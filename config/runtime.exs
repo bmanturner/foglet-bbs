@@ -20,6 +20,11 @@ if System.get_env("PHX_SERVER") do
   config :foglet_bbs, FogletBbsWeb.Endpoint, server: true
 end
 
+# SSH daemon port override (env var takes precedence in all envs).
+if ssh_port = System.get_env("FOGLET_SSH_PORT") do
+  config :foglet_bbs, :ssh_port, String.to_integer(ssh_port)
+end
+
 config :foglet_bbs, FogletBbsWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 

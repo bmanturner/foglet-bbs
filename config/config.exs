@@ -48,6 +48,10 @@ config :raxol,
     dev_performance_hints: false
   }
 
+# SSH daemon configuration (Phase 3)
+config :foglet_bbs, :ssh_port, 2222
+config :foglet_bbs, :start_ssh_daemon, true
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

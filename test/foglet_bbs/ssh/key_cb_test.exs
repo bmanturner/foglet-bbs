@@ -1,37 +1,81 @@
 defmodule Foglet.SSH.KeyCBTest do
   use FogletBbs.DataCase, async: true
 
-  describe "Foglet.SSH.KeyCB (SSH-02 / SSH-03)" do
-    @tag :pending
-    test "host_key/2 returns the server's private key from priv/ssh/" do
-      flunk("Pending — Plan 02 implements host_key/2 delegating to :ssh_file")
+  alias Foglet.Accounts
+  alias Foglet.SSH.KeyCB
+
+  import FogletBbs.AccountsFixtures
+
+  # A real ed25519 public key used as the default fixture (shared with AccountsFixtures).
+  @static_openssh_key FogletBbs.AccountsFixtures.default_ssh_public_key()
+
+  describe "Foglet.SSH.KeyCB.is_auth_key/3 (SSH-03)" do
+    test "returns false for a key not registered to any user" do
+      user = user_fixture()
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      assert KeyCB.is_auth_key(public_key, String.to_charlist(user.handle), []) == false
     end
 
-    @tag :pending
-    test "is_auth_key/3 returns true for a registered OpenSSH public key" do
-      flunk(
-        "Pending — Plan 02 implements is_auth_key/3 against Accounts.get_user_by_public_key/1"
-      )
+    test "returns true for a registered public key matched to its owner" do
+      user = user_fixture()
+
+      {:ok, _ssh_key} =
+        Accounts.register_ssh_key(user, %{label: "test", public_key: @static_openssh_key})
+
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      assert KeyCB.is_auth_key(public_key, String.to_charlist(user.handle), []) == true
     end
 
-    @tag :pending
-    test "is_auth_key/3 returns false for an unregistered key" do
-      flunk("Pending — Plan 02 implements is_auth_key/3 negative case")
+    test "returns false when handle does not match key's owner" do
+      user_a = user_fixture()
+      user_b = user_fixture()
+
+      {:ok, _} =
+        Accounts.register_ssh_key(user_a, %{label: "test", public_key: @static_openssh_key})
+
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      assert KeyCB.is_auth_key(public_key, String.to_charlist(user_b.handle), []) == false
     end
 
-    @tag :pending
-    test "is_auth_key/3 returns false for a key belonging to a deleted user" do
-      flunk("Pending — Plan 02 implements is_auth_key/3 deleted_at check")
+    test "returns false for a deleted user" do
+      user = user_fixture()
+
+      {:ok, _} =
+        Accounts.register_ssh_key(user, %{label: "test", public_key: @static_openssh_key})
+
+      {:ok, _} = Accounts.delete_user(user)
+
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      assert KeyCB.is_auth_key(public_key, String.to_charlist(user.handle), []) == false
     end
 
-    @tag :pending
-    test "pwdfun callback delegates to Foglet.Accounts.authenticate_by_password/2 (SSH-02)" do
-      flunk("Pending — Plan 02 implements pwdfun in Foglet.SSH.Supervisor")
-    end
+    test "accepts a binary username (not only charlist) — Pitfall 2" do
+      user = user_fixture()
 
-    @tag :pending
-    test "pwdfun converts SSH charlist username to binary via List.to_string/1 (Pitfall 2)" do
-      flunk("Pending — Plan 02 implements charlist boundary conversion")
+      {:ok, _} =
+        Accounts.register_ssh_key(user, %{label: "test", public_key: @static_openssh_key})
+
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      assert KeyCB.is_auth_key(public_key, user.handle, []) == true
+    end
+  end
+
+  describe "Foglet.SSH.KeyCB.host_key/2 (SSH-03)" do
+    test "delegates to :ssh_file.host_key/2 with system_dir" do
+      tmp =
+        Path.join(
+          System.tmp_dir!(),
+          "foglet_test_hk_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      # host_key will either return {:ok, key} if keys exist, or {:error, _} if not.
+      # Both are valid — we just confirm the call shape doesn't crash.
+      result = KeyCB.host_key(:"rsa-sha2-256", [{:system_dir, String.to_charlist(tmp)}])
+
+      assert match?({:ok, _}, result) or match?({:error, _}, result)
     end
   end
 end

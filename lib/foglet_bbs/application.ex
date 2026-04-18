@@ -11,16 +11,7 @@ defmodule FogletBbs.Application do
     # process might read from it. Idempotent on warm restarts.
     Foglet.Config.init_cache()
 
-    children = [
-      FogletBbsWeb.Telemetry,
-      FogletBbs.Repo,
-      {DNSCluster, query: Application.get_env(:foglet_bbs, :dns_cluster_query) || :ignore},
-      {Phoenix.PubSub, name: FogletBbs.PubSub},
-      {Registry, keys: :unique, name: Foglet.BoardRegistry},
-      Foglet.Boards.Supervisor,
-      # Start to serve requests, typically the last entry
-      FogletBbsWeb.Endpoint
-    ]
+    children = base_children() ++ ssh_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
@@ -28,6 +19,29 @@ defmodule FogletBbs.Application do
     {:ok, sup} = Supervisor.start_link(children, opts)
     Foglet.Boards.boot_board_servers()
     {:ok, sup}
+  end
+
+  defp base_children do
+    [
+      FogletBbsWeb.Telemetry,
+      FogletBbs.Repo,
+      {DNSCluster, query: Application.get_env(:foglet_bbs, :dns_cluster_query) || :ignore},
+      {Phoenix.PubSub, name: FogletBbs.PubSub},
+      {Registry, keys: :unique, name: Foglet.BoardRegistry},
+      Foglet.Boards.Supervisor,
+      {Registry, keys: :unique, name: Foglet.Sessions.Registry},
+      Foglet.Sessions.Supervisor,
+      # Start to serve requests, typically the last entry
+      FogletBbsWeb.Endpoint
+    ]
+  end
+
+  defp ssh_children do
+    if Application.get_env(:foglet_bbs, :start_ssh_daemon, true) do
+      [Foglet.SSH.Supervisor]
+    else
+      []
+    end
   end
 
   # Tell Phoenix to update the endpoint configuration

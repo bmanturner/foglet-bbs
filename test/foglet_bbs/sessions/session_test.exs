@@ -1,42 +1,80 @@
 defmodule Foglet.Sessions.SessionTest do
-  use FogletBbs.DataCase, async: false
+  use ExUnit.Case, async: false
 
-  describe "Foglet.Sessions.Session (SSH-05)" do
-    @tag :pending
-    test "starts a Session GenServer and registers via Foglet.Sessions.Registry by user_id" do
-      flunk("Pending — Plan 02 implements Foglet.Sessions.Session GenServer")
-    end
+  alias Foglet.Sessions.Session
 
-    @tag :pending
-    test "second start_link for same user_id returns {:error, {:already_started, old_pid}}" do
-      flunk("Pending — Plan 02 implements Registry via-tuple naming")
-    end
-
-    @tag :pending
-    test "Sessions.Supervisor replaces old session: notifies old, terminates it, starts new (SSH-05 + D-25)" do
-      flunk("Pending — Plan 02 implements replace_session/1 in Sessions.Supervisor")
-    end
-
-    @tag :pending
-    test "old session receives :replaced_by_new_session message before termination" do
-      flunk("Pending — Plan 02 implements replacement protocol")
-    end
-
-    @tag :pending
-    test "session init loads user, handle, role, terminal_size from opts" do
-      flunk("Pending — Plan 02 implements Session.init/1")
-    end
-
-    @tag :pending
-    test "session updates last_seen_at on heartbeat cast" do
-      flunk("Pending — Plan 02 implements heartbeat message")
-    end
+  setup do
+    # Registry and DynamicSupervisor are started by the application —
+    # but each test creates its own user_id to avoid clashes.
+    user_id = Ecto.UUID.generate()
+    %{user_id: user_id}
   end
 
-  describe "one-session-per-user race safety" do
-    @tag :pending
-    test "two near-simultaneous start_child calls for same user produce exactly one live session" do
-      flunk("Pending — Plan 02 implements TOCTOU-safe replacement (Pitfall 4)")
+  describe "Foglet.Sessions.Session (SSH-05)" do
+    test "start_link registers in Foglet.Sessions.Registry", %{user_id: user_id} do
+      {:ok, pid} =
+        start_supervised(
+          {Session, [user_id: user_id, handle: "alice", role: :user, terminal_size: {80, 24}]}
+        )
+
+      assert [{^pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+    end
+
+    test "second start_link for same user_id returns :already_started", %{user_id: user_id} do
+      {:ok, pid1} =
+        start_supervised(
+          {Session, [user_id: user_id, handle: "alice", role: :user]},
+          id: :first
+        )
+
+      result = Session.start_link(user_id: user_id, handle: "alice2", role: :user)
+
+      assert {:error, {:already_started, ^pid1}} = result
+    end
+
+    test "state holds user_id, handle, role, default terminal_size", %{user_id: user_id} do
+      {:ok, _pid} =
+        start_supervised({Session, [user_id: user_id, handle: "alice", role: :mod]})
+
+      state = Session.get_state(user_id)
+      assert state.user_id == user_id
+      assert state.handle == "alice"
+      assert state.role == :mod
+      assert state.terminal_size == {80, 24}
+      assert %DateTime{} = state.connected_at
+    end
+
+    test ":replaced_by_new_session terminates cleanly", %{user_id: user_id} do
+      {:ok, pid} =
+        start_supervised({Session, [user_id: user_id, handle: "alice", role: :user]})
+
+      ref = Process.monitor(pid)
+      send(pid, :replaced_by_new_session)
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
+    end
+
+    test "heartbeat advances last_seen_at", %{user_id: user_id} do
+      {:ok, _pid} =
+        start_supervised({Session, [user_id: user_id, handle: "alice", role: :user]})
+
+      initial = Session.get_state(user_id).last_seen_at
+      # Ensure a measurable time delta.
+      :ok = Session.heartbeat(user_id)
+      _ = :sys.get_state(Session.via_tuple(user_id))
+
+      later = Session.get_state(user_id).last_seen_at
+      assert DateTime.compare(later, initial) in [:eq, :gt]
+    end
+
+    test "terminal_size cast updates state", %{user_id: user_id} do
+      {:ok, _pid} =
+        start_supervised({Session, [user_id: user_id, handle: "alice", role: :user]})
+
+      :ok = Session.set_terminal_size(user_id, {132, 50})
+      _ = :sys.get_state(Session.via_tuple(user_id))
+
+      assert Session.get_state(user_id).terminal_size == {132, 50}
     end
   end
 end

@@ -19,9 +19,9 @@ erl_crash.dump
 # Also ignore archive artifacts (built via "mix archive.build").
 *.ez
 
-# SSH host key — never commit
-/priv/ssh/host_key
-/priv/ssh/host_key.pub
+# Phase 3: SSH host keys generated on first boot
+priv/ssh/*
+!priv/ssh/.gitkeep
 
 # Local env overrides
 .env

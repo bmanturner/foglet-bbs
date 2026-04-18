@@ -32,3 +32,7 @@ config :phoenix,
 
 # Make Argon2 fast in tests (insecure params — test-only)
 config :argon2_elixir, t_cost: 1, m_cost: 8
+
+# Never start the SSH daemon during tests — tests exercise it directly
+# via start_supervised!/1 on Foglet.SSH.Supervisor with test-specific opts.
+config :foglet_bbs, :start_ssh_daemon, false
