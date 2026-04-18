@@ -24,7 +24,7 @@ defmodule FogletBbs.MixProject do
   def application do
     [
       mod: {FogletBbs.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :crypto, :ssh, :public_key]
     ]
   end
 
