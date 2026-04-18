@@ -39,7 +39,12 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A user account can be deleted and all posts rewritten to a tombstone user with no PII remaining
   4. A user can reset their password through the password reset flow
   5. SSH public keys can be registered to a user account (schema and storage layer, used in Phase 3)
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 01-01-PLAN.md — Foglet.Schema macro, 5 migrations (citext+enum, users, ssh_keys, user_tokens, configuration), Argon2 test config, Wave-0 test scaffolding
+- [ ] 01-02-PLAN.md — User + SSHKey + UserToken schemas with changesets; schema-level tests for IDNT-01, IDNT-02, IDNT-03, IDNT-04, IDNT-08
+- [ ] 01-03-PLAN.md — Foglet.Accounts context, Foglet.Config ETS cache, Application supervision wiring, tombstone + default config seeds
+- [ ] 01-04-PLAN.md — Mix tasks: foglet.user.create, foglet.user.promote, foglet.user.reset_password (IDNT-05, IDNT-06, IDNT-08)
 
 ### Phase 2: Domain Core
 **Goal**: The BBS data model is complete — boards, threads, and posts exist with full read/unread tracking and concurrent message-number safety
@@ -209,7 +214,7 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 14
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Accounts & Identity | 0/TBD | Not started | - |
+| 1. Accounts & Identity | 0/4 | Not started | - |
 | 2. Domain Core | 0/TBD | Not started | - |
 | 3. SSH Server & TUI | 0/TBD | Not started | - |
 | 4. Presence & Login Sequence | 0/TBD | Not started | - |
