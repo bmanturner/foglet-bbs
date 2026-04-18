@@ -7,6 +7,10 @@ defmodule FogletBbs.Application do
 
   @impl true
   def start(_type, _args) do
+    # Initialize the runtime-config ETS cache before any supervised
+    # process might read from it. Idempotent on warm restarts.
+    Foglet.Config.init_cache()
+
     children = [
       FogletBbsWeb.Telemetry,
       FogletBbs.Repo,
