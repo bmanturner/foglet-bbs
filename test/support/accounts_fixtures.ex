@@ -1,36 +1,54 @@
 defmodule FogletBbs.AccountsFixtures do
   @moduledoc """
   Fixtures for account-related tests.
-
-  Implementation is filled in by Plan 02 (schemas) and Plan 03 (context).
-  Plan 01 creates only the module skeleton so downstream test files
-  can reference it without ImportError.
   """
+
+  alias Foglet.Accounts
+  alias Foglet.Accounts.{User, UserToken}
 
   @doc "Valid attrs for registration — override any key in the overrides map."
   def valid_user_attributes(overrides \\ %{}) do
     Map.merge(
       %{
-        handle: "user_#{System.unique_integer([:positive])}",
-        email: "user_#{System.unique_integer([:positive])}@example.com",
-        password: "correct horse battery staple"
+        handle: "user#{System.unique_integer([:positive])}",
+        email: "user#{System.unique_integer([:positive])}@example.com",
+        password: "correct horse battery"
       },
       overrides
     )
   end
 
-  @doc "Insert a user. Raises until Plan 03 fills in the context API."
-  def user_fixture(_attrs \\ %{}) do
-    raise "user_fixture/1 not implemented until Plan 03 wires Foglet.Accounts.register_user/1"
+  @doc "Insert a user via Foglet.Accounts.register_user/1."
+  def user_fixture(attrs \\ %{}) do
+    {:ok, user} = attrs |> valid_user_attributes() |> Accounts.register_user()
+    user
   end
 
-  @doc "Insert an SSH key. Raises until Plan 03 fills in the context API."
-  def ssh_key_fixture(_user, _attrs \\ %{}) do
-    raise "ssh_key_fixture/2 not implemented until Plan 03 wires Foglet.Accounts.register_ssh_key/2"
+  @doc """
+  An Ed25519 public key used as the default for ssh_key_fixture. Callers
+  can pass a different `:public_key` in overrides to get a distinct fingerprint.
+  """
+  @default_ssh_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGk+NU3dUxm5p8e2fMAKw1Z0p+4rM7q2DnGkgpTsvc0A test@example"
+
+  def default_ssh_public_key, do: @default_ssh_key
+
+  @doc "Insert an SSH key for the given user."
+  def ssh_key_fixture(%User{} = user, attrs \\ %{}) do
+    params =
+      Map.merge(
+        %{label: "key#{System.unique_integer([:positive])}", public_key: @default_ssh_key},
+        attrs
+      )
+
+    {:ok, key} = Accounts.register_ssh_key(user, params)
+    key
   end
 
-  @doc "Build an unsaved user token. Raises until Plan 02 exposes UserToken.build_email_token/2."
-  def user_token_fixture(_user, _context) do
-    raise "user_token_fixture/2 not implemented until Plan 02 defines Foglet.Accounts.UserToken"
+  @doc "Build and insert an email token (confirm or reset_password)."
+  def user_token_fixture(%User{} = user, context)
+      when context in ["confirm", "reset_password"] do
+    {raw, struct} = UserToken.build_email_token(user, context)
+    {:ok, inserted} = FogletBbs.Repo.insert(struct)
+    {raw, inserted}
   end
 end
