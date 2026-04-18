@@ -69,7 +69,12 @@ Plans:
   4. If a user connects while already online, the old session is terminated with a notification and the new session continues
   5. A user can navigate boards, open threads, read posts, and compose a reply entirely via single-key menu navigation
   6. The TUI adapts its layout when the terminal is resized
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 03-01-PLAN.md — Raxol dep + Accounts.verify_email_code/register_pending_user + users.status migration + Wave-0 test stubs
+- [ ] 03-02-PLAN.md — Foglet.Sessions (Registry+Supervisor+Session with one-session-per-user replacement) + Foglet.SSH (Supervisor wraps :ssh.daemon/2 + KeyCB ssh_server_key_api) + application wiring
+- [ ] 03-03-PLAN.md — Foglet.TUI.App Raxol application + Login/Register/Verify screens (guest flow with registration-mode gating, invite codes, email verify code entry with 5-attempt cooldown)
+- [ ] 03-04-PLAN.md — BBS screens: MainMenu, BoardList, ThreadList, PostReader (with read-pointer flush SSH-09), PostComposer (Markdown/preview, Ctrl+S/Ctrl+C, max_post_length)
 **UI hint**: yes
 
 ### Phase 4: Presence & Login Sequence
@@ -216,7 +221,7 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 14
 |-------|----------------|--------|-----------|
 | 1. Accounts & Identity | 0/4 | Not started | - |
 | 2. Domain Core | 0/TBD | Not started | - |
-| 3. SSH Server & TUI | 0/TBD | Not started | - |
+| 3. SSH Server & TUI | 0/4 | Not started | - |
 | 4. Presence & Login Sequence | 0/TBD | Not started | - |
 | 5. Chat | 0/TBD | Not started | - |
 | 6. DMs, Mentions & Notifications | 0/TBD | Not started | - |
