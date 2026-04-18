@@ -66,3 +66,45 @@ Enum.each(default_config, fn {key, value, description} ->
 end)
 
 IO.puts("Seeds complete.")
+
+# ============================================================
+# Phase 2: Default category and board
+# ============================================================
+
+alias Foglet.Boards.Board
+alias Foglet.Boards.Category
+
+general_category =
+  case Repo.get_by(Category, name: "General") do
+    nil ->
+      cat =
+        Repo.insert!(%Category{
+          name: "General",
+          description: "General discussion",
+          display_order: 1,
+          archived: false
+        })
+
+      IO.puts("  [seed] inserted category: General")
+      cat
+
+    existing ->
+      IO.puts("  [seed] category General already present")
+      existing
+  end
+
+unless Repo.get_by(Board, slug: "general") do
+  Repo.insert!(%Board{
+    slug: "general",
+    name: "General",
+    description: "General discussion board. Default board for all new users.",
+    display_order: 1,
+    readable_by: :public,
+    postable_by: :members,
+    default_subscription: true,
+    archived: false,
+    category_id: general_category.id
+  })
+
+  IO.puts("  [seed] inserted board: general (default_subscription: true)")
+end

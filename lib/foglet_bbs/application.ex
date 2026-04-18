@@ -26,7 +26,7 @@ defmodule FogletBbs.Application do
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: FogletBbs.Supervisor]
     {:ok, sup} = Supervisor.start_link(children, opts)
-    Foglet.Boards.Supervisor.boot_board_servers()
+    Foglet.Boards.boot_board_servers()
     {:ok, sup}
   end
 

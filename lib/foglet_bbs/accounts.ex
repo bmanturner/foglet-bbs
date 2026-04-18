@@ -32,12 +32,29 @@ defmodule Foglet.Accounts do
 
   # ---------- Users ----------
 
-  @doc "Create a new user account."
+  @doc """
+  Create a new user account and subscribe to default boards (D-06).
+
+  Calls `Foglet.Boards.subscribe_to_defaults/1` after a successful insert.
+  The subscription call is made post-commit (not inside Multi) so a subscription
+  failure does not roll back user creation.
+  """
   @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def register_user(attrs) do
-    %User{}
-    |> User.registration_changeset(attrs)
-    |> Repo.insert()
+    result =
+      %User{}
+      |> User.registration_changeset(attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, user} ->
+        # D-06: subscribe to default boards after successful registration.
+        Foglet.Boards.subscribe_to_defaults(user.id)
+        {:ok, user}
+
+      error ->
+        error
+    end
   end
 
   @spec get_user(String.t()) :: User.t() | nil
