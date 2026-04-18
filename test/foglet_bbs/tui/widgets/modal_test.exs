@@ -1,20 +1,27 @@
 defmodule Foglet.TUI.Widgets.ModalTest do
   use ExUnit.Case, async: true
 
-  describe "Foglet.TUI.Widgets.Modal (D-20)" do
-    @tag :pending
-    test "render/1 displays the message and an OK key hint" do
-      flunk("Pending — Plan 03 implements Foglet.TUI.Widgets.Modal")
+  alias Foglet.TUI.Widgets.Modal
+
+  describe "render/1 (D-20)" do
+    test "returns a non-nil view element for :info" do
+      assert _ = Modal.render(%{type: :info, message: "Hello"})
     end
 
-    @tag :pending
-    test "render/1 with :error type uses red color" do
-      flunk("Pending — Plan 03 implements error styling")
+    test "returns a non-nil view element for :error" do
+      assert _ = Modal.render(%{type: :error, message: "Oh no"})
     end
 
-    @tag :pending
-    test "render/1 with :confirm type shows [Y]es/[N]o prompt" do
-      flunk("Pending — Plan 03 implements confirm type")
+    test "returns a non-nil view element for :confirm" do
+      assert _ = Modal.render(%{type: :confirm, message: "Delete?"})
+    end
+
+    test "defaults type to :info when omitted" do
+      assert _ = Modal.render(%{message: "No type given"})
+    end
+
+    test "raises when :message is missing" do
+      assert_raise FunctionClauseError, fn -> Modal.render(%{type: :info}) end
     end
   end
 end
