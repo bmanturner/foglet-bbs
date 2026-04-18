@@ -58,7 +58,8 @@ defmodule FogletBbs.MixProject do
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:argon2_elixir, "~> 4.0"},
       {:stream_data, "~> 1.0", only: [:dev, :test]},
-      {:oban, "~> 2.18"}
+      {:oban, "~> 2.18"},
+      {:mdex, "~> 0.2"}
     ]
   end
 
