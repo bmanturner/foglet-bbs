@@ -57,6 +57,18 @@ defmodule Foglet.Accounts do
     end
   end
 
+  @doc """
+  Create a new user account in `:pending` status (sysop-approved registration mode, D-05).
+  Same validation as `register_user/1`; differs only in the persisted status value.
+  Login is blocked for pending users in Phase 3's login flow.
+  """
+  @spec register_pending_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  def register_pending_user(attrs) do
+    %User{status: :pending}
+    |> User.registration_changeset(attrs)
+    |> Repo.insert()
+  end
+
   @spec get_user(String.t()) :: User.t() | nil
   def get_user(id), do: Repo.get(User, id)
 
@@ -138,6 +150,71 @@ defmodule Foglet.Accounts do
   @spec confirm_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def confirm_user(%User{} = user) do
     user |> User.confirm_changeset() |> Repo.update()
+  end
+
+  @doc """
+  Build and persist an email verification code for `user`. Returns the raw 6-char
+  alphanumeric code (the value to show/email/log to the user). The code expires in
+  15 minutes. See D-08, D-10.
+  """
+  @spec build_verify_code(User.t()) :: {:ok, String.t()} | {:error, Ecto.Changeset.t()}
+  def build_verify_code(%User{} = user) do
+    {raw_code, token_struct} = UserToken.build_verify_code(user)
+
+    case Repo.insert(token_struct) do
+      {:ok, _} -> {:ok, raw_code}
+      {:error, cs} -> {:error, cs}
+    end
+  end
+
+  @doc """
+  Verify an email code for `user`. On success, confirms the user (sets `confirmed_at`)
+  and returns `{:ok, confirmed_user}`. On failure returns:
+    - `{:error, :invalid_code}` — code did not match any non-expired verify token
+    - `{:error, :expired}` — token exists but inserted_at > 15 minutes ago
+  See D-10, D-12.
+  """
+  @spec verify_email_code(User.t(), String.t()) ::
+          {:ok, User.t()} | {:error, :invalid_code | :expired}
+  def verify_email_code(%User{email: email} = user, code)
+      when is_binary(code) and byte_size(code) > 0 do
+    valid_row =
+      code
+      |> UserToken.verify_code_query(email)
+      |> Repo.one()
+
+    cond do
+      valid_row != nil and valid_row.user_id == user.id ->
+        result =
+          Multi.new()
+          |> Multi.update(:confirm, User.confirm_changeset(user))
+          |> Multi.delete_all(
+            :cleanup,
+            UserToken.by_user_and_contexts_query(user, ["email_verify"])
+          )
+          |> Repo.transaction()
+
+        case result do
+          {:ok, %{confirm: confirmed}} -> {:ok, confirmed}
+          {:error, :confirm, cs, _} -> {:error, cs}
+        end
+
+      expired_exists?(user, code) ->
+        {:error, :expired}
+
+      true ->
+        {:error, :invalid_code}
+    end
+  end
+
+  defp expired_exists?(%User{id: user_id, email: email}, code) do
+    query =
+      from t in UserToken,
+        where:
+          t.token == ^code and t.context == "email_verify" and
+            t.sent_to == ^email and t.user_id == ^user_id
+
+    Repo.exists?(query)
   end
 
   @doc """

@@ -19,6 +19,7 @@ defmodule Foglet.Accounts.User do
 
   @valid_roles [:user, :mod, :sysop]
   @valid_email_digests [:off, :daily, :weekly]
+  @valid_statuses [:active, :pending, :suspended]
 
   schema "users" do
     field :handle, :string
@@ -28,6 +29,7 @@ defmodule Foglet.Accounts.User do
     field :confirmed_at, :utc_datetime_usec
 
     field :role, Ecto.Enum, values: @valid_roles, default: :user
+    field :status, Ecto.Enum, values: @valid_statuses, default: :active
 
     field :location, :string
     field :tagline, :string
@@ -124,6 +126,14 @@ defmodule Foglet.Accounts.User do
       password_hash: "invalid-deleted",
       show_in_last_callers: false
     })
+  end
+
+  @doc "Changeset for sysop status change (pending → active, active → suspended)."
+  def status_changeset(user, attrs) do
+    user
+    |> cast(attrs, [:status])
+    |> validate_required([:status])
+    |> validate_inclusion(:status, @valid_statuses)
   end
 
   @doc "Public accessor for the handle format regex (used in tests)."

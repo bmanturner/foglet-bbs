@@ -25,6 +25,9 @@ defmodule Foglet.Accounts.UserToken do
   @reset_password_validity_in_days 1
   @cli_session_validity_in_days 60
 
+  @email_verify_validity_in_minutes 15
+  @verify_code_length 6
+
   schema "user_tokens" do
     field :token, :binary
     field :context, :string
@@ -54,6 +57,48 @@ defmodule Foglet.Accounts.UserToken do
   def build_cli_session_token(user) do
     build_hashed_token(user, "cli_session", nil)
   end
+
+  @doc """
+  Build an email verification code (D-08). Generates a 6-char uppercase alphanumeric
+  code, returns `{raw_code, %UserToken{}}`. The code is stored in the `:token` field
+  as a UTF-8 binary (NOT hashed — short-lived codes per D-10 don't need hashing).
+
+  See Pitfall 6: do NOT reuse build_email_token/2 for verify codes.
+  """
+  @spec build_verify_code(Foglet.Accounts.User.t()) :: {String.t(), t()}
+  def build_verify_code(%{id: user_id, email: email}) do
+    raw_code = generate_verify_code()
+
+    {raw_code,
+     %__MODULE__{
+       token: raw_code,
+       context: "email_verify",
+       sent_to: email,
+       user_id: user_id
+     }}
+  end
+
+  @doc """
+  Query matching a verify code for a user. Returns rows where:
+    - token == ^code (plain match, not hashed)
+    - context == "email_verify"
+    - inserted_at > ago(15, "minute")
+    - sent_to == ^user_email
+  """
+  @spec verify_code_query(String.t(), String.t()) :: Ecto.Query.t()
+  def verify_code_query(code, user_email) when is_binary(code) and is_binary(user_email) do
+    from t in __MODULE__,
+      where:
+        t.token == ^code and t.context == "email_verify" and
+          t.sent_to == ^user_email and
+          t.inserted_at > ago(^@email_verify_validity_in_minutes, "minute")
+  end
+
+  @doc "Validity window for email verify codes (minutes). Used by tests."
+  def email_verify_validity_minutes, do: @email_verify_validity_in_minutes
+
+  @doc "Length of verify codes. Used by tests."
+  def verify_code_length, do: @verify_code_length
 
   @doc """
   Build a query to verify a raw token and fetch the associated user.
@@ -112,6 +157,13 @@ defmodule Foglet.Accounts.UserToken do
   def rand_size, do: @rand_size
 
   # ---------- Private ----------
+
+  defp generate_verify_code do
+    :crypto.strong_rand_bytes(@verify_code_length)
+    |> Base.encode32(padding: false)
+    |> binary_part(0, @verify_code_length)
+    |> String.upcase()
+  end
 
   defp build_hashed_token(user, context, sent_to) do
     token = :crypto.strong_rand_bytes(@rand_size)

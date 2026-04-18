@@ -41,10 +41,11 @@ end
 
 # --- Default configuration entries ---
 default_config = [
-  {"registration.mode", "sysop_approved",
-   "Account registration policy: open | invite_only | sysop_approved"},
-  {"registration.require_email_verification", false,
-   "Require email verification on signup (wired in Phase 10)"}
+  {"registration_mode", "open",
+   "Account registration policy (D-02/D-03): open | invite_only | sysop_approved"},
+  {"invite_code_generators", "sysop_only",
+   "Who may generate invite codes (D-04): sysop_only | mods | any_user"},
+  {"max_post_length", 8192, "Maximum post body length in characters (D-31)"}
 ]
 
 Enum.each(default_config, fn {key, value, description} ->

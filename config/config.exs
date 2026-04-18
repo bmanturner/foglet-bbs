@@ -30,6 +30,24 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Disable Raxol's performance monitoring feature to prevent a DevHints startup crash
+# (Raxol 2.4.0 bug: DevHints.normalize_init_result/1 doesn't handle :ignore when
+# the module was compiled in test env and @mix_env == :dev evaluates to false).
+config :raxol,
+  features: %{
+    database: false,
+    pubsub: true,
+    web_interface: false,
+    terminal_driver: true,
+    performance_monitoring: false,
+    terminal_sync: true,
+    rate_limiting: true,
+    telemetry: true,
+    plugins: false,
+    audit: false,
+    dev_performance_hints: false
+  }
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"
