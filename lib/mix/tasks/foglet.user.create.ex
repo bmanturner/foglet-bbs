@@ -68,7 +68,7 @@ defmodule Mix.Tasks.Foglet.User.Create do
   defp format_errors(changeset) do
     Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
       Enum.reduce(opts, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", to_string(v))
+        String.replace(acc, "%{#{k}}", if(is_list(v), do: inspect(v), else: to_string(v)))
       end)
     end)
   end
