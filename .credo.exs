@@ -82,8 +82,6 @@
           # You can customize the priority of any check
           # Priority values are: `low, normal, high, higher`
           #
-          {Credo.Check.Design.AliasUsage,
-           [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0]},
           {Credo.Check.Design.TagFIXME, []},
           # You can also customize the exit_status of each check.
           # If you don't want TODO comments to cause `mix credo` to fail, just
@@ -162,10 +160,14 @@
           {Credo.Check.Warning.UnusedStringOperation, []},
           {Credo.Check.Warning.UnusedTupleOperation, []},
           {Credo.Check.Warning.WrongTestFilename, []},
-          {Credo.Check.Readability.Specs, []},
           {Credo.Check.Warning.UnsafeToAtom, []}
         ],
         disabled: [
+          # Disabled: enforcing @spec on all functions is a library convention, not typical for apps
+          {Credo.Check.Readability.Specs, []},
+          # Disabled: generates noise on Phoenix-generated boilerplate files
+          {Credo.Check.Design.AliasUsage, [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0]},
+
           #
           # Checks scheduled for next check update (opt-in for now)
           {Credo.Check.Refactor.UtcNowTruncate, []},

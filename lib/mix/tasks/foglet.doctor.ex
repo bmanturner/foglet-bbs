@@ -1,6 +1,7 @@
 defmodule Mix.Tasks.Foglet.Doctor do
   use Mix.Task
 
+  @moduledoc "Verifies the development environment is correctly configured."
   @shortdoc "Verifies the development environment is correctly configured"
 
   @impl Mix.Task
@@ -68,16 +69,20 @@ defmodule Mix.Tasks.Foglet.Doctor do
   end
 
   defp parse_tool_versions(tool) do
-    with {:ok, content} <- File.read(".tool-versions") do
-      content
-      |> String.split("\n", trim: true)
-      |> Enum.find_value(fn line ->
-        case String.split(line, ~r/\s+/, parts: 2) do
-          [^tool, version] -> String.trim(version)
-          _ -> nil
-        end
-      end)
-    else
+    case File.read(".tool-versions") do
+      {:ok, content} ->
+        content
+        |> String.split("\n", trim: true)
+        |> Enum.find_value(&parse_tool_line(&1, tool))
+
+      _ ->
+        nil
+    end
+  end
+
+  defp parse_tool_line(line, tool) do
+    case String.split(line, ~r/\s+/, parts: 2) do
+      [^tool, version] -> String.trim(version)
       _ -> nil
     end
   end
