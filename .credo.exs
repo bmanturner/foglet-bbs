@@ -166,7 +166,8 @@
           # Disabled: enforcing @spec on all functions is a library convention, not typical for apps
           {Credo.Check.Readability.Specs, []},
           # Disabled: generates noise on Phoenix-generated boilerplate files
-          {Credo.Check.Design.AliasUsage, [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0]},
+          {Credo.Check.Design.AliasUsage,
+           [priority: :low, if_nested_deeper_than: 2, if_called_more_often_than: 0]},
 
           #
           # Checks scheduled for next check update (opt-in for now)
