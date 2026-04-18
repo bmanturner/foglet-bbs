@@ -158,30 +158,105 @@
 
 ## Traceability
 
-*(Populated during roadmap creation)*
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| IDNT-01 through IDNT-08 | — | Pending |
-| BOARD-01 through BOARD-12 | — | Pending |
-| SSH-01 through SSH-09 | — | Pending |
-| PRSNC-01 through PRSNC-06 | — | Pending |
-| CHAT-01 through CHAT-06 | — | Pending |
-| SOCL-01 through SOCL-10 | — | Pending |
-| MODR-01 through MODR-08 | — | Pending |
-| SYSOP-01 through SYSOP-06 | — | Pending |
-| SRCH-01 through SRCH-03 | — | Pending |
-| EMAIL-01 through EMAIL-05 | — | Pending |
-| OPS-01 through OPS-05 | — | Pending |
-| REL-01 through REL-05 | — | Pending |
-| CLI-01 through CLI-04 | — | Pending |
-| GAME-01 through GAME-04 | — | Pending |
+| IDNT-01 | Phase 1 | Pending |
+| IDNT-02 | Phase 1 | Pending |
+| IDNT-03 | Phase 1 | Pending |
+| IDNT-04 | Phase 1 | Pending |
+| IDNT-05 | Phase 1 | Pending |
+| IDNT-06 | Phase 1 | Pending |
+| IDNT-07 | Phase 1 | Pending |
+| IDNT-08 | Phase 1 | Pending |
+| BOARD-01 | Phase 2 | Pending |
+| BOARD-02 | Phase 2 | Pending |
+| BOARD-03 | Phase 2 | Pending |
+| BOARD-04 | Phase 2 | Pending |
+| BOARD-05 | Phase 2 | Pending |
+| BOARD-06 | Phase 2 | Pending |
+| BOARD-07 | Phase 2 | Pending |
+| BOARD-08 | Phase 2 | Pending |
+| BOARD-09 | Phase 2 | Pending |
+| BOARD-10 | Phase 2 | Pending |
+| BOARD-11 | Phase 2 | Pending |
+| BOARD-12 | Phase 2 | Pending |
+| SSH-01 | Phase 3 | Pending |
+| SSH-02 | Phase 3 | Pending |
+| SSH-03 | Phase 3 | Pending |
+| SSH-04 | Phase 3 | Pending |
+| SSH-05 | Phase 3 | Pending |
+| SSH-06 | Phase 3 | Pending |
+| SSH-07 | Phase 3 | Pending |
+| SSH-08 | Phase 3 | Pending |
+| SSH-09 | Phase 3 | Pending |
+| PRSNC-01 | Phase 4 | Pending |
+| PRSNC-02 | Phase 4 | Pending |
+| PRSNC-03 | Phase 4 | Pending |
+| PRSNC-04 | Phase 4 | Pending |
+| PRSNC-05 | Phase 4 | Pending |
+| PRSNC-06 | Phase 4 | Pending |
+| CHAT-01 | Phase 5 | Pending |
+| CHAT-02 | Phase 5 | Pending |
+| CHAT-03 | Phase 5 | Pending |
+| CHAT-04 | Phase 5 | Pending |
+| CHAT-05 | Phase 5 | Pending |
+| CHAT-06 | Phase 5 | Pending |
+| SOCL-01 | Phase 6 | Pending |
+| SOCL-02 | Phase 6 | Pending |
+| SOCL-03 | Phase 6 | Pending |
+| SOCL-04 | Phase 6 | Pending |
+| SOCL-05 | Phase 6 | Pending |
+| SOCL-06 | Phase 9 | Pending |
+| SOCL-07 | Phase 9 | Pending |
+| SOCL-08 | Phase 9 | Pending |
+| SOCL-09 | Phase 9 | Pending |
+| SOCL-10 | Phase 9 | Pending |
+| MODR-01 | Phase 7 | Pending |
+| MODR-02 | Phase 7 | Pending |
+| MODR-03 | Phase 7 | Pending |
+| MODR-04 | Phase 7 | Pending |
+| MODR-05 | Phase 7 | Pending |
+| MODR-06 | Phase 7 | Pending |
+| MODR-07 | Phase 7 | Pending |
+| MODR-08 | Phase 7 | Pending |
+| SYSOP-01 | Phase 8 | Pending |
+| SYSOP-02 | Phase 8 | Pending |
+| SYSOP-03 | Phase 8 | Pending |
+| SYSOP-04 | Phase 8 | Pending |
+| SYSOP-05 | Phase 8 | Pending |
+| SYSOP-06 | Phase 8 | Pending |
+| SRCH-01 | Phase 9 | Pending |
+| SRCH-02 | Phase 9 | Pending |
+| SRCH-03 | Phase 9 | Pending |
+| EMAIL-01 | Phase 10 | Pending |
+| EMAIL-02 | Phase 10 | Pending |
+| EMAIL-03 | Phase 10 | Pending |
+| EMAIL-04 | Phase 10 | Pending |
+| EMAIL-05 | Phase 10 | Pending |
+| OPS-01 | Phase 11 | Pending |
+| OPS-02 | Phase 11 | Pending |
+| OPS-03 | Phase 11 | Pending |
+| OPS-04 | Phase 11 | Pending |
+| OPS-05 | Phase 11 | Pending |
+| REL-01 | Phase 12 | Pending |
+| REL-02 | Phase 12 | Pending |
+| REL-03 | Phase 12 | Pending |
+| REL-04 | Phase 12 | Pending |
+| REL-05 | Phase 12 | Pending |
+| CLI-01 | Phase 13 | Pending |
+| CLI-02 | Phase 13 | Pending |
+| CLI-03 | Phase 13 | Pending |
+| CLI-04 | Phase 13 | Pending |
+| GAME-01 | Phase 14 | Pending |
+| GAME-02 | Phase 14 | Pending |
+| GAME-03 | Phase 14 | Pending |
+| GAME-04 | Phase 14 | Pending |
 
 **Coverage:**
 - v1 requirements: 85 total
-- Mapped to phases: 0 (roadmap pending)
-- Unmapped: 85 ⚠️
+- Mapped to phases: 85
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-18*
-*Last updated: 2026-04-18 after initial definition*
+*Last updated: 2026-04-18 after roadmap creation*
