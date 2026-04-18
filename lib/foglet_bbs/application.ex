@@ -16,8 +16,8 @@ defmodule FogletBbs.Application do
       FogletBbs.Repo,
       {DNSCluster, query: Application.get_env(:foglet_bbs, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: FogletBbs.PubSub},
-      # Start a worker by calling: FogletBbs.Worker.start_link(arg)
-      # {FogletBbs.Worker, arg},
+      {Registry, keys: :unique, name: Foglet.BoardRegistry},
+      Foglet.Boards.Supervisor,
       # Start to serve requests, typically the last entry
       FogletBbsWeb.Endpoint
     ]
@@ -25,7 +25,9 @@ defmodule FogletBbs.Application do
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
     opts = [strategy: :one_for_one, name: FogletBbs.Supervisor]
-    Supervisor.start_link(children, opts)
+    {:ok, sup} = Supervisor.start_link(children, opts)
+    Foglet.Boards.Supervisor.boot_board_servers()
+    {:ok, sup}
   end
 
   # Tell Phoenix to update the endpoint configuration
