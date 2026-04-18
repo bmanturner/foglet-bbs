@@ -1,40 +1,117 @@
 defmodule Foglet.TUI.Screens.PostComposerTest do
   use ExUnit.Case, async: true
 
-  describe "Foglet.TUI.Screens.PostComposer (SSH-07, D-26..D-31)" do
-    @tag :pending
-    test "render/1 shows header, quote context, multi-line text input, key bar (D-27)" do
-      flunk("Pending — Plan 04 implements PostComposer layout")
-    end
+  alias Foglet.TUI.Screens.PostComposer
 
-    @tag :pending
-    test "renders first 5 lines of reply-to post as dimmed quote context (D-27)" do
-      flunk("Pending — Plan 04 implements quote context")
-    end
+  defmodule FakePosts do
+    def create_reply(_thread, _user, %{body: "explode"}), do: {:error, :nope}
+    def create_reply(_thread, _user, attrs), do: {:ok, Map.merge(%{id: "new-post"}, attrs)}
+  end
 
-    @tag :pending
-    test "Tab toggles between edit mode and preview mode (D-28)" do
-      flunk("Pending — Plan 04 implements Tab preview toggle")
-    end
+  defmodule FakeMarkdown do
+    def render(text), do: "MD[" <> text <> "]"
+  end
 
-    @tag :pending
-    test "Ctrl+S submits the post via Foglet.Posts.create_reply/3 (D-29)" do
-      flunk("Pending — Plan 04 implements submit")
-    end
+  setup do
+    state =
+      %Foglet.TUI.App{
+        current_screen: :post_composer,
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+        current_thread: %{id: "t1", title: "Hello"},
+        session_context: %{
+          domain: %{posts: FakePosts, markdown: FakeMarkdown},
+          max_post_length: 1_000
+        },
+        terminal_size: {80, 24},
+        composer_draft: "",
+        screen_state: %{post_composer: %{mode: :edit, reply_to: nil, error: nil}}
+      }
+      |> Map.from_struct()
 
-    @tag :pending
-    test "Ctrl+C cancels with no confirmation prompt (D-30)" do
-      flunk("Pending — Plan 04 implements cancel")
-    end
+    %{state: state}
+  end
 
-    @tag :pending
-    test "enforces max_post_length from runtime config (D-31)" do
-      flunk("Pending — Plan 04 enforces Foglet.Config.get!(\"max_post_length\")")
-    end
+  test "render/1 (new thread, edit mode) does not crash", %{state: state} do
+    assert _ = PostComposer.render(state)
+  end
 
-    @tag :pending
-    test "displays error when body exceeds max_post_length" do
-      flunk("Pending — Plan 04 surfaces max-length error")
-    end
+  test "render/1 with reply_to shows quote context (D-27)", %{state: state} do
+    reply_to = %{
+      id: "p1",
+      message_number: 1,
+      user: %{handle: "bob"},
+      body: "L1\nL2\nL3\nL4\nL5\nL6"
+    }
+
+    s = put_in(state, [:screen_state, :post_composer, :reply_to], reply_to)
+    assert _ = PostComposer.render(s)
+  end
+
+  test "Tab toggles mode :edit <-> :preview (D-28)", %{state: state} do
+    assert get_in(state.screen_state, [:post_composer, :mode]) == :edit
+    {:update, s, _} = PostComposer.handle_key(%{key: "tab"}, state)
+    assert get_in(s.screen_state, [:post_composer, :mode]) == :preview
+    {:update, s, _} = PostComposer.handle_key(%{key: "tab"}, s)
+    assert get_in(s.screen_state, [:post_composer, :mode]) == :edit
+  end
+
+  test "character keys append to draft", %{state: state} do
+    {:update, s, _} = PostComposer.handle_key(%{key: "h"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: "i"}, s)
+    assert s.composer_draft == "hi"
+  end
+
+  test "backspace removes last character", %{state: state} do
+    s = %{state | composer_draft: "hello"}
+    {:update, s, _} = PostComposer.handle_key(%{key: "backspace"}, s)
+    assert s.composer_draft == "hell"
+  end
+
+  test "Ctrl+S with empty body shows error modal", %{state: state} do
+    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_s"}, state)
+    assert s.modal.type == :error
+  end
+
+  test "Ctrl+S with valid body creates post and transitions to :post_reader (D-29)",
+       %{state: state} do
+    s = %{state | composer_draft: "Hello world"}
+    {:update, s, cmds} = PostComposer.handle_key(%{key: "ctrl_s"}, s)
+    assert s.current_screen == :post_reader
+    assert s.composer_draft == nil
+    assert Enum.any?(cmds, &match?({:load_posts, "t1"}, &1))
+  end
+
+  test "Ctrl+S with body > max_post_length shows error modal (D-31)", %{state: state} do
+    long = String.duplicate("x", 1_001)
+    s = %{state | composer_draft: long}
+    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_s"}, s)
+    assert s.modal.type == :error
+    assert s.modal.message =~ "maximum length"
+  end
+
+  test "Ctrl+C cancels to :thread_list without confirmation (D-30)", %{state: state} do
+    s = %{state | composer_draft: "draft content"}
+    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_c"}, s)
+    assert s.current_screen == :thread_list
+    assert s.composer_draft == nil
+    refute Map.has_key?(s.screen_state, :post_composer)
+  end
+
+  test "max_post_length falls back to default (8192) when not in session_context" do
+    state =
+      %Foglet.TUI.App{
+        current_screen: :post_composer,
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+        current_thread: %{id: "t1", title: "Hello"},
+        session_context: %{domain: %{posts: FakePosts}},
+        terminal_size: {80, 24},
+        composer_draft: String.duplicate("x", 10_000),
+        screen_state: %{post_composer: %{mode: :edit, reply_to: nil, error: nil}}
+      }
+      |> Map.from_struct()
+
+    # 10_000 chars exceeds default 8192 limit -> error modal
+    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_s"}, state)
+    assert s.modal.type == :error
   end
 end

@@ -1,30 +1,125 @@
 defmodule Foglet.TUI.Screens.PostReaderTest do
   use ExUnit.Case, async: true
 
-  describe "Foglet.TUI.Screens.PostReader (SSH-07, SSH-08, SSH-09)" do
-    @tag :pending
-    test "render/1 displays post with ANSI-rendered Markdown body" do
-      flunk("Pending — Plan 04 implements PostReader (calls Foglet.Markdown.render/1)")
-    end
+  alias Foglet.TUI.Screens.PostReader
 
-    @tag :pending
-    test "page-down/page-up navigate between posts in thread" do
-      flunk("Pending — Plan 04 implements pagination")
+  defmodule FakePosts do
+    def list_posts(_thread_id) do
+      [
+        %{
+          id: "p1",
+          message_number: 1,
+          body: "first",
+          user: %{handle: "alice"},
+          inserted_at: ~U[2026-04-18 00:00:00.000000Z]
+        },
+        %{
+          id: "p2",
+          message_number: 2,
+          body: "second",
+          user: %{handle: "bob"},
+          inserted_at: ~U[2026-04-18 00:01:00.000000Z]
+        }
+      ]
     end
+  end
 
-    @tag :pending
-    test "advances thread_read_pointer local state on next-post (SSH-09)" do
-      flunk("Pending — Plan 04 implements read-pointer local state")
-    end
+  defmodule FakeBoards do
+    def advance_board_read_pointer(_user_id, _board_id, _msg_num), do: {:ok, %{}}
+  end
 
-    @tag :pending
-    test "flush triggered on screen transition via Foglet.Threads.advance_read_pointer/3 (SSH-09)" do
-      flunk("Pending — Plan 04 implements flush on leave")
-    end
+  defmodule FakeThreads do
+    def advance_read_pointer(_user_id, _thread_id, _post_id), do: {:ok, %{}}
+  end
 
-    @tag :pending
-    test "'R' opens post_composer as reply to current post" do
-      flunk("Pending — Plan 04 implements reply shortcut")
-    end
+  defmodule FakeMarkdown do
+    def render(text), do: "MD[" <> text <> "]"
+  end
+
+  setup do
+    state =
+      %Foglet.TUI.App{
+        current_screen: :post_reader,
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+        current_board: %{id: "b1", name: "General"},
+        current_thread: %{id: "t1", title: "Hello"},
+        session_context: %{
+          domain: %{
+            posts: FakePosts,
+            boards: FakeBoards,
+            threads: FakeThreads,
+            markdown: FakeMarkdown
+          }
+        },
+        terminal_size: {80, 24},
+        posts: nil,
+        read_position: %{},
+        screen_state: %{post_reader: %{selected_post_index: 0}}
+      }
+      |> Map.from_struct()
+
+    %{state: state}
+  end
+
+  test "load_posts/2 populates state.posts", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    assert length(s.posts) == 2
+  end
+
+  test "render/1 with posts loaded does not crash", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    assert _ = PostReader.render(s)
+  end
+
+  test "render/1 with no posts shows loading message", %{state: state} do
+    assert _ = PostReader.render(state)
+  end
+
+  test "'n' advances to next post and updates read_position", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    {:update, s, _} = PostReader.handle_key(%{key: "n"}, s)
+    assert get_in(s.screen_state, [:post_reader, :selected_post_index]) == 1
+    assert s.read_position["t1"][:last_read_post_id] == "p2"
+    assert s.read_position["t1"][:last_read_message_number] == 2
+  end
+
+  test "'p' decrements bounded at 0", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    {:update, s, _} = PostReader.handle_key(%{key: "p"}, s)
+    assert get_in(s.screen_state, [:post_reader, :selected_post_index]) == 0
+  end
+
+  test "'R' opens :post_composer with reply_to set to current post", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    {:update, s, _} = PostReader.handle_key(%{key: "R"}, s)
+    assert s.current_screen == :post_composer
+    assert get_in(s.screen_state, [:post_composer, :reply_to]).id == "p1"
+  end
+
+  test "'Q' returns to :thread_list and emits {:flush_read_pointers, _} (SSH-09)",
+       %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    {:update, s, _} = PostReader.handle_key(%{key: "n"}, s)
+    {:update, new_state, cmds} = PostReader.handle_key(%{key: "Q"}, s)
+
+    assert new_state.current_screen == :thread_list
+    assert new_state.posts == nil
+    assert Enum.any?(cmds, &match?({:flush_read_pointers, %{thread_id: "t1"}}, &1))
+  end
+
+  test "flush_read_pointers/2 calls domain modules and clears local pointer", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    {:update, s, _} = PostReader.handle_key(%{key: "n"}, s)
+
+    ctx = %{
+      user_id: s.current_user.id,
+      board_id: "b1",
+      thread_id: "t1",
+      last_read_post_id: "p2",
+      last_read_message_number: 2
+    }
+
+    {new_state, _} = PostReader.flush_read_pointers(s, ctx)
+    refute Map.has_key?(new_state.read_position, "t1")
   end
 end

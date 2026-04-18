@@ -40,6 +40,7 @@ defmodule Foglet.TUI.App do
           board_list: list() | nil,
           current_board: map() | nil,
           current_thread: map() | nil,
+          current_thread_list: list() | nil,
           posts: list() | nil,
           read_position: map(),
           composer_draft: String.t() | nil,
@@ -56,6 +57,7 @@ defmodule Foglet.TUI.App do
             board_list: nil,
             current_board: nil,
             current_thread: nil,
+            current_thread_list: nil,
             posts: nil,
             read_position: %{},
             composer_draft: nil,
@@ -146,6 +148,22 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:verify_event, event}, state) do
     Screens.Verify.handle_verify_event(event, state)
+  end
+
+  defp do_update({:load_boards}, state) do
+    Foglet.TUI.Screens.BoardList.load_boards(state)
+  end
+
+  defp do_update({:load_threads, board_id}, state) do
+    Foglet.TUI.Screens.ThreadList.load_threads(state, board_id)
+  end
+
+  defp do_update({:load_posts, thread_id}, state) do
+    Foglet.TUI.Screens.PostReader.load_posts(state, thread_id)
+  end
+
+  defp do_update({:flush_read_pointers, ctx}, state) do
+    Foglet.TUI.Screens.PostReader.flush_read_pointers(state, ctx)
   end
 
   defp do_update(_other, state) do
