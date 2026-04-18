@@ -219,9 +219,9 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 14
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Accounts & Identity | 0/4 | Not started | - |
-| 2. Domain Core | 0/TBD | Not started | - |
-| 3. SSH Server & TUI | 0/4 | Not started | - |
+| 1. Accounts & Identity | 4/4 | Complete | 2026-04-18 |
+| 2. Domain Core | 4/4 | Complete | 2026-04-18 |
+| 3. SSH Server & TUI | 4/4 | Complete | 2026-04-18 |
 | 4. Presence & Login Sequence | 0/TBD | Not started | - |
 | 5. Chat | 0/TBD | Not started | - |
 | 6. DMs, Mentions & Notifications | 0/TBD | Not started | - |
