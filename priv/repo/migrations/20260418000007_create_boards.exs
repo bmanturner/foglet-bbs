@@ -13,7 +13,10 @@ defmodule FogletBbs.Repo.Migrations.CreateBoards do
       add :postable_by, :string, null: false, default: "members"
       add :archived, :boolean, null: false, default: false
       add :default_subscription, :boolean, null: false, default: false
-      add :category_id, references(:categories, type: :binary_id, on_delete: :restrict), null: false
+
+      add :category_id, references(:categories, type: :binary_id, on_delete: :restrict),
+        null: false
+
       timestamps(type: :utc_datetime_usec)
     end
 

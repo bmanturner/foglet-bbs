@@ -12,19 +12,22 @@ defmodule FogletBbs.Repo.Migrations.CreateThreadsAndPosts do
       add :post_count, :integer, null: false, default: 1
       add :last_post_at, :utc_datetime_usec
       add :board_id, references(:boards, type: :binary_id, on_delete: :delete_all), null: false
-      add :created_by_id, references(:users, type: :binary_id, on_delete: :nilify_all), null: false
+
+      add :created_by_id, references(:users, type: :binary_id, on_delete: :nilify_all),
+        null: false
+
       # first_post_id added AFTER posts table is created (see ALTER TABLE below)
       timestamps(type: :utc_datetime_usec)
     end
 
     create index(:threads, [:board_id, :sticky, :last_post_at],
-      name: :threads_board_id_sticky_last_post_at_idx
-    )
+             name: :threads_board_id_sticky_last_post_at_idx
+           )
 
     create index(:threads, [:board_id],
-      where: "deleted_at IS NULL",
-      name: :threads_board_id_active_idx
-    )
+             where: "deleted_at IS NULL",
+             name: :threads_board_id_active_idx
+           )
 
     # Step 2: Create posts with FK to threads
     create table(:posts, primary_key: false) do
@@ -48,9 +51,9 @@ defmodule FogletBbs.Repo.Migrations.CreateThreadsAndPosts do
     create index(:posts, [:thread_id, :inserted_at])
 
     create index(:posts, [:user_id, :inserted_at],
-      where: "deleted_at IS NULL",
-      name: :posts_user_id_inserted_at_active_idx
-    )
+             where: "deleted_at IS NULL",
+             name: :posts_user_id_inserted_at_active_idx
+           )
 
     # Add full-text search generated column (Phase 9 will query it)
     execute """

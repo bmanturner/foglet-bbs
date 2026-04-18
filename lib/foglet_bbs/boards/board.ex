@@ -38,7 +38,9 @@ defmodule Foglet.Boards.Board do
     ])
     |> validate_required([:slug, :name, :category_id])
     |> validate_length(:slug, min: 1, max: 50)
-    |> validate_format(:slug, ~r/^[a-z0-9_-]+$/, message: "must be lowercase alphanumeric with _ or -")
+    |> validate_format(:slug, ~r/^[a-z0-9_-]+$/,
+      message: "must be lowercase alphanumeric with _ or -"
+    )
     |> validate_length(:name, min: 1, max: 100)
     |> unique_constraint(:slug)
     |> foreign_key_constraint(:category_id)
