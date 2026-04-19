@@ -135,7 +135,7 @@ defmodule Foglet.SSH.CLIHandler do
     {:ok, lifecycle_pid} =
       Raxol.Core.Runtime.Lifecycle.start_link(Foglet.TUI.App,
         environment: :ssh,
-        io_writer: IOAdapter.make_writer(state.connection_ref, state.channel_id),
+        io_writer: make_crlf_writer(state.connection_ref, state.channel_id),
         width: width,
         height: height,
         context: context
@@ -197,6 +197,24 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   # --- Private helpers ---
+
+  # Wrap IOAdapter.make_writer so bare LF rendered by Raxol.Terminal.Renderer
+  # is translated to CRLF before going to the SSH channel. Without this, raw
+  # SSH mode doesn't return the cursor to column 0 on \n, so every logical
+  # row consumes ~2 visible rows (auto-wrap stair-step). Normalize existing
+  # \r\n first so we don't turn them into \r\r\n.
+  defp make_crlf_writer(connection_ref, channel_id) do
+    inner = IOAdapter.make_writer(connection_ref, channel_id)
+
+    fn data when is_binary(data) ->
+      cooked =
+        data
+        |> :binary.replace("\r\n", "\n", [:global])
+        |> :binary.replace("\n", "\r\n", [:global])
+
+      inner.(cooked)
+    end
+  end
 
   defp read_peer(connection_ref) do
     case :ssh.connection_info(connection_ref, [:peer]) do
