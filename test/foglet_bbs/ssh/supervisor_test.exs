@@ -16,10 +16,9 @@ defmodule Foglet.SSH.SupervisorTest do
       assert {:no_auth_needed, true} = List.keyfind(opts, :no_auth_needed, 0)
     end
 
-    test "includes pwdfun pointing at Foglet.SSH.Supervisor.pwdfun/4" do
+    test "does NOT include pwdfun — TUI is the authentication boundary" do
       opts = SSHSup.daemon_opts("/tmp/sd")
-      assert {:pwdfun, fun} = List.keyfind(opts, :pwdfun, 0)
-      assert is_function(fun, 4)
+      assert List.keyfind(opts, :pwdfun, 0) == nil
     end
 
     test "includes key_cb: {Foglet.SSH.KeyCB, [...]}" do
@@ -28,64 +27,16 @@ defmodule Foglet.SSH.SupervisorTest do
       assert {:system_dir, _} = List.keyfind(kcb_opts, :system_dir, 0)
     end
 
-    test "includes ssh_cli: {Raxol.SSH.CLIHandler, [app_module: Foglet.TUI.App]}" do
+    test "includes ssh_cli: {Foglet.SSH.CLIHandler, []}" do
       opts = SSHSup.daemon_opts("/tmp/sd")
 
-      assert {:ssh_cli, {Raxol.SSH.CLIHandler, cli_opts}} =
+      assert {:ssh_cli, {Foglet.SSH.CLIHandler, []}} =
                List.keyfind(opts, :ssh_cli, 0)
-
-      assert {:app_module, Foglet.TUI.App} = List.keyfind(cli_opts, :app_module, 0)
-    end
-  end
-
-  describe "Foglet.SSH.Supervisor.pwdfun/4 (SSH-02)" do
-    import FogletBbs.AccountsFixtures
-
-    setup do
-      :ok = Ecto.Adapters.SQL.Sandbox.checkout(FogletBbs.Repo)
-      on_exit(fn -> Ecto.Adapters.SQL.Sandbox.checkin(FogletBbs.Repo) end)
-      :ok
     end
 
-    test "accepts active user with correct password" do
-      password = "correcthorsebatterystaple"
-      user = user_fixture(%{password: password})
-
-      result =
-        SSHSup.pwdfun(
-          String.to_charlist(user.handle),
-          String.to_charlist(password),
-          {{127, 0, 0, 1}, 22},
-          nil
-        )
-
-      assert {true, nil} = result
-    end
-
-    test "rejects unknown user" do
-      result =
-        SSHSup.pwdfun(
-          ~c"nonexistentuser",
-          ~c"whatever",
-          {{127, 0, 0, 1}, 22},
-          nil
-        )
-
-      assert {false, nil} = result
-    end
-
-    test ":pubkey form accepts a known non-deleted handle" do
-      user = user_fixture()
-
-      result =
-        SSHSup.pwdfun(String.to_charlist(user.handle), :pubkey, {{127, 0, 0, 1}, 22}, :s)
-
-      assert {true, :s} = result
-    end
-
-    test ":pubkey form rejects an unknown handle" do
-      result = SSHSup.pwdfun(~c"ghost", :pubkey, {{127, 0, 0, 1}, 22}, :s)
-      assert {false, :s} = result
+    test "includes max_sessions: 500" do
+      opts = SSHSup.daemon_opts("/tmp/sd")
+      assert {:max_sessions, 500} = List.keyfind(opts, :max_sessions, 0)
     end
   end
 
