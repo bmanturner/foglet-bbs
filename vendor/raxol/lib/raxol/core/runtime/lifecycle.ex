@@ -119,6 +119,7 @@ defmodule Raxol.Core.Runtime.Lifecycle do
       {:ok, registry_table, pm_pid, initialized_model, dispatcher_pid,
        driver_pid, rendering_engine_pid} ->
         maybe_set_time_travel_dispatcher(options, dispatcher_pid)
+        maybe_enter_alternate_screen(options)
 
         state =
           build_initial_state(
@@ -283,6 +284,8 @@ defmodule Raxol.Core.Runtime.Lifecycle do
       "[#{__MODULE__}] terminating for #{inspect(state.app_name)}. Reason: #{inspect(reason)}"
     )
 
+    maybe_leave_alternate_screen(state.options)
+
     plugin_manager_alive =
       state.plugin_manager && Process.alive?(state.plugin_manager)
 
@@ -290,6 +293,46 @@ defmodule Raxol.Core.Runtime.Lifecycle do
     Shutdown.cleanup_registry_table(state.command_registry_table != nil, state)
 
     :ok
+  end
+
+  # --- Alternate screen buffer (opt-in) ---
+  #
+  # When `alternate_screen: true` is passed to `start_link/2`, the runtime
+  # switches the user's terminal to the alternate screen buffer (DECSET 1049)
+  # on startup and restores the primary buffer on shutdown. This is the
+  # vim/htop/less behavior: the TUI takes over the terminal while running and
+  # leaves the user's prior scrollback untouched on exit.
+  #
+  # For `:ssh` environments, output is routed through the supplied `:io_writer`
+  # function. For `:terminal` environments, output goes to stdout via IO.write.
+  # Other environments (`:liveview`, `:vscode`, `:agent`) have no concept of
+  # an alt-screen and are skipped.
+  defp maybe_enter_alternate_screen(options) do
+    if Keyword.get(options, :alternate_screen, false) do
+      write_alt_screen_escape(options, "\e[?1049h")
+    end
+  end
+
+  defp maybe_leave_alternate_screen(options) do
+    if Keyword.get(options, :alternate_screen, false) do
+      write_alt_screen_escape(options, "\e[?1049l")
+    end
+  end
+
+  defp write_alt_screen_escape(options, escape) do
+    case Keyword.get(options, :environment, :terminal) do
+      :ssh ->
+        case Keyword.get(options, :io_writer) do
+          writer when is_function(writer, 1) -> writer.(escape)
+          _ -> :ok
+        end
+
+      :terminal ->
+        IO.write(escape)
+
+      _ ->
+        :ok
+    end
   end
 
   # Initial commands processing

@@ -91,7 +91,13 @@ defmodule Raxol.Core.Runtime.Rendering.Backends do
     renderer = Raxol.Terminal.Renderer.new(updated_buffer)
     output_string = Raxol.Terminal.Renderer.render(renderer)
 
-    write_output(state.io_writer, output_string, state.sync_output)
+    # Home cursor + clear screen before each frame so the SSH client redraws
+    # in place instead of appending each render to its scrollback. Mirrors the
+    # `:terminal` backend behavior — without this, every TUI update visibly
+    # scrolls because the previous frame is left behind on screen.
+    frame = "\e[H\e[2J" <> output_string
+
+    write_output(state.io_writer, frame, state.sync_output)
 
     {:ok, %{state | buffer: updated_buffer}}
   end
