@@ -203,7 +203,7 @@ defmodule Foglet.SSH.CLIHandler do
     send_alt_screen_leave(state)
     stop_lifecycle(state.lifecycle_pid)
     _ = stop_session(state.session_pid)
-    decrement_connection_count()
+    _ = decrement_connection_count()
     {:stop, state.channel_id || 0, state}
   end
 
@@ -406,7 +406,7 @@ defmodule Foglet.SSH.CLIHandler do
   Called from `Foglet.SSH.Supervisor.init/1`.
   """
   def init_counter do
-    :ets.new(@counter_table, [:named_table, :public, :set])
+    _ = :ets.new(@counter_table, [:named_table, :public, :set])
     :ets.insert(@counter_table, {:count, 0})
     :ok
   end
@@ -416,7 +416,7 @@ defmodule Foglet.SSH.CLIHandler do
     new_count = :ets.update_counter(@counter_table, :count, {2, 1})
 
     if new_count > @max_connections do
-      :ets.update_counter(@counter_table, :count, {2, -1, 0, 0})
+      _ = :ets.update_counter(@counter_table, :count, {2, -1, 0, 0})
       :over_limit
     else
       :ok
