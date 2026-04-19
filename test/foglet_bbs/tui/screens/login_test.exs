@@ -242,4 +242,47 @@ defmodule Foglet.TUI.Screens.LoginTest do
       end
     end
   end
+
+  describe "status modals clear screen_state (Gap 3b)" do
+    test "Test D: pending user modal sets screen_state to %{}" do
+      password = "correcthorsebatterystaple"
+      attrs = valid_user_attributes(%{password: password})
+      {:ok, user} = Foglet.Accounts.register_pending_user(attrs)
+      assert user.status == :pending
+
+      state =
+        form_state(
+          %{handle: user.handle, password: password},
+          :password
+        )
+
+      {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
+
+      assert new_state.modal != nil, "Expected a modal to be set for pending user"
+      assert new_state.screen_state == %{},
+             "Expected screen_state to be cleared when pending modal is shown, got: #{inspect(new_state.screen_state)}"
+    end
+
+    test "Test E: suspended user modal sets screen_state to %{}" do
+      password = "correcthorsebatterystaple"
+      user = user_fixture(%{password: password})
+      # Confirm user first so authentication succeeds, then suspend them
+      {:ok, user} = Foglet.Accounts.confirm_user(user)
+      # Suspend the user via Repo
+      {:ok, _} =
+        FogletBbs.Repo.update(Ecto.Changeset.change(user, status: :suspended))
+
+      state =
+        form_state(
+          %{handle: user.handle, password: password},
+          :password
+        )
+
+      {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
+
+      assert new_state.modal != nil, "Expected a modal to be set for suspended user"
+      assert new_state.screen_state == %{},
+             "Expected screen_state to be cleared when suspended modal is shown, got: #{inspect(new_state.screen_state)}"
+    end
+  end
 end

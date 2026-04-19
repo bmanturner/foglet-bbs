@@ -298,11 +298,11 @@ defmodule Foglet.TUI.Screens.Login do
             "Your account is pending sysop approval. Please wait for an approval notification."
         }
 
-        {:update, %{state | modal: modal}, []}
+        {:update, %{state | modal: modal, screen_state: %{}}, []}
 
       {:ok, %{status: :suspended}} ->
         modal = %{type: :error, message: "Your account is suspended. Contact the sysop."}
-        {:update, %{state | modal: modal}, []}
+        {:update, %{state | modal: modal, screen_state: %{}}, []}
 
       {:error, :invalid_credentials} ->
         # Clear the password field but keep the handle for retry.

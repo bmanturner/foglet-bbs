@@ -34,18 +34,23 @@ defmodule Foglet.TUI.Widgets.Modal do
           optional(:on_cancel) => (map() -> any()) | :dismiss_modal
         }
 
+  @wrap_width 50
+
   @spec render(modal_spec()) :: any()
   def render(%{message: msg} = spec) do
     type = Map.get(spec, :type, :info)
     title = Map.get(spec, :title, title_for(type))
+    color = color_for(type)
+
+    wrapped_lines =
+      msg
+      |> word_wrap(@wrap_width)
+      |> Enum.map(fn line -> text(line, fg: color) end)
 
     column [] do
-      [
-        text(" #{title} ", style: [:bold]),
-        divider(),
-        text(msg, fg: color_for(type)),
-        text(key_hint_for(type), style: [:dim])
-      ]
+      [text(" #{title} ", style: [:bold]), divider()] ++
+        wrapped_lines ++
+        [text(key_hint_for(type), style: [:dim])]
     end
   end
 
@@ -60,5 +65,21 @@ defmodule Foglet.TUI.Widgets.Modal do
   defp color_for(_), do: :green
 
   defp key_hint_for(:confirm), do: "[Y] Yes   [N] No"
-  defp key_hint_for(_), do: "[Enter] OK   [Esc] Dismiss"
+  defp key_hint_for(_), do: "[Enter] OK"
+
+  # Wrap a string to <= max_width columns on whitespace boundaries.
+  # Words longer than max_width are placed on their own line (not split mid-word).
+  defp word_wrap(text, max_width) when is_binary(text) and is_integer(max_width) do
+    text
+    |> String.split(~r/\s+/, trim: true)
+    |> Enum.reduce([""], fn word, [current | rest] ->
+      cond do
+        current == "" -> [word | rest]
+        String.length(current) + 1 + String.length(word) <= max_width ->
+          ["#{current} #{word}" | rest]
+        true -> [word, current | rest]
+      end
+    end)
+    |> Enum.reverse()
+  end
 end
