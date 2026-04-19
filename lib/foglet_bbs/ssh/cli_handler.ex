@@ -118,6 +118,12 @@ defmodule Foglet.SSH.CLIHandler do
       "[SSH.CLIHandler] Lifecycle #{inspect(pid)} exited (#{inspect(reason)}); closing channel"
     )
 
+    # Restore the client's primary screen buffer before we close the channel.
+    # This is the graceful-quit path (TUI Command.quit → Lifecycle :shutdown →
+    # {:EXIT, lifecycle_pid}). At this point the SSH channel is still open, so
+    # the escape reaches iTerm2 before teardown. Without this, the TUI's final
+    # frame lingers on the alt buffer after disconnect.
+    send_alt_screen_leave(state)
     maybe_close_channel(state)
     {:stop, state.channel_id || 0, state}
   end
@@ -138,7 +144,11 @@ defmodule Foglet.SSH.CLIHandler do
         io_writer: make_crlf_writer(state.connection_ref, state.channel_id),
         width: width,
         height: height,
-        context: context
+        context: context,
+        # Take over the SSH client's terminal with the alternate screen buffer
+        # (DECSET 1049). The TUI runs on the alt buffer; on disconnect the
+        # client's primary buffer is restored, leaving its scrollback untouched.
+        alternate_screen: true
       )
 
     Process.link(lifecycle_pid)
@@ -177,12 +187,20 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:eof, _ch}}, state) do
-    # eof signals the client is done sending; channel close will follow.
+    # Client is done sending; send→client direction still open. Emit the
+    # alt-screen LEAVE escape here so iTerm2 restores the primary buffer
+    # before `{:closed}` arrives and the channel tears down. Without this,
+    # the TUI's final frame lingers in the user's scrollback post-disconnect.
+    send_alt_screen_leave(state)
     {:ok, state}
   end
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:closed, _ch}}, state) do
+    # Belt-and-suspenders: if the client dropped without sending EOF
+    # (e.g. window closed abruptly), try the LEAVE escape anyway. The
+    # channel may already be fully closed, in which case the send no-ops.
+    send_alt_screen_leave(state)
     stop_lifecycle(state.lifecycle_pid)
     _ = stop_session(state.session_pid)
     decrement_connection_count()
@@ -198,6 +216,20 @@ defmodule Foglet.SSH.CLIHandler do
     _ = stop_session(state.session_pid)
     :ok
   end
+
+  # Emit the alt-screen LEAVE escape (DECRST 1049) directly to the SSH channel
+  # so the client's terminal restores the primary screen buffer on disconnect.
+  # Safe to call when the channel is already closed — `:ssh_connection.send/3`
+  # just returns an error we ignore.
+  defp send_alt_screen_leave(%{connection_ref: ref, channel_id: ch})
+       when not is_nil(ref) and not is_nil(ch) do
+    _ = :ssh_connection.send(ref, ch, "\e[?1049l")
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp send_alt_screen_leave(_state), do: :ok
 
   # --- Private helpers ---
 
