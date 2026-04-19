@@ -255,18 +255,41 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # Rendering helpers
   # ---------------------------------------------------------------------------
 
-  defp render_input(input_st, _state) do
-    # Minimal context for render/2 (theme system not in scope).
-    context = %{theme: %{}, components: %{multi_line_input: %{}}}
+  defp render_input(input_st, state) do
+    ss = composer_screen_state(state)
+    focused? = ss.mode == :edit
+    render_input_as_text(input_st, focused?)
+  end
 
-    try do
-      MultiLineInput.render(input_st, context)
-    rescue
-      _ ->
-        # Fallback: plain text dump of lines (defensive — tests don't have a
-        # live Raxol renderer context).
-        lines = Enum.join(input_st.lines, "\n")
-        text(lines, fg: :green)
+  # Renders the MultiLineInput state as plain text/2 elements inside a column.
+  # cursor_pos is {row, col} — confirmed from MultiLineInput struct definition.
+  # This bypasses MultiLineInput.render/2, which returns tuple-shaped elements
+  # that crash Flexbox.measure_flex_child/3 (Bug B).
+  defp render_input_as_text(input_st, focused?) do
+    lines =
+      input_st.value
+      |> String.split("\n")
+      |> case do
+        [] -> [""]
+        ls -> ls
+      end
+
+    {cursor_row, cursor_col} = Map.get(input_st, :cursor_pos, {0, 0})
+
+    column style: %{gap: 0} do
+      lines
+      |> Enum.with_index()
+      |> Enum.map(fn {line, idx} ->
+        rendered =
+          if focused? and idx == cursor_row do
+            {before, after_} = String.split_at(line, cursor_col)
+            "#{before}█#{after_}"
+          else
+            line
+          end
+
+        text(rendered, fg: :green)
+      end)
     end
   end
 
