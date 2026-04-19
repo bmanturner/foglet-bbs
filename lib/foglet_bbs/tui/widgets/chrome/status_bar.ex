@@ -33,8 +33,8 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
 
     row style: %{gap: 1} do
       [
-        text("Foglet BBS — #{title}", fg: theme.status_bar.fg, bg: theme.status_bar.bg),
-        text("| #{right}", fg: theme.status_bar.fg, bg: theme.status_bar.bg)
+        text("Foglet BBS — #{title}", fg: theme.status_bar.fg),
+        text("| #{right}", fg: theme.status_bar.fg)
       ]
     end
   end
