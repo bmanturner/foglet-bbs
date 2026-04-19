@@ -32,7 +32,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
     ss = composer_screen_state(state)
     input_st = ss.input_state
     draft = input_st.value
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     body_items =
       if ss.reply_to do

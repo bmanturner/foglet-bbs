@@ -16,7 +16,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def render(state) do
     board = state.current_board
     ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
     thread_content = render_thread_content(state, ss, theme)
     board_name = (board && board.name) || "?"
 

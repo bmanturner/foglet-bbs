@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   @spec render(map()) :: any()
   def render(state) do
     ss = get_in(state.screen_state, [:board_list]) || %{selected_index: 0}
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
     board_content = render_board_content(state, ss, theme)
 
     ScreenFrame.render(state, "Boards", board_content, [

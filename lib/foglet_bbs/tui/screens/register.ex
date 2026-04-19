@@ -15,7 +15,8 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.Accounts
   alias Foglet.Config
-  alias Foglet.TUI.Widgets.KeyBar
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
 
@@ -24,38 +25,29 @@ defmodule Foglet.TUI.Screens.Register do
   @spec render(map()) :: any()
   def render(state) do
     w = state.register_wizard || default_wizard(state)
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     error_items =
       if w.error do
-        [text(""), text(w.error, fg: :red)]
+        [text(""), text(w.error, fg: theme.error.fg, style: [:bold])]
       else
         []
       end
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
+    content =
+      column style: %{gap: 0} do
         [
-          column style: %{gap: 0} do
-            [
-              text(" Register New Account ", style: [:bold]),
-              divider(),
-              column style: %{gap: 0} do
-                [
-                  text("Mode: #{w.mode}", style: [:dim]),
-                  text(""),
-                  text(prompt_for_step(w.step), fg: :green),
-                  text("> #{display_value(w.step, Map.get(w, :current_input, ""))}█",
-                    fg: :cyan,
-                    style: [:bold]
-                  )
-                ] ++ error_items
-              end
-            ]
-          end,
-          KeyBar.render([{"Enter", "Next"}, {"Esc", "Cancel"}])
-        ]
+          text("Mode: #{w.mode}", fg: theme.dim.fg),
+          text(""),
+          text(prompt_for_step(w.step), fg: theme.primary.fg),
+          text("> #{display_value(w.step, Map.get(w, :current_input, ""))}█",
+            fg: theme.accent.fg,
+            style: [:bold]
+          )
+        ] ++ error_items
       end
-    end
+
+    ScreenFrame.render(state, "Register", content, [{"Enter", "Next"}, {"Esc", "Cancel"}])
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

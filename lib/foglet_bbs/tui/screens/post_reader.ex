@@ -17,7 +17,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   def render(state) do
     thread = state.current_thread
     ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
     post_content = render_post_content(state, ss.selected_post_index, theme)
     thread_title = (thread && thread.title) || "?"
 

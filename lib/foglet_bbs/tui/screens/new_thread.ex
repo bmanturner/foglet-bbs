@@ -72,7 +72,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp render_board_step(state, ss) do
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     board_content =
       case ss.boards do
@@ -107,7 +107,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp render_compose_step(state, ss) do
     board = ss.board
     board_name = (board && board.name) || "?"
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     title_line =
       if ss.focused == :title do

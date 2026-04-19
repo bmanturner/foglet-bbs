@@ -21,7 +21,7 @@ defmodule Foglet.TUI.Screens.Verify do
   @spec render(map()) :: any()
   def render(state) do
     vs = state.verify_state || %{buffer: "", attempts: 0, cooldown_until: nil}
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     status_item =
       if cooldown?(vs) do
