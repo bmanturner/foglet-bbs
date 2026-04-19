@@ -343,7 +343,8 @@ defmodule Foglet.SSH.CLIHandler do
         session_pid: state.session_pid,
         pubkey_authenticated: not is_nil(user),
         registration_mode: reg_mode,
-        max_post_length: max_post_length
+        max_post_length: max_post_length,
+        theme: Foglet.TUI.Theme.default()
       },
       terminal_size: {width, height}
     }
