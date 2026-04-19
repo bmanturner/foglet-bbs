@@ -21,6 +21,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     BoardList,
     Login,
     MainMenu,
+    NewThread,
     PostComposer,
     PostReader,
     Register,
@@ -365,6 +366,83 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Modal overlay smoke tests (task #6)
+  # ---------------------------------------------------------------------------
+
+  test "no-modal: view/1 without modal renders screen content through layout engine" do
+    state = %App{screen_state: %{}, terminal_size: {80, 24}}
+    tree = App.view(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    # The login screen (default) must show its welcome text
+    assert Enum.any?(texts, &String.contains?(&1, "Welcome")),
+           "expected 'Welcome' in no-modal view, got: #{inspect(texts)}"
+  end
+
+  test "with-modal: view/1 with :info modal renders title and message through layout engine" do
+    state = %App{
+      screen_state: %{},
+      terminal_size: {80, 24},
+      modal: %{type: :info, title: "Saved", message: "Your draft was saved."}
+    }
+
+    tree = App.view(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "Saved")),
+           "expected modal title 'Saved' in positioned elements, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &String.contains?(&1, "Your draft was saved.")),
+           "expected modal message in positioned elements, got: #{inspect(texts)}"
+
+    # The outer box with border: :double should appear in the flat element list
+    box_elements =
+      positioned
+      |> List.flatten()
+      |> Enum.filter(fn el ->
+        el.type == :box and
+          get_in(el, [:attrs, :border]) == :double
+      end)
+
+    assert box_elements != [],
+           "expected a :box element with border: :double, got: #{inspect(List.flatten(positioned))}"
+  end
+
+  test "with-modal: content is vertically centered (y around terminal mid-point)" do
+    h = 24
+
+    state = %App{
+      screen_state: %{},
+      terminal_size: {80, h},
+      modal: %{type: :info, title: "Notice", message: "Centered?"}
+    }
+
+    tree = App.view(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    ys = Enum.map(elements, & &1.y)
+
+    # All text elements must be non-negative (no negative y coordinates)
+    assert Enum.all?(ys, &(&1 >= 0)),
+           "expected all y positions >= 0, got: #{inspect(ys)}"
+
+    # At least one text element should be in the middle half of the terminal
+    # (y between h/4 and 3*h/4) — verifying the justify: :center effect
+    mid_elements = Enum.filter(elements, fn el -> el.y >= div(h, 4) and el.y <= 3 * div(h, 4) end)
+
+    assert mid_elements != [],
+           "expected modal text near vertical centre (rows #{div(h, 4)}..#{3 * div(h, 4)}), " <>
+             "got elements at y positions: #{inspect(ys)}"
+  end
+
+  # ---------------------------------------------------------------------------
   # Height check — all four screens fit within 24 rows
   # ---------------------------------------------------------------------------
 
@@ -438,5 +516,110 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       assert max_y <= 24,
              "#{name}: total height #{max_y} exceeds 24 rows. Elements: #{inspect(elements)}"
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # NewThread screen — Audit #9 smoke tests
+  # ---------------------------------------------------------------------------
+
+  test "new_thread board step with 2 boards — both board names appear in positioned text" do
+    boards = [
+      %{id: "b1", name: "General", unread_count: 0},
+      %{id: "b2", name: "Announcements", unread_count: 2}
+    ]
+
+    ss = NewThread.init_screen_state(boards: boards, width: 80)
+
+    state = %App{
+      current_screen: :new_thread,
+      current_user: %{id: "u1", handle: "alice"},
+      session_context: %{},
+      terminal_size: {80, 24},
+      screen_state: %{new_thread: ss}
+    }
+
+    tree = NewThread.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "General")),
+           "expected 'General' board name in positioned text, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &String.contains?(&1, "Announcements")),
+           "expected 'Announcements' board name in positioned text, got: #{inspect(texts)}"
+
+    board_ys =
+      elements
+      |> Enum.filter(fn el ->
+        Enum.any?(["General", "Announcements"], &String.contains?(el.text, &1))
+      end)
+      |> Enum.map(& &1.y)
+      |> Enum.uniq()
+
+    assert length(board_ys) >= 2,
+           "expected board names at distinct y positions, got: #{inspect(board_ys)}"
+
+    max_y =
+      elements
+      |> Enum.map(fn el -> Map.get(el, :y, 0) + Map.get(el, :height, 1) end)
+      |> Enum.max(fn -> 0 end)
+
+    assert max_y <= 24,
+           "new_thread board step: total height #{max_y} exceeds 24 rows"
+  end
+
+  test "new_thread compose step with title_input='Hello' and body — both appear in positioned text" do
+    {:ok, body_input_st} =
+      MultiLineInput.init(%{
+        value: "This is my opening post.",
+        placeholder: "Write your opening post…",
+        width: 76,
+        height: 10,
+        wrap: :none,
+        focused: false
+      })
+
+    board = %{id: "b1", name: "General"}
+
+    ss = %{
+      step: :compose,
+      boards: [board],
+      selected_board_index: 0,
+      board: board,
+      title_input: "Hello",
+      body_input_state: body_input_st,
+      focused: :title,
+      error: nil
+    }
+
+    state = %App{
+      current_screen: :new_thread,
+      current_user: %{id: "u1", handle: "alice"},
+      session_context: %{},
+      terminal_size: {80, 24},
+      screen_state: %{new_thread: ss}
+    }
+
+    tree = NewThread.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "Hello")),
+           "expected title 'Hello' in positioned text, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &String.contains?(&1, "This is my opening post.")),
+           "expected body text in positioned text, got: #{inspect(texts)}"
+
+    max_y =
+      elements
+      |> Enum.map(fn el -> Map.get(el, :y, 0) + Map.get(el, :height, 1) end)
+      |> Enum.max(fn -> 0 end)
+
+    assert max_y <= 24,
+           "new_thread compose step: total height #{max_y} exceeds 24 rows"
   end
 end

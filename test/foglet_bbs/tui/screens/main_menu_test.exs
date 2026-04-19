@@ -30,11 +30,18 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert {:load_boards} in cmds2
   end
 
-  test "'C' navigates to :post_composer with empty draft and no current_thread", %{state: state} do
-    {:update, s, _} = MainMenu.handle_key(%{key: "C"}, state)
-    assert s.current_screen == :post_composer
-    assert s.composer_draft == ""
-    assert s.current_thread == nil
+  test "'C' navigates to :new_thread wizard and dispatches {:load_boards_for_new_thread}",
+       %{state: state} do
+    {:update, s, cmds} = MainMenu.handle_key(%{key: "C"}, state)
+    assert s.current_screen == :new_thread
+    assert {:load_boards_for_new_thread} in cmds
+    # Wizard screen_state initialised at the board step
+    assert get_in(s, [:screen_state, :new_thread, :step]) == :board
+
+    # lowercase 'c' same behaviour
+    {:update, s2, cmds2} = MainMenu.handle_key(%{key: "c"}, state)
+    assert s2.current_screen == :new_thread
+    assert {:load_boards_for_new_thread} in cmds2
   end
 
   test "'Q' emits {:terminate, :logout} command", %{state: state} do

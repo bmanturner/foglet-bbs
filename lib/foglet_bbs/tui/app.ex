@@ -30,6 +30,7 @@ defmodule Foglet.TUI.App do
           | :thread_list
           | :post_reader
           | :post_composer
+          | :new_thread
 
   @type t :: %__MODULE__{
           current_screen: screen(),
@@ -147,15 +148,28 @@ defmodule Foglet.TUI.App do
 
   @impl true
   def view(state) do
-    screen_view = render_screen(state)
-
     if state.modal do
-      # Temporary: stacks modal below screen using column until task #6 uses modal/1 overlay.
-      column do
-        [screen_view, Widgets.Modal.render(state.modal)]
-      end
+      render_modal_overlay(state.modal, state.terminal_size)
     else
-      screen_view
+      render_screen(state)
+    end
+  end
+
+  # Renders the modal as the sole visible content, centered in the terminal.
+  # This is not a true z-index overlay — the screen behind is suspended while
+  # the modal is active — but it gives the user clear modal focus with no
+  # Raxol widget-render surprises, and dismissal restores the screen unchanged.
+  #
+  # Design: a full-screen flex column (justify: :center centers the box
+  # vertically; align: :center centers it horizontally) containing a
+  # double-border box that holds the modal body.
+  defp render_modal_overlay(modal, _terminal_size) do
+    column justify: :center, align: :center do
+      [
+        box style: %{border: :double, padding: 1} do
+          Widgets.Modal.render(modal)
+        end
+      ]
     end
   end
 
@@ -198,6 +212,36 @@ defmodule Foglet.TUI.App do
     {%{state | modal: nil}, []}
   end
 
+  # Confirm modal — invoke on_confirm or on_cancel callback if present.
+  # Callbacks may return {:navigate, screen} or a full {state, commands} tuple.
+  # If absent, just dismiss.
+  defp do_update({:confirm_modal, answer}, state) do
+    modal = state.modal
+    cleared = %{state | modal: nil}
+
+    callback_key = if answer == :yes, do: :on_confirm, else: :on_cancel
+    callback = modal && Map.get(modal, callback_key)
+
+    case callback do
+      nil ->
+        {cleared, []}
+
+      :dismiss_modal ->
+        {cleared, []}
+
+      fun when is_function(fun, 1) ->
+        result = fun.(cleared)
+
+        case result do
+          {%__MODULE__{} = new_state, cmds} when is_list(cmds) ->
+            {new_state, wrap_commands(cmds)}
+
+          msg ->
+            do_update(msg, cleared)
+        end
+    end
+  end
+
   defp do_update({:key, key_event}, state) do
     screen_module = screen_module_for(state.current_screen)
 
@@ -223,6 +267,10 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:load_boards}, state) do
     Foglet.TUI.Screens.BoardList.load_boards(state)
+  end
+
+  defp do_update({:load_boards_for_new_thread}, state) do
+    Foglet.TUI.Screens.NewThread.load_boards(state)
   end
 
   defp do_update({:load_threads, board_id}, state) do
@@ -275,16 +323,15 @@ defmodule Foglet.TUI.App do
   end
 
   defp render_screen(state) do
-    case state.current_screen do
-      :login -> Screens.Login.render(state)
-      :register -> Screens.Register.render(state)
-      :verify -> Screens.Verify.render(state)
-      :main_menu -> Screens.MainMenu.render(state)
-      :board_list -> Screens.BoardList.render(state)
-      :thread_list -> Screens.ThreadList.render(state)
-      :post_reader -> Screens.PostReader.render(state)
-      :post_composer -> Screens.PostComposer.render(state)
-    end
+    screen_module_for(state.current_screen).render(state)
+  end
+
+  # Modal key dismissal — takes precedence over screen-level and global handlers.
+  # :confirm modals route Y/N to {:confirm_modal, :yes/:no}.
+  # :info/:error/:warning modals dismiss on Enter, Escape, or Space.
+  defp global_key_handler(key, %{modal: modal} = state) when not is_nil(modal) do
+    modal_type = Map.get(modal, :type, :info)
+    handle_modal_key(modal_type, key, state)
   end
 
   defp global_key_handler(%{key: "q"} = _key, state) when state.current_screen == :login do
@@ -292,6 +339,21 @@ defmodule Foglet.TUI.App do
   end
 
   defp global_key_handler(_key, state), do: {state, []}
+
+  defp handle_modal_key(:confirm, %{key: k}, state) when k in ["y", "Y"] do
+    do_update({:confirm_modal, :yes}, state)
+  end
+
+  defp handle_modal_key(:confirm, %{key: k}, state) when k in ["n", "N", "escape"] do
+    do_update({:confirm_modal, :no}, state)
+  end
+
+  defp handle_modal_key(type, %{key: k}, state)
+       when type in [:info, :error, :warning] and k in ["enter", "escape", "space"] do
+    do_update(:dismiss_modal, state)
+  end
+
+  defp handle_modal_key(_type, _key, state), do: {state, []}
 
   # Convert screen-returned tuples to proper %Command{} structs that the
   # Raxol dispatcher can execute.
@@ -309,4 +371,5 @@ defmodule Foglet.TUI.App do
   defp screen_module_for(:thread_list), do: Screens.ThreadList
   defp screen_module_for(:post_reader), do: Screens.PostReader
   defp screen_module_for(:post_composer), do: Screens.PostComposer
+  defp screen_module_for(:new_thread), do: Screens.NewThread
 end
