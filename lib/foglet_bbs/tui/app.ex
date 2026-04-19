@@ -525,6 +525,29 @@ defmodule Foglet.TUI.App do
     do_update(inner, state)
   end
 
+  # After the user dismisses the pending-approval modal, quit the session so the
+  # pending user cannot continue navigating the BBS. The modal is already set
+  # by Register.submit/2; we patch its on_confirm/on_cancel callbacks here so
+  # either dismiss path issues Command.quit().
+  defp do_update({:terminate_after_modal, _reason}, state) do
+    modal =
+      if state.modal do
+        Map.merge(state.modal, %{
+          on_confirm: fn s -> {s, [Command.quit()]} end,
+          on_cancel: fn s -> {s, [Command.quit()]} end
+        })
+      else
+        %{
+          type: :info,
+          message: "Session will now close.",
+          on_confirm: fn s -> {s, [Command.quit()]} end,
+          on_cancel: fn s -> {s, [Command.quit()]} end
+        }
+      end
+
+    {%{state | modal: modal}, []}
+  end
+
   defp do_update(_other, state) do
     # Unknown messages pass through unchanged.
     {state, []}
