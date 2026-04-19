@@ -46,14 +46,14 @@ Two users SSHing into the same BBS and feeling like they're actually *present* t
 - [ ] Property tests for message-number monotonicity under concurrent inserts
 - [ ] Seeds for default category + board layout
 
-**Milestone 3 — SSH Server & Minimal TUI**
-- [ ] `Foglet.SSH.Supervisor` wrapping `:ssh` daemon with persistent host key
-- [ ] SSH password auth and public-key auth against user store
-- [ ] Per-connection Session process (`Foglet.Sessions.Supervisor`), one-session-per-user enforcement
-- [ ] TUI framework: input handling, ANSI output, screen clearing, cursor control
-- [ ] Terminal size via PTY/window-change events
-- [ ] TUI screens: login, main menu, board list, thread list, post reader, post composer
-- [ ] Read pointers advance as you read
+**Milestone 3 — SSH Server & Minimal TUI** ✓ Complete 2026-04-19
+- [x] `Foglet.SSH.Supervisor` wrapping `:ssh` daemon with persistent host key — Validated in Phase 03
+- [x] SSH password auth and public-key auth against user store — Validated in Phase 03
+- [x] Per-connection Session process (`Foglet.Sessions.Supervisor`), one-session-per-user enforcement — Validated in Phase 03
+- [x] TUI framework: input handling, ANSI output, screen clearing, cursor control — Validated in Phase 03
+- [x] Terminal size via PTY/window-change events — Validated in Phase 03 (gap closure 03-06)
+- [x] TUI screens: login, main menu, board list, thread list, post reader, post composer — Validated in Phase 03
+- [x] Read pointers advance as you read — Validated in Phase 03
 
 **Milestone 4 — Presence, Online List, Login Sequence**
 - [ ] Phoenix Presence integrated with Sessions; "who's online" updated live
