@@ -136,8 +136,22 @@ defmodule Foglet.Sessions.Session do
 
   def handle_cast({:promote_to_user, user}, state) do
     Logger.info("Session guest promoted to user_id=#{user.id} handle=#{user.handle}")
+
     # Register in the Registry so one-session enforcement applies.
-    Registry.register(Foglet.Sessions.Registry, user.id, nil)
+    # The Supervisor's promote_guest_session/2 guarantees the slot is free before
+    # casting this message. If registration fails here it is a protocol bug — log
+    # it loudly so it surfaces rather than staying silent.
+    case Registry.register(Foglet.Sessions.Registry, user.id, nil) do
+      {:ok, _} ->
+        :ok
+
+      {:error, {:already_registered, other_pid}} ->
+        Logger.error(
+          "Session promote_to_user: Registry slot for user_id=#{user.id} still held by " <>
+            "pid=#{inspect(other_pid)} — protocol violation (promote_guest_session not used?)"
+        )
+    end
+
     {:noreply, %{state | user_id: user.id, handle: user.handle, role: user.role}}
   end
 

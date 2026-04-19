@@ -255,9 +255,12 @@ defmodule Foglet.TUI.App do
   end
 
   # TUI login screen authenticated a user — promote the guest session.
+  # Routes through the Supervisor so one-session-per-user (SSH-05 / D-25) is
+  # enforced: any pre-existing session for this user is replaced before this
+  # guest pid registers under the user_id key.
   defp do_update({:promote_session, user}, state) do
     if is_pid(state.session_pid) do
-      Foglet.Sessions.Session.promote_to_user(state.session_pid, user)
+      Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
     end
 
     {%{state | current_user: user, current_screen: :main_menu}, []}

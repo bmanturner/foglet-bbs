@@ -93,6 +93,142 @@ defmodule Foglet.Sessions.SupervisorTest do
       assert Process.alive?(pid2)
     end
 
+    test "promote_guest_session/2 with no existing session promotes the guest", %{
+      user_id: user_id
+    } do
+      {:ok, guest_pid} = Sup.start_guest_session()
+
+      on_exit(fn ->
+        if Process.alive?(guest_pid), do: DynamicSupervisor.terminate_child(Sup, guest_pid)
+      end)
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "alice", role: :user}
+      assert :ok = Sup.promote_guest_session(guest_pid, user)
+
+      # Allow the cast to be processed
+      _ = :sys.get_state(guest_pid)
+
+      assert [{^guest_pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+      state = Session.get_state(guest_pid)
+      assert state.user_id == user_id
+      assert state.handle == "alice"
+      assert state.role == :user
+    end
+
+    test "promote_guest_session/2 is a no-op when guest is already the registered session",
+         %{user_id: user_id} do
+      {:ok, guest_pid} = Sup.start_guest_session()
+
+      on_exit(fn ->
+        if Process.alive?(guest_pid), do: DynamicSupervisor.terminate_child(Sup, guest_pid)
+      end)
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "alice", role: :user}
+
+      # First promotion registers the guest under user_id
+      assert :ok = Sup.promote_guest_session(guest_pid, user)
+      _ = :sys.get_state(guest_pid)
+      assert [{^guest_pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+
+      # Second call with the same guest_pid must be a no-op (idempotent)
+      assert :ok = Sup.promote_guest_session(guest_pid, user)
+      _ = :sys.get_state(guest_pid)
+      assert [{^guest_pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+    end
+
+    test "promote_guest_session/2 replaces existing session when guest promotes to a user who already has one",
+         %{user_id: user_id} do
+      # Start an existing authenticated session for user_A
+      {:ok, old_pid} =
+        Sup.start_session(user_id: user_id, handle: "alice", role: :user)
+
+      old_ref = Process.monitor(old_pid)
+
+      # Start a fresh guest session (simulating a new SSH connection)
+      {:ok, guest_pid} = Sup.start_guest_session()
+
+      on_exit(fn ->
+        if Process.alive?(guest_pid), do: DynamicSupervisor.terminate_child(Sup, guest_pid)
+      end)
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "alice", role: :user}
+
+      # Promoting the guest must replace the old session
+      assert :ok = Sup.promote_guest_session(guest_pid, user)
+
+      # Old session must receive :replaced_by_new_session and terminate
+      assert_receive {:DOWN, ^old_ref, :process, ^old_pid, :normal}, 3_000
+
+      # Allow the promote cast to be processed
+      _ = :sys.get_state(guest_pid)
+
+      # Registry now points to the promoted guest pid
+      assert [{^guest_pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+
+      state = Session.get_state(guest_pid)
+      assert state.user_id == user_id
+      assert state.handle == "alice"
+      assert state.role == :user
+    end
+
+    test "promote_guest_session/2 force-terminates a session that does not stop gracefully",
+         %{user_id: user_id} do
+      # Simulate a session that holds the Registry slot but never exits on
+      # :replaced_by_new_session. We spawn an unlinked process (so the test
+      # process is not killed when the supervisor force-kills the holder), trap
+      # exits inside it, and swallow all messages. The Supervisor will time out
+      # waiting for a DOWN and fall back to Process.exit(:kill).
+      test_pid = self()
+
+      # spawn/1 creates an unlinked process — EXIT from holder_pid will not
+      # propagate to the test process even when killed with :kill.
+      holder_pid =
+        spawn(fn ->
+          Process.flag(:trap_exit, true)
+          {:ok, _} = Registry.register(Foglet.Sessions.Registry, user_id, nil)
+          send(test_pid, :holder_ready)
+
+          # Absorb :replaced_by_new_session and all other messages without exiting.
+          # :trap_exit converts EXIT signals to messages, so even :kill as an
+          # info msg lands here — but :kill bypasses trap_exit at the OS level.
+          loop = fn loop ->
+            receive do
+              _ -> loop.(loop)
+            end
+          end
+
+          loop.(loop)
+        end)
+
+      assert_receive :holder_ready, 1_000
+      holder_ref = Process.monitor(holder_pid)
+
+      {:ok, guest_pid} = Sup.start_guest_session()
+
+      on_exit(fn ->
+        if Process.alive?(holder_pid), do: Process.exit(holder_pid, :kill)
+        if Process.alive?(guest_pid), do: DynamicSupervisor.terminate_child(Sup, guest_pid)
+      end)
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "alice", role: :user}
+
+      # promote_guest_session finds holder_pid in the Registry, sends
+      # :replaced_by_new_session, waits @replacement_timeout_ms (2 s), then
+      # falls back: terminate_child returns :not_found → Process.exit(:kill).
+      # Total wait is ~2 s; give 5 s headroom.
+      assert :ok = Sup.promote_guest_session(guest_pid, user)
+
+      # holder_pid was force-killed during the timeout fallback
+      assert_receive {:DOWN, ^holder_ref, :process, ^holder_pid, _}, 5_000
+
+      # guest_pid now holds the Registry slot
+      _ = :sys.get_state(guest_pid)
+      assert [{^guest_pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+
+      state = Session.get_state(guest_pid)
+      assert state.user_id == user_id
+    end
+
     test "concurrent start_session calls for same user_id leave exactly one alive",
          %{user_id: user_id} do
       results =

@@ -14,6 +14,8 @@ defmodule Foglet.Sessions.Supervisor do
 
   use DynamicSupervisor
 
+  require Logger
+
   @registry Foglet.Sessions.Registry
   @replacement_timeout_ms 2_000
 
@@ -61,11 +63,39 @@ defmodule Foglet.Sessions.Supervisor do
 
   Guest sessions are not registered in `Foglet.Sessions.Registry` — there is no
   user_id key to register under. One-session-per-user enforcement does not apply
-  until the guest promotes to an authenticated user via `Session.promote_to_user/2`.
+  until the guest promotes to an authenticated user via `promote_guest_session/2`.
   """
   @spec start_guest_session() :: {:ok, pid()} | {:error, term()}
   def start_guest_session do
     DynamicSupervisor.start_child(__MODULE__, {Foglet.Sessions.Session, [user_id: nil]})
+  end
+
+  @doc """
+  Promote a guest session to an authenticated user session, enforcing SSH-05 / D-25.
+
+  Looks up any existing session for `user.id`:
+    * If none exists: promotes `guest_pid` in-place (no replacement needed).
+    * If the existing pid IS `guest_pid`: no-op (idempotent — already this user).
+    * If a different session owns the slot: replaces it (send `:replaced_by_new_session`,
+      wait for `:DOWN` or force-terminate after `@replacement_timeout_ms`), then promotes.
+
+  Returns `:ok` on success or `{:error, term()}` on failure.
+  """
+  @spec promote_guest_session(pid(), Foglet.Accounts.User.t()) :: :ok | {:error, term()}
+  def promote_guest_session(guest_pid, user) when is_pid(guest_pid) do
+    case Registry.lookup(@registry, user.id) do
+      [] ->
+        # No existing session — simple promote.
+        Foglet.Sessions.Session.promote_to_user(guest_pid, user)
+
+      [{^guest_pid, _}] ->
+        # Already registered as this user — idempotent no-op.
+        :ok
+
+      [{old_pid, _}] ->
+        # Different session holds the slot — replace it, then promote.
+        replace_then_promote(old_pid, guest_pid, user)
+    end
   end
 
   @spec terminate_session(String.t()) :: :ok | {:error, :not_found}
@@ -89,6 +119,37 @@ defmodule Foglet.Sessions.Supervisor do
   end
 
   # --- Private ---
+
+  defp replace_then_promote(old_pid, guest_pid, user) do
+    ref = Process.monitor(old_pid)
+    send(old_pid, :replaced_by_new_session)
+
+    receive do
+      {:DOWN, ^ref, :process, ^old_pid, _reason} ->
+        Foglet.Sessions.Session.promote_to_user(guest_pid, user)
+    after
+      @replacement_timeout_ms ->
+        Process.demonitor(ref, [:flush])
+
+        # Try graceful DynamicSupervisor termination first; fall back to a
+        # direct exit signal if old_pid is not a supervised child (e.g. in
+        # tests or after a partial crash/restart).
+        case DynamicSupervisor.terminate_child(__MODULE__, old_pid) do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "Session replace_then_promote: terminate_child failed (#{inspect(reason)}), " <>
+                "sending EXIT to #{inspect(old_pid)}"
+            )
+
+            Process.exit(old_pid, :kill)
+        end
+
+        Foglet.Sessions.Session.promote_to_user(guest_pid, user)
+    end
+  end
 
   defp replace(old_pid, opts) do
     ref = Process.monitor(old_pid)
