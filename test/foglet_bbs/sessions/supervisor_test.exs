@@ -69,6 +69,30 @@ defmodule Foglet.Sessions.SupervisorTest do
       assert {:ok, ^pid} = Sup.lookup_session(user_id)
     end
 
+    test "start_guest_session/0 starts an anonymous session not in Registry" do
+      assert {:ok, pid} = Sup.start_guest_session()
+      on_exit(fn -> if Process.alive?(pid), do: DynamicSupervisor.terminate_child(Sup, pid) end)
+
+      assert Process.alive?(pid)
+      # Guest sessions are not registered under any user_id key
+      state = Session.get_state(pid)
+      assert state.user_id == nil
+    end
+
+    test "multiple guest sessions can coexist" do
+      {:ok, pid1} = Sup.start_guest_session()
+      {:ok, pid2} = Sup.start_guest_session()
+
+      on_exit(fn ->
+        if Process.alive?(pid1), do: DynamicSupervisor.terminate_child(Sup, pid1)
+        if Process.alive?(pid2), do: DynamicSupervisor.terminate_child(Sup, pid2)
+      end)
+
+      assert pid1 != pid2
+      assert Process.alive?(pid1)
+      assert Process.alive?(pid2)
+    end
+
     test "concurrent start_session calls for same user_id leave exactly one alive",
          %{user_id: user_id} do
       results =

@@ -27,9 +27,13 @@ defmodule Foglet.Sessions.Supervisor do
   end
 
   @doc """
-  Start (or replace) a Session for the given user.
+  Start (or replace) a Session for the given authenticated user.
 
-  opts: user_id (required), handle, role, terminal_size
+  opts: user_id (required binary), handle, role, terminal_size
+
+  If a session for user_id already exists it is replaced: the old session
+  receives `:replaced_by_new_session`, waits for it to stop, then starts a
+  fresh one.
   """
   @spec start_session(keyword()) :: {:ok, pid()} | {:error, term()}
   def start_session(opts) do
@@ -42,9 +46,26 @@ defmodule Foglet.Sessions.Supervisor do
       {:error, {:already_started, old_pid}} ->
         replace(old_pid, opts)
 
+      # Registry collision from a race: the Registry via-tuple found an existing
+      # registration even before start_child returned.
+      {:error, {:already_registered, old_pid}} ->
+        replace(old_pid, opts)
+
       {:error, _reason} = err ->
         err
     end
+  end
+
+  @doc """
+  Start an anonymous guest session (user_id: nil).
+
+  Guest sessions are not registered in `Foglet.Sessions.Registry` — there is no
+  user_id key to register under. One-session-per-user enforcement does not apply
+  until the guest promotes to an authenticated user via `Session.promote_to_user/2`.
+  """
+  @spec start_guest_session() :: {:ok, pid()} | {:error, term()}
+  def start_guest_session do
+    DynamicSupervisor.start_child(__MODULE__, {Foglet.Sessions.Session, [user_id: nil]})
   end
 
   @spec terminate_session(String.t()) :: :ok | {:error, :not_found}

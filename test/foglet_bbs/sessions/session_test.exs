@@ -11,7 +11,9 @@ defmodule Foglet.Sessions.SessionTest do
   end
 
   describe "Foglet.Sessions.Session (SSH-05)" do
-    test "start_link registers in Foglet.Sessions.Registry", %{user_id: user_id} do
+    test "start_link registers in Foglet.Sessions.Registry for authenticated user", %{
+      user_id: user_id
+    } do
       {:ok, pid} =
         start_supervised(
           {Session, [user_id: user_id, handle: "alice", role: :user, terminal_size: {80, 24}]}
@@ -75,6 +77,48 @@ defmodule Foglet.Sessions.SessionTest do
       _ = :sys.get_state(Session.via_tuple(user_id))
 
       assert Session.get_state(user_id).terminal_size == {132, 50}
+    end
+  end
+
+  describe "guest sessions (user_id: nil)" do
+    test "start_link with user_id: nil does NOT register in Registry" do
+      {:ok, pid} = start_supervised({Session, [user_id: nil]})
+      assert Process.alive?(pid)
+      # No user_id key to look up — Registry should have no entry for nil
+      assert Registry.lookup(Foglet.Sessions.Registry, nil) == []
+    end
+
+    test "guest session state has nil user_id and handle" do
+      {:ok, pid} = start_supervised({Session, [user_id: nil]})
+      state = Session.get_state(pid)
+      assert state.user_id == nil
+      assert state.handle == nil
+    end
+  end
+
+  describe "promote_to_user/2" do
+    test "updates user_id, handle, role in state", %{user_id: user_id} do
+      {:ok, pid} = start_supervised({Session, [user_id: nil]})
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "promoted", role: :user}
+      :ok = Session.promote_to_user(pid, user)
+      _ = :sys.get_state(pid)
+
+      state = Session.get_state(pid)
+      assert state.user_id == user_id
+      assert state.handle == "promoted"
+      assert state.role == :user
+    end
+
+    test "registers the promoted session in the Registry", %{user_id: user_id} do
+      {:ok, pid} = start_supervised({Session, [user_id: nil]})
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "promoted", role: :user}
+      :ok = Session.promote_to_user(pid, user)
+      # Allow the cast to be processed
+      _ = :sys.get_state(pid)
+
+      assert [{^pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
     end
   end
 end
