@@ -47,6 +47,12 @@ defmodule Foglet.SSH.Supervisor do
 
     Logger.info("Foglet.SSH.Supervisor starting (port=#{port}, system_dir=#{system_dir})")
 
+    # Initialize the ETS-backed connection counter before the daemon accepts
+    # any connections. The table is public and named; it must be created exactly
+    # once per VM start — safe here because this supervisor is started once by
+    # the Application supervisor.
+    :ok = Foglet.SSH.CLIHandler.init_counter()
+
     children = [
       {Foglet.SSH.DaemonOwner, port: port, daemon_opts: d_opts}
     ]

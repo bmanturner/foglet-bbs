@@ -364,22 +364,39 @@ defmodule Foglet.SSH.CLIHandler do
 
   defp maybe_close_channel(_state), do: :ok
 
-  # --- Connection limit via :persistent_term ---
+  # --- Connection limit via ETS atomic counter ---
 
-  @counter_key {__MODULE__, :connection_count}
+  @counter_table __MODULE__.Counter
+
+  @doc """
+  Initializes the ETS counter table for tracking active SSH connections.
+  Must be called once before the daemon starts accepting connections.
+  Called from `Foglet.SSH.Supervisor.init/1`.
+  """
+  def init_counter do
+    :ets.new(@counter_table, [:named_table, :public, :set])
+    :ets.insert(@counter_table, {:count, 0})
+    :ok
+  end
 
   defp check_connection_limit do
-    count = :persistent_term.get(@counter_key, 0)
-    if count >= @max_connections, do: :over_limit, else: :ok
+    # Atomically increment; if the result exceeds the limit, decrement and reject.
+    new_count = :ets.update_counter(@counter_table, :count, {2, 1})
+
+    if new_count > @max_connections do
+      :ets.update_counter(@counter_table, :count, {2, -1, 0, 0})
+      :over_limit
+    else
+      :ok
+    end
   end
 
   defp increment_connection_count do
-    count = :persistent_term.get(@counter_key, 0)
-    :persistent_term.put(@counter_key, count + 1)
+    # Already incremented atomically inside check_connection_limit/0; this is a no-op.
+    :ok
   end
 
   defp decrement_connection_count do
-    count = :persistent_term.get(@counter_key, 0)
-    :persistent_term.put(@counter_key, max(0, count - 1))
+    :ets.update_counter(@counter_table, :count, {2, -1, 0, 0})
   end
 end
