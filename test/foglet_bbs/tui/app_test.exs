@@ -185,4 +185,79 @@ defmodule Foglet.TUI.AppTest do
       assert subs != []
     end
   end
+
+  describe "modal key dismissal (task #6)" do
+    setup do
+      {:ok, state} = App.init(%{})
+      %{state: state}
+    end
+
+    test ":info modal + Enter dismisses modal", %{state: state} do
+      state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
+      {new_state, _cmds} = App.update({:key, %{key: "enter"}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+
+    test ":info modal + Escape dismisses modal", %{state: state} do
+      state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
+      {new_state, _cmds} = App.update({:key, %{key: "escape"}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+
+    test ":info modal + Space dismisses modal", %{state: state} do
+      state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
+      {new_state, _cmds} = App.update({:key, %{key: "space"}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+
+    test ":error modal + Escape dismisses modal", %{state: state} do
+      state_with_modal = %{state | modal: %{type: :error, message: "Oops"}}
+      {new_state, _cmds} = App.update({:key, %{key: "escape"}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+
+    test ":warning modal + Enter dismisses modal", %{state: state} do
+      state_with_modal = %{state | modal: %{type: :warning, message: "Careful"}}
+      {new_state, _cmds} = App.update({:key, %{key: "enter"}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+
+    test "unrecognised key on :info modal leaves state unchanged", %{state: state} do
+      modal = %{type: :info, message: "Hello"}
+      state_with_modal = %{state | modal: modal}
+      {new_state, cmds} = App.update({:key, %{key: "x"}}, state_with_modal)
+      assert new_state.modal == modal
+      assert cmds == []
+    end
+
+    test ":confirm modal + Y dispatches {:confirm_modal, :yes} and dismisses", %{state: state} do
+      state_with_modal = %{state | modal: %{type: :confirm, message: "Delete?"}}
+      {new_state, _cmds} = App.update({:key, %{key: "y"}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+
+    test ":confirm modal + N dispatches {:confirm_modal, :no} and dismisses", %{state: state} do
+      state_with_modal = %{state | modal: %{type: :confirm, message: "Delete?"}}
+      {new_state, _cmds} = App.update({:key, %{key: "n"}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+
+    test ":confirm modal + Y invokes on_confirm callback", %{state: state} do
+      on_confirm = fn _s -> {:navigate, :board_list} end
+      modal = %{type: :confirm, message: "Go?", on_confirm: on_confirm}
+      state_with_modal = %{state | modal: modal}
+      {new_state, _cmds} = App.update({:key, %{key: "y"}}, state_with_modal)
+      assert new_state.modal == nil
+      assert new_state.current_screen == :board_list
+    end
+
+    test ":confirm modal + N invokes on_cancel callback", %{state: state} do
+      on_cancel = fn _s -> {:navigate, :post_reader} end
+      modal = %{type: :confirm, message: "Go?", on_cancel: on_cancel}
+      state_with_modal = %{state | modal: modal}
+      {new_state, _cmds} = App.update({:key, %{key: "n"}}, state_with_modal)
+      assert new_state.modal == nil
+      assert new_state.current_screen == :post_reader
+    end
+  end
 end
