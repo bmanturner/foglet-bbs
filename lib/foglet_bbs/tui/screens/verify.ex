@@ -188,8 +188,14 @@ defmodule Foglet.TUI.Screens.Verify do
   end
 
   defp resend_code(state) do
-    {new_state, cmds} = resend_code_raw(state)
-    {:update, new_state, cmds}
+    vs = state.verify_state || %{buffer: "", attempts: 0, cooldown_until: nil}
+
+    if cooldown?(vs) do
+      {:update, %{state | modal: cooldown_modal(vs)}, []}
+    else
+      {new_state, cmds} = resend_code_raw(state)
+      {:update, new_state, cmds}
+    end
   end
 
   defp resend_code_raw(%{current_user: nil} = state), do: {state, []}
