@@ -21,14 +21,16 @@ defmodule Foglet.TUI.Widgets.Modal do
     type = Map.get(spec, :type, :info)
     title = Map.get(spec, :title, title_for(type))
 
-    panel(
-      title: title,
-      border: :double,
-      children: [
-        text(msg, fg: color_for(type)),
-        text(key_hint_for(type), style: [:dim])
-      ]
-    )
+    box style: %{border: :double, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" #{title} ", style: [:bold]),
+          divider(),
+          text(msg, fg: color_for(type)),
+          text(key_hint_for(type), style: [:dim])
+        ]
+      end
+    end
   end
 
   defp title_for(:info), do: "Info"

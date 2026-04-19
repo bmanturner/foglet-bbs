@@ -10,11 +10,11 @@ defmodule Foglet.TUI.Widgets.StatusBar do
   def render(%{handle: handle, location: location}) do
     left = if handle, do: "@#{handle}", else: "guest"
 
-    box(
-      children: [
+    row style: %{gap: 1} do
+      [
         text("Foglet BBS — #{location}", fg: :green),
-        text(" | #{left}", style: [:dim])
+        text("| #{left}", style: [:dim])
       ]
-    )
+    end
   end
 end

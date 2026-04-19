@@ -8,13 +8,13 @@ defmodule Foglet.TUI.Widgets.KeyBar do
 
   @spec render(keys :: [{String.t(), String.t()}]) :: any()
   def render(keys) when is_list(keys) do
-    formatted =
-      Enum.map_join(keys, "  ", fn {k, d} -> "[#{k}] #{d}" end)
+    labels =
+      Enum.map(keys, fn {k, d} ->
+        text("[#{k}] #{d}", style: [:dim])
+      end)
 
-    box(
-      children: [
-        text(formatted, style: [:dim])
-      ]
-    )
+    row style: %{gap: 2} do
+      labels
+    end
   end
 end
