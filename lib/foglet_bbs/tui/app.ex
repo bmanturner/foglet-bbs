@@ -19,6 +19,7 @@ defmodule Foglet.TUI.App do
 
   alias Foglet.TUI.Screens
   alias Foglet.TUI.Widgets
+  alias Raxol.Core.Runtime.Command
 
   @type screen ::
           :login
@@ -34,6 +35,7 @@ defmodule Foglet.TUI.App do
           current_screen: screen(),
           current_user: Foglet.Accounts.User.t() | nil,
           session_context: map(),
+          session_pid: pid() | nil,
           terminal_size: {pos_integer(), pos_integer()},
           modal: map() | nil,
           screen_state: map(),
@@ -51,6 +53,7 @@ defmodule Foglet.TUI.App do
   defstruct current_screen: :login,
             current_user: nil,
             session_context: %{},
+            session_pid: nil,
             terminal_size: {80, 24},
             modal: nil,
             screen_state: %{},
@@ -68,9 +71,20 @@ defmodule Foglet.TUI.App do
 
   @impl true
   def init(context) do
-    session_context = Map.get(context, :session_context, %{})
-    terminal_size = Map.get(context, :terminal_size, {80, 24})
+    # When started via Raxol.Core.Runtime.Lifecycle.start_link/2, the map
+    # passed to init/1 is %{width:, height:, options: [all_lifecycle_opts]}.
+    # Our custom context is stored under the :context key in those options.
+    # When called directly in tests, context may carry :session_context at the
+    # top level — we support both to keep tests working unchanged.
+    {session_context, terminal_size} = extract_context(context)
+
     user = session_context[:user]
+    session_pid = session_context[:session_pid]
+
+    # Register TUI pid with the Session so it can receive replace/heartbeat msgs.
+    if is_pid(session_pid) do
+      Foglet.Sessions.Session.set_tui_pid(session_pid, self())
+    end
 
     screen = if user, do: :main_menu, else: :login
 
@@ -78,16 +92,58 @@ defmodule Foglet.TUI.App do
       current_screen: screen,
       current_user: user,
       session_context: session_context,
+      session_pid: session_pid,
       terminal_size: terminal_size
     }
 
-    {state, []}
+    {:ok, state}
+  end
+
+  # Extract session_context + terminal_size from either:
+  #   (a) Lifecycle-produced map: %{width:, height:, options: [context: %{...}]}
+  #   (b) Direct test call: %{session_context: %{...}, terminal_size: {w, h}}
+  defp extract_context(context) do
+    if is_map(context) and is_list(Map.get(context, :options)) do
+      # Lifecycle path — context is in options[:context]
+      opts = Map.get(context, :options, [])
+      nested = Keyword.get(opts, :context, %{})
+      session_context = Map.get(nested, :session_context, %{})
+      w = Map.get(context, :width, 80)
+      h = Map.get(context, :height, 24)
+      terminal_size = Map.get(nested, :terminal_size, {w, h})
+      {session_context, terminal_size}
+    else
+      # Direct/test path — session_context at top level
+      session_context = Map.get(context, :session_context, %{})
+      terminal_size = Map.get(context, :terminal_size, {80, 24})
+      {session_context, terminal_size}
+    end
   end
 
   @impl true
   def update(message, state) do
-    do_update(message, state)
+    do_update(normalize_message(message), state)
   end
+
+  # Translate Raxol %Event{} structs into the internal tuple format that
+  # do_update/2 and all screen handle_key/2 functions expect.
+  defp normalize_message(%Raxol.Core.Events.Event{type: :key, data: data}) do
+    {:key, normalize_key(data)}
+  end
+
+  defp normalize_message(%Raxol.Core.Events.Event{type: :window, data: %{width: w, height: h}}) do
+    {:window_change, w, h}
+  end
+
+  defp normalize_message(other), do: other
+
+  defp normalize_key(%{key: :char, ctrl: true, char: c}), do: %{key: "ctrl_#{c}"}
+  defp normalize_key(%{key: :char, char: " "}), do: %{key: "space"}
+  defp normalize_key(%{key: :char, char: c}), do: %{key: c}
+  defp normalize_key(%{key: :page_up}), do: %{key: "pageup"}
+  defp normalize_key(%{key: :page_down}), do: %{key: "pagedown"}
+  defp normalize_key(%{key: atom}) when is_atom(atom), do: %{key: Atom.to_string(atom)}
+  defp normalize_key(other), do: other
 
   @impl true
   def view(state) do
@@ -101,16 +157,25 @@ defmodule Foglet.TUI.App do
   end
 
   @impl true
-  def subscribe(_state) do
-    # Plan 04 will add PubSub topic subscriptions (board activity, notifications).
-    []
+  def subscribe(state) do
+    # Heartbeat tick — keeps last_seen_at fresh in the Session GenServer.
+    # Only subscribed when a session_pid is wired (i.e., CLIHandler started us).
+    if is_pid(state.session_pid) do
+      [subscribe_interval(10_000, :heartbeat_tick)]
+    else
+      []
+    end
   end
 
   # --- Private: update/2 dispatch ---
 
   defp do_update({:window_change, cols, rows}, state)
        when is_integer(cols) and is_integer(rows) and cols > 0 and rows > 0 do
-    # SSH-06: terminal resize
+    # SSH-06: terminal resize — also notify Session for presence/analytics.
+    if is_pid(state.session_pid) do
+      Foglet.Sessions.Session.set_terminal_size(state.session_pid, {cols, rows})
+    end
+
     {%{state | terminal_size: {cols, rows}}, []}
   end
 
@@ -131,14 +196,17 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:key, key_event}, state) do
-    # Delegate to current screen. Screens return either
-    # {:update, new_state, commands} or :no_match.
     screen_module = screen_module_for(state.current_screen)
 
     case screen_module.handle_key(key_event, state) do
-      {:update, new_state, commands} -> {new_state, commands}
+      {:update, new_state, commands} -> {new_state, wrap_commands(commands)}
       :no_match -> global_key_handler(key_event, state)
     end
+  end
+
+  # Command results from Command.task/1 — route inner message back through dispatch.
+  defp do_update({:command_result, inner}, state) do
+    do_update(inner, state)
   end
 
   defp do_update({:register_wizard, event}, state) do
@@ -166,6 +234,35 @@ defmodule Foglet.TUI.App do
     Foglet.TUI.Screens.PostReader.flush_read_pointers(state, ctx)
   end
 
+  # Heartbeat — keep last_seen_at alive in the Session GenServer.
+  defp do_update(:heartbeat_tick, state) do
+    if is_pid(state.session_pid) do
+      Foglet.Sessions.Session.heartbeat(state.session_pid)
+    end
+
+    {state, []}
+  end
+
+  # A new SSH connection for the same user replaced this session.
+  # Show a notice modal and quit cleanly.
+  defp do_update({:session_replaced, _user_id}, state) do
+    modal = %{
+      type: :warning,
+      message: "Your session was replaced by a new connection. Goodbye."
+    }
+
+    {%{state | modal: modal}, [Command.quit()]}
+  end
+
+  # TUI login screen authenticated a user — promote the guest session.
+  defp do_update({:promote_session, user}, state) do
+    if is_pid(state.session_pid) do
+      Foglet.Sessions.Session.promote_to_user(state.session_pid, user)
+    end
+
+    {%{state | current_user: user, current_screen: :main_menu}, []}
+  end
+
   defp do_update(_other, state) do
     # Unknown messages pass through unchanged.
     {state, []}
@@ -185,11 +282,18 @@ defmodule Foglet.TUI.App do
   end
 
   defp global_key_handler(%{key: "q"} = _key, state) when state.current_screen == :login do
-    # Global Q from login → terminate
-    {state, [{:terminate, :user_quit}]}
+    {state, [Command.quit()]}
   end
 
   defp global_key_handler(_key, state), do: {state, []}
+
+  # Convert screen-returned tuples to proper %Command{} structs that the
+  # Raxol dispatcher can execute.
+  defp wrap_commands(commands), do: Enum.map(commands, &wrap_command/1)
+
+  defp wrap_command({:terminate, _reason}), do: Command.quit()
+  defp wrap_command(msg) when is_tuple(msg), do: Command.task(fn -> msg end)
+  defp wrap_command(cmd), do: cmd
 
   defp screen_module_for(:login), do: Screens.Login
   defp screen_module_for(:register), do: Screens.Register
