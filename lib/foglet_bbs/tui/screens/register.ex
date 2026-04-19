@@ -42,9 +42,9 @@ defmodule Foglet.TUI.Screens.Register do
               text("Mode: #{w.mode}", style: [:dim]),
               text(""),
               text(prompt_for_step(w.step), fg: :green),
-              text_input(
-                value: display_value(w.step, Map.get(w, :current_input, "")),
-                placeholder: prompt_for_step(w.step)
+              text("> #{display_value(w.step, Map.get(w, :current_input, ""))}█",
+                fg: :cyan,
+                style: [:bold]
               )
             ] ++ error_items
           end,

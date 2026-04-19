@@ -215,16 +215,14 @@ defmodule Foglet.TUI.Screens.Login do
 
     column style: %{gap: 0} do
       [
-        text("Handle:", fg: :green),
-        text_input(
-          value: form.handle,
-          placeholder: "handle",
+        text(
+          format_input_line("Handle:   ", form.handle, focused == :handle),
+          fg: input_fg(focused == :handle),
           style: focus_style(focused == :handle)
         ),
-        text("Password:", fg: :green),
-        text_input(
-          value: mask(form.password),
-          placeholder: "password",
+        text(
+          format_input_line("Password: ", mask_password(form.password), focused == :password),
+          fg: input_fg(focused == :password),
           style: focus_style(focused == :password)
         )
       ] ++ error_items
@@ -235,9 +233,17 @@ defmodule Foglet.TUI.Screens.Login do
   defp focus_style(true), do: [:bold]
   defp focus_style(false), do: []
 
+  # Formats an input line as "Label<value><cursor?>"
+  defp format_input_line(label, value, true), do: "#{label}#{value}█"
+  defp format_input_line(label, value, false), do: "#{label}#{value}"
+
+  # Cyan when focused, green otherwise.
+  defp input_fg(true), do: :cyan
+  defp input_fg(false), do: :green
+
   # Masks password characters with asterisks for display.
-  defp mask(pw) when is_binary(pw), do: String.duplicate("*", String.length(pw))
-  defp mask(_), do: ""
+  defp mask_password(pw) when is_binary(pw), do: String.duplicate("*", String.length(pw))
+  defp mask_password(_), do: ""
 
   defp enter_login_form(state) do
     new_login_ss = %{

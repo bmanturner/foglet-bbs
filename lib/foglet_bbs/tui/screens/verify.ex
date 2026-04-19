@@ -37,7 +37,7 @@ defmodule Foglet.TUI.Screens.Verify do
             [
               text("Enter the 6-character code emailed to you:", fg: :green),
               text(""),
-              text_input(value: vs.buffer, placeholder: "XXXXXX"),
+              text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: :cyan, style: [:bold]),
               text(""),
               status_item
             ]
@@ -116,6 +116,21 @@ defmodule Foglet.TUI.Screens.Verify do
   def handle_verify_event({:resend}, state), do: resend_code_raw(state)
 
   # --- Private ---
+
+  # Renders a 6-char code slot with a block cursor at the current position.
+  # ""       → "█_____"  (cursor at first position)
+  # "XK7"    → "XK7█__"  (cursor after last typed char)
+  # "XK7P2Q" → "XK7P2Q" (full — no cursor needed)
+  defp pad_buffer_with_cursor(buffer) when is_binary(buffer) do
+    len = String.length(buffer)
+
+    if len >= @code_length do
+      buffer
+    else
+      remaining = @code_length - len - 1
+      buffer <> "█" <> String.duplicate("_", remaining)
+    end
+  end
 
   defp cooldown?(%{cooldown_until: nil}), do: false
 

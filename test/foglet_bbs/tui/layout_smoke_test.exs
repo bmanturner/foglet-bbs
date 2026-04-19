@@ -16,7 +16,18 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.App
-  alias Foglet.TUI.Screens.{BoardList, Login, MainMenu, PostReader}
+
+  alias Foglet.TUI.Screens.{
+    BoardList,
+    Login,
+    MainMenu,
+    PostComposer,
+    PostReader,
+    Register,
+    Verify
+  }
+
+  alias Raxol.UI.Components.Input.MultiLineInput
   alias Raxol.UI.Layout.Engine
 
   @dimensions %{width: 80, height: 24}
@@ -225,5 +236,207 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     assert length(ys) >= 3,
            "expected at least 3 distinct y positions, got #{length(ys)}: #{inspect(elements)}"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Login form — plain-text input fix (Bug A)
+  # ---------------------------------------------------------------------------
+
+  test "login form with handle='alice' shows 'alice' in rendered text elements" do
+    state = %App{
+      screen_state: %{
+        login: %{
+          sub: :login_form,
+          form: %{handle: "alice", password: "", error: nil},
+          focused_field: :handle
+        }
+      },
+      terminal_size: {80, 24}
+    }
+
+    tree = Login.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "alice")),
+           "expected 'alice' to appear in rendered text, got: #{inspect(texts)}"
+
+    ys = elements |> Enum.map(& &1.y) |> Enum.uniq()
+
+    assert length(ys) >= 2,
+           "expected handle and password fields at distinct y positions, got: #{inspect(ys)}"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Register wizard — plain-text input fix (Bug A)
+  # ---------------------------------------------------------------------------
+
+  test "register wizard on :handle step with current_input='bob' shows 'bob'" do
+    state = %App{
+      current_screen: :register,
+      register_wizard: %{
+        mode: "open",
+        step: :handle,
+        data: %{},
+        error: nil,
+        current_input: "bob"
+      },
+      terminal_size: {80, 24},
+      screen_state: %{}
+    }
+
+    tree = Register.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "bob")),
+           "expected 'bob' to appear in rendered text, got: #{inspect(texts)}"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Verify screen — plain-text input fix (Bug A)
+  # ---------------------------------------------------------------------------
+
+  test "verify screen with buffer='XK7' shows 'XK7' in the displayed frame" do
+    state = %App{
+      current_screen: :verify,
+      current_user: %{id: "u1", handle: "alice"},
+      verify_state: %{buffer: "XK7", attempts: 0, cooldown_until: nil},
+      terminal_size: {80, 24},
+      screen_state: %{}
+    }
+
+    tree = Verify.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "XK7")),
+           "expected 'XK7' to appear in rendered text, got: #{inspect(texts)}"
+  end
+
+  # ---------------------------------------------------------------------------
+  # PostComposer — MultiLineInput.render bypass (Bug B)
+  # ---------------------------------------------------------------------------
+
+  test "composer with non-empty input_state.value does not crash and value appears" do
+    {:ok, input_st} =
+      MultiLineInput.init(%{
+        value: "Hello world",
+        placeholder: "Write your post…",
+        width: 76,
+        height: 10,
+        wrap: :none,
+        focused: true
+      })
+
+    state = %App{
+      current_screen: :post_composer,
+      current_user: %{id: "u1", handle: "alice"},
+      current_thread: %{id: "t1", title: "Hello"},
+      session_context: %{},
+      terminal_size: {80, 24},
+      composer_draft: nil,
+      screen_state: %{
+        post_composer: %{
+          mode: :edit,
+          reply_to: nil,
+          error: nil,
+          input_state: input_st
+        }
+      }
+    }
+
+    tree = PostComposer.render(state)
+
+    # apply_layout must not raise — this is the primary Bug B assertion
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "Hello world")),
+           "expected 'Hello world' to appear in rendered text, got: #{inspect(texts)}"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Height check — all four screens fit within 24 rows
+  # ---------------------------------------------------------------------------
+
+  test "all four screens fit within height=24" do
+    {:ok, input_st} =
+      MultiLineInput.init(%{
+        value: "test body",
+        placeholder: "Write your post…",
+        width: 76,
+        height: 10,
+        wrap: :none,
+        focused: true
+      })
+
+    screens = [
+      {"login form",
+       Login.render(%App{
+         screen_state: %{
+           login: %{
+             sub: :login_form,
+             form: %{handle: "alice", password: "secret", error: nil},
+             focused_field: :handle
+           }
+         },
+         terminal_size: {80, 24}
+       })},
+      {"register wizard",
+       Register.render(%App{
+         current_screen: :register,
+         register_wizard: %{
+           mode: "open",
+           step: :handle,
+           data: %{},
+           error: nil,
+           current_input: "bob"
+         },
+         terminal_size: {80, 24},
+         screen_state: %{}
+       })},
+      {"verify screen",
+       Verify.render(%App{
+         current_screen: :verify,
+         current_user: %{id: "u1", handle: "alice"},
+         verify_state: %{buffer: "XK7", attempts: 0, cooldown_until: nil},
+         terminal_size: {80, 24},
+         screen_state: %{}
+       })},
+      {"composer",
+       PostComposer.render(%App{
+         current_screen: :post_composer,
+         current_user: %{id: "u1", handle: "alice"},
+         current_thread: %{id: "t1", title: "Hello"},
+         session_context: %{},
+         terminal_size: {80, 24},
+         composer_draft: nil,
+         screen_state: %{
+           post_composer: %{mode: :edit, reply_to: nil, error: nil, input_state: input_st}
+         }
+       })}
+    ]
+
+    for {name, tree} <- screens do
+      positioned = apply(tree)
+      elements = text_elements(positioned)
+
+      max_y =
+        elements
+        |> Enum.map(fn el -> Map.get(el, :y, 0) + Map.get(el, :height, 1) end)
+        |> Enum.max(fn -> 0 end)
+
+      assert max_y <= 24,
+             "#{name}: total height #{max_y} exceeds 24 rows. Elements: #{inspect(elements)}"
+    end
   end
 end
