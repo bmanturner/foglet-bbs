@@ -62,18 +62,21 @@ defmodule Foglet.TUI.Screens.PostComposer do
         ]
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" #{title_for(ss.reply_to, state.current_thread)} ", style: [:bold]),
-          divider(),
-          StatusBar.render(%{
-            handle: state.current_user && state.current_user.handle,
-            location: "Composer (#{ss.mode})"
-          }),
           column style: %{gap: 0} do
-            body_items
+            [
+              text(" #{title_for(ss.reply_to, state.current_thread)} ", style: [:bold]),
+              divider(),
+              StatusBar.render(%{
+                handle: state.current_user && state.current_user.handle,
+                location: "Composer (#{ss.mode})"
+              }),
+              column style: %{gap: 0} do
+                body_items
+              end
+            ]
           end,
-          spacer(flex: 1),
           KeyBar.render([
             {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
             {"Ctrl+S", "Send"},

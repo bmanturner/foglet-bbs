@@ -29,20 +29,23 @@ defmodule Foglet.TUI.Screens.Verify do
       end
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" Verify Email ", style: [:bold]),
-          divider(),
           column style: %{gap: 0} do
             [
-              text("Enter the 6-character code emailed to you:", fg: :green),
-              text(""),
-              text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: :cyan, style: [:bold]),
-              text(""),
-              status_item
+              text(" Verify Email ", style: [:bold]),
+              divider(),
+              column style: %{gap: 0} do
+                [
+                  text("Enter the 6-character code emailed to you:", fg: :green),
+                  text(""),
+                  text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: :cyan, style: [:bold]),
+                  text(""),
+                  status_item
+                ]
+              end
             ]
           end,
-          spacer(flex: 1),
           KeyBar.render([
             {"Enter", "Submit"},
             {"Backspace", "Delete"},

@@ -72,18 +72,21 @@ defmodule Foglet.TUI.Screens.NewThread do
     rows = render_board_rows(ss.boards, ss.selected_board_index)
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" New Thread — pick a board ", style: [:bold]),
-          divider(),
-          StatusBar.render(%{
-            handle: state.current_user && state.current_user.handle,
-            location: "New Thread: Board"
-          }),
           column style: %{gap: 0} do
-            rows
+            [
+              text(" New Thread — pick a board ", style: [:bold]),
+              divider(),
+              StatusBar.render(%{
+                handle: state.current_user && state.current_user.handle,
+                location: "New Thread: Board"
+              }),
+              column style: %{gap: 0} do
+                rows
+              end
+            ]
           end,
-          spacer(flex: 1),
           KeyBar.render([{"j/k", "Select"}, {"Enter", "Choose"}, {"Esc", "Cancel"}])
         ]
       end
@@ -133,30 +136,29 @@ defmodule Foglet.TUI.Screens.NewThread do
       end
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" New Thread — #{board_name} ", style: [:bold]),
-          divider(),
-          StatusBar.render(%{
-            handle: state.current_user && state.current_user.handle,
-            location: "New Thread: Compose"
-          }),
-          text(""),
-          title_line,
-          text(""),
-          text("Body:", fg: :green),
-          body_col
-        ] ++
-          error_items ++
-          [
-            text(""),
-            spacer(flex: 1),
-            KeyBar.render([
-              {"Tab", "Switch field"},
-              {"Ctrl+S", "Submit"},
-              {"Ctrl+C", "Cancel"}
-            ])
-          ]
+          column style: %{gap: 0} do
+            [
+              text(" New Thread — #{board_name} ", style: [:bold]),
+              divider(),
+              StatusBar.render(%{
+                handle: state.current_user && state.current_user.handle,
+                location: "New Thread: Compose"
+              }),
+              text(""),
+              title_line,
+              text(""),
+              text("Body:", fg: :green),
+              body_col
+            ] ++ error_items ++ [text("")]
+          end,
+          KeyBar.render([
+            {"Tab", "Switch field"},
+            {"Ctrl+S", "Submit"},
+            {"Ctrl+C", "Cancel"}
+          ])
+        ]
       end
     end
   end

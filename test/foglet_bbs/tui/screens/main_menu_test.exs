@@ -16,6 +16,94 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     %{state: state}
   end
 
+  # ---------------------------------------------------------------------------
+  # Tree-traversal helpers
+  # ---------------------------------------------------------------------------
+
+  # Recursively walks a view tree collecting all elements matching the predicate.
+  defp collect(element, pred, acc \\ [])
+
+  defp collect(element, pred, acc) when is_map(element) do
+    acc = if pred.(element), do: [element | acc], else: acc
+    children = Map.get(element, :children, [])
+    collect(children, pred, acc)
+  end
+
+  defp collect(list, pred, acc) when is_list(list) do
+    Enum.reduce(list, acc, fn el, acc -> collect(el, pred, acc) end)
+  end
+
+  defp collect(_other, _pred, acc), do: acc
+
+  # Returns true if the element has justify_content: :space_between in its style.
+  defp has_space_between?(el) do
+    style = Map.get(el, :style, %{})
+    is_map(style) and Map.get(style, :justify_content) == :space_between
+  end
+
+  # Returns true if the element looks like a divider primitive.
+  defp divider?(el) when is_map(el) do
+    Map.get(el, :type) == :divider or
+      (Map.get(el, :type) == :view and Map.get(el, :view_type) == :divider) or
+      # Raxol emits dividers as %{type: :line} or %{type: :border_line} in some versions.
+      Map.get(el, :type) in [:line, :border_line, :divider, :horizontal_rule]
+  end
+
+  defp divider?(_), do: false
+
+  # Checks if any child list contains a divider after the element at position `idx`.
+  # Returns true when any parent column has (status_bar_row, divider_after_it).
+  defp has_divider_after_statusbar?(tree) do
+    # StatusBar.render returns a :flex/:row element. We look for a parent column
+    # whose children list contains a flex-row (StatusBar) followed immediately or
+    # eventually by a divider element.
+    parents_with_flex_children =
+      collect(tree, fn el ->
+        is_map(el) and is_list(Map.get(el, :children, nil))
+      end)
+
+    Enum.any?(parents_with_flex_children, fn parent ->
+      children = Map.get(parent, :children, [])
+
+      children
+      |> Enum.with_index()
+      |> Enum.any?(fn {child, idx} ->
+        # Find a row/flex element (likely StatusBar) followed by a divider.
+        is_map(child) and
+          Map.get(child, :type) in [:flex, :row] and
+          Map.get(child, :direction) == :row and
+          Enum.any?(Enum.drop(children, idx + 1), &divider?/1)
+      end)
+    end)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Gap 1 test — justify_content: :space_between (Task 1)
+  # ---------------------------------------------------------------------------
+
+  test "render/1 outer column uses justify_content: :space_between (Gap 1)", %{state: state} do
+    tree = MainMenu.render(state)
+    found = collect(tree, &has_space_between?/1)
+
+    assert found != [],
+           "Expected at least one column with justify_content: :space_between in the rendered tree, found none.\nTree: #{inspect(tree, limit: 5)}"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Gap 2 test — divider() immediately after StatusBar (Task 1)
+  # ---------------------------------------------------------------------------
+
+  test "render/1 has a divider element after the StatusBar row (Gap 2)", %{state: state} do
+    tree = MainMenu.render(state)
+
+    assert has_divider_after_statusbar?(tree),
+           "Expected a divider element to appear after the StatusBar row in the rendered tree.\nTree: #{inspect(tree, limit: 6)}"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Existing tests
+  # ---------------------------------------------------------------------------
+
   test "render/1 does not crash", %{state: state} do
     assert _ = MainMenu.render(state)
   end

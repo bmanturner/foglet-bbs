@@ -32,15 +32,18 @@ defmodule Foglet.TUI.Screens.Login do
     sub = sub_state(state)
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" Foglet BBS — Login ", style: [:bold]),
-          divider(),
-          case sub do
-            :login_form -> render_login_form(state)
-            _ -> render_menu(mode)
+          column style: %{gap: 0} do
+            [
+              text(" Foglet BBS — Login ", style: [:bold]),
+              divider(),
+              case sub do
+                :login_form -> render_login_form(state)
+                _ -> render_menu(mode)
+              end
+            ]
           end,
-          spacer(flex: 1),
           KeyBar.render(keys_for(sub, mode))
         ]
       end
@@ -270,6 +273,20 @@ defmodule Foglet.TUI.Screens.Login do
     form = Map.get(login_ss, :form) || %{handle: "", password: ""}
 
     case Accounts.authenticate_by_password(form.handle, form.password) do
+      {:ok, %{status: :active, confirmed_at: nil} = user} ->
+        {:ok, code} = Accounts.build_verify_code(user)
+        require Logger
+        Logger.info("[verify] code for @#{user.handle}: #{code}")
+
+        {:update,
+         %{
+           state
+           | current_user: user,
+             current_screen: :verify,
+             screen_state: %{},
+             verify_state: %{buffer: "", attempts: 0, cooldown_until: nil}
+         }, []}
+
       {:ok, %{status: :active} = user} ->
         # Clear screen state and promote the session via the App's handler.
         {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}

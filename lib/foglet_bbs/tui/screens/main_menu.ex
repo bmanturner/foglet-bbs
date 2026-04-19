@@ -16,16 +16,20 @@ defmodule Foglet.TUI.Screens.MainMenu do
     handle = state.current_user && state.current_user.handle
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          StatusBar.render(%{handle: handle, location: "Main Menu"}),
           column style: %{gap: 0} do
-            [text("Welcome back, #{handle || "guest"}.", fg: :green), text("")] ++
-              Enum.map(@menu_items, fn {k, label} ->
-                text("  [#{k}] #{label}", fg: :green)
-              end)
+            [
+              StatusBar.render(%{handle: handle, location: "Main Menu"}),
+              divider(),
+              column style: %{gap: 0} do
+                [text("Welcome back, #{handle || "guest"}.", fg: :green), text("")] ++
+                  Enum.map(@menu_items, fn {k, label} ->
+                    text("  [#{k}] #{label}", fg: :green)
+                  end)
+              end
+            ]
           end,
-          spacer(flex: 1),
           KeyBar.render([{"B", "Boards"}, {"C", "Compose"}, {"Q", "Logout"}])
         ]
       end

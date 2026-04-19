@@ -153,6 +153,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "valid credentials emit {:promote_session, user} command" do
       password = "correcthorsebatterystaple"
       user = user_fixture(%{password: password})
+      # Confirm the user so login produces {:promote_session} rather than routing to verify
+      {:ok, user} = Foglet.Accounts.confirm_user(user)
 
       state = form_state(%{handle: user.handle, password: password}, :password)
 
@@ -167,6 +169,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "full flow: type handle, tab, type password, enter → promote_session" do
       password = "horsecorrectbattery"
       user = user_fixture(%{password: password})
+      # Confirm the user so login produces {:promote_session} rather than routing to verify
+      {:ok, user} = Foglet.Accounts.confirm_user(user)
 
       # Start at menu, press L to enter form
       {:update, s1, []} = Login.handle_key(%{key: :char, char: "L"}, base_state())

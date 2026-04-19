@@ -17,18 +17,21 @@ defmodule Foglet.TUI.Screens.ThreadList do
     thread_rows = render_thread_rows(state, ss)
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" Threads — #{(board && board.name) || "?"} ", style: [:bold]),
-          divider(),
-          StatusBar.render(%{
-            handle: state.current_user && state.current_user.handle,
-            location: "Threads: #{(board && board.name) || "?"}"
-          }),
           column style: %{gap: 0} do
-            thread_rows
+            [
+              text(" Threads — #{(board && board.name) || "?"} ", style: [:bold]),
+              divider(),
+              StatusBar.render(%{
+                handle: state.current_user && state.current_user.handle,
+                location: "Threads: #{(board && board.name) || "?"}"
+              }),
+              column style: %{gap: 0} do
+                thread_rows
+              end
+            ]
           end,
-          spacer(flex: 1),
           KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"C", "Compose"}, {"Q", "Back"}])
         ]
       end

@@ -33,22 +33,25 @@ defmodule Foglet.TUI.Screens.Register do
       end
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" Register New Account ", style: [:bold]),
-          divider(),
           column style: %{gap: 0} do
             [
-              text("Mode: #{w.mode}", style: [:dim]),
-              text(""),
-              text(prompt_for_step(w.step), fg: :green),
-              text("> #{display_value(w.step, Map.get(w, :current_input, ""))}█",
-                fg: :cyan,
-                style: [:bold]
-              )
-            ] ++ error_items
+              text(" Register New Account ", style: [:bold]),
+              divider(),
+              column style: %{gap: 0} do
+                [
+                  text("Mode: #{w.mode}", style: [:dim]),
+                  text(""),
+                  text(prompt_for_step(w.step), fg: :green),
+                  text("> #{display_value(w.step, Map.get(w, :current_input, ""))}█",
+                    fg: :cyan,
+                    style: [:bold]
+                  )
+                ] ++ error_items
+              end
+            ]
           end,
-          spacer(flex: 1),
           KeyBar.render([{"Enter", "Next"}, {"Esc", "Cancel"}])
         ]
       end
@@ -242,7 +245,9 @@ defmodule Foglet.TUI.Screens.Register do
     # open or invite_only — register active user, build verify code, go to :verify
     case Accounts.register_user(data) do
       {:ok, user} ->
-        {:ok, _code} = Accounts.build_verify_code(user)
+        {:ok, code} = Accounts.build_verify_code(user)
+        require Logger
+        Logger.info("[verify] code for @#{user.handle}: #{code}")
 
         new_state = %{
           state

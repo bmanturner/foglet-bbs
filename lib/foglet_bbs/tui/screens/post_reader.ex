@@ -19,18 +19,21 @@ defmodule Foglet.TUI.Screens.PostReader do
     post_content = render_post_content(state, ss.selected_post_index)
 
     box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0} do
+      column style: %{gap: 0, justify_content: :space_between} do
         [
-          text(" Thread: #{(thread && thread.title) || "?"} ", style: [:bold]),
-          divider(),
-          StatusBar.render(%{
-            handle: state.current_user && state.current_user.handle,
-            location: "Reading: #{(thread && thread.title) || "?"}"
-          }),
           column style: %{gap: 0} do
-            post_content
+            [
+              text(" Thread: #{(thread && thread.title) || "?"} ", style: [:bold]),
+              divider(),
+              StatusBar.render(%{
+                handle: state.current_user && state.current_user.handle,
+                location: "Reading: #{(thread && thread.title) || "?"}"
+              }),
+              column style: %{gap: 0} do
+                post_content
+              end
+            ]
           end,
-          spacer(flex: 1),
           KeyBar.render([{"N", "Next"}, {"P", "Prev"}, {"R", "Reply"}, {"Q", "Back"}])
         ]
       end
