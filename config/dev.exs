@@ -55,6 +55,9 @@ config :foglet_bbs, dev_routes: true
 # Do not include metadata nor timestamps in development logs
 config :logger, :default_formatter, format: "[$level] $message\n"
 
+# Suppress debug-level noise from Raxol's Buffer.Writer (uses bare_log, bypasses module filters)
+config :logger, level: :info
+
 # Set a higher stacktrace during development. Avoid configuring such
 # in production as building large stacktraces may be expensive.
 config :phoenix, :stacktrace_depth, 20

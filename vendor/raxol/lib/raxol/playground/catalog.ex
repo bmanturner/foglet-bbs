@@ -1,0 +1,396 @@
+defmodule Raxol.Playground.Catalog do
+  @moduledoc """
+  Single source of truth for Raxol's widget catalog.
+
+  Provides metadata, demo modules, and code snippets for all playground-ready
+  widgets. Used by the terminal playground, web playground, and SSH playground.
+  """
+
+  alias Raxol.Playground.Demos
+
+  @type component :: %{
+          name: String.t(),
+          module: module(),
+          category: atom(),
+          description: String.t(),
+          complexity: :basic | :intermediate | :advanced,
+          tags: [String.t()],
+          code_snippet: String.t()
+        }
+
+  @components [
+    %{
+      name: "Button",
+      module: Demos.ButtonDemo,
+      category: :input,
+      description: "Interactive button with click handling",
+      complexity: :basic,
+      tags: ["input", "interactive", "click"],
+      code_snippet: """
+      button("Click Me", on_click: :clicked)
+      button("Submit", on_click: :submit, style: [:bold])
+      """
+    },
+    %{
+      name: "TextInput",
+      module: Demos.TextInputDemo,
+      category: :input,
+      description: "Single-line text input with placeholder",
+      complexity: :basic,
+      tags: ["input", "form", "text"],
+      code_snippet: """
+      text_input(value: model.name, placeholder: "Enter name...")
+      """
+    },
+    %{
+      name: "Table",
+      module: Demos.TableDemo,
+      category: :display,
+      description: "Data table with sortable columns and row selection",
+      complexity: :intermediate,
+      tags: ["data", "display", "sorting", "rows"],
+      code_snippet: """
+      table(
+        headers: ["Name", "Language", "Stars"],
+        rows: [
+          ["Raxol", "Elixir", "500"],
+          ["Ratatui", "Rust", "19k"],
+          ["Bubble Tea", "Go", "39k"]
+        ]
+      )
+      """
+    },
+    %{
+      name: "Progress",
+      module: Demos.ProgressDemo,
+      category: :feedback,
+      description: "Progress bar with value tracking",
+      complexity: :basic,
+      tags: ["feedback", "loading", "progress"],
+      code_snippet: """
+      progress(value: 65, max: 100)
+      """
+    },
+    %{
+      name: "Modal",
+      module: Demos.ModalDemo,
+      category: :overlay,
+      description: "Modal dialog with title and content",
+      complexity: :intermediate,
+      tags: ["overlay", "dialog", "focus"],
+      code_snippet: """
+      modal(
+        title: "Confirm",
+        content: text("Are you sure?"),
+        visible: model.show_modal
+      )
+      """
+    },
+    %{
+      name: "Menu",
+      module: Demos.MenuDemo,
+      category: :navigation,
+      description: "Selectable menu with keyboard navigation",
+      complexity: :intermediate,
+      tags: ["navigation", "keyboard", "selection"],
+      code_snippet: """
+      list(
+        items: ["File", "Edit", "View", "Help"],
+        selected: model.selected
+      )
+      """
+    },
+    # --- Input widgets ---
+    %{
+      name: "Checkbox",
+      module: Demos.CheckboxDemo,
+      category: :input,
+      description: "Toggle checkboxes with keyboard navigation",
+      complexity: :basic,
+      tags: ["input", "form", "toggle"],
+      code_snippet: ~s'checkbox("Enable Feature", checked: true)'
+    },
+    %{
+      name: "TextArea",
+      module: Demos.TextAreaDemo,
+      category: :input,
+      description: "Multi-line text editor with insert/normal modes",
+      complexity: :intermediate,
+      tags: ["input", "form", "text", "multiline"],
+      code_snippet: ~s'textarea(value: model.text, rows: 5)'
+    },
+    %{
+      name: "SelectList",
+      module: Demos.SelectListDemo,
+      category: :input,
+      description: "Dropdown select list with keyboard navigation",
+      complexity: :intermediate,
+      tags: ["input", "form", "dropdown", "select"],
+      code_snippet: ~s'select(options: ["Elixir", "Rust", "Go"], selected: 0)'
+    },
+    %{
+      name: "RadioGroup",
+      module: Demos.RadioGroupDemo,
+      category: :input,
+      description: "Grouped radio buttons with tab switching",
+      complexity: :intermediate,
+      tags: ["input", "form", "radio", "group"],
+      code_snippet:
+        ~s'radio_group(options: ["Light", "Dark", "Auto"], selected: 0)'
+    },
+    %{
+      name: "PasswordField",
+      module: Demos.PasswordFieldDemo,
+      category: :input,
+      description: "Password input with visibility toggle and strength meter",
+      complexity: :basic,
+      tags: ["input", "form", "password", "security"],
+      code_snippet: ~s'text_input(value: model.password, type: :password)'
+    },
+    # --- Display widgets ---
+    %{
+      name: "Text",
+      module: Demos.TextDemo,
+      category: :display,
+      description: "Text rendering with style variations",
+      complexity: :basic,
+      tags: ["display", "text", "style"],
+      code_snippet: ~s'text("Hello", style: [:bold, :italic])'
+    },
+    %{
+      name: "Tree",
+      module: Demos.TreeDemo,
+      category: :display,
+      description: "Expandable tree view with keyboard navigation",
+      complexity: :intermediate,
+      tags: ["display", "tree", "hierarchy", "navigation"],
+      code_snippet: ~s'list(items: tree_nodes, style: %{indent: 2})'
+    },
+    %{
+      name: "StatusBar",
+      module: Demos.StatusBarDemo,
+      category: :display,
+      description: "Status bar with live-updating fields",
+      complexity: :basic,
+      tags: ["display", "status", "bar", "info"],
+      code_snippet:
+        ~s'row do [text(mode), spacer(), text(file), text(line)] end'
+    },
+    %{
+      name: "CodeBlock",
+      module: Demos.CodeBlockDemo,
+      category: :display,
+      description: "Code display with line numbers and language samples",
+      complexity: :basic,
+      tags: ["display", "code", "syntax"],
+      code_snippet: ~s'box style: %{border: :single} do text(code) end'
+    },
+    %{
+      name: "Markdown",
+      module: Demos.MarkdownDemo,
+      category: :display,
+      description: "Simple markdown rendering with raw toggle",
+      complexity: :intermediate,
+      tags: ["display", "markdown", "text", "rendering"],
+      code_snippet: ~s'text(render_markdown(content))'
+    },
+    # --- Navigation/Layout widgets ---
+    %{
+      name: "Tabs",
+      module: Demos.TabsDemo,
+      category: :navigation,
+      description: "Tab bar with keyboard switching and content panels",
+      complexity: :basic,
+      tags: ["navigation", "tabs", "panels"],
+      code_snippet: ~s'tabs(labels: ["Tab 1", "Tab 2"], active: model.tab)'
+    },
+    %{
+      name: "SplitPane",
+      module: Demos.SplitPaneDemo,
+      category: :layout,
+      description: "Resizable split pane with direction toggle",
+      complexity: :intermediate,
+      tags: ["layout", "split", "pane", "resize"],
+      code_snippet: ~s'row do [box(left_content), box(right_content)] end'
+    },
+    %{
+      name: "Container",
+      module: Demos.ContainerDemo,
+      category: :layout,
+      description: "Scrollable container with viewport controls",
+      complexity: :basic,
+      tags: ["layout", "container", "scroll", "viewport"],
+      code_snippet: ~s'container(children: items, scroll_offset: model.offset)'
+    },
+    # --- Chart/Visualization widgets ---
+    %{
+      name: "Sparkline",
+      module: Demos.SparklineDemo,
+      category: :visualization,
+      description: "Compact sparkline for inline data trends",
+      complexity: :basic,
+      tags: ["chart", "sparkline", "inline", "streaming"],
+      code_snippet:
+        ~s'sparkline(data: [10, 30, 50, 40, 60], width: 40, height: 5, color: :cyan)'
+    },
+    %{
+      name: "LineChart",
+      module: Demos.LineChartDemo,
+      category: :visualization,
+      description: "Streaming braille-resolution line chart",
+      complexity: :intermediate,
+      tags: ["chart", "line", "braille", "streaming"],
+      code_snippet:
+        ~s'line_chart(series: series, width: 60, height: 15, show_legend: true)'
+    },
+    %{
+      name: "BarChart",
+      module: Demos.BarChartDemo,
+      category: :visualization,
+      description: "Block-character bar chart with orientation toggle",
+      complexity: :basic,
+      tags: ["chart", "bar", "vertical", "horizontal"],
+      code_snippet:
+        ~s'bar_chart(series: series, width: 50, height: 12, orientation: :vertical)'
+    },
+    %{
+      name: "ScatterChart",
+      module: Demos.ScatterChartDemo,
+      category: :visualization,
+      description: "Braille scatter plot with animated clusters",
+      complexity: :intermediate,
+      tags: ["chart", "scatter", "braille", "animation"],
+      code_snippet:
+        ~s'scatter_chart(series: series, width: 60, height: 15, show_legend: true)'
+    },
+    %{
+      name: "Heatmap",
+      module: Demos.HeatmapDemo,
+      category: :visualization,
+      description: "2D heatmap with color scale cycling",
+      complexity: :basic,
+      tags: ["chart", "heatmap", "color", "grid"],
+      code_snippet:
+        ~s'heatmap(data: grid, width: 48, height: 16, color_scale: :warm)'
+    },
+    # --- Effects widgets ---
+    %{
+      name: "Cursor Trail",
+      module: Demos.CursorTrailDemo,
+      category: :effects,
+      description: "Animated cursor trail with presets",
+      complexity: :intermediate,
+      tags: ["effects", "cursor", "trail", "animation"],
+      code_snippet:
+        ~s'trail = CursorTrail.rainbow() |> CursorTrail.update({x, y})'
+    },
+    %{
+      name: "Panel Highlights",
+      module: Demos.PanelHighlightsDemo,
+      category: :effects,
+      description: "Panel focus highlighting with border styles",
+      complexity: :basic,
+      tags: ["effects", "panel", "focus", "border"],
+      code_snippet:
+        ~s'box style: %{border: :rounded, fg: :cyan} do text(content) end'
+    },
+    %{
+      name: "Easing Functions",
+      module: Demos.EasingDemo,
+      category: :effects,
+      description: "Animated easing function showcase",
+      complexity: :intermediate,
+      tags: ["effects", "easing", "animation", "curve"],
+      code_snippet: ~s'Easing.calculate_value(:ease_out_bounce, progress)'
+    },
+    %{
+      name: "Focus Ring",
+      module: Demos.FocusRingDemo,
+      category: :effects,
+      description: "Accessibility focus ring indicators",
+      complexity: :basic,
+      tags: ["effects", "focus", "ring", "accessibility"],
+      code_snippet: ~s'FocusRing.render(content, FocusRing.init(style: :solid))'
+    },
+    # --- REPL & VFS ---
+    %{
+      name: "Virtual FS",
+      module: Demos.VfsDemo,
+      category: :navigation,
+      description: "In-memory virtual file system with shell-like commands",
+      complexity: :intermediate,
+      tags: ["navigation", "filesystem", "shell", "commands", "interactive"],
+      code_snippet: """
+      fs = FileSystem.new()
+      {:ok, fs} = FileSystem.mkdir(fs, "/docs")
+      {:ok, fs} = FileSystem.create_file(fs, "/docs/readme.txt", "Hello")
+      {:ok, entries, fs} = FileSystem.ls(fs, "/docs")
+      """
+    },
+    %{
+      name: "REPL",
+      module: Demos.ReplDemo,
+      category: :input,
+      description: "Interactive Elixir REPL with sandboxed evaluation",
+      complexity: :advanced,
+      tags: ["input", "repl", "eval", "elixir", "interactive"],
+      code_snippet: """
+      evaluator = Evaluator.new()
+      {:ok, result, evaluator} = Evaluator.eval(evaluator, "1 + 2")
+      result.value  #=> 3
+      """
+    }
+  ]
+
+  @doc "Returns all playground components."
+  @spec list_components() :: [component()]
+  def list_components, do: @components
+
+  @doc "Returns a component by name."
+  @spec get_component(String.t()) :: component() | nil
+  def get_component(name) do
+    Enum.find(@components, &(&1.name == name))
+  end
+
+  @doc "Returns unique categories in display order."
+  @spec list_categories() :: [atom()]
+  def list_categories do
+    @components
+    |> Enum.map(& &1.category)
+    |> Enum.uniq()
+  end
+
+  @doc "Filters components by keyword options."
+  @spec filter(keyword()) :: [component()]
+  def filter(opts \\ []) do
+    @components
+    |> filter_by_category(opts[:category])
+    |> filter_by_complexity(opts[:complexity])
+    |> filter_by_search(opts[:search])
+  end
+
+  defp filter_by_category(components, nil), do: components
+
+  defp filter_by_category(components, category) do
+    Enum.filter(components, &(&1.category == category))
+  end
+
+  defp filter_by_complexity(components, nil), do: components
+
+  defp filter_by_complexity(components, complexity) do
+    Enum.filter(components, &(&1.complexity == complexity))
+  end
+
+  defp filter_by_search(components, nil), do: components
+  defp filter_by_search(components, ""), do: components
+
+  defp filter_by_search(components, query) do
+    q = String.downcase(query)
+
+    Enum.filter(components, fn c ->
+      String.contains?(String.downcase(c.name), q) or
+        String.contains?(String.downcase(c.description), q) or
+        Enum.any?(c.tags, &String.contains?(&1, q))
+    end)
+  end
+end

@@ -1,0 +1,253 @@
+defmodule Raxol.UI.Components.Modal.Rendering do
+  @moduledoc """
+  Rendering logic and form field rendering for the Modal component.
+  """
+
+  require Raxol.Core.Runtime.Log
+  require Raxol.View.Elements
+  require Raxol.Core.Renderer.View
+  alias Raxol.UI.Components.Selection.Dropdown
+
+  @doc "Renders the modal content when visible."
+  def render_modal_content(state) do
+    # Get modal style as a Map
+    box_style_map = get_modal_style(state)
+
+    # Convert style Map to Keyword list for Box.new
+    box_style_keyword = Enum.map(box_style_map, fn {k, v} -> {k, v} end)
+
+    Raxol.Core.Renderer.View.Components.Box.new(
+      id: get_modal_box_id(state),
+      style: box_style_keyword,
+      children:
+        Raxol.View.Elements.column style: %{width: :fill, padding: 1} do
+          build_modal_elements(
+            render_title(state.title),
+            render_content(state),
+            render_buttons(state.buttons)
+          )
+        end
+    )
+  end
+
+  @doc "Renders the modal title."
+  def render_title(title) do
+    Raxol.View.Elements.label(content: title, style: %{bold: true})
+  end
+
+  @doc "Renders the modal content based on type."
+  def render_content(%{content: content} = _state) when is_binary(content) do
+    Raxol.View.Elements.label(content: content)
+  end
+
+  def render_content(%{type: type} = state) when type in [:prompt, :form] do
+    render_form_content(state)
+  end
+
+  def render_content(%{content: content}) when not is_nil(content) do
+    content
+  end
+
+  def render_content(_state) do
+    nil
+  end
+
+  @doc "Renders modal buttons."
+  def render_buttons(buttons) do
+    Enum.map(buttons, fn {label, msg} ->
+      Raxol.View.Elements.button(
+        label: label,
+        on_click: {:button_click, msg}
+      )
+    end)
+  end
+
+  @doc "Gets modal box ID."
+  def get_modal_box_id(state) do
+    build_modal_box_id(Map.get(state, :id, nil))
+  end
+
+  defp build_modal_box_id(nil), do: nil
+  defp build_modal_box_id(id), do: "#{id}-box"
+
+  @doc "Gets modal style."
+  def get_modal_style(state) do
+    Map.merge(
+      %{border: :double, width: state.width, align: :center},
+      state.style
+    )
+  end
+
+  @doc "Builds modal elements with proper spacing."
+  def build_modal_elements(title_element, content_element, button_elements) do
+    [
+      title_element,
+      render_spacer(title_element && content_element),
+      content_element,
+      render_spacer(content_element && button_elements != []),
+      render_button_row(button_elements)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  @doc "Renders spacer element."
+  def render_spacer(condition) do
+    render_spacer_element(condition)
+  end
+
+  defp render_spacer_element(false), do: nil
+
+  defp render_spacer_element(_condition),
+    do: Raxol.View.Elements.label(content: "")
+
+  @doc "Renders button row."
+  def render_button_row(button_elements) do
+    Raxol.View.Elements.row style: %{justify: :center, width: :fill, gap: 2} do
+      button_elements
+    end
+  end
+
+  @doc "Renders form content with fields."
+  def render_form_content(state) do
+    field_elements =
+      Enum.with_index(state.form_state.fields)
+      |> Enum.map(&render_field(&1, state))
+      |> Enum.reject(&is_nil/1)
+
+    Raxol.View.Elements.column style: %{width: :fill, gap: 1} do
+      field_elements
+    end
+  end
+
+  @doc "Renders a single form field."
+  def render_field({field, index}, state) do
+    field_full_id =
+      Raxol.UI.Components.Modal.State.get_field_full_id(field, state)
+
+    focused? = index == state.form_state.focus_index
+    common_props = get_common_props(field, field_full_id, focused?)
+
+    input_element = render_input_element(field, common_props)
+    render_field_container(field, input_element)
+  end
+
+  @doc "Gets common props for form fields."
+  def get_common_props(field, field_full_id, focused?) do
+    Map.merge(field.props || %{}, %{
+      id: field_full_id,
+      focused: focused?
+    })
+  end
+
+  @doc "Renders input element based on field type."
+  def render_input_element(field, common_props) do
+    case field.type do
+      :text_input -> render_text_input(field, common_props)
+      :checkbox -> render_checkbox(field, common_props)
+      :dropdown -> render_dropdown(field, common_props)
+      _ -> render_unsupported_field(field)
+    end
+  end
+
+  @doc "Renders text input field."
+  def render_text_input(field, common_props) do
+    text_input_props =
+      Map.merge(common_props, %{
+        "value" => field.value || "",
+        "on_change" => {:field_update, field.id}
+      })
+
+    # Convert Map to Keyword list for text_input function
+    keyword_props =
+      Enum.map(text_input_props, fn {k, v} ->
+        {String.to_atom(to_string(k)), v}
+      end)
+
+    Raxol.View.Elements.text_input(keyword_props)
+  end
+
+  @doc "Renders checkbox field."
+  def render_checkbox(field, common_props) do
+    checkbox_props =
+      Map.merge(common_props, %{
+        "checked" => field.value == true,
+        "label" => "",
+        "on_toggle" => {:field_update, field.id}
+      })
+
+    # Convert Map to Keyword list for checkbox function
+    keyword_props =
+      Enum.map(checkbox_props, fn {k, v} ->
+        {String.to_atom(to_string(k)), v}
+      end)
+
+    Raxol.View.Elements.checkbox(keyword_props)
+  end
+
+  @doc "Renders dropdown field."
+  def render_dropdown(field, common_props) do
+    dropdown_props =
+      Map.merge(common_props, %{
+        "options" => field.options || [],
+        "initial_value" => field.value,
+        "width" => :fill,
+        "on_change" => {:field_update, field.id}
+      })
+
+    %{type: Dropdown, attrs: dropdown_props}
+  end
+
+  @doc "Renders unsupported field type."
+  def render_unsupported_field(field) do
+    Raxol.Core.Runtime.Log.warning(
+      "Unsupported form field type in Modal: #{inspect(field.type)}"
+    )
+
+    Raxol.View.Elements.label(content: "[Unsupported Field: #{field.id}]")
+  end
+
+  @doc "Renders field container with label and error."
+  def render_field_container(field, input_element) do
+    Raxol.View.Elements.column style: %{width: :fill, gap: 0} do
+      [
+        render_field_row(field, input_element),
+        render_field_error(field)
+      ]
+      |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  @doc "Renders field row with label and input."
+  def render_field_row(field, input_element) do
+    Raxol.View.Elements.row style: %{width: :fill, gap: 1} do
+      [
+        render_field_label(field.label),
+        input_element
+      ]
+      |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  @doc "Renders field error message."
+  def render_field_error(field) do
+    render_error_element(field.error)
+  end
+
+  defp render_error_element(nil), do: nil
+
+  defp render_error_element(error) do
+    Raxol.View.Elements.row style: %{width: :fill} do
+      Raxol.View.Elements.label(
+        content: error,
+        style: %{color: :red, padding_left: 16}
+      )
+    end
+  end
+
+  @doc "Renders field label if present."
+  def render_field_label(nil), do: nil
+
+  def render_field_label(label) do
+    Raxol.View.Elements.label(content: label, style: %{width: 15})
+  end
+end

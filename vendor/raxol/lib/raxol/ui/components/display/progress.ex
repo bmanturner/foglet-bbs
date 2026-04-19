@@ -1,0 +1,325 @@
+defmodule Raxol.UI.Components.Display.Progress do
+  @moduledoc """
+  A progress bar component for displaying completion status.
+
+  Features:
+  * Customizable colors (harmonized style/theme prop merging)
+  * Percentage display option
+  * Custom width
+  * Animated progress
+  * Optional label
+  * Accessibility/extra props (aria_label, tooltip, etc)
+  * Robust lifecycle hooks (mount/unmount)
+  """
+
+  alias Raxol.UI.Components.Base.Component
+  alias Raxol.UI.StyleHelper
+
+  @behaviour Component
+
+  @type props :: %{
+          optional(:id) => String.t(),
+          # 0.0 to 1.0
+          optional(:progress) => float(),
+          optional(:width) => integer(),
+          optional(:show_percentage) => boolean(),
+          optional(:label) => String.t(),
+          optional(:theme) => map(),
+          optional(:style) => map(),
+          optional(:animated) => boolean(),
+          optional(:aria_label) => String.t(),
+          optional(:tooltip) => String.t()
+        }
+
+  @type state :: %{
+          # props are merged into state
+          :id => String.t() | nil,
+          :progress => float(),
+          :width => integer(),
+          :show_percentage => boolean(),
+          :label => String.t() | nil,
+          :theme => map() | nil,
+          :style => map() | nil,
+          :animated => boolean(),
+          # Internal state
+          :animation_frame => integer(),
+          # timestamp for animation
+          :last_update => integer(),
+          :aria_label => String.t() | nil,
+          :tooltip => String.t() | nil
+        }
+
+  @animation_chars [" ", "▏", "▎", "▍", "▌", "▋", "▊", "▉", "█"]
+  # ms between frames
+  @animation_speed 100
+
+  @doc """
+  Initializes the progress bar state from props.
+  """
+  @impl Component
+  def init(props) do
+    # Initialize state by merging normalized props with default internal state
+    normalized_props = normalize_props(props)
+
+    state =
+      Map.merge(normalized_props, %{
+        animation_frame: 0,
+        last_update: System.monotonic_time(:millisecond)
+      })
+
+    {:ok, state}
+  end
+
+  @doc """
+  Mounts the progress bar (for future extensibility: timers, subscriptions, etc).
+  """
+  @impl Component
+  def mount(state), do: {state, []}
+
+  @doc """
+  Unmounts the progress bar (cleanup for future extensibility).
+  """
+  @impl Component
+  def unmount(state), do: state
+
+  @impl Component
+  def update({:update_props, new_props}, state) do
+    # Merge normalized new props into the current state
+    norm_new = normalize_props(new_props)
+    # Merge style and theme maps deeply
+    updated_state =
+      state
+      |> Map.merge(norm_new, fn
+        :style, old, new -> Map.merge(old || %{}, new || %{})
+        :theme, old, new -> deep_merge(old || %{}, new || %{})
+        _k, _old, new -> new
+      end)
+
+    # Handle animation tick based on the potentially updated state
+    final_state = maybe_update_animation(updated_state)
+
+    {final_state, []}
+  end
+
+  # Handle the :tick message for animation
+  def update(:tick, state) do
+    updated_state = maybe_update_animation(state)
+    {:noreply, updated_state, []}
+  end
+
+  # Ignore other messages
+  def update(_message, state) do
+    {:noreply, state, []}
+  end
+
+  # Helper to update animation frame if needed
+  defp maybe_update_animation(state) do
+    now = System.monotonic_time(:millisecond)
+    time_diff = now - state.last_update
+
+    case {state.animated, time_diff >= @animation_speed} do
+      {true, true} ->
+        new_frame = rem(state.animation_frame + 1, length(@animation_chars))
+        %{state | animation_frame: new_frame, last_update: now}
+
+      _ ->
+        # No animation update needed
+        state
+    end
+  end
+
+  @impl Component
+  def handle_event(_event, state, _context) do
+    # Progress bar doesn't respond to events directly
+    # Return the state and empty command list
+    {state, []}
+  end
+
+  @impl Component
+  def render(state, context) do
+    base_style = StyleHelper.merge_component_styles(state, context, :progress)
+    colors = extract_colors(base_style)
+
+    progress = Raxol.Core.Utils.Math.clamp(state.progress, 0.0, 1.0)
+    width = max(3, state.width)
+    filled_width = floor(progress * (width - 2))
+
+    bar_content =
+      generate_bar_content(
+        filled_width,
+        width - 2,
+        base_style,
+        state.animated,
+        state.animation_frame
+      )
+
+    extra_attrs = build_extra_attrs(state)
+
+    base_elements = build_base_elements(width, bar_content, colors, extra_attrs)
+
+    base_elements
+    |> maybe_prepend_percentage(state.show_percentage, progress, width, colors)
+    |> maybe_prepend_label(state.label, colors)
+  end
+
+  defp extract_colors(base_style) do
+    %{
+      fg: Map.get(base_style, :fg, :green),
+      bg: Map.get(base_style, :bg, :black),
+      border: Map.get(base_style, :border, :white),
+      text: Map.get(base_style, :text, :white)
+    }
+  end
+
+  defp build_extra_attrs(state) do
+    %{aria_label: state.aria_label, tooltip: state.tooltip}
+    |> Enum.reject(fn {_k, v} -> is_nil(v) end)
+    |> Enum.into(%{})
+  end
+
+  defp build_base_elements(width, bar_content, colors, extra_attrs) do
+    [
+      %{
+        type: :box,
+        width: width,
+        height: 1,
+        style: %{
+          fg: colors.border,
+          bg: colors.bg,
+          border: %{
+            top_left: "[",
+            top_right: "]",
+            bottom_left: "[",
+            bottom_right: "]",
+            horizontal: " ",
+            vertical: "|"
+          }
+        }
+      }
+      |> Map.merge(extra_attrs),
+      %{
+        type: :text,
+        x: 1,
+        y: 0,
+        content: bar_content,
+        style: %{fg: colors.fg, bg: colors.bg}
+      }
+    ]
+  end
+
+  defp maybe_prepend_percentage(elements, true, progress, width, colors) do
+    percent_str = "#{floor(progress * 100)}%"
+    padding = div(width - Raxol.UI.TextMeasure.display_width(percent_str), 2)
+    percentage_text = String.duplicate(" ", max(0, padding)) <> percent_str
+
+    text_element = %{
+      type: :text,
+      x: 1,
+      y: 0,
+      content: percentage_text,
+      style: %{fg: colors.text, bg: :transparent}
+    }
+
+    [text_element | elements]
+  end
+
+  defp maybe_prepend_percentage(elements, false, _progress, _width, _colors),
+    do: elements
+
+  defp maybe_prepend_label(elements, nil, _colors), do: elements
+
+  defp maybe_prepend_label(elements, label, colors) do
+    label_element = %{
+      type: :text,
+      x: 0,
+      y: -1,
+      content: label,
+      style: %{fg: colors.text, bg: colors.bg}
+    }
+
+    [label_element | elements]
+  end
+
+  # Private helpers
+
+  defp normalize_props(props) do
+    # Ensure it's a map
+    props = Map.new(props)
+
+    # Ensure proper value ranges and defaults
+    props
+    # Allow nil ID
+    |> Map.put_new_lazy(:id, fn -> nil end)
+    |> Map.put_new(:progress, 0.0)
+    |> Map.put_new(:width, 20)
+    |> Map.put_new(:show_percentage, false)
+    |> Map.put_new(:animated, false)
+    |> Map.put_new(:label, nil)
+    # Default theme to %{} instead of nil
+    |> Map.put_new(:theme, %{})
+    |> Map.put_new(:style, %{})
+    |> Map.put_new(:aria_label, nil)
+    |> Map.put_new(:tooltip, nil)
+    # Clamp progress between 0.0 and 1.0
+    |> Map.update!(:progress, &Raxol.Core.Utils.Math.clamp(&1, 0.0, 1.0))
+    # Ensure minimum width for borders
+    |> Map.update!(:width, &max(3, &1))
+  end
+
+  defp generate_bar_content(
+         filled_width,
+         total_width,
+         # colors not used here? Check original code. Ok, not used.
+         _base_style,
+         animated,
+         animation_frame
+       ) do
+    # Ensure widths are non-negative integers
+    filled_width = max(0, floor(filled_width))
+    total_width = max(0, floor(total_width))
+    empty_width = max(0, total_width - filled_width)
+
+    # For full blocks
+    filled_part = String.duplicate("█", filled_width)
+
+    # For empty space
+    empty_part = String.duplicate(" ", empty_width)
+
+    # If animated and not complete, add animation character at the edge
+    case {animated, filled_width < total_width} do
+      {true, true} ->
+        # Calculate animation character
+        animation_char = Enum.at(@animation_chars, animation_frame)
+
+        # Insert animation character at the transition point
+        # Instead of String.slice(empty_part, 1..-1//-1), use String.slice(empty_part, 1, String.length(empty_part) - 1)
+        trail =
+          case empty_width > 0 do
+            true -> String.slice(empty_part, 1, String.length(empty_part) - 1)
+            false -> ""
+          end
+
+        filled_part <> animation_char <> trail
+
+      _ ->
+        # No animation
+        filled_part <> empty_part
+    end
+  end
+
+  # Deep merge helper for nested maps (used for theme)
+  defp deep_merge(map1, map2) when is_map(map1) and is_map(map2) do
+    Map.merge(map1, map2, fn _k, v1, v2 ->
+      case {is_map(v1), is_map(v2)} do
+        {true, true} -> deep_merge(v1, v2)
+        _ -> v2
+      end
+    end)
+  end
+
+  defp deep_merge(_map1, map2), do: map2
+
+  # Optional callbacks provided by `use Component` if not defined:
+  # def mount(state), do: {state, []}
+  # def unmount(state), do: state
+end
