@@ -451,6 +451,7 @@ defmodule Foglet.TUI.AppTest do
       }
 
       {new_state, _cmds} = App.update({:key, %{key: :enter}}, state_with_modal)
+
       assert new_state.modal == nil,
              "Expected modal to be dismissed, got: #{inspect(new_state.modal)}"
     end
