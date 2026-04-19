@@ -3,11 +3,11 @@ workstream: phase-03-polish
 milestone: v1.0.1
 milestone_name: Phase 03 Polish
 created: 2026-04-19
-status: defining_requirements
+status: ready_to_plan_phase_1
 last_updated: 2026-04-19
 last_activity: 2026-04-19
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -31,39 +31,61 @@ See: .planning/PROJECT.md (shared across workstreams)
 
 ## Current Position
 
-**Phase:** Not started (defining requirements)
+**Phase:** Not started — ready to plan Phase 1
 **Plan:** —
-**Status:** Defining requirements for v1.0.1 polish milestone
-**Last activity:** 2026-04-19 — Workstream created; milestone scope confirmed with user
+**Status:** Roadmap approved; awaiting `/gsd-plan-phase 1`
+**Last activity:** 2026-04-19 — ROADMAP.md generated with 6 phases; 17/17 REQs mapped; traceability table filled
+
+## Roadmap Summary
+
+| Phase | Name | REQs | Depends on |
+|-------|------|------|------------|
+| 1 | Widget foundation + theme + screen chrome | WIDGET-01, WIDGET-02, THEME-01, FRAME-01, FRAME-02, LIST-04 | — |
+| 2 | Markdown rendering correctness | RENDER-01, RENDER-02 | Phase 1 |
+| 3 | Read-pointer correctness + thread-row enrichment | LIST-01, LIST-02, LIST-03 | Phase 1, Phase 2 |
+| 4 | Composer & thread creation end-to-end | COMPOSE-01, COMPOSE-02, COMPOSE-03 | Phase 1 |
+| 5 | Terminal size gate | FRAME-03 | Phase 1 |
+| 6 | Email verification toggle + resend | VERIFY-01, VERIFY-02 | Phase 1 |
+
+**Total plans:** TBD (filled in as each phase is planned)
 
 ## Milestone Scope (from user)
 
-Ten items to be shaped into requirements:
+Ten items shaped into 17 requirements across 7 categories (see REQUIREMENTS.md):
 
-1. Markdown → ANSI rendering is broken (posts show raw markdown)
-2. Layout is inconsistent across screens (header/divider/statusbar vary) — StatusBar should be a reusable widget at the top with a divider beneath, showing page context and user handle
-3. Seeded threads in General don't render properly (wrapping / other rendering issues)
-4. Boards list shows stuck unread count (`(6 unread)` next to General) that never clears
-5. Thread list rows need more info — creator handle, last-activity "time ago" (30s, 5m, 2w)
-6. Theme application is inconsistent — border box and some text don't pick up theme
-7. Composer has no title field, so starting a new thread from the board page is impossible
-8. Build a thin reusable-widget layer on top of Raxol — **without reinventing widgets Raxol already provides** (docs at `docs/raxol/`)
-9. Minimum terminal dimensions — show "terminal too small" message below threshold
-10. Audit email verification — toggleable skip per registration mode via sysop config; wire stubbed resend affordance (picks up SEED-002)
-11. Wire thread creation + post reply end-to-end
+1. Markdown → ANSI rendering is broken (posts show raw markdown) → RENDER-01, RENDER-02
+2. Layout inconsistent across screens — StatusBar + chrome unified → FRAME-01, FRAME-02
+3. Seeded threads in General don't render properly → covered by RENDER-01 acceptance against seeded data (seed fixtures themselves landed in commit `9578faf`)
+4. Boards list stuck unread count → LIST-01, LIST-02
+5. Thread list rows need creator + time-ago + post count → LIST-03
+6. Theme application inconsistent → THEME-01
+7. Composer has no title field → COMPOSE-01, COMPOSE-03
+8. Thin reusable-widget layer on top of Raxol → WIDGET-01, WIDGET-02, LIST-04
+9. Minimum terminal dimensions gate → FRAME-03
+10. Email verification toggle + resend (SEED-002) → VERIFY-01, VERIFY-02
+11. Wire thread creation + post reply end-to-end → COMPOSE-01, COMPOSE-02
 
 ## Accumulated Context
 
 ### Decisions
 Inherited from main workstream (see `.planning/PROJECT.md` Key Decisions).
 
+Locked for this milestone (see REQUIREMENTS.md "Locked Decisions"):
+- Retroactive bypass on verification toggle-off: existing `confirmed_at: nil` users gain access on next login
+- Widget style: function-form only (Raxol modern block-macro DSL)
+- Markdown rendering: view-time with per-screen memoization (no pre-rendering to DB)
+- Raxol `ThemeManager`: rejected; use `Foglet.TUI.Theme` struct
+
+### Open Decisions (per-phase)
+- **Minimum terminal dimensions** — deferred to Phase 5 discuss/plan. Research options: 60×20 (floor before garbling) vs 80×24 (comfort for BoardList row density).
+
 ### Blockers/Concerns
-- Research pending (Raxol widget inventory) before requirement refinement to ensure reuse over reinvention.
+None. Research is HIGH confidence; zero new dependencies required.
 
 ### Reference Seeds
-- SEED-002 (email-verification-ux) — folded into scope item #10 above.
+- SEED-002 (email-verification-ux) — folded into VERIFY-01, VERIFY-02.
 
 ## Session Continuity
 
-Last session: 2026-04-19 workstream created
-Stopped at: Milestone scope confirmed; about to run research + draft REQUIREMENTS.md
+Last session: 2026-04-19 — roadmap generated and traceability filled
+Stopped at: Ready for `/gsd-plan-phase 1`

@@ -10,11 +10,16 @@
 
 | Decision | Choice | Source |
 |----------|--------|--------|
-| Minimum terminal dimensions | **80×24** | FEATURES.md recommendation; comfortable BoardList row density |
 | Retroactive bypass when `require_email_verification` flips to false | **Existing `confirmed_at: nil` users gain access on next login** | Matches "toggle off = don't care anymore"; no migration needed |
 | Widget style | **Function-form only** (no `use Raxol.UI.Components.Base.Component`) | Raxol modern block-macro DSL; `memory/feedback_raxol_modern_dsl.md` |
 | Pre-rendering markdown at post-save | **Rejected** — render at view time with per-screen memoization | Terminal width varies per session |
 | Raxol `ThemeManager` | **Rejected** for v1.0.1 — use `Foglet.TUI.Theme` struct | GenServer couples to rejected Raxol components |
+
+## Open Decisions (deferred to phase discussion)
+
+| Decision | Status | Deferred to |
+|----------|--------|-------------|
+| Minimum terminal dimensions (research: 60×20 floor vs 80×24 comfort) | **Open** | Phase 5 discuss/plan |
 
 ## v1.0.1 Requirements
 
@@ -27,7 +32,7 @@
 
 - [ ] **FRAME-01**: A reusable `ScreenFrame` widget wraps every screen (outer bordered box → column → StatusBar → divider → content → KeyBar); every screen in `lib/foglet_bbs/tui/screens/` renders through it.
 - [ ] **FRAME-02**: A reusable `StatusBar` widget is the first content row inside `ScreenFrame`, showing page title and logged-in user handle (handle shown only when authenticated).
-- [ ] **FRAME-03**: Below 80×24 terminal dimensions, the ScreenFrame renders a "terminal too small" message in place of screen content; resizing back above the threshold restores the prior screen state without reset.
+- [ ] **FRAME-03**: Below an agreed minimum terminal dimension (determined during Phase 5 discussion), the ScreenFrame renders a "terminal too small" message in place of screen content; resizing back above the threshold restores the prior screen state without reset.
 
 ### THEME — Consistent visual treatment
 
@@ -48,7 +53,7 @@
 
 ### VERIFY — Email verification toggle + resend
 
-- [ ] **VERIFY-01**: A sysop-settable `Foglet.Config` key `require_email_verification` (default `true`) is checked during registration and login; when `false`, new registrations skip the verification step and existing `confirmed_at: nil` users gain access on next login.
+- [ ] **VERIFY-01**: A sysop-settable `Foglet.Config` key `require_email_verification` (default `true`) is checked during registration and login; when `false`, new registrations skip the verification step and existing `confirmed_at: nil` users gain access on next login. See Locked Decisions for retroactive policy.
 - [ ] **VERIFY-02**: The Verify screen shows a visible "Resend code" affordance (key hint) wired to the existing `{:resend}` event, respecting cooldown with visible feedback to the user.
 
 ### WIDGET — Foundation layer under everything above
@@ -81,26 +86,24 @@
 
 ## Traceability
 
-*Filled in by roadmapper after `/gsd-new-milestone` completes roadmap generation.*
-
 | REQ | Phase |
 |-----|-------|
-| RENDER-01 | — |
-| RENDER-02 | — |
-| FRAME-01 | — |
-| FRAME-02 | — |
-| FRAME-03 | — |
-| THEME-01 | — |
-| LIST-01 | — |
-| LIST-02 | — |
-| LIST-03 | — |
-| LIST-04 | — |
-| COMPOSE-01 | — |
-| COMPOSE-02 | — |
-| COMPOSE-03 | — |
-| VERIFY-01 | — |
-| VERIFY-02 | — |
-| WIDGET-01 | — |
-| WIDGET-02 | — |
+| RENDER-01 | Phase 2 |
+| RENDER-02 | Phase 2 |
+| FRAME-01 | Phase 1 |
+| FRAME-02 | Phase 1 |
+| FRAME-03 | Phase 5 |
+| THEME-01 | Phase 1 |
+| LIST-01 | Phase 3 |
+| LIST-02 | Phase 3 |
+| LIST-03 | Phase 3 |
+| LIST-04 | Phase 1 |
+| COMPOSE-01 | Phase 4 |
+| COMPOSE-02 | Phase 4 |
+| COMPOSE-03 | Phase 4 |
+| VERIFY-01 | Phase 6 |
+| VERIFY-02 | Phase 6 |
+| WIDGET-01 | Phase 1 |
+| WIDGET-02 | Phase 1 |
 
 **Total: 17 requirements across 7 categories.**
