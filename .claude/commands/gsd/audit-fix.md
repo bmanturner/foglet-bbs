@@ -25,9 +25,9 @@ Flags:
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/audit-fix.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/audit-fix.md
 </execution_context>
 
 <process>
-Execute the audit-fix workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/audit-fix.md end-to-end.
+Execute the audit-fix workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/audit-fix.md end-to-end.
 </process>

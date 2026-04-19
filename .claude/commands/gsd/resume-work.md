@@ -22,11 +22,11 @@ Routes to the resume-project workflow which handles:
   </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/resume-project.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/resume-project.md
 </execution_context>
 
 <process>
-**Follow the resume-project workflow** from `@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/resume-project.md`.
+**Follow the resume-project workflow** from `@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/resume-project.md`.
 
 The workflow handles all resumption logic including:
 

@@ -18,8 +18,8 @@ Produces EVAL-REVIEW.md with score, verdict, gaps, and remediation plan.
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/eval-review.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ai-evals.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/eval-review.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ai-evals.md
 </execution_context>
 
 <context>
@@ -27,6 +27,6 @@ Phase: $ARGUMENTS — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/eval-review.md end-to-end.
+Execute @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/eval-review.md end-to-end.
 Preserve all workflow gates.
 </process>

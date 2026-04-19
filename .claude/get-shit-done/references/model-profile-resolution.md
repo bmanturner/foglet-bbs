@@ -12,7 +12,7 @@ Default: `balanced` if not set or config missing.
 
 ## Lookup Table
 
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/model-profiles.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/model-profiles.md
 
 Look up the agent in the table for the resolved profile. Pass the model parameter to Task calls:
 

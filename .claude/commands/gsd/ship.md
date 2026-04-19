@@ -17,7 +17,7 @@ Closes the plan → execute → verify → ship loop.
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/ship.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/ship.md
 </execution_context>
 
-Execute the ship workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/ship.md end-to-end.
+Execute the ship workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/ship.md end-to-end.

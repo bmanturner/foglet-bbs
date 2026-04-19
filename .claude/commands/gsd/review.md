@@ -19,7 +19,7 @@ planning via /gsd-plan-phase --reviews.
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/review.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/review.md
 </execution_context>
 
 <context>
@@ -36,5 +36,5 @@ Phase number: extracted from $ARGUMENTS (required)
 </context>
 
 <process>
-Execute the review workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/review.md end-to-end.
+Execute the review workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/review.md end-to-end.
 </process>

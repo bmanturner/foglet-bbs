@@ -19,9 +19,9 @@ Accepts an optional topic argument: `/gsd-explore authentication strategy`
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/explore.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/explore.md
 </execution_context>
 
 <process>
-Execute the explore workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/explore.md end-to-end.
+Execute the explore workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/explore.md end-to-end.
 </process>

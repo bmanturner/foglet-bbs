@@ -11,7 +11,7 @@ Instantly restore full project context so "Where were we?" has an immediate, com
 </purpose>
 
 <required_reading>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/continuation-format.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/continuation-format.md
 </required_reading>
 
 <process>

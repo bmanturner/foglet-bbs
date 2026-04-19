@@ -22,9 +22,10 @@ Future: `--prd` mode for PRD extraction is planned for a follow-up PR.
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/import.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/gate-prompts.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/import.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/gate-prompts.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/doc-conflict-engine.md
 </execution_context>
 
 <context>

@@ -3,8 +3,8 @@ Safe git revert workflow. Rolls back GSD phase or plan commits using the phase m
 </purpose>
 
 <required_reading>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/gate-prompts.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/gate-prompts.md
 </required_reading>
 
 <process>

@@ -19,8 +19,8 @@ Then verify each level against the actual codebase.
 </core_principle>
 
 <required_reading>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/verification-patterns.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/templates/verification-report.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/verification-patterns.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/templates/verification-report.md
 </required_reading>
 
 <process>
@@ -427,7 +427,7 @@ REPORT_PATH="$PHASE_DIR/${PHASE_NUM}-VERIFICATION.md"
 
 Fill template sections: frontmatter (phase/timestamp/status/score), goal achievement, artifact table, wiring table, requirements coverage, anti-patterns, human verification, gaps summary, fix plans (if gaps_found), metadata.
 
-See /Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/templates/verification-report.md for complete template.
+See /Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/templates/verification-report.md for complete template.
 </step>
 
 <step name="return_to_orchestrator">

@@ -21,9 +21,9 @@ Flow: Select Framework → Research Docs → Research Domain → Design Eval Str
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/ai-integration-phase.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ai-frameworks.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ai-evals.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/ai-integration-phase.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ai-frameworks.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ai-evals.md
 </execution_context>
 
 <context>
@@ -31,6 +31,6 @@ Phase number: $ARGUMENTS — optional, auto-detects next unplanned phase if omit
 </context>
 
 <process>
-Execute @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/ai-integration-phase.md end-to-end.
+Execute @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/ai-integration-phase.md end-to-end.
 Preserve all workflow gates.
 </process>

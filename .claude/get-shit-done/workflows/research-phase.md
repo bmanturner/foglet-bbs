@@ -13,14 +13,14 @@ Valid GSD subagent types (use exact names — do not fall back to 'general-purpo
 
 ## Step 0: Resolve Model Profile
 
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/model-profile-resolution.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/model-profile-resolution.md
 
 Resolve model for:
 - `gsd-phase-researcher`
 
 ## Step 1: Normalize and Validate Phase
 
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/phase-argument-parsing.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/phase-argument-parsing.md
 
 ```bash
 PHASE_INFO=$(gsd-sdk query roadmap.get-phase "${PHASE}")

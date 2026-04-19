@@ -20,12 +20,12 @@ Does not require `/gsd-new-project` — auto-creates `.planning/sketches/` if ne
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/sketch.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-theme-system.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-interactivity.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-tooling.md
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-variant-patterns.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/sketch.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-theme-system.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-interactivity.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-tooling.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-variant-patterns.md
 </execution_context>
 
 <runtime_note>
@@ -40,6 +40,6 @@ Design idea: $ARGUMENTS
 </context>
 
 <process>
-Execute the sketch workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/sketch.md end-to-end.
+Execute the sketch workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/sketch.md end-to-end.
 Preserve all workflow gates (intake, decomposition, variant evaluation, MANIFEST updates, commit patterns).
 </process>

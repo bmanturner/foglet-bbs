@@ -19,11 +19,11 @@ Routes to the update workflow which handles:
 </objective>
 
 <execution_context>
-@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/update.md
+@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/update.md
 </execution_context>
 
 <process>
-**Follow the update workflow** from `@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/update.md`.
+**Follow the update workflow** from `@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/update.md`.
 
 The workflow handles all logic including:
 1. Installed version detection (local/global)

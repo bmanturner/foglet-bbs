@@ -40,7 +40,7 @@ works via Bash and produces equivalent output.
 </documentation_lookup>
 
 <required_reading>
-Read `/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ai-evals.md` — specifically the rubric design and domain expert sections.
+Read `/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ai-evals.md` — specifically the rubric design and domain expert sections.
 </required_reading>
 
 <input>
