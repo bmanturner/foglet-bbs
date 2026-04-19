@@ -28,6 +28,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
           column style: %{gap: 0} do
             thread_rows
           end,
+          spacer(flex: 1),
           KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"C", "Compose"}, {"Q", "Back"}])
         ]
       end

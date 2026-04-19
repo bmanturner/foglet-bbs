@@ -27,6 +27,7 @@ defmodule Foglet.TUI.Screens.BoardList do
           column style: %{gap: 0} do
             board_rows
           end,
+          spacer(flex: 1),
           KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"Q", "Back"}])
         ]
       end

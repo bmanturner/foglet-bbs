@@ -42,6 +42,7 @@ defmodule Foglet.TUI.Screens.Verify do
               status_item
             ]
           end,
+          spacer(flex: 1),
           KeyBar.render([
             {"Enter", "Submit"},
             {"Backspace", "Delete"},

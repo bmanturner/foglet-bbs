@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Screens.PostReader do
           column style: %{gap: 0} do
             post_content
           end,
+          spacer(flex: 1),
           KeyBar.render([{"N", "Next"}, {"P", "Prev"}, {"R", "Reply"}, {"Q", "Back"}])
         ]
       end

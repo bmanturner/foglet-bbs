@@ -69,14 +69,12 @@ Plans:
   4. If a user connects while already online, the old session is terminated with a notification and the new session continues
   5. A user can navigate boards, open threads, read posts, and compose a reply entirely via single-key menu navigation
   6. The TUI adapts its layout when the terminal is resized
-**Plans**: 6 plans
+**Plans**: 4 plans
 Plans:
 - [ ] 03-01-PLAN.md — Raxol dep + Accounts.verify_email_code/register_pending_user + users.status migration + Wave-0 test stubs
 - [ ] 03-02-PLAN.md — Foglet.Sessions (Registry+Supervisor+Session with one-session-per-user replacement) + Foglet.SSH (Supervisor wraps :ssh.daemon/2 + KeyCB ssh_server_key_api) + application wiring
 - [ ] 03-03-PLAN.md — Foglet.TUI.App Raxol application + Login/Register/Verify screens (guest flow with registration-mode gating, invite codes, email verify code entry with 5-attempt cooldown)
 - [ ] 03-04-PLAN.md — BBS screens: MainMenu, BoardList, ThreadList, PostReader (with read-pointer flush SSH-09), PostComposer (Markdown/preview, Ctrl+S/Ctrl+C, max_post_length)
-- [ ] 03-05-PLAN.md — Gap closure: KeyBar spacer in all screens, remove duplicate title in main_menu, fix register_wizard init (registration crash blocker)
-- [ ] 03-06-PLAN.md — Gap closure: modal intercept guard in App key dispatch, command_result re-dispatcher (board loading), SSH resize event type fix
 **UI hint**: yes
 
 ### Phase 4: Presence & Login Sequence
@@ -223,7 +221,7 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 14
 |-------|----------------|--------|-----------|
 | 1. Accounts & Identity | 4/4 | Complete | 2026-04-18 |
 | 2. Domain Core | 4/4 | Complete | 2026-04-18 |
-| 3. SSH Server & TUI | 4/6 | Gap closure in progress | 2026-04-18 |
+| 3. SSH Server & TUI | 4/4 | Complete | 2026-04-18 |
 | 4. Presence & Login Sequence | 0/TBD | Not started | - |
 | 5. Chat | 0/TBD | Not started | - |
 | 6. DMs, Mentions & Notifications | 0/TBD | Not started | - |
@@ -235,3 +233,4 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 14
 | 12. Public Release Prep | 0/TBD | Not started | - |
 | 13. Go CLI Client | 0/TBD | Not started | - |
 | 14. Door Games | 0/TBD | Not started | - |
+

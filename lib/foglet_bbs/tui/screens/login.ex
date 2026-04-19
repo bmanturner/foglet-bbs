@@ -40,6 +40,7 @@ defmodule Foglet.TUI.Screens.Login do
             :login_form -> render_login_form(state)
             _ -> render_menu(mode)
           end,
+          spacer(flex: 1),
           KeyBar.render(keys_for(sub, mode))
         ]
       end
@@ -143,9 +144,15 @@ defmodule Foglet.TUI.Screens.Login do
     ctx = Map.get(state, :session_context) || %{}
 
     case Map.get(ctx, :registration_mode) do
-      nil -> Config.get("registration_mode", "open")
+      nil -> safe_config_get("registration_mode", "open")
       mode -> mode
     end
+  end
+
+  defp safe_config_get(key, default) do
+    Config.get!(key)
+  rescue
+    _ -> default
   end
 
   defp sub_state(state) do

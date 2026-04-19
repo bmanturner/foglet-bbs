@@ -18,8 +18,6 @@ defmodule Foglet.TUI.Screens.MainMenu do
     box style: %{border: :single, padding: 1} do
       column style: %{gap: 0} do
         [
-          text(" Foglet BBS ", style: [:bold]),
-          divider(),
           StatusBar.render(%{handle: handle, location: "Main Menu"}),
           column style: %{gap: 0} do
             [text("Welcome back, #{handle || "guest"}.", fg: :green), text("")] ++
@@ -27,6 +25,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
                 text("  [#{k}] #{label}", fg: :green)
               end)
           end,
+          spacer(flex: 1),
           KeyBar.render([{"B", "Boards"}, {"C", "Compose"}, {"Q", "Logout"}])
         ]
       end

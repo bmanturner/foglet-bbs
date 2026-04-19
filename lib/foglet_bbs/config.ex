@@ -58,16 +58,6 @@ defmodule Foglet.Config do
   end
 
   @doc """
-  Read a config value, returning `default` if the key is missing or the lookup fails.
-  """
-  @spec get(String.t(), term()) :: term()
-  def get(key, default) when is_binary(key) do
-    get!(key)
-  rescue
-    _ -> default
-  end
-
-  @doc """
   Upsert a config value. Wraps the value as `%{"v" => value}` for jsonb,
   invalidates the ETS cache for the key, and records the updating user.
 
