@@ -342,7 +342,7 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "{:notification, user_id, kind, payload} shows a modal", %{state: state} do
-      {new_state, []} = App.update({:notification, "u1", :dm, "hey!"}, state)
+      {new_state, []} = App.update({:notification, "u1", :dm, %{body: "hey!"}}, state)
       assert new_state.modal != nil
       assert new_state.modal.type == :info
       assert new_state.modal.message =~ "message"

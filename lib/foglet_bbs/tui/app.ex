@@ -577,13 +577,9 @@ defmodule Foglet.TUI.App do
     end
   end
 
-  defp format_notification(kind, payload) do
-    case kind do
-      :dm -> "New message: #{inspect(payload)}"
-      :mention -> "You were mentioned: #{inspect(payload)}"
-      _ -> "Notification (#{kind}): #{inspect(payload)}"
-    end
-  end
+  defp format_notification(:dm, %{body: body}), do: "New message: #{body}"
+  defp format_notification(:mention, %{thread_title: t}), do: "You were mentioned in: #{t}"
+  defp format_notification(kind, _payload), do: "Notification: #{kind}"
 
   # Process the command list returned by a screen's handle_key/2.
   # Plain %Command{} structs pass through to Raxol unchanged. {:terminate, _}
