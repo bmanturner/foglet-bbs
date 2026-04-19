@@ -32,12 +32,12 @@ defmodule Foglet.TUI.Screens.Register do
         []
       end
 
-    panel(
-      title: "Register New Account",
-      border: :single,
-      children: [
-        box(
-          children:
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" Register New Account ", style: [:bold]),
+          divider(),
+          column style: %{gap: 0} do
             [
               text("Mode: #{w.mode}", style: [:dim]),
               text(""),
@@ -47,10 +47,11 @@ defmodule Foglet.TUI.Screens.Register do
                 placeholder: prompt_for_step(w.step)
               )
             ] ++ error_items
-        ),
-        KeyBar.render([{"Enter", "Next"}, {"Esc", "Cancel"}])
-      ]
-    )
+          end,
+          KeyBar.render([{"Enter", "Next"}, {"Esc", "Cancel"}])
+        ]
+      end
+    end
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

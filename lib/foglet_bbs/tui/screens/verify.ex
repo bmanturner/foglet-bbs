@@ -28,27 +28,29 @@ defmodule Foglet.TUI.Screens.Verify do
         text("Attempts: #{vs.attempts}/#{@max_attempts}", style: [:dim])
       end
 
-    panel(
-      title: "Verify Email",
-      border: :single,
-      children: [
-        box(
-          children: [
-            text("Enter the 6-character code emailed to you:", fg: :green),
-            text(""),
-            text_input(value: vs.buffer, placeholder: "XXXXXX"),
-            text(""),
-            status_item
-          ]
-        ),
-        KeyBar.render([
-          {"Enter", "Submit"},
-          {"Backspace", "Delete"},
-          {"R", "Resend code"},
-          {"Esc", "Cancel"}
-        ])
-      ]
-    )
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" Verify Email ", style: [:bold]),
+          divider(),
+          column style: %{gap: 0} do
+            [
+              text("Enter the 6-character code emailed to you:", fg: :green),
+              text(""),
+              text_input(value: vs.buffer, placeholder: "XXXXXX"),
+              text(""),
+              status_item
+            ]
+          end,
+          KeyBar.render([
+            {"Enter", "Submit"},
+            {"Backspace", "Delete"},
+            {"R", "Resend code"},
+            {"Esc", "Cancel"}
+          ])
+        ]
+      end
+    end
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

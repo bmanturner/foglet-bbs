@@ -31,17 +31,19 @@ defmodule Foglet.TUI.Screens.Login do
     mode = registration_mode(state)
     sub = sub_state(state)
 
-    panel(
-      title: "Foglet BBS — Login",
-      border: :single,
-      children:
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
         [
+          text(" Foglet BBS — Login ", style: [:bold]),
+          divider(),
           case sub do
             :login_form -> render_login_form(state)
             _ -> render_menu(mode)
-          end
-        ] ++ [KeyBar.render(keys_for(sub, mode))]
-    )
+          end,
+          KeyBar.render(keys_for(sub, mode))
+        ]
+      end
+    end
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
@@ -187,13 +189,12 @@ defmodule Foglet.TUI.Screens.Login do
   defp render_menu(mode) do
     keys = if mode == "disabled", do: @menu_keys_no_register, else: @menu_keys
 
-    box(
-      children:
-        [text("Welcome.", fg: :green)] ++
-          Enum.map(keys, fn {k, label} ->
-            text("  [#{k}] #{label}", fg: :green)
-          end)
-    )
+    column style: %{gap: 0} do
+      [text("Welcome.", fg: :green)] ++
+        Enum.map(keys, fn {k, label} ->
+          text("  [#{k}] #{label}", fg: :green)
+        end)
+    end
   end
 
   defp render_login_form(state) do
@@ -212,23 +213,22 @@ defmodule Foglet.TUI.Screens.Login do
         []
       end
 
-    box(
-      children:
-        [
-          text("Handle:", fg: :green),
-          text_input(
-            value: form.handle,
-            placeholder: "handle",
-            style: focus_style(focused == :handle)
-          ),
-          text("Password:", fg: :green),
-          text_input(
-            value: mask(form.password),
-            placeholder: "password",
-            style: focus_style(focused == :password)
-          )
-        ] ++ error_items
-    )
+    column style: %{gap: 0} do
+      [
+        text("Handle:", fg: :green),
+        text_input(
+          value: form.handle,
+          placeholder: "handle",
+          style: focus_style(focused == :handle)
+        ),
+        text("Password:", fg: :green),
+        text_input(
+          value: mask(form.password),
+          placeholder: "password",
+          style: focus_style(focused == :password)
+        )
+      ] ++ error_items
+    end
   end
 
   # Returns a bold style list when focused, empty list otherwise.
