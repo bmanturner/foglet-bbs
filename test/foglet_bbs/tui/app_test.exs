@@ -174,7 +174,7 @@ defmodule Foglet.TUI.AppTest do
   end
 
   describe "subscribe/1" do
-    test "returns empty list when session_pid is nil" do
+    test "returns empty list when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})
       assert App.subscribe(state) == []
     end
@@ -183,6 +183,169 @@ defmodule Foglet.TUI.AppTest do
       {:ok, state} = App.init(%{session_context: %{session_pid: self()}})
       subs = App.subscribe(state)
       assert subs != []
+    end
+
+    test "returns PubSub custom subscription when current_user is set (Audit #12)" do
+      user = %Foglet.Accounts.User{id: "u-pubsub", handle: "alice"}
+      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u-pubsub"}})
+      subs = App.subscribe(state)
+
+      assert Enum.any?(subs, fn
+               %Raxol.Core.Runtime.Subscription{type: :custom} -> true
+               _ -> false
+             end),
+             "expected at least one :custom subscription for PubSub"
+    end
+
+    test "no PubSub subscription when not logged in" do
+      {:ok, state} = App.init(%{})
+      subs = App.subscribe(state)
+      refute Enum.any?(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+    end
+
+    test "board_list screen adds 'boards' topic" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+      state = %{state | current_screen: :board_list}
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      assert "boards" in pubsub_sub.data.args.topics
+    end
+
+    test "thread_list screen adds board:<id> topic when current_board is set" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      board = %{id: "b-99", name: "General"}
+      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+      state = %{state | current_screen: :thread_list, current_board: board}
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      assert "board:b-99" in pubsub_sub.data.args.topics
+    end
+
+    test "post_reader screen adds thread:<id> topic when current_thread is set" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      thread = %{id: "t-42", title: "Hello World"}
+      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+      state = %{state | current_screen: :post_reader, current_thread: thread}
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      assert "thread:t-42" in pubsub_sub.data.args.topics
+    end
+  end
+
+  describe "I/O command round-trip (Audit #11)" do
+    setup do
+      {:ok, base_state} = App.init(%{})
+
+      state = %{
+        base_state
+        | current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      }
+
+      %{state: state}
+    end
+
+    test "{:load_boards} returns a Command.task (not a no-op), {state, [%Command{}]}", %{
+      state: state
+    } do
+      {new_state, cmds} = App.update({:load_boards}, state)
+      # State unchanged — I/O happens in the task, not synchronously
+      assert new_state == state
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+    end
+
+    test "{:boards_loaded, boards} assigns board_list to state", %{state: state} do
+      fake_boards = [%{id: "b1", name: "General", unread_count: 0}]
+      {new_state, cmds} = App.update({:boards_loaded, fake_boards}, state)
+      assert new_state.board_list == fake_boards
+      assert cmds == []
+    end
+
+    test "{:load_threads, board_id} returns a Command.task", %{state: state} do
+      {_new_state, cmds} = App.update({:load_threads, "b1"}, state)
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+    end
+
+    test "{:threads_loaded, threads} assigns current_thread_list", %{state: state} do
+      threads = [%{id: "t1", title: "Hello", sticky: false, last_post_at: DateTime.utc_now()}]
+      {new_state, []} = App.update({:threads_loaded, threads}, state)
+      assert new_state.current_thread_list == threads
+    end
+
+    test "{:load_posts, thread_id} returns a Command.task", %{state: state} do
+      {_new_state, cmds} = App.update({:load_posts, "t1"}, state)
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+    end
+
+    test "{:posts_loaded, posts} assigns posts", %{state: state} do
+      posts = [%{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()}]
+      {new_state, []} = App.update({:posts_loaded, posts}, state)
+      assert new_state.posts == posts
+    end
+
+    test "{:flush_read_pointers, ctx} returns a Command.task", %{state: state} do
+      ctx = %{user_id: "u1", board_id: "b1", thread_id: "t1"}
+      {_new_state, cmds} = App.update({:flush_read_pointers, ctx}, state)
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+    end
+
+    test "{:read_pointers_flushed, thread_id} clears read_position entry", %{state: state} do
+      state_with_rp = %{state | read_position: %{"t1" => %{last_read_post_id: "p5"}}}
+      {new_state, []} = App.update({:read_pointers_flushed, "t1"}, state_with_rp)
+      assert Map.get(new_state.read_position, "t1") == nil
+    end
+  end
+
+  describe "PubSub message handlers (Audit #12)" do
+    setup do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+      %{state: state, user: user}
+    end
+
+    test "{:board_activity, board_id, event} on :board_list screen triggers load", %{
+      state: state
+    } do
+      state = %{state | current_screen: :board_list}
+      {_new_state, cmds} = App.update({:board_activity, "b1", :new_post}, state)
+      # Should issue a load_boards task
+      assert Enum.any?(cmds, &match?(%Raxol.Core.Runtime.Command{type: :task}, &1))
+    end
+
+    test "{:board_activity, board_id, event} on non-board_list screen is a no-op", %{
+      state: state
+    } do
+      state = %{state | current_screen: :main_menu}
+      {_new_state, cmds} = App.update({:board_activity, "b1", :new_post}, state)
+      assert cmds == []
+    end
+
+    test "{:thread_activity, thread_id, event} on :post_reader for current thread triggers load",
+         %{state: state} do
+      thread = %{id: "t-match", title: "T"}
+      state = %{state | current_screen: :post_reader, current_thread: thread}
+      {_new_state, cmds} = App.update({:thread_activity, "t-match", :new_post}, state)
+      assert Enum.any?(cmds, &match?(%Raxol.Core.Runtime.Command{type: :task}, &1))
+    end
+
+    test "{:thread_activity} for a different thread is a no-op", %{state: state} do
+      thread = %{id: "t-other", title: "T"}
+      state = %{state | current_screen: :post_reader, current_thread: thread}
+      {_new_state, cmds} = App.update({:thread_activity, "t-match", :new_post}, state)
+      assert cmds == []
+    end
+
+    test "{:notification, user_id, kind, payload} shows a modal", %{state: state} do
+      {new_state, []} = App.update({:notification, "u1", :dm, "hey!"}, state)
+      assert new_state.modal != nil
+      assert new_state.modal.type == :info
+      assert new_state.modal.message =~ "message"
     end
   end
 

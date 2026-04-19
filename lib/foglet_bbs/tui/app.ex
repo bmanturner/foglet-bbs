@@ -17,9 +17,11 @@ defmodule Foglet.TUI.App do
 
   use Raxol.Core.Runtime.Application
 
+  alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
   alias Foglet.TUI.Widgets
   alias Raxol.Core.Runtime.Command
+  alias Raxol.Core.Runtime.Subscription
 
   @type screen ::
           :login
@@ -48,7 +50,8 @@ defmodule Foglet.TUI.App do
           read_position: map(),
           composer_draft: String.t() | nil,
           register_wizard: map() | nil,
-          verify_state: map() | nil
+          verify_state: map() | nil,
+          subscribed_topics: MapSet.t()
         }
 
   defstruct current_screen: :login,
@@ -66,7 +69,8 @@ defmodule Foglet.TUI.App do
             read_position: %{},
             composer_draft: nil,
             register_wizard: nil,
-            verify_state: nil
+            verify_state: nil,
+            subscribed_topics: MapSet.new()
 
   # --- Raxol callbacks ---
 
@@ -177,11 +181,72 @@ defmodule Foglet.TUI.App do
   def subscribe(state) do
     # Heartbeat tick — keeps last_seen_at fresh in the Session GenServer.
     # Only subscribed when a session_pid is wired (i.e., CLIHandler started us).
-    if is_pid(state.session_pid) do
-      [subscribe_interval(10_000, :heartbeat_tick)]
-    else
-      []
-    end
+    heartbeat =
+      if is_pid(state.session_pid) do
+        [subscribe_interval(10_000, :heartbeat_tick)]
+      else
+        []
+      end
+
+    # PubSub subscriptions (Audit #12).
+    #
+    # Raxol's Lifecycle and Dispatcher do NOT route arbitrary Erlang messages
+    # to update/2. Only messages wrapped as {:subscription, msg} by Raxol's own
+    # timer infrastructure reach update/2.
+    #
+    # Solution: use Subscription.custom/2 with PubSubForwarder — a lightweight
+    # GenServer that subscribes to the requested Phoenix.PubSub topics and
+    # forwards each arriving message as {:subscription, msg} to the Dispatcher
+    # process (context.pid, which is self() here in subscribe/1).
+    #
+    # This uses Raxol's documented "External data streams" custom subscription
+    # API (Subscription.custom/2 → module.start_link(args, context)).
+    pubsub_topics = build_pubsub_topics(state)
+
+    pubsub_subs =
+      if pubsub_topics != [] do
+        [Subscription.custom(PubSubForwarder, %{topics: pubsub_topics})]
+      else
+        []
+      end
+
+    heartbeat ++ pubsub_subs
+  end
+
+  # Compute which PubSub topics to subscribe to based on current screen and user.
+  # Topics follow the convention: "user:<id>", "boards", "board:<id>", "thread:<id>".
+  # Phase 2 may not yet broadcast to all of these; subscriptions are wired now so
+  # the TUI reacts automatically when Phase 2 starts emitting events.
+  defp build_pubsub_topics(state) do
+    topics =
+      if state.current_user do
+        ["user:#{state.current_user.id}"]
+      else
+        []
+      end
+
+    topics =
+      if state.current_screen in [:board_list] do
+        ["boards" | topics]
+      else
+        topics
+      end
+
+    topics =
+      if state.current_screen in [:thread_list] and state.current_board do
+        ["board:#{state.current_board.id}" | topics]
+      else
+        topics
+      end
+
+    topics =
+      if state.current_screen in [:post_reader, :post_composer] and state.current_thread do
+        ["thread:#{state.current_thread.id}" | topics]
+      else
+        topics
+      end
+
+    topics
   end
 
   # --- Private: update/2 dispatch ---
@@ -246,14 +311,17 @@ defmodule Foglet.TUI.App do
     screen_module = screen_module_for(state.current_screen)
 
     case screen_module.handle_key(key_event, state) do
-      {:update, new_state, commands} -> {new_state, wrap_commands(commands)}
-      :no_match -> global_key_handler(key_event, state)
-    end
-  end
+      {:update, new_state, commands} ->
+        # process_screen_commands/2 converts I/O dispatch tuples returned by
+        # screens (e.g. {:load_boards}, {:load_threads, id}) into real
+        # Command.task structs by routing them through their do_update/2 clauses,
+        # which have access to the current state (user, session_context, domain
+        # overrides). Plain %Command{} structs pass through unchanged.
+        process_screen_commands(new_state, commands)
 
-  # Command results from Command.task/1 — route inner message back through dispatch.
-  defp do_update({:command_result, inner}, state) do
-    do_update(inner, state)
+      :no_match ->
+        global_key_handler(key_event, state)
+    end
   end
 
   defp do_update({:register_wizard, event}, state) do
@@ -265,24 +333,169 @@ defmodule Foglet.TUI.App do
     Screens.Verify.handle_verify_event(event, state)
   end
 
+  # I/O commands — each spawns a real off-process task that performs the DB work
+  # and returns a typed result message back to update/2 (Audit #11).
+  # Previously these wrapped the tuple in a no-op Command.task that returned
+  # the tuple unchanged, causing the DB call to run synchronously on the
+  # Lifecycle process inside update/2 instead of off-process.
+
   defp do_update({:load_boards}, state) do
-    Foglet.TUI.Screens.BoardList.load_boards(state)
+    # Snapshot what we need inside the closure so we don't capture the whole state.
+    user = state.current_user
+    ctx = Map.get(state, :session_context) || %{}
+    boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
+
+    task =
+      Command.task(fn ->
+        boards =
+          if function_exported?(boards_mod, :list_subscribed_boards, 1) do
+            boards_mod.list_subscribed_boards(user)
+          else
+            []
+          end
+
+        {:boards_loaded, boards}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:boards_loaded, boards}, state) do
+    {%{state | board_list: boards}, []}
   end
 
   defp do_update({:load_boards_for_new_thread}, state) do
-    Foglet.TUI.Screens.NewThread.load_boards(state)
+    user = state.current_user
+    ctx = Map.get(state, :session_context) || %{}
+    boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
+
+    task =
+      Command.task(fn ->
+        boards =
+          if function_exported?(boards_mod, :list_subscribed_boards, 1) do
+            boards_mod.list_subscribed_boards(user)
+          else
+            []
+          end
+
+        {:boards_for_new_thread_loaded, boards}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:boards_for_new_thread_loaded, boards}, state) do
+    ss =
+      get_in(state.screen_state, [:new_thread]) ||
+        Foglet.TUI.Screens.NewThread.init_screen_state()
+
+    new_ss = %{ss | boards: boards}
+    new_screen_state = Map.put(state.screen_state, :new_thread, new_ss)
+    {%{state | screen_state: new_screen_state}, []}
   end
 
   defp do_update({:load_threads, board_id}, state) do
-    Foglet.TUI.Screens.ThreadList.load_threads(state, board_id)
+    ctx = Map.get(state, :session_context) || %{}
+    threads_mod = get_in(ctx, [:domain, :threads]) || Foglet.Threads
+
+    task =
+      Command.task(fn ->
+        threads =
+          if function_exported?(threads_mod, :list_threads, 1) do
+            threads_mod.list_threads(board_id)
+          else
+            []
+          end
+
+        {:threads_loaded, threads}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:threads_loaded, threads}, state) do
+    {%{state | current_thread_list: threads}, []}
   end
 
   defp do_update({:load_posts, thread_id}, state) do
-    Foglet.TUI.Screens.PostReader.load_posts(state, thread_id)
+    ctx = Map.get(state, :session_context) || %{}
+    posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
+
+    task =
+      Command.task(fn ->
+        posts =
+          if function_exported?(posts_mod, :list_posts, 1) do
+            posts_mod.list_posts(thread_id)
+          else
+            []
+          end
+
+        {:posts_loaded, posts}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:posts_loaded, posts}, state) do
+    {%{state | posts: posts}, []}
   end
 
   defp do_update({:flush_read_pointers, ctx}, state) do
-    Foglet.TUI.Screens.PostReader.flush_read_pointers(state, ctx)
+    # Flush runs off-process so it doesn't block the UI on the way out of a thread.
+    sc = Map.get(state, :session_context) || %{}
+    boards_mod = get_in(sc, [:domain, :boards]) || Foglet.Boards
+    threads_mod = get_in(sc, [:domain, :threads]) || Foglet.Threads
+    user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
+
+    task = Command.task(fn -> flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod) end)
+    {state, [task]}
+  end
+
+  defp do_update({:read_pointers_flushed, thread_id}, state) do
+    new_rp =
+      if thread_id, do: Map.delete(state.read_position, thread_id), else: state.read_position
+
+    {%{state | read_position: new_rp}, []}
+  end
+
+  # PubSub message handlers (Audit #12).
+  # These messages arrive via PubSubForwarder → {:subscription, msg} → Dispatcher
+  # → update/2. Phase 2 may not yet emit all of these; the handlers are wired now
+  # so real-time updates work as soon as Phase 2 starts broadcasting.
+
+  # Board-level activity (new post, read-pointer changes) — refresh board list
+  # to update unread counts if the user is on the board_list screen.
+  defp do_update({:board_activity, _board_id, _event}, state)
+       when state.current_screen == :board_list do
+    # Delegate to {:load_boards} which will spawn its own real task.
+    do_update({:load_boards}, state)
+  end
+
+  defp do_update({:board_activity, _board_id, _event}, state), do: {state, []}
+
+  # Thread-level activity (new post) — refresh posts if the user is reading it.
+  defp do_update({:thread_activity, thread_id, _event}, state)
+       when state.current_screen == :post_reader do
+    current_thread_id = state.current_thread && state.current_thread.id
+
+    if current_thread_id == thread_id do
+      # Delegate to {:load_posts, thread_id} which spawns a real task.
+      do_update({:load_posts, thread_id}, state)
+    else
+      {state, []}
+    end
+  end
+
+  defp do_update({:thread_activity, _thread_id, _event}, state), do: {state, []}
+
+  # User-level notifications — show a modal badge.
+  defp do_update({:notification, _user_id, kind, payload}, state) do
+    modal = %{
+      type: :info,
+      message: format_notification(kind, payload)
+    }
+
+    {%{state | modal: modal}, []}
   end
 
   # Heartbeat — keep last_seen_at alive in the Session GenServer.
@@ -322,6 +535,79 @@ defmodule Foglet.TUI.App do
     {state, []}
   end
 
+  # Helpers for {:flush_read_pointers, ctx} task closure — extracted to keep
+  # the do_update clause within credo's cyclomatic complexity limit.
+  defp flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod) do
+    maybe_flush_board_pointer(boards_mod, user_id, ctx)
+    maybe_flush_thread_pointer(threads_mod, user_id, ctx)
+    {:read_pointers_flushed, ctx[:thread_id]}
+  end
+
+  defp maybe_flush_board_pointer(boards_mod, user_id, ctx) do
+    if ctx[:board_id] &&
+         user_id &&
+         function_exported?(boards_mod, :advance_board_read_pointer, 3) do
+      boards_mod.advance_board_read_pointer(
+        user_id,
+        ctx[:board_id],
+        ctx[:last_read_message_number] || 0
+      )
+    end
+  end
+
+  defp maybe_flush_thread_pointer(threads_mod, user_id, ctx) do
+    if ctx[:thread_id] &&
+         user_id &&
+         function_exported?(threads_mod, :advance_read_pointer, 3) do
+      threads_mod.advance_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
+    end
+  end
+
+  defp format_notification(kind, payload) do
+    case kind do
+      :dm -> "New message: #{inspect(payload)}"
+      :mention -> "You were mentioned: #{inspect(payload)}"
+      _ -> "Notification (#{kind}): #{inspect(payload)}"
+    end
+  end
+
+  # Process the command list returned by a screen's handle_key/2.
+  # I/O dispatch tuples are routed through do_update/2 to produce real
+  # Command.task structs with proper access to state (user, session_context,
+  # domain overrides). Multiple I/O commands accumulate their tasks.
+  # Plain %Command{} structs pass through unchanged.
+  defp process_screen_commands(state, commands) do
+    Enum.reduce(commands, {state, []}, fn cmd, {acc_state, acc_cmds} ->
+      case cmd do
+        %Command{} ->
+          {acc_state, acc_cmds ++ [cmd]}
+
+        {:terminate, _} ->
+          {acc_state, acc_cmds ++ [Command.quit()]}
+
+        tuple
+        when is_tuple(tuple) and
+               elem(tuple, 0) in [
+                 :load_boards,
+                 :load_boards_for_new_thread,
+                 :load_threads,
+                 :load_posts,
+                 :flush_read_pointers
+               ] ->
+          {next_state, new_cmds} = do_update(tuple, acc_state)
+          {next_state, acc_cmds ++ new_cmds}
+
+        other ->
+          # Non-I/O tuples (e.g. {:navigate, :screen}) should not appear as
+          # commands — screens apply those transitions directly to state before
+          # returning. Log and skip.
+          require Logger
+          Logger.warning("[TUI.App] unexpected command from screen: #{inspect(other)}")
+          {acc_state, acc_cmds}
+      end
+    end)
+  end
+
   defp render_screen(state) do
     screen_module_for(state.current_screen).render(state)
   end
@@ -355,13 +641,16 @@ defmodule Foglet.TUI.App do
 
   defp handle_modal_key(_type, _key, state), do: {state, []}
 
-  # Convert screen-returned tuples to proper %Command{} structs that the
-  # Raxol dispatcher can execute.
+  # wrap_commands/wrap_command are used only for modal callback results, which
+  # return full %Command{} structs or {:terminate, reason}. Screen handle_key/2
+  # I/O dispatch tuples are handled by process_screen_commands/2 above, which
+  # routes them through do_update/2 to get real Command.task closures with
+  # proper state access (user, session_context, domain overrides).
   defp wrap_commands(commands), do: Enum.map(commands, &wrap_command/1)
 
   defp wrap_command({:terminate, _reason}), do: Command.quit()
-  defp wrap_command(msg) when is_tuple(msg), do: Command.task(fn -> msg end)
-  defp wrap_command(cmd), do: cmd
+  defp wrap_command(%Command{} = cmd), do: cmd
+  defp wrap_command(other), do: other
 
   defp screen_module_for(:login), do: Screens.Login
   defp screen_module_for(:register), do: Screens.Register
