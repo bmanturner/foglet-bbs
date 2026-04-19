@@ -63,19 +63,16 @@ defmodule Foglet.TUI.Screens.PostReader do
     posts = state.posts || []
     ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
     reply_to = Enum.at(posts, ss.selected_post_index)
+    {w, _h} = state.terminal_size || {80, 24}
 
-    new_screen_state =
-      Map.put(state.screen_state, :post_composer, %{
-        mode: :edit,
-        reply_to: reply_to,
-        error: nil
-      })
+    composer_ss =
+      Foglet.TUI.Screens.PostComposer.init_screen_state(reply_to: reply_to, width: w)
 
     new_state = %{
       state
       | current_screen: :post_composer,
         composer_draft: "",
-        screen_state: new_screen_state
+        screen_state: Map.put(state.screen_state, :post_composer, composer_ss)
     }
 
     {:update, new_state, []}
