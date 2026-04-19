@@ -52,97 +52,97 @@ defmodule Foglet.TUI.Screens.LoginTest do
   describe "handle_key/2 — menu sub" do
     test "'Q' returns terminate command" do
       assert {:update, _, [{:terminate, :user_quit}]} =
-               Login.handle_key(%{key: "Q"}, base_state())
+               Login.handle_key(%{key: :char, char: "Q"}, base_state())
     end
 
     test "'q' lowercase also terminates" do
       assert {:update, _, [{:terminate, :user_quit}]} =
-               Login.handle_key(%{key: "q"}, base_state())
+               Login.handle_key(%{key: :char, char: "q"}, base_state())
     end
 
     test "'R' transitions to :register when registration enabled (D-22)" do
-      {:update, new_state, _} = Login.handle_key(%{key: "R"}, base_state("open"))
+      {:update, new_state, _} = Login.handle_key(%{key: :char, char: "R"}, base_state("open"))
       assert new_state.current_screen == :register
       assert new_state.register_wizard.mode == "open"
     end
 
     test "'R' returns :no_match when registration disabled (D-06)" do
-      assert :no_match = Login.handle_key(%{key: "R"}, base_state("disabled"))
+      assert :no_match = Login.handle_key(%{key: :char, char: "R"}, base_state("disabled"))
     end
 
     test "'L' enters login_form sub-state with focus on :handle" do
-      {:update, new_state, _} = Login.handle_key(%{key: "L"}, base_state())
+      {:update, new_state, _} = Login.handle_key(%{key: :char, char: "L"}, base_state())
       assert get_in(new_state, [:screen_state, :login, :sub]) == :login_form
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
     end
 
     test "unknown key returns :no_match in menu sub" do
-      assert :no_match = Login.handle_key(%{key: "x"}, base_state())
+      assert :no_match = Login.handle_key(%{key: :char, char: "x"}, base_state())
     end
   end
 
   describe "handle_key/2 — login form typing" do
     test "typing a character appends to focused field (handle)" do
       state = form_state(%{}, :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: "a"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "a"}, state)
       assert get_in(new_state, [:screen_state, :login, :form, :handle]) == "a"
       assert get_in(new_state, [:screen_state, :login, :form, :password]) == ""
     end
 
     test "typing multiple characters builds up the handle" do
       state = form_state(%{handle: "al"}, :handle)
-      {:update, s1, []} = Login.handle_key(%{key: "i"}, state)
-      {:update, s2, []} = Login.handle_key(%{key: "c"}, s1)
-      {:update, s3, []} = Login.handle_key(%{key: "e"}, s2)
+      {:update, s1, []} = Login.handle_key(%{key: :char, char: "i"}, state)
+      {:update, s2, []} = Login.handle_key(%{key: :char, char: "c"}, s1)
+      {:update, s3, []} = Login.handle_key(%{key: :char, char: "e"}, s2)
       assert get_in(s3, [:screen_state, :login, :form, :handle]) == "alice"
     end
 
     test "typing appends to password field when focused" do
       state = form_state(%{}, :password)
-      {:update, new_state, []} = Login.handle_key(%{key: "s"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "s"}, state)
       assert get_in(new_state, [:screen_state, :login, :form, :password]) == "s"
     end
 
-    test "spacebar (normalized to 'space') appends a literal space to focused field" do
+    test "spacebar appends a literal space to focused field" do
       state = form_state(%{handle: "hello"}, :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: "space"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: " "}, state)
       assert get_in(new_state, [:screen_state, :login, :form, :handle]) == "hello "
     end
 
     test "backspace removes last character from focused field" do
       state = form_state(%{handle: "alice"}, :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: "backspace"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :backspace}, state)
       assert get_in(new_state, [:screen_state, :login, :form, :handle]) == "alic"
     end
 
     test "backspace on empty field is a no-op" do
       state = form_state(%{handle: ""}, :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: "backspace"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :backspace}, state)
       assert get_in(new_state, [:screen_state, :login, :form, :handle]) == ""
     end
 
     test "tab cycles focus from :handle to :password" do
       state = form_state(%{}, :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: "tab"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
     end
 
     test "tab cycles focus from :password back to :handle" do
       state = form_state(%{}, :password)
-      {:update, new_state, []} = Login.handle_key(%{key: "tab"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
     end
 
     test "enter on :handle field moves focus to :password without submitting" do
       state = form_state(%{handle: "alice"}, :handle)
-      {:update, new_state, cmds} = Login.handle_key(%{key: "enter"}, state)
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
       assert cmds == []
     end
 
     test "escape from login form returns to menu sub with cleared form" do
       state = form_state(%{handle: "alice", password: "secret"}, :password)
-      {:update, new_state, []} = Login.handle_key(%{key: "escape"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :escape}, state)
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       assert get_in(new_state, [:screen_state, :login, :form, :handle]) == ""
       assert get_in(new_state, [:screen_state, :login, :form, :password]) == ""
@@ -156,7 +156,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state(%{handle: user.handle, password: password}, :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: "enter"}, state)
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
 
       # The screen clears screen_state on success and delegates to App via command
       assert new_state.screen_state == %{}
@@ -169,28 +169,28 @@ defmodule Foglet.TUI.Screens.LoginTest do
       user = user_fixture(%{password: password})
 
       # Start at menu, press L to enter form
-      {:update, s1, []} = Login.handle_key(%{key: "L"}, base_state())
+      {:update, s1, []} = Login.handle_key(%{key: :char, char: "L"}, base_state())
 
       # Type the handle character by character
       s2 =
         Enum.reduce(String.graphemes(user.handle), s1, fn char, acc ->
-          {:update, next, []} = Login.handle_key(%{key: char}, acc)
+          {:update, next, []} = Login.handle_key(%{key: :char, char: char}, acc)
           next
         end)
 
       # Tab to password field
-      {:update, s3, []} = Login.handle_key(%{key: "tab"}, s2)
+      {:update, s3, []} = Login.handle_key(%{key: :tab}, s2)
       assert get_in(s3, [:screen_state, :login, :focused_field]) == :password
 
       # Type the password
       s4 =
         Enum.reduce(String.graphemes(password), s3, fn char, acc ->
-          {:update, next, []} = Login.handle_key(%{key: char}, acc)
+          {:update, next, []} = Login.handle_key(%{key: :char, char: char}, acc)
           next
         end)
 
       # Enter submits
-      {:update, final_state, cmds} = Login.handle_key(%{key: "enter"}, s4)
+      {:update, final_state, cmds} = Login.handle_key(%{key: :enter}, s4)
 
       assert final_state.screen_state == %{}
       assert [{:promote_session, returned_user}] = cmds
@@ -200,7 +200,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "invalid credentials surface an inline error and clear password field" do
       state = form_state(%{handle: "ghost", password: "nope"}, :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: "enter"}, state)
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
 
       assert cmds == []
       assert get_in(new_state, [:screen_state, :login, :form, :error]) == "Invalid credentials."
@@ -224,7 +224,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           :password
         )
 
-      {:update, new_state, _} = Login.handle_key(%{key: "enter"}, state)
+      {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
 
       # Should show pending modal (password matches since registration_changeset hashes it)
       case new_state.modal do

@@ -21,35 +21,35 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   test "'B'/'b' navigates to :board_list with {:load_boards} command", %{state: state} do
-    {:update, s, cmds} = MainMenu.handle_key(%{key: "B"}, state)
+    {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "B"}, state)
     assert s.current_screen == :board_list
     assert {:load_boards} in cmds
 
-    {:update, s2, cmds2} = MainMenu.handle_key(%{key: "b"}, state)
+    {:update, s2, cmds2} = MainMenu.handle_key(%{key: :char, char: "b"}, state)
     assert s2.current_screen == :board_list
     assert {:load_boards} in cmds2
   end
 
   test "'C' navigates to :new_thread wizard and dispatches {:load_boards_for_new_thread}",
        %{state: state} do
-    {:update, s, cmds} = MainMenu.handle_key(%{key: "C"}, state)
+    {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "C"}, state)
     assert s.current_screen == :new_thread
     assert {:load_boards_for_new_thread} in cmds
     # Wizard screen_state initialised at the board step
     assert get_in(s, [:screen_state, :new_thread, :step]) == :board
 
     # lowercase 'c' same behaviour
-    {:update, s2, cmds2} = MainMenu.handle_key(%{key: "c"}, state)
+    {:update, s2, cmds2} = MainMenu.handle_key(%{key: :char, char: "c"}, state)
     assert s2.current_screen == :new_thread
     assert {:load_boards_for_new_thread} in cmds2
   end
 
   test "'Q' emits {:terminate, :logout} command", %{state: state} do
-    {:update, _, cmds} = MainMenu.handle_key(%{key: "Q"}, state)
+    {:update, _, cmds} = MainMenu.handle_key(%{key: :char, char: "Q"}, state)
     assert {:terminate, :logout} in cmds
   end
 
   test "unknown key returns :no_match", %{state: state} do
-    assert :no_match = MainMenu.handle_key(%{key: "z"}, state)
+    assert :no_match = MainMenu.handle_key(%{key: :char, char: "z"}, state)
   end
 end

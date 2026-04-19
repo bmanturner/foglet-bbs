@@ -31,21 +31,21 @@ defmodule Foglet.TUI.Screens.VerifyTest do
 
   describe "handle_key character entry" do
     test "appends uppercase alphanumeric chars up to 6", %{state: state} do
-      {:update, s, _} = Verify.handle_key(%{key: "a"}, state)
+      {:update, s, _} = Verify.handle_key(%{key: :char, char: "a"}, state)
       assert s.verify_state.buffer == "A"
 
-      {:update, s, _} = Verify.handle_key(%{key: "1"}, s)
+      {:update, s, _} = Verify.handle_key(%{key: :char, char: "1"}, s)
       assert s.verify_state.buffer == "A1"
     end
 
     test "ignores input beyond 6 chars", %{state: state} do
       filled = %{state | verify_state: %{buffer: "ABCDEF", attempts: 0, cooldown_until: nil}}
-      assert :no_match = Verify.handle_key(%{key: "G"}, filled)
+      assert :no_match = Verify.handle_key(%{key: :char, char: "G"}, filled)
     end
 
     test "backspace removes last char", %{state: state} do
       s = %{state | verify_state: %{buffer: "ABC", attempts: 0, cooldown_until: nil}}
-      {:update, new, _} = Verify.handle_key(%{key: "backspace"}, s)
+      {:update, new, _} = Verify.handle_key(%{key: :backspace}, s)
       assert new.verify_state.buffer == "AB"
     end
   end
@@ -105,7 +105,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
     test "'r' triggers resend, NOT append to buffer", %{state: state} do
       s = %{state | verify_state: %{buffer: "AB", attempts: 0, cooldown_until: nil}}
       # resend_code calls Accounts.build_verify_code which needs a real user (set in setup)
-      result = Verify.handle_key(%{key: "r"}, s)
+      result = Verify.handle_key(%{key: :char, char: "r"}, s)
       # Should be {:update, _, []} from resend — buffer should NOT be "ABR"
       assert {:update, new_state, []} = result
 
@@ -115,7 +115,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
 
     test "'R' triggers resend, NOT append to buffer", %{state: state} do
       s = %{state | verify_state: %{buffer: "AB", attempts: 0, cooldown_until: nil}}
-      result = Verify.handle_key(%{key: "R"}, s)
+      result = Verify.handle_key(%{key: :char, char: "R"}, s)
       assert {:update, new_state, []} = result
       refute new_state.verify_state.buffer == "ABR"
     end
@@ -125,7 +125,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
     test "typing 6 valid chars fills the buffer completely", %{state: state} do
       final =
         Enum.reduce(~w(A B C 1 2 3), state, fn char, acc ->
-          {:update, new_acc, []} = Verify.handle_key(%{key: char}, acc)
+          {:update, new_acc, []} = Verify.handle_key(%{key: :char, char: char}, acc)
           new_acc
         end)
 
@@ -133,28 +133,28 @@ defmodule Foglet.TUI.Screens.VerifyTest do
     end
 
     test "valid chars are uppercased before appending", %{state: state} do
-      {:update, s1, []} = Verify.handle_key(%{key: "a"}, state)
+      {:update, s1, []} = Verify.handle_key(%{key: :char, char: "a"}, state)
       assert s1.verify_state.buffer == "A"
 
-      {:update, s2, []} = Verify.handle_key(%{key: "b"}, s1)
+      {:update, s2, []} = Verify.handle_key(%{key: :char, char: "b"}, s1)
       assert s2.verify_state.buffer == "AB"
     end
 
     test "invalid chars (punctuation, space) are rejected and return :no_match", %{state: state} do
-      assert :no_match = Verify.handle_key(%{key: "!"}, state)
-      assert :no_match = Verify.handle_key(%{key: " "}, state)
-      assert :no_match = Verify.handle_key(%{key: "-"}, state)
+      assert :no_match = Verify.handle_key(%{key: :char, char: "!"}, state)
+      assert :no_match = Verify.handle_key(%{key: :char, char: " "}, state)
+      assert :no_match = Verify.handle_key(%{key: :char, char: "-"}, state)
     end
 
     test "buffer does not exceed 6 chars — 7th valid char is rejected", %{state: state} do
       filled = %{state | verify_state: %{buffer: "ABCDEF", attempts: 0, cooldown_until: nil}}
-      assert :no_match = Verify.handle_key(%{key: "G"}, filled)
-      assert :no_match = Verify.handle_key(%{key: "1"}, filled)
+      assert :no_match = Verify.handle_key(%{key: :char, char: "G"}, filled)
+      assert :no_match = Verify.handle_key(%{key: :char, char: "1"}, filled)
     end
 
-    test "multi-char named keys like 'up' return :no_match", %{state: state} do
-      assert :no_match = Verify.handle_key(%{key: "up"}, state)
-      assert :no_match = Verify.handle_key(%{key: "down"}, state)
+    test "non-char keys like :up/:down return :no_match", %{state: state} do
+      assert :no_match = Verify.handle_key(%{key: :up}, state)
+      assert :no_match = Verify.handle_key(%{key: :down}, state)
     end
   end
 end

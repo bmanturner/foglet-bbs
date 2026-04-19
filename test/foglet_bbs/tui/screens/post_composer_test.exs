@@ -77,7 +77,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   end
 
   test "render/1 in preview mode does not crash", %{state: state} do
-    {:update, s, _} = PostComposer.handle_key(%{key: "tab"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :tab}, state)
     assert _ = PostComposer.render(s)
   end
 
@@ -88,10 +88,10 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   test "Tab toggles mode :edit <-> :preview (D-28)", %{state: state} do
     assert get_in(state.screen_state, [:post_composer, :mode]) == :edit
 
-    {:update, s, _} = PostComposer.handle_key(%{key: "tab"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :tab}, state)
     assert get_in(s.screen_state, [:post_composer, :mode]) == :preview
 
-    {:update, s, _} = PostComposer.handle_key(%{key: "tab"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :tab}, s)
     assert get_in(s.screen_state, [:post_composer, :mode]) == :edit
   end
 
@@ -100,26 +100,26 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   # ---------------------------------------------------------------------------
 
   test "single character keys are forwarded to MultiLineInput", %{state: state} do
-    {:update, s1, _} = PostComposer.handle_key(%{key: "h"}, state)
-    {:update, s2, _} = PostComposer.handle_key(%{key: "i"}, s1)
+    {:update, s1, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
+    {:update, s2, _} = PostComposer.handle_key(%{key: :char, char: "i"}, s1)
 
     text = get_in(s2.screen_state, [:post_composer, :input_state, Access.key(:value)])
     assert text == "hi"
   end
 
-  test "spacebar appends a space", %{state: state} do
-    {:update, s1, _} = PostComposer.handle_key(%{key: "h"}, state)
-    {:update, s2, _} = PostComposer.handle_key(%{key: "space"}, s1)
-    {:update, s3, _} = PostComposer.handle_key(%{key: "i"}, s2)
+  test "spacebar appends a space (no special-casing — native :char shape)", %{state: state} do
+    {:update, s1, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
+    {:update, s2, _} = PostComposer.handle_key(%{key: :char, char: " "}, s1)
+    {:update, s3, _} = PostComposer.handle_key(%{key: :char, char: "i"}, s2)
 
     text = get_in(s3.screen_state, [:post_composer, :input_state, Access.key(:value)])
     assert text == "h i"
   end
 
   test "enter inserts a newline", %{state: state} do
-    {:update, s1, _} = PostComposer.handle_key(%{key: "h"}, state)
-    {:update, s2, _} = PostComposer.handle_key(%{key: "enter"}, s1)
-    {:update, s3, _} = PostComposer.handle_key(%{key: "i"}, s2)
+    {:update, s1, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
+    {:update, s2, _} = PostComposer.handle_key(%{key: :enter}, s1)
+    {:update, s3, _} = PostComposer.handle_key(%{key: :char, char: "i"}, s2)
 
     text = get_in(s3.screen_state, [:post_composer, :input_state, Access.key(:value)])
     assert text == "h\ni"
@@ -129,11 +129,11 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     # Type "hello" then backspace
     s =
       Enum.reduce(~w[h e l l o], state, fn ch, acc ->
-        {:update, next, _} = PostComposer.handle_key(%{key: ch}, acc)
+        {:update, next, _} = PostComposer.handle_key(%{key: :char, char: ch}, acc)
         next
       end)
 
-    {:update, s, _} = PostComposer.handle_key(%{key: "backspace"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :backspace}, s)
 
     text = get_in(s.screen_state, [:post_composer, :input_state, Access.key(:value)])
     assert text == "hell"
@@ -141,14 +141,23 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
   test "arrow-key events are forwarded without crash", %{state: state} do
     # Type something first so there's content to navigate
-    {:update, s, _} = PostComposer.handle_key(%{key: "h"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
 
-    for key <- ~w[up down left right home end pageup pagedown] do
+    for key <- [:up, :down, :left, :right, :home, :end, :page_up, :page_down] do
       result = PostComposer.handle_key(%{key: key}, s)
 
       assert match?({:update, _, _}, result) or result == :no_match,
-             "Arrow key #{key} returned unexpected: #{inspect(result)}"
+             "Key #{key} returned unexpected: #{inspect(result)}"
     end
+  end
+
+  test "emoji grapheme is forwarded to MultiLineInput (unicode end-to-end)", %{state: state} do
+    # 🐸 is a 4-byte UTF-8 sequence — verify the :char path handles it correctly
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "🐸"}, state)
+    text = get_in(s.screen_state, [:post_composer, :input_state, Access.key(:value)])
+    # The frog emoji maps to codepoint 0x1F438 (>= 32), so it should be inserted
+    assert String.length(text) == 1
+    assert text == "🐸"
   end
 
   # ---------------------------------------------------------------------------
@@ -156,17 +165,17 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   # ---------------------------------------------------------------------------
 
   test "Ctrl+S with empty body shows error modal", %{state: state} do
-    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_s"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, state)
     assert s.modal.type == :error
   end
 
   test "Ctrl+S with valid body creates post and transitions to :post_reader (D-29)",
        %{state: state} do
     # Type content via component
-    {:update, s, _} = PostComposer.handle_key(%{key: "h"}, state)
-    {:update, s, _} = PostComposer.handle_key(%{key: "i"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "i"}, s)
 
-    {:update, s, cmds} = PostComposer.handle_key(%{key: "ctrl_s"}, s)
+    {:update, s, cmds} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert s.current_screen == :post_reader
     assert s.composer_draft == nil
     refute Map.has_key?(s.screen_state, :post_composer)
@@ -177,8 +186,8 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
        %{state: state} do
     # Remove the posts module from session_context to hit the dev-mode path
     s = %{state | session_context: %{domain: %{markdown: FakeMarkdown}}}
-    {:update, s, _} = PostComposer.handle_key(%{key: "h"}, s)
-    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_s"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert s.current_screen == :thread_list
     assert s.modal.type == :info
   end
@@ -201,7 +210,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     ss = get_in(state.screen_state, [:post_composer])
     s = put_in(state, [:screen_state, :post_composer], %{ss | input_state: big_input})
 
-    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_s"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert s.modal.type == :error
     assert s.modal.message =~ "maximum length"
   end
@@ -224,7 +233,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     s = put_in(s, [:screen_state, :post_composer], %{ss | input_state: at_limit})
 
     # Type one more char — enforce_max_len should clip the value back to 5
-    {:update, s, _} = PostComposer.handle_key(%{key: "f"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "f"}, s)
 
     text = get_in(s.screen_state, [:post_composer, :input_state, Access.key(:value)])
     assert String.length(text) <= 5
@@ -253,7 +262,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       |> Map.from_struct()
 
     # 10_000 chars exceeds default 8192 limit -> error modal
-    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_s"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, state)
     assert s.modal.type == :error
   end
 
@@ -263,8 +272,8 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
   test "Ctrl+C cancels to :thread_list without confirmation (D-30)", %{state: state} do
     # Type some content first
-    {:update, s, _} = PostComposer.handle_key(%{key: "h"}, state)
-    {:update, s, _} = PostComposer.handle_key(%{key: "ctrl_c"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, s)
 
     assert s.current_screen == :thread_list
     assert s.composer_draft == nil
@@ -291,7 +300,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     # Should not crash on render
     assert _ = PostComposer.render(s)
     # And should not crash on key
-    result = PostComposer.handle_key(%{key: "h"}, s)
+    result = PostComposer.handle_key(%{key: :char, char: "h"}, s)
     assert match?({:update, _, _}, result)
   end
 end

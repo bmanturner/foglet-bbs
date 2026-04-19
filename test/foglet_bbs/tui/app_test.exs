@@ -103,7 +103,7 @@ defmodule Foglet.TUI.AppTest do
 
     test "dispatches {:key, key_event} to current screen's handle_key/2", %{state: state} do
       # 'Q' from :login screen should return a quit command
-      {_new_state, cmds} = App.update({:key, %{key: "Q"}}, state)
+      {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
       assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
     end
 
@@ -357,51 +357,51 @@ defmodule Foglet.TUI.AppTest do
 
     test ":info modal + Enter dismisses modal", %{state: state} do
       state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
-      {new_state, _cmds} = App.update({:key, %{key: "enter"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :enter}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":info modal + Escape dismisses modal", %{state: state} do
       state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
-      {new_state, _cmds} = App.update({:key, %{key: "escape"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :escape}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":info modal + Space dismisses modal", %{state: state} do
       state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
-      {new_state, _cmds} = App.update({:key, %{key: "space"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :char, char: " "}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":error modal + Escape dismisses modal", %{state: state} do
       state_with_modal = %{state | modal: %{type: :error, message: "Oops"}}
-      {new_state, _cmds} = App.update({:key, %{key: "escape"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :escape}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":warning modal + Enter dismisses modal", %{state: state} do
       state_with_modal = %{state | modal: %{type: :warning, message: "Careful"}}
-      {new_state, _cmds} = App.update({:key, %{key: "enter"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :enter}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test "unrecognised key on :info modal leaves state unchanged", %{state: state} do
       modal = %{type: :info, message: "Hello"}
       state_with_modal = %{state | modal: modal}
-      {new_state, cmds} = App.update({:key, %{key: "x"}}, state_with_modal)
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "x"}}, state_with_modal)
       assert new_state.modal == modal
       assert cmds == []
     end
 
     test ":confirm modal + Y dispatches {:confirm_modal, :yes} and dismisses", %{state: state} do
       state_with_modal = %{state | modal: %{type: :confirm, message: "Delete?"}}
-      {new_state, _cmds} = App.update({:key, %{key: "y"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :char, char: "y"}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":confirm modal + N dispatches {:confirm_modal, :no} and dismisses", %{state: state} do
       state_with_modal = %{state | modal: %{type: :confirm, message: "Delete?"}}
-      {new_state, _cmds} = App.update({:key, %{key: "n"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :char, char: "n"}}, state_with_modal)
       assert new_state.modal == nil
     end
 
@@ -409,7 +409,7 @@ defmodule Foglet.TUI.AppTest do
       on_confirm = fn _s -> {:navigate, :board_list} end
       modal = %{type: :confirm, message: "Go?", on_confirm: on_confirm}
       state_with_modal = %{state | modal: modal}
-      {new_state, _cmds} = App.update({:key, %{key: "y"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :char, char: "y"}}, state_with_modal)
       assert new_state.modal == nil
       assert new_state.current_screen == :board_list
     end
@@ -418,7 +418,7 @@ defmodule Foglet.TUI.AppTest do
       on_cancel = fn _s -> {:navigate, :post_reader} end
       modal = %{type: :confirm, message: "Go?", on_cancel: on_cancel}
       state_with_modal = %{state | modal: modal}
-      {new_state, _cmds} = App.update({:key, %{key: "n"}}, state_with_modal)
+      {new_state, _cmds} = App.update({:key, %{key: :char, char: "n"}}, state_with_modal)
       assert new_state.modal == nil
       assert new_state.current_screen == :post_reader
     end

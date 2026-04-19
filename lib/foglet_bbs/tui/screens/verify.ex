@@ -54,48 +54,40 @@ defmodule Foglet.TUI.Screens.Verify do
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: "escape"}, state) do
+  def handle_key(%{key: :escape}, state) do
     {:update, %{state | current_screen: :login, verify_state: nil}, []}
   end
 
-  def handle_key(%{key: "backspace"}, state) do
+  def handle_key(%{key: :backspace}, state) do
     vs = state.verify_state || %{buffer: "", attempts: 0, cooldown_until: nil}
     new_len = max(String.length(vs.buffer) - 1, 0)
     new_vs = %{vs | buffer: String.slice(vs.buffer, 0, new_len)}
     {:update, %{state | verify_state: new_vs}, []}
   end
 
-  def handle_key(%{key: "enter"}, state) do
+  def handle_key(%{key: :enter}, state) do
     {new_state, cmds} = submit_raw(state)
     {:update, new_state, cmds}
   end
 
-  def handle_key(%{key: "R"}, state), do: resend_code(state)
-  def handle_key(%{key: "r"}, state), do: resend_code(state)
+  def handle_key(%{key: :char, char: c}, state) when c in ["R", "r"], do: resend_code(state)
 
-  # Binary-key catch-all. String.length/1 is NOT guard-safe, so we gate the
-  # single-grapheme check in the body. Multi-char named keys (up, f1, etc.)
-  # that slip through fall to :no_match.
-  def handle_key(%{key: key}, state) when is_binary(key) do
+  # Typed character — Raxol native shape: %{key: :char, char: c}.
+  # Only accept uppercase alphanumeric chars for the verification code.
+  def handle_key(%{key: :char, char: c}, state) do
     vs = state.verify_state || %{buffer: "", attempts: 0, cooldown_until: nil}
+    new_char = String.upcase(c)
 
     cond do
-      String.length(key) != 1 ->
-        :no_match
-
       cooldown?(vs) ->
         {:update, %{state | modal: cooldown_modal(vs)}, []}
 
-      true ->
-        new_char = String.upcase(key)
+      String.match?(new_char, ~r/\A[A-Z0-9]\z/) and String.length(vs.buffer) < @code_length ->
+        new_vs = %{vs | buffer: vs.buffer <> new_char}
+        {:update, %{state | verify_state: new_vs}, []}
 
-        if String.match?(new_char, ~r/\A[A-Z0-9]\z/) and
-             String.length(vs.buffer) < @code_length do
-          new_vs = %{vs | buffer: vs.buffer <> new_char}
-          {:update, %{state | verify_state: new_vs}, []}
-        else
-          :no_match
-        end
+      true ->
+        :no_match
     end
   end
 

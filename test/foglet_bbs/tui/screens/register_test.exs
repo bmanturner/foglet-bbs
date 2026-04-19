@@ -108,24 +108,23 @@ defmodule Foglet.TUI.Screens.RegisterTest do
   describe "handle_key/2 — character input" do
     test "typing a single char appends to current_input" do
       state = base_state("open")
-      {:update, new_state, []} = Register.handle_key(%{key: "a"}, state)
+      {:update, new_state, []} = Register.handle_key(%{key: :char, char: "a"}, state)
       assert new_state.register_wizard.current_input == "a"
     end
 
     test "typing multiple chars builds up current_input" do
       state = base_state("open")
-      {:update, s1, []} = Register.handle_key(%{key: "a"}, state)
-      {:update, s2, []} = Register.handle_key(%{key: "l"}, s1)
-      {:update, s3, []} = Register.handle_key(%{key: "i"}, s2)
+      {:update, s1, []} = Register.handle_key(%{key: :char, char: "a"}, state)
+      {:update, s2, []} = Register.handle_key(%{key: :char, char: "l"}, s1)
+      {:update, s3, []} = Register.handle_key(%{key: :char, char: "i"}, s2)
       assert s3.register_wizard.current_input == "ali"
     end
 
-    test "space key appends a literal space to current_input" do
-      # 'space' is the normalized form of the spacebar key (see #16 for normalization fix)
+    test "spacebar appends a literal space to current_input" do
       state = base_state("open")
-      {:update, s1, []} = Register.handle_key(%{key: "h"}, state)
-      {:update, s2, []} = Register.handle_key(%{key: "space"}, s1)
-      {:update, s3, []} = Register.handle_key(%{key: "i"}, s2)
+      {:update, s1, []} = Register.handle_key(%{key: :char, char: "h"}, state)
+      {:update, s2, []} = Register.handle_key(%{key: :char, char: " "}, s1)
+      {:update, s3, []} = Register.handle_key(%{key: :char, char: "i"}, s2)
       assert s3.register_wizard.current_input == "h i"
     end
 
@@ -141,13 +140,13 @@ defmodule Foglet.TUI.Screens.RegisterTest do
           }
       }
 
-      {:update, new_state, []} = Register.handle_key(%{key: "backspace"}, state)
+      {:update, new_state, []} = Register.handle_key(%{key: :backspace}, state)
       assert new_state.register_wizard.current_input == "ab"
     end
 
     test "backspace on empty current_input is a no-op (stays empty)" do
       state = base_state("open")
-      {:update, new_state, []} = Register.handle_key(%{key: "backspace"}, state)
+      {:update, new_state, []} = Register.handle_key(%{key: :backspace}, state)
       assert new_state.register_wizard.current_input == ""
     end
 
@@ -163,26 +162,26 @@ defmodule Foglet.TUI.Screens.RegisterTest do
           }
       }
 
-      {:update, _new_state, cmds} = Register.handle_key(%{key: "enter"}, state)
+      {:update, _new_state, cmds} = Register.handle_key(%{key: :enter}, state)
       assert Enum.member?(cmds, {:register_wizard, {:submit_step, :handle, "myhandle"}})
     end
 
     test "enter with empty input dispatches submit_step with empty string" do
       state = base_state("open")
-      {:update, _new_state, cmds} = Register.handle_key(%{key: "enter"}, state)
+      {:update, _new_state, cmds} = Register.handle_key(%{key: :enter}, state)
       assert Enum.member?(cmds, {:register_wizard, {:submit_step, :handle, ""}})
     end
 
     test "escape cancels wizard and returns to :login" do
       state = base_state("open")
-      {:update, new_state, []} = Register.handle_key(%{key: "escape"}, state)
+      {:update, new_state, []} = Register.handle_key(%{key: :escape}, state)
       assert new_state.current_screen == :login
       assert new_state.register_wizard == nil
     end
 
-    test "multi-char named keys (e.g. 'up') return :no_match" do
+    test "non-char keys (e.g. :up) return :no_match" do
       state = base_state("open")
-      assert :no_match = Register.handle_key(%{key: "up"}, state)
+      assert :no_match = Register.handle_key(%{key: :up}, state)
     end
   end
 

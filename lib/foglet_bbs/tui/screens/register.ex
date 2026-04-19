@@ -55,11 +55,11 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: "escape"}, state) do
+  def handle_key(%{key: :escape}, state) do
     {:update, %{state | current_screen: :login, register_wizard: nil}, []}
   end
 
-  def handle_key(%{key: "enter"}, state) do
+  def handle_key(%{key: :enter}, state) do
     w = state.register_wizard || default_wizard(state)
     value = Map.get(w, :current_input, "")
     step = w.step
@@ -67,35 +67,20 @@ defmodule Foglet.TUI.Screens.Register do
     {:update, state, [{:register_wizard, {:submit_step, step, value}}]}
   end
 
-  def handle_key(%{key: "backspace"}, state) do
+  def handle_key(%{key: :backspace}, state) do
     w = state.register_wizard || default_wizard(state)
     current = Map.get(w, :current_input, "")
     new_input = String.slice(current, 0, max(String.length(current) - 1, 0))
     {:update, %{state | register_wizard: Map.put(w, :current_input, new_input)}, []}
   end
 
-  def handle_key(%{key: "space"}, state) do
-    # FUTURE (task #16): remove once key normalization converts spacebar to " ".
+  # Typed character catch-all — Raxol native shape: %{key: :char, char: c}.
+  # `c` is always a single grapheme string (guaranteed by InputParser).
+  # Spacebar arrives as %{key: :char, char: " "} — no special-casing needed.
+  def handle_key(%{key: :char, char: c}, state) do
     w = state.register_wizard || default_wizard(state)
     current = Map.get(w, :current_input, "")
-    {:update, %{state | register_wizard: Map.put(w, :current_input, current <> " ")}, []}
-  end
-
-  # Binary-key catch-all. The multi-char named keys (escape, enter, backspace, space)
-  # are matched by the clauses above. String.length/1 is NOT guard-safe, so we gate
-  # the length check in the body and return :no_match for any other multi-char names
-  # that slip through (e.g. "up", "down", "f1").
-  #
-  # Using String.length (grapheme count) rather than byte_size/1 ensures multibyte
-  # unicode characters are accepted correctly (avoids the composer bug from task #13).
-  def handle_key(%{key: key}, state) when is_binary(key) do
-    if String.length(key) == 1 do
-      w = state.register_wizard || default_wizard(state)
-      current = Map.get(w, :current_input, "")
-      {:update, %{state | register_wizard: Map.put(w, :current_input, current <> key)}, []}
-    else
-      :no_match
-    end
+    {:update, %{state | register_wizard: Map.put(w, :current_input, current <> c)}, []}
   end
 
   def handle_key(_key, _state), do: :no_match

@@ -204,33 +204,16 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # --- Board step ---
 
-  defp handle_board_key(%{key: "escape"}, state, _ss) do
+  defp handle_board_key(%{key: :escape}, state, _ss) do
     {:update, %{state | current_screen: :main_menu}, []}
   end
 
-  defp handle_board_key(%{key: key}, state, ss) when key in ["j", "down"] do
-    boards = ss.boards || []
+  defp handle_board_key(%{key: :char, char: "j"}, state, ss), do: board_move(state, ss, +1)
+  defp handle_board_key(%{key: :down}, state, ss), do: board_move(state, ss, +1)
+  defp handle_board_key(%{key: :char, char: "k"}, state, ss), do: board_move(state, ss, -1)
+  defp handle_board_key(%{key: :up}, state, ss), do: board_move(state, ss, -1)
 
-    if boards == [] do
-      :no_match
-    else
-      new_idx = min(ss.selected_board_index + 1, length(boards) - 1)
-      {:update, put_ss(state, %{ss | selected_board_index: new_idx}), []}
-    end
-  end
-
-  defp handle_board_key(%{key: key}, state, ss) when key in ["k", "up"] do
-    boards = ss.boards || []
-
-    if boards == [] do
-      :no_match
-    else
-      new_idx = max(ss.selected_board_index - 1, 0)
-      {:update, put_ss(state, %{ss | selected_board_index: new_idx}), []}
-    end
-  end
-
-  defp handle_board_key(%{key: "enter"}, state, ss) do
+  defp handle_board_key(%{key: :enter}, state, ss) do
     boards = ss.boards || []
 
     case Enum.at(boards, ss.selected_board_index) do
@@ -257,27 +240,42 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp handle_board_key(_key, _state, _ss), do: :no_match
 
+  defp board_move(state, ss, delta) do
+    boards = ss.boards || []
+
+    if boards == [] do
+      :no_match
+    else
+      new_idx =
+        (ss.selected_board_index + delta)
+        |> max(0)
+        |> min(length(boards) - 1)
+
+      {:update, put_ss(state, %{ss | selected_board_index: new_idx}), []}
+    end
+  end
+
   # --- Compose step ---
 
-  defp handle_compose_key(%{key: "ctrl_c"}, state, _ss) do
+  defp handle_compose_key(%{key: :char, char: "c", ctrl: true}, state, _ss) do
     {:update, %{state | current_screen: :main_menu}, []}
   end
 
-  defp handle_compose_key(%{key: "escape"}, state, _ss) do
+  defp handle_compose_key(%{key: :escape}, state, _ss) do
     {:update, %{state | current_screen: :main_menu}, []}
   end
 
-  defp handle_compose_key(%{key: "tab"}, state, ss) do
+  defp handle_compose_key(%{key: :tab}, state, ss) do
     new_focus = if ss.focused == :title, do: :body, else: :title
     {:update, put_ss(state, %{ss | focused: new_focus}), []}
   end
 
-  defp handle_compose_key(%{key: "ctrl_s"}, state, ss) do
+  defp handle_compose_key(%{key: :char, char: "s", ctrl: true}, state, ss) do
     do_submit(state, ss)
   end
 
-  # Title field: handle typing directly
-  defp handle_compose_key(%{key: "backspace"}, state, %{focused: :title} = ss) do
+  # Title field: backspace removes last grapheme
+  defp handle_compose_key(%{key: :backspace}, state, %{focused: :title} = ss) do
     new_title =
       case String.length(ss.title_input) do
         0 -> ""
@@ -287,27 +285,10 @@ defmodule Foglet.TUI.Screens.NewThread do
     {:update, put_ss(state, %{ss | title_input: new_title}), []}
   end
 
-  defp handle_compose_key(%{key: "space"}, state, %{focused: :title} = ss) do
-    {:update, put_ss(state, %{ss | title_input: ss.title_input <> " "}), []}
-  end
-
-  defp handle_compose_key(%{key: key}, state, %{focused: :title} = ss)
-       when is_binary(key) and byte_size(key) == 1 do
-    case :binary.first(key) do
-      cp when cp >= 32 ->
-        {:update, put_ss(state, %{ss | title_input: ss.title_input <> key}), []}
-
-      _ ->
-        :no_match
-    end
-  end
-
-  defp handle_compose_key(%{key: key}, state, %{focused: :title} = ss) when is_binary(key) do
-    # Multibyte grapheme (e.g. "é")
-    case String.graphemes(key) do
-      [_single] -> {:update, put_ss(state, %{ss | title_input: ss.title_input <> key}), []}
-      _ -> :no_match
-    end
+  # Title field: typed character — Raxol native %{key: :char, char: c}.
+  # Spacebar arrives as char: " " naturally; no special-case needed.
+  defp handle_compose_key(%{key: :char, char: c}, state, %{focused: :title} = ss) do
+    {:update, put_ss(state, %{ss | title_input: ss.title_input <> c}), []}
   end
 
   defp handle_compose_key(_key, _state, %{focused: :title}), do: :no_match
@@ -414,34 +395,25 @@ defmodule Foglet.TUI.Screens.NewThread do
   # Key translation (same as PostComposer)
   # ---------------------------------------------------------------------------
 
-  defp translate_key(%{key: "backspace"}), do: {:backspace}
-  defp translate_key(%{key: "delete"}), do: {:delete}
-  defp translate_key(%{key: "enter"}), do: {:enter}
-  defp translate_key(%{key: "up"}), do: {:move_cursor, :up}
-  defp translate_key(%{key: "down"}), do: {:move_cursor, :down}
-  defp translate_key(%{key: "left"}), do: {:move_cursor, :left}
-  defp translate_key(%{key: "right"}), do: {:move_cursor, :right}
-  defp translate_key(%{key: "home"}), do: {:move_cursor_line_start}
-  defp translate_key(%{key: "end"}), do: {:move_cursor_line_end}
-  defp translate_key(%{key: "pageup"}), do: {:move_cursor_page, :up}
-  defp translate_key(%{key: "pagedown"}), do: {:move_cursor_page, :down}
-  defp translate_key(%{key: "space"}), do: {:input, ?\s}
+  # Translate Raxol-native event data maps to MultiLineInput.update/2 messages.
+  defp translate_key(%{key: :backspace}), do: {:backspace}
+  defp translate_key(%{key: :delete}), do: {:delete}
+  defp translate_key(%{key: :enter}), do: {:enter}
+  defp translate_key(%{key: :up}), do: {:move_cursor, :up}
+  defp translate_key(%{key: :down}), do: {:move_cursor, :down}
+  defp translate_key(%{key: :left}), do: {:move_cursor, :left}
+  defp translate_key(%{key: :right}), do: {:move_cursor, :right}
+  defp translate_key(%{key: :home}), do: {:move_cursor_line_start}
+  defp translate_key(%{key: :end}), do: {:move_cursor_line_end}
+  defp translate_key(%{key: :page_up}), do: {:move_cursor_page, :up}
+  defp translate_key(%{key: :page_down}), do: {:move_cursor_page, :down}
 
-  defp translate_key(%{key: key}) when is_binary(key) and byte_size(key) == 1 do
-    case :binary.first(key) do
-      cp when cp >= 32 -> {:input, cp}
+  # Typed character — %{key: :char, char: grapheme_string}.
+  # Spacebar arrives as char: " " naturally.
+  defp translate_key(%{key: :char, char: c}) do
+    case String.to_charlist(c) do
+      [cp | _] when cp >= 32 -> {:input, cp}
       _ -> nil
-    end
-  end
-
-  defp translate_key(%{key: key}) when is_binary(key) do
-    case String.graphemes(key) do
-      [_single] ->
-        <<cp::utf8, _rest::binary>> = :unicode.characters_to_binary(key)
-        {:input, cp}
-
-      _ ->
-        nil
     end
   end
 

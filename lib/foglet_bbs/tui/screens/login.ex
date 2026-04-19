@@ -55,12 +55,15 @@ defmodule Foglet.TUI.Screens.Login do
     end
   end
 
-  defp handle_menu_key(%{key: "q"}, state), do: {:update, state, [{:terminate, :user_quit}]}
-  defp handle_menu_key(%{key: "Q"}, state), do: {:update, state, [{:terminate, :user_quit}]}
-  defp handle_menu_key(%{key: "l"}, state), do: enter_login_form(state)
-  defp handle_menu_key(%{key: "L"}, state), do: enter_login_form(state)
-  defp handle_menu_key(%{key: "r"}, state), do: maybe_register(state)
-  defp handle_menu_key(%{key: "R"}, state), do: maybe_register(state)
+  defp handle_menu_key(%{key: :char, char: c}, state) when c in ["q", "Q"],
+    do: {:update, state, [{:terminate, :user_quit}]}
+
+  defp handle_menu_key(%{key: :char, char: c}, state) when c in ["l", "L"],
+    do: enter_login_form(state)
+
+  defp handle_menu_key(%{key: :char, char: c}, state) when c in ["r", "R"],
+    do: maybe_register(state)
+
   defp handle_menu_key(_key, _state), do: :no_match
 
   # --- Private ---
@@ -68,7 +71,7 @@ defmodule Foglet.TUI.Screens.Login do
   # Form key handlers — only reached when sub == :login_form
 
   # Tab cycles focus between :handle and :password
-  defp handle_form_key(%{key: "tab"}, state) do
+  defp handle_form_key(%{key: :tab}, state) do
     login_ss = get_login_ss(state)
     focused = Map.get(login_ss, :focused_field, :handle)
     new_focused = if focused == :handle, do: :password, else: :handle
@@ -77,7 +80,7 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   # Enter: submit if focused on password; advance focus if on handle
-  defp handle_form_key(%{key: "enter"}, state) do
+  defp handle_form_key(%{key: :enter}, state) do
     login_ss = get_login_ss(state)
     focused = Map.get(login_ss, :focused_field, :handle)
 
@@ -90,7 +93,7 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   # Backspace: delete last grapheme from focused field
-  defp handle_form_key(%{key: "backspace"}, state) do
+  defp handle_form_key(%{key: :backspace}, state) do
     login_ss = get_login_ss(state)
     focused = Map.get(login_ss, :focused_field, :handle)
     form = Map.get(login_ss, :form) || %{handle: "", password: "", error: nil}
@@ -104,31 +107,16 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   # Escape: return to menu sub, clear form state
-  defp handle_form_key(%{key: "escape"}, state) do
+  defp handle_form_key(%{key: :escape}, state) do
     new_login_ss = %{sub: :menu, form: %{handle: "", password: "", error: nil}}
     {:update, put_login_ss(state, new_login_ss), []}
   end
 
-  # Binary-key catch-all: handles space + single-character input.
-  #
-  # Note: the multi-char named keys (tab, enter, backspace, escape) are matched
-  # by the clauses above, so by the time we get here we have either:
-  #   * "space" (spacebar, converted to a literal " " by the normalization layer)
-  #   * a single grapheme character (letter, digit, punctuation, unicode)
-  #   * some other multi-char name we don't care about (→ :no_match)
-  #
-  # String.length/1 is NOT guard-safe, so we move the length check into the body.
-  # Using String.length (grapheme count) rather than byte_size/1 ensures multibyte
-  # unicode characters are accepted correctly (avoids the composer bug from task #13).
-  #
-  # FUTURE (task #16): the "space" special-case can be removed once the
-  # key normalization layer converts spacebar events to a literal " ".
-  defp handle_form_key(%{key: key}, state) when is_binary(key) do
-    cond do
-      key == "space" -> append_to_focused(state, " ")
-      String.length(key) == 1 -> append_to_focused(state, key)
-      true -> :no_match
-    end
+  # Typed character catch-all — Raxol native shape: %{key: :char, char: c}.
+  # `c` is always a single grapheme string (guaranteed by InputParser).
+  # Spacebar arrives as %{key: :char, char: " "} — no special-casing needed.
+  defp handle_form_key(%{key: :char, char: c}, state) do
+    append_to_focused(state, c)
   end
 
   defp handle_form_key(_key, _state), do: :no_match

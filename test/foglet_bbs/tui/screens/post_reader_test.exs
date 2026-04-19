@@ -77,7 +77,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "'n' advances to next post and updates read_position", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: "n"}, s)
+    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
     assert get_in(s.screen_state, [:post_reader, :selected_post_index]) == 1
     assert s.read_position["t1"][:last_read_post_id] == "p2"
     assert s.read_position["t1"][:last_read_message_number] == 2
@@ -85,13 +85,13 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "'p' decrements bounded at 0", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: "p"}, s)
+    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "p"}, s)
     assert get_in(s.screen_state, [:post_reader, :selected_post_index]) == 0
   end
 
   test "'R' opens :post_composer with reply_to set to current post", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: "R"}, s)
+    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "R"}, s)
     assert s.current_screen == :post_composer
     assert get_in(s.screen_state, [:post_composer, :reply_to]).id == "p1"
   end
@@ -99,8 +99,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "'Q' returns to :thread_list and emits {:flush_read_pointers, _} (SSH-09)",
        %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: "n"}, s)
-    {:update, new_state, cmds} = PostReader.handle_key(%{key: "Q"}, s)
+    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
+    {:update, new_state, cmds} = PostReader.handle_key(%{key: :char, char: "Q"}, s)
 
     assert new_state.current_screen == :thread_list
     assert new_state.posts == nil
@@ -109,7 +109,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "flush_read_pointers/2 calls domain modules and clears local pointer", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: "n"}, s)
+    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
 
     ctx = %{
       user_id: s.current_user.id,

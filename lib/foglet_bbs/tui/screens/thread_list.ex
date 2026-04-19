@@ -63,12 +63,12 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: "j"}, state), do: move_selection(state, +1)
-  def handle_key(%{key: "down"}, state), do: move_selection(state, +1)
-  def handle_key(%{key: "k"}, state), do: move_selection(state, -1)
-  def handle_key(%{key: "up"}, state), do: move_selection(state, -1)
+  def handle_key(%{key: :char, char: "j"}, state), do: move_selection(state, +1)
+  def handle_key(%{key: :down}, state), do: move_selection(state, +1)
+  def handle_key(%{key: :char, char: "k"}, state), do: move_selection(state, -1)
+  def handle_key(%{key: :up}, state), do: move_selection(state, -1)
 
-  def handle_key(%{key: "enter"}, state) do
+  def handle_key(%{key: :enter}, state) do
     threads = sort_threads(state.current_thread_list || [])
     ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
 
@@ -88,12 +88,12 @@ defmodule Foglet.TUI.Screens.ThreadList do
     end
   end
 
-  def handle_key(%{key: key}, state) when key in ["c", "C"] do
+  def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
     {:update, %{state | current_screen: :post_composer, composer_draft: "", current_thread: nil},
      []}
   end
 
-  def handle_key(%{key: key}, state) when key in ["q", "Q"] do
+  def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
     {:update, %{state | current_screen: :board_list}, []}
   end
 

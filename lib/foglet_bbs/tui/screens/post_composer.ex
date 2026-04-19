@@ -84,9 +84,9 @@ defmodule Foglet.TUI.Screens.PostComposer do
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: "tab"}, state), do: toggle_mode(state)
-  def handle_key(%{key: "ctrl_s"}, state), do: submit(state)
-  def handle_key(%{key: "ctrl_c"}, state), do: cancel(state)
+  def handle_key(%{key: :tab}, state), do: toggle_mode(state)
+  def handle_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
+  def handle_key(%{key: :char, char: "c", ctrl: true}, state), do: cancel(state)
 
   # Forward all other keys to MultiLineInput
   def handle_key(key_event, state) do
@@ -185,38 +185,26 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # Key translation: normalized %{key: ...} -> MultiLineInput.update/2 message
   # ---------------------------------------------------------------------------
 
-  defp translate_key(%{key: "backspace"}), do: {:backspace}
-  defp translate_key(%{key: "delete"}), do: {:delete}
-  defp translate_key(%{key: "enter"}), do: {:enter}
-  defp translate_key(%{key: "up"}), do: {:move_cursor, :up}
-  defp translate_key(%{key: "down"}), do: {:move_cursor, :down}
-  defp translate_key(%{key: "left"}), do: {:move_cursor, :left}
-  defp translate_key(%{key: "right"}), do: {:move_cursor, :right}
-  defp translate_key(%{key: "home"}), do: {:move_cursor_line_start}
-  defp translate_key(%{key: "end"}), do: {:move_cursor_line_end}
-  defp translate_key(%{key: "pageup"}), do: {:move_cursor_page, :up}
-  defp translate_key(%{key: "pagedown"}), do: {:move_cursor_page, :down}
-  defp translate_key(%{key: "space"}), do: {:input, ?\s}
+  # Translate Raxol-native event data maps to MultiLineInput.update/2 messages.
+  # All patterns match on the %{key: atom, ...} shape produced by InputParser.
+  defp translate_key(%{key: :backspace}), do: {:backspace}
+  defp translate_key(%{key: :delete}), do: {:delete}
+  defp translate_key(%{key: :enter}), do: {:enter}
+  defp translate_key(%{key: :up}), do: {:move_cursor, :up}
+  defp translate_key(%{key: :down}), do: {:move_cursor, :down}
+  defp translate_key(%{key: :left}), do: {:move_cursor, :left}
+  defp translate_key(%{key: :right}), do: {:move_cursor, :right}
+  defp translate_key(%{key: :home}), do: {:move_cursor_line_start}
+  defp translate_key(%{key: :end}), do: {:move_cursor_line_end}
+  defp translate_key(%{key: :page_up}), do: {:move_cursor_page, :up}
+  defp translate_key(%{key: :page_down}), do: {:move_cursor_page, :down}
 
-  # Single grapheme printable character
-  defp translate_key(%{key: key}) when is_binary(key) and byte_size(key) == 1 do
-    case :binary.first(key) do
-      cp when cp >= 32 -> {:input, cp}
+  # Typed character — %{key: :char, char: grapheme_string}.
+  # Spacebar arrives as char: " " naturally; emoji/unicode graphemes work too.
+  defp translate_key(%{key: :char, char: c}) do
+    case String.to_charlist(c) do
+      [cp | _] when cp >= 32 -> {:input, cp}
       _ -> nil
-    end
-  end
-
-  # Multibyte unicode grapheme (e.g. "é", "漢")
-  defp translate_key(%{key: key}) when is_binary(key) do
-    case String.graphemes(key) do
-      [single] ->
-        # Map each codepoint through handle_input one at a time.
-        # For simplicity, use the first codepoint (grapheme cluster head).
-        <<cp::utf8, _rest::binary>> = :unicode.characters_to_binary(single)
-        {:input, cp}
-
-      _ ->
-        nil
     end
   end
 

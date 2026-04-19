@@ -59,7 +59,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
   test "sticky thread appears first — enter at index 0 selects sticky thread", %{state: state} do
     {s, _} = ThreadList.load_threads(state, "b1")
-    {:update, s, cmds} = ThreadList.handle_key(%{key: "enter"}, s)
+    {:update, s, cmds} = ThreadList.handle_key(%{key: :enter}, s)
     assert s.current_thread.sticky == true
     assert {:load_posts, "t1"} in cmds
   end
@@ -67,19 +67,19 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   test "non-sticky threads sort newest-first (t2 before t3)", %{state: state} do
     {s, _} = ThreadList.load_threads(state, "b1")
     # Index 0 = sticky t1; index 1 = t2 (recent); index 2 = t3 (older)
-    {:update, s, _} = ThreadList.handle_key(%{key: "j"}, s)
-    {:update, s, _} = ThreadList.handle_key(%{key: "enter"}, s)
+    {:update, s, _} = ThreadList.handle_key(%{key: :char, char: "j"}, s)
+    {:update, s, _} = ThreadList.handle_key(%{key: :enter}, s)
     assert s.current_thread.id == "t2"
   end
 
   test "'C' opens :post_composer with current_thread == nil (new thread)", %{state: state} do
-    {:update, s, _} = ThreadList.handle_key(%{key: "C"}, state)
+    {:update, s, _} = ThreadList.handle_key(%{key: :char, char: "C"}, state)
     assert s.current_screen == :post_composer
     assert s.current_thread == nil
   end
 
   test "'Q' returns to :board_list", %{state: state} do
-    {:update, s, _} = ThreadList.handle_key(%{key: "Q"}, state)
+    {:update, s, _} = ThreadList.handle_key(%{key: :char, char: "Q"}, state)
     assert s.current_screen == :board_list
   end
 

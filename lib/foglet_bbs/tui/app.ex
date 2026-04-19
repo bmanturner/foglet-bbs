@@ -130,10 +130,11 @@ defmodule Foglet.TUI.App do
     do_update(normalize_message(message), state)
   end
 
-  # Translate Raxol %Event{} structs into the internal tuple format that
-  # do_update/2 and all screen handle_key/2 functions expect.
+  # Pass Raxol %Event{} key structs through as {:key, event_data_map} so that
+  # screens can pattern-match directly on the Raxol-native data shape.
+  # Window events are still unpacked into a plain {width, height} tuple.
   defp normalize_message(%Raxol.Core.Events.Event{type: :key, data: data}) do
-    {:key, normalize_key(data)}
+    {:key, data}
   end
 
   defp normalize_message(%Raxol.Core.Events.Event{type: :window, data: %{width: w, height: h}}) do
@@ -141,14 +142,6 @@ defmodule Foglet.TUI.App do
   end
 
   defp normalize_message(other), do: other
-
-  defp normalize_key(%{key: :char, ctrl: true, char: c}), do: %{key: "ctrl_#{c}"}
-  defp normalize_key(%{key: :char, char: " "}), do: %{key: "space"}
-  defp normalize_key(%{key: :char, char: c}), do: %{key: c}
-  defp normalize_key(%{key: :page_up}), do: %{key: "pageup"}
-  defp normalize_key(%{key: :page_down}), do: %{key: "pagedown"}
-  defp normalize_key(%{key: atom}) when is_atom(atom), do: %{key: Atom.to_string(atom)}
-  defp normalize_key(other), do: other
 
   @impl true
   def view(state) do
@@ -620,22 +613,37 @@ defmodule Foglet.TUI.App do
     handle_modal_key(modal_type, key, state)
   end
 
-  defp global_key_handler(%{key: "q"} = _key, state) when state.current_screen == :login do
+  # "q" is a typed character in Raxol's native event shape: %{key: :char, char: "q"}
+  defp global_key_handler(%{key: :char, char: "q"}, state) when state.current_screen == :login do
     {state, [Command.quit()]}
   end
 
   defp global_key_handler(_key, state), do: {state, []}
 
-  defp handle_modal_key(:confirm, %{key: k}, state) when k in ["y", "Y"] do
+  # :confirm modal — Y/y confirm, N/n/Escape cancel
+  defp handle_modal_key(:confirm, %{key: :char, char: c}, state) when c in ["y", "Y"] do
     do_update({:confirm_modal, :yes}, state)
   end
 
-  defp handle_modal_key(:confirm, %{key: k}, state) when k in ["n", "N", "escape"] do
+  defp handle_modal_key(:confirm, %{key: :char, char: c}, state) when c in ["n", "N"] do
     do_update({:confirm_modal, :no}, state)
   end
 
-  defp handle_modal_key(type, %{key: k}, state)
-       when type in [:info, :error, :warning] and k in ["enter", "escape", "space"] do
+  defp handle_modal_key(:confirm, %{key: :escape}, state) do
+    do_update({:confirm_modal, :no}, state)
+  end
+
+  # :info/:error/:warning modals — dismiss on Enter, Escape, or Space (spacebar)
+  defp handle_modal_key(type, %{key: :enter}, state) when type in [:info, :error, :warning] do
+    do_update(:dismiss_modal, state)
+  end
+
+  defp handle_modal_key(type, %{key: :escape}, state) when type in [:info, :error, :warning] do
+    do_update(:dismiss_modal, state)
+  end
+
+  defp handle_modal_key(type, %{key: :char, char: " "}, state)
+       when type in [:info, :error, :warning] do
     do_update(:dismiss_modal, state)
   end
 

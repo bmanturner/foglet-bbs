@@ -34,11 +34,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: key}, state) when key in ["b", "B"] do
+  def handle_key(%{key: :char, char: c}, state) when c in ["b", "B"] do
     {:update, %{state | current_screen: :board_list}, [{:load_boards}]}
   end
 
-  def handle_key(%{key: key}, state) when key in ["c", "C"] do
+  def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
     {w, _h} = state.terminal_size || {80, 24}
     ss = Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
     new_screen_state = Map.put(state.screen_state, :new_thread, ss)
@@ -47,7 +47,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
      [{:load_boards_for_new_thread}]}
   end
 
-  def handle_key(%{key: key}, state) when key in ["q", "Q"] do
+  def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
     {:update, state, [{:terminate, :logout}]}
   end
 

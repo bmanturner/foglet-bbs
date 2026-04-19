@@ -45,29 +45,29 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
   test "'j'/'down' increments selection bounded by length-1", %{state: state} do
     {s, _} = BoardList.load_boards(state)
-    {:update, s, _} = BoardList.handle_key(%{key: "j"}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :char, char: "j"}, s)
     assert get_in(s.screen_state, [:board_list, :selected_index]) == 1
     # Bounded at max index
-    {:update, s, _} = BoardList.handle_key(%{key: "j"}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :char, char: "j"}, s)
     assert get_in(s.screen_state, [:board_list, :selected_index]) == 1
   end
 
   test "'k'/'up' decrements selection bounded at 0", %{state: state} do
     {s, _} = BoardList.load_boards(state)
-    {:update, s, _} = BoardList.handle_key(%{key: "k"}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :char, char: "k"}, s)
     assert get_in(s.screen_state, [:board_list, :selected_index]) == 0
   end
 
   test "'enter' transitions to :thread_list and emits {:load_threads, board_id}", %{state: state} do
     {s, _} = BoardList.load_boards(state)
-    {:update, s, cmds} = BoardList.handle_key(%{key: "enter"}, s)
+    {:update, s, cmds} = BoardList.handle_key(%{key: :enter}, s)
     assert s.current_screen == :thread_list
     assert s.current_board.name == "General"
     assert {:load_threads, "b1"} in cmds
   end
 
   test "'Q' returns to :main_menu", %{state: state} do
-    {:update, s, _} = BoardList.handle_key(%{key: "Q"}, state)
+    {:update, s, _} = BoardList.handle_key(%{key: :char, char: "Q"}, state)
     assert s.current_screen == :main_menu
   end
 end

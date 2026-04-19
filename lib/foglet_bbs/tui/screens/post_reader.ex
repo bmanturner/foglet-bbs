@@ -52,15 +52,13 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: key}, state) when key in ["n", "N", "space", "pagedown"] do
-    advance_post(state, +1)
-  end
+  def handle_key(%{key: :char, char: c}, state) when c in ["n", "N"], do: advance_post(state, +1)
+  def handle_key(%{key: :char, char: " "}, state), do: advance_post(state, +1)
+  def handle_key(%{key: :page_down}, state), do: advance_post(state, +1)
+  def handle_key(%{key: :char, char: c}, state) when c in ["p", "P"], do: advance_post(state, -1)
+  def handle_key(%{key: :page_up}, state), do: advance_post(state, -1)
 
-  def handle_key(%{key: key}, state) when key in ["p", "P", "pageup"] do
-    advance_post(state, -1)
-  end
-
-  def handle_key(%{key: key}, state) when key in ["r", "R"] do
+  def handle_key(%{key: :char, char: c}, state) when c in ["r", "R"] do
     posts = state.posts || []
     ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
     reply_to = Enum.at(posts, ss.selected_post_index)
@@ -82,7 +80,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     {:update, new_state, []}
   end
 
-  def handle_key(%{key: key}, state) when key in ["q", "Q"] do
+  def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
     # SSH-09: flush read pointer on leave
     ctx = build_flush_context(state)
 
