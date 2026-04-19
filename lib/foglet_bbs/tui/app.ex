@@ -301,19 +301,27 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:key, key_event}, state) do
-    screen_module = screen_module_for(state.current_screen)
+    if state.modal != nil do
+      # Modal is active: route key directly to global_key_handler, which
+      # contains all modal dismiss / confirm logic. Never delegate to the
+      # screen module while a modal is open — screen handlers don't check
+      # state.modal and will consume the key silently.
+      global_key_handler(key_event, state)
+    else
+      screen_module = screen_module_for(state.current_screen)
 
-    case screen_module.handle_key(key_event, state) do
-      {:update, new_state, commands} ->
-        # process_screen_commands/2 converts I/O dispatch tuples returned by
-        # screens (e.g. {:load_boards}, {:load_threads, id}) into real
-        # Command.task structs by routing them through their do_update/2 clauses,
-        # which have access to the current state (user, session_context, domain
-        # overrides). Plain %Command{} structs pass through unchanged.
-        process_screen_commands(new_state, commands)
+      case screen_module.handle_key(key_event, state) do
+        {:update, new_state, commands} ->
+          # process_screen_commands/2 converts I/O dispatch tuples returned by
+          # screens (e.g. {:load_boards}, {:load_threads, id}) into real
+          # Command.task structs by routing them through their do_update/2 clauses,
+          # which have access to the current state (user, session_context, domain
+          # overrides). Plain %Command{} structs pass through unchanged.
+          process_screen_commands(new_state, commands)
 
-      :no_match ->
-        global_key_handler(key_event, state)
+        :no_match ->
+          global_key_handler(key_event, state)
+      end
     end
   end
 
@@ -507,6 +515,14 @@ defmodule Foglet.TUI.App do
     end
 
     {%{state | current_user: user, current_screen: :main_menu}, []}
+  end
+
+  defp do_update({:command_result, inner}, state) do
+    # Raxol's Command.task runtime wraps every task return value in
+    # {:command_result, inner} before delivering to update/2 (Audit #11 follow-up).
+    # Re-dispatch so all existing result handlers (:boards_loaded, :threads_loaded,
+    # :posts_loaded, :read_pointers_flushed, etc.) fire correctly.
+    do_update(inner, state)
   end
 
   defp do_update(_other, state) do

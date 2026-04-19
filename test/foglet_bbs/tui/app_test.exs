@@ -423,4 +423,95 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.current_screen == :post_reader
     end
   end
+
+  describe "modal intercept guard (Gap 4)" do
+    setup do
+      {:ok, state} = App.init(%{})
+      %{state: state}
+    end
+
+    test "Enter dismisses :error modal even when login screen is in :login_form sub-state with :password focused",
+         %{state: state} do
+      # This reproduces the suspended-account scenario (Gap 4):
+      # Login screen's handle_form_key/2 matches Enter when sub is :login_form and
+      # focused_field is :password — it would normally call submit_login/1 which
+      # calls Accounts.authenticate_by_password/2. The modal intercept guard must
+      # catch this BEFORE the screen module gets the key.
+      login_ss = %{
+        sub: :login_form,
+        form: %{handle: "alice", password: "", error: nil},
+        focused_field: :password
+      }
+
+      state_with_modal = %{
+        state
+        | modal: %{type: :error, message: "suspended"},
+          current_screen: :login,
+          screen_state: %{login: login_ss}
+      }
+
+      {new_state, _cmds} = App.update({:key, %{key: :enter}}, state_with_modal)
+      assert new_state.modal == nil,
+             "Expected modal to be dismissed, got: #{inspect(new_state.modal)}"
+    end
+
+    test "Escape dismisses :error modal when login screen is in :login_form sub-state",
+         %{state: state} do
+      login_ss = %{
+        sub: :login_form,
+        form: %{handle: "alice", password: "", error: nil},
+        focused_field: :handle
+      }
+
+      state_with_modal = %{
+        state
+        | modal: %{type: :error, message: "suspended"},
+          current_screen: :login,
+          screen_state: %{login: login_ss}
+      }
+
+      {new_state, _cmds} = App.update({:key, %{key: :escape}}, state_with_modal)
+      assert new_state.modal == nil
+    end
+  end
+
+  describe "command_result dispatcher (Gap 5)" do
+    setup do
+      {:ok, base_state} = App.init(%{})
+
+      state = %{
+        base_state
+        | current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      }
+
+      %{state: state}
+    end
+
+    test "{:command_result, {:boards_loaded, boards}} assigns board_list", %{state: state} do
+      boards = [%{id: "b1", name: "General", unread_count: 0}]
+      {new_state, cmds} = App.update({:command_result, {:boards_loaded, boards}}, state)
+      assert new_state.board_list == boards
+      assert cmds == []
+    end
+
+    test "{:command_result, {:threads_loaded, threads}} assigns current_thread_list",
+         %{state: state} do
+      threads = [%{id: "t1", title: "Hello", sticky: false, last_post_at: DateTime.utc_now()}]
+      {new_state, cmds} = App.update({:command_result, {:threads_loaded, threads}}, state)
+      assert new_state.current_thread_list == threads
+      assert cmds == []
+    end
+
+    test "{:command_result, {:posts_loaded, posts}} assigns posts", %{state: state} do
+      posts = [%{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()}]
+      {new_state, cmds} = App.update({:command_result, {:posts_loaded, posts}}, state)
+      assert new_state.posts == posts
+      assert cmds == []
+    end
+
+    test "{:command_result, {:unknown_result}} hits catch-all safely — returns {state, []}",
+         %{state: state} do
+      assert {^state, []} = App.update({:command_result, {:unknown_result}}, state)
+    end
+  end
 end
