@@ -387,14 +387,7 @@ defmodule Foglet.TUI.App do
 
     task =
       Command.task(fn ->
-        threads =
-          if function_exported?(threads_mod, :list_threads, 1) do
-            threads_mod.list_threads(board_id)
-          else
-            []
-          end
-
-        {:threads_loaded, threads}
+        {:threads_loaded, threads_mod.list_threads(board_id)}
       end)
 
     {state, [task]}
@@ -410,14 +403,7 @@ defmodule Foglet.TUI.App do
 
     task =
       Command.task(fn ->
-        posts =
-          if function_exported?(posts_mod, :list_posts, 1) do
-            posts_mod.list_posts(thread_id)
-          else
-            []
-          end
-
-        {:posts_loaded, posts}
+        {:posts_loaded, posts_mod.list_posts(thread_id)}
       end)
 
     {state, [task]}

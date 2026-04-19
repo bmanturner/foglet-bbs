@@ -547,6 +547,7 @@ defmodule Raxol.Core.Runtime.Events.Dispatcher do
         )
     end
 
+    send(state.runtime_pid, :render_needed)
     {:noreply, %{state | model: updated_model}}
   end
 
