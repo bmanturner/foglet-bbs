@@ -13,6 +13,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   If the function is not exported, shows a friendly "coming soon" modal.
   """
 
+  alias Foglet.TUI.Input
   alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
   alias Raxol.UI.Components.Input.MultiLineInput
 
@@ -298,7 +299,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Body field: forward to MultiLineInput
   defp handle_compose_key(key_event, state, %{focused: :body} = ss) do
-    case translate_key(key_event) do
+    case Input.translate_key(key_event) do
       nil ->
         :no_match
 
@@ -386,34 +387,6 @@ defmodule Foglet.TUI.Screens.NewThread do
         end
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Key translation (same as PostComposer)
-  # ---------------------------------------------------------------------------
-
-  # Translate Raxol-native event data maps to MultiLineInput.update/2 messages.
-  defp translate_key(%{key: :backspace}), do: {:backspace}
-  defp translate_key(%{key: :delete}), do: {:delete}
-  defp translate_key(%{key: :enter}), do: {:enter}
-  defp translate_key(%{key: :up}), do: {:move_cursor, :up}
-  defp translate_key(%{key: :down}), do: {:move_cursor, :down}
-  defp translate_key(%{key: :left}), do: {:move_cursor, :left}
-  defp translate_key(%{key: :right}), do: {:move_cursor, :right}
-  defp translate_key(%{key: :home}), do: {:move_cursor_line_start}
-  defp translate_key(%{key: :end}), do: {:move_cursor_line_end}
-  defp translate_key(%{key: :page_up}), do: {:move_cursor_page, :up}
-  defp translate_key(%{key: :page_down}), do: {:move_cursor_page, :down}
-
-  # Typed character — %{key: :char, char: grapheme_string}.
-  # Spacebar arrives as char: " " naturally.
-  defp translate_key(%{key: :char, char: c}) do
-    case String.to_charlist(c) do
-      [cp | _] when cp >= 32 -> {:input, cp}
-      _ -> nil
-    end
-  end
-
-  defp translate_key(_), do: nil
 
   # ---------------------------------------------------------------------------
   # Private helpers
