@@ -31,7 +31,7 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
   """
   @spec render(map(), String.t(), any(), [{String.t(), String.t()}]) :: any()
   def render(state, title, content_element, key_list) do
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     box style: %{border: :single, padding: 1, border_color: theme.border.fg} do
       column style: %{gap: 0, justify_content: :space_between} do

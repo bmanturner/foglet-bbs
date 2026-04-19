@@ -27,8 +27,8 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   """
   @spec render(map(), String.t()) :: any()
   def render(state, title) do
-    theme = get_in(state, [:session_context, :theme]) || Theme.default()
-    handle = get_in(state, [:current_user, :handle])
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    handle = state.current_user && state.current_user.handle
     right = if handle, do: "@#{handle}", else: "guest"
 
     row style: %{gap: 1} do
