@@ -11,6 +11,10 @@ defmodule FogletBbs.Application do
     # process might read from it. Idempotent on warm restarts.
     Foglet.Config.init_cache()
 
+    # Initialize the pubkey stash ETS table used by Foglet.SSH.KeyCB and
+    # Foglet.SSH.CLIHandler for pubkey-to-user correlation on connection.
+    Foglet.SSH.PubkeyStash.init()
+
     children = base_children() ++ ssh_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html
