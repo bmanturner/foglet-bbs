@@ -61,22 +61,26 @@ defmodule Foglet.TUI.Screens.PostComposer do
           text("#{String.length(draft)} / #{max_len(state)} chars", style: [:dim])
         ]
 
-    panel(
-      title: title_for(ss.reply_to, state.current_thread),
-      border: :single,
-      children: [
-        StatusBar.render(%{
-          handle: state.current_user && state.current_user.handle,
-          location: "Composer (#{ss.mode})"
-        }),
-        box(children: body_items),
-        KeyBar.render([
-          {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
-          {"Ctrl+S", "Send"},
-          {"Ctrl+C", "Cancel"}
-        ])
-      ]
-    )
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" #{title_for(ss.reply_to, state.current_thread)} ", style: [:bold]),
+          divider(),
+          StatusBar.render(%{
+            handle: state.current_user && state.current_user.handle,
+            location: "Composer (#{ss.mode})"
+          }),
+          column style: %{gap: 0} do
+            body_items
+          end,
+          KeyBar.render([
+            {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
+            {"Ctrl+S", "Send"},
+            {"Ctrl+C", "Cancel"}
+          ])
+        ]
+      end
+    end
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
