@@ -1,5 +1,5 @@
 ---
-status: partial
+status: diagnosed
 phase: 03-ssh-server-tui
 source:
   - 03-01-SUMMARY.md
@@ -109,55 +109,87 @@ blocked: 5
 ## Gaps
 
 - truth: "KeyBar renders pinned to the bottom of the terminal window"
-  status: failed
+  status: diagnosed
   reason: "User reported: KeyBar hints are not at the bottom of the window. They are below the menu (with one row of space in between)."
   severity: minor
   test: 2
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Raxol's spacer/1 silently drops the :flex key — spacer(flex: 1) produces an unexpandable 1-row spacer. The flexbox distributor sees total_grow=0 and never distributes remaining space, so KeyBar renders immediately after content."
+  artifacts:
+    - path: "deps/raxol/lib/raxol/view/components.ex"
+      issue: "spacer/1 reads :size and :direction only; :flex is discarded"
+    - path: "lib/foglet_bbs/tui/screens/*.ex (all 9 screens)"
+      issue: "spacer(flex: 1) present but ineffective"
+  missing:
+    - "Replace spacer(flex: 1) + KeyBar with column justify: :space_between grouping content and KeyBar as two children"
 
 - truth: "StatusBar separator (row of hyphens) is consistent across all screens"
-  status: failed
+  status: diagnosed
   reason: "User reported: StatusBar on login screen has a row of hyphens separating it from the body, but main menu is missing that separator — inconsistent."
   severity: cosmetic
   test: 3
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "main_menu.ex calls StatusBar.render/1 with no divider() after it, unlike every other screen. The separator is not emitted by StatusBar itself."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/main_menu.ex"
+      issue: "StatusBar.render(...) not followed by divider()"
+  missing:
+    - "Add divider() immediately after StatusBar.render(...) in main_menu.ex"
 
 - truth: "Unverified user logging in is redirected to Verify screen, not Main Menu"
-  status: failed
+  status: fixed
   reason: "User reported: logging in with unconfirmed credentials bypasses verification and lands on main menu directly."
   severity: major
   test: 7
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Fixed inline during UAT — added confirmed_at: nil guard in login.ex submit_login/1 before the :active clause."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/login.ex"
+      issue: "Fixed: new clause {:ok, %{status: :active, confirmed_at: nil}} redirects to :verify"
 
 - truth: "Pending account modal wraps content, dismisses on Enter or Esc, and returns to Login landing"
-  status: failed
-  reason: "User reported: modal content hangs off screen on 80x24 (no wrapping); both Enter and Esc return to Register page instead of Login landing; Ok/Dismiss keys are redundant. Fix: wrap modal text, both keys dismiss, navigate back to Login landing."
+  status: diagnosed
+  reason: "User reported: modal content hangs off screen on 80x24 (no wrapping); both Enter and Esc return to Register page instead of Login landing; Ok/Dismiss keys are redundant."
   severity: major
   test: 4
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Three separate issues: (1) modal.ex passes msg as bare text/2 with no word-wrap; (2) do_update(:dismiss_modal) clears modal but not screen_state, so :login_form sub-state persists and re-renders login form not top menu; (3) key_hint_for/1 hardcodes '[Enter] OK   [Esc] Dismiss' but both keys do identical things."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/widgets/modal.ex"
+      issue: "line 46: bare text(msg) with no wrapping; line 63: redundant Esc hint"
+    - path: "lib/foglet_bbs/tui/app.ex"
+      issue: "lines 269-271: do_update(:dismiss_modal) only clears modal, not screen_state"
+    - path: "lib/foglet_bbs/tui/screens/login.ex"
+      issue: "lines 291-298: modal set without clearing screen_state to %{}"
+  missing:
+    - "Add word_wrap/2 helper in modal.ex, wrap msg in column of text/2 calls at max 50 chars"
+    - "In login.ex pending/suspended clauses, add screen_state: %{} when setting modal"
+    - "Change key_hint_for/1 in modal.ex to return '[Enter] OK' only"
 
 - truth: "New thread Post Composer (Main Menu C) includes markdown edit/preview tabs"
-  status: failed
-  reason: "User reported: new thread composer has a title field but no markdown edit/preview tabs. Reply composer has tabs but no title field. The two composer modes are inconsistently featured."
+  status: diagnosed
+  reason: "User reported: new thread composer has a title field but no markdown edit/preview tabs. Reply composer has tabs but no title field."
   severity: major
   test: observed
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "NewThread is a separate screen module from PostComposer, built without a preview mode. Tab in NewThread switches focus between title/body fields, not between edit/preview modes. No mode field exists in its state."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/new_thread.ex"
+      issue: "No mode field in init_screen_state/1; Tab handler toggles :focused not :mode; render_compose_step/2 has no preview branch"
+  missing:
+    - "Add mode: :edit to new_thread init_screen_state"
+    - "Tab while focused on :body toggles mode :edit/:preview"
+    - "Add render_preview branch calling Foglet.Markdown.render/1 when mode == :preview"
+    - "Update KeyBar hint to show preview option"
 
 - truth: "Post Composer markdown preview renders formatted output (e.g. **Hello** → Hello bold)"
-  status: failed
+  status: diagnosed
   reason: "User reported: switching between edit and preview tabs shows no change — **Hello** remains **Hello** in preview instead of rendering as bold."
   severity: major
   test: observed
-  root_cause: ""
-  artifacts: []
-  missing: []
+  root_cause: "Foglet.Markdown.render/1 produces ANSI escape sequences (\\e[1m...) but Raxol's text/2 widget treats them as literal bytes. The problem is systemic — PostComposer and PostReader both pass ANSI strings to text/2 which does not interpret escape codes."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/post_composer.ex"
+      issue: "line 52: text(render_preview(state, draft), fg: :green) passes ANSI string to non-ANSI-aware widget"
+    - path: "lib/foglet_bbs/markdown.ex"
+      issue: "render/1 outputs ANSI escape sequences; no structured tuple output"
+    - path: "lib/foglet_bbs/tui/screens/post_reader.ex"
+      issue: "lines 177-183: same ANSI-via-text/2 pattern"
+  missing:
+    - "Change Foglet.Markdown.render/1 to return [{text, style_atom}] tuples instead of ANSI string"
+    - "Add helper in PostComposer and PostReader to render tuple list as column of styled text/2 calls"
