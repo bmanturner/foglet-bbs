@@ -160,7 +160,8 @@ defmodule Foglet.TUI.AppTest do
             :board_list,
             :thread_list,
             :post_reader,
-            :post_composer
+            :post_composer,
+            :new_thread
           ] do
         s = %{state | current_screen: screen}
         assert _ = App.view(s)
