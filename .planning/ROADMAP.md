@@ -71,12 +71,12 @@ Plans:
   6. The TUI adapts its layout when the terminal is resized
 **Plans**: 6 plans
 Plans:
-- [ ] 03-01-PLAN.md — Raxol dep + Accounts.verify_email_code/register_pending_user + users.status migration + Wave-0 test stubs
-- [ ] 03-02-PLAN.md — Foglet.Sessions (Registry+Supervisor+Session with one-session-per-user replacement) + Foglet.SSH (Supervisor wraps :ssh.daemon/2 + KeyCB ssh_server_key_api) + application wiring
-- [ ] 03-03-PLAN.md — Foglet.TUI.App Raxol application + Login/Register/Verify screens (guest flow with registration-mode gating, invite codes, email verify code entry with 5-attempt cooldown)
-- [ ] 03-04-PLAN.md — BBS screens: MainMenu, BoardList, ThreadList, PostReader (with read-pointer flush SSH-09), PostComposer (Markdown/preview, Ctrl+S/Ctrl+C, max_post_length)
-- [ ] 03-05-PLAN.md — Gap closure: KeyBar spacer in all screens, remove duplicate title in main_menu, fix register_wizard init (registration crash blocker)
-- [ ] 03-06-PLAN.md — Gap closure: modal intercept guard in App key dispatch, command_result re-dispatcher (board loading), SSH resize event type fix
+- [x] 03-01-PLAN.md — Raxol dep + Accounts.verify_email_code/register_pending_user + users.status migration + Wave-0 test stubs
+- [x] 03-02-PLAN.md — Foglet.Sessions (Registry+Supervisor+Session with one-session-per-user replacement) + Foglet.SSH (Supervisor wraps :ssh.daemon/2 + KeyCB ssh_server_key_api) + application wiring
+- [x] 03-03-PLAN.md — Foglet.TUI.App Raxol application + Login/Register/Verify screens (guest flow with registration-mode gating, invite codes, email verify code entry with 5-attempt cooldown)
+- [x] 03-04-PLAN.md — BBS screens: MainMenu, BoardList, ThreadList, PostReader (with read-pointer flush SSH-09), PostComposer (Markdown/preview, Ctrl+S/Ctrl+C, max_post_length)
+- [x] 03-05-PLAN.md — Gap closure: KeyBar spacer in all screens, remove duplicate title in main_menu, fix register_wizard init (registration crash blocker)
+- [x] 03-06-PLAN.md — Gap closure: modal intercept guard in App key dispatch, command_result re-dispatcher (board loading), SSH resize event type fix
 **UI hint**: yes
 
 ### Phase 4: Presence & Login Sequence
