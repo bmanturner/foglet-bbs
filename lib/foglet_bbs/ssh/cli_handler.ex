@@ -177,9 +177,7 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:eof, _ch}}, state) do
-    stop_lifecycle(state.lifecycle_pid)
-    _ = stop_session(state.session_pid)
-    decrement_connection_count()
+    # eof signals the client is done sending; channel close will follow.
     {:ok, state}
   end
 
