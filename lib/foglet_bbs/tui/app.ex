@@ -150,7 +150,10 @@ defmodule Foglet.TUI.App do
     screen_view = render_screen(state)
 
     if state.modal do
-      box(children: [screen_view, Widgets.Modal.render(state.modal)])
+      # Temporary: stacks modal below screen using column until task #6 uses modal/1 overlay.
+      column do
+        [screen_view, Widgets.Modal.render(state.modal)]
+      end
     else
       screen_view
     end
