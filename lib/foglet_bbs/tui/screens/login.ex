@@ -134,11 +134,7 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   defp drop_last_grapheme(""), do: ""
-
-  defp drop_last_grapheme(str) do
-    graphemes = String.graphemes(str)
-    graphemes |> Enum.take(length(graphemes) - 1) |> Enum.join()
-  end
+  defp drop_last_grapheme(str), do: String.slice(str, 0, String.length(str) - 1)
 
   defp registration_mode(state) do
     ctx = Map.get(state, :session_context) || %{}
