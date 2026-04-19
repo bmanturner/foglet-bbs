@@ -115,65 +115,92 @@ pending: 0
 
 ## Gaps
 
-- truth: "Server boots and SSH connections complete without crashing"
-  status: fixed
-  reason: "Raxol.SSH.CLIHandler calls Raxol.SSH.Server.register_connection() but Foglet.SSH.ConnectionCounter (which registers under that name) was not added to the supervision tree"
-  severity: blocker
-  test: 1
-  fix: "Added Foglet.SSH.ConnectionCounter to ssh_children/0 in application.ex before Foglet.SSH.Supervisor"
-
 - truth: "KeyBar renders pinned to the bottom of the terminal window"
-  status: failed
+  status: diagnosed
   reason: "User reported: keybar hints are directly below the menu options instead of being at the bottom of the window"
   severity: minor
   test: 2
-  artifacts: []
-  missing: []
+  root_cause: "Outer column in every screen's render/1 uses column style: %{gap: 0} with no justify directive and no spacer between content block and KeyBar — Raxol allocates only as much height as content needs and renders KeyBar immediately after"
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/main_menu.ex"
+      issue: "outer column has no justify or spacer before KeyBar"
+    - path: "lib/foglet_bbs/tui/screens/login.ex"
+      issue: "same structural problem — all screens likely affected"
+  missing:
+    - "Add spacer(flex: 1) between content block and KeyBar.render(...) in every screen, OR use justify: :space_between on the outer column"
 
 - truth: "StatusBar shows handle once; no duplicate title line in content area"
-  status: failed
+  status: diagnosed
   reason: "User reported: 'Foglet BBS — Main Menu | @needz' appears in status bar AND again as first line below status bar (redundant)"
   severity: minor
   test: 3
-  artifacts: []
-  missing: []
+  root_cause: "main_menu.ex render/1 contains both text(\" Foglet BBS \", style: [:bold]) (line 21) AND StatusBar.render(...) (line 23) in the same column. The StatusBar already renders the full title 'Foglet BBS — Main Menu | @handle', so the standalone text creates a redundant title element."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/main_menu.ex"
+      issue: "line 21: redundant text(\" Foglet BBS \", bold) + divider() should be removed — StatusBar.render already provides the full title"
+  missing:
+    - "Remove text(\" Foglet BBS \", style: [:bold]) and divider() from main_menu.ex render/1"
 
 - truth: "Registration completes without crashing in sysop_approved mode"
-  status: failed
-  reason: "Render crash: KeyError on :error key missing from initial state %{mode: 'sysop_approved', step: :start, current_input: 'r'} — render function accesses state[:error] which does not exist at start"
+  status: diagnosed
+  reason: "Render crash: KeyError on :error key missing from initial state"
   severity: blocker
   test: 4
-  artifacts: []
-  missing: []
-
-- truth: "Board List loads subscribed boards after pressing B from Main Menu"
-  status: failed
-  reason: "User reported: Board List screen shows 'Loading...' indefinitely — boards never render despite user having subscriptions"
-  severity: major
-  test: 8
-  artifacts: []
-  missing: []
+  root_cause: "login.ex maybe_register/1 (line 249) creates register_wizard as %{mode: mode, step: :start} — missing :error, :data, :current_input keys. Register.render/1 (line 26) bypasses default_wizard/1 fallback because register_wizard is non-nil, then crashes at w.error (line 29) via KeyError."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/login.ex"
+      issue: "line 249: incomplete wizard map missing :error, :data, :current_input; also :start is not a valid step (should use first_step_for/1)"
+    - path: "lib/foglet_bbs/tui/screens/register.ex"
+      issue: "line 26-29: w = state.register_wizard || default_wizard(state) — default_wizard never fires because register_wizard is already non-nil"
+  missing:
+    - "In login.ex maybe_register/1, replace partial map with Register.default_wizard(state) (make it public) or include all keys: %{mode: mode, step: first_step_for(mode), data: %{}, error: nil, current_input: \"\"}"
 
 - truth: "Register screen renders without crashing in open mode"
-  status: failed
-  reason: "Same root cause as test 4: KeyError on :error key missing from initial register state — affects both open and sysop_approved modes"
+  status: diagnosed
+  reason: "Same root cause as test 4: KeyError on :error key missing from initial register state — affects both modes"
   severity: blocker
   test: 6
-  artifacts: []
-  missing: []
+  root_cause: "Identical to test 4 — same login.ex maybe_register/1 incomplete map, same crash in Register.render/1 regardless of registration mode"
+  artifacts:
+    - path: "lib/foglet_bbs/tui/screens/login.ex"
+      issue: "line 249: same fix as test 4 covers both modes"
+  missing:
+    - "Same fix as test 4 — already covered"
 
 - truth: "Suspended account modal is dismissible with Enter key"
-  status: failed
+  status: diagnosed
   reason: "User reported: Enter key does nothing on suspended account modal — only Esc dismisses it"
   severity: minor
   test: 5
-  artifacts: []
-  missing: []
+  root_cause: "do_update({:key, key_event}, state) in app.ex delegates to screen_module.handle_key first; modal intercept in global_key_handler only fires on :no_match. Login's handle_form_key(%{key: :enter}, state) always matches Enter and returns {:update, ...} without checking state.modal, so the modal-dismiss path in global_key_handler (lines 609-611) is never reached."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/app.ex"
+      issue: "lines 303-318: key dispatch has no modal-intercept guard before delegating to screen module"
+    - path: "lib/foglet_bbs/tui/screens/login.ex"
+      issue: "lines 83-93: handle_form_key for :enter matches unconditionally without checking state.modal"
+  missing:
+    - "In app.ex do_update({:key, ...}, state), add modal-intercept guard: when state.modal is non-nil, route key directly to global_key_handler/2 before calling screen_module.handle_key"
+
+- truth: "Board List loads subscribed boards after pressing B from Main Menu"
+  status: diagnosed
+  reason: "User reported: Board List screen shows 'Loading...' indefinitely — boards never render despite user having subscriptions"
+  severity: major
+  test: 8
+  root_cause: "App.update/2 has do_update clauses matching bare tuples {:boards_loaded, boards} etc., but Raxol's Command.task runtime wraps every task result in {:command_result, inner} before delivering to update/2. No {:command_result, ...} clause exists, so all async results hit the catch-all and are silently discarded — board_list stays nil indefinitely."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/app.ex"
+      issue: "lines 349, 366, 395, 418: do_update clauses match bare {:boards_loaded, ...} etc. but must match {:command_result, {:boards_loaded, ...}}"
+  missing:
+    - "Add do_update({:command_result, inner}, state) dispatcher that re-dispatches do_update(inner, state), OR change all four result-handler clauses to match {:command_result, {:boards_loaded, boards}} form"
 
 - truth: "TUI re-renders to fit new terminal dimensions on resize"
-  status: failed
+  status: diagnosed
   reason: "User reported: TUI does not resize when terminal window is resized"
   severity: major
   test: 15
-  artifacts: []
-  missing: []
+  root_cause: "CLIHandler dispatches Event.window(width, height, :resize) for SSH :window_change, but Event.window/3 creates type: :window. Raxol's Dispatcher.system_event?/1 only includes type: :resize in the system event list — :window is absent — so the resize event is routed to the app path instead of handle_resize_event/2. The Rendering Engine's {width, height} and ScreenBuffer are never updated via {:update_size, ...}, so every re-render uses the original 80x24 dimensions."
+  artifacts:
+    - path: "lib/foglet_bbs/ssh/cli_handler.ex"
+      issue: "line 158: Event.window(width, height, :resize) produces type: :window, not type: :resize — mismatches Dispatcher's system_event? check"
+  missing:
+    - "In CLIHandler, for :window_change, use Event.new(:resize, %{width: width, height: height}) so Dispatcher routes it through handle_resize_event/2 which sends {:update_size, ...} to the Rendering Engine"
