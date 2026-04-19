@@ -9,7 +9,8 @@ defmodule Foglet.TUI.Screens.Verify do
   """
 
   alias Foglet.Accounts
-  alias Foglet.TUI.Widgets.KeyBar
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
 
@@ -20,41 +21,32 @@ defmodule Foglet.TUI.Screens.Verify do
   @spec render(map()) :: any()
   def render(state) do
     vs = state.verify_state || %{buffer: "", attempts: 0, cooldown_until: nil}
+    theme = get_in(state, [:session_context, :theme]) || Theme.default()
 
     status_item =
       if cooldown?(vs) do
-        text("Too many attempts. Please wait.", fg: :red)
+        text("Too many attempts. Please wait.", fg: theme.error.fg, style: [:bold])
       else
-        text("Attempts: #{vs.attempts}/#{@max_attempts}", style: [:dim])
+        text("Attempts: #{vs.attempts}/#{@max_attempts}", fg: theme.dim.fg)
       end
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
+    content =
+      column style: %{gap: 0} do
         [
-          column style: %{gap: 0} do
-            [
-              text(" Verify Email ", style: [:bold]),
-              divider(),
-              column style: %{gap: 0} do
-                [
-                  text("Enter the 6-character code emailed to you:", fg: :green),
-                  text(""),
-                  text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: :cyan, style: [:bold]),
-                  text(""),
-                  status_item
-                ]
-              end
-            ]
-          end,
-          KeyBar.render([
-            {"Enter", "Submit"},
-            {"Backspace", "Delete"},
-            {"R", "Resend code"},
-            {"Esc", "Cancel"}
-          ])
+          text("Enter the 6-character code emailed to you:", fg: theme.primary.fg),
+          text(""),
+          text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
+          text(""),
+          status_item
         ]
       end
-    end
+
+    ScreenFrame.render(state, "Verify Email", content, [
+      {"Enter", "Submit"},
+      {"Backspace", "Delete"},
+      {"R", "Resend code"},
+      {"Esc", "Cancel"}
+    ])
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

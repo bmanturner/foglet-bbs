@@ -6,7 +6,9 @@ defmodule Foglet.TUI.Screens.ThreadList do
   Each row shows title and unread count.
   """
 
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
 
   import Raxol.Core.Renderer.View
 
@@ -14,55 +16,38 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def render(state) do
     board = state.current_board
     ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
-    thread_rows = render_thread_rows(state, ss)
+    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    thread_content = render_thread_content(state, ss, theme)
+    board_name = (board && board.name) || "?"
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" Threads — #{(board && board.name) || "?"} ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "Threads: #{(board && board.name) || "?"}"
-              }),
-              column style: %{gap: 0} do
-                thread_rows
-              end
-            ]
-          end,
-          KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"C", "Compose"}, {"Q", "Back"}])
-        ]
-      end
+    ScreenFrame.render(state, "Threads — #{board_name}", thread_content, [
+      {"j/k", "Select"},
+      {"Enter", "Open"},
+      {"C", "Compose"},
+      {"Q", "Back"}
+    ])
+  end
+
+  defp render_thread_content(state, _ss, theme) when state.current_thread_list == [] do
+    column style: %{gap: 0} do
+      [text("No threads in this board yet. Press [C] to compose.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_thread_rows(state, _ss) when state.current_thread_list == [] do
-    [text("No threads in this board yet. Press [C] to compose.", fg: :yellow)]
-  end
-
-  defp render_thread_rows(state, ss) do
+  defp render_thread_content(state, ss, theme) do
     sorted = sort_threads(state.current_thread_list || [])
 
     if sorted == [] do
-      [text("Loading...", style: [:dim])]
+      column style: %{gap: 0} do
+        [text("Loading...", fg: theme.dim.fg)]
+      end
     else
-      Enum.with_index(sorted)
-      |> Enum.map(fn {thread, idx} -> render_thread_row(thread, idx, ss.selected_index) end)
-    end
-  end
-
-  defp render_thread_row(thread, idx, selected_index) do
-    marker = if idx == selected_index, do: "> ", else: "  "
-    sticky_mark = if thread.sticky, do: "[S] ", else: ""
-    unread = Map.get(thread, :unread_count, 0)
-    unread_str = if unread > 0, do: " (#{unread})", else: ""
-
-    if idx == selected_index do
-      text("#{marker}#{sticky_mark}#{thread.title}#{unread_str}", fg: :green, style: [:bold])
-    else
-      text("#{marker}#{sticky_mark}#{thread.title}#{unread_str}", fg: :green)
+      SelectionList.render(sorted, ss.selected_index, fn {thread, _idx, selected} ->
+        sticky_mark = if thread.sticky, do: "[S] ", else: ""
+        unread = Map.get(thread, :unread_count, 0)
+        unread_str = if unread > 0, do: " (#{unread})", else: ""
+        ListRow.render("#{sticky_mark}#{thread.title}#{unread_str}", selected, theme)
+      end)
     end
   end
 

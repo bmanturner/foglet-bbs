@@ -13,7 +13,9 @@ defmodule Foglet.TUI.Screens.NewThread do
   If the function is not exported, shows a friendly "coming soon" modal.
   """
 
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
@@ -70,115 +72,96 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp render_board_step(state, ss) do
-    rows = render_board_rows(ss.boards, ss.selected_board_index)
+    theme = get_in(state, [:session_context, :theme]) || Theme.default()
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
+    board_content =
+      case ss.boards do
+        nil ->
+          column style: %{gap: 0} do
+            [text("Loading boards…", fg: theme.dim.fg)]
+          end
+
+        [] ->
           column style: %{gap: 0} do
             [
-              text(" New Thread — pick a board ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "New Thread: Board"
-              }),
-              column style: %{gap: 0} do
-                rows
-              end
+              text(
+                "You aren't subscribed to any boards. Ask your sysop to subscribe you.",
+                fg: theme.warning.fg
+              )
             ]
-          end,
-          KeyBar.render([{"j/k", "Select"}, {"Enter", "Choose"}, {"Esc", "Cancel"}])
-        ]
+          end
+
+        boards ->
+          SelectionList.render(boards, ss.selected_board_index, fn {board, _idx, selected} ->
+            ListRow.render(board.name, selected, theme)
+          end)
       end
-    end
+
+    ScreenFrame.render(state, "New Thread — pick a board", board_content, [
+      {"j/k", "Select"},
+      {"Enter", "Choose"},
+      {"Esc", "Cancel"}
+    ])
   end
 
-  defp render_board_rows(nil, _idx) do
-    [text("Loading boards…", style: [:dim])]
-  end
+  defp render_compose_step(state, ss) do
+    board = ss.board
+    board_name = (board && board.name) || "?"
+    theme = get_in(state, [:session_context, :theme]) || Theme.default()
 
-  defp render_board_rows([], _idx) do
-    [text("You aren't subscribed to any boards. Ask your sysop to subscribe you.", fg: :yellow)]
-  end
-
-  defp render_board_rows(boards, selected_index) do
-    Enum.with_index(boards)
-    |> Enum.map(fn {board, idx} ->
-      marker = if idx == selected_index, do: "> ", else: "  "
-
-      if idx == selected_index do
-        text("#{marker}#{board.name}", fg: :green, style: [:bold])
+    title_line =
+      if ss.focused == :title do
+        text("Title: #{ss.title_input}█", fg: theme.accent.fg, style: [:bold])
       else
-        text("#{marker}#{board.name}", fg: :green)
+        text("Title: #{ss.title_input}", fg: theme.primary.fg)
       end
-    end)
+
+    body_section = render_body_section(state, ss, theme)
+
+    error_items =
+      if ss.error do
+        [text(""), text(ss.error, fg: theme.error.fg, style: [:bold])]
+      else
+        []
+      end
+
+    content =
+      column style: %{gap: 0} do
+        [
+          text(""),
+          title_line,
+          text(""),
+          text("Body:", fg: theme.primary.fg),
+          body_section
+        ] ++ error_items ++ [text("")]
+      end
+
+    ScreenFrame.render(state, "New Thread — #{board_name}", content, [
+      {"Tab", compose_tab_hint(ss)},
+      {"Ctrl+S", "Submit"},
+      {"Ctrl+C", "Cancel"}
+    ])
   end
 
   defp compose_tab_hint(%{focused: :body, mode: :edit}), do: "Preview"
   defp compose_tab_hint(%{focused: :body, mode: :preview}), do: "Edit"
   defp compose_tab_hint(_ss), do: "Switch field"
 
-  defp render_body_section(state, ss) do
+  defp render_body_section(state, ss, theme) do
     body_focused = ss.focused == :body
 
     case ss.mode do
-      :edit -> render_body(ss.body_input_state, body_focused)
-      :preview -> render_markdown_tuples(render_preview_text(state, ss.body_input_state.value))
-    end
-  end
+      :edit ->
+        render_body(ss.body_input_state, body_focused, theme)
 
-  defp render_compose_step(state, ss) do
-    board = ss.board
-    board_name = (board && board.name) || "?"
-
-    title_line =
-      if ss.focused == :title do
-        text("Title: #{ss.title_input}█", fg: :green, style: [:bold])
-      else
-        text("Title: #{ss.title_input}", fg: :green)
-      end
-
-    body_section = render_body_section(state, ss)
-
-    error_items =
-      if ss.error do
-        [text(""), text(ss.error, fg: :red)]
-      else
-        []
-      end
-
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" New Thread — #{board_name} ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "New Thread: Compose"
-              }),
-              text(""),
-              title_line,
-              text(""),
-              text("Body:", fg: :green),
-              body_section
-            ] ++ error_items ++ [text("")]
-          end,
-          KeyBar.render([
-            {"Tab", compose_tab_hint(ss)},
-            {"Ctrl+S", "Submit"},
-            {"Ctrl+C", "Cancel"}
-          ])
-        ]
-      end
+      :preview ->
+        render_markdown_tuples(render_preview_text(state, ss.body_input_state.value), theme)
     end
   end
 
   # Renders MultiLineInput state as plain text/2 — avoids MultiLineInput.render/2
   # which crashes the layout engine (Bug B).
-  defp render_body(input_st, focused?) do
+  defp render_body(input_st, focused?, theme) do
     lines =
       input_st.value
       |> String.split("\n")
@@ -203,13 +186,12 @@ defmodule Foglet.TUI.Screens.NewThread do
 
         # Use a placeholder space for empty lines so the element is non-empty.
         display = if rendered == "", do: " ", else: rendered
-        text(display, fg: :green)
+        text(display, fg: theme.primary.fg)
       end)
     end
   end
 
   # Returns a [{text, style_atom}] list for the given draft string.
-  # Mirrors PostComposer.render_preview/2 — uses injected markdown mod if available.
   defp render_preview_text(state, draft) do
     sc = Map.get(state, :session_context) || %{}
     markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
@@ -223,15 +205,15 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
   # a column of text/2 elements styled appropriately.
-  defp render_markdown_tuples(tuples) when is_list(tuples) do
+  defp render_markdown_tuples(tuples, theme) when is_list(tuples) do
     column style: %{gap: 0} do
       Enum.map(tuples, fn
-        {s, :bold} -> text(s, style: [:bold], fg: :green)
-        {s, :italic} -> text(s, style: [:italic], fg: :green)
-        {s, :dim} -> text(s, style: [:dim], fg: :green)
-        {s, :underline} -> text(s, style: [:underline], fg: :green)
-        {s, :plain} -> text(s, fg: :green)
-        {s, _} -> text(s, fg: :green)
+        {s, :bold} -> text(s, style: [:bold], fg: theme.primary.fg)
+        {s, :italic} -> text(s, style: [:italic], fg: theme.primary.fg)
+        {s, :dim} -> text(s, style: [:dim], fg: theme.dim.fg)
+        {s, :underline} -> text(s, style: [:underline], fg: theme.primary.fg)
+        {s, :plain} -> text(s, fg: theme.primary.fg)
+        {s, _} -> text(s, fg: theme.primary.fg)
       end)
     end
   end

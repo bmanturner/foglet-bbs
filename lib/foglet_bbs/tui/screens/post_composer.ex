@@ -15,7 +15,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
   """
 
   alias Foglet.Config
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
@@ -31,12 +32,13 @@ defmodule Foglet.TUI.Screens.PostComposer do
     ss = composer_screen_state(state)
     input_st = ss.input_state
     draft = input_st.value
+    theme = get_in(state, [:session_context, :theme]) || Theme.default()
 
     body_items =
       if ss.reply_to do
         [
-          text("Replying to @#{get_handle(ss.reply_to)}:", style: [:dim]),
-          text(quote_preview(ss.reply_to), style: [:dim]),
+          text("Replying to @#{get_handle(ss.reply_to)}:", fg: theme.dim.fg),
+          text(quote_preview(ss.reply_to), fg: theme.dim.fg),
           text("")
         ]
       else
@@ -44,47 +46,31 @@ defmodule Foglet.TUI.Screens.PostComposer do
       end ++
         case ss.mode do
           :edit ->
-            # Render the MultiLineInput component inline using its lines.
-            # render/2 requires a context map; we supply a minimal one.
-            [render_input(input_st, state)]
+            [render_input(input_st, state, theme)]
 
           :preview ->
-            [render_markdown_tuples(render_preview(state, draft))]
+            [render_markdown_tuples(render_preview(state, draft), theme)]
         end ++
         if ss.error do
-          [text(""), text(ss.error, fg: :red)]
+          [text(""), text(ss.error, fg: theme.error.fg, style: [:bold])]
         else
           []
         end ++
         [
           text(""),
-          text("#{String.length(draft)} / #{max_len(state)} chars", style: [:dim])
+          text("#{String.length(draft)} / #{max_len(state)} chars", fg: theme.dim.fg)
         ]
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" #{title_for(ss.reply_to, state.current_thread)} ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "Composer (#{ss.mode})"
-              }),
-              column style: %{gap: 0} do
-                body_items
-              end
-            ]
-          end,
-          KeyBar.render([
-            {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
-            {"Ctrl+S", "Send"},
-            {"Ctrl+C", "Cancel"}
-          ])
-        ]
+    content =
+      column style: %{gap: 0} do
+        body_items
       end
-    end
+
+    ScreenFrame.render(state, title_for(ss.reply_to, state.current_thread), content, [
+      {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
+      {"Ctrl+S", "Send"},
+      {"Ctrl+C", "Cancel"}
+    ])
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
@@ -247,17 +233,17 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # Rendering helpers
   # ---------------------------------------------------------------------------
 
-  defp render_input(input_st, state) do
+  defp render_input(input_st, state, theme) do
     ss = composer_screen_state(state)
     focused? = ss.mode == :edit
-    render_input_as_text(input_st, focused?)
+    render_input_as_text(input_st, focused?, theme)
   end
 
   # Renders the MultiLineInput state as plain text/2 elements inside a column.
   # cursor_pos is {row, col} — confirmed from MultiLineInput struct definition.
   # This bypasses MultiLineInput.render/2, which returns tuple-shaped elements
   # that crash Flexbox.measure_flex_child/3 (Bug B).
-  defp render_input_as_text(input_st, focused?) do
+  defp render_input_as_text(input_st, focused?, theme) do
     lines =
       input_st.value
       |> String.split("\n")
@@ -280,7 +266,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
             line
           end
 
-        text(rendered, fg: :green)
+        text(rendered, fg: theme.primary.fg)
       end)
     end
   end
@@ -302,15 +288,15 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
   # a column of text/2 elements styled appropriately.
-  defp render_markdown_tuples(tuples) when is_list(tuples) do
+  defp render_markdown_tuples(tuples, theme) when is_list(tuples) do
     column style: %{gap: 0} do
       Enum.map(tuples, fn
-        {s, :bold} -> text(s, style: [:bold], fg: :green)
-        {s, :italic} -> text(s, style: [:italic], fg: :green)
-        {s, :dim} -> text(s, style: [:dim], fg: :green)
-        {s, :underline} -> text(s, style: [:underline], fg: :green)
-        {s, :plain} -> text(s, fg: :green)
-        {s, _} -> text(s, fg: :green)
+        {s, :bold} -> text(s, style: [:bold], fg: theme.primary.fg)
+        {s, :italic} -> text(s, style: [:italic], fg: theme.primary.fg)
+        {s, :dim} -> text(s, style: [:dim], fg: theme.dim.fg)
+        {s, :underline} -> text(s, style: [:underline], fg: theme.primary.fg)
+        {s, :plain} -> text(s, fg: theme.primary.fg)
+        {s, _} -> text(s, fg: theme.primary.fg)
       end)
     end
   end

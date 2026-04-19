@@ -8,7 +8,8 @@ defmodule Foglet.TUI.Screens.PostReader do
   command handled by TUI.App.update/2 (SSH-09).
   """
 
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
 
@@ -16,42 +17,36 @@ defmodule Foglet.TUI.Screens.PostReader do
   def render(state) do
     thread = state.current_thread
     ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
-    post_content = render_post_content(state, ss.selected_post_index)
+    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    post_content = render_post_content(state, ss.selected_post_index, theme)
+    thread_title = (thread && thread.title) || "?"
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" Thread: #{(thread && thread.title) || "?"} ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "Reading: #{(thread && thread.title) || "?"}"
-              }),
-              column style: %{gap: 0} do
-                post_content
-              end
-            ]
-          end,
-          KeyBar.render([{"N", "Next"}, {"P", "Prev"}, {"R", "Reply"}, {"Q", "Back"}])
-        ]
-      end
+    ScreenFrame.render(state, "Thread: #{thread_title}", post_content, [
+      {"N", "Next"},
+      {"P", "Prev"},
+      {"R", "Reply"},
+      {"Q", "Back"}
+    ])
+  end
+
+  defp render_post_content(state, _idx, theme) when state.posts == [] or state.posts == nil do
+    column style: %{gap: 0} do
+      [text("Loading posts...", fg: theme.dim.fg)]
     end
   end
 
-  defp render_post_content(state, _idx) when state.posts == [] or state.posts == nil do
-    [text("Loading posts...", style: [:dim])]
-  end
-
-  defp render_post_content(state, idx) do
+  defp render_post_content(state, idx, theme) do
     posts = state.posts
     total = length(posts)
 
     if idx >= total do
-      [text("No more posts.", fg: :yellow)]
+      column style: %{gap: 0} do
+        [text("No more posts.", fg: theme.warning.fg)]
+      end
     else
-      render_post_items(state, Enum.at(posts, idx), idx, total)
+      column style: %{gap: 0} do
+        render_post_items(state, Enum.at(posts, idx), idx, total, theme)
+      end
     end
   end
 
@@ -177,23 +172,23 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
-  defp render_post_items(state, post, idx, total) do
+  defp render_post_items(state, post, idx, total, theme) do
     sc = Map.get(state, :session_context) || %{}
     markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
     body = post.body || ""
 
     rendered =
       if function_exported?(markdown_mod, :render, 1) do
-        render_markdown_tuples(markdown_mod.render(body))
+        render_markdown_tuples(markdown_mod.render(body), theme)
       else
-        text(body, fg: :green)
+        text(body, fg: theme.primary.fg)
       end
 
     author = get_post_author(post)
 
     [
-      text("Post #{idx + 1} of #{total}", style: [:dim]),
-      text("By @#{author} at #{post.inserted_at}", style: [:dim]),
+      text("Post #{idx + 1} of #{total}", fg: theme.dim.fg),
+      text("By @#{author} at #{post.inserted_at}", fg: theme.dim.fg),
       text(""),
       rendered
     ]
@@ -201,15 +196,15 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
   # a column of text/2 elements styled appropriately.
-  defp render_markdown_tuples(tuples) when is_list(tuples) do
+  defp render_markdown_tuples(tuples, theme) when is_list(tuples) do
     column style: %{gap: 0} do
       Enum.map(tuples, fn
-        {s, :bold} -> text(s, style: [:bold], fg: :green)
-        {s, :italic} -> text(s, style: [:italic], fg: :green)
-        {s, :dim} -> text(s, style: [:dim], fg: :green)
-        {s, :underline} -> text(s, style: [:underline], fg: :green)
-        {s, :plain} -> text(s, fg: :green)
-        {s, _} -> text(s, fg: :green)
+        {s, :bold} -> text(s, style: [:bold], fg: theme.primary.fg)
+        {s, :italic} -> text(s, style: [:italic], fg: theme.primary.fg)
+        {s, :dim} -> text(s, style: [:dim], fg: theme.dim.fg)
+        {s, :underline} -> text(s, style: [:underline], fg: theme.primary.fg)
+        {s, :plain} -> text(s, fg: theme.primary.fg)
+        {s, _} -> text(s, fg: theme.primary.fg)
       end)
     end
   end

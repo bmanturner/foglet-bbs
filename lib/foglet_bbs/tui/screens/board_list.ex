@@ -6,63 +6,44 @@ defmodule Foglet.TUI.Screens.BoardList do
   state.screen_state[:board_list] holds %{selected_index: integer()}.
   """
 
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
 
   import Raxol.Core.Renderer.View
 
   @spec render(map()) :: any()
   def render(state) do
     ss = get_in(state.screen_state, [:board_list]) || %{selected_index: 0}
-    board_rows = render_board_rows(state, ss)
+    theme = get_in(state, [:session_context, :theme]) || Theme.default()
+    board_content = render_board_content(state, ss, theme)
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" Boards ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "Boards"
-              }),
-              column style: %{gap: 0} do
-                board_rows
-              end
-            ]
-          end,
-          KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"Q", "Back"}])
-        ]
-      end
+    ScreenFrame.render(state, "Boards", board_content, [
+      {"j/k", "Select"},
+      {"Enter", "Open"},
+      {"Q", "Back"}
+    ])
+  end
+
+  defp render_board_content(state, _ss, theme) when state.board_list == [] do
+    column style: %{gap: 0} do
+      [text("No boards subscribed. Ask your sysop to subscribe you.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_board_rows(state, _ss) when state.board_list == [] do
-    [text("No boards subscribed. Ask your sysop to subscribe you.", fg: :yellow)]
-  end
-
-  defp render_board_rows(state, ss) do
+  defp render_board_content(state, ss, theme) do
     boards = state.board_list || []
 
     if boards == [] do
-      [text("Loading...", style: [:dim])]
+      column style: %{gap: 0} do
+        [text("Loading...", fg: theme.dim.fg)]
+      end
     else
-      Enum.with_index(boards)
-      |> Enum.map(fn {board, idx} ->
-        render_board_row(board, idx, ss.selected_index)
+      SelectionList.render(boards, ss.selected_index, fn {board, _idx, selected} ->
+        unread = board_unread(board)
+        unread_str = if unread > 0, do: " (#{unread} unread)", else: ""
+        ListRow.render("#{board.name}#{unread_str}", selected, theme)
       end)
-    end
-  end
-
-  defp render_board_row(board, idx, selected_index) do
-    marker = if idx == selected_index, do: "> ", else: "  "
-    unread = board_unread(board)
-    unread_str = if unread > 0, do: " (#{unread} unread)", else: ""
-
-    if idx == selected_index do
-      text("#{marker}#{board.name}#{unread_str}", fg: :green, style: [:bold])
-    else
-      text("#{marker}#{board.name}#{unread_str}", fg: :green)
     end
   end
 

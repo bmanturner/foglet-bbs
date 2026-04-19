@@ -23,8 +23,8 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets.Chrome.StatusBar
   alias Foglet.TUI.Widgets.Chrome.KeyBar
+  alias Foglet.TUI.Widgets.Chrome.StatusBar
 
   @doc """
   Renders the full screen chrome wrapping the caller-provided content.
