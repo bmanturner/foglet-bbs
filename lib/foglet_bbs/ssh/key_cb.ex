@@ -1,23 +1,27 @@
 defmodule Foglet.SSH.KeyCB do
   @moduledoc """
-  SSH public-key authentication callback module.
+  SSH public-key callback module (`:ssh_server_key_api` behaviour).
 
-  Implements Erlang's :ssh_server_key_api behaviour:
-    * host_key/2 — returns the server's private host key
-    * is_auth_key/3 — decides whether a presented public key matches a
-      registered user (SSH-03)
+  ## Architecture decision (D-13 rewrite / #7 audit fix)
 
-  Design notes:
-    * Username arrives as an Erlang charlist; converted via List.to_string/1
-      at the boundary (Pitfall 2 — never String.to_atom/1).
-    * Public key arrives in Erlang :public_key record form; we convert to
-      the OpenSSH text format with :ssh_file.encode/2 so we can compute the
-      same SHA256 fingerprint the Foglet.Accounts.SSHKey schema stores.
+  We chose **Option A** for `is_auth_key/3`:
+
+  - Always return `true` — the daemon runs with `no_auth_needed: true` anyway,
+    so the return value has no gating effect on connection acceptance.
+  - Record the offered pubkey in `Foglet.SSH.PubkeyStash` (an ETS table) keyed
+    by `{peer_ip, peer_port}`. The CLIHandler reads this stash on
+    `{:ssh_channel_up, ...}` to decide whether to skip the login screen.
+
+  Option B (keep the username+key check) was rejected because it couples auth
+  state to SSH-layer callbacks that Erlang doesn't expose cleanly to the channel
+  handler; Option A keeps the correlation simple and self-contained.
+
+  Host-key loading still delegates to `:ssh_file.host_key/2`.
   """
 
   @behaviour :ssh_server_key_api
 
-  alias Foglet.Accounts
+  require Logger
 
   @impl true
   def host_key(algorithm, opts) do
@@ -25,41 +29,23 @@ defmodule Foglet.SSH.KeyCB do
   end
 
   @impl true
-  def is_auth_key(public_key, user, opts) when is_list(user) do
-    handle = List.to_string(user)
-    auth_key_for?(handle, public_key, opts)
-  end
-
-  # Fallback for already-binary user (some test harnesses pass binary).
-  def is_auth_key(public_key, user, opts) when is_binary(user) do
-    auth_key_for?(user, public_key, opts)
+  def is_auth_key(public_key, _user, opts) do
+    # Stash the offered pubkey for CLIHandler to pick up after channel_up.
+    # Peer address is available as {ip, port} in opts under :peer.
+    peer = extract_peer(opts)
+    Foglet.SSH.PubkeyStash.put(peer, public_key)
+    # Always allow — connection acceptance is via no_auth_needed: true;
+    # identity resolution happens inside the TUI.
+    true
   end
 
   # --- Private ---
 
-  defp auth_key_for?(handle, public_key, _opts) do
-    case encode_public_key(public_key) do
-      {:ok, openssh_text} ->
-        ensure_handle_matches?(handle, openssh_text)
-
-      _ ->
-        false
-    end
-  end
-
-  defp encode_public_key(public_key) do
-    text = :ssh_file.encode([{public_key, []}], :openssh_key)
-    {:ok, to_string(text)}
-  rescue
-    _ -> :error
-  catch
-    _, _ -> :error
-  end
-
-  defp ensure_handle_matches?(handle, openssh_text) do
-    case Accounts.get_user_by_public_key(openssh_text) do
-      {:ok, user} -> user.handle == handle and is_nil(user.deleted_at)
-      _ -> false
+  defp extract_peer(opts) do
+    case Keyword.get(opts, :peer) do
+      {{ip, port}, _socket} -> {ip, port}
+      {ip, port} when is_tuple(ip) and is_integer(port) -> {ip, port}
+      _ -> :unknown
     end
   end
 end
