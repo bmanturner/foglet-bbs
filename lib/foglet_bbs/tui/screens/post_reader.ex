@@ -18,18 +18,22 @@ defmodule Foglet.TUI.Screens.PostReader do
     ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
     post_content = render_post_content(state, ss.selected_post_index)
 
-    panel(
-      title: "Thread: #{(thread && thread.title) || "?"}",
-      border: :single,
-      children: [
-        StatusBar.render(%{
-          handle: state.current_user && state.current_user.handle,
-          location: "Reading: #{(thread && thread.title) || "?"}"
-        }),
-        box(children: post_content),
-        KeyBar.render([{"N", "Next"}, {"P", "Prev"}, {"R", "Reply"}, {"Q", "Back"}])
-      ]
-    )
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" Thread: #{(thread && thread.title) || "?"} ", style: [:bold]),
+          divider(),
+          StatusBar.render(%{
+            handle: state.current_user && state.current_user.handle,
+            location: "Reading: #{(thread && thread.title) || "?"}"
+          }),
+          column style: %{gap: 0} do
+            post_content
+          end,
+          KeyBar.render([{"N", "Next"}, {"P", "Prev"}, {"R", "Reply"}, {"Q", "Back"}])
+        ]
+      end
+    end
   end
 
   defp render_post_content(state, _idx) when state.posts == [] or state.posts == nil do

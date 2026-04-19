@@ -15,21 +15,22 @@ defmodule Foglet.TUI.Screens.MainMenu do
   def render(state) do
     handle = state.current_user && state.current_user.handle
 
-    panel(
-      title: "Foglet BBS",
-      border: :single,
-      children: [
-        StatusBar.render(%{handle: handle, location: "Main Menu"}),
-        box(
-          children:
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" Foglet BBS ", style: [:bold]),
+          divider(),
+          StatusBar.render(%{handle: handle, location: "Main Menu"}),
+          column style: %{gap: 0} do
             [text("Welcome back, #{handle || "guest"}.", fg: :green), text("")] ++
               Enum.map(@menu_items, fn {k, label} ->
                 text("  [#{k}] #{label}", fg: :green)
               end)
-        ),
-        KeyBar.render([{"B", "Boards"}, {"C", "Compose"}, {"Q", "Logout"}])
-      ]
-    )
+          end,
+          KeyBar.render([{"B", "Boards"}, {"C", "Compose"}, {"Q", "Logout"}])
+        ]
+      end
+    end
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

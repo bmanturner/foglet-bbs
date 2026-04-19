@@ -15,18 +15,22 @@ defmodule Foglet.TUI.Screens.BoardList do
     ss = get_in(state.screen_state, [:board_list]) || %{selected_index: 0}
     board_rows = render_board_rows(state, ss)
 
-    panel(
-      title: "Boards",
-      border: :single,
-      children: [
-        StatusBar.render(%{
-          handle: state.current_user && state.current_user.handle,
-          location: "Boards"
-        }),
-        box(children: board_rows),
-        KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"Q", "Back"}])
-      ]
-    )
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" Boards ", style: [:bold]),
+          divider(),
+          StatusBar.render(%{
+            handle: state.current_user && state.current_user.handle,
+            location: "Boards"
+          }),
+          column style: %{gap: 0} do
+            board_rows
+          end,
+          KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"Q", "Back"}])
+        ]
+      end
+    end
   end
 
   defp render_board_rows(state, _ss) when state.board_list == [] do

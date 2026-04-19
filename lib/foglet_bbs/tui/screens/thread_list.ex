@@ -16,18 +16,22 @@ defmodule Foglet.TUI.Screens.ThreadList do
     ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
     thread_rows = render_thread_rows(state, ss)
 
-    panel(
-      title: "Threads — #{(board && board.name) || "?"}",
-      border: :single,
-      children: [
-        StatusBar.render(%{
-          handle: state.current_user && state.current_user.handle,
-          location: "Threads: #{(board && board.name) || "?"}"
-        }),
-        box(children: thread_rows),
-        KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"C", "Compose"}, {"Q", "Back"}])
-      ]
-    )
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text(" Threads — #{(board && board.name) || "?"} ", style: [:bold]),
+          divider(),
+          StatusBar.render(%{
+            handle: state.current_user && state.current_user.handle,
+            location: "Threads: #{(board && board.name) || "?"}"
+          }),
+          column style: %{gap: 0} do
+            thread_rows
+          end,
+          KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"C", "Compose"}, {"Q", "Back"}])
+        ]
+      end
+    end
   end
 
   defp render_thread_rows(state, _ss) when state.current_thread_list == [] do
