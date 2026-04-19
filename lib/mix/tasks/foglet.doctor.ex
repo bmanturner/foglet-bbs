@@ -6,7 +6,7 @@ defmodule Mix.Tasks.Foglet.Doctor do
 
   @impl Mix.Task
   def run(_args) do
-    Application.ensure_all_started(:postgrex)
+    {:ok, _} = Application.ensure_all_started(:postgrex)
 
     checks = [
       {"Elixir version", &check_elixir_version/0},

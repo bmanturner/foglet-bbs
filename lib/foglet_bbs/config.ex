@@ -28,7 +28,7 @@ defmodule Foglet.Config do
   def init_cache do
     case :ets.whereis(@table) do
       :undefined ->
-        :ets.new(@table, [:set, :named_table, :public, read_concurrency: true])
+        _ = :ets.new(@table, [:set, :named_table, :public, read_concurrency: true])
         :ok
 
       _tid ->

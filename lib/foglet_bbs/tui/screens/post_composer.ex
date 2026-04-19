@@ -349,40 +349,25 @@ defmodule Foglet.TUI.Screens.PostComposer do
   defp do_submit(state, ss, draft) do
     sc = Map.get(state, :session_context) || %{}
     posts_mod = get_in(sc, [:domain, :posts]) || Foglet.Posts
+    thread = state.current_thread
 
-    if function_exported?(posts_mod, :create_reply, 3) && state.current_thread do
-      attrs = %{body: draft}
+    attrs = %{body: draft}
+    reply_to_id = ss[:reply_to] && ss[:reply_to].id
+    attrs = if reply_to_id, do: Map.put(attrs, :reply_to_id, reply_to_id), else: attrs
 
-      reply_to_id = ss[:reply_to] && ss[:reply_to].id
-      attrs = if reply_to_id, do: Map.put(attrs, :reply_to_id, reply_to_id), else: attrs
+    case posts_mod.create_reply(thread.id, thread.board_id, state.current_user.id, attrs) do
+      {:ok, _post} ->
+        new_state = %{
+          state
+          | current_screen: :post_reader,
+            composer_draft: nil,
+            screen_state: Map.delete(state.screen_state, :post_composer)
+        }
 
-      case posts_mod.create_reply(state.current_thread, state.current_user, attrs) do
-        {:ok, _post} ->
-          new_state = %{
-            state
-            | current_screen: :post_reader,
-              composer_draft: nil,
-              screen_state: Map.delete(state.screen_state, :post_composer)
-          }
+        {:update, new_state, [{:load_posts, thread.id}]}
 
-          {:update, new_state, [{:load_posts, state.current_thread.id}]}
-
-        {:error, _cs} ->
-          {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
-      end
-    else
-      # Dev-mode stub: Phase 2 not yet wired or no current_thread
-      modal = %{type: :info, message: "Submitted (dev-mode; Phase 2 not fully wired)."}
-
-      new_state = %{
-        state
-        | modal: modal,
-          current_screen: :thread_list,
-          composer_draft: nil,
-          screen_state: Map.delete(state.screen_state, :post_composer)
-      }
-
-      {:update, new_state, []}
+      {:error, _cs} ->
+        {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
     end
   end
 

@@ -29,7 +29,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   defmodule FakeThreads do
-    def advance_read_pointer(_user_id, _thread_id, _post_id), do: {:ok, %{}}
+    def advance_thread_read_pointer(_user_id, _thread_id, _post_id), do: {:ok, %{}}
   end
 
   defmodule FakeMarkdown do

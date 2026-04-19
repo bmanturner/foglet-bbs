@@ -101,14 +101,8 @@ defmodule Foglet.TUI.Screens.BoardList do
   @spec load_boards(map()) :: {map(), list()}
   def load_boards(state) do
     boards_mod = domain_module(state, :boards)
-
-    if function_exported?(boards_mod, :list_subscribed_boards, 1) do
-      boards = boards_mod.list_subscribed_boards(state.current_user)
-      {%{state | board_list: boards}, []}
-    else
-      # Phase 2 not yet executed — leave empty so render shows "No boards" message
-      {%{state | board_list: []}, []}
-    end
+    boards = boards_mod.list_subscribed_boards(state.current_user)
+    {%{state | board_list: boards}, []}
   end
 
   # --- Private ---
@@ -129,13 +123,8 @@ defmodule Foglet.TUI.Screens.BoardList do
   defp board_unread(%{unread_count: n}) when is_integer(n), do: n
   defp board_unread(_), do: 0
 
-  defp domain_module(state, key) do
+  defp domain_module(state, :boards) do
     ctx = Map.get(state, :session_context) || %{}
-    get_in(ctx, [:domain, key]) || default_domain(key)
+    get_in(ctx, [:domain, :boards]) || Foglet.Boards
   end
-
-  defp default_domain(:boards), do: Foglet.Boards
-  defp default_domain(:threads), do: Foglet.Threads
-  defp default_domain(:posts), do: Foglet.Posts
-  defp default_domain(:markdown), do: Foglet.Markdown
 end

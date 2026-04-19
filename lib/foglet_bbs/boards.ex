@@ -64,8 +64,23 @@ defmodule Foglet.Boards do
 
     case result do
       {:ok, board} ->
-        BoardSupervisor.start_board(board.id)
-        {:ok, board}
+        case BoardSupervisor.start_board(board.id) do
+          {:ok, _pid} ->
+            {:ok, board}
+
+          {:error, {:already_started, _pid}} ->
+            {:ok, board}
+
+          {:error, reason} ->
+            require Logger
+
+            Logger.error(
+              "Failed to start Board Server for #{board.slug} (#{board.id}): #{inspect(reason)}. " <>
+                "Board is inserted; a future application restart will start its server."
+            )
+
+            {:ok, board}
+        end
 
       error ->
         error
@@ -134,6 +149,30 @@ defmodule Foglet.Boards do
         where: s.user_id == ^user_id,
         preload: [:board]
     )
+  end
+
+  @doc """
+  List Board structs for every board a user is subscribed to, with :category
+  preloaded and :unread_count populated. Ordered by category.display_order
+  then board.display_order. Returns [] for a nil user (guest).
+  """
+  @spec list_subscribed_boards(Foglet.Accounts.User.t() | nil) :: [Board.t()]
+  def list_subscribed_boards(nil), do: []
+
+  def list_subscribed_boards(%{id: user_id}) do
+    boards =
+      Repo.all(
+        from b in Board,
+          join: s in Subscription,
+          on: s.board_id == b.id and s.user_id == ^user_id,
+          join: c in assoc(b, :category),
+          where: b.archived == false and c.archived == false,
+          order_by: [asc: c.display_order, asc: b.display_order],
+          preload: [category: c]
+      )
+
+    counts = unread_counts(user_id)
+    Enum.map(boards, fn b -> %{b | unread_count: Map.get(counts, b.id, 0)} end)
   end
 
   # ---------- Read Pointers (BOARD-08) ----------

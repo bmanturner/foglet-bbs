@@ -30,11 +30,14 @@ defmodule Foglet.SSH.PubkeyStash do
 
   @doc "Ensure the ETS table exists. Called from Application.start/2."
   def init do
-    if :ets.whereis(@table) == :undefined do
-      :ets.new(@table, [:named_table, :public, :set])
-    end
+    case :ets.whereis(@table) do
+      :undefined ->
+        _ = :ets.new(@table, [:named_table, :public, :set])
+        :ok
 
-    :ok
+      _tid ->
+        :ok
+    end
   end
 
   @doc "Store a public key record keyed by peer `{ip, port}` or `:unknown`."

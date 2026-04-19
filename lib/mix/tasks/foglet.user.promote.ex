@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Foglet.User.Promote do
 
   @impl Mix.Task
   def run(args) do
-    Application.ensure_all_started(:foglet_bbs)
+    {:ok, _} = Application.ensure_all_started(:foglet_bbs)
 
     {opts, positional} =
       try do

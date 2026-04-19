@@ -30,7 +30,7 @@ defmodule FogletBbs.MixProject do
 
   def cli do
     [
-      preferred_envs: [precommit: :test]
+      preferred_envs: [precommit: :dev]
     ]
   end
 
@@ -56,6 +56,7 @@ defmodule FogletBbs.MixProject do
       {:bandit, "~> 1.5"},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false},
       {:argon2_elixir, "~> 4.0"},
       {:stream_data, "~> 1.0", only: [:dev, :test]},
       {:oban, "~> 2.18"},
@@ -80,7 +81,9 @@ defmodule FogletBbs.MixProject do
         "compile --warnings-as-errors",
         "deps.unlock --unused",
         "format",
-        "credo --strict"
+        "credo --strict",
+        "sobelow --exit Low",
+        "dialyzer"
       ]
     ]
   end

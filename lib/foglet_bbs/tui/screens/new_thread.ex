@@ -69,8 +69,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp render_board_step(state, ss) do
-    boards = ss.boards || []
-    rows = render_board_rows(boards, ss.selected_board_index)
+    rows = render_board_rows(ss.boards, ss.selected_board_index)
 
     box style: %{border: :single, padding: 1} do
       column style: %{gap: 0} do
@@ -90,8 +89,12 @@ defmodule Foglet.TUI.Screens.NewThread do
     end
   end
 
-  defp render_board_rows([], _idx) do
+  defp render_board_rows(nil, _idx) do
     [text("Loading boards…", style: [:dim])]
+  end
+
+  defp render_board_rows([], _idx) do
+    [text("You aren't subscribed to any boards. Ask your sysop to subscribe you.", fg: :yellow)]
   end
 
   defp render_board_rows(boards, selected_index) do
@@ -324,14 +327,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   @spec load_boards(map()) :: {map(), list()}
   def load_boards(state) do
     boards_mod = domain_module(state, :boards)
-
-    boards =
-      if function_exported?(boards_mod, :list_subscribed_boards, 1) do
-        boards_mod.list_subscribed_boards(state.current_user)
-      else
-        []
-      end
-
+    boards = boards_mod.list_subscribed_boards(state.current_user)
     ss = screen_state(state)
     new_ss = %{ss | boards: boards}
     {put_ss(state, new_ss), []}
@@ -433,14 +429,13 @@ defmodule Foglet.TUI.Screens.NewThread do
     %{state | screen_state: new_screen_state}
   end
 
-  defp domain_module(state, key) do
+  defp domain_module(state, key) when key in [:boards, :threads] do
     ctx = Map.get(state, :session_context) || %{}
     get_in(ctx, [:domain, key]) || default_domain(key)
   end
 
   defp default_domain(:boards), do: Foglet.Boards
   defp default_domain(:threads), do: Foglet.Threads
-  defp default_domain(other), do: other
 
   defp format_error(%Ecto.Changeset{} = cs) do
     Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)

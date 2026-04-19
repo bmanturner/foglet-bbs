@@ -19,6 +19,8 @@ defmodule Foglet.Boards.Board do
     has_many :posts, Foglet.Posts.Post
     has_many :subscriptions, Foglet.Boards.Subscription
 
+    field :unread_count, :integer, virtual: true, default: 0
+
     timestamps()
   end
 

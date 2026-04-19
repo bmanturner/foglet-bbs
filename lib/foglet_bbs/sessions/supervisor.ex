@@ -79,9 +79,10 @@ defmodule Foglet.Sessions.Supervisor do
     * If a different session owns the slot: replaces it (send `:replaced_by_new_session`,
       wait for `:DOWN` or force-terminate after `@replacement_timeout_ms`), then promotes.
 
-  Returns `:ok` on success or `{:error, term()}` on failure.
+  Always returns `:ok` — the underlying promote and replace paths both return
+  `:ok` (promote is a cast, replace sync-waits then casts).
   """
-  @spec promote_guest_session(pid(), Foglet.Accounts.User.t()) :: :ok | {:error, term()}
+  @spec promote_guest_session(pid(), Foglet.Accounts.User.t()) :: :ok
   def promote_guest_session(guest_pid, user) when is_pid(guest_pid) do
     case Registry.lookup(@registry, user.id) do
       [] ->
@@ -102,7 +103,7 @@ defmodule Foglet.Sessions.Supervisor do
   def terminate_session(user_id) when is_binary(user_id) do
     case lookup_session(user_id) do
       {:ok, pid} ->
-        DynamicSupervisor.terminate_child(__MODULE__, pid)
+        _ = DynamicSupervisor.terminate_child(__MODULE__, pid)
         :ok
 
       {:error, :not_found} = err ->

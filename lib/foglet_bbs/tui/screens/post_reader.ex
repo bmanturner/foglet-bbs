@@ -101,13 +101,8 @@ defmodule Foglet.TUI.Screens.PostReader do
   def load_posts(state, thread_id) do
     ctx = Map.get(state, :session_context) || %{}
     posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
-
-    if function_exported?(posts_mod, :list_posts, 1) do
-      posts = posts_mod.list_posts(thread_id)
-      {%{state | posts: posts}, []}
-    else
-      {%{state | posts: []}, []}
-    end
+    posts = posts_mod.list_posts(thread_id)
+    {%{state | posts: posts}, []}
   end
 
   @doc """
@@ -133,7 +128,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp flush_board_pointer(_mod, nil, _ctx), do: :skip
 
   defp flush_board_pointer(boards_mod, user_id, ctx) do
-    if ctx[:board_id] && function_exported?(boards_mod, :advance_board_read_pointer, 3) do
+    if ctx[:board_id] do
       boards_mod.advance_board_read_pointer(
         user_id,
         ctx[:board_id],
@@ -145,8 +140,8 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp flush_thread_pointer(_mod, nil, _ctx), do: :skip
 
   defp flush_thread_pointer(threads_mod, user_id, ctx) do
-    if ctx[:thread_id] && function_exported?(threads_mod, :advance_read_pointer, 3) do
-      threads_mod.advance_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
+    if ctx[:thread_id] do
+      threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
     end
   end
 

@@ -173,7 +173,7 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:eof, _ch}}, state) do
     stop_lifecycle(state.lifecycle_pid)
-    stop_session(state.session_pid)
+    _ = stop_session(state.session_pid)
     decrement_connection_count()
     {:ok, state}
   end
@@ -181,7 +181,7 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:closed, _ch}}, state) do
     stop_lifecycle(state.lifecycle_pid)
-    stop_session(state.session_pid)
+    _ = stop_session(state.session_pid)
     decrement_connection_count()
     {:stop, state.channel_id || 0, state}
   end
@@ -192,7 +192,7 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def terminate(_reason, state) do
     stop_lifecycle(state.lifecycle_pid)
-    stop_session(state.session_pid)
+    _ = stop_session(state.session_pid)
     :ok
   end
 

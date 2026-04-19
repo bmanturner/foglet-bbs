@@ -25,6 +25,11 @@ defmodule Foglet.SSH.Supervisor do
 
   require Logger
 
+  # @sobelow_skip is consumed by the sobelow scanner to whitelist reviewed
+  # false-positives. Registering it here keeps the Elixir compiler from
+  # warning "attribute set but never used".
+  Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
+
   @default_port 2222
   @min_otp_version "27.3.3"
 
@@ -103,6 +108,9 @@ defmodule Foglet.SSH.Supervisor do
 
   defp semver(str), do: Version.parse!(str)
 
+  # sobelow: dir is derived from Application.app_dir/2 (compile-time), not user
+  # input, so there is no traversal surface.
+  @sobelow_skip ["Traversal.FileModule"]
   defp ensure_system_dir! do
     dir = Application.app_dir(:foglet_bbs, "priv/ssh")
     File.mkdir_p!(dir)

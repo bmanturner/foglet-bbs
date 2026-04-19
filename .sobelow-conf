@@ -1,0 +1,12 @@
+[
+  verbose: false,
+  private: false,
+  skip: true,
+  router: "lib/foglet_bbs_web/router.ex",
+  exit: "Low",
+  format: "txt",
+  out: "",
+  threshold: "low",
+  ignore: [],
+  ignore_files: []
+]

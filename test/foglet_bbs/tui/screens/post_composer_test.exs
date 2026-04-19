@@ -5,8 +5,10 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   alias Raxol.UI.Components.Input.MultiLineInput
 
   defmodule FakePosts do
-    def create_reply(_thread, _user, %{body: "explode"}), do: {:error, :nope}
-    def create_reply(_thread, _user, attrs), do: {:ok, Map.merge(%{id: "new-post"}, attrs)}
+    def create_reply(_thread_id, _board_id, _user_id, %{body: "explode"}), do: {:error, :nope}
+
+    def create_reply(_thread_id, _board_id, _user_id, attrs),
+      do: {:ok, Map.merge(%{id: "new-post"}, attrs)}
   end
 
   defmodule FakeMarkdown do
@@ -35,7 +37,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       %Foglet.TUI.App{
         current_screen: :post_composer,
         current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-        current_thread: %{id: "t1", title: "Hello"},
+        current_thread: %{id: "t1", title: "Hello", board_id: "b1"},
         session_context: %{
           domain: %{posts: FakePosts, markdown: FakeMarkdown},
           max_post_length: 1_000
@@ -182,16 +184,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert Enum.any?(cmds, &match?({:load_posts, "t1"}, &1))
   end
 
-  test "Ctrl+S transitions to :thread_list in dev-mode stub (no posts module)",
-       %{state: state} do
-    # Remove the posts module from session_context to hit the dev-mode path
-    s = %{state | session_context: %{domain: %{markdown: FakeMarkdown}}}
-    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, s)
-    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
-    assert s.current_screen == :thread_list
-    assert s.modal.type == :info
-  end
-
   # ---------------------------------------------------------------------------
   # Max-length enforcement (D-31)
   # ---------------------------------------------------------------------------
@@ -246,7 +238,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       %Foglet.TUI.App{
         current_screen: :post_composer,
         current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-        current_thread: %{id: "t1", title: "Hello"},
+        current_thread: %{id: "t1", title: "Hello", board_id: "b1"},
         session_context: %{domain: %{posts: FakePosts}},
         terminal_size: {80, 24},
         composer_draft: nil,

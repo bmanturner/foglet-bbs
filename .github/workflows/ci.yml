@@ -39,10 +39,19 @@ jobs:
           path: _build
           key: ${{ runner.os }}-build-${{ hashFiles('mix.lock') }}
 
+      - name: Cache dialyzer PLTs
+        uses: actions/cache@v4
+        with:
+          path: _build/dev/*.plt*
+          key: ${{ runner.os }}-plt-${{ hashFiles('mix.lock') }}
+
       - run: mix deps.get
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
       - run: mix credo --strict
+      - run: mix hex.audit
+      - run: mix sobelow --exit Low
+      - run: mix dialyzer
       - run: mix test
         env:
           DATABASE_URL: ecto://postgres:postgres@localhost/foglet_bbs_test

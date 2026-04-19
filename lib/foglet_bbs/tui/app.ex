@@ -340,14 +340,7 @@ defmodule Foglet.TUI.App do
 
     task =
       Command.task(fn ->
-        boards =
-          if function_exported?(boards_mod, :list_subscribed_boards, 1) do
-            boards_mod.list_subscribed_boards(user)
-          else
-            []
-          end
-
-        {:boards_loaded, boards}
+        {:boards_loaded, boards_mod.list_subscribed_boards(user)}
       end)
 
     {state, [task]}
@@ -364,14 +357,7 @@ defmodule Foglet.TUI.App do
 
     task =
       Command.task(fn ->
-        boards =
-          if function_exported?(boards_mod, :list_subscribed_boards, 1) do
-            boards_mod.list_subscribed_boards(user)
-          else
-            []
-          end
-
-        {:boards_for_new_thread_loaded, boards}
+        {:boards_for_new_thread_loaded, boards_mod.list_subscribed_boards(user)}
       end)
 
     {state, [task]}
@@ -537,9 +523,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp maybe_flush_board_pointer(boards_mod, user_id, ctx) do
-    if ctx[:board_id] &&
-         user_id &&
-         function_exported?(boards_mod, :advance_board_read_pointer, 3) do
+    if ctx[:board_id] && user_id do
       boards_mod.advance_board_read_pointer(
         user_id,
         ctx[:board_id],
@@ -549,10 +533,8 @@ defmodule Foglet.TUI.App do
   end
 
   defp maybe_flush_thread_pointer(threads_mod, user_id, ctx) do
-    if ctx[:thread_id] &&
-         user_id &&
-         function_exported?(threads_mod, :advance_read_pointer, 3) do
-      threads_mod.advance_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
+    if ctx[:thread_id] && user_id do
+      threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
     end
   end
 
@@ -565,10 +547,12 @@ defmodule Foglet.TUI.App do
   end
 
   # Process the command list returned by a screen's handle_key/2.
-  # I/O dispatch tuples are routed through do_update/2 to produce real
-  # Command.task structs with proper access to state (user, session_context,
-  # domain overrides). Multiple I/O commands accumulate their tasks.
-  # Plain %Command{} structs pass through unchanged.
+  # Plain %Command{} structs pass through to Raxol unchanged. {:terminate, _}
+  # becomes Command.quit(). Every other atom-keyed tuple is routed through
+  # do_update/2 so it gets the same state access as a top-level update call —
+  # this covers both I/O tuples ({:load_boards}, {:load_posts, id}, ...) and
+  # state-transition tuples ({:promote_session, user}, {:register_wizard, ev}).
+  # Unknown messages hit do_update/2's catch-all and become a no-op.
   defp process_screen_commands(state, commands) do
     Enum.reduce(commands, {state, []}, fn cmd, {acc_state, acc_cmds} ->
       case cmd do
@@ -578,22 +562,11 @@ defmodule Foglet.TUI.App do
         {:terminate, _} ->
           {acc_state, acc_cmds ++ [Command.quit()]}
 
-        tuple
-        when is_tuple(tuple) and
-               elem(tuple, 0) in [
-                 :load_boards,
-                 :load_boards_for_new_thread,
-                 :load_threads,
-                 :load_posts,
-                 :flush_read_pointers
-               ] ->
+        tuple when is_tuple(tuple) and tuple_size(tuple) >= 1 and is_atom(elem(tuple, 0)) ->
           {next_state, new_cmds} = do_update(tuple, acc_state)
           {next_state, acc_cmds ++ new_cmds}
 
         other ->
-          # Non-I/O tuples (e.g. {:navigate, :screen}) should not appear as
-          # commands — screens apply those transitions directly to state before
-          # returning. Log and skip.
           require Logger
           Logger.warning("[TUI.App] unexpected command from screen: #{inspect(other)}")
           {acc_state, acc_cmds}
