@@ -259,6 +259,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
 
       assert new_state.modal != nil, "Expected a modal to be set for pending user"
+
       assert new_state.screen_state == %{},
              "Expected screen_state to be cleared when pending modal is shown, got: #{inspect(new_state.screen_state)}"
     end
@@ -281,6 +282,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
 
       assert new_state.modal != nil, "Expected a modal to be set for suspended user"
+
       assert new_state.screen_state == %{},
              "Expected screen_state to be cleared when suspended modal is shown, got: #{inspect(new_state.screen_state)}"
     end

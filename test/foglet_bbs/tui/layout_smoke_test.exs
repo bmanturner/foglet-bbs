@@ -591,6 +591,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       title_input: "Hello",
       body_input_state: body_input_st,
       focused: :title,
+      mode: :edit,
       error: nil
     }
 

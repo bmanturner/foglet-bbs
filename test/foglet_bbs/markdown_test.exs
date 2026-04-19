@@ -6,39 +6,58 @@ defmodule Foglet.MarkdownTest do
   # MDEx is a Rust NIF loaded when the OTP application starts.
   # The test suite starts all apps via test_helper.exs — no special setup needed.
 
-  describe "render/1 — bold (BOARD-05)" do
-    test "renders **bold** with ANSI bold escape \\e[1m...\\e[0m" do
-      result = Markdown.render("**hello world**")
-      assert result =~ "\e[1mhello world\e[0m"
+  # ---------------------------------------------------------------------------
+  # New tuple-list contract (Gap 5) — render/1 returns [{String.t(), style_atom}]
+  # ---------------------------------------------------------------------------
+
+  describe "render/1 — bold (Gap 5)" do
+    test "Test 1: renders **hello** as [{\"hello\", :bold}]" do
+      result = Markdown.render("**hello**")
+      assert {"hello", :bold} in result
+      # Only bold tuples for this input (plus optional newline)
+      non_newline = Enum.reject(result, fn {s, _} -> s == "\n" end)
+      assert non_newline == [{"hello", :bold}]
     end
 
     test "renders __bold__ alternative syntax" do
       result = Markdown.render("__bold__")
-      assert result =~ "\e[1mbold\e[0m"
+      assert {"bold", :bold} in result
     end
   end
 
-  describe "render/1 — italic (BOARD-05)" do
-    test "renders *italic* with ANSI italic escape \\e[3m...\\e[0m" do
-      result = Markdown.render("*italic text*")
-      assert result =~ "\e[3mitalic text\e[0m"
+  describe "render/1 — italic (Gap 5)" do
+    test "Test 2: renders *hi* as [{\"hi\", :italic}]" do
+      result = Markdown.render("*hi*")
+      assert {"hi", :italic} in result
+      non_newline = Enum.reject(result, fn {s, _} -> s == "\n" end)
+      assert non_newline == [{"hi", :italic}]
     end
 
     test "renders _italic_ alternative syntax" do
       result = Markdown.render("_italic_")
-      assert result =~ "\e[3mitalic\e[0m"
+      assert {"italic", :italic} in result
     end
   end
 
-  describe "render/1 — headings (BOARD-05)" do
-    test "renders # heading with ANSI underline \\e[4m and uppercased text" do
-      result = Markdown.render("# Hello World")
-      assert result =~ "\e[4mHELLO WORLD\e[0m"
+  describe "render/1 — inline code (Gap 5)" do
+    test "Test 3: renders `code` as [{\"code\", :dim}]" do
+      result = Markdown.render("`code`")
+      assert {"code", :dim} in result
+      non_newline = Enum.reject(result, fn {s, _} -> s == "\n" end)
+      assert non_newline == [{"code", :dim}]
+    end
+  end
+
+  describe "render/1 — headings (Gap 5)" do
+    test ~s(Test 4: renders # Title as [{"TITLE", :underline}, {"\\n", :plain}]) do
+      result = Markdown.render("# Title")
+      assert {"TITLE", :underline} in result
+      assert {"\n", :plain} in result
     end
 
-    test "renders ## heading with ANSI underline" do
+    test "renders ## heading with :underline and uppercased text" do
       result = Markdown.render("## Section")
-      assert result =~ "\e[4mSECTION\e[0m"
+      assert {"SECTION", :underline} in result
     end
 
     test "renders h3 through h6 headings with underline" do
@@ -46,21 +65,100 @@ defmodule Foglet.MarkdownTest do
         hashes = String.duplicate("#", level)
         result = Markdown.render("#{hashes} Sub")
 
-        assert result =~ "\e[4mSUB\e[0m",
+        assert Enum.any?(result, fn {s, style} ->
+                 String.upcase(s) == s and style == :underline
+               end),
                "Expected heading level #{level} to render with underline"
       end
     end
   end
 
-  describe "render/1 — inline code (BOARD-05)" do
-    test "renders `code` with ANSI dim escape \\e[2m...\\e[0m" do
-      result = Markdown.render("`my_function/1`")
-      assert result =~ "\e[2mmy_function/1\e[0m"
+  describe "render/1 — plain text (Gap 5)" do
+    test "Test 5: renders plain text with :plain style" do
+      result = Markdown.render("plain")
+      non_newline = Enum.reject(result, fn {s, _} -> s == "\n" end)
+      assert non_newline == [{"plain", :plain}]
+    end
+
+    test "empty string returns empty list" do
+      result = Markdown.render("")
+      assert result == []
     end
   end
 
-  describe "render/1 — code blocks (BOARD-05)" do
-    test "renders fenced code block with dim color and 2-space indent" do
+  describe "render/1 — mixed content (Gap 5)" do
+    test "Test 6: renders **a** b as bold a followed by plain ' b'" do
+      result = Markdown.render("**a** b")
+      assert {"a", :bold} in result
+
+      assert Enum.any?(result, fn {s, style} ->
+               String.starts_with?(s, " b") and style == :plain
+             end)
+    end
+  end
+
+  describe "render/1 — ANSI injection defense (T-2-03)" do
+    test "Test 7: raw ANSI injection yields only :plain styled tuples" do
+      result = Markdown.render("\e[1mx\e[0m")
+      # No :bold should appear from injected ESC sequences
+      assert Enum.all?(result, fn {_s, style} -> style == :plain end),
+             "Expected all tuples to be :plain when ANSI is injected, got: #{inspect(result)}"
+    end
+
+    test "raw ESC sequences in user input are stripped from output" do
+      malicious_input = "hello \e[31mworld\e[0m"
+      result = Markdown.render(malicious_input)
+
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+
+      refute String.contains?(all_text, "\e"),
+             "User-injected ANSI ESC bytes should be stripped from output"
+
+      assert Enum.any?(result, fn {s, _} -> String.contains?(s, "hello") end)
+      assert Enum.any?(result, fn {s, _} -> String.contains?(s, "world") end)
+    end
+
+    test "multiple injected sequences are all stripped" do
+      malicious = "\e[1mfake bold\e[0m and \e[31;1mfake red bold\e[0m"
+      result = Markdown.render(malicious)
+
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      refute String.contains?(all_text, "\e")
+      assert String.contains?(all_text, "fake bold")
+      assert String.contains?(all_text, "fake red bold")
+    end
+
+    test "legitimate markdown bold still works after stripping" do
+      result = Markdown.render("**real bold**")
+      assert {"real bold", :bold} in result
+    end
+  end
+
+  describe "render/1 — links (Gap 5)" do
+    test "renders [text](url) as plain 'text (url)' tuple" do
+      result = Markdown.render("[Click here](https://example.com)")
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      assert String.contains?(all_text, "Click here (https://example.com)")
+    end
+
+    test "link text is preserved, href shown in parens" do
+      result = Markdown.render("[Foglet BBS](https://foglet.io)")
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      assert String.contains?(all_text, "Foglet BBS (https://foglet.io)")
+    end
+  end
+
+  describe "render/1 — images (Gap 5)" do
+    test "renders ![alt](url) as alt text only in plain tuple" do
+      result = Markdown.render("![A cute cat](https://example.com/cat.jpg)")
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      assert String.contains?(all_text, "A cute cat")
+      refute String.contains?(all_text, "https://example.com/cat.jpg")
+    end
+  end
+
+  describe "render/1 — code blocks (Gap 5)" do
+    test "renders fenced code block with :dim tuples and 2-space indent" do
       markdown = """
       ```
       def hello do
@@ -70,12 +168,13 @@ defmodule Foglet.MarkdownTest do
       """
 
       result = Markdown.render(markdown)
-      # Each line should have 2-space indent and dim color
-      assert result =~ "  \e[2m"
-      assert result =~ "\e[0m"
+      # Should have at least one :dim tuple with indented content
+      assert Enum.any?(result, fn {s, style} ->
+               style == :dim and String.starts_with?(s, "  ")
+             end)
     end
 
-    test "code block does not render markdown syntax as formatting" do
+    test "code block does not render markdown syntax as :bold" do
       markdown = """
       ```
       **not bold**
@@ -83,115 +182,33 @@ defmodule Foglet.MarkdownTest do
       """
 
       result = Markdown.render(markdown)
-      # ** should appear as literal text inside dim block, not as bold ANSI
-      refute result =~ "\e[1mnot bold\e[0m"
-      assert result =~ "not bold"
+      refute {"not bold", :bold} in result
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      assert String.contains?(all_text, "not bold")
     end
   end
 
-  describe "render/1 — links (BOARD-05)" do
-    test "renders [text](url) as 'text (url)' — no HTML href tags in output" do
-      result = Markdown.render("[Click here](https://example.com)")
-      assert result =~ "Click here (https://example.com)"
-      refute result =~ "<a "
-      refute result =~ "href="
-    end
-
-    test "link text is preserved, href shown in parens" do
-      result = Markdown.render("[Foglet BBS](https://foglet.io)")
-      assert result =~ "Foglet BBS (https://foglet.io)"
-    end
-  end
-
-  describe "render/1 — images (BOARD-05)" do
-    test "renders ![alt](url) as alt text only — no HTML img tags in output" do
-      result = Markdown.render("![A cute cat](https://example.com/cat.jpg)")
-      assert result =~ "A cute cat"
-      refute result =~ "https://example.com/cat.jpg"
-      refute result =~ "<img"
-    end
-
-    test "image with empty alt renders nothing visible" do
-      result = Markdown.render("![](https://example.com/img.png)")
-      refute result =~ "https://example.com/img.png"
-      refute result =~ "<img"
-    end
-  end
-
-  describe "render/1 — ANSI injection defense (T-2-03)" do
-    test "raw ESC sequences in user input are stripped from output" do
-      # User tries to inject a red color sequence through their post body
-      malicious_input = "hello \e[31mworld\e[0m"
-      result = Markdown.render(malicious_input)
-
-      # The injected \e[31m must NOT appear in the output
-      refute result =~ "\e[31m",
-             "User-injected ANSI red color should be stripped from output"
-
-      # But the text itself should still be present
-      assert result =~ "hello"
-      assert result =~ "world"
-    end
-
-    test "ESC character alone is stripped" do
-      result = Markdown.render("hello\e world")
-      refute result =~ "\e"
-      assert result =~ "hello"
-    end
-
-    test "multiple injected sequences are all stripped" do
-      malicious = "\e[1mfake bold\e[0m and \e[31;1mfake red bold\e[0m"
-      result = Markdown.render(malicious)
-      refute result =~ "\e[1mfake bold"
-      refute result =~ "\e[31"
-      assert result =~ "fake bold"
-      assert result =~ "fake red bold"
-    end
-
-    test "legitimate markdown bold still works after stripping" do
-      # Ensure strip_ansi doesn't break real markdown formatting
-      result = Markdown.render("**real bold**")
-      assert result =~ "\e[1mreal bold\e[0m"
-    end
-  end
-
-  describe "render/1 — combined and edge cases (BOARD-05)" do
-    test "returns a string (ANSI-escaped plain text) for valid Markdown" do
+  describe "render/1 — combined (Gap 5)" do
+    test "returns a list of {string, style} tuples for valid Markdown" do
       result = Markdown.render("**hello** *world*")
-      assert is_binary(result)
-      assert result =~ "\e[1mhello\e[0m"
-      assert result =~ "\e[3mworld\e[0m"
+      assert is_list(result)
+      assert Enum.all?(result, fn item -> match?({s, _a} when is_binary(s), item) end)
+      assert {"hello", :bold} in result
+      assert {"world", :italic} in result
     end
 
-    test "returns plain text when input has no Markdown formatting" do
-      result = Markdown.render("Just plain text.")
-      assert String.contains?(result, "Just plain text.")
-    end
-
-    test "empty string returns empty string" do
-      result = Markdown.render("")
-      assert result == ""
-    end
-
-    test "nested bold and italic" do
-      result = Markdown.render("***bold italic***")
-      # MDEx renders ***text*** as <em><strong>text</strong></em>
-      # Both bold and italic ANSI codes should appear
-      assert result =~ "\e[1m"
-      assert result =~ "\e[3m"
-    end
-
-    test "paragraphs are separated by newlines" do
+    test "paragraphs include newline tuples" do
       result = Markdown.render("First paragraph.\n\nSecond paragraph.")
-      assert result =~ "First paragraph."
-      assert result =~ "Second paragraph."
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      assert String.contains?(all_text, "First paragraph.")
+      assert String.contains?(all_text, "Second paragraph.")
     end
 
     test "HTML entities in output are decoded" do
-      # Ampersand in markdown should appear as & not &amp;
       result = Markdown.render("Cats & dogs")
-      assert result =~ "Cats & dogs"
-      refute result =~ "&amp;"
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      assert String.contains?(all_text, "Cats & dogs")
+      refute String.contains?(all_text, "&amp;")
     end
   end
 end

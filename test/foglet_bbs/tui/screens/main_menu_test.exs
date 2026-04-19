@@ -43,9 +43,9 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   # Returns true if the element looks like a divider primitive.
   defp divider?(el) when is_map(el) do
+    # Raxol emits dividers as %{type: :line} or %{type: :border_line} in some versions.
     Map.get(el, :type) == :divider or
       (Map.get(el, :type) == :view and Map.get(el, :view_type) == :divider) or
-      # Raxol emits dividers as %{type: :line} or %{type: :border_line} in some versions.
       Map.get(el, :type) in [:line, :border_line, :divider, :horizontal_rule]
   end
 

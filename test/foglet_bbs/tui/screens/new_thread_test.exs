@@ -95,6 +95,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       title_input: "",
       body_input_state: body_input,
       focused: :title,
+      mode: :edit,
       error: nil
     }
 
@@ -229,13 +230,42 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(new_state).focused == :body
   end
 
-  test "Tab switches focus from :body to :title" do
+  test "Tab on :body toggles mode to :preview (Gap 4 — Test 8)" do
+    state = compose_state()
+    # Advance focus to :body first
+    {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
+    assert get_ss(s1).focused == :body
+    assert get_ss(s1).mode == :edit
+
+    # Tab on body toggles mode, does NOT switch focus back to :title
+    {:update, s2, _} = NewThread.handle_key(%{key: :tab}, s1)
+    assert get_ss(s2).mode == :preview
+    assert get_ss(s2).focused == :body
+  end
+
+  test "Tab on :body in :preview mode toggles back to :edit (Gap 4 — Test 9)" do
     state = compose_state()
     {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
     assert get_ss(s1).focused == :body
 
+    # First Tab: :edit -> :preview
     {:update, s2, _} = NewThread.handle_key(%{key: :tab}, s1)
-    assert get_ss(s2).focused == :title
+    assert get_ss(s2).mode == :preview
+
+    # Second Tab: :preview -> :edit
+    {:update, s3, _} = NewThread.handle_key(%{key: :tab}, s2)
+    assert get_ss(s3).mode == :edit
+    assert get_ss(s3).focused == :body
+  end
+
+  test "Tab on :title advances focus to :body and does NOT toggle mode (Gap 4 — Test 10)" do
+    state = compose_state()
+    assert get_ss(state).focused == :title
+    assert get_ss(state).mode == :edit
+
+    {:update, new_state, _} = NewThread.handle_key(%{key: :tab}, state)
+    assert get_ss(new_state).focused == :body
+    assert get_ss(new_state).mode == :edit
   end
 
   test "Ctrl+C cancels from compose step to :main_menu" do
@@ -431,6 +461,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       title_input: "My Thread",
       body_input_state: fresh_input("Hello"),
       focused: :title,
+      mode: :edit,
       error: nil
     }
 
@@ -457,6 +488,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       title_input: "My Thread",
       body_input_state: fresh_input("Hello"),
       focused: :title,
+      mode: :edit,
       error: nil
     }
 

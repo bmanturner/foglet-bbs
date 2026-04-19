@@ -49,22 +49,29 @@ defmodule Foglet.TUI.Widgets.ModalTest do
   describe "word-wrap (Gap 3a)" do
     test "Test A: 120-char message is wrapped so no single text line exceeds 50 chars" do
       # Build a 120-char message with spaces so word_wrap can break it
-      msg = "This is a very long pending approval message that definitely exceeds fifty characters in total length yes."
+      msg =
+        "This is a very long pending approval message that definitely exceeds fifty characters in total length yes."
 
       tree = Modal.render(%{type: :error, message: msg})
       all_text = collect_text_content(tree)
 
       # Filter out the title (" Error "), key hint ("[Enter] OK"), and empty strings
       message_lines =
-        all_text
-        |> Enum.reject(fn s ->
+        Enum.reject(all_text, fn s ->
           s == "" or
-            String.trim(s) in ["Error", "Info", "Warning", "Confirm", "[Enter] OK", "[Y] Yes   [N] No"] or
-            String.starts_with?(String.trim(s), " ") and String.ends_with?(String.trim(s), " ")
+            String.trim(s) in [
+              "Error",
+              "Info",
+              "Warning",
+              "Confirm",
+              "[Enter] OK",
+              "[Y] Yes   [N] No"
+            ] or
+            (String.starts_with?(String.trim(s), " ") and String.ends_with?(String.trim(s), " "))
         end)
-        |> Enum.reject(&(&1 == "[Enter] OK"))
 
-      assert message_lines != [], "Expected wrapped message lines in tree, found none. All text: #{inspect(all_text)}"
+      assert message_lines != [],
+             "Expected wrapped message lines in tree, found none. All text: #{inspect(all_text)}"
 
       for line <- message_lines do
         assert String.length(line) <= 50,

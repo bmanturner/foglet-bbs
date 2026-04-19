@@ -49,7 +49,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
             [render_input(input_st, state)]
 
           :preview ->
-            [text(render_preview(state, draft), fg: :green)]
+            [render_markdown_tuples(render_preview(state, draft))]
         end ++
         if ss.error do
           [text(""), text(ss.error, fg: :red)]
@@ -296,7 +296,22 @@ defmodule Foglet.TUI.Screens.PostComposer do
     if function_exported?(markdown_mod, :render, 1) do
       markdown_mod.render(draft)
     else
-      draft
+      [{draft, :plain}]
+    end
+  end
+
+  # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
+  # a column of text/2 elements styled appropriately.
+  defp render_markdown_tuples(tuples) when is_list(tuples) do
+    column style: %{gap: 0} do
+      Enum.map(tuples, fn
+        {s, :bold} -> text(s, style: [:bold], fg: :green)
+        {s, :italic} -> text(s, style: [:italic], fg: :green)
+        {s, :dim} -> text(s, style: [:dim], fg: :green)
+        {s, :underline} -> text(s, style: [:underline], fg: :green)
+        {s, :plain} -> text(s, fg: :green)
+        {s, _} -> text(s, fg: :green)
+      end)
     end
   end
 

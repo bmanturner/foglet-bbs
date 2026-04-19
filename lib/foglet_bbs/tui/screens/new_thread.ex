@@ -50,6 +50,7 @@ defmodule Foglet.TUI.Screens.NewThread do
       title_input: "",
       body_input_state: body_input_state,
       focused: :title,
+      mode: :edit,
       error: nil
     }
   end
@@ -114,6 +115,19 @@ defmodule Foglet.TUI.Screens.NewThread do
     end)
   end
 
+  defp compose_tab_hint(%{focused: :body, mode: :edit}), do: "Preview"
+  defp compose_tab_hint(%{focused: :body, mode: :preview}), do: "Edit"
+  defp compose_tab_hint(_ss), do: "Switch field"
+
+  defp render_body_section(state, ss) do
+    body_focused = ss.focused == :body
+
+    case ss.mode do
+      :edit -> render_body(ss.body_input_state, body_focused)
+      :preview -> render_markdown_tuples(render_preview_text(state, ss.body_input_state.value))
+    end
+  end
+
   defp render_compose_step(state, ss) do
     board = ss.board
     board_name = (board && board.name) || "?"
@@ -125,8 +139,7 @@ defmodule Foglet.TUI.Screens.NewThread do
         text("Title: #{ss.title_input}", fg: :green)
       end
 
-    body_focused = ss.focused == :body
-    body_col = render_body(ss.body_input_state, body_focused)
+    body_section = render_body_section(state, ss)
 
     error_items =
       if ss.error do
@@ -150,11 +163,11 @@ defmodule Foglet.TUI.Screens.NewThread do
               title_line,
               text(""),
               text("Body:", fg: :green),
-              body_col
+              body_section
             ] ++ error_items ++ [text("")]
           end,
           KeyBar.render([
-            {"Tab", "Switch field"},
+            {"Tab", compose_tab_hint(ss)},
             {"Ctrl+S", "Submit"},
             {"Ctrl+C", "Cancel"}
           ])
@@ -191,6 +204,34 @@ defmodule Foglet.TUI.Screens.NewThread do
         # Use a placeholder space for empty lines so the element is non-empty.
         display = if rendered == "", do: " ", else: rendered
         text(display, fg: :green)
+      end)
+    end
+  end
+
+  # Returns a [{text, style_atom}] list for the given draft string.
+  # Mirrors PostComposer.render_preview/2 — uses injected markdown mod if available.
+  defp render_preview_text(state, draft) do
+    sc = Map.get(state, :session_context) || %{}
+    markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
+
+    if function_exported?(markdown_mod, :render, 1) do
+      markdown_mod.render(draft)
+    else
+      [{draft, :plain}]
+    end
+  end
+
+  # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
+  # a column of text/2 elements styled appropriately.
+  defp render_markdown_tuples(tuples) when is_list(tuples) do
+    column style: %{gap: 0} do
+      Enum.map(tuples, fn
+        {s, :bold} -> text(s, style: [:bold], fg: :green)
+        {s, :italic} -> text(s, style: [:italic], fg: :green)
+        {s, :dim} -> text(s, style: [:dim], fg: :green)
+        {s, :underline} -> text(s, style: [:underline], fg: :green)
+        {s, :plain} -> text(s, fg: :green)
+        {s, _} -> text(s, fg: :green)
       end)
     end
   end
@@ -273,8 +314,15 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp handle_compose_key(%{key: :tab}, state, ss) do
-    new_focus = if ss.focused == :title, do: :body, else: :title
-    {:update, put_ss(state, %{ss | focused: new_focus}), []}
+    if ss.focused == :body do
+      # Tab on body toggles edit/preview mode (Gap 4 — matches PostComposer D-28).
+      new_mode = if ss.mode == :edit, do: :preview, else: :edit
+      {:update, put_ss(state, %{ss | mode: new_mode}), []}
+    else
+      # Tab on title advances focus to body (existing behaviour).
+      new_focus = if ss.focused == :title, do: :body, else: :title
+      {:update, put_ss(state, %{ss | focused: new_focus}), []}
+    end
   end
 
   defp handle_compose_key(%{key: :char, char: "s", ctrl: true}, state, ss) do

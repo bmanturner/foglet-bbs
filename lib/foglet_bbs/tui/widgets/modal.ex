@@ -74,10 +74,14 @@ defmodule Foglet.TUI.Widgets.Modal do
     |> String.split(~r/\s+/, trim: true)
     |> Enum.reduce([""], fn word, [current | rest] ->
       cond do
-        current == "" -> [word | rest]
+        current == "" ->
+          [word | rest]
+
         String.length(current) + 1 + String.length(word) <= max_width ->
           ["#{current} #{word}" | rest]
-        true -> [word, current | rest]
+
+        true ->
+          [word, current | rest]
       end
     end)
     |> Enum.reverse()

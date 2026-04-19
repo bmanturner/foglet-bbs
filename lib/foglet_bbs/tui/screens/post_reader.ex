@@ -180,12 +180,13 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp render_post_items(state, post, idx, total) do
     sc = Map.get(state, :session_context) || %{}
     markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
+    body = post.body || ""
 
     rendered =
       if function_exported?(markdown_mod, :render, 1) do
-        markdown_mod.render(post.body || "")
+        render_markdown_tuples(markdown_mod.render(body))
       else
-        post.body || ""
+        text(body, fg: :green)
       end
 
     author = get_post_author(post)
@@ -194,8 +195,23 @@ defmodule Foglet.TUI.Screens.PostReader do
       text("Post #{idx + 1} of #{total}", style: [:dim]),
       text("By @#{author} at #{post.inserted_at}", style: [:dim]),
       text(""),
-      text(rendered, fg: :green)
+      rendered
     ]
+  end
+
+  # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
+  # a column of text/2 elements styled appropriately.
+  defp render_markdown_tuples(tuples) when is_list(tuples) do
+    column style: %{gap: 0} do
+      Enum.map(tuples, fn
+        {s, :bold} -> text(s, style: [:bold], fg: :green)
+        {s, :italic} -> text(s, style: [:italic], fg: :green)
+        {s, :dim} -> text(s, style: [:dim], fg: :green)
+        {s, :underline} -> text(s, style: [:underline], fg: :green)
+        {s, :plain} -> text(s, fg: :green)
+        {s, _} -> text(s, fg: :green)
+      end)
+    end
   end
 
   defp get_post_author(%{user: %{handle: h}}), do: h

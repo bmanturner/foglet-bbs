@@ -12,7 +12,8 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   end
 
   defmodule FakeMarkdown do
-    def render(text), do: "MD[" <> text <> "]"
+    # Returns [{text, style_atom}] tuples per the Foglet.Markdown.render/1 contract.
+    def render(text), do: [{"MD[" <> text <> "]", :plain}]
   end
 
   # Build a fresh MultiLineInput state for tests.
