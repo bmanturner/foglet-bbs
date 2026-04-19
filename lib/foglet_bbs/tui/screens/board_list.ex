@@ -30,14 +30,14 @@ defmodule Foglet.TUI.Screens.BoardList do
   end
 
   defp render_board_rows(state, _ss) when state.board_list == [] do
-    [text("No boards subscribed. Ask your sysop to subscribe you.", color: :yellow)]
+    [text("No boards subscribed. Ask your sysop to subscribe you.", fg: :yellow)]
   end
 
   defp render_board_rows(state, ss) do
     boards = state.board_list || []
 
     if boards == [] do
-      [text("Loading...", color: :bright_black)]
+      [text("Loading...", style: [:dim])]
     else
       Enum.with_index(boards)
       |> Enum.map(fn {board, idx} ->
@@ -50,8 +50,12 @@ defmodule Foglet.TUI.Screens.BoardList do
     marker = if idx == selected_index, do: "> ", else: "  "
     unread = board_unread(board)
     unread_str = if unread > 0, do: " (#{unread} unread)", else: ""
-    color = if idx == selected_index, do: :bright_green, else: :green
-    text("#{marker}#{board.name}#{unread_str}", color: color)
+
+    if idx == selected_index do
+      text("#{marker}#{board.name}#{unread_str}", fg: :green, style: [:bold])
+    else
+      text("#{marker}#{board.name}#{unread_str}", fg: :green)
+    end
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

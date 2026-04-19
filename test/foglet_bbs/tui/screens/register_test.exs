@@ -12,7 +12,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       current_screen: :register,
       session_context: %{registration_mode: mode},
       terminal_size: {80, 24},
-      register_wizard: %{mode: mode, step: step, data: %{}, error: nil}
+      register_wizard: %{mode: mode, step: step, data: %{}, error: nil, current_input: ""}
     }
     |> Map.from_struct()
   end
@@ -102,6 +102,115 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       {new_state, _} = Register.handle_wizard_event({:cancel}, state)
       assert new_state.current_screen == :login
       assert new_state.register_wizard == nil
+    end
+  end
+
+  describe "handle_key/2 — character input" do
+    test "typing a single char appends to current_input" do
+      state = base_state("open")
+      {:update, new_state, []} = Register.handle_key(%{key: "a"}, state)
+      assert new_state.register_wizard.current_input == "a"
+    end
+
+    test "typing multiple chars builds up current_input" do
+      state = base_state("open")
+      {:update, s1, []} = Register.handle_key(%{key: "a"}, state)
+      {:update, s2, []} = Register.handle_key(%{key: "l"}, s1)
+      {:update, s3, []} = Register.handle_key(%{key: "i"}, s2)
+      assert s3.register_wizard.current_input == "ali"
+    end
+
+    test "space key appends a literal space to current_input" do
+      # 'space' is the normalized form of the spacebar key (see #16 for normalization fix)
+      state = base_state("open")
+      {:update, s1, []} = Register.handle_key(%{key: "h"}, state)
+      {:update, s2, []} = Register.handle_key(%{key: "space"}, s1)
+      {:update, s3, []} = Register.handle_key(%{key: "i"}, s2)
+      assert s3.register_wizard.current_input == "h i"
+    end
+
+    test "backspace removes the last char from current_input" do
+      state = %{
+        base_state("open")
+        | register_wizard: %{
+            mode: "open",
+            step: :handle,
+            data: %{},
+            error: nil,
+            current_input: "abc"
+          }
+      }
+
+      {:update, new_state, []} = Register.handle_key(%{key: "backspace"}, state)
+      assert new_state.register_wizard.current_input == "ab"
+    end
+
+    test "backspace on empty current_input is a no-op (stays empty)" do
+      state = base_state("open")
+      {:update, new_state, []} = Register.handle_key(%{key: "backspace"}, state)
+      assert new_state.register_wizard.current_input == ""
+    end
+
+    test "enter dispatches {:register_wizard, {:submit_step, step, value}} as a command" do
+      state = %{
+        base_state("open")
+        | register_wizard: %{
+            mode: "open",
+            step: :handle,
+            data: %{},
+            error: nil,
+            current_input: "myhandle"
+          }
+      }
+
+      {:update, _new_state, cmds} = Register.handle_key(%{key: "enter"}, state)
+      assert Enum.member?(cmds, {:register_wizard, {:submit_step, :handle, "myhandle"}})
+    end
+
+    test "enter with empty input dispatches submit_step with empty string" do
+      state = base_state("open")
+      {:update, _new_state, cmds} = Register.handle_key(%{key: "enter"}, state)
+      assert Enum.member?(cmds, {:register_wizard, {:submit_step, :handle, ""}})
+    end
+
+    test "escape cancels wizard and returns to :login" do
+      state = base_state("open")
+      {:update, new_state, []} = Register.handle_key(%{key: "escape"}, state)
+      assert new_state.current_screen == :login
+      assert new_state.register_wizard == nil
+    end
+
+    test "multi-char named keys (e.g. 'up') return :no_match" do
+      state = base_state("open")
+      assert :no_match = Register.handle_key(%{key: "up"}, state)
+    end
+  end
+
+  describe "handle_wizard_event/2 — step advancement resets current_input" do
+    test "advancing from :handle to :email resets current_input to empty" do
+      state = base_state("open")
+      {new_state, _} = Register.handle_wizard_event({:submit_step, :handle, "myhandle"}, state)
+      assert new_state.register_wizard.step == :email
+      assert new_state.register_wizard.current_input == ""
+    end
+
+    test "advancing from :email to :password resets current_input to empty" do
+      state = %{
+        base_state("open")
+        | register_wizard: %{
+            mode: "open",
+            step: :email,
+            data: %{handle: "myhandle"},
+            error: nil,
+            current_input: "typed@email.com"
+          }
+      }
+
+      {new_state, _} =
+        Register.handle_wizard_event({:submit_step, :email, "typed@email.com"}, state)
+
+      assert new_state.register_wizard.step == :password
+      assert new_state.register_wizard.current_input == ""
     end
   end
 end

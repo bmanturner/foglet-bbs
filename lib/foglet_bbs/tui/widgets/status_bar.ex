@@ -12,8 +12,8 @@ defmodule Foglet.TUI.Widgets.StatusBar do
 
     box(
       children: [
-        text("Foglet BBS — #{location}", color: :green),
-        text(" | #{left}", color: :bright_black)
+        text("Foglet BBS — #{location}", fg: :green),
+        text(" | #{left}", style: [:dim])
       ]
     )
   end

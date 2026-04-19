@@ -23,9 +23,9 @@ defmodule Foglet.TUI.Screens.Verify do
 
     status_item =
       if cooldown?(vs) do
-        text("Too many attempts. Please wait.", color: :red)
+        text("Too many attempts. Please wait.", fg: :red)
       else
-        text("Attempts: #{vs.attempts}/#{@max_attempts}", color: :bright_black)
+        text("Attempts: #{vs.attempts}/#{@max_attempts}", style: [:dim])
       end
 
     panel(
@@ -34,9 +34,9 @@ defmodule Foglet.TUI.Screens.Verify do
       children: [
         box(
           children: [
-            text("Enter the 6-character code emailed to you:", color: :green),
+            text("Enter the 6-character code emailed to you:", fg: :green),
             text(""),
-            text("  [#{pad_buffer(vs.buffer)}]", color: :green),
+            text_input(value: vs.buffer, placeholder: "XXXXXX"),
             text(""),
             status_item
           ]
@@ -71,21 +71,29 @@ defmodule Foglet.TUI.Screens.Verify do
   def handle_key(%{key: "R"}, state), do: resend_code(state)
   def handle_key(%{key: "r"}, state), do: resend_code(state)
 
-  def handle_key(%{key: key}, state) when is_binary(key) and byte_size(key) == 1 do
+  # Binary-key catch-all. String.length/1 is NOT guard-safe, so we gate the
+  # single-grapheme check in the body. Multi-char named keys (up, f1, etc.)
+  # that slip through fall to :no_match.
+  def handle_key(%{key: key}, state) when is_binary(key) do
     vs = state.verify_state || %{buffer: "", attempts: 0, cooldown_until: nil}
 
-    if cooldown?(vs) do
-      {:update, %{state | modal: cooldown_modal(vs)}, []}
-    else
-      new_char = String.upcase(key)
-
-      if String.match?(new_char, ~r/\A[A-Z0-9]\z/) and
-           String.length(vs.buffer) < @code_length do
-        new_vs = %{vs | buffer: vs.buffer <> new_char}
-        {:update, %{state | verify_state: new_vs}, []}
-      else
+    cond do
+      String.length(key) != 1 ->
         :no_match
-      end
+
+      cooldown?(vs) ->
+        {:update, %{state | modal: cooldown_modal(vs)}, []}
+
+      true ->
+        new_char = String.upcase(key)
+
+        if String.match?(new_char, ~r/\A[A-Z0-9]\z/) and
+             String.length(vs.buffer) < @code_length do
+          new_vs = %{vs | buffer: vs.buffer <> new_char}
+          {:update, %{state | verify_state: new_vs}, []}
+        else
+          :no_match
+        end
     end
   end
 
@@ -106,10 +114,6 @@ defmodule Foglet.TUI.Screens.Verify do
   def handle_verify_event({:resend}, state), do: resend_code_raw(state)
 
   # --- Private ---
-
-  defp pad_buffer(buf) do
-    buf <> String.duplicate("_", @code_length - String.length(buf))
-  end
 
   defp cooldown?(%{cooldown_until: nil}), do: false
 

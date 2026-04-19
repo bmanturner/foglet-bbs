@@ -31,14 +31,14 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   defp render_thread_rows(state, _ss) when state.current_thread_list == [] do
-    [text("No threads in this board yet. Press [C] to compose.", color: :yellow)]
+    [text("No threads in this board yet. Press [C] to compose.", fg: :yellow)]
   end
 
   defp render_thread_rows(state, ss) do
     sorted = sort_threads(state.current_thread_list || [])
 
     if sorted == [] do
-      [text("Loading...", color: :bright_black)]
+      [text("Loading...", style: [:dim])]
     else
       Enum.with_index(sorted)
       |> Enum.map(fn {thread, idx} -> render_thread_row(thread, idx, ss.selected_index) end)
@@ -50,8 +50,12 @@ defmodule Foglet.TUI.Screens.ThreadList do
     sticky_mark = if thread.sticky, do: "[S] ", else: ""
     unread = Map.get(thread, :unread_count, 0)
     unread_str = if unread > 0, do: " (#{unread})", else: ""
-    color = if idx == selected_index, do: :bright_green, else: :green
-    text("#{marker}#{sticky_mark}#{thread.title}#{unread_str}", color: color)
+
+    if idx == selected_index do
+      text("#{marker}#{sticky_mark}#{thread.title}#{unread_str}", fg: :green, style: [:bold])
+    else
+      text("#{marker}#{sticky_mark}#{thread.title}#{unread_str}", fg: :green)
+    end
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

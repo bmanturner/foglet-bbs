@@ -100,4 +100,61 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       assert new_state.modal.type == :info
     end
   end
+
+  describe "handle_key/2 — resend ordering (r must not append to buffer)" do
+    test "'r' triggers resend, NOT append to buffer", %{state: state} do
+      s = %{state | verify_state: %{buffer: "AB", attempts: 0, cooldown_until: nil}}
+      # resend_code calls Accounts.build_verify_code which needs a real user (set in setup)
+      result = Verify.handle_key(%{key: "r"}, s)
+      # Should be {:update, _, []} from resend — buffer should NOT be "ABR"
+      assert {:update, new_state, []} = result
+
+      refute new_state.verify_state.buffer == "ABR",
+             "'r' was appended to buffer instead of triggering resend"
+    end
+
+    test "'R' triggers resend, NOT append to buffer", %{state: state} do
+      s = %{state | verify_state: %{buffer: "AB", attempts: 0, cooldown_until: nil}}
+      result = Verify.handle_key(%{key: "R"}, s)
+      assert {:update, new_state, []} = result
+      refute new_state.verify_state.buffer == "ABR"
+    end
+  end
+
+  describe "handle_key/2 — char validation and buffer limits" do
+    test "typing 6 valid chars fills the buffer completely", %{state: state} do
+      final =
+        Enum.reduce(~w(A B C 1 2 3), state, fn char, acc ->
+          {:update, new_acc, []} = Verify.handle_key(%{key: char}, acc)
+          new_acc
+        end)
+
+      assert final.verify_state.buffer == "ABC123"
+    end
+
+    test "valid chars are uppercased before appending", %{state: state} do
+      {:update, s1, []} = Verify.handle_key(%{key: "a"}, state)
+      assert s1.verify_state.buffer == "A"
+
+      {:update, s2, []} = Verify.handle_key(%{key: "b"}, s1)
+      assert s2.verify_state.buffer == "AB"
+    end
+
+    test "invalid chars (punctuation, space) are rejected and return :no_match", %{state: state} do
+      assert :no_match = Verify.handle_key(%{key: "!"}, state)
+      assert :no_match = Verify.handle_key(%{key: " "}, state)
+      assert :no_match = Verify.handle_key(%{key: "-"}, state)
+    end
+
+    test "buffer does not exceed 6 chars — 7th valid char is rejected", %{state: state} do
+      filled = %{state | verify_state: %{buffer: "ABCDEF", attempts: 0, cooldown_until: nil}}
+      assert :no_match = Verify.handle_key(%{key: "G"}, filled)
+      assert :no_match = Verify.handle_key(%{key: "1"}, filled)
+    end
+
+    test "multi-char named keys like 'up' return :no_match", %{state: state} do
+      assert :no_match = Verify.handle_key(%{key: "up"}, state)
+      assert :no_match = Verify.handle_key(%{key: "down"}, state)
+    end
+  end
 end

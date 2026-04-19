@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Widgets.KeyBar do
 
     box(
       children: [
-        text(formatted, color: :bright_black)
+        text(formatted, style: [:dim])
       ]
     )
   end

@@ -22,9 +22,9 @@ defmodule Foglet.TUI.Screens.MainMenu do
         StatusBar.render(%{handle: handle, location: "Main Menu"}),
         box(
           children:
-            [text("Welcome back, #{handle || "guest"}.", color: :green), text("")] ++
+            [text("Welcome back, #{handle || "guest"}.", fg: :green), text("")] ++
               Enum.map(@menu_items, fn {k, label} ->
-                text("  [#{k}] #{label}", color: :green)
+                text("  [#{k}] #{label}", fg: :green)
               end)
         ),
         KeyBar.render([{"B", "Boards"}, {"C", "Compose"}, {"Q", "Logout"}])

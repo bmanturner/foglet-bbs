@@ -33,7 +33,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp render_post_content(state, _idx) when state.posts == [] or state.posts == nil do
-    [text("Loading posts...", color: :bright_black)]
+    [text("Loading posts...", style: [:dim])]
   end
 
   defp render_post_content(state, idx) do
@@ -41,7 +41,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     total = length(posts)
 
     if idx >= total do
-      [text("No more posts.", color: :yellow)]
+      [text("No more posts.", fg: :yellow)]
     else
       render_post_items(state, Enum.at(posts, idx), idx, total)
     end
@@ -193,10 +193,10 @@ defmodule Foglet.TUI.Screens.PostReader do
     author = get_post_author(post)
 
     [
-      text("Post #{idx + 1} of #{total}", color: :bright_black),
-      text("By @#{author} at #{post.inserted_at}", color: :bright_black),
+      text("Post #{idx + 1} of #{total}", style: [:dim]),
+      text("By @#{author} at #{post.inserted_at}", style: [:dim]),
       text(""),
-      text(rendered, color: :green)
+      text(rendered, fg: :green)
     ]
   end
 

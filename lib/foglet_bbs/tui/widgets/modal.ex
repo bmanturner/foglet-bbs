@@ -25,8 +25,8 @@ defmodule Foglet.TUI.Widgets.Modal do
       title: title,
       border: :double,
       children: [
-        text(msg, color: color_for(type)),
-        text(key_hint_for(type), color: :bright_black)
+        text(msg, fg: color_for(type)),
+        text(key_hint_for(type), style: [:dim])
       ]
     )
   end

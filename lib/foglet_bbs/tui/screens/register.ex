@@ -27,7 +27,7 @@ defmodule Foglet.TUI.Screens.Register do
 
     error_items =
       if w.error do
-        [text(""), text(w.error, color: :red)]
+        [text(""), text(w.error, fg: :red)]
       else
         []
       end
@@ -39,10 +39,13 @@ defmodule Foglet.TUI.Screens.Register do
         box(
           children:
             [
-              text("Mode: #{w.mode}", color: :bright_black),
+              text("Mode: #{w.mode}", style: [:dim]),
               text(""),
-              text(prompt_for_step(w.step), color: :green),
-              text(entered_value(w), color: :bright_black)
+              text(prompt_for_step(w.step), fg: :green),
+              text_input(
+                value: display_value(w.step, Map.get(w, :current_input, "")),
+                placeholder: prompt_for_step(w.step)
+              )
             ] ++ error_items
         ),
         KeyBar.render([{"Enter", "Next"}, {"Esc", "Cancel"}])
@@ -53,6 +56,45 @@ defmodule Foglet.TUI.Screens.Register do
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: "escape"}, state) do
     {:update, %{state | current_screen: :login, register_wizard: nil}, []}
+  end
+
+  def handle_key(%{key: "enter"}, state) do
+    w = state.register_wizard || default_wizard(state)
+    value = Map.get(w, :current_input, "")
+    step = w.step
+    # Dispatch back through App.update/2 → handle_wizard_event via command round-trip
+    {:update, state, [{:register_wizard, {:submit_step, step, value}}]}
+  end
+
+  def handle_key(%{key: "backspace"}, state) do
+    w = state.register_wizard || default_wizard(state)
+    current = Map.get(w, :current_input, "")
+    new_input = String.slice(current, 0, max(String.length(current) - 1, 0))
+    {:update, %{state | register_wizard: Map.put(w, :current_input, new_input)}, []}
+  end
+
+  def handle_key(%{key: "space"}, state) do
+    # FUTURE (task #16): remove once key normalization converts spacebar to " ".
+    w = state.register_wizard || default_wizard(state)
+    current = Map.get(w, :current_input, "")
+    {:update, %{state | register_wizard: Map.put(w, :current_input, current <> " ")}, []}
+  end
+
+  # Binary-key catch-all. The multi-char named keys (escape, enter, backspace, space)
+  # are matched by the clauses above. String.length/1 is NOT guard-safe, so we gate
+  # the length check in the body and return :no_match for any other multi-char names
+  # that slip through (e.g. "up", "down", "f1").
+  #
+  # Using String.length (grapheme count) rather than byte_size/1 ensures multibyte
+  # unicode characters are accepted correctly (avoids the composer bug from task #13).
+  def handle_key(%{key: key}, state) when is_binary(key) do
+    if String.length(key) == 1 do
+      w = state.register_wizard || default_wizard(state)
+      current = Map.get(w, :current_input, "")
+      {:update, %{state | register_wizard: Map.put(w, :current_input, current <> key)}, []}
+    else
+      :no_match
+    end
   end
 
   def handle_key(_key, _state), do: :no_match
@@ -72,6 +114,8 @@ defmodule Foglet.TUI.Screens.Register do
 
   def handle_wizard_event({:submit_step, step, value}, state) do
     w = state.register_wizard || default_wizard(state)
+    # Ensure current_input key exists (handles wizard maps created before this field was added)
+    w = Map.put_new(w, :current_input, "")
     advance(w, step, value, state)
   end
 
@@ -79,7 +123,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp default_wizard(state) do
     mode = registration_mode(state)
-    %{mode: mode, step: first_step_for(mode), data: %{}, error: nil}
+    %{mode: mode, step: first_step_for(mode), data: %{}, error: nil, current_input: ""}
   end
 
   defp registration_mode(state) do
@@ -108,43 +152,63 @@ defmodule Foglet.TUI.Screens.Register do
   defp prompt_for_step(:submitting), do: "Creating your account..."
   defp prompt_for_step(:done), do: "Account created."
 
-  defp entered_value(%{data: data, step: step}) do
-    case step do
-      :invite_code -> data[:invite_code] || ""
-      :handle -> data[:handle] || ""
-      :email -> data[:email] || ""
-      :password -> mask(data[:password])
-      _ -> ""
-    end
-  end
+  defp display_value(:password, current_input),
+    do: String.duplicate("*", String.length(current_input))
 
-  defp mask(nil), do: ""
-  defp mask(pw) when is_binary(pw), do: String.duplicate("*", String.length(pw))
+  defp display_value(_step, current_input), do: current_input
 
   defp advance(w, :invite_code, value, state) do
     if valid_invite_code?(value) do
-      new_w = %{w | step: :handle, data: Map.put(w.data, :invite_code, value), error: nil}
+      new_w = %{
+        w
+        | step: :handle,
+          data: Map.put(w.data, :invite_code, value),
+          error: nil,
+          current_input: ""
+      }
+
       {%{state | register_wizard: new_w}, []}
     else
       modal = %{type: :error, message: "Invalid invite code."}
 
-      new_w = %{w | step: :invite_code, error: "Invalid code."}
+      new_w = %{w | step: :invite_code, error: "Invalid code.", current_input: ""}
       {%{state | modal: modal, register_wizard: new_w}, []}
     end
   end
 
   defp advance(w, :handle, value, state) do
-    new_w = %{w | step: :email, data: Map.put(w.data, :handle, value), error: nil}
+    new_w = %{
+      w
+      | step: :email,
+        data: Map.put(w.data, :handle, value),
+        error: nil,
+        current_input: ""
+    }
+
     {%{state | register_wizard: new_w}, []}
   end
 
   defp advance(w, :email, value, state) do
-    new_w = %{w | step: :password, data: Map.put(w.data, :email, value), error: nil}
+    new_w = %{
+      w
+      | step: :password,
+        data: Map.put(w.data, :email, value),
+        error: nil,
+        current_input: ""
+    }
+
     {%{state | register_wizard: new_w}, []}
   end
 
   defp advance(w, :password, value, state) do
-    new_w = %{w | step: :submitting, data: Map.put(w.data, :password, value), error: nil}
+    new_w = %{
+      w
+      | step: :submitting,
+        data: Map.put(w.data, :password, value),
+        error: nil,
+        current_input: ""
+    }
+
     submit(new_w, state)
   end
 

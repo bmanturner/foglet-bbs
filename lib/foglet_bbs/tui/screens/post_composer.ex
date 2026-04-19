@@ -5,45 +5,60 @@ defmodule Foglet.TUI.Screens.PostComposer do
   Layout (D-27): header, quote context (when replying), text area, key bar.
   Tab toggles edit/preview (D-28). Ctrl+S submits (D-29). Ctrl+C cancels (D-30).
   Max body length enforced via Foglet.Config.get!("max_post_length") (D-31).
+
+  Uses `Raxol.UI.Components.Input.MultiLineInput` component module (D-26) for
+  the full-featured editor: cursor, word wrap, undo/redo, shift-select.
+  Component state is stored in `state.screen_state[:post_composer].input_state`.
+  `state.composer_draft` is NOT used for reading text — we always read from
+  `input_state.value`. The struct field remains on App but is set to nil by
+  cancel/submit to signal no active draft (unchanged contract).
   """
 
   alias Foglet.Config
   alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
 
   @default_max_post_length 8192
 
+  # ---------------------------------------------------------------------------
+  # Public API
+  # ---------------------------------------------------------------------------
+
   @spec render(map()) :: any()
   def render(state) do
-    ss =
-      get_in(state.screen_state, [:post_composer]) ||
-        %{mode: :edit, reply_to: nil, error: nil}
-
-    draft = state.composer_draft || ""
+    ss = composer_screen_state(state)
+    input_st = ss.input_state
+    draft = input_st.value
 
     body_items =
       if ss.reply_to do
         [
-          text("Replying to @#{get_handle(ss.reply_to)}:", color: :bright_black),
-          text(quote_preview(ss.reply_to), color: :bright_black),
+          text("Replying to @#{get_handle(ss.reply_to)}:", style: [:dim]),
+          text(quote_preview(ss.reply_to), style: [:dim]),
           text("")
         ]
       else
         []
       end ++
         case ss.mode do
-          :edit -> [text(draft, color: :green)]
-          :preview -> [text(render_preview(state, draft), color: :green)]
+          :edit ->
+            # Render the MultiLineInput component inline using its lines.
+            # render/2 requires a context map; we supply a minimal one.
+            [render_input(input_st, state)]
+
+          :preview ->
+            [text(render_preview(state, draft), fg: :green)]
         end ++
         if ss.error do
-          [text(""), text(ss.error, color: :red)]
+          [text(""), text(ss.error, fg: :red)]
         else
           []
         end ++
         [
           text(""),
-          text("#{String.length(draft)} / #{max_len(state)} chars", color: :bright_black)
+          text("#{String.length(draft)} / #{max_len(state)} chars", style: [:dim])
         ]
 
     panel(
@@ -66,29 +81,190 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: "tab"}, state), do: toggle_mode(state)
-
   def handle_key(%{key: "ctrl_s"}, state), do: submit(state)
   def handle_key(%{key: "ctrl_c"}, state), do: cancel(state)
 
-  def handle_key(%{key: "backspace"}, state) do
-    draft = state.composer_draft || ""
-    new_draft = String.slice(draft, 0, max(String.length(draft) - 1, 0))
-    {:update, %{state | composer_draft: new_draft}, []}
+  # Forward all other keys to MultiLineInput
+  def handle_key(key_event, state) do
+    case translate_key(key_event) do
+      nil ->
+        :no_match
+
+      msg ->
+        ss = composer_screen_state(state)
+        input_st = ss.input_state
+
+        case MultiLineInput.update(msg, input_st) do
+          {:noreply, new_input_st, _cmds} ->
+            new_input_st = enforce_max_len(new_input_st, state)
+            {:update, put_input_state(state, ss, new_input_st), []}
+
+          # update/2 occasionally returns a plain state struct (e.g., focus/blur)
+          new_input_st when is_struct(new_input_st, MultiLineInput) ->
+            new_input_st = enforce_max_len(new_input_st, state)
+            {:update, put_input_state(state, ss, new_input_st), []}
+
+          _other ->
+            :no_match
+        end
+    end
   end
 
-  def handle_key(%{key: "enter"}, state) do
-    draft = state.composer_draft || ""
-    {:update, %{state | composer_draft: draft <> "\n"}, []}
+  # ---------------------------------------------------------------------------
+  # Initialization helper (called by callers that navigate to :post_composer)
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Builds the initial screen_state map for the composer.
+  Call this when navigating to :post_composer so the MultiLineInput state
+  exists before the first render/handle_key call.
+
+  Options:
+    - `reply_to` — post struct or nil
+    - `width`    — terminal width for word-wrap (default 80)
+    - `height`   — visible rows for the text area (default 10)
+  """
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(opts \\ []) do
+    reply_to = Keyword.get(opts, :reply_to, nil)
+    width = Keyword.get(opts, :width, 80)
+    height = Keyword.get(opts, :height, 10)
+
+    {:ok, input_st} =
+      MultiLineInput.init(%{
+        value: "",
+        placeholder: "Write your post…",
+        width: width,
+        height: height,
+        wrap: :none,
+        focused: true
+      })
+
+    %{mode: :edit, reply_to: reply_to, error: nil, input_state: input_st}
   end
 
-  def handle_key(%{key: key}, state) when is_binary(key) and byte_size(key) == 1 do
-    draft = state.composer_draft || ""
-    {:update, %{state | composer_draft: draft <> key}, []}
+  # ---------------------------------------------------------------------------
+  # Private — helpers
+  # ---------------------------------------------------------------------------
+
+  # Returns a guaranteed screen_state with input_state initialised.
+  defp composer_screen_state(state) do
+    case get_in(state.screen_state, [:post_composer]) do
+      %{input_state: _} = ss ->
+        ss
+
+      existing ->
+        base = existing || %{mode: :edit, reply_to: nil, error: nil}
+        {w, _h} = state.terminal_size || {80, 24}
+
+        {:ok, input_st} =
+          MultiLineInput.init(%{
+            value: "",
+            placeholder: "Write your post…",
+            width: max(w - 4, 20),
+            height: 10,
+            wrap: :none,
+            focused: true
+          })
+
+        Map.put(base, :input_state, input_st)
+    end
   end
 
-  def handle_key(_key, _state), do: :no_match
+  defp put_input_state(state, ss, new_input_st) do
+    new_ss = %{ss | input_state: new_input_st}
+    new_screen_state = Map.put(state.screen_state, :post_composer, new_ss)
+    %{state | screen_state: new_screen_state}
+  end
 
-  # --- Private ---
+  # ---------------------------------------------------------------------------
+  # Key translation: normalized %{key: ...} -> MultiLineInput.update/2 message
+  # ---------------------------------------------------------------------------
+
+  defp translate_key(%{key: "backspace"}), do: {:backspace}
+  defp translate_key(%{key: "delete"}), do: {:delete}
+  defp translate_key(%{key: "enter"}), do: {:enter}
+  defp translate_key(%{key: "up"}), do: {:move_cursor, :up}
+  defp translate_key(%{key: "down"}), do: {:move_cursor, :down}
+  defp translate_key(%{key: "left"}), do: {:move_cursor, :left}
+  defp translate_key(%{key: "right"}), do: {:move_cursor, :right}
+  defp translate_key(%{key: "home"}), do: {:move_cursor_line_start}
+  defp translate_key(%{key: "end"}), do: {:move_cursor_line_end}
+  defp translate_key(%{key: "pageup"}), do: {:move_cursor_page, :up}
+  defp translate_key(%{key: "pagedown"}), do: {:move_cursor_page, :down}
+  defp translate_key(%{key: "space"}), do: {:input, ?\s}
+
+  # Single grapheme printable character
+  defp translate_key(%{key: key}) when is_binary(key) and byte_size(key) == 1 do
+    case :binary.first(key) do
+      cp when cp >= 32 -> {:input, cp}
+      _ -> nil
+    end
+  end
+
+  # Multibyte unicode grapheme (e.g. "é", "漢")
+  defp translate_key(%{key: key}) when is_binary(key) do
+    case String.graphemes(key) do
+      [single] ->
+        # Map each codepoint through handle_input one at a time.
+        # For simplicity, use the first codepoint (grapheme cluster head).
+        <<cp::utf8, _rest::binary>> = :unicode.characters_to_binary(single)
+        {:input, cp}
+
+      _ ->
+        nil
+    end
+  end
+
+  defp translate_key(_), do: nil
+
+  # ---------------------------------------------------------------------------
+  # Max-length enforcement (D-31)
+  # ---------------------------------------------------------------------------
+
+  defp enforce_max_len(input_st, state) do
+    max = max_len(state)
+
+    if String.length(input_st.value) > max do
+      # Truncate to max length and reinitialise — pass a plain map, not a struct,
+      # because MultiLineInput.init/1 calls struct(__MODULE__, props) which requires
+      # an enumerable (a struct is not enumerable in Elixir).
+      truncated = String.slice(input_st.value, 0, max)
+
+      {:ok, trimmed} =
+        MultiLineInput.init(%{
+          value: truncated,
+          placeholder: input_st.placeholder,
+          width: input_st.width,
+          height: input_st.height,
+          wrap: input_st.wrap,
+          focused: input_st.focused
+        })
+
+      trimmed
+    else
+      input_st
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Rendering helpers
+  # ---------------------------------------------------------------------------
+
+  defp render_input(input_st, _state) do
+    # Minimal context for render/2 (theme system not in scope).
+    context = %{theme: %{}, components: %{multi_line_input: %{}}}
+
+    try do
+      MultiLineInput.render(input_st, context)
+    rescue
+      _ ->
+        # Fallback: plain text dump of lines (defensive — tests don't have a
+        # live Raxol renderer context).
+        lines = Enum.join(input_st.lines, "\n")
+        text(lines, fg: :green)
+    end
+  end
 
   defp title_for(nil, nil), do: "New Thread"
   defp title_for(nil, thread), do: "Reply to: #{thread.title}"
@@ -117,19 +293,25 @@ defmodule Foglet.TUI.Screens.PostComposer do
   defp get_handle(%{user: %{handle: h}}), do: h
   defp get_handle(_), do: "unknown"
 
-  defp toggle_mode(state) do
-    ss =
-      get_in(state.screen_state, [:post_composer]) ||
-        %{mode: :edit, reply_to: nil, error: nil}
+  # ---------------------------------------------------------------------------
+  # Mode toggle
+  # ---------------------------------------------------------------------------
 
+  defp toggle_mode(state) do
+    ss = composer_screen_state(state)
     new_mode = if ss.mode == :edit, do: :preview, else: :edit
-    new_screen_state = Map.put(state.screen_state, :post_composer, %{ss | mode: new_mode})
+    new_ss = %{ss | mode: new_mode}
+    new_screen_state = Map.put(state.screen_state, :post_composer, new_ss)
     {:update, %{state | screen_state: new_screen_state}, []}
   end
 
+  # ---------------------------------------------------------------------------
+  # Submit
+  # ---------------------------------------------------------------------------
+
   defp submit(state) do
-    draft = state.composer_draft || ""
-    ss = get_in(state.screen_state, [:post_composer]) || %{reply_to: nil}
+    ss = composer_screen_state(state)
+    draft = ss.input_state.value
     max = max_len(state)
 
     cond do
@@ -174,7 +356,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
           {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
       end
     else
-      # Dev-mode stub: Phase 2 not yet wired
+      # Dev-mode stub: Phase 2 not yet wired or no current_thread
       modal = %{type: :info, message: "Submitted (dev-mode; Phase 2 not fully wired)."}
 
       new_state = %{
@@ -189,8 +371,11 @@ defmodule Foglet.TUI.Screens.PostComposer do
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # Cancel (D-30)
+  # ---------------------------------------------------------------------------
+
   defp cancel(state) do
-    # D-30: immediate cancel, no confirmation
     new_state = %{
       state
       | current_screen: :thread_list,
@@ -200,6 +385,10 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
     {:update, new_state, []}
   end
+
+  # ---------------------------------------------------------------------------
+  # Max length
+  # ---------------------------------------------------------------------------
 
   defp max_len(state) do
     sc = Map.get(state, :session_context) || %{}
