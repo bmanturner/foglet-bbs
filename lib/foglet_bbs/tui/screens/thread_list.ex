@@ -158,15 +158,25 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp sort_threads(threads) when is_list(threads) do
     {sticky, regular} = Enum.split_with(threads, &(Map.get(&1, :sticky, false) == true))
-
-    Enum.sort_by(sticky, &last_post_sort_key/1, :desc) ++
-      Enum.sort_by(regular, &last_post_sort_key/1, :desc)
+    sort_by_recency(sticky) ++ sort_by_recency(regular)
   end
 
-  defp last_post_sort_key(%{last_post_at: %DateTime{} = dt}),
-    do: DateTime.to_unix(dt, :microsecond)
-
-  defp last_post_sort_key(_), do: -1
+  # Sort threads newest-first within a group. Threads with nil last_post_at
+  # sort last (they are brand-new and have no post activity yet).
+  defp sort_by_recency(threads) do
+    threads
+    |> Enum.sort_by(
+      fn t ->
+        case Map.get(t, :last_post_at) do
+          %DateTime{} = dt -> {0, DateTime.to_unix(dt, :microsecond)}
+          # nil sorts last within the group
+          _ -> {1, 0}
+        end
+      end,
+      :asc
+    )
+    |> Enum.reverse()
+  end
 
   defp move_selection(state, delta) do
     threads = sort_threads(state.current_thread_list || [])
