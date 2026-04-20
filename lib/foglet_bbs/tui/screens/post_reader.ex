@@ -146,7 +146,9 @@ defmodule Foglet.TUI.Screens.PostReader do
     ss = get_screen_state(state)
     ss = warm_cache_for_index(ss, %{state | posts: posts}, posts, 0, w)
     new_screen_state = Map.put(state.screen_state, :post_reader, ss)
-    {%{state | posts: posts, read_position: new_read_position, screen_state: new_screen_state}, []}
+
+    {%{state | posts: posts, read_position: new_read_position, screen_state: new_screen_state},
+     []}
   end
 
   defp seed_read_position_on_entry(read_position, _thread_id, []), do: read_position

@@ -275,8 +275,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
     user_id = state.current_user && state.current_user.id
 
     if is_nil(user_id) do
-      {:update,
-       %{state | modal: %{type: :error, message: "You must be logged in to post."}}, []}
+      {:update, %{state | modal: %{type: :error, message: "You must be logged in to post."}}, []}
     else
       attrs = %{body: draft}
 
@@ -285,6 +284,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
           nil -> nil
           post -> post.id
         end
+
       attrs = if reply_to_id, do: Map.put(attrs, :reply_to_id, reply_to_id), else: attrs
 
       case posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs) do

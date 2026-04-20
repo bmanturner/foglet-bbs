@@ -87,7 +87,13 @@ defmodule Foglet.SSH.CLIHandler do
           )
 
         _ = :ssh_connection.close(connection_ref, channel_id)
-        new_state = %__MODULE__{over_limit: true, channel_id: channel_id, connection_ref: connection_ref}
+
+        new_state = %__MODULE__{
+          over_limit: true,
+          channel_id: channel_id,
+          connection_ref: connection_ref
+        }
+
         {:ok, new_state}
 
       :ok ->
@@ -205,9 +211,11 @@ defmodule Foglet.SSH.CLIHandler do
     send_alt_screen_leave(state)
     stop_lifecycle(state.lifecycle_pid)
     _ = stop_session(state.session_pid)
+
     unless state.over_limit do
       _ = decrement_connection_count()
     end
+
     {:stop, state.channel_id || 0, state}
   end
 
