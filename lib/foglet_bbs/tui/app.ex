@@ -256,12 +256,20 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:window_change, cols, rows}, state)
        when is_integer(cols) and is_integer(rows) and cols > 0 and rows > 0 do
-    # SSH-06: terminal resize — also notify Session for presence/analytics.
-    if is_pid(state.session_pid) do
-      Foglet.Sessions.Session.set_terminal_size(state.session_pid, {cols, rows})
-    end
+    # D-09: same-size guard — short-circuit bursty SIGWINCH events at the
+    # same terminal size to avoid render storms during tmux/iTerm drags.
+    # Raxol coalesces frame renders so no time-based debounce is needed
+    # (D-10); this guard is sufficient per research Pitfall 4.
+    if state.terminal_size == {cols, rows} do
+      {state, []}
+    else
+      # SSH-06: terminal resize — also notify Session for presence/analytics.
+      if is_pid(state.session_pid) do
+        Foglet.Sessions.Session.set_terminal_size(state.session_pid, {cols, rows})
+      end
 
-    {%{state | terminal_size: {cols, rows}}, []}
+      {%{state | terminal_size: {cols, rows}}, []}
+    end
   end
 
   defp do_update({:navigate, screen}, state) when is_atom(screen) do

@@ -237,6 +237,47 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "update/2 {:window_change} same-size guard (D-09, Pitfall 4)" do
+    setup do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+      %{state: state}
+    end
+
+    test "short-circuits when {cols, rows} matches state.terminal_size", %{state: state} do
+      {new_state, cmds} = App.update({:window_change, 100, 30}, state)
+      # Identity — state must not be mutated at all (D-09)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "processes normally when size differs", %{state: state} do
+      {new_state, cmds} = App.update({:window_change, 120, 40}, state)
+      assert new_state.terminal_size == {120, 40}
+      assert cmds == []
+    end
+
+    test "processes normally when only cols change", %{state: state} do
+      {new_state, _} = App.update({:window_change, 120, 30}, state)
+      assert new_state.terminal_size == {120, 30}
+    end
+
+    test "processes normally when only rows change", %{state: state} do
+      {new_state, _} = App.update({:window_change, 100, 40}, state)
+      assert new_state.terminal_size == {100, 40}
+    end
+
+    test "short-circuits even when state.session_pid is set (no Session cast)", %{state: state} do
+      # When state.terminal_size already matches, we must NOT send a cast to Session.
+      # Using self() as a stand-in session_pid — if a cast were sent, self()'s
+      # mailbox would accumulate it.
+      state_with_pid = %{state | session_pid: self()}
+      {_new_state, cmds} = App.update({:window_change, 100, 30}, state_with_pid)
+      assert cmds == []
+      # No cast message should be in our mailbox from Session.set_terminal_size
+      refute_receive {:"$gen_cast", _}, 10
+    end
+  end
+
   describe "subscribe/1" do
     test "returns empty list when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})
