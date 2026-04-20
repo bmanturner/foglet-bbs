@@ -45,7 +45,9 @@ default_config = [
    "Account registration policy (D-02/D-03): open | invite_only | sysop_approved"},
   {"invite_code_generators", "sysop_only",
    "Who may generate invite codes (D-04): sysop_only | mods | any_user"},
-  {"max_post_length", 8192, "Maximum post body length in characters (D-31)"}
+  {"max_post_length", 8192, "Maximum post body length in characters (D-31)"},
+  {"max_thread_title_length", 60,
+   "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)"}
 ]
 
 Enum.each(default_config, fn {key, value, description} ->
