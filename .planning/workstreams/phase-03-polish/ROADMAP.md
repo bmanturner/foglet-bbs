@@ -120,4 +120,4 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 Plans:
 - [x] 07-01-PLAN.md — Modal thin adapter + app.ex caller update + theme-hygiene tests (Wave 1)
 - [x] 07-02-PLAN.md — MarkdownBody.render_tuples_as_lines/4 + PostCard.render_body_lines/5 (additive, Wave 1)
-- [ ] 07-03-PLAN.md — PostReader Viewport integration (state shape + scroll_post + advance_post + render_post_content) (Wave 2, depends on 07-02)
+- [x] 07-03-PLAN.md — PostReader Viewport integration (state shape + scroll_post + advance_post + render_post_content) (Wave 2, depends on 07-02)
