@@ -88,12 +88,13 @@ defmodule Foglet.TUI.SizeGateTest do
     test "falls back to Theme.default() when session_context is empty" do
       default = Theme.default()
       default_fg = Map.get(default.dim, :fg)
+      # Ensure the default theme actually has a dim.fg — if this fails,
+      # Theme.default/0 needs to be updated to provide one.
+      assert default_fg != nil, "Theme.default() must provide a dim.fg for SizeGate rendering"
+
       element = SizeGate.render(%{terminal_size: {40, 10}, session_context: %{}})
       serialized = inspect(element, limit: :infinity)
-
-      if default_fg do
-        assert serialized =~ default_fg
-      end
+      assert serialized =~ default_fg
     end
 
     test "falls back to Theme.default() when session_context is absent entirely" do
