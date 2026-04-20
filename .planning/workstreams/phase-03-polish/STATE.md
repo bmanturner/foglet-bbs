@@ -3,13 +3,13 @@ workstream: phase-03-polish
 milestone: v1.0.1
 milestone_name: Phase 03 Polish
 created: 2026-04-19
-status: phase_1_complete
-last_updated: 2026-04-19
-last_activity: 2026-04-19
+status: phase_2_planned
+last_updated: 2026-04-20
+last_activity: 2026-04-20
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 4
+  total_plans: 7
   completed_plans: 4
   percent: 17
 ---
@@ -31,10 +31,10 @@ See: .planning/PROJECT.md (shared across workstreams)
 
 ## Current Position
 
-**Phase:** Phase 1 — COMPLETE
-**Plan:** 01-04 (final)
-**Status:** All 4 plans executed and committed. Ready to plan Phase 2 (Markdown rendering correctness).
-**Last activity:** 2026-04-19 — Phase 1 executed: Theme struct, Chrome widgets, List/Post widgets, all 9 screens migrated to ScreenFrame
+**Phase:** Phase 2 — PLANNED (ready to execute)
+**Plan:** 02-01, 02-02, 02-03 (3 plans, 3 waves)
+**Status:** Phase 2 plans committed. Both RENDER-01 and RENDER-02 covered by all 3 plans. Ready for `/gsd-execute-phase 2`.
+**Last activity:** 2026-04-20 — Phase 2 planned: Post.MarkdownBody (newline-grouping fix), Post.PostCard (header+body assembly), PostReader integration (j/k scroll + {post.id, width} render cache).
 
 ## Roadmap Summary
 
@@ -87,6 +87,10 @@ None. Research is HIGH confidence; zero new dependencies required.
 
 ## Session Continuity
 
-Last session: 2026-04-19 — Phase 1 executed (4 plans: Theme struct, Chrome widgets, List/Post widgets, screen migration)
-Stopped at: Phase 1 complete; ready to plan and execute Phase 2 (Markdown rendering correctness)
-Resume file: `.planning/workstreams/phase-03-polish/phases/` — next: plan phase 2
+Last session: 2026-04-20 — Phase 2 planned (3 plans across 3 waves).
+- Plan 02-01 (Wave 1): `Post.MarkdownBody` — newline-grouping via `Enum.chunk_by/2`, theme-driven style mapping (D-06), + tests
+- Plan 02-02 (Wave 2): `Post.PostCard` — author header (`By @handle · 2h ago`) + themed divider + delegated `MarkdownBody` body, + tests
+- Plan 02-03 (Wave 3): PostReader integration — `PostCard.render_from_tuples/5`, j/k within-post scroll (D-03, D-04, D-05), `render_cache` keyed on `{post.id, width}` in `screen_state[:post_reader]`, legacy `render_markdown_tuples/2` + `render_post_items/4` + `get_post_author/1` deleted, + tests including seeded-thread UAT smoke
+
+Stopped at: Phase 2 planned, 0/3 plans executed. Requirements coverage: 2/2 (RENDER-01, RENDER-02).
+Resume file: `.planning/workstreams/phase-03-polish/phases/02-markdown-rendering-correctness/` — next: `/gsd-execute-phase 2`

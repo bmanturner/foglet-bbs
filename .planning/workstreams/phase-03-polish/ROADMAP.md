@@ -43,7 +43,7 @@ v1.0.1 is a polish/hardening pass on the SSH + Raxol TUI delivered in the main w
   1. A user opening a seeded thread in the General board sees headers, bold, italic, fenced code, inline code, blockquotes, and lists rendered as styled terminal output
   2. Markdown links render with visible URL text; no broken wrapping or visible `\n` separator artifacts appear in the rendered output
   3. Resizing the terminal while a post is open re-flows the post without SGR-reset leaks or stuck styling from the prior width
-**Plans**: TBD
+**Plans**: 3 (02-01 MarkdownBody widget, 02-02 PostCard widget, 02-03 PostReader integration)
 **UI hint**: yes
 
 ### Phase 3: Read-pointer correctness + thread-row enrichment
@@ -100,8 +100,8 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Widget foundation + theme + screen chrome | 0/TBD | Not started | - |
-| 2. Markdown rendering correctness | 0/TBD | Not started | - |
+| 1. Widget foundation + theme + screen chrome | 4/4 | Complete | 2026-04-19 |
+| 2. Markdown rendering correctness | 0/3 | Planned — ready to execute | - |
 | 3. Read-pointer correctness + thread-row enrichment | 0/TBD | Not started | - |
 | 4. Composer & thread creation end-to-end | 0/TBD | Not started | - |
 | 5. Terminal size gate | 0/TBD | Not started | - |
