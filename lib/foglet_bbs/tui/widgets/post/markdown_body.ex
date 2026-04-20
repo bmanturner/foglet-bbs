@@ -135,9 +135,9 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
   end
 
   defp window_lines(lines, scroll_offset, max_lines)
-       when is_integer(max_lines) and max_lines > 0 do
+       when is_integer(max_lines) and max_lines > 0 and scroll_offset >= 0 do
     lines
-    |> Enum.drop(max(scroll_offset, 0))
+    |> Enum.drop(scroll_offset)
     |> Enum.take(max_lines)
   end
 
