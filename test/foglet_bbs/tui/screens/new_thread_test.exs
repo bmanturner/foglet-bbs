@@ -35,6 +35,10 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     end
   end
 
+  defmodule FakeThreadsMissing do
+    # Does NOT export create_thread/3 — simulates unauthenticated user path.
+  end
+
   defmodule FakeThreadsError do
     def create_thread(_board_id, _user_id, _attrs) do
       {:error, "board is locked"}
@@ -268,16 +272,34 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(new_state).mode == :edit
   end
 
-  test "Ctrl+C cancels from compose step to :main_menu" do
+  test "Ctrl+C cancels from compose step to origin screen (default :main_menu)" do
     state = compose_state()
     {:update, new_state, _} = NewThread.handle_key(%{key: :char, char: "c", ctrl: true}, state)
     assert new_state.current_screen == :main_menu
   end
 
-  test "Esc cancels from compose step to :main_menu" do
+  test "Ctrl+C with origin: :thread_list routes back to :thread_list" do
+    state = compose_state()
+    ss = get_ss(state)
+    s = Map.put(state, :screen_state, %{new_thread: Map.put(ss, :origin, :thread_list)})
+
+    {:update, new_state, _} = NewThread.handle_key(%{key: :char, char: "c", ctrl: true}, s)
+    assert new_state.current_screen == :thread_list
+  end
+
+  test "Esc cancels from compose step to origin screen (default :main_menu)" do
     state = compose_state()
     {:update, new_state, _} = NewThread.handle_key(%{key: :escape}, state)
     assert new_state.current_screen == :main_menu
+  end
+
+  test "Esc with origin: :thread_list routes back to :thread_list" do
+    state = compose_state()
+    ss = get_ss(state)
+    s = Map.put(state, :screen_state, %{new_thread: Map.put(ss, :origin, :thread_list)})
+
+    {:update, new_state, _} = NewThread.handle_key(%{key: :escape}, s)
+    assert new_state.current_screen == :thread_list
   end
 
   # ---------------------------------------------------------------------------
@@ -341,6 +363,51 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Title length cap (D-13, D-14)
+  # ---------------------------------------------------------------------------
+
+  describe "title length cap (D-13, D-14)" do
+    test "accepts characters below the cap" do
+      state = compose_state()
+      ss = get_ss(state)
+      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: "abc"}})
+
+      {:update, new_state, []} = NewThread.handle_key(%{key: :char, char: "d"}, s)
+      assert get_ss(new_state).title_input == "abcd"
+    end
+
+    test "rejects characters that would exceed the cap" do
+      # 60-char title; next char must be rejected.
+      long_title = String.duplicate("x", 60)
+      state = compose_state()
+      ss = get_ss(state)
+      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: long_title}})
+
+      assert NewThread.handle_key(%{key: :char, char: "y"}, s) == :no_match
+    end
+
+    test "accepts the final allowed character at cap - 1" do
+      title = String.duplicate("x", 59)
+      state = compose_state()
+      ss = get_ss(state)
+      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: title}})
+
+      {:update, new_state, []} = NewThread.handle_key(%{key: :char, char: "y"}, s)
+      assert String.length(get_ss(new_state).title_input) == 60
+    end
+
+    test "backspace still works above the cap (can recover from a paste)" do
+      over_cap = String.duplicate("x", 65)
+      state = compose_state()
+      ss = get_ss(state)
+      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: over_cap}})
+
+      {:update, new_state, []} = NewThread.handle_key(%{key: :backspace}, s)
+      assert String.length(get_ss(new_state).title_input) == 64
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Compose step — body input (forwarded to MultiLineInput)
   # ---------------------------------------------------------------------------
 
@@ -360,10 +427,10 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   # Submit — success path
   # ---------------------------------------------------------------------------
 
-  test "Ctrl+S with valid title and body navigates to :post_reader" do
+  test "Ctrl+S with valid title and body navigates to :thread_list and dispatches {:load_threads}" do
     state = compose_state()
 
-    # Type title using :char events; space via " " char
+    # Type title using :char events
     s =
       Enum.reduce(~w[M y   T h r e a d], state, fn ch, acc ->
         key =
@@ -388,12 +455,12 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
 
-    assert final.current_screen == :post_reader
-    assert final.current_thread != nil
-    assert Enum.any?(cmds, &match?({:load_posts, _}, &1))
+    assert final.current_screen == :thread_list
+    assert final.current_board.id == "b1"
+    assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
   end
 
-  test "Ctrl+S with {:ok, %{thread: thread}} sets current_board from wizard" do
+  test "Ctrl+S with {:ok, %{thread: thread}} preserves current_board from wizard" do
     state = compose_state(%{id: "b1", name: "General"})
 
     # Set a title directly in ss
@@ -411,6 +478,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     {:update, final, _cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert final.current_board.id == "b1"
+    assert final.current_screen == :thread_list
   end
 
   # ---------------------------------------------------------------------------
@@ -472,10 +540,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(final).error != nil
   end
 
-  test "Ctrl+S without threads module exported shows coming-soon modal" do
+  test "Ctrl+S without current_user shows error modal" do
     state =
       base_state(%{
-        session_context: %{domain: %{boards: FakeBoards, threads: FakeBoardsEmpty}}
+        current_user: nil,
+        session_context: %{domain: %{boards: FakeBoards, threads: FakeThreadsMissing}}
       })
 
     board = %{id: "b1", name: "General"}
@@ -496,7 +565,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
 
     assert final.modal != nil
-    assert final.modal.type == :info
+    assert final.modal.type == :error
+    assert final.modal.message =~ "logged in"
   end
 
   # ---------------------------------------------------------------------------

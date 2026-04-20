@@ -97,6 +97,13 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert get_in(s.screen_state, [:post_composer, :reply_to]).id == "p1"
   end
 
+  test "'R' stashes origin: :post_reader in the :post_composer screen_state", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "r"}, s)
+    assert s.current_screen == :post_composer
+    assert get_in(s.screen_state, [:post_composer, :origin]) == :post_reader
+  end
+
   test "'Q' returns to :thread_list and emits {:flush_read_pointers, _} (SSH-09)",
        %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")

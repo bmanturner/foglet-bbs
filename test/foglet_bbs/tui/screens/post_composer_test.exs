@@ -182,7 +182,12 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert s.current_screen == :post_reader
     assert s.composer_draft == nil
     refute Map.has_key?(s.screen_state, :post_composer)
-    assert Enum.any?(cmds, &match?({:load_posts, "t1"}, &1))
+
+    assert Enum.any?(cmds, fn
+             {:load_posts, "t1"} -> true
+             {:load_posts, "t1", _opts} -> true
+             _ -> false
+           end)
   end
 
   # ---------------------------------------------------------------------------
@@ -268,9 +273,72 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
     {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, s)
 
-    assert s.current_screen == :thread_list
+    assert s.current_screen == :main_menu
     assert s.composer_draft == nil
     refute Map.has_key?(s.screen_state, :post_composer)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Cancel — origin-aware (D-07)
+  # ---------------------------------------------------------------------------
+
+  describe "cancel (origin-aware)" do
+    test "Ctrl+C with origin: :post_reader routes back to :post_reader", %{state: state} do
+      s = put_in(state, [:screen_state, :post_composer, :origin], :post_reader)
+
+      {:update, new_state, []} =
+        PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, s)
+
+      assert new_state.current_screen == :post_reader
+    end
+
+    test "Ctrl+C with no origin defaults to :main_menu (safety net)", %{state: state} do
+      # Remove origin if present — composer_screen_state reads from screen_state
+      s = update_in(state, [:screen_state, :post_composer], &Map.delete(&1, :origin))
+
+      {:update, new_state, []} =
+        PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, s)
+
+      assert new_state.current_screen == :main_menu
+    end
+
+    test "Ctrl+C clears the composer screen_state", %{state: state} do
+      s = put_in(state, [:screen_state, :post_composer, :origin], :post_reader)
+
+      {:update, new_state, []} =
+        PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, s)
+
+      assert Map.get(new_state.screen_state, :post_composer) == nil
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Submit — reply-jump (D-05)
+  # ---------------------------------------------------------------------------
+
+  describe "do_submit/3 on success (reply-jump)" do
+    test "dispatches {:load_posts, thread_id, jump_last: true}", %{state: state} do
+      # Type content into the composer
+      {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
+      {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "i"}, s)
+
+      {:update, _new_state, cmds} =
+        PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+
+      assert [{:load_posts, thread_id, opts}] = cmds
+      assert thread_id == "t1"
+      assert Keyword.get(opts, :jump_last) == true
+    end
+
+    test "navigates to :post_reader on success", %{state: state} do
+      {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
+      {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "i"}, s)
+
+      {:update, new_state, _cmds} =
+        PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+
+      assert new_state.current_screen == :post_reader
+    end
   end
 
   # ---------------------------------------------------------------------------

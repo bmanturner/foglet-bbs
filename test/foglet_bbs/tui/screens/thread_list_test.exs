@@ -81,10 +81,23 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     assert s.current_thread.id == "t2"
   end
 
-  test "'C' opens :post_composer with current_thread == nil (new thread)", %{state: state} do
-    {:update, s, _} = ThreadList.handle_key(%{key: :char, char: "C"}, state)
-    assert s.current_screen == :post_composer
-    assert s.current_thread == nil
+  test "'C' routes to :new_thread with step: :compose and origin: :thread_list (COMPOSE-03)",
+       %{state: state} do
+    {:update, s, cmds} = ThreadList.handle_key(%{key: :char, char: "C"}, state)
+    assert s.current_screen == :new_thread
+    assert cmds == []
+
+    ss = s.screen_state[:new_thread]
+    assert ss.step == :compose
+    assert ss.board == %{id: "b1", name: "General", slug: "general"}
+    assert ss.boards == nil
+    assert ss.origin == :thread_list
+  end
+
+  test "'C' no longer routes to :post_composer with current_thread: nil (COMPOSE-03)",
+       %{state: state} do
+    {:update, s, _cmds} = ThreadList.handle_key(%{key: :char, char: "c"}, state)
+    refute s.current_screen == :post_composer
   end
 
   test "'Q' returns to :board_list and dispatches {:load_boards} (LIST-02)", %{state: state} do

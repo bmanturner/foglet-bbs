@@ -39,7 +39,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
     {w, _h} = state.terminal_size || {80, 24}
-    ss = Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
+
+    ss =
+      Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
+      |> Map.put(:origin, :main_menu)
+
     new_screen_state = Map.put(state.screen_state, :new_thread, ss)
 
     {:update, %{state | current_screen: :new_thread, screen_state: new_screen_state},

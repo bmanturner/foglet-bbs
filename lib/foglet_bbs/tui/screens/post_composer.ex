@@ -369,7 +369,9 @@ defmodule Foglet.TUI.Screens.PostComposer do
             screen_state: Map.delete(state.screen_state, :post_composer)
         }
 
-        {:update, new_state, [{:load_posts, thread.id}]}
+        # D-05: after the post reload finishes, the app handler sets
+        # selected_post_index to the last post (the user's new reply).
+        {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
 
       {:error, _cs} ->
         {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
@@ -381,9 +383,16 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # ---------------------------------------------------------------------------
 
   defp cancel(state) do
+    # D-07: origin-aware cancel. ss.origin is set by the navigating screen
+    # (PostReader's [R] handler in Phase 4). Default :main_menu preserves
+    # the "classic BBS" behavior — if origin is somehow missing, bail
+    # to a known-safe screen rather than crashing or looping.
+    ss = composer_screen_state(state)
+    origin = Map.get(ss, :origin, :main_menu)
+
     new_state = %{
       state
-      | current_screen: :thread_list,
+      | current_screen: origin,
         composer_draft: nil,
         screen_state: Map.delete(state.screen_state, :post_composer)
     }

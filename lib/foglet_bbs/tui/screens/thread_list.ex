@@ -100,8 +100,23 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
-    {:update, %{state | current_screen: :post_composer, composer_draft: "", current_thread: nil},
-     []}
+    {w, _h} = state.terminal_size || {80, 24}
+
+    # COMPOSE-01 / COMPOSE-03: skip the board picker since we're already
+    # inside a board. Pre-fill board, jump straight to :compose step, and
+    # stash origin so Cancel returns to this ThreadList.
+    ss =
+      Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
+      |> Map.merge(%{
+        step: :compose,
+        board: state.current_board,
+        boards: nil,
+        origin: :thread_list
+      })
+
+    new_screen_state = Map.put(state.screen_state, :new_thread, ss)
+
+    {:update, %{state | current_screen: :new_thread, screen_state: new_screen_state}, []}
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do

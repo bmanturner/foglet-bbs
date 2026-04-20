@@ -398,20 +398,47 @@ defmodule Foglet.TUI.App do
     {%{state | current_thread_list: threads}, []}
   end
 
-  defp do_update({:load_posts, thread_id}, state) do
+  # --- Load posts (with optional `jump_last: true` for reply-submit jump) ---
+
+  # 2-arity backward compat: existing callers dispatch {:load_posts, thread_id}.
+  defp do_update({:load_posts, thread_id}, state),
+    do: do_update({:load_posts, thread_id, []}, state)
+
+  # 3-arity with opts — Plan 04-03 D-05 reply-jump path.
+  defp do_update({:load_posts, thread_id, opts}, state) when is_list(opts) do
     ctx = Map.get(state, :session_context) || %{}
     posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
 
     task =
       Command.task(fn ->
-        {:posts_loaded, posts_mod.list_posts(thread_id)}
+        {:posts_loaded, posts_mod.list_posts(thread_id), opts}
       end)
 
     {state, [task]}
   end
 
-  defp do_update({:posts_loaded, posts}, state) do
-    {%{state | posts: posts}, []}
+  # 2-arity backward compat for the sink (other paths still emit the 2-tuple).
+  defp do_update({:posts_loaded, posts}, state),
+    do: do_update({:posts_loaded, posts, []}, state)
+
+  # 3-arity sink — consumes `jump_last: true` to set selected_post_index to
+  # the last post in the freshly-loaded list. All other opts are ignored.
+  defp do_update({:posts_loaded, posts, opts}, state) when is_list(opts) do
+    jump_last? = Keyword.get(opts, :jump_last, false)
+
+    ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
+
+    new_idx =
+      if jump_last? and posts != [] do
+        length(posts) - 1
+      else
+        ss.selected_post_index
+      end
+
+    new_ss = Map.put(ss, :selected_post_index, new_idx)
+    new_screen_state = Map.put(state.screen_state, :post_reader, new_ss)
+
+    {%{state | posts: posts, screen_state: new_screen_state}, []}
   end
 
   defp do_update({:flush_read_pointers, ctx}, state) do

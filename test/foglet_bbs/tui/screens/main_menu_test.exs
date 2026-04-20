@@ -129,6 +129,15 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert {:load_boards} in cmds2
   end
 
+  test "'C' stashes origin: :main_menu in the :new_thread screen_state",
+       %{state: state} do
+    {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "c"}, state)
+    assert s.current_screen == :new_thread
+    ss = s.screen_state[:new_thread]
+    assert ss.origin == :main_menu
+    assert cmds == [{:load_boards_for_new_thread}]
+  end
+
   test "'C' navigates to :new_thread wizard and dispatches {:load_boards_for_new_thread}",
        %{state: state} do
     {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "C"}, state)

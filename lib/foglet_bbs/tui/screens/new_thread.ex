@@ -9,10 +9,10 @@ defmodule Foglet.TUI.Screens.NewThread do
   State lives in state.screen_state[:new_thread].  See init_screen_state/1.
 
   On submit: calls Foglet.Threads.create_thread/3 (board_id, user_id, %{title:, body:}).
-  On success: navigates to :post_reader with the new thread loaded.
-  If the function is not exported, shows a friendly "coming soon" modal.
+  On success: navigates to :thread_list with the new thread pre-loaded.
   """
 
+  alias Foglet.Config
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
@@ -109,12 +109,20 @@ defmodule Foglet.TUI.Screens.NewThread do
     board_name = (board && board.name) || "?"
     theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
+    # D-14: render the title line with a live N / cap char counter so users
+    # see the soft limit as they type.
+    cap = max_thread_title_length()
+    title_len = String.length(ss.title_input)
+    counter = "#{title_len} / #{cap} chars"
+
     title_line =
       if ss.focused == :title do
         text("Title: #{ss.title_input}█", fg: theme.accent.fg, style: [:bold])
       else
         text("Title: #{ss.title_input}", fg: theme.primary.fg)
       end
+
+    title_counter_line = text(counter, fg: theme.dim.fg)
 
     body_section = render_body_section(state, ss, theme)
 
@@ -130,6 +138,7 @@ defmodule Foglet.TUI.Screens.NewThread do
         [
           text(""),
           title_line,
+          title_counter_line,
           text(""),
           text("Body:", fg: theme.primary.fg),
           body_section
@@ -287,12 +296,15 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # --- Compose step ---
 
-  defp handle_compose_key(%{key: :char, char: "c", ctrl: true}, state, _ss) do
-    {:update, %{state | current_screen: :main_menu}, []}
+  # D-07: origin-aware cancel on the :compose step.
+  # The board step still routes Esc to :main_menu (handle_board_key at
+  # line ~237) because the board step is only reachable from MainMenu.
+  defp handle_compose_key(%{key: :char, char: "c", ctrl: true}, state, ss) do
+    {:update, %{state | current_screen: Map.get(ss, :origin, :main_menu)}, []}
   end
 
-  defp handle_compose_key(%{key: :escape}, state, _ss) do
-    {:update, %{state | current_screen: :main_menu}, []}
+  defp handle_compose_key(%{key: :escape}, state, ss) do
+    {:update, %{state | current_screen: Map.get(ss, :origin, :main_menu)}, []}
   end
 
   defp handle_compose_key(%{key: :tab}, state, ss) do
@@ -324,8 +336,19 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Title field: typed character — Raxol native %{key: :char, char: c}.
   # Spacebar arrives as char: " " naturally; no special-case needed.
+  # D-14: enforce the soft title cap from Foglet.Config key
+  # "max_thread_title_length" (default 60). Keystrokes past the cap are
+  # rejected silently. The schema-level hard cap of 300 (D-15) remains
+  # as a DB backstop for sysops who raise the config.
   defp handle_compose_key(%{key: :char, char: c}, state, %{focused: :title} = ss) do
-    {:update, put_ss(state, %{ss | title_input: ss.title_input <> c}), []}
+    cap = max_thread_title_length()
+    new_title = ss.title_input <> c
+
+    if String.length(new_title) > cap do
+      :no_match
+    else
+      {:update, put_ss(state, %{ss | title_input: new_title}), []}
+    end
   end
 
   defp handle_compose_key(_key, _state, %{focused: :title}), do: :no_match
@@ -384,40 +407,48 @@ defmodule Foglet.TUI.Screens.NewThread do
         {:update, put_ss(state, %{ss | error: "Post body cannot be empty."}), []}
 
       true ->
-        threads_mod = domain_module(state, :threads)
-        user_id = state.current_user && state.current_user.id
+        do_create_thread(state, ss, title, body, board)
+    end
+  end
 
-        if function_exported?(threads_mod, :create_thread, 3) and user_id do
-          case threads_mod.create_thread(board.id, user_id, %{title: title, body: body}) do
-            {:ok, %{thread: thread}} ->
-              new_state = %{
-                state
-                | current_screen: :post_reader,
-                  current_board: board,
-                  current_thread: thread,
-                  screen_state:
-                    Map.merge(state.screen_state, %{
-                      new_thread: nil,
-                      post_reader: %{selected_post_index: 0}
-                    })
-              }
+  defp do_create_thread(state, ss, title, body, board) do
+    threads_mod = domain_module(state, :threads)
+    user_id = state.current_user && state.current_user.id
 
-              {:update, new_state, [{:load_posts, thread.id}]}
+    if user_id do
+      case threads_mod.create_thread(board.id, user_id, %{title: title, body: body}) do
+        {:ok, %{thread: _thread}} ->
+          # D-04: success navigates back to :thread_list with the new
+          # thread pre-selected. Threads sort by last_post_at desc, so
+          # a freshly created thread is always at index 0.
+          thread_list_ss = %{selected_index: 0}
 
-            {:error, cs} ->
-              msg = format_error(cs)
-              {:update, put_ss(state, %{ss | error: msg}), []}
-          end
-        else
-          # Phase 2 create_thread not available — friendly stub
-          modal = %{
-            type: :info,
-            # Phase 2 needs to implement Foglet.Threads.create_thread/3.
-            message: "Thread creation coming soon — Phase 2 not yet wired."
+          new_screen_state =
+            state.screen_state
+            |> Map.delete(:new_thread)
+            |> Map.put(:thread_list, thread_list_ss)
+
+          new_state = %{
+            state
+            | current_screen: :thread_list,
+              current_board: board,
+              screen_state: new_screen_state
           }
 
-          {:update, %{state | modal: modal, current_screen: :main_menu}, []}
-        end
+          {:update, new_state, [{:load_threads, board.id}]}
+
+        {:error, cs} ->
+          msg = format_error(cs)
+          {:update, put_ss(state, %{ss | error: msg}), []}
+      end
+    else
+      # Guard against a missing current_user (unauthenticated state).
+      # Should never happen in the wired flow, but crash-free is better.
+      {:update,
+       %{
+         state
+         | modal: %{type: :error, message: "You must be logged in to create a thread."}
+       }, []}
     end
   end
 
@@ -477,4 +508,18 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
+
+  @default_max_thread_title_length 60
+
+  # D-13: safe config getter — missing key defaults to 60 rather than
+  # raising. Mirrors the PostComposer.safe_config_get/2 pattern (~line 410)
+  # to keep the screens decoupled from each other.
+  defp max_thread_title_length do
+    case Config.get!("max_thread_title_length") do
+      n when is_integer(n) and n > 0 -> n
+      _ -> @default_max_thread_title_length
+    end
+  rescue
+    _ -> @default_max_thread_title_length
+  end
 end
