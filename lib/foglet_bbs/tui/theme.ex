@@ -101,6 +101,111 @@ defmodule Foglet.TUI.Theme do
     status_bar: %{fg: "#33ff66"}
   }
 
+  @amber_slots %{
+    border:     %{fg: "#aa7700"},
+    primary:    %{fg: "#ffb000"},
+    dim:        %{fg: "#aa7700"},
+    accent:     %{fg: "#ffcc44", style: [:bold]},
+    title:      %{fg: "#ffcc44", style: [:bold]},
+    error:      %{fg: "#ff5555", style: [:bold]},
+    warning:    %{fg: "#ffff55"},
+    selected:   %{fg: "#000000", bg: "#ffb000", style: [:bold]},
+    unselected: %{fg: "#ffb000"},
+    status_bar: %{fg: "#ffcc44"}
+  }
+
+  @cyan_slots %{
+    border:     %{fg: "#0000aa"},
+    primary:    %{fg: "#55ffff"},
+    dim:        %{fg: "#00aaaa"},
+    accent:     %{fg: "#ffff55", style: [:bold]},
+    title:      %{fg: "#ffffff", style: [:bold]},
+    error:      %{fg: "#ff5555", style: [:bold]},
+    warning:    %{fg: "#ffff55"},
+    selected:   %{fg: "#000000", bg: "#55ffff", style: [:bold]},
+    unselected: %{fg: "#55ffff"},
+    status_bar: %{fg: "#ffff55"}
+  }
+
+  @paper_slots %{
+    border:     %{fg: "#555555"},
+    primary:    %{fg: "#000000"},
+    dim:        %{fg: "#555555"},
+    accent:     %{fg: "#aa0000", style: [:bold]},
+    title:      %{fg: "#000000", style: [:bold]},
+    error:      %{fg: "#aa0000", style: [:bold]},
+    warning:    %{fg: "#aa5500"},
+    selected:   %{fg: "#cccccc", bg: "#000000", style: [:bold]},
+    unselected: %{fg: "#000000"},
+    status_bar: %{fg: "#000000"}
+  }
+
+  @magenta_slots %{
+    border:     %{fg: "#aa00aa"},
+    primary:    %{fg: "#ff55ff"},
+    dim:        %{fg: "#aa00aa"},
+    accent:     %{fg: "#55ffff", style: [:bold]},
+    title:      %{fg: "#ff55ff", style: [:bold]},
+    error:      %{fg: "#ff5555", style: [:bold]},
+    warning:    %{fg: "#ffff55"},
+    selected:   %{fg: "#000000", bg: "#ff55ff", style: [:bold]},
+    unselected: %{fg: "#ff55ff"},
+    status_bar: %{fg: "#ff55ff"}
+  }
+
+  @danger_slots %{
+    border:     %{fg: "#aa0000"},
+    primary:    %{fg: "#ffffff"},
+    dim:        %{fg: "#888888"},
+    accent:     %{fg: "#ff5555", style: [:bold]},
+    title:      %{fg: "#ff5555", style: [:bold]},
+    error:      %{fg: "#ffff55", style: [:bold]},
+    warning:    %{fg: "#ffb000"},
+    selected:   %{fg: "#000000", bg: "#ff5555", style: [:bold]},
+    unselected: %{fg: "#ffffff"},
+    status_bar: %{fg: "#ff5555"}
+  }
+
+  @ice_slots %{
+    border:     %{fg: "#5555ff"},
+    primary:    %{fg: "#aaaaaa"},
+    dim:        %{fg: "#5555ff"},
+    accent:     %{fg: "#55ffff", style: [:bold]},
+    title:      %{fg: "#ffffff", style: [:bold]},
+    error:      %{fg: "#ff5555", style: [:bold]},
+    warning:    %{fg: "#ffff55"},
+    selected:   %{fg: "#000000", bg: "#55ffff", style: [:bold]},
+    unselected: %{fg: "#aaaaaa"},
+    status_bar: %{fg: "#55ffff"}
+  }
+
+  @mono_slots %{
+    border:     %{fg: "#555555"},
+    primary:    %{fg: "#ffffff"},
+    dim:        %{fg: "#888888"},
+    accent:     %{fg: "#ffffff", style: [:bold]},
+    title:      %{fg: "#ffffff", style: [:bold]},
+    error:      %{fg: "#ffffff", style: [:bold]},
+    warning:    %{fg: "#aaaaaa", style: [:bold]},
+    selected:   %{fg: "#000000", bg: "#ffffff", style: [:bold]},
+    unselected: %{fg: "#ffffff"},
+    status_bar: %{fg: "#ffffff"}
+  }
+
+  # All theme id → slot-map pairs. Single source of truth for both
+  # `register_all/0` and the `static_slots/1` test/pre-boot fallback.
+  @themes %{
+    gray: @gray_slots,
+    green: @green_slots,
+    amber: @amber_slots,
+    cyan: @cyan_slots,
+    paper: @paper_slots,
+    magenta: @magenta_slots,
+    danger: @danger_slots,
+    ice: @ice_slots,
+    mono: @mono_slots
+  }
+
   @doc """
   Registers all Foglet TUI themes with Raxol's theme registry.
   Idempotent — safe to call multiple times. Call from
@@ -108,10 +213,16 @@ defmodule Foglet.TUI.Theme do
   """
   @spec register_all() :: :ok
   def register_all do
-    :ok = RaxolTheme.register(build_raxol_theme(:gray, @gray_slots))
-    :ok = RaxolTheme.register(build_raxol_theme(:green, @green_slots))
+    Enum.each(@themes, fn {id, slots} ->
+      :ok = RaxolTheme.register(build_raxol_theme(id, slots))
+    end)
+
     :ok
   end
+
+  @doc "List of registered theme ids."
+  @spec ids() :: [atom()]
+  def ids, do: Map.keys(@themes)
 
   @doc "Default theme (`:gray`) for v1.0.1."
   @spec default() :: t()
@@ -136,14 +247,6 @@ defmodule Foglet.TUI.Theme do
     struct(__MODULE__, slots)
   end
 
-  @doc "Alias for `resolve(:gray)`."
-  @spec gray() :: t()
-  def gray, do: resolve(:gray)
-
-  @doc "Alias for `resolve(:green)`."
-  @spec green() :: t()
-  def green, do: resolve(:green)
-
   # --- private ---
 
   defp build_raxol_theme(id, slots) do
@@ -154,7 +257,5 @@ defmodule Foglet.TUI.Theme do
     })
   end
 
-  defp static_slots(:gray), do: @gray_slots
-  defp static_slots(:green), do: @green_slots
-  defp static_slots(_), do: @gray_slots
+  defp static_slots(id), do: Map.get(@themes, id, @gray_slots)
 end
