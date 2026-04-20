@@ -87,6 +87,33 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   end
 
   @doc """
+  Render a post's body as a flat list of Raxol row elements — one per
+  logical line — for use as `Raxol.UI.Components.Display.Viewport`
+  children. The Viewport owns windowing/scroll-slicing.
+
+  This function returns BODY ONLY — no "Post X of N" header, no author
+  line, no divider. Callers wanting the header separately should build it
+  with their own `text/2` calls using `theme.dim.fg` and `theme.border.fg`
+  (see the `assemble_card/4` private helper for the current shape).
+
+  Delegates to `MarkdownBody.render_tuples_as_lines/4`. The `opts` keyword
+  is accepted for signature parity with `render_from_tuples/5` but has no
+  effect (the Viewport handles windowing).
+  """
+  @spec render_body_lines(
+          post_like(),
+          [MarkdownBody.tuple_entry()],
+          pos_integer(),
+          Theme.t(),
+          keyword()
+        ) :: [any()]
+  def render_body_lines(post, tuples, width, %Theme{} = theme, opts \\ [])
+      when is_map(post) and is_list(tuples) and is_integer(width) and width > 0 do
+    _ = post
+    MarkdownBody.render_tuples_as_lines(tuples, width, theme, body_opts(opts))
+  end
+
+  @doc """
   Total number of logical body lines for the given post body string.
   Exposed so PostReader can compute scroll bounds without assembling
   the full card.
