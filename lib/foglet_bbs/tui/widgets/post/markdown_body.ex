@@ -93,6 +93,30 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
   end
 
   @doc """
+  Render tuples as a flat list of Raxol row elements — one per logical line.
+
+  Returned shape: a plain list (not a column). Each element is either a bare
+  `text/2` (single-run line) or a `row/2` (multi-run line). Used by
+  `Raxol.UI.Components.Display.Viewport` as `children:` — the Viewport owns
+  windowing / scroll-slicing.
+
+  Differs from `render_tuples/4` in two ways:
+    * No column wrapper — returns the raw list.
+    * No `scroll_offset` / `max_lines` windowing — opts are ignored.
+
+  Empty input returns `[]`. The Viewport handles empty children gracefully.
+  """
+  @spec render_tuples_as_lines([tuple_entry()], pos_integer(), Theme.t(), keyword()) :: [any()]
+  def render_tuples_as_lines(tuples, width, %Theme{} = theme, opts \\ [])
+      when is_list(tuples) and is_integer(width) and width > 0 do
+    _ = opts
+
+    tuples
+    |> group_by_newline()
+    |> Enum.map(fn group -> line_group_to_row(group, theme) end)
+  end
+
+  @doc """
   Count the number of logical lines produced by a markdown string.
   Used by PostReader/PostCard to compute scroll bounds without
   re-rendering the view.
