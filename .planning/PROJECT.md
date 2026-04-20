@@ -48,6 +48,7 @@ Two users SSHing into the same BBS and feeling like they're actually *present* t
 - [ ] Seeds for default category + board layout
 
 **Milestone 3 — SSH Server & Minimal TUI** ✓ Complete 2026-04-19
+**Phase-03-polish Phase 6** — Email verification toggle + resend cooldown ✓ Complete 2026-04-20 (VERIFY-01: sysop config toggle routes post-login screen; VERIFY-02: independent resend cooldown on verify screen)
 - [x] `Foglet.SSH.Supervisor` wrapping `:ssh` daemon with persistent host key — Validated in Phase 03
 - [x] SSH password auth and public-key auth against user store — Validated in Phase 03
 - [x] Per-connection Session process (`Foglet.Sessions.Supervisor`), one-session-per-user enforcement — Validated in Phase 03
