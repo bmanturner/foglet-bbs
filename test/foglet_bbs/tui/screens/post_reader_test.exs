@@ -37,6 +37,10 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     def render(text), do: [{"MD[" <> text <> "]", :plain}]
   end
 
+  defmodule EmptyPosts do
+    def list_posts(_tid), do: []
+  end
+
   setup do
     state =
       %Foglet.TUI.App{
@@ -519,10 +523,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
 
     test "empty posts list leaves read_position unchanged (no crash)" do
-      defmodule EmptyPosts do
-        def list_posts(_tid), do: []
-      end
-
       s =
         p2_state(%{
           current_thread: %{id: "t1", title: "test"},
