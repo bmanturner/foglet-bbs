@@ -102,6 +102,78 @@ defmodule Foglet.TUI.Screens.RegisterTest do
     end
   end
 
+  describe "submit/2 — VERIFY-01 post-registration routing" do
+    setup do
+      original =
+        try do
+          Foglet.Config.get!("require_email_verification")
+        rescue
+          _ -> :not_seeded
+        end
+
+      on_exit(fn ->
+        case original do
+          :not_seeded -> :ok
+          value -> Foglet.Config.put!("require_email_verification", value)
+        end
+      end)
+
+      :ok
+    end
+
+    test "open mode + toggle=true routes to :verify with verify_state including resend_cooldown_until" do
+      Foglet.Config.put!("require_email_verification", true)
+
+      attrs = valid_user_attributes(%{password: "letmein12"})
+      handle = attrs[:handle] || attrs["handle"]
+      email = attrs[:email] || attrs["email"]
+      password = attrs[:password] || attrs["password"]
+
+      state = base_state("open")
+      {state, _} = Register.handle_wizard_event({:submit_step, :handle, handle}, state)
+      {state, _} = Register.handle_wizard_event({:submit_step, :email, email}, state)
+      {state, cmds} = Register.handle_wizard_event({:submit_step, :password, password}, state)
+
+      assert state.current_screen == :verify
+      assert state.current_user != nil
+      assert state.current_user.handle == handle
+      assert state.register_wizard == nil
+      assert Map.has_key?(state.verify_state, :resend_cooldown_until)
+      assert state.verify_state.resend_cooldown_until == nil
+      assert state.verify_state.buffer == ""
+      assert state.verify_state.attempts == 0
+      assert state.verify_state.cooldown_until == nil
+      assert cmds == []
+    end
+
+    test "open mode + toggle=false routes to :main_menu via {:promote_session, user}" do
+      Foglet.Config.put!("require_email_verification", false)
+
+      attrs = valid_user_attributes(%{password: "letmein12"})
+      handle = attrs[:handle] || attrs["handle"]
+      email = attrs[:email] || attrs["email"]
+      password = attrs[:password] || attrs["password"]
+
+      state = base_state("open")
+      {state, _} = Register.handle_wizard_event({:submit_step, :handle, handle}, state)
+      {state, _} = Register.handle_wizard_event({:submit_step, :email, email}, state)
+      {state, cmds} = Register.handle_wizard_event({:submit_step, :password, password}, state)
+
+      assert [{:promote_session, returned_user}] = cmds
+      assert returned_user.handle == handle
+      assert state.current_user != nil
+      assert state.current_user.id == returned_user.id
+      assert state.register_wizard == nil
+      # The :main_menu branch does NOT touch current_screen inline — app.ex's
+      # handler for {:promote_session, _} does. So state.current_screen may
+      # remain :register until the command runs through App.update/2.
+      # What matters here: no verify_state was built, no :verify code logged.
+      assert Map.get(state, :verify_state) == nil or
+               Map.get(state, :verify_state) ==
+                 %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
+    end
+  end
+
   describe "cancel" do
     test "{:cancel} resets wizard and returns to :login" do
       state = base_state("open")
