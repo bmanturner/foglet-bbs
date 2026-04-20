@@ -1,17 +1,17 @@
 ---
-workstream: phase-03-polish
+gsd_state_version: 1.0
 milestone: v1.0.1
-milestone_name: Phase 03 Polish
-created: 2026-04-19
-status: phase_2_planned
-last_updated: 2026-04-20
-last_activity: 2026-04-20
+milestone_name: milestone
+status: Phase 2 plans committed. Both RENDER-01 and RENDER-02 covered by all 3 plans. Ready for `/gsd-execute-phase 2`.
+stopped_at: Phase 4 context gathered
+last_updated: "2026-04-20T15:52:16.025Z"
+last_activity: "2026-04-20 — Phase 2 planned: Post.MarkdownBody (newline-grouping fix), Post.PostCard (header+body assembly), PostReader integration (j/k scroll + {post.id, width} render cache)."
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 7
   completed_plans: 4
-  percent: 17
+  percent: 57
 ---
 
 # Workstream State — phase-03-polish
@@ -68,29 +68,35 @@ Ten items shaped into 17 requirements across 7 categories (see REQUIREMENTS.md):
 ## Accumulated Context
 
 ### Decisions
+
 Inherited from main workstream (see `.planning/PROJECT.md` Key Decisions).
 
 Locked for this milestone (see REQUIREMENTS.md "Locked Decisions"):
+
 - Retroactive bypass on verification toggle-off: existing `confirmed_at: nil` users gain access on next login
 - Widget style: function-form only (Raxol modern block-macro DSL)
 - Markdown rendering: view-time with per-screen memoization (no pre-rendering to DB)
 - Raxol `ThemeManager`: rejected; use `Foglet.TUI.Theme` struct
 
 ### Open Decisions (per-phase)
+
 - **Minimum terminal dimensions** — deferred to Phase 5 discuss/plan. Research options: 60×20 (floor before garbling) vs 80×24 (comfort for BoardList row density).
 
 ### Blockers/Concerns
+
 None. Research is HIGH confidence; zero new dependencies required.
 
 ### Reference Seeds
+
 - SEED-002 (email-verification-ux) — folded into VERIFY-01, VERIFY-02.
 
 ## Session Continuity
 
-Last session: 2026-04-20 — Phase 2 planned (3 plans across 3 waves).
+Last session: 2026-04-20T15:52:16.020Z
+
 - Plan 02-01 (Wave 1): `Post.MarkdownBody` — newline-grouping via `Enum.chunk_by/2`, theme-driven style mapping (D-06), + tests
 - Plan 02-02 (Wave 2): `Post.PostCard` — author header (`By @handle · 2h ago`) + themed divider + delegated `MarkdownBody` body, + tests
 - Plan 02-03 (Wave 3): PostReader integration — `PostCard.render_from_tuples/5`, j/k within-post scroll (D-03, D-04, D-05), `render_cache` keyed on `{post.id, width}` in `screen_state[:post_reader]`, legacy `render_markdown_tuples/2` + `render_post_items/4` + `get_post_author/1` deleted, + tests including seeded-thread UAT smoke
 
-Stopped at: Phase 2 planned, 0/3 plans executed. Requirements coverage: 2/2 (RENDER-01, RENDER-02).
-Resume file: `.planning/workstreams/phase-03-polish/phases/02-markdown-rendering-correctness/` — next: `/gsd-execute-phase 2`
+Stopped at: Phase 4 context gathered
+Resume file: .planning/workstreams/phase-03-polish/phases/04-composer-thread-creation-end-to-end/04-CONTEXT.md
