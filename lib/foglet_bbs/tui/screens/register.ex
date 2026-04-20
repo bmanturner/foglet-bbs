@@ -22,6 +22,8 @@ defmodule Foglet.TUI.Screens.Register do
 
   @modes ~w(open invite_only sysop_approved)
 
+  @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
+
   @spec render(map()) :: any()
   def render(state) do
     w = state.register_wizard || default_wizard(state)
@@ -234,27 +236,36 @@ defmodule Foglet.TUI.Screens.Register do
       {:ok, user} ->
         case Accounts.post_login_screen(user) do
           :verify ->
-            {:ok, code} = Accounts.build_verify_code(user)
+            case Accounts.build_verify_code(user) do
+              {:ok, code} ->
+                if @log_verify_codes do
+                  require Logger
+                  Logger.info("[verify] code for @#{user.handle}: #{code}")
+                end
 
-            if Mix.env() != :prod do
-              require Logger
-              Logger.info("[verify] code for @#{user.handle}: #{code}")
-            end
-
-            new_state = %{
-              state
-              | current_user: user,
-                current_screen: :verify,
-                register_wizard: nil,
-                verify_state: %{
-                  buffer: "",
-                  attempts: 0,
-                  cooldown_until: nil,
-                  resend_cooldown_until: nil
+                new_state = %{
+                  state
+                  | current_user: user,
+                    current_screen: :verify,
+                    register_wizard: nil,
+                    verify_state: %{
+                      buffer: "",
+                      attempts: 0,
+                      cooldown_until: nil,
+                      resend_cooldown_until: nil
+                    }
                 }
-            }
 
-            {new_state, []}
+                {new_state, []}
+
+              {:error, _cs} ->
+                modal = %{
+                  type: :error,
+                  message: "Could not generate a verification code. Please try again."
+                }
+
+                {%{state | modal: modal}, []}
+            end
 
           :main_menu ->
             # require_email_verification is false — skip verify screen, promote

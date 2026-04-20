@@ -27,6 +27,8 @@ defmodule Foglet.TUI.Screens.Login do
   @menu_keys [{"L", "Login"}, {"R", "Register"}, {"Q", "Quit"}]
   @menu_keys_no_register [{"L", "Login"}, {"Q", "Quit"}]
 
+  @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
+
   @spec render(map()) :: any()
   def render(state) do
     mode = registration_mode(state)
@@ -266,26 +268,35 @@ defmodule Foglet.TUI.Screens.Login do
       {:ok, %{status: :active} = user} ->
         case Accounts.post_login_screen(user) do
           :verify ->
-            {:ok, code} = Accounts.build_verify_code(user)
+            case Accounts.build_verify_code(user) do
+              {:ok, code} ->
+                if @log_verify_codes do
+                  require Logger
+                  Logger.info("[verify] code for @#{user.handle}: #{code}")
+                end
 
-            if Mix.env() != :prod do
-              require Logger
-              Logger.info("[verify] code for @#{user.handle}: #{code}")
+                {:update,
+                 %{
+                   state
+                   | current_user: user,
+                     current_screen: :verify,
+                     screen_state: %{},
+                     verify_state: %{
+                       buffer: "",
+                       attempts: 0,
+                       cooldown_until: nil,
+                       resend_cooldown_until: nil
+                     }
+                 }, []}
+
+              {:error, _cs} ->
+                modal = %{
+                  type: :error,
+                  message: "Could not generate a verification code. Please try again."
+                }
+
+                {:update, %{state | modal: modal}, []}
             end
-
-            {:update,
-             %{
-               state
-               | current_user: user,
-                 current_screen: :verify,
-                 screen_state: %{},
-                 verify_state: %{
-                   buffer: "",
-                   attempts: 0,
-                   cooldown_until: nil,
-                   resend_cooldown_until: nil
-                 }
-             }, []}
 
           :main_menu ->
             # Clear screen state and promote the session via the App's handler.
