@@ -216,15 +216,36 @@ defmodule Raxol.UI.ElementRenderer do
     border_chars =
       BorderRenderer.get_border_chars(Map.get(style, :border_style, :single))
 
+    # Local patch: honor `:border_fg` / `:border_bg` for border colors so
+    # callers can color the border without forcing `:fg` onto the box
+    # (which would cascade to children via StyleProcessor inheritance).
+    # See https://github.com/DROOdotFOO/raxol/issues/215 (companion ask).
+    border_style = apply_border_colors(style)
+
     BorderRenderer.render_box_borders(
       clip_x,
       clip_y,
       clip_width,
       clip_height,
       border_chars,
-      style
+      border_style
     )
   end
+
+  defp apply_border_colors(style) do
+    # Look for :border_fg/:border_bg at the top level first, then fall
+    # back to attrs.style — the UI layout engine nests the original
+    # view-DSL style map under :attrs.style and the renderer doesn't
+    # currently lift it back out. See engine.ex:284 / style_processor.ex:78.
+    nested = get_in(style, [:attrs, :style]) || %{}
+
+    style
+    |> maybe_override(:fg, Map.get(style, :border_fg) || Map.get(nested, :border_fg))
+    |> maybe_override(:bg, Map.get(style, :border_bg) || Map.get(nested, :border_bg))
+  end
+
+  defp maybe_override(style, _key, nil), do: style
+  defp maybe_override(style, key, value), do: Map.put(style, key, value)
 
   defp render_box_with_border_option(
          false,
