@@ -269,23 +269,37 @@ defmodule Foglet.TUI.Screens.Login do
     form = Map.get(login_ss, :form) || %{handle: "", password: ""}
 
     case Accounts.authenticate_by_password(form.handle, form.password) do
-      {:ok, %{status: :active, confirmed_at: nil} = user} ->
-        {:ok, code} = Accounts.build_verify_code(user)
-        require Logger
-        Logger.info("[verify] code for @#{user.handle}: #{code}")
-
-        {:update,
-         %{
-           state
-           | current_user: user,
-             current_screen: :verify,
-             screen_state: %{},
-             verify_state: %{buffer: "", attempts: 0, cooldown_until: nil}
-         }, []}
-
       {:ok, %{status: :active} = user} ->
-        # Clear screen state and promote the session via the App's handler.
-        {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}
+        case Accounts.post_login_screen(user) do
+          :verify ->
+            {:ok, code} = Accounts.build_verify_code(user)
+
+            if Mix.env() != :prod do
+              require Logger
+              Logger.info("[verify] code for @#{user.handle}: #{code}")
+            end
+
+            {:update,
+             %{
+               state
+               | current_user: user,
+                 current_screen: :verify,
+                 screen_state: %{},
+                 verify_state: %{
+                   buffer: "",
+                   attempts: 0,
+                   cooldown_until: nil,
+                   resend_cooldown_until: nil
+                 }
+             }, []}
+
+          :main_menu ->
+            # Clear screen state and promote the session via the App's handler.
+            # post_login_screen/1 returns :main_menu for confirmed users AND
+            # unconfirmed users when require_email_verification is false
+            # (VERIFY-01 retroactive bypass).
+            {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}
+        end
 
       {:ok, %{status: :pending}} ->
         modal = %{
