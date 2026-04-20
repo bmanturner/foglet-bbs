@@ -591,4 +591,57 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {new_state, _} = NewThread.load_boards(state)
     assert get_ss(new_state).boards == []
   end
+
+  # ---------------------------------------------------------------------------
+  # Preview mode — D-11 delegation to Post.MarkdownBody
+  # ---------------------------------------------------------------------------
+
+  test "Tab on body toggles to :preview mode" do
+    state = compose_state()
+    # Tab to body
+    {:update, s, _} = NewThread.handle_key(%{key: :tab}, state)
+    assert get_ss(s).focused == :body
+    assert get_ss(s).mode == :edit
+
+    # Tab on body toggles to preview
+    {:update, s, _} = NewThread.handle_key(%{key: :tab}, s)
+    assert get_ss(s).mode == :preview
+    assert get_ss(s).focused == :body
+  end
+
+  test "render/1 in :compose step + :preview mode does not crash on markdown input" do
+    {:ok, body_input} =
+      MultiLineInput.init(%{
+        value: "# Thread Title\n\nOpening post with **emphasis**.",
+        placeholder: "Write your opening post…",
+        width: 76,
+        height: 10,
+        wrap: :none,
+        focused: false
+      })
+
+    board = %{id: "b1", name: "General"}
+
+    ss = %{
+      step: :compose,
+      boards: [board],
+      selected_board_index: 0,
+      board: board,
+      title_input: "Test Thread",
+      body_input_state: body_input,
+      focused: :body,
+      mode: :preview,
+      error: nil
+    }
+
+    state =
+      Map.put(
+        base_state(%{session_context: %{domain: %{boards: FakeBoards, threads: FakeThreadsOk}}}),
+        :screen_state,
+        %{new_thread: ss}
+      )
+
+    # render/1 is pure — calling it should not raise.
+    assert NewThread.render(state) != nil
+  end
 end

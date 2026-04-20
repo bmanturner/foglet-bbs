@@ -15,7 +15,9 @@ defmodule Foglet.TUI.Screens.NewThread do
   alias Foglet.Config
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.Post.MarkdownBody
   alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
@@ -161,73 +163,19 @@ defmodule Foglet.TUI.Screens.NewThread do
 
     case ss.mode do
       :edit ->
-        render_body(ss.body_input_state, body_focused, theme)
+        # D-09: delegate to shared widget. NewThread preserves its legacy
+        # single-space placeholder for empty lines (see Plan 04-01's opt).
+        Compose.render_input(ss.body_input_state, body_focused, theme,
+          empty_line_placeholder: " "
+        )
 
       :preview ->
-        render_markdown_tuples(render_preview_text(state, ss.body_input_state.value), theme)
+        {w, _h} = state.terminal_size || {80, 24}
+        body_width = max(w - 4, 20)
+        MarkdownBody.render(ss.body_input_state.value, body_width, theme)
     end
   end
 
-  # Renders MultiLineInput state as plain text/2 — avoids MultiLineInput.render/2
-  # which crashes the layout engine (Bug B).
-  defp render_body(input_st, focused?, theme) do
-    lines =
-      input_st.value
-      |> String.split("\n")
-      |> case do
-        [] -> [""]
-        ls -> ls
-      end
-
-    {cursor_row, cursor_col} = Map.get(input_st, :cursor_pos, {0, 0})
-
-    column style: %{gap: 0} do
-      lines
-      |> Enum.with_index()
-      |> Enum.map(fn {line, idx} ->
-        rendered =
-          if focused? and idx == cursor_row do
-            {before, after_} = String.split_at(line, cursor_col)
-            "#{before}█#{after_}"
-          else
-            line
-          end
-
-        # Use a placeholder space for empty lines so the element is non-empty.
-        display = if rendered == "", do: " ", else: rendered
-        text(display, fg: theme.primary.fg)
-      end)
-    end
-  end
-
-  # Returns a [{text, style_atom}] list for the given draft string.
-  defp render_preview_text(state, draft) do
-    sc = Map.get(state, :session_context) || %{}
-    markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
-
-    if function_exported?(markdown_mod, :render, 1) do
-      markdown_mod.render(draft)
-    else
-      [{draft, :plain}]
-    end
-  end
-
-  # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
-  # a column of text/2 elements styled appropriately.
-  defp render_markdown_tuples(tuples, theme) when is_list(tuples) do
-    column style: %{gap: 0} do
-      Enum.map(tuples, fn
-        {s, :bold} -> text(s, style: [:bold], fg: theme.primary.fg)
-        {s, :italic} -> text(s, style: [:italic], fg: theme.primary.fg)
-        {s, :dim} -> text(s, style: [:dim], fg: theme.dim.fg)
-        {s, :underline} -> text(s, style: [:underline], fg: theme.primary.fg)
-        {s, :plain} -> text(s, fg: theme.primary.fg)
-        {s, _} -> text(s, fg: theme.primary.fg)
-      end)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
   # Key handler
   # ---------------------------------------------------------------------------
 
@@ -355,7 +303,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Body field: forward to MultiLineInput
   defp handle_compose_key(key_event, state, %{focused: :body} = ss) do
-    case translate_key(key_event) do
+    case Compose.translate_key(key_event) do
       nil ->
         :no_match
 
@@ -451,34 +399,6 @@ defmodule Foglet.TUI.Screens.NewThread do
        }, []}
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Key translation (same as PostComposer)
-  # ---------------------------------------------------------------------------
-
-  # Translate Raxol-native event data maps to MultiLineInput.update/2 messages.
-  defp translate_key(%{key: :backspace}), do: {:backspace}
-  defp translate_key(%{key: :delete}), do: {:delete}
-  defp translate_key(%{key: :enter}), do: {:enter}
-  defp translate_key(%{key: :up}), do: {:move_cursor, :up}
-  defp translate_key(%{key: :down}), do: {:move_cursor, :down}
-  defp translate_key(%{key: :left}), do: {:move_cursor, :left}
-  defp translate_key(%{key: :right}), do: {:move_cursor, :right}
-  defp translate_key(%{key: :home}), do: {:move_cursor_line_start}
-  defp translate_key(%{key: :end}), do: {:move_cursor_line_end}
-  defp translate_key(%{key: :page_up}), do: {:move_cursor_page, :up}
-  defp translate_key(%{key: :page_down}), do: {:move_cursor_page, :down}
-
-  # Typed character — %{key: :char, char: grapheme_string}.
-  # Spacebar arrives as char: " " naturally.
-  defp translate_key(%{key: :char, char: c}) do
-    case String.to_charlist(c) do
-      [cp | _] when cp >= 32 -> {:input, cp}
-      _ -> nil
-    end
-  end
-
-  defp translate_key(_), do: nil
 
   # ---------------------------------------------------------------------------
   # Private helpers

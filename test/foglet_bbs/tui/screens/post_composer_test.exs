@@ -364,4 +364,61 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     result = PostComposer.handle_key(%{key: :char, char: "h"}, s)
     assert match?({:update, _, _}, result)
   end
+
+  # ---------------------------------------------------------------------------
+  # Preview mode — D-11 delegation to Post.MarkdownBody
+  # ---------------------------------------------------------------------------
+
+  test "Tab toggles to :preview mode with markdown body", %{state: state} do
+    # Type some content first
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "#"}, state)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: " "}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, s)
+    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "i"}, s)
+
+    assert get_in(s.screen_state, [:post_composer, :mode]) == :edit
+
+    {:update, s, _} = PostComposer.handle_key(%{key: :tab}, s)
+    assert get_in(s.screen_state, [:post_composer, :mode]) == :preview
+  end
+
+  test "render/1 in preview mode does not crash on complex markdown input" do
+    # Smoke test — previously, preview rendered via a private
+    # render_markdown_tuples/2 that showed literal \n characters for
+    # line breaks (RENDER-01 bug). After D-11, Post.MarkdownBody
+    # handles newline grouping. This test verifies no crash.
+    {:ok, input_st} =
+      MultiLineInput.init(%{
+        value: "# Header\n\nSome **bold** text\n\n- item 1\n- item 2",
+        placeholder: "Write your post…",
+        width: 76,
+        height: 10,
+        wrap: :none,
+        focused: true
+      })
+
+    state =
+      %Foglet.TUI.App{
+        current_screen: :post_composer,
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+        current_thread: %{id: "t1", title: "Hello", board_id: "b1"},
+        session_context: %{
+          domain: %{posts: FakePosts, markdown: FakeMarkdown}
+        },
+        terminal_size: {80, 24},
+        composer_draft: nil,
+        screen_state: %{
+          post_composer: %{
+            mode: :preview,
+            reply_to: nil,
+            error: nil,
+            input_state: input_st
+          }
+        }
+      }
+      |> Map.from_struct()
+
+    # render/1 is pure — calling it should not raise.
+    assert PostComposer.render(state) != nil
+  end
 end
