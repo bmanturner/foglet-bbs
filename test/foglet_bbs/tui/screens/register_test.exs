@@ -44,7 +44,13 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert state.current_screen == :verify
       assert state.current_user != nil
       assert state.register_wizard == nil
-      assert state.verify_state == %{buffer: "", attempts: 0, cooldown_until: nil}
+
+      assert state.verify_state == %{
+               buffer: "",
+               attempts: 0,
+               cooldown_until: nil,
+               resend_cooldown_until: nil
+             }
     end
 
     test "invite_only mode: rejects empty/invalid invite_code before handle step" do
