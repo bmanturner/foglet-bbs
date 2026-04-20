@@ -13,15 +13,18 @@ defmodule Foglet.TUI.Screens.PostReader do
   `state.screen_state[:post_reader]` holds:
 
     - `selected_post_index` — 0-based post index in the thread
-    - `scroll_offset` — within-post scroll position (logical lines)
+    - `viewport` — Raxol.UI.Components.Display.Viewport state (owns scroll_top,
+      content_height, visible_height, children). Replaces pre-Phase-7 `scroll_offset`.
     - `render_cache` — `%{{post_id, width} => tuples}` memoizing Markdown.parse
 
   The cache is discarded on `Q` (screen exit) and rebuilt on re-entry.
   """
 
+  alias Foglet.TimeAgo
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
+  alias Raxol.UI.Components.Display.Viewport
 
   import Raxol.Core.Renderer.View
 
@@ -65,12 +68,25 @@ defmodule Foglet.TUI.Screens.PostReader do
       available_height = max(h - 10, 5)
       tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
 
-      PostCard.render_from_tuples(post, tuples, w, theme,
-        index: idx,
-        total: total,
-        scroll_offset: ss.scroll_offset,
-        max_lines: available_height
-      )
+      # Non-scrolling header (Post X of N, author, divider).
+      header_line_1 = text("Post #{idx + 1} of #{total}", fg: theme.dim.fg)
+      header_line_2 = text(author_line(post), fg: theme.dim.fg)
+      header_divider = divider(char: "─", style: %{fg: theme.border.fg})
+
+      # Pre-themed body lines — Viewport passes them through unmodified.
+      body_lines = PostCard.render_body_lines(post, tuples, w, theme)
+
+      # Wire visible_height and children for this frame. render_post_content
+      # is a read-only function — the Viewport state built here is transient,
+      # not written back into screen_state. State-writing happens in
+      # scroll_post / advance_post / load_posts via warm_viewport.
+      {vp, []} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
+      {vp, []} = Viewport.update({:set_children, body_lines}, vp)
+      body_rendered = Viewport.render(vp, %{})
+
+      column style: %{gap: 0} do
+        [header_line_1, header_line_2, header_divider, body_rendered]
+      end
     end
   end
 
@@ -141,10 +157,18 @@ defmodule Foglet.TUI.Screens.PostReader do
     posts = posts_mod.list_posts(thread_id)
     new_read_position = seed_read_position_on_entry(state.read_position, thread_id, posts)
     {w, _h} = state.terminal_size || {80, 24}
+
     # WR-01: warm the render cache for the first post on load so that the
     # initial render (before any keypress) does not re-parse on every frame.
     ss = get_screen_state(state)
-    ss = warm_cache_for_index(ss, %{state | posts: posts}, posts, 0, w)
+    state_with_posts = %{state | posts: posts}
+    ss = warm_cache_for_index(ss, state_with_posts, posts, 0, w)
+
+    # Pre-populate the viewport children for post 0 so j/k have correct
+    # content_height for clamping on first keypress.
+    first_post = Enum.at(posts, 0)
+    ss = if first_post, do: warm_viewport(ss, state_with_posts, first_post, w), else: ss
+
     new_screen_state = Map.put(state.screen_state, :post_reader, ss)
 
     {%{state | posts: posts, read_position: new_read_position, screen_state: new_screen_state},
@@ -206,19 +230,35 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   # Default screen_state shape for post_reader.
   # `render_cache` is a map keyed on {post_id, width} → rendered tuples.
+  # `viewport` is a Raxol.UI.Components.Display.Viewport state map — owns
+  # scroll_top, content_height, visible_height, and children. Replaces the
+  # pre-Phase-7 `scroll_offset` integer.
   defp default_screen_state do
+    {:ok, vp} =
+      Viewport.init(%{
+        id: "post_reader_vp",
+        children: [],
+        visible_height: 10,
+        scroll_top: 0,
+        show_scrollbar: false
+      })
+
     %{
       selected_post_index: 0,
-      scroll_offset: 0,
+      viewport: vp,
       render_cache: %{}
     }
   end
 
   # Merges the default shape over any existing :post_reader entry so
-  # legacy states (from pre-Phase-2 sessions mid-flight) get the new
-  # keys without overwriting selected_post_index.
+  # legacy states (from pre-Phase-7 sessions mid-flight) get the new
+  # :viewport field without overwriting selected_post_index. Legacy
+  # :scroll_offset is explicitly dropped — Viewport owns scroll now.
   defp get_screen_state(state) do
-    existing = get_in(state.screen_state, [:post_reader]) || %{}
+    existing =
+      (get_in(state.screen_state, [:post_reader]) || %{})
+      |> Map.drop([:scroll_offset])
+
     Map.merge(default_screen_state(), existing)
   end
 
@@ -240,6 +280,11 @@ defmodule Foglet.TUI.Screens.PostReader do
     sc = Map.get(state, :session_context) || %{}
     markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
     body = Map.get(post, :body) || ""
+
+    # Ensure the module is loaded before checking function_exported? — the
+    # check returns false for modules that haven't been called yet in the
+    # current runtime session even if the function exists (lazy loading).
+    _ = Code.ensure_loaded(markdown_mod)
 
     if function_exported?(markdown_mod, :render, 1) do
       markdown_mod.render(body)
@@ -270,6 +315,22 @@ defmodule Foglet.TUI.Screens.PostReader do
     if post, do: warm_cache(ss, state, post, w), else: ss
   end
 
+  # Populates the viewport's children with pre-themed body lines for the
+  # currently-selected post. Required before any scroll_by/scroll_to call
+  # so the Viewport has the correct content_height for clamping.
+  # Width-aware: re-runs whenever width changes (via scroll_post caller).
+  defp warm_viewport(ss, state, post, w) do
+    theme =
+      (Map.get(state, :session_context) || %{}) |> Map.get(:theme) ||
+        Foglet.TUI.Theme.default()
+
+    tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
+    body_lines = PostCard.render_body_lines(post, tuples, w, theme)
+
+    {new_vp, []} = Viewport.update({:set_children, body_lines}, ss.viewport)
+    %{ss | viewport: new_vp}
+  end
+
   defp advance_post(state, delta) do
     posts = state.posts || []
 
@@ -281,9 +342,11 @@ defmodule Foglet.TUI.Screens.PostReader do
       post = Enum.at(posts, new_idx)
       {w, _h} = state.terminal_size || {80, 24}
 
-      # D-04: N/P resets scroll_offset to 0.
-      ss = %{ss | selected_post_index: new_idx, scroll_offset: 0}
+      # D-04: N/P/space/page_down/page_up resets scroll to the top of the new post.
+      {reset_vp, []} = Viewport.update({:scroll_to, 0}, ss.viewport)
+      ss = %{ss | selected_post_index: new_idx, viewport: reset_vp}
       ss = if post, do: warm_cache(ss, state, post, w), else: ss
+      ss = if post, do: warm_viewport(ss, state, post, w), else: ss
 
       # Local read-pointer advance — flushed on screen transition.
       new_rp =
@@ -317,14 +380,16 @@ defmodule Foglet.TUI.Screens.PostReader do
         {w, h} = state.terminal_size || {80, 24}
         available_height = max(h - 10, 5)
 
-        total_lines = PostCard.body_line_count(Map.get(post, :body))
-        # Max offset: never scroll past (total - available_height).
-        # Clamp at 0 for short posts.
-        max_offset = max(total_lines - available_height, 0)
-        new_offset = (ss.scroll_offset + delta) |> max(0) |> min(max_offset)
-
-        ss = %{ss | scroll_offset: new_offset}
+        # Warm the cache + viewport BEFORE scrolling so Viewport has the
+        # correct content_height for clamping. Also sync visible_height from
+        # the current terminal size so max_scroll reflects the real window.
         ss = warm_cache(ss, state, post, w)
+        ss = warm_viewport(ss, state, post, w)
+
+        {new_vp, []} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
+        # Viewport.update/2 handles all clamping — no max_offset math needed.
+        {new_vp, []} = Viewport.update({:scroll_by, delta}, new_vp)
+        ss = %{ss | viewport: new_vp}
 
         new_screen_state = Map.put(state.screen_state, :post_reader, ss)
         {:update, %{state | screen_state: new_screen_state}, []}
@@ -346,4 +411,31 @@ defmodule Foglet.TUI.Screens.PostReader do
       last_read_message_number: pos[:last_read_message_number]
     }
   end
+
+  # Ported from PostCard — used by render_post_content/5 to build the
+  # non-scrolling post header. Kept private here to avoid broadening
+  # PostCard's public surface for a single caller.
+  defp author_line(post) do
+    handle = get_handle(post)
+    when_str = get_time_ago(post)
+
+    case {handle, when_str} do
+      {h, nil} when is_binary(h) -> "By @#{h}"
+      {nil, t} when is_binary(t) -> "#{t} ago"
+      {h, t} when is_binary(h) and is_binary(t) -> "By @#{h} · #{t} ago"
+      _ -> "(post details unavailable)"
+    end
+  end
+
+  defp get_handle(%{user: %{handle: h}}) when is_binary(h) and h != "", do: h
+  defp get_handle(_), do: nil
+
+  defp get_time_ago(%{inserted_at: %DateTime{} = dt}), do: TimeAgo.format(dt)
+
+  defp get_time_ago(%{inserted_at: %NaiveDateTime{} = naive}) do
+    dt = DateTime.from_naive!(naive, "Etc/UTC")
+    TimeAgo.format(dt)
+  end
+
+  defp get_time_ago(_), do: nil
 end
