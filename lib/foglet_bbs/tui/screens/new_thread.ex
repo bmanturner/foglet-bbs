@@ -332,23 +332,6 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   # ---------------------------------------------------------------------------
-  # Board loading (called by App.update/2 on {:load_boards_for_new_thread})
-  # ---------------------------------------------------------------------------
-
-  @doc """
-  Loads subscribed boards into the new_thread screen state.
-  Called from App.update/2 in response to {:load_boards_for_new_thread}.
-  """
-  @spec load_boards(map()) :: {map(), list()}
-  def load_boards(state) do
-    boards_mod = domain_module(state, :boards)
-    boards = boards_mod.list_subscribed_boards(state.current_user)
-    ss = screen_state(state)
-    new_ss = %{ss | boards: boards}
-    {put_ss(state, new_ss), []}
-  end
-
-  # ---------------------------------------------------------------------------
   # Submit
   # ---------------------------------------------------------------------------
 

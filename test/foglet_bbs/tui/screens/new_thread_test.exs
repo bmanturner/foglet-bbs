@@ -11,10 +11,6 @@ defmodule Foglet.TUI.Screens.NewThreadTest.FakeBoards do
   end
 end
 
-defmodule Foglet.TUI.Screens.NewThreadTest.FakeBoardsEmpty do
-  def list_subscribed_boards(_user), do: []
-end
-
 defmodule Foglet.TUI.Screens.NewThreadTest.FakeThreadsOk do
   def create_thread(_board_id, _user_id, attrs) do
     thread = %{
@@ -46,7 +42,6 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   alias Raxol.UI.Components.Input.MultiLineInput
 
   alias Foglet.TUI.Screens.NewThreadTest.FakeBoards
-  alias Foglet.TUI.Screens.NewThreadTest.FakeBoardsEmpty
   alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsOk
   alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsMissing
   alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsError
@@ -574,29 +569,6 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert final.modal != nil
     assert final.modal.type == :error
     assert final.modal.message =~ "logged in"
-  end
-
-  # ---------------------------------------------------------------------------
-  # load_boards/1
-  # ---------------------------------------------------------------------------
-
-  test "load_boards/1 populates boards into screen_state" do
-    state = base_state(%{session_context: %{domain: %{boards: FakeBoards}}})
-    # Clear boards first
-    ss = get_ss(state)
-    s = Map.put(state, :screen_state, %{new_thread: %{ss | boards: nil}})
-
-    {new_state, _cmds} = NewThread.load_boards(s)
-    loaded = get_ss(new_state).boards
-    assert length(loaded) == 2
-    assert Enum.any?(loaded, &(&1.name == "General"))
-    assert Enum.any?(loaded, &(&1.name == "Announcements"))
-  end
-
-  test "load_boards/1 with no domain module sets empty list" do
-    state = base_state(%{session_context: %{domain: %{boards: FakeBoardsEmpty}}})
-    {new_state, _} = NewThread.load_boards(state)
-    assert get_ss(new_state).boards == []
   end
 
   # ---------------------------------------------------------------------------
