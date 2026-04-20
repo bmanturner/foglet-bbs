@@ -70,7 +70,11 @@ defmodule Foglet.TUI.SizeGate do
       |> Kernel.||(Theme.default())
 
     fg = Map.get(theme.dim, :fg)
-    {cols, rows} = Map.get(state, :terminal_size) || {0, 0}
+    {cols, rows} =
+      case Map.get(state, :terminal_size) do
+        {c, r} when is_integer(c) and is_integer(r) -> {c, r}
+        _ -> {0, 0}
+      end
 
     column style: %{justify_content: :center, align_items: :center} do
       [
