@@ -20,6 +20,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
   alias Foglet.TUI.SizeGate
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
   alias Raxol.Core.Runtime.Command
   alias Raxol.Core.Runtime.Subscription
@@ -155,7 +156,7 @@ defmodule Foglet.TUI.App do
         SizeGate.render(state)
 
       state.modal ->
-        render_modal_overlay(state.modal, state.terminal_size)
+        render_modal_overlay(state.modal, state)
 
       true ->
         render_screen(state)
@@ -163,18 +164,15 @@ defmodule Foglet.TUI.App do
   end
 
   # Renders the modal as the sole visible content, centered in the terminal.
-  # This is not a true z-index overlay — the screen behind is suspended while
-  # the modal is active — but it gives the user clear modal focus with no
-  # Raxol widget-render surprises, and dismissal restores the screen unchanged.
-  #
-  # Design: a full-screen flex column (justify: :center centers the box
-  # vertically; align: :center centers it horizontally) containing a
-  # double-border box that holds the modal body.
-  defp render_modal_overlay(modal, _terminal_size) do
+  # Extracts theme from state.session_context and passes it through to the
+  # theme-aware Modal.render/2 (Phase 7 thin adapter, D-08).
+  defp render_modal_overlay(modal, state) do
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+
     column justify: :center, align: :center do
       [
-        box style: %{border: :double, padding: 1} do
-          Widgets.Modal.render(modal)
+        box style: %{border: :double, padding: 1, border_fg: theme.border.fg} do
+          Widgets.Modal.render(modal, theme)
         end
       ]
     end
