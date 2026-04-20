@@ -37,9 +37,9 @@ defmodule Foglet.Threads.Thread do
     })
   end
 
-  @doc "Set first_post_id after root post creation."
+  @doc "Set first_post_id and last_post_at after root post creation."
   def set_first_post(thread, post_id) do
-    change(thread, %{first_post_id: post_id})
+    change(thread, %{first_post_id: post_id, last_post_at: DateTime.utc_now()})
   end
 
   @doc "Mod/sysop: lock or unlock a thread."

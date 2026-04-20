@@ -155,4 +155,165 @@ defmodule Foglet.ThreadsTest do
       assert reloaded_p2.board_id == board_b.id
     end
   end
+
+  describe "list_threads/2 — unread annotation (LIST-03)" do
+    test "returns empty list for a board with no threads" do
+      {board, _pid} = setup_board_with_server()
+      user = user_fixture()
+
+      assert [] = Foglet.Threads.list_threads(board.id, user.id)
+    end
+
+    test "new user (no read pointers) sees all threads as has_unread: true" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+
+      {:ok, %{thread: t1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "A", body: "b"})
+
+      {:ok, %{thread: t2}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "B", body: "b"})
+
+      results = Foglet.Threads.list_threads(board.id, reader.id)
+
+      assert length(results) == 2
+
+      result_map = Map.new(results, fn t -> {t.id, t.has_unread} end)
+      assert Map.get(result_map, t1.id) == true
+      assert Map.get(result_map, t2.id) == true
+    end
+
+    test "thread read before its last post is has_unread: true" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+
+      {:ok, %{thread: thread, post: p1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T", body: "root"})
+
+      {:ok, _} = Foglet.Threads.advance_thread_read_pointer(reader.id, thread.id, p1.id)
+
+      past = DateTime.add(DateTime.utc_now(), -3600, :second)
+
+      from(rp in Foglet.Threads.ReadPointer,
+        where: rp.user_id == ^reader.id and rp.thread_id == ^thread.id
+      )
+      |> Repo.update_all(set: [last_read_at: past])
+
+      {:ok, _p2} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "later"})
+
+      [%{has_unread: has_unread}] = Foglet.Threads.list_threads(board.id, reader.id)
+      assert has_unread == true
+    end
+
+    test "thread read up-to-date is has_unread: false" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+
+      {:ok, %{thread: thread, post: p1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T", body: "root"})
+
+      future = DateTime.add(DateTime.utc_now(), 3600, :second)
+
+      {:ok, _} = Foglet.Threads.advance_thread_read_pointer(reader.id, thread.id, p1.id)
+
+      from(rp in Foglet.Threads.ReadPointer,
+        where: rp.user_id == ^reader.id and rp.thread_id == ^thread.id
+      )
+      |> Repo.update_all(set: [last_read_at: future])
+
+      [%{has_unread: has_unread}] = Foglet.Threads.list_threads(board.id, reader.id)
+      assert has_unread == false
+    end
+
+    test "preserves order: stickies first, then newest last_post_at" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+
+      {:ok, %{thread: t_old}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "old", body: "b"})
+
+      {:ok, %{thread: t_sticky}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "sticky", body: "b"})
+
+      {:ok, %{thread: t_new}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "new", body: "b"})
+
+      {:ok, _} = Foglet.Threads.sticky_thread(Foglet.Threads.get_thread!(t_sticky.id))
+
+      past = DateTime.add(DateTime.utc_now(), -3600, :second)
+
+      from(t in Foglet.Threads.Thread, where: t.id == ^t_old.id)
+      |> Repo.update_all(set: [last_post_at: past])
+
+      results = Foglet.Threads.list_threads(board.id, reader.id)
+      ids = Enum.map(results, & &1.id)
+
+      assert ids == [t_sticky.id, t_new.id, t_old.id]
+    end
+
+    test "preloads :created_by so callers can read handle without N+1" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture(%{handle: "mallory"})
+      reader = user_fixture()
+
+      {:ok, _} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T", body: "b"})
+
+      [t | _] = Foglet.Threads.list_threads(board.id, reader.id)
+
+      assert %Foglet.Accounts.User{handle: "mallory"} = t.created_by
+    end
+
+    test "list_threads/2 with nil user_id delegates to list_threads/1 with has_unread: false" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+
+      {:ok, _} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "A", body: "b"})
+
+      [t] = Foglet.Threads.list_threads(board.id, nil)
+      assert t.has_unread == false
+      assert t.title == "A"
+    end
+
+    test "excludes soft-deleted threads" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+
+      {:ok, %{thread: alive}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "alive", body: "b"})
+
+      {:ok, %{thread: dead}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "dead", body: "b"})
+
+      {:ok, _} = Foglet.Threads.delete_thread(Foglet.Threads.get_thread!(dead.id))
+
+      results = Foglet.Threads.list_threads(board.id, reader.id)
+      ids = Enum.map(results, & &1.id)
+
+      assert alive.id in ids
+      refute dead.id in ids
+    end
+
+    test "empty thread (last_post_at nil) is has_unread: false" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+
+      {:ok, %{thread: thread}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T", body: "b"})
+
+      from(t in Foglet.Threads.Thread, where: t.id == ^thread.id)
+      |> Repo.update_all(set: [last_post_at: nil])
+
+      [%{has_unread: has_unread}] = Foglet.Threads.list_threads(board.id, reader.id)
+      assert has_unread == false
+    end
+  end
 end
