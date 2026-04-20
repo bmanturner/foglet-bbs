@@ -54,7 +54,7 @@ v1.0.1 is a polish/hardening pass on the SSH + Raxol TUI delivered in the main w
   1. After reading every post in a board, the board-list unread count reaches zero and does not drift backward when the user re-reads older threads
   2. Returning to the board list from a thread always shows refreshed unread counts (no stale cache after a read-pointer advance)
   3. Each thread-list row displays the creator handle, total post count, and last-activity time in short form (`30s`, `5m`, `2h`, `3d`, `2w`, `6mo`, `2y`)
-**Plans**: TBD
+**Plans**: 4 (03-01 Boards GREATEST fix, 03-02 Threads.list_threads/2 unread annotation, 03-03 ListRow.render_with_metadata, 03-04 ThreadList+PostReader+App integration)
 **UI hint**: yes
 
 ### Phase 4: Composer & thread creation end-to-end
@@ -102,7 +102,7 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 |-------|----------------|--------|-----------|
 | 1. Widget foundation + theme + screen chrome | 4/4 | Complete | 2026-04-19 |
 | 2. Markdown rendering correctness | 0/3 | Complete    | 2026-04-20 |
-| 3. Read-pointer correctness + thread-row enrichment | 0/TBD | Not started | - |
+| 3. Read-pointer correctness + thread-row enrichment | 0/4 | Planned | - |
 | 4. Composer & thread creation end-to-end | 0/TBD | Not started | - |
 | 5. Terminal size gate | 0/TBD | Not started | - |
 | 6. Email verification toggle + resend | 0/TBD | Not started | - |
