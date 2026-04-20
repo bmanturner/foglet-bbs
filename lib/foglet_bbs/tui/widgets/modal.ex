@@ -7,9 +7,9 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   Types:
     * :info    — neutral message with [Enter] OK hint
-    * :error   — red-accent message with [Enter] OK hint
-    * :warning — yellow-accent message with [Enter] OK hint
-    * :confirm — message + [Y]es / [N]o hints
+    * :error   — error-slot-colored message with [Enter] OK hint
+    * :warning — warning-slot-colored message with [Enter] OK hint
+    * :confirm — warning-slot-colored message + [Y]es / [N]o hints
 
   Modal spec shape (used by callers dispatching {:show_modal, spec}):
 
@@ -26,6 +26,8 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.Theme
+
   @type modal_spec :: %{
           required(:message) => String.t(),
           optional(:type) => :info | :error | :warning | :confirm,
@@ -36,21 +38,21 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   @wrap_width 50
 
-  @spec render(modal_spec()) :: any()
-  def render(%{message: msg} = spec) do
+  @spec render(modal_spec(), Theme.t()) :: any()
+  def render(%{message: msg} = spec, %Theme{} = theme) do
     type = Map.get(spec, :type, :info)
     title = Map.get(spec, :title, title_for(type))
-    color = color_for(type)
+    msg_fg = color_for_type(type, theme)
 
     wrapped_lines =
       msg
       |> word_wrap(@wrap_width)
-      |> Enum.map(fn line -> text(line, fg: color) end)
+      |> Enum.map(fn line -> text(line, fg: msg_fg) end)
 
     column [] do
-      [text(" #{title} ", style: [:bold]), divider()] ++
+      [text(" #{title} ", fg: theme.title.fg, style: [:bold]), divider()] ++
         wrapped_lines ++
-        [text(key_hint_for(type), style: [:dim])]
+        [text(key_hint_for(type), fg: theme.dim.fg)]
     end
   end
 
@@ -59,10 +61,10 @@ defmodule Foglet.TUI.Widgets.Modal do
   defp title_for(:warning), do: "Warning"
   defp title_for(:confirm), do: "Confirm"
 
-  defp color_for(:error), do: :red
-  defp color_for(:warning), do: :yellow
-  defp color_for(:confirm), do: :yellow
-  defp color_for(_), do: :green
+  defp color_for_type(:error, %Theme{} = theme), do: theme.error.fg
+  defp color_for_type(:warning, %Theme{} = theme), do: theme.warning.fg
+  defp color_for_type(:confirm, %Theme{} = theme), do: theme.warning.fg
+  defp color_for_type(_info, %Theme{} = theme), do: theme.primary.fg
 
   defp key_hint_for(:confirm), do: "[Y] Yes   [N] No"
   defp key_hint_for(_), do: "[Enter] OK"
