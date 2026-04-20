@@ -46,6 +46,77 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     end
   end
 
+  defmodule HandlelessFakeThreads do
+    def list_threads(_board_id) do
+      [
+        %{
+          id: "t1",
+          title: "Anonymous thread",
+          sticky: false,
+          last_post_at: DateTime.utc_now(),
+          post_count: 1,
+          created_by: nil
+        }
+      ]
+    end
+
+    def list_threads(board_id, _user_id), do: list_threads(board_id)
+  end
+
+  defmodule NiltimeFakeThreads do
+    def list_threads(_board_id) do
+      [
+        %{
+          id: "t1",
+          title: "Brand new thread",
+          sticky: false,
+          last_post_at: nil,
+          post_count: 1,
+          created_by: %{handle: "alice"}
+        }
+      ]
+    end
+
+    def list_threads(board_id, _user_id), do: list_threads(board_id)
+  end
+
+  defmodule AnnotatingFakeThreads do
+    def list_threads(board_id), do: stub_data(board_id)
+
+    def list_threads(board_id, _user_id) do
+      stub_data(board_id)
+      |> Enum.map(&Map.put(&1, :has_unread, true))
+    end
+
+    defp stub_data(_board_id) do
+      [
+        %{
+          id: "t1",
+          title: "Unread thread",
+          sticky: false,
+          last_post_at: DateTime.utc_now(),
+          post_count: 2,
+          created_by: %{handle: "alice"}
+        }
+      ]
+    end
+  end
+
+  defmodule OneArityOnly do
+    def list_threads(_board_id) do
+      [
+        %{
+          id: "t1",
+          title: "Legacy thread",
+          sticky: false,
+          last_post_at: DateTime.utc_now(),
+          post_count: 1,
+          created_by: %{handle: "ancient"}
+        }
+      ]
+    end
+  end
+
   setup do
     state =
       %Foglet.TUI.App{
@@ -152,23 +223,6 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     end
 
     test "missing handle falls back to @unknown" do
-      defmodule HandlelessFakeThreads do
-        def list_threads(_board_id) do
-          [
-            %{
-              id: "t1",
-              title: "Anonymous thread",
-              sticky: false,
-              last_post_at: DateTime.utc_now(),
-              post_count: 1,
-              created_by: nil
-            }
-          ]
-        end
-
-        def list_threads(board_id, _user_id), do: list_threads(board_id)
-      end
-
       state =
         %Foglet.TUI.App{
           current_screen: :thread_list,
@@ -186,23 +240,6 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     end
 
     test "nil last_post_at renders time segment as 'new'" do
-      defmodule NiltimeFakeThreads do
-        def list_threads(_board_id) do
-          [
-            %{
-              id: "t1",
-              title: "Brand new thread",
-              sticky: false,
-              last_post_at: nil,
-              post_count: 1,
-              created_by: %{handle: "alice"}
-            }
-          ]
-        end
-
-        def list_threads(board_id, _user_id), do: list_threads(board_id)
-      end
-
       state =
         %Foglet.TUI.App{
           current_screen: :thread_list,
@@ -222,28 +259,6 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   end
 
   describe "load_threads/2 — domain dispatch (LIST-03)" do
-    defmodule AnnotatingFakeThreads do
-      def list_threads(board_id), do: stub_data(board_id)
-
-      def list_threads(board_id, _user_id) do
-        stub_data(board_id)
-        |> Enum.map(&Map.put(&1, :has_unread, true))
-      end
-
-      defp stub_data(_board_id) do
-        [
-          %{
-            id: "t1",
-            title: "Unread thread",
-            sticky: false,
-            last_post_at: DateTime.utc_now(),
-            post_count: 2,
-            created_by: %{handle: "alice"}
-          }
-        ]
-      end
-    end
-
     test "prefers list_threads/2 when the domain module exports it" do
       state =
         %Foglet.TUI.App{
@@ -262,21 +277,6 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     end
 
     test "falls back to list_threads/1 when only the 1-arity is exported", %{state: _state} do
-      defmodule OneArityOnly do
-        def list_threads(_board_id) do
-          [
-            %{
-              id: "t1",
-              title: "Legacy thread",
-              sticky: false,
-              last_post_at: DateTime.utc_now(),
-              post_count: 1,
-              created_by: %{handle: "ancient"}
-            }
-          ]
-        end
-      end
-
       state =
         %Foglet.TUI.App{
           current_screen: :thread_list,

@@ -41,6 +41,27 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     def list_posts(_tid), do: []
   end
 
+  defmodule FakePostsForLoad do
+    def list_posts(_thread_id) do
+      [
+        %{
+          id: "p1",
+          body: "first post body",
+          inserted_at: DateTime.utc_now(),
+          user: %{handle: "sysop"},
+          message_number: 5
+        },
+        %{
+          id: "p2",
+          body: "second post body",
+          inserted_at: DateTime.utc_now(),
+          user: %{handle: "sysop"},
+          message_number: 6
+        }
+      ]
+    end
+  end
+
   setup do
     state =
       %Foglet.TUI.App{
@@ -467,27 +488,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   describe "load_posts/2 — read-on-entry seeding (LIST-01 D-05)" do
-    defmodule FakePostsForLoad do
-      def list_posts(_thread_id) do
-        [
-          %{
-            id: "p1",
-            body: "first post body",
-            inserted_at: DateTime.utc_now(),
-            user: %{handle: "sysop"},
-            message_number: 5
-          },
-          %{
-            id: "p2",
-            body: "second post body",
-            inserted_at: DateTime.utc_now(),
-            user: %{handle: "sysop"},
-            message_number: 6
-          }
-        ]
-      end
-    end
-
     test "seeds read_position[thread_id] with post 0's id and message_number on load" do
       s =
         p2_state(%{
