@@ -134,7 +134,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
       {h, nil} when is_binary(h) -> "By @#{h}"
       {nil, t} when is_binary(t) -> "#{t} ago"
       {h, t} when is_binary(h) and is_binary(t) -> "By @#{h} · #{t} ago"
-      _ -> "By @unknown"
+      _ -> "(post details unavailable)"
     end
   end
 
