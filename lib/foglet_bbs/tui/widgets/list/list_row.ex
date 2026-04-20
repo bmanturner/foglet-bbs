@@ -128,7 +128,14 @@ defmodule Foglet.TUI.Widgets.List.ListRow do
     title_part = marker <> title_body
     title_part_len = marker_len + String.length(title_body)
 
-    padding_len = max(width - title_part_len - metadata_len, min_gap)
+    # Clamp padding so total length does not exceed width.
+    # If metadata alone exceeds width, padding collapses to 0 — metadata
+    # visibility is the priority contract, so we accept the overflow.
+    padding_len =
+      (width - title_part_len - metadata_len)
+      |> max(0)
+      |> min(width)
+
     padding_part = String.duplicate(" ", padding_len)
 
     {title_part, padding_part, metadata}
@@ -136,14 +143,22 @@ defmodule Foglet.TUI.Widgets.List.ListRow do
 
   @spec truncate_title(String.t(), non_neg_integer()) :: String.t()
   defp truncate_title(title, max_len) do
+    # max_len == 0: first clause fires (empty title has length 0 <= 0) → returns ""
+    # max_len == 1: falls to `true` clause → returns @ellipsis
+    # max_len >= 2 and < @min_title_length: below-minimum fallback — emit 1 char + ellipsis
+    # max_len >= @min_title_length: standard truncation with ellipsis
     title_len = String.length(title)
 
     cond do
       title_len <= max_len ->
         title
 
-      max_len >= 1 ->
-        String.slice(title, 0, max(max_len - 1, 0)) <> @ellipsis
+      max_len >= @min_title_length ->
+        String.slice(title, 0, max_len - 1) <> @ellipsis
+
+      max_len >= 2 ->
+        # Below minimum title length — emit at least 1 char + ellipsis
+        String.slice(title, 0, 1) <> @ellipsis
 
       true ->
         @ellipsis
