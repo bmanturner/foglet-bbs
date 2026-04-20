@@ -1,8 +1,8 @@
 {
-  "version": "1.38.0",
-  "timestamp": "2026-04-19T20:13:26.290Z",
+  "version": "1.38.1",
+  "timestamp": "2026-04-20T00:58:08.507Z",
   "files": {
-    "get-shit-done/VERSION": "3891e1b69ac62dbbf48fcb9baac916368d574d5b8ea09e1d5731966e86a446ad",
+    "get-shit-done/VERSION": "995c14ca49b032f607f2b5e836729304546380b0099ac41d827d0469813ce992",
     "get-shit-done/bin/gsd-tools.cjs": "a30a46031c75b77a3b2b6721e0527c72ee8f7974b69fabf0fb9916c7f3a6283b",
     "get-shit-done/bin/lib/audit.cjs": "2dd47b2587bce43364f0cda8280706a13eef63025b7e7f0ab706cb29e829b07c",
     "get-shit-done/bin/lib/commands.cjs": "16d766f8cb8b6c354e5fbbb40acf6bc6493062a9fe2c705621c5d2c48120b313",
@@ -159,7 +159,7 @@
     "get-shit-done/workflows/help.md": "129d053280e3de22c8afe21b75328e0d5e1734e6c5fac633d76d2600338967ad",
     "get-shit-done/workflows/import.md": "765d6be4d92a22ed92bfbb4bc2d0a49472131b172299f585b347eccb30ecfa7e",
     "get-shit-done/workflows/inbox.md": "fcf6d0cfd77eff355289e33c7aadf22a9cbc5161454a361667a6ca905b819f18",
-    "get-shit-done/workflows/ingest-docs.md": "3b59966304ee1e16dfae4a9aef68d247341471aab68cf6eaccbc06cc196ce899",
+    "get-shit-done/workflows/ingest-docs.md": "d15ff47c0c8c0fec9e8d37a25a81fb1598427134ea848b9493098c45e988abdf",
     "get-shit-done/workflows/insert-phase.md": "833438ed010af945d975318d2b443fa8429cca0e8c2a7c20ae02130f3fd657b9",
     "get-shit-done/workflows/list-phase-assumptions.md": "01948ced1d711b19ae794a09a901f1156f6efa4c826961caa535d1d40ecf98cb",
     "get-shit-done/workflows/list-workspaces.md": "382fb6aed159a6a886665ef602479998e3a53da0ef03b2c5d5c783b97cd02adf",
@@ -238,15 +238,16 @@
     "agents/gsd-ui-researcher.md": "9504032c143b0cf93c94c56ea3968dc71397dd2143fe0da49f0ea51e4faa1d71",
     "agents/gsd-user-profiler.md": "7ccdd02cdca4b03ac70a1482c65bddd682fa3a6464acd1d49a99094cb2832462",
     "agents/gsd-verifier.md": "b1694614f0fa1d8279ff70fd74e2ceaad9293d566f4398f77a659ed03506f665",
-    "hooks/gsd-check-update-worker.js": "396031b84e9603c063f6baa64ea19934cacf9e08ace7040e2695cf6e7eba7b72",
-    "hooks/gsd-check-update.js": "040fd3a1562faa464ac02742fcb32e1b8ea84f2daccef3f8026e41fb33957637",
-    "hooks/gsd-context-monitor.js": "0e5951b8d46c8b806e5627bc4c385bb7b80740b523375a47175e0ac423c81627",
-    "hooks/gsd-phase-boundary.sh": "152514a1d4f3a9d180c267d021517892a070119f3f4ec31e0638f3b3a18a3ece",
-    "hooks/gsd-prompt-guard.js": "616c0b7b08912c3a9d26e2ccece9542747f5b5e446ca875ddc3f88a026476ff1",
-    "hooks/gsd-read-guard.js": "362b6ff3691eda3351179f250153bb6551f226022ada5a82a9889123deae9032",
-    "hooks/gsd-session-state.sh": "84411b7999900705853cf172780d720cd11a3e7c7df1a6587658283df3cf0a65",
-    "hooks/gsd-statusline.js": "647df74045d3f0e793387df1faa200fa8bdc120a697419f031acf5e5821ff632",
-    "hooks/gsd-validate-commit.sh": "d79a2316af9db8bb6c7be980235e90f0ec07d6ef1f1ea07988e65cafc205ed8e",
-    "hooks/gsd-workflow-guard.js": "d083ca067d4084a6e09bdd3bf1cf70d6ea58925d1b21eee610d710d510fceac9"
+    "hooks/gsd-check-update-worker.js": "5a10fd615b06c7927d40d974fb29017a439a7cc05c7b972931d5cbe67f88cfec",
+    "hooks/gsd-check-update.js": "9ad12c64f7653621b1f9e007fc4ba7388749320865ab4700940c317a22c89f14",
+    "hooks/gsd-context-monitor.js": "d89d97b8d6db6be7f16c442a04b0bd7cd6dad0ad071af9df46d8841577480d52",
+    "hooks/gsd-phase-boundary.sh": "9cd4c464909cb265052191d03f8cf9de3f97ff8c877a4ef38c9e3622175c7fe7",
+    "hooks/gsd-prompt-guard.js": "0e490e95e1215e1a42df366ef8b6660bda932f5a57930289efc331db3d61d8fc",
+    "hooks/gsd-read-guard.js": "72c0a55cacbea0bfaa851ccd66cbbba73314eb1510a48c4f73c919c97a2d6c75",
+    "hooks/gsd-read-injection-scanner.js": "4843413f49dcf9a7a33637725fd84b94acd6c4280154c505eeb52cd5e63bc4c2",
+    "hooks/gsd-session-state.sh": "50e7becf56577688f9b6d4c22461061beb038605f7704bd34866fe3b28533d17",
+    "hooks/gsd-statusline.js": "3eee85628e03a10ffb6e01483570fbe1ec357d8cf98d922fad0d7e6cd5a51b4e",
+    "hooks/gsd-validate-commit.sh": "b484aad41c1acc4da5e4a2830ea37ab910b7338d7bdf5ebac45c0ad876891906",
+    "hooks/gsd-workflow-guard.js": "c5176a491a22fc9c461afe8b98fbdb860a2ecf06c923b9b880e519c960f8fba6"
   }
 }
