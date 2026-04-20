@@ -525,16 +525,27 @@ defmodule Foglet.TUI.AppTest do
         %{
           base_state
           | current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-            session_context: %{domain: %{boards: %{
-              list_subscribed_boards: fn _user -> [%{id: "b1", name: "General", slug: "general", unread_count: 3}] end
-            }}}
+            session_context: %{
+              domain: %{
+                boards: %{
+                  list_subscribed_boards: fn _user ->
+                    [%{id: "b1", name: "General", slug: "general", unread_count: 3}]
+                  end
+                }
+              }
+            }
         }
 
       %{state: state}
     end
 
     test "clears read_position[thread_id] regardless of current screen", %{state: state} do
-      state = %{state | current_screen: :thread_list, read_position: %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}}
+      state = %{
+        state
+        | current_screen: :thread_list,
+          read_position: %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
+      }
+
       {new_state, _cmds} = App.update({:read_pointers_flushed, "t1"}, state)
       refute Map.has_key?(new_state.read_position, "t1")
     end
@@ -546,7 +557,9 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.read_position == rp
     end
 
-    test "on :board_list — dispatches a {:load_boards} task (D-06 second refresh)", %{state: state} do
+    test "on :board_list — dispatches a {:load_boards} task (D-06 second refresh)", %{
+      state: state
+    } do
       state = %{state | current_screen: :board_list, read_position: %{"t1" => %{}}}
       {_new_state, cmds} = App.update({:read_pointers_flushed, "t1"}, state)
 

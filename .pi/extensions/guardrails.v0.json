@@ -1,0 +1,8 @@
+{
+  "pathAccess": {
+    "allowedPaths": [
+      "/dev/",
+      "~/.nvm/versions/node/v24.11.1/lib/node_modules/@mariozechner/pi-coding-agent/"
+    ]
+  }
+}

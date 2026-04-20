@@ -102,6 +102,7 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
       t = theme()
       result = MarkdownBody.render("**bold**", 80, t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
       assert serialized =~ t.accent.fg,
              "Expected bold run to use theme.accent.fg (#{t.accent.fg}), tree: #{serialized}"
     end
@@ -110,6 +111,7 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
       t = theme()
       result = MarkdownBody.render("# Heading", 80, t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
       assert serialized =~ t.title.fg,
              "Expected heading to use theme.title.fg (#{t.title.fg}), tree: #{serialized}"
     end
@@ -118,6 +120,7 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
       t = theme()
       result = MarkdownBody.render("Run `mix test` first.", 80, t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
       assert serialized =~ t.dim.fg,
              "Expected inline code to use theme.dim.fg (#{t.dim.fg}), tree: #{serialized}"
     end

@@ -148,7 +148,9 @@ defmodule Foglet.TUI.Screens.ThreadList do
       Enum.sort_by(regular, &last_post_sort_key/1, :desc)
   end
 
-  defp last_post_sort_key(%{last_post_at: %DateTime{} = dt}), do: DateTime.to_unix(dt, :microsecond)
+  defp last_post_sort_key(%{last_post_at: %DateTime{} = dt}),
+    do: DateTime.to_unix(dt, :microsecond)
+
   defp last_post_sort_key(_), do: -1
 
   defp move_selection(state, delta) do

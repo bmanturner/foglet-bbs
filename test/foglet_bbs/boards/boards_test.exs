@@ -155,6 +155,7 @@ defmodule Foglet.BoardsTest do
 
       # Advance to 3 (lower) — must NOT regress the pointer
       {:ok, second} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, 3)
+
       assert second.last_read_message_number == 7,
              "Expected pointer to remain at 7 after advancing with 3, got #{second.last_read_message_number}"
 

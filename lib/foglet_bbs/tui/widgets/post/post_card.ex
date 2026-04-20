@@ -73,7 +73,13 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   Used by PostReader when a render cache hit provides the tuple list
   — skipping the `Foglet.Markdown.render/1` call.
   """
-  @spec render_from_tuples(post_like(), [MarkdownBody.tuple_entry()], pos_integer(), Theme.t(), keyword()) :: any()
+  @spec render_from_tuples(
+          post_like(),
+          [MarkdownBody.tuple_entry()],
+          pos_integer(),
+          Theme.t(),
+          keyword()
+        ) :: any()
   def render_from_tuples(post, tuples, width, %Theme{} = theme, opts \\ [])
       when is_map(post) and is_list(tuples) and is_integer(width) and width > 0 do
     body_element = MarkdownBody.render_tuples(tuples, width, theme, body_opts(opts))

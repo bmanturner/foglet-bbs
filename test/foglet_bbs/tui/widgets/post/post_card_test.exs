@@ -148,7 +148,9 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
 
     test "matches MarkdownBody.line_count for a string" do
       body = "first\n\nsecond\n\nthird"
-      assert PostCard.body_line_count(body) == Foglet.TUI.Widgets.Post.MarkdownBody.line_count(body)
+
+      assert PostCard.body_line_count(body) ==
+               Foglet.TUI.Widgets.Post.MarkdownBody.line_count(body)
     end
   end
 

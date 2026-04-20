@@ -161,7 +161,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   defp flatten_text(tree), do: tree |> p2_collect_text([]) |> Enum.reverse() |> Enum.join("")
 
   defp p2_collect_text(nil, acc), do: acc
-  defp p2_collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &p2_collect_text/2)
+
+  defp p2_collect_text(list, acc) when is_list(list),
+    do: Enum.reduce(list, acc, &p2_collect_text/2)
 
   defp p2_collect_text(%{children: children} = node, acc) do
     acc = p2_maybe_add_content(node, acc)
@@ -290,6 +292,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     test "N resets scroll_offset to 0 (D-04)" do
       # Use small terminal so scroll works: height 12 → available = 5.
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
+
       s =
         p2_state(%{
           posts: [
@@ -331,7 +334,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
 
       cache = s1.screen_state[:post_reader].render_cache
-      assert Map.has_key?(cache, {"p1", 80}), "Expected cache key {\"p1\", 80}, got: #{inspect(Map.keys(cache))}"
+
+      assert Map.has_key?(cache, {"p1", 80}),
+             "Expected cache key {\"p1\", 80}, got: #{inspect(Map.keys(cache))}"
     end
 
     test "cache is keyed on {post.id, width} — width change adds a new entry" do

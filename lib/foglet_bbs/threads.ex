@@ -113,7 +113,9 @@ defmodule Foglet.Threads do
       if created_by_ids == [] do
         %{}
       else
-        Repo.all(from u in Foglet.Accounts.User, where: u.id in ^created_by_ids, select: {u.id, u})
+        Repo.all(
+          from u in Foglet.Accounts.User, where: u.id in ^created_by_ids, select: {u.id, u}
+        )
         |> Map.new()
       end
 
