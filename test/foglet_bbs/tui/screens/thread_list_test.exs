@@ -1,121 +1,131 @@
+# ---------------------------------------------------------------------------
+# Fake domain adapters (defined outside test module per project convention)
+# ---------------------------------------------------------------------------
+
+defmodule Foglet.TUI.Screens.ThreadListTest.FakeThreads do
+  def list_threads(_board_id) do
+    now = DateTime.utc_now()
+
+    [
+      %{
+        id: "t1",
+        title: "Old but sticky",
+        sticky: true,
+        last_post_at: DateTime.add(now, -10_000, :second),
+        unread_count: 0,
+        post_count: 20,
+        created_by: %{handle: "alice"}
+      },
+      %{
+        id: "t2",
+        title: "Recent non-sticky",
+        sticky: false,
+        last_post_at: DateTime.add(now, -10, :second),
+        unread_count: 5,
+        post_count: 3,
+        created_by: %{handle: "bob"}
+      },
+      %{
+        id: "t3",
+        title: "Older non-sticky",
+        sticky: false,
+        last_post_at: DateTime.add(now, -1_000, :second),
+        unread_count: 0,
+        post_count: 1,
+        created_by: %{handle: "carol"}
+      }
+    ]
+  end
+
+  def list_threads(board_id, nil), do: list_threads(board_id)
+
+  def list_threads(board_id, _user_id) do
+    list_threads(board_id)
+    |> Enum.map(&Map.put(&1, :has_unread, false))
+  end
+end
+
+defmodule Foglet.TUI.Screens.ThreadListTest.HandlelessFakeThreads do
+  def list_threads(_board_id) do
+    [
+      %{
+        id: "t1",
+        title: "Anonymous thread",
+        sticky: false,
+        last_post_at: DateTime.utc_now(),
+        post_count: 1,
+        created_by: nil
+      }
+    ]
+  end
+
+  def list_threads(board_id, _user_id), do: list_threads(board_id)
+end
+
+defmodule Foglet.TUI.Screens.ThreadListTest.NiltimeFakeThreads do
+  def list_threads(_board_id) do
+    [
+      %{
+        id: "t1",
+        title: "Brand new thread",
+        sticky: false,
+        last_post_at: nil,
+        post_count: 1,
+        created_by: %{handle: "alice"}
+      }
+    ]
+  end
+
+  def list_threads(board_id, _user_id), do: list_threads(board_id)
+end
+
+defmodule Foglet.TUI.Screens.ThreadListTest.AnnotatingFakeThreads do
+  def list_threads(board_id), do: stub_data(board_id)
+
+  def list_threads(board_id, _user_id) do
+    stub_data(board_id)
+    |> Enum.map(&Map.put(&1, :has_unread, true))
+  end
+
+  defp stub_data(_board_id) do
+    [
+      %{
+        id: "t1",
+        title: "Unread thread",
+        sticky: false,
+        last_post_at: DateTime.utc_now(),
+        post_count: 2,
+        created_by: %{handle: "alice"}
+      }
+    ]
+  end
+end
+
+defmodule Foglet.TUI.Screens.ThreadListTest.OneArityOnly do
+  def list_threads(_board_id) do
+    [
+      %{
+        id: "t1",
+        title: "Legacy thread",
+        sticky: false,
+        last_post_at: DateTime.utc_now(),
+        post_count: 1,
+        created_by: %{handle: "ancient"}
+      }
+    ]
+  end
+end
+
 defmodule Foglet.TUI.Screens.ThreadListTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.Screens.ThreadList
 
-  defmodule FakeThreads do
-    def list_threads(_board_id) do
-      now = DateTime.utc_now()
-
-      [
-        %{
-          id: "t1",
-          title: "Old but sticky",
-          sticky: true,
-          last_post_at: DateTime.add(now, -10_000, :second),
-          unread_count: 0,
-          post_count: 20,
-          created_by: %{handle: "alice"}
-        },
-        %{
-          id: "t2",
-          title: "Recent non-sticky",
-          sticky: false,
-          last_post_at: DateTime.add(now, -10, :second),
-          unread_count: 5,
-          post_count: 3,
-          created_by: %{handle: "bob"}
-        },
-        %{
-          id: "t3",
-          title: "Older non-sticky",
-          sticky: false,
-          last_post_at: DateTime.add(now, -1_000, :second),
-          unread_count: 0,
-          post_count: 1,
-          created_by: %{handle: "carol"}
-        }
-      ]
-    end
-
-    def list_threads(board_id, nil), do: list_threads(board_id)
-
-    def list_threads(board_id, _user_id) do
-      list_threads(board_id)
-      |> Enum.map(&Map.put(&1, :has_unread, false))
-    end
-  end
-
-  defmodule HandlelessFakeThreads do
-    def list_threads(_board_id) do
-      [
-        %{
-          id: "t1",
-          title: "Anonymous thread",
-          sticky: false,
-          last_post_at: DateTime.utc_now(),
-          post_count: 1,
-          created_by: nil
-        }
-      ]
-    end
-
-    def list_threads(board_id, _user_id), do: list_threads(board_id)
-  end
-
-  defmodule NiltimeFakeThreads do
-    def list_threads(_board_id) do
-      [
-        %{
-          id: "t1",
-          title: "Brand new thread",
-          sticky: false,
-          last_post_at: nil,
-          post_count: 1,
-          created_by: %{handle: "alice"}
-        }
-      ]
-    end
-
-    def list_threads(board_id, _user_id), do: list_threads(board_id)
-  end
-
-  defmodule AnnotatingFakeThreads do
-    def list_threads(board_id), do: stub_data(board_id)
-
-    def list_threads(board_id, _user_id) do
-      stub_data(board_id)
-      |> Enum.map(&Map.put(&1, :has_unread, true))
-    end
-
-    defp stub_data(_board_id) do
-      [
-        %{
-          id: "t1",
-          title: "Unread thread",
-          sticky: false,
-          last_post_at: DateTime.utc_now(),
-          post_count: 2,
-          created_by: %{handle: "alice"}
-        }
-      ]
-    end
-  end
-
-  defmodule OneArityOnly do
-    def list_threads(_board_id) do
-      [
-        %{
-          id: "t1",
-          title: "Legacy thread",
-          sticky: false,
-          last_post_at: DateTime.utc_now(),
-          post_count: 1,
-          created_by: %{handle: "ancient"}
-        }
-      ]
-    end
-  end
+  alias Foglet.TUI.Screens.ThreadListTest.FakeThreads
+  alias Foglet.TUI.Screens.ThreadListTest.HandlelessFakeThreads
+  alias Foglet.TUI.Screens.ThreadListTest.NiltimeFakeThreads
+  alias Foglet.TUI.Screens.ThreadListTest.AnnotatingFakeThreads
+  alias Foglet.TUI.Screens.ThreadListTest.OneArityOnly
 
   setup do
     state =
