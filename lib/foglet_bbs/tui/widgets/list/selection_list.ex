@@ -25,7 +25,8 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
   `selected_index`  — 0-based index of the currently selected item
   `row_renderer_fn` — fn({item, idx, selected?}) -> view_element
   """
-  @spec render(list(), non_neg_integer(), ({any(), non_neg_integer(), boolean()} -> any())) :: any()
+  @spec render(list(), non_neg_integer(), ({any(), non_neg_integer(), boolean()} -> any())) ::
+          any()
   def render(items, selected_index, row_renderer_fn)
       when is_list(items) and is_integer(selected_index) and is_function(row_renderer_fn, 1) do
     rows =

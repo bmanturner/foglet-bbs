@@ -51,30 +51,41 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   defp divider?(_), do: false
 
-  # Checks if any child list contains a divider after the element at position `idx`.
-  # Returns true when any parent column has (status_bar_row, divider_after_it).
+  # Checks if any parent's children list contains the StatusBar element
+  # followed eventually by a divider. The StatusBar is identified as any
+  # subtree containing a text with "Foglet BBS" in its content, so the
+  # predicate is robust to wrapping the status bar in a box/row.
   defp has_divider_after_statusbar?(tree) do
-    # StatusBar.render returns a :flex/:row element. We look for a parent column
-    # whose children list contains a flex-row (StatusBar) followed immediately or
-    # eventually by a divider element.
-    parents_with_flex_children =
+    parents_with_children =
       collect(tree, fn el ->
         is_map(el) and is_list(Map.get(el, :children, nil))
       end)
 
-    Enum.any?(parents_with_flex_children, fn parent ->
+    Enum.any?(parents_with_children, fn parent ->
       children = Map.get(parent, :children, [])
 
       children
       |> Enum.with_index()
       |> Enum.any?(fn {child, idx} ->
-        # Find a row/flex element (likely StatusBar) followed by a divider.
-        is_map(child) and
-          Map.get(child, :type) in [:flex, :row] and
-          Map.get(child, :direction) == :row and
+        subtree_contains_status_bar?(child) and
           Enum.any?(Enum.drop(children, idx + 1), &divider?/1)
       end)
     end)
+  end
+
+  # Returns true if el or any of its descendants is a text whose content
+  # contains the status-bar prefix "Foglet BBS".
+  defp subtree_contains_status_bar?(el) do
+    collect(el, fn node ->
+      is_map(node) and status_bar_text?(node)
+    end) != []
+  end
+
+  defp status_bar_text?(el) do
+    content =
+      Map.get(el, :content) || Map.get(el, :text) || Map.get(el, :value) || ""
+
+    is_binary(content) and String.contains?(content, "Foglet BBS")
   end
 
   # ---------------------------------------------------------------------------
