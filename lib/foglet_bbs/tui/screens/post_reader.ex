@@ -140,7 +140,13 @@ defmodule Foglet.TUI.Screens.PostReader do
     posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
     posts = posts_mod.list_posts(thread_id)
     new_read_position = seed_read_position_on_entry(state.read_position, thread_id, posts)
-    {%{state | posts: posts, read_position: new_read_position}, []}
+    {w, _h} = state.terminal_size || {80, 24}
+    # WR-01: warm the render cache for the first post on load so that the
+    # initial render (before any keypress) does not re-parse on every frame.
+    ss = get_screen_state(state)
+    ss = warm_cache_for_index(ss, %{state | posts: posts}, posts, 0, w)
+    new_screen_state = Map.put(state.screen_state, :post_reader, ss)
+    {%{state | posts: posts, read_position: new_read_position, screen_state: new_screen_state}, []}
   end
 
   defp seed_read_position_on_entry(read_position, _thread_id, []), do: read_position
@@ -241,6 +247,14 @@ defmodule Foglet.TUI.Screens.PostReader do
       tuples = parse_body(state, post)
       %{ss | render_cache: Map.put(ss.render_cache, key, tuples)}
     end
+  end
+
+  # Warms the cache for the post at the given index (used by load_posts/2
+  # to pre-populate the cache for the first post so render/1 never parses
+  # on the first frame). Returns the updated screen_state.
+  defp warm_cache_for_index(ss, state, posts, idx, w) do
+    post = Enum.at(posts, idx)
+    if post, do: warm_cache(ss, state, post, w), else: ss
   end
 
   defp advance_post(state, delta) do
