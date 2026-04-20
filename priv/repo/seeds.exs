@@ -125,6 +125,9 @@ alias Foglet.Threads.Thread
 alias Foglet.Posts
 alias Foglet.Posts.Post
 
+# NOTE: Seeds are intended for development use only. The password below is a
+# well-known dev fixture and must never be used in production. Do not run
+# `mix run priv/repo/seeds.exs` against a production database.
 seed_sysop =
   case Accounts.get_user_by_handle("sysop") do
     nil ->
