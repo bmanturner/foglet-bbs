@@ -235,11 +235,21 @@ defmodule Foglet.TUI.Screens.Verify do
       {:ok, _code} ->
         modal = %{type: :info, message: "A new code has been sent."}
 
+        cooldown_seconds = Foglet.Config.get("email_verify_resend_cooldown_seconds", 60)
+        now = DateTime.utc_now()
+
         vs =
           state.verify_state ||
             %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
 
-        new_vs = %{vs | buffer: "", attempts: 0, cooldown_until: nil}
+        new_vs = %{
+          vs
+          | buffer: "",
+            attempts: 0,
+            cooldown_until: nil,
+            resend_cooldown_until: DateTime.add(now, cooldown_seconds, :second)
+        }
+
         {%{state | modal: modal, verify_state: new_vs}, []}
 
       {:error, _cs} ->
