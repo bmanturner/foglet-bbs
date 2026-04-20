@@ -108,13 +108,16 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 | 4. Composer & thread creation end-to-end | 4/4 | Complete    | 2026-04-20 |
 | 5. Terminal size gate | 2/2 | Complete | 2026-04-20 |
 | 6. Email verification toggle + resend | 0/TBD | Not started | - |
+| 7. Migrate hand-rolled UI components to Raxol widgets | 0/3 | Planned | - |
 
 ### Phase 7: Migrate hand-rolled UI components to Raxol widgets
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Replace custom widget implementations with Raxol primitives where a built-in equivalent exists and overlap is high, gated on theming support. Modal becomes a thin adapter routing colors through `Foglet.TUI.Theme` slots; PostReader scroll windowing migrates to `Raxol.UI.Components.Display.Viewport` (which owns clamping); SelectionList (base + full) and StatusBar stay hand-rolled per the research theming verdicts.
+**Requirements**: D-01..D-17 from `phases/07-migrate-hand-rolled-ui-components-to-raxol-widgets/07-CONTEXT.md` (workstream-level locked decisions; no ROADMAP-level REQ IDs allocated — polish work inside the existing widget layer)
 **Depends on:** Phase 6
-**Plans:** 0 plans
+**Plans:** 3 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 7 to break down)
+- [ ] 07-01-PLAN.md — Modal thin adapter + app.ex caller update + theme-hygiene tests (Wave 1)
+- [ ] 07-02-PLAN.md — MarkdownBody.render_tuples_as_lines/4 + PostCard.render_body_lines/5 (additive, Wave 1)
+- [ ] 07-03-PLAN.md — PostReader Viewport integration (state shape + scroll_post + advance_post + render_post_content) (Wave 2, depends on 07-02)
