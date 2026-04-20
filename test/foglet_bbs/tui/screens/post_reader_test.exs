@@ -278,8 +278,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       {:update, s2, _} = PostReader.handle_key(%{key: :char, char: "k"}, s1)
       {:update, s3, _} = PostReader.handle_key(%{key: :char, char: "n"}, s2)
 
-      # After N, scroll_offset must reset to 0 (D-04).
-      assert s3.screen_state[:post_reader].scroll_offset == 0
+      # After N, viewport.scroll_top must reset to 0 (D-04).
+      assert s3.screen_state[:post_reader].viewport.scroll_top == 0
       # And the current selection is the second post.
       assert s3.screen_state[:post_reader].selected_post_index == 1
 
@@ -294,34 +294,34 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # =================================================================
 
   describe "handle_key/2 — j/k within-post scroll (D-03, D-04, D-05)" do
-    test "j advances scroll_offset by 1" do
-      # 5 lines, terminal height 12 → available_height = max(12-10, 5) = 5 → max_offset = 0
-      # Need more lines than available. Use 8 lines with height 12 → available = 5 → max_offset = 3.
+    test "j advances viewport.scroll_top by 1" do
+      # 5 lines, terminal height 12 → available_height = max(12-10, 5) = 5 → max_scroll = 3.
+      # Need more lines than available. Use 8 lines with height 12 → available = 5 → max_scroll = 3.
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
       s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {80, 12}})
 
       assert {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "j"}, s)
-      assert s1.screen_state[:post_reader].scroll_offset == 1
+      assert s1.screen_state[:post_reader].viewport.scroll_top == 1
     end
 
-    test "k decrements scroll_offset but clamps at 0" do
+    test "k decrements viewport.scroll_top but clamps at 0" do
       s = p2_state(%{posts: [p2_post(body: "A\n\nB\n\nC")]})
 
       assert {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "k"}, s)
-      assert s1.screen_state[:post_reader].scroll_offset == 0
+      assert s1.screen_state[:post_reader].viewport.scroll_top == 0
     end
 
-    test "j clamps at max_offset for short posts (cannot scroll past end)" do
+    test "j clamps at max_scroll for short posts (cannot scroll past end)" do
       # A single-line post has total_lines=1; with available_height >= 5
-      # the max_offset is 0 — j should not advance.
+      # the max_scroll is 0 — j should not advance.
       s = p2_state(%{posts: [p2_post(body: "Just one line.")]})
 
       result = PostReader.handle_key(%{key: :char, char: "j"}, s)
       assert {:update, s1, []} = result
-      assert s1.screen_state[:post_reader].scroll_offset == 0
+      assert s1.screen_state[:post_reader].viewport.scroll_top == 0
     end
 
-    test "N resets scroll_offset to 0 (D-04)" do
+    test "N resets viewport.scroll_top to 0 (D-04)" do
       # Use small terminal so scroll works: height 12 → available = 5.
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
 
@@ -337,11 +337,11 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       # Scroll down twice on post 1.
       {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
       {:update, s2, _} = PostReader.handle_key(%{key: :char, char: "j"}, s1)
-      assert s2.screen_state[:post_reader].scroll_offset == 2
+      assert s2.screen_state[:post_reader].viewport.scroll_top == 2
 
       # Press N to advance to post 2.
       {:update, s3, _} = PostReader.handle_key(%{key: :char, char: "n"}, s2)
-      assert s3.screen_state[:post_reader].scroll_offset == 0
+      assert s3.screen_state[:post_reader].viewport.scroll_top == 0
       assert s3.screen_state[:post_reader].selected_post_index == 1
     end
 
@@ -349,9 +349,23 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
       s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {80, 12}})
       assert {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "J"}, s)
-      assert s1.screen_state[:post_reader].scroll_offset == 1
+      assert s1.screen_state[:post_reader].viewport.scroll_top == 1
       assert {:update, s2, []} = PostReader.handle_key(%{key: :char, char: "K"}, s1)
-      assert s2.screen_state[:post_reader].scroll_offset == 0
+      assert s2.screen_state[:post_reader].viewport.scroll_top == 0
+    end
+
+    test "viewport state shape: scroll_top is a non-negative integer and children is a list" do
+      body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
+      s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {80, 12}})
+
+      {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      ss = s1.screen_state[:post_reader]
+
+      assert is_map(ss.viewport)
+      assert is_integer(ss.viewport.scroll_top)
+      assert ss.viewport.scroll_top >= 0
+      assert is_list(ss.viewport.children)
+      refute Map.has_key?(ss, :scroll_offset), "legacy :scroll_offset key must be absent"
     end
   end
 
@@ -402,6 +416,27 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
                _ -> false
              end)
     end
+
+    test "render_cache is preserved verbatim through Viewport migration (D-13)" do
+      # Multiple posts with scrollable content. After a j/N/j cycle the cache
+      # should contain entries for BOTH posts at width 80 — Viewport migration
+      # must not disturb the cache shape.
+      body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
+
+      s =
+        p2_state(%{
+          posts: [p2_post(id: "p1", body: body), p2_post(id: "p2", body: body)],
+          terminal_size: {80, 12}
+        })
+
+      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      {:update, s2, _} = PostReader.handle_key(%{key: :char, char: "n"}, s1)
+      {:update, s3, _} = PostReader.handle_key(%{key: :char, char: "j"}, s2)
+
+      cache = s3.screen_state[:post_reader].render_cache
+      assert Map.has_key?(cache, {"p1", 80})
+      assert Map.has_key?(cache, {"p2", 80})
+    end
   end
 
   # =================================================================
@@ -428,8 +463,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         })
 
       {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
-      # scroll_offset default is 0; j advances to 1 (bounded by max_offset)
-      assert s1.screen_state[:post_reader].scroll_offset in [0, 1]
+      # Legacy state has no :scroll_offset — Viewport owns scroll now.
+      # viewport.scroll_top defaults to 0; j advances to 1 (bounded by max_scroll).
+      assert s1.screen_state[:post_reader].viewport.scroll_top in [0, 1]
     end
   end
 
