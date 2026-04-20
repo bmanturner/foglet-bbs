@@ -14,6 +14,12 @@ defmodule Foglet.TUI.Screens.Verify do
 
   The two cooldowns are independent (VERIFY-02 D-10): hitting invalid 5x still
   allows a resend; hitting resend once still allows code entry.
+
+  Resend resets `attempts` and `cooldown_until` intentionally (D-09): a fresh
+  code makes any previous invalid-attempt count meaningless, so the counter is
+  cleared to give the user a clean slate. This is a deliberate UX design
+  decision — it does NOT bypass security, because the old code becomes invalid
+  once a new one is issued.
   """
 
   alias Foglet.Accounts
