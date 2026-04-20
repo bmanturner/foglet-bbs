@@ -6,10 +6,10 @@ defmodule Foglet.TUI.Screens.ThreadList do
   Each row shows title and unread count.
   """
 
+  alias Foglet.TimeAgo
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
-  alias Foglet.TimeAgo
 
   import Raxol.Core.Renderer.View
 

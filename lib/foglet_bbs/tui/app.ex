@@ -394,28 +394,6 @@ defmodule Foglet.TUI.App do
     {state, [task]}
   end
 
-  defp load_threads_for_user(threads_mod, board_id, user_id) do
-    cond do
-      function_exported?(threads_mod, :list_threads, 2) ->
-        threads_mod.list_threads(board_id, user_id)
-
-      function_exported?(threads_mod, :list_threads, 1) ->
-        threads_mod.list_threads(board_id)
-        |> Enum.map(fn t ->
-          case t do
-            %Foglet.Threads.Thread{} ->
-              t |> Map.from_struct() |> Map.put(:has_unread, false)
-
-            %{} ->
-              Map.put_new(t, :has_unread, false)
-          end
-        end)
-
-      true ->
-        []
-    end
-  end
-
   defp do_update({:threads_loaded, threads}, state) do
     {%{state | current_thread_list: threads}, []}
   end
@@ -566,6 +544,28 @@ defmodule Foglet.TUI.App do
   defp do_update(_other, state) do
     # Unknown messages pass through unchanged.
     {state, []}
+  end
+
+  defp load_threads_for_user(threads_mod, board_id, user_id) do
+    cond do
+      function_exported?(threads_mod, :list_threads, 2) ->
+        threads_mod.list_threads(board_id, user_id)
+
+      function_exported?(threads_mod, :list_threads, 1) ->
+        threads_mod.list_threads(board_id)
+        |> Enum.map(fn t ->
+          case t do
+            %Foglet.Threads.Thread{} ->
+              t |> Map.from_struct() |> Map.put(:has_unread, false)
+
+            %{} ->
+              Map.put_new(t, :has_unread, false)
+          end
+        end)
+
+      true ->
+        []
+    end
   end
 
   # Helpers for {:flush_read_pointers, ctx} task closure — extracted to keep
