@@ -234,22 +234,42 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp submit(%{data: data} = w, state) do
-    # open or invite_only — register active user, build verify code, go to :verify
+    # open or invite_only — register active user, route via post_login_screen/1
+    # (Phase 6 D-06: config-driven verify/main_menu decision).
     case Accounts.register_user(data) do
       {:ok, user} ->
-        {:ok, code} = Accounts.build_verify_code(user)
-        require Logger
-        Logger.info("[verify] code for @#{user.handle}: #{code}")
+        case Accounts.post_login_screen(user) do
+          :verify ->
+            {:ok, code} = Accounts.build_verify_code(user)
 
-        new_state = %{
-          state
-          | current_user: user,
-            current_screen: :verify,
-            register_wizard: nil,
-            verify_state: %{buffer: "", attempts: 0, cooldown_until: nil}
-        }
+            if Mix.env() != :prod do
+              require Logger
+              Logger.info("[verify] code for @#{user.handle}: #{code}")
+            end
 
-        {new_state, []}
+            new_state = %{
+              state
+              | current_user: user,
+                current_screen: :verify,
+                register_wizard: nil,
+                verify_state: %{
+                  buffer: "",
+                  attempts: 0,
+                  cooldown_until: nil,
+                  resend_cooldown_until: nil
+                }
+            }
+
+            {new_state, []}
+
+          :main_menu ->
+            # require_email_verification is false — skip verify screen, promote
+            # the session directly. {:promote_session, user} routes through the
+            # App's session supervisor (SSH-05 one-session-per-user) and lands
+            # the user on :main_menu (app.ex do_update/2 at line ~498-504).
+            new_state = %{state | current_user: user, register_wizard: nil}
+            {new_state, [{:promote_session, user}]}
+        end
 
       {:error, changeset} ->
         new_w = %{w | error: changeset_error_text(changeset), step: :handle}

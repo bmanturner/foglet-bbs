@@ -287,4 +287,79 @@ defmodule Foglet.TUI.Screens.LoginTest do
              "Expected screen_state to be cleared when suspended modal is shown, got: #{inspect(new_state.screen_state)}"
     end
   end
+
+  describe "submit_login/1 — VERIFY-01 retroactive bypass" do
+    setup do
+      original =
+        try do
+          Foglet.Config.get!("require_email_verification")
+        rescue
+          _ -> :not_seeded
+        end
+
+      on_exit(fn ->
+        case original do
+          :not_seeded -> :ok
+          value -> Foglet.Config.put!("require_email_verification", value)
+        end
+      end)
+
+      :ok
+    end
+
+    test "unconfirmed user + toggle=true routes to :verify" do
+      Foglet.Config.put!("require_email_verification", true)
+
+      password = "letmein12"
+      user = user_fixture(%{password: password})
+      assert user.confirmed_at == nil
+
+      state = form_state(%{handle: user.handle, password: password}, :password)
+
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+
+      assert new_state.current_screen == :verify
+      assert new_state.current_user.id == user.id
+      assert Map.has_key?(new_state.verify_state, :resend_cooldown_until)
+      assert new_state.verify_state.resend_cooldown_until == nil
+      assert new_state.verify_state.buffer == ""
+      assert new_state.verify_state.attempts == 0
+      assert new_state.verify_state.cooldown_until == nil
+      assert cmds == []
+    end
+
+    test "unconfirmed user + toggle=false routes to :main_menu via {:promote_session, user}" do
+      Foglet.Config.put!("require_email_verification", false)
+
+      password = "letmein12"
+      user = user_fixture(%{password: password})
+      assert user.confirmed_at == nil
+
+      state = form_state(%{handle: user.handle, password: password}, :password)
+
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+
+      assert new_state.screen_state == %{}
+      assert [{:promote_session, returned_user}] = cmds
+      assert returned_user.id == user.id
+    end
+
+    test "confirmed user is unaffected by toggle value" do
+      for toggle <- [true, false] do
+        Foglet.Config.put!("require_email_verification", toggle)
+
+        password = "letmein12"
+        user = user_fixture(%{password: password})
+        {:ok, confirmed} = Foglet.Accounts.confirm_user(user)
+        assert confirmed.confirmed_at != nil
+
+        state = form_state(%{handle: confirmed.handle, password: password}, :password)
+
+        {:update, _new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+
+        assert [{:promote_session, _}] = cmds,
+               "Confirmed user must always promote regardless of toggle=#{toggle}"
+      end
+    end
+  end
 end
