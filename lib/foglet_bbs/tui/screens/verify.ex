@@ -93,7 +93,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
     cond do
       cooldown?(vs) ->
-        {:update, %{state | modal: cooldown_modal(vs)}, []}
+        {:update, %{state | modal: cooldown_modal(vs.cooldown_until, "Too many attempts.")}, []}
 
       String.match?(new_char, ~r/\A[A-Z0-9]\z/) and String.length(vs.buffer) < @code_length ->
         new_vs = %{vs | buffer: vs.buffer <> new_char}
@@ -146,9 +146,19 @@ defmodule Foglet.TUI.Screens.Verify do
     DateTime.compare(DateTime.utc_now(), t) == :lt
   end
 
-  defp cooldown_modal(vs) do
-    remaining = DateTime.diff(vs.cooldown_until, DateTime.utc_now(), :second)
-    %{type: :error, message: "Too many attempts. Wait #{max(remaining, 0)}s."}
+  defp resend_cooldown?(%{resend_cooldown_until: nil}), do: false
+
+  defp resend_cooldown?(%{resend_cooldown_until: t}) do
+    DateTime.compare(DateTime.utc_now(), t) == :lt
+  end
+
+  # Build an :error modal that says <prefix> Wait Ns. given a DateTime
+  # representing when the cooldown ends. Takes the field value directly
+  # (not the whole verify_state) so the same helper serves both the
+  # invalid-attempts cooldown and the resend cooldown (D-11).
+  defp cooldown_modal(%DateTime{} = until, prefix) when is_binary(prefix) do
+    remaining = DateTime.diff(until, DateTime.utc_now(), :second)
+    %{type: :error, message: "#{prefix} Wait #{max(remaining, 0)}s."}
   end
 
   defp submit_raw(%{current_user: nil} = state) do
@@ -163,7 +173,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
     cond do
       cooldown?(vs) ->
-        {%{state | modal: cooldown_modal(vs)}, []}
+        {%{state | modal: cooldown_modal(vs.cooldown_until, "Too many attempts.")}, []}
 
       String.length(vs.buffer) != @code_length ->
         modal = %{type: :error, message: "Enter all 6 characters."}
@@ -209,8 +219,9 @@ defmodule Foglet.TUI.Screens.Verify do
       state.verify_state ||
         %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
 
-    if cooldown?(vs) do
-      {:update, %{state | modal: cooldown_modal(vs)}, []}
+    if resend_cooldown?(vs) do
+      {:update,
+       %{state | modal: cooldown_modal(vs.resend_cooldown_until, "Please wait to resend.")}, []}
     else
       {new_state, cmds} = resend_code_raw(state)
       {:update, new_state, cmds}
