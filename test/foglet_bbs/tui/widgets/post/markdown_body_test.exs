@@ -192,4 +192,59 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
       assert top_level_line_count(a) == top_level_line_count(b)
     end
   end
+
+  describe "render_tuples_as_lines/4 — flat list for Viewport children" do
+    test "returns a list (not a column element)" do
+      tuples = Foglet.Markdown.render("Hello.\n\nWorld.")
+      result = MarkdownBody.render_tuples_as_lines(tuples, 80, theme())
+      assert is_list(result)
+      refute is_map(result)
+    end
+
+    test "list length equals the number of logical lines" do
+      body = "A\n\nB\n\nC"
+      tuples = Foglet.Markdown.render(body)
+      result = MarkdownBody.render_tuples_as_lines(tuples, 80, theme())
+      assert length(result) == MarkdownBody.line_count(body)
+      assert length(result) == 3
+    end
+
+    test "each element is a Raxol view element map" do
+      tuples = Foglet.Markdown.render("one\n\ntwo")
+      result = MarkdownBody.render_tuples_as_lines(tuples, 80, theme())
+      assert Enum.all?(result, &is_map/1)
+      assert Enum.all?(result, fn el -> Map.has_key?(el, :type) or Map.has_key?(el, :content) end)
+    end
+
+    test "opts are ignored — no windowing applied" do
+      body = "A\n\nB\n\nC\n\nD"
+      tuples = Foglet.Markdown.render(body)
+      full = MarkdownBody.render_tuples_as_lines(tuples, 80, theme())
+
+      windowed =
+        MarkdownBody.render_tuples_as_lines(
+          tuples,
+          80,
+          theme(),
+          scroll_offset: 99,
+          max_lines: 1
+        )
+
+      # Both return the same length — opts are ignored (Viewport handles windowing).
+      assert length(full) == length(windowed)
+    end
+
+    test "empty tuple list returns []" do
+      result = MarkdownBody.render_tuples_as_lines([], 80, theme())
+      assert result == []
+    end
+
+    test "bold content routes through theme.accent.fg" do
+      t = theme()
+      tuples = Foglet.Markdown.render("Hello **world**.")
+      result = MarkdownBody.render_tuples_as_lines(tuples, 80, t)
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+      assert serialized =~ to_string(t.accent.fg)
+    end
+  end
 end

@@ -154,6 +154,60 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
     end
   end
 
+  describe "render_body_lines/5 — flat list for Viewport children" do
+    test "returns a list (not a column element)" do
+      post = sample_post(%{body: "Hello.\n\nWorld."})
+      tuples = Foglet.Markdown.render(Map.fetch!(post, :body))
+      result = PostCard.render_body_lines(post, tuples, 80, theme())
+      assert is_list(result)
+      refute is_map(result)
+    end
+
+    test "each element is a Raxol view element map" do
+      post = sample_post(%{body: "Line one.\n\nLine two."})
+      tuples = Foglet.Markdown.render(Map.fetch!(post, :body))
+      result = PostCard.render_body_lines(post, tuples, 80, theme())
+      assert Enum.all?(result, &is_map/1)
+      assert Enum.all?(result, fn el -> Map.has_key?(el, :type) or Map.has_key?(el, :content) end)
+    end
+
+    test "list length matches MarkdownBody.line_count for the same body" do
+      body = "A\n\nB\n\nC"
+      post = sample_post(%{body: body})
+      tuples = Foglet.Markdown.render(body)
+      result = PostCard.render_body_lines(post, tuples, 80, theme())
+      assert length(result) == Foglet.TUI.Widgets.Post.MarkdownBody.line_count(body)
+      assert length(result) == 3
+    end
+
+    test "body content is included but header content is NOT" do
+      body = "Hello **world**."
+      post = sample_post(%{body: body, user: %{handle: "sysop"}})
+      tuples = Foglet.Markdown.render(body)
+      result = PostCard.render_body_lines(post, tuples, 80, theme(), index: 0, total: 5)
+      flat = flatten_text(result)
+      assert flat =~ "world", "body text should be present, flat=#{inspect(flat)}"
+      refute flat =~ "Post 1 of 5", "header 'Post X of N' must NOT be present"
+      refute flat =~ "By @", "author line must NOT be present"
+      refute flat =~ "sysop", "handle must NOT be present"
+    end
+
+    test "opts (scroll_offset, max_lines) are ignored — no windowing" do
+      body = "A\n\nB\n\nC\n\nD"
+      post = sample_post(%{body: body})
+      tuples = Foglet.Markdown.render(body)
+      full = PostCard.render_body_lines(post, tuples, 80, theme())
+
+      windowed =
+        PostCard.render_body_lines(post, tuples, 80, theme(),
+          scroll_offset: 99,
+          max_lines: 1
+        )
+
+      assert length(full) == length(windowed)
+    end
+  end
+
   describe "render/4 — theme hygiene" do
     test "no hardcoded color atoms appear anywhere in the tree" do
       post = sample_post(%{body: "A **bold** post with `code` and *italics*."})
