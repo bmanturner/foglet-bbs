@@ -112,15 +112,9 @@ defmodule Foglet.TUI.Screens.Register do
     ctx = Map.get(state, :session_context) || %{}
 
     case Map.get(ctx, :registration_mode) do
-      nil -> safe_config_get("registration_mode", "open")
+      nil -> Config.get("registration_mode", "open")
       mode -> mode
     end
-  end
-
-  defp safe_config_get(key, default) do
-    Config.get!(key)
-  rescue
-    _ -> default
   end
 
   defp first_step_for("invite_only"), do: :invite_code
