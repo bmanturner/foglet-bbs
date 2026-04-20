@@ -39,7 +39,7 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
           column style: %{gap: 0} do
             [
               StatusBar.render(state, title),
-              divider(),
+              divider(char: "─", style: %{fg: theme.border.fg}),
               content_element
             ]
           end,
