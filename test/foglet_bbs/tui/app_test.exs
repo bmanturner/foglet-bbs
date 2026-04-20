@@ -463,8 +463,8 @@ defmodule Foglet.TUI.AppTest do
       }
 
       {gated, _} = App.update({:window_change, 50, 15}, state_reading)
-      {_, _} = App.update({:key, %{key: :char, char: "j"}}, gated)
-      {released, _} = App.update({:window_change, 100, 30}, gated)
+      {after_keys, _} = App.update({:key, %{key: :char, char: "j"}}, gated)
+      {released, _} = App.update({:window_change, 100, 30}, after_keys)
 
       assert released.read_position == state_reading.read_position
       assert released.screen_state.post_reader.selected_post_index == 5
