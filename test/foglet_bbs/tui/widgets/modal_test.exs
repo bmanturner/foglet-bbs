@@ -150,8 +150,10 @@ defmodule Foglet.TUI.Widgets.ModalTest do
 
         refute serialized =~ ":red",
                "#{type} modal leaked :red atom: #{serialized}"
+
         refute serialized =~ ":yellow",
                "#{type} modal leaked :yellow atom: #{serialized}"
+
         refute serialized =~ ":green",
                "#{type} modal leaked :green atom: #{serialized}"
       end
