@@ -272,26 +272,32 @@ defmodule Foglet.TUI.Screens.PostComposer do
     sc = Map.get(state, :session_context) || %{}
     posts_mod = get_in(sc, [:domain, :posts]) || Foglet.Posts
     thread = state.current_thread
+    user_id = state.current_user && state.current_user.id
 
-    attrs = %{body: draft}
-    reply_to_id = ss[:reply_to] && ss[:reply_to].id
-    attrs = if reply_to_id, do: Map.put(attrs, :reply_to_id, reply_to_id), else: attrs
+    if is_nil(user_id) do
+      {:update,
+       %{state | modal: %{type: :error, message: "You must be logged in to post."}}, []}
+    else
+      attrs = %{body: draft}
+      reply_to_id = ss[:reply_to] && ss[:reply_to].id
+      attrs = if reply_to_id, do: Map.put(attrs, :reply_to_id, reply_to_id), else: attrs
 
-    case posts_mod.create_reply(thread.id, thread.board_id, state.current_user.id, attrs) do
-      {:ok, _post} ->
-        new_state = %{
-          state
-          | current_screen: :post_reader,
-            composer_draft: nil,
-            screen_state: Map.delete(state.screen_state, :post_composer)
-        }
+      case posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs) do
+        {:ok, _post} ->
+          new_state = %{
+            state
+            | current_screen: :post_reader,
+              composer_draft: nil,
+              screen_state: Map.delete(state.screen_state, :post_composer)
+          }
 
-        # D-05: after the post reload finishes, the app handler sets
-        # selected_post_index to the last post (the user's new reply).
-        {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
+          # D-05: after the post reload finishes, the app handler sets
+          # selected_post_index to the last post (the user's new reply).
+          {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
 
-      {:error, _cs} ->
-        {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
+        {:error, _cs} ->
+          {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
+      end
     end
   end
 
