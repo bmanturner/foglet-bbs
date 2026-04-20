@@ -55,7 +55,10 @@ defmodule Foglet.TUI.Screens.NewThread do
       body_input_state: body_input_state,
       focused: :title,
       mode: :edit,
-      error: nil
+      error: nil,
+      # Callers may override :origin to control where Ctrl+C / Esc navigate.
+      # Default is :main_menu (the only entry point for the board-pick step).
+      origin: :main_menu
     }
   end
 

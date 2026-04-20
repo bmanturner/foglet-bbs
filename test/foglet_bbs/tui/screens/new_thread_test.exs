@@ -128,6 +128,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert is_struct(ss.body_input_state, MultiLineInput)
     assert ss.focused == :title
     assert ss.error == nil
+    assert ss.origin == :main_menu
   end
 
   test "init_screen_state/1 with boards pre-loaded stores them" do
