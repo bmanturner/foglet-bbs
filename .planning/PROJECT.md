@@ -180,4 +180,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 after initialization*
+*Last updated: 2026-04-20 after Phase 2 (markdown rendering correctness) — v1.0.1 polish workstream*
