@@ -279,7 +279,12 @@ defmodule Foglet.TUI.Screens.PostComposer do
        %{state | modal: %{type: :error, message: "You must be logged in to post."}}, []}
     else
       attrs = %{body: draft}
-      reply_to_id = ss[:reply_to] && ss[:reply_to].id
+
+      reply_to_id =
+        case Map.get(ss, :reply_to) do
+          nil -> nil
+          post -> post.id
+        end
       attrs = if reply_to_id, do: Map.put(attrs, :reply_to_id, reply_to_id), else: attrs
 
       case posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs) do
