@@ -14,8 +14,8 @@ v1.0.1 is a polish/hardening pass on the SSH + Raxol TUI delivered in the main w
 - Integer phases (1–6): Planned polish work for v1.0.1
 - Decimal phases (e.g., 2.1): Reserved for urgent insertions if surfaced mid-milestone
 
-- [ ] **Phase 1: Widget foundation + theme + screen chrome** - Reusable function-form widget layer, per-session theme struct, and consistent screen chrome land before any correctness work
-- [x] **Phase 2: Markdown rendering correctness** - Posts render as styled terminal output instead of raw markdown; wrapping is stable across terminal widths (completed 2026-04-20)
+- [x] **Phase 1: Widget foundation + theme + screen chrome** - Reusable function-form widget layer, per-session theme struct, and consistent screen chrome land before any correctness work (completed 2026-04-19)
+- [ ] **Phase 2: Markdown rendering correctness** - Posts render as styled terminal output instead of raw markdown; wrapping is stable across terminal widths
 - [ ] **Phase 3: Read-pointer correctness + thread-row enrichment** - Board unread counts decrement monotonically and reach zero; thread rows show creator, last-activity time-ago, and post count
 - [ ] **Phase 4: Composer & thread creation end-to-end** - `[C]` from thread list creates a new thread; `[R]` from post reader creates a reply; the broken crash-on-compose branch is removed
 - [ ] **Phase 5: Terminal size gate** - Terminals below the agreed minimum dimensions show a "too small" message; resizing back restores the prior screen with state intact (threshold decided during Phase 5 discussion)
@@ -101,7 +101,7 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Widget foundation + theme + screen chrome | 4/4 | Complete | 2026-04-19 |
-| 2. Markdown rendering correctness | 0/3 | Complete    | 2026-04-20 |
+| 2. Markdown rendering correctness | 0/3 | Planned | - |
 | 3. Read-pointer correctness + thread-row enrichment | 0/TBD | Not started | - |
 | 4. Composer & thread creation end-to-end | 0/TBD | Not started | - |
 | 5. Terminal size gate | 0/TBD | Not started | - |
