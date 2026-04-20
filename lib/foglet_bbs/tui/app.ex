@@ -19,6 +19,7 @@ defmodule Foglet.TUI.App do
 
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
+  alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Widgets
   alias Raxol.Core.Runtime.Command
   alias Raxol.Core.Runtime.Subscription
@@ -145,10 +146,19 @@ defmodule Foglet.TUI.App do
 
   @impl true
   def view(state) do
-    if state.modal do
-      render_modal_overlay(state.modal, state.terminal_size)
-    else
-      render_screen(state)
+    cond do
+      SizeGate.too_small?(state) ->
+        # FRAME-03 / D-04: render-time gate bypasses ScreenFrame entirely.
+        # No outer border, no StatusBar, no KeyBar on the too-small screen.
+        # State is never modified — current_screen / screen_state / modal
+        # are all preserved for when the terminal resizes back.
+        SizeGate.render(state)
+
+      state.modal ->
+        render_modal_overlay(state.modal, state.terminal_size)
+
+      true ->
+        render_screen(state)
     end
   end
 

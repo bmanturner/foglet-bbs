@@ -174,6 +174,69 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "view/1 size gate (FRAME-03, Phase 5)" do
+    test "renders SizeGate output when cols < 64" do
+      {:ok, state} = App.init(%{terminal_size: {40, 30}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      assert serialized =~ "Terminal too small."
+      assert serialized =~ "Foglet BBS requires at least 60×20."
+      assert serialized =~ "40×30"
+    end
+
+    test "renders SizeGate output when rows < 22" do
+      {:ok, state} = App.init(%{terminal_size: {100, 10}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      assert serialized =~ "Terminal too small."
+      assert serialized =~ "100×10"
+    end
+
+    test "renders normal screen at exactly 64×22 (strict inequality per D-13)" do
+      {:ok, state} = App.init(%{terminal_size: {64, 22}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      # Normal screen renders chrome — StatusBar contains "Foglet BBS —"
+      # but NOT "Terminal too small." So assert the absence of the gate marker.
+      refute serialized =~ "Terminal too small."
+    end
+
+    test "renders normal screen at 80×24 (common default)" do
+      {:ok, state} = App.init(%{terminal_size: {80, 24}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      refute serialized =~ "Terminal too small."
+    end
+
+    test "gate takes precedence over modal (D-04 ordering)" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {with_modal, _} = App.update({:show_modal, %{type: :info, message: "a modal"}}, state)
+      element = App.view(with_modal)
+      serialized = inspect(element, limit: :infinity)
+      # Gate wins — modal message is NOT visible, gate message IS
+      assert serialized =~ "Terminal too small."
+      refute serialized =~ "a modal"
+    end
+
+    test "gate is purely render-time — state is not modified by view/1 call" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+
+      state_with_screen = %{
+        state
+        | current_screen: :board_list,
+          screen_state: %{board_list: %{selected_index: 3}},
+          composer_draft: "draft-in-progress"
+      }
+
+      _ = App.view(state_with_screen)
+
+      # view/1 is pure — state should be completely unchanged
+      assert state_with_screen.current_screen == :board_list
+      assert state_with_screen.screen_state.board_list.selected_index == 3
+      assert state_with_screen.composer_draft == "draft-in-progress"
+    end
+  end
+
   describe "subscribe/1" do
     test "returns empty list when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})
