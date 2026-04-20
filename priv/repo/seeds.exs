@@ -47,7 +47,11 @@ default_config = [
    "Who may generate invite codes (D-04): sysop_only | mods | any_user"},
   {"max_post_length", 8192, "Maximum post body length in characters (D-31)"},
   {"max_thread_title_length", 60,
-   "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)"}
+   "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)"},
+  {"require_email_verification", true,
+   "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)"},
+  {"email_verify_resend_cooldown_seconds", 60,
+   "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)"}
 ]
 
 Enum.each(default_config, fn {key, value, description} ->
