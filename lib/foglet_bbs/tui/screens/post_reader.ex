@@ -124,13 +124,32 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   def handle_key(_key, _state), do: :no_match
 
-  @doc "Called by App.update/2 on {:load_posts, thread_id}."
+  @doc """
+  Called by App.update/2 on {:load_posts, thread_id}.
+
+  Seeds `state.read_position[thread_id]` with post 0's
+  `{last_read_post_id, last_read_message_number}` tuple immediately on
+  entry (LIST-01 D-05). This means pressing Q right after opening a
+  thread still advances the board read pointer past the first post on
+  flush — "if you saw it, you read it."
+  """
   @spec load_posts(map(), String.t()) :: {map(), list()}
   def load_posts(state, thread_id) do
     ctx = Map.get(state, :session_context) || %{}
     posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
     posts = posts_mod.list_posts(thread_id)
-    {%{state | posts: posts}, []}
+    new_read_position = seed_read_position_on_entry(state.read_position, thread_id, posts)
+    {%{state | posts: posts, read_position: new_read_position}, []}
+  end
+
+  defp seed_read_position_on_entry(read_position, _thread_id, []), do: read_position
+  defp seed_read_position_on_entry(read_position, _thread_id, nil), do: read_position
+
+  defp seed_read_position_on_entry(read_position, thread_id, [first_post | _]) do
+    Map.put(read_position, thread_id, %{
+      last_read_post_id: first_post.id,
+      last_read_message_number: Map.get(first_post, :message_number, 0)
+    })
   end
 
   @doc """

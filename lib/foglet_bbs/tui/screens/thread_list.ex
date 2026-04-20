@@ -9,6 +9,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TimeAgo
 
   import Raxol.Core.Renderer.View
 
@@ -36,6 +37,8 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp render_thread_content(state, ss, theme) do
     sorted = sort_threads(state.current_thread_list || [])
+    {width, _h} = state.terminal_size || {80, 24}
+    inner_width = max(width - 4, 40)
 
     if sorted == [] do
       column style: %{gap: 0} do
@@ -43,13 +46,32 @@ defmodule Foglet.TUI.Screens.ThreadList do
       end
     else
       SelectionList.render(sorted, ss.selected_index, fn {thread, _idx, selected} ->
-        sticky_mark = if thread.sticky, do: "[S] ", else: ""
-        unread = Map.get(thread, :unread_count, 0)
-        unread_str = if unread > 0, do: " (#{unread})", else: ""
-        ListRow.render("#{sticky_mark}#{thread.title}#{unread_str}", selected, theme)
+        render_thread_row(thread, selected, inner_width, theme)
       end)
     end
   end
+
+  defp render_thread_row(thread, selected, width, theme) do
+    sticky_mark = if Map.get(thread, :sticky, false), do: "[S] ", else: ""
+    title = "#{sticky_mark}#{Map.get(thread, :title, "?")}"
+    metadata = thread_metadata(thread)
+    unread? = Map.get(thread, :has_unread, false)
+    ListRow.render_with_metadata(title, metadata, selected, unread?, theme, width: width)
+  end
+
+  defp thread_metadata(thread) do
+    handle = thread_handle(thread)
+    count = Map.get(thread, :post_count, 1) |> max(1)
+    post_word = if count == 1, do: "post", else: "posts"
+    time_segment = thread_time_segment(thread)
+    "@#{handle} · #{count} #{post_word} · #{time_segment}"
+  end
+
+  defp thread_handle(%{created_by: %{handle: h}}) when is_binary(h) and h != "", do: h
+  defp thread_handle(_), do: "unknown"
+
+  defp thread_time_segment(%{last_post_at: %DateTime{} = dt}), do: "#{TimeAgo.format(dt)} ago"
+  defp thread_time_segment(_), do: "new"
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :char, char: "j"}, state), do: move_selection(state, +1)
@@ -83,7 +105,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
-    {:update, %{state | current_screen: :board_list}, []}
+    {:update, %{state | current_screen: :board_list}, [{:load_boards}]}
   end
 
   def handle_key(_key, _state), do: :no_match
@@ -93,23 +115,41 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def load_threads(state, board_id) do
     ctx = Map.get(state, :session_context) || %{}
     threads_mod = get_in(ctx, [:domain, :threads]) || Foglet.Threads
+    user_id = state.current_user && state.current_user.id
 
-    if function_exported?(threads_mod, :list_threads, 1) do
-      threads = threads_mod.list_threads(board_id)
-      {%{state | current_thread_list: threads}, []}
-    else
-      {%{state | current_thread_list: []}, []}
+    cond do
+      function_exported?(threads_mod, :list_threads, 2) ->
+        threads = threads_mod.list_threads(board_id, user_id)
+        {%{state | current_thread_list: threads}, []}
+
+      function_exported?(threads_mod, :list_threads, 1) ->
+        threads = threads_mod.list_threads(board_id) |> Enum.map(&annotate_fallback/1)
+        {%{state | current_thread_list: threads}, []}
+
+      true ->
+        {%{state | current_thread_list: []}, []}
     end
   end
+
+  defp annotate_fallback(%Foglet.Threads.Thread{} = t) do
+    t
+    |> Map.from_struct()
+    |> Map.put(:has_unread, false)
+  end
+
+  defp annotate_fallback(t) when is_map(t), do: Map.put_new(t, :has_unread, false)
 
   # --- Private ---
 
   defp sort_threads(threads) when is_list(threads) do
-    {sticky, regular} = Enum.split_with(threads, &(&1.sticky == true))
+    {sticky, regular} = Enum.split_with(threads, &(Map.get(&1, :sticky, false) == true))
 
-    Enum.sort_by(sticky, & &1.last_post_at, {:desc, DateTime}) ++
-      Enum.sort_by(regular, & &1.last_post_at, {:desc, DateTime})
+    Enum.sort_by(sticky, &last_post_sort_key/1, :desc) ++
+      Enum.sort_by(regular, &last_post_sort_key/1, :desc)
   end
+
+  defp last_post_sort_key(%{last_post_at: %DateTime{} = dt}), do: DateTime.to_unix(dt, :microsecond)
+  defp last_post_sort_key(_), do: -1
 
   defp move_selection(state, delta) do
     threads = sort_threads(state.current_thread_list || [])

@@ -449,4 +449,108 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       refute serialized =~ "*italic*"
     end
   end
+
+  describe "load_posts/2 — read-on-entry seeding (LIST-01 D-05)" do
+    defmodule FakePostsForLoad do
+      def list_posts(_thread_id) do
+        [
+          %{
+            id: "p1",
+            body: "first post body",
+            inserted_at: DateTime.utc_now(),
+            user: %{handle: "sysop"},
+            message_number: 5
+          },
+          %{
+            id: "p2",
+            body: "second post body",
+            inserted_at: DateTime.utc_now(),
+            user: %{handle: "sysop"},
+            message_number: 6
+          }
+        ]
+      end
+    end
+
+    test "seeds read_position[thread_id] with post 0's id and message_number on load" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t1", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{theme: theme(), domain: %{posts: FakePostsForLoad}}
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t1")
+
+      rp = s_after.read_position["t1"]
+      assert rp, "Expected read_position[\"t1\"] to be seeded"
+      assert rp.last_read_post_id == "p1"
+      assert rp.last_read_message_number == 5
+    end
+
+    test "does NOT touch other threads' read_position entries" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t1", title: "test"},
+          posts: nil,
+          read_position: %{
+            "tOther" => %{last_read_post_id: "pX", last_read_message_number: 99}
+          },
+          session_context: %{theme: theme(), domain: %{posts: FakePostsForLoad}}
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t1")
+
+      assert s_after.read_position["tOther"].last_read_post_id == "pX"
+      assert s_after.read_position["tOther"].last_read_message_number == 99
+    end
+
+    test "empty posts list leaves read_position unchanged (no crash)" do
+      defmodule EmptyPosts do
+        def list_posts(_tid), do: []
+      end
+
+      s =
+        p2_state(%{
+          current_thread: %{id: "t1", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{theme: theme(), domain: %{posts: EmptyPosts}}
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t1")
+
+      assert s_after.read_position == %{}
+    end
+
+    test "Q immediately after load produces a flush command with post 0's message_number (integration)" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t1", title: "test"},
+          current_board: %{id: "b1"},
+          current_user: %{id: "u1", handle: "sysop"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{theme: theme(), domain: %{posts: FakePostsForLoad}}
+        })
+
+      {s_after_load, _} = PostReader.load_posts(s, "t1")
+      {:update, _s_after_q, cmds} = PostReader.handle_key(%{key: :char, char: "q"}, s_after_load)
+
+      flush =
+        Enum.find(cmds, fn
+          {:flush_read_pointers, _ctx} -> true
+          _ -> false
+        end)
+
+      assert flush, "Expected a :flush_read_pointers command after Q, got: #{inspect(cmds)}"
+
+      {:flush_read_pointers, ctx} = flush
+      assert ctx[:last_read_message_number] == 5
+      assert ctx[:last_read_post_id] == "p1"
+      assert ctx[:thread_id] == "t1"
+      assert ctx[:board_id] == "b1"
+    end
+  end
 end

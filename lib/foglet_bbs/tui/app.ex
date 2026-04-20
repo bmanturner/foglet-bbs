@@ -384,13 +384,36 @@ defmodule Foglet.TUI.App do
   defp do_update({:load_threads, board_id}, state) do
     ctx = Map.get(state, :session_context) || %{}
     threads_mod = get_in(ctx, [:domain, :threads]) || Foglet.Threads
+    user_id = state.current_user && state.current_user.id
 
     task =
       Command.task(fn ->
-        {:threads_loaded, threads_mod.list_threads(board_id)}
+        {:threads_loaded, load_threads_for_user(threads_mod, board_id, user_id)}
       end)
 
     {state, [task]}
+  end
+
+  defp load_threads_for_user(threads_mod, board_id, user_id) do
+    cond do
+      function_exported?(threads_mod, :list_threads, 2) ->
+        threads_mod.list_threads(board_id, user_id)
+
+      function_exported?(threads_mod, :list_threads, 1) ->
+        threads_mod.list_threads(board_id)
+        |> Enum.map(fn t ->
+          case t do
+            %Foglet.Threads.Thread{} ->
+              t |> Map.from_struct() |> Map.put(:has_unread, false)
+
+            %{} ->
+              Map.put_new(t, :has_unread, false)
+          end
+        end)
+
+      true ->
+        []
+    end
   end
 
   defp do_update({:threads_loaded, threads}, state) do
@@ -428,7 +451,13 @@ defmodule Foglet.TUI.App do
     new_rp =
       if thread_id, do: Map.delete(state.read_position, thread_id), else: state.read_position
 
-    {%{state | read_position: new_rp}, []}
+    new_state = %{state | read_position: new_rp}
+
+    if new_state.current_screen == :board_list do
+      do_update({:load_boards}, new_state)
+    else
+      {new_state, []}
+    end
   end
 
   # PubSub message handlers (Audit #12).
