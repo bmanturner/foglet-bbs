@@ -29,11 +29,14 @@ defmodule Foglet.TUI.Widgets.Chrome.KeyBar do
     accent_style = Map.get(theme.accent, :style, [])
 
     labels =
-      Enum.map(keys, fn {k, d} ->
-        text("[#{k}] #{d}", fg: theme.accent.fg, style: accent_style)
+      Enum.flat_map(keys, fn {k, d} ->
+        [
+          text("[#{k}] ", fg: theme.accent.fg, style: accent_style),
+          text("#{d}  ", fg: theme.dim.fg)
+        ]
       end)
 
-    row style: %{gap: 2} do
+    row style: %{gap: 0} do
       labels
     end
   end
