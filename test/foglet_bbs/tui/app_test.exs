@@ -343,6 +343,135 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "composer draft preservation across resize gate cycles (Pitfall 4)" do
+    test "post_composer input_state.value survives resize-down → key-press → resize-up cycle" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      # Simulate a post_composer session with an in-flight draft
+      state_with_composer = %{
+        state
+        | current_screen: :post_composer,
+          screen_state: %{
+            post_composer: %{
+              mode: :compose,
+              input_state: %{value: "draft-in-progress", cursor_pos: 17},
+              error: nil
+            }
+          }
+      }
+
+      # Step 1: resize DOWN below threshold — gate engages
+      {gated, _cmds} = App.update({:window_change, 40, 10}, state_with_composer)
+      assert Foglet.TUI.SizeGate.too_small?(gated)
+      # Composer state is preserved through the resize (update/2 didn't touch it)
+      assert gated.screen_state.post_composer.input_state.value == "draft-in-progress"
+      assert gated.screen_state.post_composer.input_state.cursor_pos == 17
+      assert gated.current_screen == :post_composer
+
+      # Step 2: user hammers keys while gated — ALL must be swallowed
+      {after_q, _} = App.update({:key, %{key: :char, char: "q"}}, gated)
+      {after_enter, _} = App.update({:key, %{key: :enter}}, after_q)
+      {after_esc, _} = App.update({:key, %{key: :escape}}, after_enter)
+      # Draft still intact
+      assert after_esc.screen_state.post_composer.input_state.value == "draft-in-progress"
+      assert after_esc.screen_state.post_composer.input_state.cursor_pos == 17
+      assert after_esc.current_screen == :post_composer
+
+      # Step 3: resize BACK above threshold — gate releases
+      {released, _} = App.update({:window_change, 100, 30}, after_esc)
+      refute Foglet.TUI.SizeGate.too_small?(released)
+      # Draft survives the full cycle end-to-end
+      assert released.screen_state.post_composer.input_state.value == "draft-in-progress"
+      assert released.screen_state.post_composer.input_state.cursor_pos == 17
+      assert released.current_screen == :post_composer
+    end
+
+    test "new_thread body_input_state.value survives the same cycle" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      state_with_new_thread = %{
+        state
+        | current_screen: :new_thread,
+          screen_state: %{
+            new_thread: %{
+              step: :compose,
+              title_input: "My new thread",
+              body_input_state: %{value: "line1\nline2\nline3", cursor_pos: 17},
+              focused: :body,
+              mode: :compose,
+              boards: nil,
+              board: nil,
+              selected_board_index: 0,
+              error: nil,
+              origin: :main_menu
+            }
+          }
+      }
+
+      # Resize down → key presses → resize up
+      {gated, _} = App.update({:window_change, 50, 15}, state_with_new_thread)
+      {after_keys, _} = App.update({:key, %{key: :char, char: "X"}}, gated)
+      {released, _} = App.update({:window_change, 100, 30}, after_keys)
+
+      # Multi-line content preserved verbatim
+      assert released.screen_state.new_thread.body_input_state.value == "line1\nline2\nline3"
+      assert released.screen_state.new_thread.body_input_state.cursor_pos == 17
+      assert released.screen_state.new_thread.title_input == "My new thread"
+      assert released.current_screen == :new_thread
+    end
+
+    test "rapid resize bursts at the same sub-threshold size do not mutate state" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      state_with_composer = %{
+        state
+        | current_screen: :post_composer,
+          screen_state: %{
+            post_composer: %{
+              mode: :compose,
+              input_state: %{value: "important-draft", cursor_pos: 15},
+              error: nil
+            }
+          }
+      }
+
+      # One resize to sub-threshold
+      {gated_once, _} = App.update({:window_change, 40, 10}, state_with_composer)
+
+      # Burst of same-size events (simulates tmux drag) — D-09 same-size guard
+      # Each one must short-circuit to identity
+      final =
+        Enum.reduce(1..20, gated_once, fn _, acc ->
+          {new_state, _cmds} = App.update({:window_change, 40, 10}, acc)
+          new_state
+        end)
+
+      # Draft preserved, state structurally identical to gated_once
+      assert final == gated_once
+      assert final.screen_state.post_composer.input_state.value == "important-draft"
+    end
+
+    test "read_position survives resize gate cycle" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      state_reading = %{
+        state
+        | current_screen: :post_reader,
+          current_thread: %{id: "thread-1"},
+          read_position: %{"thread-1" => %{last_post_id: "post-42", scroll: 15}},
+          screen_state: %{post_reader: %{selected_post_index: 5}}
+      }
+
+      {gated, _} = App.update({:window_change, 50, 15}, state_reading)
+      {_, _} = App.update({:key, %{key: :char, char: "j"}}, gated)
+      {released, _} = App.update({:window_change, 100, 30}, gated)
+
+      assert released.read_position == state_reading.read_position
+      assert released.screen_state.post_reader.selected_post_index == 5
+      assert released.current_screen == :post_reader
+    end
+  end
+
   describe "subscribe/1" do
     test "returns empty list when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})
