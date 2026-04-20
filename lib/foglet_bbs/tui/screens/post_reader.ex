@@ -220,9 +220,20 @@ defmodule Foglet.TUI.Screens.PostReader do
     Map.merge(default_screen_state(), existing)
   end
 
-  # Cache-aware Foglet.Markdown.render/1 wrapper. Returns the parsed
-  # tuple list. If the result was not cached, the caller should store
-  # it via warm_cache/4.
+  # Parses the post body via Foglet.Markdown.render/1. Returns the
+  # rendered tuple list but does NOT write to render_cache — it is a
+  # pure read-only helper.
+  #
+  # The cache is populated via warm_cache/4, which is called from:
+  #   - load_posts/2    (on initial thread load — warms post 0)
+  #   - advance_post/2  (on n/p navigation)
+  #   - scroll_post/2   (on j/k scroll)
+  #
+  # render_post_content/5 uses the cache when available and falls back
+  # to parse_body/2 for any post not yet cached (e.g. a PubSub-triggered
+  # reload before the user has navigated). Since render_post_content/5 is
+  # pure (read-only from state) it intentionally cannot write the result
+  # back into the cache.
   defp parse_body(state, post) do
     sc = Map.get(state, :session_context) || %{}
     markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
