@@ -153,6 +153,37 @@ defmodule Foglet.Accounts do
   end
 
   @doc """
+  Decide which screen the user lands on after a successful login or
+  registration (Phase 6 D-04, VERIFY-01).
+
+  Returns:
+    * `:main_menu` — user is confirmed (`confirmed_at != nil`), OR
+                    `require_email_verification` is disabled globally.
+    * `:verify`   — user is unconfirmed AND verification is required.
+
+  Reads the `require_email_verification` config key with a safe default of
+  `true` — a missing seed entry (stale test DB) defaults to "verification
+  required" rather than silently bypassing the check.
+
+  Retroactive bypass policy (REQUIREMENTS locked): an existing user with
+  `confirmed_at: nil` gains access on their next login when the sysop flips
+  the toggle to `false`; no DB migration is performed.
+  """
+  @spec post_login_screen(User.t()) :: :main_menu | :verify
+  def post_login_screen(%User{confirmed_at: confirmed_at}) do
+    cond do
+      confirmed_at != nil ->
+        :main_menu
+
+      Foglet.Config.get("require_email_verification", true) == false ->
+        :main_menu
+
+      true ->
+        :verify
+    end
+  end
+
+  @doc """
   Build and persist an email verification code for `user`. Returns the raw 6-char
   alphanumeric code (the value to show/email/log to the user). The code expires in
   15 minutes. See D-08, D-10.
