@@ -70,14 +70,16 @@ v1.0.1 is a polish/hardening pass on the SSH + Raxol TUI delivered in the main w
 
 ### Phase 5: Terminal size gate
 **Goal**: A user whose terminal is smaller than the agreed minimum sees a clear "terminal too small" message instead of garbled UI; resizing back restores the prior screen unchanged.
-**Depends on**: Phase 1 (branch lives inside `ScreenFrame`)
+**Depends on**: Phase 1 (Phase 5 decision D-04 moves the gate from `ScreenFrame` to `App.view/1`, but still relies on Phase 1 chrome geometry for the 64×22 code-level threshold)
 **Requirements**: FRAME-03
-**Open decision (resolve at Phase 5 discuss/plan):** Minimum terminal dimensions — research surfaced 60×20 (floor before garbling) vs 80×24 (comfort for BoardList row density). Decide before implementation.
+**Resolved decision:** Minimum terminal dimensions are 60×20 user-facing / 64×22 code-level (strict inequality). See `phases/05-terminal-size-gate/05-CONTEXT.md` D-01..D-13.
 **Success Criteria** (what must be TRUE):
   1. Resizing the terminal below the agreed minimum replaces screen content with a clear "terminal too small" message showing current and required dimensions
   2. Resizing back above the threshold restores the exact prior screen — selected row, composer draft, scroll position — with no state loss
   3. Alt-screen takeover survives resize events without border fragments or stuck frame redraws
-**Plans**: TBD
+**Plans**: 2 plans
+- [ ] 05-01-PLAN.md — SizeGate module + App.view/1 cond branch (creates the visible gate)
+- [ ] 05-02-PLAN.md — Same-size guard + key-swallow guard + MultiLineInput preservation regression test (locks in state safety)
 **UI hint**: yes
 
 ### Phase 6: Email verification toggle + resend
@@ -104,5 +106,5 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 | 2. Markdown rendering correctness | 0/3 | Complete    | 2026-04-20 |
 | 3. Read-pointer correctness + thread-row enrichment | 0/4 | Planned | - |
 | 4. Composer & thread creation end-to-end | 0/TBD | Not started | - |
-| 5. Terminal size gate | 0/TBD | Not started | - |
+| 5. Terminal size gate | 0/2 | Planned | - |
 | 6. Email verification toggle + resend | 0/TBD | Not started | - |
