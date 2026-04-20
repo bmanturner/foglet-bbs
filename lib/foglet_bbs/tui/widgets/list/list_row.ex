@@ -142,11 +142,8 @@ defmodule Foglet.TUI.Widgets.List.ListRow do
       title_len <= max_len ->
         title
 
-      max_len >= @min_title_length ->
-        String.slice(title, 0, max_len - 1) <> @ellipsis
-
-      max_len >= 2 ->
-        String.slice(title, 0, max_len - 1) <> @ellipsis
+      max_len >= 1 ->
+        String.slice(title, 0, max(max_len - 1, 0)) <> @ellipsis
 
       true ->
         @ellipsis
