@@ -108,3 +108,13 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 | 4. Composer & thread creation end-to-end | 4/4 | Complete    | 2026-04-20 |
 | 5. Terminal size gate | 2/2 | Complete | 2026-04-20 |
 | 6. Email verification toggle + resend | 0/TBD | Not started | - |
+
+### Phase 7: Migrate hand-rolled UI components to Raxol widgets
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 6
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 7 to break down)
