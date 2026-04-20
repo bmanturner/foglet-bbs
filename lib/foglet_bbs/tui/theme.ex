@@ -1,23 +1,33 @@
 defmodule Foglet.TUI.Theme do
   @moduledoc """
-  Per-session theme struct for Foglet BBS TUI (v1.0.1).
+  Theme registry and per-session flat snapshot for Foglet BBS TUI.
 
-  Resolved once per session in CLIHandler.build_context/3 and stored in
-  state.session_context.theme. Screens read theme slots directly —
-  no Raxol ThemeManager is used.
+  Two responsibilities:
 
-  Slots:
-    border     — outer box border, divider lines
-    primary    — body text, unselected list row text
-    dim        — secondary labels, metadata text
-    accent     — key hint brackets [K], highlighted labels
-    title      — screen/section headings
-    error      — error messages, validation failures
-    warning    — warning/notice text
-    selected   — selected list row (reverse-video)
-    unselected — non-selected list rows
-    status_bar — StatusBar reverse-video bar
+  1. **Registry** — Palettes are defined as `Raxol.UI.Theming.Theme` structs
+     and registered via `Raxol.UI.Theming.Theme.register/1` on app boot.
+     Each Foglet slot (`border`, `primary`, `status_bar`, ...) is stored
+     under the Raxol theme's `:component_styles`. This lets future
+     Raxol-aware widgets read the same theme definitions, and gives us a
+     painless upgrade path to user-selectable themes later.
+
+  2. **Session snapshot** — `%Foglet.TUI.Theme{}` is a flat struct held in
+     `state.session_context.theme`. Screens read slots as `theme.border.fg`
+     etc., which is fast in render paths and keeps widget code terse.
+     `resolve/1` looks up the registered Raxol theme and projects its
+     component styles into the flat struct.
+
+  Slots (locked in UI-SPEC D-01/D-02):
+    border, primary, dim, accent, title, error, warning,
+    selected, unselected, status_bar
+
+  Call `Foglet.TUI.Theme.register_all/0` on app boot (see
+  `Foglet.Application.start/2`). `resolve/1` falls back to a static
+  palette if the Raxol registry has not been populated yet (e.g. in
+  tests that don't boot the application).
   """
+
+  alias Raxol.UI.Theming.Theme, as: RaxolTheme
 
   @type style_map :: %{
           optional(:fg) => String.t(),
@@ -38,7 +48,18 @@ defmodule Foglet.TUI.Theme do
           status_bar: style_map()
         }
 
-  defstruct [
+  defstruct border: %{},
+            primary: %{},
+            dim: %{},
+            accent: %{},
+            title: %{},
+            error: %{},
+            warning: %{},
+            selected: %{},
+            unselected: %{},
+            status_bar: %{}
+
+  @slot_keys [
     :border,
     :primary,
     :dim,
@@ -51,47 +72,89 @@ defmodule Foglet.TUI.Theme do
     :status_bar
   ]
 
-  @doc "Returns the default theme (`:gray`) used for v1.0.1."
+  # Static palette definitions — the source of truth in code.
+  # Registered into the Raxol theme system on app boot.
+
+  @gray_slots %{
+    border: %{fg: "#555555"},
+    primary: %{fg: "#cccccc"},
+    dim: %{fg: "#888888"},
+    accent: %{fg: "#ffb000", style: [:bold]},
+    title: %{fg: "#ffb000", style: [:bold]},
+    error: %{fg: "#ff5555", style: [:bold]},
+    warning: %{fg: "#ffff55"},
+    selected: %{fg: "#000000", bg: "#aaaaaa", style: [:bold]},
+    unselected: %{fg: "#cccccc"},
+    status_bar: %{fg: "#ffb000"}
+  }
+
+  @green_slots %{
+    border: %{fg: "#22aa44"},
+    primary: %{fg: "#33ff66"},
+    dim: %{fg: "#22aa44"},
+    accent: %{fg: "#ffb000", style: [:bold]},
+    title: %{fg: "#33ff66", style: [:bold]},
+    error: %{fg: "#ff5555", style: [:bold]},
+    warning: %{fg: "#ffff55"},
+    selected: %{fg: "#000000", bg: "#33ff66", style: [:bold]},
+    unselected: %{fg: "#33ff66"},
+    status_bar: %{fg: "#33ff66"}
+  }
+
+  @doc """
+  Registers all Foglet TUI themes with Raxol's theme registry.
+  Idempotent — safe to call multiple times. Call from
+  `Foglet.Application.start/2`.
+  """
+  @spec register_all() :: :ok
+  def register_all do
+    :ok = RaxolTheme.register(build_raxol_theme(:gray, @gray_slots))
+    :ok = RaxolTheme.register(build_raxol_theme(:green, @green_slots))
+    :ok
+  end
+
+  @doc "Default theme (`:gray`) for v1.0.1."
   @spec default() :: t()
-  def default, do: gray()
+  def default, do: resolve(:gray)
 
-  @doc "Gray/amber theme — the active theme for v1.0.1."
-  @spec gray() :: t()
-  def gray do
-    %__MODULE__{
-      border: %{fg: "#555555"},
-      primary: %{fg: "#cccccc"},
-      dim: %{fg: "#888888"},
-      accent: %{fg: "#ffb000", style: [:bold]},
-      title: %{fg: "#ffb000", style: [:bold]},
-      error: %{fg: "#ff5555", style: [:bold]},
-      warning: %{fg: "#ffff55"},
-      selected: %{fg: "#000000", bg: "#aaaaaa", style: [:bold]},
-      unselected: %{fg: "#cccccc"},
-      status_bar: %{fg: "#000000", bg: "#aaaaaa"}
-    }
-  end
-
-  @doc "Green phosphor theme — defined but inactive in v1.0.1."
-  @spec green() :: t()
-  def green do
-    %__MODULE__{
-      border: %{fg: "#22aa44"},
-      primary: %{fg: "#33ff66"},
-      dim: %{fg: "#22aa44"},
-      accent: %{fg: "#ffb000", style: [:bold]},
-      title: %{fg: "#33ff66", style: [:bold]},
-      error: %{fg: "#ff5555", style: [:bold]},
-      warning: %{fg: "#ffff55"},
-      selected: %{fg: "#000000", bg: "#33ff66", style: [:bold]},
-      unselected: %{fg: "#33ff66"},
-      status_bar: %{fg: "#000000", bg: "#33ff66"}
-    }
-  end
-
-  @doc "Resolve a theme by name atom. Unknown names fall back to :gray."
+  @doc "Returns a flat `%Foglet.TUI.Theme{}` snapshot for the given id."
   @spec resolve(atom()) :: t()
-  def resolve(:gray), do: gray()
-  def resolve(:green), do: green()
-  def resolve(_), do: gray()
+  def resolve(id) when is_atom(id) do
+    raxol_theme = RaxolTheme.get(id)
+
+    slots =
+      if raxol_theme.id == id do
+        Enum.into(@slot_keys, %{}, fn slot ->
+          {slot, RaxolTheme.get_component_style(raxol_theme, slot)}
+        end)
+      else
+        # Raxol returned the fallback default_theme — our registry is empty.
+        # Use the static palette so tests and pre-boot calls still work.
+        static_slots(id)
+      end
+
+    struct(__MODULE__, slots)
+  end
+
+  @doc "Alias for `resolve(:gray)`."
+  @spec gray() :: t()
+  def gray, do: resolve(:gray)
+
+  @doc "Alias for `resolve(:green)`."
+  @spec green() :: t()
+  def green, do: resolve(:green)
+
+  # --- private ---
+
+  defp build_raxol_theme(id, slots) do
+    RaxolTheme.new(%{
+      id: id,
+      name: Atom.to_string(id),
+      component_styles: slots
+    })
+  end
+
+  defp static_slots(:gray), do: @gray_slots
+  defp static_slots(:green), do: @green_slots
+  defp static_slots(_), do: @gray_slots
 end
