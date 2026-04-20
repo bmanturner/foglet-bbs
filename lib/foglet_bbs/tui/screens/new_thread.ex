@@ -301,7 +301,14 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp handle_compose_key(_key, _state, %{focused: :title}), do: :no_match
 
-  # Body field: forward to MultiLineInput
+  # Body field: forward to MultiLineInput.
+  # NOTE: The Ctrl+C (cancel) and Ctrl+S (submit) clauses at lines 250 and 270
+  # MUST remain above this clause in source order. Compose.translate_key/1
+  # intentionally passes ctrl+char combos through as {:input, codepoint} for
+  # terminal-native workflows; the screen-level pattern-matches above intercept
+  # Ctrl+S and Ctrl+C before they can reach this fallthrough. Moving those
+  # clauses below this one would cause Ctrl+S on body focus to insert "s" into
+  # the body text instead of submitting.
   defp handle_compose_key(key_event, state, %{focused: :body} = ss) do
     case Compose.translate_key(key_event) do
       nil ->
