@@ -642,7 +642,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp maybe_flush_thread_pointer(threads_mod, user_id, ctx) do
-    if ctx[:thread_id] && user_id do
+    if ctx[:thread_id] && user_id && ctx[:last_read_post_id] do
       threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
     end
   end

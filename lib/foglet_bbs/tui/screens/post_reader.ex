@@ -194,7 +194,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp flush_thread_pointer(_mod, nil, _ctx), do: :skip
 
   defp flush_thread_pointer(threads_mod, user_id, ctx) do
-    if ctx[:thread_id] do
+    if ctx[:thread_id] && ctx[:last_read_post_id] do
       threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
     end
   end
@@ -304,7 +304,7 @@ defmodule Foglet.TUI.Screens.PostReader do
         {w, h} = state.terminal_size || {80, 24}
         available_height = max(h - 10, 5)
 
-        total_lines = PostCard.body_line_count(post.body)
+        total_lines = PostCard.body_line_count(Map.get(post, :body))
         # Max offset: never scroll past (total - available_height).
         # Clamp at 0 for short posts.
         max_offset = max(total_lines - available_height, 0)
