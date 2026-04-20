@@ -1,3 +1,43 @@
+# ---------------------------------------------------------------------------
+# Fake domain adapters (defined outside test module per project convention)
+# ---------------------------------------------------------------------------
+
+defmodule Foglet.TUI.Screens.NewThreadTest.FakeBoards do
+  def list_subscribed_boards(_user) do
+    [
+      %{id: "b1", name: "General", unread_count: 0},
+      %{id: "b2", name: "Announcements", unread_count: 0}
+    ]
+  end
+end
+
+defmodule Foglet.TUI.Screens.NewThreadTest.FakeBoardsEmpty do
+  def list_subscribed_boards(_user), do: []
+end
+
+defmodule Foglet.TUI.Screens.NewThreadTest.FakeThreadsOk do
+  def create_thread(_board_id, _user_id, attrs) do
+    thread = %{
+      id: "t-new",
+      title: Map.get(attrs, :title, ""),
+      sticky: false,
+      last_post_at: DateTime.utc_now()
+    }
+
+    {:ok, %{thread: thread, post: %{id: "p-new"}}}
+  end
+end
+
+defmodule Foglet.TUI.Screens.NewThreadTest.FakeThreadsMissing do
+  # Does NOT export create_thread/3 — simulates unauthenticated user path.
+end
+
+defmodule Foglet.TUI.Screens.NewThreadTest.FakeThreadsError do
+  def create_thread(_board_id, _user_id, _attrs) do
+    {:error, "board is locked"}
+  end
+end
+
 defmodule Foglet.TUI.Screens.NewThreadTest do
   use ExUnit.Case, async: true
 
@@ -5,45 +45,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   alias Foglet.TUI.Screens.NewThread
   alias Raxol.UI.Components.Input.MultiLineInput
 
-  # ---------------------------------------------------------------------------
-  # Fake domain adapters
-  # ---------------------------------------------------------------------------
-
-  defmodule FakeBoards do
-    def list_subscribed_boards(_user) do
-      [
-        %{id: "b1", name: "General", unread_count: 0},
-        %{id: "b2", name: "Announcements", unread_count: 0}
-      ]
-    end
-  end
-
-  defmodule FakeBoardsEmpty do
-    def list_subscribed_boards(_user), do: []
-  end
-
-  defmodule FakeThreadsOk do
-    def create_thread(_board_id, _user_id, attrs) do
-      thread = %{
-        id: "t-new",
-        title: Map.get(attrs, :title, ""),
-        sticky: false,
-        last_post_at: DateTime.utc_now()
-      }
-
-      {:ok, %{thread: thread, post: %{id: "p-new"}}}
-    end
-  end
-
-  defmodule FakeThreadsMissing do
-    # Does NOT export create_thread/3 — simulates unauthenticated user path.
-  end
-
-  defmodule FakeThreadsError do
-    def create_thread(_board_id, _user_id, _attrs) do
-      {:error, "board is locked"}
-    end
-  end
+  alias Foglet.TUI.Screens.NewThreadTest.FakeBoards
+  alias Foglet.TUI.Screens.NewThreadTest.FakeBoardsEmpty
+  alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsOk
+  alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsMissing
+  alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsError
 
   # ---------------------------------------------------------------------------
   # Helpers
