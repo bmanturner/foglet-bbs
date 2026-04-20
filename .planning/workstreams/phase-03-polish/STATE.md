@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: milestone
 status: Phase 2 plans committed. Both RENDER-01 and RENDER-02 covered by all 3 plans. Ready for `/gsd-execute-phase 2`.
-stopped_at: Phase 4 context gathered
-last_updated: "2026-04-20T15:52:16.025Z"
+stopped_at: Phase 5 context gathered
+last_updated: "2026-04-20T16:31:04.083Z"
 last_activity: "2026-04-20 — Phase 2 planned: Post.MarkdownBody (newline-grouping fix), Post.PostCard (header+body assembly), PostReader integration (j/k scroll + {post.id, width} render cache)."
 progress:
   total_phases: 6
@@ -92,11 +92,11 @@ None. Research is HIGH confidence; zero new dependencies required.
 
 ## Session Continuity
 
-Last session: 2026-04-20T15:52:16.020Z
+Last session: 2026-04-20T16:31:04.071Z
 
 - Plan 02-01 (Wave 1): `Post.MarkdownBody` — newline-grouping via `Enum.chunk_by/2`, theme-driven style mapping (D-06), + tests
 - Plan 02-02 (Wave 2): `Post.PostCard` — author header (`By @handle · 2h ago`) + themed divider + delegated `MarkdownBody` body, + tests
 - Plan 02-03 (Wave 3): PostReader integration — `PostCard.render_from_tuples/5`, j/k within-post scroll (D-03, D-04, D-05), `render_cache` keyed on `{post.id, width}` in `screen_state[:post_reader]`, legacy `render_markdown_tuples/2` + `render_post_items/4` + `get_post_author/1` deleted, + tests including seeded-thread UAT smoke
 
-Stopped at: Phase 4 context gathered
-Resume file: .planning/workstreams/phase-03-polish/phases/04-composer-thread-creation-end-to-end/04-CONTEXT.md
+Stopped at: Phase 5 context gathered
+Resume file: .planning/workstreams/phase-03-polish/phases/05-terminal-size-gate/05-CONTEXT.md
