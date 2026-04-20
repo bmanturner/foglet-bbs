@@ -278,6 +278,71 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "update/2 {:key} swallow when gated (FRAME-03, D-11)" do
+    test "swallows {:key, _} when SizeGate.too_small?(state)" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "q"}}, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "swallows enter when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {new_state, cmds} = App.update({:key, %{key: :enter}}, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "swallows escape when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {new_state, cmds} = App.update({:key, %{key: :escape}}, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "does NOT dispatch to screen's handle_key when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      # On the login screen normally, 'Q' returns a quit command. When gated,
+      # it must be swallowed — no quit command.
+      {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
+      assert cmds == []
+    end
+
+    test "still dispatches {:key, _} normally above threshold" do
+      {:ok, state} = App.init(%{terminal_size: {80, 24}})
+      # 'Q' on login returns a quit command (proves key reached handle_key)
+      {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
+      assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
+    end
+
+    test "{:window_change, _, _} reaches the normal handler even when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      # Resize OUT of the gate — this non-key message must still process
+      # so the user can un-gate by resizing up
+      {new_state, _cmds} = App.update({:window_change, 100, 30}, state)
+      assert new_state.terminal_size == {100, 30}
+    end
+
+    test ":heartbeat_tick reaches the normal handler even when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      # Non-key messages flow through normally — heartbeat is a no-op with
+      # no session_pid but must not crash or be swallowed
+      {new_state, cmds} = App.update(:heartbeat_tick, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "gate precedence: gate beats modal" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {with_modal, _} = App.update({:show_modal, %{type: :info, message: "x"}}, state)
+      # Even with a modal open, the key is swallowed by the gate (gate is first in cond)
+      {new_state, cmds} = App.update({:key, %{key: :enter}}, with_modal)
+      # Modal would normally dismiss on :enter; gate prevents that
+      assert new_state.modal != nil
+      assert cmds == []
+    end
+  end
+
   describe "subscribe/1" do
     test "returns empty list when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})

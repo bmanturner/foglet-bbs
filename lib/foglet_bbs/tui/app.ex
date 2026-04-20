@@ -319,27 +319,37 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:key, key_event}, state) do
-    if state.modal != nil do
-      # Modal is active: route key directly to global_key_handler, which
-      # contains all modal dismiss / confirm logic. Never delegate to the
-      # screen module while a modal is open — screen handlers don't check
-      # state.modal and will consume the key silently.
-      global_key_handler(key_event, state)
-    else
-      screen_module = screen_module_for(state.current_screen)
+    cond do
+      SizeGate.too_small?(state) ->
+        # D-11: swallow keys entirely while gated. Screens behind the gate
+        # are hidden — we must not let their handle_key/2 silently mutate
+        # state (e.g., scroll a list, advance a cursor, consume a char).
+        # D-12: Ctrl+C / EOF reach CLIHandler at the SSH channel layer
+        # independently of update/2, so disconnect still works.
+        {state, []}
 
-      case screen_module.handle_key(key_event, state) do
-        {:update, new_state, commands} ->
-          # process_screen_commands/2 converts I/O dispatch tuples returned by
-          # screens (e.g. {:load_boards}, {:load_threads, id}) into real
-          # Command.task structs by routing them through their do_update/2 clauses,
-          # which have access to the current state (user, session_context, domain
-          # overrides). Plain %Command{} structs pass through unchanged.
-          process_screen_commands(new_state, commands)
+      state.modal != nil ->
+        # Modal is active: route key directly to global_key_handler, which
+        # contains all modal dismiss / confirm logic. Never delegate to the
+        # screen module while a modal is open — screen handlers don't check
+        # state.modal and will consume the key silently.
+        global_key_handler(key_event, state)
 
-        :no_match ->
-          global_key_handler(key_event, state)
-      end
+      true ->
+        screen_module = screen_module_for(state.current_screen)
+
+        case screen_module.handle_key(key_event, state) do
+          {:update, new_state, commands} ->
+            # process_screen_commands/2 converts I/O dispatch tuples returned by
+            # screens (e.g. {:load_boards}, {:load_threads, id}) into real
+            # Command.task structs by routing them through their do_update/2 clauses,
+            # which have access to the current state (user, session_context, domain
+            # overrides). Plain %Command{} structs pass through unchanged.
+            process_screen_commands(new_state, commands)
+
+          :no_match ->
+            global_key_handler(key_event, state)
+        end
     end
   end
 
