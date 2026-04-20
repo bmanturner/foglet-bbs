@@ -143,6 +143,49 @@ defmodule Foglet.BoardsTest do
 
       assert count == 1
     end
+
+    test "does NOT regress when advanced with a lower message_number (LIST-01)" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      # Advance to 7 first
+      {:ok, first} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, 7)
+      assert first.last_read_message_number == 7
+
+      # Advance to 3 (lower) — must NOT regress the pointer
+      {:ok, second} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, 3)
+      assert second.last_read_message_number == 7,
+             "Expected pointer to remain at 7 after advancing with 3, got #{second.last_read_message_number}"
+
+      # Reload from DB to confirm the stored row is also 7
+      reloaded = Foglet.Boards.get_board_read_pointer(user.id, board.id)
+      assert reloaded.last_read_message_number == 7
+    end
+
+    test "stays at max across a mixed advance sequence (LIST-01 monotonicity)" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      # Advance sequence: 2, 5, 1, 4, 7, 3 — max is 7
+      Enum.each([2, 5, 1, 4, 7, 3], fn n ->
+        assert {:ok, _} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, n)
+      end)
+
+      reloaded = Foglet.Boards.get_board_read_pointer(user.id, board.id)
+      assert reloaded.last_read_message_number == 7
+    end
+
+    test "advancing with same message_number is a no-op (still returns :ok)" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      {:ok, _} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, 5)
+      assert {:ok, same} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, 5)
+      assert same.last_read_message_number == 5
+    end
   end
 
   describe "unread_counts/1 (BOARD-10)" do

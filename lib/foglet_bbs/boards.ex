@@ -178,13 +178,37 @@ defmodule Foglet.Boards do
   # ---------- Read Pointers (BOARD-08) ----------
 
   @doc """
-  Advance (or create) a board read pointer.
-  Upserts on (user_id, board_id) — safe to call multiple times.
+  Advance (or create) a board read pointer (LIST-01 monotonic).
+
+  The `last_read_message_number` only ever increases — the on_conflict
+  upsert uses a `GREATEST(existing, incoming)` fragment so that reading
+  an older thread after a newer one does NOT regress the pointer.
+  `last_read_at` is updated to `now` unconditionally because it
+  represents "most recent activity", not the pointer's identity.
+
+  Safe to call multiple times with the same or lower message_number —
+  the pointer stays at the max value seen so far.
   """
   @spec advance_board_read_pointer(String.t(), String.t(), integer()) ::
           {:ok, ReadPointer.t()} | {:error, Ecto.Changeset.t()}
-  def advance_board_read_pointer(user_id, board_id, message_number) do
+  def advance_board_read_pointer(user_id, board_id, message_number)
+      when is_integer(message_number) and message_number >= 0 do
     now = DateTime.utc_now()
+
+    on_conflict_query =
+      from(rp in ReadPointer,
+        update: [
+          set: [
+            last_read_message_number:
+              fragment(
+                "GREATEST(?, ?)",
+                rp.last_read_message_number,
+                ^message_number
+              ),
+            last_read_at: ^now
+          ]
+        ]
+      )
 
     %ReadPointer{user_id: user_id, board_id: board_id}
     |> ReadPointer.changeset(%{
@@ -192,8 +216,9 @@ defmodule Foglet.Boards do
       last_read_at: now
     })
     |> Repo.insert(
-      on_conflict: [set: [last_read_message_number: message_number, last_read_at: now]],
-      conflict_target: [:user_id, :board_id]
+      on_conflict: on_conflict_query,
+      conflict_target: [:user_id, :board_id],
+      returning: true
     )
   end
 
