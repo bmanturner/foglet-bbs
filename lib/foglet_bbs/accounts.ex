@@ -239,11 +239,14 @@ defmodule Foglet.Accounts do
   end
 
   defp expired_exists?(%User{id: user_id, email: email}, code) do
+    validity = UserToken.email_verify_validity_minutes()
+
     query =
       from t in UserToken,
         where:
           t.token == ^code and t.context == "email_verify" and
-            t.sent_to == ^email and t.user_id == ^user_id
+            t.sent_to == ^email and t.user_id == ^user_id and
+            t.inserted_at <= ago(^validity, "minute")
 
     Repo.exists?(query)
   end
