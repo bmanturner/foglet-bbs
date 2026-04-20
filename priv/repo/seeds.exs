@@ -239,9 +239,10 @@ if general_board do
     )
 
   if intro_post_count < 2 do
-    Posts.create_reply(intro_thread.id, general_board.id, seed_member.id, %{
-      body: "Hey! I'm foglet — just setting up the system. Glad to be here."
-    })
+    {:ok, _} =
+      Posts.create_reply(intro_thread.id, general_board.id, seed_member.id, %{
+        body: "Hey! I'm foglet — just setting up the system. Glad to be here."
+      })
 
     IO.puts("  [seed] inserted reply in thread: Introduce Yourself")
   end
@@ -272,14 +273,16 @@ if general_board do
     )
 
   if chat_post_count < 3 do
-    Posts.create_reply(chat_thread.id, general_board.id, seed_sysop.id, %{
-      body: "Glad this system is up and running. The SSH interface feels snappy."
-    })
+    {:ok, _} =
+      Posts.create_reply(chat_thread.id, general_board.id, seed_sysop.id, %{
+        body: "Glad this system is up and running. The SSH interface feels snappy."
+      })
 
-    Posts.create_reply(chat_thread.id, general_board.id, seed_member.id, %{
-      body:
-        "Agreed. Markdown preview in the composer is a nice touch — **bold** and *italic* both render correctly."
-    })
+    {:ok, _} =
+      Posts.create_reply(chat_thread.id, general_board.id, seed_member.id, %{
+        body:
+          "Agreed. Markdown preview in the composer is a nice touch — **bold** and *italic* both render correctly."
+      })
 
     IO.puts("  [seed] inserted replies in thread: General Chat")
   end
