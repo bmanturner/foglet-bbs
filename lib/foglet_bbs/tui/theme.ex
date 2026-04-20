@@ -102,92 +102,92 @@ defmodule Foglet.TUI.Theme do
   }
 
   @amber_slots %{
-    border:     %{fg: "#aa7700"},
-    primary:    %{fg: "#ffb000"},
-    dim:        %{fg: "#aa7700"},
-    accent:     %{fg: "#ffcc44", style: [:bold]},
-    title:      %{fg: "#ffcc44", style: [:bold]},
-    error:      %{fg: "#ff5555", style: [:bold]},
-    warning:    %{fg: "#ffff55"},
-    selected:   %{fg: "#000000", bg: "#ffb000", style: [:bold]},
+    border: %{fg: "#aa7700"},
+    primary: %{fg: "#ffb000"},
+    dim: %{fg: "#aa7700"},
+    accent: %{fg: "#ffcc44", style: [:bold]},
+    title: %{fg: "#ffcc44", style: [:bold]},
+    error: %{fg: "#ff5555", style: [:bold]},
+    warning: %{fg: "#ffff55"},
+    selected: %{fg: "#000000", bg: "#ffb000", style: [:bold]},
     unselected: %{fg: "#ffb000"},
     status_bar: %{fg: "#ffcc44"}
   }
 
   @cyan_slots %{
-    border:     %{fg: "#0000aa"},
-    primary:    %{fg: "#55ffff"},
-    dim:        %{fg: "#00aaaa"},
-    accent:     %{fg: "#ffff55", style: [:bold]},
-    title:      %{fg: "#ffffff", style: [:bold]},
-    error:      %{fg: "#ff5555", style: [:bold]},
-    warning:    %{fg: "#ffff55"},
-    selected:   %{fg: "#000000", bg: "#55ffff", style: [:bold]},
+    border: %{fg: "#0000aa"},
+    primary: %{fg: "#55ffff"},
+    dim: %{fg: "#00aaaa"},
+    accent: %{fg: "#ffff55", style: [:bold]},
+    title: %{fg: "#ffffff", style: [:bold]},
+    error: %{fg: "#ff5555", style: [:bold]},
+    warning: %{fg: "#ffff55"},
+    selected: %{fg: "#000000", bg: "#55ffff", style: [:bold]},
     unselected: %{fg: "#55ffff"},
     status_bar: %{fg: "#ffff55"}
   }
 
   @paper_slots %{
-    border:     %{fg: "#555555"},
-    primary:    %{fg: "#000000"},
-    dim:        %{fg: "#555555"},
-    accent:     %{fg: "#aa0000", style: [:bold]},
-    title:      %{fg: "#000000", style: [:bold]},
-    error:      %{fg: "#aa0000", style: [:bold]},
-    warning:    %{fg: "#aa5500"},
-    selected:   %{fg: "#cccccc", bg: "#000000", style: [:bold]},
+    border: %{fg: "#555555"},
+    primary: %{fg: "#000000"},
+    dim: %{fg: "#555555"},
+    accent: %{fg: "#aa0000", style: [:bold]},
+    title: %{fg: "#000000", style: [:bold]},
+    error: %{fg: "#aa0000", style: [:bold]},
+    warning: %{fg: "#aa5500"},
+    selected: %{fg: "#cccccc", bg: "#000000", style: [:bold]},
     unselected: %{fg: "#000000"},
     status_bar: %{fg: "#000000"}
   }
 
   @magenta_slots %{
-    border:     %{fg: "#aa00aa"},
-    primary:    %{fg: "#ff55ff"},
-    dim:        %{fg: "#aa00aa"},
-    accent:     %{fg: "#55ffff", style: [:bold]},
-    title:      %{fg: "#ff55ff", style: [:bold]},
-    error:      %{fg: "#ff5555", style: [:bold]},
-    warning:    %{fg: "#ffff55"},
-    selected:   %{fg: "#000000", bg: "#ff55ff", style: [:bold]},
+    border: %{fg: "#aa00aa"},
+    primary: %{fg: "#ff55ff"},
+    dim: %{fg: "#aa00aa"},
+    accent: %{fg: "#55ffff", style: [:bold]},
+    title: %{fg: "#ff55ff", style: [:bold]},
+    error: %{fg: "#ff5555", style: [:bold]},
+    warning: %{fg: "#ffff55"},
+    selected: %{fg: "#000000", bg: "#ff55ff", style: [:bold]},
     unselected: %{fg: "#ff55ff"},
     status_bar: %{fg: "#ff55ff"}
   }
 
   @danger_slots %{
-    border:     %{fg: "#aa0000"},
-    primary:    %{fg: "#ffffff"},
-    dim:        %{fg: "#888888"},
-    accent:     %{fg: "#ff5555", style: [:bold]},
-    title:      %{fg: "#ff5555", style: [:bold]},
-    error:      %{fg: "#ffff55", style: [:bold]},
-    warning:    %{fg: "#ffb000"},
-    selected:   %{fg: "#000000", bg: "#ff5555", style: [:bold]},
+    border: %{fg: "#aa0000"},
+    primary: %{fg: "#ffffff"},
+    dim: %{fg: "#888888"},
+    accent: %{fg: "#ff5555", style: [:bold]},
+    title: %{fg: "#ff5555", style: [:bold]},
+    error: %{fg: "#ffff55", style: [:bold]},
+    warning: %{fg: "#ffb000"},
+    selected: %{fg: "#000000", bg: "#ff5555", style: [:bold]},
     unselected: %{fg: "#ffffff"},
     status_bar: %{fg: "#ff5555"}
   }
 
   @ice_slots %{
-    border:     %{fg: "#5555ff"},
-    primary:    %{fg: "#aaaaaa"},
-    dim:        %{fg: "#5555ff"},
-    accent:     %{fg: "#55ffff", style: [:bold]},
-    title:      %{fg: "#ffffff", style: [:bold]},
-    error:      %{fg: "#ff5555", style: [:bold]},
-    warning:    %{fg: "#ffff55"},
-    selected:   %{fg: "#000000", bg: "#55ffff", style: [:bold]},
+    border: %{fg: "#5555ff"},
+    primary: %{fg: "#aaaaaa"},
+    dim: %{fg: "#5555ff"},
+    accent: %{fg: "#55ffff", style: [:bold]},
+    title: %{fg: "#ffffff", style: [:bold]},
+    error: %{fg: "#ff5555", style: [:bold]},
+    warning: %{fg: "#ffff55"},
+    selected: %{fg: "#000000", bg: "#55ffff", style: [:bold]},
     unselected: %{fg: "#aaaaaa"},
     status_bar: %{fg: "#55ffff"}
   }
 
   @mono_slots %{
-    border:     %{fg: "#555555"},
-    primary:    %{fg: "#ffffff"},
-    dim:        %{fg: "#888888"},
-    accent:     %{fg: "#ffffff", style: [:bold]},
-    title:      %{fg: "#ffffff", style: [:bold]},
-    error:      %{fg: "#ffffff", style: [:bold]},
-    warning:    %{fg: "#aaaaaa", style: [:bold]},
-    selected:   %{fg: "#000000", bg: "#ffffff", style: [:bold]},
+    border: %{fg: "#555555"},
+    primary: %{fg: "#ffffff"},
+    dim: %{fg: "#888888"},
+    accent: %{fg: "#ffffff", style: [:bold]},
+    title: %{fg: "#ffffff", style: [:bold]},
+    error: %{fg: "#ffffff", style: [:bold]},
+    warning: %{fg: "#aaaaaa", style: [:bold]},
+    selected: %{fg: "#000000", bg: "#ffffff", style: [:bold]},
     unselected: %{fg: "#ffffff"},
     status_bar: %{fg: "#ffffff"}
   }
