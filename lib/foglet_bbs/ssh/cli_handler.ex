@@ -320,7 +320,7 @@ defmodule Foglet.SSH.CLIHandler do
       if is_pid(state.session_pid) do
         case Sessions.Session.get_state(state.session_pid) do
           %{user_id: nil} -> nil
-          %{user_id: uid} -> Foglet.Accounts.get_user!(uid)
+          %{user_id: uid} -> Foglet.Accounts.get_user(uid)
         end
       else
         nil
