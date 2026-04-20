@@ -124,9 +124,22 @@ defmodule Foglet.Boards do
       Repo.all(from b in Board, where: b.default_subscription == true, select: b.id)
 
     Enum.each(default_board_ids, fn board_id ->
-      %Subscription{user_id: user_id, board_id: board_id}
-      |> Subscription.changeset(%{subscribed_at: DateTime.utc_now()})
-      |> Repo.insert(on_conflict: :nothing, conflict_target: [:user_id, :board_id])
+      result =
+        %Subscription{user_id: user_id, board_id: board_id}
+        |> Subscription.changeset(%{subscribed_at: DateTime.utc_now()})
+        |> Repo.insert(on_conflict: :nothing, conflict_target: [:user_id, :board_id])
+
+      case result do
+        {:ok, _} ->
+          :ok
+
+        {:error, cs} ->
+          require Logger
+
+          Logger.warning(
+            "subscribe_to_defaults: failed to subscribe #{user_id} to #{board_id}: #{inspect(cs.errors)}"
+          )
+      end
     end)
 
     :ok
