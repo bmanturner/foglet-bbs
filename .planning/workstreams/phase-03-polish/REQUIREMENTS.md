@@ -47,9 +47,9 @@
 
 ### COMPOSE — Thread creation and reply actually work
 
-- [ ] **COMPOSE-01**: Pressing `[C]` from the thread list view routes to a NewThread flow with title + body fields (uses existing `new_thread.ex`); submit creates the thread and returns the user to the thread list with the new thread visible at the top.
-- [ ] **COMPOSE-02**: Pressing `[R]` from PostReader opens a reply composer; submit creates the post and returns the user to the thread with the new post visible.
-- [ ] **COMPOSE-03**: The broken `current_thread: nil → :post_composer` branch in `thread_list.ex` that causes the crash-on-compose is removed.
+- [x] **COMPOSE-01**: Pressing `[C]` from the thread list view routes to a NewThread flow with title + body fields (uses existing `new_thread.ex`); submit creates the thread and returns the user to the thread list with the new thread visible at the top.
+- [x] **COMPOSE-02**: Pressing `[R]` from PostReader opens a reply composer; submit creates the post and returns the user to the thread with the new post visible.
+- [x] **COMPOSE-03**: The broken `current_thread: nil → :post_composer` branch in `thread_list.ex` that causes the crash-on-compose is removed.
 
 ### VERIFY — Email verification toggle + resend
 

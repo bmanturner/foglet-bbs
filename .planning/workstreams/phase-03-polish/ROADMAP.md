@@ -105,6 +105,6 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 | 1. Widget foundation + theme + screen chrome | 4/4 | Complete | 2026-04-19 |
 | 2. Markdown rendering correctness | 0/3 | Complete    | 2026-04-20 |
 | 3. Read-pointer correctness + thread-row enrichment | 4/4 | Complete | 2026-04-20 |
-| 4. Composer & thread creation end-to-end | 0/TBD | Not started | - |
+| 4. Composer & thread creation end-to-end | 3/4 | In Progress | - |
 | 5. Terminal size gate | 0/2 | Planned | - |
 | 6. Email verification toggle + resend | 0/TBD | Not started | - |
