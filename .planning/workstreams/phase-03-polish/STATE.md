@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 4 plan 03 complete
-last_updated: "2026-04-20T18:53:27.310Z"
+stopped_at: Phase 5 plan 02 complete
+last_updated: "2026-04-20T20:15:00.000Z"
 last_activity: 2026-04-20
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 20
-  completed_plans: 16
+  completed_plans: 18
 ---
 
 # Workstream State — phase-03-polish
@@ -30,9 +30,9 @@ See: .planning/PROJECT.md (shared across workstreams)
 
 ## Current Position
 
-**Phase:** 05 of 6 (terminal size gate)
+**Phase:** 05 of 6 (terminal size gate) — COMPLETE
 **Plan:** 2 of 2
-**Status:** Executing Phase 05
+**Status:** Phase 5 complete. Ready for Phase 6.
 **Last activity:** 2026-04-20
 
 ## Roadmap Summary
@@ -79,7 +79,7 @@ Locked for this milestone (see REQUIREMENTS.md "Locked Decisions"):
 
 ### Open Decisions (per-phase)
 
-- **Minimum terminal dimensions** — deferred to Phase 5 discuss/plan. Research options: 60×20 (floor before garbling) vs 80×24 (comfort for BoardList row density).
+None. All open decisions resolved through Phase 5.
 
 ### Blockers/Concerns
 
@@ -97,5 +97,5 @@ Last session: 2026-04-20T16:31:04.071Z
 - Plan 02-02 (Wave 2): `Post.PostCard` — author header (`By @handle · 2h ago`) + themed divider + delegated `MarkdownBody` body, + tests
 - Plan 02-03 (Wave 3): PostReader integration — `PostCard.render_from_tuples/5`, j/k within-post scroll (D-03, D-04, D-05), `render_cache` keyed on `{post.id, width}` in `screen_state[:post_reader]`, legacy `render_markdown_tuples/2` + `render_post_items/4` + `get_post_author/1` deleted, + tests including seeded-thread UAT smoke
 
-Stopped at: Phase 4 plan 03 complete
-Resume file: .planning/workstreams/phase-03-polish/phases/04-composer-thread-creation-end-to-end/04-04-PLAN.md
+Stopped at: Phase 5 plan 02 complete — FRAME-03 fully closed
+Resume file: None. Phase 6 (email verification toggle + resend) is next.
