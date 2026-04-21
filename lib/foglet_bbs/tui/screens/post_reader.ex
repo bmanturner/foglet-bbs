@@ -80,8 +80,8 @@ defmodule Foglet.TUI.Screens.PostReader do
       # is a read-only function — the Viewport state built here is transient,
       # not written back into screen_state. State-writing happens in
       # scroll_post / advance_post / load_posts via warm_viewport.
-      {vp, []} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
-      {vp, []} = Viewport.update({:set_children, body_lines}, vp)
+      {vp, _cmds} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
+      {vp, _cmds} = Viewport.update({:set_children, body_lines}, vp)
       body_rendered = Viewport.render(vp, %{})
 
       column style: %{gap: 0} do
@@ -327,7 +327,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
     body_lines = PostCard.render_body_lines(post, tuples, w, theme)
 
-    {new_vp, []} = Viewport.update({:set_children, body_lines}, ss.viewport)
+    {new_vp, _cmds} = Viewport.update({:set_children, body_lines}, ss.viewport)
     %{ss | viewport: new_vp}
   end
 
@@ -343,7 +343,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       {w, _h} = state.terminal_size || {80, 24}
 
       # D-04: N/P/space/page_down/page_up resets scroll to the top of the new post.
-      {reset_vp, []} = Viewport.update({:scroll_to, 0}, ss.viewport)
+      {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, ss.viewport)
       ss = %{ss | selected_post_index: new_idx, viewport: reset_vp}
       ss = if post, do: warm_cache(ss, state, post, w), else: ss
       ss = if post, do: warm_viewport(ss, state, post, w), else: ss
@@ -386,9 +386,9 @@ defmodule Foglet.TUI.Screens.PostReader do
         ss = warm_cache(ss, state, post, w)
         ss = warm_viewport(ss, state, post, w)
 
-        {new_vp, []} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
+        {new_vp, _cmds} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
         # Viewport.update/2 handles all clamping — no max_offset math needed.
-        {new_vp, []} = Viewport.update({:scroll_by, delta}, new_vp)
+        {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
         ss = %{ss | viewport: new_vp}
 
         new_screen_state = Map.put(state.screen_state, :post_reader, ss)
