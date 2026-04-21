@@ -132,9 +132,9 @@ Plans:
 **Plans:** 6 plans
 
 Plans:
-- [ ] 08-01-PLAN.md — Input bucket (stateless): Button, Checkbox, RadioGroup (Wave 1; REQ-W-07/08/09)
-- [ ] 08-02-PLAN.md — Input bucket (stateful): TextInput, Tabs, Menu (Wave 1; REQ-W-06/10/11)
-- [ ] 08-03-PLAN.md — Display + Progress: Table, Tree, Display.Progress, Progress.Spinner (Wave 1; REQ-W-02/03/04/05)
-- [ ] 08-04-PLAN.md — List.SmartList (Wave 1; REQ-W-01)
+- [x] 08-01-PLAN.md — Input bucket (stateless): Button, Checkbox, RadioGroup (Wave 1; REQ-W-07/08/09)
+- [x] 08-02-PLAN.md — Input bucket (stateful): TextInput, Tabs, Menu (Wave 1; REQ-W-06/10/11)
+- [x] 08-03-PLAN.md — Display + Progress: Table, Tree, Display.Progress, Progress.Spinner (Wave 1; REQ-W-02/03/04/05)
+- [x] 08-04-PLAN.md — List.SmartList (Wave 1; REQ-W-01)
 - [ ] 08-05-PLAN.md — README index + cross-bucket smoke test + precommit gate (Wave 2, depends on 08-01..04; REQ-W-12/13)
 - [ ] 08-06-PLAN.md — `spacer()` adoption audit over existing `justify_*` call sites in `lib/` (Wave 2, independent of 08-01..04; REQ-W-14)
