@@ -107,10 +107,8 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
   Empty input returns `[]`. The Viewport handles empty children gracefully.
   """
   @spec render_tuples_as_lines([tuple_entry()], pos_integer(), Theme.t(), keyword()) :: [any()]
-  def render_tuples_as_lines(tuples, width, %Theme{} = theme, opts \\ [])
+  def render_tuples_as_lines(tuples, width, %Theme{} = theme, _opts \\ [])
       when is_list(tuples) and is_integer(width) and width > 0 do
-    _ = opts
-
     tuples
     |> group_by_newline()
     |> Enum.map(fn group -> line_group_to_row(group, theme) end)
