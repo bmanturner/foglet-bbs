@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: milestone
-status: verifying
+status: planning
 stopped_at: Phase 2 complete — verification passed (1 AUDIT-16 override applied), roadmap updated
-last_updated: "2026-04-21T20:59:46.875Z"
+last_updated: "2026-04-21T21:08:10.293Z"
 last_activity: 2026-04-21
 progress:
   total_phases: 10
@@ -32,10 +32,10 @@ See: .planning/PROJECT.md (shared across workstreams — **not modified from ins
 ## Current Position
 
 Phase: 04 (mainmenu) — EXECUTING
-Plan: 1 of 1
-**Phase:** 04 of 10 (mainmenu)
+Plan: Not started
+**Phase:** 5 of 10 (boardlist)
 **Next:** Phase 3 (Verify) — hand-rolled 6-char buffer preserved; consolidate 7 default-state literals; wizard-state migration to screen_state[:verify]
-**Status:** Phase complete — ready for verification
+**Status:** Ready to plan
 **Last activity:** 2026-04-21
 
 Progress: [███░░░░░░░] 30%
