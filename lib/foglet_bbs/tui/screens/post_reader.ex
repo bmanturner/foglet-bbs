@@ -46,11 +46,9 @@ defmodule Foglet.TUI.Screens.PostReader do
     ])
   end
 
-  defp render_post_content(state, _ss, theme, _w, _h)
-       when state.posts == [] or state.posts == nil do
-    column style: %{gap: 0} do
-      [text("Loading posts...", fg: theme.dim.fg)]
-    end
+  defp render_post_content(%{posts: posts}, _ss, theme, _w, _h)
+       when posts in [[], nil] do
+    render_loading(theme)
   end
 
   defp render_post_content(state, ss, theme, w, h) do
@@ -86,6 +84,14 @@ defmodule Foglet.TUI.Screens.PostReader do
       column style: %{gap: 0} do
         [header_line_1, header_line_2, header_divider, body_rendered]
       end
+    end
+  end
+
+  # Single-line "Loading posts..." placeholder used when posts is nil/[]
+  # (post_reader was opened but {:posts_loaded, posts} hasn't landed yet).
+  defp render_loading(theme) do
+    column style: %{gap: 0} do
+      [text("Loading posts...", fg: theme.dim.fg)]
     end
   end
 
