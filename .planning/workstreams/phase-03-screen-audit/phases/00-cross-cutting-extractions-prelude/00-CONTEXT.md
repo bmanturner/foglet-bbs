@@ -87,6 +87,15 @@ Phase 0 ships two tiny, single-purpose helpers that every subsequent phase in th
 
 - **D-08:** The Phase 0 prelude is a **zero-user-visible-change** refactor. An SSH session at any terminal size rendering any screen MUST render byte-for-byte identically pre- and post-Phase-0 (modulo test-injection paths that are themselves exercised by the tests). The prelude exists solely so Phases 1–9 can run within a strict single-file scope fence.
 
+### Rubric applicability (post-amendment guardrail)
+
+- **D-09:** The per-screen rubric (AUDIT-05..22) is for screen modules and does not apply to the two helper modules shipped by Phase 0. Specifically:
+  - `AUDIT-18` (canonical 10-section screen layout) — **N/A to Phase 0**. `Foglet.TUI.Theme` is a pre-existing registry/struct module; `Foglet.TUI.Screens.Domain` is a single-function lookup module. Neither is a screen.
+  - `AUDIT-19` (`init_screen_state/1` presence) — **N/A to Phase 0**. Helper modules have no screen state.
+  - `AUDIT-13` (scope fence) — Phase 0 is documented exception (a). The 11-file migration is the whole point of the prelude.
+  - Plan-phase researcher should NOT attempt to bolt canonical-section-order or `init_screen_state/1` compliance onto the helper modules.
+- **D-10:** Phase 0 call-site migration in 00-03-PLAN MAY touch `app.ex` modal overlay, `screen_frame.ex`, and `size_gate.ex` alongside the 9 screen files. This is the entirety of the AUDIT-13 (a) exception; no other non-screen file should be touched in 00-03.
+
 ### Claude's Discretion
 
 - Exact moduledoc prose for the two new helpers — follow the existing `Foglet.TUI.Theme` moduledoc style (purpose sentence, responsibilities list, slot/key reference, final footer with file references).
@@ -103,7 +112,7 @@ Phase 0 ships two tiny, single-purpose helpers that every subsequent phase in th
 
 ### Workstream planning
 
-- `.planning/workstreams/phase-03-screen-audit/REQUIREMENTS.md` — AUDIT-01..04 define Phase 0 scope; AUDIT-05..20 rubric is checked at Phase 0 completion.
+- `.planning/workstreams/phase-03-screen-audit/REQUIREMENTS.md` — AUDIT-01..04 define Phase 0 scope. The per-screen rubric (AUDIT-05..22) is written for Phases 1–9 and **does not fully apply to Phase 0**. What Phase 0 completion must check: (i) AUDIT-01..04 requirements satisfied, (ii) AUDIT-15 `mix precommit` green, (iii) AUDIT-04 grep gates #8/#9 return zero (a direct Phase 0 acceptance criterion). AUDIT-18 (canonical screen section order) and AUDIT-19 (`init_screen_state/1` adoption) do NOT apply — the two helper modules are not screens. AUDIT-13 scope fence does not apply — Phase 0 is documented exception (a).
 - `.planning/workstreams/phase-03-screen-audit/ROADMAP.md` §Phase 0 — 5 success criteria verbatim.
 - `.planning/workstreams/phase-03-screen-audit/research/SUMMARY.md` — Cross-cutting helpers section locks the two helpers; Headline finding frames this as a restraint workstream.
 - `.planning/workstreams/phase-03-screen-audit/research/ARCHITECTURE.md` §3, §4, §9 — canonical screen shape, screen-widget boundary, phase ordering.
