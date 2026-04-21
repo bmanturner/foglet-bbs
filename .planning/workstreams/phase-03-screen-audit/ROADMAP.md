@@ -67,7 +67,8 @@ Locked at workstream creation — do not re-litigate per phase:
   3. The hand-rolled form plumbing — `format_input_line/3`, `input_fg/2`, `focus_style/1`, `mask_password/1`, `drop_last_grapheme/1`, `append_to_focused/2`, and the entire `handle_form_key/2` family at `:76-124` — is deleted. Login's focused-field state has migrated to `state.screen_state[:login]` with `:focused_field` + two TextInput sub-states per D-14; `init_screen_state/1` is present (it is missing today).
   4. The nested `case {:ok,_}|{:error,_}` authentication chain at `:267-308` has been rewritten as a `with` chain that preserves every happy/error branch exactly (modal payloads, `post_login_screen` dispatch, verify-code path).
   5. Rubric items `AUDIT-05..22` pass: grep gates return zero, canonical section order (AUDIT-18) satisfied with `init_screen_state/1` present (AUDIT-19), `handle_key/2` source order preserved, no spinner on instant ops, no protected-region fills, `mix precommit` green end-to-end.
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 01-01-PLAN.md — Adopt TextInput, flatten state shape, add init_screen_state/1, rewrite submit_login/1 as with chain, update tests (Wave 1)
 **UI hint**: yes
 
 ### Phase 2: Register
@@ -187,7 +188,7 @@ Critical path: `0 → 1 → 2 → 3 → (4+5+6) → (7+8) → 9` — 7 serial bl
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 0. Cross-cutting extractions (prelude) | 0/3 | Planned | - |
-| 1. Login | 0/TBD | Not started | - |
+| 1. Login | 0/1 | Planned | - |
 | 2. Register | 0/TBD | Not started | - |
 | 3. Verify | 0/TBD | Not started | - |
 | 4. MainMenu | 0/TBD | Not started | - |
