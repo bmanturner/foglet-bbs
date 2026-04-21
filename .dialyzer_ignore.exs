@@ -25,6 +25,21 @@
   {"lib/foglet_bbs/threads.ex", :call_without_opaque},
   {"lib/foglet_bbs/tui/screens/board_list.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/login.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/screens/main_menu.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/new_thread.ex", :contract_supertype},
-  {"lib/foglet_bbs/tui/screens/post_composer.ex", :contract_supertype}
+  {"lib/foglet_bbs/tui/screens/post_composer.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/screens/post_reader.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/screens/register.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/screens/thread_list.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/screens/verify.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/size_gate.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/chrome/screen_frame.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/display/progress.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/display/tree.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/input/button.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/input/checkbox.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/input/menu.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/input/tabs.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/post/post_card.ex", :contract_supertype},
+  {"lib/foglet_bbs/tui/widgets/progress/spinner.ex", :contract_supertype}
 ]

@@ -238,10 +238,7 @@ defmodule Foglet.TUI.Screens.Register do
           :verify ->
             case Accounts.build_verify_code(user) do
               {:ok, code} ->
-                if @log_verify_codes do
-                  require Logger
-                  Logger.info("[verify] code for @#{user.handle}: #{code}")
-                end
+                maybe_log_verify_code(user, code)
 
                 new_state = %{
                   state
@@ -284,5 +281,14 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp changeset_error_text(cs) do
     Enum.map_join(cs.errors, "; ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+  end
+
+  if @log_verify_codes do
+    defp maybe_log_verify_code(user, code) do
+      require Logger
+      Logger.info("[verify] code for @#{user.handle}: #{code}")
+    end
+  else
+    defp maybe_log_verify_code(_user, _code), do: :ok
   end
 end

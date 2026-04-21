@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0.1
 milestone_name: milestone
-status: completed
-stopped_at: Phase 8 context gathered
-last_updated: "2026-04-21T11:56:49.471Z"
+status: complete
+stopped_at: Phase 8 complete
+last_updated: "2026-04-21T13:00:34.000Z"
 last_activity: 2026-04-21
 progress:
   total_phases: 8
-  completed_phases: 7
+  completed_phases: 8
   total_plans: 29
-  completed_plans: 28
-  percent: 97
+  completed_plans: 29
 ---
 
 # Workstream State — phase-03-polish
@@ -31,11 +30,9 @@ See: .planning/PROJECT.md (shared across workstreams)
 
 ## Current Position
 
-Phase: 08 (build-local-widget-library-from-raxol-primitives) — EXECUTING
-Plan: 2 of 2
-**Phase:** 08 of 8 (terminal size gate)
-**Plan:** Not started
-**Status:** Milestone complete
+**Phase:** 08 of 8 (build-local-widget-library-from-raxol-primitives)
+**Plan:** 6 of 6
+**Status:** Workstream complete
 **Last activity:** 2026-04-21
 
 ## Roadmap Summary
@@ -101,11 +98,8 @@ None. Research is HIGH confidence; zero new dependencies required.
 
 ## Session Continuity
 
-Last session: 2026-04-21T01:23:23.893Z
+Last session: 2026-04-21T13:00:34.000Z
 
-- Plan 02-01 (Wave 1): `Post.MarkdownBody` — newline-grouping via `Enum.chunk_by/2`, theme-driven style mapping (D-06), + tests
-- Plan 02-02 (Wave 2): `Post.PostCard` — author header (`By @handle · 2h ago`) + themed divider + delegated `MarkdownBody` body, + tests
-- Plan 02-03 (Wave 3): PostReader integration — `PostCard.render_from_tuples/5`, j/k within-post scroll (D-03, D-04, D-05), `render_cache` keyed on `{post.id, width}` in `screen_state[:post_reader]`, legacy `render_markdown_tuples/2` + `render_post_items/4` + `get_post_author/1` deleted, + tests including seeded-thread UAT smoke
+Phase 8 complete — 6 plans shipped, code review + fixes applied (see 08-REVIEW-FIX.md), verification and UAT passed. All quality gates green: `mix precommit` passes end-to-end (compile --warnings-as-errors, format, credo --strict, sobelow, dialyzer) and full test suite (785 tests, 0 failures).
 
-Stopped at: Phase 8 context gathered
-Resume file: .planning/workstreams/phase-03-polish/phases/08-build-local-widget-library-from-raxol-primitives/08-CONTEXT.md
+Workstream complete. Main workstream (`.planning/STATE.md`) can proceed with Phase 04 (Presence & Login Sequence).

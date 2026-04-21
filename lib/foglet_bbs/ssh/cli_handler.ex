@@ -212,9 +212,10 @@ defmodule Foglet.SSH.CLIHandler do
     stop_lifecycle(state.lifecycle_pid)
     _ = stop_session(state.session_pid)
 
-    unless state.over_limit do
-      _ = decrement_connection_count()
-    end
+    _ =
+      unless state.over_limit do
+        decrement_connection_count()
+      end
 
     {:stop, state.channel_id || 0, state}
   end

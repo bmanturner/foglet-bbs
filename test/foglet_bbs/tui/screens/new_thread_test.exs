@@ -42,9 +42,9 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   alias Raxol.UI.Components.Input.MultiLineInput
 
   alias Foglet.TUI.Screens.NewThreadTest.FakeBoards
-  alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsOk
-  alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsMissing
   alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsError
+  alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsMissing
+  alias Foglet.TUI.Screens.NewThreadTest.FakeThreadsOk
 
   # ---------------------------------------------------------------------------
   # Helpers

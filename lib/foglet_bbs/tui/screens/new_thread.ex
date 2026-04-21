@@ -353,7 +353,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp do_create_thread(state, ss, title, body, board) do
-    threads_mod = domain_module(state, :threads)
+    threads_mod = threads_module(state)
     user_id = state.current_user && state.current_user.id
 
     if user_id do
@@ -407,13 +407,10 @@ defmodule Foglet.TUI.Screens.NewThread do
     %{state | screen_state: new_screen_state}
   end
 
-  defp domain_module(state, key) when key in [:boards, :threads] do
+  defp threads_module(state) do
     ctx = Map.get(state, :session_context) || %{}
-    get_in(ctx, [:domain, key]) || default_domain(key)
+    get_in(ctx, [:domain, :threads]) || Foglet.Threads
   end
-
-  defp default_domain(:boards), do: Foglet.Boards
-  defp default_domain(:threads), do: Foglet.Threads
 
   defp format_error(%Ecto.Changeset{} = cs) do
     Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)

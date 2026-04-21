@@ -109,14 +109,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
       {%{st | last_action: nil}, nil}
     else
       raxol_event = translate_event(event)
-      result = RaxolTable.handle_event(raxol_event, rs, %{})
-
-      new_rs =
-        case result do
-          {:ok, new_state} -> new_state
-          {new_state, _cmds} -> new_state
-          _ -> rs
-        end
+      {:ok, new_rs} = RaxolTable.handle_event(raxol_event, rs, %{})
 
       action = derive_action(rs, new_rs, event)
       {%{st | raxol_state: new_rs, last_action: action}, action}
