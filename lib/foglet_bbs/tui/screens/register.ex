@@ -73,7 +73,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   # §5 handle_key/2 (PUBLIC)
 
-  @spec handle_key(map(), map()) :: {:update, map(), list()}
+  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :escape}, state) do
     {:update, clear_register_ss(%{state | current_screen: :login}), []}
   end
