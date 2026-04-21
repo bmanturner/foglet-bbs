@@ -105,6 +105,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
       state = TextInput.init(value: "hello")
       default_result = TextInput.render(state, theme: theme())
       danger_result = TextInput.render(state, theme: alt_theme())
+
       refute inspect(default_result, printable_limit: :infinity, limit: :infinity) ==
                inspect(danger_result, printable_limit: :infinity, limit: :infinity)
     end

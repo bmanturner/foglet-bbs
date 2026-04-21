@@ -123,37 +123,35 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   # (it calls fire_on_select as a side-effect but doesn't change state).
   # We infer the leaf activation from state.cursor before the event.
   defp derive_action(before_rs, after_rs, %{key: key}) when key in [:enter, :space] do
-    cursor_id = Map.get(before_rs, :cursor)
-    before_path = Map.get(before_rs, :open_path, [])
-    after_path = Map.get(after_rs, :open_path, [])
-
-    cond do
-      # Submenu was opened — cursor moved into children; not a leaf action
-      length(after_path) > length(before_path) ->
-        nil
-
-      # Cursor is on a leaf item with a known id
-      is_nil(cursor_id) ->
-        nil
-
-      true ->
-        {:menu_action, cursor_id}
-    end
+    derive_activate_action(before_rs, after_rs)
   end
 
   defp derive_action(before_rs, after_rs, %{key: :escape}) do
-    before_path = Map.get(before_rs, :open_path, [])
-    after_path = Map.get(after_rs, :open_path, [])
-
-    cond do
-      # State didn't change — Raxol returned early because path was already []
-      before_path == [] and after_path == [] -> :cancelled
-      # A submenu level was closed — navigate up, no semantic action
-      true -> nil
-    end
+    derive_escape_action(before_rs, after_rs)
   end
 
   defp derive_action(_, _, _), do: nil
+
+  # Submenu opened → path grew → not a leaf action.
+  # No cursor → nothing to activate.
+  # Otherwise → leaf was activated.
+  defp derive_activate_action(before_rs, after_rs) do
+    before_path = Map.get(before_rs, :open_path, [])
+    after_path = Map.get(after_rs, :open_path, [])
+    cursor_id = Map.get(before_rs, :cursor)
+    submenu_opened = length(after_path) > length(before_path)
+    leaf_activated = not submenu_opened and not is_nil(cursor_id)
+    if leaf_activated, do: {:menu_action, cursor_id}, else: nil
+  end
+
+  # Both paths [] and unchanged → Raxol returned early (already at top) → :cancelled.
+  # Otherwise a submenu level closed → navigation only.
+  defp derive_escape_action(before_rs, after_rs) do
+    before_path = Map.get(before_rs, :open_path, [])
+    after_path = Map.get(after_rs, :open_path, [])
+    top_level_escape = before_path == [] and after_path == []
+    if top_level_escape, do: :cancelled, else: nil
+  end
 
   defp build_menu_theme(%Theme{} = t) do
     %{
