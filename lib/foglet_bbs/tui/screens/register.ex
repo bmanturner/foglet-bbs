@@ -111,13 +111,13 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp registration_mode(state) do
-    ctx = Map.get(state, :session_context) || %{}
-
-    case Map.get(ctx, :registration_mode) do
+    case Map.get(session_ctx(state), :registration_mode) do
       nil -> Config.get("registration_mode", "open")
       mode -> mode
     end
   end
+
+  defp session_ctx(state), do: Map.get(state, :session_context) || %{}
 
   defp first_step_for("invite_only"), do: :invite_code
   defp first_step_for(mode) when mode in @modes, do: :handle

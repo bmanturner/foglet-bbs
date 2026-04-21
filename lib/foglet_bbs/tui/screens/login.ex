@@ -138,13 +138,13 @@ defmodule Foglet.TUI.Screens.Login do
   defp drop_last_grapheme(str), do: String.slice(str, 0, String.length(str) - 1)
 
   defp registration_mode(state) do
-    ctx = Map.get(state, :session_context) || %{}
-
-    case Map.get(ctx, :registration_mode) do
+    case Map.get(session_ctx(state), :registration_mode) do
       nil -> Config.get("registration_mode", "open")
       mode -> mode
     end
   end
+
+  defp session_ctx(state), do: Map.get(state, :session_context) || %{}
 
   defp sub_state(state) do
     login_ss = Map.get(state.screen_state || %{}, :login) || %{}
