@@ -1,13 +1,10 @@
 defmodule Foglet.TUI.Screens.MainMenu do
   @moduledoc """
   BBS main menu — primary screen after login (SSH-07, SSH-08).
-
   MainMenu is intentionally stateless: no `screen_state[:main_menu]`.
   Future contributors should not add `init_screen_state/1` reflexively.
-
   `@menu_items` and `@menu_keys` intentionally duplicate data because menu rows and
   KeyBar hints have different formatting needs.
-
   The welcome line, spacer, and three menu rows stay intentionally sparse:
   future milestones own the reserved whitespace.
   """
