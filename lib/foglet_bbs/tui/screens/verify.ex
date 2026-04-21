@@ -2,26 +2,27 @@ defmodule Foglet.TUI.Screens.Verify do
   @moduledoc """
   Email-verification code entry screen (D-08..D-12, VERIFY-02 Phase 6).
 
-  State (in state.verify_state):
-    * buffer                — the 0..6 chars typed so far
-    * attempts              — count of invalid attempts since last success
-    * cooldown_until        — DateTime when the invalid-attempts cooldown ends, or nil
+  State (in state.screen_state[:verify]):
+    * buffer                - the 0..6 chars typed so far
+    * attempts              - count of invalid attempts since last success
+    * cooldown_until        - DateTime when the invalid-attempts cooldown ends, or nil
                               (set after @max_attempts failures; blocks code entry,
                               NOT resend)
-    * resend_cooldown_until — DateTime when the resend cooldown ends, or nil
+    * resend_cooldown_until - DateTime when the resend cooldown ends, or nil
                               (set after a successful resend; blocks further resends,
                               NOT code entry)
-
   The two cooldowns are independent (VERIFY-02 D-10): hitting invalid 5x still
   allows a resend; hitting resend once still allows code entry.
-
   Resend resets `attempts` and `cooldown_until` intentionally (D-09): a fresh
   code makes any previous invalid-attempt count meaningless, so the counter is
   cleared to give the user a clean slate. This is a deliberate UX design
-  decision — it does NOT bypass security, because the old code becomes invalid
+  decision - it does NOT bypass security, because the old code becomes invalid
   once a new one is issued.
+  The 6-character `[ABC___]` buffer remains hand-rolled per inherited 07 D-02:
+  the shared input widget cannot reproduce the slot visualization without a
+  custom renderer, and its internal box would conflict with this flat slot
+  display.
   """
-
   alias Foglet.Accounts
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -32,12 +33,12 @@ defmodule Foglet.TUI.Screens.Verify do
   @cooldown_seconds 60
   @code_length 6
 
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(_opts \\ []), do: default_verify_ss()
+
   @spec render(map()) :: any()
   def render(state) do
-    vs =
-      state.verify_state ||
-        %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
-
+    vs = get_verify_ss(state)
     theme = Theme.from_state(state)
 
     status_item =
@@ -68,17 +69,14 @@ defmodule Foglet.TUI.Screens.Verify do
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :escape}, state) do
-    {:update, %{state | current_screen: :login, verify_state: nil}, []}
+    {:update, clear_verify_ss(%{state | current_screen: :login}), []}
   end
 
   def handle_key(%{key: :backspace}, state) do
-    vs =
-      state.verify_state ||
-        %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
-
+    vs = get_verify_ss(state)
     new_len = max(String.length(vs.buffer) - 1, 0)
     new_vs = %{vs | buffer: String.slice(vs.buffer, 0, new_len)}
-    {:update, %{state | verify_state: new_vs}, []}
+    {:update, put_verify_ss(state, new_vs), []}
   end
 
   def handle_key(%{key: :enter}, state) do
@@ -88,13 +86,9 @@ defmodule Foglet.TUI.Screens.Verify do
 
   def handle_key(%{key: :char, char: c}, state) when c in ["R", "r"], do: resend_code(state)
 
-  # Typed character — Raxol native shape: %{key: :char, char: c}.
-  # Only accept uppercase alphanumeric chars for the verification code.
+  # Typed character from Raxol: %{key: :char, char: c}.
   def handle_key(%{key: :char, char: c}, state) do
-    vs =
-      state.verify_state ||
-        %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
-
+    vs = get_verify_ss(state)
     new_char = String.upcase(c)
 
     cond do
@@ -103,7 +97,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
       String.match?(new_char, ~r/\A[A-Z0-9]\z/) and String.length(vs.buffer) < @code_length ->
         new_vs = %{vs | buffer: vs.buffer <> new_char}
-        {:update, %{state | verify_state: new_vs}, []}
+        {:update, put_verify_ss(state, new_vs), []}
 
       true ->
         :no_match
@@ -119,63 +113,20 @@ defmodule Foglet.TUI.Screens.Verify do
   @spec handle_verify_event({:set_buffer, String.t()} | {:submit} | {:resend}, map()) ::
           {map(), list()}
   def handle_verify_event({:set_buffer, code}, state) do
-    vs =
-      state.verify_state ||
-        %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
-
-    {%{state | verify_state: %{vs | buffer: code}}, []}
+    vs = get_verify_ss(state)
+    {put_verify_ss(state, %{vs | buffer: code}), []}
   end
 
   def handle_verify_event({:submit}, state), do: submit_raw(state)
   def handle_verify_event({:resend}, state), do: resend_code_raw(state)
 
-  # --- Private ---
-
-  # Renders a 6-char code slot with a block cursor at the current position.
-  # ""       → "█_____"  (cursor at first position)
-  # "XK7"    → "XK7█__"  (cursor after last typed char)
-  # "XK7P2Q" → "XK7P2Q" (full — no cursor needed)
-  defp pad_buffer_with_cursor(buffer) when is_binary(buffer) do
-    len = String.length(buffer)
-
-    if len >= @code_length do
-      buffer
-    else
-      remaining = @code_length - len - 1
-      buffer <> "█" <> String.duplicate("_", remaining)
-    end
-  end
-
-  defp cooldown?(%{cooldown_until: nil}), do: false
-
-  defp cooldown?(%{cooldown_until: t}) do
-    DateTime.compare(DateTime.utc_now(), t) == :lt
-  end
-
-  defp resend_cooldown?(%{resend_cooldown_until: nil}), do: false
-
-  defp resend_cooldown?(%{resend_cooldown_until: t}) do
-    DateTime.compare(DateTime.utc_now(), t) == :lt
-  end
-
-  # Build an :error modal that says <prefix> Wait Ns. given a DateTime
-  # representing when the cooldown ends. Takes the field value directly
-  # (not the whole verify_state) so the same helper serves both the
-  # invalid-attempts cooldown and the resend cooldown (D-11).
-  defp cooldown_modal(%DateTime{} = until, prefix) when is_binary(prefix) do
-    remaining = DateTime.diff(until, DateTime.utc_now(), :second)
-    %{type: :error, message: "#{prefix} Wait #{max(remaining, 0)}s."}
-  end
-
   defp submit_raw(%{current_user: nil} = state) do
     modal = %{type: :error, message: "No user context. Please register again."}
-    {%{state | modal: modal, current_screen: :login, verify_state: nil}, []}
+    {clear_verify_ss(%{state | modal: modal, current_screen: :login}), []}
   end
 
   defp submit_raw(state) do
-    vs =
-      state.verify_state ||
-        %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
+    vs = get_verify_ss(state)
 
     cond do
       cooldown?(vs) ->
@@ -186,44 +137,12 @@ defmodule Foglet.TUI.Screens.Verify do
         {%{state | modal: modal}, []}
 
       true ->
-        case Accounts.verify_email_code(state.current_user, vs.buffer) do
-          {:ok, confirmed} ->
-            {%{state | current_user: confirmed, current_screen: :main_menu, verify_state: nil},
-             []}
-
-          {:error, :expired} ->
-            modal = %{
-              type: :error,
-              message: "Code expired. Press [R] to request a new one."
-            }
-
-            {%{state | modal: modal, verify_state: %{vs | buffer: ""}}, []}
-
-          {:error, :invalid_code} ->
-            new_attempts = vs.attempts + 1
-
-            new_vs =
-              if new_attempts >= @max_attempts do
-                %{
-                  vs
-                  | buffer: "",
-                    attempts: new_attempts,
-                    cooldown_until: DateTime.add(DateTime.utc_now(), @cooldown_seconds, :second)
-                }
-              else
-                %{vs | buffer: "", attempts: new_attempts}
-              end
-
-            modal = %{type: :error, message: "Invalid code (#{new_attempts}/#{@max_attempts})."}
-            {%{state | modal: modal, verify_state: new_vs}, []}
-        end
+        verify_code(state, vs)
     end
   end
 
   defp resend_code(state) do
-    vs =
-      state.verify_state ||
-        %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
+    vs = get_verify_ss(state)
 
     if resend_cooldown?(vs) do
       {:update,
@@ -240,18 +159,9 @@ defmodule Foglet.TUI.Screens.Verify do
     case Accounts.build_verify_code(state.current_user) do
       {:ok, _code} ->
         modal = %{type: :info, message: "A new code has been sent."}
-
-        cooldown_seconds =
-          case Foglet.Config.get("email_verify_resend_cooldown_seconds", 60) do
-            n when is_integer(n) and n > 0 -> n
-            _ -> 60
-          end
-
+        cooldown_seconds = resend_cooldown_seconds()
         now = DateTime.utc_now()
-
-        vs =
-          state.verify_state ||
-            %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
+        vs = get_verify_ss(state)
 
         new_vs = %{
           vs
@@ -261,11 +171,100 @@ defmodule Foglet.TUI.Screens.Verify do
             resend_cooldown_until: DateTime.add(now, cooldown_seconds, :second)
         }
 
-        {%{state | modal: modal, verify_state: new_vs}, []}
+        {put_verify_ss(%{state | modal: modal}, new_vs), []}
 
       {:error, _cs} ->
         modal = %{type: :error, message: "Could not generate a new code. Try again later."}
         {%{state | modal: modal}, []}
+    end
+  end
+
+  # Render a 6-char slot with a block cursor at the current position.
+  defp pad_buffer_with_cursor(buffer) when is_binary(buffer) do
+    len = String.length(buffer)
+
+    if len >= @code_length do
+      buffer
+    else
+      remaining = @code_length - len - 1
+      buffer <> "█" <> String.duplicate("_", remaining)
+    end
+  end
+
+  # Build an :error modal saying "<prefix> Wait Ns." from a cooldown end time.
+  defp cooldown_modal(%DateTime{} = until, prefix) when is_binary(prefix) do
+    remaining = DateTime.diff(until, DateTime.utc_now(), :second)
+    %{type: :error, message: "#{prefix} Wait #{max(remaining, 0)}s."}
+  end
+
+  defp default_verify_ss do
+    %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
+  end
+
+  defp get_verify_ss(state),
+    do: Map.get(state.screen_state || %{}, :verify) || default_verify_ss()
+
+  defp put_verify_ss(state, vs) do
+    %{state | screen_state: Map.put(state.screen_state || %{}, :verify, vs)}
+  end
+
+  defp clear_verify_ss(state) do
+    %{state | screen_state: Map.delete(state.screen_state || %{}, :verify)}
+  end
+
+  defp cooldown?(%{cooldown_until: nil}), do: false
+
+  defp cooldown?(%{cooldown_until: t}) do
+    DateTime.compare(DateTime.utc_now(), t) == :lt
+  end
+
+  defp resend_cooldown?(%{resend_cooldown_until: nil}), do: false
+
+  defp resend_cooldown?(%{resend_cooldown_until: t}) do
+    DateTime.compare(DateTime.utc_now(), t) == :lt
+  end
+
+  defp verify_code(state, vs) do
+    case Accounts.verify_email_code(state.current_user, vs.buffer) do
+      {:ok, confirmed} ->
+        {clear_verify_ss(%{state | current_user: confirmed, current_screen: :main_menu}), []}
+
+      {:error, :expired} ->
+        modal = %{
+          type: :error,
+          message: "Code expired. Press [R] to request a new one."
+        }
+
+        {put_verify_ss(%{state | modal: modal}, %{vs | buffer: ""}), []}
+
+      {:error, :invalid_code} ->
+        handle_invalid_code(state, vs)
+    end
+  end
+
+  defp handle_invalid_code(state, vs) do
+    new_attempts = vs.attempts + 1
+
+    new_vs =
+      if new_attempts >= @max_attempts do
+        %{
+          vs
+          | buffer: "",
+            attempts: new_attempts,
+            cooldown_until: DateTime.add(DateTime.utc_now(), @cooldown_seconds, :second)
+        }
+      else
+        %{vs | buffer: "", attempts: new_attempts}
+      end
+
+    modal = %{type: :error, message: "Invalid code (#{new_attempts}/#{@max_attempts})."}
+    {put_verify_ss(%{state | modal: modal}, new_vs), []}
+  end
+
+  defp resend_cooldown_seconds do
+    case Foglet.Config.get("email_verify_resend_cooldown_seconds", 60) do
+      n when is_integer(n) and n > 0 -> n
+      _ -> 60
     end
   end
 end
