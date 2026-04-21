@@ -1,0 +1,146 @@
+defmodule Foglet.TUI.Widgets.Input.MenuTest do
+  use ExUnit.Case, async: true
+
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Input.Menu
+
+  # --- Local helpers (copied from list_row_test.exs pattern) ---
+
+  defp flatten_text(tree), do: tree |> collect_text([]) |> Enum.reverse() |> Enum.join("")
+
+  defp collect_text(nil, acc), do: acc
+  defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
+
+  defp collect_text(%{children: children} = node, acc) do
+    acc = maybe_add_content(node, acc)
+    collect_text(children, acc)
+  end
+
+  defp collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
+  defp collect_text(%{text: t}, acc) when is_binary(t), do: [t | acc]
+  defp collect_text(_other, acc), do: acc
+
+  defp maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
+  defp maybe_add_content(_node, acc), do: acc
+
+  defp theme, do: Theme.default()
+  defp alt_theme, do: Theme.resolve(:danger)
+
+  # A simple flat menu with an explicit :id for action testing
+  defp leaf_menu_state do
+    Menu.init(items: [%{id: :file_new, label: "New File", children: []}])
+  end
+
+  describe "normalize_items/1" do
+    test "test 2 — fills :id when absent" do
+      items = Menu.normalize_items([%{label: "File", children: []}])
+      [item] = items
+      assert Map.has_key?(item, :id)
+      assert item.id != nil
+    end
+
+    test "test 3 — fills :disabled with false when absent" do
+      items = Menu.normalize_items([%{label: "File", children: []}])
+      [item] = items
+      assert item.disabled == false
+    end
+
+    test "test 4 — fills :shortcut with nil when absent" do
+      items = Menu.normalize_items([%{label: "File", children: []}])
+      [item] = items
+      assert item.shortcut == nil
+    end
+
+    test "test 5 — preserves caller-supplied fields" do
+      input = [%{id: :file, label: "File", children: [], disabled: true, shortcut: "Ctrl+F"}]
+      [item] = Menu.normalize_items(input)
+      assert item.id == :file
+      assert item.label == "File"
+      assert item.disabled == true
+      assert item.shortcut == "Ctrl+F"
+    end
+
+    test "test 6 — recurses into children" do
+      input = [%{label: "A", children: [%{label: "B", children: []}]}]
+      [outer] = Menu.normalize_items(input)
+      assert Map.has_key?(outer, :id)
+      [inner] = outer.children
+      assert Map.has_key?(inner, :id)
+    end
+  end
+
+  describe "init/1" do
+    test "smoke — init with items missing :id succeeds via normalize_items" do
+      state = Menu.init(items: [%{label: "File", children: []}])
+      refute is_nil(state)
+      assert is_struct(state)
+    end
+
+    test "all items have :id after init" do
+      state = Menu.init(items: [%{label: "Edit", children: []}, %{label: "View", children: []}])
+      items = state.raxol_state.items
+      assert Enum.all?(items, &Map.has_key?(&1, :id))
+    end
+  end
+
+  describe "handle_event/2 (D-14)" do
+    test "test 7 — Esc on top-level returns :cancelled" do
+      state = leaf_menu_state()
+      # open_path is [] at init, so Esc from top-level = :cancelled
+      {_new_state, action} = Menu.handle_event(%{key: :escape}, state)
+      assert action == :cancelled
+    end
+
+    test "test 8 — Enter on leaf returns {:menu_action, id}" do
+      state = leaf_menu_state()
+      {_new_state, action} = Menu.handle_event(%{key: :enter}, state)
+      assert match?({:menu_action, _id}, action)
+      {:menu_action, id} = action
+      assert id == :file_new
+    end
+
+    test "test 9 — purity: same input + event -> same output" do
+      state = leaf_menu_state()
+      result1 = Menu.handle_event(%{key: :escape}, state)
+      result2 = Menu.handle_event(%{key: :escape}, state)
+      assert result1 == result2
+    end
+  end
+
+  describe "render/2 — theme hygiene (D-18)" do
+    test "test 10 — no hardcoded color atoms in rendered tree" do
+      state = leaf_menu_state()
+      result = Menu.render(state, theme: theme())
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
+      for color <- ~w(red green cyan yellow blue magenta white black) do
+        refute serialized =~ ":#{color}",
+               "Menu leaked :#{color} atom in serialized tree"
+      end
+    end
+
+    test "alt-theme produces different rendered output" do
+      state = leaf_menu_state()
+      default_result = Menu.render(state, theme: theme())
+      danger_result = Menu.render(state, theme: alt_theme())
+
+      refute inspect(default_result, printable_limit: :infinity, limit: :infinity) ==
+               inspect(danger_result, printable_limit: :infinity, limit: :infinity)
+    end
+
+    test "smoke — render returns non-nil map" do
+      state = leaf_menu_state()
+      result = Menu.render(state, theme: theme())
+      refute is_nil(result)
+      assert is_map(result)
+      assert Map.has_key?(result, :type)
+    end
+
+    test "smoke — rendered output contains item label" do
+      state = leaf_menu_state()
+      result = Menu.render(state, theme: theme())
+      flat = flatten_text(result)
+      assert flat =~ "New File"
+    end
+  end
+end
