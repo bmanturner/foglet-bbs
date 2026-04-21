@@ -6,8 +6,8 @@ offers mid-conversation research when useful, then routes crystallized outputs t
 <required_reading>
 Read all files referenced by the invoking prompt's execution_context before starting.
 
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/questioning.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/domain-probes.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/questioning.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/domain-probes.md
 </required_reading>
 
 <available_agent_types>

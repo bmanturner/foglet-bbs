@@ -13,7 +13,7 @@ Ensure config exists and load current state:
 
 ```bash
 gsd-sdk query config-ensure-section
-GSD_CONFIG_PATH=$(node "/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/bin/gsd-tools.cjs" config-path)
+GSD_CONFIG_PATH=$(node "/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/bin/gsd-tools.cjs" config-path)
 INIT=$(gsd-sdk query state.load)
 if [[ "$INIT" == @file:* ]]; then INIT=$(cat "${INIT#@file:}"); fi
 ```

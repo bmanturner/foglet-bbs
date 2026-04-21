@@ -20,9 +20,9 @@ Consumed by: /gsd-new-milestone (scans seeds and presents matches)
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/plant-seed.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/plant-seed.md
 </execution_context>
 
 <process>
-Execute the plant-seed workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/plant-seed.md end-to-end.
+Execute the plant-seed workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/plant-seed.md end-to-end.
 </process>

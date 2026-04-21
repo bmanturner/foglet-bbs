@@ -33,14 +33,14 @@ Initialize a new project through unified flow: questioning → research (optiona
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/new-project.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/questioning.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/templates/project.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/templates/requirements.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/new-project.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/questioning.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/templates/project.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/templates/requirements.md
 </execution_context>
 
 <process>
-Execute the new-project workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/new-project.md end-to-end.
+Execute the new-project workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/new-project.md end-to-end.
 Preserve all workflow gates (validation, approvals, commits, routing).
 </process>

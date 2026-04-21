@@ -15,10 +15,10 @@ Output ONLY the reference content below. Do NOT add:
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/help.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/help.md
 </execution_context>
 
 <process>
-Output the complete GSD command reference from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/help.md.
+Output the complete GSD command reference from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/help.md.
 Display the reference content directly — no additions or modifications.
 </process>

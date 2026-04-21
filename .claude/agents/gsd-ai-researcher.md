@@ -40,7 +40,7 @@ works via Bash and produces equivalent output.
 </documentation_lookup>
 
 <required_reading>
-Read `/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ai-frameworks.md` for framework profiles and known pitfalls before fetching docs.
+Read `/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ai-frameworks.md` for framework profiles and known pitfalls before fetching docs.
 </required_reading>
 
 <input>

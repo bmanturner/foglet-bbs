@@ -19,8 +19,8 @@ Routes to the profile-user workflow which orchestrates the full flow: consent ga
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/profile-user.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/profile-user.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>

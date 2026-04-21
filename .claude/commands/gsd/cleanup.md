@@ -14,10 +14,10 @@ Use when `.planning/phases/` has accumulated directories from past milestones.
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/cleanup.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/cleanup.md
 </execution_context>
 
 <process>
-Follow the cleanup workflow at @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/cleanup.md.
+Follow the cleanup workflow at @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/cleanup.md.
 Identify completed milestones, show a dry-run summary, and archive on confirmation.
 </process>
