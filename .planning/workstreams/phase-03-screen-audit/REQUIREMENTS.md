@@ -90,12 +90,12 @@
 
 ### Phase 2 — Register screen
 
-- [ ] **REGISTER-01**: Single-line wizard input (`register.ex:43-48`) is replaced with `Widgets.Input.TextInput` per Phase 1 precedent, with `mask_char` swapped to `*` for the `:password` and `:confirm` wizard steps.
-- [ ] **REGISTER-02**: Wizard step dispatcher is audited for clarity — prefer multi-clause `render_step/2` + pattern-matched step atoms over a large `case`. No new abstractions beyond what already exists.
-- [ ] **REGISTER-03**: The nested `case {:ok, _}|{:error, _}` registration chain (`register.ex:232-280`) is rewritten as a `with` chain.
-- [ ] **REGISTER-04**: The existing `apply(Foglet.Accounts, :consume_invite_code, …)` + `function_exported?/3` guard with its `credo:disable` is preserved verbatim (documented inherited decision — consumer module may not exist yet).
-- [ ] **REGISTER-05**: Rubric items `AUDIT-05..22` pass; `mix precommit` green; line count decreases.
-- [ ] **REGISTER-06**: **Top-level `state.register_wizard` → `state.screen_state[:register]` migration.** The field declared at `app.ex:53-56` is removed; the wizard-dispatch path at `app.ex:354-361` (`:submit_step` / `:cancel_step` routing) is rewritten to read/write through `state.screen_state[:register]`. Phase 2 operates under the documented AUDIT-13 scope-fence exception (b). **Watch List:**
+- [x] **REGISTER-01**: Single-line wizard input (`register.ex:43-48`) is replaced with `Widgets.Input.TextInput` per Phase 1 precedent, with `mask_char` swapped to `*` for the `:password` and `:confirm` wizard steps.
+- [x] **REGISTER-02**: Wizard step dispatcher is audited for clarity — prefer multi-clause `render_step/2` + pattern-matched step atoms over a large `case`. No new abstractions beyond what already exists.
+- [x] **REGISTER-03**: The nested `case {:ok, _}|{:error, _}` registration chain (`register.ex:232-280`) is rewritten as a `with` chain.
+- [x] **REGISTER-04**: The existing `apply(Foglet.Accounts, :consume_invite_code, …)` + `function_exported?/3` guard with its `credo:disable` is preserved verbatim (documented inherited decision — consumer module may not exist yet).
+- [x] **REGISTER-05**: Rubric items `AUDIT-05..22` pass; `mix precommit` green; line count deviation accepted (developer override 2026-04-21 — structural increase from 4-field wizard, see 02-VERIFICATION.md).
+- [x] **REGISTER-06**: **Top-level `state.register_wizard` → `state.screen_state[:register]` migration.** The field declared at `app.ex:53-56` is removed; the wizard-dispatch path at `app.ex:354-361` (`:submit_step` / `:cancel_step` routing) is rewritten to read/write through `state.screen_state[:register]`. Phase 2 operates under the documented AUDIT-13 scope-fence exception (b). **Watch List:**
   - (i) `:submit_step` self-dispatch semantics preserved — submitting the current step still round-trips through `App.update/2` to advance the wizard.
   - (ii) Modal-close `screen_state: %{}` reset behavior preserved — after a wizard-initiated modal closes, the wizard state must not survive if the modal was a cancellation confirm.
   - (iii) Key-dispatch ordering in wizard steps preserved — source-order dependencies in `register.ex:handle_key/2` clauses are load-bearing (Pitfall 6).
@@ -245,7 +245,7 @@ Every per-phase requirement ID maps to exactly one phase below. The audit-wide r
 | AUDIT-21 | Inherited anti-affordance (Phases 1–9) | Pending |
 | AUDIT-22 | Inherited anti-affordance (Phases 1–9) | Pending |
 | LOGIN-01..LOGIN-06 | Phase 1 | Pending |
-| REGISTER-01..REGISTER-06 | Phase 2 | Pending |
+| REGISTER-01..REGISTER-06 | Phase 2 | Verified 2026-04-21 |
 | VERIFY-01..VERIFY-05 | Phase 3 | Pending |
 | MENU-01..MENU-05 | Phase 4 | Pending |
 | BOARDS-01..BOARDS-05 | Phase 5 | Pending |

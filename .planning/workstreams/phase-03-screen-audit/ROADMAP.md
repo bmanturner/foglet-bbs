@@ -30,7 +30,7 @@ Locked at workstream creation — do not re-litigate per phase:
 
 - [ ] **Phase 0: Cross-cutting extractions (prelude)** — `Theme.from_state/1` + `Screens.Domain.get/2` helpers; grep gates #7/#8/#9 reach zero across all 9 screen files
 - [ ] **Phase 1: Login** — Adopt `Input.TextInput` for handle + password; delete the hand-rolled form plumbing; `with`-chain the auth pipeline; sets TextInput precedent for Phases 2 + 7
-- [ ] **Phase 2: Register** — Apply Phase 1 TextInput pattern to the wizard single-line input; `with`-chain the registration pipeline; preserve the `apply/3` + `credo:disable` for `consume_invite_code` verbatim
+- [x] **Phase 2: Register** ✓ 2026-04-21 — Apply Phase 1 TextInput pattern to the wizard single-line input; `with`-chain the registration pipeline; preserve the `apply/3` + `credo:disable` for `consume_invite_code` verbatim
 - [ ] **Phase 3: Verify** — Keep the hand-rolled 6-char buffer (07 D-02); consolidate the 7 duplicated default-state map literals behind a file-local helper; preserve 5-attempt lockout semantics
 - [ ] **Phase 4: MainMenu** — Phase-0 helper swap and sparseness discipline test; keep the `@menu_keys`/`@menu_items` duplication and letter-shortcut menu rows as inherited decisions
 - [ ] **Phase 5: BoardList** — Phase-0 helper swap; dead-code audit of `load_boards/1`; evaluate spinner for the async `load_boards` op
@@ -82,7 +82,10 @@ Locked at workstream creation — do not re-litigate per phase:
   3. **Wizard-state migration complete:** `state.register_wizard` removed from the top-level App struct; `state.screen_state[:register]` is the canonical store; wizard-dispatch at `app.ex:354-361` (`:submit_step` / `:cancel_step`) routes through `state.screen_state[:register]`; `init_screen_state/1` is present on `register.ex` (AUDIT-19). Round-trip tests cover the full wizard flow (handle → email → password → confirm → submit) AND the cancel-during-step flow.
   4. The nested `case {:ok,_}|{:error,_}` chain at `:232-280` is rewritten as a `with` chain with all branches preserved. The existing `apply(Foglet.Accounts, :consume_invite_code, [code])` + `function_exported?/3` guard + `credo:disable` is preserved verbatim.
   5. Rubric items `AUDIT-05..22` pass (canonical section order AUDIT-18 satisfied; `init_screen_state/1` AUDIT-19 present); `mix precommit` green; no protected-region fill below the error line.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [x] 02-01-PLAN.md — Test harness rebuild: register_test.exs to screen_state shape (Wave 0)
+  - [x] 02-02-PLAN.md — Structural refactor: TextInput adoption, wizard-state migration, with-chain (Wave 1)
+  - [x] 02-03-PLAN.md — AUDIT-05..22 rubric sweep; Dialyzer extra_range fix; mix precommit green (Wave 2)
 **UI hint**: yes
 
 ### Phase 3: Verify
@@ -189,7 +192,7 @@ Critical path: `0 → 1 → 2 → 3 → (4+5+6) → (7+8) → 9` — 7 serial bl
 |-------|----------------|--------|-----------|
 | 0. Cross-cutting extractions (prelude) | 0/3 | Planned | - |
 | 1. Login | 0/1 | Planned | - |
-| 2. Register | 0/TBD | Not started | - |
+| 2. Register | 3/3 | Complete | 2026-04-21 |
 | 3. Verify | 0/TBD | Not started | - |
 | 4. MainMenu | 0/TBD | Not started | - |
 | 5. BoardList | 0/TBD | Not started | - |
