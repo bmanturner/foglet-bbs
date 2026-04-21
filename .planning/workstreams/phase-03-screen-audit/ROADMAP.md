@@ -100,9 +100,9 @@ Locked at workstream creation — do not re-litigate per phase:
   4. **Verify-state migration complete:** `state.verify_state` removed from the top-level App struct; `state.screen_state[:verify]` is the canonical store; `init_screen_state/1` is present on `verify.ex` (AUDIT-19). Round-trip tests cover the attempt-lockout flow and the resend-cooldown flow post-migration.
   5. Rubric items `AUDIT-05..22` pass (canonical section order AUDIT-18 satisfied; `init_screen_state/1` AUDIT-19 present); `mix precommit` green; no protected-region fill below the error line.
 **Plans**: 3 plans
-  - [ ] 03-01-PLAN.md — Migrate Verify tests and layout smoke fixtures to `screen_state[:verify]` (Wave 0)
-  - [ ] 03-02-PLAN.md — Remove top-level `verify_state`; migrate Verify/Login/Register/App production ownership (Wave 1)
-  - [ ] 03-03-PLAN.md — Run AUDIT-05..22 closure, LoC gate, and `mix precommit` (Wave 2)
+  - [x] 03-01-PLAN.md — Migrate Verify tests and layout smoke fixtures to `screen_state[:verify]` (Wave 0)
+  - [x] 03-02-PLAN.md — Remove top-level `verify_state`; migrate Verify/Login/Register/App production ownership (Wave 1)
+  - [x] 03-03-PLAN.md — Run AUDIT-05..22 closure, LoC gate, and `mix precommit` (Wave 2)
 **UI hint**: yes
 
 ### Phase 4: MainMenu
