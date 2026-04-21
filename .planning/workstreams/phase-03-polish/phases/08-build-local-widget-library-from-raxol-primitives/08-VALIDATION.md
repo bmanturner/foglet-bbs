@@ -53,6 +53,7 @@ created: 2026-04-20
 | REQ-W-11 | `Foglet.TUI.Widgets.Input.Menu` | unit | `mix test test/foglet_bbs/tui/widgets/input/menu_test.exs` | ❌ W0 | ⬜ pending |
 | REQ-W-12 | `lib/foglet_bbs/tui/widgets/README.md` index | integration | `test -f lib/foglet_bbs/tui/widgets/README.md && grep -c "SmartList\|Table\|Tree\|Progress\|Spinner\|TextInput\|Button\|Checkbox\|RadioGroup\|Tabs\|Menu" lib/foglet_bbs/tui/widgets/README.md` (≥ 11) | ❌ W0 | ⬜ pending |
 | REQ-W-13 | Umbrella: whole phase passes precommit | suite | `mix precommit` | Existing | ⬜ pending |
+| REQ-W-14 | `spacer()`/`justify_*` audit complete (ROADMAP Phase 8 goal clause 2) | integration | `grep -q '08-06 audit' lib/foglet_bbs/tui/size_gate.ex && grep -q '08-06 audit' lib/foglet_bbs/tui/widgets/chrome/status_bar.ex && grep -q '08-06 audit' lib/foglet_bbs/tui/widgets/chrome/screen_frame.ex && test -f .planning/workstreams/phase-03-polish/phases/08-build-local-widget-library-from-raxol-primitives/08-06-SUMMARY.md` | Existing (3 files + new summary) | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
