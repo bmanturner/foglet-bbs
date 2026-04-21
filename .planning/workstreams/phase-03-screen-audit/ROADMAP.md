@@ -51,7 +51,10 @@ Locked at workstream creation — do not re-litigate per phase:
   3. Both helpers ship with per-function tests exercising happy-path resolution, missing-`session_context` fallback, and missing-`:domain`-key fallback. `mix precommit` is green post-extraction.
   4. After Phase 0 lands, grep gates **#8** (`(Map.get(state, :session_context) \|\| %{}) \|> Map.get(:theme)`) and **#9** (`get_in(ctx, [:domain,`) return **zero** matches across `lib/foglet_bbs/tui/screens/*.ex`. Grep gate **#7** (`{80, 24}` inlined) is untouched by Phase 0 and is resolved per-screen in Phases 5/6/7/8/9 via `@default_terminal_size` attributes.
   5. No behavioural change to any screen is visible end-to-end: an SSH session renders identically pre- and post-Phase-0 at default terminal size.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 00-01-PLAN.md — Add `Foglet.TUI.Theme.from_state/1` + theme_test.exs (Wave 1)
+  - [ ] 00-02-PLAN.md — Create `Foglet.TUI.Screens.Domain` module + domain_test.exs (Wave 1, parallel with 00-01)
+  - [ ] 00-03-PLAN.md — Migrate 14 theme + 8 domain call sites across 12 files; verify grep gates #8/#9 zero (Wave 2)
 **UI hint**: yes
 
 ### Phase 1: Login
@@ -183,7 +186,7 @@ Critical path: `0 → 1 → 2 → 3 → (4+5+6) → (7+8) → 9` — 7 serial bl
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 0. Cross-cutting extractions (prelude) | 0/TBD | Not started | - |
+| 0. Cross-cutting extractions (prelude) | 0/3 | Planned | - |
 | 1. Login | 0/TBD | Not started | - |
 | 2. Register | 0/TBD | Not started | - |
 | 3. Verify | 0/TBD | Not started | - |
