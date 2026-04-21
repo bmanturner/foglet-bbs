@@ -143,6 +143,24 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       result2 = Table.handle_event(%{key: :down}, state)
       assert result1 == result2
     end
+
+    test "WR-05 — empty table init leaves selected_row nil" do
+      state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [])
+      assert Map.get(state.raxol_state, :selected_row) == nil
+    end
+
+    test "WR-05 — nav key on empty table is a no-op, does not crash" do
+      state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [])
+      {new_state, action} = Table.handle_event(%{key: :down}, state)
+      assert action == nil
+      assert Map.get(new_state.raxol_state, :selected_row) == nil
+    end
+
+    test "WR-05 — enter on empty table returns nil action" do
+      state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [])
+      {_new_state, action} = Table.handle_event(%{key: :enter}, state)
+      assert action == nil
+    end
   end
 
   describe "render/2 — theme hygiene (D-18)" do

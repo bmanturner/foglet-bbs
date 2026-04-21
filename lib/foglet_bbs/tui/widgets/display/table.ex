@@ -85,8 +85,11 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     }
 
     {:ok, raxol_state} = RaxolTable.init(raxol_props)
-    # Initialize selected_row to 0 so down-arrow arithmetic works
-    raxol_state = Map.put(raxol_state, :selected_row, 0)
+    # Initialize selected_row to 0 only when there is at least one row;
+    # otherwise leave it nil so the renderer doesn't paint a phantom
+    # selection bar over an empty table (WR-05).
+    initial_selected = if rows == [], do: nil, else: 0
+    raxol_state = Map.put(raxol_state, :selected_row, initial_selected)
 
     %__MODULE__{
       raxol_state: raxol_state,
@@ -99,18 +102,25 @@ defmodule Foglet.TUI.Widgets.Display.Table do
 
   @spec handle_event(map(), t()) :: {t(), action()}
   def handle_event(event, %__MODULE__{raxol_state: rs} = st) do
-    raxol_event = translate_event(event)
-    result = RaxolTable.handle_event(raxol_event, rs, %{})
+    if Map.get(rs, :data, []) == [] do
+      # WR-05: empty tables have selected_row = nil; forwarding nav keys into
+      # Raxol's table would crash on `nil + 1` arithmetic. Short-circuit and
+      # return the state unchanged with no semantic action.
+      {%{st | last_action: nil}, nil}
+    else
+      raxol_event = translate_event(event)
+      result = RaxolTable.handle_event(raxol_event, rs, %{})
 
-    new_rs =
-      case result do
-        {:ok, new_state} -> new_state
-        {new_state, _cmds} -> new_state
-        _ -> rs
-      end
+      new_rs =
+        case result do
+          {:ok, new_state} -> new_state
+          {new_state, _cmds} -> new_state
+          _ -> rs
+        end
 
-    action = derive_action(rs, new_rs, event)
-    {%{st | raxol_state: new_rs, last_action: action}, action}
+      action = derive_action(rs, new_rs, event)
+      {%{st | raxol_state: new_rs, last_action: action}, action}
+    end
   end
 
   @spec render(t(), keyword()) :: any()
