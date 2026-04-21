@@ -40,6 +40,37 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       state = Tabs.init(tabs: ["A", "B", "C"], active: 1)
       assert Map.get(state.raxol_state, :active_index) == 1
     end
+
+    test "WR-04 — atom tab entries are coerced to string labels" do
+      state = Tabs.init(tabs: [:home, :posts])
+      flat = flatten_text(Tabs.render(state, theme: theme()))
+      assert flat =~ "home"
+      assert flat =~ "posts"
+    end
+
+    test "WR-04 — map with :label passes through" do
+      state = Tabs.init(tabs: [%{label: "Mixed"}])
+      flat = flatten_text(Tabs.render(state, theme: theme()))
+      assert flat =~ "Mixed"
+    end
+
+    test "WR-04 — nil tab entry raises ArgumentError with helpful message" do
+      assert_raise ArgumentError, ~r/:tabs entry must be/, fn ->
+        Tabs.init(tabs: [nil])
+      end
+    end
+
+    test "WR-04 — tuple tab entry raises ArgumentError" do
+      assert_raise ArgumentError, ~r/:tabs entry must be/, fn ->
+        Tabs.init(tabs: [{:bad, "shape"}])
+      end
+    end
+
+    test "WR-04 — map without :label raises ArgumentError" do
+      assert_raise ArgumentError, ~r/:tabs entry must be/, fn ->
+        Tabs.init(tabs: [%{name: "oops"}])
+      end
+    end
   end
 
   describe "handle_event/2 (D-14)" do

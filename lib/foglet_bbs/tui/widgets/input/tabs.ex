@@ -47,7 +47,10 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
   Pure constructor.
 
   Options:
-    * `:tabs`   — list of string labels or `%{label: String.t()}` maps (required)
+    * `:tabs`   — list of tab entries (required). Each entry may be a string
+                  label, an atom (converted via `Atom.to_string/1`), or a
+                  `%{label: String.t()}` map. Any other shape raises
+                  `ArgumentError` with a helpful message.
     * `:active` — initial active index (default `0`)
   """
   @spec init(keyword()) :: t()
@@ -87,7 +90,17 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
   # --- private ---
 
   defp normalize_tab(label) when is_binary(label), do: %{label: label}
+
+  defp normalize_tab(label) when is_atom(label) and not is_nil(label),
+    do: %{label: Atom.to_string(label)}
+
   defp normalize_tab(%{label: _} = tab), do: tab
+
+  defp normalize_tab(other) do
+    raise ArgumentError,
+          "Foglet.TUI.Widgets.Input.Tabs :tabs entry must be a string, atom, " <>
+            "or %{label: _}; got #{inspect(other)}"
+  end
 
   defp derive_action(before_rs, after_rs) do
     before_idx = Map.get(before_rs, :active_index, 0)
