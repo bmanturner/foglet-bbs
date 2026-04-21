@@ -8,6 +8,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   alias Foglet.TimeAgo
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
 
@@ -17,7 +18,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def render(state) do
     board = state.current_board
     ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
     thread_content = render_thread_content(state, ss, theme)
     board_name = (board && board.name) || "?"
 
@@ -129,7 +130,11 @@ defmodule Foglet.TUI.Screens.ThreadList do
   @spec load_threads(map(), String.t()) :: {map(), list()}
   def load_threads(state, board_id) do
     ctx = Map.get(state, :session_context) || %{}
-    threads_mod = get_in(ctx, [:domain, :threads]) || Foglet.Threads
+    threads_mod =
+      case Domain.get(ctx, :threads) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Threads
+      end
     user_id = state.current_user && state.current_user.id
 
     cond do

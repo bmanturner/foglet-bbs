@@ -33,7 +33,7 @@ defmodule Foglet.TUI.Screens.Login do
   def render(state) do
     mode = registration_mode(state)
     sub = sub_state(state)
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     content =
       column style: %{gap: 0} do

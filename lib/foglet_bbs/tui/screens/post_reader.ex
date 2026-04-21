@@ -21,6 +21,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   """
 
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
   alias Raxol.UI.Components.Display.Viewport
@@ -31,7 +32,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   def render(state) do
     thread = state.current_thread
     ss = get_screen_state(state)
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
     {w, h} = state.terminal_size || {80, 24}
     post_content = render_post_content(state, ss, theme, w, h)
     thread_title = (thread && thread.title) || "?"
@@ -158,7 +159,11 @@ defmodule Foglet.TUI.Screens.PostReader do
   @spec load_posts(map(), String.t()) :: {map(), list()}
   def load_posts(state, thread_id) do
     ctx = Map.get(state, :session_context) || %{}
-    posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
+    posts_mod =
+      case Domain.get(ctx, :posts) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Posts
+      end
     posts = posts_mod.list_posts(thread_id)
     new_read_position = seed_read_position_on_entry(state.read_position, thread_id, posts)
     {w, _h} = state.terminal_size || {80, 24}
@@ -197,8 +202,16 @@ defmodule Foglet.TUI.Screens.PostReader do
   @spec flush_read_pointers(map(), map()) :: {map(), list()}
   def flush_read_pointers(state, ctx) do
     sc = Map.get(state, :session_context) || %{}
-    boards_mod = get_in(sc, [:domain, :boards]) || Foglet.Boards
-    threads_mod = get_in(sc, [:domain, :threads]) || Foglet.Threads
+    boards_mod =
+      case Domain.get(sc, :boards) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Boards
+      end
+    threads_mod =
+      case Domain.get(sc, :threads) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Threads
+      end
     user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
 
     flush_board_pointer(boards_mod, user_id, ctx)
@@ -283,7 +296,11 @@ defmodule Foglet.TUI.Screens.PostReader do
   # back into the cache.
   defp parse_body(state, post) do
     sc = Map.get(state, :session_context) || %{}
-    markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
+    markdown_mod =
+      case Domain.get(sc, :markdown) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Markdown
+      end
     body = Map.get(post, :body) || ""
 
     # Ensure the module is loaded before checking function_exported? — the
@@ -325,9 +342,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   # so the Viewport has the correct content_height for clamping.
   # Width-aware: re-runs whenever width changes (via scroll_post caller).
   defp warm_viewport(ss, state, post, w) do
-    theme =
-      (Map.get(state, :session_context) || %{}) |> Map.get(:theme) ||
-        Foglet.TUI.Theme.default()
+    theme = Theme.from_state(state)
 
     tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
     body_lines = PostCard.render_body_lines(tuples, w, theme)

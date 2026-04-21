@@ -14,6 +14,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   alias Foglet.Config
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
@@ -77,7 +78,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp render_board_step(state, ss) do
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     board_content =
       case ss.boards do
@@ -112,7 +113,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp render_compose_step(state, ss) do
     board = ss.board
     board_name = (board && board.name) || "?"
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     # D-14: render the title line with a live N / cap char counter so users
     # see the soft limit as they type.
@@ -409,7 +410,10 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp threads_module(state) do
     ctx = Map.get(state, :session_context) || %{}
-    get_in(ctx, [:domain, :threads]) || Foglet.Threads
+    case Domain.get(ctx, :threads) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Threads
+    end
   end
 
   defp format_error(%Ecto.Changeset{} = cs) do

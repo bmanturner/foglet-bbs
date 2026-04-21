@@ -16,6 +16,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   alias Foglet.Config
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Post.MarkdownBody
@@ -35,7 +36,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
     ss = composer_screen_state(state)
     input_st = ss.input_state
     draft = input_st.value
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     body_items =
       if ss.reply_to do
@@ -283,7 +284,11 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   defp submit_reply(state, ss, draft, user_id) do
     sc = Map.get(state, :session_context) || %{}
-    posts_mod = get_in(sc, [:domain, :posts]) || Foglet.Posts
+    posts_mod =
+      case Domain.get(sc, :posts) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Posts
+      end
     thread = state.current_thread
     attrs = build_reply_attrs(draft, ss)
 

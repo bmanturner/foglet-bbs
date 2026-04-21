@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @spec render(map()) :: any()
   def render(state) do
     handle = state.current_user && state.current_user.handle
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     content =
       column style: %{gap: 0} do

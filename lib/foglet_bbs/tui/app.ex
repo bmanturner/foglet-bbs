@@ -167,7 +167,7 @@ defmodule Foglet.TUI.App do
   # Extracts theme from state.session_context and passes it through to the
   # theme-aware Modal.render/2 (Phase 7 thin adapter, D-08).
   defp render_modal_overlay(modal, state) do
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     column justify: :center, align: :center do
       [

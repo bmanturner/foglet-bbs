@@ -27,7 +27,7 @@ defmodule Foglet.TUI.Screens.Register do
   @spec render(map()) :: any()
   def render(state) do
     w = state.register_wizard || default_wizard(state)
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     error_items =
       if w.error do
