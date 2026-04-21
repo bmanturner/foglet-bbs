@@ -115,11 +115,11 @@
 
 ### Phase 4 — MainMenu screen
 
-- [ ] **MENU-01**: Theme extraction + domain-module lookup use the Phase 0 helpers. No other structural change.
-- [ ] **MENU-02**: `@menu_keys` + `@menu_items` duplication (`main_menu.ex:9-13, 28-32`) is **kept** as an inherited decision — load-bearing because render and KeyBar use different format needs; documented in moduledoc.
-- [ ] **MENU-03**: `[L]/[R]/[Q]` letter-shortcut menu rows stay as plain `text/2` calls (inherited decision — `SelectionList` wrong, `Button` wrong, `text/2` is correct).
-- [ ] **MENU-04**: Rubric items `AUDIT-05..22` pass with **special sparseness scrutiny** — main_menu is 58 LoC and has the largest share of reserved layout regions (M4/M6/M9). `AUDIT-16` size delta ≤ 0 is strictly enforced.
-- [ ] **MENU-05**: MainMenu's `@moduledoc` documents **"intentionally stateless — no `screen_state[:main_menu]` key"** with a note that future contributors should NOT add a default hash reflexively. This is the documented AUDIT-19 deviation for MainMenu (per ARCHITECTURE §3.2 #4).
+- [x] **MENU-01**: Theme extraction + domain-module lookup use the Phase 0 helpers. No other structural change.
+- [x] **MENU-02**: `@menu_keys` + `@menu_items` duplication (`main_menu.ex:9-13, 28-32`) is **kept** as an inherited decision — load-bearing because render and KeyBar use different format needs; documented in moduledoc.
+- [x] **MENU-03**: `[L]/[R]/[Q]` letter-shortcut menu rows stay as plain `text/2` calls (inherited decision — `SelectionList` wrong, `Button` wrong, `text/2` is correct).
+- [x] **MENU-04**: Rubric items `AUDIT-05..22` pass with **special sparseness scrutiny** — main_menu is 58 LoC and has the largest share of reserved layout regions (M4/M6/M9). `AUDIT-16` size delta ≤ 0 is strictly enforced.
+- [x] **MENU-05**: MainMenu's `@moduledoc` documents **"intentionally stateless — no `screen_state[:main_menu]` key"** with a note that future contributors should NOT add a default hash reflexively. This is the documented AUDIT-19 deviation for MainMenu (per ARCHITECTURE §3.2 #4).
 
 ### Phase 5 — BoardList screen
 
