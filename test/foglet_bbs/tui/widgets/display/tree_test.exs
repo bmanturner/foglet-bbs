@@ -137,7 +137,8 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
     end
 
     test "IN-07 — theme with :selected slot but no :bg renders without crash" do
-      bgless_theme = %Theme{theme() | selected: %{fg: "#ffffff", style: [:bold]}}
+      %Theme{} = base = theme()
+      bgless_theme = %{base | selected: %{fg: "#ffffff", style: [:bold]}}
       state = Tree.init(nodes: [%{id: :root, label: "Root", children: []}])
 
       # Raxol's Text.new/2 always materializes `bg:` (defaulting to nil when
