@@ -71,6 +71,11 @@ defmodule Foglet.TUI.SizeGate do
 
     fg = Map.get(theme.dim, :fg)
 
+    # Defensive fallback: `App.view/1` only calls `render/1` after
+    # `too_small?/1` has returned true, which itself requires a
+    # well-formed `{cols, rows}` tuple. The `_ -> {0, 0}` branch is
+    # unreachable in production; we keep it so unit tests can invoke
+    # `render/1` directly with a bare `%{}` state without crashing.
     {cols, rows} =
       case Map.get(state, :terminal_size) do
         {c, r} when is_integer(c) and is_integer(r) -> {c, r}
