@@ -30,7 +30,9 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
       TextInput.render(TextInput.init(value: "hello"), theme: t),
       Tabs.render(Tabs.init(tabs: ["Home", "Posts"]), theme: t),
       Menu.render(Menu.init(items: [%{label: "File", children: []}]), theme: t),
-      Table.render(Table.init(columns: [%{key: :name, label: "Name"}], rows: [%{name: "x"}]), theme: t),
+      Table.render(Table.init(columns: [%{key: :name, label: "Name"}], rows: [%{name: "x"}]),
+        theme: t
+      ),
       Tree.render(Tree.init(nodes: [%{id: :root, label: "R", children: []}]), theme: t),
       Progress.render(0.5, theme: t),
       Spinner.render(0, theme: t),
