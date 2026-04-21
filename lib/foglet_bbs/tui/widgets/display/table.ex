@@ -175,9 +175,18 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     }
   end
 
-  # Ensure each column has the required :align and :width fields that Raxol accesses directly.
+  # Ensure each column has the required :id, :align, :width, and :format fields that Raxol
+  # accesses directly. Callers may pass either :id or :key for the column identifier; both
+  # forms are normalised so Raxol's create_cells/7 (which reads column.id) finds the field.
   defp normalize_column(col) when is_map(col) do
     col
+    |> then(fn c ->
+      # Accept :key as an alias for :id (plan spec uses %{key: :name, label: "Name"})
+      case {Map.get(c, :id), Map.get(c, :key)} do
+        {nil, key} when not is_nil(key) -> Map.put(c, :id, key)
+        _ -> c
+      end
+    end)
     |> Map.put_new(:align, :left)
     |> Map.put_new(:width, 20)
     |> Map.put_new(:format, nil)
