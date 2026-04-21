@@ -36,7 +36,7 @@ defmodule Foglet.TUI.Widgets.Chrome.KeyBar do
         ]
       end)
 
-    row style: %{gap: 0} do
+    row style: %{gap: 0, justify_content: :center} do
       labels
     end
   end
