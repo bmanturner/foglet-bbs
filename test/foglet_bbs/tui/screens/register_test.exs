@@ -364,4 +364,35 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert get_in(new_state, [:screen_state, :register, :step]) == :combined
     end
   end
+
+  # WR-03: Integration test verifying the full App-level round-trip for the
+  # :invite_code step. Exercises the path:
+  #   handle_key(:enter) → {:register_wizard, {:submit_step, :invite_code, value}}
+  #     → App.process_screen_commands → do_update({:register_wizard, ...})
+  #       → handle_wizard_event → {new_state, []} with step == :combined
+  # This catches any contract drift between handle_wizard_event's return shape
+  # and do_update's expectations (e.g., wrapping in {:ok, ...} would silently
+  # drop the state transition and leave the wizard stuck on :invite_code).
+  describe "App.update/2 round-trip — invite_code step (WR-03)" do
+    test "pressing enter on a valid invite code advances state to :combined step via App.update" do
+      alias Foglet.TUI.App
+
+      # Build state with :invite_code step and a pre-typed valid code.
+      state = invite_state(invite_code: "VALIDCODE1")
+
+      # App.update returns {new_state, commands}.
+      {new_state, _commands} = App.update({:key, %{key: :enter}}, state)
+
+      assert get_in(new_state, [:screen_state, :register, :step]) == :combined,
+             "expected step to advance to :combined after valid invite code, " <>
+               "got: #{inspect(get_in(new_state, [:screen_state, :register, :step]))}"
+
+      assert get_in(new_state, [:screen_state, :register, :focused_field]) == :handle,
+             "expected focused_field to be :handle after advancing to :combined"
+
+      assert get_in(new_state, [:screen_state, :register, :collected, :invite_code]) ==
+               "VALIDCODE1",
+             "expected invite_code to be stored in :collected"
+    end
+  end
 end
