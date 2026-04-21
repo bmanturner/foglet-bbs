@@ -8,10 +8,10 @@ files_reviewed_list:
   - test/foglet_bbs/tui/screens/login_test.exs
 findings:
   critical: 0
-  warning: 2
-  info: 2
-  total: 4
-status: issues_found
+  warning: 0
+  info: 0
+  total: 0
+status: clean
 ---
 
 # Phase 01: Code Review Report
@@ -28,29 +28,6 @@ Reviewed the completed login screen refactor (`login.ex`) and its test suite. Th
 ---
 
 ## Warnings
-
-### WR-01: Password mask lost after failed login
-
-**File:** `lib/foglet_bbs/tui/screens/login.ex:270`
-
-**Issue:** On `{:error, :invalid_credentials}`, the password field is cleared by calling `TextInput.init([])` — without `mask_char: "*"`. The new TextInput has no mask, so the next password the user types will display in plaintext until they escape and re-enter the form (which calls `enter_login_form/1`, which correctly passes `mask_char: "*"`).
-
-Compare line 270:
-```elixir
-new_password_input = TextInput.init([])
-```
-
-with line 223 in `enter_login_form/1`:
-```elixir
-password_input: TextInput.init(mask_char: "*"),
-```
-
-**Fix:** Pass `mask_char: "*"` consistently:
-```elixir
-new_password_input = TextInput.init(mask_char: "*")
-```
-
----
 
 ### WR-02: Weakened assertion in pending-user modal test
 
