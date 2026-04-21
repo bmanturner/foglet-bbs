@@ -169,8 +169,106 @@ Inherited from `phase-03-polish` (see its REQUIREMENTS.md "Locked Decisions") an
 
 ## Traceability
 
-Filled in by `gsd-roadmapper` — maps each requirement to the phase that delivers it and the success criteria that validate it.
+Every per-phase requirement ID maps to exactly one phase below. The audit-wide rubric (`AUDIT-05..20`) is **inherited by every phase** and checked at each phase's verification step — it is not mapped to a single phase.
+
+### Phase-to-requirement mapping
+
+| Phase | Screen / Focus | Requirements delivered |
+|-------|----------------|------------------------|
+| 0 | Cross-cutting extractions (prelude) | AUDIT-01, AUDIT-02, AUDIT-03, AUDIT-04 |
+| 1 | Login | LOGIN-01, LOGIN-02, LOGIN-03, LOGIN-04, LOGIN-05, LOGIN-06 |
+| 2 | Register | REGISTER-01, REGISTER-02, REGISTER-03, REGISTER-04, REGISTER-05 |
+| 3 | Verify | VERIFY-01, VERIFY-02, VERIFY-03, VERIFY-04 |
+| 4 | MainMenu | MENU-01, MENU-02, MENU-03, MENU-04 |
+| 5 | BoardList | BOARDS-01, BOARDS-02, BOARDS-03, BOARDS-04, BOARDS-05 |
+| 6 | ThreadList | THREADS-01, THREADS-02, THREADS-03, THREADS-04, THREADS-05, THREADS-06, THREADS-07 |
+| 7 | NewThread | NEWTHREAD-01, NEWTHREAD-02, NEWTHREAD-03, NEWTHREAD-04, NEWTHREAD-05 |
+| 8 | PostComposer | COMPOSER-01, COMPOSER-02, COMPOSER-03, COMPOSER-04, COMPOSER-05 |
+| 9 | PostReader | READER-01, READER-02, READER-03, READER-04, READER-05, READER-06 |
+
+### Requirement-to-phase lookup
+
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| AUDIT-01 | Phase 0 | Pending |
+| AUDIT-02 | Phase 0 | Pending |
+| AUDIT-03 | Phase 0 | Pending |
+| AUDIT-04 | Phase 0 | Pending |
+| AUDIT-05 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-06 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-07 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-08 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-09 | Inherited rubric (Phases 1, 2, 8 — other phases pass trivially) | Pending |
+| AUDIT-10 | Inherited rubric (Phases 5, 6, 9 — other phases pass trivially) | Pending |
+| AUDIT-11 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-12 | Inherited rubric (Phases 5, 6, 9 — other phases pass trivially) | Pending |
+| AUDIT-13 | Inherited rubric (Phases 1–9; Phase 0 sole exception) | Pending |
+| AUDIT-14 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-15 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-16 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-17 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-18 | Workstream-wide (verified at final phase) | Pending |
+| AUDIT-19 | Inherited rubric (Phases 1–9) | Pending |
+| AUDIT-20 | Inherited rubric (Phases 1–9) | Pending |
+| LOGIN-01 | Phase 1 | Pending |
+| LOGIN-02 | Phase 1 | Pending |
+| LOGIN-03 | Phase 1 | Pending |
+| LOGIN-04 | Phase 1 | Pending |
+| LOGIN-05 | Phase 1 | Pending |
+| LOGIN-06 | Phase 1 | Pending |
+| REGISTER-01 | Phase 2 | Pending |
+| REGISTER-02 | Phase 2 | Pending |
+| REGISTER-03 | Phase 2 | Pending |
+| REGISTER-04 | Phase 2 | Pending |
+| REGISTER-05 | Phase 2 | Pending |
+| VERIFY-01 | Phase 3 | Pending |
+| VERIFY-02 | Phase 3 | Pending |
+| VERIFY-03 | Phase 3 | Pending |
+| VERIFY-04 | Phase 3 | Pending |
+| MENU-01 | Phase 4 | Pending |
+| MENU-02 | Phase 4 | Pending |
+| MENU-03 | Phase 4 | Pending |
+| MENU-04 | Phase 4 | Pending |
+| BOARDS-01 | Phase 5 | Pending |
+| BOARDS-02 | Phase 5 | Pending |
+| BOARDS-03 | Phase 5 | Pending |
+| BOARDS-04 | Phase 5 | Pending |
+| BOARDS-05 | Phase 5 | Pending |
+| THREADS-01 | Phase 6 | Pending |
+| THREADS-02 | Phase 6 | Pending |
+| THREADS-03 | Phase 6 | Pending |
+| THREADS-04 | Phase 6 | Pending |
+| THREADS-05 | Phase 6 | Pending |
+| THREADS-06 | Phase 6 | Pending |
+| THREADS-07 | Phase 6 | Pending |
+| NEWTHREAD-01 | Phase 7 | Pending |
+| NEWTHREAD-02 | Phase 7 | Pending |
+| NEWTHREAD-03 | Phase 7 | Pending |
+| NEWTHREAD-04 | Phase 7 | Pending |
+| NEWTHREAD-05 | Phase 7 | Pending |
+| COMPOSER-01 | Phase 8 | Pending |
+| COMPOSER-02 | Phase 8 | Pending |
+| COMPOSER-03 | Phase 8 | Pending |
+| COMPOSER-04 | Phase 8 | Pending |
+| COMPOSER-05 | Phase 8 | Pending |
+| READER-01 | Phase 9 | Pending |
+| READER-02 | Phase 9 | Pending |
+| READER-03 | Phase 9 | Pending |
+| READER-04 | Phase 9 | Pending |
+| READER-05 | Phase 9 | Pending |
+| READER-06 | Phase 9 | Pending |
+
+### Coverage Validation
+
+- **Total per-phase requirement IDs:** 47 (LOGIN ×6 + REGISTER ×5 + VERIFY ×4 + MENU ×4 + BOARDS ×5 + THREADS ×7 + NEWTHREAD ×5 + COMPOSER ×5 + READER ×6 = 47)
+- **Total audit-wide Phase-0 IDs:** 4 (AUDIT-01..04)
+- **Total inherited rubric IDs:** 16 (AUDIT-05..20) — checked at every per-screen phase
+- **Orphaned requirements:** 0 ✓
+- **Duplicated requirements (mapped to >1 phase):** 0 ✓
+- **FUT-01..05:** deferred (v2 scope; tracked in Deferred Items of STATE.md)
+
+**Coverage: 51/51 v1.0.2 requirements mapped** (47 per-phase + 4 Phase-0) **+ 16 inherited rubric items** applied at every per-screen phase. 100% ✓
 
 ---
 
-*Last updated: 2026-04-21 — workstream created from `/gsd-new-milestone --ws phase-03-screen-audit`*
+*Last updated: 2026-04-21 — Traceability filled in by `gsd-roadmapper` after ROADMAP.md creation.*
