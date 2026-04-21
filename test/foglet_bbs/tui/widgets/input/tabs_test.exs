@@ -115,14 +115,14 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
     end
 
     test "test 10 — moduledoc mentions digit shortcuts and D-15 caller-filter contract" do
-      moduledoc = Foglet.TUI.Widgets.Input.Tabs.__info__(:attributes)[:moduledoc]
+      {:docs_v1, _anno, _lang, _format, %{"en" => moduledoc}, _metadata, _docs} =
+        Code.fetch_docs(Foglet.TUI.Widgets.Input.Tabs)
 
       has_digit_ref =
-        is_binary(moduledoc) and
-          (String.contains?(moduledoc, "digit") or String.contains?(moduledoc, "1-9") or
-             String.contains?(moduledoc, "1–9"))
+        String.contains?(moduledoc, "digit") or String.contains?(moduledoc, "1-9") or
+          String.contains?(moduledoc, "1–9")
 
-      has_d15_ref = is_binary(moduledoc) and String.contains?(moduledoc, "D-15")
+      has_d15_ref = String.contains?(moduledoc, "D-15")
 
       assert has_digit_ref or has_d15_ref,
              "Moduledoc must mention digit shortcuts (1-9) and/or D-15 screen-filter contract"
