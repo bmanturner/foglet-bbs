@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.List.SmartListTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.List.SmartList
@@ -203,16 +204,13 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
   # ---------------------------------------------------------------------------
 
   describe "render/2 — theme hygiene (D-18)" do
-    test "no hardcoded color atoms appear in serialized render tree" do
+    test "no hardcoded color atoms appear in serialized render tree (IN-03)" do
       result = SmartList.render(two_item_fixture(), theme: theme())
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
 
-      refute serialized =~ ":red", "leaked :red atom"
-      refute serialized =~ ":green", "leaked :green atom"
-      refute serialized =~ ":cyan", "leaked :cyan atom"
-      refute serialized =~ ":yellow", "leaked :yellow atom"
-      refute serialized =~ ":blue", "leaked :blue atom"
-      refute serialized =~ ":magenta", "leaked :magenta atom"
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color), "leaked :#{color} atom"
+      end
     end
 
     test "alt-theme differential: default and danger themes produce different render trees" do

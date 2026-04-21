@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Checkbox
@@ -69,22 +70,19 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
   end
 
   describe "render/2 — theme hygiene (D-18)" do
-    test "no hardcoded color atoms leak into the tree" do
-      for scenario <- [
-            [checked?: true, theme: theme()],
-            [checked?: false, theme: theme()],
-            [checked?: true, disabled: true, theme: theme()]
-          ] do
+    test "no hardcoded color atoms leak into the tree (IN-03)" do
+      scenarios = [
+        [checked?: true, theme: theme()],
+        [checked?: false, theme: theme()],
+        [checked?: true, disabled: true, theme: theme()]
+      ]
+
+      for scenario <- scenarios, color <- color_names() do
         tree = Checkbox.render("x", scenario)
         serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-        refute serialized =~ ":red", "scenario leaked :red"
-        refute serialized =~ ":green", "scenario leaked :green"
-        refute serialized =~ ":cyan", "scenario leaked :cyan"
-        refute serialized =~ ":yellow", "scenario leaked :yellow"
-        refute serialized =~ ":blue", "scenario leaked :blue"
-        refute serialized =~ ":magenta", "scenario leaked :magenta"
-        refute serialized =~ ":white", "scenario leaked :white"
-        refute serialized =~ ":black", "scenario leaked :black"
+
+        refute color_atom_leaked?(serialized, color),
+               "scenario #{inspect(scenario)} leaked :#{color}"
       end
     end
 

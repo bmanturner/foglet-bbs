@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Display.TreeTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.Tree
@@ -113,17 +114,15 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
       assert moduledoc =~ "Pitfall 9"
     end
 
-    test "no hardcoded color atoms appear in the rendered tree" do
+    test "no hardcoded color atoms appear in the rendered tree (IN-03)" do
       state = Tree.init(nodes: [%{id: :root, label: "Root", children: []}])
       tree = Tree.render(state, theme: theme())
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
-      refute serialized =~ ":red", "Tree leaked :red atom: #{serialized}"
-      refute serialized =~ ":green", "Tree leaked :green atom: #{serialized}"
-      refute serialized =~ ":yellow", "Tree leaked :yellow atom: #{serialized}"
-      refute serialized =~ ":cyan", "Tree leaked :cyan atom: #{serialized}"
-      refute serialized =~ ":magenta", "Tree leaked :magenta atom: #{serialized}"
-      refute serialized =~ ":blue", "Tree leaked :blue atom: #{serialized}"
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
+               "Tree leaked :#{color} atom: #{serialized}"
+      end
     end
 
     test "alt-theme differential: default vs danger produce different serialized output" do

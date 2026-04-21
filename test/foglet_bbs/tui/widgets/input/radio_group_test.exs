@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Input.RadioGroupTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.RadioGroup
@@ -63,17 +64,13 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroupTest do
   end
 
   describe "render/3 — theme hygiene (D-18)" do
-    test "no hardcoded color atoms leak into the tree" do
+    test "no hardcoded color atoms leak into the tree (IN-03)" do
       tree = RadioGroup.render(["One", "Two", "Three"], 1, theme: theme())
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-      refute serialized =~ ":red", "leaked :red"
-      refute serialized =~ ":green", "leaked :green"
-      refute serialized =~ ":cyan", "leaked :cyan"
-      refute serialized =~ ":yellow", "leaked :yellow"
-      refute serialized =~ ":blue", "leaked :blue"
-      refute serialized =~ ":magenta", "leaked :magenta"
-      refute serialized =~ ":white", "leaked :white"
-      refute serialized =~ ":black", "leaked :black"
+
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color), "leaked :#{color}"
+      end
     end
 
     test "rendering with an alternate theme produces different color output" do

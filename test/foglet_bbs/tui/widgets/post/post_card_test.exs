@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Post.PostCardTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Post.PostCard
@@ -188,14 +189,14 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
   end
 
   describe "render/4 — theme hygiene" do
-    test "no hardcoded color atoms appear anywhere in the tree" do
+    test "no hardcoded color atoms appear anywhere in the tree (IN-03)" do
       post = sample_post(%{body: "A **bold** post with `code` and *italics*."})
       result = PostCard.render(post, 80, theme())
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      refute serialized =~ ":green"
-      refute serialized =~ ":cyan"
-      refute serialized =~ ":red"
-      refute serialized =~ ":yellow"
+
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color), "PostCard leaked :#{color}"
+      end
     end
 
     test "header uses theme.dim.fg" do

@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Display.TableTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.Table
@@ -147,17 +148,15 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
   end
 
   describe "render/2 — theme hygiene (D-18)" do
-    test "no hardcoded color atoms appear in the rendered tree" do
+    test "no hardcoded color atoms appear in the rendered tree (IN-03)" do
       state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [%{name: "Alice"}])
       tree = Table.render(state, theme: theme())
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
-      refute serialized =~ ":red", "Table leaked :red atom: #{serialized}"
-      refute serialized =~ ":green", "Table leaked :green atom: #{serialized}"
-      refute serialized =~ ":yellow", "Table leaked :yellow atom: #{serialized}"
-      refute serialized =~ ":cyan", "Table leaked :cyan atom: #{serialized}"
-      refute serialized =~ ":magenta", "Table leaked :magenta atom: #{serialized}"
-      refute serialized =~ ":blue", "Table leaked :blue atom: #{serialized}"
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
+               "Table leaked :#{color} atom: #{serialized}"
+      end
     end
 
     test "alt-theme differential: default vs danger produce different serialized output" do

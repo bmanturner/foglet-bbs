@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Display.ProgressTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.Progress
@@ -63,33 +64,14 @@ defmodule Foglet.TUI.Widgets.Display.ProgressTest do
       assert moduledoc =~ "Pitfall 8"
     end
 
-    test "no :green atom leaks from Raxol's extract_colors/1 defaults" do
-      tree = Progress.render(0.5, theme: theme())
-      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-      refute serialized =~ ":green", "Progress leaked :green atom: #{serialized}"
-    end
-
-    test "no :black atom leaks from Raxol's extract_colors/1 defaults" do
-      tree = Progress.render(0.5, theme: theme())
-      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-      refute serialized =~ ":black", "Progress leaked :black atom: #{serialized}"
-    end
-
-    test "no :white atom leaks from Raxol's extract_colors/1 defaults" do
-      tree = Progress.render(0.5, theme: theme())
-      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-      refute serialized =~ ":white", "Progress leaked :white atom: #{serialized}"
-    end
-
-    test "no other hardcoded color atoms appear in the rendered output" do
+    test "no hardcoded color atoms appear in the rendered output (IN-03)" do
       tree = Progress.render(0.5, theme: theme())
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
-      refute serialized =~ ":red", "Progress leaked :red atom"
-      refute serialized =~ ":cyan", "Progress leaked :cyan atom"
-      refute serialized =~ ":yellow", "Progress leaked :yellow atom"
-      refute serialized =~ ":blue", "Progress leaked :blue atom"
-      refute serialized =~ ":magenta", "Progress leaked :magenta atom"
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
+               "Progress leaked :#{color} atom: #{serialized}"
+      end
     end
 
     test "alt-theme differential: default vs danger produce different serialized output" do

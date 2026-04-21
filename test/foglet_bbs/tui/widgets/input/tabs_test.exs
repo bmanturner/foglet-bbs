@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Input.TabsTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -113,8 +114,8 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       result = Tabs.render(state, theme: theme())
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
 
-      for color <- ~w(red green cyan yellow blue magenta white black) do
-        refute serialized =~ ":#{color}",
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
                "Tabs leaked :#{color} atom in serialized tree"
       end
     end

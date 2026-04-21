@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Input.ButtonTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Button
@@ -80,18 +81,14 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
   end
 
   describe "render/2 — theme hygiene (D-18)" do
-    test "no hardcoded color atoms leak into the tree" do
-      for role <- [:primary, :secondary, :danger, :success] do
+    test "no hardcoded color atoms leak into the tree (IN-03)" do
+      for role <- [:primary, :secondary, :danger, :success],
+          color <- color_names() do
         tree = Button.render("x", role: role, theme: theme())
         serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-        refute serialized =~ ":red", "#{role} leaked :red"
-        refute serialized =~ ":green", "#{role} leaked :green"
-        refute serialized =~ ":cyan", "#{role} leaked :cyan"
-        refute serialized =~ ":yellow", "#{role} leaked :yellow"
-        refute serialized =~ ":blue", "#{role} leaked :blue"
-        refute serialized =~ ":magenta", "#{role} leaked :magenta"
-        refute serialized =~ ":white", "#{role} leaked :white"
-        refute serialized =~ ":black", "#{role} leaked :black"
+
+        refute color_atom_leaked?(serialized, color),
+               "#{role} leaked :#{color}"
       end
     end
 

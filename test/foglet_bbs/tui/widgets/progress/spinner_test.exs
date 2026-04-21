@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Widgets.Progress.SpinnerTest do
   use ExUnit.Case, async: true
 
-  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+  import Foglet.TUI.WidgetHelpers,
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Progress.Spinner
@@ -38,18 +39,14 @@ defmodule Foglet.TUI.Widgets.Progress.SpinnerTest do
   end
 
   describe "render/2 — theme hygiene (D-18)" do
-    test "no hardcoded color atoms appear in the rendered output" do
+    test "no hardcoded color atoms appear in the rendered output (IN-03)" do
       tree = Spinner.render(0, theme: theme())
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
-      refute serialized =~ ":red", "Spinner leaked :red atom"
-      refute serialized =~ ":green", "Spinner leaked :green atom"
-      refute serialized =~ ":yellow", "Spinner leaked :yellow atom"
-      refute serialized =~ ":cyan", "Spinner leaked :cyan atom"
-      refute serialized =~ ":magenta", "Spinner leaked :magenta atom"
-      refute serialized =~ ":blue", "Spinner leaked :blue atom"
-      refute serialized =~ ":white", "Spinner leaked :white atom"
-      refute serialized =~ ":black", "Spinner leaked :black atom"
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
+               "Spinner leaked :#{color} atom"
+      end
     end
 
     test "alt-theme differential: default vs danger produce different serialized output" do

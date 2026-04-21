@@ -12,6 +12,8 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
 
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.WidgetHelpers, only: [color_atom_leaked?: 2, color_names: 0]
+
   alias Foglet.TUI.Theme
 
   alias Foglet.TUI.Widgets.Display.{Progress, Table, Tree}
@@ -97,13 +99,13 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
   end
 
   describe "cross-bucket combined render (D-18, REQ-W-13)" do
-    test "no hardcoded color atoms leak in the combined tree" do
+    test "no hardcoded color atoms leak in the combined tree (IN-03)" do
       trees = render_catalog(theme())
       serialized = inspect(trees, printable_limit: :infinity, limit: :infinity)
 
-      for atom <- ~w(:red :green :cyan :yellow :blue :magenta :white :black) do
-        refute serialized =~ atom,
-               "combined catalog render leaked #{atom}: serialized tree contained the atom"
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
+               "combined catalog render leaked :#{color}: serialized tree contained the atom"
       end
     end
 
