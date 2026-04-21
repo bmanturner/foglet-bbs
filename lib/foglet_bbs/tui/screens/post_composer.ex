@@ -15,8 +15,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
   """
 
   alias Foglet.Config
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Post.MarkdownBody

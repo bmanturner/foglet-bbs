@@ -368,6 +368,9 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:load_boards}, state) do
     # Snapshot what we need inside the closure so we don't capture the whole state.
+    # Intentionally not using Domain.get/2 — do_update closures snapshot the domain
+    # module directly so the task closure captures only the atom, not the full state map.
+    # Tracked for migration in a future phase.
     user = state.current_user
     ctx = Map.get(state, :session_context) || %{}
     boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards

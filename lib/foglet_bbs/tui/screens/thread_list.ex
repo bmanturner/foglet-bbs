@@ -7,8 +7,8 @@ defmodule Foglet.TUI.Screens.ThreadList do
   """
 
   alias Foglet.TimeAgo
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
 

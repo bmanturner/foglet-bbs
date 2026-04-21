@@ -6,8 +6,8 @@ defmodule Foglet.TUI.Screens.BoardList do
   state.screen_state[:board_list] holds %{selected_index: integer()}.
   """
 
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
 
