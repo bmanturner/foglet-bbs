@@ -301,31 +301,17 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
 
     test "pending user shows 'pending sysop approval' modal (D-05)" do
-      attrs = valid_user_attributes()
+      password = "correct horse battery"
+      attrs = valid_user_attributes(%{password: password})
       {:ok, user} = Foglet.Accounts.register_pending_user(attrs)
       assert user.status == :pending
 
-      state =
-        form_state(
-          [
-            handle: user.handle,
-            password: attrs[:password] || attrs["password"]
-          ],
-          :password
-        )
+      state = form_state([handle: user.handle, password: password], :password)
 
       {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
 
-      # Should show pending modal (password matches since registration_changeset hashes it)
-      case new_state.modal do
-        %{type: :error, message: msg} ->
-          assert msg =~ "pending"
-
-        nil ->
-          # Fallback: password mismatch shows inline error — acceptable but noted
-          assert get_in(new_state, [:screen_state, :login, :error]) ==
-                   "Invalid credentials."
-      end
+      assert %{type: :error, message: msg} = new_state.modal
+      assert msg =~ "pending"
     end
   end
 
