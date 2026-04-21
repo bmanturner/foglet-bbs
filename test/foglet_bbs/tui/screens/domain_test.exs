@@ -34,5 +34,10 @@ defmodule Foglet.TUI.Screens.DomainTest do
       ctx = %{domain: %{unknown_key: SomeMod}}
       assert Domain.get(ctx, :unknown_key) == {:error, :not_configured}
     end
+
+    test "returns {:error, :not_configured} when the key value is nil" do
+      ctx = %{domain: %{boards: nil}}
+      assert Domain.get(ctx, :boards) == {:error, :not_configured}
+    end
   end
 end
