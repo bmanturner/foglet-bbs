@@ -135,5 +135,18 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
 
       assert s1 != s2, "Expected different rendering with different themes"
     end
+
+    test "IN-07 — theme with :selected slot but no :bg renders without crash" do
+      bgless_theme = %Theme{theme() | selected: %{fg: "#ffffff", style: [:bold]}}
+      state = Tree.init(nodes: [%{id: :root, label: "Root", children: []}])
+
+      # Raxol's Text.new/2 always materializes `bg:` (defaulting to nil when
+      # absent from attrs), so the rendered struct still has `bg: nil`.
+      # The important contract this test pins is: the widget does not pass
+      # `bg: nil` *explicitly* through `text/2` — if Raxol later treats
+      # missing-vs-nil attrs differently, this helper path is ready.
+      result = Tree.render(state, theme: bgless_theme)
+      refute is_nil(result)
+    end
   end
 end

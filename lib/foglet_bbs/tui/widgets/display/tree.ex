@@ -99,11 +99,7 @@ defmodule Foglet.TUI.Widgets.Display.Tree do
         label = "#{indent_str}#{icon} #{node.label}"
 
         if node.id == cursor do
-          text(label,
-            fg: theme.selected.fg,
-            bg: theme.selected.bg,
-            style: Map.get(theme.selected, :style, [])
-          )
+          text(label, selected_attrs(theme))
         else
           text(label, fg: theme.primary.fg)
         end
@@ -115,6 +111,20 @@ defmodule Foglet.TUI.Widgets.Display.Tree do
   end
 
   # --- private ---
+
+  # IN-07: Only include :bg when the theme's :selected slot actually sets
+  # one. Today's Foglet themes all do, but a future theme that omits :bg
+  # would pass `bg: nil` to Raxol's text/2, and Raxol's rendering of
+  # `nil` bg is unspecified. Build the attrs list conditionally so nil
+  # is never emitted.
+  defp selected_attrs(theme) do
+    base = [fg: theme.selected.fg, style: Map.get(theme.selected, :style, [])]
+
+    case Map.get(theme.selected, :bg) do
+      nil -> base
+      bg -> [{:bg, bg} | base]
+    end
+  end
 
   defp node_icon(%{children: []}, _rs), do: " "
 
