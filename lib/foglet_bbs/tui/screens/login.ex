@@ -232,25 +232,10 @@ defmodule Foglet.TUI.Screens.Login do
       "disabled" ->
         :no_match
 
-      mode ->
-        new_state = %{
-          state
-          | current_screen: :register,
-            register_wizard: %{
-              mode: mode,
-              step: first_step_for_mode(mode),
-              data: %{},
-              error: nil,
-              current_input: ""
-            }
-        }
-
-        {:update, new_state, []}
+      _mode ->
+        {:update, %{state | current_screen: :register}, []}
     end
   end
-
-  defp first_step_for_mode("invite_only"), do: :invite_code
-  defp first_step_for_mode(_mode), do: :handle
 
   defp submit_login(state) do
     login_ss = get_login_ss(state)

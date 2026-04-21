@@ -51,7 +51,6 @@ defmodule Foglet.TUI.App do
           posts: list() | nil,
           read_position: map(),
           composer_draft: String.t() | nil,
-          register_wizard: map() | nil,
           verify_state: map() | nil,
           subscribed_topics: MapSet.t()
         }
@@ -70,7 +69,6 @@ defmodule Foglet.TUI.App do
             posts: nil,
             read_position: %{},
             composer_draft: nil,
-            register_wizard: nil,
             verify_state: nil,
             subscribed_topics: MapSet.new()
 
