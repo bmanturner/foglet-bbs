@@ -15,14 +15,11 @@
 #                              Style warning, not a bug.
 
 [
-  {"lib/foglet_bbs/accounts.ex", :call_without_opaque},
   {"lib/foglet_bbs/boards.ex", :unknown_type},
   {"lib/foglet_bbs/boards/server.ex", :unknown_type},
   {"lib/foglet_bbs/boards/server.ex", :call_without_opaque},
   {"lib/foglet_bbs/posts.ex", :unknown_type},
-  {"lib/foglet_bbs/posts.ex", :call_without_opaque},
   {"lib/foglet_bbs/threads.ex", :unknown_type},
-  {"lib/foglet_bbs/threads.ex", :call_without_opaque},
   {"lib/foglet_bbs/tui/screens/board_list.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/login.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/main_menu.ex", :contract_supertype},

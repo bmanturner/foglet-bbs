@@ -20,7 +20,6 @@ defmodule Foglet.Accounts do
 
   import Ecto.Query, warn: false
 
-  alias Ecto.Multi
   alias Foglet.Accounts.{SSHKey, User, UserToken}
   alias FogletBbs.Repo
 
@@ -134,17 +133,12 @@ defmodule Foglet.Accounts do
   @spec reset_user_password(User.t(), map()) ::
           {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def reset_user_password(%User{} = user, attrs) do
-    Multi.new()
-    |> Multi.update(:user, User.password_changeset(user, attrs))
-    |> Multi.delete_all(
-      :invalidate_tokens,
-      UserToken.by_user_and_contexts_query(user, ["reset_password"])
-    )
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{user: updated}} -> {:ok, updated}
-      {:error, :user, changeset, _} -> {:error, changeset}
-    end
+    Repo.transact(fn ->
+      with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
+        Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
+        {:ok, updated}
+      end
+    end)
   end
 
   @spec confirm_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
@@ -216,19 +210,12 @@ defmodule Foglet.Accounts do
 
     cond do
       valid_row != nil and valid_row.user_id == user.id ->
-        result =
-          Multi.new()
-          |> Multi.update(:confirm, User.confirm_changeset(user))
-          |> Multi.delete_all(
-            :cleanup,
-            UserToken.by_user_and_contexts_query(user, ["email_verify"])
-          )
-          |> Repo.transaction()
-
-        case result do
-          {:ok, %{confirm: confirmed}} -> {:ok, confirmed}
-          {:error, :confirm, cs, _} -> {:error, cs}
-        end
+        Repo.transact(fn ->
+          with {:ok, confirmed} <- user |> User.confirm_changeset() |> Repo.update() do
+            Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["email_verify"]))
+            {:ok, confirmed}
+          end
+        end)
 
       expired_exists?(user, code) ->
         {:error, :expired}
@@ -263,25 +250,13 @@ defmodule Foglet.Accounts do
   `tombstone_user_id/0`. Phase 6+ will add direct_messages handling.
   The user row is preserved so FK references (future) remain valid.
   """
-  @spec delete_user(User.t()) ::
-          {:ok, User.t()} | {:error, Ecto.Changeset.t() | :transaction_failed}
+  @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def delete_user(%User{} = user) do
-    Multi.new()
-    |> Multi.delete_all(
-      :delete_tokens,
-      UserToken.by_user_and_contexts_query(user, :all)
-    )
-    |> Multi.delete_all(
-      :delete_ssh_keys,
-      from(k in SSHKey, where: k.user_id == ^user.id)
-    )
-    |> Multi.update(:anonymize, User.deletion_changeset(user))
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{anonymize: updated}} -> {:ok, updated}
-      {:error, _op, %Ecto.Changeset{} = cs, _} -> {:error, cs}
-      {:error, _op, _reason, _} -> {:error, :transaction_failed}
-    end
+    Repo.transact(fn ->
+      Repo.delete_all(UserToken.by_user_and_contexts_query(user, :all))
+      Repo.delete_all(from(k in SSHKey, where: k.user_id == ^user.id))
+      user |> User.deletion_changeset() |> Repo.update()
+    end)
   end
 
   # ---------- SSH Keys ----------
