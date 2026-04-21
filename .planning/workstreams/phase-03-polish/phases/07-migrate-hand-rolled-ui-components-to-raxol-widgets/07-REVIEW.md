@@ -1,310 +1,217 @@
 ---
 phase: 07-migrate-hand-rolled-ui-components-to-raxol-widgets
-reviewed: 2026-04-20T00:00:00Z
+reviewed: 2026-04-21T00:00:00Z
 depth: standard
 files_reviewed: 9
 files_reviewed_list:
-  - lib/foglet_bbs/tui/widgets/modal.ex
   - lib/foglet_bbs/tui/app.ex
-  - test/foglet_bbs/tui/widgets/modal_test.exs
+  - lib/foglet_bbs/tui/screens/post_reader.ex
+  - lib/foglet_bbs/tui/widgets/modal.ex
   - lib/foglet_bbs/tui/widgets/post/markdown_body.ex
   - lib/foglet_bbs/tui/widgets/post/post_card.ex
+  - test/foglet_bbs/tui/screens/post_reader_test.exs
+  - test/foglet_bbs/tui/widgets/modal_test.exs
   - test/foglet_bbs/tui/widgets/post/markdown_body_test.exs
   - test/foglet_bbs/tui/widgets/post/post_card_test.exs
-  - lib/foglet_bbs/tui/screens/post_reader.ex
-  - test/foglet_bbs/tui/screens/post_reader_test.exs
 findings:
   critical: 0
-  warning: 3
+  warning: 2
   info: 5
-  total: 8
+  total: 7
 status: issues_found
 ---
 
 # Phase 07: Code Review Report
 
-**Reviewed:** 2026-04-20T00:00:00Z
+**Reviewed:** 2026-04-21T00:00:00Z
 **Depth:** standard
 **Files Reviewed:** 9
 **Status:** issues_found
 
 ## Summary
 
-Phase 07 migrates three hand-rolled UI surfaces onto Raxol widgets: a theme-aware
-Modal adapter (07-01), additive line-renderers on the post widgets for Viewport
-consumption (07-02), and a PostReader scroll state replacement built on
-`Raxol.UI.Components.Display.Viewport` (07-03).
+Phase 07 migrates hand-rolled TUI widgets (Modal, PostCard, MarkdownBody, PostReader scroll) to Raxol widget primitives while preserving Foglet module names (D-07 thin-adapter pattern). The migration is well-scoped and the decisions documented in `07-CONTEXT.md` (D-08 Modal keeps thin adapter, D-12 Viewport owns scroll, D-13 render_cache preserved, D-R1 Viewport children are flat lines) are implemented correctly. Tests exercise the scroll, cache, theme, and legacy-state migration paths thoroughly.
 
-Overall the implementation is solid and well-tested. The code correctly delegates
-clamping to the Viewport, threads theme slots through every branch, and preserves
-backward-compatible screen_state migration via `get_screen_state/1`. No critical
-correctness or security issues were found. All pattern matches are on well-known
-shapes, no user input reaches `String.to_atom`, and no raw SQL / shell / eval
-vectors exist in these files.
+The code is clean overall — no critical bugs or security issues. Two warnings involve error-handling robustness around Viewport return shapes and a subtle rebind inside the render path. Five info-level items flag code duplication between PostReader and PostCard, unused parameters, and a minor contract inconsistency in `get_handle/1` between PostReader and PostComposer.
 
-Three warnings are worth addressing before calling the phase done:
-
-1. A real state/render divergence in `PostReader.render_post_content/5` where
-   the render-time viewport clamp is silently discarded (WR-01).
-2. Weak `assert _ = expr` assertions in Modal and PostReader tests that fail
-   to verify the stated contract (WR-02).
-3. An ordering fragility in `scroll_post/2` where `:set_visible_height` is
-   applied after `:set_children`, making the intermediate clamp dependent on
-   the default visible_height (WR-03).
-
-Info items cover minor duplication, magic numbers, and a redundant
-`Viewport.init/1` call on every `get_screen_state/1` invocation.
+Run `mix precommit` per project conventions to confirm formatting, credo, and dialyzer pass cleanly.
 
 ## Warnings
 
-### WR-01: Render-time viewport clamp is discarded; state can drift from rendered scroll position
+### WR-01: Viewport.update/2 return-tuple match-assumption is fragile
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:83-85`
-**Issue:**
-`render_post_content/5` applies `{:set_visible_height, available_height}` and
-`{:set_children, body_lines}` to a local `vp` but never writes the result back
-to `state.screen_state[:post_reader].viewport`. The Viewport `update/2` clauses
-all re-clamp `scroll_top` against the new bounds (see
-`vendor/raxol/lib/raxol/ui/components/display/viewport.ex:73-104`). If the terminal
-resizes between keypresses, or if content_height differs from what warm_viewport
-captured, the rendered scroll_top may be clamped to a smaller value than
-`ss.viewport.scroll_top`. The next j/k press will reconcile (because
-`scroll_post/2` re-applies both updates before `:scroll_by`), but until then the
-visible content and the stored state disagree. This is benign in practice today
-because the content does not change on resize, but the invariant is not obvious
-and is easy to break.
-
-**Fix:** Either (a) document that render-time clamping is intentionally
-ephemeral and guard against drift with an equality assertion in tests, or
-(b) write the clamped viewport back into `screen_state` by making `render/1`
-return a `{view, updated_state}` pair — Raxol does not currently support this,
-so option (a) is preferred. At minimum, add an inline comment next to the
-discarded `_ = vp` binding spelling out why the clamp is discarded and what
-downstream flow (next j/k press) makes it self-correcting. A regression test
-that resizes between renders and asserts the rendered scroll_top cannot exceed
-`max(0, content_height - visible_height)` would lock the invariant down.
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:83-84, 330, 346, 389-391`
+**Issue:** Every `Viewport.update/2` call binds the result with a strict match on `{new_vp, []}`:
 
 ```elixir
-# lib/foglet_bbs/tui/screens/post_reader.ex:79-85
-# Wire visible_height and children for this frame. render_post_content
-# is a read-only function — the Viewport state built here is transient,
-# not written back into screen_state. State-writing happens in
-# scroll_post / advance_post / load_posts via warm_viewport.
-#
-# INVARIANT: If terminal height shrinks between renders, the render-time
-# set_visible_height clamp may temporarily show a smaller scroll_top than
-# state holds. The next j/k press calls scroll_post/2 which re-applies
-# both updates and writes the clamped result back, reconciling state.
 {vp, []} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
 {vp, []} = Viewport.update({:set_children, body_lines}, vp)
-body_rendered = Viewport.render(vp, %{})
-```
-
-### WR-02: `assert _ = expr` is a no-op assertion — Modal and PostReader tests do not verify non-nil results
-
-**File:** `test/foglet_bbs/tui/widgets/modal_test.exs:32, 36, 40, 44`
-**File:** `test/foglet_bbs/tui/screens/post_reader_test.exs:97, 101`
-**Issue:**
-The pattern `assert _ = Modal.render(...)` binds the result to `_` and asserts
-the match succeeded. Since `_` matches anything (including `nil`), this is
-functionally equivalent to just calling the function — it only guards against
-exceptions, not the stated "returns a non-nil view element" contract. The
-`MarkdownBodyTest` and `PostCardTest` files use `refute is_nil(result)` for
-exactly these assertions; Modal and PostReader should match that style.
-
-Test names like `"returns a non-nil view element for :info"` and `"render/1
-with posts loaded does not crash"` (the latter is at least accurate for the
-no-op assertion, but the former is misleading).
-
-**Fix:**
-```elixir
-# test/foglet_bbs/tui/widgets/modal_test.exs:30-50
-describe "render/2 (Phase 7 thin adapter)" do
-  test "returns a non-nil view element for :info" do
-    result = Modal.render(%{type: :info, message: "Hello"}, theme())
-    refute is_nil(result)
-  end
-
-  test "returns a non-nil view element for :error" do
-    result = Modal.render(%{type: :error, message: "Oh no"}, theme())
-    refute is_nil(result)
-  end
-
-  test "returns a non-nil view element for :confirm" do
-    result = Modal.render(%{type: :confirm, message: "Delete?"}, theme())
-    refute is_nil(result)
-  end
-
-  test "defaults type to :info when omitted" do
-    result = Modal.render(%{message: "No type given"}, theme())
-    refute is_nil(result)
-  end
-
-  # ...
-end
-```
-
-And in `post_reader_test.exs`:
-
-```elixir
-test "render/1 with posts loaded does not crash", %{state: state} do
-  {s, _} = PostReader.load_posts(state, "t1")
-  result = PostReader.render(s)
-  refute is_nil(result)
-end
-
-test "render/1 with no posts shows loading message", %{state: state} do
-  result = PostReader.render(state)
-  refute is_nil(result)
-  # Ideally also: assert flatten_text(result) =~ "Loading posts..."
-end
-```
-
-### WR-03: `scroll_post/2` applies `:set_visible_height` AFTER `:set_children`, leaking the default `visible_height: 10` into the intermediate clamp
-
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:386-391`
-**Issue:**
-The sequence inside `scroll_post/2` is:
-
-```elixir
-ss = warm_cache(ss, state, post, w)
-ss = warm_viewport(ss, state, post, w)      # calls set_children with old visible_height
+# ...
+{reset_vp, []} = Viewport.update({:scroll_to, 0}, ss.viewport)
+# ...
+{new_vp, []} = Viewport.update({:set_children, body_lines}, ss.viewport)
+# ...
 {new_vp, []} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
 {new_vp, []} = Viewport.update({:scroll_by, delta}, new_vp)
 ```
 
-`warm_viewport` calls `{:set_children, body_lines}` which re-clamps `scroll_top`
-against `state.visible_height` (defaults to `10` from `Viewport.init/1` on first
-call, then whatever was last set). If `available_height != 10` and the post has
-between `available_height` and `10` lines, the `set_children` clamp will use the
-wrong bound, clamp to 0 (or a stale value), and then `set_visible_height`
-re-clamps. The final `scroll_by(delta)` then operates on a potentially-off
-base. In practice this does not cause visible bugs because the immediately-following
-`set_visible_height` + `scroll_by` both re-clamp, and a 1-line delta cannot
-produce a scroll_top greater than the correct max_scroll. But the ordering is
-fragile: a future change that introduces a larger delta (e.g. `:scroll_by, 10`
-for page-down) combined with a shrunken terminal could produce surprising
-intermediate states.
+The vendored `Raxol.UI.Components.Display.Viewport.update/2` (`vendor/raxol/lib/raxol/ui/components/display/viewport.ex:73-137`) does return `{state, []}` today, but the `Raxol.UI.Components.Base.Component` behaviour contract defines commands as a list that *could* contain elements in future versions. If a Raxol upgrade ever makes Viewport emit any command (even a harmless log event), every render and every keypress in PostReader will raise `MatchError`, including the `render/1` hot path — turning a Raxol upgrade into a render-time crash.
 
-**Fix:** Apply `:set_visible_height` before `:set_children`, or bundle them into a
-single `:update_props` call which clamps once against the final bounds:
+Also note line 83-84 shadows the variable `vp` across two consecutive pattern-matched calls inside `render_post_content/5`, which is the one place this pattern runs every frame.
+
+**Fix:** Discard the command list explicitly and bind only the state. Leaves intent clearer and survives a non-empty command list in future Raxol releases:
 
 ```elixir
-# lib/foglet_bbs/tui/screens/post_reader.ex:386-391
-ss = warm_cache(ss, state, post, w)
+# In render_post_content/5 (lines 83-84) — rename to avoid shadowing
+{vp, _cmds} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
+{vp, _cmds} = Viewport.update({:set_children, body_lines}, vp)
 
-# Apply visible_height first so set_children's clamp uses the correct bound.
-{vp, []} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
-ss = %{ss | viewport: vp}
-ss = warm_viewport(ss, state, post, w)  # now set_children clamps against available_height
+# In warm_viewport/4 (line 330)
+{new_vp, _cmds} = Viewport.update({:set_children, body_lines}, ss.viewport)
 
-{new_vp, []} = Viewport.update({:scroll_by, delta}, ss.viewport)
-ss = %{ss | viewport: new_vp}
+# In advance_post/2 (line 346)
+{reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, ss.viewport)
+
+# In scroll_post/2 (lines 389-391)
+{new_vp, _cmds} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
+{new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
 ```
 
-Alternatively, collapse into a single `:update_props` call which clamps once at
-the end (see `Viewport.update({:update_props, props}, state)` at
-`vendor/raxol/lib/raxol/ui/components/display/viewport.ex:106-135`).
+If you want belt-and-suspenders safety for the runtime, consider a tiny helper:
 
-Regardless of the fix chosen, add a test that scrolls on a post whose line count
-is between `Viewport.init` default (10) and `available_height` after resize, to
-lock in the intended behavior.
+```elixir
+defp vp_update(msg, vp) do
+  {new_vp, _cmds} = Viewport.update(msg, vp)
+  new_vp
+end
+```
+
+### WR-02: `handle_key/2` spec claims `:no_match` but `advance_post/2` / `scroll_post/2` never actually return `:no_match` when used via the `def handle_key` wrappers
+
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:93-106, 334-398`
+**Issue:** The `@spec` declares `handle_key(map(), map()) :: {:update, map(), list()} | :no_match`. The helpers `advance_post/2` and `scroll_post/2` both return `:no_match` when `posts == []` or when the currently-selected post is `nil`. That return value then propagates up through the `handle_key(%{key: :char, char: c}, state) when c in ["j", "J"]` clauses unchanged.
+
+Upstream in `TUI.App.do_update({:key, key_event}, state)` (`lib/foglet_bbs/tui/app.ex:339-350`), the handler matches:
+
+```elixir
+case screen_module.handle_key(key_event, state) do
+  {:update, new_state, commands} -> ...
+  :no_match -> global_key_handler(key_event, state)
+end
+```
+
+A `:no_match` return will route the user's `j`/`k`/`n`/`p`/`space` to the global key handler. In `global_key_handler` (app.ex:697), unknown keys silently return `{state, []}`. Net effect: in the (rare but reachable) state where `state.posts == nil` but `state.screen_state[:post_reader]` is present — for example, immediately after `{:load_posts, thread_id}` fires a task but before `{:posts_loaded, posts}` lands — pressing `n`/`j`/`k`/`p` will escape the PostReader's own handler. This is fine for `n`/`p` (nothing to advance to) but means space-as-page-down (line 95) and page_down (line 96) also silently no-op instead of, say, showing a "Loading..." cue.
+
+Reviewing `render_post_content/5:50-55` confirms the loading path *does* render "Loading posts..." — so the user sees the message. But the key dispatch still quietly drops the keypress instead of being explicitly absorbed.
+
+**Fix:** Either (a) return `{:update, state, []}` from the empty-posts branch to explicitly absorb the key while loading, or (b) document the contract — `:no_match` on empty posts is intentional so global handlers (e.g., a future `?` help key) still work. Option (a) is safer because it prevents future global handlers from acting on PostReader-intended keys during loading:
+
+```elixir
+defp advance_post(state, _delta) when is_nil(state.posts) or state.posts == [] do
+  {:update, state, []}
+end
+
+defp advance_post(state, delta) do
+  # ... existing body ...
+end
+
+# Same pattern for scroll_post/2.
+```
+
+Keep the `:no_match` return reserved for keys this screen genuinely doesn't handle (which is what the `def handle_key(_key, _state), do: :no_match` clause on line 142 already does correctly).
 
 ## Info
 
-### IN-01: `author_line/1`, `get_handle/1`, `get_time_ago/1` are duplicated between PostCard and PostReader
+### IN-01: `author_line/1`, `get_handle/1`, `get_time_ago/1` duplicated between PostReader and PostCard
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:418-440`
-**File:** `lib/foglet_bbs/tui/widgets/post/post_card.ex:156-178`
-**Issue:**
-The identical three helper functions appear in both modules. PostReader's comment
-acknowledges this is intentional ("Kept private here to avoid broadening
-PostCard's public surface for a single caller.") but the maintenance burden is
-real: a bug fix in one will drift from the other. The underlying motive — keep
-PostCard's API small — is reasonable, but a one-liner `@doc false` function on
-PostCard or a shared `Foglet.TUI.Widgets.Post.Header` module would cost nothing
-and remove the duplication.
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:418-440` and `lib/foglet_bbs/tui/widgets/post/post_card.ex:156-178`
+**Issue:** The PostReader screen reimplements `author_line/1`, `get_handle/1`, and `get_time_ago/1` privately (post_reader.ex:418-440), even though the exact same three functions exist on PostCard (post_card.ex:156-178). The PostReader comment at line 415 says the duplication is intentional "to avoid broadening PostCard's public surface for a single caller" — but PostReader is the only consumer of PostCard anyway, and the duplication means a future format change (e.g., showing a timezone, abbreviating long handles) has to be made in two places.
 
-**Fix:** Extract to a shared private module or expose `PostCard.author_line/1`
-with `@doc false`. If kept duplicated, add a comment pointing each copy at the
-other and a test that exercises both paths with the same inputs and asserts
-identical output to catch drift.
+PostReader also still uses the header builder inline (post_reader.ex:72-74) instead of calling `PostCard.render_from_tuples/5` — that call path uses the non-scrolling portion but PostCard's `assemble_card/4` already builds the same three lines. The current design ends up with PostCard owning the full card render and PostReader owning a parallel header render, which is the worst of both worlds for this function trio.
 
-### IN-02: Magic number `10` for chrome overhead appears twice in PostReader
-
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:68, 381`
-**Issue:**
-`available_height = max(h - 10, 5)` appears in both `render_post_content/5` and
-`scroll_post/2`. The `10` represents the chrome overhead (ScreenFrame border
-top+bottom, status bar, key bar, post header 2 lines + divider). If that
-overhead changes — e.g. ScreenFrame adds a title bar — one call site could be
-updated without the other.
-
-**Fix:** Extract to a module attribute:
+**Fix:** Promote `author_line/1` (and its private helpers) to a public `PostCard.author_line/1` — it's a pure formatter with no side effects. Then delete the three duplicates from post_reader.ex and call `PostCard.author_line(post)` on line 73. Four clauses for `get_handle`/`get_time_ago` become one call site each:
 
 ```elixir
-# The ScreenFrame chrome + post header + divider consumes ~10 rows from
-# the terminal height. Adjust if ScreenFrame layout changes.
-@chrome_overhead 10
-@min_body_height 5
+# post_card.ex — promote to @doc false public function
+@doc false
+@spec author_line(post_like()) :: String.t()
+def author_line(post) do
+  handle = get_handle(post)
+  when_str = get_time_ago(post)
+  # ... existing body ...
+end
 
-defp available_body_height(h), do: max(h - @chrome_overhead, @min_body_height)
+# post_reader.ex line 73:
+header_line_2 = text(PostCard.author_line(post), fg: theme.dim.fg)
 ```
 
-### IN-03: `Viewport.init/1` runs on every `get_screen_state/1` call
+### IN-02: `get_handle/1` contracts diverge across three modules
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:236-263`
-**Issue:**
-`default_screen_state/0` calls `Viewport.init/1` unconditionally, and
-`get_screen_state/1` calls `default_screen_state/0` unconditionally before
-merging. In the steady state (after load_posts), the merge discards the fresh
-viewport and keeps `existing.viewport`, so the `Viewport.init/1` result is
-thrown away. `render/1` calls `get_screen_state/1`, so this runs on every frame.
+**File:** `lib/foglet_bbs/tui/widgets/post/post_card.ex:168-169`, `lib/foglet_bbs/tui/screens/post_reader.ex:430-431`, `lib/foglet_bbs/tui/screens/post_composer.ex:230-231`
+**Issue:** Three private implementations of `get_handle/1` with different fallback behavior:
 
-`Viewport.init/1` is cheap (one map construction, one call to
-`:erlang.unique_integer/1`), but the wasted unique integer allocation is an
-unnecessary side effect on the hot path.
+- `PostCard.get_handle/1` — returns `nil` on missing/blank handle, guard `is_binary(h) and h != ""`.
+- `PostReader.get_handle/1` — identical to PostCard (guard + `nil` fallback).
+- `PostComposer.get_handle/1` — returns the string `"unknown"` on missing handle, *no empty-string guard*.
 
-**Fix:** Either (a) memoize `default_screen_state/0` via module attribute after
-removing the unique-integer id (pin it to `"post_reader_vp"` which is already
-hardcoded), or (b) only call `default_screen_state/0` when `existing == %{}`:
+The PostComposer version means a user with an empty-string handle (which is allowed by the guard-less pattern match `%{user: %{handle: h}}`) will render as `"@"` — a visible UI bug if that path is ever reached. The `User` schema presumably disallows empty handles, but that's a schema invariant, not a widget invariant.
+
+**Fix:** Consolidate on the stricter PostCard version (exported via IN-01's fix) and have PostComposer call it, substituting `"unknown"` at the call site when the result is `nil`:
 
 ```elixir
-defp get_screen_state(state) do
-  case get_in(state.screen_state, [:post_reader]) do
-    nil ->
-      default_screen_state()
+# post_composer.ex line 42:
+text("Replying to @#{PostCard.author_handle_or(ss.reply_to, "unknown")}:", fg: theme.dim.fg),
+```
 
-    existing ->
-      existing
-      |> Map.drop([:scroll_offset])
-      |> ensure_viewport()
+Or inline:
+
+```elixir
+defp display_handle(post), do: PostCard.get_handle(post) || "unknown"
+```
+
+This removes the divergent empty-string semantics.
+
+### IN-03: Dead parameters `_w` / `_h` in `render_post_content/5` empty-posts clause
+
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:50-55`
+**Issue:** The first `render_post_content/5` clause takes `_state, _ss, theme, _w, _h` — `state` and `ss` are unused on that branch (only `theme` is needed). The clause exists for the loading-posts case so the underscore prefixes are correct, but the arity-5 callsite passes them unconditionally. This is fine as-is, but worth noting that a simpler arity-1 helper `render_loading(theme)` would make the empty-posts branch self-evident without the four underscored parameters:
+
+```elixir
+defp render_loading(theme) do
+  column style: %{gap: 0} do
+    [text("Loading posts...", fg: theme.dim.fg)]
   end
 end
 
-defp ensure_viewport(%{viewport: _} = ss), do: Map.put_new(ss, :render_cache, %{})
-                                               |> Map.put_new(:selected_post_index, 0)
-
-defp ensure_viewport(ss) do
-  {:ok, vp} = Viewport.init(%{id: "post_reader_vp", children: [],
-                              visible_height: 10, scroll_top: 0, show_scrollbar: false})
-  ss |> Map.put(:viewport, vp)
-     |> Map.put_new(:render_cache, %{})
-     |> Map.put_new(:selected_post_index, 0)
+defp render_post_content(%{posts: posts}, _ss, theme, _w, _h) when posts in [[], nil] do
+  render_loading(theme)
 end
 ```
 
-### IN-04: `render_tuples_as_lines/4` accepts but ignores `opts` — the `_ = opts` trick is subtle
+### IN-04: `render_body_lines/5` ignores the `post` parameter
+
+**File:** `lib/foglet_bbs/tui/widgets/post/post_card.ex:110-114`
+**Issue:** `render_body_lines/5` accepts `post` and explicitly discards it with `_ = post`. The function then delegates entirely to `MarkdownBody.render_tuples_as_lines(tuples, width, theme, body_opts(opts))`. The `post` argument is only part of the signature for "parity with `render_from_tuples/5`" (per the `@doc`), but since tuples are already parsed at this point, the post is truly unused — no header, no author line, no body-caching.
+
+This is a minor API smell — it asks every caller (just PostReader today) to pass an argument that does nothing. A caller could plausibly pass a stale or wrong post and it would still work.
+
+**Fix:** Drop the parameter. Update PostReader's one call site at post_reader.ex:77 from `PostCard.render_body_lines(post, tuples, w, theme)` to `PostCard.render_body_lines(tuples, w, theme)`. The `@spec` and signature become:
+
+```elixir
+@spec render_body_lines([MarkdownBody.tuple_entry()], pos_integer(), Theme.t(), keyword()) :: [any()]
+def render_body_lines(tuples, width, %Theme{} = theme, opts \\ [])
+    when is_list(tuples) and is_integer(width) and width > 0 do
+  MarkdownBody.render_tuples_as_lines(tuples, width, theme, body_opts(opts))
+end
+```
+
+Tests in `post_card_test.exs:161, 169, 178, 187, 199, 202` update mechanically.
+
+### IN-05: `_ = opts` pattern noise in `render_tuples_as_lines/4`
 
 **File:** `lib/foglet_bbs/tui/widgets/post/markdown_body.ex:110-117`
-**Issue:**
-The function signature takes `opts \\ []` for "signature parity" with
-`render_tuples/4`, but the body explicitly ignores it with `_ = opts`. This is
-fine but the `_ = opts` pattern is easy to miss when reading the function
-quickly, and tests already confirm the opts are ignored. A more explicit
-approach: drop the default and use `_opts` in the head.
+**Issue:** `render_tuples_as_lines/4` documents that `opts` is accepted but ignored (Viewport handles windowing), then uses `_ = opts` to silence the compiler. This works but is less idiomatic than just naming the param with an underscore prefix:
 
-**Fix:**
 ```elixir
 @spec render_tuples_as_lines([tuple_entry()], pos_integer(), Theme.t(), keyword()) :: [any()]
 def render_tuples_as_lines(tuples, width, %Theme{} = theme, _opts \\ [])
@@ -315,35 +222,10 @@ def render_tuples_as_lines(tuples, width, %Theme{} = theme, _opts \\ [])
 end
 ```
 
-This accomplishes the same thing with one fewer line and makes the "ignored"
-status visible in the signature.
-
-### IN-05: `render_body_lines/5` post parameter is also unused (`_ = post`)
-
-**File:** `lib/foglet_bbs/tui/widgets/post/post_card.ex:110-114`
-**Issue:**
-Same pattern as IN-04 — `post` is bound then ignored via `_ = post`. Same fix:
-rename to `_post` in the head. The `@spec post_like()` constraint still
-provides type safety via Dialyzer if the caller passes a truly wrong shape
-elsewhere.
-
-**Fix:**
-```elixir
-@spec render_body_lines(
-        post_like(),
-        [MarkdownBody.tuple_entry()],
-        pos_integer(),
-        Theme.t(),
-        keyword()
-      ) :: [any()]
-def render_body_lines(_post, tuples, width, %Theme{} = theme, opts \\ [])
-    when is_list(tuples) and is_integer(width) and width > 0 do
-  MarkdownBody.render_tuples_as_lines(tuples, width, theme, body_opts(opts))
-end
-```
+Removes one line of noise and the `_ = opts` idiom, and conveys intent (the parameter is deliberately ignored) in the signature rather than the body.
 
 ---
 
-_Reviewed: 2026-04-20T00:00:00Z_
+_Reviewed: 2026-04-21T00:00:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
