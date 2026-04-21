@@ -87,14 +87,24 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
     {%{st | raxol_state: new_rs, last_action: action}, action}
   end
 
-  @doc "Pure render — takes state + `theme:` keyword."
+  @doc """
+  Pure render — takes state + `theme:` keyword.
+
+  Options:
+    * `:theme`   — required Theme struct
+    * `:bordered` — whether to render with surrounding box (default `false`)
+  """
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{raxol_state: rs}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
     rs_with_theme = %{rs | theme: build_input_theme(theme)}
 
-    box style: %{border_fg: theme.border.fg, padding: 0} do
+    if Keyword.get(opts, :bordered, false) do
+      box style: %{border_fg: theme.border.fg, padding: 0} do
+        RaxolTextInput.render(rs_with_theme, %{})
+      end
+    else
       RaxolTextInput.render(rs_with_theme, %{})
     end
   end

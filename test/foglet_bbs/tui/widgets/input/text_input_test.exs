@@ -23,7 +23,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
 
     test "test 10 — mask_char option causes render to not show raw value" do
       state = TextInput.init(value: "secret", mask_char: "*")
-      result = TextInput.render(state, theme: theme())
+      result = TextInput.render(state, theme: theme(), bordered: true)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
       refute serialized =~ "secret"
     end
@@ -59,7 +59,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
   describe "render/2 — smoke (D-18)" do
     test "test 1 — returns a non-nil map with :type key" do
       state = TextInput.init(value: "")
-      result = TextInput.render(state, theme: theme())
+      result = TextInput.render(state, theme: theme(), bordered: true)
       refute is_nil(result)
       assert is_map(result)
       assert Map.has_key?(result, :type)
@@ -67,7 +67,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
 
     test "render with value shows text in output" do
       state = TextInput.init(value: "mytext")
-      result = TextInput.render(state, theme: theme())
+      result = TextInput.render(state, theme: theme(), bordered: true)
       flat = flatten_text(result)
       assert flat =~ "mytext"
     end
@@ -76,7 +76,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
   describe "render/2 — theme hygiene (D-18)" do
     test "test 8 — no hardcoded color atoms in rendered tree" do
       state = TextInput.init(value: "hello")
-      result = TextInput.render(state, theme: theme())
+      result = TextInput.render(state, theme: theme(), bordered: true)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
 
       for color <- color_names() do
@@ -87,11 +87,43 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
 
     test "test 9 — alt-theme produces different rendered output" do
       state = TextInput.init(value: "hello")
-      default_result = TextInput.render(state, theme: theme())
-      danger_result = TextInput.render(state, theme: alt_theme())
+      default_result = TextInput.render(state, theme: theme(), bordered: true)
+      danger_result = TextInput.render(state, theme: alt_theme(), bordered: true)
 
       refute inspect(default_result, printable_limit: :infinity, limit: :infinity) ==
                inspect(danger_result, printable_limit: :infinity, limit: :infinity)
+    end
+  end
+
+  describe "render/2 — bordered option" do
+    test "bordered: false does not produce a box element" do
+      state = TextInput.init(value: "hello")
+      result = TextInput.render(state, theme: theme(), bordered: false)
+
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
+      refute serialized =~ ~s(type: :box),
+             "bordered: false should not produce a box element"
+    end
+
+    test "bordered: true produces a box element" do
+      state = TextInput.init(value: "hello")
+      result = TextInput.render(state, theme: theme(), bordered: true)
+
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
+      assert serialized =~ ~s(type: :box),
+             "bordered: true should produce a box element"
+    end
+
+    test "default (no bordered option) does not produce a box element" do
+      state = TextInput.init(value: "hello")
+      result = TextInput.render(state, theme: theme())
+
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
+      refute serialized =~ ~s(type: :box),
+             "default (bordered: false) should not produce a box element"
     end
   end
 end
