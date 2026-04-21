@@ -67,6 +67,40 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
       [inner] = outer.children
       assert Map.has_key?(inner, :id)
     end
+
+    test "WR-03 — auto-generated :id is deterministic across calls" do
+      [a1] = Menu.normalize_items([%{label: "New", children: []}])
+      [a2] = Menu.normalize_items([%{label: "New", children: []}])
+      assert a1.id == a2.id
+    end
+
+    test "WR-03 — different labels produce different auto-ids" do
+      [a, b] =
+        Menu.normalize_items([
+          %{label: "New", children: []},
+          %{label: "Open", children: []}
+        ])
+
+      assert a.id != b.id
+    end
+
+    test "WR-03 — nested auto-ids include parent label path" do
+      input = [%{label: "File", children: [%{label: "New", children: []}]}]
+      [parent] = Menu.normalize_items(input)
+      [child] = parent.children
+      assert child.id == {:auto, ["File", "New"]}
+    end
+
+    test "WR-03 — explicit :id wins over auto-derivation" do
+      [item] = Menu.normalize_items([%{id: :explicit, label: "Any", children: []}])
+      assert item.id == :explicit
+    end
+
+    test "WR-03 — item missing both :id and :label raises ArgumentError" do
+      assert_raise ArgumentError, ~r/require :id or :label/, fn ->
+        Menu.normalize_items([%{children: []}])
+      end
+    end
   end
 
   describe "init/1" do

@@ -8,15 +8,19 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   **Pitfall 7 (RESEARCH.md):** The Raxol menu component requires
   every item to have `:id`. `init/1` calls `normalize_items/1`
   which fills in defaults:
-    * `:id`       → `:erlang.unique_integer([:positive])` if absent
+    * `:id`       → deterministic tuple `{:auto, [label_path...]}`
+                    when absent (so `{:menu_action, id}` actions
+                    round-trip through code reloads and VM restarts)
     * `:disabled` → `false` if absent
     * `:shortcut` → `nil` if absent
 
-  Normalization recurses through `:children`.
+  Normalization recurses through `:children`. Items missing BOTH
+  `:id` and `:label` raise `ArgumentError` — there is no sane
+  auto-id to derive for a label-less item.
 
   ## Item shape (after normalization)
 
-      %{id: atom() | integer(), label: String.t(),
+      %{id: atom() | integer() | {:auto, [String.t()]}, label: String.t(),
         children: [item()], disabled: boolean(), shortcut: String.t() | nil}
 
   Honours:
@@ -42,15 +46,17 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.Menu, as: RaxolMenu
 
+  @type item_id :: atom() | integer() | {:auto, [String.t()]}
+
   @type item :: %{
-          optional(:id) => atom() | integer(),
-          required(:label) => String.t(),
+          optional(:id) => item_id(),
+          optional(:label) => String.t(),
           optional(:children) => [item()],
           optional(:disabled) => boolean(),
           optional(:shortcut) => String.t() | nil
         }
 
-  @type action :: {:menu_action, atom() | integer()} | :cancelled | nil
+  @type action :: {:menu_action, item_id()} | :cancelled | nil
 
   defstruct [:raxol_state, last_action: nil]
 
@@ -96,25 +102,42 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   Normalizes a list of menu items, filling in defaults for missing fields.
 
   Every item receives:
-    * `:id`       — `:erlang.unique_integer([:positive])` if absent
+    * `:id`       — derived from the label path `{:auto, [labels...]}` if
+                    absent, so actions round-trip deterministically across
+                    code reloads and VM restarts (see WR-03)
     * `:disabled` — `false` if absent
     * `:shortcut` — `nil` if absent
 
-  Normalization recurses into `:children`.
+  Normalization recurses into `:children`. Items missing BOTH `:id` and
+  `:label` raise `ArgumentError` — a label-less item cannot produce a
+  stable derived id.
   """
   @spec normalize_items([map()]) :: [item()]
   def normalize_items(items) when is_list(items) do
-    Enum.map(items, &normalize_item/1)
+    normalize_items(items, [])
   end
 
   # --- private ---
 
-  defp normalize_item(item) when is_map(item) do
+  defp normalize_items(items, parent_path) when is_list(items) do
+    Enum.map(items, &normalize_item(&1, parent_path))
+  end
+
+  defp normalize_item(item, parent_path) when is_map(item) do
+    unless Map.has_key?(item, :id) or Map.has_key?(item, :label) do
+      raise ArgumentError,
+            "Foglet.TUI.Widgets.Input.Menu items require :id or :label; " <>
+              "got #{inspect(item)}"
+    end
+
+    label = Map.get(item, :label)
+    path = parent_path ++ [label]
+
     item
-    |> Map.put_new_lazy(:id, fn -> :erlang.unique_integer([:positive]) end)
+    |> Map.put_new_lazy(:id, fn -> {:auto, path} end)
     |> Map.put_new(:disabled, false)
     |> Map.put_new(:shortcut, nil)
-    |> Map.update(:children, [], &normalize_items/1)
+    |> Map.update(:children, [], fn kids -> normalize_items(kids, path) end)
   end
 
   # derive_action/3 — map (before_rs, after_rs, event) -> action
