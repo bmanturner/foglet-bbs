@@ -27,7 +27,7 @@ decisions:
 metrics:
   duration: "12m"
   completed: "2026-04-21"
-  tasks_completed: 1
+  tasks_completed: 2
   files_changed: 2
 ---
 
@@ -43,7 +43,7 @@ AUDIT-05..22 grep gates all pass on the post-plan-02 `register.ex`; Dialyzer `ex
 
 ## Task 2 Status
 
-**PENDING HUMAN VERIFICATION** — SSH smoke test (6 scenarios). See Checkpoint Details section.
+**APPROVED** — Developer confirmed all 6 SSH smoke test scenarios pass (2026-04-21).
 
 ## AUDIT-05..22 Sweep Results
 
