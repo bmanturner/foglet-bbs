@@ -37,14 +37,14 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
       t = theme()
       result = Checkbox.render("x", checked?: true, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.selected.fg)
+      assert serialized =~ t.selected.fg
     end
 
     test "unchecked state uses theme.unselected.fg" do
       t = theme()
       result = Checkbox.render("x", checked?: false, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.unselected.fg)
+      assert serialized =~ t.unselected.fg
     end
 
     test "disabled uses theme.dim.fg regardless of checked?" do
@@ -54,7 +54,7 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
         result = Checkbox.render("x", checked?: checked?, disabled: true, theme: t)
         serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
 
-        assert serialized =~ to_string(t.dim.fg),
+        assert serialized =~ t.dim.fg,
                "disabled (checked?=#{checked?}) must use dim.fg"
       end
     end
@@ -65,7 +65,7 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
 
       # Should use selected.fg, not dim.fg (since dim.fg != selected.fg in default theme)
-      assert serialized =~ to_string(t.selected.fg)
+      assert serialized =~ t.selected.fg
     end
   end
 

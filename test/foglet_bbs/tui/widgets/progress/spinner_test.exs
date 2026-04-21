@@ -34,7 +34,7 @@ defmodule Foglet.TUI.Widgets.Progress.SpinnerTest do
       t = theme()
       result = Spinner.render(0, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.accent.fg)
+      assert serialized =~ t.accent.fg
     end
   end
 

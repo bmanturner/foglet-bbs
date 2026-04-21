@@ -52,14 +52,14 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroupTest do
       t = theme()
       result = RadioGroup.render(["One", "Two"], 0, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.selected.fg)
+      assert serialized =~ t.selected.fg
     end
 
     test "unselected options use theme.unselected.fg" do
       t = theme()
       result = RadioGroup.render(["One", "Two"], 0, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.unselected.fg)
+      assert serialized =~ t.unselected.fg
     end
   end
 

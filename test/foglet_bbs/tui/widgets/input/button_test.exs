@@ -32,28 +32,28 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
       t = theme()
       result = Button.render("Save", role: :primary, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.accent.fg)
+      assert serialized =~ t.accent.fg
     end
 
     test "danger role uses theme.error.fg" do
       t = theme()
       result = Button.render("Delete", role: :danger, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.error.fg)
+      assert serialized =~ t.error.fg
     end
 
     test "success role uses theme.primary.fg" do
       t = theme()
       result = Button.render("OK", role: :success, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.primary.fg)
+      assert serialized =~ t.primary.fg
     end
 
     test "secondary role uses theme.primary.fg (no :bold)" do
       t = theme()
       result = Button.render("Cancel", role: :secondary, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.primary.fg)
+      assert serialized =~ t.primary.fg
     end
 
     test "disabled uses theme.dim.fg regardless of role" do
@@ -63,7 +63,7 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
         result = Button.render("x", role: role, disabled: true, theme: t)
         serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
 
-        assert serialized =~ to_string(t.dim.fg),
+        assert serialized =~ t.dim.fg,
                "disabled #{role} button must use dim.fg"
       end
     end

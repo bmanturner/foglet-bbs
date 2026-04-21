@@ -49,7 +49,7 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       state = Table.init(columns: [%{id: :name, label: "Name"}])
       result = Table.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.border.fg)
+      assert serialized =~ t.border.fg
     end
 
     test "build_table_theme/1 wires title slot for header" do
@@ -57,7 +57,7 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       state = Table.init(columns: [%{id: :name, label: "Name"}])
       result = Table.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.title.fg)
+      assert serialized =~ t.title.fg
     end
 
     test "build_table_theme/1 wires primary slot for rows" do
@@ -71,7 +71,7 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
 
       result = Table.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.primary.fg)
+      assert serialized =~ t.primary.fg
     end
 
     test "build_table_theme/1 wires selected slot" do
@@ -80,7 +80,7 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       result = Table.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
       # selected.fg and selected.bg must appear somewhere in the theme map
-      assert serialized =~ to_string(t.selected.fg)
+      assert serialized =~ t.selected.fg
     end
   end
 

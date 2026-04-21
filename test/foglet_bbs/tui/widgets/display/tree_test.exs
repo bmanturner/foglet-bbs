@@ -50,7 +50,7 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
       state = Tree.init(nodes: nodes)
       result = Tree.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.primary.fg)
+      assert serialized =~ t.primary.fg
     end
 
     test "rendered tree contains selected.fg for the cursor node" do
@@ -58,7 +58,7 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
       state = Tree.init(nodes: [%{id: :root, label: "Root", children: []}])
       result = Tree.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.selected.fg)
+      assert serialized =~ t.selected.fg
     end
   end
 
