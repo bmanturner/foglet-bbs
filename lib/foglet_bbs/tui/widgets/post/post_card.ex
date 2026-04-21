@@ -101,15 +101,13 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   effect (the Viewport handles windowing).
   """
   @spec render_body_lines(
-          post_like(),
           [MarkdownBody.tuple_entry()],
           pos_integer(),
           Theme.t(),
           keyword()
         ) :: [any()]
-  def render_body_lines(post, tuples, width, %Theme{} = theme, opts \\ [])
-      when is_map(post) and is_list(tuples) and is_integer(width) and width > 0 do
-    _ = post
+  def render_body_lines(tuples, width, %Theme{} = theme, opts \\ [])
+      when is_list(tuples) and is_integer(width) and width > 0 do
     MarkdownBody.render_tuples_as_lines(tuples, width, theme, body_opts(opts))
   end
 

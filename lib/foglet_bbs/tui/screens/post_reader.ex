@@ -71,7 +71,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       header_divider = divider(char: "─", style: %{fg: theme.border.fg})
 
       # Pre-themed body lines — Viewport passes them through unmodified.
-      body_lines = PostCard.render_body_lines(post, tuples, w, theme)
+      body_lines = PostCard.render_body_lines(tuples, w, theme)
 
       # Wire visible_height and children for this frame. render_post_content
       # is a read-only function — the Viewport state built here is transient,
@@ -330,7 +330,7 @@ defmodule Foglet.TUI.Screens.PostReader do
         Foglet.TUI.Theme.default()
 
     tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
-    body_lines = PostCard.render_body_lines(post, tuples, w, theme)
+    body_lines = PostCard.render_body_lines(tuples, w, theme)
 
     {new_vp, _cmds} = Viewport.update({:set_children, body_lines}, ss.viewport)
     %{ss | viewport: new_vp}
