@@ -77,12 +77,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   test "login form renders handle and password fields at distinct y positions" do
+    alias Foglet.TUI.Widgets.Input.TextInput, as: TI
+
     state = %App{
       screen_state: %{
         login: %{
           sub: :login_form,
-          form: %{handle: "alice", password: "secret", error: nil},
-          focused_field: :handle
+          focused_field: :handle,
+          handle_input: TI.init(value: "alice"),
+          password_input: TI.init(value: "", mask_char: "*"),
+          error: nil
         }
       },
       terminal_size: {80, 24}
@@ -244,12 +248,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   test "login form with handle='alice' shows 'alice' in rendered text elements" do
+    alias Foglet.TUI.Widgets.Input.TextInput, as: TI
+
     state = %App{
       screen_state: %{
         login: %{
           sub: :login_form,
-          form: %{handle: "alice", password: "", error: nil},
-          focused_field: :handle
+          focused_field: :handle,
+          handle_input: TI.init(value: "alice"),
+          password_input: TI.init(value: "", mask_char: "*"),
+          error: nil
         }
       },
       terminal_size: {80, 24}
@@ -471,8 +479,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
          screen_state: %{
            login: %{
              sub: :login_form,
-             form: %{handle: "alice", password: "secret", error: nil},
-             focused_field: :handle
+             focused_field: :handle,
+             handle_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "alice"),
+             password_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "", mask_char: "*"),
+             error: nil
            }
          },
          terminal_size: {80, 24}
