@@ -2,110 +2,74 @@ This is a web application written using the Phoenix web framework.
 
 ## Project guidelines
 
-- Use `mix precommit` alias when you are done with all changes and fix any pending issues
-- Use the already included and available `:req` (`Req`) library for HTTP requests, **avoid** `:httpoison`, `:tesla`, and `:httpc`. Req is included by default and is the preferred HTTP client for Phoenix apps
+- Run `mix precommit` when you are done with all changes and fix any pending issues. It runs `compile --warnings-as-errors`, `format`, `credo --strict`, `sobelow`, and `dialyzer` — trust it to catch formatting, predicate names, `String.to_atom` misuse, list-Access warnings, and type/security issues so this file doesn't have to.
+- Use the already included `:req` (`Req`) library for HTTP requests. **Avoid** `:httpoison`, `:tesla`, and `:httpc`.
+- Prefer Elixir's stdlib (`Time`, `Date`, `DateTime`, `Calendar`) for date/time work. **Never** add a dep for this unless asked — `date_time_parser` is the only sanctioned exception (parsing).
 
-### Phoenix v1.8 guidelines
+## Project docs
 
-- **Always** begin your LiveView templates with `<Layouts.app flash={@flash} ...>` which wraps all inner content
-- The `MyAppWeb.Layouts` module is aliased in the `my_app_web.ex` file, so you can use it without needing to alias it again
-- Anytime you run into errors with no `current_scope` assign:
-  - You failed to follow the Authenticated Routes guidelines, or you failed to pass `current_scope` to `<Layouts.app>`
-  - **Always** fix the `current_scope` error by moving your routes to the proper `live_session` and ensure you pass `current_scope` as needed
-- Phoenix v1.8 moved the `<.flash_group>` component to the `Layouts` module. You are **forbidden** from calling `<.flash_group>` outside of the `layouts.ex` module
-- Out of the box, `core_components.ex` imports an `<.icon name="hero-x-mark" class="w-5 h-5"/>` component for hero icons. **Always** use the `<.icon>` component for icons, **never** use `Heroicons` modules or similar
-- **Always** use the imported `<.input>` component for form inputs from `core_components.ex` when available. `<.input>` is imported and using it will save steps and prevent errors
-- If you override the default input classes (`<.input class="myclass px-2 py-1 rounded-lg">)`) class with your own values, no default classes are inherited, so your
-custom classes must fully style the input
+Consult these before making non-trivial changes in the relevant area:
 
+- `docs/ARCHITECTURE.md` — system architecture, module boundaries, the "why" behind major structural decisions.
+- `docs/DATA_MODEL.md` — schemas, relationships, invariants. Read before touching Ecto schemas or migrations.
+- `docs/ROADMAP.md` — milestone scope and sequencing.
+- `docs/raxol/` — vendored Raxol documentation. Reach for this whenever you're reading or writing Raxol code; start at `docs/raxol/README.md`.
+  - **TUI work:** `docs/raxol/getting-started/WIDGET_GALLERY.md` for the primitives we have available, plus `lib/foglet_bbs/tui/widgets/README.md` for an overview of the themed widgets we have in foglet_bbs
+  - **ADRs / deeper dives:** `docs/raxol/adr/`, `docs/raxol/core/`, `docs/raxol/guides/`.
+- `.planning/` — GSD planning artifacts (requirements, ADRs, phase plans, verification). Search here for the reasoning behind existing decisions before proposing changes to them.
 
-<!-- usage-rules-start -->
+## Elixir gotchas
 
-<!-- phoenix:elixir-start -->
-## Elixir guidelines
+These aren't caught by precommit — keep them in mind:
 
-- Elixir lists **do not support index based access via the access syntax**
+- **Block expressions rebind, they don't mutate.** In `if`/`case`/`cond`, bind the whole expression to a variable; don't try to reassign inside the block:
 
-  **Never do this (invalid)**:
-
-      i = 0
-      mylist = ["blue", "green"]
-      mylist[i]
-
-  Instead, **always** use `Enum.at`, pattern matching, or `List` for index based list access, ie:
-
-      i = 0
-      mylist = ["blue", "green"]
-      Enum.at(mylist, i)
-
-- Elixir variables are immutable, but can be rebound, so for block expressions like `if`, `case`, `cond`, etc
-  you *must* bind the result of the expression to a variable if you want to use it and you CANNOT rebind the result inside the expression, ie:
-
-      # INVALID: we are rebinding inside the `if` and the result never gets assigned
+      # INVALID — rebind inside `if` is lost
       if connected?(socket) do
         socket = assign(socket, :val, val)
       end
 
-      # VALID: we rebind the result of the `if` to a new variable
+      # VALID
       socket =
         if connected?(socket) do
           assign(socket, :val, val)
+        else
+          socket
         end
 
-- **Never** nest multiple modules in the same file as it can cause cyclic dependencies and compilation errors
-- **Never** use map access syntax (`changeset[:field]`) on structs as they do not implement the Access behaviour by default. For regular structs, you **must** access the fields directly, such as `my_struct.field` or use higher level APIs that are available on the struct if they exist, `Ecto.Changeset.get_field/2` for changesets
-- Elixir's standard library has everything necessary for date and time manipulation. Familiarize yourself with the common `Time`, `Date`, `DateTime`, and `Calendar` interfaces by accessing their documentation as necessary. **Never** install additional dependencies unless asked or for date/time parsing (which you can use the `date_time_parser` package)
-- Don't use `String.to_atom/1` on user input (memory leak risk)
-- Predicate function names should not start with `is_` and should end in a question mark. Names like `is_thing` should be reserved for guards
-- Elixir's builtin OTP primitives like `DynamicSupervisor` and `Registry`, require names in the child spec, such as `{DynamicSupervisor, name: MyApp.MyDynamicSup}`, then you can use `DynamicSupervisor.start_child(MyApp.MyDynamicSup, child_spec)`
-- Use `Task.async_stream(collection, callback, options)` for concurrent enumeration with back-pressure. The majority of times you will want to pass `timeout: :infinity` as option
+- **Never nest multiple modules in the same file** — causes cyclic dependency and compilation headaches.
+- **Structs don't implement `Access`.** Use `my_struct.field` directly, or `Ecto.Changeset.get_field/2` for changesets — never `struct[:field]`.
+- **OTP primitives need names in the child spec.** `DynamicSupervisor` and `Registry` require `name:` in their child_spec so you can address them later:
 
-## Mix guidelines
+      {DynamicSupervisor, name: MyApp.MyDynamicSup}
 
-- Read the docs and options before using tasks (by using `mix help task_name`)
-- To debug test failures, run tests in a specific file with `mix test test/my_test.exs` or run all previously failed tests with `mix test --failed`
-- `mix deps.clean --all` is **almost never needed**. **Avoid** using it unless you have good reason
+- **Concurrent enumeration:** use `Task.async_stream(collection, callback, options)` with `timeout: :infinity` in almost all cases — it gives you back-pressure for free.
+
+## Mix
+
+- Read `mix help <task>` before reaching for unfamiliar tasks.
+- Debug a single test file with `mix test path/to/test.exs`; re-run only failures with `mix test --failed`.
+- `mix deps.clean --all` is almost never the right answer — diagnose first.
 
 ## Test guidelines
 
-- **Always use `start_supervised!/1`** to start processes in tests as it guarantees cleanup between tests
-- **Avoid** `Process.sleep/1` and `Process.alive?/1` in tests
-  - Instead of sleeping to wait for a process to finish, **always** use `Process.monitor/1` and assert on the DOWN message:
+- **Always use `start_supervised!/1`** to start processes in tests — it guarantees cleanup between tests.
+- **Avoid `Process.sleep/1` and `Process.alive?/1`.** Synchronize deterministically instead:
+  - To wait for a process to finish, monitor it and assert on `:DOWN`:
 
-      ref = Process.monitor(pid)
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+        ref = Process.monitor(pid)
+        assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
 
-   - Instead of sleeping to synchronize before the next call, **always** use `_ = :sys.get_state/1` to ensure the process has handled prior messages
-<!-- phoenix:elixir-end -->
+  - To wait until a process has handled prior messages, use `_ = :sys.get_state(pid)`.
 
-<!-- phoenix:phoenix-start -->
-## Phoenix guidelines
+## Phoenix
 
-- Remember Phoenix router `scope` blocks include an optional alias which is prefixed for all routes within the scope. **Always** be mindful of this when creating routes within a scope to avoid duplicate module prefixes.
+- Phoenix router `scope` blocks carry an optional alias that prefixes every route inside. Don't double-alias — `scope "/admin", AppWeb.Admin do live "/users", UserLive end` already resolves to `AppWeb.Admin.UserLive`.
 
-- You **never** need to create your own `alias` for route definitions! The `scope` provides the alias, ie:
+## Ecto
 
-      scope "/admin", AppWeb.Admin do
-        pipe_through :browser
-
-        live "/users", UserLive, :index
-      end
-
-  the UserLive route would point to the `AppWeb.Admin.UserLive` module
-
-- `Phoenix.View` no longer is needed or included with Phoenix, don't use it
-<!-- phoenix:phoenix-end -->
-
-<!-- phoenix:ecto-start -->
-## Ecto Guidelines
-
-- **Always** preload Ecto associations in queries when they'll be accessed in templates, ie a message that needs to reference the `message.user.email`
-- Remember `import Ecto.Query` and other supporting modules when you write `seeds.exs`
-- `Ecto.Schema` fields always use the `:string` type, even for `:text`, columns, ie: `field :name, :string`
-- `Ecto.Changeset.validate_number/2` **DOES NOT SUPPORT the `:allow_nil` option**. By default, Ecto validations only run if a change for the given field exists and the change value is not nil, so such as option is never needed
-- You **must** use `Ecto.Changeset.get_field(changeset, :field)` to access changeset fields
-- Fields which are set programmatically, such as `user_id`, must not be listed in `cast` calls or similar for security purposes. Instead they must be explicitly set when creating the struct
-- **Always** invoke `mix ecto.gen.migration migration_name_using_underscores` when generating migration files, so the correct timestamp and conventions are applied
-<!-- phoenix:ecto-end -->
-
-<!-- usage-rules-end -->
+- **Preload associations** in the query when they'll be accessed later (templates, JSON serializers) — don't rely on lazy loads that don't exist.
+- Remember to `import Ecto.Query` (and friends) when writing `seeds.exs`.
+- `Ecto.Schema` uses `:string` for both `:string` and `:text` DB columns: `field :name, :string`.
+- Programmatically-set fields like `user_id` must **not** appear in `cast/3` — set them explicitly on the struct before changeset construction.
+- Generate migrations with `mix ecto.gen.migration migration_name_using_underscores` so timestamps and naming stay consistent.

@@ -40,6 +40,7 @@ Two users SSHing into the same BBS and feeling like they're actually *present* t
 - [ ] `categories`, `boards`, `threads`, `posts` schemas and migrations
 - [ ] `Foglet.Boards.Server` GenServer for per-board message-number allocation (DynamicSupervisor)
 - [ ] Thread creation (always creates a root post), post creation, edit (with edit history), soft-delete
+  - ✓ TUI composer wired end-to-end (new thread + reply) — Validated in phase-03-polish Phase 4
 - [ ] Markdown parsing and rendering to terminal-friendly representation
 - [ ] `board_subscriptions`, `board_read_pointers`, `thread_read_pointers`
 - [ ] Unread counts queries
@@ -54,6 +55,7 @@ Two users SSHing into the same BBS and feeling like they're actually *present* t
 - [x] Terminal size via PTY/window-change events — Validated in Phase 03 (gap closure 03-06)
 - [x] TUI screens: login, main menu, board list, thread list, post reader, post composer — Validated in Phase 03
 - [x] Read pointers advance as you read — Validated in Phase 03
+- [x] Composer creates threads and replies end-to-end without crashes — Validated in phase-03-polish Phase 4
 
 **Milestone 4 — Presence, Online List, Login Sequence**
 - [ ] Phoenix Presence integrated with Sessions; "who's online" updated live
@@ -180,4 +182,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-18 after initialization*
+*Last updated: 2026-04-20 after phase-03-polish Phase 4 (composer & thread creation) — v1.0.1 polish workstream*

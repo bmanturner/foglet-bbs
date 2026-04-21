@@ -15,7 +15,11 @@ defmodule Foglet.TUI.Screens.PostComposer do
   """
 
   alias Foglet.Config
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Compose
+  alias Foglet.TUI.Widgets.Post.MarkdownBody
+  alias Foglet.TUI.Widgets.Post.PostCard
   alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
@@ -31,12 +35,13 @@ defmodule Foglet.TUI.Screens.PostComposer do
     ss = composer_screen_state(state)
     input_st = ss.input_state
     draft = input_st.value
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     body_items =
       if ss.reply_to do
         [
-          text("Replying to @#{get_handle(ss.reply_to)}:", style: [:dim]),
-          text(quote_preview(ss.reply_to), style: [:dim]),
+          text("Replying to @#{get_handle(ss.reply_to)}:", fg: theme.dim.fg),
+          text(quote_preview(ss.reply_to), fg: theme.dim.fg),
           text("")
         ]
       else
@@ -44,47 +49,33 @@ defmodule Foglet.TUI.Screens.PostComposer do
       end ++
         case ss.mode do
           :edit ->
-            # Render the MultiLineInput component inline using its lines.
-            # render/2 requires a context map; we supply a minimal one.
-            [render_input(input_st, state)]
+            [render_input(input_st, state, theme)]
 
           :preview ->
-            [render_markdown_tuples(render_preview(state, draft))]
+            {w, _h} = state.terminal_size || {80, 24}
+            body_width = max(w - 4, 20)
+            [MarkdownBody.render(draft, body_width, theme)]
         end ++
         if ss.error do
-          [text(""), text(ss.error, fg: :red)]
+          [text(""), text(ss.error, fg: theme.error.fg, style: [:bold])]
         else
           []
         end ++
         [
           text(""),
-          text("#{String.length(draft)} / #{max_len(state)} chars", style: [:dim])
+          text("#{String.length(draft)} / #{max_len(state)} chars", fg: theme.dim.fg)
         ]
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" #{title_for(ss.reply_to, state.current_thread)} ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "Composer (#{ss.mode})"
-              }),
-              column style: %{gap: 0} do
-                body_items
-              end
-            ]
-          end,
-          KeyBar.render([
-            {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
-            {"Ctrl+S", "Send"},
-            {"Ctrl+C", "Cancel"}
-          ])
-        ]
+    content =
+      column style: %{gap: 0} do
+        body_items
       end
-    end
+
+    ScreenFrame.render(state, title_for(ss.reply_to, state.current_thread), content, [
+      {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
+      {"Ctrl+S", "Send"},
+      {"Ctrl+C", "Cancel"}
+    ])
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
@@ -94,7 +85,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   # Forward all other keys to MultiLineInput
   def handle_key(key_event, state) do
-    case translate_key(key_event) do
+    case Compose.translate_key(key_event) do
       nil ->
         :no_match
 
@@ -186,35 +177,6 @@ defmodule Foglet.TUI.Screens.PostComposer do
   end
 
   # ---------------------------------------------------------------------------
-  # Key translation: normalized %{key: ...} -> MultiLineInput.update/2 message
-  # ---------------------------------------------------------------------------
-
-  # Translate Raxol-native event data maps to MultiLineInput.update/2 messages.
-  # All patterns match on the %{key: atom, ...} shape produced by InputParser.
-  defp translate_key(%{key: :backspace}), do: {:backspace}
-  defp translate_key(%{key: :delete}), do: {:delete}
-  defp translate_key(%{key: :enter}), do: {:enter}
-  defp translate_key(%{key: :up}), do: {:move_cursor, :up}
-  defp translate_key(%{key: :down}), do: {:move_cursor, :down}
-  defp translate_key(%{key: :left}), do: {:move_cursor, :left}
-  defp translate_key(%{key: :right}), do: {:move_cursor, :right}
-  defp translate_key(%{key: :home}), do: {:move_cursor_line_start}
-  defp translate_key(%{key: :end}), do: {:move_cursor_line_end}
-  defp translate_key(%{key: :page_up}), do: {:move_cursor_page, :up}
-  defp translate_key(%{key: :page_down}), do: {:move_cursor_page, :down}
-
-  # Typed character — %{key: :char, char: grapheme_string}.
-  # Spacebar arrives as char: " " naturally; emoji/unicode graphemes work too.
-  defp translate_key(%{key: :char, char: c}) do
-    case String.to_charlist(c) do
-      [cp | _] when cp >= 32 -> {:input, cp}
-      _ -> nil
-    end
-  end
-
-  defp translate_key(_), do: nil
-
-  # ---------------------------------------------------------------------------
   # Max-length enforcement (D-31)
   # ---------------------------------------------------------------------------
 
@@ -247,73 +209,15 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # Rendering helpers
   # ---------------------------------------------------------------------------
 
-  defp render_input(input_st, state) do
+  defp render_input(input_st, state, theme) do
     ss = composer_screen_state(state)
     focused? = ss.mode == :edit
-    render_input_as_text(input_st, focused?)
-  end
-
-  # Renders the MultiLineInput state as plain text/2 elements inside a column.
-  # cursor_pos is {row, col} — confirmed from MultiLineInput struct definition.
-  # This bypasses MultiLineInput.render/2, which returns tuple-shaped elements
-  # that crash Flexbox.measure_flex_child/3 (Bug B).
-  defp render_input_as_text(input_st, focused?) do
-    lines =
-      input_st.value
-      |> String.split("\n")
-      |> case do
-        [] -> [""]
-        ls -> ls
-      end
-
-    {cursor_row, cursor_col} = Map.get(input_st, :cursor_pos, {0, 0})
-
-    column style: %{gap: 0} do
-      lines
-      |> Enum.with_index()
-      |> Enum.map(fn {line, idx} ->
-        rendered =
-          if focused? and idx == cursor_row do
-            {before, after_} = String.split_at(line, cursor_col)
-            "#{before}█#{after_}"
-          else
-            line
-          end
-
-        text(rendered, fg: :green)
-      end)
-    end
+    Compose.render_input(input_st, focused?, theme)
   end
 
   defp title_for(nil, nil), do: "New Thread"
   defp title_for(nil, thread), do: "Reply to: #{thread.title}"
   defp title_for(reply_to, _), do: "Reply to post ##{Map.get(reply_to, :message_number, "?")}"
-
-  defp render_preview(state, draft) do
-    sc = Map.get(state, :session_context) || %{}
-    markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
-
-    if function_exported?(markdown_mod, :render, 1) do
-      markdown_mod.render(draft)
-    else
-      [{draft, :plain}]
-    end
-  end
-
-  # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
-  # a column of text/2 elements styled appropriately.
-  defp render_markdown_tuples(tuples) when is_list(tuples) do
-    column style: %{gap: 0} do
-      Enum.map(tuples, fn
-        {s, :bold} -> text(s, style: [:bold], fg: :green)
-        {s, :italic} -> text(s, style: [:italic], fg: :green)
-        {s, :dim} -> text(s, style: [:dim], fg: :green)
-        {s, :underline} -> text(s, style: [:underline], fg: :green)
-        {s, :plain} -> text(s, fg: :green)
-        {s, _} -> text(s, fg: :green)
-      end)
-    end
-  end
 
   defp quote_preview(post) do
     body = Map.get(post, :body, "")
@@ -324,8 +228,10 @@ defmodule Foglet.TUI.Screens.PostComposer do
     |> Enum.map_join("\n", fn line -> "> #{line}" end)
   end
 
-  defp get_handle(%{user: %{handle: h}}), do: h
-  defp get_handle(_), do: "unknown"
+  # Delegate to PostCard.get_handle/1 (strict: returns nil on empty or
+  # missing handle), then substitute "unknown" at the display call site so
+  # an empty-string handle never renders as "@".
+  defp get_handle(post), do: PostCard.get_handle(post) || "unknown"
 
   # ---------------------------------------------------------------------------
   # Mode toggle
@@ -366,15 +272,22 @@ defmodule Foglet.TUI.Screens.PostComposer do
   end
 
   defp do_submit(state, ss, draft) do
+    user_id = state.current_user && state.current_user.id
+
+    if is_nil(user_id) do
+      {:update, %{state | modal: %{type: :error, message: "You must be logged in to post."}}, []}
+    else
+      submit_reply(state, ss, draft, user_id)
+    end
+  end
+
+  defp submit_reply(state, ss, draft, user_id) do
     sc = Map.get(state, :session_context) || %{}
     posts_mod = get_in(sc, [:domain, :posts]) || Foglet.Posts
     thread = state.current_thread
+    attrs = build_reply_attrs(draft, ss)
 
-    attrs = %{body: draft}
-    reply_to_id = ss[:reply_to] && ss[:reply_to].id
-    attrs = if reply_to_id, do: Map.put(attrs, :reply_to_id, reply_to_id), else: attrs
-
-    case posts_mod.create_reply(thread.id, thread.board_id, state.current_user.id, attrs) do
+    case posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs) do
       {:ok, _post} ->
         new_state = %{
           state
@@ -383,10 +296,19 @@ defmodule Foglet.TUI.Screens.PostComposer do
             screen_state: Map.delete(state.screen_state, :post_composer)
         }
 
-        {:update, new_state, [{:load_posts, thread.id}]}
+        # D-05: after the post reload finishes, the app handler sets
+        # selected_post_index to the last post (the user's new reply).
+        {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
 
       {:error, _cs} ->
         {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
+    end
+  end
+
+  defp build_reply_attrs(draft, ss) do
+    case Map.get(ss, :reply_to) do
+      nil -> %{body: draft}
+      post -> %{body: draft, reply_to_id: post.id}
     end
   end
 
@@ -395,9 +317,16 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # ---------------------------------------------------------------------------
 
   defp cancel(state) do
+    # D-07: origin-aware cancel. ss.origin is set by the navigating screen
+    # (PostReader's [R] handler in Phase 4). Default :main_menu preserves
+    # the "classic BBS" behavior — if origin is somehow missing, bail
+    # to a known-safe screen rather than crashing or looping.
+    ss = composer_screen_state(state)
+    origin = Map.get(ss, :origin, :main_menu)
+
     new_state = %{
       state
-      | current_screen: :thread_list,
+      | current_screen: origin,
         composer_draft: nil,
         screen_state: Map.delete(state.screen_state, :post_composer)
     }

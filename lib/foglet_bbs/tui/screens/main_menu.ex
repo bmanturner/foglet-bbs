@@ -1,7 +1,8 @@
 defmodule Foglet.TUI.Screens.MainMenu do
   @moduledoc "BBS main menu — primary screen after login (SSH-07, SSH-08)."
 
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
 
@@ -14,26 +15,21 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @spec render(map()) :: any()
   def render(state) do
     handle = state.current_user && state.current_user.handle
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              StatusBar.render(%{handle: handle, location: "Main Menu"}),
-              divider(),
-              column style: %{gap: 0} do
-                [text("Welcome back, #{handle || "guest"}.", fg: :green), text("")] ++
-                  Enum.map(@menu_items, fn {k, label} ->
-                    text("  [#{k}] #{label}", fg: :green)
-                  end)
-              end
-            ]
-          end,
-          KeyBar.render([{"B", "Boards"}, {"C", "Compose"}, {"Q", "Logout"}])
-        ]
+    content =
+      column style: %{gap: 0} do
+        [text("Welcome back, #{handle || "guest"}.", fg: theme.primary.fg), text("")] ++
+          Enum.map(@menu_items, fn {k, label} ->
+            text("  [#{k}] #{label}", fg: theme.primary.fg)
+          end)
       end
-    end
+
+    ScreenFrame.render(state, "Main Menu", content, [
+      {"B", "Boards"},
+      {"C", "Compose"},
+      {"Q", "Logout"}
+    ])
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
@@ -43,7 +39,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
     {w, _h} = state.terminal_size || {80, 24}
-    ss = Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
+
+    ss =
+      Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
+      |> Map.put(:origin, :main_menu)
+
     new_screen_state = Map.put(state.screen_state, :new_thread, ss)
 
     {:update, %{state | current_screen: :new_thread, screen_state: new_screen_state},

@@ -15,6 +15,10 @@ defmodule FogletBbs.Application do
     # Foglet.SSH.CLIHandler for pubkey-to-user correlation on connection.
     Foglet.SSH.PubkeyStash.init()
 
+    # Register TUI themes with Raxol's theme registry so widgets and
+    # future user-selectable switching can look them up by id.
+    Foglet.TUI.Theme.register_all()
+
     children = base_children() ++ ssh_children()
 
     # See https://hexdocs.pm/elixir/Supervisor.html

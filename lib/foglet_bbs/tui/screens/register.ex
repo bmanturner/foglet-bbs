@@ -15,47 +15,41 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.Accounts
   alias Foglet.Config
-  alias Foglet.TUI.Widgets.KeyBar
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
 
   @modes ~w(open invite_only sysop_approved)
 
+  @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
+
   @spec render(map()) :: any()
   def render(state) do
     w = state.register_wizard || default_wizard(state)
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     error_items =
       if w.error do
-        [text(""), text(w.error, fg: :red)]
+        [text(""), text(w.error, fg: theme.error.fg, style: [:bold])]
       else
         []
       end
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
+    content =
+      column style: %{gap: 0} do
         [
-          column style: %{gap: 0} do
-            [
-              text(" Register New Account ", style: [:bold]),
-              divider(),
-              column style: %{gap: 0} do
-                [
-                  text("Mode: #{w.mode}", style: [:dim]),
-                  text(""),
-                  text(prompt_for_step(w.step), fg: :green),
-                  text("> #{display_value(w.step, Map.get(w, :current_input, ""))}█",
-                    fg: :cyan,
-                    style: [:bold]
-                  )
-                ] ++ error_items
-              end
-            ]
-          end,
-          KeyBar.render([{"Enter", "Next"}, {"Esc", "Cancel"}])
-        ]
+          text("Mode: #{w.mode}", fg: theme.dim.fg),
+          text(""),
+          text(prompt_for_step(w.step), fg: theme.primary.fg),
+          text("> #{display_value(w.step, Map.get(w, :current_input, ""))}█",
+            fg: theme.accent.fg,
+            style: [:bold]
+          )
+        ] ++ error_items
       end
-    end
+
+    ScreenFrame.render(state, "Register", content, [{"Enter", "Next"}, {"Esc", "Cancel"}])
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
@@ -120,15 +114,9 @@ defmodule Foglet.TUI.Screens.Register do
     ctx = Map.get(state, :session_context) || %{}
 
     case Map.get(ctx, :registration_mode) do
-      nil -> safe_config_get("registration_mode", "open")
+      nil -> Config.get("registration_mode", "open")
       mode -> mode
     end
-  end
-
-  defp safe_config_get(key, default) do
-    Config.get!(key)
-  rescue
-    _ -> default
   end
 
   defp first_step_for("invite_only"), do: :invite_code
@@ -242,22 +230,48 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp submit(%{data: data} = w, state) do
-    # open or invite_only — register active user, build verify code, go to :verify
+    # open or invite_only — register active user, route via post_login_screen/1
+    # (Phase 6 D-06: config-driven verify/main_menu decision).
     case Accounts.register_user(data) do
       {:ok, user} ->
-        {:ok, code} = Accounts.build_verify_code(user)
-        require Logger
-        Logger.info("[verify] code for @#{user.handle}: #{code}")
+        case Accounts.post_login_screen(user) do
+          :verify ->
+            case Accounts.build_verify_code(user) do
+              {:ok, code} ->
+                maybe_log_verify_code(user, code)
 
-        new_state = %{
-          state
-          | current_user: user,
-            current_screen: :verify,
-            register_wizard: nil,
-            verify_state: %{buffer: "", attempts: 0, cooldown_until: nil}
-        }
+                new_state = %{
+                  state
+                  | current_user: user,
+                    current_screen: :verify,
+                    register_wizard: nil,
+                    verify_state: %{
+                      buffer: "",
+                      attempts: 0,
+                      cooldown_until: nil,
+                      resend_cooldown_until: nil
+                    }
+                }
 
-        {new_state, []}
+                {new_state, []}
+
+              {:error, _cs} ->
+                modal = %{
+                  type: :error,
+                  message: "Could not generate a verification code. Please try again."
+                }
+
+                {%{state | modal: modal}, []}
+            end
+
+          :main_menu ->
+            # require_email_verification is false — skip verify screen, promote
+            # the session directly. {:promote_session, user} routes through the
+            # App's session supervisor (SSH-05 one-session-per-user) and lands
+            # the user on :main_menu (app.ex do_update/2 at line ~498-504).
+            new_state = %{state | current_user: user, register_wizard: nil}
+            {new_state, [{:promote_session, user}]}
+        end
 
       {:error, changeset} ->
         new_w = %{w | error: changeset_error_text(changeset), step: :handle}
@@ -267,5 +281,14 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp changeset_error_text(cs) do
     Enum.map_join(cs.errors, "; ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+  end
+
+  if @log_verify_codes do
+    defp maybe_log_verify_code(user, code) do
+      require Logger
+      Logger.info("[verify] code for @#{user.handle}: #{code}")
+    end
+  else
+    defp maybe_log_verify_code(_user, _code), do: :ok
   end
 end

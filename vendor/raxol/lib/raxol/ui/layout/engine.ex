@@ -356,6 +356,12 @@ defmodule Raxol.UI.Layout.Engine do
   def process_element(%{type: :divider} = divider, space, acc) do
     char = Map.get(divider, :char, "-")
 
+    # Local patch: carry :style through to the positioned element so
+    # UIRenderer.render_visible_element/3 can honor :fg/:bg. Without
+    # this, divider styles set in the View DSL are silently dropped.
+    # See https://github.com/DROOdotFOO/raxol/issues/217.
+    style = Map.get(divider, :style, %{})
+
     [
       %{
         type: :divider,
@@ -363,7 +369,8 @@ defmodule Raxol.UI.Layout.Engine do
         y: space.y,
         width: space.width,
         height: 1,
-        char: char
+        char: char,
+        style: style
       }
       | acc
     ]

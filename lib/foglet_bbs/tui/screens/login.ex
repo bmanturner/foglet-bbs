@@ -19,35 +19,33 @@ defmodule Foglet.TUI.Screens.Login do
   """
 
   alias Foglet.{Accounts, Config}
-  alias Foglet.TUI.Widgets.KeyBar
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
 
   @menu_keys [{"L", "Login"}, {"R", "Register"}, {"Q", "Quit"}]
   @menu_keys_no_register [{"L", "Login"}, {"Q", "Quit"}]
 
+  @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
+
   @spec render(map()) :: any()
   def render(state) do
     mode = registration_mode(state)
     sub = sub_state(state)
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
+    content =
+      column style: %{gap: 0} do
         [
-          column style: %{gap: 0} do
-            [
-              text(" Foglet BBS — Login ", style: [:bold]),
-              divider(),
-              case sub do
-                :login_form -> render_login_form(state)
-                _ -> render_menu(mode)
-              end
-            ]
-          end,
-          KeyBar.render(keys_for(sub, mode))
+          case sub do
+            :login_form -> render_login_form(state, theme)
+            _ -> render_menu(mode, theme)
+          end
         ]
       end
-    end
+
+    ScreenFrame.render(state, "Login", content, keys_for(sub, mode))
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
@@ -143,15 +141,9 @@ defmodule Foglet.TUI.Screens.Login do
     ctx = Map.get(state, :session_context) || %{}
 
     case Map.get(ctx, :registration_mode) do
-      nil -> safe_config_get("registration_mode", "open")
+      nil -> Config.get("registration_mode", "open")
       mode -> mode
     end
-  end
-
-  defp safe_config_get(key, default) do
-    Config.get!(key)
-  rescue
-    _ -> default
   end
 
   defp sub_state(state) do
@@ -174,18 +166,18 @@ defmodule Foglet.TUI.Screens.Login do
   defp keys_for(_, "disabled"), do: @menu_keys_no_register
   defp keys_for(_, _), do: @menu_keys
 
-  defp render_menu(mode) do
+  defp render_menu(mode, theme) do
     keys = if mode == "disabled", do: @menu_keys_no_register, else: @menu_keys
 
     column style: %{gap: 0} do
-      [text("Welcome.", fg: :green)] ++
+      [text("Welcome.", fg: theme.primary.fg)] ++
         Enum.map(keys, fn {k, label} ->
-          text("  [#{k}] #{label}", fg: :green)
+          text("  [#{k}] #{label}", fg: theme.primary.fg)
         end)
     end
   end
 
-  defp render_login_form(state) do
+  defp render_login_form(state, theme) do
     login_ss = get_login_ss(state)
 
     form =
@@ -196,7 +188,7 @@ defmodule Foglet.TUI.Screens.Login do
 
     error_items =
       if form.error do
-        [text(""), text(form.error, fg: :red)]
+        [text(""), text(form.error, fg: theme.error.fg, style: [:bold])]
       else
         []
       end
@@ -205,12 +197,12 @@ defmodule Foglet.TUI.Screens.Login do
       [
         text(
           format_input_line("Handle:   ", form.handle, focused == :handle),
-          fg: input_fg(focused == :handle),
+          fg: input_fg(focused == :handle, theme),
           style: focus_style(focused == :handle)
         ),
         text(
           format_input_line("Password: ", mask_password(form.password), focused == :password),
-          fg: input_fg(focused == :password),
+          fg: input_fg(focused == :password, theme),
           style: focus_style(focused == :password)
         )
       ] ++ error_items
@@ -225,9 +217,9 @@ defmodule Foglet.TUI.Screens.Login do
   defp format_input_line(label, value, true), do: "#{label}#{value}█"
   defp format_input_line(label, value, false), do: "#{label}#{value}"
 
-  # Cyan when focused, green otherwise.
-  defp input_fg(true), do: :cyan
-  defp input_fg(false), do: :green
+  # Accent when focused, primary otherwise.
+  defp input_fg(true, theme), do: theme.accent.fg
+  defp input_fg(false, theme), do: theme.primary.fg
 
   # Masks password characters with asterisks for display.
   defp mask_password(pw) when is_binary(pw), do: String.duplicate("*", String.length(pw))
@@ -273,23 +265,8 @@ defmodule Foglet.TUI.Screens.Login do
     form = Map.get(login_ss, :form) || %{handle: "", password: ""}
 
     case Accounts.authenticate_by_password(form.handle, form.password) do
-      {:ok, %{status: :active, confirmed_at: nil} = user} ->
-        {:ok, code} = Accounts.build_verify_code(user)
-        require Logger
-        Logger.info("[verify] code for @#{user.handle}: #{code}")
-
-        {:update,
-         %{
-           state
-           | current_user: user,
-             current_screen: :verify,
-             screen_state: %{},
-             verify_state: %{buffer: "", attempts: 0, cooldown_until: nil}
-         }, []}
-
       {:ok, %{status: :active} = user} ->
-        # Clear screen state and promote the session via the App's handler.
-        {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}
+        handle_active_user(state, user)
 
       {:ok, %{status: :pending}} ->
         modal = %{
@@ -314,5 +291,57 @@ defmodule Foglet.TUI.Screens.Login do
         new_login_ss = Map.put(login_ss, :form, form_with_error)
         {:update, put_login_ss(state, new_login_ss), []}
     end
+  end
+
+  defp handle_active_user(state, user) do
+    case Accounts.post_login_screen(user) do
+      :verify ->
+        start_verify_flow(state, user)
+
+      :main_menu ->
+        # Clear screen state and promote the session via the App's handler.
+        # post_login_screen/1 returns :main_menu for confirmed users AND
+        # unconfirmed users when require_email_verification is false
+        # (VERIFY-01 retroactive bypass).
+        {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}
+    end
+  end
+
+  defp start_verify_flow(state, user) do
+    case Accounts.build_verify_code(user) do
+      {:ok, code} ->
+        maybe_log_verify_code(user, code)
+
+        {:update,
+         %{
+           state
+           | current_user: user,
+             current_screen: :verify,
+             screen_state: %{},
+             verify_state: %{
+               buffer: "",
+               attempts: 0,
+               cooldown_until: nil,
+               resend_cooldown_until: nil
+             }
+         }, []}
+
+      {:error, _cs} ->
+        modal = %{
+          type: :error,
+          message: "Could not generate a verification code. Please try again."
+        }
+
+        {:update, %{state | modal: modal}, []}
+    end
+  end
+
+  if @log_verify_codes do
+    defp maybe_log_verify_code(user, code) do
+      require Logger
+      Logger.info("[verify] code for @#{user.handle}: #{code}")
+    end
+  else
+    defp maybe_log_verify_code(_user, _code), do: :ok
   end
 end

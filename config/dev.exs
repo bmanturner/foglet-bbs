@@ -58,6 +58,9 @@ config :logger, :default_formatter, format: "[$level] $message\n"
 # Suppress debug-level noise from Raxol's Buffer.Writer (uses bare_log, bypasses module filters)
 config :logger, level: :info
 
+# Log email verify codes to the console in dev (compile-time flag, never set in prod/test)
+config :foglet_bbs, :log_verify_codes, true
+
 # Set a higher stacktrace during development. Avoid configuring such
 # in production as building large stacktraces may be expensive.
 config :phoenix, :stacktrace_depth, 20

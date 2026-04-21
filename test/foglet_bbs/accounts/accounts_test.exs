@@ -57,6 +57,63 @@ defmodule Foglet.AccountsTest do
     end
   end
 
+  describe "post_login_screen/1 (VERIFY-01)" do
+    setup do
+      # The sandbox rolls back all DB writes after each test, so we don't need
+      # to restore the config row in on_exit. We only need to clear the ETS
+      # cache so the next test doesn't read a stale cached value.
+      on_exit(fn ->
+        Foglet.Config.invalidate("require_email_verification")
+      end)
+
+      :ok
+    end
+
+    test "confirmed user routes to :main_menu regardless of config flag" do
+      Foglet.Config.put!("require_email_verification", true)
+      user = AccountsFixtures.user_fixture()
+      {:ok, confirmed} = Accounts.confirm_user(user)
+
+      assert Accounts.post_login_screen(confirmed) == :main_menu
+
+      # Flip the config and re-check — confirmed users are unaffected.
+      Foglet.Config.put!("require_email_verification", false)
+      assert Accounts.post_login_screen(confirmed) == :main_menu
+    end
+
+    test "unconfirmed user with require_email_verification=true routes to :verify" do
+      Foglet.Config.put!("require_email_verification", true)
+      user = AccountsFixtures.user_fixture()
+      assert user.confirmed_at == nil
+
+      assert Accounts.post_login_screen(user) == :verify
+    end
+
+    test "unconfirmed user with require_email_verification=false routes to :main_menu" do
+      Foglet.Config.put!("require_email_verification", false)
+      user = AccountsFixtures.user_fixture()
+      assert user.confirmed_at == nil
+
+      assert Accounts.post_login_screen(user) == :main_menu
+    end
+
+    test "missing config key defaults to :verify for unconfirmed users (safe posture)" do
+      # Delete the config row to simulate a stale test DB that didn't run seeds.
+      case from(e in Foglet.Config.Entry, where: e.key == "require_email_verification")
+           |> FogletBbs.Repo.delete_all() do
+        {_, _} -> :ok
+      end
+
+      Foglet.Config.invalidate("require_email_verification")
+
+      user = AccountsFixtures.user_fixture()
+      assert user.confirmed_at == nil
+
+      assert Accounts.post_login_screen(user) == :verify,
+             "Missing config key must default to :verify (verification required is the safe posture)"
+    end
+  end
+
   describe "update_role/2 (IDNT-06 support)" do
     test "promotes a user to sysop" do
       user = AccountsFixtures.user_fixture()

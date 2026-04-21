@@ -19,6 +19,8 @@ defmodule Foglet.TUI.App do
 
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
+  alias Foglet.TUI.SizeGate
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
   alias Raxol.Core.Runtime.Command
   alias Raxol.Core.Runtime.Subscription
@@ -145,26 +147,32 @@ defmodule Foglet.TUI.App do
 
   @impl true
   def view(state) do
-    if state.modal do
-      render_modal_overlay(state.modal, state.terminal_size)
-    else
-      render_screen(state)
+    cond do
+      SizeGate.too_small?(state) ->
+        # FRAME-03 / D-04: render-time gate bypasses ScreenFrame entirely.
+        # No outer border, no StatusBar, no KeyBar on the too-small screen.
+        # State is never modified — current_screen / screen_state / modal
+        # are all preserved for when the terminal resizes back.
+        SizeGate.render(state)
+
+      state.modal ->
+        render_modal_overlay(state.modal, state)
+
+      true ->
+        render_screen(state)
     end
   end
 
   # Renders the modal as the sole visible content, centered in the terminal.
-  # This is not a true z-index overlay — the screen behind is suspended while
-  # the modal is active — but it gives the user clear modal focus with no
-  # Raxol widget-render surprises, and dismissal restores the screen unchanged.
-  #
-  # Design: a full-screen flex column (justify: :center centers the box
-  # vertically; align: :center centers it horizontally) containing a
-  # double-border box that holds the modal body.
-  defp render_modal_overlay(modal, _terminal_size) do
+  # Extracts theme from state.session_context and passes it through to the
+  # theme-aware Modal.render/2 (Phase 7 thin adapter, D-08).
+  defp render_modal_overlay(modal, state) do
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+
     column justify: :center, align: :center do
       [
-        box style: %{border: :double, padding: 1} do
-          Widgets.Modal.render(modal)
+        box style: %{border: :double, padding: 1, border_fg: theme.border.fg} do
+          Widgets.Modal.render(modal, theme)
         end
       ]
     end
@@ -246,12 +254,20 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:window_change, cols, rows}, state)
        when is_integer(cols) and is_integer(rows) and cols > 0 and rows > 0 do
-    # SSH-06: terminal resize — also notify Session for presence/analytics.
-    if is_pid(state.session_pid) do
-      Foglet.Sessions.Session.set_terminal_size(state.session_pid, {cols, rows})
-    end
+    # D-09: same-size guard — short-circuit bursty SIGWINCH events at the
+    # same terminal size to avoid render storms during tmux/iTerm drags.
+    # Raxol coalesces frame renders so no time-based debounce is needed
+    # (D-10); this guard is sufficient per research Pitfall 4.
+    if state.terminal_size == {cols, rows} do
+      {state, []}
+    else
+      # SSH-06: terminal resize — also notify Session for presence/analytics.
+      if is_pid(state.session_pid) do
+        Foglet.Sessions.Session.set_terminal_size(state.session_pid, {cols, rows})
+      end
 
-    {%{state | terminal_size: {cols, rows}}, []}
+      {%{state | terminal_size: {cols, rows}}, []}
+    end
   end
 
   defp do_update({:navigate, screen}, state) when is_atom(screen) do
@@ -301,27 +317,37 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:key, key_event}, state) do
-    if state.modal != nil do
-      # Modal is active: route key directly to global_key_handler, which
-      # contains all modal dismiss / confirm logic. Never delegate to the
-      # screen module while a modal is open — screen handlers don't check
-      # state.modal and will consume the key silently.
-      global_key_handler(key_event, state)
-    else
-      screen_module = screen_module_for(state.current_screen)
+    cond do
+      SizeGate.too_small?(state) ->
+        # D-11: swallow keys entirely while gated. Screens behind the gate
+        # are hidden — we must not let their handle_key/2 silently mutate
+        # state (e.g., scroll a list, advance a cursor, consume a char).
+        # D-12: Ctrl+C / EOF reach CLIHandler at the SSH channel layer
+        # independently of update/2, so disconnect still works.
+        {state, []}
 
-      case screen_module.handle_key(key_event, state) do
-        {:update, new_state, commands} ->
-          # process_screen_commands/2 converts I/O dispatch tuples returned by
-          # screens (e.g. {:load_boards}, {:load_threads, id}) into real
-          # Command.task structs by routing them through their do_update/2 clauses,
-          # which have access to the current state (user, session_context, domain
-          # overrides). Plain %Command{} structs pass through unchanged.
-          process_screen_commands(new_state, commands)
+      state.modal != nil ->
+        # Modal is active: route key directly to global_key_handler, which
+        # contains all modal dismiss / confirm logic. Never delegate to the
+        # screen module while a modal is open — screen handlers don't check
+        # state.modal and will consume the key silently.
+        global_key_handler(key_event, state)
 
-        :no_match ->
-          global_key_handler(key_event, state)
-      end
+      true ->
+        screen_module = screen_module_for(state.current_screen)
+
+        case screen_module.handle_key(key_event, state) do
+          {:update, new_state, commands} ->
+            # process_screen_commands/2 converts I/O dispatch tuples returned by
+            # screens (e.g. {:load_boards}, {:load_threads, id}) into real
+            # Command.task structs by routing them through their do_update/2 clauses,
+            # which have access to the current state (user, session_context, domain
+            # overrides). Plain %Command{} structs pass through unchanged.
+            process_screen_commands(new_state, commands)
+
+          :no_match ->
+            global_key_handler(key_event, state)
+        end
     end
   end
 
@@ -384,10 +410,11 @@ defmodule Foglet.TUI.App do
   defp do_update({:load_threads, board_id}, state) do
     ctx = Map.get(state, :session_context) || %{}
     threads_mod = get_in(ctx, [:domain, :threads]) || Foglet.Threads
+    user_id = state.current_user && state.current_user.id
 
     task =
       Command.task(fn ->
-        {:threads_loaded, threads_mod.list_threads(board_id)}
+        {:threads_loaded, load_threads_for_user(threads_mod, board_id, user_id)}
       end)
 
     {state, [task]}
@@ -397,20 +424,47 @@ defmodule Foglet.TUI.App do
     {%{state | current_thread_list: threads}, []}
   end
 
-  defp do_update({:load_posts, thread_id}, state) do
+  # --- Load posts (with optional `jump_last: true` for reply-submit jump) ---
+
+  # 2-arity backward compat: existing callers dispatch {:load_posts, thread_id}.
+  defp do_update({:load_posts, thread_id}, state),
+    do: do_update({:load_posts, thread_id, []}, state)
+
+  # 3-arity with opts — Plan 04-03 D-05 reply-jump path.
+  defp do_update({:load_posts, thread_id, opts}, state) when is_list(opts) do
     ctx = Map.get(state, :session_context) || %{}
     posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
 
     task =
       Command.task(fn ->
-        {:posts_loaded, posts_mod.list_posts(thread_id)}
+        {:posts_loaded, posts_mod.list_posts(thread_id), opts}
       end)
 
     {state, [task]}
   end
 
-  defp do_update({:posts_loaded, posts}, state) do
-    {%{state | posts: posts}, []}
+  # 2-arity backward compat for the sink (other paths still emit the 2-tuple).
+  defp do_update({:posts_loaded, posts}, state),
+    do: do_update({:posts_loaded, posts, []}, state)
+
+  # 3-arity sink — consumes `jump_last: true` to set selected_post_index to
+  # the last post in the freshly-loaded list. All other opts are ignored.
+  defp do_update({:posts_loaded, posts, opts}, state) when is_list(opts) do
+    jump_last? = Keyword.get(opts, :jump_last, false)
+
+    ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
+
+    new_idx =
+      if jump_last? and posts != [] do
+        length(posts) - 1
+      else
+        ss.selected_post_index
+      end
+
+    new_ss = Map.put(ss, :selected_post_index, new_idx)
+    new_screen_state = Map.put(state.screen_state, :post_reader, new_ss)
+
+    {%{state | posts: posts, screen_state: new_screen_state}, []}
   end
 
   defp do_update({:flush_read_pointers, ctx}, state) do
@@ -428,7 +482,13 @@ defmodule Foglet.TUI.App do
     new_rp =
       if thread_id, do: Map.delete(state.read_position, thread_id), else: state.read_position
 
-    {%{state | read_position: new_rp}, []}
+    new_state = %{state | read_position: new_rp}
+
+    if new_state.current_screen == :board_list do
+      do_update({:load_boards}, new_state)
+    else
+      {new_state, []}
+    end
   end
 
   # PubSub message handlers (Audit #12).
@@ -539,6 +599,28 @@ defmodule Foglet.TUI.App do
     {state, []}
   end
 
+  defp load_threads_for_user(threads_mod, board_id, user_id) do
+    cond do
+      function_exported?(threads_mod, :list_threads, 2) ->
+        threads_mod.list_threads(board_id, user_id)
+
+      function_exported?(threads_mod, :list_threads, 1) ->
+        threads_mod.list_threads(board_id)
+        |> Enum.map(fn t ->
+          case t do
+            %Foglet.Threads.Thread{} ->
+              t |> Map.from_struct() |> Map.put(:has_unread, false)
+
+            %{} ->
+              Map.put_new(t, :has_unread, false)
+          end
+        end)
+
+      true ->
+        []
+    end
+  end
+
   # Helpers for {:flush_read_pointers, ctx} task closure — extracted to keep
   # the do_update clause within credo's cyclomatic complexity limit.
   defp flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod) do
@@ -558,7 +640,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp maybe_flush_thread_pointer(threads_mod, user_id, ctx) do
-    if ctx[:thread_id] && user_id do
+    if ctx[:thread_id] && user_id && ctx[:last_read_post_id] do
       threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
     end
   end

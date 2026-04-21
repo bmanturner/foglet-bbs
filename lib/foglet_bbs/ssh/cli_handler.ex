@@ -61,7 +61,8 @@ defmodule Foglet.SSH.CLIHandler do
     :session_pid,
     :lifecycle_pid,
     :width,
-    :height
+    :height,
+    over_limit: false
   ]
 
   # --- :ssh_server_channel callbacks ---
@@ -86,7 +87,14 @@ defmodule Foglet.SSH.CLIHandler do
           )
 
         _ = :ssh_connection.close(connection_ref, channel_id)
-        {:ok, state}
+
+        new_state = %__MODULE__{
+          over_limit: true,
+          channel_id: channel_id,
+          connection_ref: connection_ref
+        }
+
+        {:ok, new_state}
 
       :ok ->
         increment_connection_count()
@@ -203,7 +211,12 @@ defmodule Foglet.SSH.CLIHandler do
     send_alt_screen_leave(state)
     stop_lifecycle(state.lifecycle_pid)
     _ = stop_session(state.session_pid)
-    _ = decrement_connection_count()
+
+    _ =
+      unless state.over_limit do
+        decrement_connection_count()
+      end
+
     {:stop, state.channel_id || 0, state}
   end
 
@@ -316,7 +329,7 @@ defmodule Foglet.SSH.CLIHandler do
       if is_pid(state.session_pid) do
         case Sessions.Session.get_state(state.session_pid) do
           %{user_id: nil} -> nil
-          %{user_id: uid} -> Foglet.Accounts.get_user!(uid)
+          %{user_id: uid} -> Foglet.Accounts.get_user(uid)
         end
       else
         nil
@@ -343,7 +356,8 @@ defmodule Foglet.SSH.CLIHandler do
         session_pid: state.session_pid,
         pubkey_authenticated: not is_nil(user),
         registration_mode: reg_mode,
-        max_post_length: max_post_length
+        max_post_length: max_post_length,
+        theme: Foglet.TUI.Theme.default()
       },
       terminal_size: {width, height}
     }

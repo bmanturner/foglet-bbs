@@ -6,7 +6,10 @@ defmodule Foglet.TUI.Screens.ThreadList do
   Each row shows title and unread count.
   """
 
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.TimeAgo
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
 
   import Raxol.Core.Renderer.View
 
@@ -14,57 +17,61 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def render(state) do
     board = state.current_board
     ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
-    thread_rows = render_thread_rows(state, ss)
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    thread_content = render_thread_content(state, ss, theme)
+    board_name = (board && board.name) || "?"
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" Threads — #{(board && board.name) || "?"} ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "Threads: #{(board && board.name) || "?"}"
-              }),
-              column style: %{gap: 0} do
-                thread_rows
-              end
-            ]
-          end,
-          KeyBar.render([{"j/k", "Select"}, {"Enter", "Open"}, {"C", "Compose"}, {"Q", "Back"}])
-        ]
-      end
+    ScreenFrame.render(state, "Threads — #{board_name}", thread_content, [
+      {"j/k", "Select"},
+      {"Enter", "Open"},
+      {"C", "Compose"},
+      {"Q", "Back"}
+    ])
+  end
+
+  defp render_thread_content(state, _ss, theme) when state.current_thread_list == [] do
+    column style: %{gap: 0} do
+      [text("No threads in this board yet. Press [C] to compose.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_thread_rows(state, _ss) when state.current_thread_list == [] do
-    [text("No threads in this board yet. Press [C] to compose.", fg: :yellow)]
-  end
-
-  defp render_thread_rows(state, ss) do
+  defp render_thread_content(state, ss, theme) do
     sorted = sort_threads(state.current_thread_list || [])
+    {width, _h} = state.terminal_size || {80, 24}
+    inner_width = max(width - 4, 40)
 
     if sorted == [] do
-      [text("Loading...", style: [:dim])]
+      column style: %{gap: 0} do
+        [text("Loading...", fg: theme.dim.fg)]
+      end
     else
-      Enum.with_index(sorted)
-      |> Enum.map(fn {thread, idx} -> render_thread_row(thread, idx, ss.selected_index) end)
+      SelectionList.render(sorted, ss.selected_index, fn {thread, _idx, selected} ->
+        render_thread_row(thread, selected, inner_width, theme)
+      end)
     end
   end
 
-  defp render_thread_row(thread, idx, selected_index) do
-    marker = if idx == selected_index, do: "> ", else: "  "
-    sticky_mark = if thread.sticky, do: "[S] ", else: ""
-    unread = Map.get(thread, :unread_count, 0)
-    unread_str = if unread > 0, do: " (#{unread})", else: ""
-
-    if idx == selected_index do
-      text("#{marker}#{sticky_mark}#{thread.title}#{unread_str}", fg: :green, style: [:bold])
-    else
-      text("#{marker}#{sticky_mark}#{thread.title}#{unread_str}", fg: :green)
-    end
+  defp render_thread_row(thread, selected, width, theme) do
+    sticky_mark = if Map.get(thread, :sticky, false), do: "[S] ", else: ""
+    title = "#{sticky_mark}#{Map.get(thread, :title, "?")}"
+    metadata = thread_metadata(thread)
+    unread? = Map.get(thread, :has_unread, false)
+    ListRow.render_with_metadata(title, metadata, selected, unread?, theme, width: width)
   end
+
+  defp thread_metadata(thread) do
+    handle = thread_handle(thread)
+    count = Map.get(thread, :post_count, 1) |> max(1)
+    post_word = if count == 1, do: "post", else: "posts"
+    time_segment = thread_time_segment(thread)
+    "@#{handle} · #{count} #{post_word} · #{time_segment}"
+  end
+
+  defp thread_handle(%{created_by: %{handle: h}}) when is_binary(h) and h != "", do: h
+  defp thread_handle(_), do: "unknown"
+
+  defp thread_time_segment(%{last_post_at: %DateTime{} = dt}), do: "#{TimeAgo.format(dt)} ago"
+  defp thread_time_segment(_), do: "new"
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :char, char: "j"}, state), do: move_selection(state, +1)
@@ -93,12 +100,27 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
-    {:update, %{state | current_screen: :post_composer, composer_draft: "", current_thread: nil},
-     []}
+    {w, _h} = state.terminal_size || {80, 24}
+
+    # COMPOSE-01 / COMPOSE-03: skip the board picker since we're already
+    # inside a board. Pre-fill board, jump straight to :compose step, and
+    # stash origin so Cancel returns to this ThreadList.
+    ss =
+      Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
+      |> Map.merge(%{
+        step: :compose,
+        board: state.current_board,
+        boards: nil,
+        origin: :thread_list
+      })
+
+    new_screen_state = Map.put(state.screen_state, :new_thread, ss)
+
+    {:update, %{state | current_screen: :new_thread, screen_state: new_screen_state}, []}
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
-    {:update, %{state | current_screen: :board_list}, []}
+    {:update, %{state | current_screen: :board_list}, [{:load_boards}]}
   end
 
   def handle_key(_key, _state), do: :no_match
@@ -108,22 +130,52 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def load_threads(state, board_id) do
     ctx = Map.get(state, :session_context) || %{}
     threads_mod = get_in(ctx, [:domain, :threads]) || Foglet.Threads
+    user_id = state.current_user && state.current_user.id
 
-    if function_exported?(threads_mod, :list_threads, 1) do
-      threads = threads_mod.list_threads(board_id)
-      {%{state | current_thread_list: threads}, []}
-    else
-      {%{state | current_thread_list: []}, []}
+    cond do
+      function_exported?(threads_mod, :list_threads, 2) ->
+        threads = threads_mod.list_threads(board_id, user_id)
+        {%{state | current_thread_list: threads}, []}
+
+      function_exported?(threads_mod, :list_threads, 1) ->
+        threads = threads_mod.list_threads(board_id) |> Enum.map(&annotate_fallback/1)
+        {%{state | current_thread_list: threads}, []}
+
+      true ->
+        {%{state | current_thread_list: []}, []}
     end
   end
+
+  defp annotate_fallback(%Foglet.Threads.Thread{} = t) do
+    t
+    |> Map.from_struct()
+    |> Map.put(:has_unread, false)
+  end
+
+  defp annotate_fallback(t) when is_map(t), do: Map.put_new(t, :has_unread, false)
 
   # --- Private ---
 
   defp sort_threads(threads) when is_list(threads) do
-    {sticky, regular} = Enum.split_with(threads, &(&1.sticky == true))
+    {sticky, regular} = Enum.split_with(threads, &(Map.get(&1, :sticky, false) == true))
+    sort_by_recency(sticky) ++ sort_by_recency(regular)
+  end
 
-    Enum.sort_by(sticky, & &1.last_post_at, {:desc, DateTime}) ++
-      Enum.sort_by(regular, & &1.last_post_at, {:desc, DateTime})
+  # Sort threads newest-first within a group. Threads with nil last_post_at
+  # sort last (they are brand-new and have no post activity yet).
+  defp sort_by_recency(threads) do
+    threads
+    |> Enum.sort_by(
+      fn t ->
+        case Map.get(t, :last_post_at) do
+          %DateTime{} = dt -> {0, DateTime.to_unix(dt, :microsecond)}
+          # nil sorts last within the group
+          _ -> {1, 0}
+        end
+      end,
+      :asc
+    )
+    |> Enum.reverse()
   end
 
   defp move_selection(state, delta) do

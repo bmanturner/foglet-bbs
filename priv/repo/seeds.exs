@@ -45,7 +45,13 @@ default_config = [
    "Account registration policy (D-02/D-03): open | invite_only | sysop_approved"},
   {"invite_code_generators", "sysop_only",
    "Who may generate invite codes (D-04): sysop_only | mods | any_user"},
-  {"max_post_length", 8192, "Maximum post body length in characters (D-31)"}
+  {"max_post_length", 8192, "Maximum post body length in characters (D-31)"},
+  {"max_thread_title_length", 60,
+   "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)"},
+  {"require_email_verification", true,
+   "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)"},
+  {"email_verify_resend_cooldown_seconds", 60,
+   "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)"}
 ]
 
 Enum.each(default_config, fn {key, value, description} ->
@@ -119,6 +125,9 @@ alias Foglet.Threads.Thread
 alias Foglet.Posts
 alias Foglet.Posts.Post
 
+# NOTE: Seeds are intended for development use only. The password below is a
+# well-known dev fixture and must never be used in production. Do not run
+# `mix run priv/repo/seeds.exs` against a production database.
 seed_sysop =
   case Accounts.get_user_by_handle("sysop") do
     nil ->
@@ -233,9 +242,10 @@ if general_board do
     )
 
   if intro_post_count < 2 do
-    Posts.create_reply(intro_thread.id, general_board.id, seed_member.id, %{
-      body: "Hey! I'm foglet — just setting up the system. Glad to be here."
-    })
+    {:ok, _} =
+      Posts.create_reply(intro_thread.id, general_board.id, seed_member.id, %{
+        body: "Hey! I'm foglet — just setting up the system. Glad to be here."
+      })
 
     IO.puts("  [seed] inserted reply in thread: Introduce Yourself")
   end
@@ -266,14 +276,16 @@ if general_board do
     )
 
   if chat_post_count < 3 do
-    Posts.create_reply(chat_thread.id, general_board.id, seed_sysop.id, %{
-      body: "Glad this system is up and running. The SSH interface feels snappy."
-    })
+    {:ok, _} =
+      Posts.create_reply(chat_thread.id, general_board.id, seed_sysop.id, %{
+        body: "Glad this system is up and running. The SSH interface feels snappy."
+      })
 
-    Posts.create_reply(chat_thread.id, general_board.id, seed_member.id, %{
-      body:
-        "Agreed. Markdown preview in the composer is a nice touch — **bold** and *italic* both render correctly."
-    })
+    {:ok, _} =
+      Posts.create_reply(chat_thread.id, general_board.id, seed_member.id, %{
+        body:
+          "Agreed. Markdown preview in the composer is a nice touch — **bold** and *italic* both render correctly."
+      })
 
     IO.puts("  [seed] inserted replies in thread: General Chat")
   end

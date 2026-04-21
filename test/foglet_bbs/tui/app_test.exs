@@ -174,6 +174,304 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "view/1 size gate (FRAME-03, Phase 5)" do
+    test "renders SizeGate output when cols < 64" do
+      {:ok, state} = App.init(%{terminal_size: {40, 30}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      assert serialized =~ "Terminal too small."
+      assert serialized =~ "Foglet BBS requires at least 60×20."
+      assert serialized =~ "40×30"
+    end
+
+    test "renders SizeGate output when rows < 22" do
+      {:ok, state} = App.init(%{terminal_size: {100, 10}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      assert serialized =~ "Terminal too small."
+      assert serialized =~ "100×10"
+    end
+
+    test "renders normal screen at exactly 64×22 (strict inequality per D-13)" do
+      {:ok, state} = App.init(%{terminal_size: {64, 22}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      # Normal screen renders chrome — StatusBar contains "Foglet BBS —"
+      # but NOT "Terminal too small." So assert the absence of the gate marker.
+      refute serialized =~ "Terminal too small."
+    end
+
+    test "renders normal screen at 80×24 (common default)" do
+      {:ok, state} = App.init(%{terminal_size: {80, 24}})
+      element = App.view(state)
+      serialized = inspect(element, limit: :infinity)
+      refute serialized =~ "Terminal too small."
+    end
+
+    test "gate takes precedence over modal (D-04 ordering)" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {with_modal, _} = App.update({:show_modal, %{type: :info, message: "a modal"}}, state)
+      element = App.view(with_modal)
+      serialized = inspect(element, limit: :infinity)
+      # Gate wins — modal message is NOT visible, gate message IS
+      assert serialized =~ "Terminal too small."
+      refute serialized =~ "a modal"
+    end
+
+    test "gate is purely render-time — state is not modified by view/1 call" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+
+      state_with_screen = %{
+        state
+        | current_screen: :board_list,
+          screen_state: %{board_list: %{selected_index: 3}},
+          composer_draft: "draft-in-progress"
+      }
+
+      _ = App.view(state_with_screen)
+
+      # view/1 is pure — state should be completely unchanged
+      assert state_with_screen.current_screen == :board_list
+      assert state_with_screen.screen_state.board_list.selected_index == 3
+      assert state_with_screen.composer_draft == "draft-in-progress"
+    end
+  end
+
+  describe "update/2 {:window_change} same-size guard (D-09, Pitfall 4)" do
+    setup do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+      %{state: state}
+    end
+
+    test "short-circuits when {cols, rows} matches state.terminal_size", %{state: state} do
+      {new_state, cmds} = App.update({:window_change, 100, 30}, state)
+      # Identity — state must not be mutated at all (D-09)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "processes normally when size differs", %{state: state} do
+      {new_state, cmds} = App.update({:window_change, 120, 40}, state)
+      assert new_state.terminal_size == {120, 40}
+      assert cmds == []
+    end
+
+    test "processes normally when only cols change", %{state: state} do
+      {new_state, _} = App.update({:window_change, 120, 30}, state)
+      assert new_state.terminal_size == {120, 30}
+    end
+
+    test "processes normally when only rows change", %{state: state} do
+      {new_state, _} = App.update({:window_change, 100, 40}, state)
+      assert new_state.terminal_size == {100, 40}
+    end
+
+    test "short-circuits even when state.session_pid is set (no Session cast)", %{state: state} do
+      # When state.terminal_size already matches, we must NOT send a cast to Session.
+      # Using self() as a stand-in session_pid — if a cast were sent, self()'s
+      # mailbox would accumulate it.
+      state_with_pid = %{state | session_pid: self()}
+      {_new_state, cmds} = App.update({:window_change, 100, 30}, state_with_pid)
+      assert cmds == []
+      # No cast message should be in our mailbox from Session.set_terminal_size
+      refute_receive {:"$gen_cast", _}, 10
+    end
+  end
+
+  describe "update/2 {:key} swallow when gated (FRAME-03, D-11)" do
+    test "swallows {:key, _} when SizeGate.too_small?(state)" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "q"}}, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "swallows enter when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {new_state, cmds} = App.update({:key, %{key: :enter}}, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "swallows escape when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {new_state, cmds} = App.update({:key, %{key: :escape}}, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "does NOT dispatch to screen's handle_key when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      # On the login screen normally, 'Q' returns a quit command. When gated,
+      # it must be swallowed — no quit command.
+      {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
+      assert cmds == []
+    end
+
+    test "still dispatches {:key, _} normally above threshold" do
+      {:ok, state} = App.init(%{terminal_size: {80, 24}})
+      # 'Q' on login returns a quit command (proves key reached handle_key)
+      {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
+      assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
+    end
+
+    test "{:window_change, _, _} reaches the normal handler even when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      # Resize OUT of the gate — this non-key message must still process
+      # so the user can un-gate by resizing up
+      {new_state, _cmds} = App.update({:window_change, 100, 30}, state)
+      assert new_state.terminal_size == {100, 30}
+    end
+
+    test ":heartbeat_tick reaches the normal handler even when gated" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      # Non-key messages flow through normally — heartbeat is a no-op with
+      # no session_pid but must not crash or be swallowed
+      {new_state, cmds} = App.update(:heartbeat_tick, state)
+      assert new_state == state
+      assert cmds == []
+    end
+
+    test "gate precedence: gate beats modal" do
+      {:ok, state} = App.init(%{terminal_size: {40, 10}})
+      {with_modal, _} = App.update({:show_modal, %{type: :info, message: "x"}}, state)
+      # Even with a modal open, the key is swallowed by the gate (gate is first in cond)
+      {new_state, cmds} = App.update({:key, %{key: :enter}}, with_modal)
+      # Modal would normally dismiss on :enter; gate prevents that
+      assert new_state.modal != nil
+      assert cmds == []
+    end
+  end
+
+  describe "composer draft preservation across resize gate cycles (Pitfall 4)" do
+    test "post_composer input_state.value survives resize-down → key-press → resize-up cycle" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      # Simulate a post_composer session with an in-flight draft
+      state_with_composer = %{
+        state
+        | current_screen: :post_composer,
+          screen_state: %{
+            post_composer: %{
+              mode: :compose,
+              input_state: %{value: "draft-in-progress", cursor_pos: 17},
+              error: nil
+            }
+          }
+      }
+
+      # Step 1: resize DOWN below threshold — gate engages
+      {gated, _cmds} = App.update({:window_change, 40, 10}, state_with_composer)
+      assert Foglet.TUI.SizeGate.too_small?(gated)
+      # Composer state is preserved through the resize (update/2 didn't touch it)
+      assert gated.screen_state.post_composer.input_state.value == "draft-in-progress"
+      assert gated.screen_state.post_composer.input_state.cursor_pos == 17
+      assert gated.current_screen == :post_composer
+
+      # Step 2: user hammers keys while gated — ALL must be swallowed
+      {after_q, _} = App.update({:key, %{key: :char, char: "q"}}, gated)
+      {after_enter, _} = App.update({:key, %{key: :enter}}, after_q)
+      {after_esc, _} = App.update({:key, %{key: :escape}}, after_enter)
+      # Draft still intact
+      assert after_esc.screen_state.post_composer.input_state.value == "draft-in-progress"
+      assert after_esc.screen_state.post_composer.input_state.cursor_pos == 17
+      assert after_esc.current_screen == :post_composer
+
+      # Step 3: resize BACK above threshold — gate releases
+      {released, _} = App.update({:window_change, 100, 30}, after_esc)
+      refute Foglet.TUI.SizeGate.too_small?(released)
+      # Draft survives the full cycle end-to-end
+      assert released.screen_state.post_composer.input_state.value == "draft-in-progress"
+      assert released.screen_state.post_composer.input_state.cursor_pos == 17
+      assert released.current_screen == :post_composer
+    end
+
+    test "new_thread body_input_state.value survives the same cycle" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      state_with_new_thread = %{
+        state
+        | current_screen: :new_thread,
+          screen_state: %{
+            new_thread: %{
+              step: :compose,
+              title_input: "My new thread",
+              body_input_state: %{value: "line1\nline2\nline3", cursor_pos: 17},
+              focused: :body,
+              mode: :compose,
+              boards: nil,
+              board: nil,
+              selected_board_index: 0,
+              error: nil,
+              origin: :main_menu
+            }
+          }
+      }
+
+      # Resize down → key presses → resize up
+      {gated, _} = App.update({:window_change, 50, 15}, state_with_new_thread)
+      {after_keys, _} = App.update({:key, %{key: :char, char: "X"}}, gated)
+      {released, _} = App.update({:window_change, 100, 30}, after_keys)
+
+      # Multi-line content preserved verbatim
+      assert released.screen_state.new_thread.body_input_state.value == "line1\nline2\nline3"
+      assert released.screen_state.new_thread.body_input_state.cursor_pos == 17
+      assert released.screen_state.new_thread.title_input == "My new thread"
+      assert released.current_screen == :new_thread
+    end
+
+    test "rapid resize bursts at the same sub-threshold size do not mutate state" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      state_with_composer = %{
+        state
+        | current_screen: :post_composer,
+          screen_state: %{
+            post_composer: %{
+              mode: :compose,
+              input_state: %{value: "important-draft", cursor_pos: 15},
+              error: nil
+            }
+          }
+      }
+
+      # One resize to sub-threshold
+      {gated_once, _} = App.update({:window_change, 40, 10}, state_with_composer)
+
+      # Burst of same-size events (simulates tmux drag) — D-09 same-size guard
+      # Each one must short-circuit to identity
+      final =
+        Enum.reduce(1..20, gated_once, fn _, acc ->
+          {new_state, _cmds} = App.update({:window_change, 40, 10}, acc)
+          new_state
+        end)
+
+      # Draft preserved, state structurally identical to gated_once
+      assert final == gated_once
+      assert final.screen_state.post_composer.input_state.value == "important-draft"
+    end
+
+    test "read_position survives resize gate cycle" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      state_reading = %{
+        state
+        | current_screen: :post_reader,
+          current_thread: %{id: "thread-1"},
+          read_position: %{"thread-1" => %{last_post_id: "post-42", scroll: 15}},
+          screen_state: %{post_reader: %{selected_post_index: 5}}
+      }
+
+      {gated, _} = App.update({:window_change, 50, 15}, state_reading)
+      {after_keys, _} = App.update({:key, %{key: :char, char: "j"}}, gated)
+      {released, _} = App.update({:window_change, 100, 30}, after_keys)
+
+      assert released.read_position == state_reading.read_position
+      assert released.screen_state.post_reader.selected_post_index == 5
+      assert released.current_screen == :post_reader
+    end
+  end
+
   describe "subscribe/1" do
     test "returns empty list when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})
@@ -514,6 +812,81 @@ defmodule Foglet.TUI.AppTest do
     test "{:command_result, {:unknown_result}} hits catch-all safely — returns {state, []}",
          %{state: state} do
       assert {^state, []} = App.update({:command_result, {:unknown_result}}, state)
+    end
+  end
+
+  describe "update/2 — {:read_pointers_flushed, thread_id} second-phase refresh (LIST-02 D-06)" do
+    setup do
+      {:ok, base_state} = App.init(%{})
+
+      state =
+        %{
+          base_state
+          | current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+            session_context: %{
+              domain: %{
+                boards: %{
+                  list_subscribed_boards: fn _user ->
+                    [%{id: "b1", name: "General", slug: "general", unread_count: 3}]
+                  end
+                }
+              }
+            }
+        }
+
+      %{state: state}
+    end
+
+    test "clears read_position[thread_id] regardless of current screen", %{state: state} do
+      state = %{
+        state
+        | current_screen: :thread_list,
+          read_position: %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
+      }
+
+      {new_state, _cmds} = App.update({:read_pointers_flushed, "t1"}, state)
+      refute Map.has_key?(new_state.read_position, "t1")
+    end
+
+    test "nil thread_id leaves read_position unchanged", %{state: state} do
+      rp = %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
+      state = %{state | current_screen: :thread_list, read_position: rp}
+      {new_state, _cmds} = App.update({:read_pointers_flushed, nil}, state)
+      assert new_state.read_position == rp
+    end
+
+    test "on :board_list — dispatches a {:load_boards} task (D-06 second refresh)", %{
+      state: state
+    } do
+      state = %{state | current_screen: :board_list, read_position: %{"t1" => %{}}}
+      {_new_state, cmds} = App.update({:read_pointers_flushed, "t1"}, state)
+
+      assert Enum.any?(cmds, fn
+               %Raxol.Core.Runtime.Command{} -> true
+               _ -> false
+             end),
+             "Expected a Command.task for {:load_boards} refresh when current_screen == :board_list"
+    end
+
+    test "on :thread_list — does NOT dispatch {:load_boards}", %{state: state} do
+      state = %{state | current_screen: :thread_list, read_position: %{"t1" => %{}}}
+      {_new_state, cmds} = App.update({:read_pointers_flushed, "t1"}, state)
+
+      refute Enum.any?(cmds, fn
+               %Raxol.Core.Runtime.Command{} -> true
+               _ -> false
+             end),
+             "Expected no {:load_boards} refresh on :thread_list screen"
+    end
+
+    test "on :post_reader — does NOT dispatch {:load_boards}", %{state: state} do
+      state = %{state | current_screen: :post_reader, read_position: %{"t1" => %{}}}
+      {_new_state, cmds} = App.update({:read_pointers_flushed, "t1"}, state)
+
+      refute Enum.any?(cmds, fn
+               %Raxol.Core.Runtime.Command{} -> true
+               _ -> false
+             end)
     end
   end
 end

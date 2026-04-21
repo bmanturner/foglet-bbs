@@ -9,11 +9,15 @@ defmodule Foglet.TUI.Screens.NewThread do
   State lives in state.screen_state[:new_thread].  See init_screen_state/1.
 
   On submit: calls Foglet.Threads.create_thread/3 (board_id, user_id, %{title:, body:}).
-  On success: navigates to :post_reader with the new thread loaded.
-  If the function is not exported, shows a friendly "coming soon" modal.
+  On success: navigates to :thread_list with the new thread pre-loaded.
   """
 
-  alias Foglet.TUI.Widgets.{KeyBar, StatusBar}
+  alias Foglet.Config
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Compose
+  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.Post.MarkdownBody
   alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
@@ -51,7 +55,10 @@ defmodule Foglet.TUI.Screens.NewThread do
       body_input_state: body_input_state,
       focused: :title,
       mode: :edit,
-      error: nil
+      error: nil,
+      # Callers may override :origin to control where Ctrl+C / Esc navigate.
+      # Default is :main_menu (the only entry point for the board-pick step).
+      origin: :main_menu
     }
   end
 
@@ -70,173 +77,108 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp render_board_step(state, ss) do
-    rows = render_board_rows(ss.boards, ss.selected_board_index)
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
+    board_content =
+      case ss.boards do
+        nil ->
+          column style: %{gap: 0} do
+            [text("Loading boards…", fg: theme.dim.fg)]
+          end
+
+        [] ->
           column style: %{gap: 0} do
             [
-              text(" New Thread — pick a board ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "New Thread: Board"
-              }),
-              column style: %{gap: 0} do
-                rows
-              end
+              text(
+                "You aren't subscribed to any boards. Ask your sysop to subscribe you.",
+                fg: theme.warning.fg
+              )
             ]
-          end,
-          KeyBar.render([{"j/k", "Select"}, {"Enter", "Choose"}, {"Esc", "Cancel"}])
-        ]
+          end
+
+        boards ->
+          SelectionList.render(boards, ss.selected_board_index, fn {board, _idx, selected} ->
+            ListRow.render(board.name, selected, theme)
+          end)
       end
-    end
+
+    ScreenFrame.render(state, "New Thread — pick a board", board_content, [
+      {"j/k", "Select"},
+      {"Enter", "Choose"},
+      {"Esc", "Cancel"}
+    ])
   end
 
-  defp render_board_rows(nil, _idx) do
-    [text("Loading boards…", style: [:dim])]
-  end
+  defp render_compose_step(state, ss) do
+    board = ss.board
+    board_name = (board && board.name) || "?"
+    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
-  defp render_board_rows([], _idx) do
-    [text("You aren't subscribed to any boards. Ask your sysop to subscribe you.", fg: :yellow)]
-  end
+    # D-14: render the title line with a live N / cap char counter so users
+    # see the soft limit as they type.
+    cap = max_thread_title_length()
+    title_len = String.length(ss.title_input)
+    counter = "#{title_len} / #{cap} chars"
 
-  defp render_board_rows(boards, selected_index) do
-    Enum.with_index(boards)
-    |> Enum.map(fn {board, idx} ->
-      marker = if idx == selected_index, do: "> ", else: "  "
-
-      if idx == selected_index do
-        text("#{marker}#{board.name}", fg: :green, style: [:bold])
+    title_line =
+      if ss.focused == :title do
+        text("Title: #{ss.title_input}█", fg: theme.accent.fg, style: [:bold])
       else
-        text("#{marker}#{board.name}", fg: :green)
+        text("Title: #{ss.title_input}", fg: theme.primary.fg)
       end
-    end)
+
+    title_counter_line = text(counter, fg: theme.dim.fg)
+
+    body_section = render_body_section(state, ss, theme)
+
+    error_items =
+      if ss.error do
+        [text(""), text(ss.error, fg: theme.error.fg, style: [:bold])]
+      else
+        []
+      end
+
+    content =
+      column style: %{gap: 0} do
+        [
+          text(""),
+          title_line,
+          title_counter_line,
+          text(""),
+          text("Body:", fg: theme.primary.fg),
+          body_section
+        ] ++ error_items ++ [text("")]
+      end
+
+    ScreenFrame.render(state, "New Thread — #{board_name}", content, [
+      {"Tab", compose_tab_hint(ss)},
+      {"Ctrl+S", "Submit"},
+      {"Ctrl+C", "Cancel"}
+    ])
   end
 
   defp compose_tab_hint(%{focused: :body, mode: :edit}), do: "Preview"
   defp compose_tab_hint(%{focused: :body, mode: :preview}), do: "Edit"
   defp compose_tab_hint(_ss), do: "Switch field"
 
-  defp render_body_section(state, ss) do
+  defp render_body_section(state, ss, theme) do
     body_focused = ss.focused == :body
 
     case ss.mode do
-      :edit -> render_body(ss.body_input_state, body_focused)
-      :preview -> render_markdown_tuples(render_preview_text(state, ss.body_input_state.value))
+      :edit ->
+        # D-09: delegate to shared widget. NewThread preserves its legacy
+        # single-space placeholder for empty lines (see Plan 04-01's opt).
+        Compose.render_input(ss.body_input_state, body_focused, theme,
+          empty_line_placeholder: " "
+        )
+
+      :preview ->
+        {w, _h} = state.terminal_size || {80, 24}
+        body_width = max(w - 4, 20)
+        MarkdownBody.render(ss.body_input_state.value, body_width, theme)
     end
   end
 
-  defp render_compose_step(state, ss) do
-    board = ss.board
-    board_name = (board && board.name) || "?"
-
-    title_line =
-      if ss.focused == :title do
-        text("Title: #{ss.title_input}█", fg: :green, style: [:bold])
-      else
-        text("Title: #{ss.title_input}", fg: :green)
-      end
-
-    body_section = render_body_section(state, ss)
-
-    error_items =
-      if ss.error do
-        [text(""), text(ss.error, fg: :red)]
-      else
-        []
-      end
-
-    box style: %{border: :single, padding: 1} do
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              text(" New Thread — #{board_name} ", style: [:bold]),
-              divider(),
-              StatusBar.render(%{
-                handle: state.current_user && state.current_user.handle,
-                location: "New Thread: Compose"
-              }),
-              text(""),
-              title_line,
-              text(""),
-              text("Body:", fg: :green),
-              body_section
-            ] ++ error_items ++ [text("")]
-          end,
-          KeyBar.render([
-            {"Tab", compose_tab_hint(ss)},
-            {"Ctrl+S", "Submit"},
-            {"Ctrl+C", "Cancel"}
-          ])
-        ]
-      end
-    end
-  end
-
-  # Renders MultiLineInput state as plain text/2 — avoids MultiLineInput.render/2
-  # which crashes the layout engine (Bug B).
-  defp render_body(input_st, focused?) do
-    lines =
-      input_st.value
-      |> String.split("\n")
-      |> case do
-        [] -> [""]
-        ls -> ls
-      end
-
-    {cursor_row, cursor_col} = Map.get(input_st, :cursor_pos, {0, 0})
-
-    column style: %{gap: 0} do
-      lines
-      |> Enum.with_index()
-      |> Enum.map(fn {line, idx} ->
-        rendered =
-          if focused? and idx == cursor_row do
-            {before, after_} = String.split_at(line, cursor_col)
-            "#{before}█#{after_}"
-          else
-            line
-          end
-
-        # Use a placeholder space for empty lines so the element is non-empty.
-        display = if rendered == "", do: " ", else: rendered
-        text(display, fg: :green)
-      end)
-    end
-  end
-
-  # Returns a [{text, style_atom}] list for the given draft string.
-  # Mirrors PostComposer.render_preview/2 — uses injected markdown mod if available.
-  defp render_preview_text(state, draft) do
-    sc = Map.get(state, :session_context) || %{}
-    markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
-
-    if function_exported?(markdown_mod, :render, 1) do
-      markdown_mod.render(draft)
-    else
-      [{draft, :plain}]
-    end
-  end
-
-  # Walks a [{text, style}] list from Foglet.Markdown.render/1 and produces
-  # a column of text/2 elements styled appropriately.
-  defp render_markdown_tuples(tuples) when is_list(tuples) do
-    column style: %{gap: 0} do
-      Enum.map(tuples, fn
-        {s, :bold} -> text(s, style: [:bold], fg: :green)
-        {s, :italic} -> text(s, style: [:italic], fg: :green)
-        {s, :dim} -> text(s, style: [:dim], fg: :green)
-        {s, :underline} -> text(s, style: [:underline], fg: :green)
-        {s, :plain} -> text(s, fg: :green)
-        {s, _} -> text(s, fg: :green)
-      end)
-    end
-  end
-
-  # ---------------------------------------------------------------------------
   # Key handler
   # ---------------------------------------------------------------------------
 
@@ -305,12 +247,15 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # --- Compose step ---
 
-  defp handle_compose_key(%{key: :char, char: "c", ctrl: true}, state, _ss) do
-    {:update, %{state | current_screen: :main_menu}, []}
+  # D-07: origin-aware cancel on the :compose step.
+  # The board step still routes Esc to :main_menu (handle_board_key at
+  # line ~237) because the board step is only reachable from MainMenu.
+  defp handle_compose_key(%{key: :char, char: "c", ctrl: true}, state, ss) do
+    {:update, %{state | current_screen: Map.get(ss, :origin, :main_menu)}, []}
   end
 
-  defp handle_compose_key(%{key: :escape}, state, _ss) do
-    {:update, %{state | current_screen: :main_menu}, []}
+  defp handle_compose_key(%{key: :escape}, state, ss) do
+    {:update, %{state | current_screen: Map.get(ss, :origin, :main_menu)}, []}
   end
 
   defp handle_compose_key(%{key: :tab}, state, ss) do
@@ -342,15 +287,33 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Title field: typed character — Raxol native %{key: :char, char: c}.
   # Spacebar arrives as char: " " naturally; no special-case needed.
+  # D-14: enforce the soft title cap from Foglet.Config key
+  # "max_thread_title_length" (default 60). Keystrokes past the cap are
+  # rejected silently. The schema-level hard cap of 300 (D-15) remains
+  # as a DB backstop for sysops who raise the config.
   defp handle_compose_key(%{key: :char, char: c}, state, %{focused: :title} = ss) do
-    {:update, put_ss(state, %{ss | title_input: ss.title_input <> c}), []}
+    cap = max_thread_title_length()
+    new_title = ss.title_input <> c
+
+    if String.length(new_title) > cap do
+      :no_match
+    else
+      {:update, put_ss(state, %{ss | title_input: new_title}), []}
+    end
   end
 
   defp handle_compose_key(_key, _state, %{focused: :title}), do: :no_match
 
-  # Body field: forward to MultiLineInput
+  # Body field: forward to MultiLineInput.
+  # NOTE: The Ctrl+C (cancel) and Ctrl+S (submit) clauses at lines 250 and 270
+  # MUST remain above this clause in source order. Compose.translate_key/1
+  # intentionally passes ctrl+char combos through as {:input, codepoint} for
+  # terminal-native workflows; the screen-level pattern-matches above intercept
+  # Ctrl+S and Ctrl+C before they can reach this fallthrough. Moving those
+  # clauses below this one would cause Ctrl+S on body focus to insert "s" into
+  # the body text instead of submitting.
   defp handle_compose_key(key_event, state, %{focused: :body} = ss) do
-    case translate_key(key_event) do
+    case Compose.translate_key(key_event) do
       nil ->
         :no_match
 
@@ -366,23 +329,6 @@ defmodule Foglet.TUI.Screens.NewThread do
             :no_match
         end
     end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Board loading (called by App.update/2 on {:load_boards_for_new_thread})
-  # ---------------------------------------------------------------------------
-
-  @doc """
-  Loads subscribed boards into the new_thread screen state.
-  Called from App.update/2 in response to {:load_boards_for_new_thread}.
-  """
-  @spec load_boards(map()) :: {map(), list()}
-  def load_boards(state) do
-    boards_mod = domain_module(state, :boards)
-    boards = boards_mod.list_subscribed_boards(state.current_user)
-    ss = screen_state(state)
-    new_ss = %{ss | boards: boards}
-    {put_ss(state, new_ss), []}
   end
 
   # ---------------------------------------------------------------------------
@@ -402,70 +348,50 @@ defmodule Foglet.TUI.Screens.NewThread do
         {:update, put_ss(state, %{ss | error: "Post body cannot be empty."}), []}
 
       true ->
-        threads_mod = domain_module(state, :threads)
-        user_id = state.current_user && state.current_user.id
+        do_create_thread(state, ss, title, body, board)
+    end
+  end
 
-        if function_exported?(threads_mod, :create_thread, 3) and user_id do
-          case threads_mod.create_thread(board.id, user_id, %{title: title, body: body}) do
-            {:ok, %{thread: thread}} ->
-              new_state = %{
-                state
-                | current_screen: :post_reader,
-                  current_board: board,
-                  current_thread: thread,
-                  screen_state:
-                    Map.merge(state.screen_state, %{
-                      new_thread: nil,
-                      post_reader: %{selected_post_index: 0}
-                    })
-              }
+  defp do_create_thread(state, ss, title, body, board) do
+    threads_mod = threads_module(state)
+    user_id = state.current_user && state.current_user.id
 
-              {:update, new_state, [{:load_posts, thread.id}]}
+    if user_id do
+      case threads_mod.create_thread(board.id, user_id, %{title: title, body: body}) do
+        {:ok, %{thread: _thread}} ->
+          # D-04: success navigates back to :thread_list with the new
+          # thread pre-selected. Threads sort by last_post_at desc, so
+          # a freshly created thread is always at index 0.
+          thread_list_ss = %{selected_index: 0}
 
-            {:error, cs} ->
-              msg = format_error(cs)
-              {:update, put_ss(state, %{ss | error: msg}), []}
-          end
-        else
-          # Phase 2 create_thread not available — friendly stub
-          modal = %{
-            type: :info,
-            # Phase 2 needs to implement Foglet.Threads.create_thread/3.
-            message: "Thread creation coming soon — Phase 2 not yet wired."
+          new_screen_state =
+            state.screen_state
+            |> Map.delete(:new_thread)
+            |> Map.put(:thread_list, thread_list_ss)
+
+          new_state = %{
+            state
+            | current_screen: :thread_list,
+              current_board: board,
+              screen_state: new_screen_state
           }
 
-          {:update, %{state | modal: modal, current_screen: :main_menu}, []}
-        end
+          {:update, new_state, [{:load_threads, board.id}]}
+
+        {:error, cs} ->
+          msg = format_error(cs)
+          {:update, put_ss(state, %{ss | error: msg}), []}
+      end
+    else
+      # Guard against a missing current_user (unauthenticated state).
+      # Should never happen in the wired flow, but crash-free is better.
+      {:update,
+       %{
+         state
+         | modal: %{type: :error, message: "You must be logged in to create a thread."}
+       }, []}
     end
   end
-
-  # ---------------------------------------------------------------------------
-  # Key translation (same as PostComposer)
-  # ---------------------------------------------------------------------------
-
-  # Translate Raxol-native event data maps to MultiLineInput.update/2 messages.
-  defp translate_key(%{key: :backspace}), do: {:backspace}
-  defp translate_key(%{key: :delete}), do: {:delete}
-  defp translate_key(%{key: :enter}), do: {:enter}
-  defp translate_key(%{key: :up}), do: {:move_cursor, :up}
-  defp translate_key(%{key: :down}), do: {:move_cursor, :down}
-  defp translate_key(%{key: :left}), do: {:move_cursor, :left}
-  defp translate_key(%{key: :right}), do: {:move_cursor, :right}
-  defp translate_key(%{key: :home}), do: {:move_cursor_line_start}
-  defp translate_key(%{key: :end}), do: {:move_cursor_line_end}
-  defp translate_key(%{key: :page_up}), do: {:move_cursor_page, :up}
-  defp translate_key(%{key: :page_down}), do: {:move_cursor_page, :down}
-
-  # Typed character — %{key: :char, char: grapheme_string}.
-  # Spacebar arrives as char: " " naturally.
-  defp translate_key(%{key: :char, char: c}) do
-    case String.to_charlist(c) do
-      [cp | _] when cp >= 32 -> {:input, cp}
-      _ -> nil
-    end
-  end
-
-  defp translate_key(_), do: nil
 
   # ---------------------------------------------------------------------------
   # Private helpers
@@ -481,13 +407,10 @@ defmodule Foglet.TUI.Screens.NewThread do
     %{state | screen_state: new_screen_state}
   end
 
-  defp domain_module(state, key) when key in [:boards, :threads] do
+  defp threads_module(state) do
     ctx = Map.get(state, :session_context) || %{}
-    get_in(ctx, [:domain, key]) || default_domain(key)
+    get_in(ctx, [:domain, :threads]) || Foglet.Threads
   end
-
-  defp default_domain(:boards), do: Foglet.Boards
-  defp default_domain(:threads), do: Foglet.Threads
 
   defp format_error(%Ecto.Changeset{} = cs) do
     Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
@@ -495,4 +418,18 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
+
+  @default_max_thread_title_length 60
+
+  # D-13: safe config getter — missing key defaults to 60 rather than
+  # raising. Mirrors the PostComposer.safe_config_get/2 pattern (~line 410)
+  # to keep the screens decoupled from each other.
+  defp max_thread_title_length do
+    case Config.get!("max_thread_title_length") do
+      n when is_integer(n) and n > 0 -> n
+      _ -> @default_max_thread_title_length
+    end
+  rescue
+    _ -> @default_max_thread_title_length
+  end
 end
