@@ -121,4 +121,29 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroupTest do
       assert flat =~ "> (o) c"
     end
   end
+
+  describe "render/3 — out-of-range selected_index (WR-02)" do
+    test "index above last option clamps to last (still one (o) marker)" do
+      result = RadioGroup.render(["a", "b"], 5, theme: theme())
+      flat = flatten_text(result)
+      on_count = flat |> String.split("(o)") |> length() |> Kernel.-(1)
+      assert on_count == 1
+      assert flat =~ "> (o) b"
+    end
+
+    test "negative index clamps to 0 (first option highlighted)" do
+      result = RadioGroup.render(["a", "b"], -1, theme: theme())
+      flat = flatten_text(result)
+      on_count = flat |> String.split("(o)") |> length() |> Kernel.-(1)
+      assert on_count == 1
+      assert flat =~ "> (o) a"
+    end
+
+    test "empty options list renders nothing selectable (no crash)" do
+      result = RadioGroup.render([], 0, theme: theme())
+      flat = flatten_text(result)
+      refute flat =~ "(o)"
+      refute flat =~ "( )"
+    end
+  end
 end

@@ -31,10 +31,12 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroup do
   `selected_index` — 0-based index of the selected option
   `opts`           — must include `:theme` (`%Foglet.TUI.Theme{}`)
   """
-  @spec render([String.t()], non_neg_integer(), keyword()) :: any()
+  @spec render([String.t()], integer(), keyword()) :: any()
   def render(options, selected_index, opts)
       when is_list(options) and is_integer(selected_index) and is_list(opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
+
+    selected_index = clamp_index(selected_index, options)
 
     rows =
       options
@@ -50,5 +52,17 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroup do
     column style: %{gap: 0} do
       rows
     end
+  end
+
+  # Clamp `selected_index` into the valid option range. Out-of-range indices
+  # (negative or >= length) would silently render every row as unselected,
+  # leaving the user with no visible selection. Clamping surfaces the bug
+  # by highlighting the nearest edge instead of disappearing entirely.
+  defp clamp_index(_idx, []), do: -1
+  defp clamp_index(idx, _options) when idx < 0, do: 0
+
+  defp clamp_index(idx, options) do
+    last = length(options) - 1
+    if idx > last, do: last, else: idx
   end
 end
