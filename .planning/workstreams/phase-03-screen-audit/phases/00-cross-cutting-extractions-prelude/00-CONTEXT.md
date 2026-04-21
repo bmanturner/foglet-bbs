@@ -24,7 +24,9 @@ Phase 0 ships two tiny, single-purpose helpers that every subsequent phase in th
 - Any new shared module beyond these two (`AUDIT-14`).
 - Any behavioral change visible end-to-end — SSH session must render identically pre- and post-Phase-0 at default terminal size (roadmap success criterion #5).
 
-**Phase 0 is the ONE exception to the scope fence in `AUDIT-13`** — it touches every screen once. Phases 1–9 are strictly one-screen-per-phase.
+**Phase 0 is AUDIT-13 exception (a)** — it touches every screen once for the extractions. Phase 2 (exception b) and Phase 3 (exception c) have their own documented exceptions for wizard-state migration; Phases 1, 4–9 remain strictly one-screen-per-phase.
+
+**Cross-reference to post-Phase-0 amendments:** REQUIREMENTS.md was amended during this discuss-phase (2026-04-21) to add AUDIT-18 (canonical section order), AUDIT-19 (`init_screen_state/1` adoption), REGISTER-06, VERIFY-05, MENU-05, and READER-07. None of these affect Phase 0's scope — Phase 0 ships the two helpers and migrates call sites only. But downstream phases will consume the canonical layout rubric once in force.
 
 </domain>
 

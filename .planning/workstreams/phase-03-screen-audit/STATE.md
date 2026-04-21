@@ -40,10 +40,10 @@ Progress: [░░░░░░░░░░] 0%
 
 ## Roadmap Summary
 
-10 phases. Critical path under parallelism: `0 → 1 → (2+3) → (4+5+6) → (7+8) → 9` (6 serial blocks).
+10 phases. Critical path: `0 → 1 → 2 → 3 → (4+5+6) → (7+8) → 9` (7 serial blocks). **Phases 2 and 3 are serialized** (previously parallel) — both modify `app.ex` wizard-dispatch paths during the top-level wizard-state migration surfaced during Phase 0 discuss-phase.
 
-- **Phase 0** — Cross-cutting extractions: `Theme.from_state/1` + `Screens.Domain.get/2`; touches all 9 screens + chrome + size_gate + app modal (prelude exception to `AUDIT-13` scope fence).
-- **Phases 1–9** — One-per-screen audits (Login → Register → Verify → MainMenu → BoardList → ThreadList → NewThread → PostComposer → PostReader). Scope fence `AUDIT-13` strictly enforced: each phase diff touches exactly ONE screen file + its test.
+- **Phase 0** — Cross-cutting extractions: `Theme.from_state/1` + `Screens.Domain.get/2`; touches all 9 screens + chrome + size_gate + app modal (AUDIT-13 exception (a)).
+- **Phases 1–9** — One-per-screen audits (Login → Register → Verify → MainMenu → BoardList → ThreadList → NewThread → PostComposer → PostReader). Scope fence `AUDIT-13` enforced with documented exceptions: Phase 2 may touch `app.ex:53-56, 354-361` for Register wizard-state migration (exception (b)); Phase 3 may touch `app.ex:74-75` for Verify wizard-state migration (exception (c)).
 
 ## Accumulated Context
 
@@ -54,6 +54,15 @@ Progress: [░░░░░░░░░░] 0%
 - Verify 6-char `[ABC___]` buffer stays hand-rolled (07 D-02 inheritance).
 - Spinner adoption evaluated per screen against anti-affordance rule (no spinner on instant ops).
 - Phrasing normalization is scoped to each audited screen's own file — no cross-screen sweep commit.
+
+### Decisions locked during Phase 0 discuss-phase (amendment 2026-04-21)
+
+- **Top-level wizard-state migration IN scope** — `state.register_wizard → state.screen_state[:register]` in Phase 2; `state.verify_state → state.screen_state[:verify]` in Phase 3. User chose consistency over restraint; overrides research recommendation to defer.
+- **Canonical 10-section screen layout (AUDIT-18)** codified as an audit-wide rubric item; deviations require moduledoc note (MainMenu MENU-05 intentional-stateless; PostReader READER-07 load-absorb pattern + render_cache plumbing).
+- **`init_screen_state/1` adoption (AUDIT-19)** codified — every screen exposes it or documents "intentionally stateless".
+- **Phase 2 and Phase 3 serialized** (previously parallel) — both touch `app.ex` wizard-dispatch paths.
+- **AUDIT-13 scope fence now has three documented exceptions** — Phase 0 (cross-cutting), Phase 2 (Register wizard-state), Phase 3 (Verify wizard-state).
+- **Phase 0 plan structure: three plans** — 00-01 Theme helper + tests; 00-02 Domain module + tests; 00-03 Call-site migration (11 files). Standard authoring order (implementation, then tests).
 
 ### Decisions locked from `phase-03-polish` (inherited, not re-decided)
 
