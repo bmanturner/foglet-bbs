@@ -20,8 +20,8 @@ defmodule Foglet.TUI.Screens.PostReader do
   The cache is discarded on `Q` (screen exit) and rebuilt on re-entry.
   """
 
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
   alias Raxol.UI.Components.Display.Viewport
@@ -202,7 +202,9 @@ defmodule Foglet.TUI.Screens.PostReader do
   Called by App.update/2 on {:flush_read_pointers, ctx}.
   """
   @spec flush_read_pointers(map(), map()) :: {map(), list()}
-  def flush_read_pointers(state, ctx) do
+  # `flush_ctx` is a flush-data bag — %{user_id:, board_id:, thread_id:, ...}.
+  # Domain modules are read from state.session_context, not from flush_ctx.
+  def flush_read_pointers(state, flush_ctx) do
     sc = Map.get(state, :session_context) || %{}
 
     boards_mod =
@@ -217,12 +219,12 @@ defmodule Foglet.TUI.Screens.PostReader do
         {:error, :not_configured} -> Foglet.Threads
       end
 
-    user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
+    user_id = flush_ctx[:user_id] || (state.current_user && state.current_user.id)
 
-    flush_board_pointer(boards_mod, user_id, ctx)
-    flush_thread_pointer(threads_mod, user_id, ctx)
+    flush_board_pointer(boards_mod, user_id, flush_ctx)
+    flush_thread_pointer(threads_mod, user_id, flush_ctx)
 
-    new_rp = clear_read_position(state.read_position, ctx[:thread_id])
+    new_rp = clear_read_position(state.read_position, flush_ctx[:thread_id])
     {%{state | read_position: new_rp}, []}
   end
 
