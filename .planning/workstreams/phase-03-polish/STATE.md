@@ -48,6 +48,8 @@ Plan: 1 of 3
 | 4 | Composer & thread creation end-to-end | COMPOSE-01, COMPOSE-02, COMPOSE-03 | Phase 1 |
 | 5 | Terminal size gate | FRAME-03 | Phase 1 |
 | 6 | Email verification toggle + resend | VERIFY-01, VERIFY-02 | Phase 1 |
+| 7 | Migrate hand-rolled UI components to Raxol widgets | D-01..D-17 (phase-level) | Phase 6 |
+| 8 | Build local widget library from Raxol primitives | TBD | Phase 7 |
 
 **Total plans:** TBD (filled in as each phase is planned)
 
@@ -95,6 +97,7 @@ None. Research is HIGH confidence; zero new dependencies required.
 ### Roadmap Evolution
 
 - Phase 7 added: Migrate hand-rolled UI components to Raxol widgets
+- Phase 8 added (2026-04-20): Build local widget library from Raxol primitives — proactively wrap the Raxol primitives we'll want for upcoming screens and explore underused idioms (e.g. `spacer()` vs `justify_*`). Source: `docs/raxol/getting-started/WIDGET_GALLERY.md`.
 
 ## Session Continuity
 

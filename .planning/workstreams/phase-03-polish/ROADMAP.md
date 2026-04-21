@@ -109,6 +109,7 @@ Recommended order: 1 → 2 → 3 → 4 → 5 → 6.
 | 5. Terminal size gate | 2/2 | Complete | 2026-04-20 |
 | 6. Email verification toggle + resend | 0/TBD | Not started | - |
 | 7. Migrate hand-rolled UI components to Raxol widgets | 0/3 | Planned | - |
+| 8. Build local widget library from Raxol primitives | 0/TBD | Not planned | - |
 
 ### Phase 7: Migrate hand-rolled UI components to Raxol widgets
 
@@ -121,3 +122,14 @@ Plans:
 - [x] 07-01-PLAN.md — Modal thin adapter + app.ex caller update + theme-hygiene tests (Wave 1)
 - [x] 07-02-PLAN.md — MarkdownBody.render_tuples_as_lines/4 + PostCard.render_body_lines/5 (additive, Wave 1)
 - [x] 07-03-PLAN.md — PostReader Viewport integration (state shape + scroll_post + advance_post + render_post_content) (Wave 2, depends on 07-02)
+
+### Phase 8: Build local widget library from Raxol primitives
+
+**Goal:** Pre-build a local library of thin `Foglet.TUI` widgets wrapping the Raxol primitives we're likely to need for upcoming screens, so later feature work composes familiar local widgets instead of reaching directly into Raxol each time. Also survey and adopt primitives we aren't yet using — e.g. `spacer()` — where they read more naturally than the equivalent `justify_*` attributes.
+**Scope note:** Source gallery is `docs/raxol/getting-started/WIDGET_GALLERY.md`. Exact set of widgets, naming, and theming hooks to be decided in planning — use existing `Foglet.TUI.Widgets.*` conventions (function-form, theme slot routing, no `ThemeManager`) as the baseline.
+**Requirements**: TBD (polish work inside the existing widget layer; no ROADMAP-level REQ IDs expected)
+**Depends on:** Phase 7
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 8 to break down)
