@@ -29,21 +29,22 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
   @doc """
   Renders a progress bar.
 
-  `progress` — float in `0.0..1.0` (clamped automatically)
+  `progress` — number in `0.0..1.0` (integers coerced to floats; NaN/Infinity
+               treated as `0.0`; out-of-range values clamped)
   `opts`:
     * `:width`           — integer (default `#{@default_width}`)
     * `:label`           — optional string shown above the bar
     * `:show_percentage` — boolean (default `true`)
     * `:theme`           — required `%Foglet.TUI.Theme{}` struct
   """
-  @spec render(float(), keyword()) :: any()
-  def render(progress, opts) when is_float(progress) and is_list(opts) do
+  @spec render(number(), keyword()) :: any()
+  def render(progress, opts) when is_number(progress) and is_list(opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
     width = Keyword.get(opts, :width, @default_width)
     label = Keyword.get(opts, :label)
     show_pct = Keyword.get(opts, :show_percentage, true)
 
-    progress = clamp(progress, 0.0, 1.0)
+    progress = progress |> to_float() |> sanitize() |> clamp(0.0, 1.0)
     bar_inner_width = max(1, width - 2)
     filled = floor(progress * bar_inner_width)
     empty = bar_inner_width - filled
@@ -84,6 +85,14 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
   end
 
   # --- private ---
+
+  defp to_float(n) when is_integer(n), do: n * 1.0
+  defp to_float(n) when is_float(n), do: n
+
+  # Guard against NaN (NaN is the only float where `n != n`). Infinity
+  # comparisons work in `clamp/3`, so only NaN needs special handling.
+  defp sanitize(n) when is_float(n) and n != n, do: 0.0
+  defp sanitize(n), do: n
 
   defp clamp(value, min_val, _max_val) when value < min_val, do: min_val
   defp clamp(value, _min_val, max_val) when value > max_val, do: max_val

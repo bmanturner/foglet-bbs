@@ -52,6 +52,26 @@ defmodule Foglet.TUI.Widgets.Display.ProgressTest do
       result = Progress.render(1.0, theme: theme())
       refute is_nil(result)
     end
+
+    test "integer 0 coerces to float without crash (WR-01)" do
+      result = Progress.render(0, theme: theme())
+      refute is_nil(result)
+    end
+
+    test "integer 1 coerces to float without crash (WR-01)" do
+      result = Progress.render(1, theme: theme())
+      refute is_nil(result)
+    end
+
+    test "out-of-range value above 1.0 is clamped (WR-01)" do
+      result = Progress.render(1.5, theme: theme())
+      refute is_nil(result)
+    end
+
+    test "negative value is clamped to 0.0 (WR-01)" do
+      result = Progress.render(-0.5, theme: theme())
+      refute is_nil(result)
+    end
   end
 
   describe "render/2 — theme hygiene (D-18, Pitfall 8)" do
