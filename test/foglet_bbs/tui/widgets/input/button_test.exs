@@ -68,6 +68,17 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
       end
     end
 
+    test "IN-04 — unknown :role falls back to :secondary styling (documented)" do
+      t = theme()
+      bogus_result = Button.render("x", role: :bogus_role, theme: t)
+      secondary_result = Button.render("x", role: :secondary, theme: t)
+
+      # The role_style/3 fallback makes unknown roles indistinguishable
+      # from :secondary — pinning this contract here catches an
+      # accidental change to strict-role validation.
+      assert inspect(bogus_result) == inspect(secondary_result)
+    end
+
     test "omitting :role defaults to @default_role (:secondary)" do
       t = theme()
       result_default = Button.render("Click", theme: t)

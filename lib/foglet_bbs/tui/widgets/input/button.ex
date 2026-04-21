@@ -18,6 +18,12 @@ defmodule Foglet.TUI.Widgets.Input.Button do
     :success   → fg: theme.primary.fg, style: [:bold]
     :secondary → fg: theme.primary.fg, style: []
     disabled   → fg: theme.dim.fg,     style: [:dim] (any role)
+
+  **Unknown `:role` values fall through to the `:secondary` clause** (see
+  `role_style/3`). This is intentional: it means a typo such as
+  `:warning` instead of `:danger` silently renders a secondary-styled
+  button rather than crashing at render time. Callers that want a
+  stricter contract should validate roles before calling `render/2`.
   """
 
   import Raxol.Core.Renderer.View
