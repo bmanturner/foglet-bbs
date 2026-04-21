@@ -19,6 +19,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Post.MarkdownBody
+  alias Foglet.TUI.Widgets.Post.PostCard
   alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
@@ -227,8 +228,10 @@ defmodule Foglet.TUI.Screens.PostComposer do
     |> Enum.map_join("\n", fn line -> "> #{line}" end)
   end
 
-  defp get_handle(%{user: %{handle: h}}), do: h
-  defp get_handle(_), do: "unknown"
+  # Delegate to PostCard.get_handle/1 (strict: returns nil on empty or
+  # missing handle), then substitute "unknown" at the display call site so
+  # an empty-string handle never renders as "@".
+  defp get_handle(post), do: PostCard.get_handle(post) || "unknown"
 
   # ---------------------------------------------------------------------------
   # Mode toggle
