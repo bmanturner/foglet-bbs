@@ -267,7 +267,7 @@ defmodule Foglet.TUI.Screens.Login do
       handle_auth_success(state, user, screen)
     else
       {:error, :invalid_credentials} ->
-        new_password_input = TextInput.init([])
+        new_password_input = TextInput.init(mask_char: "*")
 
         new_login_ss = %{
           login_ss
