@@ -41,6 +41,10 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
     fg = Map.get(theme.status_bar, :fg)
     bg = Map.get(theme.status_bar, :bg)
 
+    # Kept `justify_content: :space_between` over `spacer()` per 08-06 audit —
+    # spacer/1 is fixed-size (vendor/raxol/lib/raxol/view/components.ex:164),
+    # cannot reproduce the flex-grow push-to-opposite-ends behavior without
+    # caller-computed widths.
     row style: %{justify_content: :space_between} do
       [
         text(" Foglet BBS — #{title}", fg: fg, bg: bg),

@@ -34,6 +34,8 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
     theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
 
     box style: %{border: :single, padding: 1, border_fg: theme.border.fg} do
+      # Kept `justify_content: :space_between` over `spacer()` per 08-06 audit —
+      # would require knowing `content_element`'s height at call time.
       column style: %{gap: 0, justify_content: :space_between} do
         [
           column style: %{gap: 0} do

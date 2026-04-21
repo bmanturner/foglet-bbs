@@ -77,6 +77,8 @@ defmodule Foglet.TUI.SizeGate do
         _ -> {0, 0}
       end
 
+    # Kept `justify_content: :center` over `spacer()` per 08-06 audit
+    # (spacer/1 is fixed-size — vendor/raxol/lib/raxol/view/components.ex:164).
     column style: %{justify_content: :center, align_items: :center} do
       [
         text("Terminal too small.", fg: fg),
