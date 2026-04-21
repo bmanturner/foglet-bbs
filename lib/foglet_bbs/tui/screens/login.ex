@@ -295,13 +295,7 @@ defmodule Foglet.TUI.Screens.Login do
            state
            | current_user: user,
              current_screen: :verify,
-             screen_state: %{},
-             verify_state: %{
-               buffer: "",
-               attempts: 0,
-               cooldown_until: nil,
-               resend_cooldown_until: nil
-             }
+             screen_state: Map.delete(state.screen_state || %{}, :verify)
          }, []}
 
       {:error, _cs} ->

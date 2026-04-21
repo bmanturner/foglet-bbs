@@ -399,13 +399,7 @@ defmodule Foglet.TUI.Screens.Register do
     new_state = %{
       state
       | current_user: user,
-        current_screen: :verify,
-        verify_state: %{
-          buffer: "",
-          attempts: 0,
-          cooldown_until: nil,
-          resend_cooldown_until: nil
-        }
+        current_screen: :verify
     }
 
     {:update, clear_register_ss(new_state), []}
