@@ -73,7 +73,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   # §5 handle_key/2 (PUBLIC)
 
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
+  @spec handle_key(map(), map()) :: {:update, map(), list()}
   def handle_key(%{key: :escape}, state) do
     {:update, clear_register_ss(%{state | current_screen: :login}), []}
   end
@@ -273,7 +273,9 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp keys_for(:invite_code), do: [{"Enter", "Submit"}, {"Esc", "Cancel"}]
-  defp keys_for(:combined), do: [{"Tab", "Switch field"}, {"Enter", "Next/Submit"}, {"Esc", "Cancel"}]
+
+  defp keys_for(:combined),
+    do: [{"Tab", "Switch field"}, {"Enter", "Next/Submit"}, {"Esc", "Cancel"}]
 
   # §9 Private state plumbing
 

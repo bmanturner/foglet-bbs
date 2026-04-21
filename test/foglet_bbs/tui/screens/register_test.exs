@@ -298,7 +298,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
   describe "handle_wizard_event/2 — {:cancel}" do
     test "clears screen_state[:register] and transitions to :login" do
-      state = combined_state([handle: "alice"])
+      state = combined_state(handle: "alice")
       {new_state, []} = Register.handle_wizard_event({:cancel}, state)
       assert new_state.current_screen == :login
       assert Map.get(new_state.screen_state || %{}, :register) == nil
@@ -314,7 +314,10 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       assert get_in(new_state, [:screen_state, :register, :step]) == :combined
       assert get_in(new_state, [:screen_state, :register, :focused_field]) == :handle
-      assert get_in(new_state, [:screen_state, :register, :collected, :invite_code]) == "VALIDCODE1"
+
+      assert get_in(new_state, [:screen_state, :register, :collected, :invite_code]) ==
+               "VALIDCODE1"
+
       assert get_in(new_state, [:screen_state, :register, :error]) == nil
     end
 
