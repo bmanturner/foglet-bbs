@@ -422,5 +422,4 @@ defmodule Foglet.TUI.Screens.PostReader do
       last_read_message_number: pos[:last_read_message_number]
     }
   end
-
 end

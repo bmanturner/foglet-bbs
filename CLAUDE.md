@@ -14,7 +14,7 @@ Consult these before making non-trivial changes in the relevant area:
 - `docs/DATA_MODEL.md` — schemas, relationships, invariants. Read before touching Ecto schemas or migrations.
 - `docs/ROADMAP.md` — milestone scope and sequencing.
 - `docs/raxol/` — vendored Raxol documentation. Reach for this whenever you're reading or writing Raxol code; start at `docs/raxol/README.md`.
-  - **TUI work:** `docs/raxol/getting-started/WIDGET_GALLERY.md` for the primitives we have available, plus `CORE_CONCEPTS.md` and `QUICKSTART.md` in the same folder.
+  - **TUI work:** `docs/raxol/getting-started/WIDGET_GALLERY.md` for the primitives we have available, plus `lib/foglet_bbs/tui/widgets/README.md` for an overview of the themed widgets we have in foglet_bbs
   - **ADRs / deeper dives:** `docs/raxol/adr/`, `docs/raxol/core/`, `docs/raxol/guides/`.
 - `.planning/` — GSD planning artifacts (requirements, ADRs, phase plans, verification). Search here for the reasoning behind existing decisions before proposing changes to them.
 
