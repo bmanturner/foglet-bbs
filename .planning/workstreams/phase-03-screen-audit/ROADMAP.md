@@ -68,7 +68,7 @@ Locked at workstream creation — do not re-litigate per phase:
   4. The nested `case {:ok,_}|{:error,_}` authentication chain at `:267-308` has been rewritten as a `with` chain that preserves every happy/error branch exactly (modal payloads, `post_login_screen` dispatch, verify-code path).
   5. Rubric items `AUDIT-05..22` pass: grep gates return zero, canonical section order (AUDIT-18) satisfied with `init_screen_state/1` present (AUDIT-19), `handle_key/2` source order preserved, no spinner on instant ops, no protected-region fills, `mix precommit` green end-to-end.
 **Plans**: 1 plan
-  - [ ] 01-01-PLAN.md — Adopt TextInput, flatten state shape, add init_screen_state/1, rewrite submit_login/1 as with chain, update tests (Wave 1)
+  - [x] 01-01-PLAN.md — Adopt TextInput, flatten state shape, add init_screen_state/1, rewrite submit_login/1 as with chain, update tests (Wave 1)
 **UI hint**: yes
 
 ### Phase 2: Register

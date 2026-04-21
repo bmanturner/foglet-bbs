@@ -4,7 +4,7 @@ milestone: v1.0.2
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered
-last_updated: "2026-04-21T16:48:19.326Z"
+last_updated: "2026-04-21T17:24:15.746Z"
 last_activity: 2026-04-21
 progress:
   total_phases: 10
@@ -31,7 +31,7 @@ See: .planning/PROJECT.md (shared across workstreams — **not modified from ins
 
 ## Current Position
 
-Phase: 01 (Login) — EXECUTING
+Phase: 01 (login) — EXECUTING
 Plan: 1 of 1
 **Phase:** Phase 0 of 10 (Cross-cutting extractions — prelude)
 **Plan:** 00-03 Call-site migration (11 files)
