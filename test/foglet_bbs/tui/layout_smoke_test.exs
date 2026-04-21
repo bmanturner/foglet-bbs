@@ -322,9 +322,15 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       current_screen: :verify,
       current_user: %{id: "u1", handle: "alice"},
-      verify_state: %{buffer: "XK7", attempts: 0, cooldown_until: nil},
       terminal_size: {80, 24},
-      screen_state: %{}
+      screen_state: %{
+        verify: %{
+          buffer: "XK7",
+          attempts: 0,
+          cooldown_until: nil,
+          resend_cooldown_until: nil
+        }
+      }
     }
 
     tree = Verify.render(state)
@@ -510,9 +516,15 @@ defmodule Foglet.TUI.LayoutSmokeTest do
        Verify.render(%App{
          current_screen: :verify,
          current_user: %{id: "u1", handle: "alice"},
-         verify_state: %{buffer: "XK7", attempts: 0, cooldown_until: nil},
          terminal_size: {80, 24},
-         screen_state: %{}
+         screen_state: %{
+           verify: %{
+             buffer: "XK7",
+             attempts: 0,
+             cooldown_until: nil,
+             resend_cooldown_until: nil
+           }
+         }
        })},
       {"composer",
        PostComposer.render(%App{
