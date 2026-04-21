@@ -111,6 +111,7 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp domain_module(state, :boards) do
     ctx = Map.get(state, :session_context) || %{}
+
     case Domain.get(ctx, :boards) do
       {:ok, mod} -> mod
       {:error, :not_configured} -> Foglet.Boards

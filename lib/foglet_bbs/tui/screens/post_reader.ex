@@ -159,11 +159,13 @@ defmodule Foglet.TUI.Screens.PostReader do
   @spec load_posts(map(), String.t()) :: {map(), list()}
   def load_posts(state, thread_id) do
     ctx = Map.get(state, :session_context) || %{}
+
     posts_mod =
       case Domain.get(ctx, :posts) do
         {:ok, mod} -> mod
         {:error, :not_configured} -> Foglet.Posts
       end
+
     posts = posts_mod.list_posts(thread_id)
     new_read_position = seed_read_position_on_entry(state.read_position, thread_id, posts)
     {w, _h} = state.terminal_size || {80, 24}
@@ -202,16 +204,19 @@ defmodule Foglet.TUI.Screens.PostReader do
   @spec flush_read_pointers(map(), map()) :: {map(), list()}
   def flush_read_pointers(state, ctx) do
     sc = Map.get(state, :session_context) || %{}
+
     boards_mod =
       case Domain.get(sc, :boards) do
         {:ok, mod} -> mod
         {:error, :not_configured} -> Foglet.Boards
       end
+
     threads_mod =
       case Domain.get(sc, :threads) do
         {:ok, mod} -> mod
         {:error, :not_configured} -> Foglet.Threads
       end
+
     user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
 
     flush_board_pointer(boards_mod, user_id, ctx)
@@ -296,11 +301,13 @@ defmodule Foglet.TUI.Screens.PostReader do
   # back into the cache.
   defp parse_body(state, post) do
     sc = Map.get(state, :session_context) || %{}
+
     markdown_mod =
       case Domain.get(sc, :markdown) do
         {:ok, mod} -> mod
         {:error, :not_configured} -> Foglet.Markdown
       end
+
     body = Map.get(post, :body) || ""
 
     # Ensure the module is loaded before checking function_exported? — the

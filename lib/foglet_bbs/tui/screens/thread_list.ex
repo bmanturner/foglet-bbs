@@ -130,11 +130,13 @@ defmodule Foglet.TUI.Screens.ThreadList do
   @spec load_threads(map(), String.t()) :: {map(), list()}
   def load_threads(state, board_id) do
     ctx = Map.get(state, :session_context) || %{}
+
     threads_mod =
       case Domain.get(ctx, :threads) do
         {:ok, mod} -> mod
         {:error, :not_configured} -> Foglet.Threads
       end
+
     user_id = state.current_user && state.current_user.id
 
     cond do

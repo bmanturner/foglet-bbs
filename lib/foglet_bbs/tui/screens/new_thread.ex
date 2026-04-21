@@ -410,6 +410,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp threads_module(state) do
     ctx = Map.get(state, :session_context) || %{}
+
     case Domain.get(ctx, :threads) do
       {:ok, mod} -> mod
       {:error, :not_configured} -> Foglet.Threads

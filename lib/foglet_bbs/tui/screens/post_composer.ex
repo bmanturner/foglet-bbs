@@ -284,11 +284,13 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   defp submit_reply(state, ss, draft, user_id) do
     sc = Map.get(state, :session_context) || %{}
+
     posts_mod =
       case Domain.get(sc, :posts) do
         {:ok, mod} -> mod
         {:error, :not_configured} -> Foglet.Posts
       end
+
     thread = state.current_thread
     attrs = build_reply_attrs(draft, ss)
 
