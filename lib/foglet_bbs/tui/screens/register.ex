@@ -35,6 +35,18 @@ defmodule Foglet.TUI.Screens.Register do
 
   # §3 init_screen_state/1 (PUBLIC — AUDIT-19, D-05)
 
+  @doc """
+  Returns a minimal "open"-mode stub suitable for pre-populating
+  `screen_state[:register]` (e.g. during screen-transition bootstrapping).
+
+  **Important:** This function always returns `mode: "open"` and `step: :combined`
+  regardless of the opts or runtime configuration. Callers that need a
+  mode-aware initial state (e.g. `"invite_only"` → `:invite_code` step) should
+  rely on the lazy `get_register_ss/1` path — register.ex self-initializes
+  via `init_screen_state_for/1` (which reads `state.session_context`) on the
+  first `render/1` or `handle_key/2` call. This divergence is intentional and
+  is tracked for Phase 8 when invite-code logic is fully wired (D-04, D-05).
+  """
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts \\ []) do
     %{
