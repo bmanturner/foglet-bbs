@@ -13,14 +13,28 @@ defmodule Foglet.TUI.Screens.Login do
   Login form state shape:
     %{
       sub: :login_form,
-      form: %{handle: "", password: "", error: nil},
-      focused_field: :handle | :password
+      focused_field: :handle | :password,
+      handle_input: %TextInput{},
+      password_input: %TextInput{},
+      error: nil | "Invalid credentials."
     }
+
+  ## Config.get Safety (D-07)
+
+  Foglet.Config.get/1 calls in registration_mode/1 are safe for render paths —
+  Foglet.Config is ETS read-through cached. No render-path change required.
+
+  ## init_screen_state/1 (AUDIT-19)
+
+  Returns minimal menu sub-state: %{sub: :menu}. TextInput structs are created
+  lazily in enter_login_form/1 each time the user presses L — this keeps
+  per-session memory footprint small.
   """
 
   alias Foglet.{Accounts, Config}
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Input.TextInput
 
   import Raxol.Core.Renderer.View
 
@@ -28,6 +42,9 @@ defmodule Foglet.TUI.Screens.Login do
   @menu_keys_no_register [{"L", "Login"}, {"Q", "Quit"}]
 
   @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
+
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(_opts), do: %{sub: :menu}
 
   @spec render(map()) :: any()
   def render(state) do
@@ -70,72 +87,57 @@ defmodule Foglet.TUI.Screens.Login do
 
   # --- Private ---
 
-  # Form key handlers — only reached when sub == :login_form
+  # Key routing pattern (D-06): Screen intercepts Tab/Enter/Escape, delegates to TextInput.
+  # This pattern is inherited by Phase 2 (Register) and Phase 7 (NewThread).
 
   # Tab cycles focus between :handle and :password
   defp handle_form_key(%{key: :tab}, state) do
     login_ss = get_login_ss(state)
-    focused = Map.get(login_ss, :focused_field, :handle)
-    new_focused = if focused == :handle, do: :password, else: :handle
-    new_login_ss = Map.put(login_ss, :focused_field, new_focused)
+    new_focused = if login_ss.focused_field == :handle, do: :password, else: :handle
+    new_login_ss = %{login_ss | focused_field: new_focused}
     {:update, put_login_ss(state, new_login_ss), []}
   end
 
   # Enter: submit if focused on password; advance focus if on handle
   defp handle_form_key(%{key: :enter}, state) do
     login_ss = get_login_ss(state)
-    focused = Map.get(login_ss, :focused_field, :handle)
 
-    if focused == :password do
+    if login_ss.focused_field == :password do
       submit_login(state)
     else
-      new_login_ss = Map.put(login_ss, :focused_field, :password)
+      new_login_ss = %{login_ss | focused_field: :password}
       {:update, put_login_ss(state, new_login_ss), []}
     end
   end
 
-  # Backspace: delete last grapheme from focused field
-  defp handle_form_key(%{key: :backspace}, state) do
-    login_ss = get_login_ss(state)
-    focused = Map.get(login_ss, :focused_field, :handle)
-    form = Map.get(login_ss, :form) || %{handle: "", password: "", error: nil}
-
-    current_val = Map.get(form, focused, "")
-    new_val = drop_last_grapheme(current_val)
-
-    new_form = Map.put(form, focused, new_val)
-    new_login_ss = Map.put(login_ss, :form, new_form)
-    {:update, put_login_ss(state, new_login_ss), []}
-  end
-
   # Escape: return to menu sub, clear form state
   defp handle_form_key(%{key: :escape}, state) do
-    new_login_ss = %{sub: :menu, form: %{handle: "", password: "", error: nil}}
+    new_login_ss = %{sub: :menu}
     {:update, put_login_ss(state, new_login_ss), []}
   end
 
-  # Typed character catch-all — Raxol native shape: %{key: :char, char: c}.
-  # `c` is always a single grapheme string (guaranteed by InputParser).
-  # Spacebar arrives as %{key: :char, char: " "} — no special-casing needed.
-  defp handle_form_key(%{key: :char, char: c}, state) do
-    append_to_focused(state, c)
+  # Everything else — delegate to focused TextInput
+  defp handle_form_key(event, state) do
+    {new_input, _action} = TextInput.handle_event(event, focused_input(state))
+    {:update, update_focused_input(state, new_input), []}
   end
 
-  defp handle_form_key(_key, _state), do: :no_match
-
-  defp append_to_focused(state, char) do
+  defp focused_input(state) do
     login_ss = get_login_ss(state)
     focused = Map.get(login_ss, :focused_field, :handle)
-    form = Map.get(login_ss, :form) || %{handle: "", password: "", error: nil}
-
-    current_val = Map.get(form, focused, "")
-    new_form = Map.put(form, focused, current_val <> char)
-    new_login_ss = Map.put(login_ss, :form, new_form)
-    {:update, put_login_ss(state, new_login_ss), []}
+    Map.get(login_ss, input_key(focused))
   end
 
-  defp drop_last_grapheme(""), do: ""
-  defp drop_last_grapheme(str), do: String.slice(str, 0, String.length(str) - 1)
+  defp update_focused_input(state, new_input) do
+    login_ss = get_login_ss(state)
+    focused = Map.get(login_ss, :focused_field, :handle)
+    new_login_ss = Map.put(login_ss, input_key(focused), new_input)
+    put_login_ss(state, new_login_ss)
+  end
+
+  # Maps focused_field atom to the corresponding input map key.
+  defp input_key(:handle), do: :handle_input
+  defp input_key(:password), do: :password_input
 
   defp registration_mode(state) do
     case Map.get(session_ctx(state), :registration_mode) do
@@ -152,7 +154,8 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   defp get_login_ss(state) do
-    Map.get(state.screen_state || %{}, :login) || %{}
+    Map.get(state.screen_state || %{}, :login) ||
+      %{focused_field: nil, handle_input: nil, password_input: nil, error: nil}
   end
 
   defp put_login_ss(state, login_ss) do
@@ -179,57 +182,46 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp render_login_form(state, theme) do
     login_ss = get_login_ss(state)
-
-    form =
-      Map.get(login_ss, :form) ||
-        %{handle: "", password: "", error: nil}
-
     focused = Map.get(login_ss, :focused_field, :handle)
 
+    handle_label_fg = if focused == :handle, do: theme.accent.fg, else: theme.primary.fg
+    handle_label_style = if focused == :handle, do: [:bold], else: []
+
+    password_label_fg = if focused == :password, do: theme.accent.fg, else: theme.primary.fg
+    password_label_style = if focused == :password, do: [:bold], else: []
+
     error_items =
-      if form.error do
-        [text(""), text(form.error, fg: theme.error.fg, style: [:bold])]
+      if login_ss.error do
+        [text(""), text(login_ss.error, fg: theme.error.fg, style: [:bold])]
       else
         []
       end
 
     column style: %{gap: 0} do
       [
-        text(
-          format_input_line("Handle:   ", form.handle, focused == :handle),
-          fg: input_fg(focused == :handle, theme),
-          style: focus_style(focused == :handle)
-        ),
-        text(
-          format_input_line("Password: ", mask_password(form.password), focused == :password),
-          fg: input_fg(focused == :password, theme),
-          style: focus_style(focused == :password)
-        )
+        row style: %{gap: 0} do
+          [
+            text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
+            TextInput.render(login_ss.handle_input, bordered: false, theme: theme)
+          ]
+        end,
+        row style: %{gap: 0} do
+          [
+            text("Password: ", fg: password_label_fg, style: password_label_style),
+            TextInput.render(login_ss.password_input, bordered: false, theme: theme)
+          ]
+        end
       ] ++ error_items
     end
   end
 
-  # Returns a bold style list when focused, empty list otherwise.
-  defp focus_style(true), do: [:bold]
-  defp focus_style(false), do: []
-
-  # Formats an input line as "Label<value><cursor?>"
-  defp format_input_line(label, value, true), do: "#{label}#{value}█"
-  defp format_input_line(label, value, false), do: "#{label}#{value}"
-
-  # Accent when focused, primary otherwise.
-  defp input_fg(true, theme), do: theme.accent.fg
-  defp input_fg(false, theme), do: theme.primary.fg
-
-  # Masks password characters with asterisks for display.
-  defp mask_password(pw) when is_binary(pw), do: String.duplicate("*", String.length(pw))
-  defp mask_password(_), do: ""
-
   defp enter_login_form(state) do
     new_login_ss = %{
       sub: :login_form,
-      form: %{handle: "", password: "", error: nil},
-      focused_field: :handle
+      focused_field: :handle,
+      handle_input: TextInput.init([]),
+      password_input: TextInput.init(mask_char: "*"),
+      error: nil
     }
 
     {:update, put_login_ss(state, new_login_ss), []}
@@ -262,13 +254,30 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp submit_login(state) do
     login_ss = get_login_ss(state)
-    form = Map.get(login_ss, :form) || %{handle: "", password: ""}
+    handle_value = login_ss.handle_input.raxol_state.value
+    password_value = login_ss.password_input.raxol_state.value
 
-    case Accounts.authenticate_by_password(form.handle, form.password) do
-      {:ok, %{status: :active} = user} ->
-        handle_active_user(state, user)
+    # with chain (D-08): authenticate first, then dispatch on user status.
+    # post_login_screen/1 returns :verify | :main_menu directly (no {:ok, _} wrapper).
+    # Status check is inside the success branch — pending/suspended users authenticate
+    # successfully but must not reach the main flow.
+    with {:ok, user} <- Accounts.authenticate_by_password(handle_value, password_value),
+         :active <- user.status do
+      screen = Accounts.post_login_screen(user)
+      handle_auth_success(state, user, screen)
+    else
+      {:error, :invalid_credentials} ->
+        new_password_input = TextInput.init([])
 
-      {:ok, %{status: :pending}} ->
+        new_login_ss = %{
+          login_ss
+          | error: "Invalid credentials.",
+            password_input: new_password_input
+        }
+
+        {:update, put_login_ss(state, new_login_ss), []}
+
+      :pending ->
         modal = %{
           type: :error,
           message:
@@ -277,34 +286,18 @@ defmodule Foglet.TUI.Screens.Login do
 
         {:update, %{state | modal: modal, screen_state: %{}}, []}
 
-      {:ok, %{status: :suspended}} ->
+      :suspended ->
         modal = %{type: :error, message: "Your account is suspended. Contact the sysop."}
         {:update, %{state | modal: modal, screen_state: %{}}, []}
-
-      {:error, :invalid_credentials} ->
-        # Clear the password field but keep the handle for retry.
-        form_with_error =
-          form
-          |> Map.put(:error, "Invalid credentials.")
-          |> Map.put(:password, "")
-
-        new_login_ss = Map.put(login_ss, :form, form_with_error)
-        {:update, put_login_ss(state, new_login_ss), []}
     end
   end
 
-  defp handle_active_user(state, user) do
-    case Accounts.post_login_screen(user) do
-      :verify ->
-        start_verify_flow(state, user)
+  defp handle_auth_success(state, user, :verify) do
+    start_verify_flow(state, user)
+  end
 
-      :main_menu ->
-        # Clear screen state and promote the session via the App's handler.
-        # post_login_screen/1 returns :main_menu for confirmed users AND
-        # unconfirmed users when require_email_verification is false
-        # (VERIFY-01 retroactive bypass).
-        {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}
-    end
+  defp handle_auth_success(state, user, :main_menu) do
+    {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}
   end
 
   defp start_verify_flow(state, user) do
