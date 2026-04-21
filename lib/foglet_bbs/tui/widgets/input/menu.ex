@@ -8,9 +8,11 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   **Pitfall 7 (RESEARCH.md):** The Raxol menu component requires
   every item to have `:id`. `init/1` calls `normalize_items/1`
   which fills in defaults:
-    * `:id`       → deterministic tuple `{:auto, [label_path...]}`
+    * `:id`       → deterministic string `"auto:<label>/<child>/..."`
                     when absent (so `{:menu_action, id}` actions
-                    round-trip through code reloads and VM restarts)
+                    round-trip through code reloads and VM restarts).
+                    Raxol interpolates `item.id` into a string elsewhere,
+                    so the derived id must be a string not a tuple.
     * `:disabled` → `false` if absent
     * `:shortcut` → `nil` if absent
 
@@ -20,7 +22,7 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
 
   ## Item shape (after normalization)
 
-      %{id: atom() | integer() | {:auto, [String.t()]}, label: String.t(),
+      %{id: atom() | integer() | String.t(), label: String.t(),
         children: [item()], disabled: boolean(), shortcut: String.t() | nil}
 
   Honours:
@@ -46,7 +48,7 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.Menu, as: RaxolMenu
 
-  @type item_id :: atom() | integer() | {:auto, [String.t()]}
+  @type item_id :: atom() | integer() | String.t()
 
   @type item :: %{
           optional(:id) => item_id(),
@@ -131,10 +133,10 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     end
 
     label = Map.get(item, :label)
-    path = parent_path ++ [label]
+    path = parent_path ++ [to_string(label)]
 
     item
-    |> Map.put_new_lazy(:id, fn -> {:auto, path} end)
+    |> Map.put_new_lazy(:id, fn -> "auto:" <> Enum.join(path, "/") end)
     |> Map.put_new(:disabled, false)
     |> Map.put_new(:shortcut, nil)
     |> Map.update(:children, [], fn kids -> normalize_items(kids, path) end)
