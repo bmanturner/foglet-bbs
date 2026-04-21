@@ -63,7 +63,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "'R' transitions to :register when registration enabled (D-22)" do
       {:update, new_state, _} = Login.handle_key(%{key: :char, char: "R"}, base_state("open"))
       assert new_state.current_screen == :register
-      assert new_state.register_wizard.mode == "open"
+      # Post-Phase-2: login.ex:maybe_register/1 no longer initializes wizard state.
+      # register.ex self-initializes screen_state[:register] on first access (D-06).
+      # Only the screen transition is login.ex's responsibility.
     end
 
     test "'R' returns :no_match when registration disabled (D-06)" do
