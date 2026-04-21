@@ -333,12 +333,12 @@ Source: `lib/foglet_bbs/tui/screens/verify.ex` `[VERIFIED: codebase grep]`
 |---|-------|---------|---------------|
 | A1 | A dedicated `clear_verify_ss/1` helper is the cleanest way to clear screen state in all exit paths. | Common Pitfalls | Low — planner can choose different helper names/mechanics without changing scope. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should `handle_verify_event/2` stay public as the App dispatch entry point?**
    - What we know: `App.do_update({:verify_event, event}, state)` currently delegates straight to it, and CONTEXT.md leaves the exact shape to planner discretion. `[VERIFIED: lib/foglet_bbs/tui/app.ex] [CITED: .planning/workstreams/phase-03-screen-audit/phases/03-verify/03-CONTEXT.md]`
    - What's unclear: Whether the planner wants to preserve that public hook unchanged or collapse some logic behind private helpers while keeping the dispatch boundary stable.
-   - Recommendation: Keep the public function and refactor internals only; that minimizes App churn and mirrors the current contract. `[ASSUMED]`
+   - Resolution: Keep `handle_verify_event/2` public as the `App.do_update({:verify_event, event}, state)` entry point, and refactor only its internal state-plumbing helpers. This preserves the existing App dispatch boundary while letting `verify.ex` own `screen_state[:verify]`. `[RESOLVED]`
 
 ## Environment Availability
 
