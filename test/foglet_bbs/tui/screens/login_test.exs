@@ -389,11 +389,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       assert new_state.current_screen == :verify
       assert new_state.current_user.id == user.id
-      assert Map.has_key?(new_state.verify_state, :resend_cooldown_until)
-      assert new_state.verify_state.resend_cooldown_until == nil
-      assert new_state.verify_state.buffer == ""
-      assert new_state.verify_state.attempts == 0
-      assert new_state.verify_state.cooldown_until == nil
+      refute Map.has_key?(new_state.screen_state || %{}, :verify)
       assert cmds == []
     end
 
