@@ -1,27 +1,10 @@
 defmodule Foglet.TUI.Widgets.Display.ProgressTest do
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.Progress
-
-  # --- Local helpers (copied from list_row_test.exs pattern) ---
-
-  defp flatten_text(tree), do: tree |> collect_text([]) |> Enum.reverse() |> Enum.join("")
-
-  defp collect_text(nil, acc), do: acc
-  defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
-
-  defp collect_text(%{children: children} = node, acc) do
-    acc = maybe_add_content(node, acc)
-    collect_text(children, acc)
-  end
-
-  defp collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
-  defp collect_text(%{text: t}, acc) when is_binary(t), do: [t | acc]
-  defp collect_text(_other, acc), do: acc
-
-  defp maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
-  defp maybe_add_content(_node, acc), do: acc
 
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
