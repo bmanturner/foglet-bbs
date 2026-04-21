@@ -118,6 +118,11 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
     raxol_data = translate_event_for_select_list(event)
     raxol_event = %Raxol.Core.Events.Event{type: :key, data: raxol_data}
     {new_rs, _cmds} = RaxolSelectList.handle_event(raxol_event, rs, %{})
+    # IN-06: derive_action/4 receives the ORIGINAL event (with :key => :char),
+    # NOT raxol_data (where :key has been replaced with the character string).
+    # The pattern match `%{key: :char}` in derive_action/4 depends on this.
+    # Do not collapse these variables — a future refactor that reuses
+    # raxol_data here will silently break the :search_changed action.
     action = derive_action(rs, new_rs, event, st.multiple)
     {%{st | raxol_state: new_rs, last_action: action}, action}
   end
