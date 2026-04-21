@@ -78,7 +78,13 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
 
     test "build_table_theme/1 wires primary slot for rows" do
       t = theme()
-      state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [%{name: "Alice"}])
+      # Two rows needed: selected_row starts at 0, so row 1 (Bob) is unselected and uses row theme
+      state =
+        Table.init(
+          columns: [%{id: :name, label: "Name"}],
+          rows: [%{name: "Alice"}, %{name: "Bob"}]
+        )
+
       result = Table.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
       assert serialized =~ to_string(t.primary.fg)

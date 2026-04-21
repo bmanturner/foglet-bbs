@@ -55,12 +55,26 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
   end
 
   describe "render/2 — theme slot routing (D-18)" do
-    test "rendered tree contains primary.fg for node text" do
+    test "rendered tree contains primary.fg for non-selected node text" do
+      t = theme()
+      # Two sibling nodes: cursor starts at :a, so :b renders with primary.fg
+      nodes = [
+        %{id: :a, label: "Alpha", children: []},
+        %{id: :b, label: "Beta", children: []}
+      ]
+
+      state = Tree.init(nodes: nodes)
+      result = Tree.render(state, theme: t)
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+      assert serialized =~ to_string(t.primary.fg)
+    end
+
+    test "rendered tree contains selected.fg for the cursor node" do
       t = theme()
       state = Tree.init(nodes: [%{id: :root, label: "Root", children: []}])
       result = Tree.render(state, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.primary.fg)
+      assert serialized =~ to_string(t.selected.fg)
     end
   end
 
