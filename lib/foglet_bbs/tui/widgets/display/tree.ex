@@ -131,10 +131,40 @@ defmodule Foglet.TUI.Widgets.Display.Tree do
     cond do
       after_size > before_size -> :node_expanded
       after_size < before_size -> :node_collapsed
-      key == :enter -> :node_activated
+      key == :enter and leaf_under_cursor?(after_rs) -> :node_activated
       true -> nil
     end
   end
 
   defp derive_action(_, _, _), do: nil
+
+  # WR-06: :node_activated is documented as "Enter on a leaf node". Raxol's
+  # tree component may bind :enter to an already-expanded-parent as a no-op
+  # (expansion state unchanged) — without inspecting the cursor node's
+  # children we'd spuriously fire :node_activated for that parent. Return
+  # true only when the cursor points at a node with no children.
+  defp leaf_under_cursor?(rs) do
+    cursor = Map.get(rs, :cursor)
+    nodes = Map.get(rs, :nodes, [])
+
+    case find_node(nodes, cursor) do
+      %{children: []} -> true
+      _ -> false
+    end
+  end
+
+  defp find_node(_nodes, nil), do: nil
+
+  defp find_node(nodes, id) when is_list(nodes) do
+    Enum.find_value(nodes, fn
+      %{id: ^id} = n ->
+        n
+
+      %{children: children} ->
+        find_node(children, id)
+
+      _ ->
+        nil
+    end)
+  end
 end

@@ -101,6 +101,14 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
       assert action == :node_activated
     end
 
+    test "WR-06 — Enter on a parent does NOT emit :node_activated" do
+      # cursor starts on :root (a parent); pressing Enter without expanding
+      # must not claim the parent was activated.
+      state = Tree.init(nodes: [@root_with_child])
+      {_final, action} = Tree.handle_event(%{key: :enter}, state)
+      refute action == :node_activated
+    end
+
     test "handle_event/2 returns a two-element tuple" do
       state = Tree.init(nodes: [@leaf_node])
       result = Tree.handle_event(%{key: :down}, state)
