@@ -335,7 +335,11 @@ defmodule Foglet.TUI.Screens.PostReader do
     posts = state.posts || []
 
     if posts == [] do
-      :no_match
+      # Absorb the keypress during loading rather than falling through to the
+      # global key handler — prevents future global handlers from acting on
+      # PostReader-intended keys (n/p/space/page_down/page_up) while the
+      # thread is still loading.
+      {:update, state, []}
     else
       ss = get_screen_state(state)
       new_idx = (ss.selected_post_index + delta) |> max(0) |> min(length(posts) - 1)
@@ -369,13 +373,15 @@ defmodule Foglet.TUI.Screens.PostReader do
     posts = state.posts || []
 
     if posts == [] do
-      :no_match
+      # WR-02: absorb scroll keys during loading so they don't escape to the
+      # global key handler.
+      {:update, state, []}
     else
       ss = get_screen_state(state)
       post = Enum.at(posts, ss.selected_post_index)
 
       if is_nil(post) do
-        :no_match
+        {:update, state, []}
       else
         {w, h} = state.terminal_size || {80, 24}
         available_height = max(h - 10, 5)
