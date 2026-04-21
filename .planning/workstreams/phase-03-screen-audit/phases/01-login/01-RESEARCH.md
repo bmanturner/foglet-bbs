@@ -458,17 +458,17 @@ end
 
 **If this table is empty:** All claims in this research were verified or cited — no user confirmation needed.
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Exact row layout implementation for label alignment**
    - What we know: `row style: %{gap: 0}` puts children adjacent. Label `"Handle:   "` has three-space padding.
    - What's unclear: Whether TextInput's internal cursor positioning aligns exactly with the `█` block cursor's column position.
-   - Recommendation: Proceed with `row` layout; test exact column alignment in smoke test. If off-by-one, adjust label padding in code review.
+   - Recommendation (RESOLVED): Proceed with `row` layout; test exact column alignment in smoke test. If off-by-one, adjust label padding in code review.
 
 2. **`with` chain else-clause structure for multi-branch errors**
    - What we know: `authenticate_by_password/2` returns `{:ok, user}` or `{:error, :invalid_credentials}`. User has `status: :active | :pending | :suspended`.
    - What's unclear: Whether to pattern-match on status in `with` clauses or use `case` inside success branch.
-   - Recommendation: Use `case` on `user.status` inside the `with` success branch (or call `handle_active_user/2` which already does this). This keeps `with` linear and branches only at decision points.
+   - Recommendation (RESOLVED): Use `case` on `user.status` inside the `with` success branch (or call `handle_active_user/2` which already does this). This keeps `with` linear and branches only at decision points.
 
 ## Environment Availability
 
