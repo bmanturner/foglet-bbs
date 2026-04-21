@@ -364,12 +364,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
   describe "submit_login/1 — VERIFY-01 retroactive bypass" do
     setup do
-      original =
-        try do
-          Foglet.Config.get!("require_email_verification")
-        rescue
-          _ -> :not_seeded
-        end
+      original = Foglet.Config.get("require_email_verification", :not_seeded)
 
       on_exit(fn ->
         case original do
