@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.Screens.RegisterTest do
-  use ExUnit.Case, async: true
+  use FogletBbs.DataCase, async: true
 
   alias Foglet.TUI.Screens.Register
   alias Foglet.TUI.Widgets.Input.TextInput

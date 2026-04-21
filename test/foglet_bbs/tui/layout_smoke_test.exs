@@ -275,17 +275,25 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   test "register wizard on :handle step with current_input='bob' shows 'bob'" do
+    alias Foglet.TUI.Widgets.Input.TextInput, as: TI
+
     state = %App{
       current_screen: :register,
-      register_wizard: %{
-        mode: "open",
-        step: :handle,
-        data: %{},
-        error: nil,
-        current_input: "bob"
-      },
       terminal_size: {80, 24},
-      screen_state: %{}
+      screen_state: %{
+        register: %{
+          mode: "open",
+          step: :combined,
+          focused_field: :handle,
+          invite_code_input: TI.init([]),
+          handle_input: TI.init(value: "bob"),
+          email_input: TI.init([]),
+          password_input: TI.init(mask_char: "*"),
+          confirm_input: TI.init(mask_char: "*"),
+          collected: %{},
+          error: nil
+        }
+      }
     }
 
     tree = Register.render(state)
@@ -472,15 +480,21 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       {"register wizard",
        Register.render(%App{
          current_screen: :register,
-         register_wizard: %{
-           mode: "open",
-           step: :handle,
-           data: %{},
-           error: nil,
-           current_input: "bob"
-         },
          terminal_size: {80, 24},
-         screen_state: %{}
+         screen_state: %{
+           register: %{
+             mode: "open",
+             step: :combined,
+             focused_field: :handle,
+             invite_code_input: Foglet.TUI.Widgets.Input.TextInput.init([]),
+             handle_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "bob"),
+             email_input: Foglet.TUI.Widgets.Input.TextInput.init([]),
+             password_input: Foglet.TUI.Widgets.Input.TextInput.init(mask_char: "*"),
+             confirm_input: Foglet.TUI.Widgets.Input.TextInput.init(mask_char: "*"),
+             collected: %{},
+             error: nil
+           }
+         }
        })},
       {"verify screen",
        Verify.render(%App{
