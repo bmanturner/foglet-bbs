@@ -152,8 +152,15 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   end
 
   # "By @handle · 2h ago" when both fields are present; degrades
-  # gracefully when either is missing.
-  defp author_line(post) do
+  # gracefully when either is missing. Returns "(post details unavailable)"
+  # when neither handle nor timestamp is present.
+  #
+  # Exposed (via @doc false) so PostReader can render the non-scrolling
+  # header line without duplicating the formatter. Pure formatter, no side
+  # effects.
+  @doc false
+  @spec author_line(post_like()) :: String.t()
+  def author_line(post) do
     handle = get_handle(post)
     when_str = get_time_ago(post)
 
@@ -165,15 +172,30 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end
   end
 
-  defp get_handle(%{user: %{handle: h}}) when is_binary(h) and h != "", do: h
-  defp get_handle(_), do: nil
+  # Extract the author handle from a post-like map. Returns the handle
+  # string when present and non-empty, else nil.
+  #
+  # Exposed (via @doc false) for reuse by PostReader and PostComposer.
+  # The strict guard (is_binary(h) and h != "") means an empty-string
+  # handle renders as nil rather than "@".
+  @doc false
+  @spec get_handle(post_like()) :: String.t() | nil
+  def get_handle(%{user: %{handle: h}}) when is_binary(h) and h != "", do: h
+  def get_handle(_), do: nil
 
-  defp get_time_ago(%{inserted_at: %DateTime{} = dt}), do: TimeAgo.format(dt)
+  # Format the post's :inserted_at as a relative time string ("2h", "3d",
+  # etc) via Foglet.TimeAgo. Returns nil when the field is missing or not
+  # a DateTime / NaiveDateTime.
+  #
+  # Exposed (via @doc false) for reuse by PostReader.
+  @doc false
+  @spec get_time_ago(post_like()) :: String.t() | nil
+  def get_time_ago(%{inserted_at: %DateTime{} = dt}), do: TimeAgo.format(dt)
 
-  defp get_time_ago(%{inserted_at: %NaiveDateTime{} = naive}) do
+  def get_time_ago(%{inserted_at: %NaiveDateTime{} = naive}) do
     dt = DateTime.from_naive!(naive, "Etc/UTC")
     TimeAgo.format(dt)
   end
 
-  defp get_time_ago(_), do: nil
+  def get_time_ago(_), do: nil
 end

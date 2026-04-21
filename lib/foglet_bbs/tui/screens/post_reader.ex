@@ -20,7 +20,6 @@ defmodule Foglet.TUI.Screens.PostReader do
   The cache is discarded on `Q` (screen exit) and rebuilt on re-entry.
   """
 
-  alias Foglet.TimeAgo
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
@@ -70,7 +69,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
       # Non-scrolling header (Post X of N, author, divider).
       header_line_1 = text("Post #{idx + 1} of #{total}", fg: theme.dim.fg)
-      header_line_2 = text(author_line(post), fg: theme.dim.fg)
+      header_line_2 = text(PostCard.author_line(post), fg: theme.dim.fg)
       header_divider = divider(char: "─", style: %{fg: theme.border.fg})
 
       # Pre-themed body lines — Viewport passes them through unmodified.
@@ -418,30 +417,4 @@ defmodule Foglet.TUI.Screens.PostReader do
     }
   end
 
-  # Ported from PostCard — used by render_post_content/5 to build the
-  # non-scrolling post header. Kept private here to avoid broadening
-  # PostCard's public surface for a single caller.
-  defp author_line(post) do
-    handle = get_handle(post)
-    when_str = get_time_ago(post)
-
-    case {handle, when_str} do
-      {h, nil} when is_binary(h) -> "By @#{h}"
-      {nil, t} when is_binary(t) -> "#{t} ago"
-      {h, t} when is_binary(h) and is_binary(t) -> "By @#{h} · #{t} ago"
-      _ -> "(post details unavailable)"
-    end
-  end
-
-  defp get_handle(%{user: %{handle: h}}) when is_binary(h) and h != "", do: h
-  defp get_handle(_), do: nil
-
-  defp get_time_ago(%{inserted_at: %DateTime{} = dt}), do: TimeAgo.format(dt)
-
-  defp get_time_ago(%{inserted_at: %NaiveDateTime{} = naive}) do
-    dt = DateTime.from_naive!(naive, "Etc/UTC")
-    TimeAgo.format(dt)
-  end
-
-  defp get_time_ago(_), do: nil
 end
