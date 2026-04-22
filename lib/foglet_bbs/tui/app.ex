@@ -17,6 +17,7 @@ defmodule Foglet.TUI.App do
 
   use Raxol.Core.Runtime.Application
 
+  alias Foglet.Threads.ThreadEntry
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
   alias Foglet.TUI.SizeGate
@@ -46,7 +47,7 @@ defmodule Foglet.TUI.App do
           screen_state: map(),
           board_list: list() | nil,
           current_board: map() | nil,
-          current_thread: map() | nil,
+          current_thread: ThreadEntry.t() | nil,
           current_thread_list: list() | nil,
           posts: list() | nil,
           read_position: map(),
@@ -653,7 +654,21 @@ defmodule Foglet.TUI.App do
         |> Enum.map(fn t ->
           case t do
             %Foglet.Threads.Thread{} ->
-              t |> Map.from_struct() |> Map.put(:has_unread, false)
+              %ThreadEntry{
+                id: t.id,
+                title: t.title,
+                board_id: t.board_id,
+                sticky: t.sticky,
+                locked: t.locked,
+                post_count: t.post_count,
+                first_post_id: t.first_post_id,
+                last_post_at: t.last_post_at,
+                deleted_at: t.deleted_at,
+                inserted_at: t.inserted_at,
+                created_by_id: t.created_by_id,
+                has_unread: false,
+                created_by: t.created_by
+              }
 
             %{} ->
               Map.put_new(t, :has_unread, false)

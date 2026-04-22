@@ -266,6 +266,7 @@ defmodule Foglet.ThreadsTest do
 
       [t | _] = Foglet.Threads.list_threads(board.id, reader.id)
 
+      assert %Foglet.Threads.ThreadEntry{} = t
       assert %Foglet.Accounts.User{handle: "mallory"} = t.created_by
     end
 
