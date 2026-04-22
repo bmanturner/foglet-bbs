@@ -11,13 +11,17 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.Progress.Spinner
 
   import Raxol.Core.Renderer.View
+
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(_opts \\ []), do: %{selected_index: 0}
 
   @spec render(map()) :: any()
   def render(state) do
     board = state.current_board
-    ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
+    ss = get_in(state.screen_state, [:thread_list]) || init_screen_state()
     theme = Theme.from_state(state)
     thread_content = render_thread_content(state, ss, theme)
     board_name = (board && board.name) || "?"
@@ -30,6 +34,19 @@ defmodule Foglet.TUI.Screens.ThreadList do
     ])
   end
 
+  defp render_thread_content(state, _ss, theme) when state.current_thread_list == nil do
+    column style: %{gap: 0} do
+      [
+        row style: %{gap: 1} do
+          [
+            Spinner.render(0, theme: theme, style: :dots),
+            text("Loading...", fg: theme.dim.fg)
+          ]
+        end
+      ]
+    end
+  end
+
   defp render_thread_content(state, _ss, theme) when state.current_thread_list == [] do
     column style: %{gap: 0} do
       [text("No threads in this board yet. Press [C] to compose.", fg: theme.warning.fg)]
@@ -37,19 +54,13 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   defp render_thread_content(state, ss, theme) do
-    sorted = sort_threads(state.current_thread_list || [])
+    sorted = sort_threads(state.current_thread_list)
     {width, _h} = state.terminal_size || {80, 24}
     inner_width = max(width - 4, 40)
 
-    if sorted == [] do
-      column style: %{gap: 0} do
-        [text("Loading...", fg: theme.dim.fg)]
-      end
-    else
-      SelectionList.render(sorted, ss.selected_index, fn {thread, _idx, selected} ->
-        render_thread_row(thread, selected, inner_width, theme)
-      end)
-    end
+    SelectionList.render(sorted, ss.selected_index, fn {thread, _idx, selected} ->
+      render_thread_row(thread, selected, inner_width, theme)
+    end)
   end
 
   defp render_thread_row(thread, selected, width, theme) do
@@ -82,7 +93,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   def handle_key(%{key: :enter}, state) do
     threads = sort_threads(state.current_thread_list || [])
-    ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
+    ss = get_in(state.screen_state, [:thread_list]) || init_screen_state()
 
     case Enum.at(threads, ss.selected_index) do
       nil ->
@@ -126,30 +137,37 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   def handle_key(_key, _state), do: :no_match
 
-  @doc "Called by App.update/2 on {:load_threads, board_id}."
+  # Production load orchestration is owned by Foglet.TUI.App.do_update({:load_threads, board_id}, state).
+  @doc false
   @spec load_threads(map(), String.t()) :: {map(), list()}
   def load_threads(state, board_id) do
     ctx = Map.get(state, :session_context) || %{}
-
-    threads_mod =
-      case Domain.get(ctx, :threads) do
-        {:ok, mod} -> mod
-        {:error, :not_configured} -> Foglet.Threads
-      end
+    threads_mod = resolve_threads_module(ctx)
 
     user_id = state.current_user && state.current_user.id
+    threads = dispatch_thread_load(threads_mod, board_id, user_id)
+    {%{state | current_thread_list: threads}, []}
+  end
+
+  defp resolve_threads_module(ctx) do
+    case Domain.get(ctx, :threads) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Threads
+    end
+  end
+
+  defp dispatch_thread_load(threads_mod, board_id, user_id) do
+    loaded? = match?({:module, _}, Code.ensure_loaded(threads_mod))
 
     cond do
-      function_exported?(threads_mod, :list_threads, 2) ->
-        threads = threads_mod.list_threads(board_id, user_id)
-        {%{state | current_thread_list: threads}, []}
+      loaded? and function_exported?(threads_mod, :list_threads, 2) ->
+        threads_mod.list_threads(board_id, user_id)
 
-      function_exported?(threads_mod, :list_threads, 1) ->
-        threads = threads_mod.list_threads(board_id) |> Enum.map(&annotate_fallback/1)
-        {%{state | current_thread_list: threads}, []}
+      loaded? and function_exported?(threads_mod, :list_threads, 1) ->
+        threads_mod.list_threads(board_id) |> Enum.map(&annotate_fallback/1)
 
       true ->
-        {%{state | current_thread_list: []}, []}
+        []
     end
   end
 
@@ -191,7 +209,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
     if threads == [] do
       :no_match
     else
-      ss = get_in(state.screen_state, [:thread_list]) || %{selected_index: 0}
+      ss = get_in(state.screen_state, [:thread_list]) || init_screen_state()
       new_idx = (ss.selected_index + delta) |> max(0) |> min(length(threads) - 1)
 
       new_screen_state =

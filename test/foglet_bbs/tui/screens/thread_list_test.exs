@@ -143,6 +143,10 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     %{state: state}
   end
 
+  test "init_screen_state/0 returns the default selection state" do
+    assert ThreadList.init_screen_state() == %{selected_index: 0}
+  end
+
   test "load_threads/2 populates current_thread_list", %{state: state} do
     {s, _} = ThreadList.load_threads(state, "b1")
     assert length(s.current_thread_list) == 3
@@ -210,6 +214,11 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     defp maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
     defp maybe_add_content(_node, acc), do: acc
 
+    test "nil current_thread_list renders loading affordance", %{state: state} do
+      flat = flatten_text(ThreadList.render(state))
+      assert flat =~ "Loading..."
+    end
+
     test "thread rows include creator handle", %{state: state} do
       {s, _} = ThreadList.load_threads(state, "b1")
       flat = flatten_text(ThreadList.render(s))
@@ -270,6 +279,8 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
   describe "load_threads/2 — domain dispatch (LIST-03)" do
     test "prefers list_threads/2 when the domain module exports it" do
+      assert {:module, AnnotatingFakeThreads} = Code.ensure_loaded(AnnotatingFakeThreads)
+
       state =
         %Foglet.TUI.App{
           current_screen: :thread_list,

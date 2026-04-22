@@ -27,10 +27,19 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     %{state: state}
   end
 
+  test "init_screen_state/0 returns selected_index default" do
+    assert BoardList.init_screen_state() == %{selected_index: 0}
+  end
+
   test "load_boards/1 populates state.board_list from domain module", %{state: state} do
     {new_state, _} = BoardList.load_boards(state)
     assert length(new_state.board_list) == 2
     assert Enum.at(new_state.board_list, 0).name == "General"
+  end
+
+  test "render/1 with board_list: nil uses loading branch without crashing", %{state: state} do
+    s = %{state | board_list: nil}
+    assert _ = BoardList.render(s)
   end
 
   test "render/1 with board_list == [] shows 'No boards' message", %{state: state} do

@@ -269,6 +269,28 @@ defmodule Foglet.ThreadsTest do
       assert %Foglet.Accounts.User{handle: "mallory"} = t.created_by
     end
 
+    test "list_threads/2 rows always include created_by.handle for rendering contract" do
+      {board, _pid} = setup_board_with_server()
+      poster_a = user_fixture(%{handle: "alpha"})
+      poster_b = user_fixture(%{handle: "beta"})
+      reader = user_fixture()
+
+      {:ok, _} =
+        Foglet.Threads.create_thread(board.id, poster_a.id, %{title: "A", body: "b"})
+
+      {:ok, _} =
+        Foglet.Threads.create_thread(board.id, poster_b.id, %{title: "B", body: "b"})
+
+      rows = Foglet.Threads.list_threads(board.id, reader.id)
+      assert length(rows) == 2
+
+      assert Enum.all?(rows, fn row ->
+               is_map(row.created_by) and
+                 is_binary(row.created_by.handle) and
+                 row.created_by.handle != ""
+             end)
+    end
+
     test "list_threads/2 with nil user_id delegates to list_threads/1 with has_unread: false" do
       {board, _pid} = setup_board_with_server()
       poster = user_fixture()
