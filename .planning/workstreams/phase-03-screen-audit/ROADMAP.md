@@ -115,7 +115,8 @@ Locked at workstream creation — do not re-litigate per phase:
   3. `@menu_keys` + `@menu_items` duplication at `:9-13, 28-32` is **kept** as an inherited decision, documented in the moduledoc as load-bearing (render and KeyBar have different format needs). The `[L]/[R]/[Q]` letter-shortcut menu rows stay as plain `text/2` calls (SelectionList and Button are wrong primitives here).
   4. MainMenu's `@moduledoc` documents **"intentionally stateless — no `screen_state[:main_menu]` key"** (MENU-05) with a note that future contributors should NOT add a default hash reflexively. This is MainMenu's documented AUDIT-19 deviation.
   5. Rubric items `AUDIT-05..22` pass — with **special sparseness scrutiny** given MainMenu is 58 LoC and has the largest share of reserved layout regions; `mix precommit` green.
-**Plans**: TBD
+**Plans**: 1 plan
+  - [ ] 09-01-PLAN.md — Spinner loading adoption, callback-contract dead-code audit proof, render-purity + load-absorb documentation/tests
 **UI hint**: yes
 
 ### Phase 5: BoardList
@@ -202,4 +203,4 @@ Critical path: `0 → 1 → 2 → 3 → (4+5+6) → (7+8) → 9` — 7 serial bl
 | 6. ThreadList | 0/1 | Complete    | 2026-04-22 |
 | 7. NewThread | 1/1 | Complete | 2026-04-22 |
 | 8. PostComposer | 1/1 | Complete | 2026-04-22 |
-| 9. PostReader | 0/TBD | Not started | - |
+| 9. PostReader | 0/1 | Planned | - |

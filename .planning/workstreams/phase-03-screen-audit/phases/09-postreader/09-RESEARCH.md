@@ -270,17 +270,17 @@ end
 |---|-------|---------|---------------|
 | None | All claims in this research were verified from repository artifacts in this session. [VERIFIED: paths in Sources] | — | — |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should PostReader spinner animate by frame counter (monotonic-time like BoardList) or fixed frame like ThreadList?**
-   - What we know: Both patterns exist in current screens. [VERIFIED: lib/foglet_bbs/tui/screens/board_list.ex:37; lib/foglet_bbs/tui/screens/thread_list.ex:42]
-   - What's unclear: Which variant best fits PostReader flush/load phases under sparseness constraints.
-   - Recommendation: Use one-row spinner+label and pick monotonic frame counter for visible progress, then lock with deterministic tests around rendered text presence (not exact glyph frame). [VERIFIED: lib/foglet_bbs/tui/widgets/progress/spinner.ex]
+   - **Resolution:** Use monotonic frame-counter spinner with one-row spinner+label composition.
+   - **Why:** Matches accepted sparse loading affordance while preserving visible progress and no row-growth constraint (D-05, D-06; READER-03). [VERIFIED: lib/foglet_bbs/tui/screens/board_list.ex:37; lib/foglet_bbs/tui/widgets/progress/spinner.ex]
+   - **Plan impact:** 09-01 Task 1 spinner implementation and READER-03 acceptance checks lock this behavior.
 
 2. **How explicit should callback ownership proof be when App handles command tasks directly?**
-   - What we know: Context locks callbacks as intentional public surface.
-   - What's unclear: Whether tests should assert App references these callbacks or only screen-level semantics.
-   - Recommendation: Add/keep screen tests for callback behavior and App tests for command task tuple behavior; avoid forcing direct App->callback call linkage that no longer exists in current architecture. [VERIFIED: test/foglet_bbs/tui/screens/post_reader_test.exs; test/foglet_bbs/tui/app_test.exs:580-593]
+   - **Resolution:** Keep screen-level callback contract tests in `post_reader_test.exs`; do not require new `app_test.exs` changes for this phase.
+   - **Why:** D-03/D-04 lock callback ownership as intentional public surface while current architecture executes load/flush via App command tasks; screen tests plus existing app command tests provide sufficient proof without scope expansion. [VERIFIED: .planning/workstreams/phase-03-screen-audit/phases/09-postreader/09-CONTEXT.md; test/foglet_bbs/tui/app_test.exs:580-593]
+   - **Plan impact:** 09-01 remains within `post_reader.ex` + `post_reader_test.exs` scope and adds explicit callback-contract assertions/comments.
 
 ## Environment Availability
 
