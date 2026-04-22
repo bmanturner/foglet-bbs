@@ -16,6 +16,7 @@ commit: 4dfc670
 - PASS: Direct callback tests cover `:data`, `:window_change`, `:closed`, matching lifecycle `{:EXIT, ...}`, and non-matching lifecycle exits.
 - PASS: `:window_change` assertions include returned state, resize dispatch, and guest session `terminal_size` update.
 - PASS: `:closed` assertions include guest session cleanup via monitor `:DOWN`.
+- PASS: Matching lifecycle `{:EXIT, ...}` assertions include active connection-counter cleanup.
 - PASS: Production changes are limited to PTY/shell `:ssh_connection.reply_request/4` success replies.
 
 ## Evidence
@@ -23,6 +24,7 @@ commit: 4dfc670
 - Added `real SSH channel startup` tests in `test/foglet_bbs/ssh/cli_handler_test.exs`.
 - Added `direct SSH callbacks` tests in `test/foglet_bbs/ssh/cli_handler_test.exs`.
 - Updated `lib/foglet_bbs/ssh/cli_handler.ex` to reply to successful PTY and shell requests.
+- Updated `lib/foglet_bbs/ssh/cli_handler.ex` to decrement the active connection counter when the matching lifecycle EXIT path closes the channel.
 - `mix test test/foglet_bbs/ssh/cli_handler_test.exs` completed with 16 tests and 0 failures.
 - `mix precommit` completed successfully.
 
