@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: milestone
-status: planning
-stopped_at: Phase 5 context gathered
-last_updated: "2026-04-22T01:52:51.594Z"
+status: Blocked (planner auth required)
+stopped_at: Phase 6 context gathered
+last_updated: "2026-04-22T01:58:49.892Z"
 last_activity: 2026-04-21
 progress:
   total_phases: 10
@@ -35,7 +35,7 @@ Phase: 04 (mainmenu) — EXECUTING
 Plan: Not started
 **Phase:** 5 of 10 (boardlist)
 **Next:** Phase 3 (Verify) — hand-rolled 6-char buffer preserved; consolidate 7 default-state literals; wizard-state migration to screen_state[:verify]
-**Status:** Ready to plan
+**Status:** Blocked (planner auth required)
 **Last activity:** 2026-04-21
 
 Progress: [███░░░░░░░] 30%
@@ -80,7 +80,9 @@ None yet.
 
 ### Blockers/Concerns
 
-None yet. Three correctness items are **scoped into phases** (not blockers):
+- **Blocker (2026-04-22):** Could not run `Skill(skill="gsd-plan-phase", args="5 --auto --ws phase-03-screen-audit")` via `gsd-sdk run` because the GSD runner is unauthenticated in this environment (`Not logged in · Please run /login`). Planning for Phase 5 cannot proceed until the GSD session is logged in.
+
+Three correctness items are **scoped into phases** (not blockers):
 
 - `thread_list.ex:136,140` `function_exported?/3` missing `Code.ensure_loaded/1` → Phase 6.
 - Dead-code audit of public `load_*`/`flush_*` hooks → Phases 5, 6, 9.
@@ -98,6 +100,6 @@ None yet. Three correctness items are **scoped into phases** (not blockers):
 
 ## Session Continuity
 
-Last session: 2026-04-22T01:52:51.588Z
-Stopped at: Phase 5 context gathered
-Resume file: .planning/workstreams/phase-03-screen-audit/phases/05-boardlist/05-CONTEXT.md
+Last session: 2026-04-22T01:58:49.887Z
+Stopped at: Phase 6 context gathered
+Resume file: .planning/workstreams/phase-03-screen-audit/phases/06-threadlist/06-CONTEXT.md
