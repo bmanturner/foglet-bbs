@@ -1,10 +1,10 @@
 ---
 gsd_state_version: 1.0
 milestone: v1.0.2
-milestone_name: milestone
-status: completed
-stopped_at: Phase 7 context gathered
-last_updated: "2026-04-22T14:55:53.592Z"
+milestone_name: Phase-03 Screen Audit
+status: archived
+stopped_at: Milestone v1.0.2 closed 2026-04-22
+last_updated: "2026-04-22T15:30:00.000Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 10
@@ -31,11 +31,8 @@ See: .planning/PROJECT.md (shared across workstreams — **not modified from ins
 
 ## Current Position
 
-Phase: 09 (postreader) — EXECUTING
-Plan: Not started
-**Phase:** 09 of 10 (postreader)
-**Next:** Phase 9 (PostReader) — plan final screen audit with full helper adoption, callback contract verification, spinner decision, and render-path purity checks
-**Status:** Milestone complete
+**Status:** ✅ ARCHIVED — v1.0.2 milestone closed 2026-04-22
+**Next:** Workstream complete — return to main roadmap (Phase 04: Presence & Login Sequence)
 **Last activity:** 2026-04-22
 
 Progress: [████████░░] 80%
@@ -103,6 +100,16 @@ Resolved blocker (2026-04-22):
 | Widget | FUT-03: Extend `Input.TextInput` with `█`-block cursor style | Deferred | 2026-04-21 |
 | Pagination | FUT-04: PostReader pagination (currently loads all posts up-front) | Deferred | 2026-04-21 |
 | Cosmetic | FUT-05: Normalize `{:terminate, :user_quit}` vs `{:terminate, :logout}` | Deferred | 2026-04-21 |
+
+Acknowledged at milestone close on 2026-04-22 (5 items):
+
+| Category | Item | Status |
+|----------|------|--------|
+| uat_gap | Phase 03 / 03-HUMAN-UAT.md (7 pending scenarios) | partial |
+| uat_gap | Phase 03 / 03-UAT.md | diagnosed |
+| verification_gap | Phase 03 / 03-VERIFICATION.md | human_needed |
+| seed | SEED-001: User notifications over webhook | dormant |
+| seed | SEED-002: Resend verification email from Verify screen + configurable email verification requirement | dormant |
 
 ## Session Continuity
 
