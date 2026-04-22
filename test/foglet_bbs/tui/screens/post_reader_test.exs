@@ -3,6 +3,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   alias Foglet.TUI.Screens.PostReader
 
+  # Test-only fake modules — standard ExUnit pattern, exempt from the CLAUDE.md
+  # "no nested modules" convention (no cyclic-dependency risk in test files).
   defmodule FakePosts do
     def list_posts(_thread_id) do
       [
