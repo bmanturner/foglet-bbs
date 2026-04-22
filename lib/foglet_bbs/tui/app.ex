@@ -20,6 +20,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
@@ -639,6 +640,20 @@ defmodule Foglet.TUI.App do
     # Unknown messages pass through unchanged.
     {state, []}
   end
+
+  defp domain_module(state, key) do
+    ctx = Map.get(state, :session_context) || %{}
+
+    case Domain.get(ctx, key) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> default_domain_module(key)
+    end
+  end
+
+  defp default_domain_module(:boards), do: Foglet.Boards
+  defp default_domain_module(:threads), do: Foglet.Threads
+  defp default_domain_module(:posts), do: Foglet.Posts
+  defp default_domain_module(:markdown), do: Foglet.Markdown
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
