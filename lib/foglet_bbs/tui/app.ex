@@ -50,8 +50,7 @@ defmodule Foglet.TUI.App do
           current_thread_list: list() | nil,
           posts: list() | nil,
           read_position: map(),
-          composer_draft: String.t() | nil,
-          subscribed_topics: MapSet.t()
+          composer_draft: String.t() | nil
         }
 
   defstruct current_screen: :login,
@@ -67,8 +66,7 @@ defmodule Foglet.TUI.App do
             current_thread_list: nil,
             posts: nil,
             read_position: %{},
-            composer_draft: nil,
-            subscribed_topics: MapSet.new()
+            composer_draft: nil
 
   # --- Raxol callbacks ---
 
