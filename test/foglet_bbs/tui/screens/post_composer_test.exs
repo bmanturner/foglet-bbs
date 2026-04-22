@@ -170,6 +170,33 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   test "Ctrl+S with empty body shows error modal", %{state: state} do
     {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, state)
     assert s.modal.type == :error
+    assert get_in(s.screen_state, [:post_composer, :input_state, Access.key(:value)]) == ""
+  end
+
+  test "Ctrl+S with no current_user shows login-required modal", %{state: state} do
+    s0 = %{state | current_user: nil}
+    {:update, s1, _} = PostComposer.handle_key(%{key: :char, char: "h"}, s0)
+
+    {:update, s2, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s1)
+
+    assert s2.modal.type == :error
+    assert s2.modal.message == "You must be logged in to post."
+    assert get_in(s2.screen_state, [:post_composer, :input_state, Access.key(:value)]) == "h"
+  end
+
+  test "Ctrl+S create failure shows domain-error modal", %{state: state} do
+    for ch <- String.graphemes("explode"), reduce: state do
+      acc ->
+        {:update, next, _} = PostComposer.handle_key(%{key: :char, char: ch}, acc)
+        next
+    end
+    |> then(fn s ->
+      {:update, new_state, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+      assert new_state.modal.type == :error
+      assert new_state.modal.message == "Failed to create post."
+      assert new_state.current_screen == :post_composer
+      assert Map.has_key?(new_state.screen_state, :post_composer)
+    end)
   end
 
   test "Ctrl+S with valid body creates post and transitions to :post_reader (D-29)",
@@ -276,6 +303,24 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert s.current_screen == :main_menu
     assert s.composer_draft == nil
     refute Map.has_key?(s.screen_state, :post_composer)
+  end
+
+  test "Ctrl+S and Ctrl+C are intercepted by explicit clauses, not char forwarding", %{
+    state: state
+  } do
+    {:update, save_state, _} =
+      PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+    assert save_state.modal.type == :error
+
+    assert get_in(save_state.screen_state, [:post_composer, :input_state, Access.key(:value)]) ==
+             ""
+
+    {:update, cancel_state, _} =
+      PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, state)
+
+    assert cancel_state.current_screen == :main_menu
+    assert cancel_state.composer_draft == nil
   end
 
   # ---------------------------------------------------------------------------
