@@ -74,14 +74,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "C"}, state)
     assert s.current_screen == :new_thread
     assert {:load_boards_for_new_thread} in cmds
-    assert get_in(s, [:screen_state, :new_thread, :step]) == :board
-    assert get_in(s, [:screen_state, :new_thread, :origin]) == :main_menu
+    assert s.screen_state.new_thread.step == :board
+    assert s.screen_state.new_thread.origin == :main_menu
 
     {:update, s2, cmds2} = MainMenu.handle_key(%{key: :char, char: "c"}, state)
     assert s2.current_screen == :new_thread
     assert {:load_boards_for_new_thread} in cmds2
-    assert get_in(s2, [:screen_state, :new_thread, :step]) == :board
-    assert get_in(s2, [:screen_state, :new_thread, :origin]) == :main_menu
+    assert s2.screen_state.new_thread.step == :board
+    assert s2.screen_state.new_thread.origin == :main_menu
   end
 
   test "'Q'/'q' emits {:terminate, :logout} command", %{state: state} do

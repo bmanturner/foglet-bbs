@@ -175,7 +175,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     composer_ss =
       Foglet.TUI.Screens.PostComposer.init_screen_state(reply_to: reply_to, width: w)
-      |> Map.put(:origin, :post_reader)
+      |> then(&%{&1 | origin: :post_reader})
 
     new_state = %{
       state

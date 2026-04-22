@@ -39,6 +39,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   alias Foglet.TUI.App
   alias Foglet.TUI.Screens.NewThread
+  alias Foglet.TUI.Screens.NewThread.State
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Raxol.UI.Components.Input.MultiLineInput
 
@@ -93,17 +94,14 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   defp compose_state(board \\ %{id: "b1", name: "General"}) do
     body_input = fresh_input()
 
-    ss = %{
-      step: :compose,
-      boards: [board],
-      selected_board_index: 0,
-      board: board,
-      title_input_state: TextInput.init(value: ""),
-      body_input_state: body_input,
-      focused: :title,
-      mode: :edit,
-      error: nil
-    }
+    ss =
+      NewThread.init_screen_state(
+        step: :compose,
+        boards: [board],
+        board: board,
+        title_input_state: TextInput.init(value: ""),
+        body_input_state: body_input
+      )
 
     Map.put(base_state(), :screen_state, %{new_thread: ss})
   end
@@ -112,15 +110,13 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   defp title_value(state), do: get_ss(state).title_input_state.raxol_state.value
 
   defp put_title(state, title, max_length \\ 60) do
-    ss = get_ss(state)
-
     title_input =
       Enum.reduce(String.graphemes(title), TextInput.init(max_length: max_length), fn ch, acc ->
         {next, _} = TextInput.handle_event(%{key: :char, char: ch}, acc)
         next
       end)
 
-    Map.put(state, :screen_state, %{new_thread: %{ss | title_input_state: title_input}})
+    put_in(state.screen_state.new_thread.title_input_state, title_input)
   end
 
   # ---------------------------------------------------------------------------
@@ -129,6 +125,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "init_screen_state/1 defaults to board step" do
     ss = NewThread.init_screen_state()
+    assert %State{} = ss
     assert ss.step == :board
     assert ss.boards == nil
     assert ss.selected_board_index == 0
@@ -297,8 +294,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "Ctrl+C with origin: :thread_list routes back to :thread_list" do
     state = compose_state()
-    ss = get_ss(state)
-    s = Map.put(state, :screen_state, %{new_thread: Map.put(ss, :origin, :thread_list)})
+    s = put_in(state.screen_state.new_thread.origin, :thread_list)
 
     {:update, new_state, _} = NewThread.handle_key(%{key: :char, char: "c", ctrl: true}, s)
     assert new_state.current_screen == :thread_list
@@ -312,8 +308,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "Esc with origin: :thread_list routes back to :thread_list" do
     state = compose_state()
-    ss = get_ss(state)
-    s = Map.put(state, :screen_state, %{new_thread: Map.put(ss, :origin, :thread_list)})
+    s = put_in(state.screen_state.new_thread.origin, :thread_list)
 
     {:update, new_state, _} = NewThread.handle_key(%{key: :escape}, s)
     assert new_state.current_screen == :thread_list
@@ -471,16 +466,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   test "Ctrl+S with {:ok, %{thread: thread}} preserves current_board from wizard" do
     state = compose_state(%{id: "b1", name: "General"})
 
-    # Set a title directly in ss
-    ss = get_ss(state)
-
     s =
-      Map.put(state, :screen_state, %{
-        new_thread: %{
-          ss
-          | title_input_state: TextInput.init(value: "Test Thread", max_length: 60)
-        }
-      })
+      put_in(
+        state.screen_state.new_thread.title_input_state,
+        TextInput.init(value: "Test Thread", max_length: 60)
+      )
 
     # Type body
     {:update, s, _} = NewThread.handle_key(%{key: :tab}, s)
@@ -520,12 +510,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   test "Ctrl+S with empty body shows error, stays on compose" do
     state = compose_state()
     # Set title but leave body empty
-    ss = get_ss(state)
-
     s =
-      Map.put(state, :screen_state, %{
-        new_thread: %{ss | title_input_state: TextInput.init(value: "Has Title", max_length: 60)}
-      })
+      put_in(
+        state.screen_state.new_thread.title_input_state,
+        TextInput.init(value: "Has Title", max_length: 60)
+      )
 
     {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert final.current_screen == :new_thread
@@ -540,17 +529,14 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     board = %{id: "b1", name: "General"}
 
-    ss = %{
-      step: :compose,
-      boards: [board],
-      selected_board_index: 0,
-      board: board,
-      title_input_state: TextInput.init(value: "My Thread", max_length: 60),
-      body_input_state: fresh_input("Hello"),
-      focused: :title,
-      mode: :edit,
-      error: nil
-    }
+    ss =
+      NewThread.init_screen_state(
+        step: :compose,
+        boards: [board],
+        board: board,
+        title_input_state: TextInput.init(value: "My Thread", max_length: 60),
+        body_input_state: fresh_input("Hello")
+      )
 
     s = Map.put(state, :screen_state, %{new_thread: ss})
     {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
@@ -568,17 +554,14 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     board = %{id: "b1", name: "General"}
 
-    ss = %{
-      step: :compose,
-      boards: [board],
-      selected_board_index: 0,
-      board: board,
-      title_input_state: TextInput.init(value: "My Thread", max_length: 60),
-      body_input_state: fresh_input("Hello"),
-      focused: :title,
-      mode: :edit,
-      error: nil
-    }
+    ss =
+      NewThread.init_screen_state(
+        step: :compose,
+        boards: [board],
+        board: board,
+        title_input_state: TextInput.init(value: "My Thread", max_length: 60),
+        body_input_state: fresh_input("Hello")
+      )
 
     s = Map.put(state, :screen_state, %{new_thread: ss})
     {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
@@ -618,17 +601,16 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     board = %{id: "b1", name: "General"}
 
-    ss = %{
-      step: :compose,
-      boards: [board],
-      selected_board_index: 0,
-      board: board,
-      title_input_state: TextInput.init(value: "Test Thread", max_length: 60),
-      body_input_state: body_input,
-      focused: :body,
-      mode: :preview,
-      error: nil
-    }
+    ss =
+      NewThread.init_screen_state(
+        step: :compose,
+        boards: [board],
+        board: board,
+        title_input_state: TextInput.init(value: "Test Thread", max_length: 60),
+        body_input_state: body_input,
+        focused: :body,
+        mode: :preview
+      )
 
     state =
       Map.put(

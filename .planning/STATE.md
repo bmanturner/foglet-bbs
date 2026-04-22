@@ -60,6 +60,7 @@ Progress: [█░░░░░░░░░] 14%
 
 | Date | Task | Status | Summary |
 |------|------|--------|---------|
+| 2026-04-22 | Create state structs for NewThread and PostComposer | complete | `.planning/quick/260422-hfc-create-state-structs-for-newthread-and-p/SUMMARY.md` |
 | 2026-04-22 | Add PostReader.State state struct for PostReader | complete | `.planning/quick/260422-gx8-add-postreader-state-state-struct-for-po/SUMMARY.md` |
 
 ## Accumulated Context

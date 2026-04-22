@@ -396,7 +396,10 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:boards_for_new_thread_loaded, boards}, state) do
     ss =
-      get_in(state.screen_state, [:new_thread]) ||
+      case Map.get(state.screen_state, :new_thread) do
+        %Foglet.TUI.Screens.NewThread.State{} = ss -> ss
+        _ -> nil
+      end ||
         Foglet.TUI.Screens.NewThread.init_screen_state()
 
     new_ss = %{ss | boards: boards}

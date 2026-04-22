@@ -58,7 +58,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
     ss =
       Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
-      |> Map.put(:origin, :main_menu)
+      |> then(&%{&1 | origin: :main_menu})
 
     new_screen_state = Map.put(state.screen_state, :new_thread, ss)
 

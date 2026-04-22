@@ -8,7 +8,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   Uses `Raxol.UI.Components.Input.MultiLineInput` component module (D-26) for
   the full-featured editor: cursor, word wrap, undo/redo, shift-select.
-  Component state is stored in `state.screen_state[:post_composer].input_state`.
+  Component state is stored in `%PostComposer.State{}.input_state` at
+  `state.screen_state[:post_composer]`.
   `state.composer_draft` is NOT used for reading text — we always read from
   `input_state.value`. The struct field remains on App but is set to nil by
   cancel/submit to signal no active draft (unchanged contract).
@@ -18,6 +19,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   alias Foglet.Config
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.PostComposer.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
@@ -132,23 +134,9 @@ defmodule Foglet.TUI.Screens.PostComposer do
     - `height`   — visible rows for the text area (default 10)
   """
   @impl true
-  @spec init_screen_state(keyword()) :: map()
+  @spec init_screen_state(keyword()) :: State.t()
   def init_screen_state(opts \\ []) do
-    reply_to = Keyword.get(opts, :reply_to, nil)
-    width = Keyword.get(opts, :width, 80)
-    height = Keyword.get(opts, :height, 10)
-
-    {:ok, input_st} =
-      MultiLineInput.init(%{
-        value: "",
-        placeholder: "Write your post…",
-        width: width,
-        height: height,
-        wrap: :none,
-        focused: true
-      })
-
-    %{mode: :edit, reply_to: reply_to, error: nil, input_state: input_st}
+    State.new(opts)
   end
 
   # ---------------------------------------------------------------------------
@@ -157,25 +145,13 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   # Returns a guaranteed screen_state with input_state initialised.
   defp composer_screen_state(state) do
-    case get_in(state.screen_state, [:post_composer]) do
-      %{input_state: _} = ss ->
+    case Map.get(state.screen_state, :post_composer) do
+      %State{} = ss ->
         ss
 
-      existing ->
-        base = existing || %{mode: :edit, reply_to: nil, error: nil}
+      _ ->
         {w, _h} = state.terminal_size || @default_terminal_size
-
-        {:ok, input_st} =
-          MultiLineInput.init(%{
-            value: "",
-            placeholder: "Write your post…",
-            width: max(w - 4, 20),
-            height: 10,
-            wrap: :none,
-            focused: true
-          })
-
-        Map.put(base, :input_state, input_st)
+        init_screen_state(width: max(w - 4, 20), height: 10)
     end
   end
 

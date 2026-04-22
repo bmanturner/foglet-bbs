@@ -126,12 +126,9 @@ defmodule Foglet.TUI.Screens.ThreadList do
     # stash origin so Cancel returns to this ThreadList.
     ss =
       Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
-      |> Map.merge(%{
-        step: :compose,
-        board: state.current_board,
-        boards: nil,
-        origin: :thread_list
-      })
+      |> then(
+        &%{&1 | step: :compose, board: state.current_board, boards: nil, origin: :thread_list}
+      )
 
     new_screen_state = Map.put(state.screen_state, :new_thread, ss)
 

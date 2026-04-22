@@ -119,6 +119,7 @@ end
 defmodule Foglet.TUI.Screens.ThreadListTest do
   use ExUnit.Case, async: true
 
+  alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.ThreadList
 
   alias Foglet.TUI.Screens.ThreadListTest.AnnotatingFakeThreads
@@ -173,6 +174,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     assert cmds == []
 
     ss = s.screen_state[:new_thread]
+    assert %NewThread.State{} = ss
     assert ss.step == :compose
     assert ss.board == %{id: "b1", name: "General", slug: "general"}
     assert ss.boards == nil

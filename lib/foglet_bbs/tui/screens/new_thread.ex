@@ -6,7 +6,8 @@ defmodule Foglet.TUI.Screens.NewThread do
   Step 2 — :compose : enter title (Tab-switch focus) and body (MultiLineInput state, rendered as plain text/2).
                        Ctrl+S to submit, Ctrl+C to cancel.
 
-  State lives in state.screen_state[:new_thread].  See init_screen_state/1.
+  State lives in `state.screen_state[:new_thread]` as a `%NewThread.State{}`.
+  See init_screen_state/1.
 
   On submit: calls Foglet.Threads.create_thread/3 (board_id, user_id, %{title:, body:}).
   On success: navigates to :thread_list with the new thread pre-loaded.
@@ -16,6 +17,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   alias Foglet.Config
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.NewThread.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
@@ -33,36 +35,11 @@ defmodule Foglet.TUI.Screens.NewThread do
   Boards are passed in immediately (already loaded) or left nil to show "Loading…".
   """
   @impl true
-  @spec init_screen_state(keyword()) :: map()
+  @spec init_screen_state(keyword()) :: State.t()
   def init_screen_state(opts \\ []) do
-    boards = Keyword.get(opts, :boards, nil)
-    width = Keyword.get(opts, :width, 80)
-    height = Keyword.get(opts, :height, 10)
-
-    {:ok, body_input_state} =
-      MultiLineInput.init(%{
-        value: "",
-        placeholder: "Write your opening post…",
-        width: max(width - 4, 20),
-        height: height,
-        wrap: :none,
-        focused: false
-      })
-
-    %{
-      step: :board,
-      boards: boards,
-      selected_board_index: 0,
-      board: nil,
-      title_input_state: TextInput.init(value: "", max_length: max_thread_title_length()),
-      body_input_state: body_input_state,
-      focused: :title,
-      mode: :edit,
-      error: nil,
-      # Callers may override :origin to control where Ctrl+C / Esc navigate.
-      # Default is :main_menu (the only entry point for the board-pick step).
-      origin: :main_menu
-    }
+    opts
+    |> Keyword.put_new(:max_title_length, max_thread_title_length())
+    |> State.new()
   end
 
   @impl true
@@ -118,10 +95,7 @@ defmodule Foglet.TUI.Screens.NewThread do
     # see the soft limit as they type.
     cap = max_thread_title_length()
 
-    title_input_state =
-      Map.get(ss, :title_input_state, TextInput.init(value: "", max_length: cap))
-
-    title_value = title_input_state.raxol_state.value
+    title_value = ss.title_input_state.raxol_state.value
     title_len = String.length(title_value)
     counter = "#{title_len} / #{cap} chars"
     title_focused = ss.focused == :title
@@ -132,7 +106,7 @@ defmodule Foglet.TUI.Screens.NewThread do
       row style: %{gap: 0} do
         [
           text("Title: ", fg: title_label_fg, style: title_label_style),
-          TextInput.render(title_input_state, bordered: false, theme: theme)
+          TextInput.render(ss.title_input_state, bordered: false, theme: theme)
         ]
       end
 
@@ -232,8 +206,7 @@ defmodule Foglet.TUI.Screens.NewThread do
             focused: false
           })
 
-        new_ss =
-          Map.merge(ss, %{step: :compose, board: board, body_input_state: body_input_state})
+        new_ss = %{ss | step: :compose, board: board, body_input_state: body_input_state}
 
         {:update, put_ss(state, new_ss), []}
     end
@@ -288,11 +261,8 @@ defmodule Foglet.TUI.Screens.NewThread do
   # Title field: delegate to TextInput while preserving cap behavior contract.
   # D-14: the soft title cap is still enforced from Config.
   defp handle_compose_key(key_event, state, %{focused: :title} = ss) do
-    title_input =
-      Map.get(ss, :title_input_state, TextInput.init(max_length: max_thread_title_length()))
-
-    before = title_input.raxol_state.value
-    {new_input, _action} = TextInput.handle_event(key_event, title_input)
+    before = ss.title_input_state.raxol_state.value
+    {new_input, _action} = TextInput.handle_event(key_event, ss.title_input_state)
     after_value = new_input.raxol_state.value
 
     cond do
@@ -336,10 +306,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp do_submit(state, ss) do
-    title_input =
-      Map.get(ss, :title_input_state, TextInput.init(max_length: max_thread_title_length()))
-
-    title = String.trim(title_input.raxol_state.value)
+    title = String.trim(ss.title_input_state.raxol_state.value)
     body = ss.body_input_state.value
     board = ss.board
 
@@ -404,8 +371,10 @@ defmodule Foglet.TUI.Screens.NewThread do
   # ---------------------------------------------------------------------------
 
   defp screen_state(state) do
-    get_in(state.screen_state, [:new_thread]) ||
-      init_screen_state()
+    case Map.get(state.screen_state, :new_thread) do
+      %State{} = ss -> ss
+      _ -> init_screen_state()
+    end
   end
 
   defp put_ss(state, ss) do

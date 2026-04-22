@@ -29,6 +29,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     Verify
   }
 
+  alias Foglet.TUI.Widgets.Input.TextInput
   alias Raxol.UI.Components.Input.MultiLineInput
   alias Raxol.UI.Layout.Engine
 
@@ -378,12 +379,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       terminal_size: {80, 24},
       composer_draft: nil,
       screen_state: %{
-        post_composer: %{
-          mode: :edit,
-          reply_to: nil,
-          error: nil,
-          input_state: input_st
-        }
+        post_composer: PostComposer.init_screen_state(input_state: input_st)
       }
     }
 
@@ -547,7 +543,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
          terminal_size: {80, 24},
          composer_draft: nil,
          screen_state: %{
-           post_composer: %{mode: :edit, reply_to: nil, error: nil, input_state: input_st}
+           post_composer: PostComposer.init_screen_state(input_state: input_st)
          }
        })}
     ]
@@ -631,17 +627,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     board = %{id: "b1", name: "General"}
 
-    ss = %{
-      step: :compose,
-      boards: [board],
-      selected_board_index: 0,
-      board: board,
-      title_input_state: Foglet.TUI.Widgets.Input.TextInput.init(value: "Hello", max_length: 60),
-      body_input_state: body_input_st,
-      focused: :title,
-      mode: :edit,
-      error: nil
-    }
+    ss =
+      NewThread.init_screen_state(
+        step: :compose,
+        boards: [board],
+        board: board,
+        title_input_state: TextInput.init(value: "Hello", max_length: 60),
+        body_input_state: body_input_st
+      )
 
     state = %App{
       current_screen: :new_thread,

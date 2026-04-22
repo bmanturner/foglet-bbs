@@ -3,7 +3,10 @@ defmodule Foglet.TUI.AppTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.Screens.NewThread
+  alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
+  alias Foglet.TUI.Widgets.Input.TextInput
 
   # Seed the ETS config cache so render paths that call Config.get/2
   # (e.g. Login, Register, Verify screens) do not hit the DB.
@@ -371,11 +374,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :post_composer,
           screen_state: %{
-            post_composer: %{
-              mode: :compose,
-              input_state: %{value: "draft-in-progress", cursor_pos: 17},
-              error: nil
-            }
+            post_composer: PostComposer.init_screen_state(value: "draft-in-progress")
           }
       }
 
@@ -384,7 +383,6 @@ defmodule Foglet.TUI.AppTest do
       assert Foglet.TUI.SizeGate.too_small?(gated)
       # Composer state is preserved through the resize (update/2 didn't touch it)
       assert gated.screen_state.post_composer.input_state.value == "draft-in-progress"
-      assert gated.screen_state.post_composer.input_state.cursor_pos == 17
       assert gated.current_screen == :post_composer
 
       # Step 2: user hammers keys while gated — ALL must be swallowed
@@ -393,7 +391,6 @@ defmodule Foglet.TUI.AppTest do
       {after_esc, _} = App.update({:key, %{key: :escape}}, after_enter)
       # Draft still intact
       assert after_esc.screen_state.post_composer.input_state.value == "draft-in-progress"
-      assert after_esc.screen_state.post_composer.input_state.cursor_pos == 17
       assert after_esc.current_screen == :post_composer
 
       # Step 3: resize BACK above threshold — gate releases
@@ -401,7 +398,6 @@ defmodule Foglet.TUI.AppTest do
       refute Foglet.TUI.SizeGate.too_small?(released)
       # Draft survives the full cycle end-to-end
       assert released.screen_state.post_composer.input_state.value == "draft-in-progress"
-      assert released.screen_state.post_composer.input_state.cursor_pos == 17
       assert released.current_screen == :post_composer
     end
 
@@ -412,18 +408,13 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :new_thread,
           screen_state: %{
-            new_thread: %{
-              step: :compose,
-              title_input: "My new thread",
-              body_input_state: %{value: "line1\nline2\nline3", cursor_pos: 17},
-              focused: :body,
-              mode: :compose,
-              boards: nil,
-              board: nil,
-              selected_board_index: 0,
-              error: nil,
-              origin: :main_menu
-            }
+            new_thread:
+              NewThread.init_screen_state(
+                step: :compose,
+                title_input_state: TextInput.init(value: "My new thread"),
+                body_value: "line1\nline2\nline3",
+                focused: :body
+              )
           }
       }
 
@@ -434,8 +425,10 @@ defmodule Foglet.TUI.AppTest do
 
       # Multi-line content preserved verbatim
       assert released.screen_state.new_thread.body_input_state.value == "line1\nline2\nline3"
-      assert released.screen_state.new_thread.body_input_state.cursor_pos == 17
-      assert released.screen_state.new_thread.title_input == "My new thread"
+
+      assert released.screen_state.new_thread.title_input_state.raxol_state.value ==
+               "My new thread"
+
       assert released.current_screen == :new_thread
     end
 
@@ -446,11 +439,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :post_composer,
           screen_state: %{
-            post_composer: %{
-              mode: :compose,
-              input_state: %{value: "important-draft", cursor_pos: 15},
-              error: nil
-            }
+            post_composer: PostComposer.init_screen_state(value: "important-draft")
           }
       }
 
