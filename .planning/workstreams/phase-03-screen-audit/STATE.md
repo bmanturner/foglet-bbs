@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: milestone
 status: planning
-stopped_at: Phase 7 context gathered
-last_updated: "2026-04-22T12:04:49.806Z"
+stopped_at: "Phase 9 context gathered; ready to plan"
+last_updated: "2026-04-22T13:23:36Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 10
-  completed_phases: 7
-  total_plans: 14
-  completed_plans: 13
+  completed_phases: 8
+  total_plans: 15
+  completed_plans: 14
   percent: 93
 ---
 
@@ -31,14 +31,14 @@ See: .planning/PROJECT.md (shared across workstreams — **not modified from ins
 
 ## Current Position
 
-Phase: 08 (postcomposer) — READY TO PLAN
+Phase: 09 (postreader) — READY TO PLAN
 Plan: Not started
-**Phase:** 8 of 10 (postcomposer)
-**Next:** Phase 8 (PostComposer) — add source-order guard note, keep Compose + MultiLineInput body path, and convert publish nested-case flow to `with`
+**Phase:** 9 of 10 (postreader)
+**Next:** Phase 9 (PostReader) — plan final screen audit with full helper adoption, callback contract verification, spinner decision, and render-path purity checks
 **Status:** Ready to plan
 **Last activity:** 2026-04-22
 
-Progress: [███████░░░] 70%
+Progress: [████████░░] 80%
 
 ## Roadmap Summary
 
@@ -85,6 +85,9 @@ Three correctness items are **scoped into phases** (not blockers):
 - `thread_list.ex:136,140` `function_exported?/3` missing `Code.ensure_loaded/1` → Phase 6.
 - Dead-code audit of public `load_*`/`flush_*` hooks → Phases 5, 6, 9.
 - `with`-chain refactors for nested `case {:ok,_}|{:error,_}` → Phases 1 (Login), 2 (Register), 8 (PostComposer).
+
+Resolved blocker (2026-04-22):
+- Phase 8 inline resume completed after commit-step permission escalation; task commits and 08-01 summary are now recorded.
 
 ## Deferred Items
 
