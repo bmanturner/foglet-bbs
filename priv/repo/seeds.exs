@@ -10,9 +10,6 @@ import Ecto.Query, warn: false
 
 alias Foglet.Accounts
 alias Foglet.Accounts.User
-alias Foglet.Config
-alias Foglet.Config.Entry
-alias Foglet.Config.Schema
 alias FogletBbs.Repo
 
 # --- Tombstone user ---
@@ -41,23 +38,9 @@ case Repo.get(User, tombstone_id) do
 end
 
 # --- Default configuration entries ---
-Enum.each(Schema.entries(), fn %{key: key, default: default, description: description} ->
-  case Repo.get_by(Entry, key: key) do
-    nil ->
-      Config.put!(key, default, nil)
-
-      # Set description on first insert (put!/3 doesn't touch description)
-      Entry
-      |> Repo.get_by!(key: key)
-      |> Ecto.Changeset.change(%{description: description})
-      |> Repo.update!()
-
-      IO.puts("  [seed] inserted config #{key} = #{inspect(default)}")
-
-    _existing ->
-      IO.puts("  [seed] config #{key} already present")
-  end
-end)
+# Delegated to priv/repo/seeds/config.exs so the `test` mix alias can run it
+# standalone (without dev-only fixtures below).
+Code.eval_file(Path.join(__DIR__, "seeds/config.exs"))
 
 IO.puts("Seeds complete.")
 
