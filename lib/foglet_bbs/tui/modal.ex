@@ -10,6 +10,7 @@ defmodule Foglet.TUI.Modal do
 
   @type t :: %__MODULE__{
           type: modal_type(),
+          title: String.t() | nil,
           message: String.t() | nil,
           on_confirm: callback(),
           on_cancel: callback()
@@ -17,5 +18,5 @@ defmodule Foglet.TUI.Modal do
 
   # NO @enforce_keys — some flows (e.g. terminate_after_modal) merge callbacks
   # onto existing modals via Map.merge/2.
-  defstruct [:type, :message, :on_confirm, :on_cancel]
+  defstruct [:type, :title, :message, :on_confirm, :on_cancel]
 end

@@ -41,7 +41,7 @@ defmodule Foglet.TUI.Widgets.Modal do
   @spec render(modal_spec() | Foglet.TUI.Modal.t(), Theme.t()) :: any()
   def render(%Foglet.TUI.Modal{message: msg} = spec, %Theme{} = theme) do
     type = spec.type || :info
-    title = title_for(type)
+    title = spec.title || title_for(type)
     msg_fg = color_for_type(type, theme)
 
     wrapped_lines =

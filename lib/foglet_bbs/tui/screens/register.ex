@@ -337,6 +337,7 @@ defmodule Foglet.TUI.Screens.Register do
       {:ok, _user} ->
         modal = %Foglet.TUI.Modal{
           type: :info,
+          title: "Account Pending",
           message:
             "Your account has been created and is pending sysop approval. You will be notified by email."
         }
