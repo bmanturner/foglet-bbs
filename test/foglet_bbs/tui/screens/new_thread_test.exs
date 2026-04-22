@@ -39,6 +39,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   alias Foglet.TUI.App
   alias Foglet.TUI.Screens.NewThread
+  alias Foglet.TUI.Widgets.Input.TextInput
   alias Raxol.UI.Components.Input.MultiLineInput
 
   alias Foglet.TUI.Screens.NewThreadTest.FakeBoards
@@ -97,7 +98,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       boards: [board],
       selected_board_index: 0,
       board: board,
-      title_input: "",
+      title_input_state: TextInput.init(value: ""),
       body_input_state: body_input,
       focused: :title,
       mode: :edit,
@@ -108,6 +109,19 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   end
 
   defp get_ss(state), do: get_in(state, [:screen_state, :new_thread])
+  defp title_value(state), do: get_ss(state).title_input_state.raxol_state.value
+
+  defp put_title(state, title, max_length \\ 60) do
+    ss = get_ss(state)
+
+    title_input =
+      Enum.reduce(String.graphemes(title), TextInput.init(max_length: max_length), fn ch, acc ->
+        {next, _} = TextInput.handle_event(%{key: :char, char: ch}, acc)
+        next
+      end)
+
+    Map.put(state, :screen_state, %{new_thread: %{ss | title_input_state: title_input}})
+  end
 
   # ---------------------------------------------------------------------------
   # init_screen_state/1
@@ -119,7 +133,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert ss.boards == nil
     assert ss.selected_board_index == 0
     assert ss.board == nil
-    assert ss.title_input == ""
+    assert is_struct(ss.title_input_state, TextInput)
+    assert ss.title_input_state.raxol_state.value == ""
     assert is_struct(ss.body_input_state, MultiLineInput)
     assert ss.focused == :title
     assert ss.error == nil
@@ -315,7 +330,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {:update, s1, _} = NewThread.handle_key(%{key: :char, char: "H"}, state)
     {:update, s2, _} = NewThread.handle_key(%{key: :char, char: "i"}, s1)
 
-    assert get_ss(s2).title_input == "Hi"
+    assert title_value(s2) == "Hi"
   end
 
   test "spacebar appends a space to title" do
@@ -324,7 +339,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {:update, s2, _} = NewThread.handle_key(%{key: :char, char: " "}, s1)
     {:update, s3, _} = NewThread.handle_key(%{key: :char, char: "i"}, s2)
 
-    assert get_ss(s3).title_input == "H i"
+    assert title_value(s3) == "H i"
   end
 
   test "backspace removes the last character from title" do
@@ -337,13 +352,13 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       end)
 
     {:update, s, _} = NewThread.handle_key(%{key: :backspace}, s)
-    assert get_ss(s).title_input == "Hell"
+    assert title_value(s) == "Hell"
   end
 
   test "backspace on empty title stays empty" do
     state = compose_state()
     {:update, new_state, _} = NewThread.handle_key(%{key: :backspace}, state)
-    assert get_ss(new_state).title_input == ""
+    assert title_value(new_state) == ""
   end
 
   test "typing does NOT update title when focused on :body" do
@@ -357,7 +372,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     case result do
       {:update, new_state, _} ->
-        assert get_ss(new_state).title_input == ""
+        assert title_value(new_state) == ""
 
       :no_match ->
         :ok
@@ -370,42 +385,33 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   describe "title length cap (D-13, D-14)" do
     test "accepts characters below the cap" do
-      state = compose_state()
-      ss = get_ss(state)
-      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: "abc"}})
+      s = compose_state() |> put_title("abc")
 
       {:update, new_state, []} = NewThread.handle_key(%{key: :char, char: "d"}, s)
-      assert get_ss(new_state).title_input == "abcd"
+      assert title_value(new_state) == "abcd"
     end
 
     test "rejects characters that would exceed the cap" do
       # 60-char title; next char must be rejected.
       long_title = String.duplicate("x", 60)
-      state = compose_state()
-      ss = get_ss(state)
-      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: long_title}})
+      s = compose_state() |> put_title(long_title)
 
       assert NewThread.handle_key(%{key: :char, char: "y"}, s) == :no_match
     end
 
     test "accepts the final allowed character at cap - 1" do
       title = String.duplicate("x", 59)
-      state = compose_state()
-      ss = get_ss(state)
-      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: title}})
+      s = compose_state() |> put_title(title)
 
       {:update, new_state, []} = NewThread.handle_key(%{key: :char, char: "y"}, s)
-      assert String.length(get_ss(new_state).title_input) == 60
+      assert String.length(title_value(new_state)) == 60
     end
 
-    test "backspace still works above the cap (can recover from a paste)" do
-      over_cap = String.duplicate("x", 65)
-      state = compose_state()
-      ss = get_ss(state)
-      s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: over_cap}})
+    test "backspace still works at the cap" do
+      s = compose_state() |> put_title(String.duplicate("x", 60))
 
       {:update, new_state, []} = NewThread.handle_key(%{key: :backspace}, s)
-      assert String.length(get_ss(new_state).title_input) == 64
+      assert String.length(title_value(new_state)) == 59
     end
   end
 
@@ -467,7 +473,14 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     # Set a title directly in ss
     ss = get_ss(state)
-    s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: "Test Thread"}})
+
+    s =
+      Map.put(state, :screen_state, %{
+        new_thread: %{
+          ss
+          | title_input_state: TextInput.init(value: "Test Thread", max_length: 60)
+        }
+      })
 
     # Type body
     {:update, s, _} = NewThread.handle_key(%{key: :tab}, s)
@@ -508,7 +521,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = compose_state()
     # Set title but leave body empty
     ss = get_ss(state)
-    s = Map.put(state, :screen_state, %{new_thread: %{ss | title_input: "Has Title"}})
+
+    s =
+      Map.put(state, :screen_state, %{
+        new_thread: %{ss | title_input_state: TextInput.init(value: "Has Title", max_length: 60)}
+      })
 
     {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert final.current_screen == :new_thread
@@ -528,7 +545,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       boards: [board],
       selected_board_index: 0,
       board: board,
-      title_input: "My Thread",
+      title_input_state: TextInput.init(value: "My Thread", max_length: 60),
       body_input_state: fresh_input("Hello"),
       focused: :title,
       mode: :edit,
@@ -556,7 +573,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       boards: [board],
       selected_board_index: 0,
       board: board,
-      title_input: "My Thread",
+      title_input_state: TextInput.init(value: "My Thread", max_length: 60),
       body_input_state: fresh_input("Hello"),
       focused: :title,
       mode: :edit,
@@ -606,7 +623,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       boards: [board],
       selected_board_index: 0,
       board: board,
-      title_input: "Test Thread",
+      title_input_state: TextInput.init(value: "Test Thread", max_length: 60),
       body_input_state: body_input,
       focused: :body,
       mode: :preview,
