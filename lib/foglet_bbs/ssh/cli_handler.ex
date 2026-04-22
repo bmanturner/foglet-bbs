@@ -164,7 +164,7 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_ssh_msg(
-        {:ssh_cm, _conn, {:pty, _ch, _want_reply, {_term, width, height, _pxw, _pxh, _modes}}},
+        {:ssh_cm, conn, {:pty, ch, want_reply, {_term, width, height, _pxw, _pxh, _modes}}},
         state
       ) do
     context = build_context(state, width, height)
@@ -183,6 +183,7 @@ defmodule Foglet.SSH.CLIHandler do
       )
 
     Process.link(lifecycle_pid)
+    :ssh_connection.reply_request(conn, want_reply, :success, ch)
 
     {:ok, %{state | lifecycle_pid: lifecycle_pid, width: width, height: height}}
   end
@@ -212,7 +213,8 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   @impl true
-  def handle_ssh_msg({:ssh_cm, _conn, {:shell, _ch, _want_reply}}, state) do
+  def handle_ssh_msg({:ssh_cm, conn, {:shell, ch, want_reply}}, state) do
+    :ssh_connection.reply_request(conn, want_reply, :success, ch)
     {:ok, state}
   end
 
