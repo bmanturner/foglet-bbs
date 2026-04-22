@@ -41,6 +41,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     def list_posts(_tid), do: []
   end
 
+  # Separate from FakePosts: uses message_number 5/6 (vs 1/2) to test
+  # load-specific read-position keying and distinguish from default-fixture
+  # data. The distinct message_numbers are load-post seeding assertions.
   defmodule FakePostsForLoad do
     def list_posts(_thread_id) do
       [
