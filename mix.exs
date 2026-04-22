@@ -61,7 +61,8 @@ defmodule FogletBbs.MixProject do
       {:stream_data, "~> 1.0", only: [:dev, :test]},
       {:oban, "~> 2.18"},
       {:mdex, "~> 0.2"},
-      {:raxol, path: "vendor/raxol"}
+      {:raxol, path: "vendor/raxol"},
+      {:hammer, "~> 7.3.0"}
     ]
   end
 

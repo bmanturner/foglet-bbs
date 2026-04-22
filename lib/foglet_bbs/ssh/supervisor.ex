@@ -54,6 +54,7 @@ defmodule Foglet.SSH.Supervisor do
     :ok = Foglet.SSH.CLIHandler.init_counter()
 
     children = [
+      {Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)},
       {Foglet.SSH.DaemonOwner, port: port, daemon_opts: d_opts}
     ]
 

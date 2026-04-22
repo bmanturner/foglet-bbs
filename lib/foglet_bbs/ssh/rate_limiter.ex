@@ -1,0 +1,39 @@
+defmodule Foglet.SSH.RateLimiter do
+  @moduledoc """
+  Per-IP SSH connection rate limiter backed by Hammer v7 (ETS).
+
+  Enforces @rate_limit_max connections per @rate_limit_window_ms per source IP.
+  This module uses `use Hammer, backend: :ets` which injects `start_link/1` and
+  `hit/3`. It must be started as a child process before use — `Foglet.SSH.Supervisor`
+  adds it to its supervision tree.
+
+  ## Usage
+
+      # Check and increment rate limit for a peer
+      Foglet.SSH.RateLimiter.allow?({127, 0, 0, 1})  # => true | false
+
+  Fails open on any unexpected error to maintain SSH daemon availability.
+  """
+
+  use Hammer, backend: :ets
+
+  @rate_limit_max 10
+  @rate_limit_window_ms 60_000
+
+  @spec allow?(peer :: {:inet.ip_address(), :inet.port_number()} | :unknown) :: boolean()
+  def allow?(peer) do
+    key = ip_key(peer)
+
+    case hit(key, @rate_limit_window_ms, @rate_limit_max) do
+      {:allow, _count} -> true
+      {:deny, _retry_after_ms} -> false
+    end
+  end
+
+  @spec ip_key(peer :: {:inet.ip_address(), :inet.port_number()} | :unknown) :: String.t()
+  defp ip_key({ip_tuple, _port}) when is_tuple(ip_tuple) do
+    "ssh:" <> (ip_tuple |> :inet.ntoa() |> to_string())
+  end
+
+  defp ip_key(:unknown), do: "ssh:unknown"
+end
