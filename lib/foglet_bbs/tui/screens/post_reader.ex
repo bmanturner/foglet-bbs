@@ -8,6 +8,31 @@ defmodule Foglet.TUI.Screens.PostReader do
   flush to DB happens on screen transition via {:flush_read_pointers, ctx}
   command handled by TUI.App.update/2 (SSH-09).
 
+  ## Load-absorb behavior (READER-07, AUDIT-18 deviation note)
+
+  While posts are still loading (`state.posts == [] or nil`), the navigation
+  and scroll key handlers (`advance_post/2` via n/p/space/page_down/page_up,
+  and `scroll_post/2` via j/k) return `{:update, state, []}` to absorb the
+  keypress rather than falling through to the global key handler. This prevents
+  global handlers from acting on PostReader-intended keys (WR-02) and avoids
+  command churn during the async load window (T-09-02).
+
+  ## Public callbacks (READER-02, D-03, D-04)
+
+  `load_posts/2` and `flush_read_pointers/2` are intentionally public. They
+  serve as stable contract surface for screen-level unit tests and for direct
+  invocation by `Foglet.TUI.App.do_update/2` command handlers. See each
+  function's `@doc` for details. Do not privatize or delete these without a
+  corresponding context decision update.
+
+  ## Render-path purity (READER-05, D-07, D-08)
+
+  No `defp render_*` helper may perform state writes (`put_in`, `%{state | …}`,
+  `Map.put`). Mutations are confined to non-render helpers (`load_posts/2`,
+  `advance_post/2`, `scroll_post/2`, `warm_cache/4`, `warm_viewport/4`).
+  The `render_cache` warming plumbing sits in §9 state-plumbing scope (not §8
+  render helpers) precisely because it mutates state.
+
   ## Screen state
 
   `state.screen_state[:post_reader]` holds:
@@ -24,6 +49,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
+  alias Foglet.TUI.Widgets.Progress.Spinner
   alias Raxol.UI.Components.Display.Viewport
 
   import Raxol.Core.Renderer.View
@@ -88,11 +114,23 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
-  # Single-line "Loading posts..." placeholder used when posts is nil/[]
+  # Spinner-based loading affordance used when posts is nil/[]
   # (post_reader was opened but {:posts_loaded, posts} hasn't landed yet).
+  # One-row composition: gap-1 row with spinner glyph + label text.
+  # Row count is identical to the old plain-text path — no visible row growth (D-05, D-06).
   defp render_loading(theme) do
+    frame = System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
+
     column style: %{gap: 0} do
-      [text("Loading posts...", fg: theme.dim.fg)]
+      [
+        row(
+          style: %{gap: 1},
+          do: [
+            Spinner.render(frame, style: :line, theme: theme),
+            text("Loading…", fg: theme.dim.fg)
+          ]
+        )
+      ]
     end
   end
 
@@ -155,6 +193,14 @@ defmodule Foglet.TUI.Screens.PostReader do
   entry (LIST-01 D-05). This means pressing Q right after opening a
   thread still advances the board read pointer past the first post on
   flush — "if you saw it, you read it."
+
+  **Dead-code audit (READER-02, D-03, D-04):** This public callback is
+  intentional contract surface. Production orchestration is owned by
+  `Foglet.TUI.App.do_update({:load_posts, thread_id, opts}, state)`, which
+  runs the real load off-process via `Command.task`. This function exists as
+  a stable screen-level test seam (verified in `post_reader_test.exs`) and
+  as the callable entry point should direct invocation be needed. Do not
+  delete or privatize without a corresponding context decision update.
   """
   @spec load_posts(map(), String.t()) :: {map(), list()}
   def load_posts(state, thread_id) do
@@ -200,6 +246,14 @@ defmodule Foglet.TUI.Screens.PostReader do
   @doc """
   Flush board and thread read pointers to DB (SSH-09).
   Called by App.update/2 on {:flush_read_pointers, ctx}.
+
+  **Dead-code audit (READER-02, D-03, D-04):** This public callback is
+  intentional contract surface. Production flushing is owned by
+  `Foglet.TUI.App.do_update({:flush_read_pointers, ctx}, state)`, which
+  runs the real flush off-process via `Command.task`. This function exists as
+  a stable screen-level test seam (verified in `post_reader_test.exs`) and as
+  the callable entry point for direct invocation. Do not delete or privatize
+  without a corresponding context decision update.
   """
   @spec flush_read_pointers(map(), map()) :: {map(), list()}
   # `flush_ctx` is a flush-data bag — %{user_id:, board_id:, thread_id:, ...}.
