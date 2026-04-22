@@ -123,13 +123,12 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     column style: %{gap: 0} do
       [
-        row(
-          style: %{gap: 1},
-          do: [
+        row style: %{gap: 1} do
+          [
             Spinner.render(frame, style: :line, theme: theme),
             text("Loading…", fg: theme.dim.fg)
           ]
-        )
+        end
       ]
     end
   end

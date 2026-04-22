@@ -87,7 +87,18 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     %{state: state}
   end
 
+  # ===========================================================================
+  # READER-02 / D-03 / D-04: Public callback contract surface evidence
+  #
+  # load_posts/2 and flush_read_pointers/2 are intentional contract surface —
+  # kept public to serve as screen-level test seams AND as callable entry
+  # points for Foglet.TUI.App.do_update/2 command handling.  These tests act
+  # as the explicit dead-code audit evidence (AUDIT-12) proving both functions
+  # are called and tested, not dead code.
+  # ===========================================================================
+
   test "load_posts/2 populates state.posts", %{state: state} do
+    # load_posts/2 intentional callback surface (READER-02, D-03, D-04)
     {s, _} = PostReader.load_posts(state, "t1")
     assert length(s.posts) == 2
   end
@@ -97,8 +108,26 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert _ = PostReader.render(s)
   end
 
-  test "render/1 with no posts shows loading message", %{state: state} do
-    assert _ = PostReader.render(state)
+  # ===========================================================================
+  # READER-03 / AUDIT-11: Loading-state spinner render (canonical "Loading…")
+  # ===========================================================================
+
+  describe "render/1 loading state" do
+    test "nil posts renders canonical 'Loading…' text (not legacy 'Loading posts...')", %{
+      state: state
+    } do
+      # state.posts == nil — loading not yet started
+      flat = flatten_text(PostReader.render(state))
+      assert flat =~ "Loading…", "Expected canonical Loading… text, got: #{inspect(flat)}"
+      refute String.contains?(flat, "Loading posts..."), "Legacy loading text must not appear"
+    end
+
+    test "empty posts list renders canonical 'Loading…' text", %{state: state} do
+      s = %{state | posts: []}
+      flat = flatten_text(PostReader.render(s))
+      assert flat =~ "Loading…", "Expected canonical Loading… text for empty posts"
+      refute String.contains?(flat, "Loading posts...")
+    end
   end
 
   test "'n' advances to next post and updates read_position", %{state: state} do
@@ -141,6 +170,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   test "flush_read_pointers/2 calls domain modules and clears local pointer", %{state: state} do
+    # flush_read_pointers/2 intentional callback surface (READER-02, D-03, D-04)
     {s, _} = PostReader.load_posts(state, "t1")
     {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
 
@@ -154,6 +184,97 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     {new_state, _} = PostReader.flush_read_pointers(s, ctx)
     refute Map.has_key?(new_state.read_position, "t1")
+  end
+
+  # ===========================================================================
+  # READER-07: Load-absorb semantics — navigation/scroll keys during loading
+  # must return {:update, state, []} and not dispatch extra commands.
+  # ===========================================================================
+
+  describe "load-absorb behavior (READER-07)" do
+    test "n key on loading state (posts nil) returns {:update, state, []} and absorbs", %{
+      state: state
+    } do
+      # posts is nil — loading window not yet closed
+      assert {:update, s, []} = PostReader.handle_key(%{key: :char, char: "n"}, state)
+      # State is returned unchanged (no navigation occurred)
+      assert s.posts == state.posts
+    end
+
+    test "p key on loading state absorbs without extra commands", %{state: state} do
+      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "p"}, state)
+    end
+
+    test "space key on loading state absorbs without extra commands", %{state: state} do
+      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: " "}, state)
+    end
+
+    test "j key on loading state absorbs without extra commands", %{state: state} do
+      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "j"}, state)
+    end
+
+    test "k key on loading state absorbs without extra commands", %{state: state} do
+      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "k"}, state)
+    end
+
+    test "n key on empty posts list absorbs without extra commands", %{state: state} do
+      s = %{state | posts: []}
+      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "n"}, s)
+    end
+  end
+
+  # ===========================================================================
+  # READER-05: Render helper purity guard — static source check
+  #
+  # No defp render_* block may contain put_in(, %{state |, or Map.put( writes.
+  # This test enforces the render purity boundary (D-07, D-08) at the source level.
+  # ===========================================================================
+
+  describe "render helper purity (READER-05, D-07, D-08)" do
+    test "defp render_* blocks contain no state-write operations" do
+      # Resolve source path relative to this test file's compile-time location.
+      source_path =
+        __ENV__.file
+        |> Path.dirname()
+        |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_reader.ex")
+        |> Path.expand()
+
+      source = File.read!(source_path)
+      lines = String.split(source, "\n")
+
+      # Collect lines belonging to defp render_* bodies
+      {render_lines, _} =
+        Enum.reduce(lines, {[], false}, fn line, {acc, inside} ->
+          cond do
+            # Entering a render helper
+            String.match?(line, ~r/^\s+defp render_/) ->
+              {[line | acc], true}
+
+            # Entering a non-render defp or public def — exit render scope
+            inside and String.match?(line, ~r/^\s+defp [^r]|^\s+defp r[^e]|^\s+def /) ->
+              {acc, false}
+
+            inside ->
+              {[line | acc], true}
+
+            true ->
+              {acc, false}
+          end
+        end)
+
+      forbidden_patterns = [~r/put_in\(/, ~r/%\{state \|/, ~r/Map\.put\(/]
+
+      violations =
+        Enum.flat_map(render_lines, fn line ->
+          Enum.flat_map(forbidden_patterns, fn pat ->
+            if Regex.match?(pat, line), do: [String.trim(line)], else: []
+          end)
+        end)
+
+      assert violations == [],
+             "render_* helpers contain forbidden state-write operations:\n" <>
+               Enum.join(violations, "\n")
+    end
   end
 
   # --- Helper for Phase 2 integration tests (simpler state shape) ---
