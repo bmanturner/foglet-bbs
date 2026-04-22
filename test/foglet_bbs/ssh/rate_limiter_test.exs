@@ -50,7 +50,9 @@ defmodule Foglet.SSH.RateLimiterTest do
     assert RateLimiter.allow?({@test_ip_2, 54_322}) == true
   end
 
-  test "allow? with :unknown peer does not crash and fails open" do
-    assert RateLimiter.allow?(:unknown) == true
+  test "allow? with :unknown peer always fails open, even past the limit" do
+    for _ <- 1..11 do
+      assert RateLimiter.allow?(:unknown) == true
+    end
   end
 end

@@ -118,6 +118,10 @@ defmodule Foglet.SSH.CLIHandler do
 
           {:ok, new_state}
         else
+          # check_connection_limit/0 incremented the counter before we got here;
+          # undo it so rate-limited connections don't drift the count upward.
+          _ = decrement_connection_count()
+
           _ =
             :ssh_connection.send(
               connection_ref,

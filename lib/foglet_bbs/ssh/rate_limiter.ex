@@ -21,6 +21,9 @@ defmodule Foglet.SSH.RateLimiter do
   @rate_limit_window_ms 60_000
 
   @spec allow?(peer :: {:inet.ip_address(), :inet.port_number()} | :unknown) :: boolean()
+  # Fail open when peer address is unresolvable — no address to gate on.
+  def allow?(:unknown), do: true
+
   def allow?(peer) do
     key = ip_key(peer)
 
@@ -28,12 +31,13 @@ defmodule Foglet.SSH.RateLimiter do
       {:allow, _count} -> true
       {:deny, _retry_after_ms} -> false
     end
+  rescue
+    # Fail open if the ETS table is unavailable (e.g. RateLimiter restarting).
+    _ -> true
   end
 
-  @spec ip_key(peer :: {:inet.ip_address(), :inet.port_number()} | :unknown) :: String.t()
+  @spec ip_key(peer :: {:inet.ip_address(), :inet.port_number()}) :: String.t()
   defp ip_key({ip_tuple, _port}) when is_tuple(ip_tuple) do
     "ssh:" <> (ip_tuple |> :inet.ntoa() |> to_string())
   end
-
-  defp ip_key(:unknown), do: "ssh:unknown"
 end
