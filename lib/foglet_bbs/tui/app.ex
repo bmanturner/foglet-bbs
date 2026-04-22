@@ -42,7 +42,7 @@ defmodule Foglet.TUI.App do
           session_context: map(),
           session_pid: pid() | nil,
           terminal_size: {pos_integer(), pos_integer()},
-          modal: map() | nil,
+          modal: Foglet.TUI.Modal.t() | nil,
           screen_state: map(),
           board_list: list() | nil,
           current_board: map() | nil,
@@ -50,8 +50,7 @@ defmodule Foglet.TUI.App do
           current_thread_list: list() | nil,
           posts: list() | nil,
           read_position: map(),
-          composer_draft: String.t() | nil,
-          subscribed_topics: MapSet.t()
+          composer_draft: String.t() | nil
         }
 
   defstruct current_screen: :login,
@@ -67,8 +66,7 @@ defmodule Foglet.TUI.App do
             current_thread_list: nil,
             posts: nil,
             read_position: %{},
-            composer_draft: nil,
-            subscribed_topics: MapSet.new()
+            composer_draft: nil
 
   # --- Raxol callbacks ---
 
@@ -274,7 +272,7 @@ defmodule Foglet.TUI.App do
     {%{state | current_user: user, current_screen: :main_menu}, []}
   end
 
-  defp do_update({:show_modal, modal}, state) when is_map(modal) do
+  defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
     {%{state | modal: modal}, []}
   end
 
@@ -372,7 +370,7 @@ defmodule Foglet.TUI.App do
     boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_boards, fn ->
         {:boards_loaded, boards_mod.list_subscribed_boards(user)}
       end)
 
@@ -389,7 +387,7 @@ defmodule Foglet.TUI.App do
     boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_boards_for_new_thread, fn ->
         {:boards_for_new_thread_loaded, boards_mod.list_subscribed_boards(user)}
       end)
 
@@ -412,7 +410,7 @@ defmodule Foglet.TUI.App do
     user_id = state.current_user && state.current_user.id
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_threads, fn ->
         {:threads_loaded, load_threads_for_user(threads_mod, board_id, user_id)}
       end)
 
@@ -435,7 +433,7 @@ defmodule Foglet.TUI.App do
     posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_posts, fn ->
         {:posts_loaded, posts_mod.list_posts(thread_id), opts}
       end)
 
@@ -447,21 +445,40 @@ defmodule Foglet.TUI.App do
     do: do_update({:posts_loaded, posts, []}, state)
 
   # 3-arity sink — consumes `jump_last: true` to set selected_post_index to
-  # the last post in the freshly-loaded list. All other opts are ignored.
+  # the last post in the freshly-loaded list. Also calls prepare_after_load/3
+  # to warm the render cache and guarantee a fully-shaped screen_state
+  # (render_cache, viewport, etc. are always present after this handler).
   defp do_update({:posts_loaded, posts, opts}, state) when is_list(opts) do
     jump_last? = Keyword.get(opts, :jump_last, false)
 
-    ss = get_in(state.screen_state, [:post_reader]) || %{selected_post_index: 0}
+    # Compute the target index using existing selected_post_index as the
+    # base — init_screen_state/0 default is 0, so partial maps are safe.
+    existing_ss =
+      get_in(state.screen_state, [:post_reader]) ||
+        Foglet.TUI.Screens.PostReader.init_screen_state([])
+
+    existing_idx = Map.get(existing_ss, :selected_post_index, 0)
 
     new_idx =
       if jump_last? and posts != [] do
         length(posts) - 1
       else
-        ss.selected_post_index
+        existing_idx
       end
 
-    new_ss = Map.put(ss, :selected_post_index, new_idx)
-    new_screen_state = Map.put(state.screen_state, :post_reader, new_ss)
+    # Seed posts and idx into state so prepare_after_load/3 can read
+    # terminal_size and session_context while warming the cache.
+    state_with_posts = %{
+      state
+      | posts: posts,
+        screen_state:
+          Map.put(state.screen_state, :post_reader, %{existing_ss | selected_post_index: new_idx})
+    }
+
+    warmed_ss =
+      Foglet.TUI.Screens.PostReader.prepare_after_load(state_with_posts, posts, new_idx)
+
+    new_screen_state = Map.put(state.screen_state, :post_reader, warmed_ss)
 
     {%{state | posts: posts, screen_state: new_screen_state}, []}
   end
@@ -473,7 +490,11 @@ defmodule Foglet.TUI.App do
     threads_mod = get_in(sc, [:domain, :threads]) || Foglet.Threads
     user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
 
-    task = Command.task(fn -> flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod) end)
+    task =
+      Foglet.TUI.Command.task(:flush_read_pointers, fn ->
+        flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod)
+      end)
+
     {state, [task]}
   end
 
@@ -522,7 +543,7 @@ defmodule Foglet.TUI.App do
 
   # User-level notifications — show a modal badge.
   defp do_update({:notification, _user_id, kind, payload}, state) do
-    modal = %{
+    modal = %Foglet.TUI.Modal{
       type: :info,
       message: format_notification(kind, payload)
     }
@@ -542,7 +563,7 @@ defmodule Foglet.TUI.App do
   # A new SSH connection for the same user replaced this session.
   # Show a notice modal and quit cleanly.
   defp do_update({:session_replaced, _user_id}, state) do
-    modal = %{
+    modal = %Foglet.TUI.Modal{
       type: :warning,
       message: "Your session was replaced by a new connection. Goodbye."
     }
@@ -582,7 +603,7 @@ defmodule Foglet.TUI.App do
           on_cancel: fn s -> {s, [Command.quit()]} end
         })
       else
-        %{
+        %Foglet.TUI.Modal{
           type: :info,
           message: "Session will now close.",
           on_confirm: fn s -> {s, [Command.quit()]} end,
@@ -593,9 +614,25 @@ defmodule Foglet.TUI.App do
     {%{state | modal: modal}, []}
   end
 
+  defp do_update({:task_error, op, reason}, state) do
+    require Logger
+    Logger.error("[TUI.App] task #{inspect(op)} failed: #{reason}")
+
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Something went wrong while trying to #{humanize_op(op)}. Please try again."
+    }
+
+    {%{state | modal: modal}, []}
+  end
+
   defp do_update(_other, state) do
     # Unknown messages pass through unchanged.
     {state, []}
+  end
+
+  defp humanize_op(op) when is_atom(op) do
+    op |> to_string() |> String.replace("_", " ")
   end
 
   defp load_threads_for_user(threads_mod, board_id, user_id) do

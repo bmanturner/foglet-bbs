@@ -340,7 +340,7 @@ defmodule Foglet.TUI.Screens.Register do
 
     case Accounts.register_pending_user(data) do
       {:ok, _user} ->
-        modal = %{
+        modal = %Foglet.TUI.Modal{
           type: :info,
           title: "Account Pending",
           message:
@@ -384,7 +384,7 @@ defmodule Foglet.TUI.Screens.Register do
         {:update, put_register_ss(state, new_reg), []}
 
       {:error, _build_code_error} ->
-        modal = %{
+        modal = %Foglet.TUI.Modal{
           type: :error,
           message: "Could not generate a verification code. Please try again."
         }
