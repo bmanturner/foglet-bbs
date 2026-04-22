@@ -8,6 +8,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostReader
@@ -176,12 +177,24 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   defp annotate_fallback(%Foglet.Threads.Thread{} = t) do
-    t
-    |> Map.from_struct()
-    |> Map.put(:has_unread, false)
+    %ThreadEntry{
+      id: t.id,
+      title: t.title,
+      board_id: t.board_id,
+      sticky: t.sticky,
+      locked: t.locked,
+      post_count: t.post_count,
+      first_post_id: t.first_post_id,
+      last_post_at: t.last_post_at,
+      deleted_at: t.deleted_at,
+      inserted_at: t.inserted_at,
+      created_by_id: t.created_by_id,
+      has_unread: false,
+      created_by: t.created_by
+    }
   end
 
-  defp annotate_fallback(t) when is_map(t), do: Map.put_new(t, :has_unread, false)
+  defp annotate_fallback(%{} = t), do: struct(ThreadEntry, Map.put_new(t, :has_unread, false))
 
   # --- Private ---
 
