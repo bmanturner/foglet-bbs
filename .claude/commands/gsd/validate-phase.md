@@ -22,7 +22,7 @@ Output: updated VALIDATION.md + generated test files.
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/validate-phase.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/validate-phase.md
 </execution_context>
 
 <context>
@@ -30,6 +30,6 @@ Phase: $ARGUMENTS — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/validate-phase.md.
+Execute @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/validate-phase.md.
 Preserve all workflow gates.
 </process>

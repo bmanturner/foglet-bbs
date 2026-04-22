@@ -22,7 +22,7 @@ Output: updated SECURITY.md.
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/secure-phase.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/secure-phase.md
 </execution_context>
 
 <context>
@@ -30,6 +30,6 @@ Phase: $ARGUMENTS — optional, defaults to last completed phase.
 </context>
 
 <process>
-Execute @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/secure-phase.md.
+Execute @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/secure-phase.md.
 Preserve all workflow gates.
 </process>

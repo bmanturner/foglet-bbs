@@ -64,10 +64,7 @@ defmodule Foglet.TUI.SizeGate do
   """
   @spec render(map()) :: any()
   def render(state) do
-    theme =
-      (Map.get(state, :session_context) || %{})
-      |> Map.get(:theme)
-      |> Kernel.||(Theme.default())
+    theme = Theme.from_state(state)
 
     fg = Map.get(theme.dim, :fg)
 

@@ -19,7 +19,7 @@ Output: Forensic report saved to `.planning/forensics/`, presented inline, with 
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/forensics.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/forensics.md
 </execution_context>
 
 <context>
@@ -36,7 +36,7 @@ Output: Forensic report saved to `.planning/forensics/`, presented inline, with 
 </context>
 
 <process>
-Read and execute the forensics workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/forensics.md end-to-end.
+Read and execute the forensics workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/forensics.md end-to-end.
 </process>
 
 <success_criteria>

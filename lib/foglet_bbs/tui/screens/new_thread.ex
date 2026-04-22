@@ -13,18 +13,18 @@ defmodule Foglet.TUI.Screens.NewThread do
   """
 
   alias Foglet.Config
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
+  alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Foglet.TUI.Widgets.Post.MarkdownBody
   alias Raxol.UI.Components.Input.MultiLineInput
 
   import Raxol.Core.Renderer.View
 
-  # ---------------------------------------------------------------------------
-  # Screen-state initialiser
-  # ---------------------------------------------------------------------------
+  @default_terminal_size {80, 24}
 
   @doc """
   Build the initial screen_state map for the new-thread wizard.
@@ -51,7 +51,7 @@ defmodule Foglet.TUI.Screens.NewThread do
       boards: boards,
       selected_board_index: 0,
       board: nil,
-      title_input: "",
+      title_input_state: TextInput.init(value: "", max_length: max_thread_title_length()),
       body_input_state: body_input_state,
       focused: :title,
       mode: :edit,
@@ -61,10 +61,6 @@ defmodule Foglet.TUI.Screens.NewThread do
       origin: :main_menu
     }
   end
-
-  # ---------------------------------------------------------------------------
-  # Render
-  # ---------------------------------------------------------------------------
 
   @spec render(map()) :: any()
   def render(state) do
@@ -77,7 +73,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp render_board_step(state, ss) do
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     board_content =
       case ss.boards do
@@ -112,19 +108,28 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp render_compose_step(state, ss) do
     board = ss.board
     board_name = (board && board.name) || "?"
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     # D-14: render the title line with a live N / cap char counter so users
     # see the soft limit as they type.
     cap = max_thread_title_length()
-    title_len = String.length(ss.title_input)
+
+    title_input_state =
+      Map.get(ss, :title_input_state, TextInput.init(value: "", max_length: cap))
+
+    title_value = title_input_state.raxol_state.value
+    title_len = String.length(title_value)
     counter = "#{title_len} / #{cap} chars"
+    title_focused = ss.focused == :title
+    title_label_fg = if title_focused, do: theme.accent.fg, else: theme.primary.fg
+    title_label_style = if title_focused, do: [:bold], else: []
 
     title_line =
-      if ss.focused == :title do
-        text("Title: #{ss.title_input}█", fg: theme.accent.fg, style: [:bold])
-      else
-        text("Title: #{ss.title_input}", fg: theme.primary.fg)
+      row style: %{gap: 0} do
+        [
+          text("Title: ", fg: title_label_fg, style: title_label_style),
+          TextInput.render(title_input_state, bordered: false, theme: theme)
+        ]
       end
 
     title_counter_line = text(counter, fg: theme.dim.fg)
@@ -173,7 +178,7 @@ defmodule Foglet.TUI.Screens.NewThread do
         )
 
       :preview ->
-        {w, _h} = state.terminal_size || {80, 24}
+        {w, _h} = state.terminal_size || @default_terminal_size
         body_width = max(w - 4, 20)
         MarkdownBody.render(ss.body_input_state.value, body_width, theme)
     end
@@ -181,7 +186,6 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Key handler
   # ---------------------------------------------------------------------------
-
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(key_event, state) do
     ss = screen_state(state)
@@ -211,7 +215,7 @@ defmodule Foglet.TUI.Screens.NewThread do
         :no_match
 
       board ->
-        {w, _h} = state.terminal_size || {80, 24}
+        {w, _h} = state.terminal_size || @default_terminal_size
 
         {:ok, body_input_state} =
           MultiLineInput.init(%{
@@ -223,7 +227,9 @@ defmodule Foglet.TUI.Screens.NewThread do
             focused: false
           })
 
-        new_ss = %{ss | step: :compose, board: board, body_input_state: body_input_state}
+        new_ss =
+          Map.merge(ss, %{step: :compose, board: board, body_input_state: body_input_state})
+
         {:update, put_ss(state, new_ss), []}
     end
   end
@@ -274,37 +280,30 @@ defmodule Foglet.TUI.Screens.NewThread do
     do_submit(state, ss)
   end
 
-  # Title field: backspace removes last grapheme
-  defp handle_compose_key(%{key: :backspace}, state, %{focused: :title} = ss) do
-    new_title =
-      case String.length(ss.title_input) do
-        0 -> ""
-        n -> String.slice(ss.title_input, 0, n - 1)
-      end
+  # Title field: delegate to TextInput while preserving cap behavior contract.
+  # D-14: the soft title cap is still enforced from Config.
+  defp handle_compose_key(key_event, state, %{focused: :title} = ss) do
+    title_input =
+      Map.get(ss, :title_input_state, TextInput.init(max_length: max_thread_title_length()))
 
-    {:update, put_ss(state, %{ss | title_input: new_title}), []}
-  end
+    before = title_input.raxol_state.value
+    {new_input, _action} = TextInput.handle_event(key_event, title_input)
+    after_value = new_input.raxol_state.value
 
-  # Title field: typed character — Raxol native %{key: :char, char: c}.
-  # Spacebar arrives as char: " " naturally; no special-case needed.
-  # D-14: enforce the soft title cap from Foglet.Config key
-  # "max_thread_title_length" (default 60). Keystrokes past the cap are
-  # rejected silently. The schema-level hard cap of 300 (D-15) remains
-  # as a DB backstop for sysops who raise the config.
-  defp handle_compose_key(%{key: :char, char: c}, state, %{focused: :title} = ss) do
-    cap = max_thread_title_length()
-    new_title = ss.title_input <> c
+    cond do
+      after_value != before ->
+        {:update, put_ss(state, %{ss | title_input_state: new_input}), []}
 
-    if String.length(new_title) > cap do
-      :no_match
-    else
-      {:update, put_ss(state, %{ss | title_input: new_title}), []}
+      match?(%{key: :backspace}, key_event) ->
+        {:update, put_ss(state, %{ss | title_input_state: new_input}), []}
+
+      true ->
+        :no_match
     end
   end
 
-  defp handle_compose_key(_key, _state, %{focused: :title}), do: :no_match
-
   # Body field: forward to MultiLineInput.
+  # NOTE: source order matters for handle_key/2 clauses — do not reorder.
   # NOTE: The Ctrl+C (cancel) and Ctrl+S (submit) clauses at lines 250 and 270
   # MUST remain above this clause in source order. Compose.translate_key/1
   # intentionally passes ctrl+char combos through as {:input, codepoint} for
@@ -331,12 +330,11 @@ defmodule Foglet.TUI.Screens.NewThread do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Submit
-  # ---------------------------------------------------------------------------
-
   defp do_submit(state, ss) do
-    title = String.trim(ss.title_input)
+    title_input =
+      Map.get(ss, :title_input_state, TextInput.init(max_length: max_thread_title_length()))
+
+    title = String.trim(title_input.raxol_state.value)
     body = ss.body_input_state.value
     board = ss.board
 
@@ -409,7 +407,11 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp threads_module(state) do
     ctx = Map.get(state, :session_context) || %{}
-    get_in(ctx, [:domain, :threads]) || Foglet.Threads
+
+    case Domain.get(ctx, :threads) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Threads
+    end
   end
 
   defp format_error(%Ecto.Changeset{} = cs) do

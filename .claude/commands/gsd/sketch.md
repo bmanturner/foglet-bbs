@@ -1,7 +1,7 @@
 ---
 name: gsd:sketch
-description: Rapidly sketch UI/design ideas using throwaway HTML mockups with multi-variant exploration
-argument-hint: "<design idea to explore> [--quick]"
+description: Sketch UI/design ideas with throwaway HTML mockups, or propose what to sketch next (frontier mode)
+argument-hint: "[design idea to explore] [--quick] [--text] or [frontier]"
 allowed-tools:
   - Read
   - Write
@@ -10,22 +10,31 @@ allowed-tools:
   - Grep
   - Glob
   - AskUserQuestion
+  - WebSearch
+  - WebFetch
+  - mcp__context7__resolve-library-id
+  - mcp__context7__query-docs
 ---
 <objective>
 Explore design directions through throwaway HTML mockups before committing to implementation.
 Each sketch produces 2-3 variants for comparison. Sketches live in `.planning/sketches/` and
-integrate with GSD commit patterns, state tracking, and handoff workflows.
+integrate with GSD commit patterns, state tracking, and handoff workflows. Loads spike
+findings to ground mockups in real data shapes and validated interaction patterns.
+
+Two modes:
+- **Idea mode** (default) — describe a design idea to sketch
+- **Frontier mode** (no argument or "frontier") — analyzes existing sketch landscape and proposes consistency and frontier sketches
 
 Does not require `/gsd-new-project` — auto-creates `.planning/sketches/` if needed.
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/sketch.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-theme-system.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-interactivity.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-tooling.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/sketch-variant-patterns.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/sketch.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-theme-system.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-interactivity.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-tooling.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/sketch-variant-patterns.md
 </execution_context>
 
 <runtime_note>
@@ -40,6 +49,6 @@ Design idea: $ARGUMENTS
 </context>
 
 <process>
-Execute the sketch workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/sketch.md end-to-end.
-Preserve all workflow gates (intake, decomposition, variant evaluation, MANIFEST updates, commit patterns).
+Execute the sketch workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/sketch.md end-to-end.
+Preserve all workflow gates (intake, decomposition, target stack research, variant evaluation, MANIFEST updates, commit patterns).
 </process>

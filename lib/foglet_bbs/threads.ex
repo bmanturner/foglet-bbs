@@ -11,7 +11,6 @@ defmodule Foglet.Threads do
 
   import Ecto.Query, warn: false
 
-  alias Ecto.Multi
   alias Foglet.Posts.Post
   alias Foglet.Threads.{ReadPointer, Thread}
   alias FogletBbs.Repo
@@ -160,7 +159,7 @@ defmodule Foglet.Threads do
   Move a thread to another board (mod/sysop — BOARD-12).
 
   Updates thread.board_id AND all posts in the thread (posts.board_id
-  denormalization). Uses Ecto.Multi for atomicity.
+  denormalization). Wrapped in a transaction for atomicity.
 
   NOTE: Moved posts retain their original message numbers. These numbers may not
   be contiguous with the destination board's existing message numbers — this is
@@ -169,18 +168,19 @@ defmodule Foglet.Threads do
   """
   @spec move_thread(Thread.t(), String.t()) :: {:ok, Thread.t()} | {:error, any()}
   def move_thread(%Thread{} = thread, new_board_id) do
-    Multi.new()
-    |> Multi.update(:thread, Ecto.Changeset.change(thread, %{board_id: new_board_id}))
-    |> Multi.update_all(
-      :posts,
-      from(p in Post, where: p.thread_id == ^thread.id),
-      set: [board_id: new_board_id]
-    )
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{thread: updated_thread}} -> {:ok, updated_thread}
-      {:error, _op, reason, _changes} -> {:error, reason}
-    end
+    Repo.transact(fn ->
+      with {:ok, updated_thread} <-
+             thread
+             |> Ecto.Changeset.change(%{board_id: new_board_id})
+             |> Repo.update() do
+        Repo.update_all(
+          from(p in Post, where: p.thread_id == ^thread.id),
+          set: [board_id: new_board_id]
+        )
+
+        {:ok, updated_thread}
+      end
+    end)
   end
 
   @doc "Soft-delete a thread."

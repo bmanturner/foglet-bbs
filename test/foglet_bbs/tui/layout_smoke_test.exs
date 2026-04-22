@@ -77,12 +77,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   test "login form renders handle and password fields at distinct y positions" do
+    alias Foglet.TUI.Widgets.Input.TextInput, as: TI
+
     state = %App{
       screen_state: %{
         login: %{
           sub: :login_form,
-          form: %{handle: "alice", password: "secret", error: nil},
-          focused_field: :handle
+          focused_field: :handle,
+          handle_input: TI.init(value: "alice"),
+          password_input: TI.init(value: "", mask_char: "*"),
+          error: nil
         }
       },
       terminal_size: {80, 24}
@@ -244,12 +248,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   test "login form with handle='alice' shows 'alice' in rendered text elements" do
+    alias Foglet.TUI.Widgets.Input.TextInput, as: TI
+
     state = %App{
       screen_state: %{
         login: %{
           sub: :login_form,
-          form: %{handle: "alice", password: "", error: nil},
-          focused_field: :handle
+          focused_field: :handle,
+          handle_input: TI.init(value: "alice"),
+          password_input: TI.init(value: "", mask_char: "*"),
+          error: nil
         }
       },
       terminal_size: {80, 24}
@@ -275,17 +283,25 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   test "register wizard on :handle step with current_input='bob' shows 'bob'" do
+    alias Foglet.TUI.Widgets.Input.TextInput, as: TI
+
     state = %App{
       current_screen: :register,
-      register_wizard: %{
-        mode: "open",
-        step: :handle,
-        data: %{},
-        error: nil,
-        current_input: "bob"
-      },
       terminal_size: {80, 24},
-      screen_state: %{}
+      screen_state: %{
+        register: %{
+          mode: "open",
+          step: :combined,
+          focused_field: :handle,
+          invite_code_input: TI.init([]),
+          handle_input: TI.init(value: "bob"),
+          email_input: TI.init([]),
+          password_input: TI.init(mask_char: "*"),
+          confirm_input: TI.init(mask_char: "*"),
+          collected: %{},
+          error: nil
+        }
+      }
     }
 
     tree = Register.render(state)
@@ -306,9 +322,15 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       current_screen: :verify,
       current_user: %{id: "u1", handle: "alice"},
-      verify_state: %{buffer: "XK7", attempts: 0, cooldown_until: nil},
       terminal_size: {80, 24},
-      screen_state: %{}
+      screen_state: %{
+        verify: %{
+          buffer: "XK7",
+          attempts: 0,
+          cooldown_until: nil,
+          resend_cooldown_until: nil
+        }
+      }
     }
 
     tree = Verify.render(state)
@@ -463,8 +485,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
          screen_state: %{
            login: %{
              sub: :login_form,
-             form: %{handle: "alice", password: "secret", error: nil},
-             focused_field: :handle
+             focused_field: :handle,
+             handle_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "alice"),
+             password_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "", mask_char: "*"),
+             error: nil
            }
          },
          terminal_size: {80, 24}
@@ -472,23 +496,35 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       {"register wizard",
        Register.render(%App{
          current_screen: :register,
-         register_wizard: %{
-           mode: "open",
-           step: :handle,
-           data: %{},
-           error: nil,
-           current_input: "bob"
-         },
          terminal_size: {80, 24},
-         screen_state: %{}
+         screen_state: %{
+           register: %{
+             mode: "open",
+             step: :combined,
+             focused_field: :handle,
+             invite_code_input: Foglet.TUI.Widgets.Input.TextInput.init([]),
+             handle_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "bob"),
+             email_input: Foglet.TUI.Widgets.Input.TextInput.init([]),
+             password_input: Foglet.TUI.Widgets.Input.TextInput.init(mask_char: "*"),
+             confirm_input: Foglet.TUI.Widgets.Input.TextInput.init(mask_char: "*"),
+             collected: %{},
+             error: nil
+           }
+         }
        })},
       {"verify screen",
        Verify.render(%App{
          current_screen: :verify,
          current_user: %{id: "u1", handle: "alice"},
-         verify_state: %{buffer: "XK7", attempts: 0, cooldown_until: nil},
          terminal_size: {80, 24},
-         screen_state: %{}
+         screen_state: %{
+           verify: %{
+             buffer: "XK7",
+             attempts: 0,
+             cooldown_until: nil,
+             resend_cooldown_until: nil
+           }
+         }
        })},
       {"composer",
        PostComposer.render(%App{
@@ -588,7 +624,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       boards: [board],
       selected_board_index: 0,
       board: board,
-      title_input: "Hello",
+      title_input_state: Foglet.TUI.Widgets.Input.TextInput.init(value: "Hello", max_length: 60),
       body_input_state: body_input_st,
       focused: :title,
       mode: :edit,

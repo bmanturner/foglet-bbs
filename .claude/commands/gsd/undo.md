@@ -20,9 +20,9 @@ Three modes:
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/undo.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/gate-prompts.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/undo.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/gate-prompts.md
 </execution_context>
 
 <context>
@@ -30,5 +30,5 @@ $ARGUMENTS
 </context>
 
 <process>
-Execute the undo workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/undo.md end-to-end.
+Execute the undo workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/undo.md end-to-end.
 </process>

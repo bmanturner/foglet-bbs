@@ -1,5 +1,5 @@
 {
-  "model_profile": "inherit",
+  "model_profile": "balanced",
   "commit_docs": true,
   "parallelization": true,
   "search_gitignored": false,
@@ -20,8 +20,8 @@
     "auto_advance": false,
     "node_repair": true,
     "node_repair_budget": 2,
-    "ui_phase": true,
-    "ui_safety_gate": true,
+    "ui_phase": false,
+    "ui_safety_gate": false,
     "ai_integration_phase": true,
     "tdd_mode": false,
     "text_mode": false,

@@ -228,6 +228,24 @@ defmodule Foglet.TUI.Theme do
   @spec default() :: t()
   def default, do: resolve(:gray)
 
+  @doc """
+  Extracts the active theme from the Raxol app state.
+
+  Reads `state.session_context.theme`, which is a `%Foglet.TUI.Theme{}`
+  set by `Foglet.Sessions.Session` at login. Falls back to `default/0`
+  when `session_context` is absent or does not contain a `:theme` key.
+
+  Call this at the top of every `render/1` and render helper that needs
+  color slots. Do NOT call `default/0` directly from screen code.
+  """
+  @spec from_state(map()) :: t()
+  def from_state(state) do
+    case Map.get(state, :session_context) do
+      nil -> default()
+      ctx -> Map.get(ctx, :theme) || default()
+    end
+  end
+
   @doc "Returns a flat `%Foglet.TUI.Theme{}` snapshot for the given id."
   @spec resolve(atom()) :: t()
   def resolve(id) when is_atom(id) do

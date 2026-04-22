@@ -10,7 +10,6 @@ defmodule Foglet.Posts do
 
   import Ecto.Query, warn: false
 
-  alias Ecto.Multi
   alias Foglet.Posts.{Edit, Post}
   alias FogletBbs.Repo
 
@@ -53,30 +52,23 @@ defmodule Foglet.Posts do
 
   @doc """
   Edit a post body. Inserts a post_edits record with the previous body,
-  then updates the post. Uses Ecto.Multi for atomicity.
+  then updates the post. Wrapped in a transaction for atomicity.
 
   Returns {:ok, post} on success, {:error, reason} on failure.
   """
   @spec edit_post(Post.t(), String.t(), map()) :: {:ok, Post.t()} | {:error, any()}
   def edit_post(%Post{} = post, editor_user_id, attrs) do
-    previous_body = post.body
+    Repo.transact(fn ->
+      edit_cs =
+        Edit.changeset(
+          %Edit{post_id: post.id, edited_by_id: editor_user_id},
+          %{previous_body: post.body, edited_at: DateTime.utc_now()}
+        )
 
-    Multi.new()
-    |> Multi.insert(:edit_record, fn _ ->
-      %Edit{post_id: post.id, edited_by_id: editor_user_id}
-      |> Edit.changeset(%{
-        previous_body: previous_body,
-        edited_at: DateTime.utc_now()
-      })
+      with {:ok, _edit} <- Repo.insert(edit_cs) do
+        post |> Post.edit_changeset(attrs) |> Repo.update()
+      end
     end)
-    |> Multi.update(:post, fn _ ->
-      Post.edit_changeset(post, attrs)
-    end)
-    |> Repo.transaction()
-    |> case do
-      {:ok, %{post: updated_post}} -> {:ok, updated_post}
-      {:error, _op, reason, _changes} -> {:error, reason}
-    end
   end
 
   @doc "List edit history for a post, newest first. Preloads :edited_by."

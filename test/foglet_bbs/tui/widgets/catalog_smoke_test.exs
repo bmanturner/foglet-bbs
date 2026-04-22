@@ -29,7 +29,7 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
       Button.render("Save", role: :primary, theme: t),
       Checkbox.render("Agree", checked?: true, theme: t),
       RadioGroup.render(["A", "B"], 0, theme: t),
-      TextInput.render(TextInput.init(value: "hello"), theme: t),
+      TextInput.render(TextInput.init(value: "hello"), theme: t, bordered: true),
       Tabs.render(Tabs.init(tabs: ["Home", "Posts"]), theme: t),
       Menu.render(Menu.init(items: [%{label: "File", children: []}]), theme: t),
       Table.render(Table.init(columns: [%{key: :name, label: "Name"}], rows: [%{name: "x"}]),
@@ -61,7 +61,7 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
 
     test "Input.TextInput renders", %{t: t} do
       state = TextInput.init(value: "hello")
-      refute is_nil(TextInput.render(state, theme: t))
+      refute is_nil(TextInput.render(state, theme: t, bordered: true))
     end
 
     test "Input.Tabs renders", %{t: t} do

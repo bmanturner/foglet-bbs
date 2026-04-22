@@ -19,8 +19,8 @@ Output: Milestone archived (roadmap + requirements), PROJECT.md evolved, git tag
 <execution_context>
 **Load these files NOW (before proceeding):**
 
-- @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
-- @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/templates/milestone-archive.md (archive template)
+- @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/complete-milestone.md (main workflow)
+- @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/templates/milestone-archive.md (archive template)
   </execution_context>
 
 <context>

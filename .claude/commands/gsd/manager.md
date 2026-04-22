@@ -24,8 +24,8 @@ Designed for power users who want to parallelize work across phases from one ter
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/manager.md
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/references/ui-brand.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/manager.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <context>
@@ -35,6 +35,6 @@ Project context, phase list, dependencies, and recommendations are resolved insi
 </context>
 
 <process>
-Execute the manager workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/manager.md end-to-end.
+Execute the manager workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/manager.md end-to-end.
 Maintain the dashboard refresh loop until the user exits or all phases complete.
 </process>

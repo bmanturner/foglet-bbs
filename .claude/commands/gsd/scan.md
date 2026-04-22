@@ -18,9 +18,9 @@ Lightweight alternative to `/gsd-map-codebase` — spawns one mapper agent inste
 </objective>
 
 <execution_context>
-@/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/scan.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/scan.md
 </execution_context>
 
 <process>
-Execute the scan workflow from @/Users/bfturner/Dev/local/foglet-bbs/.claude/get-shit-done/workflows/scan.md end-to-end.
+Execute the scan workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.claude/get-shit-done/workflows/scan.md end-to-end.
 </process>

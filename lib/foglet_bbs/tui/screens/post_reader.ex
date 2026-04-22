@@ -8,6 +8,31 @@ defmodule Foglet.TUI.Screens.PostReader do
   flush to DB happens on screen transition via {:flush_read_pointers, ctx}
   command handled by TUI.App.update/2 (SSH-09).
 
+  ## Load-absorb behavior (READER-07, AUDIT-18 deviation note)
+
+  While posts are still loading (`state.posts == [] or nil`), the navigation
+  and scroll key handlers (`advance_post/2` via n/p/space/page_down/page_up,
+  and `scroll_post/2` via j/k) return `{:update, state, []}` to absorb the
+  keypress rather than falling through to the global key handler. This prevents
+  global handlers from acting on PostReader-intended keys (WR-02) and avoids
+  command churn during the async load window (T-09-02).
+
+  ## Public callbacks (READER-02, D-03, D-04)
+
+  `load_posts/2` and `flush_read_pointers/2` are intentionally public. They
+  serve as stable contract surface for screen-level unit tests and for direct
+  invocation by `Foglet.TUI.App.do_update/2` command handlers. See each
+  function's `@doc` for details. Do not privatize or delete these without a
+  corresponding context decision update.
+
+  ## Render-path purity (READER-05, D-07, D-08)
+
+  No `defp render_*` helper may perform state writes (`put_in`, `%{state | …}`,
+  `Map.put`). Mutations are confined to non-render helpers (`load_posts/2`,
+  `advance_post/2`, `scroll_post/2`, `warm_cache/4`, `warm_viewport/4`).
+  The `render_cache` warming plumbing sits in §9 state-plumbing scope (not §8
+  render helpers) precisely because it mutates state.
+
   ## Screen state
 
   `state.screen_state[:post_reader]` holds:
@@ -17,22 +42,30 @@ defmodule Foglet.TUI.Screens.PostReader do
       content_height, visible_height, children). Replaces pre-Phase-7 `scroll_offset`.
     - `render_cache` — `%{{post_id, width} => tuples}` memoizing Markdown.parse
 
+  `init_screen_state/1` returns this default map (AUDIT-19). `get_screen_state/1`
+  merges it over any persisted `:post_reader` entry so legacy states pick up
+  new fields without overwriting in-flight values.
+
   The cache is discarded on `Q` (screen exit) and rebuilt on re-entry.
   """
 
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
+  alias Foglet.TUI.Widgets.Progress.Spinner
   alias Raxol.UI.Components.Display.Viewport
 
   import Raxol.Core.Renderer.View
+
+  @default_terminal_size {80, 24}
 
   @spec render(map()) :: any()
   def render(state) do
     thread = state.current_thread
     ss = get_screen_state(state)
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
-    {w, h} = state.terminal_size || {80, 24}
+    theme = Theme.from_state(state)
+    {w, h} = state.terminal_size || @default_terminal_size
     post_content = render_post_content(state, ss, theme, w, h)
     thread_title = (thread && thread.title) || "?"
 
@@ -87,11 +120,22 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
-  # Single-line "Loading posts..." placeholder used when posts is nil/[]
+  # Spinner-based loading affordance used when posts is nil/[]
   # (post_reader was opened but {:posts_loaded, posts} hasn't landed yet).
+  # One-row composition: gap-1 row with spinner glyph + label text.
+  # Row count is identical to the old plain-text path — no visible row growth (D-05, D-06).
   defp render_loading(theme) do
+    frame = System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
+
     column style: %{gap: 0} do
-      [text("Loading posts...", fg: theme.dim.fg)]
+      [
+        row style: %{gap: 1} do
+          [
+            Spinner.render(frame, style: :line, theme: theme),
+            text("Loading…", fg: theme.dim.fg)
+          ]
+        end
+      ]
     end
   end
 
@@ -114,7 +158,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     posts = state.posts || []
     ss = get_screen_state(state)
     reply_to = Enum.at(posts, ss.selected_post_index)
-    {w, _h} = state.terminal_size || {80, 24}
+    {w, _h} = state.terminal_size || @default_terminal_size
 
     composer_ss =
       Foglet.TUI.Screens.PostComposer.init_screen_state(reply_to: reply_to, width: w)
@@ -154,14 +198,28 @@ defmodule Foglet.TUI.Screens.PostReader do
   entry (LIST-01 D-05). This means pressing Q right after opening a
   thread still advances the board read pointer past the first post on
   flush — "if you saw it, you read it."
+
+  **Dead-code audit (READER-02, D-03, D-04):** This public callback is
+  intentional contract surface. Production orchestration is owned by
+  `Foglet.TUI.App.do_update({:load_posts, thread_id, opts}, state)`, which
+  runs the real load off-process via `Command.task`. This function exists as
+  a stable screen-level test seam (verified in `post_reader_test.exs`) and
+  as the callable entry point should direct invocation be needed. Do not
+  delete or privatize without a corresponding context decision update.
   """
   @spec load_posts(map(), String.t()) :: {map(), list()}
   def load_posts(state, thread_id) do
     ctx = Map.get(state, :session_context) || %{}
-    posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
+
+    posts_mod =
+      case Domain.get(ctx, :posts) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Posts
+      end
+
     posts = posts_mod.list_posts(thread_id)
     new_read_position = seed_read_position_on_entry(state.read_position, thread_id, posts)
-    {w, _h} = state.terminal_size || {80, 24}
+    {w, _h} = state.terminal_size || @default_terminal_size
 
     # WR-01: warm the render cache for the first post on load so that the
     # initial render (before any keypress) does not re-parse on every frame.
@@ -193,19 +251,39 @@ defmodule Foglet.TUI.Screens.PostReader do
   @doc """
   Flush board and thread read pointers to DB (SSH-09).
   Called by App.update/2 on {:flush_read_pointers, ctx}.
+
+  **Dead-code audit (READER-02, D-03, D-04):** This public callback is
+  intentional contract surface. Production flushing is owned by
+  `Foglet.TUI.App.do_update({:flush_read_pointers, ctx}, state)`, which
+  runs the real flush off-process via `Command.task`. This function exists as
+  a stable screen-level test seam (verified in `post_reader_test.exs`) and as
+  the callable entry point for direct invocation. Do not delete or privatize
+  without a corresponding context decision update.
   """
   @spec flush_read_pointers(map(), map()) :: {map(), list()}
-  def flush_read_pointers(state, ctx) do
+  # `flush_ctx` is a flush-data bag — %{user_id:, board_id:, thread_id:, ...}.
+  # Domain modules are read from state.session_context, not from flush_ctx.
+  def flush_read_pointers(state, flush_ctx) do
     sc = Map.get(state, :session_context) || %{}
-    boards_mod = get_in(sc, [:domain, :boards]) || Foglet.Boards
-    threads_mod = get_in(sc, [:domain, :threads]) || Foglet.Threads
-    user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
 
-    flush_board_pointer(boards_mod, user_id, ctx)
-    flush_thread_pointer(threads_mod, user_id, ctx)
+    boards_mod =
+      case Domain.get(sc, :boards) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Boards
+      end
 
-    new_rp = clear_read_position(state.read_position, ctx[:thread_id])
-    {%{state | read_position: new_rp}, []}
+    threads_mod =
+      case Domain.get(sc, :threads) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Threads
+      end
+
+    user_id = flush_ctx[:user_id] || (state.current_user && state.current_user.id)
+
+    board_result = flush_board_pointer(boards_mod, user_id, flush_ctx)
+    thread_result = flush_thread_pointer(threads_mod, user_id, flush_ctx)
+
+    apply_flush_result(state, flush_ctx, board_result, thread_result)
   end
 
   # --- Private ---
@@ -219,6 +297,8 @@ defmodule Foglet.TUI.Screens.PostReader do
         ctx[:board_id],
         ctx[:last_read_message_number] || 0
       )
+    else
+      :skip
     end
   end
 
@@ -227,18 +307,52 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp flush_thread_pointer(threads_mod, user_id, ctx) do
     if ctx[:thread_id] && ctx[:last_read_post_id] do
       threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
+    else
+      :skip
     end
   end
 
   defp clear_read_position(read_position, nil), do: read_position
   defp clear_read_position(read_position, thread_id), do: Map.delete(read_position, thread_id)
 
-  # Default screen_state shape for post_reader.
-  # `render_cache` is a map keyed on {post_id, width} → rendered tuples.
-  # `viewport` is a Raxol.UI.Components.Display.Viewport state map — owns
-  # scroll_top, content_height, visible_height, and children. Replaces the
-  # pre-Phase-7 `scroll_offset` integer.
-  defp default_screen_state do
+  # Clears the local read-pointer only when both DB flushes succeeded (or were
+  # skipped because there was nothing to flush). On failure, logs a warning and
+  # returns state unchanged so the pointer is retried on the next transition.
+  defp apply_flush_result(state, flush_ctx, board_result, thread_result) do
+    if flush_result_ok?(board_result) and flush_result_ok?(thread_result) do
+      new_rp = clear_read_position(state.read_position, flush_ctx[:thread_id])
+      {%{state | read_position: new_rp}, []}
+    else
+      require Logger
+
+      Logger.warning(
+        "flush_read_pointers: flush failed — board: #{inspect(board_result)}, thread: #{inspect(thread_result)}"
+      )
+
+      {state, []}
+    end
+  end
+
+  defp flush_result_ok?(:skip), do: true
+  defp flush_result_ok?(:ok), do: true
+  defp flush_result_ok?({:ok, _}), do: true
+  defp flush_result_ok?(_), do: false
+
+  @doc """
+  Build the initial screen_state map for PostReader (AUDIT-19).
+
+  `render_cache` is a map keyed on `{post_id, width}` → rendered tuples.
+  `viewport` is a `Raxol.UI.Components.Display.Viewport` state map — owns
+  `scroll_top`, `content_height`, `visible_height`, and `children`.
+  Replaces the pre-Phase-7 `scroll_offset` integer.
+
+  `opts` is currently unused; the keyword-list shape matches every other
+  stateful screen's `init_screen_state/1` (see `PostComposer` and
+  `NewThread`) so future callers can parameterise initial state without a
+  signature change.
+  """
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(_opts \\ []) do
     {:ok, vp} =
       Viewport.init(%{
         id: "post_reader_vp",
@@ -264,7 +378,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       (get_in(state.screen_state, [:post_reader]) || %{})
       |> Map.drop([:scroll_offset])
 
-    Map.merge(default_screen_state(), existing)
+    Map.merge(init_screen_state([]), existing)
   end
 
   # Parses the post body via Foglet.Markdown.render/1. Returns the
@@ -283,7 +397,13 @@ defmodule Foglet.TUI.Screens.PostReader do
   # back into the cache.
   defp parse_body(state, post) do
     sc = Map.get(state, :session_context) || %{}
-    markdown_mod = get_in(sc, [:domain, :markdown]) || Foglet.Markdown
+
+    markdown_mod =
+      case Domain.get(sc, :markdown) do
+        {:ok, mod} -> mod
+        {:error, :not_configured} -> Foglet.Markdown
+      end
+
     body = Map.get(post, :body) || ""
 
     # Ensure the module is loaded before checking function_exported? — the
@@ -325,9 +445,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   # so the Viewport has the correct content_height for clamping.
   # Width-aware: re-runs whenever width changes (via scroll_post caller).
   defp warm_viewport(ss, state, post, w) do
-    theme =
-      (Map.get(state, :session_context) || %{}) |> Map.get(:theme) ||
-        Foglet.TUI.Theme.default()
+    theme = Theme.from_state(state)
 
     tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
     body_lines = PostCard.render_body_lines(tuples, w, theme)
@@ -349,7 +467,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       ss = get_screen_state(state)
       new_idx = (ss.selected_post_index + delta) |> max(0) |> min(length(posts) - 1)
       post = Enum.at(posts, new_idx)
-      {w, _h} = state.terminal_size || {80, 24}
+      {w, _h} = state.terminal_size || @default_terminal_size
 
       # D-04: N/P/space/page_down/page_up resets scroll to the top of the new post.
       {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, ss.viewport)
@@ -388,7 +506,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       if is_nil(post) do
         {:update, state, []}
       else
-        {w, h} = state.terminal_size || {80, 24}
+        {w, h} = state.terminal_size || @default_terminal_size
         available_height = max(h - 10, 5)
 
         # Warm the cache + viewport BEFORE scrolling so Viewport has the
@@ -412,7 +530,13 @@ defmodule Foglet.TUI.Screens.PostReader do
     thread = state.current_thread
     board = state.current_board
     thread_id = thread && thread.id
-    pos = Map.get(state.read_position, thread_id) || %{}
+
+    pos =
+      if thread_id do
+        Map.get(state.read_position, thread_id, %{})
+      else
+        %{}
+      end
 
     %{
       user_id: state.current_user && state.current_user.id,

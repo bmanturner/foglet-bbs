@@ -1,10 +1,20 @@
 defmodule Foglet.TUI.Screens.MainMenu do
-  @moduledoc "BBS main menu — primary screen after login (SSH-07, SSH-08)."
+  @moduledoc """
+  BBS main menu — primary screen after login (SSH-07, SSH-08).
+  MainMenu is intentionally stateless: no `screen_state[:main_menu]`.
+  Future contributors should not add `init_screen_state/1` reflexively.
+  `@menu_items` and `@menu_keys` intentionally duplicate data because menu rows and
+  KeyBar hints have different formatting needs.
+  The welcome line, spacer, and three menu rows stay intentionally sparse:
+  future milestones own the reserved whitespace.
+  """
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
+
+  @default_terminal_size {80, 24}
 
   @menu_items [
     {"B", "Browse Boards"},
@@ -12,10 +22,16 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {"Q", "Logout"}
   ]
 
+  @menu_keys [
+    {"B", "Boards"},
+    {"C", "Compose"},
+    {"Q", "Logout"}
+  ]
+
   @spec render(map()) :: any()
   def render(state) do
     handle = state.current_user && state.current_user.handle
-    theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
+    theme = Theme.from_state(state)
 
     content =
       column style: %{gap: 0} do
@@ -25,11 +41,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
           end)
       end
 
-    ScreenFrame.render(state, "Main Menu", content, [
-      {"B", "Boards"},
-      {"C", "Compose"},
-      {"Q", "Logout"}
-    ])
+    ScreenFrame.render(state, "Main Menu", content, @menu_keys)
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
@@ -38,7 +50,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
-    {w, _h} = state.terminal_size || {80, 24}
+    {w, _h} = state.terminal_size || @default_terminal_size
 
     ss =
       Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
