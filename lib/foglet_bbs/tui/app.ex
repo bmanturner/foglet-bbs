@@ -363,13 +363,10 @@ defmodule Foglet.TUI.App do
   # Lifecycle process inside update/2 instead of off-process.
 
   defp do_update({:load_boards}, state) do
-    # Snapshot what we need inside the closure so we don't capture the whole state.
-    # Intentionally not using Domain.get/2 — do_update closures snapshot the domain
-    # module directly so the task closure captures only the atom, not the full state map.
-    # Tracked for migration in a future phase.
+    # Snapshot the module atom before entering the closure so the task captures only
+    # the atom, not the full state map.
     user = state.current_user
-    ctx = Map.get(state, :session_context) || %{}
-    boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
+    boards_mod = domain_module(state, :boards)
 
     task =
       Foglet.TUI.Command.task(:load_boards, fn ->
@@ -385,8 +382,7 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:load_boards_for_new_thread}, state) do
     user = state.current_user
-    ctx = Map.get(state, :session_context) || %{}
-    boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
+    boards_mod = domain_module(state, :boards)
 
     task =
       Foglet.TUI.Command.task(:load_boards_for_new_thread, fn ->
@@ -410,8 +406,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:load_threads, board_id}, state) do
-    ctx = Map.get(state, :session_context) || %{}
-    threads_mod = get_in(ctx, [:domain, :threads]) || Foglet.Threads
+    threads_mod = domain_module(state, :threads)
     user_id = state.current_user && state.current_user.id
 
     task =
@@ -434,8 +429,7 @@ defmodule Foglet.TUI.App do
 
   # 3-arity with opts — Plan 04-03 D-05 reply-jump path.
   defp do_update({:load_posts, thread_id, opts}, state) when is_list(opts) do
-    ctx = Map.get(state, :session_context) || %{}
-    posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
+    posts_mod = domain_module(state, :posts)
 
     task =
       Foglet.TUI.Command.task(:load_posts, fn ->
@@ -495,9 +489,8 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:flush_read_pointers, ctx}, state) do
     # Flush runs off-process so it doesn't block the UI on the way out of a thread.
-    sc = Map.get(state, :session_context) || %{}
-    boards_mod = get_in(sc, [:domain, :boards]) || Foglet.Boards
-    threads_mod = get_in(sc, [:domain, :threads]) || Foglet.Threads
+    boards_mod = domain_module(state, :boards)
+    threads_mod = domain_module(state, :threads)
     user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
 
     task =
@@ -653,7 +646,6 @@ defmodule Foglet.TUI.App do
   defp default_domain_module(:boards), do: Foglet.Boards
   defp default_domain_module(:threads), do: Foglet.Threads
   defp default_domain_module(:posts), do: Foglet.Posts
-  defp default_domain_module(:markdown), do: Foglet.Markdown
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
