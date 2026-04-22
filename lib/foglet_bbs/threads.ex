@@ -12,7 +12,7 @@ defmodule Foglet.Threads do
   import Ecto.Query, warn: false
 
   alias Foglet.Posts.Post
-  alias Foglet.Threads.{ReadPointer, Thread}
+  alias Foglet.Threads.{ReadPointer, Thread, ThreadEntry}
   alias FogletBbs.Repo
 
   # ---------- Thread creation (BOARD-02) ----------
@@ -52,13 +52,12 @@ defmodule Foglet.Threads do
   List all non-deleted threads in a board, annotated with `:has_unread` for
   the given user (LIST-03).
 
-  Returns a list of maps (not `Thread.t()` structs) — each map merges the
-  thread's fields with a boolean `:has_unread` virtual field computed
-  from `thread_read_pointers`. A thread is `has_unread: true` when its
-  `last_post_at` is later than the user's `last_read_at` for that thread
-  (NULL last_read_at is treated as the Unix epoch, so never-opened
-  threads with activity are unread). Empty threads (`last_post_at IS
-  NULL`) are always `has_unread: false`.
+  Returns `[ThreadEntry.t()]` — each entry merges the thread's fields with a
+  boolean `:has_unread` virtual field computed from `thread_read_pointers`. A
+  thread is `has_unread: true` when its `last_post_at` is later than the
+  user's `last_read_at` for that thread (NULL last_read_at is treated as the
+  Unix epoch, so never-opened threads with activity are unread). Empty threads
+  (`last_post_at IS NULL`) are always `has_unread: false`.
 
   Order matches `list_threads/1`: stickies first, then newest activity.
   Preloads `:created_by` so callers can render the creator handle
@@ -68,7 +67,7 @@ defmodule Foglet.Threads do
   every row with `has_unread: false` — the "no user context" case used
   by admin paths and tests that don't care about read-state.
   """
-  @spec list_threads(String.t(), String.t() | nil) :: [map()]
+  @spec list_threads(String.t(), String.t() | nil) :: [ThreadEntry.t()]
   def list_threads(board_id, nil) do
     board_id
     |> list_threads()
@@ -101,6 +100,7 @@ defmodule Foglet.Threads do
 
     query
     |> Repo.all()
+    |> Enum.map(&struct(ThreadEntry, &1))
     |> preload_created_by()
   end
 
@@ -119,14 +119,26 @@ defmodule Foglet.Threads do
       end
 
     Enum.map(rows, fn row ->
-      Map.put(row, :created_by, Map.get(users, row.created_by_id))
+      %{row | created_by: Map.get(users, row.created_by_id)}
     end)
   end
 
   defp annotate_no_user(%Thread{} = t) do
-    t
-    |> Map.from_struct()
-    |> Map.put(:has_unread, false)
+    %ThreadEntry{
+      id: t.id,
+      title: t.title,
+      board_id: t.board_id,
+      sticky: t.sticky,
+      locked: t.locked,
+      post_count: t.post_count,
+      first_post_id: t.first_post_id,
+      last_post_at: t.last_post_at,
+      deleted_at: t.deleted_at,
+      inserted_at: t.inserted_at,
+      created_by_id: t.created_by_id,
+      has_unread: false,
+      created_by: t.created_by
+    }
   end
 
   # ---------- Mod/sysop operations (BOARD-12) ----------
