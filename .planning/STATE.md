@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 Phase: 04
 Next: Phase 04 (presence-login-sequence)
 Status: Phase 03 all 4 plans complete; ready for /gsd-verify-work or Phase 04
-Last activity: 2026-04-22
+Last activity: 2026-04-22 - Completed quick task 260422-irb: Typed config schema with accessors and validation
 
 Progress: [█░░░░░░░░░] 14%
 
@@ -62,6 +62,7 @@ Progress: [█░░░░░░░░░] 14%
 |------|------|--------|---------|
 | 2026-04-22 | Create state structs for NewThread and PostComposer | complete | `.planning/quick/260422-hfc-create-state-structs-for-newthread-and-p/SUMMARY.md` |
 | 2026-04-22 | Add PostReader.State state struct for PostReader | complete | `.planning/quick/260422-gx8-add-postreader-state-state-struct-for-po/SUMMARY.md` |
+| 2026-04-22 | Typed config schema with accessors and validation | complete | `.planning/quick/260422-irb-build-a-typed-config-schema-with-accesso/260422-irb-SUMMARY.md` |
 
 ## Accumulated Context
 
