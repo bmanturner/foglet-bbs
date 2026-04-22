@@ -272,7 +272,11 @@ defmodule Foglet.TUI.Screens.Login do
         {:update, %{state | modal: modal, screen_state: %{}}, []}
 
       :suspended ->
-        modal = %Foglet.TUI.Modal{type: :error, message: "Your account is suspended. Contact the sysop."}
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Your account is suspended. Contact the sysop."
+        }
+
         {:update, %{state | modal: modal, screen_state: %{}}, []}
     end
   end

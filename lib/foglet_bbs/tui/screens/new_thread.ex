@@ -386,7 +386,10 @@ defmodule Foglet.TUI.Screens.NewThread do
       {:update,
        %{
          state
-         | modal: %Foglet.TUI.Modal{type: :error, message: "You must be logged in to create a thread."}
+         | modal: %Foglet.TUI.Modal{
+             type: :error,
+             message: "You must be logged in to create a thread."
+           }
        }, []}
     end
   end

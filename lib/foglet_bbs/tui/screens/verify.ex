@@ -174,7 +174,11 @@ defmodule Foglet.TUI.Screens.Verify do
         {put_verify_ss(%{state | modal: modal}, new_vs), []}
 
       {:error, _cs} ->
-        modal = %Foglet.TUI.Modal{type: :error, message: "Could not generate a new code. Try again later."}
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Could not generate a new code. Try again later."
+        }
+
         {%{state | modal: modal}, []}
     end
   end
@@ -257,7 +261,11 @@ defmodule Foglet.TUI.Screens.Verify do
         %{vs | buffer: "", attempts: new_attempts}
       end
 
-    modal = %Foglet.TUI.Modal{type: :error, message: "Invalid code (#{new_attempts}/#{@max_attempts})."}
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Invalid code (#{new_attempts}/#{@max_attempts})."
+    }
+
     {put_verify_ss(%{state | modal: modal}, new_vs), []}
   end
 

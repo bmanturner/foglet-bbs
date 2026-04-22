@@ -210,7 +210,10 @@ defmodule Foglet.TUI.AppTest do
 
     test "gate takes precedence over modal (D-04 ordering)" do
       {:ok, state} = App.init(%{terminal_size: {40, 10}})
-      {with_modal, _} = App.update({:show_modal, %Foglet.TUI.Modal{type: :info, message: "a modal"}}, state)
+
+      {with_modal, _} =
+        App.update({:show_modal, %Foglet.TUI.Modal{type: :info, message: "a modal"}}, state)
+
       element = App.view(with_modal)
       serialized = inspect(element, limit: :infinity)
       # Gate wins — modal message is NOT visible, gate message IS
@@ -334,7 +337,10 @@ defmodule Foglet.TUI.AppTest do
 
     test "gate precedence: gate beats modal" do
       {:ok, state} = App.init(%{terminal_size: {40, 10}})
-      {with_modal, _} = App.update({:show_modal, %Foglet.TUI.Modal{type: :info, message: "x"}}, state)
+
+      {with_modal, _} =
+        App.update({:show_modal, %Foglet.TUI.Modal{type: :info, message: "x"}}, state)
+
       # Even with a modal open, the key is swallowed by the gate (gate is first in cond)
       {new_state, cmds} = App.update({:key, %{key: :enter}}, with_modal)
       # Modal would normally dismiss on :enter; gate prevents that

@@ -260,7 +260,9 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
     cond do
       String.trim(draft) == "" ->
-        {:update, %{state | modal: %Foglet.TUI.Modal{type: :error, message: "Post body cannot be empty."}}, []}
+        {:update,
+         %{state | modal: %Foglet.TUI.Modal{type: :error, message: "Post body cannot be empty."}},
+         []}
 
       String.length(draft) > max ->
         modal = %Foglet.TUI.Modal{
@@ -279,7 +281,11 @@ defmodule Foglet.TUI.Screens.PostComposer do
     user_id = state.current_user && state.current_user.id
 
     if is_nil(user_id) do
-      {:update, %{state | modal: %Foglet.TUI.Modal{type: :error, message: "You must be logged in to post."}}, []}
+      {:update,
+       %{
+         state
+         | modal: %Foglet.TUI.Modal{type: :error, message: "You must be logged in to post."}
+       }, []}
     else
       submit_reply(state, ss, draft, user_id)
     end
@@ -304,7 +310,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
       {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
     else
       {:error, _cs} ->
-        {:update, %{state | modal: %Foglet.TUI.Modal{type: :error, message: "Failed to create post."}}, []}
+        {:update,
+         %{state | modal: %Foglet.TUI.Modal{type: :error, message: "Failed to create post."}}, []}
     end
   end
 

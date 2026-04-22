@@ -471,7 +471,8 @@ defmodule Foglet.TUI.App do
     state_with_posts = %{
       state
       | posts: posts,
-        screen_state: Map.put(state.screen_state, :post_reader, %{existing_ss | selected_post_index: new_idx})
+        screen_state:
+          Map.put(state.screen_state, :post_reader, %{existing_ss | selected_post_index: new_idx})
     }
 
     warmed_ss =
