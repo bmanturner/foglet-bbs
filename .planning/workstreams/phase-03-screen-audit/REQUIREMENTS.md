@@ -141,11 +141,11 @@
 
 ### Phase 7 — NewThread screen
 
-- [ ] **NEWTHREAD-01**: Title-line input with `█` cursor (`new_thread.ex:124-128`) migrates to `Input.TextInput` per Phase 1 precedent.
-- [ ] **NEWTHREAD-02**: Body composer continues to use `Foglet.TUI.Widgets.Compose` + `MultiLineInput` — inherited decision (Phase-5 D-13; re-entry guards load-bearing).
-- [ ] **NEWTHREAD-03**: Theme + domain + `{80,24}` → Phase 0 helpers + `@default_terminal_size` attribute.
-- [ ] **NEWTHREAD-04**: The load-bearing `# NOTE: source order` comment at `new_thread.ex:307-314` is **preserved** — any reformatter touch must not strip it.
-- [ ] **NEWTHREAD-05**: Rubric items `AUDIT-05..22` pass; `mix precommit` green; line count decreases.
+- [x] **NEWTHREAD-01**: Title-line input with `█` cursor (`new_thread.ex:124-128`) migrates to `Input.TextInput` per Phase 1 precedent.
+- [x] **NEWTHREAD-02**: Body composer continues to use `Foglet.TUI.Widgets.Compose` + `MultiLineInput` — inherited decision (Phase-5 D-13; re-entry guards load-bearing).
+- [x] **NEWTHREAD-03**: Theme + domain + `{80,24}` → Phase 0 helpers + `@default_terminal_size` attribute.
+- [x] **NEWTHREAD-04**: The load-bearing `# NOTE: source order` comment at `new_thread.ex:307-314` is **preserved** — any reformatter touch must not strip it.
+- [x] **NEWTHREAD-05**: Rubric items `AUDIT-05..22` pass; `mix precommit` green; line count decreases.
 
 ### Phase 8 — PostComposer screen
 
@@ -250,7 +250,7 @@ Every per-phase requirement ID maps to exactly one phase below. The audit-wide r
 | MENU-01..MENU-05 | Phase 4 | Pending |
 | BOARDS-01..BOARDS-05 | Phase 5 | Verified 2026-04-22 |
 | THREADS-01..THREADS-07 | Phase 6 | Pending |
-| NEWTHREAD-01..NEWTHREAD-05 | Phase 7 | Pending |
+| NEWTHREAD-01..NEWTHREAD-05 | Phase 7 | Complete |
 | COMPOSER-01..COMPOSER-05 | Phase 8 | Pending |
 | READER-01..READER-07 | Phase 9 | Pending |
 

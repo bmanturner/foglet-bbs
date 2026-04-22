@@ -31,14 +31,14 @@ See: .planning/PROJECT.md (shared across workstreams — **not modified from ins
 
 ## Current Position
 
-Phase: 07 (newthread) — EXECUTING
+Phase: 08 (postcomposer) — READY TO PLAN
 Plan: Not started
 **Phase:** 8 of 10 (postcomposer)
-**Next:** Phase 6 (ThreadList) — ensure `Code.ensure_loaded/1` guard before `function_exported?/3`, verify `:created_by` preload, preserve sticky+recency sort
+**Next:** Phase 8 (PostComposer) — add source-order guard note, keep Compose + MultiLineInput body path, and convert publish nested-case flow to `with`
 **Status:** Ready to plan
 **Last activity:** 2026-04-22
 
-Progress: [██████░░░░] 60%
+Progress: [███████░░░] 70%
 
 ## Roadmap Summary
 

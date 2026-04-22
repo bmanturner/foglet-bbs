@@ -35,7 +35,7 @@ Locked at workstream creation — do not re-litigate per phase:
 - [ ] **Phase 4: MainMenu** — Phase-0 helper swap and sparseness discipline test; keep the `@menu_keys`/`@menu_items` duplication and letter-shortcut menu rows as inherited decisions
 - [x] **Phase 5: BoardList** — Phase-0 helper swap; dead-code audit of `load_boards/1`; evaluate spinner for the async `load_boards` op (completed 2026-04-22)
 - [x] **Phase 6: ThreadList** — Phase-0 helper swap; **correctness fix**: `Code.ensure_loaded/1` before `function_exported?/3` at `:136,:140`; verify `:created_by` preload; keep the two-pass sticky+recency sort (completed 2026-04-22)
-- [ ] **Phase 7: NewThread** — Phase-0 helper swap + `@default_terminal_size` attribute; adopt `Input.TextInput` for the title line (Phase 1 precedent); preserve the load-bearing `# NOTE: source order` comment at `:307-314`
+- [x] **Phase 7: NewThread** ✓ 2026-04-22 — Phase-0 helper swap + `@default_terminal_size` attribute; adopt `Input.TextInput` for the title line (Phase 1 precedent); preserve the load-bearing `# NOTE: source order` comment at `:307-314`
 - [ ] **Phase 8: PostComposer** — Phase-0 helper swap + `@default_terminal_size` attribute; `with`-chain the publish pipeline; **add** the missing `# NOTE: source order` comment above `:82-110`
 - [ ] **Phase 9: PostReader** — Phase-0 helper swap (3 call sites — densest in the codebase); dead-code audit of `load_posts/2` and `flush_read_pointers/2`; render-path purity scrutiny (no `put_in`/`%{state | …}` inside any `defp render_*`)
 
@@ -200,6 +200,6 @@ Critical path: `0 → 1 → 2 → 3 → (4+5+6) → (7+8) → 9` — 7 serial bl
 | 4. MainMenu | 0/TBD | Not started | - |
 | 5. BoardList | 1/1 | Complete    | 2026-04-22 |
 | 6. ThreadList | 0/1 | Complete    | 2026-04-22 |
-| 7. NewThread | 0/TBD | Not started | - |
+| 7. NewThread | 1/1 | Complete | 2026-04-22 |
 | 8. PostComposer | 0/TBD | Not started | - |
 | 9. PostReader | 0/TBD | Not started | - |
