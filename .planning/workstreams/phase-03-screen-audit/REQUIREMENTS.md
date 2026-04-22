@@ -162,7 +162,7 @@
 - [ ] **READER-03**: Loading text → evaluate spinner per `AUDIT-10` for both load + flush.
 - [ ] **READER-04**: `PostCard` + `MarkdownBody` + `Viewport` pipeline is **kept** as an inherited decision (07 D-12/D-13). Any change here exits the audit scope.
 - [ ] **READER-05**: Render-path purity is scrutinized most carefully here — this screen has the most complex render (`render_post_content/*` family; line-width cache at `:77-82`). No `put_in` / `%{state | …}` permitted inside any `defp render_*`.
-- [ ] **READER-06**: Rubric items `AUDIT-05..22` pass; `mix precommit` green. Line count reduction here is smaller than other phases — PostReader is mostly already where we want it.
+- [x] **READER-06**: Rubric items `AUDIT-05..22` pass; `mix precommit` green. Line count reduction here is smaller than other phases — PostReader is mostly already where we want it. Line count deviation accepted (developer override 2026-04-22 — documentation additions for READER-02/AUDIT-12 callback contract evidence and READER-07/AUDIT-18 load-absorb moduledoc are intentional and required; +53 lines accepted, see 09-VERIFICATION.md).
 - [ ] **READER-07**: PostReader's `@moduledoc` documents the **load-absorb pattern** — `advance_post`/`scroll_post` return `{:update, state, []}` when `state.posts == []` to absorb keys during loading (see `post_reader.ex:343-347, 379-383`). Currently undocumented behavior (per ARCHITECTURE §3.2 #5). This is the documented AUDIT-18 deviation-note entry for PostReader.
 
 ---

@@ -3,7 +3,7 @@ phase: 09-postreader
 verified: 2026-04-22T14:30:00Z
 status: gaps_found
 score: 4/7 must-haves verified
-overrides_applied: 0
+overrides_applied: 1
 gaps:
   - truth: "READER and inherited AUDIT rubric gates pass with mix precommit."
     status: failed
@@ -15,8 +15,9 @@ gaps:
       - "Add `@default_terminal_size {80, 24}` module attribute near top of post_reader.ex (after aliases, before @spec)."
       - "Replace all occurrences of `state.terminal_size || {80, 24}` with `state.terminal_size || @default_terminal_size`."
   - truth: "READER and inherited AUDIT rubric gates pass with mix precommit."
-    status: failed
+    status: overridden
     reason: "AUDIT-16 line-count delta violated: file grew from 449 to 502 lines (+53). AUDIT-16 requires equal-or-lower. The SUMMARY acknowledges the increase ('purely documentation/comments') but provides no developer override. REGISTER-05 set the precedent: any line-count increase requires an explicit developer override recorded in the VERIFICATION.md frontmatter and REQUIREMENTS.md. No such override exists here."
+    override: "Developer override 2026-04-22 — the +53 lines are documentation additions required by READER-02/AUDIT-12 (dead-code-audit @doc evidence on load_posts/2 and flush_read_pointers/2) and READER-07/AUDIT-18 (load-absorb pattern moduledoc note). Addition is intentional and cannot be trimmed without removing audit evidence. Mirrors REGISTER-05 precedent. Override recorded on REQUIREMENTS.md READER-06 line."
     artifacts:
       - path: "lib/foglet_bbs/tui/screens/post_reader.ex"
         issue: "Pre-phase: 449 lines. Post-phase: 502 lines. Delta: +53. AUDIT-16 permits zero or negative delta only."
