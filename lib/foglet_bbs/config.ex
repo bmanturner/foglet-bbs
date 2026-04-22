@@ -58,13 +58,14 @@ defmodule Foglet.Config do
   end
 
   @doc """
-  Read a config value, returning `default` if the key is missing or the lookup fails.
+  Read a config value, returning `default` if the key is missing.
+  Other errors (DB outages, malformed values) propagate.
   """
   @spec get(String.t(), term()) :: term()
   def get(key, default) when is_binary(key) do
     get!(key)
   rescue
-    _ -> default
+    Ecto.NoResultsError -> default
   end
 
   @doc """

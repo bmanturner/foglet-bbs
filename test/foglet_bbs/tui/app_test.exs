@@ -1,7 +1,19 @@
 defmodule Foglet.TUI.AppTest do
   use ExUnit.Case, async: true
 
+  alias Foglet.Config
   alias Foglet.TUI.App
+
+  # Seed the ETS config cache so render paths that call Config.get/2
+  # (e.g. Login, Register, Verify screens) do not hit the DB.
+  # Config.get/2 now only rescues Ecto.NoResultsError — other DB errors
+  # propagate, so async tests without a DB checkout would fail without this.
+  setup do
+    Config.init_cache()
+    :ets.insert(:foglet_config, {"registration_mode", "open"})
+    :ets.insert(:foglet_config, {"email_verify_resend_cooldown_seconds", 60})
+    :ok
+  end
 
   describe "init/1 (SSH-04, SSH-06)" do
     test "with empty context returns :login and guest" do

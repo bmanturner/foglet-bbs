@@ -15,6 +15,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   use ExUnit.Case, async: true
 
+  alias Foglet.Config
   alias Foglet.TUI.App
 
   alias Foglet.TUI.Screens.{
@@ -32,6 +33,17 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   alias Raxol.UI.Layout.Engine
 
   @dimensions %{width: 80, height: 24}
+
+  # Seed the ETS config cache so render paths that call Config.get/2
+  # (Login, Register, Verify screens) do not hit the DB.
+  # Config.get/2 now only rescues Ecto.NoResultsError — other DB errors
+  # propagate, so async tests without a DB checkout would fail without this.
+  setup do
+    Config.init_cache()
+    :ets.insert(:foglet_config, {"registration_mode", "open"})
+    :ets.insert(:foglet_config, {"email_verify_resend_cooldown_seconds", 60})
+    :ok
+  end
 
   # Extract all text-type elements with non-empty text from the positioned list.
   defp text_elements(positioned) do
