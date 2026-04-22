@@ -300,7 +300,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       posts: [p2_post(id: "p1", body: "Hello **world**.")],
       read_position: %{},
       screen_state: %{},
-      session_context: %{theme: theme()},
+      session_context: %{theme: theme(), domain: %{markdown: FakeMarkdown}},
       terminal_size: {80, 24},
       modal: nil,
       composer_draft: ""
