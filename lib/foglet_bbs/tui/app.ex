@@ -42,7 +42,7 @@ defmodule Foglet.TUI.App do
           session_context: map(),
           session_pid: pid() | nil,
           terminal_size: {pos_integer(), pos_integer()},
-          modal: map() | nil,
+          modal: Foglet.TUI.Modal.t() | nil,
           screen_state: map(),
           board_list: list() | nil,
           current_board: map() | nil,
@@ -272,7 +272,7 @@ defmodule Foglet.TUI.App do
     {%{state | current_user: user, current_screen: :main_menu}, []}
   end
 
-  defp do_update({:show_modal, modal}, state) when is_map(modal) do
+  defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
     {%{state | modal: modal}, []}
   end
 
@@ -524,7 +524,7 @@ defmodule Foglet.TUI.App do
 
   # User-level notifications — show a modal badge.
   defp do_update({:notification, _user_id, kind, payload}, state) do
-    modal = %{
+    modal = %Foglet.TUI.Modal{
       type: :info,
       message: format_notification(kind, payload)
     }
@@ -544,7 +544,7 @@ defmodule Foglet.TUI.App do
   # A new SSH connection for the same user replaced this session.
   # Show a notice modal and quit cleanly.
   defp do_update({:session_replaced, _user_id}, state) do
-    modal = %{
+    modal = %Foglet.TUI.Modal{
       type: :warning,
       message: "Your session was replaced by a new connection. Goodbye."
     }
@@ -584,7 +584,7 @@ defmodule Foglet.TUI.App do
           on_cancel: fn s -> {s, [Command.quit()]} end
         })
       else
-        %{
+        %Foglet.TUI.Modal{
           type: :info,
           message: "Session will now close.",
           on_confirm: fn s -> {s, [Command.quit()]} end,
@@ -599,7 +599,7 @@ defmodule Foglet.TUI.App do
     require Logger
     Logger.error("[TUI.App] task #{inspect(op)} failed: #{reason}")
 
-    modal = %{
+    modal = %Foglet.TUI.Modal{
       type: :error,
       message: "Something went wrong while trying to #{humanize_op(op)}. Please try again."
     }

@@ -64,7 +64,7 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test ":navigate clears an active modal", %{state: state} do
-      state_with_modal = %{state | modal: %{message: "old", type: :info}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{message: "old", type: :info}}
       {new_state, _} = App.update({:navigate, :main_menu}, state_with_modal)
       assert new_state.modal == nil
     end
@@ -77,7 +77,7 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test ":show_modal sets modal, :dismiss_modal clears it", %{state: state} do
-      modal = %{message: "hi", type: :info}
+      modal = %Foglet.TUI.Modal{message: "hi", type: :info}
       {with_modal, _} = App.update({:show_modal, modal}, state)
       assert with_modal.modal == modal
 
@@ -169,7 +169,7 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "renders with modal without crashing", %{state: state} do
-      s = %{state | modal: %{type: :info, message: "Test"}}
+      s = %{state | modal: %Foglet.TUI.Modal{type: :info, message: "Test"}}
       assert _ = App.view(s)
     end
   end
@@ -210,7 +210,7 @@ defmodule Foglet.TUI.AppTest do
 
     test "gate takes precedence over modal (D-04 ordering)" do
       {:ok, state} = App.init(%{terminal_size: {40, 10}})
-      {with_modal, _} = App.update({:show_modal, %{type: :info, message: "a modal"}}, state)
+      {with_modal, _} = App.update({:show_modal, %Foglet.TUI.Modal{type: :info, message: "a modal"}}, state)
       element = App.view(with_modal)
       serialized = inspect(element, limit: :infinity)
       # Gate wins — modal message is NOT visible, gate message IS
@@ -334,7 +334,7 @@ defmodule Foglet.TUI.AppTest do
 
     test "gate precedence: gate beats modal" do
       {:ok, state} = App.init(%{terminal_size: {40, 10}})
-      {with_modal, _} = App.update({:show_modal, %{type: :info, message: "x"}}, state)
+      {with_modal, _} = App.update({:show_modal, %Foglet.TUI.Modal{type: :info, message: "x"}}, state)
       # Even with a modal open, the key is swallowed by the gate (gate is first in cond)
       {new_state, cmds} = App.update({:key, %{key: :enter}}, with_modal)
       # Modal would normally dismiss on :enter; gate prevents that
@@ -655,37 +655,37 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test ":info modal + Enter dismisses modal", %{state: state} do
-      state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{type: :info, message: "Hello"}}
       {new_state, _cmds} = App.update({:key, %{key: :enter}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":info modal + Escape dismisses modal", %{state: state} do
-      state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{type: :info, message: "Hello"}}
       {new_state, _cmds} = App.update({:key, %{key: :escape}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":info modal + Space dismisses modal", %{state: state} do
-      state_with_modal = %{state | modal: %{type: :info, message: "Hello"}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{type: :info, message: "Hello"}}
       {new_state, _cmds} = App.update({:key, %{key: :char, char: " "}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":error modal + Escape dismisses modal", %{state: state} do
-      state_with_modal = %{state | modal: %{type: :error, message: "Oops"}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{type: :error, message: "Oops"}}
       {new_state, _cmds} = App.update({:key, %{key: :escape}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":warning modal + Enter dismisses modal", %{state: state} do
-      state_with_modal = %{state | modal: %{type: :warning, message: "Careful"}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{type: :warning, message: "Careful"}}
       {new_state, _cmds} = App.update({:key, %{key: :enter}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test "unrecognised key on :info modal leaves state unchanged", %{state: state} do
-      modal = %{type: :info, message: "Hello"}
+      modal = %Foglet.TUI.Modal{type: :info, message: "Hello"}
       state_with_modal = %{state | modal: modal}
       {new_state, cmds} = App.update({:key, %{key: :char, char: "x"}}, state_with_modal)
       assert new_state.modal == modal
@@ -693,20 +693,20 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test ":confirm modal + Y dispatches {:confirm_modal, :yes} and dismisses", %{state: state} do
-      state_with_modal = %{state | modal: %{type: :confirm, message: "Delete?"}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{type: :confirm, message: "Delete?"}}
       {new_state, _cmds} = App.update({:key, %{key: :char, char: "y"}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":confirm modal + N dispatches {:confirm_modal, :no} and dismisses", %{state: state} do
-      state_with_modal = %{state | modal: %{type: :confirm, message: "Delete?"}}
+      state_with_modal = %{state | modal: %Foglet.TUI.Modal{type: :confirm, message: "Delete?"}}
       {new_state, _cmds} = App.update({:key, %{key: :char, char: "n"}}, state_with_modal)
       assert new_state.modal == nil
     end
 
     test ":confirm modal + Y invokes on_confirm callback", %{state: state} do
       on_confirm = fn _s -> {:navigate, :board_list} end
-      modal = %{type: :confirm, message: "Go?", on_confirm: on_confirm}
+      modal = %Foglet.TUI.Modal{type: :confirm, message: "Go?", on_confirm: on_confirm}
       state_with_modal = %{state | modal: modal}
       {new_state, _cmds} = App.update({:key, %{key: :char, char: "y"}}, state_with_modal)
       assert new_state.modal == nil
@@ -715,7 +715,7 @@ defmodule Foglet.TUI.AppTest do
 
     test ":confirm modal + N invokes on_cancel callback", %{state: state} do
       on_cancel = fn _s -> {:navigate, :post_reader} end
-      modal = %{type: :confirm, message: "Go?", on_cancel: on_cancel}
+      modal = %Foglet.TUI.Modal{type: :confirm, message: "Go?", on_cancel: on_cancel}
       state_with_modal = %{state | modal: modal}
       {new_state, _cmds} = App.update({:key, %{key: :char, char: "n"}}, state_with_modal)
       assert new_state.modal == nil
@@ -744,7 +744,7 @@ defmodule Foglet.TUI.AppTest do
 
       state_with_modal = %{
         state
-        | modal: %{type: :error, message: "suspended"},
+        | modal: %Foglet.TUI.Modal{type: :error, message: "suspended"},
           current_screen: :login,
           screen_state: %{login: login_ss}
       }
@@ -765,7 +765,7 @@ defmodule Foglet.TUI.AppTest do
 
       state_with_modal = %{
         state
-        | modal: %{type: :error, message: "suspended"},
+        | modal: %Foglet.TUI.Modal{type: :error, message: "suspended"},
           current_screen: :login,
           screen_state: %{login: login_ss}
       }

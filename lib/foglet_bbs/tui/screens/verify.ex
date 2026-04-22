@@ -121,7 +121,7 @@ defmodule Foglet.TUI.Screens.Verify do
   def handle_verify_event({:resend}, state), do: resend_code_raw(state)
 
   defp submit_raw(%{current_user: nil} = state) do
-    modal = %{type: :error, message: "No user context. Please register again."}
+    modal = %Foglet.TUI.Modal{type: :error, message: "No user context. Please register again."}
     {clear_verify_ss(%{state | modal: modal, current_screen: :login}), []}
   end
 
@@ -133,7 +133,7 @@ defmodule Foglet.TUI.Screens.Verify do
         {%{state | modal: cooldown_modal(vs.cooldown_until, "Too many attempts.")}, []}
 
       String.length(vs.buffer) != @code_length ->
-        modal = %{type: :error, message: "Enter all 6 characters."}
+        modal = %Foglet.TUI.Modal{type: :error, message: "Enter all 6 characters."}
         {%{state | modal: modal}, []}
 
       true ->
@@ -158,7 +158,7 @@ defmodule Foglet.TUI.Screens.Verify do
   defp resend_code_raw(state) do
     case Accounts.build_verify_code(state.current_user) do
       {:ok, _code} ->
-        modal = %{type: :info, message: "A new code has been sent."}
+        modal = %Foglet.TUI.Modal{type: :info, message: "A new code has been sent."}
         cooldown_seconds = resend_cooldown_seconds()
         now = DateTime.utc_now()
         vs = get_verify_ss(state)
@@ -174,7 +174,7 @@ defmodule Foglet.TUI.Screens.Verify do
         {put_verify_ss(%{state | modal: modal}, new_vs), []}
 
       {:error, _cs} ->
-        modal = %{type: :error, message: "Could not generate a new code. Try again later."}
+        modal = %Foglet.TUI.Modal{type: :error, message: "Could not generate a new code. Try again later."}
         {%{state | modal: modal}, []}
     end
   end
@@ -194,7 +194,7 @@ defmodule Foglet.TUI.Screens.Verify do
   # Build an :error modal saying "<prefix> Wait Ns." from a cooldown end time.
   defp cooldown_modal(%DateTime{} = until, prefix) when is_binary(prefix) do
     remaining = DateTime.diff(until, DateTime.utc_now(), :second)
-    %{type: :error, message: "#{prefix} Wait #{max(remaining, 0)}s."}
+    %Foglet.TUI.Modal{type: :error, message: "#{prefix} Wait #{max(remaining, 0)}s."}
   end
 
   defp default_verify_ss do
@@ -230,7 +230,7 @@ defmodule Foglet.TUI.Screens.Verify do
         {clear_verify_ss(%{state | current_user: confirmed, current_screen: :main_menu}), []}
 
       {:error, :expired} ->
-        modal = %{
+        modal = %Foglet.TUI.Modal{
           type: :error,
           message: "Code expired. Press [R] to request a new one."
         }
@@ -257,7 +257,7 @@ defmodule Foglet.TUI.Screens.Verify do
         %{vs | buffer: "", attempts: new_attempts}
       end
 
-    modal = %{type: :error, message: "Invalid code (#{new_attempts}/#{@max_attempts})."}
+    modal = %Foglet.TUI.Modal{type: :error, message: "Invalid code (#{new_attempts}/#{@max_attempts})."}
     {put_verify_ss(%{state | modal: modal}, new_vs), []}
   end
 

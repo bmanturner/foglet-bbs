@@ -263,7 +263,7 @@ defmodule Foglet.TUI.Screens.Login do
         {:update, put_login_ss(state, new_login_ss), []}
 
       :pending ->
-        modal = %{
+        modal = %Foglet.TUI.Modal{
           type: :error,
           message:
             "Your account is pending sysop approval. Please wait for an approval notification."
@@ -272,7 +272,7 @@ defmodule Foglet.TUI.Screens.Login do
         {:update, %{state | modal: modal, screen_state: %{}}, []}
 
       :suspended ->
-        modal = %{type: :error, message: "Your account is suspended. Contact the sysop."}
+        modal = %Foglet.TUI.Modal{type: :error, message: "Your account is suspended. Contact the sysop."}
         {:update, %{state | modal: modal, screen_state: %{}}, []}
     end
   end
@@ -299,7 +299,7 @@ defmodule Foglet.TUI.Screens.Login do
          }, []}
 
       {:error, _cs} ->
-        modal = %{
+        modal = %Foglet.TUI.Modal{
           type: :error,
           message: "Could not generate a verification code. Please try again."
         }

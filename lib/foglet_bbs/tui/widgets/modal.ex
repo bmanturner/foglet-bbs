@@ -38,10 +38,10 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   @wrap_width 50
 
-  @spec render(modal_spec(), Theme.t()) :: any()
-  def render(%{message: msg} = spec, %Theme{} = theme) do
-    type = Map.get(spec, :type, :info)
-    title = Map.get(spec, :title, title_for(type))
+  @spec render(modal_spec() | Foglet.TUI.Modal.t(), Theme.t()) :: any()
+  def render(%Foglet.TUI.Modal{message: msg} = spec, %Theme{} = theme) do
+    type = spec.type || :info
+    title = title_for(type)
     msg_fg = color_for_type(type, theme)
 
     wrapped_lines =

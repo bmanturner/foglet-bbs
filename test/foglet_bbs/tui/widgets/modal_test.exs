@@ -29,19 +29,19 @@ defmodule Foglet.TUI.Widgets.ModalTest do
 
   describe "render/2 (Phase 7 thin adapter)" do
     test "returns a non-nil view element for :info" do
-      assert _ = Modal.render(%{type: :info, message: "Hello"}, theme())
+      assert _ = Modal.render(%Foglet.TUI.Modal{type: :info, message: "Hello"}, theme())
     end
 
     test "returns a non-nil view element for :error" do
-      assert _ = Modal.render(%{type: :error, message: "Oh no"}, theme())
+      assert _ = Modal.render(%Foglet.TUI.Modal{type: :error, message: "Oh no"}, theme())
     end
 
     test "returns a non-nil view element for :confirm" do
-      assert _ = Modal.render(%{type: :confirm, message: "Delete?"}, theme())
+      assert _ = Modal.render(%Foglet.TUI.Modal{type: :confirm, message: "Delete?"}, theme())
     end
 
     test "defaults type to :info when omitted" do
-      assert _ = Modal.render(%{message: "No type given"}, theme())
+      assert _ = Modal.render(%Foglet.TUI.Modal{message: "No type given"}, theme())
     end
 
     test "raises when :message is missing" do
@@ -55,7 +55,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
       msg =
         "This is a very long pending approval message that definitely exceeds fifty characters in total length yes."
 
-      tree = Modal.render(%{type: :error, message: msg}, theme())
+      tree = Modal.render(%Foglet.TUI.Modal{type: :error, message: msg}, theme())
       all_text = collect_text_content(tree)
 
       # Filter out the title (" Error "), key hint ("[Enter] OK"), and empty strings
@@ -85,7 +85,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
 
   describe "key hint (Gap 3c)" do
     test "Test B: :info modal ends with '[Enter] OK' (no Esc)" do
-      tree = Modal.render(%{type: :info, message: "short"}, theme())
+      tree = Modal.render(%Foglet.TUI.Modal{type: :info, message: "short"}, theme())
       all_text = collect_text_content(tree)
 
       assert "[Enter] OK" in all_text,
@@ -96,7 +96,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
     end
 
     test "Test C: :confirm modal still shows '[Y] Yes   [N] No'" do
-      tree = Modal.render(%{type: :confirm, message: "yn"}, theme())
+      tree = Modal.render(%Foglet.TUI.Modal{type: :confirm, message: "yn"}, theme())
       all_text = collect_text_content(tree)
 
       assert "[Y] Yes   [N] No" in all_text,
@@ -107,35 +107,35 @@ defmodule Foglet.TUI.Widgets.ModalTest do
   describe "render/2 — theme slot routing (Phase 7)" do
     test ":error modal uses theme.error.fg for message text" do
       t = theme()
-      tree = Modal.render(%{type: :error, message: "fail"}, t)
+      tree = Modal.render(%Foglet.TUI.Modal{type: :error, message: "fail"}, t)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       assert serialized =~ to_string(t.error.fg)
     end
 
     test ":warning modal uses theme.warning.fg for message text" do
       t = theme()
-      tree = Modal.render(%{type: :warning, message: "careful"}, t)
+      tree = Modal.render(%Foglet.TUI.Modal{type: :warning, message: "careful"}, t)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       assert serialized =~ to_string(t.warning.fg)
     end
 
     test ":confirm modal uses theme.warning.fg for message text" do
       t = theme()
-      tree = Modal.render(%{type: :confirm, message: "sure?"}, t)
+      tree = Modal.render(%Foglet.TUI.Modal{type: :confirm, message: "sure?"}, t)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       assert serialized =~ to_string(t.warning.fg)
     end
 
     test ":info modal uses theme.primary.fg for message text" do
       t = theme()
-      tree = Modal.render(%{type: :info, message: "ok"}, t)
+      tree = Modal.render(%Foglet.TUI.Modal{type: :info, message: "ok"}, t)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       assert serialized =~ to_string(t.primary.fg)
     end
 
     test "title uses theme.title.fg and key hint uses theme.dim.fg" do
       t = theme()
-      tree = Modal.render(%{type: :info, message: "ok"}, t)
+      tree = Modal.render(%Foglet.TUI.Modal{type: :info, message: "ok"}, t)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       assert serialized =~ to_string(t.title.fg)
       assert serialized =~ to_string(t.dim.fg)
@@ -145,7 +145,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
   describe "render/2 — theme hygiene (Phase 7)" do
     test "no hardcoded color atoms appear in the rendered tree" do
       for type <- [:info, :error, :warning, :confirm] do
-        tree = Modal.render(%{type: type, message: "x"}, theme())
+        tree = Modal.render(%Foglet.TUI.Modal{type: type, message: "x"}, theme())
         serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
         refute serialized =~ ":red",

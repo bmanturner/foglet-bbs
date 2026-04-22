@@ -408,7 +408,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       screen_state: %{},
       terminal_size: {80, 24},
-      modal: %{type: :info, title: "Saved", message: "Your draft was saved."}
+      modal: %Foglet.TUI.Modal{type: :info, message: "Your draft was saved."}
     }
 
     tree = App.view(state)
@@ -417,8 +417,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
 
-    assert Enum.any?(texts, &String.contains?(&1, "Saved")),
-           "expected modal title 'Saved' in positioned elements, got: #{inspect(texts)}"
+    assert Enum.any?(texts, &String.contains?(&1, "Info")),
+           "expected modal title 'Info' in positioned elements, got: #{inspect(texts)}"
 
     assert Enum.any?(texts, &String.contains?(&1, "Your draft was saved.")),
            "expected modal message in positioned elements, got: #{inspect(texts)}"
@@ -442,7 +442,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       screen_state: %{},
       terminal_size: {80, h},
-      modal: %{type: :info, title: "Notice", message: "Centered?"}
+      modal: %Foglet.TUI.Modal{type: :info, message: "Centered?"}
     }
 
     tree = App.view(state)
