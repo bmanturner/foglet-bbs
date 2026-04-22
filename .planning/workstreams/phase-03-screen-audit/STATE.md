@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.0.2
 milestone_name: milestone
-status: planning
-stopped_at: "Phase 9 context gathered; ready to plan"
-last_updated: "2026-04-22T13:23:36Z"
+status: blocked
+stopped_at: "Blocked starting plan-phase for Phase 9 (EPERM creating ~/.gsd/sessions)"
+last_updated: "2026-04-22T13:29:10Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 10
@@ -79,6 +79,9 @@ Progress: [████████░░] 80%
 None yet.
 
 ### Blockers/Concerns
+
+Active blocker (2026-04-22):
+- `gsd plan-phase 9 --auto --ws phase-03-screen-audit` failed with `EPERM: operation not permitted, mkdir '/Users/brendan.turner/.gsd/sessions/--Users-brendan.turner-Dev-personal-foglet_bbs--'` from Node `fs.mkdirSync` inside `SessionManager`. Planning is paused until write access to `~/.gsd/sessions` is available.
 
 Three correctness items are **scoped into phases** (not blockers):
 

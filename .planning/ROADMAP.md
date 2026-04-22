@@ -13,8 +13,8 @@ Foglet BBS is built in dependency order: identity first, then the domain data mo
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Accounts & Identity** - Users and authentication exist; sysop can manage accounts from the command line (completed 2026-04-22)
-- [ ] **Phase 2: Domain Core** - Boards, threads, and posts exist with full read/unread tracking
-- [ ] **Phase 3: SSH Server & TUI** - Users can SSH in, browse boards, and post replies
+- [x] **Phase 2: Domain Core** - Boards, threads, and posts exist with full read/unread tracking (completed 2026-04-22)
+- [x] **Phase 3: SSH Server & TUI** - Users can SSH in, browse boards, and post replies (completed 2026-04-22)
 - [ ] **Phase 4: Presence & Login Sequence** - Connecting feels like arriving somewhere — banner, news, who's online
 - [ ] **Phase 5: Chat** - Two users can hold a real-time conversation in the lobby or a board room
 - [ ] **Phase 6: DMs, Mentions & Notifications** - Users can message each other and get notified of activity directed at them
@@ -222,8 +222,8 @@ Phases execute in numeric order: 1 → 2 → 3 → ... → 14
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Accounts & Identity | 4/4 | Complete    | 2026-04-22 |
-| 2. Domain Core | 4/4 | Complete | 2026-04-18 |
-| 3. SSH Server & TUI | 4/6 | Gap closure in progress | 2026-04-18 |
+| 2. Domain Core | 4/4 | Complete    | 2026-04-22 |
+| 3. SSH Server & TUI | 7/7 | Complete    | 2026-04-22 |
 | 4. Presence & Login Sequence | 0/TBD | Not started | - |
 | 5. Chat | 0/TBD | Not started | - |
 | 6. DMs, Mentions & Notifications | 0/TBD | Not started | - |

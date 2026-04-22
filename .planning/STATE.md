@@ -4,7 +4,7 @@ milestone: v1.0
 milestone_name: milestone
 status: verifying
 stopped_at: Phase 3 context gathered (read-pointer + thread-row enrichment)
-last_updated: "2026-04-22T01:54:48.923Z"
+last_updated: "2026-04-22T13:17:25.093Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 14
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-04-18)
 
 ## Current Position
 
-Phase: 02
+Phase: 04
 Next: Phase 04 (presence-login-sequence)
 Status: Phase 03 all 4 plans complete; ready for /gsd-verify-work or Phase 04
 Last activity: 2026-04-22
@@ -36,7 +36,7 @@ Progress: [█░░░░░░░░░] 14%
 
 **Velocity:**
 
-- Total plans completed: 10
+- Total plans completed: 21
 - Average duration: —
 - Total execution time: —
 
@@ -46,6 +46,8 @@ Progress: [█░░░░░░░░░] 14%
 |-------|-------|-------|----------|
 | 03 | 6 | - | - |
 | 1 | 4 | - | - |
+| 2 | 4 | - | - |
+| 3 | 7 | - | - |
 
 **Recent Trend:**
 
@@ -74,6 +76,7 @@ None yet.
 
 - Registration mode (open / invite-only / sysop-approved) not yet decided — will need resolution before Phase 3 (SSH guest flow, SSH-04)
 - License choice (MIT vs Apache 2.0) deferred to Phase 12
+- Phase 9 plan-phase blocked: Skill runner requires authenticated Claude session ('Not logged in · Please run /login'), and local gsd headless requires .gsd/ (this repo uses .planning/). Unable to execute Skill(skill="gsd-plan-phase", args="9 --auto --ws phase-03-screen-audit") in current environment.
 
 ## Deferred Items
 
