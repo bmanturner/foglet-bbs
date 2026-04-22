@@ -683,7 +683,7 @@ Unique index on `key`. Values are always wrapped as maps (`%{"v" => 42}`) to avo
 
 **Keys we expect** (documented in a `Foglet.Config` module with typed accessors):
 
-Keys use `snake_case` separators (the `.` form shown in earlier drafts was aspirational and is deprecated).
+Keys use `snake_case` separators. This is the canonical form.
 
 Seeded by `priv/repo/seeds.exs`:
 
@@ -693,6 +693,8 @@ Seeded by `priv/repo/seeds.exs`:
 - `max_thread_title_length` — integer (characters)
 - `require_email_verification` — boolean
 - `email_verify_resend_cooldown_seconds` — integer
+
+> Programmatic access: `Foglet.Config.Schema` declares the seeded keys with their types, defaults, and constraints. `Foglet.Config` exposes typed accessors (e.g., `registration_mode/0`, `max_post_length/0`, `require_email_verification?/0`).
 
 Aspirational (not yet seeded):
 

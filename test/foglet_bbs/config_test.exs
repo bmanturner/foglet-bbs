@@ -5,21 +5,18 @@ defmodule Foglet.ConfigTest do
   alias Foglet.Config
   alias Foglet.Config.Entry
   alias Foglet.Config.InvalidValueError
+  alias Foglet.Config.Schema
   alias Foglet.Config.UnknownKeyError
 
-  # Real schema keys — the DB is seeded with these via priv/repo/seeds.exs,
-  # but DataCase uses the Ecto sandbox so test mutations do not escape.
-  @test_keys [
-    "registration_mode",
-    "max_post_length",
-    "require_email_verification"
-  ]
+  # All schematized keys — iterated from Schema so the isolation list stays
+  # in sync with the source of truth. ETS is process-global (the Ecto
+  # sandbox only rolls back the DB), so other tests in the suite can leave
+  # stale values in the cache; invalidating every schema key before and
+  # after each test ensures the next read sees sandbox-visible DB state.
+  @test_keys Map.keys(Schema.defaults())
 
   setup do
     Config.init_cache()
-    # ETS is process-global (the sandbox only rolls back the DB), so drop
-    # cached values both before and after each test to guarantee that the
-    # next read hits the sandbox-visible DB state.
     for key <- @test_keys, do: Config.invalidate(key)
     on_exit(fn -> for key <- @test_keys, do: Config.invalidate(key) end)
     :ok

@@ -335,28 +335,14 @@ defmodule Foglet.SSH.CLIHandler do
         nil
       end
 
-    reg_mode =
-      try do
-        Foglet.Config.get!("registration_mode")
-      rescue
-        _ -> "open"
-      end
-
-    max_post_length =
-      try do
-        Foglet.Config.get!("max_post_length")
-      rescue
-        _ -> 8192
-      end
-
     %{
       session_context: %{
         user: user,
         user_id: user && user.id,
         session_pid: state.session_pid,
         pubkey_authenticated: not is_nil(user),
-        registration_mode: reg_mode,
-        max_post_length: max_post_length,
+        registration_mode: Foglet.Config.registration_mode(),
+        max_post_length: Foglet.Config.max_post_length(),
         theme: Foglet.TUI.Theme.default()
       },
       terminal_size: {width, height}

@@ -275,9 +275,6 @@ defmodule Foglet.TUI.Screens.Verify do
   end
 
   defp resend_cooldown_seconds do
-    case Foglet.Config.get("email_verify_resend_cooldown_seconds", 60) do
-      n when is_integer(n) and n > 0 -> n
-      _ -> 60
-    end
+    Foglet.Config.email_verify_resend_cooldown_seconds()
   end
 end

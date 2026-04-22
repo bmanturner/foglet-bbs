@@ -32,6 +32,20 @@ defmodule Foglet.Config.Schema do
   `Foglet.Config.InvalidValueError` for symmetry.
   """
 
+  @typedoc """
+  Shape of a schematized config spec. `enum`, `min`, and `max` are `nil`
+  when the constraint does not apply to a given key.
+  """
+  @type entry :: %{
+          key: String.t(),
+          type: :string | :integer | :boolean,
+          default: term(),
+          description: String.t(),
+          enum: nil | [String.t()],
+          min: nil | integer(),
+          max: nil | integer()
+        }
+
   @entries [
     %{
       key: "registration_mode",
@@ -101,14 +115,14 @@ defmodule Foglet.Config.Schema do
   an existing DB iterates this list, so changing the order only affects the
   order of `[seed] already present` log lines on re-seed.
   """
-  @spec entries() :: [map()]
+  @spec entries() :: [entry()]
   def entries, do: @entries
 
   @doc """
   Look up the spec map for `key`. Returns `{:ok, spec}` on hit, `:error` on
   miss — matches the `Map.fetch/2` / `Keyword.fetch/2` stdlib shape.
   """
-  @spec fetch_spec(String.t()) :: {:ok, map()} | :error
+  @spec fetch_spec(String.t()) :: {:ok, entry()} | :error
   def fetch_spec(key) when is_binary(key), do: Map.fetch(@spec_map, key)
 
   @doc """

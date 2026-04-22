@@ -12,6 +12,7 @@ alias Foglet.Accounts
 alias Foglet.Accounts.User
 alias Foglet.Config
 alias Foglet.Config.Entry
+alias Foglet.Config.Schema
 alias FogletBbs.Repo
 
 # --- Tombstone user ---
@@ -40,24 +41,10 @@ case Repo.get(User, tombstone_id) do
 end
 
 # --- Default configuration entries ---
-default_config = [
-  {"registration_mode", "open",
-   "Account registration policy (D-02/D-03): open | invite_only | sysop_approved"},
-  {"invite_code_generators", "sysop_only",
-   "Who may generate invite codes (D-04): sysop_only | mods | any_user"},
-  {"max_post_length", 8192, "Maximum post body length in characters (D-31)"},
-  {"max_thread_title_length", 60,
-   "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)"},
-  {"require_email_verification", true,
-   "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)"},
-  {"email_verify_resend_cooldown_seconds", 60,
-   "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)"}
-]
-
-Enum.each(default_config, fn {key, value, description} ->
+Enum.each(Schema.entries(), fn %{key: key, default: default, description: description} ->
   case Repo.get_by(Entry, key: key) do
     nil ->
-      Config.put!(key, value, nil)
+      Config.put!(key, default, nil)
 
       # Set description on first insert (put!/3 doesn't touch description)
       Entry
@@ -65,7 +52,7 @@ Enum.each(default_config, fn {key, value, description} ->
       |> Ecto.Changeset.change(%{description: description})
       |> Repo.update!()
 
-      IO.puts("  [seed] inserted config #{key} = #{inspect(value)}")
+      IO.puts("  [seed] inserted config #{key} = #{inspect(default)}")
 
     _existing ->
       IO.puts("  [seed] config #{key} already present")

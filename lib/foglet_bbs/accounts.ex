@@ -169,7 +169,7 @@ defmodule Foglet.Accounts do
       confirmed_at != nil ->
         :main_menu
 
-      Foglet.Config.get("require_email_verification", true) == false ->
+      Foglet.Config.require_email_verification?() == false ->
         :main_menu
 
       true ->

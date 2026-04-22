@@ -97,8 +97,12 @@ defmodule Foglet.AccountsTest do
       assert Accounts.post_login_screen(user) == :main_menu
     end
 
-    test "missing config key defaults to :verify for unconfirmed users (safe posture)" do
+    test "missing config key raises Ecto.NoResultsError (mis-configured app signal)" do
       # Delete the config row to simulate a stale test DB that didn't run seeds.
+      # With the typed-accessor migration (quick task 260422-irb), a missing
+      # schema key is no longer silently treated as "true" — seeds are
+      # authoritative and an empty row means the app is mis-configured. The
+      # raise surfaces that loud-and-clear, matching D-03 of the quick task.
       case from(e in Foglet.Config.Entry, where: e.key == "require_email_verification")
            |> FogletBbs.Repo.delete_all() do
         {_, _} -> :ok
@@ -109,8 +113,9 @@ defmodule Foglet.AccountsTest do
       user = AccountsFixtures.user_fixture()
       assert user.confirmed_at == nil
 
-      assert Accounts.post_login_screen(user) == :verify,
-             "Missing config key must default to :verify (verification required is the safe posture)"
+      assert_raise Ecto.NoResultsError, fn ->
+        Accounts.post_login_screen(user)
+      end
     end
   end
 

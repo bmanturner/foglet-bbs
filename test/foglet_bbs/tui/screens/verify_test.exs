@@ -280,9 +280,14 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       assert get_verify_ss(new_state).resend_cooldown_until == future
     end
 
-    test "missing config key defaults resend cooldown to 60s", %{state: state} do
+    test "missing config key raises Ecto.NoResultsError (mis-configured app signal)",
+         %{state: state} do
       import Ecto.Query, only: [from: 2]
 
+      # With the typed-accessor migration (quick task 260422-irb), the
+      # email_verify_resend_cooldown_seconds fallback is removed — seeds are
+      # authoritative. A missing schema key indicates the app is
+      # mis-configured and the raise surfaces that loudly.
       case from(e in Foglet.Config.Entry, where: e.key == "email_verify_resend_cooldown_seconds")
            |> FogletBbs.Repo.delete_all() do
         {_, _} -> :ok
@@ -290,14 +295,9 @@ defmodule Foglet.TUI.Screens.VerifyTest do
 
       Foglet.Config.invalidate("email_verify_resend_cooldown_seconds")
 
-      before = DateTime.utc_now()
-      {new_state, _} = Foglet.TUI.Screens.Verify.handle_verify_event({:resend}, state)
-
-      remaining =
-        DateTime.diff(get_verify_ss(new_state).resend_cooldown_until, before, :second)
-
-      assert remaining in 59..61,
-             "Expected ~60s default, got #{remaining}"
+      assert_raise Ecto.NoResultsError, fn ->
+        Foglet.TUI.Screens.Verify.handle_verify_event({:resend}, state)
+      end
     end
   end
 end
