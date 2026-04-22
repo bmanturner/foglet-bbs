@@ -1,6 +1,6 @@
 ---
 phase: 09-postreader
-reviewed: 2026-04-22T14:18:02Z
+reviewed: 2026-04-22T16:45:00Z
 depth: standard
 files_reviewed: 2
 files_reviewed_list:
@@ -9,23 +9,25 @@ files_reviewed_list:
 findings:
   critical: 0
   warning: 3
-  info: 3
-  total: 6
+  info: 4
+  total: 7
 status: issues_found
 ---
 
 # Phase 09: Code Review Report — PostReader
 
-**Reviewed:** 2026-04-22T14:18:02Z
+**Reviewed:** 2026-04-22T16:45:00Z
 **Depth:** standard
 **Files Reviewed:** 2
 **Status:** issues_found
 
 ## Summary
 
-Both files are well-structured and thoroughly documented. The screen-state lifecycle (load, navigate, scroll, flush, exit) is clearly separated, the render-purity boundary is enforced at both the code and test levels, and load-absorb semantics are explicitly tested. No security issues or data-loss paths were found.
+Both files are in good shape after plan-02 changes. The `@default_terminal_size` module attribute is declared once (line 61) and referenced at all five call sites. `init_screen_state/1` is public with an `@spec` and `@doc`, `defp default_screen_state/0` is gone, and `get_screen_state/1` uses `init_screen_state([])`. The moduledoc "Screen state" section names `init_screen_state/1`. Load-absorb semantics, render-purity boundary, and viewport scroll are all correctly implemented and tested.
 
-Three warnings stand out: the fire-and-forget pattern in `flush_read_pointers/2` silently discards domain errors; the `flush_board_pointer/2` clause can fall through to `nil` without making its intent explicit; and `build_flush_context/2` silently passes a `nil` thread_id into the flush context when `state.current_thread` is nil, which causes `Map.get/2` to silently return the wrong value. Three info items cover dead code in `p2_state/1`, a missing `markdown` domain key in several test states, and a potential misleading path in the purity-guard test's `defp` scope-tracking regex.
+Three warnings from the prior review remain open — none were addressed by plan-02, which was scoped to the three audit-rubric gaps only. Two of these (WR-01 and WR-02) combine to create a scenario where a DB flush failure is undetectable by the caller and the local read-pointer is cleared regardless. WR-03 is a nil-key map lookup that is currently benign but could silently produce a bad flush context if `read_position[nil]` ever gets populated.
+
+Four info items: the `p2_state/1` test fixture still falls back to real `Foglet.Markdown` in all `p2_state`-based tests, the purity-guard scope-tracking regex has a non-monotonic edge case, the two fake-posts modules are redundant, and the test file's nested `defmodule` blocks technically violate the CLAUDE.md convention (though this is the standard ExUnit fake pattern).
 
 ---
 
@@ -33,38 +35,41 @@ Three warnings stand out: the fire-and-forget pattern in `flush_read_pointers/2`
 
 ### WR-01: `flush_read_pointers/2` silently swallows domain errors
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:277-278`
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:283-284`
 
-**Issue:** The return values of `flush_board_pointer/3` and `flush_thread_pointer/3` are discarded at lines 277–278. When the domain module returns `{:error, reason}` (e.g. DB unavailability, auth failure), `flush_read_pointers/2` still returns `{state_with_cleared_pointer, []}`, meaning the local read-pointer is cleared even though the flush never reached the DB. The caller (`TUI.App.do_update`) has no way to know the flush failed.
+**Issue:** The return values of `flush_board_pointer/3` and `flush_thread_pointer/3` are discarded at lines 283-284. When a domain module returns `{:error, reason}` (DB unavailability, auth failure), `flush_read_pointers/2` still returns `{state_with_cleared_pointer, []}` — the local read-pointer is cleared even though the flush never reached the DB. The caller (`TUI.App.do_update`) has no signal that the flush failed.
 
-**Fix:** Capture and propagate errors, or at minimum log the failure and retain the local pointer:
+**Fix:** Capture results and condition the pointer-clear on success, or at minimum log:
 
 ```elixir
 board_result  = flush_board_pointer(boards_mod, user_id, flush_ctx)
 thread_result = flush_thread_pointer(threads_mod, user_id, flush_ctx)
 
-if board_result == :skip or match?({:ok, _}, board_result) do
+ok? =
+  board_result in [:skip, nil] or match?({:ok, _}, board_result)
+  and (thread_result in [:skip, nil] or match?({:ok, _}, thread_result))
+
+if ok? do
   new_rp = clear_read_position(state.read_position, flush_ctx[:thread_id])
   {%{state | read_position: new_rp}, []}
 else
-  # Retain pointer so the next flush can retry.
   require Logger
-  Logger.warning("flush_read_pointers: board flush failed: #{inspect(board_result)}")
+  Logger.warning("flush_read_pointers: flush failed — board: #{inspect(board_result)}, thread: #{inspect(thread_result)}")
   {state, []}
 end
 ```
 
-At a minimum, wrap the calls in `_ =` and add a `Logger.warning` so failures are observable in production logs.
+At minimum, wrap the calls in `_ =` and add a `Logger.warning` so failures appear in production logs.
 
 ---
 
-### WR-02: `flush_board_pointer/2` returns `nil` (not `:skip`) when `board_id` is absent
+### WR-02: `flush_board_pointer/3` and `flush_thread_pointer/3` return `nil` when their condition is falsy
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:288-295`
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:294-309`
 
-**Issue:** The second clause of `flush_board_pointer/3` uses a bare `if` without an `else` branch (lines 289–295). When `ctx[:board_id]` is falsy the function returns `nil`, not `:skip` as the nil-`user_id` guard clause does. This is an inconsistency: callers that inspect the return value (e.g. in a future retry path or in WR-01's fix above) must handle both `:skip` and `nil` as "nothing happened." The same pattern applies to `flush_thread_pointer/3` at lines 300–303.
+**Issue:** Both `flush_board_pointer/3` (lines 294-302) and `flush_thread_pointer/3` (lines 306-309) use a bare `if` with no `else` branch. When `ctx[:board_id]` or `ctx[:thread_id]` is falsy, Elixir's `if` returns `nil`, not `:skip` as the nil-`user_id` guard clause does (lines 292 and 304). This inconsistency means any code that inspects the return value (e.g. the WR-01 fix above) must handle both `:skip` and `nil` as "nothing happened," making the contract unclear.
 
-**Fix:** Add an explicit `else :skip` to both `if` expressions:
+**Fix:** Add an explicit `else :skip` to both functions:
 
 ```elixir
 defp flush_board_pointer(boards_mod, user_id, ctx) do
@@ -90,20 +95,20 @@ end
 
 ---
 
-### WR-03: `build_flush_context/2` uses `nil` as a `Map.get/2` key when `current_thread` is absent
+### WR-03: `build_flush_context/1` uses `nil` as a `Map.get/2` key when `current_thread` is absent
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:488-501`
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:506-507`
 
-**Issue:** Lines 490–492:
+**Issue:**
 
 ```elixir
 thread_id = thread && thread.id
 pos = Map.get(state.read_position, thread_id) || %{}
 ```
 
-When `state.current_thread` is nil, `thread_id` is `nil` and `Map.get(state.read_position, nil)` silently returns whatever is stored under the `nil` key (defaulting to `%{}`). This is unlikely in practice (Q can only be pressed when the screen is active, which requires a current thread) but is invisible and could produce a flush context with incorrect `last_read_post_id`/`last_read_message_number` if any code path accidentally writes to `read_position[nil]`.
+When `state.current_thread` is nil, `thread_id` is `nil` and `Map.get(state.read_position, nil)` silently returns whatever is stored under the `nil` key. In practice Q can only be pressed when the screen is active (which requires a current thread), but if any code path accidentally writes to `read_position[nil]`, `build_flush_context/1` would silently produce a flush context with stale or incorrect `last_read_post_id` / `last_read_message_number`.
 
-**Fix:** Guard the map lookup explicitly:
+**Fix:** Guard the lookup explicitly:
 
 ```elixir
 pos =
@@ -118,15 +123,13 @@ pos =
 
 ## Info
 
-### IN-01: `p2_state/1` does not inject `domain` into `session_context` — several tests rely on real `Foglet.Markdown`
+### IN-01: `p2_state/1` fixture does not inject `domain` — render/navigation tests fall back to real `Foglet.Markdown`
 
 **File:** `test/foglet_bbs/tui/screens/post_reader_test.exs:303`
 
-**Issue:** The base `p2_state/1` fixture sets `session_context: %{theme: theme()}` with no `domain` key. `parse_body/2` in the source uses `Domain.get(sc, :markdown)` and falls back to `Foglet.Markdown` when the key is absent. This means any `p2_state`-based test that calls `render/1` or navigates is silently exercising the real `Foglet.Markdown` module rather than a controlled fake. If that module changes contract or is unavailable, unrelated tests will break without a clear signal.
+**Issue:** `p2_state/1` sets `session_context: %{theme: theme()}` with no `domain` key. `parse_body/2` in the source uses `Domain.get(sc, :markdown)` and falls back to `Foglet.Markdown` when the key is absent. All `p2_state`-based tests that call `render/1` or navigate silently exercise the real production module. If `Foglet.Markdown` changes its contract or is unavailable, these tests will fail without a clear signal pointing to the fixture gap.
 
-This is not a test-reliability bug today, but it means the tests are not fully isolated from the production Markdown module.
-
-**Fix:** Add a `domain` key to the `p2_state/1` base fixture pointing to `FakeMarkdown` (already defined in the test module), or explicitly override it in the tests that call `render/1`:
+**Fix:** Add a `domain` key to the `p2_state/1` base fixture pointing to `FakeMarkdown` (already defined in the test module):
 
 ```elixir
 session_context: %{theme: theme(), domain: %{markdown: FakeMarkdown}},
@@ -134,34 +137,36 @@ session_context: %{theme: theme(), domain: %{markdown: FakeMarkdown}},
 
 ---
 
-### IN-02: Render-purity test scope regex can misclassify `defp render_loading/1`
+### IN-02: Purity-guard scope-tracking regex is non-monotonic for back-to-back `defp render_*` clauses
 
 **File:** `test/foglet_bbs/tui/screens/post_reader_test.exs:250-261`
 
-**Issue:** The regex used to detect "entering a non-render defp" is:
+**Issue:** The `cond` inside the `Enum.reduce/3` at lines 246-263 uses `String.match?(line, ~r/^\s+defp render_/)` to enter render scope. Because `render_post_content/5` has two clauses (lines 82 and 87), the second clause re-triggers the "entering a render helper" branch rather than the "continue accumulating" branch. This re-accumulation is harmless for the current source, but the logic is non-monotonic: if a `defp render_*` function immediately follows another (without an intervening non-render `defp`), the second function's head line resets the `inside` state rather than maintaining it. A future `defp render_*` function added after `render_loading/1` would work correctly, but a second clause added to an existing `defp render_*` function continues to work only by coincidence of the regex order.
 
-```elixir
-String.match?(line, ~r/^\s+defp [^r]|^\s+defp r[^e]|^\s+def /)
-```
-
-This matches `defp r<not-e>` to exit render scope, but `defp render_loading` starts with `defp render_l` — `r` followed by `e` — so the guard correctly keeps `render_loading` in-scope. However `defp render_post_content` triggers a fresh "entering a render helper" match at line 249 every time it appears, resetting the accumulation. The logic is subtly non-monotonic: it works for the current file but could give false negatives if two `defp render_*` functions are back-to-back (the second one restarts accumulation rather than continuing it). It also does not account for `def ` (public) render functions.
-
-**Fix:** A simpler and more robust approach is to parse render-block content with a `defp render_` start sentinel and an `^  def ` (any `def`/`defp` at the same indent level) exit sentinel, or use a two-pass approach: collect all `defp render_*` source ranges by line number, then check forbidden patterns only in those ranges.
-
-This is an info-level note because the current test correctly catches violations in the existing source.
+**Fix:** A more robust approach is a two-pass strategy: collect `{start_line, end_line}` ranges for each `defp render_*` function by scanning for matching `defp render_` heads and matching `end` keywords at the same indentation level, then check forbidden patterns only within those ranges. For the current source the existing test is sufficient.
 
 ---
 
-### IN-03: `FakePosts` and `FakePostsForLoad` are redundant — two modules with identical structure
+### IN-03: `FakePosts` and `FakePostsForLoad` are structurally redundant
 
 **File:** `test/foglet_bbs/tui/screens/post_reader_test.exs:6-63`
 
-**Issue:** `FakePosts` (lines 6–25) and `FakePostsForLoad` (lines 44–63) both implement `list_posts/1` returning a two-element list with structurally identical post maps. The only difference is that `FakePostsForLoad` uses `DateTime.utc_now()` for `inserted_at` and has `message_number: 5/6` instead of `1/2`. The `setup` block uses `FakePosts` while the `load_posts` describe blocks use `FakePostsForLoad`, but several tests in those blocks only care about `length/1` or `read_position` keys — they do not depend on the specific `message_number` values from `FakePostsForLoad`.
+**Issue:** Both `FakePosts` (lines 6-25) and `FakePostsForLoad` (lines 44-63) implement `list_posts/1` returning a two-post list with identical structure. The only differences are the `inserted_at` source (`~U[...]` literal vs `DateTime.utc_now()`) and `message_number` values (`1/2` vs `5/6`). The `setup` block uses `FakePosts`; the `load_posts` describe blocks use `FakePostsForLoad`. Several tests in those blocks only care about `length/1` or read-position keys, not the specific message numbers.
 
-**Fix:** Consolidate into a single `FakePosts` module and parameterize `message_number` via a module attribute, or keep them separate but add a comment explaining why distinct fixtures are necessary. The duplication is minor but makes it harder to reason about which fixture a test is relying on.
+**Fix:** Consolidate into a single `FakePosts` with a module attribute for `message_number` values, or add a comment on each module explaining why distinct fixtures are necessary so the intent is explicit.
 
 ---
 
-_Reviewed: 2026-04-22T14:18:02Z_
+### IN-04: Test file contains six nested `defmodule` blocks
+
+**File:** `test/foglet_bbs/tui/screens/post_reader_test.exs:6-63`
+
+**Issue:** The CLAUDE.md guideline states "Never nest multiple modules in the same file — causes cyclic dependency and compilation headaches." The test file defines six modules nested inside `PostReaderTest`: `FakePosts`, `FakeBoards`, `FakeThreads`, `FakeMarkdown`, `EmptyPosts`, and `FakePostsForLoad`. While nested modules in test files are the standard Elixir/ExUnit pattern for lightweight fakes and do not carry the same cyclic-dependency risk as production code, the guideline does not exempt test files.
+
+**Fix:** If the CLAUDE.md guideline is intended to apply strictly to all files, move the fake modules to a shared `test/support/fakes/` file. If test files are considered exempt, annotate the CLAUDE.md guideline to make the exemption explicit. The current approach is standard ExUnit practice and carries no practical risk.
+
+---
+
+_Reviewed: 2026-04-22T16:45:00Z_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
