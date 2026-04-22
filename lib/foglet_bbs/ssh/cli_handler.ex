@@ -97,25 +97,44 @@ defmodule Foglet.SSH.CLIHandler do
         {:ok, new_state}
 
       :ok ->
-        increment_connection_count()
-        pubkey_user = resolve_pubkey_user(peer)
-        session_pid = start_session(pubkey_user)
+        if Foglet.SSH.RateLimiter.allow?(peer) do
+          increment_connection_count()
+          pubkey_user = resolve_pubkey_user(peer)
+          session_pid = start_session(pubkey_user)
 
-        Logger.info(
-          "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
-            "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
-            "session_pid=#{inspect(session_pid)}"
-        )
+          Logger.info(
+            "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
+              "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
+              "session_pid=#{inspect(session_pid)}"
+          )
 
-        new_state = %__MODULE__{
-          state
-          | channel_id: channel_id,
-            connection_ref: connection_ref,
-            peer: peer,
-            session_pid: session_pid
-        }
+          new_state = %__MODULE__{
+            state
+            | channel_id: channel_id,
+              connection_ref: connection_ref,
+              peer: peer,
+              session_pid: session_pid
+          }
 
-        {:ok, new_state}
+          {:ok, new_state}
+        else
+          _ =
+            :ssh_connection.send(
+              connection_ref,
+              channel_id,
+              "Rate limit exceeded. Try again later.\r\n"
+            )
+
+          _ = :ssh_connection.close(connection_ref, channel_id)
+
+          new_state = %__MODULE__{
+            over_limit: true,
+            channel_id: channel_id,
+            connection_ref: connection_ref
+          }
+
+          {:ok, new_state}
+        end
     end
   end
 
@@ -359,12 +378,8 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   defp get_dispatcher(lifecycle_pid) do
-    if Process.alive?(lifecycle_pid) do
-      %{dispatcher_pid: pid} = GenServer.call(lifecycle_pid, :get_full_state)
-      pid
-    else
-      nil
-    end
+    %{dispatcher_pid: pid} = GenServer.call(lifecycle_pid, :get_full_state)
+    pid
   catch
     :exit, _ -> nil
   end
