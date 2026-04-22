@@ -669,7 +669,7 @@ Runtime-editable sysop configuration. Never stores secrets.
 
 ```elixir
 schema "configuration" do
-  field :key, :string               # e.g., "registration.mode", "rate_limits.posts_per_day"
+  field :key, :string               # e.g., "registration_mode", "rate_limits_posts_per_day"
   field :value, :map                # jsonb; wrapped to allow any JSON type
   field :description, :string
 
@@ -683,17 +683,28 @@ Unique index on `key`. Values are always wrapped as maps (`%{"v" => 42}`) to avo
 
 **Keys we expect** (documented in a `Foglet.Config` module with typed accessors):
 
-- `registration.mode` — `"open" | "invite_only" | "sysop_approved"`
-- `registration.require_email_verification` — boolean
-- `rate_limits.posts_per_day_new_user` — integer
-- `rate_limits.new_user_period_days` — integer
-- `login_banner.body` — string (CP437 or UTF-8)
-- `news.bulletins` — array of `%{title, body, posted_at}`
-- `themes.available` — array of theme names
-- `chat.retention_days` — integer
-- `last_callers.retention_days` — integer
-- `oneliners.max_length` — integer
-- `archive.enabled` — boolean (read-only mode)
+Keys use `snake_case` separators (the `.` form shown in earlier drafts was aspirational and is deprecated).
+
+Seeded by `priv/repo/seeds.exs`:
+
+- `registration_mode` — `"open" | "invite_only" | "sysop_approved"`
+- `invite_code_generators` — `"sysop_only" | "mods" | "any_user"`
+- `max_post_length` — integer (characters)
+- `max_thread_title_length` — integer (characters)
+- `require_email_verification` — boolean
+- `email_verify_resend_cooldown_seconds` — integer
+
+Aspirational (not yet seeded):
+
+- `rate_limits_posts_per_day_new_user` — integer
+- `rate_limits_new_user_period_days` — integer
+- `login_banner_body` — string (CP437 or UTF-8)
+- `news_bulletins` — array of `%{title, body, posted_at}`
+- `themes_available` — array of theme names
+- `chat_retention_days` — integer
+- `last_callers_retention_days` — integer
+- `oneliners_max_length` — integer
+- `archive_enabled` — boolean (read-only mode)
 
 Sysop TUI edits hit this table; application code reads via a cached accessor (`Foglet.Config.get!/1`) backed by an ETS table invalidated on write.
 
