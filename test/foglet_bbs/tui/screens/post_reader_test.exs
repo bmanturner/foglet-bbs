@@ -242,7 +242,11 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       source = File.read!(source_path)
       lines = String.split(source, "\n")
 
-      # Collect lines belonging to defp render_* bodies
+      # Collect lines belonging to defp render_* bodies.
+      # Note: This regex is sufficient for the current source. If multi-clause
+      # render_* functions are added back-to-back, the second clause head
+      # re-triggers scope entry — harmless but non-monotonic. A two-pass
+      # line-range approach would be needed for full correctness.
       {render_lines, _} =
         Enum.reduce(lines, {[], false}, fn line, {acc, inside} ->
           cond do
