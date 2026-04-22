@@ -33,7 +33,7 @@ Locked at workstream creation — do not re-litigate per phase:
 - [x] **Phase 2: Register** ✓ 2026-04-21 — Apply Phase 1 TextInput pattern to the wizard single-line input; `with`-chain the registration pipeline; preserve the `apply/3` + `credo:disable` for `consume_invite_code` verbatim
 - [ ] **Phase 3: Verify** — Keep the hand-rolled 6-char buffer (07 D-02); consolidate the 7 duplicated default-state map literals behind a file-local helper; preserve 5-attempt lockout semantics
 - [ ] **Phase 4: MainMenu** — Phase-0 helper swap and sparseness discipline test; keep the `@menu_keys`/`@menu_items` duplication and letter-shortcut menu rows as inherited decisions
-- [ ] **Phase 5: BoardList** — Phase-0 helper swap; dead-code audit of `load_boards/1`; evaluate spinner for the async `load_boards` op
+- [x] **Phase 5: BoardList** — Phase-0 helper swap; dead-code audit of `load_boards/1`; evaluate spinner for the async `load_boards` op (completed 2026-04-22)
 - [ ] **Phase 6: ThreadList** — Phase-0 helper swap; **correctness fix**: `Code.ensure_loaded/1` before `function_exported?/3` at `:136,:140`; verify `:created_by` preload; keep the two-pass sticky+recency sort
 - [ ] **Phase 7: NewThread** — Phase-0 helper swap + `@default_terminal_size` attribute; adopt `Input.TextInput` for the title line (Phase 1 precedent); preserve the load-bearing `# NOTE: source order` comment at `:307-314`
 - [ ] **Phase 8: PostComposer** — Phase-0 helper swap + `@default_terminal_size` attribute; `with`-chain the publish pipeline; **add** the missing `# NOTE: source order` comment above `:82-110`
@@ -198,7 +198,7 @@ Critical path: `0 → 1 → 2 → 3 → (4+5+6) → (7+8) → 9` — 7 serial bl
 | 2. Register | 3/3 | Complete | 2026-04-21 |
 | 3. Verify | 0/3 | Planned | - |
 | 4. MainMenu | 0/TBD | Not started | - |
-| 5. BoardList | 0/TBD | Not started | - |
+| 5. BoardList | 1/1 | Complete    | 2026-04-22 |
 | 6. ThreadList | 0/TBD | Not started | - |
 | 7. NewThread | 0/TBD | Not started | - |
 | 8. PostComposer | 0/TBD | Not started | - |

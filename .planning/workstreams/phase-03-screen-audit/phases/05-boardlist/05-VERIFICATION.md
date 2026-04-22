@@ -29,7 +29,7 @@ score: 5/5 must-haves verified
 
 | Artifact | Expected | Status | Details |
 | --- | --- | --- | --- |
-| `lib/foglet_bbs/tui/screens/board_list.ex` | BoardList with initializer + spinner loading + documented seam | ✓ VERIFIED | Exists, 122 LoC post-comment update, all required patterns present. |
+| `lib/foglet_bbs/tui/screens/board_list.ex` | BoardList with initializer + spinner loading + documented seam | ✓ VERIFIED | Exists, 117 LoC, all required patterns present. |
 | `test/foglet_bbs/tui/screens/board_list_test.exs` | Tests for initializer/loading and existing navigation routes | ✓ VERIFIED | Exists, focused suite passes (9 tests, 0 failures). |
 
 ### Key Link Verification

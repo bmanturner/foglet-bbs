@@ -123,11 +123,11 @@
 
 ### Phase 5 — BoardList screen
 
-- [ ] **BOARDS-01**: Theme + domain lookups use Phase 0 helpers.
-- [ ] **BOARDS-02**: `load_boards/1` (`board_list.ex:86-91`) — run dead-code audit per `AUDIT-12`. Result: delete, or `@doc false` + comment.
-- [ ] **BOARDS-03**: Loading text → evaluate `Widgets.Progress.Spinner` per `AUDIT-10` (load_boards is an async op).
-- [ ] **BOARDS-04**: `SelectionList`/`ListRow` usage audited — no change expected (research flagged as correctly applied).
-- [ ] **BOARDS-05**: Rubric items `AUDIT-05..22` pass; `mix precommit` green.
+- [x] **BOARDS-01**: Theme + domain lookups use Phase 0 helpers.
+- [x] **BOARDS-02**: `load_boards/1` (`board_list.ex:86-91`) — run dead-code audit per `AUDIT-12`. Result: delete, or `@doc false` + comment.
+- [x] **BOARDS-03**: Loading text → evaluate `Widgets.Progress.Spinner` per `AUDIT-10` (load_boards is an async op).
+- [x] **BOARDS-04**: `SelectionList`/`ListRow` usage audited — no change expected (research flagged as correctly applied).
+- [x] **BOARDS-05**: Rubric items `AUDIT-05..22` pass; `mix precommit` green.
 
 ### Phase 6 — ThreadList screen
 
@@ -248,7 +248,7 @@ Every per-phase requirement ID maps to exactly one phase below. The audit-wide r
 | REGISTER-01..REGISTER-06 | Phase 2 | Verified 2026-04-21 |
 | VERIFY-01..VERIFY-05 | Phase 3 | Pending |
 | MENU-01..MENU-05 | Phase 4 | Pending |
-| BOARDS-01..BOARDS-05 | Phase 5 | Pending |
+| BOARDS-01..BOARDS-05 | Phase 5 | Verified 2026-04-22 |
 | THREADS-01..THREADS-07 | Phase 6 | Pending |
 | NEWTHREAD-01..NEWTHREAD-05 | Phase 7 | Pending |
 | COMPOSER-01..COMPOSER-05 | Phase 8 | Pending |

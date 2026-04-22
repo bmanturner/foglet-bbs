@@ -38,7 +38,7 @@ completed: 2026-04-22
 
 - **Duration:** 35 min
 - **Started:** 2026-04-22T03:31:00Z
-- **Completed:** 2026-04-22T04:06:00Z
+- **Completed:** 2026-04-22T04:12:00Z
 - **Tasks:** 2
 - **Files modified:** 2
 
@@ -52,6 +52,7 @@ completed: 2026-04-22
 ## Task Commits
 
 1. **Task 1-2 combined: BoardList implementation + tests + gate cleanup** - `df5e175` (feat)
+2. **Post-gate cleanup: line-count/default-flow tightening** - `79b7e33` (fix)
 
 ## Files Created/Modified
 
@@ -82,5 +83,5 @@ None - no external service configuration required.
 
 ## Self-Check: PASSED
 
-- Verified key task commit exists: `df5e175`.
+- Verified key task commits exist: `df5e175`, `79b7e33`.
 - Verified `mix test test/foglet_bbs/tui/screens/board_list_test.exs` and `mix precommit` pass.
