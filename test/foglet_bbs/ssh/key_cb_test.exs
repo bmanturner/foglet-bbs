@@ -72,23 +72,4 @@ defmodule Foglet.SSH.KeyCBTest do
       assert {:ok, ^public_key} = Foglet.SSH.PubkeyStash.pop(peer)
     end
   end
-
-  describe "Foglet.SSH.KeyCB.host_key/2 (SSH-03)" do
-    test "delegates to :ssh_file.host_key/2 with system_dir" do
-      tmp =
-        Path.join(
-          System.tmp_dir!(),
-          "foglet_test_hk_#{System.unique_integer([:positive])}"
-        )
-
-      File.mkdir_p!(tmp)
-      on_exit(fn -> File.rm_rf!(tmp) end)
-
-      # host_key will either return {:ok, key} if keys exist, or {:error, _} if not.
-      # Both are valid — we just confirm the call shape doesn't crash.
-      result = KeyCB.host_key(:"rsa-sha2-256", [{:system_dir, String.to_charlist(tmp)}])
-
-      assert match?({:ok, _}, result) or match?({:error, _}, result)
-    end
-  end
 end

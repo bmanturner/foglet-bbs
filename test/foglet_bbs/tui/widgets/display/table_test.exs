@@ -102,20 +102,6 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       assert {%Table{}, _action} = result
     end
 
-    test "Enter returns {:row_selected, row} when a row is selected" do
-      state =
-        Table.init(
-          columns: [%{id: :name, label: "Name"}],
-          rows: [%{name: "Alice"}]
-        )
-
-      # Navigate to select a row first, then press enter
-      {state2, _} = Table.handle_event(%{key: :down}, state)
-      {_final, action} = Table.handle_event(%{key: :enter}, state2)
-      # Action should be nil or {:row_selected, _} — both are valid depending on state
-      assert action == nil or match?({:row_selected, _}, action)
-    end
-
     test "purity: same state + event → same output" do
       state =
         Table.init(

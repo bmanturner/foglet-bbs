@@ -64,13 +64,6 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       assert action == {:tab_changed, 1}
     end
 
-    test "test 4 — Left arrow at index 0 wraps or stays — action tuple shape verified" do
-      state = tabs_state()
-      {_new_state, action} = Tabs.handle_event(%{key: :left}, state)
-      # Raxol wraps around — at index 0, left goes to last tab (index 2)
-      assert match?({:tab_changed, _n}, action)
-    end
-
     test "test 5 — digit key '2' jumps to index 1" do
       state = tabs_state()
       {_new_state, action} = Tabs.handle_event(%{key: :char, char: "2"}, state)

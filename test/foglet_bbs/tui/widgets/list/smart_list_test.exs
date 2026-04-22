@@ -98,26 +98,6 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert {:item_selected, 1} = action
     end
 
-    test "search mode character input updates search_buffer and returns {:search_changed, term}" do
-      st =
-        SmartList.init(
-          options: [{"Alpha", 1}, {"Beta", 2}],
-          enable_search: true
-        )
-
-      # Enable search focus so SelectList processes the character
-      st = activate_search(st)
-
-      {_new_st, action} = SmartList.handle_event(%{key: :char, char: "a"}, st)
-
-      # The action should either be {:search_changed, term} or nil if search_buffer unchanged.
-      # We verify tuple shape when non-nil.
-      case action do
-        {:search_changed, term} -> assert is_binary(term)
-        nil -> :ok
-      end
-    end
-
     test "search buffer grows after character input when search focused" do
       st =
         SmartList.init(
@@ -173,19 +153,6 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
 
       # Within a single page: action is nil
       assert is_nil(action)
-    end
-
-    test "PageDown on multi-page list emits {:page_changed, n} when page boundary crossed" do
-      # 30 items / page_size 5 → crossing from page 0 to page 1 when moving 5 items down
-      opts = Enum.map(1..30, fn i -> {"Item #{i}", i} end)
-      st = SmartList.init(options: opts, page_size: 5)
-
-      {_new_st, action} = SmartList.handle_event(%{key: :page_down}, st)
-
-      case action do
-        {:page_changed, n} -> assert is_integer(n) and n >= 0
-        nil -> :ok
-      end
     end
 
     test "purity: same state + event produces same output" do

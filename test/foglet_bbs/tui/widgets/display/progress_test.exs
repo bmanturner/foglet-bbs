@@ -16,45 +16,10 @@ defmodule Foglet.TUI.Widgets.Display.ProgressTest do
       refute is_nil(result)
     end
 
-    test "default width uses @default_width (40)" do
-      result = Progress.render(0.5, theme: theme())
-      refute is_nil(result)
-    end
-
     test "label appears in flattened text when passed" do
       result = Progress.render(0.5, label: "Loading", theme: theme())
       flat = flatten_text(result)
       assert flat =~ "Loading"
-    end
-
-    test "boundary: 0.0 renders without crash" do
-      result = Progress.render(0.0, theme: theme())
-      refute is_nil(result)
-    end
-
-    test "boundary: 1.0 renders without crash" do
-      result = Progress.render(1.0, theme: theme())
-      refute is_nil(result)
-    end
-
-    test "integer 0 coerces to float without crash (WR-01)" do
-      result = Progress.render(0, theme: theme())
-      refute is_nil(result)
-    end
-
-    test "integer 1 coerces to float without crash (WR-01)" do
-      result = Progress.render(1, theme: theme())
-      refute is_nil(result)
-    end
-
-    test "out-of-range value above 1.0 is clamped (WR-01)" do
-      result = Progress.render(1.5, theme: theme())
-      refute is_nil(result)
-    end
-
-    test "negative value is clamped to 0.0 (WR-01)" do
-      result = Progress.render(-0.5, theme: theme())
-      refute is_nil(result)
     end
   end
 

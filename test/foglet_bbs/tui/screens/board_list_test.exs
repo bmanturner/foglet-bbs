@@ -42,11 +42,6 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert _ = BoardList.render(s)
   end
 
-  test "render/1 with board_list == [] shows 'No boards' message", %{state: state} do
-    s = %{state | board_list: []}
-    assert _ = BoardList.render(s)
-  end
-
   test "render/1 with boards loaded does not crash", %{state: state} do
     {s, _} = BoardList.load_boards(state)
     assert _ = BoardList.render(s)

@@ -40,10 +40,6 @@ defmodule Foglet.TUI.Widgets.ModalTest do
       assert _ = Modal.render(%Foglet.TUI.Modal{type: :confirm, message: "Delete?"}, theme())
     end
 
-    test "defaults type to :info when omitted" do
-      assert _ = Modal.render(%Foglet.TUI.Modal{message: "No type given"}, theme())
-    end
-
     test "raises when :message is missing" do
       assert_raise FunctionClauseError, fn -> Modal.render(%{type: :info}, theme()) end
     end

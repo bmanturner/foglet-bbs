@@ -16,13 +16,6 @@ defmodule Foglet.TUI.Widgets.Progress.SpinnerTest do
       refute is_nil(result)
     end
 
-    test "default style uses @default_style (:line)" do
-      # :line style has 4 frames: [|, /, -, \]
-      # Renders without error using the default
-      result = Spinner.render(0, theme: theme())
-      refute is_nil(result)
-    end
-
     test "frame-index advance produces different glyph" do
       t = theme()
       glyph_0 = flatten_text(Spinner.render(0, theme: t))

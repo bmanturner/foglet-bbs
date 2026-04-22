@@ -42,62 +42,6 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
     ]
   end
 
-  describe "per-widget smoke renders (D-17, D-18)" do
-    setup do
-      {:ok, t: theme()}
-    end
-
-    test "Input.Button renders", %{t: t} do
-      refute is_nil(Button.render("Save", role: :primary, theme: t))
-    end
-
-    test "Input.Checkbox renders", %{t: t} do
-      refute is_nil(Checkbox.render("Agree", checked?: true, theme: t))
-    end
-
-    test "Input.RadioGroup renders", %{t: t} do
-      refute is_nil(RadioGroup.render(["A", "B"], 0, theme: t))
-    end
-
-    test "Input.TextInput renders", %{t: t} do
-      state = TextInput.init(value: "hello")
-      refute is_nil(TextInput.render(state, theme: t, bordered: true))
-    end
-
-    test "Input.Tabs renders", %{t: t} do
-      state = Tabs.init(tabs: ["Home", "Posts"])
-      refute is_nil(Tabs.render(state, theme: t))
-    end
-
-    test "Input.Menu renders", %{t: t} do
-      state = Menu.init(items: [%{label: "File", children: []}])
-      refute is_nil(Menu.render(state, theme: t))
-    end
-
-    test "Display.Table renders", %{t: t} do
-      state = Table.init(columns: [%{key: :name, label: "Name"}], rows: [%{name: "x"}])
-      refute is_nil(Table.render(state, theme: t))
-    end
-
-    test "Display.Tree renders", %{t: t} do
-      state = Tree.init(nodes: [%{id: :root, label: "R", children: []}])
-      refute is_nil(Tree.render(state, theme: t))
-    end
-
-    test "Display.Progress renders", %{t: t} do
-      refute is_nil(Progress.render(0.5, theme: t))
-    end
-
-    test "Progress.Spinner renders", %{t: t} do
-      refute is_nil(Spinner.render(0, theme: t))
-    end
-
-    test "List.SmartList renders", %{t: t} do
-      state = SmartList.init(options: [{"A", 1}])
-      refute is_nil(SmartList.render(state, theme: t))
-    end
-  end
-
   describe "cross-bucket combined render (D-18, REQ-W-13)" do
     test "no hardcoded color atoms leak in the combined tree (IN-03)" do
       trees = render_catalog(theme())

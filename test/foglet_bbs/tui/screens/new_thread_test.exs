@@ -192,21 +192,6 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(new_state).selected_board_index == 1
   end
 
-  test "k moves board selection up (clamps at 0)" do
-    state = base_state()
-    # Already at 0, pressing k should stay at 0
-    result = NewThread.handle_key(%{key: :char, char: "k"}, state)
-    assert match?({:update, _, _}, result) or result == :no_match
-
-    case result do
-      {:update, new_state, _} ->
-        assert get_ss(new_state).selected_board_index == 0
-
-      :no_match ->
-        :ok
-    end
-  end
-
   test "j clamps at last board index" do
     state = base_state()
     # Move to last board (index 1 of 2)

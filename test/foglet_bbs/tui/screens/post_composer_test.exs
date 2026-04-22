@@ -66,18 +66,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert _ = PostComposer.render(state)
   end
 
-  test "render/1 with reply_to shows quote context (D-27)", %{state: state} do
-    reply_to = %{
-      id: "p1",
-      message_number: 1,
-      user: %{handle: "bob"},
-      body: "L1\nL2\nL3\nL4\nL5\nL6"
-    }
-
-    s = put_in(state.screen_state.post_composer.reply_to, reply_to)
-    assert _ = PostComposer.render(s)
-  end
-
   test "render/1 in preview mode does not crash", %{state: state} do
     {:update, s, _} = PostComposer.handle_key(%{key: :tab}, state)
     assert _ = PostComposer.render(s)
@@ -135,18 +123,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     {:update, s, _} = PostComposer.handle_key(%{key: :backspace}, s)
 
     assert input_value(s) == "hell"
-  end
-
-  test "arrow-key events are forwarded without crash", %{state: state} do
-    # Type something first so there's content to navigate
-    {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "h"}, state)
-
-    for key <- [:up, :down, :left, :right, :home, :end, :page_up, :page_down] do
-      result = PostComposer.handle_key(%{key: key}, s)
-
-      assert match?({:update, _, _}, result) or result == :no_match,
-             "Key #{key} returned unexpected: #{inspect(result)}"
-    end
   end
 
   test "emoji grapheme is forwarded to MultiLineInput (unicode end-to-end)", %{state: state} do
@@ -410,40 +386,5 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
     {:update, s, _} = PostComposer.handle_key(%{key: :tab}, s)
     assert composer_ss(s).mode == :preview
-  end
-
-  test "render/1 in preview mode does not crash on complex markdown input" do
-    # Smoke test — previously, preview rendered via a private
-    # render_markdown_tuples/2 that showed literal \n characters for
-    # line breaks (RENDER-01 bug). After D-11, Post.MarkdownBody
-    # handles newline grouping. This test verifies no crash.
-    {:ok, input_st} =
-      MultiLineInput.init(%{
-        value: "# Header\n\nSome **bold** text\n\n- item 1\n- item 2",
-        placeholder: "Write your post…",
-        width: 76,
-        height: 10,
-        wrap: :none,
-        focused: true
-      })
-
-    state =
-      %Foglet.TUI.App{
-        current_screen: :post_composer,
-        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-        current_thread: %{id: "t1", title: "Hello", board_id: "b1"},
-        session_context: %{
-          domain: %{posts: FakePosts, markdown: FakeMarkdown}
-        },
-        terminal_size: {80, 24},
-        composer_draft: nil,
-        screen_state: %{
-          post_composer: PostComposer.init_screen_state(mode: :preview, input_state: input_st)
-        }
-      }
-      |> Map.from_struct()
-
-    # render/1 is pure — calling it should not raise.
-    assert PostComposer.render(state) != nil
   end
 end

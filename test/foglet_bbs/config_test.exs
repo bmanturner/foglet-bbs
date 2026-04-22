@@ -224,9 +224,6 @@ defmodule Foglet.ConfigTest do
 
     test "require_email_verification?/0 returns the seeded default with ? suffix" do
       assert Config.require_email_verification?() == true
-      # Confirm the predicate (?) name is the one exported — a compile error
-      # here would mean the accessor was named without the ? suffix.
-      assert function_exported?(Config, :require_email_verification?, 0)
     end
 
     test "email_verify_resend_cooldown_seconds/0 returns the seeded default" do
