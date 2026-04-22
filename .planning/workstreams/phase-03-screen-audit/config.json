@@ -1,7 +1,0 @@
-{
-  "workflow": {
-    "_auto_chain_active": false,
-    "ui_phase": false,
-    "ui_safety_gate": false
-  }
-}
