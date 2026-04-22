@@ -285,6 +285,58 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert cancel_state.composer_draft == nil
   end
 
+  # Regression: handle_key/2 clause order is load-bearing. Compose.translate_key/1
+  # does NOT filter ctrl-modified char events — it produces {:input, ?s} for
+  # `%{key: :char, char: "s", ctrl: true}`. If anyone moves the catch-all
+  # forwarding clause above the Ctrl+S / Ctrl+C clauses, the body will silently
+  # eat "s" / "c" and Submit/Cancel will stop working. These tests prove the
+  # interceptors run first by typing real content first and asserting the body
+  # is unchanged after the ctrl shortcut fires.
+  describe "handle_key/2 clause order regression (TODO #7)" do
+    test "Ctrl+S submits even when body already has content (does not insert 's')",
+         %{state: state} do
+      state =
+        Enum.reduce(~w[h e l l o], state, fn ch, acc ->
+          {:update, next, _} = PostComposer.handle_key(%{key: :char, char: ch}, acc)
+          next
+        end)
+
+      assert input_value(state) == "hello"
+
+      {:update, after_save, cmds} =
+        PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+      # Submit fired (transitioned away from composer) and the body did NOT
+      # grow an "s" — i.e., the explicit clause intercepted before forwarding.
+      assert after_save.current_screen == :post_reader
+      refute Map.has_key?(after_save.screen_state, :post_composer)
+
+      assert Enum.any?(cmds, fn
+               {:load_posts, "t1"} -> true
+               {:load_posts, "t1", _} -> true
+               _ -> false
+             end)
+    end
+
+    test "Ctrl+C cancels even when body already has content (does not insert 'c')",
+         %{state: state} do
+      state =
+        Enum.reduce(~w[h e l l o], state, fn ch, acc ->
+          {:update, next, _} = PostComposer.handle_key(%{key: :char, char: ch}, acc)
+          next
+        end)
+
+      assert input_value(state) == "hello"
+
+      {:update, after_cancel, _} =
+        PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, state)
+
+      # Cancel fired and the body did NOT grow a "c".
+      assert after_cancel.current_screen == :main_menu
+      refute Map.has_key?(after_cancel.screen_state, :post_composer)
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Cancel — origin-aware (D-07)
   # ---------------------------------------------------------------------------

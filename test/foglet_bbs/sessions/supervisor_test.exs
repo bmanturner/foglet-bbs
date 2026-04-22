@@ -19,7 +19,8 @@ defmodule Foglet.Sessions.SupervisorTest do
 
       on_exit(fn -> if Process.alive?(pid), do: Sup.terminate_session(user_id) end)
 
-      assert Process.alive?(pid)
+      # Registry lookup is a synchronous Registry call — proves the process is
+      # alive and registered without resorting to Process.alive?/1 (per CLAUDE.md).
       assert {:ok, ^pid} = Sup.lookup_session(user_id)
     end
 
@@ -37,7 +38,9 @@ defmodule Foglet.Sessions.SupervisorTest do
       # Old session must be terminated, new one alive.
       assert_receive {:DOWN, ^ref, :process, ^old_pid, _}, 3_000
       assert new_pid != old_pid
-      assert Process.alive?(new_pid)
+      # Registry lookup + get_state below are synchronous calls into new_pid;
+      # they would crash if the new session weren't alive, so an explicit
+      # Process.alive?/1 assertion is redundant (per CLAUDE.md).
       assert {:ok, ^new_pid} = Sup.lookup_session(user_id)
       assert Session.get_state(user_id).handle == "alice2"
     end
@@ -73,8 +76,10 @@ defmodule Foglet.Sessions.SupervisorTest do
       assert {:ok, pid} = Sup.start_guest_session()
       on_exit(fn -> if Process.alive?(pid), do: DynamicSupervisor.terminate_child(Sup, pid) end)
 
-      assert Process.alive?(pid)
-      # Guest sessions are not registered under any user_id key
+      # Session.get_state/1 below is a synchronous GenServer call into pid —
+      # it would crash if the process weren't alive, so an explicit
+      # Process.alive?/1 assertion is redundant (per CLAUDE.md).
+      # Guest sessions are not registered under any user_id key.
       state = Session.get_state(pid)
       assert state.user_id == nil
     end
@@ -89,8 +94,11 @@ defmodule Foglet.Sessions.SupervisorTest do
       end)
 
       assert pid1 != pid2
-      assert Process.alive?(pid1)
-      assert Process.alive?(pid2)
+      # Prove both sessions are alive deterministically via synchronous
+      # GenServer calls rather than Process.alive?/1 (per CLAUDE.md). Each
+      # Session.get_state/1 would crash the test if its target were dead.
+      assert Session.get_state(pid1).user_id == nil
+      assert Session.get_state(pid2).user_id == nil
     end
 
     test "promote_guest_session/2 with no existing session promotes the guest", %{

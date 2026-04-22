@@ -277,6 +277,68 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert new_state.current_screen == :main_menu
   end
 
+  # Regression: handle_compose_key/3 clause order is load-bearing. The
+  # body-focused fallback forwards to MultiLineInput via Compose.translate_key,
+  # which does NOT filter ctrl-modified char events — it produces {:input, ?s}
+  # for `%{key: :char, char: "s", ctrl: true}`. If the Ctrl+S / Ctrl+C clauses
+  # are moved below the body fallback, the body silently eats "s" / "c" and
+  # Submit/Cancel break. The in-source comment at lines 281–288 of
+  # screens/new_thread.ex warns about this; these tests enforce it.
+  describe "compose-step handle_key/2 clause order regression (TODO #7)" do
+    test "Ctrl+S on body-focused compose submits (does not insert 's' into body)" do
+      state = compose_state()
+
+      # Set a valid title so submit doesn't fail validation.
+      state =
+        put_in(
+          state.screen_state.new_thread.title_input_state,
+          TextInput.init(value: "Regression Title", max_length: 60)
+        )
+
+      # Tab to body, type some content.
+      {:update, state, _} = NewThread.handle_key(%{key: :tab}, state)
+      assert get_ss(state).focused == :body
+
+      state =
+        Enum.reduce(~w[H i], state, fn ch, acc ->
+          {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+          next
+        end)
+
+      assert get_ss(state).body_input_state.value == "Hi"
+
+      {:update, after_save, cmds} =
+        NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+      # Submit fired and routed to :thread_list with a load_threads command.
+      # The body did NOT grow an "s" — i.e., the explicit clause intercepted
+      # before falling through to MultiLineInput forwarding.
+      assert after_save.current_screen == :thread_list
+      assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
+    end
+
+    test "Ctrl+C on body-focused compose cancels (does not insert 'c' into body)" do
+      state = compose_state()
+      {:update, state, _} = NewThread.handle_key(%{key: :tab}, state)
+      assert get_ss(state).focused == :body
+
+      state =
+        Enum.reduce(~w[H i], state, fn ch, acc ->
+          {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+          next
+        end)
+
+      assert get_ss(state).body_input_state.value == "Hi"
+
+      {:update, after_cancel, _} =
+        NewThread.handle_key(%{key: :char, char: "c", ctrl: true}, state)
+
+      # Cancel routed to origin (default :main_menu) and the body did NOT
+      # gain a "c" before transition (would still be "Hi" if it hadn't fired).
+      assert after_cancel.current_screen == :main_menu
+    end
+  end
+
   test "Ctrl+C with origin: :thread_list routes back to :thread_list" do
     state = compose_state()
     s = put_in(state.screen_state.new_thread.origin, :thread_list)
