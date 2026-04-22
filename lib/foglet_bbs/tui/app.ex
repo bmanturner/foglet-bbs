@@ -370,7 +370,7 @@ defmodule Foglet.TUI.App do
     boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_boards, fn ->
         {:boards_loaded, boards_mod.list_subscribed_boards(user)}
       end)
 
@@ -387,7 +387,7 @@ defmodule Foglet.TUI.App do
     boards_mod = get_in(ctx, [:domain, :boards]) || Foglet.Boards
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_boards_for_new_thread, fn ->
         {:boards_for_new_thread_loaded, boards_mod.list_subscribed_boards(user)}
       end)
 
@@ -410,7 +410,7 @@ defmodule Foglet.TUI.App do
     user_id = state.current_user && state.current_user.id
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_threads, fn ->
         {:threads_loaded, load_threads_for_user(threads_mod, board_id, user_id)}
       end)
 
@@ -433,7 +433,7 @@ defmodule Foglet.TUI.App do
     posts_mod = get_in(ctx, [:domain, :posts]) || Foglet.Posts
 
     task =
-      Command.task(fn ->
+      Foglet.TUI.Command.task(:load_posts, fn ->
         {:posts_loaded, posts_mod.list_posts(thread_id), opts}
       end)
 
@@ -471,7 +471,11 @@ defmodule Foglet.TUI.App do
     threads_mod = get_in(sc, [:domain, :threads]) || Foglet.Threads
     user_id = ctx[:user_id] || (state.current_user && state.current_user.id)
 
-    task = Command.task(fn -> flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod) end)
+    task =
+      Foglet.TUI.Command.task(:flush_read_pointers, fn ->
+        flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod)
+      end)
+
     {state, [task]}
   end
 
@@ -591,9 +595,25 @@ defmodule Foglet.TUI.App do
     {%{state | modal: modal}, []}
   end
 
+  defp do_update({:task_error, op, reason}, state) do
+    require Logger
+    Logger.error("[TUI.App] task #{inspect(op)} failed: #{reason}")
+
+    modal = %{
+      type: :error,
+      message: "Something went wrong while trying to #{humanize_op(op)}. Please try again."
+    }
+
+    {%{state | modal: modal}, []}
+  end
+
   defp do_update(_other, state) do
     # Unknown messages pass through unchanged.
     {state, []}
+  end
+
+  defp humanize_op(op) when is_atom(op) do
+    op |> to_string() |> String.replace("_", " ")
   end
 
   defp load_threads_for_user(threads_mod, board_id, user_id) do
