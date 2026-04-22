@@ -156,6 +156,12 @@ defmodule Foglet.SSH.CLIHandler do
     # frame lingers on the alt buffer after disconnect.
     send_alt_screen_leave(state)
     maybe_close_channel(state)
+
+    _ =
+      unless state.over_limit do
+        decrement_connection_count()
+      end
+
     {:stop, state.channel_id || 0, state}
   end
 

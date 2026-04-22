@@ -110,11 +110,16 @@ defmodule Foglet.SSH.CLIHandlerTest do
     end
 
     test "matching lifecycle EXIT returns stop without requiring an SSH channel" do
+      reset_cli_counter!()
+      :ets.update_counter(Foglet.SSH.CLIHandler.Counter, :count, {2, 1})
+
       lifecycle_pid = self()
       state = %CLIHandler{channel_id: nil, connection_ref: nil, lifecycle_pid: lifecycle_pid}
 
       assert {:stop, 0, ^state} =
                CLIHandler.handle_msg({:EXIT, lifecycle_pid, :boom}, state)
+
+      assert [{:count, 0}] = :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
     end
 
     test "non-matching lifecycle EXIT is ignored" do
