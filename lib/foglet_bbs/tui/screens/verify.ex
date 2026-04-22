@@ -23,6 +23,8 @@ defmodule Foglet.TUI.Screens.Verify do
   custom renderer, and its internal box would conflict with this flat slot
   display.
   """
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.Accounts
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -33,9 +35,11 @@ defmodule Foglet.TUI.Screens.Verify do
   @cooldown_seconds 60
   @code_length 6
 
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts \\ []), do: default_verify_ss()
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     vs = get_verify_ss(state)
@@ -67,6 +71,7 @@ defmodule Foglet.TUI.Screens.Verify do
     ])
   end
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :escape}, state) do
     {:update, clear_verify_ss(%{state | current_screen: :login}), []}

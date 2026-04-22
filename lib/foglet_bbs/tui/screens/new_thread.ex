@@ -12,6 +12,8 @@ defmodule Foglet.TUI.Screens.NewThread do
   On success: navigates to :thread_list with the new thread pre-loaded.
   """
 
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.Config
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
@@ -30,6 +32,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   Build the initial screen_state map for the new-thread wizard.
   Boards are passed in immediately (already loaded) or left nil to show "Loading…".
   """
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(opts \\ []) do
     boards = Keyword.get(opts, :boards, nil)
@@ -62,6 +65,7 @@ defmodule Foglet.TUI.Screens.NewThread do
     }
   end
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     ss = screen_state(state)
@@ -186,6 +190,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Key handler
   # ---------------------------------------------------------------------------
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(key_event, state) do
     ss = screen_state(state)

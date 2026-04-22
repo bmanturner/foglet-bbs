@@ -6,6 +6,8 @@ defmodule Foglet.TUI.Screens.ThreadList do
   Each row shows title and unread count.
   """
 
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.TimeAgo
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
@@ -15,9 +17,11 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   import Raxol.Core.Renderer.View
 
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts \\ []), do: %{selected_index: 0}
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     board = state.current_board
@@ -85,6 +89,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   defp thread_time_segment(%{last_post_at: %DateTime{} = dt}), do: "#{TimeAgo.format(dt)} ago"
   defp thread_time_segment(_), do: "new"
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :char, char: "j"}, state), do: move_selection(state, +1)
   def handle_key(%{key: :down}, state), do: move_selection(state, +1)

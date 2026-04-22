@@ -1,6 +1,8 @@
 defmodule Foglet.TUI.Screens.BoardList do
   @moduledoc "Subscribed-boards list (SSH-07, SSH-08)."
 
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -8,9 +10,11 @@ defmodule Foglet.TUI.Screens.BoardList do
   alias Foglet.TUI.Widgets.Progress.Spinner
   import Raxol.Core.Renderer.View
 
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts \\ []), do: %{selected_index: 0}
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     ss = screen_state(state)
@@ -59,6 +63,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     end)
   end
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :char, char: "j"}, state), do: move_selection(state, +1)
   def handle_key(%{key: :down}, state), do: move_selection(state, +1)

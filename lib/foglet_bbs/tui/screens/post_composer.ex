@@ -14,6 +14,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
   cancel/submit to signal no active draft (unchanged contract).
   """
 
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.Config
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
@@ -32,6 +34,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # Public API
   # ---------------------------------------------------------------------------
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     ss = composer_screen_state(state)
@@ -80,6 +83,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
     ])
   end
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   # NOTE: PostComposer handle_key/2 clause order is load-bearing:
   # keep :tab/Ctrl+S/Ctrl+C above fallback forwarding.
@@ -127,6 +131,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
     - `width`    — terminal width for word-wrap (default 80)
     - `height`   — visible rows for the text area (default 10)
   """
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(opts \\ []) do
     reply_to = Keyword.get(opts, :reply_to, nil)
