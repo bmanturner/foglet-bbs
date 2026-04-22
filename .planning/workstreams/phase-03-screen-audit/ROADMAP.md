@@ -116,7 +116,7 @@ Locked at workstream creation — do not re-litigate per phase:
   4. MainMenu's `@moduledoc` documents **"intentionally stateless — no `screen_state[:main_menu]` key"** (MENU-05) with a note that future contributors should NOT add a default hash reflexively. This is MainMenu's documented AUDIT-19 deviation.
   5. Rubric items `AUDIT-05..22` pass — with **special sparseness scrutiny** given MainMenu is 58 LoC and has the largest share of reserved layout regions; `mix precommit` green.
 **Plans**: 1 plan
-  - [ ] 09-01-PLAN.md — Spinner loading adoption, callback-contract dead-code audit proof, render-purity + load-absorb documentation/tests
+  - [x] 09-01-PLAN.md — Spinner loading adoption, callback-contract dead-code audit proof, render-purity + load-absorb documentation/tests
 **UI hint**: yes
 
 ### Phase 5: BoardList
