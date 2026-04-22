@@ -77,4 +77,15 @@ defmodule Foglet.ConfigTest do
       end
     end
   end
+
+  describe "get/2" do
+    test "returns the default when the key is absent from the DB" do
+      assert Config.get("test.key.missing", :fallback) == :fallback
+    end
+
+    test "returns the stored value when the key is present" do
+      Config.put!("test.key.string", "present", nil)
+      assert Config.get("test.key.string", :fallback) == "present"
+    end
+  end
 end
