@@ -10,6 +10,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   alias Foglet.TimeAgo
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
@@ -109,7 +110,8 @@ defmodule Foglet.TUI.Screens.ThreadList do
           state
           | current_thread: thread,
             current_screen: :post_reader,
-            screen_state: Map.put(state.screen_state, :post_reader, %{selected_post_index: 0})
+            screen_state:
+              Map.put(state.screen_state, :post_reader, PostReader.init_screen_state([]))
         }
 
         {:update, new_state, [{:load_posts, thread.id}]}

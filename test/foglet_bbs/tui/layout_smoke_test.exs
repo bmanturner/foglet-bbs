@@ -230,7 +230,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       current_thread: thread,
       posts: posts,
       read_position: %{},
-      screen_state: %{post_reader: %{selected_post_index: 0}},
+      screen_state: %{post_reader: PostReader.init_screen_state([])},
       terminal_size: {80, 24}
     }
 

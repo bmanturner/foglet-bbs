@@ -35,16 +35,14 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   ## Screen state
 
-  `state.screen_state[:post_reader]` holds:
+  `state.screen_state[:post_reader]` holds a `%PostReader.State{}` with:
 
     - `selected_post_index` — 0-based post index in the thread
     - `viewport` — Raxol.UI.Components.Display.Viewport state (owns scroll_top,
       content_height, visible_height, children). Replaces pre-Phase-7 `scroll_offset`.
     - `render_cache` — `%{{post_id, width} => tuples}` memoizing Markdown.parse
 
-  `init_screen_state/1` returns this default map (AUDIT-19). `get_screen_state/1`
-  merges it over any persisted `:post_reader` entry so legacy states pick up
-  new fields without overwriting in-flight values.
+  `init_screen_state/1` returns this default struct (AUDIT-19).
 
   The cache is discarded on `Q` (screen exit) and rebuilt on re-entry.
   """
@@ -52,6 +50,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
@@ -353,52 +352,33 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp flush_result_ok?(_), do: false
 
   @doc """
-  Build the initial screen_state map for PostReader (AUDIT-19).
+  Build the initial screen_state struct for PostReader (AUDIT-19).
 
   `render_cache` is a map keyed on `{post_id, width}` → rendered tuples.
   `viewport` is a `Raxol.UI.Components.Display.Viewport` state map — owns
   `scroll_top`, `content_height`, `visible_height`, and `children`.
   Replaces the pre-Phase-7 `scroll_offset` integer.
 
-  `opts` is currently unused; the keyword-list shape matches every other
-  stateful screen's `init_screen_state/1` (see `PostComposer` and
-  `NewThread`) so future callers can parameterise initial state without a
-  signature change.
+  `opts` accepts the struct fields and keeps the keyword-list shape used by
+  other stateful screens' `init_screen_state/1` callbacks.
   """
   @impl true
-  @spec init_screen_state(keyword()) :: map()
-  def init_screen_state(_opts \\ []) do
-    {:ok, vp} =
-      Viewport.init(%{
-        id: "post_reader_vp",
-        children: [],
-        visible_height: 10,
-        scroll_top: 0,
-        show_scrollbar: false
-      })
-
-    %{
-      selected_post_index: 0,
-      viewport: vp,
-      render_cache: %{}
-    }
+  @spec init_screen_state(keyword()) :: State.t()
+  def init_screen_state(opts \\ []) do
+    State.new(opts)
   end
 
   @doc """
   Called by App.update/2 on {:posts_loaded, posts, opts} to warm the
   render cache for the post at `idx` and seed a correctly-shaped
-  screen_state map. Returns the updated screen_state map for :post_reader.
+  screen_state struct. Returns the updated screen_state struct for :post_reader.
 
-  Merges `init_screen_state/0` defaults into any partial map already present,
-  so `render_cache`, `viewport`, etc. are guaranteed to exist.
+  Initializes missing PostReader state with the struct shape.
   """
-  @spec prepare_after_load(map(), [map()], non_neg_integer()) :: map()
+  @spec prepare_after_load(map(), [map()], non_neg_integer()) :: State.t()
   def prepare_after_load(state, posts, idx) do
-    ss = Map.get(state.screen_state, :post_reader) || init_screen_state([])
+    ss = get_screen_state(state)
     {w, _h} = state.terminal_size || @default_terminal_size
-    # Merge init_screen_state defaults into any partial map already present,
-    # so render_cache, viewport, etc. are guaranteed.
-    ss = Map.merge(init_screen_state([]), ss)
     ss = warm_cache_for_index(ss, state, posts, idx, w)
 
     # Also warm the viewport for the selected post so scroll math works.
@@ -408,17 +388,8 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
-  # Merges the default shape over any existing :post_reader entry so
-  # legacy states (from pre-Phase-7 sessions mid-flight) get the new
-  # :viewport field without overwriting selected_post_index. Legacy
-  # :scroll_offset is explicitly dropped — Viewport owns scroll now.
-  defp get_screen_state(state) do
-    existing =
-      (get_in(state.screen_state, [:post_reader]) || %{})
-      |> Map.drop([:scroll_offset])
-
-    Map.merge(init_screen_state([]), existing)
-  end
+  defp get_screen_state(%{screen_state: %{post_reader: %State{} = ss}}), do: ss
+  defp get_screen_state(_state), do: init_screen_state([])
 
   # Parses the post body via Foglet.Markdown.render/1. Returns the
   # rendered tuple list but does NOT write to render_cache — it is a

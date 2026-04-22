@@ -3,6 +3,7 @@ defmodule Foglet.TUI.AppTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.Screens.PostReader
 
   # Seed the ETS config cache so render paths that call Config.get/2
   # (e.g. Login, Register, Verify screens) do not hit the DB.
@@ -477,7 +478,7 @@ defmodule Foglet.TUI.AppTest do
         | current_screen: :post_reader,
           current_thread: %{id: "thread-1"},
           read_position: %{"thread-1" => %{last_post_id: "post-42", scroll: 15}},
-          screen_state: %{post_reader: %{selected_post_index: 5}}
+          screen_state: %{post_reader: PostReader.init_screen_state(selected_post_index: 5)}
       }
 
       {gated, _} = App.update({:window_change, 50, 15}, state_reading)
@@ -485,6 +486,7 @@ defmodule Foglet.TUI.AppTest do
       {released, _} = App.update({:window_change, 100, 30}, after_keys)
 
       assert released.read_position == state_reading.read_position
+      assert %PostReader.State{} = released.screen_state.post_reader
       assert released.screen_state.post_reader.selected_post_index == 5
       assert released.current_screen == :post_reader
     end
@@ -604,6 +606,27 @@ defmodule Foglet.TUI.AppTest do
       posts = [%{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()}]
       {new_state, []} = App.update({:posts_loaded, posts}, state)
       assert new_state.posts == posts
+      assert %PostReader.State{selected_post_index: 0} = new_state.screen_state.post_reader
+    end
+
+    test "{:posts_loaded, posts, jump_last: true} updates PostReader.State to last post", %{
+      state: state
+    } do
+      posts = [
+        %{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()},
+        %{id: "p2", body: "Second", inserted_at: DateTime.utc_now()}
+      ]
+
+      state_with_reader = %{
+        state
+        | screen_state: %{post_reader: PostReader.init_screen_state(selected_post_index: 0)}
+      }
+
+      {new_state, []} = App.update({:posts_loaded, posts, jump_last: true}, state_with_reader)
+
+      assert new_state.posts == posts
+      assert %PostReader.State{} = new_state.screen_state.post_reader
+      assert new_state.screen_state.post_reader.selected_post_index == 1
     end
 
     test "{:flush_read_pointers, ctx} returns a Command.task", %{state: state} do
@@ -824,6 +847,7 @@ defmodule Foglet.TUI.AppTest do
       posts = [%{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()}]
       {new_state, cmds} = App.update({:command_result, {:posts_loaded, posts}}, state)
       assert new_state.posts == posts
+      assert %PostReader.State{} = new_state.screen_state.post_reader
       assert cmds == []
     end
 

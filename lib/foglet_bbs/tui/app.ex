@@ -450,14 +450,19 @@ defmodule Foglet.TUI.App do
   # (render_cache, viewport, etc. are always present after this handler).
   defp do_update({:posts_loaded, posts, opts}, state) when is_list(opts) do
     jump_last? = Keyword.get(opts, :jump_last, false)
+    screen_state = state.screen_state || %{}
 
-    # Compute the target index using existing selected_post_index as the
-    # base — init_screen_state/0 default is 0, so partial maps are safe.
+    # Compute the target index using existing PostReader.State as the base.
     existing_ss =
-      get_in(state.screen_state, [:post_reader]) ||
-        Foglet.TUI.Screens.PostReader.init_screen_state([])
+      case Map.get(screen_state, :post_reader) do
+        %Foglet.TUI.Screens.PostReader.State{} = ss ->
+          ss
 
-    existing_idx = Map.get(existing_ss, :selected_post_index, 0)
+        nil ->
+          Foglet.TUI.Screens.PostReader.init_screen_state([])
+      end
+
+    existing_idx = existing_ss.selected_post_index
 
     new_idx =
       if jump_last? and posts != [] do
@@ -472,13 +477,13 @@ defmodule Foglet.TUI.App do
       state
       | posts: posts,
         screen_state:
-          Map.put(state.screen_state, :post_reader, %{existing_ss | selected_post_index: new_idx})
+          Map.put(screen_state, :post_reader, %{existing_ss | selected_post_index: new_idx})
     }
 
     warmed_ss =
       Foglet.TUI.Screens.PostReader.prepare_after_load(state_with_posts, posts, new_idx)
 
-    new_screen_state = Map.put(state.screen_state, :post_reader, warmed_ss)
+    new_screen_state = Map.put(screen_state, :post_reader, warmed_ss)
 
     {%{state | posts: posts, screen_state: new_screen_state}, []}
   end

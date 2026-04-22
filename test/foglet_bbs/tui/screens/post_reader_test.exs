@@ -2,6 +2,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.Screens.PostReader
+  alias Foglet.TUI.Screens.PostReader.State
 
   # Test-only fake modules — standard ExUnit pattern, exempt from the CLAUDE.md
   # "no nested modules" convention (no cyclic-dependency risk in test files).
@@ -85,7 +86,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         terminal_size: {80, 24},
         posts: nil,
         read_position: %{},
-        screen_state: %{post_reader: %{selected_post_index: 0}}
+        screen_state: %{post_reader: PostReader.init_screen_state([])}
       }
       |> Map.from_struct()
 
@@ -106,6 +107,14 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     # load_posts/2 intentional callback surface (READER-02, D-03, D-04)
     {s, _} = PostReader.load_posts(state, "t1")
     assert length(s.posts) == 2
+    assert %State{} = s.screen_state.post_reader
+  end
+
+  test "init_screen_state/1 returns the PostReader.State struct" do
+    assert %State{
+             selected_post_index: 0,
+             render_cache: %{}
+           } = PostReader.init_screen_state([])
   end
 
   test "render/1 with posts loaded does not crash", %{state: state} do
@@ -138,7 +147,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "'n' advances to next post and updates read_position", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
     {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
-    assert get_in(s.screen_state, [:post_reader, :selected_post_index]) == 1
+    assert s.screen_state.post_reader.selected_post_index == 1
     assert s.read_position["t1"][:last_read_post_id] == "p2"
     assert s.read_position["t1"][:last_read_message_number] == 2
   end
@@ -146,7 +155,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "'p' decrements bounded at 0", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
     {:update, s, _} = PostReader.handle_key(%{key: :char, char: "p"}, s)
-    assert get_in(s.screen_state, [:post_reader, :selected_post_index]) == 0
+    assert s.screen_state.post_reader.selected_post_index == 0
   end
 
   test "'R' opens :post_composer with reply_to set to current post", %{state: state} do
@@ -300,7 +309,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     }
   end
 
-  defp p2_state(overrides \\ %{}) do
+  defp p2_state(overrides) do
     base = %{
       current_screen: :post_reader,
       current_thread: %{id: "t1", title: "Test Thread"},
@@ -308,7 +317,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       current_user: %{id: "u1", handle: "sysop"},
       posts: [p2_post(id: "p1", body: "Hello **world**.")],
       read_position: %{},
-      screen_state: %{},
+      screen_state: %{post_reader: PostReader.init_screen_state([])},
       session_context: %{theme: theme()},
       terminal_size: {80, 24},
       modal: nil,
@@ -495,7 +504,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert is_integer(ss.viewport.scroll_top)
       assert ss.viewport.scroll_top >= 0
       assert is_list(ss.viewport.children)
-      refute Map.has_key?(ss, :scroll_offset), "legacy :scroll_offset key must be absent"
+      refute Map.has_key?(ss, :scroll_offset), ":scroll_offset key must be absent"
     end
   end
 
@@ -566,36 +575,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       cache = s3.screen_state[:post_reader].render_cache
       assert Map.has_key?(cache, {"p1", 80})
       assert Map.has_key?(cache, {"p2", 80})
-    end
-  end
-
-  # =================================================================
-  # Screen-state migration (legacy state without new keys)
-  # =================================================================
-
-  describe "get_screen_state — legacy state migration" do
-    test "render/1 works against a state with only :selected_post_index (pre-Phase-2 shape)" do
-      s =
-        p2_state(%{
-          posts: [p2_post(body: "Hello **world**.")],
-          screen_state: %{post_reader: %{selected_post_index: 0}}
-        })
-
-      tree = PostReader.render(s)
-      refute is_nil(tree)
-    end
-
-    test "j works against a legacy-shaped state (no crash)" do
-      s =
-        p2_state(%{
-          posts: [p2_post(body: "A\n\nB\n\nC\n\nD")],
-          screen_state: %{post_reader: %{selected_post_index: 0}}
-        })
-
-      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
-      # Legacy state has no :scroll_offset — Viewport owns scroll now.
-      # viewport.scroll_top defaults to 0; j advances to 1 (bounded by max_scroll).
-      assert s1.screen_state[:post_reader].viewport.scroll_top in [0, 1]
     end
   end
 
