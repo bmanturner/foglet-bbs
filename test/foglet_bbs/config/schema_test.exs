@@ -120,7 +120,7 @@ defmodule Foglet.Config.SchemaTest do
                description:
                  "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)",
                enum: nil,
-               min: 0,
+               min: 1,
                max: nil
              }
     end
@@ -175,7 +175,7 @@ defmodule Foglet.Config.SchemaTest do
     test "accepts an integer at the minimum boundary" do
       assert Schema.validate("max_post_length", 1) == :ok
       assert Schema.validate("max_thread_title_length", 1) == :ok
-      assert Schema.validate("email_verify_resend_cooldown_seconds", 0) == :ok
+      assert Schema.validate("email_verify_resend_cooldown_seconds", 1) == :ok
     end
 
     test "accepts a large integer when no max is set" do
@@ -234,18 +234,30 @@ defmodule Foglet.Config.SchemaTest do
   end
 
   describe "validate/2 — below_min (inclusive)" do
-    test "rejects an integer below min: 1" do
+    test "rejects an integer below min: 1 for max_post_length" do
       assert Schema.validate("max_post_length", 0) ==
                {:error, %{reason: :below_min, expected: 1, got: 0}}
     end
 
-    test "accepts an integer at min: 0 inclusive" do
-      assert Schema.validate("email_verify_resend_cooldown_seconds", 0) == :ok
+    test "rejects zero for email_verify_resend_cooldown_seconds (min: 1 per D-02 'minimum seconds')" do
+      assert Schema.validate("email_verify_resend_cooldown_seconds", 0) ==
+               {:error, %{reason: :below_min, expected: 1, got: 0}}
     end
 
-    test "rejects an integer below min: 0" do
-      assert Schema.validate("email_verify_resend_cooldown_seconds", -1) ==
-               {:error, %{reason: :below_min, expected: 0, got: -1}}
+    test "rejects a negative integer for email_verify_resend_cooldown_seconds" do
+      assert Schema.validate("email_verify_resend_cooldown_seconds", -5) ==
+               {:error, %{reason: :below_min, expected: 1, got: -5}}
+    end
+  end
+
+  describe "validate/2 — invalid UTF-8 strings" do
+    test "rejects a binary that is not valid UTF-8" do
+      # 0xFF 0xFE is an invalid UTF-8 leading-byte sequence. Prevents raw
+      # binaries from slipping into jsonb for any future non-enum string key.
+      bad = <<0xFF, 0xFE>>
+
+      assert Schema.validate("registration_mode", bad) ==
+               {:error, %{reason: :type_mismatch, expected: :string, got: bad}}
     end
   end
 

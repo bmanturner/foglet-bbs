@@ -100,7 +100,7 @@ defmodule Foglet.Config.Schema do
       description:
         "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)",
       enum: nil,
-      min: 0,
+      min: 1,
       max: nil
     }
   ]
@@ -156,13 +156,33 @@ defmodule Foglet.Config.Schema do
 
   # ---------- Private ----------
 
+  @allowed_types [:string, :integer, :boolean]
+
   # Type dispatch — uses struct-style dot access per CLAUDE.md gotcha
   # (plain maps would allow Access, but we're explicit for readability).
-  defp check(%{type: :string} = spec, value) when is_binary(value), do: check_enum(spec, value)
+  #
+  # String values additionally require valid UTF-8 (no embedded nulls or
+  # malformed code points) — prevents garbage binaries from slipping into
+  # jsonb for any future non-enum string key.
+  defp check(%{type: :string} = spec, value) when is_binary(value) do
+    if String.valid?(value) do
+      check_enum(spec, value)
+    else
+      {:error, %{reason: :type_mismatch, expected: :string, got: value}}
+    end
+  end
 
   defp check(%{type: :integer} = spec, value) when is_integer(value), do: check_range(spec, value)
 
   defp check(%{type: :boolean}, value) when is_boolean(value), do: :ok
+
+  # Guard against schema drift: if a new type is added to @type entry
+  # without a matching check/2 clause, fail loudly instead of emitting a
+  # misleading :type_mismatch report.
+  defp check(%{type: type}, _value) when type not in @allowed_types do
+    raise ArgumentError,
+          "Foglet.Config.Schema: unsupported type #{inspect(type)} — extend check/2 when adding a new type to @type entry"
+  end
 
   defp check(%{type: type}, value),
     do: {:error, %{reason: :type_mismatch, expected: type, got: value}}
