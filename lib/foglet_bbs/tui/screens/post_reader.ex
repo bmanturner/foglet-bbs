@@ -49,6 +49,8 @@ defmodule Foglet.TUI.Screens.PostReader do
   The cache is discarded on `Q` (screen exit) and rebuilt on re-entry.
   """
 
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -60,6 +62,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @default_terminal_size {80, 24}
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     thread = state.current_thread
@@ -139,6 +142,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :char, char: c}, state) when c in ["n", "N"], do: advance_post(state, +1)
   def handle_key(%{key: :char, char: " "}, state), do: advance_post(state, +1)
@@ -351,6 +355,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   `NewThread`) so future callers can parameterise initial state without a
   signature change.
   """
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts \\ []) do
     {:ok, vp} =

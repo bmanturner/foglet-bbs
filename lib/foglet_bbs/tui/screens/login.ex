@@ -31,6 +31,8 @@ defmodule Foglet.TUI.Screens.Login do
   per-session memory footprint small.
   """
 
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.{Accounts, Config}
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -43,9 +45,11 @@ defmodule Foglet.TUI.Screens.Login do
 
   @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
 
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts), do: %{sub: :menu}
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     mode = registration_mode(state)
@@ -65,6 +69,7 @@ defmodule Foglet.TUI.Screens.Login do
     ScreenFrame.render(state, "Login", content, keys_for(sub, mode))
   end
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   # Route all keys through sub-state so form input gets every character.
   def handle_key(key, state) do

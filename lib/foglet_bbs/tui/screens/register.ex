@@ -25,6 +25,8 @@ defmodule Foglet.TUI.Screens.Register do
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput
 
+  @behaviour Foglet.TUI.Screen
+
   import Raxol.Core.Renderer.View
 
   # §2 Module attributes
@@ -47,6 +49,7 @@ defmodule Foglet.TUI.Screens.Register do
   first `render/1` or `handle_key/2` call. This divergence is intentional and
   is tracked for Phase 8 when invite-code logic is fully wired (D-04, D-05).
   """
+  @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts \\ []) do
     %{
@@ -65,6 +68,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   # §4 render/1 (PUBLIC)
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     reg = get_register_ss(state)
@@ -85,6 +89,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   # §5 handle_key/2 (PUBLIC)
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()}
   def handle_key(%{key: :escape}, state) do
     {:update, clear_register_ss(%{state | current_screen: :login}), []}

@@ -9,6 +9,8 @@ defmodule Foglet.TUI.Screens.MainMenu do
   future milestones own the reserved whitespace.
   """
 
+  @behaviour Foglet.TUI.Screen
+
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
@@ -28,6 +30,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {"Q", "Logout"}
   ]
 
+  @impl true
   @spec render(map()) :: any()
   def render(state) do
     handle = state.current_user && state.current_user.handle
@@ -44,6 +47,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     ScreenFrame.render(state, "Main Menu", content, @menu_keys)
   end
 
+  @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   def handle_key(%{key: :char, char: c}, state) when c in ["b", "B"] do
     {:update, %{state | current_screen: :board_list}, [{:load_boards}]}
