@@ -1,7 +1,7 @@
 ---
 phase: 07
 slug: newthread
-status: draft
+status: complete
 shadcn_initialized: false
 preset: not_applicable_tui
 created: 2026-04-22
@@ -59,10 +59,10 @@ created: 2026-04-22
 
 ## Checker Sign-Off
 
-- [ ] Interaction parity: PASS
-- [ ] Density and sparseness: PASS
-- [ ] Theme routing: PASS
-- [ ] Reserved region protection: PASS
-- [ ] Source-order key semantics preserved: PASS
+- [x] Interaction parity: PASS
+- [x] Density and sparseness: PASS
+- [x] Theme routing: PASS
+- [x] Reserved region protection: PASS
+- [x] Source-order key semantics preserved: PASS
 
-**Approval:** pending
+**Approval:** approved

@@ -4,14 +4,14 @@ milestone: v1.0.2
 milestone_name: milestone
 status: planning
 stopped_at: Phase 7 context gathered
-last_updated: "2026-04-22T04:08:47.431Z"
+last_updated: "2026-04-22T12:04:49.806Z"
 last_activity: 2026-04-22
 progress:
   total_phases: 10
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 14
-  completed_plans: 12
-  percent: 86
+  completed_plans: 13
+  percent: 93
 ---
 
 # Workstream State — phase-03-screen-audit
@@ -31,9 +31,9 @@ See: .planning/PROJECT.md (shared across workstreams — **not modified from ins
 
 ## Current Position
 
-Phase: 06 (threadlist) — PLANNING
+Phase: 07 (newthread) — EXECUTING
 Plan: Not started
-**Phase:** 06 of 10 (threadlist)
+**Phase:** 8 of 10 (postcomposer)
 **Next:** Phase 6 (ThreadList) — ensure `Code.ensure_loaded/1` guard before `function_exported?/3`, verify `:created_by` preload, preserve sticky+recency sort
 **Status:** Ready to plan
 **Last activity:** 2026-04-22

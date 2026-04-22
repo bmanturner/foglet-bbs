@@ -1,8 +1,8 @@
 ---
 phase: 07
 slug: newthread
-status: draft
-nyquist_compliant: false
+status: complete
+nyquist_compliant: true
 wave_0_complete: true
 created: 2026-04-22
 ---
@@ -38,8 +38,8 @@ created: 2026-04-22
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 07-01-01 | 01 | 1 | NEWTHREAD-01, NEWTHREAD-02, NEWTHREAD-03, NEWTHREAD-04 | T-07-01, T-07-02 | Title-input migration preserves compose submit/cancel ordering and behavior | unit + grep | `mix test test/foglet_bbs/tui/screens/new_thread_test.exs` | ✅ | ⬜ pending |
-| 07-01-02 | 01 | 1 | NEWTHREAD-05, AUDIT-05, AUDIT-15, AUDIT-16, AUDIT-17, AUDIT-18, AUDIT-19 | T-07-03 | Rubric/CI gates pass without adding reserved-region affordances | grep + full suite | `mix precommit` | ✅ | ⬜ pending |
+| 07-01-01 | 01 | 1 | NEWTHREAD-01, NEWTHREAD-02, NEWTHREAD-03, NEWTHREAD-04 | T-07-01, T-07-02 | Title-input migration preserves compose submit/cancel ordering and behavior | unit + grep | `mix test test/foglet_bbs/tui/screens/new_thread_test.exs` | ✅ | ✅ green |
+| 07-01-02 | 01 | 1 | NEWTHREAD-05, AUDIT-05, AUDIT-15, AUDIT-16, AUDIT-17, AUDIT-18, AUDIT-19 | T-07-03 | Rubric/CI gates pass without adding reserved-region affordances | grep + full suite | `mix precommit` | ✅ | ✅ green |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -64,6 +64,6 @@ All phase behaviors have automated verification.
 - [x] Wave 0 covers all MISSING references
 - [x] No watch-mode flags
 - [x] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** approved
