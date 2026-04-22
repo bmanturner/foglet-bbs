@@ -624,7 +624,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       boards: [board],
       selected_board_index: 0,
       board: board,
-      title_input: "Hello",
+      title_input_state: Foglet.TUI.Widgets.Input.TextInput.init(value: "Hello", max_length: 60),
       body_input_state: body_input_st,
       focused: :title,
       mode: :edit,
