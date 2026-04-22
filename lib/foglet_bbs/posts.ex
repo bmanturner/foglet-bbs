@@ -37,12 +37,12 @@ defmodule Foglet.Posts do
     |> Repo.preload([:user, :reply_to])
   end
 
-  @doc "List all non-deleted posts in a thread, in insertion order. Preloads :user."
+  @doc "List all posts in a thread, in insertion order. Preloads :user."
   @spec list_posts(String.t()) :: [Post.t()]
   def list_posts(thread_id) do
     Repo.all(
       from p in Post,
-        where: p.thread_id == ^thread_id and is_nil(p.deleted_at),
+        where: p.thread_id == ^thread_id,
         order_by: [asc: :inserted_at],
         preload: [:user]
     )

@@ -153,7 +153,7 @@ defmodule Foglet.PostsTest do
       assert deleted.message_number == original_message_number
     end
 
-    test "soft-deleted posts are invisible to list_posts/1 queries" do
+    test "soft-deleted posts remain visible to list_posts/1 queries" do
       board = setup_board_with_server()
       user = user_fixture()
       {thread, root} = setup_thread(board, user)
@@ -170,7 +170,11 @@ defmodule Foglet.PostsTest do
 
       assert root.id in ids
       assert post.id in ids
-      refute deleted_post.id in ids
+      assert deleted_post.id in ids
+
+      listed_deleted_post = Enum.find(visible, &(&1.id == deleted_post.id))
+      assert listed_deleted_post.deleted_at != nil
+      assert listed_deleted_post.user.id == user.id
     end
   end
 end

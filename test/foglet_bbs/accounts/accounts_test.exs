@@ -3,6 +3,9 @@ defmodule Foglet.AccountsTest do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.{SSHKey, User, UserToken}
+  alias Foglet.Boards.{Board, Category}
+  alias Foglet.Posts.Post
+  alias Foglet.Threads.Thread
   alias FogletBbs.AccountsFixtures
 
   describe "register_user/1 (IDNT-01)" do
@@ -288,11 +291,73 @@ defmodule Foglet.AccountsTest do
       assert Repo.aggregate(from(k in SSHKey, where: k.user_id == ^user.id), :count) == 0
       assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id), :count) == 0
     end
+
+    test "rewrites authored posts to the tombstone user" do
+      user = AccountsFixtures.user_fixture()
+      tombstone = insert_tombstone_user!()
+      post = insert_post_authored_by!(user)
+
+      assert {:ok, _} = Accounts.delete_user(user)
+
+      reloaded_post =
+        Post
+        |> Repo.get!(post.id)
+        |> Repo.preload(:user)
+
+      assert reloaded_post.user_id == tombstone.id
+      assert reloaded_post.user.handle == "[deleted]"
+    end
   end
 
   describe "tombstone_user_id/0" do
     test "returns a fixed UUID string" do
       assert Accounts.tombstone_user_id() == "00000000-0000-0000-0000-000000000001"
     end
+  end
+
+  defp insert_tombstone_user! do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    Repo.insert!(%User{
+      id: Accounts.tombstone_user_id(),
+      handle: "[deleted]",
+      email: "tombstone@localhost",
+      password_hash: "invalid-tombstone",
+      confirmed_at: now,
+      role: :user,
+      show_in_last_callers: false
+    })
+  end
+
+  defp insert_post_authored_by!(%User{} = user) do
+    unique = System.unique_integer([:positive])
+
+    category =
+      %Category{}
+      |> Category.changeset(%{name: "Category #{unique}"})
+      |> Repo.insert!()
+
+    board =
+      %Board{}
+      |> Board.changeset(%{
+        slug: "board-#{unique}",
+        name: "Board #{unique}",
+        category_id: category.id
+      })
+      |> Repo.insert!()
+
+    thread =
+      %Thread{board_id: board.id, created_by_id: user.id}
+      |> Thread.creation_changeset(%{title: "Thread #{unique}"})
+      |> Repo.insert!()
+
+    %Post{
+      message_number: 1,
+      board_id: board.id,
+      thread_id: thread.id,
+      user_id: user.id
+    }
+    |> Post.creation_changeset(%{body: "Authored by deleted user"})
+    |> Repo.insert!()
   end
 end

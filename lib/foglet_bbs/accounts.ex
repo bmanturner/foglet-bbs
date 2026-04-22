@@ -21,6 +21,7 @@ defmodule Foglet.Accounts do
   import Ecto.Query, warn: false
 
   alias Foglet.Accounts.{SSHKey, User, UserToken}
+  alias Foglet.Posts.Post
   alias FogletBbs.Repo
 
   @tombstone_user_id "00000000-0000-0000-0000-000000000001"
@@ -241,13 +242,15 @@ defmodule Foglet.Accounts do
   @doc """
   Delete a user with anonymization.
 
-  In Phase 1 (no posts table yet):
+  Current anonymization flow:
     1. Delete all user_tokens for this user
     2. Delete all ssh_keys for this user
-    3. Apply deletion_changeset to the user row (clears PII, sets deleted_at)
+    3. Rewrite posts authored by the user to the tombstone user
+    4. Apply deletion_changeset to the user row (clears PII, sets deleted_at)
 
-  Phase 2+ will add a Multi step rewriting `posts.user_id` to
-  `tombstone_user_id/0`. Phase 6+ will add direct_messages handling.
+  The tombstone user is seeded, not created here. If matching posts exist
+  and the seed row is missing, the foreign key fails the transaction.
+  Phase 6+ will add direct_messages handling.
   The user row is preserved so FK references (future) remain valid.
   """
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
@@ -255,6 +258,11 @@ defmodule Foglet.Accounts do
     Repo.transact(fn ->
       Repo.delete_all(UserToken.by_user_and_contexts_query(user, :all))
       Repo.delete_all(from(k in SSHKey, where: k.user_id == ^user.id))
+
+      Repo.update_all(from(p in Post, where: p.user_id == ^user.id),
+        set: [user_id: tombstone_user_id()]
+      )
+
       user |> User.deletion_changeset() |> Repo.update()
     end)
   end
