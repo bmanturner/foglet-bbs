@@ -280,11 +280,10 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     user_id = flush_ctx[:user_id] || (state.current_user && state.current_user.id)
 
-    flush_board_pointer(boards_mod, user_id, flush_ctx)
-    flush_thread_pointer(threads_mod, user_id, flush_ctx)
+    board_result = flush_board_pointer(boards_mod, user_id, flush_ctx)
+    thread_result = flush_thread_pointer(threads_mod, user_id, flush_ctx)
 
-    new_rp = clear_read_position(state.read_position, flush_ctx[:thread_id])
-    {%{state | read_position: new_rp}, []}
+    apply_flush_result(state, flush_ctx, board_result, thread_result)
   end
 
   # --- Private ---
@@ -298,6 +297,8 @@ defmodule Foglet.TUI.Screens.PostReader do
         ctx[:board_id],
         ctx[:last_read_message_number] || 0
       )
+    else
+      :skip
     end
   end
 
@@ -306,11 +307,36 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp flush_thread_pointer(threads_mod, user_id, ctx) do
     if ctx[:thread_id] && ctx[:last_read_post_id] do
       threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
+    else
+      :skip
     end
   end
 
   defp clear_read_position(read_position, nil), do: read_position
   defp clear_read_position(read_position, thread_id), do: Map.delete(read_position, thread_id)
+
+  # Clears the local read-pointer only when both DB flushes succeeded (or were
+  # skipped because there was nothing to flush). On failure, logs a warning and
+  # returns state unchanged so the pointer is retried on the next transition.
+  defp apply_flush_result(state, flush_ctx, board_result, thread_result) do
+    if flush_result_ok?(board_result) and flush_result_ok?(thread_result) do
+      new_rp = clear_read_position(state.read_position, flush_ctx[:thread_id])
+      {%{state | read_position: new_rp}, []}
+    else
+      require Logger
+
+      Logger.warning(
+        "flush_read_pointers: flush failed — board: #{inspect(board_result)}, thread: #{inspect(thread_result)}"
+      )
+
+      {state, []}
+    end
+  end
+
+  defp flush_result_ok?(:skip), do: true
+  defp flush_result_ok?(:ok), do: true
+  defp flush_result_ok?({:ok, _}), do: true
+  defp flush_result_ok?(_), do: false
 
   @doc """
   Build the initial screen_state map for PostReader (AUDIT-19).
@@ -504,7 +530,13 @@ defmodule Foglet.TUI.Screens.PostReader do
     thread = state.current_thread
     board = state.current_board
     thread_id = thread && thread.id
-    pos = Map.get(state.read_position, thread_id) || %{}
+
+    pos =
+      if thread_id do
+        Map.get(state.read_position, thread_id, %{})
+      else
+        %{}
+      end
 
     %{
       user_id: state.current_user && state.current_user.id,
