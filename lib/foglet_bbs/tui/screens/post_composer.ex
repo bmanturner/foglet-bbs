@@ -26,6 +26,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   import Raxol.Core.Renderer.View
 
   @default_max_post_length 8192
+  @default_terminal_size {80, 24}
 
   # ---------------------------------------------------------------------------
   # Public API
@@ -53,7 +54,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
             [render_input(input_st, state, theme)]
 
           :preview ->
-            {w, _h} = state.terminal_size || {80, 24}
+            {w, _h} = state.terminal_size || @default_terminal_size
             body_width = max(w - 4, 20)
             [MarkdownBody.render(draft, body_width, theme)]
         end ++
@@ -80,6 +81,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
   end
 
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
+  # NOTE: PostComposer handle_key/2 clause order is load-bearing:
+  # keep :tab/Ctrl+S/Ctrl+C above fallback forwarding.
   def handle_key(%{key: :tab}, state), do: toggle_mode(state)
   def handle_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
   def handle_key(%{key: :char, char: "c", ctrl: true}, state), do: cancel(state)
@@ -155,7 +158,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
       existing ->
         base = existing || %{mode: :edit, reply_to: nil, error: nil}
-        {w, _h} = state.terminal_size || {80, 24}
+        {w, _h} = state.terminal_size || @default_terminal_size
 
         {:ok, input_st} =
           MultiLineInput.init(%{
@@ -294,22 +297,25 @@ defmodule Foglet.TUI.Screens.PostComposer do
     thread = state.current_thread
     attrs = build_reply_attrs(draft, ss)
 
-    case posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs) do
-      {:ok, _post} ->
-        new_state = %{
-          state
-          | current_screen: :post_reader,
-            composer_draft: nil,
-            screen_state: Map.delete(state.screen_state, :post_composer)
-        }
-
-        # D-05: after the post reload finishes, the app handler sets
-        # selected_post_index to the last post (the user's new reply).
-        {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
-
+    with {:ok, _post} <- posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs),
+         {:ok, new_state} <- success_state_after_submit(state) do
+      # D-05: after the post reload finishes, the app handler sets
+      # selected_post_index to the last post (the user's new reply).
+      {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
+    else
       {:error, _cs} ->
         {:update, %{state | modal: %{type: :error, message: "Failed to create post."}}, []}
     end
+  end
+
+  defp success_state_after_submit(state) do
+    {:ok,
+     %{
+       state
+       | current_screen: :post_reader,
+         composer_draft: nil,
+         screen_state: Map.delete(state.screen_state, :post_composer)
+     }}
   end
 
   defp build_reply_attrs(draft, ss) do
