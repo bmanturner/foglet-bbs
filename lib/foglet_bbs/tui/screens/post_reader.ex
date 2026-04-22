@@ -96,7 +96,17 @@ defmodule Foglet.TUI.Screens.PostReader do
     else
       post = Enum.at(posts, idx)
       available_height = max(h - 10, 5)
-      tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
+
+      tuples =
+        case ss.render_cache[{post.id, w}] do
+          nil ->
+            require Logger
+            Logger.warning("[PostReader] render cache miss for post=#{post.id} width=#{w}")
+            parse_body(state, post)
+
+          cached ->
+            cached
+        end
 
       # Non-scrolling header (Post X of N, author, divider).
       header_line_1 = text("Post #{idx + 1} of #{total}", fg: theme.dim.fg)
@@ -367,6 +377,30 @@ defmodule Foglet.TUI.Screens.PostReader do
       viewport: vp,
       render_cache: %{}
     }
+  end
+
+  @doc """
+  Called by App.update/2 on {:posts_loaded, posts, opts} to warm the
+  render cache for the post at `idx` and seed a correctly-shaped
+  screen_state map. Returns the updated screen_state map for :post_reader.
+
+  Merges `init_screen_state/0` defaults into any partial map already present,
+  so `render_cache`, `viewport`, etc. are guaranteed to exist.
+  """
+  @spec prepare_after_load(map(), [map()], non_neg_integer()) :: map()
+  def prepare_after_load(state, posts, idx) do
+    ss = Map.get(state.screen_state, :post_reader) || init_screen_state([])
+    {w, _h} = state.terminal_size || @default_terminal_size
+    # Merge init_screen_state defaults into any partial map already present,
+    # so render_cache, viewport, etc. are guaranteed.
+    ss = Map.merge(init_screen_state([]), ss)
+    ss = warm_cache_for_index(ss, state, posts, idx, w)
+
+    # Also warm the viewport for the selected post so scroll math works.
+    case Enum.at(posts, idx) do
+      nil -> ss
+      post -> warm_viewport(ss, state, post, w)
+    end
   end
 
   # Merges the default shape over any existing :post_reader entry so
