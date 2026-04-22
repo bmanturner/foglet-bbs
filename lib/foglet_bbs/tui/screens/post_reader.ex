@@ -42,6 +42,10 @@ defmodule Foglet.TUI.Screens.PostReader do
       content_height, visible_height, children). Replaces pre-Phase-7 `scroll_offset`.
     - `render_cache` — `%{{post_id, width} => tuples}` memoizing Markdown.parse
 
+  `init_screen_state/1` returns this default map (AUDIT-19). `get_screen_state/1`
+  merges it over any persisted `:post_reader` entry so legacy states pick up
+  new fields without overwriting in-flight values.
+
   The cache is discarded on `Q` (screen exit) and rebuilt on re-entry.
   """
 
@@ -54,12 +58,14 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   import Raxol.Core.Renderer.View
 
+  @default_terminal_size {80, 24}
+
   @spec render(map()) :: any()
   def render(state) do
     thread = state.current_thread
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
-    {w, h} = state.terminal_size || {80, 24}
+    {w, h} = state.terminal_size || @default_terminal_size
     post_content = render_post_content(state, ss, theme, w, h)
     thread_title = (thread && thread.title) || "?"
 
@@ -152,7 +158,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     posts = state.posts || []
     ss = get_screen_state(state)
     reply_to = Enum.at(posts, ss.selected_post_index)
-    {w, _h} = state.terminal_size || {80, 24}
+    {w, _h} = state.terminal_size || @default_terminal_size
 
     composer_ss =
       Foglet.TUI.Screens.PostComposer.init_screen_state(reply_to: reply_to, width: w)
@@ -213,7 +219,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     posts = posts_mod.list_posts(thread_id)
     new_read_position = seed_read_position_on_entry(state.read_position, thread_id, posts)
-    {w, _h} = state.terminal_size || {80, 24}
+    {w, _h} = state.terminal_size || @default_terminal_size
 
     # WR-01: warm the render cache for the first post on load so that the
     # initial render (before any keypress) does not re-parse on every frame.
@@ -306,12 +312,21 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp clear_read_position(read_position, nil), do: read_position
   defp clear_read_position(read_position, thread_id), do: Map.delete(read_position, thread_id)
 
-  # Default screen_state shape for post_reader.
-  # `render_cache` is a map keyed on {post_id, width} → rendered tuples.
-  # `viewport` is a Raxol.UI.Components.Display.Viewport state map — owns
-  # scroll_top, content_height, visible_height, and children. Replaces the
-  # pre-Phase-7 `scroll_offset` integer.
-  defp default_screen_state do
+  @doc """
+  Build the initial screen_state map for PostReader (AUDIT-19).
+
+  `render_cache` is a map keyed on `{post_id, width}` → rendered tuples.
+  `viewport` is a `Raxol.UI.Components.Display.Viewport` state map — owns
+  `scroll_top`, `content_height`, `visible_height`, and `children`.
+  Replaces the pre-Phase-7 `scroll_offset` integer.
+
+  `opts` is currently unused; the keyword-list shape matches every other
+  stateful screen's `init_screen_state/1` (see `PostComposer` and
+  `NewThread`) so future callers can parameterise initial state without a
+  signature change.
+  """
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(_opts \\ []) do
     {:ok, vp} =
       Viewport.init(%{
         id: "post_reader_vp",
@@ -337,7 +352,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       (get_in(state.screen_state, [:post_reader]) || %{})
       |> Map.drop([:scroll_offset])
 
-    Map.merge(default_screen_state(), existing)
+    Map.merge(init_screen_state([]), existing)
   end
 
   # Parses the post body via Foglet.Markdown.render/1. Returns the
@@ -426,7 +441,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       ss = get_screen_state(state)
       new_idx = (ss.selected_post_index + delta) |> max(0) |> min(length(posts) - 1)
       post = Enum.at(posts, new_idx)
-      {w, _h} = state.terminal_size || {80, 24}
+      {w, _h} = state.terminal_size || @default_terminal_size
 
       # D-04: N/P/space/page_down/page_up resets scroll to the top of the new post.
       {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, ss.viewport)
@@ -465,7 +480,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       if is_nil(post) do
         {:update, state, []}
       else
-        {w, h} = state.terminal_size || {80, 24}
+        {w, h} = state.terminal_size || @default_terminal_size
         available_height = max(h - 10, 5)
 
         # Warm the cache + viewport BEFORE scrolling so Viewport has the
