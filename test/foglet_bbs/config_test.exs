@@ -211,6 +211,10 @@ defmodule Foglet.ConfigTest do
       assert Config.registration_mode() == "open"
     end
 
+    test "invite_generation_per_user_limit/0 returns the seeded default (INVT-07)" do
+      assert Config.invite_generation_per_user_limit() == 0
+    end
+
     test "invite_code_generators/0 returns the seeded default" do
       assert Config.invite_code_generators() == "sysop_only"
     end
