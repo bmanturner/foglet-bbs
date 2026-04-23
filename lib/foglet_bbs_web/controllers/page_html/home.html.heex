@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>foglet — a self-hostable bbs</title>
+    <link rel="stylesheet" href="/assets/landing.css" />
+    <script defer src="/assets/landing.js"></script>
+  </head>
+  <body>
+    <div class="page">
+      <div class="bar">
+        <span>foglet · self-hostable terminal bbs · /</span>
+        <span>
+          <span class="live">PRE-ALPHA</span>
+          <span style="color:#555; padding: 0 8px">│</span>
+          v0.0 · mit/apache-2.0 on release
+        </span>
+      </div>
+
+      <div class="wrap">
+        <div class="hero">
+          <pre class="logo">  ███████╗ ██████╗  ██████╗ ██╗     ███████╗████████╗
+  ██╔════╝██╔═══██╗██╔════╝ ██║     ██╔════╝╚══██╔══╝
+  █████╗  ██║   ██║██║  ███╗██║     █████╗     ██║
+  ██╔══╝  ██║   ██║██║   ██║██║     ██╔══╝     ██║
+  ██║     ╚██████╔╝╚██████╔╝███████╗███████╗   ██║
+  ╚═╝      ╚═════╝  ╚═════╝ ╚══════╝╚══════╝   ╚═╝</pre>
+
+          <h1>a small bbs you run yourself</h1>
+
+          <p class="pitch">
+            foglet is a <em>self-hostable, terminal-native bulletin board system</em>.
+            you install it on your own machine. your users reach it over <b>ssh</b>.
+            no web ui, no ads, no growth team. a place, not a product.
+          </p>
+
+          <div>
+            <a
+              class="install"
+              href="https://github.com/bmanturner/foglet-bbs"
+              target="_blank"
+              rel="noopener"
+              style="text-decoration:none"
+            >
+              github.com/bmanturner/foglet-bbs →
+            </a>
+          </div>
+          <p class="hint" style="margin-top: 12px">
+            ── elixir on the beam · postgres · CP437 over ssh · runs anywhere erlang runs<span class="caret"></span>
+          </p>
+        </div>
+
+        <section>
+          <div class="num">§ 01</div>
+          <h2>what you get when you run it</h2>
+          <p>
+            one elixir application. one postgres database. one ssh port. your own
+            bbs, named whatever you want, with whatever boards you want, moderated
+            by you.
+          </p>
+          <div class="features">
+            <div class="feature">
+              <h3>message boards</h3>
+              <p>
+                categories → boards → threads → posts. first-class thread titles,
+                per-board sequential message numbers, read pointers at thread and
+                board granularity.
+              </p>
+            </div>
+            <div class="feature">
+              <h3>presence &amp; chat</h3>
+              <p>
+                a global lobby plus per-board rooms. who's-online on the main menu.
+                last-callers list. real-time because the beam makes it free.
+              </p>
+            </div>
+            <div class="feature">
+              <h3>mail &amp; mentions</h3>
+              <p>
+                direct messages, <code>@handle</code> mentions with notifications,
+                opt-in email digests. no push. no nags.
+              </p>
+            </div>
+            <div class="feature">
+              <h3>cp437 aesthetic</h3>
+              <p>
+                box-drawing, block glyphs, the ansi-16 palette. the tui adapts to
+                your terminal size, from a full-screen window down to 64×22.
+              </p>
+            </div>
+            <div class="feature">
+              <h3>sysop tooling</h3>
+              <p>
+                admin menus inside the ssh tui. report queue, bans, stickies, board
+                editing. mix tasks for out-of-band provisioning. livedashboard for
+                observability.
+              </p>
+            </div>
+            <div class="feature">
+              <h3>a single session rule</h3>
+              <p>
+                one node per user, the classic way. reconnect and your session is
+                adopted. no tab-sprawl. no simultaneous-you.
+              </p>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="num">§ 02 · featured feature</div>
+          <h2>ssh public-key authentication</h2>
+
+          <div class="authkey">
+            <h3>your ssh-agent is the login form</h3>
+            <p class="sub">── the key you already have, pointed at a bbs.</p>
+
+            <div class="grid">
+              <div>
+                <h4>── the premise</h4>
+                <p>
+                  users can register <em class="amber">ssh public keys</em>
+                  against their foglet account. once a key is on file, subsequent
+                  logins skip the password prompt. the key proves they're them;
+                  the bbs opens the door.
+                </p>
+                <p>
+                  a single account can have several keys on file —
+                  <b>laptop</b>, <b>workstation</b>, <b>the machine in the closet</b>
+                  — each with its own label, so a lost device only costs you one
+                  line in a list.
+                </p>
+              </div>
+              <div>
+                <h4>── why it matters</h4>
+                <p>
+                  passwords travel. keys don't. a stolen password grants access
+                  anywhere; a stolen key grants access from one compromised
+                  device. and most users already have a key in
+                  <code>~/.ssh/id_ed25519.pub</code>.
+                </p>
+                <p>
+                  it turns the bbs from "another credential to manage" into
+                  <em class="amber">a thing your ssh-agent knocks on</em>. which
+                  is how bbses should have always worked.
+                </p>
+              </div>
+            </div>
+
+            <pre class="replay">  <span class="dim">── the shape of it, roughly ──</span>
+
+  $ <span class="u">ssh bbs.foglet.io</span>
+  <span class="dim">Authenticated using "publickey".</span>
+
+  <span class="amb">╔══════════════════════════════════════════════════════╗
+  ║  welcome back, spider_jerusalem.                     ║
+  ║  2 unread · last seen tuesday, 03:12 AM              ║
+  ╚══════════════════════════════════════════════════════╝</span>
+
+  foglet&gt; <span class="u">_</span><span class="caret">█</span>
+</pre>
+
+            <div class="grid" style="margin-top: 20px">
+              <div>
+                <h4>── how it works, in one paragraph</h4>
+                <p>
+                  foglet owns the erlang <code>:ssh</code> daemon. an auth
+                  callback looks the incoming public key up against the keys on
+                  file for the handle being logged into. match → session starts.
+                  no match → the user falls back to their password.
+                </p>
+              </div>
+              <div>
+                <h4>── things keys are good for</h4>
+                <p>
+                  no password over the wire on every dial-in. no password manager
+                  entry for a bbs. a session can be tied to the key it
+                  authenticated with, so a single lost laptop doesn't lock the
+                  rest of your accounts behind a rotation.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="num">§ 03</div>
+          <h2>what it is / what it isn't</h2>
+          <p class="soft">
+            foglet targets terminal capabilities from 1985. it happily uses
+            capabilities from 2026 where they serve the aesthetic rather than
+            undermine it.
+          </p>
+          <div class="stance">
+            <div class="col is">
+              <h4>── what it is</h4>
+              <ul>
+                <li>terminal-native, end to end</li>
+                <li>one instance, one sysop, one world</li>
+                <li>built on elixir / otp / postgres</li>
+                <li>ssh as the primary transport</li>
+                <li>opinionated defaults, configurable where it matters</li>
+                <li>a place for residents who want async over push</li>
+              </ul>
+            </div>
+            <div class="col not">
+              <h4>── what it isn't</h4>
+              <ul>
+                <li>a discord alternative</li>
+                <li>a federated system</li>
+                <li>a web forum with a terminal option</li>
+                <li>a mobile-first experience</li>
+                <li>a file-sharing service</li>
+                <li>a hosted saas product</li>
+              </ul>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <div class="num">§ 04</div>
+          <h2>the stack, in one screen</h2>
+          <div class="stack">
+            <div class="row">
+              <span class="k">runtime</span>
+              <span class="v">
+                elixir on the beam · otp supervision tree · single
+                <code>:foglet</code> app
+              </span>
+            </div>
+            <div class="row">
+              <span class="k">framework</span>
+              <span class="v">
+                phoenix — for channels, pubsub, presence, livedashboard (sysop-only)
+              </span>
+            </div>
+            <div class="row">
+              <span class="k">database</span>
+              <span class="v">postgresql via ecto · uuid primary keys · citext handles</span>
+            </div>
+            <div class="row">
+              <span class="k">ephemeral state</span>
+              <span class="v">
+                ets + phoenix presence · crdt-merged across nodes if you cluster
+              </span>
+            </div>
+            <div class="row">
+              <span class="k">ssh server</span>
+              <span class="v">
+                erlang <code>:ssh</code> (the one that ships with the beam) · host
+                keys persisted to <code>priv/ssh</code>
+              </span>
+            </div>
+            <div class="row">
+              <span class="k">auth</span>
+              <span class="v">
+                argon2 passwords · ssh public keys · registration is open / invite
+                / sysop-approved
+              </span>
+            </div>
+            <div class="row">
+              <span class="k">tui rendering</span>
+              <span class="v">raxol · custom cp437-to-unicode translation layer</span>
+            </div>
+            <div class="row">
+              <span class="k">jobs</span>
+              <span class="v">oban · for email digests, scheduled cleanups, retention policies</span>
+            </div>
+            <div class="row">
+              <span class="k">deployment</span>
+              <span class="v">
+                anywhere elixir runs · fly.io · a pi in a closet · a $5 vps · your
+                own hardware
+              </span>
+            </div>
+          </div>
+        </section>
+
+        <section class="cta">
+          <div class="num">§ 05</div>
+          <h2>the source</h2>
+          <p class="soft">
+            pre-alpha. under active development. read the code, file an issue,
+            lurk the commits.
+          </p>
+          <p style="margin-top: 6px">
+            <a
+              class="cmd"
+              href="https://github.com/bmanturner/foglet-bbs"
+              target="_blank"
+              rel="noopener"
+              style="text-decoration: none"
+            >
+              github.com/bmanturner/foglet-bbs →
+            </a>
+          </p>
+        </section>
+
+        <p class="soft" style="margin-top: 36px; text-align: center">
+          ── foglet · a small bbs you run yourself · nothing here is for sale ──
+        </p>
+      </div>
+
+      <div class="bar bot">
+        <span>
+          <b>[↑↓]</b>scroll · <b>[G]</b>et the source · <b>[D]</b>ocs · <b>[K]</b>nock
+        </span>
+        <span>foglet · pre-alpha · rev 0.0</span>
+      </div>
+    </div>
+  </body>
+</html>

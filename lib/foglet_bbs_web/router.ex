@@ -1,8 +1,30 @@
 defmodule FogletBbsWeb.Router do
   use FogletBbsWeb, :router
 
+  @csp "default-src 'self'; " <>
+         "script-src 'self'; " <>
+         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " <>
+         "font-src 'self' https://fonts.gstatic.com; " <>
+         "img-src 'self'; " <>
+         "connect-src 'self'; " <>
+         "base-uri 'self'; " <>
+         "form-action 'self'; " <>
+         "frame-ancestors 'none'; " <>
+         "object-src 'none'"
+
+  pipeline :browser do
+    plug :accepts, ["html"]
+    plug :put_secure_browser_headers, %{"content-security-policy" => @csp}
+  end
+
   pipeline :api do
     plug :accepts, ["json"]
+  end
+
+  scope "/", FogletBbsWeb do
+    pipe_through :browser
+
+    get "/", PageController, :home
   end
 
   scope "/api", FogletBbsWeb do
