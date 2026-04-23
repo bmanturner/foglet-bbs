@@ -136,7 +136,10 @@ defmodule Foglet.Config do
   invalidation occur.
   """
   @spec put(Foglet.Accounts.User.t() | nil, String.t(), term()) ::
-          {:ok, Entry.t()} | {:error, :forbidden} | {:error, :unknown_key} | {:error, :invalid_value}
+          {:ok, Entry.t()}
+          | {:error, :forbidden}
+          | {:error, :unknown_key}
+          | {:error, :invalid_value}
   def put(actor, key, value) when is_binary(key) do
     with :ok <- Bodyguard.permit(Foglet.Authorization, :edit_config, actor, :site) do
       case Schema.validate(key, value) do

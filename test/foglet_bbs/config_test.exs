@@ -257,7 +257,8 @@ defmodule Foglet.ConfigTest do
     test "regular user is forbidden — returns {:error, :forbidden} and DB value is unchanged" do
       Config.put!("registration_mode", "open", nil)
 
-      assert {:error, :forbidden} = Config.put(regular_user_actor(), "registration_mode", "invite_only")
+      assert {:error, :forbidden} =
+               Config.put(regular_user_actor(), "registration_mode", "invite_only")
 
       assert Config.get!("registration_mode") == "open"
     end
