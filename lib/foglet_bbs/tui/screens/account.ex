@@ -46,6 +46,13 @@ defmodule Foglet.TUI.Screens.Account do
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
 
+    # IN-01: `invites?` is recomputed here each render and also inside
+    # `init_opts_from_state/1` on the first render (when `screen_state.account`
+    # is nil). The duplicate call is bounded to the first frame, and the
+    # predicate is pattern-match-only (no I/O — see ShellVisibility.resolve_policy/1),
+    # so the clarity trade-off is intentional for Phase 0. Phases 4+ that
+    # mutate role/policy mid-session should either memoize `invites?` in
+    # screen_state at init time or thread it through a single call site.
     invites? =
       ShellVisibility.invites_visible?(
         Map.get(state, :current_user),
