@@ -198,10 +198,12 @@ defmodule Foglet.Threads do
              thread
              |> Ecto.Changeset.change(%{board_id: new_board_id})
              |> Repo.update() do
-        Repo.update_all(
-          from(p in Post, where: p.thread_id == ^thread.id),
-          set: [board_id: new_board_id]
-        )
+        # Pattern-match the return tuple to surface any unexpected shape (WR-04).
+        {_count, nil} =
+          Repo.update_all(
+            from(p in Post, where: p.thread_id == ^thread.id),
+            set: [board_id: new_board_id]
+          )
 
         {:ok, updated_thread}
       end
