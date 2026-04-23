@@ -140,11 +140,23 @@ defmodule Foglet.Config do
           | {:error, :forbidden}
           | {:error, :unknown_key}
           | {:error, :invalid_value}
+          | {:error, :db_error}
   def put(actor, key, value) when is_binary(key) do
     with :ok <- Bodyguard.permit(Foglet.Authorization, :edit_config, actor, :site) do
       case Schema.validate(key, value) do
         :ok ->
-          {:ok, do_put!(key, value, actor && actor.id)}
+          try do
+            {:ok, do_put!(key, value, actor && actor.id)}
+          rescue
+            e in [Ecto.InvalidChangesetError, Postgrex.Error, DBConnection.ConnectionError] ->
+              require Logger
+
+              Logger.error(
+                "Foglet.Config.put/3 DB failure for key #{inspect(key)}: #{inspect(e)}"
+              )
+
+              {:error, :db_error}
+          end
 
         {:error, {:unknown_key, ^key}} ->
           {:error, :unknown_key}
