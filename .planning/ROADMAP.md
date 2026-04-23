@@ -38,7 +38,7 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   - [x] 00-04-PLAN.md — Wave 2: Account shell (PROFILE/PREFS + conditional INVITES via shared surface) [ACCT-01]
   - [x] 00-05-PLAN.md — Wave 2: Moderation shell (QUEUE/LOG/USERS/SANCTIONS/BOARDS, role-gated) [MODR-01]
   - [x] 00-06-PLAN.md — Wave 2: Sysop shell (SITE/BOARDS/LIMITS/SYSTEM/USERS, role-gated) [SYSO-01]
-  - [ ] 00-07-PLAN.md — Wave 3: MainMenu role-gated entries + `mix precommit` gate
+  - [x] 00-07-PLAN.md — Wave 3: MainMenu role-gated entries + `mix precommit` gate
 **UI hint**: yes
 
 ### Phase 1: Authorization and Scope Backbone
