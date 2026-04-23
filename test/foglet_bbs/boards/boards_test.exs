@@ -6,7 +6,7 @@ defmodule Foglet.BoardsTest do
 
   alias Ecto.Adapters.SQL.Sandbox
   alias Foglet.Accounts.User
-  alias Foglet.Boards.{ReadPointer, Subscription}
+  alias Foglet.Boards.{Category, ReadPointer, Subscription}
   alias FogletBbs.Repo
 
   # Board Server is started by Foglet.Boards.create_board/3 via BoardSupervisor.
@@ -32,6 +32,24 @@ defmodule Foglet.BoardsTest do
     test "rejects category with blank name" do
       assert {:error, changeset} = Foglet.Boards.create_category(%{name: ""})
       assert "can't be blank" in errors_on(changeset).name
+    end
+  end
+
+  describe "Category.archive_changeset/1 (02-02 Task 1)" do
+    test "returns a changeset that sets archived: true" do
+      category = category_fixture()
+
+      cs = Category.archive_changeset(category)
+      assert cs.valid?
+      assert Ecto.Changeset.get_change(cs, :archived) == true
+    end
+
+    test "does not allow other fields to be mutated through archive_changeset" do
+      category = category_fixture()
+
+      cs = Category.archive_changeset(category)
+      assert is_nil(Ecto.Changeset.get_change(cs, :name))
+      assert is_nil(Ecto.Changeset.get_change(cs, :display_order))
     end
   end
 
