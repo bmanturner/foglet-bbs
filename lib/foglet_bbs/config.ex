@@ -120,6 +120,38 @@ defmodule Foglet.Config do
     end
   end
 
+  @doc """
+  Actor-aware config write (D-19). Returns tagged tuples for all failure modes; never raises.
+  Use this from interactive callers (TUI sysop screen in Phase 2, future API clients).
+
+  For trusted internal paths (seeds, Mix tasks, test setup), call `put!/3` directly with
+  `nil` as `updated_by_id` — the non-actor pathway continues unchanged.
+
+  Authorization: the actor must be permitted for `:edit_config` at `:site` scope
+  (`Foglet.Authorization`). Sysops are permitted; mods, regular users, and `nil` actors
+  are all denied.
+
+  Validation errors (unknown key, invalid value) are returned as `{:error, :unknown_key}` /
+  `{:error, :invalid_value}` instead of raising. On any failure, no DB mutation and no ETS
+  invalidation occur.
+  """
+  @spec put(Foglet.Accounts.User.t() | nil, String.t(), term()) ::
+          {:ok, Entry.t()} | {:error, :forbidden} | {:error, :unknown_key} | {:error, :invalid_value}
+  def put(actor, key, value) when is_binary(key) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :edit_config, actor, :site) do
+      case Schema.validate(key, value) do
+        :ok ->
+          {:ok, do_put!(key, value, actor && actor.id)}
+
+        {:error, {:unknown_key, ^key}} ->
+          {:error, :unknown_key}
+
+        {:error, %{reason: _reason}} ->
+          {:error, :invalid_value}
+      end
+    end
+  end
+
   @doc "Drop the key from the ETS cache so the next get!/1 re-reads from DB."
   @spec invalidate(String.t()) :: :ok
   def invalidate(key) when is_binary(key) do
