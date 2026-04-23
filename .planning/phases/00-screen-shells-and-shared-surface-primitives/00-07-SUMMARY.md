@@ -65,7 +65,7 @@ mix dialyzer                  : Total errors: 71, Skipped: 71, Unnecessary Skips
                                 done (passed successfully)
 ```
 
-**Awaiting human approval** — the task is type `checkpoint:human-verify`. Signal "approved" to close Phase 0.
+**APPROVED by user (2026-04-23)** — automated gates all green; SSH sanity check skipped per user direction. Phase 0 is closed.
 
 ## What Was Built
 
