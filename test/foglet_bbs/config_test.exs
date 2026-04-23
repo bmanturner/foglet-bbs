@@ -293,4 +293,36 @@ defmodule Foglet.ConfigTest do
       assert before_count == after_count
     end
   end
+
+  describe "invite_generation_per_user_limit (INVT-07)" do
+    test "accepts 0 (unlimited sentinel)" do
+      assert {:ok, _} = Config.put(sysop_actor(), "invite_generation_per_user_limit", 0)
+      assert Config.get!("invite_generation_per_user_limit") == 0
+    end
+
+    test "accepts positive integer" do
+      assert {:ok, _} = Config.put(sysop_actor(), "invite_generation_per_user_limit", 5)
+      assert Config.get!("invite_generation_per_user_limit") == 5
+    end
+
+    test "rejects negative integer (below_min: 0)" do
+      assert {:error, :invalid_value} =
+               Config.put(sysop_actor(), "invite_generation_per_user_limit", -1)
+    end
+
+    test "rejects non-integer value" do
+      assert {:error, :invalid_value} =
+               Config.put(sysop_actor(), "invite_generation_per_user_limit", "five")
+    end
+
+    test "rejects non-sysop actor (mod)" do
+      assert {:error, :forbidden} =
+               Config.put(mod_actor(), "invite_generation_per_user_limit", 1)
+    end
+
+    test "rejects nil actor" do
+      assert {:error, :forbidden} =
+               Config.put(nil, "invite_generation_per_user_limit", 1)
+    end
+  end
 end
