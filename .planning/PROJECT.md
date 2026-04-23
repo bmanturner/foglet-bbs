@@ -35,6 +35,7 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 - [x] Reusable themed TUI widgets cover chrome, lists, inputs, display elements, modals, post rendering, composition, and progress states - existing code
 - [x] Runtime configuration is persisted in the database and cached through a typed ETS-backed config layer - existing code
 - [x] Markdown rendering, user deletion anonymization, deleted-post preservation, SSH rate limiting, and broad SSH/TUI test coverage are in place - existing code
+- [x] Read-only Account, Moderation, and Sysop shell screens exist with role-gated main-menu entries, milestone tab sets, placeholder/loading/error states, and a shared `InvitesSurface` primitive — no fake persistence - Validated in Phase 00: Screen Shells and Shared Surface Primitives
 
 ### Active
 
@@ -113,4 +114,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state.
 
 ---
-*Last updated: 2026-04-23 after milestone v1.1 start*
+*Last updated: 2026-04-23 after Phase 00: Screen Shells and Shared Surface Primitives*
