@@ -70,7 +70,10 @@ defmodule Foglet.BoardsTest do
       category = category_fixture()
 
       assert {:ok, board} =
-               Foglet.Boards.create_board(sysop_actor(), category.id, %{slug: "tech", name: "Tech"})
+               Foglet.Boards.create_board(sysop_actor(), category.id, %{
+                 slug: "tech",
+                 name: "Tech"
+               })
 
       assert board.slug == "tech"
       assert board.category_id == category.id
@@ -79,10 +82,15 @@ defmodule Foglet.BoardsTest do
 
     test "rejects board with duplicate slug" do
       category = category_fixture()
-      {:ok, _} = Foglet.Boards.create_board(sysop_actor(), category.id, %{slug: "dup", name: "First"})
+
+      {:ok, _} =
+        Foglet.Boards.create_board(sysop_actor(), category.id, %{slug: "dup", name: "First"})
 
       assert {:error, changeset} =
-               Foglet.Boards.create_board(sysop_actor(), category.id, %{slug: "dup", name: "Second"})
+               Foglet.Boards.create_board(sysop_actor(), category.id, %{
+                 slug: "dup",
+                 name: "Second"
+               })
 
       assert "has already been taken" in errors_on(changeset).slug
     end

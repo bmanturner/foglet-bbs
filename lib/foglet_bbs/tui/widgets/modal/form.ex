@@ -239,7 +239,11 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     field_state
   end
 
-  defp dispatch_to_field(%{type: :textarea}, %{mli_state: mli, raw_value: rv} = field_state, event) do
+  defp dispatch_to_field(
+         %{type: :textarea},
+         %{mli_state: mli, raw_value: rv} = field_state,
+         event
+       ) do
     # Treat char: "\n" as an enter keypress so textarea accepts newlines from
     # String.codepoints/1 event streams (codepoint 10 is filtered by Compose.translate_key).
     msg =
@@ -306,7 +310,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     [label_row, widget_row] ++ error_rows
   end
 
-  defp render_widget(%{type: type}, field_state, _focused?, theme) when type in [:text, :integer] do
+  defp render_widget(%{type: type}, field_state, _focused?, theme)
+       when type in [:text, :integer] do
     TextInput.render(field_state, theme: theme)
   end
 
