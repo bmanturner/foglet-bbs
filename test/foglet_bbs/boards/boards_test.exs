@@ -238,6 +238,98 @@ defmodule Foglet.BoardsTest do
     end
   end
 
+  describe "create_category/2 (SYSO-03, actor-first)" do
+    test "sysop creates category" do
+      assert {:ok, %Category{name: "Tech", display_order: 3}} =
+               Foglet.Boards.create_category(sysop_actor(), %{name: "Tech", display_order: 3})
+    end
+
+    test "mod is forbidden" do
+      assert {:error, :forbidden} =
+               Foglet.Boards.create_category(mod_actor(), %{name: "Tech"})
+
+      assert Repo.aggregate(Category, :count) == 0
+    end
+
+    test "nil actor is forbidden" do
+      assert {:error, :forbidden} = Foglet.Boards.create_category(nil, %{name: "Tech"})
+      assert Repo.aggregate(Category, :count) == 0
+    end
+
+    test "regular user is forbidden" do
+      user = user_fixture()
+
+      assert {:error, :forbidden} = Foglet.Boards.create_category(user, %{name: "Tech"})
+      assert Repo.aggregate(Category, :count) == 0
+    end
+
+    test "invalid attrs return changeset error" do
+      assert {:error, %Ecto.Changeset{valid?: false}} =
+               Foglet.Boards.create_category(sysop_actor(), %{})
+    end
+  end
+
+  describe "update_category/3 (SYSO-03)" do
+    test "sysop updates category" do
+      category = category_fixture()
+
+      assert {:ok, %Category{name: "Renamed"} = updated} =
+               Foglet.Boards.update_category(sysop_actor(), category, %{name: "Renamed"})
+
+      assert updated.id == category.id
+    end
+
+    test "mod is forbidden" do
+      category = category_fixture()
+      original_name = category.name
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.update_category(mod_actor(), category, %{name: "X"})
+
+      assert Repo.get!(Category, category.id).name == original_name
+    end
+
+    test "regular user is forbidden" do
+      category = category_fixture()
+      user = user_fixture()
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.update_category(user, category, %{name: "X"})
+    end
+
+    test "invalid attrs return changeset error" do
+      category = category_fixture()
+
+      assert {:error, %Ecto.Changeset{valid?: false}} =
+               Foglet.Boards.update_category(sysop_actor(), category, %{name: ""})
+    end
+  end
+
+  describe "archive_category/2 (SYSO-03)" do
+    test "sysop archives category — archived becomes true" do
+      category = category_fixture()
+
+      assert {:ok, %Category{archived: true}} =
+               Foglet.Boards.archive_category(sysop_actor(), category)
+    end
+
+    test "mod is forbidden" do
+      category = category_fixture()
+
+      assert {:error, :forbidden} = Foglet.Boards.archive_category(mod_actor(), category)
+
+      assert Repo.get!(Category, category.id).archived == false
+    end
+
+    test "regular user is forbidden" do
+      category = category_fixture()
+      user = user_fixture()
+
+      assert {:error, :forbidden} = Foglet.Boards.archive_category(user, category)
+      assert Repo.get!(Category, category.id).archived == false
+    end
+  end
+
   describe "subscribe_to_defaults/1 (BOARD-07)" do
     test "inserts subscription rows for all boards with default_subscription: true" do
       category = category_fixture()
