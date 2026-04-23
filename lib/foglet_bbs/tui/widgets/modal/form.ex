@@ -227,8 +227,11 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     field_state
   end
 
+  defp dispatch_to_field(%{type: :enum, choices: []}, field_state, %{key: :down}),
+    do: field_state
+
   defp dispatch_to_field(%{type: :enum, choices: choices}, field_state, %{key: :down}) do
-    min(field_state + 1, length(choices) - 1)
+    max(0, min(field_state + 1, length(choices) - 1))
   end
 
   defp dispatch_to_field(%{type: :enum}, field_state, %{key: :up}) do
@@ -277,7 +280,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     |> Map.new(fn {spec, st} -> {spec.name, coerce(spec, st)} end)
   end
 
-  defp coerce(%{type: :text}, %TextInput{raxol_state: %{value: v}}), do: v
+  defp coerce(%{type: :text}, %TextInput{raxol_state: %{value: v}}), do: v || ""
 
   defp coerce(%{type: :integer}, %TextInput{raxol_state: %{value: v}}) do
     case Integer.parse(String.trim(v || "")) do
@@ -338,12 +341,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   defp apply_raw_edit(rv, %{key: :char, char: c}), do: rv <> c
   defp apply_raw_edit(rv, %{key: :enter}), do: rv <> "\n"
 
-  defp apply_raw_edit(rv, %{key: :backspace}) do
-    case String.length(rv) do
-      0 -> rv
-      _ -> String.slice(rv, 0, String.length(rv) - 1)
-    end
-  end
+  defp apply_raw_edit(rv, %{key: :backspace}), do: String.slice(rv, 0..-2//1)
 
   defp apply_raw_edit(rv, _event), do: rv
 end
