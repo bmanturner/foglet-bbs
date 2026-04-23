@@ -38,6 +38,11 @@ defmodule Foglet.AuthorizationTest do
     {:sysop, :delete_post, :site, :ok},
     {:sysop, :lock_thread, {:board, @board_id}, :ok},
     {:sysop, :delete_post, {:board, @board_id}, :ok},
+    # Sysop — also permitted for site-only actions at {:board, _} scope.
+    # Guards against a future regression that accidentally adds a scope
+    # check before the sysop catch-all clause.
+    {:sysop, :create_board, {:board, @board_id}, :ok},
+    {:sysop, :edit_config, {:board, @board_id}, :ok},
     # Mod — permitted moderation actions at :site
     {:mod, :lock_thread, :site, :ok},
     {:mod, :unlock_thread, :site, :ok},
