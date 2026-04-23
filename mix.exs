@@ -62,7 +62,8 @@ defmodule FogletBbs.MixProject do
       {:oban, "~> 2.18"},
       {:mdex, "~> 0.2"},
       {:raxol, path: "vendor/raxol"},
-      {:hammer, "~> 7.3.0"}
+      {:hammer, "~> 7.3.0"},
+      {:bodyguard, "~> 2.4"}
     ]
   end
 

@@ -4,14 +4,14 @@ milestone: v1.1
 milestone_name: milestone
 status: executing
 stopped_at: Phase 1 context gathered (assumptions mode)
-last_updated: "2026-04-23T19:47:25.062Z"
-last_activity: 2026-04-23
+last_updated: "2026-04-23T20:52:01.060Z"
+last_activity: 2026-04-23 -- Phase 01 execution started
 progress:
   total_phases: 9
   completed_phases: 1
-  total_plans: 7
+  total_plans: 11
   completed_plans: 7
-  percent: 100
+  percent: 64
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 00 — screen-shells-and-shared-surface-primitives
+**Current focus:** Phase 01 — authorization-and-scope-backbone
 
 ## Current Position
 
-Phase: 1
-Plan: Not started
-Status: Executing Phase 00
-Last activity: 2026-04-23
+Phase: 01 (authorization-and-scope-backbone) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 01
+Last activity: 2026-04-23 -- Phase 01 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
