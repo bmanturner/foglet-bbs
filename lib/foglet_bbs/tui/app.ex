@@ -37,6 +37,9 @@ defmodule Foglet.TUI.App do
           | :post_reader
           | :post_composer
           | :new_thread
+          | :account
+          | :moderation
+          | :sysop
 
   @type t :: %__MODULE__{
           current_screen: screen(),
@@ -811,4 +814,7 @@ defmodule Foglet.TUI.App do
   defp screen_module_for(:post_reader), do: Screens.PostReader
   defp screen_module_for(:post_composer), do: Screens.PostComposer
   defp screen_module_for(:new_thread), do: Screens.NewThread
+  defp screen_module_for(:account), do: Screens.Account
+  defp screen_module_for(:moderation), do: Screens.Moderation
+  defp screen_module_for(:sysop), do: Screens.Sysop
 end
