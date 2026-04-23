@@ -15,7 +15,10 @@ defmodule Foglet.AuthorizationTest do
   defp actor(:user), do: %User{role: :user, status: :active, deleted_at: nil}
   defp actor(:suspended), do: %User{role: :mod, status: :suspended, deleted_at: nil}
   defp actor(:pending), do: %User{role: :mod, status: :pending, deleted_at: nil}
-  defp actor(:deleted), do: %User{role: :mod, status: :active, deleted_at: ~U[2026-01-01 00:00:00Z]}
+
+  defp actor(:deleted),
+    do: %User{role: :mod, status: :active, deleted_at: ~U[2026-01-01 00:00:00Z]}
+
   defp actor(:nil_actor), do: nil
 
   # --- Policy matrix: {actor_key, action, scope, expected} ---
@@ -91,7 +94,12 @@ defmodule Foglet.AuthorizationTest do
     test "returns {:error, :forbidden} and emits a Logger.warning" do
       log =
         capture_log(fn ->
-          assert Bodyguard.permit(Authorization, :definitely_not_a_real_action, actor(:sysop), :site) ==
+          assert Bodyguard.permit(
+                   Authorization,
+                   :definitely_not_a_real_action,
+                   actor(:sysop),
+                   :site
+                 ) ==
                    {:error, :forbidden}
         end)
 

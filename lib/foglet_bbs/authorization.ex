@@ -23,28 +23,49 @@ defmodule Foglet.Authorization do
   alias Foglet.Accounts.User
 
   @valid_actions [
-    :lock_thread, :unlock_thread, :sticky_thread, :unsticky_thread,
-    :move_thread, :delete_thread,
-    :delete_post, :edit_post_as_mod,
+    :lock_thread,
+    :unlock_thread,
+    :sticky_thread,
+    :unsticky_thread,
+    :move_thread,
+    :delete_thread,
+    :delete_post,
+    :edit_post_as_mod,
     :hide_oneliner,
-    :create_board, :update_board, :archive_board,
-    :create_category, :update_category, :archive_category,
+    :create_board,
+    :update_board,
+    :archive_board,
+    :create_category,
+    :update_category,
+    :archive_category,
     :edit_config,
-    :generate_invite, :revoke_invite
+    :generate_invite,
+    :revoke_invite
   ]
 
   @mod_site_actions [
-    :lock_thread, :unlock_thread, :sticky_thread, :unsticky_thread,
-    :move_thread, :delete_thread,
-    :delete_post, :edit_post_as_mod,
+    :lock_thread,
+    :unlock_thread,
+    :sticky_thread,
+    :unsticky_thread,
+    :move_thread,
+    :delete_thread,
+    :delete_post,
+    :edit_post_as_mod,
     :hide_oneliner,
-    :generate_invite, :revoke_invite
+    :generate_invite,
+    :revoke_invite
   ]
 
   @mod_board_actions [
-    :lock_thread, :unlock_thread, :sticky_thread, :unsticky_thread,
-    :move_thread, :delete_thread,
-    :delete_post, :edit_post_as_mod,
+    :lock_thread,
+    :unlock_thread,
+    :sticky_thread,
+    :unsticky_thread,
+    :move_thread,
+    :delete_thread,
+    :delete_post,
+    :edit_post_as_mod,
     :hide_oneliner
   ]
 
