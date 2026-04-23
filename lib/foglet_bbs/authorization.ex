@@ -20,6 +20,8 @@ defmodule Foglet.Authorization do
 
   @behaviour Bodyguard.Policy
 
+  require Logger
+
   alias Foglet.Accounts.User
 
   @valid_actions [
@@ -92,8 +94,6 @@ defmodule Foglet.Authorization do
 
   # Unknown action (D-13) — safe default, warning, no raise.
   def authorize(action, _actor, _scope) when action not in @valid_actions do
-    require Logger
-
     Logger.warning(
       "[Foglet.Authorization] Unknown action atom: #{inspect(action)} — returning forbidden"
     )
