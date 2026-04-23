@@ -9,7 +9,7 @@
 
 Foglet v1.1 is not a new product category. It is an SSH-first BBS adding the operational surfaces mature BBSes are expected to have: compact account defaults, real invite-only onboarding, moderator and sysop workspaces, and a lightweight social strip on the main menu. The research is consistent that Foglet should keep this terminal-native, role-gated, and explicit. The right implementation is a Phoenix monolith with thin TUI screens, domain logic in contexts, Postgres as the source of truth, and small OTP helpers only where live caching or timed refreshes are actually needed.
 
-For this codebase, the decisive recommendation is to add one new stack dependency, `tzdata`, then build the milestone around four new seams: `Foglet.Authz`, `Foglet.Invites`, `Foglet.Moderation`, and `Foglet.Oneliners`. Preferences should stay in `users.preferences`; invite codes and oneliners should be persisted in Postgres; the recent-oneliners view should be served from a supervised in-memory buffer backed by the database; and the reusable `INVITES` UI should live in shared TUI code, not in three copied surfaces. `Foglet.TUI.App` should remain a dispatcher, not become a business-logic sink.
+For this codebase, the decisive recommendation is to add one new stack dependency, `Timex ~> 3.7`, then build the milestone around four new seams: `Foglet.Authz`, `Foglet.Invites`, `Foglet.Moderation`, and `Foglet.Oneliners`. Preferences should stay in `users.preferences`; invite codes and oneliners should be persisted in Postgres; the recent-oneliners view should be served from a supervised in-memory buffer backed by the database; and the reusable `INVITES` UI should live in shared TUI code, not in three copied surfaces. `Foglet.TUI.App` should remain a dispatcher, not become a business-logic sink.
 
 The biggest risks are already visible in the current codebase. `register.ex` still treats invite validation as a stub path, and `ssh/cli_handler.ex` snapshots session context at connect time. If v1.1 ships on top of those seams unchanged, invite-only mode will remain fake and preference/config changes will drift from the active SSH session. The roadmap should therefore front-load actor-aware authorization, transactional invite consumption, typed preference validation, and live session refresh before building out the full moderation and sysop shells.
 
@@ -17,11 +17,10 @@ The biggest risks are already visible in the current codebase. `register.ex` sti
 
 ### Recommended Stack
 
-This milestone does not need a technology reset. The existing Phoenix/Ecto/Postgres/Raxol/OTP stack is the correct substrate for v1.1. The only required addition is `tzdata` so Elixir's timezone APIs can render user-selected IANA zones correctly. Everything else should reuse what Foglet already has: Postgres for durable state, Phoenix PubSub plus OTP timers for refreshes, existing typed runtime config, and existing Raxol screens/widgets for the UI layer.
+This milestone does not need a technology reset. The existing Phoenix/Ecto/Postgres/Raxol/OTP stack is the correct substrate for v1.1. The only required addition is `Timex ~> 3.7` so stored IANA timezone preferences and user-facing clock rendering have an approved milestone-level implementation path. Everything else should reuse what Foglet already has: Postgres for durable state, Phoenix PubSub plus OTP timers for refreshes, existing typed runtime config, and existing Raxol screens/widgets for the UI layer.
 
 **Core technologies:**
-- Elixir stdlib `DateTime`, `Calendar.strftime/3`, `Base`, and `:crypto`: timezone rendering, clock formatting, and secure invite-code generation without new utility deps.
-- `tzdata ~> 1.1`: required to make stored IANA timezone preferences actually work in the current codebase.
+- `Timex ~> 3.7`, Elixir stdlib `DateTime`, `Calendar`, `Base`, and `:crypto`: timezone rendering, clock formatting, and secure invite-code generation within the approved v1.1 stack.
 - Ecto + PostgreSQL: authoritative storage for invite lifecycle, moderation data, oneliners, and user display preferences.
 - Phoenix PubSub + OTP timers: minute-clock refresh and oneliner fanout without adding schedulers or another event bus.
 - Raxol + existing Foglet TUI widgets: account, moderation, sysop, and shared invite surfaces inside the existing SSH UI model.
@@ -66,7 +65,7 @@ The recommended architecture is to keep screens thin and contexts thick. `Foglet
 2. **Authorization enforced only in screens** — require actor-aware domain APIs and return `{:error, :forbidden}` from contexts, not just hidden tabs in the TUI.
 3. **Global-only moderator assumptions** — carry explicit scope through moderation queries and actions so v1.1 does not block board-scoped moderators later.
 4. **Session-context drift after preference or config changes** — refresh `current_user` and derived session context after Account or Sysop saves so theme, clock, and invite/config visibility update without reconnect.
-5. **Timezone preferences without a real contract** — validate IANA zone names, add `tzdata`, and route all user-facing timestamp rendering through one formatter.
+5. **Timezone preferences without a real contract** — validate IANA zone names, add `Timex ~> 3.7`, and route all user-facing timestamp rendering through one formatter.
 
 ## Implications for Roadmap
 
@@ -74,7 +73,7 @@ Based on the research, suggested phase structure:
 
 ### Phase 1: Policy and Persistence Backbone
 **Rationale:** Every later screen depends on safe domain APIs, real persistence, and a defined time-formatting contract.
-**Delivers:** `Foglet.Authz`; invite/oneliner/moderation schemas and contexts; `tzdata` wiring; a shared timestamp formatter; typed config additions such as oneliner policy where needed; supervised `Foglet.Oneliners` buffer.
+**Delivers:** `Foglet.Authz`; invite/oneliner/moderation schemas and contexts; `Timex ~> 3.7` wiring; a shared timestamp formatter; typed config additions such as oneliner policy where needed; supervised `Foglet.Oneliners` buffer.
 **Addresses:** Real invite model, moderation audit/logging foundation, oneliner persistence, future board-scoped moderation.
 **Avoids:** Screen-only auth, fake timezone support, cache-as-truth oneliners.
 
@@ -119,7 +118,7 @@ Phases likely needing deeper research during planning:
 - **Phase 5:** Board-scoped moderation UX needs explicit planning so the first screen does not accidentally encode global-only assumptions.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1:** `tzdata` wiring, typed preference validation, and context/schema additions are well understood.
+- **Phase 1:** `Timex ~> 3.7` wiring, typed preference validation, and context/schema additions are well understood.
 - **Phase 2:** Transactional invite redemption and shared invite-tab reuse have clear patterns from both the codebase research and external references.
 - **Phase 3:** Account preferences plus live session refresh are mostly local integration work, not a research problem.
 - **Phase 4:** Bounded oneliners with DB authority and a small process cache fit established OTP/PubSub patterns.
@@ -128,7 +127,7 @@ Phases with standard patterns (skip research-phase):
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | The recommended stack is mostly existing Foglet infrastructure plus one well-supported dependency addition, `tzdata`. |
+| Stack | HIGH | The recommended stack is mostly existing Foglet infrastructure plus one approved dependency addition, `Timex ~> 3.7`. |
 | Features | MEDIUM | The milestone shape is clear, but exact moderation/sysop depth still requires product scoping discipline. |
 | Architecture | HIGH | The proposed boundaries map directly onto current seams in `TUI.App`, registration, config, and domain contexts. |
 | Pitfalls | HIGH | The major failure modes are already observable in the current codebase and have direct prevention strategies. |
@@ -155,7 +154,7 @@ Phases with standard patterns (skip research-phase):
 - `.planning/research/PITFALLS.md` — concrete failure modes and phase warnings
 - Elixir `Calendar` docs — timezone and formatting contract
 - Elixir `DateTime` docs — timezone conversion and UTC handling
-- `tzdata` docs — IANA timezone database integration for Elixir
+- Timex docs — timezone handling and formatting support for Elixir
 
 ### Secondary (MEDIUM confidence)
 - Synchronet documentation — compact defaults, user editing, moderation, and sysop patterns in terminal-native BBS software

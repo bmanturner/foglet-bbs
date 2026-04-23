@@ -10,8 +10,8 @@
 
 | Technology | Version | Purpose | Why Recommended |
 |------------|---------|---------|-----------------|
-| Elixir stdlib (`DateTime`, `Calendar.strftime/3`, `Base`, `:crypto`) | Elixir 1.19.5 | Timezone conversion/formatting, minute-clock rendering, secure invite-code generation | This milestone does not need Timex, CLDR, or token-generator deps. Stdlib already covers UTC storage, IANA-zone rendering once a timezone DB is configured, 12h/24h formatting, and secure random bytes. |
-| `tzdata` | `~> 1.1` | Back Elixir's timezone APIs with real IANA zone data | This is the only required dependency addition. Elixir defaults to `Calendar.UTCOnlyTimeZoneDatabase`, so user-selected zones like `America/Chicago` will not work without a timezone database. `tzdata` plugs directly into `DateTime.now/2` and `DateTime.shift_zone/3`. |
+| `Timex` | `~> 3.7` | Approved milestone dependency for timezone-aware rendering and formatting | This is the required dependency addition for v1.1. It gives Foglet an explicit, project-level path for validating IANA zones and rendering user-local time without adding a larger i18n stack. |
+| Elixir stdlib (`DateTime`, `Calendar.strftime/3`, `Base`, `:crypto`) | Elixir 1.19.5 | UTC storage, supporting time/date operations, and secure invite-code generation | Stdlib should still own UTC persistence, general date handling, and secure random bytes even with Timex added for user-local rendering. |
 | Ecto + PostgreSQL | existing (`ecto_sql ~> 3.13`, Postgres) | Persist invite codes, oneliners, and user display preferences | Invite workflows and shoutbox state are authoritative domain data, not cache data. Postgres already matches the project rule that durable truth lives in the DB. |
 | Phoenix PubSub + OTP timers | existing | Push oneliner updates and drive the main-menu minute refresh | `Foglet.TUI.App` already uses interval subscriptions and PubSub forwarding. Reuse that instead of adding a scheduler, polling loop library, or separate event bus. |
 | Raxol + existing Foglet TUI widgets | existing vendored runtime | Account, moderation, sysop, and reusable invite-tab surfaces | These new screens are stack consumers, not a reason to introduce LiveView, web forms, or another terminal framework. |
@@ -37,22 +37,17 @@
 
 Required:
 
-- Add `{:tzdata, "~> 1.1"}` to `deps/0`.
-- Configure Elixir to use it globally:
-
-```elixir
-config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
-```
+- Add `{:timex, "~> 3.7"}` to `deps/0`.
 
 - Keep timestamps stored in UTC.
 - Store the user's preferred IANA timezone name in `users.preferences`, for example `%{"time_zone" => "America/Chicago"}`.
 - Store the display preference as a simple presentation value, preferably `%{"time_format" => "12h" | "24h"}` or a boolean like `%{"time_24h" => true}`.
-- Render the main-menu clock by converting from UTC with `DateTime.shift_zone/3` or by calling `DateTime.now/2` for the user's zone, then format with `Calendar.strftime/3`.
+- Render the main-menu clock through one shared formatter that uses Timex for user-local timezone handling and formatting.
 
-Concrete stdlib choice:
+Concrete formatting choice:
 
-- 24h: `Calendar.strftime(dt, "%Y-%m-%d %H:%M")`
-- 12h: `Calendar.strftime(dt, "%Y-%m-%d %I:%M %p")`
+- 24h: Timex-backed formatter renders an equivalent of `%Y-%m-%d %H:%M`
+- 12h: Timex-backed formatter renders an equivalent of `%Y-%m-%d %I:%M %p`
 
 Recommendation:
 
@@ -111,22 +106,14 @@ Not required for this milestone:
 
 ```bash
 # Required addition
-mix deps.get tzdata
-```
-
-```elixir
-# config/config.exs
-config :elixir, :time_zone_database, Tzdata.TimeZoneDatabase
-
-# Optional release hardening if you do not want runtime timezone downloads
-config :tzdata, :autoupdate, :disabled
+mix deps.get timex
 ```
 
 ## Alternatives Considered
 
 | Recommended | Alternative | When to Use Alternative |
 |-------------|-------------|-------------------------|
-| Elixir `DateTime` + `Calendar.strftime/3` + `tzdata` | `Timex` | Only if the project later needs broader parsing/localization ergonomics across many date formats. This milestone does not. |
+| `Timex` | Elixir stdlib-only timezone handling | Use the stdlib-only route only if the project deliberately backs away from the approved milestone dependency decision. |
 | `users.preferences` JSONB + Ecto validation | Separate `user_preferences` table | Only if preferences become query-heavy, reportable, or independently versioned. Current needs are small and presentation-only. |
 | Existing PubSub + OTP intervals + optional existing Oban | New cron/scheduler/job dependency | Do not use an alternative here. If cleanup becomes necessary, use existing Oban rather than adding another job system. |
 
@@ -134,7 +121,7 @@ config :tzdata, :autoupdate, :disabled
 
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| `Timex`, `Calendar` package, `ex_cldr_dates_times` for this milestone | Too much surface area for simple timezone conversion and 12h/24h formatting; adds maintenance and concept load | Stdlib `DateTime` + `Calendar.strftime/3`, plus `tzdata` as the timezone database |
+| `ex_cldr_dates_times` or a broader i18n stack for this milestone | Too much surface area for the current needs; the project only needs timezone-aware rendering and 12h/24h presentation | `Timex ~> 3.7` plus stdlib date/time handling |
 | Invite-code helper libs (`nanoid`, `hashids`, short-ID packages) | Unnecessary dependency for a small, security-sensitive code path | `:crypto.strong_rand_bytes/1` + `Base.encode32/2` or `Base.url_encode64/2` |
 | New scheduler/cron/job deps | Minute clock refresh and synchronous redemption do not need background infrastructure | Existing Raxol interval subscriptions; existing Oban only if later cleanup is actually required |
 | New cache/event-bus deps (`Cachex`, custom message broker, etc.) | Oneliners only need a small in-memory ring buffer and PubSub fanout | Existing OTP GenServer + Phoenix PubSub |
@@ -145,7 +132,7 @@ config :tzdata, :autoupdate, :disabled
 **If timezone choice is user-editable now:**
 
 - Validate against real IANA names, not ad hoc abbreviations like `CST`.
-- Use `Tzdata.zone_exists?/1` or a curated allowlist built from `Tzdata.zone_list/0`.
+- Validate against Timex-supported canonical IANA names before saving.
 - Keep the persisted value as the canonical IANA name.
 
 **If invite codes are single-use only:**
@@ -167,8 +154,8 @@ config :tzdata, :autoupdate, :disabled
 
 | Package A | Compatible With | Notes |
 |-----------|-----------------|-------|
-| `elixir 1.19.5` | `tzdata ~> 1.1` | `tzdata` integrates through Elixir's `Calendar.TimeZoneDatabase` behaviour and is documented for Elixir's timezone APIs. |
-| `phoenix 1.8.5` / `ecto_sql 3.13` | `tzdata ~> 1.1` | No framework-level coupling; timezone support stays in Elixir stdlib and application config. |
+| `elixir 1.19.5` | `Timex ~> 3.7` | Timex is widely used in Elixir applications for timezone-aware date rendering and fits the approved milestone dependency choice. |
+| `phoenix 1.8.5` / `ecto_sql 3.13` | `Timex ~> 3.7` | No framework-level coupling; Timex sits at the application layer for parsing, shifting, and formatting user-local time. |
 | Existing Raxol runtime | Existing PubSub + interval subscriptions | Main-menu time refresh and oneliner updates fit the current TUI event model. |
 
 ## Sources
@@ -176,9 +163,9 @@ config :tzdata, :autoupdate, :disabled
 - Local project context: `.planning/PROJECT.md`, `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, `.planning/codebase/CONCERNS.md`, `lib/foglet_bbs/config/schema.ex`, `lib/foglet_bbs/accounts/user.ex`
 - Elixir `Calendar` docs — https://hexdocs.pm/elixir/Calendar.html
 - Elixir `DateTime` docs — https://hexdocs.pm/elixir/DateTime.html
-- `tzdata` docs — https://hexdocs.pm/tzdata/readme.html
-- `tzdata` `Tzdata.TimeZoneDatabase` docs — https://hexdocs.pm/tzdata/Tzdata.TimeZoneDatabase.html
-- Hex package metadata for current `tzdata` release — https://hex.pm/packages/tzdata
+- Timex docs — https://hexdocs.pm/timex/Timex.html
+- Timex getting started / formatting docs — https://hexdocs.pm/timex/getting-started.html
+- Hex package metadata for current `timex` release — https://hex.pm/packages/timex
 
 ---
 *Stack research for: operations surfaces, invites, preference-driven time rendering, and oneliners*

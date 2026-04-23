@@ -1,31 +1,76 @@
 # Project State
 
-## Current Position
-
-Phase: Not started (defining requirements)
-Plan: -
-Status: Defining requirements
-Last activity: 2026-04-23 - Milestone v1.1 Operations Surfaces & Invites started
-
 ## Project Reference
 
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Milestone v1.1 Operations Surfaces & Invites
+**Current focus:** Phase 0 - Screen Shells and Shared Surface Primitives
+
+## Current Position
+
+Phase: 0 of 9 (Screen Shells and Shared Surface Primitives)
+Plan: 0 of TBD in current phase
+Status: Ready to plan
+Last activity: 2026-04-23 - Roadmap revised to 9 phases for milestone v1.1 Operations Surfaces & Invites
+
+Progress: [░░░░░░░░░░] 0%
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 0
+- Average duration: -
+- Total execution time: 0.0 hours
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 0. Screen Shells and Shared Surface Primitives | 0 | - | - |
+| 1. Authorization and Scope Backbone | 0 | - | - |
+| 2. Sysop Config and Board Management | 0 | - | - |
+| 3. Invite Persistence and Registration Enforcement | 0 | - | - |
+| 4. Shared Invite Surface Activation | 0 | - | - |
+| 5. Account Preferences and Live Session Refresh | 0 | - | - |
+| 6. Chrome Clock and Main Menu Wiring | 0 | - | - |
+| 7. Oneliners and Main Menu Social Strip | 0 | - | - |
+| 8. Moderation Workspace Population and Scope-Aware Operations | 0 | - | - |
+
+**Recent Trend:**
+- Last 5 plans: -
+- Trend: -
 
 ## Accumulated Context
 
+### Decisions
+
+Decisions are logged in PROJECT.md Key Decisions table.
+Recent decisions affecting current work:
+
+- Phase 0 is shell-only work: route, tab, and state scaffolding without fake persistence or fake operator behavior.
+- Shared invite flows stay single-use in v1.1 and reuse one `INVITES` surface across allowed screens.
+- Moderation remains scope-aware so future board-scoped moderators fit without reworking authorization later.
+- Main-menu clock placement is in the top-right chrome, with new-user defaults of system timezone and 12-hour time.
+
+### Pending Todos
+
+None yet.
+
 ### Blockers/Concerns
 
-None.
+- Phase 2 depends on Phase 1 exposing actor-aware policy first, so sysop and moderation surfaces do not rely on screen-only auth.
+- Phase 4 depends on Phase 3 finishing real invite persistence and redemption before the reusable `INVITES` UI becomes operational.
+- Chrome time rendering must honor system timezone and 12-hour defaults for new accounts before user preferences are saved.
 
-### Quick Tasks Completed
+## Deferred Items
 
-| # | Description | Date | Commit | Status | Directory |
-|---|-------------|------|--------|--------|-----------|
-| 260422-mpz | SSH connection rate limiting | 2026-04-22 | 19052cf | Verified | [260422-mpz-ssh-connection-rate-limiting-design-choi](./quick/260422-mpz-ssh-connection-rate-limiting-design-choi/) |
-| 260422-neu | Convert Threads.list_threads/2 to structs + fold in preload_created_by/1 | 2026-04-22 | 6a9aa4c | Verified | [260422-neu-convert-threads-list-threads-2-to-struct](./quick/260422-neu-convert-threads-list-threads-2-to-struct/) |
-| 260422-nsx | Migrate 5 do_update clauses in app.ex to domain_module/2 via Domain.get/2 | 2026-04-22 | 1118185 | Complete | [260422-nsx-dual-domain-injection-patterns-in-the-tu](./quick/260422-nsx-dual-domain-injection-patterns-in-the-tu/) |
-| 260422-oez | Rewrite posts.user_id to tombstone_user_id on user deletion and include deleted posts in Posts.list_posts/1 | 2026-04-22 | 72eb560 | Verified | [260422-oez-rewrite-posts-user-id-tombstone-user-id-](./quick/260422-oez-rewrite-posts-user-id-tombstone-user-id-/) |
-| 260422-omm | Add CLIHandler SSH channel coverage for PTY, data, window, EOF, closed, CRLF, alt-screen, and EXIT | 2026-04-22 | 4dfc670 | Verified | [260422-omm-today-handle-ssh-msg-for-pty-data-window](./quick/260422-omm-today-handle-ssh-msg-for-pty-data-window/) |
+| Category | Item | Status | Deferred At |
+|----------|------|--------|-------------|
+| *(none)* | | | |
+
+## Session Continuity
+
+Last session: 2026-04-23 11:17 CDT
+Stopped at: Roadmap revised to 9 phases; Phase 0 is ready for planning
+Resume file: None

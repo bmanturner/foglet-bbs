@@ -87,39 +87,39 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ACCT-01 | TBD | Pending |
-| ACCT-02 | TBD | Pending |
-| ACCT-03 | TBD | Pending |
-| ACCT-04 | TBD | Pending |
-| ACCT-05 | TBD | Pending |
-| ACCT-06 | TBD | Pending |
-| INVT-01 | TBD | Pending |
-| INVT-02 | TBD | Pending |
-| INVT-03 | TBD | Pending |
-| INVT-04 | TBD | Pending |
-| INVT-05 | TBD | Pending |
-| INVT-06 | TBD | Pending |
-| INVT-07 | TBD | Pending |
-| MODR-01 | TBD | Pending |
-| MODR-02 | TBD | Pending |
-| MODR-03 | TBD | Pending |
-| MODR-04 | TBD | Pending |
-| MODR-05 | TBD | Pending |
-| SYSO-01 | TBD | Pending |
-| SYSO-02 | TBD | Pending |
-| SYSO-03 | TBD | Pending |
-| SYSO-04 | TBD | Pending |
-| SYSO-05 | TBD | Pending |
-| MENU-01 | TBD | Pending |
-| MENU-02 | TBD | Pending |
-| ONEL-01 | TBD | Pending |
-| ONEL-02 | TBD | Pending |
-| ONEL-03 | TBD | Pending |
+| ACCT-01 | Phase 0 | Pending |
+| ACCT-02 | Phase 5 | Pending |
+| ACCT-03 | Phase 5 | Pending |
+| ACCT-04 | Phase 5 | Pending |
+| ACCT-05 | Phase 5 | Pending |
+| ACCT-06 | Phase 5 | Pending |
+| INVT-01 | Phase 4 | Pending |
+| INVT-02 | Phase 3 | Pending |
+| INVT-03 | Phase 3 | Pending |
+| INVT-04 | Phase 3 | Pending |
+| INVT-05 | Phase 3 | Pending |
+| INVT-06 | Phase 2 | Pending |
+| INVT-07 | Phase 2 | Pending |
+| MODR-01 | Phase 0 | Pending |
+| MODR-02 | Phase 1 | Pending |
+| MODR-03 | Phase 1 | Pending |
+| MODR-04 | Phase 4 | Pending |
+| MODR-05 | Phase 8 | Pending |
+| SYSO-01 | Phase 0 | Pending |
+| SYSO-02 | Phase 2 | Pending |
+| SYSO-03 | Phase 2 | Pending |
+| SYSO-04 | Phase 2 | Pending |
+| SYSO-05 | Phase 4 | Pending |
+| MENU-01 | Phase 6 | Pending |
+| MENU-02 | Phase 6 | Pending |
+| ONEL-01 | Phase 7 | Pending |
+| ONEL-02 | Phase 7 | Pending |
+| ONEL-03 | Phase 7 | Pending |
 
 **Coverage:**
 - v1 requirements: 28 total
-- Mapped to phases: 0
-- Unmapped: 28
+- Mapped to phases: 28
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-23*
