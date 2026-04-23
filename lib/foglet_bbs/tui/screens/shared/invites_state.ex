@@ -15,6 +15,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   logic that consumes this struct.
   """
 
+  # TODO(phase-4): tighten :items to [%Foglet.Invites.Invite{}] and add
+  # per-element validation in validate_items!/1. Phase 0 never looks inside
+  # items, but persistence activation (Phase 4) will silently accept garbage
+  # without tighter shape checks.
   @type t :: %__MODULE__{items: list() | nil}
   defstruct items: []
 
