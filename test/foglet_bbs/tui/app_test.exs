@@ -805,6 +805,49 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "Phase 0 screen routing" do
+    setup do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}
+      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+      %{state: state}
+    end
+
+    test "screen_module_for/1 maps :account — navigating and calling view/1 does not crash", %{
+      state: state
+    } do
+      {new_state, _cmds} = App.update({:navigate, :account}, state)
+      assert new_state.current_screen == :account
+      assert _ = App.view(new_state)
+    end
+
+    test "screen_module_for/1 maps :moderation — navigating and calling view/1 does not crash",
+         %{state: state} do
+      {new_state, _cmds} = App.update({:navigate, :moderation}, state)
+      assert new_state.current_screen == :moderation
+      assert _ = App.view(new_state)
+    end
+
+    test "screen_module_for/1 maps :sysop — navigating and calling view/1 does not crash", %{
+      state: state
+    } do
+      {new_state, _cmds} = App.update({:navigate, :sysop}, state)
+      assert new_state.current_screen == :sysop
+      assert _ = App.view(new_state)
+    end
+
+    test "navigating to :account does not land on :login (routing succeeds)", %{state: state} do
+      {new_state, _cmds} = App.update({:navigate, :account}, state)
+      refute new_state.current_screen == :login
+    end
+
+    test "init/1 does NOT route authenticated users into :account/:moderation/:sysop by default",
+         %{state: state} do
+      # After init with user, stays at :main_menu — not directly at new shells
+      assert state.current_screen == :main_menu
+      refute state.current_screen in [:account, :moderation, :sysop]
+    end
+  end
+
   describe "command_result dispatcher (Gap 5)" do
     setup do
       {:ok, base_state} = App.init(%{})
