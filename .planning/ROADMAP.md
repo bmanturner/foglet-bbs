@@ -85,7 +85,12 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   2. Invite generation policy can be set to `sysop_only`, `mods`, or `any_user`, and `any_user` mode can use either unlimited or numeric per-user invite caps.
   3. Sysop can create, update, list, and archive categories and boards from the `BOARDS` tab without direct database edits.
   4. Sysop can inspect current system details from the `SYSTEM` tab.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 02-01-PLAN.md — Wave 1: Config schema key `invite_generation_per_user_limit` + accessor + seed + test [INVT-06, INVT-07, SYSO-02]
+  - [ ] 02-02-PLAN.md — Wave 1: Actor-first category CRUD in `Foglet.Boards` + `archive_changeset/1` + test [SYSO-03]
+  - [ ] 02-03-PLAN.md — Wave 2: Sysop.State expansion + SITE/LIMITS inline-form submodules + partition test [INVT-06, INVT-07, SYSO-02]
+  - [ ] 02-04-PLAN.md — Wave 3: BOARDS tab submodule (Modal.Form create/edit + confirm archive) [SYSO-03]
+  - [ ] 02-05-PLAN.md — Wave 4: SYSTEM snapshot tab + final Sysop delegation + `mix precommit` gate [SYSO-04]
 **UI hint**: yes
 
 ### Phase 3: Invite Persistence and Registration Enforcement
