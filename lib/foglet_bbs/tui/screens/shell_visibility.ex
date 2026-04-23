@@ -86,8 +86,24 @@ defmodule Foglet.TUI.Screens.ShellVisibility do
   defp config_policy_or_nil do
     Foglet.Config.invite_code_generators()
   rescue
-    _ -> nil
+    e ->
+      require Logger
+
+      Logger.warning(
+        "[ShellVisibility] invite_code_generators config read failed: " <>
+          Exception.message(e) <> " — defaulting policy to nil"
+      )
+
+      nil
   catch
-    :exit, _ -> nil
+    :exit, reason ->
+      require Logger
+
+      Logger.warning(
+        "[ShellVisibility] invite_code_generators exited: #{inspect(reason)} — " <>
+          "defaulting policy to nil"
+      )
+
+      nil
   end
 end
