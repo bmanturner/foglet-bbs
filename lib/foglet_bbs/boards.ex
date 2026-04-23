@@ -48,6 +48,52 @@ defmodule Foglet.Boards do
     |> Repo.insert()
   end
 
+  @doc """
+  Create a category. Actor must be authorized for `:create_category` at `:site` scope.
+  Returns `{:error, :forbidden}` if the actor is not permitted (D-15, SYSO-03).
+
+  This actor-first arity-2 form is additive to `create_category/1` (D-10), which
+  remains for seeds and internal trusted callers.
+  """
+  @spec create_category(Foglet.Accounts.User.t() | nil, map()) ::
+          {:ok, Category.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def create_category(actor, attrs) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :create_category, actor, :site) do
+      %Category{}
+      |> Category.changeset(attrs)
+      |> Repo.insert()
+    end
+  end
+
+  @doc """
+  Update a category's attributes. Actor must be authorized for `:update_category` at `:site` scope.
+  Returns `{:error, :forbidden}` if the actor is not permitted (SYSO-03).
+  """
+  @spec update_category(Foglet.Accounts.User.t() | nil, Category.t(), map()) ::
+          {:ok, Category.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def update_category(actor, %Category{} = category, attrs) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :update_category, actor, :site) do
+      category
+      |> Category.changeset(attrs)
+      |> Repo.update()
+    end
+  end
+
+  @doc """
+  Archive a category. Actor must be authorized for `:archive_category` at `:site` scope.
+  Flips `archived` to true via `Category.archive_changeset/1` (defensive: only archived is cast).
+  Returns `{:error, :forbidden}` if the actor is not permitted (SYSO-03).
+  """
+  @spec archive_category(Foglet.Accounts.User.t() | nil, Category.t()) ::
+          {:ok, Category.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def archive_category(actor, %Category{} = category) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :archive_category, actor, :site) do
+      category
+      |> Category.archive_changeset()
+      |> Repo.update()
+    end
+  end
+
   @doc "Get a category by ID. Raises if not found."
   @spec get_category!(String.t()) :: Category.t()
   def get_category!(id), do: Repo.get!(Category, id)
