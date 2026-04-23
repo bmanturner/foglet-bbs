@@ -40,14 +40,26 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   def visible?(_, _), do: false
 
   @spec render(map(), Theme.t()) :: any()
-  def render(%{items: nil}, %Theme{} = theme), do: render_loading(theme)
+  def render(%{items: nil, frame: frame}, %Theme{} = theme) when is_integer(frame),
+    do: render_loading(frame, theme)
+
+  def render(%{items: nil}, %Theme{} = theme), do: render_loading(current_frame(), theme)
+
   def render(%{items: []}, %Theme{} = theme), do: render_placeholder(theme)
 
   def render(%{items: [_ | _] = items}, %Theme{} = theme),
     do: render_future_placeholder(items, theme)
 
-  defp render_loading(theme) do
-    frame = System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
+  # Monotonic-clock fallback frame when the caller does not supply one.
+  # Kept so Phase 0 callers (which pass no :frame) still see an animated
+  # spinner. Later phases that want deterministic / snapshot-friendly
+  # rendering should thread :frame through state (e.g. from a
+  # subscribe_interval tick) and avoid this branch.
+  defp current_frame do
+    System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
+  end
+
+  defp render_loading(frame, theme) when is_integer(frame) do
     spinner_el = Spinner.render(frame, style: :line, theme: theme)
     loading_el = text("Loading…", fg: theme.dim.fg)
 
