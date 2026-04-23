@@ -228,7 +228,7 @@ lib/foglet_bbs/
 │                             #      Exports scopes_for/2 as a regular public function
 ├── boards.ex                 # CHANGE: create_board/update_board/archive_board gain actor first arg
 │                             #         + scope_for/1 helper added
-├── config.ex                 # CHANGE: put!/3 gains actor first arg (currently put!(key, value, updated_by_id))
+├── config.ex                 # CHANGE: put!/3 gains actor as first argument (currently put!(key, value, updated_by_id))
 ├── threads.ex                # CHANGE: scope_for/1 helper added (no signature change to existing ops)
 └── posts.ex                  # CHANGE: scope_for/1 helper added (no signature change to existing ops)
 
@@ -981,3 +981,303 @@ One new dependency introduced: `{:bodyguard, "~> 2.4"}` in `mix.exs`. Pure Elixi
 **Research date:** 2026-04-23
 **Revised:** 2026-04-23 (Bodyguard swap)
 **Valid until:** 2026-07-23 (stable domain — Phoenix + Elixir authorization patterns are mature)
+
+---
+
+## Continuation Research (2026-04-23)
+
+**Scope:** Three detail questions the plan-phase needs resolved before Wave 0. Supplements locked decisions D-01 through D-28 above — no decisions are reopened.
+
+**Sources for this section:**
+- [CITED: hexdocs.pm/bodyguard/Bodyguard.html] — `Bodyguard.scope/4` signature and params handling
+- [CITED: hexdocs.pm/bodyguard/Bodyguard.Schema.html] — `Bodyguard.Schema` behaviour, `scope/3` callback contract and example
+- [CITED: hexdocs.pm/bodyguard/readme.html] — `permit/4` callback result coercion; default `:unauthorized` reason
+- [VERIFIED: /Users/brendan.turner/Dev/personal/foglet_bbs/priv/repo/seeds/config.exs] — actual `Config.put!` call pattern in seeds
+- [VERIFIED: /Users/brendan.turner/Dev/personal/foglet_bbs/lib/foglet_bbs/config.ex] — `put!/3` full implementation, raise paths
+
+---
+
+### Q1: Bodyguard.scope/4 and Ecto Query Scoping
+
+#### What Bodyguard.scope/4 actually does
+
+`Bodyguard.scope/4` has signature `scope(query, user, params \\ [], opts \\ [])`. It infers the schema module from the query (an Ecto.Query, a schema module atom, or a list of structs) and delegates to a `scope/3` callback on that schema module, which must implement the `Bodyguard.Schema` behaviour. The callback signature is:
+
+```elixir
+@callback scope(query :: any(), user :: any(), params :: %{required(atom()) => any()}) :: any()
+```
+
+The `params` argument here is a map (Bodyguard converts keyword lists before passing down). This is a separate callback from `Bodyguard.Policy.authorize/3` — it lives on the schema struct module, not on the policy module.
+
+#### What a scope/3 callback on Thread would look like
+
+For Phase 8's `Threads.list_for_moderation/2` / `Posts.list_for_moderation/2`, a `Bodyguard.Schema` implementation on `Foglet.Threads.Thread` would look like:
+
+```elixir
+# lib/foglet_bbs/threads/thread.ex
+# Source: Bodyguard.Schema behaviour — hexdocs.pm/bodyguard/Bodyguard.Schema.html
+
+defmodule Foglet.Threads.Thread do
+  # ... existing schema ...
+
+  @behaviour Bodyguard.Schema
+
+  import Ecto.Query
+
+  @impl Bodyguard.Schema
+  def scope(query, %Foglet.Accounts.User{role: :sysop}, _params) do
+    # Sysop sees all threads across all boards
+    query
+  end
+
+  def scope(query, %Foglet.Accounts.User{role: :mod} = actor, _params) do
+    # v1.1: mods are site-scope, same as sysop
+    # v2: scopes_for(actor, :lock_thread) returns [{:board, id}, ...];
+    #     filter to boards the mod oversees
+    board_ids =
+      Foglet.Authorization.scopes_for(actor, :lock_thread)
+      |> Enum.flat_map(fn
+        {:board, id} -> [id]
+        :site -> []  # site-scope mod: handled by the sysop-role clause above
+      end)
+
+    if board_ids == [] do
+      # Site-scope mod in v1.1: no board_ids filter needed (sysop clause handles it)
+      # This clause fires only if scopes_for returns only {:board, id} tuples with none
+      where(query, [t], t.board_id in ^board_ids)
+    else
+      where(query, [t], t.board_id in ^board_ids)
+    end
+  end
+
+  def scope(query, _user, _params) do
+    # Default: empty result set for non-operators
+    where(query, false)
+  end
+end
+```
+
+The caller in Phase 8 would then be:
+
+```elixir
+# Phase 8 — Threads.list_for_moderation/2
+def list_for_moderation(actor, opts \\ []) do
+  Thread
+  |> Bodyguard.scope(actor)
+  |> order_by([t], desc: t.inserted_at)
+  |> Repo.all()
+end
+```
+
+#### Caller-side pattern (our scopes_for/2 + where)
+
+The alternative the question asks about is:
+
+```elixir
+# Phase 8 — caller-side where
+def list_for_moderation(actor, opts \\ []) do
+  scopes = Foglet.Authorization.scopes_for(actor, :lock_thread)
+
+  board_ids =
+    Enum.flat_map(scopes, fn
+      {:board, id} -> [id]
+      :site -> []
+    end)
+
+  query =
+    if :site in scopes do
+      Thread  # site-scope: no board filter
+    else
+      from t in Thread, where: t.board_id in ^board_ids
+    end
+
+  query
+  |> order_by([t], desc: t.inserted_at)
+  |> Repo.all()
+end
+```
+
+#### Comparison
+
+| Dimension | Bodyguard.scope/4 + Bodyguard.Schema | scopes_for/2 + caller-side where |
+|-----------|--------------------------------------|-----------------------------------|
+| Where filtering logic lives | Schema module (Thread, Post) | Context function (Threads, Posts) |
+| Consistency with our policy seam | Requires adding `@behaviour Bodyguard.Schema` to schema modules | Uses `scopes_for/2` already defined in Phase 1 |
+| v2 multi-board mod path | scope/3 callback queries scopes_for then filters | Same: caller queries scopes_for then filters |
+| Testability | Phase 8 must test both the schema callback and the context function | Phase 8 tests the context function only; scopes_for/2 already has tests |
+| YAGNI fit for Phase 1 | No Phase 1 caller exists — any schema callback written now is speculative dead code | scopes_for/2 is introduced for Phase 1 (D-21); no additional code needed |
+| Bodyguard coupling | Strong: filtering logic coupled to Bodyguard's dispatch mechanism | Weak: filtering uses our own public API; Bodyguard could be swapped without touching query logic |
+
+#### Recommendation: DEFER — do not add Bodyguard.Schema in Phase 1
+
+**D-22 locks this:** "Phase 1 does NOT build scope-filtered list query helpers." The recommendation is consistent with that decision. When Phase 8 arrives:
+
+- Use the **caller-side `scopes_for/2` + `where` pattern** rather than `Bodyguard.scope/4 + Bodyguard.Schema`. Rationale: `scopes_for/2` is already the Phase 1 seam; the caller-side pattern avoids coupling filtering logic to Bodyguard and keeps the schema modules free of authorization concerns. The `Bodyguard.Schema` callback would duplicate the `scopes_for/2` logic inside a schema module, making it harder to test and harder to reuse from non-query contexts (e.g., a permission summary page).
+- Phase 1 adds `scopes_for/2` — that is the entire Phase 1 contribution to MODR-02. The `where` filter is added in Phase 8 only.
+- Do NOT add `use Bodyguard.Schema` or any `scope/3` callbacks to schema modules in Phase 1. Zero schema module changes beyond the `scope_for/1` helper functions already planned in D-08.
+
+**Reconciliation with D-22:** Confirmed — this finding fully aligns with D-22. The recommendation is to implement the caller-side `scopes_for/2` + `where` approach in Phase 8, not to use `Bodyguard.scope/4` at all (despite it being available in the library). The `scopes_for/2` seam we introduce now is sufficient.
+
+---
+
+### Q2: Config.put!/3 Contract Under Bodyguard
+
+#### What the codebase actually does today
+
+`Config.put!/3` raises for two classes of error:
+- `Foglet.Config.UnknownKeyError` — unknown key
+- `Foglet.Config.InvalidValueError` — type/enum/range violation
+
+[VERIFIED: `lib/foglet_bbs/config.ex` lines 110-121]
+
+All existing callers fall into two categories:
+
+1. **Seeds and test setup** (`priv/repo/seeds/config.exs`, `test/foglet_bbs/config_test.exs`, `test/foglet_bbs/tui/screens/login_test.exs`, etc.) — call the 2- or 3-arity form `put!("key", value)` or `put!("key", value, nil)` **with no actor**. These are trusted internal paths. [VERIFIED: grep across repo]
+
+2. **Phase 2 TUI sysop screen (not yet written)** — will be the first interactive caller that needs to handle authorization rejection gracefully.
+
+#### The core tension
+
+Adding `Bodyguard.permit/4` to `put!/3` introduces a `{:error, :forbidden}` return path into a function whose entire existing contract is "either returns `Entry.t()` or raises." Category 1 callers are trusted (no actor) — they must not break. Category 2 callers are interactive — they must not crash on authorization rejection.
+
+Two options exist:
+
+**Option A: New `put/4` (non-bang, actor-first, tagged tuples for all failures)**
+
+```elixir
+# lib/foglet_bbs/config.ex
+# Source: pattern from Open Question 2 in this research file
+
+@doc """
+Actor-aware config write. Returns tagged tuples for all failure modes;
+never raises. Use this from interactive callers (TUI, future API).
+
+Pass a `%User{}` as the actor. For trusted internal paths (seeds, Mix tasks,
+test setup), use `put!/3` directly with `nil` for `updated_by_id`.
+"""
+@spec put(Foglet.Accounts.User.t() | nil, String.t(), term()) ::
+        {:ok, Entry.t()} | {:error, :forbidden} | {:error, :unknown_key} | {:error, :invalid_value}
+def put(actor, key, value) when is_binary(key) do
+  with :ok <- Bodyguard.permit(Foglet.Authorization, :edit_config, actor, :site) do
+    case Schema.validate(key, value) do
+      :ok ->
+        {:ok, do_put!(key, value, actor && actor.id)}
+
+      {:error, {:unknown_key, ^key}} ->
+        {:error, :unknown_key}
+
+      {:error, %{reason: _reason}} ->
+        {:error, :invalid_value}
+    end
+  end
+end
+
+# Original put!/3 unchanged — seeds and test setup continue to call this directly
+@spec put!(String.t(), term(), String.t() | nil) :: Entry.t()
+def put!(key, value, updated_by_id \\ nil) when is_binary(key) do
+  # ... existing implementation unchanged ...
+end
+```
+
+**Option B: Keep only `put!/3`, add actor as first argument**
+
+```elixir
+# Variant: put!(actor, key, value) — raises on validation, returns {:error, :forbidden} on authz
+@spec put!(Foglet.Accounts.User.t() | nil, String.t(), term()) :: Entry.t()
+def put!(actor, key, value) when is_binary(key) do
+  with :ok <- Bodyguard.permit(Foglet.Authorization, :edit_config, actor, :site) do
+    put!(key, value, actor && actor.id)
+  end
+end
+```
+
+This variant has a mixed return contract: `with` returns `{:error, :forbidden}` on the short-circuit path, but `Entry.t()` on success and raises on validation errors. The `!` naming convention implies "raises or returns the value" — returning `{:error, :forbidden}` from a bang function is unexpected and breaks the convention. Phase 2 callers using `with :ok <- Config.put!(actor, key, val)` will get the authorization tuple correctly but crash on validation errors without `rescue`.
+
+#### Recommendation: Use Option A — introduce `Config.put/4`
+
+**Prescription for the planner:** Add `Foglet.Config.put/4` as a new non-bang function. Keep `put!/3` completely unchanged. Update D-19's reference to reflect this:
+
+> D-19 (`Foglet.Config.put!/3` → gains actor as first argument) is **refined**: Phase 1 adds `Foglet.Config.put/4` (actor-first, tagged-tuple returns for all failure modes) as the interactive caller surface. The existing `put!/3` is not modified. Phase 2 TUI callers use `put/4`.
+
+**Rationale tied to user profile and codebase conventions:**
+- The codebase's `!`-bang convention means "raises or returns the value" (`Repo.get!/2`, `Repo.insert!/1`, `put!/3`). Returning `{:error, :forbidden}` from a bang function violates this convention and confuses future readers.
+- The "conservative, well-established patterns" preference means: follow Elixir stdlib idiom (`Map.fetch/2` vs `Map.fetch!/2`, `Keyword.get/3` vs `Keyword.fetch!/2`). The existing `fetch/1` in `Config` already follows this pattern — `fetch!/1` would raise, `fetch/1` returns `{:ok, v} | :error`.
+- Seeds and test setup use `put!("key", value, nil)` — these are trusted callers. Touching `put!/3`'s signature would require updating every test in `config_test.exs`, `login_test.exs`, `verify_test.exs`, and `accounts_test.exs`. [VERIFIED: 20+ call sites in test files]
+- `put/4` wraps validation errors into `:unknown_key` and `:invalid_value` atoms, giving Phase 2 TUI a clean `case` match without `rescue` blocks.
+
+**Impact on D-19:** The planner should replace "gains actor as first argument" with "new `put/4` function added (actor-first, non-bang, tagged tuples); `put!/3` unchanged." The test plan in D-27 should add a forbidden-path test for `put/4`, not for `put!/3`.
+
+---
+
+### Q3: Bodyguard + Repo.transact Ordering — Confirmation
+
+**Status of Pitfall 2:** The pitfall documented above (authorize before `Repo.transact`, never inside) applies identically with Bodyguard. Switching from a hand-rolled `Authorization.authorize/3` call to `Bodyguard.permit/4` changes nothing about the interaction with `Repo.transact` — both are pure function calls that return `{:error, :forbidden}`. `Repo.transact`'s wrapping behavior is a property of Ecto, not of the authorization library.
+
+**No new Bodyguard-specific interaction discovered.** The only Bodyguard-adjacent consideration is that `Bodyguard.permit!/5` raises `Bodyguard.NotAuthorizedError` — but D-16 already forbids using that variant. So there is no new exception path through `Repo.transact` to worry about.
+
+**Correct pattern (confirmed):**
+
+```elixir
+# lib/foglet_bbs/boards.ex — archive_board/2 (representative example)
+# Source: Pitfall 2 above; confirmed unchanged for Bodyguard
+
+@spec archive_board(Foglet.Accounts.User.t() | nil, Ecto.UUID.t()) ::
+        {:ok, Board.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+def archive_board(actor, board_id) do
+  # Bodyguard.permit/4 runs OUTSIDE Repo.transact.
+  # It is a pure check with no DB access — no reason to be inside a transaction.
+  with :ok <- Bodyguard.permit(Foglet.Authorization, :archive_board, actor, :site) do
+    Repo.transact(fn ->
+      board = Repo.get!(Board, board_id)
+      board |> Board.archive_changeset() |> Repo.update()
+    end)
+  end
+end
+```
+
+The Bodyguard call on line 2 of `with` produces `:ok` (passes through to `Repo.transact`) or `{:error, :forbidden}` (short-circuits and never enters the transaction). `Repo.transact` never sees the authorization tuple.
+
+**Confidence:** HIGH — this is a pure Ecto behavior claim verified by code inspection of the pattern, not a Bodyguard-specific claim.
+
+---
+
+### A4 Smoke Test: Bodyguard.permit/4 Passes {:error, :forbidden} Through Unchanged
+
+**Finding:** Bodyguard documentation confirms `permit/4` "coerces the callback result into a strict `:ok` or `{:error, reason}` result." The default reason for bare `:error` or `false` is `:unauthorized`. An explicit `{:error, :forbidden}` from the callback preserves its reason because it is already in the `{:error, reason}` shape — no coercion applies. [CITED: hexdocs.pm/bodyguard/readme.html]
+
+**A4 status:** Verified by documentation. The callback pattern in this codebase (`def authorize(...), do: {:error, :forbidden}`) will produce `{:error, :forbidden}` from `Bodyguard.permit/4`. The default `:unauthorized` only fires for bare `:error` or `false` returns — which our callback never emits.
+
+**Wave 0 smoke test** — include this in `test/foglet_bbs/authorization_test.exs` as a standalone regression guard:
+
+```elixir
+# test/foglet_bbs/authorization_test.exs
+# Wave 0 smoke test for A4: {:error, :forbidden} passes through Bodyguard.permit/4 unchanged.
+# This test guards against Bodyguard changing its coercion behavior in a future release
+# and silently flipping our error reason to :unauthorized.
+#
+# Uses an inline policy module (not Foglet.Authorization) to isolate the Bodyguard
+# pass-through behavior from our policy matrix.
+
+defmodule Foglet.Authorization.BodyguardPassthroughTest do
+  use ExUnit.Case, async: true
+
+  defmodule AlwaysForbiddenPolicy do
+    @behaviour Bodyguard.Policy
+
+    @impl Bodyguard.Policy
+    def authorize(_action, _user, _params), do: {:error, :forbidden}
+  end
+
+  test "Bodyguard.permit/4 passes {:error, :forbidden} through unchanged (A4)" do
+    assert Bodyguard.permit(AlwaysForbiddenPolicy, :x, nil, :y) == {:error, :forbidden}
+  end
+end
+```
+
+This test asserts the exact A4 claim: `Bodyguard.permit/4` called with a policy whose callback returns `{:error, :forbidden}` produces `{:error, :forbidden}` at the call site — not `{:error, :unauthorized}`. If Bodyguard changes its coercion logic in a hypothetical future release, this test will catch it before the behavior reaches the policy matrix.
+
+**Why a separate module:** Defining `AlwaysForbiddenPolicy` inline inside the test module keeps this test self-contained and independent of `Foglet.Authorization`'s actual matrix. The inline module is valid ExUnit/Elixir — modules defined inside a test file are compiled normally.
+
+**Note on file placement:** This test can live in `test/foglet_bbs/authorization_test.exs` as a second `defmodule` block, or in a dedicated `test/foglet_bbs/authorization/bodyguard_passthrough_test.exs`. Either location is valid; the planner should pick the one that fits the test file structure. Do not nest modules — per CLAUDE.md, never nest multiple modules in the same file. A separate file is preferred.
+
+**Preferred placement:** `test/foglet_bbs/authorization/bodyguard_passthrough_test.exs` — keeps the passthrough concern isolated from the policy matrix file.
