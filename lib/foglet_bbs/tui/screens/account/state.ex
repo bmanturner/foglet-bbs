@@ -34,6 +34,18 @@ defmodule Foglet.TUI.Screens.Account.State do
     * `:invites_visible?` — boolean (default `false`). When true, includes the
       future-facing `INVITES` tab in the tab set (D-09).
     * `:active` — initial active tab index (default `0`).
+
+  ## Invariant (IN-02)
+
+  The INVITES tab's presence is decided once at construction time from
+  `:invites_visible?` and baked into the underlying `Tabs` widget. Phase 0
+  treats role and `invite_code_generators` policy as immutable for the
+  lifetime of a screen_state — if either changes mid-session (e.g. a sysop
+  edits policy), the tab bar stays frozen until the screen_state is rebuilt
+  (typically on navigating away and back). `Account.render/1` recomputes
+  tab-body visibility each frame, so the INVITES body itself reacts even
+  when the tab bar does not. Phases 4+ that mutate policy should rebuild
+  the Tabs widget from `tab_labels(invites?)` when visibility changes.
   """
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
