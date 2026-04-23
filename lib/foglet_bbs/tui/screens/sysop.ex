@@ -152,42 +152,18 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   def handle_key(event, state) do
     ss = get_screen_state(state)
-    before_idx = Map.get(ss.tabs.raxol_state, :active_index, ss.active_tab)
     tab_count = length(State.tab_labels())
+    before_idx = Map.get(ss.tabs.raxol_state, :active_index, ss.active_tab)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
     after_idx = Map.get(new_tabs.raxol_state, :active_index, ss.active_tab)
 
-    new_active =
-      case action do
-        {:tab_changed, idx} -> idx
-        _ -> ss.active_tab
-      end
-
-    # Detect boundary wraparound for arrow-key navigation only. The Raxol
-    # Tabs widget wraps using rem arithmetic. Sysop arrow navigation is
-    # bounded: Right at the last tab and Left at the first tab do nothing.
-    # Digit shortcuts (1-9) and Home/End are direct jumps — never clamped.
-    is_arrow_key = event[:key] in [:left, :right]
-    forward_wrap = is_arrow_key and before_idx == tab_count - 1 and after_idx == 0
-    backward_wrap = is_arrow_key and before_idx == 0 and after_idx == tab_count - 1
-
-    cond do
-      # Unknown key — Tabs widget did not consume it
-      action == nil and before_idx == after_idx ->
-        :no_match
-
-      # Wraparound at right boundary (Right at last tab)
-      forward_wrap ->
-        :no_match
-
-      # Wraparound at left boundary (Left at first tab)
-      backward_wrap ->
-        :no_match
-
-      true ->
-        new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-        {:update, %{state | screen_state: new_screen_state}, []}
+    if no_match?(event, action, before_idx, after_idx, tab_count) do
+      :no_match
+    else
+      new_active = extract_active(action, ss.active_tab)
+      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
+      new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
+      {:update, %{state | screen_state: new_screen_state}, []}
     end
   end
 
@@ -197,4 +173,20 @@ defmodule Foglet.TUI.Screens.Sysop do
       _ -> init_screen_state([])
     end
   end
+
+  # Returns true when the event should produce :no_match:
+  #   - Tabs widget did not consume the key (action nil, index unchanged)
+  #   - Arrow key wrapped around the right boundary (Right at last tab)
+  #   - Arrow key wrapped around the left boundary (Left at first tab)
+  # Digit/Home/End direct jumps are never clamped — only :left/:right arrows.
+  defp no_match?(event, action, before_idx, after_idx, tab_count) do
+    is_arrow = event[:key] in [:left, :right]
+    unknown_key = action == nil and before_idx == after_idx
+    forward_wrap = is_arrow and before_idx == tab_count - 1 and after_idx == 0
+    backward_wrap = is_arrow and before_idx == 0 and after_idx == tab_count - 1
+    unknown_key or forward_wrap or backward_wrap
+  end
+
+  defp extract_active({:tab_changed, idx}, _default), do: idx
+  defp extract_active(_action, default), do: default
 end
