@@ -35,9 +35,9 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   - [x] 00-01-PLAN.md — Wave 0: write failing tests for Account, Moderation, Sysop shells and shared InvitesSurface (plus main_menu/app/layout_smoke extensions)
   - [x] 00-02-PLAN.md — Wave 1: shared INVITES surface primitive (InvitesSurface + InvitesState)
   - [x] 00-03-PLAN.md — Wave 1: App routing seams for :account/:moderation/:sysop + ShellVisibility helper
-  - [ ] 00-04-PLAN.md — Wave 2: Account shell (PROFILE/PREFS + conditional INVITES via shared surface) [ACCT-01]
-  - [ ] 00-05-PLAN.md — Wave 2: Moderation shell (QUEUE/LOG/USERS/SANCTIONS/BOARDS, role-gated) [MODR-01]
-  - [ ] 00-06-PLAN.md — Wave 2: Sysop shell (SITE/BOARDS/LIMITS/SYSTEM/USERS, role-gated) [SYSO-01]
+  - [x] 00-04-PLAN.md — Wave 2: Account shell (PROFILE/PREFS + conditional INVITES via shared surface) [ACCT-01]
+  - [x] 00-05-PLAN.md — Wave 2: Moderation shell (QUEUE/LOG/USERS/SANCTIONS/BOARDS, role-gated) [MODR-01]
+  - [x] 00-06-PLAN.md — Wave 2: Sysop shell (SITE/BOARDS/LIMITS/SYSTEM/USERS, role-gated) [SYSO-01]
   - [ ] 00-07-PLAN.md — Wave 3: MainMenu role-gated entries + `mix precommit` gate
 **UI hint**: yes
 
