@@ -69,7 +69,10 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   4. Caller-supplied field errors render inline under the offending field without dismissing the modal.
   5. Existing `Foglet.TUI.Widgets.Modal` (info / warning / error / confirm) remains unchanged and continues to work as today.
   6. A test fixture exercises the widget end-to-end: open the form, navigate fields, submit, assert callback fires with expected values.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 01.1-01-PLAN.md — Wave 1: failing tests for Modal.Form (REQ-1..REQ-7, REQ-9) + empirical Shift-Tab shape discovery (TDD RED)
+  - [ ] 01.1-02-PLAN.md — Wave 2: implement Foglet.TUI.Widgets.Modal.Form (D-14 triplet + set_errors/2 + 5 field-type dispatch) — turns tests GREEN
+  - [ ] 01.1-03-PLAN.md — Wave 3: widget catalog README entry + mix precommit + REQ-8 byte-identity guard
 **UI hint**: yes
 **Why inserted:** Phase 2's board/category CRUD (INVT-06/07, SYSO-02/03/04) needs a typed-form container; `NewThread`-style inline sub-steps don't generalize across future CRUD flows. Building the primitive once in 1.1 avoids duplicating form-navigation logic across the Sysop, Moderation, and Account workspaces as they grow.
 
