@@ -1,6 +1,8 @@
 defmodule FogletBbs.BoardsFixtures do
   @moduledoc "Fixtures for boards, threads, and posts tests."
 
+  alias Foglet.Accounts.User
+
   @doc "Create a category via Foglet.Boards.create_category/1."
   def category_fixture(attrs \\ %{}) do
     attrs =
@@ -17,8 +19,10 @@ defmodule FogletBbs.BoardsFixtures do
   end
 
   @doc """
-  Create a board in a category via Foglet.Boards.create_board/2.
+  Create a board in a category via `Foglet.Boards.create_board/3`.
   Starts a Board Server automatically. Accepts a Category struct or a category_id binary.
+  Internally passes a sysop actor so Phase 1's authorization guard is satisfied; existing
+  tests that do not care about authorization continue to work without source changes.
   """
   def board_fixture(category_or_id, attrs \\ %{}) do
     category_id =
@@ -37,7 +41,8 @@ defmodule FogletBbs.BoardsFixtures do
         attrs
       )
 
-    {:ok, board} = Foglet.Boards.create_board(category_id, attrs)
+    sysop = %User{role: :sysop, status: :active, deleted_at: nil}
+    {:ok, board} = Foglet.Boards.create_board(sysop, category_id, attrs)
     board
   end
 

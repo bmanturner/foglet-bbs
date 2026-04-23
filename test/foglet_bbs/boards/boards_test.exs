@@ -5,16 +5,21 @@ defmodule Foglet.BoardsTest do
   import Ecto.Query, warn: false
 
   alias Ecto.Adapters.SQL.Sandbox
+  alias Foglet.Accounts.User
   alias Foglet.Boards.{ReadPointer, Subscription}
   alias FogletBbs.Repo
 
-  # Board Server is started by Foglet.Boards.create_board/2 via BoardSupervisor.
+  # Board Server is started by Foglet.Boards.create_board/3 via BoardSupervisor.
   # Look up the PID from the Registry and allow sandbox access.
   defp allow_board_server!(board_id) do
     [{pid, _}] = Registry.lookup(Foglet.BoardRegistry, board_id)
     Sandbox.allow(Repo, self(), pid)
     pid
   end
+
+  # Plain-struct actors (not inserted; policy only matches on role/status/deleted_at).
+  defp sysop_actor, do: %User{role: :sysop, status: :active, deleted_at: nil}
+  defp mod_actor, do: %User{role: :mod, status: :active, deleted_at: nil}
 
   describe "create_category/1 (BOARD-01)" do
     test "creates a category with valid attrs" do
@@ -60,10 +65,13 @@ defmodule Foglet.BoardsTest do
     end
   end
 
-  describe "create_board/2 (BOARD-01)" do
+  describe "create_board/3 (BOARD-01)" do
     test "creates a board in a category" do
       category = category_fixture()
-      assert {:ok, board} = Foglet.Boards.create_board(category.id, %{slug: "tech", name: "Tech"})
+
+      assert {:ok, board} =
+               Foglet.Boards.create_board(sysop_actor(), category.id, %{slug: "tech", name: "Tech"})
+
       assert board.slug == "tech"
       assert board.category_id == category.id
       assert board.next_message_number == 1
@@ -71,10 +79,10 @@ defmodule Foglet.BoardsTest do
 
     test "rejects board with duplicate slug" do
       category = category_fixture()
-      {:ok, _} = Foglet.Boards.create_board(category.id, %{slug: "dup", name: "First"})
+      {:ok, _} = Foglet.Boards.create_board(sysop_actor(), category.id, %{slug: "dup", name: "First"})
 
       assert {:error, changeset} =
-               Foglet.Boards.create_board(category.id, %{slug: "dup", name: "Second"})
+               Foglet.Boards.create_board(sysop_actor(), category.id, %{slug: "dup", name: "Second"})
 
       assert "has already been taken" in errors_on(changeset).slug
     end
@@ -83,9 +91,124 @@ defmodule Foglet.BoardsTest do
       category = category_fixture()
 
       assert {:error, changeset} =
-               Foglet.Boards.create_board(category.id, %{slug: "Tech-Board", name: "Tech"})
+               Foglet.Boards.create_board(sysop_actor(), category.id, %{
+                 slug: "Tech-Board",
+                 name: "Tech"
+               })
 
       assert errors_on(changeset).slug != []
+    end
+  end
+
+  describe "create_board/3 authorization (D-27)" do
+    test "returns {:error, :forbidden} for a regular user" do
+      category = category_fixture()
+      user = user_fixture()
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.create_board(user, category.id, %{slug: "test", name: "Test"})
+
+      assert Repo.aggregate(Foglet.Boards.Board, :count) == 0
+    end
+
+    test "returns {:error, :forbidden} for nil actor (guest)" do
+      category = category_fixture()
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.create_board(nil, category.id, %{slug: "test", name: "Test"})
+
+      assert Repo.aggregate(Foglet.Boards.Board, :count) == 0
+    end
+
+    test "returns {:error, :forbidden} for a mod (sysop-only action)" do
+      category = category_fixture()
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.create_board(mod_actor(), category.id, %{slug: "test", name: "Test"})
+
+      assert Repo.aggregate(Foglet.Boards.Board, :count) == 0
+    end
+  end
+
+  describe "update_board/3" do
+    test "sysop can update a board's name" do
+      category = category_fixture()
+      board = board_fixture(category)
+
+      assert {:ok, updated} = Foglet.Boards.update_board(sysop_actor(), board, %{name: "Renamed"})
+      assert updated.name == "Renamed"
+      assert updated.id == board.id
+    end
+
+    test "returns {:error, :forbidden} for a regular user" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.update_board(user, board, %{name: "Renamed"})
+
+      reloaded = Repo.get!(Foglet.Boards.Board, board.id)
+      assert reloaded.name == board.name
+    end
+
+    test "returns {:error, :forbidden} for a mod" do
+      category = category_fixture()
+      board = board_fixture(category)
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.update_board(mod_actor(), board, %{name: "Renamed"})
+    end
+
+    test "does not mutate the board row when forbidden" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      assert {:error, :forbidden} =
+               Foglet.Boards.update_board(user, board, %{name: "Renamed"})
+
+      reloaded = Repo.get!(Foglet.Boards.Board, board.id)
+      assert reloaded.name == board.name
+    end
+  end
+
+  describe "archive_board/2" do
+    test "sysop archives a board — archived becomes true" do
+      category = category_fixture()
+      board = board_fixture(category)
+
+      assert {:ok, archived} = Foglet.Boards.archive_board(sysop_actor(), board)
+      assert archived.archived == true
+    end
+
+    test "returns {:error, :forbidden} for a regular user" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      assert {:error, :forbidden} = Foglet.Boards.archive_board(user, board)
+
+      reloaded = Repo.get!(Foglet.Boards.Board, board.id)
+      assert reloaded.archived == false
+    end
+
+    test "returns {:error, :forbidden} for a mod" do
+      category = category_fixture()
+      board = board_fixture(category)
+
+      assert {:error, :forbidden} = Foglet.Boards.archive_board(mod_actor(), board)
+    end
+
+    test "does not flip archived when forbidden" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      assert {:error, :forbidden} = Foglet.Boards.archive_board(user, board)
+
+      reloaded = Repo.get!(Foglet.Boards.Board, board.id)
+      assert reloaded.archived == false
     end
   end
 
@@ -94,14 +217,14 @@ defmodule Foglet.BoardsTest do
       category = category_fixture()
 
       {:ok, default_board} =
-        Foglet.Boards.create_board(category.id, %{
+        Foglet.Boards.create_board(sysop_actor(), category.id, %{
           slug: "default-board",
           name: "Default",
           default_subscription: true
         })
 
       {:ok, _non_default} =
-        Foglet.Boards.create_board(category.id, %{
+        Foglet.Boards.create_board(sysop_actor(), category.id, %{
           slug: "non-default-board",
           name: "Non-default",
           default_subscription: false
@@ -119,7 +242,7 @@ defmodule Foglet.BoardsTest do
       category = category_fixture()
 
       {:ok, board} =
-        Foglet.Boards.create_board(category.id, %{
+        Foglet.Boards.create_board(sysop_actor(), category.id, %{
           slug: "idem-board",
           name: "Idem",
           default_subscription: true
