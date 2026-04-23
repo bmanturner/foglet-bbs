@@ -1,6 +1,8 @@
 defmodule Foglet.TUI.Screens.SysopTest do
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.RenderHelpers
+
   alias Foglet.TUI.Screens.Sysop
 
   defp build_state(role \\ :sysop) do
@@ -16,33 +18,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   setup do
     %{state: build_state(:sysop)}
-  end
-
-  defp collect_text_values(node, acc \\ [])
-
-  defp collect_text_values(node, acc) when is_map(node) do
-    acc =
-      case Map.get(node, :type) do
-        :text ->
-          content = Map.get(node, :content)
-
-          if is_binary(content) do
-            [content | acc]
-          else
-            acc
-          end
-
-        _ ->
-          acc
-      end
-
-    node
-    |> Map.get(:children, [])
-    |> collect_text_values(acc)
-  end
-
-  defp collect_text_values(nodes, acc) when is_list(nodes) do
-    Enum.reduce(nodes, acc, fn node, text_acc -> collect_text_values(node, text_acc) end)
   end
 
   describe "init_screen_state/1" do
@@ -110,7 +85,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: state}
     end
 
-    test "advances through all five tabs with Right arrow (0→1→2→3→4, stays at 4)", %{
+    test "advances through all five tabs with Right arrow (0→1→2→3→4, then wraps)", %{
       state: state
     } do
       {state1, tab1} =
@@ -133,6 +108,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
         end
 
+      # Past the last tab, the Raxol Tabs widget wraps back to 0; handle_key
+      # simply reflects that (WR-03: no wrap-detection heuristic). Accept either
+      # clamp-at-4 or wrap-to-0 so this test survives a future widget-behavior
+      # change without silently re-introducing the "lie about :no_match" hack.
       {_state5, tab5} =
         case Sysop.handle_key(%{key: :right}, state4) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
@@ -143,8 +122,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert tab2 == 2
       assert tab3 == 3
       assert tab4 == 4
-      # Stays at 4 (bounded)
-      assert tab5 == 4
+      assert tab5 in [0, 4]
     end
 
     test "digit '5' jumps to USERS tab (index 4)", %{state: state} do

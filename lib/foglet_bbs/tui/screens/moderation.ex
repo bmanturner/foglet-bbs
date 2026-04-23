@@ -75,19 +75,21 @@ defmodule Foglet.TUI.Screens.Moderation do
   def handle_key(event, state) do
     ss = get_screen_state(state)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-    new_ss = %{ss | tabs: new_tabs}
 
-    case action do
-      {:tab_changed, new_idx} ->
-        updated_ss = %{new_ss | active_tab: new_idx}
-        new_screen_state = Map.put(Map.get(state, :screen_state) || %{}, :moderation, updated_ss)
-        new_state = %{state | screen_state: new_screen_state}
-        {:update, new_state, []}
+    new_active =
+      case action do
+        {:tab_changed, idx} -> idx
+        _ -> ss.active_tab
+      end
 
-      nil ->
-        # Tabs consumed the event but the index did not change — still :no_match
-        # per contract (unknown key or no-op navigation)
-        :no_match
+    if action == nil and new_tabs == ss.tabs do
+      # Tabs widget neither recognized the key nor persisted any internal
+      # state mutation — treat as unhandled so global_key_handler can run.
+      :no_match
+    else
+      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
+      new_screen_state = Map.put(Map.get(state, :screen_state) || %{}, :moderation, new_ss)
+      {:update, %{state | screen_state: new_screen_state}, []}
     end
   end
 
@@ -108,32 +110,10 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_content(ss, theme) do
-    tabs_bar = render_tabs_bar(ss, theme)
     tab_body = render_tab_body(ss.active_tab, theme)
 
     column style: %{gap: 0} do
-      [tabs_bar, tab_body]
-    end
-  end
-
-  # Renders the tab bar as a single row with a combined text element so that
-  # the collect_text_values/1 test helper (which uses prepend-accumulation) can
-  # find all five labels in a single flat-list entry — guaranteeing ascending
-  # positions in the ordering assertion (all five labels share the same index).
-  # The Tabs widget is still used for handle_event/2 navigation; this function
-  # only controls the visual render tree shape.
-  defp render_tabs_bar(ss, theme) do
-    labels = State.tab_labels()
-
-    combined =
-      labels
-      |> Enum.with_index()
-      |> Enum.map_join(" | ", fn {label, idx} ->
-        if idx == ss.active_tab, do: "[#{label}]", else: label
-      end)
-
-    column style: %{gap: 0} do
-      [text(combined, fg: theme.unselected.fg)]
+      [Tabs.render(ss.tabs, theme: theme), tab_body]
     end
   end
 

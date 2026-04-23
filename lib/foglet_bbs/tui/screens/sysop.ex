@@ -16,16 +16,9 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   Tab focus state lives in `state.screen_state[:sysop]` as
   `%Foglet.TUI.Screens.Sysop.State{}` (D-04). Tab navigation is delegated to
-  `Foglet.TUI.Widgets.Input.Tabs.handle_event/2` (D-05).
-
-  ## Tab bar rendering note
-
-  The tab bar is rendered as a row with labels listed in reverse order in the
-  element tree. This is required so that `collect_text_values/1` depth-first
-  traversal (which prepend-accumulates, reversing DFS order) produces the tab
-  labels in the canonical D-11 order [SITE < BOARDS < LIMITS < SYSTEM < USERS]
-  when checked by ascending-position assertions in sysop_test.exs. The Tabs
-  widget state and navigation remain fully correct (active_index 0 = SITE).
+  `Foglet.TUI.Widgets.Input.Tabs.handle_event/2` (D-05) and rendering to
+  `Foglet.TUI.Widgets.Input.Tabs.render/2` so the themed widget remains the
+  single source of truth for the tab bar's visual styling.
   """
 
   @behaviour Foglet.TUI.Screen
@@ -77,49 +70,14 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   defp build_content(ss, theme) do
     active_label = Enum.at(State.tab_labels(), ss.active_tab)
-    tab_bar = render_tab_bar(ss, theme)
     body = render_tab_body(active_label, theme)
 
     column style: %{gap: 0} do
-      [tab_bar, divider(char: "─", style: %{fg: theme.border.fg}), body]
-    end
-  end
-
-  # Renders the tab bar as a row with labels listed in reverse order in the
-  # children list. This ensures that `collect_text_values/1` DFS traversal
-  # (which prepend-accumulates, reversing order) produces ascending index
-  # positions for [SITE, BOARDS, LIMITS, SYSTEM, USERS] as expected by
-  # sysop_test.exs order assertions.
-  defp render_tab_bar(ss, theme) do
-    labels = State.tab_labels()
-
-    # Build tab elements in REVERSE order so DFS prepend-accumulation
-    # (collect_text_values prepends, reversing traversal order) yields
-    # ascending index positions for the canonical D-11 tab sequence
-    # [SITE, BOARDS, LIMITS, SYSTEM, USERS] as expected by sysop_test.exs.
-    tab_children =
-      labels
-      |> Enum.with_index()
-      |> Enum.reverse()
-      |> Enum.flat_map(fn {label, idx} ->
-        tab_style =
-          if idx == ss.active_tab,
-            do: %{fg: theme.selected.fg, bg: theme.selected.bg},
-            else: %{fg: theme.unselected.fg}
-
-        tab_el = text(" #{label} ", fg: Map.get(tab_style, :fg))
-
-        if idx > 0 do
-          [tab_el, text("|", fg: theme.border.fg)]
-        else
-          [tab_el]
-        end
-      end)
-
-    box style: %{border_fg: theme.border.fg, padding: 0} do
-      row style: %{gap: 0} do
-        tab_children
-      end
+      [
+        Tabs.render(ss.tabs, theme: theme),
+        divider(char: "─", style: %{fg: theme.border.fg}),
+        body
+      ]
     end
   end
 
@@ -152,15 +110,17 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   def handle_key(event, state) do
     ss = get_screen_state(state)
-    tab_count = length(State.tab_labels())
-    before_idx = Map.get(ss.tabs.raxol_state, :active_index, ss.active_tab)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-    after_idx = Map.get(new_tabs.raxol_state, :active_index, ss.active_tab)
 
-    if no_match?(event, action, before_idx, after_idx, tab_count) do
+    new_active =
+      case action do
+        {:tab_changed, idx} -> idx
+        _ -> ss.active_tab
+      end
+
+    if action == nil and new_tabs == ss.tabs do
       :no_match
     else
-      new_active = extract_active(action, ss.active_tab)
       new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
       new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
       {:update, %{state | screen_state: new_screen_state}, []}
@@ -173,20 +133,4 @@ defmodule Foglet.TUI.Screens.Sysop do
       _ -> init_screen_state([])
     end
   end
-
-  # Returns true when the event should produce :no_match:
-  #   - Tabs widget did not consume the key (action nil, index unchanged)
-  #   - Arrow key wrapped around the right boundary (Right at last tab)
-  #   - Arrow key wrapped around the left boundary (Left at first tab)
-  # Digit/Home/End direct jumps are never clamped — only :left/:right arrows.
-  defp no_match?(event, action, before_idx, after_idx, tab_count) do
-    is_arrow = event[:key] in [:left, :right]
-    unknown_key = action == nil and before_idx == after_idx
-    forward_wrap = is_arrow and before_idx == tab_count - 1 and after_idx == 0
-    backward_wrap = is_arrow and before_idx == 0 and after_idx == tab_count - 1
-    unknown_key or forward_wrap or backward_wrap
-  end
-
-  defp extract_active({:tab_changed, idx}, _default), do: idx
-  defp extract_active(_action, default), do: default
 end

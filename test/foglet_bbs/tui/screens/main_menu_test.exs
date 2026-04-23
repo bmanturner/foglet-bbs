@@ -1,6 +1,8 @@
 defmodule Foglet.TUI.Screens.MainMenuTest do
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.RenderHelpers
+
   alias Foglet.TUI.Screens.MainMenu
 
   defp build_state(role) do
@@ -15,33 +17,6 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   setup do
     %{state: build_state(:user)}
-  end
-
-  defp collect_text_values(node, acc \\ [])
-
-  defp collect_text_values(node, acc) when is_map(node) do
-    acc =
-      case Map.get(node, :type) do
-        :text ->
-          content = Map.get(node, :content)
-
-          if is_binary(content) do
-            [content | acc]
-          else
-            acc
-          end
-
-        _ ->
-          acc
-      end
-
-    node
-    |> Map.get(:children, [])
-    |> collect_text_values(acc)
-  end
-
-  defp collect_text_values(nodes, acc) when is_list(nodes) do
-    Enum.reduce(nodes, acc, fn node, text_acc -> collect_text_values(node, text_acc) end)
   end
 
   test "render/1 does not crash", %{state: state} do
