@@ -50,7 +50,7 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   2. The authorization seam supports at least `:site` and `{:board, board_id}` scopes so future board-scoped moderation does not require API rewrites.
   3. Unauthorized operator actions return explicit forbidden results instead of silently succeeding or relying on hidden UI controls.
 **Plans**: 4 plans
-  - [ ] 01-01-PLAN.md — Wave 1: Foglet.Authorization module + bodyguard dep + matrix test + A4 passthrough smoke test [MODR-02, MODR-03]
+  - [x] 01-01-PLAN.md — Wave 1: Foglet.Authorization module + bodyguard dep + matrix test + A4 passthrough smoke test [MODR-02, MODR-03]
   - [ ] 01-02-PLAN.md — Wave 2: Boards actor-first create_board/3, update_board/3, archive_board/2, scope_for/1, forbidden-path tests [MODR-03]
   - [ ] 01-03-PLAN.md — Wave 2: new Foglet.Config.put/3 actor-aware non-bang writer with tagged-tuple returns [MODR-03]
   - [ ] 01-04-PLAN.md — Wave 2: Threads.scope_for/1 + Posts.scope_for/1 helpers (D-08, no operator signature changes per D-20) [MODR-02]
