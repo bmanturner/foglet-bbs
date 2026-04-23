@@ -12,6 +12,7 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
 
 - [x] **Phase 0: Screen Shells and Shared Surface Primitives** - Scaffold Account, Moderation, Sysop, and shared tab/screen state without shipping fake business behavior.
 - [x] **Phase 1: Authorization and Scope Backbone** - Add actor-aware policy and future-safe moderation scope rules before operator actions ship.
+- [ ] **Phase 1.1: Shared Modal Form Primitive** (INSERTED) - Deliver a reusable modal-form widget with typed fields, focus navigation, and validation so Phase 2+ CRUD workflows share one container.
 - [ ] **Phase 2: Sysop Config and Board Management** - Expose typed site policy, invite controls, board/category lifecycle, and system details from the TUI.
 - [ ] **Phase 3: Invite Persistence and Registration Enforcement** - Make invite-only onboarding real through persisted single-use invites and transactional redemption.
 - [ ] **Phase 4: Shared Invite Surface Activation** - Turn on the reusable `INVITES` tab across allowed surfaces according to config and role.
@@ -56,9 +57,25 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   - [x] 01-04-PLAN.md — Wave 2: Threads.scope_for/1 + Posts.scope_for/1 helpers (D-08, no operator signature changes per D-20) [MODR-02]
 **UI hint**: no
 
+### Phase 01.1: Shared Modal Form Primitive (INSERTED)
+
+**Goal:** Deliver `Foglet.TUI.Widgets.Modal.Form` — a reusable modal-overlay widget that hosts typed input fields (text, integer, boolean, enum), supports Tab/Shift-Tab focus navigation, exposes submit and cancel callbacks, and renders caller-supplied per-field inline validation errors — so Phase 2+ CRUD workflows share one container instead of re-inventing per-screen step machines.
+**Depends on:** Phase 1
+**Requirements**: None (infrastructure primitive — consumed by Phase 2 board/category CRUD and future CRUD workflows)
+**Success Criteria** (what must be TRUE):
+  1. `Foglet.TUI.Widgets.Modal.Form` renders text, integer, boolean, and enum fields.
+  2. Tab and Shift-Tab move focus forward and backward between fields; Enter on last field submits; Esc cancels.
+  3. Submit invokes a caller-supplied `on_submit/1` callback with a map of `{field_name => value}`; cancel invokes `on_cancel/0`.
+  4. Caller-supplied field errors render inline under the offending field without dismissing the modal.
+  5. Existing `Foglet.TUI.Widgets.Modal` (info / warning / error / confirm) remains unchanged and continues to work as today.
+  6. A test fixture exercises the widget end-to-end: open the form, navigate fields, submit, assert callback fires with expected values.
+**Plans**: TBD
+**UI hint**: yes
+**Why inserted:** Phase 2's board/category CRUD (INVT-06/07, SYSO-02/03/04) needs a typed-form container; `NewThread`-style inline sub-steps don't generalize across future CRUD flows. Building the primitive once in 1.1 avoids duplicating form-navigation logic across the Sysop, Moderation, and Account workspaces as they grow.
+
 ### Phase 2: Sysop Config and Board Management
 **Goal**: Sysops can manage typed site policy, invite controls, board/category lifecycle, and system details from the TUI on top of the new authz backbone.
-**Depends on**: Phase 1
+**Depends on**: Phase 1, Phase 1.1 (requires `Modal.Form` for board/category CRUD)
 **Requirements**: INVT-06, INVT-07, SYSO-02, SYSO-03, SYSO-04
 **Success Criteria** (what must be TRUE):
   1. Sysop can change seeded runtime config values for registration, invite policy, and operational limits from the TUI, and unschematized config keys are not exposed there.

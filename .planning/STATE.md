@@ -72,6 +72,10 @@ Recent decisions affecting current work:
 - Moderation remains scope-aware so future board-scoped moderators fit without reworking authorization later.
 - Main-menu clock placement is in the top-right chrome, with new-user defaults of system timezone and 12-hour time.
 
+### Roadmap Evolution
+
+- 2026-04-23: Phase 01.1 inserted after Phase 1: Shared Modal Form Primitive (URGENT) — surfaced during Phase 2 assumptions review. Phase 2's board/category CRUD needs a typed form-modal container that doesn't exist yet; building it as a shared primitive in 1.1 avoids per-screen step-machine duplication across future CRUD workflows.
+
 ### Pending Todos
 
 None yet.
