@@ -15,6 +15,15 @@ defmodule Foglet.Boards do
   alias Foglet.Boards.Supervisor, as: BoardSupervisor
   alias FogletBbs.Repo
 
+  # ---------- Authorization scope helper (D-08) ----------
+
+  @doc """
+  Returns the authorization scope for a board — the board itself.
+  Consumed by callers that invoke `Bodyguard.permit(Foglet.Authorization, action, actor, Foglet.Boards.scope_for(board))`.
+  """
+  @spec scope_for(Board.t()) :: {:board, Ecto.UUID.t()}
+  def scope_for(%Board{id: id}), do: {:board, id}
+
   # ---------- Application boot ----------
 
   @doc """

@@ -30,6 +30,36 @@ defmodule Foglet.BoardsTest do
     end
   end
 
+  describe "Board.archive_changeset/1 (Task 1)" do
+    test "returns a changeset that sets archived: true" do
+      category = category_fixture()
+      board = board_fixture(category)
+
+      cs = Foglet.Boards.Board.archive_changeset(board)
+      assert cs.valid?
+      assert Ecto.Changeset.get_change(cs, :archived) == true
+    end
+
+    test "does not allow other fields to be mutated through archive_changeset" do
+      category = category_fixture()
+      board = board_fixture(category)
+
+      # archive_changeset ignores all attrs beyond archived
+      cs = Foglet.Boards.Board.archive_changeset(board)
+      assert is_nil(Ecto.Changeset.get_change(cs, :name))
+      assert is_nil(Ecto.Changeset.get_change(cs, :slug))
+    end
+  end
+
+  describe "Boards.scope_for/1 (Task 1)" do
+    test "returns {:board, id} for a board struct" do
+      category = category_fixture()
+      board = board_fixture(category)
+
+      assert Foglet.Boards.scope_for(board) == {:board, board.id}
+    end
+  end
+
   describe "create_board/2 (BOARD-01)" do
     test "creates a board in a category" do
       category = category_fixture()

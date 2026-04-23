@@ -47,4 +47,14 @@ defmodule Foglet.Boards.Board do
     |> unique_constraint(:slug)
     |> foreign_key_constraint(:category_id)
   end
+
+  @doc """
+  Changeset that flips `archived` to true. Used by `Foglet.Boards.archive_board/2`.
+  Defensively scoped: only `:archived` is cast, nothing else can be mutated through this path.
+  """
+  def archive_changeset(board) do
+    board
+    |> cast(%{archived: true}, [:archived])
+    |> validate_required([:archived])
+  end
 end
