@@ -206,6 +206,10 @@ defmodule Foglet.Config do
   @spec email_verify_resend_cooldown_seconds() :: integer()
   def email_verify_resend_cooldown_seconds, do: get!("email_verify_resend_cooldown_seconds")
 
+  @doc "Per-user invite generation cap when invite_code_generators == \"any_user\" (INVT-07 D-04). 0 = unlimited."
+  @spec invite_generation_per_user_limit() :: non_neg_integer()
+  def invite_generation_per_user_limit, do: get!("invite_generation_per_user_limit")
+
   # ---------- Private ----------
 
   defp do_put!(key, value, updated_by_id) do
