@@ -30,6 +30,7 @@ New widgets should:
 |---|---|---|
 | `Compose` | [`compose.ex`](compose.ex) | Shared plumbing for post/thread composers (COMPOSE-01/02) |
 | `Modal`   | [`modal.ex`](modal.ex)     | Modal body (info/error/warning/confirm) — thin adapter (D-20, Phase 7) |
+| `Modal.Form` | [`modal/form.ex`](modal/form.ex) | Stateful modal-overlay form container with typed fields, Tab/Shift-Tab focus, submit/cancel callbacks, and caller-set inline errors (D-14, Phase 01.1) |
 
 ## Post (Phase 1–3, unchanged)
 
