@@ -339,4 +339,23 @@ defmodule Foglet.ThreadsTest do
       assert has_unread == false
     end
   end
+
+  describe "scope_for/1 (D-08)" do
+    test "returns {:board, board_id} for a Thread struct" do
+      thread = %Foglet.Threads.Thread{
+        id: "00000000-0000-0000-0000-000000000001",
+        board_id: "11111111-1111-1111-1111-111111111111"
+      }
+
+      assert Foglet.Threads.scope_for(thread) == {:board, "11111111-1111-1111-1111-111111111111"}
+    end
+
+    test "works with a persisted thread" do
+      {board, _pid} = setup_board_with_server()
+      user = user_fixture()
+      thread = thread_fixture(board, user)
+
+      assert Foglet.Threads.scope_for(thread) == {:board, board.id}
+    end
+  end
 end

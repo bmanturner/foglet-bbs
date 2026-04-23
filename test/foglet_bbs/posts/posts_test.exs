@@ -177,4 +177,24 @@ defmodule Foglet.PostsTest do
       assert listed_deleted_post.user.id == user.id
     end
   end
+
+  describe "scope_for/1 (D-08)" do
+    test "returns {:board, board_id} for a Post struct" do
+      post = %Foglet.Posts.Post{
+        id: "00000000-0000-0000-0000-000000000001",
+        board_id: "11111111-1111-1111-1111-111111111111"
+      }
+
+      assert Foglet.Posts.scope_for(post) == {:board, "11111111-1111-1111-1111-111111111111"}
+    end
+
+    test "works with a persisted post" do
+      board = setup_board_with_server()
+      user = user_fixture()
+      {thread, _root} = setup_thread(board, user)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "A post"})
+
+      assert Foglet.Posts.scope_for(post) == {:board, board.id}
+    end
+  end
 end

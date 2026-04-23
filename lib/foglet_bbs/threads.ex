@@ -15,6 +15,19 @@ defmodule Foglet.Threads do
   alias Foglet.Threads.{ReadPointer, Thread, ThreadEntry}
   alias FogletBbs.Repo
 
+  # ---------- Authorization scope helper (D-08) ----------
+
+  @doc """
+  Returns the authorization scope for a thread — the board it belongs to.
+  Consumed by callers of `Bodyguard.permit(Foglet.Authorization, action, actor, scope)`
+  when the action targets a specific thread (e.g., `:lock_thread`, `:move_thread`).
+
+  The thread/post operator call sites are deferred to Phase 8 per D-20; the helper is
+  introduced now to complete the Phase 1 seam.
+  """
+  @spec scope_for(Thread.t()) :: {:board, Ecto.UUID.t()}
+  def scope_for(%Thread{board_id: board_id}), do: {:board, board_id}
+
   # ---------- Thread creation (BOARD-02) ----------
 
   @doc """
