@@ -102,6 +102,16 @@ defmodule Foglet.Config.Schema do
       enum: nil,
       min: 1,
       max: nil
+    },
+    %{
+      key: "invite_generation_per_user_limit",
+      type: :integer,
+      default: 0,
+      description:
+        "Per-user invite generation cap when invite_code_generators == \"any_user\" (INVT-07 D-04). 0 = unlimited.",
+      enum: nil,
+      min: 0,
+      max: nil
     }
   ]
 
