@@ -11,7 +11,7 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
 - Decimal phases (`2.1`, `2.2`): urgent insertions if needed later
 
 - [x] **Phase 0: Screen Shells and Shared Surface Primitives** - Scaffold Account, Moderation, Sysop, and shared tab/screen state without shipping fake business behavior.
-- [ ] **Phase 1: Authorization and Scope Backbone** - Add actor-aware policy and future-safe moderation scope rules before operator actions ship.
+- [x] **Phase 1: Authorization and Scope Backbone** - Add actor-aware policy and future-safe moderation scope rules before operator actions ship.
 - [ ] **Phase 2: Sysop Config and Board Management** - Expose typed site policy, invite controls, board/category lifecycle, and system details from the TUI.
 - [ ] **Phase 3: Invite Persistence and Registration Enforcement** - Make invite-only onboarding real through persisted single-use invites and transactional redemption.
 - [ ] **Phase 4: Shared Invite Surface Activation** - Turn on the reusable `INVITES` tab across allowed surfaces according to config and role.
