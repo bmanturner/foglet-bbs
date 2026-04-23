@@ -19,13 +19,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   alias Foglet.TUI.App
 
   alias Foglet.TUI.Screens.{
+    Account,
     BoardList,
     Login,
     MainMenu,
+    Moderation,
     NewThread,
     PostComposer,
     PostReader,
     Register,
+    Sysop,
     Verify
   }
 
@@ -612,6 +615,101 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     assert max_y <= 24,
            "new_thread board step: total height #{max_y} exceeds 24 rows"
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 0 shell smoke tests
+  # ---------------------------------------------------------------------------
+
+  test "account shell renders PROFILE/PREFS tab labels at distinct x positions within height=24" do
+    user = %{id: "u1", handle: "alice", role: :user, status: :active}
+
+    state = %App{
+      current_screen: :account,
+      current_user: user,
+      screen_state: %{account: Account.init_screen_state()},
+      terminal_size: {80, 24}
+    }
+
+    tree = Account.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    assert Enum.any?(texts, &String.contains?(&1, "PROFILE")),
+           "expected 'PROFILE' tab label, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &String.contains?(&1, "PREFS")),
+           "expected 'PREFS' tab label, got: #{inspect(texts)}"
+
+    max_y =
+      elements
+      |> Enum.map(fn el -> Map.get(el, :y, 0) + Map.get(el, :height, 1) end)
+      |> Enum.max(fn -> 0 end)
+
+    assert max_y <= 24,
+           "account shell: total height #{max_y} exceeds 24 rows"
+  end
+
+  test "moderation shell renders all five tab labels within height=24" do
+    user = %{id: "u2", handle: "alice", role: :mod, status: :active}
+
+    state = %App{
+      current_screen: :moderation,
+      current_user: user,
+      screen_state: %{moderation: Moderation.init_screen_state()},
+      terminal_size: {80, 24}
+    }
+
+    tree = Moderation.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    for tab <- ["QUEUE", "LOG", "USERS", "SANCTIONS", "BOARDS"] do
+      assert Enum.any?(texts, &String.contains?(&1, tab)),
+             "expected '#{tab}' tab label in moderation shell, got: #{inspect(texts)}"
+    end
+
+    max_y =
+      elements
+      |> Enum.map(fn el -> Map.get(el, :y, 0) + Map.get(el, :height, 1) end)
+      |> Enum.max(fn -> 0 end)
+
+    assert max_y <= 24,
+           "moderation shell: total height #{max_y} exceeds 24 rows"
+  end
+
+  test "sysop shell renders all five tab labels within height=24" do
+    user = %{id: "u3", handle: "alice", role: :sysop, status: :active}
+
+    state = %App{
+      current_screen: :sysop,
+      current_user: user,
+      screen_state: %{sysop: Sysop.init_screen_state()},
+      terminal_size: {80, 24}
+    }
+
+    tree = Sysop.render(state)
+    positioned = apply(tree)
+
+    elements = text_elements(positioned)
+    texts = Enum.map(elements, & &1.text)
+
+    for tab <- ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS"] do
+      assert Enum.any?(texts, &String.contains?(&1, tab)),
+             "expected '#{tab}' tab label in sysop shell, got: #{inspect(texts)}"
+    end
+
+    max_y =
+      elements
+      |> Enum.map(fn el -> Map.get(el, :y, 0) + Map.get(el, :height, 1) end)
+      |> Enum.max(fn -> 0 end)
+
+    assert max_y <= 24,
+           "sysop shell: total height #{max_y} exceeds 24 rows"
   end
 
   test "new_thread compose step with title_input='Hello' and body — both appear in positioned text" do
