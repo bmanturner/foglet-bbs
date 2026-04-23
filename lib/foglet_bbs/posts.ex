@@ -13,6 +13,19 @@ defmodule Foglet.Posts do
   alias Foglet.Posts.{Edit, Post}
   alias FogletBbs.Repo
 
+  # ---------- Authorization scope helper (D-08) ----------
+
+  @doc """
+  Returns the authorization scope for a post — the board it belongs to.
+  Consumed by callers of `Bodyguard.permit(Foglet.Authorization, action, actor, scope)`
+  when the action targets a specific post (e.g., `:delete_post`, `:edit_post_as_mod`).
+
+  The post operator call sites are deferred to Phase 8 per D-20; the helper is
+  introduced now to complete the Phase 1 seam.
+  """
+  @spec scope_for(Post.t()) :: {:board, Ecto.UUID.t()}
+  def scope_for(%Post{board_id: board_id}), do: {:board, board_id}
+
   # ---------- Post creation (BOARD-03) ----------
 
   @doc """
