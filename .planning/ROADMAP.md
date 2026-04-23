@@ -32,9 +32,9 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   3. A shared surface primitive exists for the reusable `INVITES` tab so later phases do not duplicate invite-tab UI/state across screens.
   4. Screen shell work does not introduce fake save actions or fake moderation/invite behavior that bypasses real domain logic.
 **Plans**: 7 plans
-  - [ ] 00-01-PLAN.md — Wave 0: write failing tests for Account, Moderation, Sysop shells and shared InvitesSurface (plus main_menu/app/layout_smoke extensions)
-  - [ ] 00-02-PLAN.md — Wave 1: shared INVITES surface primitive (InvitesSurface + InvitesState)
-  - [ ] 00-03-PLAN.md — Wave 1: App routing seams for :account/:moderation/:sysop + ShellVisibility helper
+  - [x] 00-01-PLAN.md — Wave 0: write failing tests for Account, Moderation, Sysop shells and shared InvitesSurface (plus main_menu/app/layout_smoke extensions)
+  - [x] 00-02-PLAN.md — Wave 1: shared INVITES surface primitive (InvitesSurface + InvitesState)
+  - [x] 00-03-PLAN.md — Wave 1: App routing seams for :account/:moderation/:sysop + ShellVisibility helper
   - [ ] 00-04-PLAN.md — Wave 2: Account shell (PROFILE/PREFS + conditional INVITES via shared surface) [ACCT-01]
   - [ ] 00-05-PLAN.md — Wave 2: Moderation shell (QUEUE/LOG/USERS/SANCTIONS/BOARDS, role-gated) [MODR-01]
   - [ ] 00-06-PLAN.md — Wave 2: Sysop shell (SITE/BOARDS/LIMITS/SYSTEM/USERS, role-gated) [SYSO-01]

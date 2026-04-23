@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
-status: planning
+status: executing
 stopped_at: Phase 0 context gathered (assumptions mode)
-last_updated: "2026-04-23T16:55:23.593Z"
-last_activity: 2026-04-23 - Roadmap revised to 9 phases for milestone v1.1 Operations Surfaces & Invites
+last_updated: "2026-04-23T18:07:55.639Z"
+last_activity: 2026-04-23 -- Phase 00 execution started
 progress:
   total_phases: 9
   completed_phases: 0
-  total_plans: 0
+  total_plans: 7
   completed_plans: 0
   percent: 0
 ---
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 0 - Screen Shells and Shared Surface Primitives
+**Current focus:** Phase 00 — screen-shells-and-shared-surface-primitives
 
 ## Current Position
 
-Phase: 0 of 9 (Screen Shells and Shared Surface Primitives)
-Plan: 0 of TBD in current phase
-Status: Ready to plan
-Last activity: 2026-04-23 - Roadmap revised to 9 phases for milestone v1.1 Operations Surfaces & Invites
+Phase: 00 (screen-shells-and-shared-surface-primitives) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 00
+Last activity: 2026-04-23 -- Phase 00 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
