@@ -15,6 +15,15 @@ defmodule Foglet.Boards do
   alias Foglet.Boards.Supervisor, as: BoardSupervisor
   alias FogletBbs.Repo
 
+  # ---------- Authorization scope helper (D-08) ----------
+
+  @doc """
+  Returns the authorization scope for a board — the board itself.
+  Consumed by callers that invoke `Bodyguard.permit(Foglet.Authorization, action, actor, Foglet.Boards.scope_for(board))`.
+  """
+  @spec scope_for(Board.t()) :: {:board, Ecto.UUID.t()}
+  def scope_for(%Board{id: id}), do: {:board, id}
+
   # ---------- Application boot ----------
 
   @doc """
@@ -52,38 +61,72 @@ defmodule Foglet.Boards do
   # ---------- Boards ----------
 
   @doc """
-  Create a board in a category (sysop pathway — BOARD-01).
+  Create a board in a category. Actor must be authorized for `:create_board` at `:site` scope.
   Starts a Board Server for the new board immediately (D-04).
+
+  Returns `{:error, :forbidden}` if the actor is not permitted (D-15).
   """
-  @spec create_board(String.t(), map()) :: {:ok, Board.t()} | {:error, Ecto.Changeset.t()}
-  def create_board(category_id, attrs) do
-    result =
-      %Board{category_id: category_id}
+  @spec create_board(Foglet.Accounts.User.t() | nil, String.t(), map()) ::
+          {:ok, Board.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def create_board(actor, category_id, attrs) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :create_board, actor, :site) do
+      result =
+        %Board{category_id: category_id}
+        |> Board.changeset(attrs)
+        |> Repo.insert()
+
+      case result do
+        {:ok, board} ->
+          case BoardSupervisor.start_board(board.id) do
+            {:ok, _pid} ->
+              {:ok, board}
+
+            {:error, {:already_started, _pid}} ->
+              {:ok, board}
+
+            {:error, reason} ->
+              require Logger
+
+              Logger.error(
+                "Failed to start Board Server for #{board.slug} (#{board.id}): #{inspect(reason)}. " <>
+                  "Board is inserted; a future application restart will start its server."
+              )
+
+              {:ok, board}
+          end
+
+        error ->
+          error
+      end
+    end
+  end
+
+  @doc """
+  Update a board's attributes. Actor must be authorized for `:update_board` at `:site` scope.
+  Returns `{:error, :forbidden}` if the actor is not permitted.
+  """
+  @spec update_board(Foglet.Accounts.User.t() | nil, Board.t(), map()) ::
+          {:ok, Board.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def update_board(actor, %Board{} = board, attrs) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :update_board, actor, :site) do
+      board
       |> Board.changeset(attrs)
-      |> Repo.insert()
+      |> Repo.update()
+    end
+  end
 
-    case result do
-      {:ok, board} ->
-        case BoardSupervisor.start_board(board.id) do
-          {:ok, _pid} ->
-            {:ok, board}
-
-          {:error, {:already_started, _pid}} ->
-            {:ok, board}
-
-          {:error, reason} ->
-            require Logger
-
-            Logger.error(
-              "Failed to start Board Server for #{board.slug} (#{board.id}): #{inspect(reason)}. " <>
-                "Board is inserted; a future application restart will start its server."
-            )
-
-            {:ok, board}
-        end
-
-      error ->
-        error
+  @doc """
+  Archive a board. Actor must be authorized for `:archive_board` at `:site` scope.
+  Flips `archived` to true via `Board.archive_changeset/1` (defensive: only archived is cast).
+  Returns `{:error, :forbidden}` if the actor is not permitted.
+  """
+  @spec archive_board(Foglet.Accounts.User.t() | nil, Board.t()) ::
+          {:ok, Board.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def archive_board(actor, %Board{} = board) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :archive_board, actor, :site) do
+      board
+      |> Board.archive_changeset()
+      |> Repo.update()
     end
   end
 
