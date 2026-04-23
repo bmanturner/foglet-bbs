@@ -23,6 +23,11 @@ defmodule FogletBbs.BoardsFixtures do
   Starts a Board Server automatically. Accepts a Category struct or a category_id binary.
   Internally passes a sysop actor so Phase 1's authorization guard is satisfied; existing
   tests that do not care about authorization continue to work without source changes.
+
+  IMPORTANT: If the test will drive the Board Server (thread/post creation, message-number
+  allocation, etc.), call `allow_board_server!(board.id)` after this fixture so the sandbox
+  owner grants DB access to the server process. Tests that only inspect the board record
+  directly can skip that call.
   """
   def board_fixture(category_or_id, attrs \\ %{}) do
     category_id =
