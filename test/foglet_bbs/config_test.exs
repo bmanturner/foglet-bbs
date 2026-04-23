@@ -2,6 +2,7 @@ defmodule Foglet.ConfigTest do
   # async: false because :foglet_config is a shared named ETS table.
   use FogletBbs.DataCase, async: false
 
+  alias Foglet.Accounts.User
   alias Foglet.Config
   alias Foglet.Config.Entry
   alias Foglet.Config.InvalidValueError
@@ -233,6 +234,59 @@ defmodule Foglet.ConfigTest do
     test "typed accessor reflects subsequent writes" do
       Config.put!("max_post_length", 2048, nil)
       assert Config.max_post_length() == 2048
+    end
+  end
+
+  # Helper actors — plain structs (no DB insert needed; policy is pure).
+  defp sysop_actor, do: %User{role: :sysop, status: :active, deleted_at: nil}
+  defp mod_actor, do: %User{role: :mod, status: :active, deleted_at: nil}
+  defp regular_user_actor, do: %User{role: :user, status: :active, deleted_at: nil}
+
+  describe "put/3 (actor-aware, D-19)" do
+    test "sysop can write a valid key/value — returns {:ok, %Entry{}} and value is readable via get!/1" do
+      assert {:ok, %Entry{}} = Config.put(sysop_actor(), "registration_mode", "invite_only")
+      assert Config.get!("registration_mode") == "invite_only"
+    end
+
+    test "sysop can update an existing value — returns {:ok, %Entry{}}" do
+      Config.put!("registration_mode", "open", nil)
+      assert {:ok, %Entry{}} = Config.put(sysop_actor(), "registration_mode", "invite_only")
+      assert Config.get!("registration_mode") == "invite_only"
+    end
+
+    test "regular user is forbidden — returns {:error, :forbidden} and DB value is unchanged" do
+      Config.put!("registration_mode", "open", nil)
+
+      assert {:error, :forbidden} =
+               Config.put(regular_user_actor(), "registration_mode", "invite_only")
+
+      assert Config.get!("registration_mode") == "open"
+    end
+
+    test "nil actor is forbidden — returns {:error, :forbidden}" do
+      assert {:error, :forbidden} = Config.put(nil, "registration_mode", "invite_only")
+    end
+
+    test "mod actor is forbidden — returns {:error, :forbidden}" do
+      assert {:error, :forbidden} = Config.put(mod_actor(), "registration_mode", "invite_only")
+    end
+
+    test "unknown key returns {:error, :unknown_key} (no raise)" do
+      assert {:error, :unknown_key} =
+               Config.put(sysop_actor(), "definitely_not_a_real_key", "value")
+    end
+
+    test "invalid value returns {:error, :invalid_value} (no raise)" do
+      # max_post_length is an integer key; pass a string
+      assert {:error, :invalid_value} =
+               Config.put(sysop_actor(), "max_post_length", "not_an_integer")
+    end
+
+    test "forbidden path does NOT insert or update the Entry row" do
+      before_count = Repo.aggregate(Entry, :count)
+      {:error, :forbidden} = Config.put(regular_user_actor(), "registration_mode", "invite_only")
+      after_count = Repo.aggregate(Entry, :count)
+      assert before_count == after_count
     end
   end
 end
