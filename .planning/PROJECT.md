@@ -8,6 +8,19 @@ Foglet BBS is an SSH-first bulletin board system built as a Phoenix/Elixir appli
 
 A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
 
+## Current Milestone: v1.1 Operations Surfaces & Invites
+
+**Goal:** Add the user, moderator, and sysop TUI surfaces needed to manage preferences, invites, site operations, and main-menu social/status affordances without leaving the terminal.
+
+**Target features:**
+- Account screen for private profile and preferences, including timezone, theme, and 12h/24h display
+- Reusable INVITES tab that appears in Account, Moderation, or Sysop based on `invite_code_generators`
+- Moderation screen scaffolding with tabbed sections for queue, log, users, sanctions, boards, and future board-scoped moderator growth
+- Sysop screen scaffolding with site, boards, limits, system, users, and conditional invites administration
+- Invite generation and redemption wired end to end for `invite_only` registration
+- Main menu timestamp rendered from the logged-in user's display preferences and refreshed every minute
+- Main menu shoutbox/oneliners entry and display
+
 ## Requirements
 
 ### Validated
@@ -25,13 +38,13 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 
 ### Active
 
-- [ ] Make the SSH/TUI BBS flow feel complete end to end: connect, authenticate, browse boards, read threads, compose posts, and return later with read state intact
-- [ ] Preserve terminal-first ergonomics while continuing to improve screen state, widget consistency, and Raxol integration
-- [ ] Build the community-presence layer: online users, last callers, login sequence, banners, news, preferences, and CP437-aware ANSI rendering
-- [ ] Add real-time interaction through chat, DMs, mentions, notifications, and PubSub-backed live updates
-- [ ] Add moderation and sysop operations inside the TUI so a BBS can be run day to day without leaving the terminal
-- [ ] Add search, oneliners, profiles, upvotes, and polish that make the system feel complete for a solo user and small community
-- [ ] Keep operational quality high through precommit checks, tests, security scanning, typed config, and deterministic process supervision
+- [ ] Users can manage private profile and presentation settings from an Account screen without shell access or database edits
+- [ ] Invite-only registration uses persisted invite codes with generation rights controlled by runtime config and surfaced through a shared INVITES tab
+- [ ] Moderators and sysops have dedicated tabbed TUI surfaces that can grow into full operational workspaces without reworking navigation structure later
+- [ ] Sysops can manage site configuration, board/category lifecycle, and operational limits from the TUI rather than ad hoc code or DB edits
+- [ ] The main menu feels more alive and personalized through per-user time rendering and a lightweight shoutbox/oneliners surface
+- [ ] Authorization and UI structure leave room for future board-scoped moderators instead of hard-coding global moderator assumptions
+- [ ] Terminal-first ergonomics, reusable widgets, and strong tests remain intact while these new surfaces are added
 
 ### Out of Scope
 
@@ -52,6 +65,8 @@ The domain core is organized as Phoenix-style context modules backed by Ecto sch
 
 Project planning history lives in `.planning/`, including a codebase map, stack analysis, quick-task summaries, and current state. The current planning cycle has focused on tightening SSH handling, TUI domain injection, state structs, typed configuration, post deletion/anonymization semantics, and test coverage.
 
+The v1.1 planning focus is operational depth inside the TUI: user account/preferences management, moderator/sysop control surfaces, invite workflows that actually enforce invite-only mode, and main-menu polish that makes the BBS feel more inhabited. Existing documentation already calls out invites, oneliners, and sysop runtime config as intended system capabilities; this milestone turns those into concrete operator and user-facing surfaces.
+
 ## Constraints
 
 - **Tech stack**: Elixir 1.19.5, Erlang/OTP 28.3.1, Phoenix 1.8.5, Ecto, PostgreSQL, Bandit, and vendored Raxol - existing project choices and `.tool-versions` pin the runtime
@@ -62,6 +77,8 @@ Project planning history lives in `.planning/`, including a codebase map, stack 
 - **Testing**: Process tests should use supervised processes and deterministic synchronization - avoid sleeps and fragile liveness checks
 - **Security**: SSH auth, password hashing, account deletion, rate limiting, and runtime config changes need conservative handling - this is an internet-facing service
 - **Dependencies**: Prefer project-standard libraries and Elixir/Phoenix/Raxol patterns - use `Req` for HTTP if needed and avoid adding date/time or HTTP client dependencies without a deliberate decision
+- **Surface reuse**: Account, moderation, and sysop screens should share invite-tab primitives rather than forking near-identical implementations
+- **Authorization**: Moderator and sysop UI must align with role checks and future board-scoped moderation instead of assuming every moderator is global forever
 
 ## Key Decisions
 
@@ -75,6 +92,8 @@ Project planning history lives in `.planning/`, including a codebase map, stack 
 | Allocate per-board message numbers through board server processes | A single writer per board gives deterministic numbering without relying on per-board database sequence gymnastics | - Pending |
 | Enforce one active session per user through the session supervisor and registry | BBS presence and terminal state are easier to reason about when a user has a single canonical session | - Pending |
 | Keep sysop administration inside the TUI for day-to-day operations | A sysop should be able to operate the BBS from the same terminal experience users inhabit | - Pending |
+| Build a reusable invite-management surface that can be embedded in account, moderation, and sysop screens | Invite generation rules vary by runtime config, but the workflows and data model should stay consistent across roles | - Pending |
+| Store per-user time rendering preferences alongside other presentation preferences | Timezone and 12h/24h display are user-specific UI concerns that need to drive main-menu rendering and other future timestamps | - Pending |
 
 ## Evolution
 
@@ -94,4 +113,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state.
 
 ---
-*Last updated: 2026-04-22 after initialization*
+*Last updated: 2026-04-23 after milestone v1.1 start*

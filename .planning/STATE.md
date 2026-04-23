@@ -1,6 +1,20 @@
 # Project State
 
-Last activity: 2026-04-22 - Completed quick task 260422-oez: Rewrite posts.user_id to tombstone_user_id on user deletion and include deleted posts in Posts.list_posts/1
+## Current Position
+
+Phase: Not started (defining requirements)
+Plan: -
+Status: Defining requirements
+Last activity: 2026-04-23 - Milestone v1.1 Operations Surfaces & Invites started
+
+## Project Reference
+
+See: .planning/PROJECT.md (updated 2026-04-23)
+
+**Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
+**Current focus:** Milestone v1.1 Operations Surfaces & Invites
+
+## Accumulated Context
 
 ### Blockers/Concerns
 
