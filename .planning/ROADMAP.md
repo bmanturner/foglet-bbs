@@ -93,7 +93,11 @@ Plans:
   2. User can reply only when the board's `postable_by` policy permits their role and the thread is not locked.
   3. Rejected thread or reply attempts do not allocate board message numbers or persist posts.
   4. User sees a clear terminal error when submission is rejected by posting policy or locked-thread state.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 11-01-PLAN.md — Thread posting-policy preflight and side-effect invariants
+- [ ] 11-02-PLAN.md — Reply posting-policy and locked-thread preflight
+- [ ] 11-03-PLAN.md — Terminal rejection copy for posting denials
 **UI hint**: yes
 
 ### Phase 12: Account SSH Key Management
