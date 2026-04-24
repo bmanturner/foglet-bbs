@@ -223,6 +223,25 @@ defmodule Foglet.OnelinersTest do
       assert action.metadata == %{"body" => "metadata body", "author_handle" => author.handle}
     end
 
+    test "already-hidden entries cannot be hidden again or re-audited" do
+      first_actor = operator_fixture(:mod)
+      second_actor = operator_fixture(:sysop)
+      author = AccountsFixtures.user_fixture()
+      {:ok, entry} = Oneliners.create_entry(author, %{body: "single audit"})
+
+      assert {:ok, %Entry{} = hidden_entry} = Oneliners.hide_entry(first_actor, entry.id, "abuse")
+      before_action_count = Repo.aggregate(Action, :count)
+
+      assert {:error, :already_hidden} =
+               Oneliners.hide_entry(second_actor, hidden_entry.id, "different reason")
+
+      reloaded_entry = Repo.get!(Entry, hidden_entry.id)
+      assert reloaded_entry.hidden
+      assert reloaded_entry.hidden_reason == "abuse"
+      assert reloaded_entry.hidden_by_id == first_actor.id
+      assert Repo.aggregate(Action, :count) == before_action_count
+    end
+
     test "after hide, list_recent_visible excludes hidden entry and preserves newest-first order" do
       actor = operator_fixture(:mod)
       first_author = AccountsFixtures.user_fixture()

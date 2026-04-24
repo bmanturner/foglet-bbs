@@ -66,9 +66,11 @@ defmodule Foglet.Oneliners do
   this mutation.
   """
   @spec hide_entry(User.t() | nil, Entry.t() | Ecto.UUID.t(), String.t()) ::
-          {:ok, Entry.t()} | {:error, :forbidden | :not_found | Ecto.Changeset.t()}
+          {:ok, Entry.t()}
+          | {:error, :already_hidden | :forbidden | :not_found | Ecto.Changeset.t()}
   def hide_entry(actor, entry_or_id, reason) do
     with {:ok, entry} <- fetch_entry(entry_or_id),
+         :ok <- ensure_visible(entry),
          :ok <- authorize_hide(actor),
          {:ok, changeset} <- hide_changeset(entry, actor, reason) do
       Repo.transact(fn ->
@@ -122,6 +124,9 @@ defmodule Foglet.Oneliners do
   end
 
   defp fetch_entry(_entry_or_id), do: {:error, :not_found}
+
+  defp ensure_visible(%Entry{hidden: false}), do: :ok
+  defp ensure_visible(%Entry{hidden: true}), do: {:error, :already_hidden}
 
   defp authorize_hide(%User{} = actor) do
     actor
