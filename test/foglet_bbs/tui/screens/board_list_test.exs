@@ -113,6 +113,41 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert BoardList.handle_key(%{key: :enter}, s) == :no_match
   end
 
+  test "'s' on an unsubscribed board emits subscribe command", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+
+    {:update, _s, cmds} = BoardList.handle_key(%{key: :char, char: "s"}, s)
+
+    assert {:subscribe_to_board, "b2"} in cmds
+  end
+
+  test "'u' on a subscribed non-required board emits unsubscribe command", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+
+    {:update, _s, cmds} = BoardList.handle_key(%{key: :char, char: "u"}, s)
+
+    assert {:unsubscribe_from_board, "b1"} in cmds
+  end
+
+  test "'u' on a required board renders feedback and emits no command", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+
+    {:update, s, cmds} = BoardList.handle_key(%{key: :char, char: "u"}, s)
+
+    assert cmds == []
+    assert BoardList.render(s) |> flatten_text() =~ "required subscription"
+    assert BoardList.render(s) |> flatten_text() =~ "Announcements [required]"
+  end
+
   test "'Q' returns to :main_menu", %{state: state} do
     {:update, s, _} = BoardList.handle_key(%{key: :char, char: "Q"}, state)
     assert s.current_screen == :main_menu
