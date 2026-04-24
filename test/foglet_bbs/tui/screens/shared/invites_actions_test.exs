@@ -87,7 +87,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
   end
 
   describe "revoke_selected/2" do
-    test "revoke selected available invite refreshes from Accounts list" do
+    test "available invite revoke sets persisted revoked_at and refreshed rendered status revoked" do
       sysop = actor_fixture(:sysop)
       AccountsFixtures.invite_fixture(sysop, %{code: "INVITEAVAILABLE001"})
       AccountsFixtures.invite_fixture(sysop, %{code: "INVITEAVAILABLE002"})
@@ -102,14 +102,18 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
                Enum.find(revoked_state.items, &(&1.code == "INVITEAVAILABLE001"))
 
       assert revoked_state.error == nil
+
+      assert {:ok, %{status: :revoked, revoked_at: %DateTime{}}} =
+               Accounts.get_invite_status("INVITEAVAILABLE001")
     end
 
-    test "failed revoke leaves local state unchanged" do
+    test "unauthorized actor revoke sets error and leaves persisted invite fields unchanged" do
       sysop = actor_fixture(:sysop)
       user = AccountsFixtures.user_fixture()
       invite = AccountsFixtures.invite_fixture(sysop)
       {:ok, items} = Accounts.list_invites(sysop)
       state = InvitesState.new(items: items, selected_index: 0, last_generated_code: "OLD")
+      before_status = invite_status!(invite.code)
 
       assert {:ok, failed} = InvitesActions.revoke_selected(user, state)
       assert failed.items == state.items
@@ -117,10 +121,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert failed.last_generated_code == "OLD"
       assert failed.error == "You are not allowed to manage invites."
 
-      assert {:ok, %{status: :available}} = Accounts.get_invite_status(invite.code)
+      assert invite_status!(invite.code) == before_status
     end
 
-    test "maps Accounts errors for unavailable selected invite" do
+    test "consumed invite revoke sets error and leaves persisted invite fields unchanged" do
       sysop = actor_fixture(:sysop)
       user = AccountsFixtures.user_fixture()
       invite = AccountsFixtures.invite_fixture(sysop)
@@ -132,10 +136,80 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
 
       {:ok, items} = Accounts.list_invites(sysop)
       state = InvitesState.new(items: items)
+      before_status = invite_status!(invite.code)
 
       assert {:ok, failed} = InvitesActions.revoke_selected(sysop, state)
       assert failed.items == state.items
+      assert failed.selected_index == state.selected_index
       assert failed.error == "That invite is already consumed or revoked."
+
+      assert invite_status!(invite.code) == before_status
+    end
+
+    test "already revoked invite revoke sets error and leaves persisted invite fields unchanged" do
+      sysop = actor_fixture(:sysop)
+      invite = AccountsFixtures.invite_fixture(sysop)
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+      invite
+      |> Ecto.Changeset.change(revoked_at: now)
+      |> Repo.update!()
+
+      {:ok, items} = Accounts.list_invites(sysop)
+      state = InvitesState.new(items: items)
+      before_status = invite_status!(invite.code)
+
+      assert {:ok, failed} = InvitesActions.revoke_selected(sysop, state)
+      assert failed.items == state.items
+      assert failed.selected_index == state.selected_index
+      assert failed.error == "That invite is already consumed or revoked."
+
+      assert invite_status!(invite.code) == before_status
+    end
+
+    test "missing code revoke sets error and leaves persisted invites unchanged" do
+      sysop = actor_fixture(:sysop)
+      invite = AccountsFixtures.invite_fixture(sysop)
+
+      state =
+        InvitesState.new(
+          items: [
+            %{
+              code: "MISSINGINVITECODE001",
+              status: :available,
+              revoked_at: nil,
+              consumed_at: nil,
+              consumed_by_user_id: nil
+            }
+          ]
+        )
+
+      before_status = invite_status!(invite.code)
+
+      assert {:ok, failed} = InvitesActions.revoke_selected(sysop, state)
+      assert failed.items == state.items
+      assert failed.selected_index == state.selected_index
+      assert failed.error == "That invite could not be found."
+
+      assert invite_status!(invite.code) == before_status
+    end
+  end
+
+  describe "shared screen delegation" do
+    test "account moderation and sysop contain no duplicated invite lifecycle or Repo calls" do
+      for path <- [
+            "lib/foglet_bbs/tui/screens/account.ex",
+            "lib/foglet_bbs/tui/screens/moderation.ex",
+            "lib/foglet_bbs/tui/screens/sysop.ex"
+          ] do
+        source = File.read!(path)
+
+        assert String.contains?(source, "InvitesActions"),
+               "Expected #{path} to delegate invite keys through InvitesActions"
+
+        refute source =~ ~r/Accounts\.(create_invite|list_invites|revoke_invite)/
+        refute String.contains?(source, "FogletBbs.Repo")
+      end
     end
   end
 
@@ -186,5 +260,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
     user = AccountsFixtures.user_fixture()
     {:ok, actor} = Accounts.update_role(user, role)
     actor
+  end
+
+  defp invite_status!(code) do
+    assert {:ok, status} = Accounts.get_invite_status(code)
+    status
   end
 end
