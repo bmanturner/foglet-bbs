@@ -180,6 +180,101 @@ defmodule Foglet.AccountsTest do
     end
   end
 
+  describe "transition_user_status/3" do
+    test "active sysop can perform the locked transition graph" do
+      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+
+      pending_to_active = user_with_status(:pending, "pendingactive")
+      assert {:ok, result} = Accounts.transition_user_status(sysop, pending_to_active, :active)
+      assert %{from: :pending, to: :active, delivery: :not_applicable} = result
+      assert result.user.status == :active
+
+      pending_to_rejected = user_with_status(:pending, "pendingrejected")
+      assert {:ok, result} = Accounts.transition_user_status(sysop, pending_to_rejected.handle, "rejected")
+      assert %{from: :pending, to: :rejected, delivery: :not_applicable} = result
+      assert result.user.status == :rejected
+
+      active_to_suspended = AccountsFixtures.user_fixture(%{handle: "activesuspended"})
+      assert {:ok, result} = Accounts.transition_user_status(sysop, active_to_suspended.id, :suspended)
+      assert %{from: :active, to: :suspended, delivery: :not_applicable} = result
+      assert result.user.status == :suspended
+
+      suspended_to_active = user_with_status(:suspended, "suspendedactive")
+      assert {:ok, result} = Accounts.transition_user_status(sysop, suspended_to_active, :active)
+      assert %{from: :suspended, to: :active, delivery: :not_applicable} = result
+      assert result.user.status == :active
+    end
+
+    test "invalid transitions do not mutate persisted status" do
+      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+
+      for {from, to, handle} <- [
+            {:rejected, :active, "rejectedactive"},
+            {:suspended, :rejected, "suspendedrejected"},
+            {:active, :rejected, "activerejected"},
+            {:pending, :suspended, "pendingsuspended"}
+          ] do
+        user = user_with_status(from, handle)
+
+        assert {:error, :invalid_transition} = Accounts.transition_user_status(sysop, user, to)
+        assert Accounts.get_user!(user.id).status == from
+      end
+    end
+
+    test "non-active non-sysop actors are forbidden before target mutation" do
+      target = user_with_status(:pending, "forbiddentarget")
+
+      for actor <- [
+            AccountsFixtures.user_fixture(%{handle: "regularactor"}),
+            AccountsFixtures.user_fixture(%{handle: "modactor", role: :mod}),
+            user_with_status(:pending, "pendingactor", :sysop),
+            user_with_status(:rejected, "rejectedactor", :sysop),
+            user_with_status(:suspended, "suspendedactor", :sysop),
+            deleted_user_fixture("deletedactor"),
+            nil
+          ] do
+        assert {:error, :forbidden} = Accounts.transition_user_status(actor, target, :active)
+      end
+
+      assert Accounts.get_user!(target.id).status == :pending
+    end
+
+    test "unknown target and deleted target return tagged errors" do
+      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+      deleted = deleted_user_fixture("deletedtarget")
+
+      assert {:error, :not_found} =
+               Accounts.transition_user_status(sysop, "missing-target", :active)
+
+      assert {:error, :deleted} = Accounts.transition_user_status(sysop, deleted.handle, :active)
+    end
+  end
+
+  describe "list_user_status_admin_targets/1" do
+    test "returns non-deleted users grouped by status for sysops" do
+      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+      pending = user_with_status(:pending, "listpending")
+      active = AccountsFixtures.user_fixture(%{handle: "listactive"})
+      suspended = user_with_status(:suspended, "listsuspended")
+      rejected = user_with_status(:rejected, "listrejected")
+      deleted = deleted_user_fixture("listdeleted")
+
+      assert {:ok, targets} = Accounts.list_user_status_admin_targets(sysop)
+
+      assert pending.id in Enum.map(targets.pending, & &1.id)
+      assert active.id in Enum.map(targets.active, & &1.id)
+      assert suspended.id in Enum.map(targets.suspended, & &1.id)
+      assert rejected.id in Enum.map(targets.rejected, & &1.id)
+      refute deleted.id in targets |> Map.values() |> List.flatten() |> Enum.map(& &1.id)
+    end
+
+    test "returns forbidden for non-sysops" do
+      actor = AccountsFixtures.user_fixture()
+
+      assert {:error, :forbidden} = Accounts.list_user_status_admin_targets(actor)
+    end
+  end
+
   describe "update_profile/2 (ACCT-02/03/04/05)" do
     test "persists valid private profile and account preferences" do
       user = AccountsFixtures.user_fixture()
@@ -280,6 +375,22 @@ defmodule Foglet.AccountsTest do
       assert updated.preferences["time_format"] == "24h"
       assert updated.preferences["density"] == "compact"
     end
+  end
+
+  defp user_with_status(status, handle, role \\ :user) do
+    {:ok, user} =
+      AccountsFixtures.user_fixture(%{handle: handle})
+      |> Accounts.update_role(role)
+
+    user
+    |> User.status_changeset(%{status: status})
+    |> Repo.update!()
+  end
+
+  defp deleted_user_fixture(handle) do
+    user = AccountsFixtures.user_fixture(%{handle: handle})
+    {:ok, deleted} = Accounts.delete_user(user)
+    deleted
   end
 
   describe "register_ssh_key/2 (IDNT-04)" do
