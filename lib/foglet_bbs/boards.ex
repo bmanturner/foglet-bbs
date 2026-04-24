@@ -13,6 +13,7 @@ defmodule Foglet.Boards do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.Accounts.User
   alias Foglet.Boards.{Board, Category, ReadPointer, Subscription}
   alias Foglet.Boards.Supervisor, as: BoardSupervisor
   alias FogletBbs.Repo
@@ -165,9 +166,15 @@ defmodule Foglet.Boards do
           {:ok, Board.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
   def update_board(actor, %Board{} = board, attrs) do
     with :ok <- Bodyguard.permit(Foglet.Authorization, :update_board, actor, :site) do
-      board
-      |> Board.changeset(attrs)
-      |> Repo.update()
+      Repo.transact(fn ->
+        with {:ok, updated} <-
+               board
+               |> Board.changeset(attrs)
+               |> Repo.update(),
+             :ok <- maybe_subscribe_existing_users_to_required_board(updated) do
+          {:ok, updated}
+        end
+      end)
     end
   end
 
@@ -321,6 +328,21 @@ defmodule Foglet.Boards do
       {:ok, :subscribed}
     end
   end
+
+  defp maybe_subscribe_existing_users_to_required_board(
+         %Board{required_subscription: true} = board
+       ) do
+    from(u in User, where: is_nil(u.deleted_at), select: u.id)
+    |> Repo.all()
+    |> Enum.reduce_while(:ok, fn user_id, :ok ->
+      case subscribe(user_id, board.id) do
+        {:ok, _subscription} -> {:cont, :ok}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+  end
+
+  defp maybe_subscribe_existing_users_to_required_board(%Board{}), do: :ok
 
   @doc """
   Unsubscribe a user from an active board unless the board requires subscription.

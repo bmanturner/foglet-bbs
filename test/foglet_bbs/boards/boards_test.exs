@@ -216,6 +216,33 @@ defmodule Foglet.BoardsTest do
       assert updated.id == board.id
     end
 
+    test "sysop requiring a board subscribes existing non-deleted users" do
+      category = category_fixture()
+
+      board =
+        board_fixture(category, %{default_subscription: false, required_subscription: false})
+
+      user = user_fixture()
+      other_user = user_fixture()
+
+      assert [] = Foglet.Boards.list_subscriptions(user.id)
+      assert [] = Foglet.Boards.list_subscriptions(other_user.id)
+
+      assert {:ok, updated} =
+               Foglet.Boards.update_board(sysop_actor(), board, %{
+                 default_subscription: true,
+                 required_subscription: true
+               })
+
+      assert updated.required_subscription == true
+
+      assert [%Subscription{board_id: board_id}] = Foglet.Boards.list_subscriptions(user.id)
+      assert board_id == board.id
+
+      assert [%Subscription{board_id: board_id}] = Foglet.Boards.list_subscriptions(other_user.id)
+      assert board_id == board.id
+    end
+
     test "returns {:error, :forbidden} for a regular user" do
       category = category_fixture()
       board = board_fixture(category)
