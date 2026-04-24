@@ -106,7 +106,11 @@ Plans:
   3. User can list their SSH keys with label, fingerprint, created time, and last-used time when available.
   4. User can revoke one of their own SSH keys from Account.
   5. User can authenticate with a registered SSH public key, and successful public-key authentication records last-used metadata.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 12-01-PLAN.md — Accounts SSH key lifecycle and public-key auth metadata
+- [ ] 12-02-PLAN.md — Account SSH KEYS terminal tab
+- [ ] 12-03-PLAN.md — Phase 12 regression validation and precommit
 **UI hint**: yes
 
 ### Phase 13: Board Subscription Management
