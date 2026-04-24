@@ -1,10 +1,12 @@
 defmodule Foglet.ModerationTest do
   use FogletBbs.DataCase, async: false
 
+  alias Foglet.Accounts
   alias Foglet.Moderation
   alias Foglet.Moderation.Action
   alias Foglet.Oneliners
   alias FogletBbs.AccountsFixtures
+  alias FogletBbs.BoardsFixtures
 
   describe "record_hide_oneliner!/4" do
     test "inserts a durable hide-oneliner audit action" do
@@ -71,6 +73,45 @@ defmodule Foglet.ModerationTest do
       Moderation.record_hide_oneliner!(moderator, entry, "spam", %{})
 
       assert Moderation.list_actions_for_scopes([{:board, board_id}]) == []
+    end
+  end
+
+  describe "workspace_snapshot/1" do
+    test "returns scoped moderation workspace rows for a moderator" do
+      moderator = AccountsFixtures.user_fixture()
+      {:ok, moderator} = Accounts.update_role(moderator, :mod)
+      user = AccountsFixtures.user_fixture(%{handle: "activeuser"})
+      category = BoardsFixtures.category_fixture(%{display_order: 1})
+      board = BoardsFixtures.board_fixture(category, %{name: "General", display_order: 2})
+      {:ok, entry} = Oneliners.create_entry(user, %{body: "bad line"})
+
+      action = Moderation.record_hide_oneliner!(moderator, entry, "abuse", %{"body" => entry.body})
+
+      assert {:ok, snapshot} = Moderation.workspace_snapshot(moderator)
+      assert snapshot.scopes == [:site]
+      assert snapshot.queue == []
+      assert snapshot.sanctions_available? == false
+      assert Enum.map(snapshot.log, & &1.id) == [action.id]
+      assert Enum.any?(snapshot.users, &match?(%{id: _, handle: "activeuser", role: :user}, &1))
+      assert Enum.any?(snapshot.boards, &match?(%{id: _, name: "General", scope: {:board, _}}, &1))
+      assert Enum.find(snapshot.boards, &(&1.id == board.id)).scope == {:board, board.id}
+    end
+
+    test "does not leak populated data to regular users or guests" do
+      moderator = AccountsFixtures.user_fixture(%{role: :mod})
+      user = AccountsFixtures.user_fixture()
+      {:ok, entry} = Oneliners.create_entry(user, %{body: "hidden"})
+      Moderation.record_hide_oneliner!(moderator, entry, "spam", %{})
+
+      assert Moderation.workspace_snapshot(user) == {:error, :forbidden}
+      assert Moderation.workspace_snapshot(nil) == {:error, :forbidden}
+    end
+
+    test "accepts synthetic board-scope lists in read helpers" do
+      board_id = Ecto.UUID.generate()
+
+      assert [] = Moderation.list_actions_for_scopes([{:board, board_id}])
+      assert [] = Moderation.board_scope_rows([{:board, board_id}])
     end
   end
 end

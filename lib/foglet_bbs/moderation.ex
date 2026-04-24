@@ -8,15 +8,44 @@ defmodule Foglet.Moderation do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.Authorization
   alias Foglet.Accounts.User
+  alias Foglet.Boards
+  alias Foglet.Boards.Board
   alias Foglet.Moderation.Action
   alias Foglet.Oneliners.Entry
   alias FogletBbs.Repo
 
   @default_limit 50
+  @workspace_limit 20
   @max_limit 100
 
   @type scope :: :site | {:board, Ecto.UUID.t()}
+
+  @doc """
+  Returns the read-only moderation workspace snapshot visible to an actor.
+
+  The scope list is the trust boundary: actors with no `:hide_oneliner` scope
+  receive no populated workspace data.
+  """
+  @spec workspace_snapshot(User.t() | nil) :: {:ok, map()} | {:error, :forbidden}
+  def workspace_snapshot(actor) do
+    case Authorization.scopes_for(actor, :hide_oneliner) do
+      [] ->
+        {:error, :forbidden}
+
+      scopes ->
+        {:ok,
+         %{
+           scopes: scopes,
+           queue: [],
+           log: list_actions_for_scopes(scopes, limit: @workspace_limit),
+           users: active_user_rows(limit: @workspace_limit),
+           boards: board_scope_rows(scopes, limit: @workspace_limit),
+           sanctions_available?: false
+         }}
+    end
+  end
 
   @doc """
   Records a successful oneliner hide audit row.
@@ -59,6 +88,76 @@ defmodule Foglet.Moderation do
     else
       []
     end
+  end
+
+  @doc """
+  Returns read-only board rows visible for the provided moderation scopes.
+
+  Board-scope tuples are accepted even though v1.1 currently grants site scopes
+  to moderators and sysops.
+  """
+  @spec board_scope_rows([scope()], keyword()) :: [map()]
+  def board_scope_rows(scopes, opts \\ [])
+
+  def board_scope_rows([], _opts), do: []
+
+  def board_scope_rows(scopes, opts) when is_list(scopes) do
+    limit = bounded_limit(Keyword.get(opts, :limit, @workspace_limit))
+
+    scope_query =
+      if :site in scopes do
+        dynamic([b], true)
+      else
+        board_ids =
+          scopes
+          |> Enum.flat_map(fn
+            {:board, board_id} -> [board_id]
+            _scope -> []
+          end)
+
+        dynamic([b], b.id in ^board_ids)
+      end
+
+    Repo.all(
+      from b in Board,
+        join: c in assoc(b, :category),
+        where: b.archived == false and c.archived == false,
+        where: ^scope_query,
+        order_by: [asc: c.display_order, asc: b.display_order],
+        limit: ^limit,
+        preload: [category: c]
+    )
+    |> Enum.map(&board_row/1)
+  end
+
+  defp active_user_rows(opts) do
+    limit = bounded_limit(Keyword.get(opts, :limit, @workspace_limit))
+
+    Repo.all(
+      from user in User,
+        where: user.status == :active and is_nil(user.deleted_at),
+        order_by: [asc: user.handle],
+        limit: ^limit,
+        select: %{
+          id: user.id,
+          handle: user.handle,
+          role: user.role,
+          status: user.status,
+          inserted_at: user.inserted_at,
+          last_seen_at: user.last_seen_at
+        }
+    )
+  end
+
+  defp board_row(%Board{} = board) do
+    %{
+      id: board.id,
+      slug: board.slug,
+      name: board.name,
+      description: board.description,
+      category_name: board.category.name,
+      scope: Boards.scope_for(board)
+    }
   end
 
   defp normalize_metadata(metadata) when is_map(metadata) do
