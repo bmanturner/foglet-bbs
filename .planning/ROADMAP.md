@@ -38,10 +38,10 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Milestone Goal:** Offered registration, account, posting, subscription, and sysop configuration flows are honest, operational, and enforce their rules before Foglet is presented as a credible pre-alpha.
 
 - [ ] **Phase 9: Delivery Modes and Onboarding Honesty** - Verification, reset, and no-email onboarding paths match the configured delivery mode.
-- [ ] **Phase 10: User Status Administration** - Sysops can approve, reject, suspend, and reactivate users through actor-aware terminal and break-glass workflows.
+- [ ] **Phase 10: User Status Administration** - Sysops can approve, reject, suspend, and reactivate users through actor-aware terminal and break-glass workflows. Sysop receive email upon new user awaiting approval when email is available.
 - [ ] **Phase 11: Posting Policy Enforcement** - Board posting policy and locked-thread restrictions are enforced before board-server writes.
-- [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata.
-- [ ] **Phase 13: Board Subscription Management** - Users and sysops have real terminal paths to inspect and change board subscriptions.
+- [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata (when last successful login with key was made).
+- [ ] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions.
 - [ ] **Phase 14: Launch Hygiene and Operator Notes** - Visible sysop settings, tests, copy, and operator docs are aligned for pre-alpha.
 
 ## Phase Details
