@@ -174,6 +174,108 @@ defmodule Foglet.AccountsTest do
     end
   end
 
+  describe "update_profile/2 (ACCT-02/03/04/05)" do
+    test "persists valid private profile and account preferences" do
+      user = AccountsFixtures.user_fixture()
+
+      assert {:ok, updated} =
+               Accounts.update_profile(user, %{
+                 location: "Chicago",
+                 tagline: "fog rolling in",
+                 real_name: "Brendan Turner",
+                 timezone: "America/Chicago",
+                 theme: "green",
+                 preferences: %{"time_format" => "24h"}
+               })
+
+      assert updated.location == "Chicago"
+      assert updated.tagline == "fog rolling in"
+      assert updated.real_name == "Brendan Turner"
+      assert updated.timezone == "America/Chicago"
+      assert updated.theme == "green"
+      assert updated.preferences["time_format"] == "24h"
+    end
+
+    test "rejects invalid timezone and leaves the persisted row unchanged" do
+      user = AccountsFixtures.user_fixture()
+      assert {:ok, user} = Accounts.update_profile(user, %{timezone: "America/Chicago"})
+
+      assert {:error, changeset} =
+               Accounts.update_profile(user, %{timezone: "Not/A_Timezone"})
+
+      refute changeset.valid?
+      assert Accounts.get_user!(user.id).timezone == "America/Chicago"
+    end
+
+    test "rejects invalid time format and leaves the persisted row unchanged" do
+      user = AccountsFixtures.user_fixture()
+
+      assert {:ok, user} =
+               Accounts.update_profile(user, %{preferences: %{"time_format" => "24h"}})
+
+      assert {:error, changeset} =
+               Accounts.update_profile(user, %{preferences: %{"time_format" => "military"}})
+
+      refute changeset.valid?
+      assert Accounts.get_user!(user.id).preferences["time_format"] == "24h"
+    end
+
+    test "rejects invalid theme and leaves the persisted row unchanged" do
+      user = AccountsFixtures.user_fixture()
+      assert {:ok, user} = Accounts.update_profile(user, %{theme: "green"})
+
+      assert {:error, changeset} = Accounts.update_profile(user, %{theme: "new_theme"})
+
+      refute changeset.valid?
+      assert Accounts.get_user!(user.id).theme == "green"
+    end
+
+    test "normalizes blank private profile fields to nil" do
+      user = AccountsFixtures.user_fixture()
+
+      assert {:ok, updated} =
+               Accounts.update_profile(user, %{
+                 location: "   ",
+                 tagline: "",
+                 real_name: "\t"
+               })
+
+      assert updated.location == nil
+      assert updated.tagline == nil
+      assert updated.real_name == nil
+    end
+
+    test "rejects overlong private profile fields" do
+      user = AccountsFixtures.user_fixture()
+      assert {:ok, user} = Accounts.update_profile(user, %{location: "Home"})
+
+      assert {:error, changeset} =
+               Accounts.update_profile(user, %{
+                 location: String.duplicate("l", 81),
+                 tagline: String.duplicate("t", 121),
+                 real_name: String.duplicate("r", 121)
+               })
+
+      refute changeset.valid?
+      assert Accounts.get_user!(user.id).location == "Home"
+    end
+
+    test "preserves unrelated preference keys when saving time format" do
+      user = AccountsFixtures.user_fixture()
+
+      assert {:ok, user} =
+               Accounts.update_profile(user, %{
+                 preferences: %{"time_format" => "12h", "density" => "compact"}
+               })
+
+      assert {:ok, updated} =
+               Accounts.update_profile(user, %{preferences: %{"time_format" => "24h"}})
+
+      assert updated.preferences["time_format"] == "24h"
+      assert updated.preferences["density"] == "compact"
+    end
+  end
+
   describe "register_ssh_key/2 (IDNT-04)" do
     test "stores key with computed fingerprint" do
       user = AccountsFixtures.user_fixture()
