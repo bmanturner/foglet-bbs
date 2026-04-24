@@ -769,7 +769,7 @@ defmodule Foglet.Accounts do
   @doc """
   Lookup a user by an OpenSSH-format public key. Used by Phase 3 SSH
   pubkey auth. Returns `{:ok, user}` if the fingerprint matches a
-  registered, non-deleted user.
+  registered active user.
   """
   @spec get_user_by_public_key(String.t()) :: {:ok, User.t()} | {:error, :not_found}
   def get_user_by_public_key(public_key_text) when is_binary(public_key_text) do
@@ -779,7 +779,7 @@ defmodule Foglet.Accounts do
              from k in SSHKey,
                where: k.fingerprint == ^fp,
                join: u in assoc(k, :user),
-               where: is_nil(u.deleted_at),
+               where: is_nil(u.deleted_at) and u.status == :active,
                select: u
            ) do
       {:ok, user}
@@ -810,7 +810,7 @@ defmodule Foglet.Accounts do
       from k in SSHKey,
         where: k.fingerprint == ^fingerprint,
         join: u in assoc(k, :user),
-        where: is_nil(u.deleted_at),
+        where: is_nil(u.deleted_at) and u.status == :active,
         select: {k, u}
     )
   end

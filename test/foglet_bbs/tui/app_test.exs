@@ -34,6 +34,7 @@ defmodule Foglet.TUI.AppTest do
   setup do
     Config.init_cache()
     :ets.insert(:foglet_config, {"registration_mode", "open"})
+    :ets.insert(:foglet_config, {"require_email_verification", false})
     :ets.insert(:foglet_config, {"email_verify_resend_cooldown_seconds", 60})
     :ok
   end
@@ -58,6 +59,31 @@ defmodule Foglet.TUI.AppTest do
       assert state.current_user == user
       assert state.recent_oneliners == [%{id: "ol1", body: "hello"}]
       assert_received {:list_recent_visible, 5}
+    end
+
+    test "pubkey-authenticated unconfirmed users route to verification when required" do
+      :ets.insert(:foglet_config, {"require_email_verification", true})
+
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        status: :active,
+        confirmed_at: nil
+      }
+
+      {:ok, state} =
+        App.init(%{
+          session_context:
+            fake_oneliners_context(%{
+              user: user,
+              user_id: "u1",
+              pubkey_authenticated: true
+            })
+        })
+
+      assert state.current_screen == :verify
+      assert state.current_user == user
+      assert state.recent_oneliners == []
     end
 
     test "authenticated user can trigger bounded oneliner load command" do

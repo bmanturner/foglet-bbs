@@ -704,6 +704,16 @@ defmodule Foglet.AccountsTest do
       assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, deleted_owner_key.id)
     end
 
+    test "inactive account statuses return not_found without last_used_at writes" do
+      for status <- [:pending, :suspended, :rejected] do
+        user = user_with_status(status, "pubkey#{status}")
+        key = AccountsFixtures.ssh_key_fixture(user, %{public_key: public_key_for(status)})
+
+        assert {:error, :not_found} = Accounts.authenticate_by_public_key(key.public_key)
+        assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+      end
+    end
+
     test "password authentication does not update SSH key last_used_at" do
       user = AccountsFixtures.user_fixture(%{password: "letmein12"})
       key = AccountsFixtures.ssh_key_fixture(user)
@@ -1064,6 +1074,13 @@ defmodule Foglet.AccountsTest do
       show_in_last_callers: false
     })
   end
+
+  defp public_key_for(:pending), do: AccountsFixtures.default_ssh_public_key()
+  defp public_key_for(:suspended), do: @alternate_ssh_public_key
+
+  defp public_key_for(:rejected),
+    do:
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIP3YzupUUO1ytFJEzTWUf46vEQ0g5yWmK5IE6fCyEbDH rejected@example"
 
   defp insert_post_authored_by!(%User{} = user) do
     unique = System.unique_integer([:positive])

@@ -105,7 +105,7 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Session.set_tui_pid(session_pid, self())
     end
 
-    screen = if user, do: :main_menu, else: :login
+    screen = initial_screen(user)
 
     state =
       %__MODULE__{
@@ -119,6 +119,9 @@ defmodule Foglet.TUI.App do
 
     {:ok, state}
   end
+
+  defp initial_screen(nil), do: :login
+  defp initial_screen(user), do: Accounts.post_login_screen(user)
 
   # Extract session_context + terminal_size from either:
   #   (a) Lifecycle-produced map: %{width:, height:, options: [context: %{...}]}
