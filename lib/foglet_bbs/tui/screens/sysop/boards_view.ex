@@ -569,9 +569,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         other ->
           require Logger
 
-          Logger.error(
-            "BoardsView confirm: unexpected modal_kind #{inspect(other)}"
-          )
+          Logger.error("BoardsView confirm: unexpected modal_kind #{inspect(other)}")
 
           {:error, :unknown_confirm_kind}
       end
