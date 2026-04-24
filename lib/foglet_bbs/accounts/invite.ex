@@ -31,7 +31,9 @@ defmodule Foglet.Accounts.Invite do
     |> cast(attrs, [:code])
     |> validate_required([:code])
     |> validate_length(:code, min: 16, max: 64)
-    |> validate_format(:code, @code_format, message: "must contain only uppercase letters and digits")
+    |> validate_format(:code, @code_format,
+      message: "must contain only uppercase letters and digits"
+    )
     |> unique_constraint(:code)
   end
 
