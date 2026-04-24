@@ -398,7 +398,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
         session_pid: session_pid,
         terminal_size: {80, 24},
         screen_state: %{
-          account: Account.init_screen_state(current_user: user) |> Map.put(:prefs_dirty?, true)
+          account:
+            Account.init_screen_state(current_user: user)
+            |> Map.put(:active_tab, 1)
+            |> Map.put(:prefs_dirty?, true)
         }
       }
 
@@ -426,7 +429,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Session.get_state(session_pid).theme_id == original_session.theme_id
 
       assert %{timezone: message} = new_state.screen_state.account.prefs_errors
-      assert String.contains?(message, "invalid")
+      assert String.contains?(message, "valid IANA timezone")
 
       flat = Account.render(Map.from_struct(new_state)) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Timezone error:"))

@@ -18,9 +18,13 @@ defmodule Foglet.TUI.App do
   use Raxol.Core.Runtime.Application
 
   alias Foglet.Threads.ThreadEntry
+  alias Foglet.Accounts
+  alias Foglet.Sessions.Preferences
+  alias Foglet.Sessions.Session
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.Account.State, as: AccountState
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
@@ -589,6 +593,19 @@ defmodule Foglet.TUI.App do
     {%{state | current_user: user, current_screen: :main_menu}, []}
   end
 
+  defp do_update({:account_save_profile, attrs}, state) when is_map(attrs) do
+    save_account(state, :profile, Map.take(attrs, [:location, :tagline, :real_name]))
+  end
+
+  defp do_update({:account_save_prefs, attrs}, state) when is_map(attrs) do
+    allowed_attrs =
+      attrs
+      |> Map.take([:timezone, :preferences, :theme])
+      |> normalize_account_preferences()
+
+    save_account(state, :prefs, allowed_attrs)
+  end
+
   defp do_update({:command_result, inner}, state) do
     # Raxol's Command.task runtime wraps every task return value in
     # {:command_result, inner} before delivering to update/2 (Audit #11 follow-up).
@@ -712,6 +729,102 @@ defmodule Foglet.TUI.App do
     if ctx[:thread_id] && user_id && ctx[:last_read_post_id] do
       threads_mod.advance_thread_read_pointer(user_id, ctx[:thread_id], ctx[:last_read_post_id])
     end
+  end
+
+  defp save_account(%{current_user: nil} = state, section, _attrs) do
+    {put_account_errors(state, section, %{base: "User session is not available."}), []}
+  end
+
+  defp save_account(state, section, attrs) do
+    case Accounts.update_profile(state.current_user, attrs) do
+      {:ok, updated_user} ->
+        snapshot = Preferences.from_user(updated_user)
+
+        state =
+          state
+          |> Map.put(:current_user, updated_user)
+          |> merge_session_preferences(snapshot)
+          |> refresh_session_preferences(snapshot)
+          |> clear_account_save_state(updated_user)
+
+        {state, []}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {put_account_errors(state, section, changeset_errors(changeset)), []}
+    end
+  end
+
+  defp normalize_account_preferences(%{preferences: preferences} = attrs)
+       when is_map(preferences) do
+    time_format = Map.get(preferences, "time_format") || Map.get(preferences, :time_format)
+    %{attrs | preferences: %{"time_format" => time_format}}
+  end
+
+  defp normalize_account_preferences(attrs), do: attrs
+
+  defp merge_session_preferences(state, snapshot) do
+    session_context =
+      state.session_context
+      |> Map.put(:timezone, snapshot.timezone)
+      |> Map.put(:time_format, snapshot.time_format)
+      |> Map.put(:theme_id, snapshot.theme_id)
+      |> Map.put(:theme, snapshot.theme)
+
+    %{state | session_context: session_context}
+  end
+
+  defp refresh_session_preferences(%{session_pid: session_pid} = state, snapshot)
+       when is_pid(session_pid) do
+    Session.update_preferences(session_pid, snapshot)
+    state
+  end
+
+  defp refresh_session_preferences(state, _snapshot), do: state
+
+  defp clear_account_save_state(state, updated_user) do
+    account_state =
+      state
+      |> account_screen_state(updated_user)
+      |> AccountState.seed_from_user(updated_user)
+      |> Map.put(:status_message, "Account changes saved.")
+
+    put_account_screen_state(state, account_state)
+  end
+
+  defp put_account_errors(state, section, errors) do
+    account_state =
+      state
+      |> account_screen_state(state.current_user)
+      |> Map.put(error_field(section), errors)
+      |> Map.put(:status_message, "Account save failed.")
+
+    put_account_screen_state(state, account_state)
+  end
+
+  defp account_screen_state(state, user) do
+    case Map.get(state.screen_state || %{}, :account) do
+      %AccountState{} = account_state ->
+        account_state
+
+      _other ->
+        Screens.Account.init_screen_state(current_user: user)
+    end
+  end
+
+  defp put_account_screen_state(state, %AccountState{} = account_state) do
+    %{state | screen_state: Map.put(state.screen_state || %{}, :account, account_state)}
+  end
+
+  defp error_field(:profile), do: :profile_errors
+  defp error_field(:prefs), do: :prefs_errors
+
+  defp changeset_errors(%Ecto.Changeset{} = changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {message, opts} ->
+      Enum.reduce(opts, message, fn {key, value}, acc ->
+        String.replace(acc, "%{#{key}}", to_string(value))
+      end)
+    end)
+    |> Enum.into(%{}, fn {field, messages} -> {field, Enum.join(messages, ", ")} end)
   end
 
   defp format_notification(:dm, %{body: body}), do: "New message: #{body}"
