@@ -62,6 +62,8 @@ defmodule Foglet.TUI.App do
           current_thread_list: list() | nil,
           posts: list() | nil,
           recent_oneliners: list(),
+          selected_oneliner_index: non_neg_integer(),
+          pending_hide_oneliner_id: String.t() | nil,
           read_position: map(),
           composer_draft: String.t() | nil
         }
@@ -79,6 +81,8 @@ defmodule Foglet.TUI.App do
             current_thread_list: nil,
             posts: nil,
             recent_oneliners: [],
+            selected_oneliner_index: 0,
+            pending_hide_oneliner_id: nil,
             read_position: %{},
             composer_draft: nil
 
@@ -290,10 +294,15 @@ defmodule Foglet.TUI.App do
   defp do_update({:navigate, screen}, state) when is_atom(screen) do
     new_state = %{state | current_screen: screen, modal: nil}
 
-    if screen == :main_menu and new_state.current_user do
-      do_update({:load_oneliners}, new_state)
-    else
-      {new_state, []}
+    cond do
+      screen == :main_menu and new_state.current_user ->
+        do_update({:load_oneliners}, new_state)
+
+      screen == :moderation and new_state.current_user ->
+        do_update({:load_moderation_workspace}, new_state)
+
+      true ->
+        {new_state, []}
     end
   end
 
@@ -422,6 +431,28 @@ defmodule Foglet.TUI.App do
     {%{state | recent_oneliners: entries}, []}
   end
 
+  defp do_update({:load_moderation_workspace}, state) do
+    user = state.current_user
+    moderation_mod = domain_module(state, :moderation)
+
+    state = put_moderation_loading(state)
+
+    task =
+      Foglet.TUI.Command.task(:load_moderation_workspace, fn ->
+        {:moderation_workspace_loaded, moderation_mod.workspace_snapshot(user)}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:moderation_workspace_loaded, {:ok, snapshot}}, state) when is_map(snapshot) do
+    {%{state | screen_state: put_moderation_snapshot(state, snapshot)}, []}
+  end
+
+  defp do_update({:moderation_workspace_loaded, {:error, reason}}, state) do
+    {%{state | screen_state: put_moderation_error(state, reason)}, []}
+  end
+
   defp do_update({:open_oneliner_composer}, state) do
     form =
       ModalForm.init(
@@ -479,6 +510,91 @@ defmodule Foglet.TUI.App do
       end
 
     {put_oneliner_form_errors(state, visible_errors), []}
+  end
+
+  defp do_update({:open_hide_oneliner_modal, entry_id}, state)
+       when is_binary(entry_id) and entry_id != "" do
+    form =
+      ModalForm.init(
+        title: "Hide Oneliner",
+        fields: [
+          %{
+            name: :reason,
+            type: :text,
+            label: "Reason",
+            placeholder: "Required",
+            max_length: 240
+          }
+        ],
+        on_submit: &stash_hide_oneliner_submit/1,
+        on_cancel: fn -> :dismiss_modal end
+      )
+
+    modal = %Foglet.TUI.Modal{type: :form, title: "Hide Oneliner", message: form}
+
+    {%{state | modal: modal, pending_hide_oneliner_id: entry_id}, []}
+  end
+
+  defp do_update({:submit_hide_oneliner, %{reason: reason}}, state) do
+    reason = reason |> to_string() |> String.trim()
+
+    cond do
+      reason == "" ->
+        {put_hide_oneliner_form_errors(state, %{reason: "Reason is required."}), []}
+
+      is_nil(state.current_user) ->
+        {put_hide_oneliner_form_errors(state, %{base: "User session is not available."}), []}
+
+      is_nil(state.pending_hide_oneliner_id) ->
+        {put_hide_oneliner_form_errors(state, %{base: "No oneliner is selected."}), []}
+
+      true ->
+        user = state.current_user
+        entry_id = state.pending_hide_oneliner_id
+        oneliners_mod = domain_module(state, :oneliners)
+
+        task =
+          Foglet.TUI.Command.task(:submit_hide_oneliner, fn ->
+            {:oneliner_hidden, oneliners_mod.hide_entry(user, entry_id, reason)}
+          end)
+
+        {state, [task]}
+    end
+  end
+
+  defp do_update({:submit_hide_oneliner, _payload}, state) do
+    {put_hide_oneliner_form_errors(state, %{reason: "Reason is required."}), []}
+  end
+
+  defp do_update({:oneliner_hidden, {:ok, hidden}}, state) do
+    hidden_id = hidden_id(hidden) || state.pending_hide_oneliner_id
+
+    recent_oneliners =
+      Enum.reject(state.recent_oneliners || [], fn entry ->
+        entry_id(entry) == hidden_id
+      end)
+
+    {%{
+       state
+       | modal: nil,
+         pending_hide_oneliner_id: nil,
+         recent_oneliners: recent_oneliners,
+         selected_oneliner_index: clamp_selected_oneliner_index(state.selected_oneliner_index, recent_oneliners)
+     }, []}
+  end
+
+  defp do_update({:oneliner_hidden, {:error, :forbidden}}, state) do
+    {put_hide_oneliner_form_errors(state, %{base: "You are not allowed to hide this oneliner."}),
+     []}
+  end
+
+  defp do_update({:oneliner_hidden, {:error, %Ecto.Changeset{} = changeset}}, state) do
+    {put_hide_oneliner_form_errors(state, changeset_errors(changeset)), []}
+  end
+
+  defp do_update({:oneliner_hidden, {:error, reason}}, state) do
+    {put_hide_oneliner_form_errors(state, %{base: "Unable to hide oneliner: #{inspect(reason)}"}),
+     []}
   end
 
   defp do_update({:load_boards_for_new_thread}, state) do
@@ -763,6 +879,7 @@ defmodule Foglet.TUI.App do
   defp default_domain_module(:threads), do: Foglet.Threads
   defp default_domain_module(:posts), do: Foglet.Posts
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
+  defp default_domain_module(:moderation), do: Foglet.Moderation
 
   defp maybe_load_initial_oneliners(%{current_screen: :main_menu, current_user: user} = state)
        when not is_nil(user) do
@@ -777,9 +894,20 @@ defmodule Foglet.TUI.App do
     :ok
   end
 
+  defp stash_hide_oneliner_submit(payload) do
+    Process.put({__MODULE__, :pending_hide_oneliner_submit}, payload)
+    :ok
+  end
+
   defp take_oneliner_submit do
     payload = Process.get({__MODULE__, :pending_oneliner_submit})
     Process.delete({__MODULE__, :pending_oneliner_submit})
+    payload
+  end
+
+  defp take_hide_oneliner_submit do
+    payload = Process.get({__MODULE__, :pending_hide_oneliner_submit})
+    Process.delete({__MODULE__, :pending_hide_oneliner_submit})
     payload
   end
 
@@ -795,6 +923,85 @@ defmodule Foglet.TUI.App do
     {state, []} = do_update({:open_oneliner_composer}, state)
     put_oneliner_form_errors(state, errors)
   end
+
+  defp put_hide_oneliner_form_errors(
+         %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state,
+         errors
+       ) do
+    form = ModalForm.set_errors(form, errors)
+    %{state | modal: %{state.modal | message: form}}
+  end
+
+  defp put_hide_oneliner_form_errors(state, errors) do
+    entry_id = state.pending_hide_oneliner_id || ""
+
+    if entry_id == "" do
+      state
+    else
+      {state, []} = do_update({:open_hide_oneliner_modal, entry_id}, state)
+      put_hide_oneliner_form_errors(state, errors)
+    end
+  end
+
+  defp put_moderation_loading(state) do
+    ss =
+      state
+      |> moderation_screen_state()
+      |> Map.put(:loading?, true)
+      |> Map.put(:error, nil)
+
+    %{state | screen_state: Map.put(state.screen_state || %{}, :moderation, ss)}
+  end
+
+  defp put_moderation_snapshot(state, snapshot) do
+    ss =
+      state
+      |> moderation_screen_state()
+      |> Map.merge(%{
+        scopes: Map.get(snapshot, :scopes, []),
+        queue: Map.get(snapshot, :queue, []),
+        mod_log: Map.get(snapshot, :mod_log, []),
+        users: Map.get(snapshot, :users, []),
+        boards: Map.get(snapshot, :boards, []),
+        loading?: false,
+        error: nil
+      })
+
+    Map.put(state.screen_state || %{}, :moderation, ss)
+  end
+
+  defp put_moderation_error(state, reason) do
+    ss =
+      state
+      |> moderation_screen_state()
+      |> Map.put(:loading?, false)
+      |> Map.put(:error, reason)
+
+    Map.put(state.screen_state || %{}, :moderation, ss)
+  end
+
+  defp moderation_screen_state(state) do
+    case Map.get(state.screen_state || %{}, :moderation) do
+      %Foglet.TUI.Screens.Moderation.State{} = ss -> ss
+      _other -> Screens.Moderation.init_screen_state()
+    end
+  end
+
+  defp hidden_id(%{} = hidden), do: Map.get(hidden, :id) || Map.get(hidden, "id")
+  defp hidden_id(_other), do: nil
+
+  defp entry_id(%{} = entry), do: Map.get(entry, :id) || Map.get(entry, "id")
+  defp entry_id(_other), do: nil
+
+  defp clamp_selected_oneliner_index(_index, []), do: 0
+
+  defp clamp_selected_oneliner_index(index, entries) when is_integer(index) do
+    index
+    |> max(0)
+    |> min(length(entries) - 1)
+  end
+
+  defp clamp_selected_oneliner_index(_index, entries), do: clamp_selected_oneliner_index(0, entries)
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
@@ -1026,14 +1233,21 @@ defmodule Foglet.TUI.App do
          %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
        ) do
     Process.delete({__MODULE__, :pending_oneliner_submit})
+    Process.delete({__MODULE__, :pending_hide_oneliner_submit})
     {new_form, action} = ModalForm.handle_event(key, form)
     state = %{state | modal: %{state.modal | message: new_form}}
 
     case action do
       :submitted ->
-        case take_oneliner_submit() do
-          nil -> {state, []}
-          payload -> do_update({:submit_oneliner, payload}, state)
+        case {take_hide_oneliner_submit(), take_oneliner_submit()} do
+          {payload, _oneliner_payload} when not is_nil(payload) ->
+            do_update({:submit_hide_oneliner, payload}, state)
+
+          {nil, payload} when not is_nil(payload) ->
+            do_update({:submit_oneliner, payload}, state)
+
+          {nil, nil} ->
+            {state, []}
         end
 
       :cancelled ->

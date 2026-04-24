@@ -9,7 +9,7 @@ defmodule Foglet.TUI.Screens.Domain do
      when the key is absent or the domain is not set up.
 
   Supported keys (locked in AUDIT-02):
-    :boards, :threads, :posts, :markdown, :oneliners
+    :boards, :threads, :posts, :markdown, :oneliners, :moderation
 
   Callers provide `state.session_context` (the narrower input).
   Each call site is responsible for its own default-module fallback
@@ -20,9 +20,9 @@ defmodule Foglet.TUI.Screens.Domain do
   `PostComposer`, `NewThread` for call-site examples.
   """
 
-  @supported_keys [:boards, :threads, :posts, :markdown, :oneliners]
+  @supported_keys [:boards, :threads, :posts, :markdown, :oneliners, :moderation]
 
-  @type domain_key :: :boards | :threads | :posts | :markdown | :oneliners
+  @type domain_key :: :boards | :threads | :posts | :markdown | :oneliners | :moderation
   @type result :: {:ok, module()} | {:error, :not_configured}
 
   @doc """
