@@ -102,6 +102,7 @@ defmodule Foglet.BoardsTest do
         })
 
       refute changeset.valid?
+
       assert "requires default_subscription to be true" in errors_on(changeset).required_subscription
     end
 

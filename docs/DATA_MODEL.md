@@ -187,6 +187,7 @@ schema "boards" do
   field :postable_by, Ecto.Enum, values: [:members, :mods_only, :sysop_only], default: :members
   field :archived, :boolean, default: false
   field :default_subscription, :boolean, default: false
+  field :required_subscription, :boolean, default: false
 
   belongs_to :category, Foglet.Boards.Category
 
@@ -203,6 +204,7 @@ end
 
 - Unique index on `slug`.
 - Index on `(category_id, display_order)` for menu rendering.
+- `required_subscription` has a check constraint named `boards_required_subscription_requires_default_subscription`; it may be true only when `default_subscription` is true.
 - `next_message_number` is the persisted source of truth. The `Foglet.Boards.Server` loads it at startup, allocates in memory, and writes through on every post insert inside the same transaction.
 
 **Why persist `next_message_number` on the board row instead of deriving it?**

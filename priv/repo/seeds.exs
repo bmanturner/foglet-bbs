@@ -79,6 +79,7 @@ unless Repo.get_by(Board, slug: "general") do
     readable_by: :public,
     postable_by: :members,
     default_subscription: true,
+    required_subscription: false,
     archived: false,
     category_id: general_category.id
   })
