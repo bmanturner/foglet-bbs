@@ -20,11 +20,26 @@ defmodule Foglet.PostsTest do
     board
   end
 
+  defp setup_board_with_server(attrs) do
+    category = category_fixture()
+    board = board_fixture(category, attrs)
+    allow_board_server!(board.id)
+    board
+  end
+
   defp setup_thread(board, user) do
     {:ok, %{thread: thread, post: root}} =
       Foglet.Threads.create_thread(board.id, user.id, %{title: "T", body: "root"})
 
     {thread, root}
+  end
+
+  defp active_user_fixture(attrs \\ %{}) do
+    user = user_fixture()
+
+    user
+    |> Ecto.Changeset.change(Map.merge(%{status: :active}, attrs))
+    |> Repo.update!()
   end
 
   describe "create_reply/4 (BOARD-03)" do
@@ -89,6 +104,96 @@ defmodule Foglet.PostsTest do
       assert reply.reply_to_id == root.id
       # message_number still sequentially assigned
       assert reply.message_number == root.message_number + 1
+    end
+  end
+
+  describe "create_reply/4 posting policy and locks (POST-02, POST-03)" do
+    test "matches the board postable_by role matrix for replies" do
+      cases = [
+        {:members, :user, :ok},
+        {:members, :mod, :ok},
+        {:members, :sysop, :ok},
+        {:mods_only, :user, :posting_not_allowed},
+        {:mods_only, :mod, :ok},
+        {:mods_only, :sysop, :ok},
+        {:sysop_only, :user, :posting_not_allowed},
+        {:sysop_only, :mod, :posting_not_allowed},
+        {:sysop_only, :sysop, :ok}
+      ]
+
+      for {postable_by, role, expected} <- cases do
+        board = setup_board_with_server(%{postable_by: postable_by})
+        author = active_user_fixture(%{role: :sysop})
+        replier = active_user_fixture(%{role: role})
+        {thread, _root} = setup_thread(board, author)
+
+        result = Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{body: "Reply"})
+
+        case expected do
+          :ok -> assert {:ok, _reply} = result
+          reason -> assert {:error, ^reason} = result
+        end
+      end
+    end
+
+    test "rejects locked thread replies unless actor can bypass the lock" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, locked_thread} = Foglet.Threads.lock_thread(thread)
+
+      user = active_user_fixture()
+      mod = active_user_fixture(%{role: :mod})
+      sysop = active_user_fixture(%{role: :sysop})
+
+      assert {:error, :thread_locked} =
+               Foglet.Posts.create_reply(locked_thread.id, board.id, user.id, %{body: "Nope"})
+
+      assert {:ok, _reply} =
+               Foglet.Posts.create_reply(locked_thread.id, board.id, mod.id, %{body: "Mod reply"})
+
+      assert {:ok, _reply} =
+               Foglet.Posts.create_reply(locked_thread.id, board.id, sysop.id, %{body: "Sysop reply"})
+    end
+
+    test "lock bypass does not override board posting policy" do
+      board = setup_board_with_server(%{postable_by: :sysop_only})
+      author = active_user_fixture(%{role: :sysop})
+      {thread, _root} = setup_thread(board, author)
+      {:ok, locked_thread} = Foglet.Threads.lock_thread(thread)
+
+      mod = active_user_fixture(%{role: :mod})
+
+      assert {:error, :posting_not_allowed} =
+               Foglet.Posts.create_reply(locked_thread.id, board.id, mod.id, %{body: "Nope"})
+    end
+
+    test "rejected replies do not mutate post, thread, user, or board counters" do
+      board = setup_board_with_server(%{postable_by: :sysop_only})
+      author = active_user_fixture(%{role: :sysop})
+      replier = active_user_fixture(%{role: :user})
+      {thread, _root} = setup_thread(board, author)
+      pid = allow_board_server!(board.id)
+
+      before_posts = Repo.aggregate(Foglet.Posts.Post, :count)
+      before_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      before_user = Repo.get!(Foglet.Accounts.User, replier.id)
+      before_board = Repo.get!(Foglet.Boards.Board, board.id)
+      before_next_number = :sys.get_state(pid).next_number
+
+      assert {:error, :posting_not_allowed} =
+               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{body: "Nope"})
+
+      after_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      after_user = Repo.get!(Foglet.Accounts.User, replier.id)
+      after_board = Repo.get!(Foglet.Boards.Board, board.id)
+
+      assert Repo.aggregate(Foglet.Posts.Post, :count) == before_posts
+      assert after_thread.post_count == before_thread.post_count
+      assert after_thread.last_post_at == before_thread.last_post_at
+      assert after_user.post_count == before_user.post_count
+      assert after_board.next_message_number == before_board.next_message_number
+      assert :sys.get_state(pid).next_number == before_next_number
     end
   end
 
