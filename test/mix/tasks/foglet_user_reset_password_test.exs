@@ -22,6 +22,40 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
   end
 
   describe "mix foglet.user.reset_password (IDNT-08)" do
+    test "Accounts helper returns a raw reset token that verifies back to the user" do
+      user = AccountsFixtures.user_fixture(%{handle: "helperreset"})
+
+      assert {:ok, raw_token} = Accounts.generate_reset_token_for_operator(user)
+      assert raw_token =~ ~r/\A[A-Za-z0-9_-]+\z/
+      refute String.contains?(raw_token, "=")
+
+      {:ok, query} = UserToken.verify_email_token_query(raw_token, "reset_password")
+      assert %{id: found_id} = Repo.one(query)
+      assert found_id == user.id
+    end
+
+    test "Accounts helper persists only the hashed reset token row" do
+      user = AccountsFixtures.user_fixture(%{handle: "helperhash"})
+
+      assert {:ok, raw_token} = Accounts.generate_reset_token_for_operator(user)
+      {:ok, decoded_token} = Base.url_decode64(raw_token, padding: false)
+      hashed_token = :crypto.hash(UserToken.hash_algorithm(), decoded_token)
+
+      assert Repo.exists?(
+               from t in UserToken,
+                 where:
+                   t.user_id == ^user.id and t.context == "reset_password" and
+                     t.token == ^hashed_token and t.sent_to == ^user.email
+             )
+
+      refute Repo.exists?(
+               from t in UserToken,
+                 where:
+                   t.user_id == ^user.id and t.context == "reset_password" and
+                     t.token == ^raw_token
+             )
+    end
+
     test "in email mode prints a break-glass reset URL containing a url-encoded token to stdout" do
       Config.put!("delivery_mode", "email", nil)
       user = AccountsFixtures.user_fixture(%{handle: "resetme"})
