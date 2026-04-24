@@ -51,6 +51,14 @@ defmodule Foglet.Accounts do
   """
   @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def register_user(attrs) do
+    if Foglet.Config.registration_mode() == "invite_only" do
+      register_invite_only_user(attrs)
+    else
+      register_open_user(attrs)
+    end
+  end
+
+  defp register_open_user(attrs) do
     result =
       %User{}
       |> User.registration_changeset(attrs)
@@ -65,6 +73,60 @@ defmodule Foglet.Accounts do
       error ->
         error
     end
+  end
+
+  defp register_invite_only_user(attrs) do
+    attrs = Map.new(attrs)
+    invite_code = attrs[:invite_code] || attrs["invite_code"]
+    user_changeset = User.registration_changeset(%User{}, attrs)
+
+    cond do
+      is_nil(invite_code) or String.trim(to_string(invite_code)) == "" ->
+        {:error, invite_code_error(user_changeset)}
+
+      not user_changeset.valid? ->
+        {:error, user_changeset}
+
+      true ->
+        code = String.trim(to_string(invite_code))
+
+        case Repo.transact(fn ->
+               with {:ok, user} <- Repo.insert(user_changeset),
+                    {:ok, user} <- consume_invite_for_user(Repo, code, user) do
+                 {:ok, user}
+               end
+             end) do
+          {:ok, user} ->
+            # D-06: subscribe to default boards after successful registration.
+            Foglet.Boards.subscribe_to_defaults(user.id)
+            {:ok, user}
+
+          {:error, :invalid_invite_code} ->
+            {:error, invite_code_error(user_changeset)}
+
+          {:error, %Ecto.Changeset{} = changeset} ->
+            {:error, changeset}
+        end
+    end
+  end
+
+  defp consume_invite_for_user(repo, code, %User{} = user) do
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    query =
+      from i in Invite,
+        where: i.code == ^code and is_nil(i.consumed_at) and is_nil(i.revoked_at)
+
+    case repo.update_all(query,
+           set: [consumed_at: now, consumed_by_user_id: user.id, updated_at: now]
+         ) do
+      {1, _rows} -> {:ok, user}
+      {0, _rows} -> {:error, :invalid_invite_code}
+    end
+  end
+
+  defp invite_code_error(changeset) do
+    Ecto.Changeset.add_error(changeset, :invite_code, "is invalid or unavailable")
   end
 
   @doc """

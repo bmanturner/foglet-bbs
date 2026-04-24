@@ -18,7 +18,7 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
 
     test "unknown, revoked, and consumed codes return the same generic invite_code error" do
       issuer = actor_fixture(:sysop)
-      user = AccountsFixtures.user_fixture()
+      user = with_open_registration(fn -> AccountsFixtures.user_fixture() end)
       now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
       revoked =
@@ -43,7 +43,7 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
     end
 
     test "successful registration consumes the invite" do
-      invite = AccountsFixtures.invite_fixture()
+      invite = with_open_registration(fn -> AccountsFixtures.invite_fixture() end)
       attrs = AccountsFixtures.valid_user_attributes(%{invite_code: invite.code})
 
       assert {:ok, user} = Accounts.register_user(attrs)
@@ -55,7 +55,7 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
     end
 
     test "invalid user attrs leave an available invite unconsumed" do
-      invite = AccountsFixtures.invite_fixture()
+      invite = with_open_registration(fn -> AccountsFixtures.invite_fixture() end)
 
       attrs =
         AccountsFixtures.valid_user_attributes(%{
@@ -73,7 +73,7 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
     end
 
     test "second redemption cannot create a second user" do
-      invite = AccountsFixtures.invite_fixture()
+      invite = with_open_registration(fn -> AccountsFixtures.invite_fixture() end)
 
       first_attrs = AccountsFixtures.valid_user_attributes(%{invite_code: invite.code})
       second_attrs = AccountsFixtures.valid_user_attributes(%{invite_code: invite.code})
@@ -104,8 +104,20 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
   end
 
   defp actor_fixture(role) do
-    user = AccountsFixtures.user_fixture()
+    user = with_open_registration(fn -> AccountsFixtures.user_fixture() end)
     {:ok, actor} = Accounts.update_role(user, role)
     actor
+  end
+
+  defp with_open_registration(fun) do
+    current_registration_mode = Config.get("registration_mode", "open")
+    Config.put!("registration_mode", "open")
+
+    try do
+      fun.()
+    after
+      Config.put!("registration_mode", current_registration_mode)
+      Config.invalidate("registration_mode")
+    end
   end
 end
