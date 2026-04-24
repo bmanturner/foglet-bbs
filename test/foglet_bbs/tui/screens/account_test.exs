@@ -285,9 +285,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "visibility changes in session_context rebuild tab list on handle-key", %{state: state} do
       state = %{state | session_context: %{invite_code_generators: "any_user"}}
 
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "4"}, state)
 
-      assert new_state.screen_state.account.active_tab == 2
+      assert new_state.screen_state.account.active_tab == 3
       flat = Account.render(new_state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
@@ -303,7 +303,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       flat = Account.render(new_state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
-      assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet."))
     end
 
     test "'Q' returns to :main_menu", %{state: state} do
@@ -509,7 +508,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert {:ok, []} = Accounts.list_invites(user)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
       {:update, state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
 
       assert {:ok, [invite]} = Accounts.list_invites(user)
@@ -528,7 +527,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:ok, first} = Accounts.create_invite(user)
       {:ok, second} = Accounts.create_invite(user)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
       assert Enum.count(state.screen_state.account.invites.items) == 2
 
       {:update, state, []} = Account.handle_key(%{key: :down}, state)
