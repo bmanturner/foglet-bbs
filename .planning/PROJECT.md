@@ -35,6 +35,7 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 - [x] Reusable themed TUI widgets cover chrome, lists, inputs, display elements, modals, post rendering, composition, and progress states - existing code
 - [x] Runtime configuration is persisted in the database and cached through a typed ETS-backed config layer - existing code
 - [x] Markdown rendering, user deletion anonymization, deleted-post preservation, SSH rate limiting, and broad SSH/TUI test coverage are in place - existing code
+- [x] Authorization and UI structure leave room for future board-scoped moderators instead of hard-coding global moderator assumptions - Validated in Phase 01: Authorization and Scope Backbone
 - [x] Read-only Account, Moderation, and Sysop shell screens exist with role-gated main-menu entries, milestone tab sets, placeholder/loading/error states, and a shared `InvitesSurface` primitive — no fake persistence - Validated in Phase 00: Screen Shells and Shared Surface Primitives
 - [x] Persisted single-use invite codes support authorized generation, status review, unused revocation, and transactional `invite_only` registration redemption - Validated in Phase 03: Invite Persistence and Registration Enforcement
 - [x] Invite workflows are surfaced through a shared INVITES tab according to runtime generation policy - Validated in Phase 04: Shared Invite Surface Activation
@@ -45,7 +46,6 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 - [ ] Moderators and sysops have dedicated tabbed TUI surfaces that can grow into full operational workspaces without reworking navigation structure later
 - [ ] Sysops can manage site configuration, board/category lifecycle, and operational limits from the TUI rather than ad hoc code or DB edits
 - [ ] The main menu feels more alive and personalized through per-user time rendering and a lightweight shoutbox/oneliners surface
-- [ ] Authorization and UI structure leave room for future board-scoped moderators instead of hard-coding global moderator assumptions
 - [ ] Terminal-first ergonomics, reusable widgets, and strong tests remain intact while these new surfaces are added
 
 ### Out of Scope
