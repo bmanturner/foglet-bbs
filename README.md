@@ -37,9 +37,7 @@ environment/runtime config, not DB-backed runtime config. Keep those secrets in
 #### no-email mode
 
 no-email mode uses `delivery_mode=no_email` and requires explicit operator
-retrieval workflows. No email is sent in this mode. Operators retrieve reset
-URLs or verification codes through break-glass Mix tasks, then communicate them
-through an out-of-band process they control.
+retrieval workflows. No email is sent in this mode. Operators retrieve reset tokens or verification codes through break-glass Mix tasks, then communicate them through an out-of-band process they control.
 
 ### Break-Glass Tasks
 
@@ -53,9 +51,7 @@ mix foglet.user.status HANDLE --actor SYSOP --status active
 mix foglet.board_subscriptions list --user HANDLE
 ```
 
-`mix foglet.user.reset_password HANDLE` generates an operator reset URL. The
-task does not send email; in no-email mode the URL is explicitly for operator
-retrieval.
+`mix foglet.user.reset_password HANDLE` generates a raw reset token for operator-assisted SSH reset handling. The task does not send email and does not create a browser reset URL.
 
 `mix foglet.user.verification_code HANDLE` generates a verification code for
 no-email operation. In Email mode, use the normal Login or Verify resend flow
@@ -72,9 +68,10 @@ archived-board rules still route through `Foglet.Boards`.
 
 ### Known Launch Blockers
 
-No upstream Phase 9-13 blockers are currently recorded for this launch-hygiene
-pass. See `.planning/phases/14-launch-hygiene-and-operator-notes/14-BLOCKERS.md`
-for the current blocker log and audit notes.
+The Phase 14 reset-URL blocker is closed by Phase 15 when the reset task,
+tests, and operator notes use raw reset tokens instead of browser URLs. See
+`.planning/phases/14-launch-hygiene-and-operator-notes/14-BLOCKERS.md` for the
+current blocker log and audit notes.
 
 ### Launch Caveats
 
