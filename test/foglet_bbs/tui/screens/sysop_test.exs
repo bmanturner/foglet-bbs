@@ -1,14 +1,34 @@
 defmodule Foglet.TUI.Screens.SysopTest do
-  use ExUnit.Case, async: true
+  # async: false because SITE/LIMITS tabs lazy-init their submodules which
+  # call Foglet.Config.get!/1 — the :foglet_config ETS table is process-global.
+  use FogletBbs.DataCase, async: false
 
   import Foglet.TUI.RenderHelpers
 
+  alias Foglet.Config
+  alias Foglet.Config.Schema
   alias Foglet.TUI.Screens.Sysop
 
-  defp build_state(role \\ :sysop) do
+  @config_keys Map.keys(Schema.defaults())
+
+  defp build_state(role) do
+    user =
+      case role do
+        nil ->
+          nil
+
+        r ->
+          %Foglet.Accounts.User{
+            id: Ecto.UUID.generate(),
+            handle: "alice",
+            role: r,
+            status: :active
+          }
+      end
+
     %Foglet.TUI.App{
       current_screen: :sysop,
-      current_user: %Foglet.Accounts.User{id: "u1", handle: "alice", role: role},
+      current_user: user,
       session_context: %{},
       terminal_size: {80, 24},
       screen_state: %{}
@@ -17,6 +37,16 @@ defmodule Foglet.TUI.Screens.SysopTest do
   end
 
   setup do
+    Config.init_cache()
+    for key <- @config_keys, do: Config.invalidate(key)
+
+    # Seed default values so get!/1 finds rows.
+    for {key, default} <- Schema.defaults() do
+      Config.put!(key, default, nil)
+    end
+
+    on_exit(fn -> for key <- @config_keys, do: Config.invalidate(key) end)
+
     %{state: build_state(:sysop)}
   end
 
@@ -66,17 +96,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
                "Got positions: #{inspect(Enum.zip(expected_tabs, tab_positions))}"
     end
 
-    test "renders scaffold-only placeholder copy (no fake config writes)", %{state: state} do
-      flat = Sysop.render(state) |> collect_text_values()
-      # Forbidden substrings as action affordances: key-bar or button contexts
-      forbidden = ["Save", "Apply", "Revert", "Set"]
-
-      for word <- forbidden do
-        refute Enum.any?(flat, &String.contains?(&1, word)),
-               "Expected #{inspect(word)} not to appear as an action affordance in Sysop render output. " <>
-                 "Found in: #{inspect(Enum.filter(flat, &String.contains?(&1, word)))}"
-      end
-    end
+    # Former scaffold-only guard removed in Plan 02-03: SITE/LIMITS tabs now
+    # genuinely render forms with [Ctrl+S] Save hints — a "Save" refute would
+    # always fire. The anti-fake-command guard survives under handle_key/2.
   end
 
   describe "handle_key/2" do
@@ -170,6 +192,176 @@ defmodule Foglet.TUI.Screens.SysopTest do
           :no_match ->
             :ok
         end
+      end
+    end
+  end
+
+  describe "SITE / LIMITS tab partition (D-02)" do
+    test "every schema key appears in exactly one of @site_keys / @limits_keys" do
+      all_keys = MapSet.new(Enum.map(Foglet.Config.Schema.entries(), & &1.key))
+      site = MapSet.new(Foglet.TUI.Screens.Sysop.SiteForm.site_keys())
+      limits = MapSet.new(Foglet.TUI.Screens.Sysop.LimitsForm.limits_keys())
+
+      assert MapSet.disjoint?(site, limits),
+             "SITE and LIMITS key lists must be disjoint"
+
+      assert MapSet.union(site, limits) == all_keys,
+             "Every Schema.entries/0 key must appear in exactly one of @site_keys / @limits_keys"
+    end
+  end
+
+  describe "SITE tab render (SYSO-02, INVT-06)" do
+    setup %{state: state} do
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      %{state: state}
+    end
+
+    test "renders every visible @site_keys description", %{state: state} do
+      # Force the limit row visible so all four SITE descriptions are rendered.
+      Config.put!("invite_code_generators", "any_user", nil)
+
+      # Lazy-init the SiteForm by delegating a no-op key to the SITE tab.
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      for key <- Foglet.TUI.Screens.Sysop.SiteForm.site_keys() do
+        {:ok, spec} = Schema.fetch_spec(key)
+
+        assert String.contains?(flat, spec.description),
+               "Expected description for #{inspect(key)} in SITE render output"
+      end
+    end
+
+    test "hides invite_generation_per_user_limit when invite_code_generators != any_user (D-04)",
+         %{state: state} do
+      Config.put!("invite_code_generators", "sysop_only", nil)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+      {:ok, spec} = Schema.fetch_spec("invite_generation_per_user_limit")
+
+      refute String.contains?(flat, spec.description),
+             "Limit row must be hidden when generators != any_user"
+
+      refute String.contains?(flat, "invite_generation_per_user_limit"),
+             "Limit key name must not leak when row is hidden"
+    end
+
+    test "shows invite_generation_per_user_limit when invite_code_generators == any_user",
+         %{state: state} do
+      Config.put!("invite_code_generators", "any_user", nil)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "invite_generation_per_user_limit"),
+             "Limit row must be visible when generators == any_user"
+    end
+  end
+
+  describe "SITE tab Ctrl+S (SYSO-02)" do
+    setup %{state: state} do
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      %{state: state}
+    end
+
+    test "invalid integer surfaces inline error, no modal", %{state: state} do
+      # Put into 'any_user' so the limit row is visible & focusable.
+      Config.put!("invite_code_generators", "any_user", nil)
+
+      # Persist a real sysop so Config.put/3 clears authz AND the
+      # configuration.updated_by_id FK constraint. MUST be set BEFORE lazy-init
+      # so SiteForm.init captures the persisted actor.
+      sysop =
+        FogletBbs.AccountsFixtures.user_fixture()
+        |> Ecto.Changeset.change(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+
+      state = %{state | current_user: sysop}
+
+      # Navigate to SITE tab (already index 0) — lazy-init by sending Tab.
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      # SiteForm was lazy-initialized with the real sysop above.
+      _ = state
+
+      # Manually install a draft with a negative value for the limit field
+      # (simulating the sysop typing a value that fails the min: 0 schema check).
+      ss = state.screen_state.sysop
+
+      site_form = %{
+        ss.site_form
+        | drafts: Map.put(ss.site_form.drafts, "invite_generation_per_user_limit", -1)
+      }
+
+      state = put_in(state, [:screen_state, :sysop], %{ss | site_form: site_form})
+
+      # Send Ctrl+S.
+      {:update, new_state, _cmds} =
+        Sysop.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+      # Inline error recorded; no modal; still on sysop screen.
+      assert new_state.current_screen == :sysop
+      assert new_state.modal == nil
+
+      errors = new_state.screen_state.sysop.site_form.errors
+
+      assert Map.has_key?(errors, "invite_generation_per_user_limit"),
+             "Expected inline error for the bad integer; got errors: #{inspect(errors)}"
+    end
+
+    test ":forbidden from Config.put routes to error modal + :main_menu (D-08, D-24)",
+         %{state: _state} do
+      # Build a state with a nil actor — Bodyguard.permit/4 denies (D-24).
+      # nil is used (rather than a non-sysop User struct with a random UUID)
+      # because a random UUID would fail the configuration.updated_by_id_fkey
+      # constraint after the authorization check passes — nil trips authz first.
+      state =
+        build_state(nil)
+        |> put_in([:screen_state, :sysop], Sysop.init_screen_state())
+
+      # Lazy-init SiteForm and mutate a draft so submit hits Config.put.
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      ss = state.screen_state.sysop
+
+      site_form = %{
+        ss.site_form
+        | drafts: Map.put(ss.site_form.drafts, "registration_mode", "invite_only")
+      }
+
+      state = put_in(state, [:screen_state, :sysop], %{ss | site_form: site_form})
+
+      {:update, new_state, _cmds} =
+        Sysop.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+      assert %Foglet.TUI.Modal{type: :error} = new_state.modal
+      assert new_state.current_screen == :main_menu
+    end
+  end
+
+  describe "LIMITS tab render (SYSO-02)" do
+    setup %{state: state} do
+      state =
+        state
+        |> put_in([:screen_state, :sysop], Sysop.init_screen_state(active: 2))
+
+      %{state: state}
+    end
+
+    test "renders every @limits_keys description", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      for key <- Foglet.TUI.Screens.Sysop.LimitsForm.limits_keys() do
+        {:ok, spec} = Schema.fetch_spec(key)
+
+        assert String.contains?(flat, spec.description),
+               "Expected description for #{inspect(key)} in LIMITS render output"
       end
     end
   end

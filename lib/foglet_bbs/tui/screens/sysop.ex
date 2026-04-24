@@ -23,7 +23,10 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Sysop.LimitsForm
+  alias Foglet.TUI.Screens.Sysop.SiteForm
   alias Foglet.TUI.Screens.Sysop.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -70,7 +73,7 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   defp build_content(ss, theme) do
     active_label = Enum.at(State.tab_labels(), ss.active_tab)
-    body = render_tab_body(active_label, theme)
+    body = render_tab_body(active_label, ss, theme)
 
     column style: %{gap: 0} do
       [
@@ -81,19 +84,27 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
-  defp render_tab_body("SITE", theme),
-    do: placeholder("Site policy editing will arrive in Phase 2.", theme)
+  defp render_tab_body("SITE", ss, theme) do
+    case ss.site_form do
+      nil -> placeholder("Press any key to load site policy.", theme)
+      form -> SiteForm.render(form, theme)
+    end
+  end
 
-  defp render_tab_body("BOARDS", theme),
+  defp render_tab_body("BOARDS", _ss, theme),
     do: placeholder("Board and category management will arrive in Phase 2.", theme)
 
-  defp render_tab_body("LIMITS", theme),
-    do: placeholder("Runtime limit configuration will arrive in Phase 2.", theme)
+  defp render_tab_body("LIMITS", ss, theme) do
+    case ss.limits_form do
+      nil -> placeholder("Press any key to load runtime limits.", theme)
+      form -> LimitsForm.render(form, theme)
+    end
+  end
 
-  defp render_tab_body("SYSTEM", theme),
+  defp render_tab_body("SYSTEM", _ss, theme),
     do: placeholder("System details will arrive in Phase 2.", theme)
 
-  defp render_tab_body("USERS", theme),
+  defp render_tab_body("USERS", _ss, theme),
     do: placeholder("User administration will arrive in a later phase.", theme)
 
   defp placeholder(copy, theme) do
@@ -112,18 +123,62 @@ defmodule Foglet.TUI.Screens.Sysop do
     ss = get_screen_state(state)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
-    new_active =
-      case action do
-        {:tab_changed, idx} -> idx
-        _ -> ss.active_tab
-      end
-
     if action == nil and new_tabs == ss.tabs do
-      :no_match
+      # Tab widget ignored — delegate to the active tab's submodule (if any).
+      delegate_to_active_tab(event, state, ss)
     else
+      new_active =
+        case action do
+          {:tab_changed, idx} -> idx
+          _ -> ss.active_tab
+        end
+
       new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
       new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
       {:update, %{state | screen_state: new_screen_state}, []}
+    end
+  end
+
+  defp delegate_to_active_tab(event, state, ss) do
+    case Enum.at(State.tab_labels(), ss.active_tab) do
+      "SITE" ->
+        sub = ss.site_form || SiteForm.init(current_user: state.current_user)
+        {new_sub, events} = SiteForm.handle_key(event, sub)
+        apply_submodule_result(state, ss, :site_form, new_sub, sub, events)
+
+      "LIMITS" ->
+        sub = ss.limits_form || LimitsForm.init(current_user: state.current_user)
+        {new_sub, events} = LimitsForm.handle_key(event, sub)
+        apply_submodule_result(state, ss, :limits_form, new_sub, sub, events)
+
+      _ ->
+        :no_match
+    end
+  end
+
+  defp apply_submodule_result(state, ss, field, new_sub, old_sub, events) do
+    new_ss = Map.put(ss, field, new_sub)
+    new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
+    base_state = %{state | screen_state: new_screen_state}
+
+    case Enum.find(events, fn
+           {:error_modal, _msg, _dest} -> true
+           _ -> false
+         end) do
+      {:error_modal, msg, dest} ->
+        {:update,
+         %{
+           base_state
+           | modal: %Modal{type: :error, message: msg},
+             current_screen: dest
+         }, []}
+
+      nil ->
+        if new_sub == old_sub and events == [] do
+          :no_match
+        else
+          {:update, base_state, []}
+        end
     end
   end
 
