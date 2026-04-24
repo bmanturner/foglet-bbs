@@ -12,6 +12,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
 
+  @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
+
   defp build_state(user, session_context) do
     %Foglet.TUI.App{
       current_screen: :account,
@@ -551,6 +553,155 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert {:update, _state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
       assert {:ok, []} = Accounts.list_invites(user)
+    end
+  end
+
+  describe "live SSH KEYS actions" do
+    test "entering SSH KEYS and refreshing load only the current user's keys" do
+      user = AccountsFixtures.user_fixture()
+      other_user = AccountsFixtures.user_fixture()
+      own_key = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
+
+      _other_key =
+        AccountsFixtures.ssh_key_fixture(other_user, %{public_key: @alternate_ssh_public_key})
+
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+
+      assert [%{id: key_id, label: "laptop"}] = state.screen_state.account.ssh_keys.items
+      assert key_id == own_key.id
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "r"}, state)
+      assert [%{id: ^key_id}] = state.screen_state.account.ssh_keys.items
+
+      flat = Account.render(state) |> collect_text_values()
+      assert Enum.any?(flat, &String.contains?(&1, "Refresh"))
+      assert Enum.any?(flat, &String.contains?(&1, "Revoke"))
+    end
+
+    test "add flow stores a valid key, refreshes list, and shows status" do
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "a"}, state)
+
+      account_state =
+        put_in(state.screen_state.account.ssh_keys.form, %{
+          label: "workstation",
+          public_key: @alternate_ssh_public_key
+        })
+
+      state = put_in(state, [:screen_state, :account], account_state)
+
+      {:update, state, []} = Account.handle_key(%{key: :enter}, state)
+
+      assert [%{label: "workstation", fingerprint: "SHA256:" <> _}] = Accounts.list_ssh_keys(user)
+      assert state.screen_state.account.ssh_keys.status_message == "SSH key added."
+      assert [%{label: "workstation"}] = state.screen_state.account.ssh_keys.items
+    end
+
+    test "add flow shows terminal-visible validation errors" do
+      user = AccountsFixtures.user_fixture()
+      _existing = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "a"}, state)
+      {:update, blank_state, []} = Account.handle_key(%{key: :enter}, state)
+
+      blank_flat = Account.render(blank_state) |> collect_text_values()
+      assert Enum.any?(blank_flat, &String.contains?(&1, "label"))
+      assert Enum.any?(blank_flat, &String.contains?(&1, "public_key"))
+
+      invalid_state =
+        put_in(blank_state.screen_state.account.ssh_keys.form, %{
+          label: "bad",
+          public_key: "invalid OpenSSH material"
+        })
+        |> then(&put_in(blank_state, [:screen_state, :account], &1))
+
+      {:update, invalid_state, []} = Account.handle_key(%{key: :enter}, invalid_state)
+      invalid_flat = Account.render(invalid_state) |> collect_text_values()
+      assert Enum.any?(invalid_flat, &String.contains?(&1, "invalid OpenSSH"))
+
+      duplicate_fingerprint_state =
+        put_in(invalid_state.screen_state.account.ssh_keys.form, %{
+          label: "other",
+          public_key: AccountsFixtures.default_ssh_public_key()
+        })
+        |> then(&put_in(invalid_state, [:screen_state, :account], &1))
+
+      {:update, duplicate_fingerprint_state, []} =
+        Account.handle_key(%{key: :enter}, duplicate_fingerprint_state)
+
+      duplicate_fingerprint_flat =
+        duplicate_fingerprint_state |> Account.render() |> collect_text_values()
+
+      assert Enum.any?(duplicate_fingerprint_flat, &String.contains?(&1, "already been taken"))
+
+      duplicate_label_state =
+        put_in(duplicate_fingerprint_state.screen_state.account.ssh_keys.form, %{
+          label: "laptop",
+          public_key: @alternate_ssh_public_key
+        })
+        |> then(&put_in(duplicate_fingerprint_state, [:screen_state, :account], &1))
+
+      {:update, duplicate_label_state, []} =
+        Account.handle_key(%{key: :enter}, duplicate_label_state)
+
+      duplicate_label_flat = duplicate_label_state |> Account.render() |> collect_text_values()
+      assert Enum.any?(duplicate_label_flat, &String.contains?(&1, "already been taken"))
+    end
+
+    test "revoke selected key refreshes list and reports missing selections" do
+      user = AccountsFixtures.user_fixture()
+      first = AccountsFixtures.ssh_key_fixture(user, %{label: "first"})
+
+      second =
+        AccountsFixtures.ssh_key_fixture(user, %{
+          label: "second",
+          public_key: @alternate_ssh_public_key
+        })
+
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :down}, state)
+      assert state.screen_state.account.ssh_keys.selected_index == 1
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+
+      assert state.screen_state.account.ssh_keys.status_message == "SSH key revoked."
+      assert [%{id: remaining_id}] = state.screen_state.account.ssh_keys.items
+      assert remaining_id == first.id
+      assert [%{id: ^remaining_id}] = Accounts.list_ssh_keys(user)
+      refute Enum.any?(Accounts.list_ssh_keys(user), &(&1.id == second.id))
+
+      empty_state =
+        put_in(
+          state.screen_state.account.ssh_keys,
+          SSHKeysState.loaded(state.screen_state.account.ssh_keys, [])
+        )
+        |> then(&put_in(state, [:screen_state, :account], &1))
+
+      {:update, empty_state, []} = Account.handle_key(%{key: :char, char: "d"}, empty_state)
+      assert empty_state.screen_state.account.ssh_keys.errors.general == "No SSH key is selected."
+    end
+
+    test "revoke handles not found without crashing" do
+      user = AccountsFixtures.user_fixture()
+      key = AccountsFixtures.ssh_key_fixture(user)
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:ok, _revoked} = Accounts.revoke_ssh_key(user, key.id)
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+
+      assert state.screen_state.account.ssh_keys.errors.general ==
+               "That SSH key could not be found."
     end
   end
 
