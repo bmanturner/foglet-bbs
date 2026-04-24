@@ -62,7 +62,7 @@ Plans:
 - [x] 09-02-PLAN.md — Verification delivery and Verify resend honesty
 - [x] 09-03-PLAN.md — Terminal password-reset request flow
 - [x] 09-04-PLAN.md — Sysop delivery-mode visibility and invalid-combo blocking
-- [ ] 09-05-PLAN.md — Break-glass reset task delivery-mode honesty
+- [x] 09-05-PLAN.md — Break-glass reset task delivery-mode honesty
 - [ ] 09-06-PLAN.md — Cross-surface delivery-copy regression guard
 **UI hint**: yes
 
