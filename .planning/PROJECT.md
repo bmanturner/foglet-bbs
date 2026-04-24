@@ -36,11 +36,12 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 - [x] Runtime configuration is persisted in the database and cached through a typed ETS-backed config layer - existing code
 - [x] Markdown rendering, user deletion anonymization, deleted-post preservation, SSH rate limiting, and broad SSH/TUI test coverage are in place - existing code
 - [x] Read-only Account, Moderation, and Sysop shell screens exist with role-gated main-menu entries, milestone tab sets, placeholder/loading/error states, and a shared `InvitesSurface` primitive — no fake persistence - Validated in Phase 00: Screen Shells and Shared Surface Primitives
+- [x] Persisted single-use invite codes support authorized generation, status review, unused revocation, and transactional `invite_only` registration redemption - Validated in Phase 03: Invite Persistence and Registration Enforcement
 
 ### Active
 
 - [ ] Users can manage private profile and presentation settings from an Account screen without shell access or database edits
-- [ ] Invite-only registration uses persisted invite codes with generation rights controlled by runtime config and surfaced through a shared INVITES tab
+- [ ] Invite workflows are surfaced through a shared INVITES tab according to runtime generation policy
 - [ ] Moderators and sysops have dedicated tabbed TUI surfaces that can grow into full operational workspaces without reworking navigation structure later
 - [ ] Sysops can manage site configuration, board/category lifecycle, and operational limits from the TUI rather than ad hoc code or DB edits
 - [ ] The main menu feels more alive and personalized through per-user time rendering and a lightweight shoutbox/oneliners surface
@@ -114,4 +115,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state.
 
 ---
-*Last updated: 2026-04-23 after Phase 00: Screen Shells and Shared Surface Primitives*
+*Last updated: 2026-04-24 after Phase 03: Invite Persistence and Registration Enforcement*
