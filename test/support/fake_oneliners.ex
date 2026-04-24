@@ -15,6 +15,15 @@ defmodule Foglet.TUI.FakeOneliners do
     )
   end
 
+  def hide_entry(actor, target, reason) do
+    send(test_owner(), {:hide_entry, actor, target, reason})
+
+    Process.get(
+      :fake_oneliners_hide_result,
+      {:ok, %{id: target, hidden?: true, hidden_reason: reason}}
+    )
+  end
+
   defp test_owner do
     Process.get(:fake_oneliners_owner, self())
   end

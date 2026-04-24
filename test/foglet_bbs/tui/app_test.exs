@@ -13,6 +13,13 @@ defmodule Foglet.TUI.AppTest do
     Map.merge(%{domain: %{oneliners: Foglet.TUI.FakeOneliners}}, extra)
   end
 
+  defp fake_moderation_context(extra) do
+    Map.merge(
+      %{domain: %{oneliners: Foglet.TUI.FakeOneliners, moderation: Foglet.TUI.FakeModeration}},
+      extra
+    )
+  end
+
   defp interval_subscription(subscriptions, message) do
     Enum.find(subscriptions, fn
       %Raxol.Core.Runtime.Subscription{type: :interval, data: %{message: ^message}} -> true
@@ -340,6 +347,148 @@ defmodule Foglet.TUI.AppTest do
 
       assert inspect(App.view(new_state), limit: :infinity) =~
                "Let someone else post before posting again."
+    end
+  end
+
+  describe "moderation workspace and hide modal lifecycle (Phase 8)" do
+    setup do
+      Process.put(:fake_oneliners_owner, self())
+      Process.put(:fake_moderation_owner, self())
+
+      user = %Foglet.Accounts.User{id: "mod1", handle: "mod-alice", role: :mod}
+
+      {:ok, state} =
+        App.init(%{
+          session_context:
+            fake_moderation_context(%{
+              user: user,
+              user_id: user.id
+            })
+        })
+
+      state = %{
+        state
+        | recent_oneliners: [
+            %{id: "ol1", body: "abuse", user: %{handle: "bad"}},
+            %{id: "ol2", body: "hello", user: %{handle: "good"}}
+          ]
+      }
+
+      %{state: state, user: user}
+    end
+
+    test "pressing M as a moderator queues load_moderation_workspace", %{state: state, user: user} do
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "M"}}, state)
+
+      assert new_state.current_screen == :moderation
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+      assert {:moderation_workspace_loaded, {:ok, snapshot}} = task.()
+      assert snapshot.scopes == [:site]
+      assert_received {:workspace_snapshot, ^user}
+    end
+
+    test "{:navigate, :moderation} queues load_moderation_workspace", %{state: state, user: user} do
+      {new_state, cmds} = App.update({:navigate, :moderation}, state)
+
+      assert new_state.current_screen == :moderation
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+      assert {:moderation_workspace_loaded, {:ok, _snapshot}} = task.()
+      assert_received {:workspace_snapshot, ^user}
+    end
+
+    test "{:moderation_workspace_loaded, {:ok, snapshot}} stores scoped screen state", %{
+      state: state
+    } do
+      snapshot = %{
+        scopes: [:site],
+        queue: [%{id: "r1"}],
+        mod_log: [%{id: "a1", reason: "spam"}],
+        users: [%{handle: "alice", role: :user, status: :active}],
+        boards: [%{name: "General", slug: "general", category_name: "Main", scope: :site}]
+      }
+
+      {new_state, cmds} = App.update({:moderation_workspace_loaded, {:ok, snapshot}}, state)
+
+      assert cmds == []
+      assert new_state.screen_state.moderation.scopes == [:site]
+      assert new_state.screen_state.moderation.queue == snapshot.queue
+      assert new_state.screen_state.moderation.mod_log == snapshot.mod_log
+      assert new_state.screen_state.moderation.users == snapshot.users
+      assert new_state.screen_state.moderation.boards == snapshot.boards
+      refute new_state.screen_state.moderation.loading?
+      assert new_state.screen_state.moderation.error == nil
+    end
+
+    test "{:open_hide_oneliner_modal, entry_id} opens focused required reason form", %{
+      state: state
+    } do
+      {new_state, cmds} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+
+      assert cmds == []
+      assert new_state.pending_hide_oneliner_id == "ol1"
+      assert %Foglet.TUI.Modal{type: :form, title: "Hide Oneliner", message: %Form{} = form} =
+               new_state.modal
+
+      assert form.title == "Hide Oneliner"
+      assert [%{name: :reason, type: :text, label: "Reason", placeholder: "Required"}] =
+               form.fields
+
+      assert form.focus_index == 0
+      assert inspect(App.view(new_state), limit: :infinity) =~ "Hide Oneliner"
+    end
+
+    test "submitting blank hide reason keeps modal focused and emits no hide task", %{
+      state: state
+    } do
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+      {new_state, cmds} = App.update({:submit_hide_oneliner, %{reason: "   "}}, with_modal)
+
+      assert cmds == []
+      assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
+      assert form.errors.reason == "Reason is required."
+      assert new_state.pending_hide_oneliner_id == "ol1"
+      refute_received {:hide_entry, _actor, _target, _reason}
+    end
+
+    test "valid hide submit calls actor-aware oneliner domain API", %{state: state, user: user} do
+      Process.put(:fake_oneliners_hide_result, {:ok, %{id: "ol1", hidden?: true}})
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+
+      {submitting, cmds} =
+        App.update({:submit_hide_oneliner, %{reason: "  abusive line  "}}, with_modal)
+
+      assert submitting.modal == with_modal.modal
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+      assert {:oneliner_hidden, {:ok, %{id: "ol1"}}} = task.()
+      assert_received {:hide_entry, ^user, "ol1", "abusive line"}
+    end
+
+    test "{:oneliner_hidden, {:ok, hidden}} clears modal and removes row immediately", %{
+      state: state
+    } do
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+
+      {new_state, cmds} = App.update({:oneliner_hidden, {:ok, %{id: "ol1"}}}, with_modal)
+
+      assert cmds == []
+      assert new_state.modal == nil
+      assert new_state.pending_hide_oneliner_id == nil
+      refute Enum.any?(new_state.recent_oneliners, &(&1.id == "ol1"))
+      assert Enum.any?(new_state.recent_oneliners, &(&1.id == "ol2"))
+    end
+
+    test "{:oneliner_hidden, {:error, :forbidden}} keeps modal error and visible row", %{
+      state: state
+    } do
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+
+      {new_state, cmds} = App.update({:oneliner_hidden, {:error, :forbidden}}, with_modal)
+
+      assert cmds == []
+      assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
+      assert form.errors.base =~ "not allowed"
+      assert new_state.pending_hide_oneliner_id == "ol1"
+      assert Enum.any?(new_state.recent_oneliners, &(&1.id == "ol1"))
     end
   end
 
