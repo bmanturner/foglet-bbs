@@ -224,9 +224,7 @@ defmodule Foglet.Boards do
           :ok
 
         {:error, cs} ->
-          require Logger
-
-          Logger.warning(
+          Logger.error(
             "subscribe_to_defaults: failed to subscribe #{user_id} to #{board_id}: #{inspect(cs.errors)}"
           )
       end
