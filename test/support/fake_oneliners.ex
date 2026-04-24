@@ -8,7 +8,11 @@ defmodule Foglet.TUI.FakeOneliners do
 
   def create_entry(user, attrs) do
     send(test_owner(), {:create_entry, user, attrs})
-    Process.get(:fake_oneliners_create_result, {:ok, %{id: "ol-new", body: attrs.body, user: user}})
+
+    Process.get(
+      :fake_oneliners_create_result,
+      {:ok, %{id: "ol-new", body: attrs.body, user: user}}
+    )
   end
 
   defp test_owner do

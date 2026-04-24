@@ -771,7 +771,10 @@ defmodule Foglet.TUI.App do
     payload
   end
 
-  defp put_oneliner_form_errors(%{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state, errors) do
+  defp put_oneliner_form_errors(
+         %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state,
+         errors
+       ) do
     form = ModalForm.set_errors(form, errors)
     %{state | modal: %{state.modal | message: form}}
   end
@@ -1005,7 +1008,11 @@ defmodule Foglet.TUI.App do
     do_update({:confirm_modal, :no}, state)
   end
 
-  defp handle_modal_key(:form, key, %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state) do
+  defp handle_modal_key(
+         :form,
+         key,
+         %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
+       ) do
     Process.delete({__MODULE__, :pending_oneliner_submit})
     {new_form, action} = ModalForm.handle_event(key, form)
     state = %{state | modal: %{state.modal | message: new_form}}

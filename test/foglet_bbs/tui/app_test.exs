@@ -6,8 +6,8 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
-  alias Foglet.TUI.Widgets.Modal.Form
   alias Foglet.TUI.Widgets.Input.TextInput
+  alias Foglet.TUI.Widgets.Modal.Form
 
   defp interval_subscription(subscriptions, message) do
     Enum.find(subscriptions, fn
@@ -319,7 +319,9 @@ defmodule Foglet.TUI.AppTest do
       refute inspect(App.view(new_state), limit: :infinity) =~ "hidden_reason"
     end
 
-    test "same_user_latest_visible keeps composer focused with visible base error", %{state: state} do
+    test "same_user_latest_visible keeps composer focused with visible base error", %{
+      state: state
+    } do
       {with_modal, []} = App.update({:open_oneliner_composer}, state)
 
       {new_state, cmds} =
@@ -328,6 +330,7 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
       assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
       assert form.errors.base == "Let someone else post before posting again."
+
       assert inspect(App.view(new_state), limit: :infinity) =~
                "Let someone else post before posting again."
     end
