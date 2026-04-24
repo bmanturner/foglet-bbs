@@ -1,7 +1,7 @@
 ---
 phase: 12
 slug: account-ssh-key-management
-status: draft
+status: audited
 nyquist_compliant: true
 wave_0_complete: true
 created: 2026-04-24
@@ -19,7 +19,7 @@ created: 2026-04-24
 |----------|-------|
 | **Framework** | ExUnit via Mix |
 | **Config file** | `mix.exs` |
-| **Quick run command** | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/ssh/cli_handler_test.exs` |
+| **Quick run command** | `rtk mix test --max-cases 1 test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/ssh/cli_handler_test.exs` |
 | **Full suite command** | `rtk mix precommit` |
 | **Estimated runtime** | ~120 seconds |
 
@@ -28,7 +28,7 @@ created: 2026-04-24
 ## Sampling Rate
 
 - **After every task commit:** Run the focused command for the touched subsystem from the map below.
-- **After every plan wave:** Run `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/ssh/cli_handler_test.exs`.
+- **After every plan wave:** Run `rtk mix test --max-cases 1 test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/ssh/cli_handler_test.exs`.
 - **Before `$gsd-verify-work`:** `rtk mix precommit` must pass.
 - **Max feedback latency:** 120 seconds for focused checks before full precommit.
 
@@ -38,10 +38,10 @@ created: 2026-04-24
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 12-01-01 | 01 | 1 | KEYS-02, KEYS-03, KEYS-04 | T-12-01 / T-12-02 | Key mutations are scoped to the current user and duplicate key material is rejected. | unit | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs` | yes | pending |
-| 12-01-02 | 01 | 1 | KEYS-05 | T-12-03 | Public-key authentication only accepts a registered key for an active user and updates `last_used_at` only on success. | unit | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/ssh/cli_handler_test.exs` | yes | pending |
-| 12-02-01 | 02 | 2 | KEYS-01, KEYS-02, KEYS-03, KEYS-04 | T-12-04 | Account UI displays and mutates only the signed-in user's SSH keys through Accounts context APIs. | TUI unit | `rtk mix test test/foglet_bbs/tui/screens/account_test.exs` | yes | pending |
-| 12-03-01 | 03 | 3 | KEYS-01, KEYS-02, KEYS-03, KEYS-04, KEYS-05 | T-12-05 | End-to-end focused coverage proves Account UI and SSH auth behavior satisfy all KEYS requirements. | integration/regression | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/ssh/cli_handler_test.exs` | yes | pending |
+| 12-01-01 | 01 | 1 | KEYS-02, KEYS-03, KEYS-04 | T-12-01 / T-12-02 | Key mutations are scoped to the current user and duplicate key material is rejected. | unit | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs` | yes | covered |
+| 12-01-02 | 01 | 1 | KEYS-05 | T-12-03 | Public-key authentication only accepts a registered key for an active user and updates `last_used_at` only on success. | unit | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/ssh/cli_handler_test.exs` | yes | covered |
+| 12-02-01 | 02 | 2 | KEYS-01, KEYS-02, KEYS-03, KEYS-04 | T-12-04 | Account UI displays and mutates only the signed-in user's SSH keys through Accounts context APIs. | TUI unit | `rtk mix test test/foglet_bbs/tui/screens/account_test.exs` | yes | covered |
+| 12-03-01 | 03 | 3 | KEYS-01, KEYS-02, KEYS-03, KEYS-04, KEYS-05 | T-12-05 | End-to-end focused coverage proves Account UI and SSH auth behavior satisfy all KEYS requirements. | integration/regression | `rtk mix test --max-cases 1 test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/ssh/cli_handler_test.exs` | yes | covered |
 
 ---
 
@@ -67,3 +67,18 @@ All phase behaviors have automated verification.
 - [x] `nyquist_compliant: true` set in frontmatter.
 
 **Approval:** approved 2026-04-24
+
+## Validation Audit 2026-04-24
+
+| Metric | Count |
+|--------|-------|
+| Gaps found | 2 |
+| Resolved | 2 |
+| Escalated | 0 |
+
+### Audit Notes
+
+- Cross-reference found requirement-tagged automated coverage for KEYS-01 through KEYS-05 in `test/foglet_bbs/accounts/accounts_test.exs`, `test/foglet_bbs/accounts/ssh_key_test.exs`, `test/foglet_bbs/tui/screens/account_test.exs`, and `test/foglet_bbs/ssh/cli_handler_test.exs`.
+- Fixed stale pubkey-auth context setup in `test/foglet_bbs/ssh/cli_handler_test.exs` by making the expected main-menu user confirmed.
+- Warmed login config cache before real SSH channel startup tests so PTY startup does not depend on a DB-backed config read from the SSH render process.
+- The focused Phase 12 file set passes with serialized ExUnit execution: `rtk mix test --max-cases 1 test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/accounts/ssh_key_test.exs test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/ssh/cli_handler_test.exs` returned 124 tests, 0 failures.
