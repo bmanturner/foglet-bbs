@@ -81,17 +81,18 @@ defmodule Foglet.Accounts.InviteTest do
       sysop = actor_fixture(:sysop)
       invite = AccountsFixtures.invite_fixture(sysop)
 
-      assert [
-               %{
-                 code: code,
-                 issuer_id: issuer_id,
-                 inserted_at: %DateTime{},
-                 consumed_at: nil,
-                 consumed_by_user_id: nil,
-                 revoked_at: nil,
-                 status: :available
-               }
-             ] = Accounts.list_invites(sysop)
+      assert {:ok,
+              [
+                %{
+                  code: code,
+                  issuer_id: issuer_id,
+                  inserted_at: %DateTime{},
+                  consumed_at: nil,
+                  consumed_by_user_id: nil,
+                  revoked_at: nil,
+                  status: :available
+                }
+              ]} = Accounts.list_invites(sysop)
 
       assert code == invite.code
       assert issuer_id == sysop.id

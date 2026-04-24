@@ -26,6 +26,16 @@ defmodule Foglet.Accounts do
 
   @tombstone_user_id "00000000-0000-0000-0000-000000000001"
 
+  @type invite_status :: %{
+          code: String.t(),
+          issuer_id: Ecto.UUID.t(),
+          inserted_at: DateTime.t(),
+          consumed_at: DateTime.t() | nil,
+          consumed_by_user_id: Ecto.UUID.t() | nil,
+          revoked_at: DateTime.t() | nil,
+          status: :available | :consumed | :revoked
+        }
+
   @doc "UUID of the tombstone user. Post-anonymization (Phase 2+) rewrites authorship to this id."
   @spec tombstone_user_id() :: String.t()
   def tombstone_user_id, do: @tombstone_user_id
@@ -282,6 +292,39 @@ defmodule Foglet.Accounts do
     end
   end
 
+  @spec list_invites(User.t()) :: {:ok, [invite_status()]} | {:error, :forbidden}
+  def list_invites(%User{} = actor) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :generate_invite, actor, :site) do
+      invites =
+        Repo.all(from(i in Invite, order_by: [desc: i.inserted_at]))
+        |> Enum.map(&invite_status_map/1)
+
+      {:ok, invites}
+    end
+  end
+
+  @spec get_invite_status(String.t()) :: {:ok, invite_status()} | {:error, :not_found}
+  def get_invite_status(code) when is_binary(code) do
+    case Repo.get_by(Invite, code: code) do
+      %Invite{} = invite -> {:ok, invite_status_map(invite)}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  @spec revoke_invite(User.t(), String.t()) ::
+          {:ok, Invite.t()} | {:error, :forbidden | :not_found | :unavailable}
+  def revoke_invite(%User{} = actor, code) when is_binary(code) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :revoke_invite, actor, :site) do
+      case Repo.get_by(Invite, code: code) do
+        nil ->
+          {:error, :not_found}
+
+        %Invite{} = invite ->
+          revoke_available_invite(invite, code)
+      end
+    end
+  end
+
   defp ensure_invite_generation_policy(%User{role: :sysop}), do: :ok
 
   defp ensure_invite_generation_policy(%User{role: :mod}) do
@@ -348,6 +391,35 @@ defmodule Foglet.Accounts do
     |> :crypto.strong_rand_bytes()
     |> Base.encode32(case: :upper, padding: false)
     |> String.replace(~r/[^A-Z0-9]/, "")
+  end
+
+  defp invite_status_map(%Invite{} = invite) do
+    %{
+      code: invite.code,
+      issuer_id: invite.issuer_id,
+      inserted_at: invite.inserted_at,
+      consumed_at: invite.consumed_at,
+      consumed_by_user_id: invite.consumed_by_user_id,
+      revoked_at: invite.revoked_at,
+      status: Invite.status(invite)
+    }
+  end
+
+  defp revoke_available_invite(%Invite{} = invite, code) do
+    if Invite.status(invite) == :available do
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+      query =
+        from i in Invite,
+          where: i.code == ^code and is_nil(i.consumed_at) and is_nil(i.revoked_at)
+
+      case Repo.update_all(query, set: [revoked_at: now, updated_at: now]) do
+        {1, _rows} -> {:ok, Repo.get!(Invite, invite.id)}
+        {0, _rows} -> {:error, :unavailable}
+      end
+    else
+      {:error, :unavailable}
+    end
   end
 
   # ---------- SSH Keys ----------
