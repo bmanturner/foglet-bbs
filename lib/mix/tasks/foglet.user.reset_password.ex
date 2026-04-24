@@ -6,7 +6,8 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
 
   This task is delivery-mode aware. In email mode it prints a break-glass
   reset URL for operator use without sending email. In no-email mode it
-  exits non-zero so no-email operation is not presented as reset delivery.
+  prints explicit operator retrieval details without presenting reset as
+  user-facing email delivery.
   """
   @shortdoc "Generate an operator break-glass password-reset URL"
 
@@ -72,15 +73,17 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
         :ok
 
       "no_email" ->
-        Mix.shell().error(
-          "Password reset delivery is unavailable because Foglet is in no-email mode."
+        {:ok, url} =
+          Accounts.deliver_user_reset_password_instructions(user, &build_reset_url/1)
+
+        Mix.shell().info("No-email reset details for #{user.handle}:")
+        Mix.shell().info("  #{url}")
+
+        Mix.shell().info(
+          "This reset URL was generated for operator retrieval; no email was sent by this task."
         )
 
-        Mix.shell().error(
-          "Use an operator break-glass password change procedure instead of relaying a reset link."
-        )
-
-        exit({:shutdown, 1})
+        :ok
     end
   end
 

@@ -64,25 +64,23 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
              )
     end
 
-    test "in no-email mode exits non-zero and explains reset delivery is unavailable" do
+    test "in no-email mode prints operator retrieval reset details" do
       Config.put!("delivery_mode", "no_email", nil)
       user = AccountsFixtures.user_fixture(%{handle: "noemailreset"})
 
       output =
-        capture_io(:stderr, fn ->
-          assert catch_exit(Mix.Tasks.Foglet.User.ResetPassword.run([user.handle])) ==
-                   {:shutdown, 1}
+        capture_io(fn ->
+          Mix.Tasks.Foglet.User.ResetPassword.run([user.handle])
         end)
 
-      assert output =~
-               "Password reset delivery is unavailable because Foglet is in no-email mode."
+      assert output =~ "No-email reset details for noemailreset:"
 
       assert output =~
-               "Use an operator break-glass password change procedure instead of relaying a reset link."
+               "This reset URL was generated for operator retrieval; no email was sent by this task."
 
-      refute output =~ "/users/reset_password/"
+      assert output =~ "/users/reset_password/"
 
-      refute Repo.exists?(
+      assert Repo.exists?(
                from t in UserToken,
                  where: t.user_id == ^user.id and t.context == "reset_password"
              )
