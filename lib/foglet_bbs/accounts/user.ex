@@ -19,7 +19,7 @@ defmodule Foglet.Accounts.User do
 
   @valid_roles [:user, :mod, :sysop]
   @valid_email_digests [:off, :daily, :weekly]
-  @valid_statuses [:active, :pending, :suspended]
+  @valid_statuses [:active, :pending, :rejected, :suspended]
   @default_timezone "Etc/UTC"
   @default_time_format "12h"
   @default_theme_id "gray"
@@ -142,7 +142,12 @@ defmodule Foglet.Accounts.User do
     })
   end
 
-  @doc "Changeset for sysop status change (pending → active, active → suspended)."
+  @doc """
+  Changeset for sysop status changes.
+
+  Valid transitions are enforced by `Foglet.Accounts`: pending -> active,
+  pending -> rejected, active -> suspended, and suspended -> active.
+  """
   def status_changeset(user, attrs) do
     user
     |> cast(attrs, [:status])
