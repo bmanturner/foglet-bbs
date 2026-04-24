@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   import Foglet.TUI.RenderHelpers
 
   alias Foglet.Accounts
+  alias Foglet.Accounts.User
   alias Foglet.Config
   alias Foglet.TUI.Screens.Moderation
   alias Foglet.TUI.Screens.Shared.InvitesState
@@ -20,15 +21,15 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     |> Map.from_struct()
   end
 
-  defp build_state_with_policy(role, policy) do
-    role
-    |> build_state()
+  defp build_state_with_policy(%User{} = user, policy) do
+    user.role
+    |> build_state(user)
     |> put_in([:session_context, :invite_code_generators], policy)
   end
 
-  defp build_state_with_policy(user, policy) do
-    user.role
-    |> build_state(user)
+  defp build_state_with_policy(role, policy) do
+    role
+    |> build_state()
     |> put_in([:session_context, :invite_code_generators], policy)
   end
 

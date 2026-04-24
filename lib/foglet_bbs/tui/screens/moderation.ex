@@ -34,6 +34,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Screens.Moderation.State
+  alias Foglet.TUI.Screens.Shared.InvitesActions
+  alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -82,14 +84,22 @@ defmodule Foglet.TUI.Screens.Moderation do
         _ -> ss.active_tab
       end
 
-    if action == nil and new_tabs == ss.tabs and ss == old_ss do
-      # Tabs widget neither recognized the key nor persisted any internal
-      # state mutation — treat as unhandled so global_key_handler can run.
-      :no_match
+    if action == nil and new_tabs == ss.tabs do
+      case delegate_to_active_tab(event, state, ss) do
+        :no_match when ss == old_ss ->
+          # Tabs widget neither recognized the key nor persisted any internal
+          # state mutation — treat as unhandled so global_key_handler can run.
+          :no_match
+
+        :no_match ->
+          update_screen_state(state, ss)
+
+        {:ok, new_invites} ->
+          update_screen_state(state, %{ss | invites: new_invites})
+      end
     else
       new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-      new_screen_state = Map.put(Map.get(state, :screen_state) || %{}, :moderation, new_ss)
-      {:update, %{state | screen_state: new_screen_state}, []}
+      update_screen_state(state, maybe_load_invites(new_ss, state))
     end
   end
 
@@ -148,6 +158,10 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
+  defp render_tab_body("INVITES", ss, theme) do
+    InvitesSurface.render(ss.invites, theme)
+  end
+
   defp render_tab_body(_label, _ss, theme) do
     column style: %{gap: 0} do
       [text("Report queue will arrive in Phase 8.", fg: theme.warning.fg)]
@@ -178,5 +192,36 @@ defmodule Foglet.TUI.Screens.Moderation do
       %{label: label} -> label
       other -> to_string(other)
     end)
+  end
+
+  defp delegate_to_active_tab(event, state, ss) do
+    case Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab) do
+      "INVITES" ->
+        event
+        |> key_for_invites()
+        |> InvitesActions.handle_key(state.current_user, ss.invites)
+
+      _other ->
+        :no_match
+    end
+  end
+
+  defp maybe_load_invites(ss, state) do
+    case {Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab), ss.invites.items} do
+      {"INVITES", items} when not is_list(items) ->
+        {:ok, invites} = InvitesActions.load(state.current_user, ss.invites)
+        %{ss | invites: invites}
+
+      _other ->
+        ss
+    end
+  end
+
+  defp key_for_invites(%{key: :char, char: char}), do: char
+  defp key_for_invites(%{key: key}), do: key
+
+  defp update_screen_state(state, ss) do
+    new_screen_state = Map.put(Map.get(state, :screen_state) || %{}, :moderation, ss)
+    {:update, %{state | screen_state: new_screen_state}, []}
   end
 end
