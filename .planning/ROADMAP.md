@@ -137,7 +137,7 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   - [x] 05-01-PLAN.md — Wave 1: Accounts persistence, Timex timezone storage/defaulting, and profile/preference validation [ACCT-02, ACCT-03, ACCT-04, ACCT-05]
   - [x] 05-02-PLAN.md — Wave 1: Session preference snapshot API and SSH startup seeding [ACCT-03, ACCT-04, ACCT-05, ACCT-06]
   - [x] 05-03-PLAN.md — Wave 2: inline Account PROFILE/PREFS forms and unsaved theme preview [ACCT-02, ACCT-03, ACCT-04, ACCT-05]
-  - [ ] 05-04-PLAN.md — Wave 3: Account save live refresh, failed-save behavior, and `mix precommit` gate [ACCT-02, ACCT-03, ACCT-04, ACCT-05, ACCT-06]
+  - [x] 05-04-PLAN.md — Wave 3: Account save live refresh, failed-save behavior, and `mix precommit` gate [ACCT-02, ACCT-03, ACCT-04, ACCT-05, ACCT-06]
 **UI hint**: yes
 
 ### Phase 6: Chrome Clock and Main Menu Wiring
