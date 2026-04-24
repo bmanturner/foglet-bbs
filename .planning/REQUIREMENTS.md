@@ -84,9 +84,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MAIL-01 | Phase 9 | Pending |
 | MAIL-02 | Phase 9 | Pending |
 | MAIL-03 | Phase 9 | Pending |
-| MAIL-04 | Phase 9 | Pending |
+| MAIL-04 | Phase 15 | Pending |
 | MAIL-05 | Phase 9 | Pending |
-| MAIL-06 | Phase 9 | Pending |
+| MAIL-06 | Phase 15 | Pending |
 | MAIL-07 | Phase 10 | Pending |
 | USER-01 | Phase 10 | Pending |
 | USER-02 | Phase 10 | Pending |
@@ -108,8 +108,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUBS-04 | Phase 13 | Pending |
 | SUBS-05 | Phase 13 | Pending |
 | HYGN-01 | Phase 14 | Pending |
-| HYGN-02 | Phase 14 | Pending |
-| HYGN-03 | Phase 14 | Pending |
+| HYGN-02 | Phase 15 | Pending |
+| HYGN-03 | Phase 15 | Pending |
 
 **Coverage:**
 - v1 requirements: 29 total
@@ -118,4 +118,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-24*
-*Last updated: 2026-04-24 after milestone v1.2 initial definition*
+*Last updated: 2026-04-24 after milestone v1.2 audit gap closure planning*

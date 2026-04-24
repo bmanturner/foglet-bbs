@@ -3,7 +3,7 @@
 ## Milestones
 
 - ✅ **v1.1 Operations Surfaces & Invites** - Phases 0-8, including inserted Phase 1.1 (shipped 2026-04-24). See [.planning/milestones/v1.1-ROADMAP.md](milestones/v1.1-ROADMAP.md).
-- 🚧 **v1.2 Pre-Alpha Gap Closure** - Phases 9-14 (in progress).
+- 🚧 **v1.2 Pre-Alpha Gap Closure** - Phases 9-15 (in progress).
 
 ## Overview
 
@@ -43,6 +43,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata (when last successful login with key was made).
 - [x] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions. (completed 2026-04-24)
 - [x] **Phase 14: Launch Hygiene and Operator Notes** - Visible sysop settings, tests, copy, and operator docs are aligned for pre-alpha. (completed 2026-04-24)
+- [ ] **Phase 15: Reset Path Gap Closure** - Password reset operator and break-glass paths stop emitting unsupported browser URLs, and operator docs/tests describe only supported SSH-first behavior.
 
 ## Phase Details
 
@@ -151,10 +152,26 @@ Plans:
 - [x] 14-03-PLAN.md — Root README operator notes and hygiene gate
 **UI hint**: yes
 
+### Phase 15: Reset Path Gap Closure
+**Goal**: Password reset delivery, no-email retrieval, tests, and operator notes describe only reset behavior Foglet actually supports.
+**Depends on**: Phase 14
+**Requirements**: MAIL-04, MAIL-06, HYGN-02, HYGN-03
+**Gap Closure**: Closes gaps from `.planning/v1.2-MILESTONE-AUDIT.md`: MAIL-04, MAIL-06, HYGN-02, HYGN-03, INT-01, INT-02, FLOW-RESET-01, FLOW-RESET-02.
+**Success Criteria** (what must be TRUE):
+  1. The break-glass reset Mix task no longer emits a browser reset URL unless a supported route or SSH/TUI consumption path exists.
+  2. SMTP password reset and no-email/operator retrieval copy expose a token or supported terminal-native reset instruction without claiming unsupported browser behavior.
+  3. Focused reset blocker tests assert happy path, forbidden path, and user/operator-facing copy for the supported reset flow.
+  4. README operator notes and Phase 14 blocker records agree about reset support and no longer contradict each other.
+**Plans**: TBD
+Plans:
+- [ ] TBD — Replace unsupported reset URL flow with supported reset-token handling or honest operator output
+- [ ] TBD — Align reset tests, README operator notes, and blocker records
+**UI hint**: yes
+
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
+Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14 -> 15
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -174,3 +191,4 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 4/4 | Complete    | 2026-04-24 |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 3/3 | Complete   | 2026-04-24 |
+| 15. Reset Path Gap Closure | v1.2 | 0/TBD | Not started | - |
