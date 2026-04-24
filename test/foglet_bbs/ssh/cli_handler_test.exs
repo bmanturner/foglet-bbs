@@ -237,7 +237,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
     end
 
     test "authenticated context (pubkey match) produces main_menu screen" do
-      user = %Foglet.Accounts.User{id: "uid-123", handle: "pubkeyuser", role: :user}
+      user = %Foglet.Accounts.User{
+        id: "uid-123",
+        handle: "pubkeyuser",
+        role: :user,
+        confirmed_at: DateTime.utc_now()
+      }
 
       auth_ctx = %{
         session_context: %{
@@ -279,6 +284,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
   defp start_test_daemon! do
     reset_cli_counter!()
+    warm_login_config_cache!()
     host_dir = tmp_host_key_dir!()
     start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
 
@@ -306,6 +312,11 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
     on_exit(fn -> :ssh.close(conn) end)
     %{conn: conn, daemon_ref: daemon_ref, port: port}
+  end
+
+  defp warm_login_config_cache! do
+    _ = Foglet.Config.registration_mode()
+    _ = Foglet.Config.delivery_mode()
   end
 
   defp reset_cli_counter! do
