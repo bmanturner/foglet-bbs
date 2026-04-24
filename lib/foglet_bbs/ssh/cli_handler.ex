@@ -50,6 +50,7 @@ defmodule Foglet.SSH.CLIHandler do
   require Logger
 
   alias Foglet.Sessions
+  alias Foglet.Sessions.Preferences
   alias Raxol.SSH.IOAdapter
 
   @max_connections 500
@@ -342,10 +343,16 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   defp start_session(user) do
+    preferences = Preferences.from_user(user)
+
     case Sessions.Supervisor.start_session(
            user_id: user.id,
            handle: user.handle,
-           role: user.role
+           role: user.role,
+           timezone: preferences.timezone,
+           time_format: preferences.time_format,
+           theme_id: preferences.theme_id,
+           theme: preferences.theme
          ) do
       {:ok, pid} -> pid
       _ -> nil
@@ -366,6 +373,8 @@ defmodule Foglet.SSH.CLIHandler do
         nil
       end
 
+    preferences = Preferences.from_user(user)
+
     %{
       session_context: %{
         user: user,
@@ -374,7 +383,10 @@ defmodule Foglet.SSH.CLIHandler do
         pubkey_authenticated: not is_nil(user),
         registration_mode: Foglet.Config.registration_mode(),
         max_post_length: Foglet.Config.max_post_length(),
-        theme: Foglet.TUI.Theme.default()
+        timezone: preferences.timezone,
+        time_format: preferences.time_format,
+        theme_id: preferences.theme_id,
+        theme: preferences.theme
       },
       terminal_size: {width, height}
     }

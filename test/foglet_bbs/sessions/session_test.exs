@@ -78,6 +78,10 @@ defmodule Foglet.Sessions.SessionTest do
       assert state.role == :mod
       assert state.terminal_size == {80, 24}
       assert %DateTime{} = state.connected_at
+      assert state.timezone == "Etc/UTC"
+      assert state.time_format == "12h"
+      assert state.theme_id == "gray"
+      assert state.theme == Theme.default()
     end
 
     test ":replaced_by_new_session terminates cleanly", %{user_id: user_id} do
@@ -131,10 +135,19 @@ defmodule Foglet.Sessions.SessionTest do
   end
 
   describe "promote_to_user/2" do
-    test "updates user_id, handle, role in state", %{user_id: user_id} do
+    test "updates user_id, handle, role, and preferences in state", %{user_id: user_id} do
       {:ok, pid} = start_supervised({Session, [user_id: nil]})
 
-      user = %Foglet.Accounts.User{id: user_id, handle: "promoted", role: :user}
+      user =
+        %Foglet.Accounts.User{
+          id: user_id,
+          handle: "promoted",
+          role: :user,
+          preferences: %{"time_format" => "24h"},
+          theme: "amber"
+        }
+        |> Map.put(:timezone, "America/Chicago")
+
       :ok = Session.promote_to_user(pid, user)
       _ = :sys.get_state(pid)
 
@@ -142,6 +155,10 @@ defmodule Foglet.Sessions.SessionTest do
       assert state.user_id == user_id
       assert state.handle == "promoted"
       assert state.role == :user
+      assert state.timezone == "America/Chicago"
+      assert state.time_format == "24h"
+      assert state.theme_id == "amber"
+      assert state.theme == Theme.resolve(:amber)
     end
 
     test "registers the promoted session in the Registry", %{user_id: user_id} do
@@ -153,6 +170,50 @@ defmodule Foglet.Sessions.SessionTest do
       _ = :sys.get_state(pid)
 
       assert [{^pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+    end
+  end
+
+  describe "update_preferences/2" do
+    test "updates only preference snapshot fields for a user struct", %{user_id: user_id} do
+      {:ok, _pid} =
+        start_supervised({Session, [user_id: user_id, handle: "alice", role: :mod]})
+
+      user =
+        %User{preferences: %{"time_format" => "24h"}, theme: "amber"}
+        |> Map.put(:timezone, "America/Chicago")
+
+      :ok = Session.update_preferences(user_id, user)
+      _ = :sys.get_state(Session.via_tuple(user_id))
+
+      state = Session.get_state(user_id)
+      assert state.user_id == user_id
+      assert state.handle == "alice"
+      assert state.role == :mod
+      assert state.timezone == "America/Chicago"
+      assert state.time_format == "24h"
+      assert state.theme_id == "amber"
+      assert state.theme == Theme.resolve(:amber)
+    end
+
+    test "updates preference snapshot fields from an existing snapshot" do
+      {:ok, pid} = start_supervised({Session, [user_id: nil]})
+
+      snapshot = %{
+        timezone: "America/Chicago",
+        time_format: "24h",
+        theme_id: "amber",
+        theme: Theme.resolve(:amber)
+      }
+
+      :ok = Session.update_preferences(pid, snapshot)
+      _ = :sys.get_state(pid)
+
+      state = Session.get_state(pid)
+      assert state.user_id == nil
+      assert state.timezone == "America/Chicago"
+      assert state.time_format == "24h"
+      assert state.theme_id == "amber"
+      assert state.theme == Theme.resolve(:amber)
     end
   end
 end

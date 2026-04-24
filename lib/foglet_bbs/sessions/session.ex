@@ -20,6 +20,8 @@ defmodule Foglet.Sessions.Session do
 
   require Logger
 
+  alias Foglet.Sessions.Preferences
+
   @type t :: %__MODULE__{
           user_id: String.t() | nil,
           handle: String.t() | nil,
@@ -27,7 +29,11 @@ defmodule Foglet.Sessions.Session do
           terminal_size: {pos_integer(), pos_integer()},
           connected_at: DateTime.t(),
           last_seen_at: DateTime.t(),
-          tui_pid: pid() | nil
+          tui_pid: pid() | nil,
+          timezone: String.t(),
+          time_format: String.t(),
+          theme_id: String.t(),
+          theme: Foglet.TUI.Theme.t()
         }
 
   defstruct [
@@ -37,7 +43,11 @@ defmodule Foglet.Sessions.Session do
     :terminal_size,
     :connected_at,
     :last_seen_at,
-    :tui_pid
+    :tui_pid,
+    :timezone,
+    :time_format,
+    :theme_id,
+    :theme
   ]
 
   # --- Public API ---
@@ -81,6 +91,14 @@ defmodule Foglet.Sessions.Session do
     GenServer.cast(resolve(target), {:tui_pid, tui_pid})
   end
 
+  @spec update_preferences(
+          pid() | String.t(),
+          Foglet.Accounts.User.t() | Preferences.snapshot()
+        ) :: :ok
+  def update_preferences(target, user_or_snapshot) do
+    GenServer.cast(resolve(target), {:update_preferences, preference_snapshot(user_or_snapshot)})
+  end
+
   @doc """
   Promote a guest session to an authenticated user session.
 
@@ -104,6 +122,7 @@ defmodule Foglet.Sessions.Session do
   @impl true
   def init(opts) do
     now = DateTime.utc_now()
+    preferences = Preferences.from_user(nil)
 
     state = %__MODULE__{
       user_id: Keyword.get(opts, :user_id),
@@ -112,7 +131,11 @@ defmodule Foglet.Sessions.Session do
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
       connected_at: now,
       last_seen_at: now,
-      tui_pid: nil
+      tui_pid: nil,
+      timezone: Keyword.get(opts, :timezone, preferences.timezone),
+      time_format: Keyword.get(opts, :time_format, preferences.time_format),
+      theme_id: Keyword.get(opts, :theme_id, preferences.theme_id),
+      theme: Keyword.get(opts, :theme, preferences.theme)
     }
 
     {:ok, state}
@@ -134,6 +157,10 @@ defmodule Foglet.Sessions.Session do
     {:noreply, %{state | tui_pid: pid}}
   end
 
+  def handle_cast({:update_preferences, preferences}, state) do
+    {:noreply, merge_preferences(state, preferences)}
+  end
+
   def handle_cast({:promote_to_user, user}, state) do
     Logger.info("Session guest promoted to user_id=#{user.id} handle=#{user.handle}")
 
@@ -152,7 +179,12 @@ defmodule Foglet.Sessions.Session do
         )
     end
 
-    {:noreply, %{state | user_id: user.id, handle: user.handle, role: user.role}}
+    state =
+      state
+      |> Map.merge(%{user_id: user.id, handle: user.handle, role: user.role})
+      |> merge_preferences(Preferences.from_user(user))
+
+    {:noreply, state}
   end
 
   @impl true
@@ -164,5 +196,20 @@ defmodule Foglet.Sessions.Session do
     end
 
     {:stop, :normal, state}
+  end
+
+  defp preference_snapshot(%Foglet.Accounts.User{} = user), do: Preferences.from_user(user)
+
+  defp preference_snapshot(%{timezone: _, time_format: _, theme_id: _, theme: _} = snapshot) do
+    Map.take(snapshot, [:timezone, :time_format, :theme_id, :theme])
+  end
+
+  defp merge_preferences(state, preferences) do
+    Map.merge(state, %{
+      timezone: preferences.timezone,
+      time_format: preferences.time_format,
+      theme_id: preferences.theme_id,
+      theme: preferences.theme
+    })
   end
 end
