@@ -62,8 +62,9 @@ completed: 2026-04-24
 
 1. **Task 1: Verify Phase 2 dependency and create invite persistence** - `511ec14` (feat)
 2. **Task 2: Add failing invite lifecycle and registration tests** - `ccb172d` (test)
+3. **Task 1 formatting follow-up** - `19bd7f2` (style)
 
-**Plan metadata:** pending this summary commit.
+**Plan metadata:** `38c7e06` (initial docs), final summary correction in this docs commit.
 
 ## Files Created/Modified
 
