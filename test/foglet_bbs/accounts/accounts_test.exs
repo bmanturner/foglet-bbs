@@ -29,6 +29,18 @@ defmodule Foglet.AccountsTest do
       assert Argon2.verify_pass("opensesame", user.password_hash)
     end
 
+    test "creates users with account preference defaults" do
+      attrs = AccountsFixtures.valid_user_attributes()
+
+      assert {:ok, %User{} = user} = Accounts.register_user(attrs)
+      reloaded = Accounts.get_user!(user.id)
+
+      assert is_binary(reloaded.timezone)
+      assert reloaded.timezone != ""
+      assert reloaded.preferences["time_format"] == "12h"
+      assert reloaded.theme == "gray"
+    end
+
     test "returns {:error, changeset} on invalid attrs" do
       assert {:error, cs} = Accounts.register_user(%{})
       refute cs.valid?
