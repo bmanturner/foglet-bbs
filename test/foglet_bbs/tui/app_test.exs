@@ -8,6 +8,13 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Widgets.Input.TextInput
 
+  defp interval_subscription(subscriptions, message) do
+    Enum.find(subscriptions, fn
+      %Raxol.Core.Runtime.Subscription{type: :interval, data: %{message: ^message}} -> true
+      _ -> false
+    end)
+  end
+
   # Seed the ETS config cache so render paths that call Config.get/2
   # (e.g. Login, Register, Verify screens) do not hit the DB.
   # Config.get/2 now only rescues Ecto.NoResultsError — other DB errors
@@ -132,6 +139,34 @@ defmodule Foglet.TUI.AppTest do
 
     test ":heartbeat_tick is a no-op when session_pid is nil", %{state: state} do
       assert {^state, []} = App.update(:heartbeat_tick, state)
+    end
+
+    test ":main_menu_clock_tick is a no-op rerender trigger preserving loaded state", %{
+      state: state
+    } do
+      state = %{
+        state
+        | current_screen: :main_menu,
+          screen_state: %{main_menu: %{ignored: true}, board_list: %{selected_index: 2}},
+          modal: %Foglet.TUI.Modal{message: "keep me", type: :info},
+          board_list: [%{id: "b1", name: "General"}],
+          current_board: %{id: "b1", name: "General"},
+          current_thread: %{id: "t1", title: "Hello"},
+          posts: [%{id: "p1", body: "hi"}],
+          read_position: %{"t1" => %{last_read_post_id: "p1"}}
+      }
+
+      {new_state, cmds} = App.update(:main_menu_clock_tick, state)
+
+      assert new_state.current_screen == state.current_screen
+      assert new_state.screen_state == state.screen_state
+      assert new_state.modal == state.modal
+      assert new_state.board_list == state.board_list
+      assert new_state.current_board == state.current_board
+      assert new_state.current_thread == state.current_thread
+      assert new_state.posts == state.posts
+      assert new_state.read_position == state.read_position
+      assert cmds == []
     end
 
     test "{:session_replaced, user_id} shows modal and issues quit command", %{state: state} do
@@ -491,6 +526,34 @@ defmodule Foglet.TUI.AppTest do
       {:ok, state} = App.init(%{session_context: %{session_pid: self()}})
       subs = App.subscribe(state)
       assert subs != []
+    end
+
+    test "main_menu screen adds main-menu clock interval subscription" do
+      user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
+
+      {:ok, state} =
+        App.init(%{session_context: %{user: user, user_id: "u-clock", session_pid: nil}})
+
+      state = %{state | current_screen: :main_menu}
+      subs = App.subscribe(state)
+
+      assert %Raxol.Core.Runtime.Subscription{type: :interval, data: data} =
+               interval_subscription(subs, :main_menu_clock_tick)
+
+      assert is_integer(data.interval)
+      assert data.interval <= 60_000
+    end
+
+    test "non-main-menu screens do not add main-menu clock interval subscription" do
+      user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
+
+      {:ok, state} =
+        App.init(%{session_context: %{user: user, user_id: "u-clock", session_pid: nil}})
+
+      state = %{state | current_screen: :board_list}
+      subs = App.subscribe(state)
+
+      refute interval_subscription(subs, :main_menu_clock_tick)
     end
 
     test "returns PubSub custom subscription when current_user is set (Audit #12)" do
