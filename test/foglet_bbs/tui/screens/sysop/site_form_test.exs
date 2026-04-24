@@ -7,6 +7,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
   alias Foglet.Config.Schema
   alias Foglet.TUI.Screens.Sysop.SiteForm
   alias Foglet.TUI.Theme
+  alias FogletBbs.AccountsFixtures
+  alias FogletBbs.Repo
 
   @config_keys Map.keys(Schema.defaults())
 
@@ -66,5 +68,63 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       {form, []} = SiteForm.handle_key(%{key: :char, char: "n"}, form)
       assert form.drafts["delivery_mode"] == "no_email"
     end
+  end
+
+  describe "submit delivery mode validation" do
+    test "blocks no_email when email verification is required without persisting drafts" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("require_email_verification", false, nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("delivery_mode", "no_email")
+        |> put_draft("require_email_verification", true)
+
+      {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      assert form.errors["delivery_mode"] == "No-email mode cannot require email verification"
+
+      assert form.errors["require_email_verification"] ==
+               "Email verification requires delivery_mode=email"
+
+      assert Config.get!("delivery_mode") == "email"
+      assert Config.get!("require_email_verification") == false
+    end
+
+    test "allows valid delivery and verification combinations" do
+      sysop = sysop_fixture()
+
+      for {delivery_mode, require_verification} <- [
+            {"email", true},
+            {"email", false},
+            {"no_email", false}
+          ] do
+        Config.put!("delivery_mode", "email", nil)
+        Config.put!("require_email_verification", true, nil)
+
+        form =
+          SiteForm.init(current_user: sysop)
+          |> put_draft("delivery_mode", delivery_mode)
+          |> put_draft("require_email_verification", require_verification)
+
+        {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+        refute Map.has_key?(form.errors, "delivery_mode")
+        refute Map.has_key?(form.errors, "require_email_verification")
+        assert Config.get!("delivery_mode") == delivery_mode
+        assert Config.get!("require_email_verification") == require_verification
+      end
+    end
+  end
+
+  defp put_draft(form, key, value) do
+    %{form | drafts: Map.put(form.drafts, key, value)}
+  end
+
+  defp sysop_fixture do
+    AccountsFixtures.user_fixture()
+    |> Ecto.Changeset.change(%{role: :sysop})
+    |> Repo.update!()
   end
 end
