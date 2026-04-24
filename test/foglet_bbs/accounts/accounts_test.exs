@@ -182,7 +182,7 @@ defmodule Foglet.AccountsTest do
 
   describe "transition_user_status/3" do
     test "active sysop can perform the locked transition graph" do
-      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+      sysop = user_with_status(:active, "sysoptransition", :sysop)
 
       pending_to_active = user_with_status(:pending, "pendingactive")
       assert {:ok, result} = Accounts.transition_user_status(sysop, pending_to_active, :active)
@@ -190,12 +190,18 @@ defmodule Foglet.AccountsTest do
       assert result.user.status == :active
 
       pending_to_rejected = user_with_status(:pending, "pendingrejected")
-      assert {:ok, result} = Accounts.transition_user_status(sysop, pending_to_rejected.handle, "rejected")
+
+      assert {:ok, result} =
+               Accounts.transition_user_status(sysop, pending_to_rejected.handle, "rejected")
+
       assert %{from: :pending, to: :rejected, delivery: :not_applicable} = result
       assert result.user.status == :rejected
 
       active_to_suspended = AccountsFixtures.user_fixture(%{handle: "activesuspended"})
-      assert {:ok, result} = Accounts.transition_user_status(sysop, active_to_suspended.id, :suspended)
+
+      assert {:ok, result} =
+               Accounts.transition_user_status(sysop, active_to_suspended.id, :suspended)
+
       assert %{from: :active, to: :suspended, delivery: :not_applicable} = result
       assert result.user.status == :suspended
 
@@ -206,7 +212,7 @@ defmodule Foglet.AccountsTest do
     end
 
     test "invalid transitions do not mutate persisted status" do
-      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+      sysop = user_with_status(:active, "sysopinvalid", :sysop)
 
       for {from, to, handle} <- [
             {:rejected, :active, "rejectedactive"},
@@ -240,7 +246,7 @@ defmodule Foglet.AccountsTest do
     end
 
     test "unknown target and deleted target return tagged errors" do
-      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+      sysop = user_with_status(:active, "sysopmissing", :sysop)
       deleted = deleted_user_fixture("deletedtarget")
 
       assert {:error, :not_found} =
@@ -252,7 +258,7 @@ defmodule Foglet.AccountsTest do
 
   describe "list_user_status_admin_targets/1" do
     test "returns non-deleted users grouped by status for sysops" do
-      sysop = AccountsFixtures.user_fixture(%{role: :sysop})
+      sysop = user_with_status(:active, "sysoplist", :sysop)
       pending = user_with_status(:pending, "listpending")
       active = AccountsFixtures.user_fixture(%{handle: "listactive"})
       suspended = user_with_status(:suspended, "listsuspended")
@@ -265,7 +271,7 @@ defmodule Foglet.AccountsTest do
       assert active.id in Enum.map(targets.active, & &1.id)
       assert suspended.id in Enum.map(targets.suspended, & &1.id)
       assert rejected.id in Enum.map(targets.rejected, & &1.id)
-      refute deleted.id in targets |> Map.values() |> List.flatten() |> Enum.map(& &1.id)
+      refute deleted.id in (targets |> Map.values() |> List.flatten() |> Enum.map(& &1.id))
     end
 
     test "returns forbidden for non-sysops" do
@@ -600,12 +606,15 @@ defmodule Foglet.AccountsTest do
         refute email.text_body =~ "/users/reset_password"
         refute email.text_body =~ "http://"
         refute email.text_body =~ "https://"
+        true
       end)
     end
 
     test "email mode returns a generic response and delivers for an active email match" do
       Config.put!("delivery_mode", "email")
-      user = AccountsFixtures.user_fixture(%{handle: "emailreset", email: "emailreset@example.test"})
+
+      user =
+        AccountsFixtures.user_fixture(%{handle: "emailreset", email: "emailreset@example.test"})
 
       assert {:ok, :generic_response} =
                Accounts.request_password_reset_delivery("emailreset@example.test")
@@ -622,6 +631,7 @@ defmodule Foglet.AccountsTest do
       Config.put!("delivery_mode", "email")
       deleted = AccountsFixtures.user_fixture(%{handle: "deletedreset"})
       {:ok, _deleted} = Accounts.delete_user(deleted)
+
       pending =
         AccountsFixtures.user_fixture(%{handle: "pendingreset"})
         |> User.status_changeset(%{status: :pending})

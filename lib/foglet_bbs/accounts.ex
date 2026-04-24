@@ -36,6 +36,16 @@ defmodule Foglet.Accounts do
           status: :available | :consumed | :revoked
         }
 
+  @type status_transition_delivery ::
+          :not_applicable | :skipped_no_email | :attempted | {:failed, term()}
+
+  @type status_transition_result :: %{
+          user: User.t(),
+          from: atom(),
+          to: atom(),
+          delivery: status_transition_delivery()
+        }
+
   @doc "UUID of the tombstone user. Post-anonymization (Phase 2+) rewrites authorship to this id."
   @spec tombstone_user_id() :: String.t()
   def tombstone_user_id, do: @tombstone_user_id
@@ -141,6 +151,76 @@ defmodule Foglet.Accounts do
     Ecto.Changeset.add_error(changeset, :invite_code, "is invalid or unavailable")
   end
 
+  defp normalize_status(status) when status in [:active, :rejected, :suspended], do: {:ok, status}
+
+  defp normalize_status(status) when is_binary(status) do
+    status
+    |> String.trim()
+    |> String.downcase()
+    |> String.to_existing_atom()
+    |> normalize_status()
+  rescue
+    ArgumentError -> {:error, :invalid_status}
+  end
+
+  defp normalize_status(_status), do: {:error, :invalid_status}
+
+  defp fetch_status_target(%User{id: id}), do: fetch_status_target(id)
+
+  defp fetch_status_target(identifier) when is_binary(identifier) do
+    user =
+      case Ecto.UUID.cast(identifier) do
+        {:ok, id} -> Repo.get(User, id)
+        :error -> Repo.get_by(User, handle: identifier)
+      end
+
+    case user do
+      %User{} = user -> {:ok, user}
+      nil -> {:error, :not_found}
+    end
+  end
+
+  defp fetch_status_target(_target), do: {:error, :not_found}
+
+  defp ensure_not_deleted(%User{deleted_at: nil}), do: :ok
+  defp ensure_not_deleted(%User{}), do: {:error, :deleted}
+
+  defp permit_status_transition(:pending, :active), do: :ok
+  defp permit_status_transition(:pending, :rejected), do: :ok
+  defp permit_status_transition(:active, :suspended), do: :ok
+  defp permit_status_transition(:suspended, :active), do: :ok
+  defp permit_status_transition(_from, _to), do: {:error, :invalid_transition}
+
+  defp find_password_reset_delivery_target(identifier) do
+    normalized = String.trim(identifier)
+
+    Repo.one(
+      from u in User,
+        where:
+          is_nil(u.deleted_at) and u.status == :active and
+            (u.handle == ^normalized or u.email == ^normalized),
+        limit: 1
+    )
+  end
+
+  defp maybe_deliver_password_reset(nil), do: :ok
+
+  defp maybe_deliver_password_reset(%User{} = user) do
+    {raw, token_struct} = UserToken.build_email_token(user, "reset_password")
+
+    with {:ok, _token} <- Repo.insert(token_struct) do
+      try do
+        _ = Foglet.Mailer.deliver(Email.password_reset(user, raw))
+      rescue
+        _error -> :ok
+      catch
+        _kind, _reason -> :ok
+      end
+
+      :ok
+    end
+  end
+
   @doc """
   Create a new user account in `:pending` status (sysop-approved registration mode, D-05).
   Same validation as `register_user/1`; differs only in the persisted status value.
@@ -202,6 +282,72 @@ defmodule Foglet.Accounts do
     user
     |> User.role_changeset(%{role: role})
     |> Repo.update()
+  end
+
+  @doc """
+  Transition a user's account status through the locked sysop graph.
+
+  The actor is authorized before target lookup or mutation so unauthorized
+  callers cannot use this boundary to probe account existence.
+  """
+  @spec transition_user_status(User.t() | nil, User.t() | String.t(), atom() | String.t()) ::
+          {:ok, status_transition_result()}
+          | {:error, :forbidden | :not_found | :deleted | :invalid_transition | :invalid_status}
+  def transition_user_status(actor, target, target_status) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :manage_user_status, actor, :site),
+         {:ok, status} <- normalize_status(target_status),
+         {:ok, user} <- fetch_status_target(target),
+         :ok <- ensure_not_deleted(user),
+         :ok <- permit_status_transition(user.status, status),
+         {:ok, updated} <- user |> User.status_changeset(%{status: status}) |> Repo.update() do
+      {:ok,
+       %{
+         user: updated,
+         from: user.status,
+         to: status,
+         delivery: :not_applicable
+       }}
+    else
+      {:error, reason}
+      when reason in [:forbidden, :not_found, :deleted, :invalid_transition, :invalid_status] ->
+        {:error, reason}
+
+      {:error, %Ecto.Changeset{}} ->
+        {:error, :invalid_status}
+    end
+  end
+
+  @doc "List non-deleted users grouped by status for sysop status administration."
+  @spec list_user_status_admin_targets(User.t() | nil) ::
+          {:ok,
+           %{
+             pending: [User.t()],
+             active: [User.t()],
+             suspended: [User.t()],
+             rejected: [User.t()]
+           }}
+          | {:error, :forbidden}
+  def list_user_status_admin_targets(actor) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :manage_user_status, actor, :site) do
+      users =
+        Repo.all(
+          from u in User,
+            where: is_nil(u.deleted_at),
+            order_by: [asc: u.inserted_at]
+        )
+
+      grouped = Enum.group_by(users, & &1.status)
+
+      {:ok,
+       %{
+         pending: Map.get(grouped, :pending, []),
+         active: Map.get(grouped, :active, []),
+         suspended: Map.get(grouped, :suspended, []),
+         rejected: Map.get(grouped, :rejected, [])
+       }}
+    else
+      {:error, :forbidden} -> {:error, :forbidden}
+    end
   end
 
   @spec update_profile(User.t(), map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
@@ -296,6 +442,28 @@ defmodule Foglet.Accounts do
           {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
           {:error, _reason} -> {:error, :delivery_failed}
         end
+
+      "no_email" ->
+        {:error, :unavailable}
+    end
+  end
+
+  @doc """
+  Request password-reset delivery for an active, non-deleted user by handle or email.
+
+  Email mode intentionally returns a generic response for unknown or ineligible
+  accounts, and also when provider delivery fails, to avoid account enumeration.
+  """
+  @spec request_password_reset_delivery(String.t()) ::
+          {:ok, :generic_response} | {:error, :unavailable}
+  def request_password_reset_delivery(identifier) when is_binary(identifier) do
+    case Foglet.Config.delivery_mode() do
+      "email" ->
+        identifier
+        |> find_password_reset_delivery_target()
+        |> maybe_deliver_password_reset()
+
+        {:ok, :generic_response}
 
       "no_email" ->
         {:error, :unavailable}
