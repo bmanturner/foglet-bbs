@@ -453,6 +453,15 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   defp handle_submit_payload(nil, state), do: {state, []}
 
+  defp handle_submit_payload(
+         %{display_order: nil},
+         %__MODULE__{modal_kind: kind} = state
+       )
+       when kind in [:create_category, :edit_category] do
+    form = ModalForm.set_errors(state.modal, %{display_order: "is invalid"})
+    {%{state | modal: form}, []}
+  end
+
   defp handle_submit_payload(payload, %__MODULE__{modal_kind: kind} = state) do
     case dispatch_submit(kind, payload, state) do
       {:ok, _result} ->
@@ -516,9 +525,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   defp normalize_category_attrs(attrs) do
     attrs
     |> Map.update(:display_order, 0, fn
-      nil -> 0
       n when is_integer(n) -> n
-      _ -> 0
+      value -> value
     end)
   end
 

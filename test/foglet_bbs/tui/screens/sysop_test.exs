@@ -759,6 +759,41 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert new_bv.modal == nil
       assert Enum.any?(new_bv.categories, &(&1.name == "Announcements"))
     end
+
+    test "invalid category display_order stays in Modal.Form with inline error", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+      bv = state.screen_state.sysop.boards_view
+
+      fields = [
+        %{name: :name, type: :text, label: "Name", max_length: 100, value: "Bad Order"},
+        %{name: :description, type: :textarea, label: "Description", value: ""},
+        %{name: :display_order, type: :integer, label: "Display order", value: "not-a-number"}
+      ]
+
+      form =
+        ModalForm.init(
+          title: "New category",
+          fields: fields,
+          on_submit: fn payload ->
+            Process.put({BoardsView, :pending_submit}, payload)
+            :ok
+          end,
+          on_cancel: fn -> :ok end
+        )
+
+      bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_category}
+      state = put_boards_view(state, bv)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+
+      new_bv = new_state.screen_state.sysop.boards_view
+      assert %ModalForm{} = new_bv.modal
+      assert Map.has_key?(new_bv.modal.errors, :display_order)
+      refute Enum.any?(new_bv.categories, &(&1.name == "Bad Order"))
+    end
   end
 
   # =========================================================================
