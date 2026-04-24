@@ -42,7 +42,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 11: Posting Policy Enforcement** - Board posting policy and locked-thread restrictions are enforced before board-server writes. (completed 2026-04-24)
 - [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata (when last successful login with key was made).
 - [x] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions. (completed 2026-04-24)
-- [ ] **Phase 14: Launch Hygiene and Operator Notes** - Visible sysop settings, tests, copy, and operator docs are aligned for pre-alpha.
+- [x] **Phase 14: Launch Hygiene and Operator Notes** - Visible sysop settings, tests, copy, and operator docs are aligned for pre-alpha. (completed 2026-04-24)
 
 ## Phase Details
 
@@ -148,7 +148,7 @@ Plans:
 Plans:
 - [x] 14-01-PLAN.md — Sysop config accountability and blocker audit
 - [x] 14-02-PLAN.md — Launch-copy and blocker-flow test audit
-- [ ] 14-03-PLAN.md — Root README operator notes and hygiene gate
+- [x] 14-03-PLAN.md — Root README operator notes and hygiene gate
 **UI hint**: yes
 
 ## Progress
@@ -173,4 +173,4 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 11. Posting Policy Enforcement | v1.2 | 3/3 | Complete   | 2026-04-24 |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 4/4 | Complete    | 2026-04-24 |
-| 14. Launch Hygiene and Operator Notes | v1.2 | 2/3 | In Progress|  |
+| 14. Launch Hygiene and Operator Notes | v1.2 | 3/3 | Complete   | 2026-04-24 |
