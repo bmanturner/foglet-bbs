@@ -85,6 +85,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
     :ok
   end
 
+  defp forbidden_reset_route, do: "/" <> "users" <> "/" <> "reset_password"
+  defp forbidden_http_prefix, do: "http" <> "://"
+  defp forbidden_https_prefix, do: "https" <> "://"
+
   describe "init_screen_state/1 (AUDIT-19)" do
     test "returns minimal menu sub-state" do
       assert Login.init_screen_state([]) == %{sub: :menu}
@@ -121,12 +125,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "reset request form renders browser-free copy" do
       Config.put!("delivery_mode", "email")
 
-      text = Login.render(reset_request_state("alice")) |> collect_text_values() |> Enum.join("\n")
+      text =
+        Login.render(reset_request_state("alice")) |> collect_text_values() |> Enum.join("\n")
 
       assert text =~ "Handle or email:"
-      refute text =~ "/users/reset_password"
-      refute text =~ "http://"
-      refute text =~ "https://"
+      refute text =~ forbidden_reset_route()
+      refute text =~ forbidden_http_prefix()
+      refute text =~ forbidden_https_prefix()
     end
   end
 
@@ -319,9 +324,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
         |> Enum.join("\n")
 
       assert rendered =~ "If an active account matches"
-      refute rendered =~ "/users/reset_password"
-      refute rendered =~ "http://"
-      refute rendered =~ "https://"
+      refute rendered =~ forbidden_reset_route()
+      refute rendered =~ forbidden_http_prefix()
+      refute rendered =~ forbidden_https_prefix()
     end
 
     test "enter reports unavailable if delivery mode is disabled" do

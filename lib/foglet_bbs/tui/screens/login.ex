@@ -7,8 +7,9 @@ defmodule Foglet.TUI.Screens.Login do
     * any other value → shows all three options
 
   Sub-states (stored in state.screen_state[:login]):
-    * :menu          — showing [L]/[R]/[Q] menu
+    * :menu          — showing [L]/[R]/[F]/[Q] menu as allowed by config
     * :login_form    — collecting handle+password
+    * :reset_request — collecting handle/email for reset delivery
 
   Login form state shape:
     %{
@@ -17,6 +18,14 @@ defmodule Foglet.TUI.Screens.Login do
       handle_input: %TextInput{},
       password_input: %TextInput{},
       error: nil | "Invalid credentials."
+    }
+
+  Reset request state shape:
+    %{
+      sub: :reset_request,
+      focused_field: :identifier,
+      identifier_input: %TextInput{},
+      message: nil | String.t()
     }
 
   ## Config.get Safety (D-07)
@@ -42,6 +51,8 @@ defmodule Foglet.TUI.Screens.Login do
 
   @menu_keys [{"L", "Login"}, {"R", "Register"}, {"Q", "Quit"}]
   @menu_keys_no_register [{"L", "Login"}, {"Q", "Quit"}]
+  @reset_success_message "If an active account matches, reset instructions will be sent by email."
+  @reset_unavailable_message "Password reset by email is unavailable on this Foglet."
 
   @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
 
@@ -61,6 +72,7 @@ defmodule Foglet.TUI.Screens.Login do
         [
           case sub do
             :login_form -> render_login_form(state, theme)
+            :reset_request -> render_reset_request(state, theme)
             _ -> render_menu(mode, theme)
           end
         ]
@@ -75,6 +87,7 @@ defmodule Foglet.TUI.Screens.Login do
   def handle_key(key, state) do
     case sub_state(state) do
       :login_form -> handle_form_key(key, state)
+      :reset_request -> handle_reset_key(key, state)
       _ -> handle_menu_key(key, state)
     end
   end
@@ -87,6 +100,9 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp handle_menu_key(%{key: :char, char: c}, state) when c in ["r", "R"],
     do: maybe_register(state)
+
+  defp handle_menu_key(%{key: :char, char: c}, state) when c in ["f", "F"],
+    do: maybe_enter_reset_request(state)
 
   defp handle_menu_key(_key, _state), do: :no_match
 
@@ -127,6 +143,18 @@ defmodule Foglet.TUI.Screens.Login do
     {:update, update_focused_input(state, new_input), []}
   end
 
+  defp handle_reset_key(%{key: :enter}, state), do: submit_reset_request(state)
+
+  defp handle_reset_key(%{key: :escape}, state) do
+    {:update, put_login_ss(state, %{sub: :menu}), []}
+  end
+
+  defp handle_reset_key(event, state) do
+    login_ss = get_login_ss(state)
+    {new_input, _action} = TextInput.handle_event(event, login_ss.identifier_input)
+    {:update, put_login_ss(state, %{login_ss | identifier_input: new_input}), []}
+  end
+
   defp focused_input(state) do
     login_ss = get_login_ss(state)
     focused = Map.get(login_ss, :focused_field, :handle)
@@ -153,6 +181,8 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp session_ctx(state), do: Map.get(state, :session_context) || %{}
 
+  defp delivery_mode, do: Config.delivery_mode()
+
   defp sub_state(state) do
     login_ss = Map.get(state.screen_state || %{}, :login) || %{}
     Map.get(login_ss, :sub) || :menu
@@ -171,17 +201,36 @@ defmodule Foglet.TUI.Screens.Login do
   defp keys_for(:login_form, _),
     do: [{"Tab", "Switch field"}, {"Enter", "Submit/Next"}, {"Esc", "Cancel"}]
 
-  defp keys_for(_, "disabled"), do: @menu_keys_no_register
-  defp keys_for(_, _), do: @menu_keys
+  defp keys_for(:reset_request, _),
+    do: [{"Enter", "Request reset"}, {"Esc", "Cancel"}]
+
+  defp keys_for(_, mode), do: menu_keys(mode)
 
   defp render_menu(mode, theme) do
-    keys = if mode == "disabled", do: @menu_keys_no_register, else: @menu_keys
+    keys = menu_keys(mode)
 
     column style: %{gap: 0} do
       [text("Welcome.", fg: theme.primary.fg)] ++
         Enum.map(keys, fn {k, label} ->
           text("  [#{k}] #{label}", fg: theme.primary.fg)
         end)
+    end
+  end
+
+  defp menu_keys(mode) do
+    mode
+    |> base_menu_keys()
+    |> maybe_add_reset_key()
+  end
+
+  defp base_menu_keys("disabled"), do: @menu_keys_no_register
+  defp base_menu_keys(_mode), do: @menu_keys
+
+  defp maybe_add_reset_key(keys) do
+    if delivery_mode() == "email" do
+      List.insert_at(keys, max(length(keys) - 1, 0), {"F", "Forgot password"})
+    else
+      keys
     end
   end
 
@@ -220,6 +269,29 @@ defmodule Foglet.TUI.Screens.Login do
     end
   end
 
+  defp render_reset_request(state, theme) do
+    login_ss = get_login_ss(state)
+
+    message_items =
+      if login_ss.message do
+        [text(""), text(login_ss.message, fg: theme.accent.fg)]
+      else
+        []
+      end
+
+    column style: %{gap: 0} do
+      [
+        text("Password reset", fg: theme.primary.fg, style: [:bold]),
+        row style: %{gap: 0} do
+          [
+            text("Handle or email: ", fg: theme.accent.fg, style: [:bold]),
+            TextInput.render(login_ss.identifier_input, bordered: false, theme: theme)
+          ]
+        end
+      ] ++ message_items
+    end
+  end
+
   defp enter_login_form(state) do
     new_login_ss = %{
       sub: :login_form,
@@ -240,6 +312,37 @@ defmodule Foglet.TUI.Screens.Login do
       _mode ->
         {:update, %{state | current_screen: :register}, []}
     end
+  end
+
+  defp maybe_enter_reset_request(state) do
+    case delivery_mode() do
+      "email" -> enter_reset_request(state)
+      "no_email" -> :no_match
+    end
+  end
+
+  defp enter_reset_request(state) do
+    new_login_ss = %{
+      sub: :reset_request,
+      focused_field: :identifier,
+      identifier_input: TextInput.init([]),
+      message: nil
+    }
+
+    {:update, put_login_ss(state, new_login_ss), []}
+  end
+
+  defp submit_reset_request(state) do
+    login_ss = get_login_ss(state)
+    identifier = login_ss.identifier_input.raxol_state.value
+
+    message =
+      case Accounts.request_password_reset_delivery(identifier) do
+        {:ok, :generic_response} -> @reset_success_message
+        {:error, :unavailable} -> @reset_unavailable_message
+      end
+
+    {:update, put_login_ss(state, %{login_ss | message: message}), []}
   end
 
   defp submit_login(state) do
@@ -270,8 +373,7 @@ defmodule Foglet.TUI.Screens.Login do
       :pending ->
         modal = %Foglet.TUI.Modal{
           type: :error,
-          message:
-            "Your account is pending sysop approval. Please wait for an approval notification."
+          message: "Your account is pending sysop approval. Please wait for sysop approval."
         }
 
         {:update, %{state | modal: modal, screen_state: %{}}, []}
