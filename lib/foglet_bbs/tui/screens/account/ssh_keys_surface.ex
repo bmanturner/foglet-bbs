@@ -49,11 +49,10 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
 
   defp maybe_errors(errors, theme) when is_map(errors) do
     errors
-    |> Enum.map(fn
+    |> Enum.map_join("; ", fn
       {:general, message} -> to_string(message)
       {field, message} -> "#{field} error: #{message}"
     end)
-    |> Enum.join("; ")
     |> text(fg: theme.error.fg)
   end
 
