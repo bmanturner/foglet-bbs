@@ -343,6 +343,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "invalid integer surfaces inline error, no modal", %{state: state} do
       # Put into 'any_user' so the limit row is visible & focusable.
+      Config.put!("delivery_mode", "email", nil)
       Config.put!("invite_code_generators", "any_user", nil)
 
       # Persist a real sysop so Config.put/3 clears authz AND the
@@ -395,6 +396,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state =
         build_state(nil)
         |> put_in([:screen_state, :sysop], Sysop.init_screen_state())
+
+      Config.put!("delivery_mode", "email", nil)
 
       # Lazy-init SiteForm and mutate a draft so submit hits Config.put.
       {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
@@ -488,6 +491,16 @@ defmodule Foglet.TUI.Screens.SysopTest do
     put_users_view(state, uv)
   end
 
+  defp select_user_row(state, handle) do
+    uv = state.screen_state.sysop.users_view
+
+    idx =
+      Enum.find_index(uv.rows, fn {_status, user} -> user.handle == handle end) ||
+        flunk("Expected USERS row for #{handle}")
+
+    put_users_view(state, %{uv | selection_index: idx})
+  end
+
   describe "USERS tab render (USER-01)" do
     test "renders pending, active, suspended, and rejected non-deleted handles", %{state: state} do
       sysop = persist_user(%{handle: "sysopusers", role: :sysop})
@@ -531,6 +544,70 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Enum.any?(flat, &String.contains?(&1, "No administrable users."))
       assert Enum.any?(flat, &String.contains?(&1, "[A] Approve"))
+    end
+  end
+
+  describe "USERS tab actions (USER-02, USER-03)" do
+    test "approves pending users through Accounts and refreshes as active", %{state: state} do
+      sysop = persist_user(%{handle: "approve_sysop", role: :sysop})
+      pending = persist_user(%{handle: "approve_me", status: :pending})
+      state = activate_users_tab(state, sysop)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "A"}, state)
+
+      assert Accounts.get_user!(pending.id).status == :active
+      assert state.screen_state.sysop.users_view.message ==
+               "Status changed: @approve_me pending -> active."
+    end
+
+    test "rejects pending users through Accounts and refreshes as rejected", %{state: state} do
+      sysop = persist_user(%{handle: "reject_sysop", role: :sysop})
+      pending = persist_user(%{handle: "reject_me", status: :pending})
+      state = activate_users_tab(state, sysop)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+
+      assert Accounts.get_user!(pending.id).status == :rejected
+      assert state.screen_state.sysop.users_view.message ==
+               "Status changed: @reject_me pending -> rejected."
+    end
+
+    test "suspends active users through Accounts and refreshes as suspended", %{state: state} do
+      sysop = persist_user(%{handle: "suspend_sysop", role: :sysop})
+      active = persist_user(%{handle: "suspend_me", status: :active})
+      state = activate_users_tab(state, sysop)
+      state = select_user_row(state, active.handle)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "S"}, state)
+
+      assert Accounts.get_user!(active.id).status == :suspended
+      assert state.screen_state.sysop.users_view.message ==
+               "Status changed: @suspend_me active -> suspended."
+    end
+
+    test "reactivates suspended users through Accounts and refreshes as active", %{state: state} do
+      sysop = persist_user(%{handle: "reactivate_sysop", role: :sysop})
+      suspended = persist_user(%{handle: "reactivate_me", status: :suspended})
+      state = activate_users_tab(state, sysop)
+      state = select_user_row(state, suspended.handle)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "U"}, state)
+
+      assert Accounts.get_user!(suspended.id).status == :active
+      assert state.screen_state.sysop.users_view.message ==
+               "Status changed: @reactivate_me suspended -> active."
+    end
+
+    test "invalid row action surfaces message without mutating", %{state: state} do
+      sysop = persist_user(%{handle: "invalid_sysop", role: :sysop})
+      active = persist_user(%{handle: "reject_active", status: :active})
+      state = activate_users_tab(state, sysop)
+      state = select_user_row(state, active.handle)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+
+      assert Accounts.get_user!(active.id).status == :active
+      assert state.screen_state.sysop.users_view.message == "Invalid status transition."
     end
   end
 

@@ -27,7 +27,8 @@ defmodule Foglet.TUI.Screens.Sysop.State do
           site_form: term() | nil,
           limits_form: term() | nil,
           boards_view: term() | nil,
-          system_snapshot: term() | nil
+          system_snapshot: term() | nil,
+          users_view: term() | nil
         }
 
   defstruct [
@@ -38,7 +39,8 @@ defmodule Foglet.TUI.Screens.Sysop.State do
     site_form: nil,
     limits_form: nil,
     boards_view: nil,
-    system_snapshot: nil
+    system_snapshot: nil,
+    users_view: nil
   ]
 
   @spec new(keyword()) :: t()
