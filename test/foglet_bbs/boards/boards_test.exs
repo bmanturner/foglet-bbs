@@ -6,7 +6,7 @@ defmodule Foglet.BoardsTest do
 
   alias Ecto.Adapters.SQL.Sandbox
   alias Foglet.Accounts.User
-  alias Foglet.Boards.{Category, ReadPointer, Subscription}
+  alias Foglet.Boards.{Board, Category, ReadPointer, Subscription}
   alias FogletBbs.Repo
 
   # Board Server is started by Foglet.Boards.create_board/3 via BoardSupervisor.
@@ -71,6 +71,55 @@ defmodule Foglet.BoardsTest do
       cs = Foglet.Boards.Board.archive_changeset(board)
       assert is_nil(Ecto.Changeset.get_change(cs, :name))
       assert is_nil(Ecto.Changeset.get_change(cs, :slug))
+    end
+  end
+
+  describe "Board.changeset/2 required subscription policy (SUBS-03)" do
+    test "accepts required subscriptions when default subscriptions are enabled" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "required-default",
+          name: "Required Default",
+          default_subscription: true,
+          required_subscription: true
+        })
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_field(changeset, :required_subscription) == true
+    end
+
+    test "rejects required subscriptions without default subscriptions" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "required-non-default",
+          name: "Required Non Default",
+          default_subscription: false,
+          required_subscription: true
+        })
+
+      refute changeset.valid?
+      assert "requires default_subscription to be true" in errors_on(changeset).required_subscription
+    end
+
+    test "database constraint rejects required subscriptions without default subscriptions" do
+      category = category_fixture()
+
+      assert {:error, changeset} =
+               %Board{category_id: category.id}
+               |> Board.changeset(%{
+                 slug: "required-db",
+                 name: "Required DB",
+                 default_subscription: true,
+                 required_subscription: true
+               })
+               |> Ecto.Changeset.put_change(:default_subscription, false)
+               |> Repo.insert()
+
+      assert "requires default_subscription to be true" in errors_on(changeset).required_subscription
     end
   end
 
