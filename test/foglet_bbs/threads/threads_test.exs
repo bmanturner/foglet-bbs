@@ -22,6 +22,29 @@ defmodule Foglet.ThreadsTest do
     {board, pid}
   end
 
+  defp setup_board_with_server(attrs) do
+    category = category_fixture()
+    board = board_fixture(category, attrs)
+    pid = allow_board_server!(board.id)
+    {board, pid}
+  end
+
+  defp update_user_status!(user, status) do
+    user
+    |> Foglet.Accounts.User.status_changeset(%{status: status})
+    |> Repo.update!()
+  end
+
+  defp delete_user!(user) do
+    user
+    |> Foglet.Accounts.User.deletion_changeset()
+    |> Repo.update!()
+  end
+
+  defp posting_attrs(title \\ "Policy test") do
+    %{title: title, body: "Policy body"}
+  end
+
   describe "create_thread/3 (BOARD-02)" do
     test "creates thread with first_post_id set and root post in DB" do
       {board, _pid} = setup_board_with_server()
@@ -58,6 +81,101 @@ defmodule Foglet.ThreadsTest do
         Foglet.Threads.create_thread(board.id, user.id, %{title: "T", body: "b"})
 
       assert post.message_number == 1
+    end
+  end
+
+  describe "create_thread/3 posting policy (POST-01)" do
+    test ":members board allows active users, mods, and sysops" do
+      {board, _pid} = setup_board_with_server(%{postable_by: :members})
+
+      for role <- [:user, :mod, :sysop] do
+        user = user_fixture(%{role: role})
+
+        assert {:ok, %{thread: thread, post: post}} =
+                 Foglet.Threads.create_thread(board.id, user.id, posting_attrs("#{role} thread"))
+
+        assert thread.created_by_id == user.id
+        assert post.user_id == user.id
+      end
+    end
+
+    test ":mods_only board rejects users and allows mods and sysops" do
+      {board, _pid} = setup_board_with_server(%{postable_by: :mods_only})
+      user = user_fixture(%{role: :user})
+
+      assert {:error, :posting_not_allowed} =
+               Foglet.Threads.create_thread(board.id, user.id, posting_attrs())
+
+      for role <- [:mod, :sysop] do
+        poster = user_fixture(%{role: role})
+
+        assert {:ok, %{thread: thread, post: post}} =
+                 Foglet.Threads.create_thread(board.id, poster.id, posting_attrs("#{role} thread"))
+
+        assert thread.created_by_id == poster.id
+        assert post.user_id == poster.id
+      end
+    end
+
+    test ":sysop_only board rejects users and mods and allows sysops" do
+      {board, _pid} = setup_board_with_server(%{postable_by: :sysop_only})
+
+      for role <- [:user, :mod] do
+        user = user_fixture(%{role: role})
+
+        assert {:error, :posting_not_allowed} =
+                 Foglet.Threads.create_thread(board.id, user.id, posting_attrs("#{role} thread"))
+      end
+
+      sysop = user_fixture(%{role: :sysop})
+
+      assert {:ok, %{thread: thread, post: post}} =
+               Foglet.Threads.create_thread(board.id, sysop.id, posting_attrs("sysop thread"))
+
+      assert thread.created_by_id == sysop.id
+      assert post.user_id == sysop.id
+    end
+
+    test "rejects pending, suspended, deleted, missing, and unknown users" do
+      {board, _pid} = setup_board_with_server(%{postable_by: :members})
+      pending = user_fixture() |> update_user_status!(:pending)
+      suspended = user_fixture() |> update_user_status!(:suspended)
+      deleted = user_fixture() |> delete_user!()
+
+      disallowed_user_ids = [
+        pending.id,
+        suspended.id,
+        deleted.id,
+        nil,
+        Ecto.UUID.generate()
+      ]
+
+      for user_id <- disallowed_user_ids do
+        assert {:error, :posting_not_allowed} =
+                 Foglet.Threads.create_thread(board.id, user_id, posting_attrs("denied thread"))
+      end
+    end
+
+    test "rejected creates do not persist rows or advance board message numbers" do
+      {board, pid} = setup_board_with_server(%{postable_by: :sysop_only})
+      user = user_fixture(%{role: :user})
+
+      before_thread_count = Repo.aggregate(Foglet.Threads.Thread, :count, :id)
+      before_post_count = Repo.aggregate(Foglet.Posts.Post, :count, :id)
+      before_board = Repo.get!(Foglet.Boards.Board, board.id)
+      before_next_number = :sys.get_state(pid).next_number
+
+      assert before_board.next_message_number == before_next_number
+
+      assert {:error, :posting_not_allowed} =
+               Foglet.Threads.create_thread(board.id, user.id, posting_attrs("denied thread"))
+
+      after_board = Repo.get!(Foglet.Boards.Board, board.id)
+
+      assert Repo.aggregate(Foglet.Threads.Thread, :count, :id) == before_thread_count
+      assert Repo.aggregate(Foglet.Posts.Post, :count, :id) == before_post_count
+      assert after_board.next_message_number == before_board.next_message_number
+      assert :sys.get_state(pid).next_number == before_next_number
     end
   end
 
