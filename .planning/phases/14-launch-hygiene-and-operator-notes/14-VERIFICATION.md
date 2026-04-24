@@ -50,6 +50,10 @@ Responsible party: Codex. This gap was missed and then documented as acceptable 
 
 Expected remediation: remove or change `mix foglet.user.reset_password` so it does not emit HTTP URLs, remove README claims that imply a usable reset URL, and rewrite/delete tests that assert `/users/reset_password/` output unless a real SSH/TUI reset-token consumption flow is implemented.
 
+## Phase 15 Closure Note
+
+The Phase 14 reset URL gap is remediated by Phase 15 plan execution when targeted reset task tests pass and README no longer documents reset URLs. Phase 15 changed the break-glass reset task to print raw reset tokens with operator-assisted SSH instructions, strengthened delivery-copy guards against browser reset URL terminology, and updated operator notes to describe raw reset-token behavior only.
+
 ### 2. Low-value test pruning audit was not completed
 
 The phase spec required removing or rewriting tests that are static, redundant, or too shallow to catch meaningful regressions. The executed work added coverage and audited selected blocker-flow tests, but it did not perform or document a real suite-wide weak-test pruning pass.
