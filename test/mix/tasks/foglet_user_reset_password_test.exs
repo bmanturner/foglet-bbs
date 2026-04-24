@@ -35,7 +35,6 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
       assert output =~ "This URL was generated for operator use; no email was sent by this task."
       assert output =~ "/users/reset_password/"
       refute output =~ "has been emailed"
-      refute output =~ "email was sent"
       refute output =~ "sent by email"
 
       # Extract the raw token portion and verify it's url-safe base64

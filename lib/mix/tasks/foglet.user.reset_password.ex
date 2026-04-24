@@ -1,19 +1,20 @@
 defmodule Mix.Tasks.Foglet.User.ResetPassword do
   @moduledoc """
-  Generate a password-reset token for a user and print the reset URL.
+  Generate an operator break-glass password-reset token for a user.
 
       mix foglet.user.reset_password bman
 
-  Phase 1 has no email delivery (CONTEXT D-01/D-03) — the sysop prints
-  the URL to stdout and delivers it manually (e.g., via a secure channel).
-  Phase 10 wires Swoosh and this task stops being the primary entrypoint.
+  This task is delivery-mode aware. In email mode it prints a break-glass
+  reset URL for operator use without sending email. In no-email mode it
+  exits non-zero so no-email operation is not presented as reset delivery.
   """
-  @shortdoc "Generate a password-reset URL for a user (stdout, no email)"
+  @shortdoc "Generate an operator break-glass password-reset URL"
 
   use Mix.Task
 
   alias Foglet.Accounts
   alias Foglet.Accounts.User
+  alias Foglet.Config
 
   @impl Mix.Task
   def run(args) do
@@ -51,12 +52,35 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
         exit({:shutdown, 1})
 
       %User{} = user ->
+        reset_existing_user(user)
+    end
+  end
+
+  defp reset_existing_user(%User{} = user) do
+    case Config.delivery_mode() do
+      "email" ->
         {:ok, url} =
           Accounts.deliver_user_reset_password_instructions(user, &build_reset_url/1)
 
-        Mix.shell().info("Reset URL for #{user.handle}:")
+        Mix.shell().info("Break-glass reset URL for #{user.handle}:")
         Mix.shell().info("  #{url}")
+
+        Mix.shell().info(
+          "This URL was generated for operator use; no email was sent by this task."
+        )
+
         :ok
+
+      "no_email" ->
+        Mix.shell().error(
+          "Password reset delivery is unavailable because Foglet is in no-email mode."
+        )
+
+        Mix.shell().error(
+          "Use an operator break-glass password change procedure instead of relaying a reset link."
+        )
+
+        exit({:shutdown, 1})
     end
   end
 
