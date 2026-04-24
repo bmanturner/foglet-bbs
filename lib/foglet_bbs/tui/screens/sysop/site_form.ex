@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   @site_keys [
     "registration_mode",
     "invite_code_generators",
+    "delivery_mode",
     "require_email_verification",
     "invite_generation_per_user_limit"
   ]
