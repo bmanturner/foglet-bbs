@@ -278,6 +278,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       assert new_state.current_screen == :register
       assert new_state.modal.type == :error
+
       assert new_state.modal.message ==
                "Email verification is unavailable because email delivery is disabled."
 

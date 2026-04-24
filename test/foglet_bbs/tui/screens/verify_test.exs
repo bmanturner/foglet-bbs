@@ -149,6 +149,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       assert get_verify_ss(new_state).buffer == ""
       assert get_verify_ss(new_state).attempts == 0
       assert new_state.modal.type == :info
+
       assert new_state.modal.message ==
                "If email delivery is available, new verification instructions have been sent."
 

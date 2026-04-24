@@ -227,7 +227,10 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
       state =
         state
         |> set_error("delivery_mode", "No-email mode cannot require email verification")
-        |> set_error("require_email_verification", "Email verification requires delivery_mode=email")
+        |> set_error(
+          "require_email_verification",
+          "Email verification requires delivery_mode=email"
+        )
 
       {:error, state}
     else

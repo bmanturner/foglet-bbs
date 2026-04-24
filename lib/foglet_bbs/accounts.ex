@@ -298,25 +298,27 @@ defmodule Foglet.Accounts do
            }}
           | {:error, :forbidden}
   def list_user_status_admin_targets(actor) do
-    with :ok <- Bodyguard.permit(Foglet.Authorization, :manage_user_status, actor, :site) do
-      users =
-        Repo.all(
-          from u in User,
-            where: is_nil(u.deleted_at),
-            order_by: [asc: u.inserted_at]
-        )
+    case Bodyguard.permit(Foglet.Authorization, :manage_user_status, actor, :site) do
+      :ok ->
+        users =
+          Repo.all(
+            from u in User,
+              where: is_nil(u.deleted_at),
+              order_by: [asc: u.inserted_at]
+          )
 
-      grouped = Enum.group_by(users, & &1.status)
+        grouped = Enum.group_by(users, & &1.status)
 
-      {:ok,
-       %{
-         pending: Map.get(grouped, :pending, []),
-         active: Map.get(grouped, :active, []),
-         suspended: Map.get(grouped, :suspended, []),
-         rejected: Map.get(grouped, :rejected, [])
-       }}
-    else
-      {:error, :forbidden} -> {:error, :forbidden}
+        {:ok,
+         %{
+           pending: Map.get(grouped, :pending, []),
+           active: Map.get(grouped, :active, []),
+           suspended: Map.get(grouped, :suspended, []),
+           rejected: Map.get(grouped, :rejected, [])
+         }}
+
+      {:error, :forbidden} ->
+        {:error, :forbidden}
     end
   end
 

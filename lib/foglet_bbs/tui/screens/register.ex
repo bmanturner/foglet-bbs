@@ -398,7 +398,9 @@ defmodule Foglet.TUI.Screens.Register do
 
   # Only attempt verification delivery when the post-login screen is :verify.
   # For :main_menu, skip delivery by short-circuiting to {:ok, nil}.
-  defp maybe_deliver_verification_code(:verify, user), do: Accounts.deliver_verification_code(user)
+  defp maybe_deliver_verification_code(:verify, user),
+    do: Accounts.deliver_verification_code(user)
+
   defp maybe_deliver_verification_code(:main_menu, _user), do: {:ok, nil}
 
   defp handle_register_success(state, user, :verify, :attempted) do
