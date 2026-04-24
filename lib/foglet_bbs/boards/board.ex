@@ -2,6 +2,8 @@ defmodule Foglet.Boards.Board do
   @moduledoc "Schema for BBS boards — discussion areas within a category."
   use Foglet.Schema
 
+  @type t :: %__MODULE__{}
+
   schema "boards" do
     field :slug, :string
     field :name, :string

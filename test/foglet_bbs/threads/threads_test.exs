@@ -35,6 +35,12 @@ defmodule Foglet.ThreadsTest do
     |> Repo.update!()
   end
 
+  defp user_with_role!(role) do
+    user_fixture()
+    |> Foglet.Accounts.User.role_changeset(%{role: role})
+    |> Repo.update!()
+  end
+
   defp delete_user!(user) do
     user
     |> Foglet.Accounts.User.deletion_changeset()
@@ -89,7 +95,7 @@ defmodule Foglet.ThreadsTest do
       {board, _pid} = setup_board_with_server(%{postable_by: :members})
 
       for role <- [:user, :mod, :sysop] do
-        user = user_fixture(%{role: role})
+        user = user_with_role!(role)
 
         assert {:ok, %{thread: thread, post: post}} =
                  Foglet.Threads.create_thread(board.id, user.id, posting_attrs("#{role} thread"))
@@ -101,16 +107,20 @@ defmodule Foglet.ThreadsTest do
 
     test ":mods_only board rejects users and allows mods and sysops" do
       {board, _pid} = setup_board_with_server(%{postable_by: :mods_only})
-      user = user_fixture(%{role: :user})
+      user = user_with_role!(:user)
 
       assert {:error, :posting_not_allowed} =
                Foglet.Threads.create_thread(board.id, user.id, posting_attrs())
 
       for role <- [:mod, :sysop] do
-        poster = user_fixture(%{role: role})
+        poster = user_with_role!(role)
 
         assert {:ok, %{thread: thread, post: post}} =
-                 Foglet.Threads.create_thread(board.id, poster.id, posting_attrs("#{role} thread"))
+                 Foglet.Threads.create_thread(
+                   board.id,
+                   poster.id,
+                   posting_attrs("#{role} thread")
+                 )
 
         assert thread.created_by_id == poster.id
         assert post.user_id == poster.id
@@ -121,13 +131,13 @@ defmodule Foglet.ThreadsTest do
       {board, _pid} = setup_board_with_server(%{postable_by: :sysop_only})
 
       for role <- [:user, :mod] do
-        user = user_fixture(%{role: role})
+        user = user_with_role!(role)
 
         assert {:error, :posting_not_allowed} =
                  Foglet.Threads.create_thread(board.id, user.id, posting_attrs("#{role} thread"))
       end
 
-      sysop = user_fixture(%{role: :sysop})
+      sysop = user_with_role!(:sysop)
 
       assert {:ok, %{thread: thread, post: post}} =
                Foglet.Threads.create_thread(board.id, sysop.id, posting_attrs("sysop thread"))
@@ -158,7 +168,7 @@ defmodule Foglet.ThreadsTest do
 
     test "rejected creates do not persist rows or advance board message numbers" do
       {board, pid} = setup_board_with_server(%{postable_by: :sysop_only})
-      user = user_fixture(%{role: :user})
+      user = user_with_role!(:user)
 
       before_thread_count = Repo.aggregate(Foglet.Threads.Thread, :count, :id)
       before_post_count = Repo.aggregate(Foglet.Posts.Post, :count, :id)
