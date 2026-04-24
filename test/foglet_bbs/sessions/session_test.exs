@@ -1,13 +1,47 @@
 defmodule Foglet.Sessions.SessionTest do
   use ExUnit.Case, async: false
 
+  alias Foglet.Accounts.User
+  alias Foglet.Sessions.Preferences
   alias Foglet.Sessions.Session
+  alias Foglet.TUI.Theme
 
   setup do
     # Registry and DynamicSupervisor are started by the application —
     # but each test creates its own user_id to avoid clashes.
     user_id = Ecto.UUID.generate()
     %{user_id: user_id}
+  end
+
+  describe "Foglet.Sessions.Preferences.from_user/1" do
+    test "builds a snapshot from persisted user preferences" do
+      user =
+        %User{preferences: %{"time_format" => "24h"}, theme: "amber"}
+        |> Map.put(:timezone, "America/Chicago")
+
+      snapshot = Preferences.from_user(user)
+
+      assert snapshot.timezone == "America/Chicago"
+      assert snapshot.time_format == "24h"
+      assert snapshot.theme_id == "amber"
+      assert snapshot.theme == Theme.resolve(:amber)
+    end
+
+    test "falls back to default preferences when values are missing" do
+      assert Preferences.from_user(nil) == %{
+               timezone: "Etc/UTC",
+               time_format: "12h",
+               theme_id: "gray",
+               theme: Theme.default()
+             }
+
+      snapshot = Preferences.from_user(%User{preferences: nil, theme: nil})
+
+      assert snapshot.timezone == "Etc/UTC"
+      assert snapshot.time_format == "12h"
+      assert snapshot.theme_id == "gray"
+      assert snapshot.theme == Theme.default()
+    end
   end
 
   describe "Foglet.Sessions.Session (SSH-05)" do
