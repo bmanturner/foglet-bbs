@@ -43,7 +43,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata (when last successful login with key was made).
 - [x] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions. (completed 2026-04-24)
 - [x] **Phase 14: Launch Hygiene and Operator Notes** - Visible sysop settings, tests, copy, and operator docs are aligned for pre-alpha. (completed 2026-04-24)
-- [ ] **Phase 15: Reset Path Gap Closure** - Password reset operator and break-glass paths stop emitting unsupported browser URLs, and operator docs/tests describe only supported SSH-first behavior.
+- [x] **Phase 15: Reset Path Gap Closure** - Password reset operator and break-glass paths stop emitting unsupported browser URLs, and operator docs/tests describe only supported SSH-first behavior. (completed 2026-04-24)
 
 ## Phase Details
 
@@ -165,7 +165,7 @@ Plans:
 **Plans**: 2 plans
 Plans:
 - [x] 15-01-PLAN.md — Replace unsupported reset URL output with Accounts-owned raw reset-token handling
-- [ ] 15-02-PLAN.md — Align reset copy guards, README operator notes, and Phase 14 blocker records
+- [x] 15-02-PLAN.md — Align reset copy guards, README operator notes, and Phase 14 blocker records
 **UI hint**: yes
 
 ## Progress
@@ -191,4 +191,4 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14 -> 15
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 4/4 | Complete    | 2026-04-24 |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 3/3 | Complete   | 2026-04-24 |
-| 15. Reset Path Gap Closure | v1.2 | 1/2 | In Progress|  |
+| 15. Reset Path Gap Closure | v1.2 | 2/2 | Complete   | 2026-04-24 |

@@ -50,7 +50,7 @@
 
 - [ ] **HYGN-01**: Every currently visible Sysop configuration option either changes real runtime behavior or renders as disabled/unavailable with honest copy.
 - [x] **HYGN-02**: Pre-alpha blocker flows have focused tests for happy path, forbidden path, and user-facing error/copy behavior.
-- [ ] **HYGN-03**: Pre-alpha docs or operator notes describe how to run Foglet in SMTP mode and no-email mode.
+- [x] **HYGN-03**: Pre-alpha docs or operator notes describe how to run Foglet in SMTP mode and no-email mode.
 
 ## v2 Requirements
 
@@ -109,7 +109,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUBS-05 | Phase 13 | Pending |
 | HYGN-01 | Phase 14 | Pending |
 | HYGN-02 | Phase 15 | Complete |
-| HYGN-03 | Phase 15 | Pending |
+| HYGN-03 | Phase 15 | Complete |
 
 **Coverage:**
 - v1 requirements: 29 total
