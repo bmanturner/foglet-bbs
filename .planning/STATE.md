@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Pre-Alpha Gap Closure
-status: verifying
-stopped_at: Completed 15-02-PLAN.md
-last_updated: "2026-04-24T22:53:16.124Z"
+status: complete
+stopped_at: Milestone v1.2 archived
+last_updated: "2026-04-24T23:03:05.027Z"
 last_activity: 2026-04-24
 progress:
   total_phases: 7
@@ -21,13 +21,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-24)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 15 — reset-path-gap-closure
+**Current focus:** Milestone v1.2 shipped. Next milestone not started.
 
 ## Current Position
 
-Phase: 15
-Plan: Not started
-Status: Phase complete — ready for verification
+Phase: -
+Plan: -
+Status: v1.2 shipped and archived
 Last activity: 2026-04-24
 
 Progress: [██████████] 100%
@@ -36,7 +36,7 @@ Progress: [██████████] 100%
 
 **Velocity:**
 
-- Total plans completed: 45 from shipped v1.1; 23 in v1.2
+- Total plans completed: 45 from shipped v1.1; 26 in v1.2
 - Average duration: Not measured for v1.2 yet
 - Total execution time: Not measured for v1.2 yet
 
@@ -99,6 +99,6 @@ Items acknowledged and carried forward from v1.1 close:
 
 ## Session Continuity
 
-Last session: 2026-04-24T22:46:43.505Z
-Stopped at: Completed 15-02-PLAN.md
+Last session: 2026-04-24
+Stopped at: Milestone v1.2 archived
 Resume file: None

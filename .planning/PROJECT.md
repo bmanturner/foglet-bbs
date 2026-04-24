@@ -10,24 +10,16 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 
 ## Current State
 
-**Shipped version:** v1.1 Operations Surfaces & Invites on 2026-04-24.
-**Current milestone:** v1.2 Pre-Alpha Gap Closure.
+**Shipped version:** v1.2 Pre-Alpha Gap Closure on 2026-04-24.
+**Current milestone:** none. Run `$gsd-new-milestone` to define the next milestone.
 
-Foglet now has terminal-native Account, Moderation, and Sysop surfaces; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; and moderation hide/audit workflows.
+Foglet now has terminal-native Account, Moderation, and Sysop surfaces; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; enforced board posting and locked-thread restrictions; Account SSH key management; board subscription management; and pre-alpha operator notes aligned to the shipped SSH-first behavior.
 
-The chrome clock intentionally displays time only. It honors the user's timezone and 12h/24h preference; date display is not part of the accepted v1.1 behavior.
+The chrome clock intentionally displays time only. It honors the user's timezone and 12h/24h preference; date display is not part of the accepted behavior.
 
-## Current Milestone: v1.2 Pre-Alpha Gap Closure
+## Next Milestone Goals
 
-**Goal:** Close the codebase-first gaps that would make offered Foglet flows or sysop-visible configuration options unusable or misleading before a credible pre-alpha launch.
-
-**Target features:**
-- Make email verification, password reset, pending approval, and no-email operation honest and operational.
-- Let sysops approve, reject, suspend, and reactivate users from both the TUI and break-glass Mix tasks.
-- Enforce board posting policies and locked-thread reply prevention in domain contexts before board-server writes.
-- Let users manage SSH keys from Account and ensure public-key authentication updates key metadata.
-- Add board subscription management so users can reach boards intentionally after account creation.
-- Cover visible sysop configuration options with real behavior, tests, and matching empty-state/help copy.
+Fresh goals have not been defined yet. Start the next cycle with `$gsd-new-milestone` so requirements are scoped from the shipped v1.2 baseline.
 
 ## Requirements
 
@@ -53,15 +45,16 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - [x] Main-menu chrome renders preference-aware time and refreshes without reconnecting - v1.1 Phase 6
 - [x] Main menu includes persistent bounded oneliners with quick posting - v1.1 Phase 7
 - [x] Moderation workspace uses real scope-aware data and can hide oneliners through audited moderation tooling - v1.1 Phase 8
+- [x] Email verification, password reset, pending-approval, and no-email flows are honest and operational - v1.2 Phase 9 and Phase 15
+- [x] Sysops can manage pending and existing user status through actor-aware workflows - v1.2 Phase 10
+- [x] Board `postable_by` policy and locked-thread restrictions are enforced before post/thread creation - v1.2 Phase 11
+- [x] Users can add, list, and revoke SSH keys from the terminal Account surface - v1.2 Phase 12
+- [x] Users and sysops have a real board subscription management path that matches product copy - v1.2 Phase 13
+- [x] Every visible sysop configuration option in the current product surface has a real effect or honest disabled/no-op copy - v1.2 Phase 14
 
 ### Active
 
-- [ ] Email verification, password reset, pending-approval, and no-email flows are honest and operational.
-- [ ] Sysops can manage pending and existing user status through actor-aware workflows.
-- [ ] Board `postable_by` policy and locked-thread restrictions are enforced before post/thread creation.
-- [ ] Users can add, list, and revoke SSH keys from the terminal Account surface.
-- [ ] Users and sysops have a real board subscription management path that matches product copy.
-- [ ] Every visible sysop configuration option in the current product surface has a real effect or honest disabled/no-op copy.
+(None. Next milestone requirements should be defined with `$gsd-new-milestone`.)
 
 ### Out of Scope
 
@@ -79,6 +72,8 @@ Foglet is a brownfield Phoenix project that has advanced beyond initial scaffold
 The primary interface is an SSH terminal UI. Erlang's built-in `:ssh` daemon accepts connections, `Foglet.SSH.CLIHandler` handles SSH channel lifecycle events, and Raxol owns the terminal rendering lifecycle. The TUI is screen-oriented: `Foglet.TUI.App` owns routing, modal handling, PubSub wiring, task command dispatch, and active screen state; individual screen modules implement the `Foglet.TUI.Screen` behavior.
 
 The domain core is organized as Phoenix-style context modules backed by Ecto schemas. Accounts, boards, threads, posts, configuration, oneliners, moderation, markdown rendering, and sessions have concrete modules and tests. Board servers are supervised per active board and serialize message-number allocation so the per-board numbering model stays deterministic under concurrency.
+
+v1.2 completed the pre-alpha gap-closure pass. Remaining known debt is human SSH/TUI confirmation for a few presentation paths, partial Nyquist metadata in several phase validation artifacts, and manual rather than test-backed README operator-note verification.
 
 ## Constraints
 
@@ -107,7 +102,8 @@ The domain core is organized as Phoenix-style context modules backed by Ecto sch
 | Build a reusable invite-management surface embedded in account, moderation, and sysop screens | Invite generation rules vary by runtime config, but workflows and data model should stay consistent across roles | Good |
 | Store per-user time rendering preferences alongside other presentation preferences | Timezone and 12h/24h display are user-specific UI concerns that drive chrome and future timestamp rendering | Good |
 | Render chrome time without date | The user prefers time-only chrome; date was intentionally removed from the accepted v1.1 behavior | Good |
-| Treat pre-alpha readiness as gap closure before new reach features | The codebase-first audit found several visible flows that are incomplete or misleading; credible pre-alpha should make existing offered behavior complete before adding broader product surface | Pending |
+| Treat pre-alpha readiness as gap closure before new reach features | The codebase-first audit found several visible flows that were incomplete or misleading; v1.2 completed those code and workflow gaps before adding broader product surface | Good |
+| Keep reset recovery browser-free for v1.2 | Foglet has no supported end-user browser reset flow; operator-assisted SSH reset with raw tokens is honest and testable | Good |
 
 ## Evolution
 
@@ -127,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-24 after starting v1.2 Pre-Alpha Gap Closure*
+*Last updated: 2026-04-24 after shipping v1.2 Pre-Alpha Gap Closure*
