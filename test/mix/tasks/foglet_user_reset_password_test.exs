@@ -33,6 +33,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
 
       assert output =~ "Break-glass reset URL for resetme:"
       assert output =~ "This URL was generated for operator use; no email was sent by this task."
+      assert output =~ "no email was sent by this task"
       assert output =~ "/users/reset_password/"
       refute output =~ "has been emailed"
       refute output =~ "sent by email"
