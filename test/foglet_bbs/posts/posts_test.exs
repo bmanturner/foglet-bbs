@@ -153,7 +153,9 @@ defmodule Foglet.PostsTest do
                Foglet.Posts.create_reply(locked_thread.id, board.id, mod.id, %{body: "Mod reply"})
 
       assert {:ok, _reply} =
-               Foglet.Posts.create_reply(locked_thread.id, board.id, sysop.id, %{body: "Sysop reply"})
+               Foglet.Posts.create_reply(locked_thread.id, board.id, sysop.id, %{
+                 body: "Sysop reply"
+               })
     end
 
     test "lock bypass does not override board posting policy" do
