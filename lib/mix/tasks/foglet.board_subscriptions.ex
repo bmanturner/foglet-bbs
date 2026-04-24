@@ -121,6 +121,7 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
   defp status_label(%{subscribed?: true}), do: "[subscribed]"
   defp status_label(%{subscribed?: false}), do: "[unsubscribed]"
 
+  @spec fail(String.t(), String.t() | nil) :: no_return()
   defp fail(message, detail \\ nil) do
     Mix.shell().error(message)
 
@@ -131,6 +132,7 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
     exit({:shutdown, 1})
   end
 
+  @spec fail_changeset(String.t(), Ecto.Changeset.t()) :: no_return()
   defp fail_changeset(message, changeset) do
     Mix.shell().error(message)
 
