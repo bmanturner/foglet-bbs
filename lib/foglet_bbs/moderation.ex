@@ -8,8 +8,8 @@ defmodule Foglet.Moderation do
 
   import Ecto.Query, warn: false
 
-  alias Foglet.Authorization
   alias Foglet.Accounts.User
+  alias Foglet.Authorization
   alias Foglet.Boards
   alias Foglet.Boards.Board
   alias Foglet.Moderation.Action
@@ -28,7 +28,17 @@ defmodule Foglet.Moderation do
   The scope list is the trust boundary: actors with no `:hide_oneliner` scope
   receive no populated workspace data.
   """
-  @spec workspace_snapshot(User.t() | nil) :: {:ok, map()} | {:error, :forbidden}
+  @spec workspace_snapshot(User.t() | nil) ::
+          {:ok,
+           %{
+             scopes: [scope(), ...],
+             queue: [],
+             log: [Action.t()],
+             users: [map()],
+             boards: [map()],
+             sanctions_available?: false
+           }}
+          | {:error, :forbidden}
   def workspace_snapshot(actor) do
     case Authorization.scopes_for(actor, :hide_oneliner) do
       [] ->

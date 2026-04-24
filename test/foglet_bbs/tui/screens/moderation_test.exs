@@ -6,6 +6,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Accounts
   alias Foglet.Accounts.User
   alias Foglet.Config
+  alias Foglet.Moderation.Action
   alias Foglet.TUI.Screens.Moderation
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias FogletBbs.AccountsFixtures
@@ -158,6 +159,110 @@ defmodule Foglet.TUI.Screens.ModerationTest do
                "Expected #{inspect(word)} not to appear in Moderation render output. " <>
                  "Found in: #{inspect(Enum.filter(flat, &String.contains?(&1, word)))}"
       end
+    end
+
+    test "base tabs render without Phase 8 placeholder copy", %{state: state} do
+      for active <- 0..4 do
+        flat =
+          state
+          |> put_moderation_state(active)
+          |> Moderation.render()
+          |> collect_text_values()
+
+        refute Enum.any?(flat, &String.contains?(&1, "will arrive in Phase 8"))
+        refute Enum.any?(flat, &String.contains?(&1, "Phase 8"))
+      end
+    end
+
+    test "LOG renders newest hide_oneliner audit rows with moderator, target, and reason", %{
+      state: state
+    } do
+      older = audit_row("old-mod", "first body", "spam", ~U[2026-04-24 12:00:00Z])
+      newer = audit_row("new-mod", "second body", "abuse", ~U[2026-04-24 13:00:00Z])
+
+      flat =
+        state
+        |> put_moderation_state(1, mod_log: [newer, older])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+      assert joined =~ "hide_oneliner"
+      assert joined =~ "new-mod"
+      assert joined =~ "second body"
+      assert joined =~ "abuse"
+      assert joined =~ "old-mod"
+      assert joined =~ "first body"
+      assert text_index(flat, "new-mod") < text_index(flat, "old-mod")
+    end
+
+    test "QUEUE renders honest report workflow unavailable state and no work items", %{
+      state: state
+    } do
+      flat =
+        state
+        |> put_moderation_state(0, queue: [%{body: "fake report"}])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+      assert joined =~ "No report queue workflow"
+      refute joined =~ "fake report"
+      refute joined =~ "Approve"
+    end
+
+    test "USERS renders read-only user rows without mutation commands", %{state: state} do
+      flat =
+        state
+        |> put_moderation_state(2,
+          users: [%{handle: "alice", role: :user, status: :active, last_seen_at: nil}]
+        )
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+      assert joined =~ "Read-only"
+      assert joined =~ "alice"
+      refute joined =~ "Promote"
+      refute joined =~ "Suspend"
+      refute joined =~ "Delete"
+      refute joined =~ "Edit"
+    end
+
+    test "SANCTIONS renders unavailable copy and no sanction command", %{state: state} do
+      flat =
+        state
+        |> put_moderation_state(3)
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+      assert joined =~ "No sanction workflow"
+      refute joined =~ "Sanction"
+      refute joined =~ "Ban"
+    end
+
+    test "BOARDS renders read-only scope context without board lifecycle commands", %{
+      state: state
+    } do
+      flat =
+        state
+        |> put_moderation_state(4,
+          scopes: [:site],
+          boards: [
+            %{name: "General", slug: "general", category_name: "Main", scope: {:board, "b1"}}
+          ]
+        )
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+      assert joined =~ "Read-only"
+      assert joined =~ "General"
+      assert joined =~ "hide_oneliner"
+      refute joined =~ "Archive"
+      refute joined =~ "Create Board"
+      refute joined =~ "Edit Board"
     end
   end
 
@@ -315,5 +420,29 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     user = AccountsFixtures.user_fixture()
     {:ok, actor} = Accounts.update_role(user, role)
     actor
+  end
+
+  defp put_moderation_state(state, active, attrs \\ []) do
+    ss =
+      Moderation.init_screen_state(active: active)
+      |> struct!(attrs)
+
+    put_in(state, [:screen_state, :moderation], ss)
+  end
+
+  defp audit_row(handle, body, reason, inserted_at) do
+    %Action{
+      kind: :hide_oneliner,
+      target_kind: :oneliner,
+      target_id: Ecto.UUID.generate(),
+      reason: reason,
+      metadata: %{"body" => body, "author_handle" => "target"},
+      mod: %User{handle: handle},
+      inserted_at: inserted_at
+    }
+  end
+
+  defp text_index(flat, needle) do
+    Enum.find_index(flat, &String.contains?(&1, needle))
   end
 end

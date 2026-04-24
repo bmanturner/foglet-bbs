@@ -7,9 +7,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   Tabs (D-10, locked order):
       ["QUEUE", "LOG", "USERS", "SANCTIONS", "BOARDS"]
 
-  Phase 0 scope: UI focus only. Real queue/log/user/sanction/board data arrives
-  in Phase 8 (Moderation Workspace Population). Phase 4 appends the shared
-  INVITES tab when runtime invite policy permits moderators to generate codes.
+  The state holds bounded, scope-aware read rows populated by the TUI app.
+  Phase 4 appends the shared INVITES tab when runtime invite policy permits
+  moderators to generate codes.
   """
 
   alias Foglet.TUI.Screens.Shared.InvitesState
@@ -22,10 +22,28 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @type t :: %__MODULE__{
           tabs: Tabs.t(),
           active_tab: non_neg_integer(),
-          invites: InvitesState.t()
+          invites: InvitesState.t(),
+          scopes: list(),
+          queue: list(),
+          mod_log: list(),
+          users: list(),
+          boards: list(),
+          loading?: boolean(),
+          error: term()
         }
 
-  defstruct [:tabs, active_tab: 0, invites: nil]
+  defstruct [
+    :tabs,
+    active_tab: 0,
+    invites: nil,
+    scopes: [],
+    queue: [],
+    mod_log: [],
+    users: [],
+    boards: [],
+    loading?: false,
+    error: nil
+  ]
 
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
@@ -37,7 +55,14 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     %__MODULE__{
       tabs: Tabs.init(tabs: labels, active: active),
       active_tab: active,
-      invites: InvitesSurface.default_state()
+      invites: InvitesSurface.default_state(),
+      scopes: Keyword.get(opts, :scopes, []),
+      queue: Keyword.get(opts, :queue, []),
+      mod_log: Keyword.get(opts, :mod_log, []),
+      users: Keyword.get(opts, :users, []),
+      boards: Keyword.get(opts, :boards, []),
+      loading?: Keyword.get(opts, :loading?, false),
+      error: Keyword.get(opts, :error)
     }
   end
 

@@ -85,7 +85,8 @@ defmodule Foglet.ModerationTest do
       board = BoardsFixtures.board_fixture(category, %{name: "General", display_order: 2})
       {:ok, entry} = Oneliners.create_entry(user, %{body: "bad line"})
 
-      action = Moderation.record_hide_oneliner!(moderator, entry, "abuse", %{"body" => entry.body})
+      action =
+        Moderation.record_hide_oneliner!(moderator, entry, "abuse", %{"body" => entry.body})
 
       assert {:ok, snapshot} = Moderation.workspace_snapshot(moderator)
       assert snapshot.scopes == [:site]
@@ -93,7 +94,12 @@ defmodule Foglet.ModerationTest do
       assert snapshot.sanctions_available? == false
       assert Enum.map(snapshot.log, & &1.id) == [action.id]
       assert Enum.any?(snapshot.users, &match?(%{id: _, handle: "activeuser", role: :user}, &1))
-      assert Enum.any?(snapshot.boards, &match?(%{id: _, name: "General", scope: {:board, _}}, &1))
+
+      assert Enum.any?(
+               snapshot.boards,
+               &match?(%{id: _, name: "General", scope: {:board, _}}, &1)
+             )
+
       assert Enum.find(snapshot.boards, &(&1.id == board.id)).scope == {:board, board.id}
     end
 

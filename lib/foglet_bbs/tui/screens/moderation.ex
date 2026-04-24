@@ -15,12 +15,9 @@ defmodule Foglet.TUI.Screens.Moderation do
   than crashing. The Plan 01 tests exercise `:mod` and `:sysop` roles only, so
   this defensive branch is not exercised by unit tests but prevents EoP drift.
 
-  ## Phase 0 Scope
-
-  All tab bodies are scaffold placeholders (D-12). Real moderation data
-  (report queue, audit log, user administration, sanctions, board-scoped
-  moderation) arrives in Phase 8 (Moderation Workspace Population). No
-  fake ban/approve/remove/sanction operations are defined (D-13, T-00-02-b).
+  Tab bodies render scope-aware, read-only state loaded by the TUI app. Report
+  queues, sanctions, user mutation, and board lifecycle workflows remain
+  unavailable in v1.1, so those tabs show honest non-action states.
 
   ## INVITES Tab
 
@@ -42,6 +39,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Widgets.Input.Tabs
 
   @key_list [{"←/→", "Tab"}, {"1-6", "Jump"}, {"Q", "Back"}]
+  @max_rows 20
+  @text_limit 48
 
   # ---------------------------------------------------------------------------
   # Screen behaviour callbacks
@@ -128,33 +127,58 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("QUEUE", _ss, theme) do
+  defp render_tab_body("QUEUE", ss, theme) do
     column style: %{gap: 0} do
-      [text("Report queue will arrive in Phase 8.", fg: theme.warning.fg)]
+      [
+        status_line(ss, theme),
+        text("No report queue workflow is available in v1.1.", fg: theme.dim.fg)
+      ]
+      |> Enum.reject(&is_nil/1)
     end
   end
 
-  defp render_tab_body("LOG", _ss, theme) do
+  defp render_tab_body("LOG", ss, theme) do
     column style: %{gap: 0} do
-      [text("Audit log will arrive in Phase 8.", fg: theme.warning.fg)]
+      [
+        status_line(ss, theme),
+        text("hide_oneliner audit log", fg: theme.accent.fg)
+        | audit_rows(ss.mod_log, theme)
+      ]
+      |> Enum.reject(&is_nil/1)
     end
   end
 
-  defp render_tab_body("USERS", _ss, theme) do
+  defp render_tab_body("USERS", ss, theme) do
     column style: %{gap: 0} do
-      [text("User administration will arrive in Phase 8.", fg: theme.warning.fg)]
+      [
+        status_line(ss, theme),
+        text("Read-only active user context.", fg: theme.dim.fg)
+        | user_rows(ss.users, theme)
+      ]
+      |> Enum.reject(&is_nil/1)
     end
   end
 
-  defp render_tab_body("SANCTIONS", _ss, theme) do
+  defp render_tab_body("SANCTIONS", ss, theme) do
     column style: %{gap: 0} do
-      [text("Sanctions tooling will arrive in Phase 8.", fg: theme.warning.fg)]
+      [
+        status_line(ss, theme),
+        text("No sanction workflow is available in v1.1.", fg: theme.dim.fg)
+      ]
+      |> Enum.reject(&is_nil/1)
     end
   end
 
-  defp render_tab_body("BOARDS", _ss, theme) do
+  defp render_tab_body("BOARDS", ss, theme) do
     column style: %{gap: 0} do
-      [text("Board-scoped moderation will arrive in Phase 8.", fg: theme.warning.fg)]
+      [
+        status_line(ss, theme),
+        text("Read-only hide_oneliner scope context: #{format_scopes(ss.scopes)}",
+          fg: theme.dim.fg
+        )
+        | board_rows(ss.boards, theme)
+      ]
+      |> Enum.reject(&is_nil/1)
     end
   end
 
@@ -164,7 +188,106 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp render_tab_body(_label, _ss, theme) do
     column style: %{gap: 0} do
-      [text("Report queue will arrive in Phase 8.", fg: theme.warning.fg)]
+      [text("No report queue workflow is available in v1.1.", fg: theme.dim.fg)]
+    end
+  end
+
+  defp status_line(%{loading?: true}, theme),
+    do: text("Loading moderation workspace…", fg: theme.dim.fg)
+
+  defp status_line(%{error: nil}, _theme), do: nil
+
+  defp status_line(%{error: error}, theme),
+    do: text("Unable to load moderation workspace: #{truncate(error)}", fg: theme.error.fg)
+
+  defp audit_rows([], theme),
+    do: [text("No hide_oneliner audit records in scope.", fg: theme.dim.fg)]
+
+  defp audit_rows(actions, theme) do
+    actions
+    |> Enum.take(@max_rows)
+    |> Enum.map(fn action ->
+      moderator = action |> Map.get(:mod) |> field(:handle, "unknown")
+      metadata = Map.get(action, :metadata) || %{}
+
+      target =
+        Map.get(metadata, "author_handle") || Map.get(metadata, :author_handle) ||
+          target_id(action)
+
+      body = Map.get(metadata, "body") || Map.get(metadata, :body) || ""
+      reason = field(action, :reason, "")
+
+      text(
+        "#{timestamp(action)} hide_oneliner by #{truncate(moderator, 18)} -> #{truncate(target, 18)}: #{truncate(body)} | reason: #{truncate(reason)}",
+        fg: theme.primary.fg
+      )
+    end)
+  end
+
+  defp user_rows([], theme), do: [text("No active users in scope.", fg: theme.dim.fg)]
+
+  defp user_rows(users, theme) do
+    users
+    |> Enum.take(@max_rows)
+    |> Enum.map(fn user ->
+      handle = field(user, :handle, "unknown")
+      role = field(user, :role, "user")
+      status = field(user, :status, "active")
+
+      text("#{truncate(handle, 20)} | role: #{role} | status: #{status}", fg: theme.primary.fg)
+    end)
+  end
+
+  defp board_rows([], theme), do: [text("No board scopes available.", fg: theme.dim.fg)]
+
+  defp board_rows(boards, theme) do
+    boards
+    |> Enum.take(@max_rows)
+    |> Enum.map(fn board ->
+      name = field(board, :name, "unknown")
+      slug = field(board, :slug, "")
+      category = field(board, :category_name, "")
+      scope = board |> Map.get(:scope) |> format_scope()
+
+      text("#{truncate(name, 24)} | #{truncate(slug, 20)} | #{truncate(category, 20)} | #{scope}",
+        fg: theme.primary.fg
+      )
+    end)
+  end
+
+  defp format_scopes([]), do: "none"
+  defp format_scopes(scopes), do: Enum.map_join(scopes, ", ", &format_scope/1)
+
+  defp format_scope(:site), do: "site"
+  defp format_scope({:board, board_id}), do: "board:#{board_id}"
+  defp format_scope(scope), do: to_string(scope)
+
+  defp timestamp(%{inserted_at: %DateTime{} = inserted_at}) do
+    Calendar.strftime(inserted_at, "%Y-%m-%d %H:%M")
+  end
+
+  defp timestamp(_action), do: ""
+
+  defp target_id(action), do: field(action, :target_id, "unknown")
+
+  defp field(nil, _key, default), do: default
+
+  defp field(map, key, default) when is_map(map) do
+    case Map.get(map, key, default) do
+      nil -> default
+      value -> to_string(value)
+    end
+  end
+
+  defp truncate(value, limit \\ @text_limit)
+
+  defp truncate(value, limit) do
+    value = to_string(value)
+
+    if String.length(value) > limit do
+      String.slice(value, 0, max(limit - 1, 0)) <> "…"
+    else
+      value
     end
   end
 
