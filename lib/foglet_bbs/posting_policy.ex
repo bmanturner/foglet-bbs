@@ -8,6 +8,7 @@ defmodule Foglet.PostingPolicy do
   """
 
   alias Foglet.Accounts.User
+  alias Foglet.Authorization
   alias Foglet.Boards.Board
 
   @doc """
@@ -21,6 +22,18 @@ defmodule Foglet.PostingPolicy do
   end
 
   def can_post?(_user, _board), do: false
+
+  @doc """
+  Returns true when the actor may reply to a locked thread on the board.
+  """
+  @spec can_bypass_thread_lock?(User.t() | nil, Ecto.UUID.t()) :: boolean()
+  def can_bypass_thread_lock?(%User{} = user, board_id) do
+    scopes = Authorization.scopes_for(user, :lock_thread)
+
+    :site in scopes or {:board, board_id} in scopes
+  end
+
+  def can_bypass_thread_lock?(_user, _board_id), do: false
 
   defp role_allowed?(role, :members) when role in [:user, :mod, :sysop], do: true
   defp role_allowed?(role, :mods_only) when role in [:mod, :sysop], do: true

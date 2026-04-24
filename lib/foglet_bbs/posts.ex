@@ -10,7 +10,12 @@ defmodule Foglet.Posts do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.Accounts.User
+  alias Foglet.Boards
+  alias Foglet.Boards.Board
+  alias Foglet.PostingPolicy
   alias Foglet.Posts.{Edit, Post}
+  alias Foglet.Threads.Thread
   alias FogletBbs.Repo
 
   # ---------- Authorization scope helper (D-08) ----------
@@ -38,7 +43,23 @@ defmodule Foglet.Posts do
   @spec create_reply(String.t(), String.t(), String.t(), map()) ::
           {:ok, Post.t()} | {:error, any()}
   def create_reply(thread_id, board_id, user_id, attrs) do
-    Foglet.Boards.Server.create_post(board_id, thread_id, user_id, attrs)
+    user = if is_binary(user_id), do: Repo.get(User, user_id)
+    board = if is_binary(board_id), do: Repo.get(Board, board_id)
+    thread = if is_binary(thread_id), do: Repo.get(Thread, thread_id)
+
+    cond do
+      not PostingPolicy.can_post?(user, board) ->
+        {:error, :posting_not_allowed}
+
+      not match?(%Thread{board_id: ^board_id}, thread) ->
+        {:error, :posting_not_allowed}
+
+      thread.locked and not PostingPolicy.can_bypass_thread_lock?(user, board_id) ->
+        {:error, :thread_locked}
+
+      true ->
+        Boards.Server.create_post(board_id, thread_id, user_id, attrs)
+    end
   end
 
   # ---------- Post queries ----------
