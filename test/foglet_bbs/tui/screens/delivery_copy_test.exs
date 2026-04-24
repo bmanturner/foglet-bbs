@@ -20,6 +20,8 @@ defmodule Foglet.TUI.Screens.DeliveryCopyTest do
     "You will be notified by email.",
     "approval notification",
     "/users/reset_password",
+    "operator reset URL",
+    "reset URL",
     "http://",
     "https://"
   ]
@@ -109,6 +111,17 @@ defmodule Foglet.TUI.Screens.DeliveryCopyTest do
       assert text =~ "delivery_mode"
       assert text =~ "no_email"
       assert_forbidden_copy_absent(text)
+    end
+
+    test "reset task and delivery copy do not advertise browser reset URLs" do
+      reset_task_source = File.read!("lib/mix/tasks/foglet.user.reset_password.ex")
+      email_source = File.read!("lib/foglet_bbs/accounts/email.ex")
+
+      assert reset_task_source =~ "Reset token:"
+      assert reset_task_source =~ "operator-assisted SSH reset procedure"
+
+      assert_forbidden_copy_absent(reset_task_source)
+      assert_forbidden_copy_absent(email_source)
     end
   end
 
