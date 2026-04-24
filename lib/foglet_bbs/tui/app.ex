@@ -103,13 +103,15 @@ defmodule Foglet.TUI.App do
 
     screen = if user, do: :main_menu, else: :login
 
-    state = %__MODULE__{
-      current_screen: screen,
-      current_user: user,
-      session_context: session_context,
-      session_pid: session_pid,
-      terminal_size: terminal_size
-    }
+    state =
+      %__MODULE__{
+        current_screen: screen,
+        current_user: user,
+        session_context: session_context,
+        session_pid: session_pid,
+        terminal_size: terminal_size
+      }
+      |> maybe_load_initial_oneliners()
 
     {:ok, state}
   end
@@ -761,6 +763,14 @@ defmodule Foglet.TUI.App do
   defp default_domain_module(:threads), do: Foglet.Threads
   defp default_domain_module(:posts), do: Foglet.Posts
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
+
+  defp maybe_load_initial_oneliners(%{current_screen: :main_menu, current_user: user} = state)
+       when not is_nil(user) do
+    oneliners_mod = domain_module(state, :oneliners)
+    %{state | recent_oneliners: oneliners_mod.list_recent_visible(@oneliner_limit)}
+  end
+
+  defp maybe_load_initial_oneliners(state), do: state
 
   defp stash_oneliner_submit(payload) do
     Process.put({__MODULE__, :pending_oneliner_submit}, payload)
