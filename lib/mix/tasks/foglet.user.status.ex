@@ -11,6 +11,8 @@ defmodule Mix.Tasks.Foglet.User.Status do
 
   use Mix.Task
 
+  alias Foglet.Accounts
+
   @switches [status: :string, actor: :string]
   @valid_status_strings ["active", "rejected", "suspended"]
 
@@ -60,10 +62,49 @@ defmodule Mix.Tasks.Foglet.User.Status do
     end
   end
 
-  defp change_status(_handle, status, _actor) do
-    _target_status = String.to_existing_atom(status)
+  defp change_status(handle, status, actor_handle) do
+    target_status = String.to_existing_atom(status)
 
-    :ok
+    case Accounts.get_user_by_handle(actor_handle) do
+      nil -> fail("User not found.")
+      actor -> transition_status(actor, handle, target_status)
+    end
+  end
+
+  defp transition_status(actor, handle, target_status) do
+    case Accounts.transition_user_status(actor, handle, target_status) do
+      {:ok, %{user: updated, from: from, to: to, delivery: delivery}} ->
+        Mix.shell().info(
+          "Changed #{updated.handle} from #{from} to #{to}. Notification: #{format_delivery(delivery)}"
+        )
+
+        :ok
+
+      {:error, :forbidden} ->
+        fail("Forbidden.")
+
+      {:error, :not_found} ->
+        fail("User not found.")
+
+      {:error, :deleted} ->
+        fail("Deleted users cannot be changed.")
+
+      {:error, :invalid_transition} ->
+        fail("Invalid status transition.")
+
+      {:error, :invalid_status} ->
+        fail("Invalid target status.")
+    end
+  end
+
+  defp format_delivery(:not_applicable), do: "not_applicable"
+  defp format_delivery(:skipped_no_email), do: "skipped_no_email"
+  defp format_delivery(:attempted), do: "attempted"
+  defp format_delivery({:failed, _reason}), do: "failed"
+
+  defp fail(message) do
+    Mix.shell().error(message)
+    exit({:shutdown, 1})
   end
 
   defp usage do

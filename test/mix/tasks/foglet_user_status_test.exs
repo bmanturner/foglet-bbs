@@ -129,12 +129,12 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
 
     test "changes suspended user to active" do
       sysop_fixture("reactivator")
-      user_with_status(:suspended, "suspended_active")
+      user_with_status(:suspended, "suspactive")
 
       output =
         capture_io(fn ->
           Mix.Tasks.Foglet.User.Status.run([
-            "suspended_active",
+            "suspactive",
             "--status",
             "active",
             "--actor",
@@ -143,9 +143,9 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
         end)
 
       assert output =~
-               "Changed suspended_active from suspended to active. Notification: not_applicable"
+               "Changed suspactive from suspended to active. Notification: not_applicable"
 
-      assert Accounts.get_user_by_handle("suspended_active").status == :active
+      assert Accounts.get_user_by_handle("suspactive").status == :active
     end
 
     test "prints forbidden for non-sysop actor" do
@@ -226,7 +226,9 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
   end
 
   defp sysop_fixture(handle) do
-    AccountsFixtures.user_fixture(%{handle: handle, role: :sysop})
+    user = AccountsFixtures.user_fixture(%{handle: handle})
+    {:ok, sysop} = Accounts.update_role(user, :sysop)
+    sysop
   end
 
   defp user_with_status(status, handle) do
