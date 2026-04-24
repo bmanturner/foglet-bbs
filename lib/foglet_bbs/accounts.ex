@@ -5,9 +5,8 @@ defmodule Foglet.Accounts do
   Public API consumed by:
     * Phase 1 Mix tasks (`mix foglet.user.*`)
     * Phase 3 SSH auth (`authenticate_by_password/2`, `get_user_by_public_key/1`)
-    * Phase 10 email delivery (the `deliver_*` functions will gain a
-      mailer call there; for now they only persist the token and return
-      the URL — per CONTEXT D-01).
+    * Email and operator delivery paths persist token rows and return
+      raw delivery tokens to the caller-owned delivery channel.
 
   Design notes:
     * Hand-rolled per CONTEXT D-07 — not `mix phx.gen.auth` output.
@@ -527,6 +526,22 @@ defmodule Foglet.Accounts do
     end
   end
 
+  @doc """
+  Build and persist a reset-password token for operator-assisted retrieval.
+
+  Returns the raw token once so the caller can hand it to the user through a
+  supported operator-controlled channel. Only the hashed token row is stored.
+  """
+  @spec generate_reset_token_for_operator(User.t()) :: {:ok, String.t()} | {:error, Ecto.Changeset.t()}
+  def generate_reset_token_for_operator(%User{} = user) do
+    {raw_token, token_struct} = UserToken.build_email_token(user, "reset_password")
+
+    case Repo.insert(token_struct) do
+      {:ok, _token} -> {:ok, raw_token}
+      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
+    end
+  end
+
   defp notify_sysops_pending_registration(%User{} = pending_user) do
     case Config.delivery_mode() do
       "email" ->
@@ -818,9 +833,8 @@ defmodule Foglet.Accounts do
   # ---------- Tokens (no mailer in Phase 1 — D-01) ----------
 
   @doc """
-  Generate a confirmation token, persist it, and return the URL built
-  via `url_fn`. No email sent in Phase 1 (D-01). Phase 10 adds Swoosh
-  delivery here.
+  Generate a confirmation token, persist it, and return the caller-built
+  delivery value.
   """
   @spec deliver_user_confirmation_instructions(User.t(), (String.t() -> String.t())) ::
           {:ok, String.t()} | {:error, :already_confirmed}
@@ -836,8 +850,8 @@ defmodule Foglet.Accounts do
   end
 
   @doc """
-  Generate a reset-password token, persist it, and return the URL.
-  No email sent in Phase 1 (D-01, IDNT-08). Phase 10 adds delivery.
+  Generate a reset-password token, persist it, and return the caller-built
+  delivery value.
   """
   @spec deliver_user_reset_password_instructions(User.t(), (String.t() -> String.t())) ::
           {:ok, String.t()}
