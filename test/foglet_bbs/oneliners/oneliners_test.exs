@@ -5,6 +5,7 @@ defmodule Foglet.OnelinersTest do
 
   alias Foglet.Oneliners
   alias Foglet.Oneliners.Entry
+  alias Foglet.Moderation.Action
   alias FogletBbs.AccountsFixtures
   alias FogletBbs.Repo
 
@@ -134,5 +135,120 @@ defmodule Foglet.OnelinersTest do
                from(e in Entry, where: e.hidden == false, select: e)
                |> Repo.all()
     end
+  end
+
+  describe "hide_entry/3" do
+    test "active mod and active sysop can hide a visible oneliner with a reason" do
+      for role <- [:mod, :sysop] do
+        actor = operator_fixture(role)
+        author = AccountsFixtures.user_fixture()
+        {:ok, entry} = Oneliners.create_entry(author, %{body: "abuse #{role}"})
+
+        assert {:ok, %Entry{} = hidden_entry} = Oneliners.hide_entry(actor, entry, "abuse")
+        assert hidden_entry.hidden
+        assert hidden_entry.hidden_reason == "abuse"
+        assert hidden_entry.hidden_by_id == actor.id
+      end
+    end
+
+    test "regular, nil, pending, suspended, deleted, and board-scope-only actors are forbidden without side effects" do
+      author = AccountsFixtures.user_fixture()
+      actors = [
+        AccountsFixtures.user_fixture(),
+        nil,
+        operator_fixture(:mod, %{status: :pending}),
+        operator_fixture(:mod, %{status: :suspended}),
+        deleted_operator_fixture(),
+        board_scope_only_actor_fixture()
+      ]
+
+      for actor <- actors do
+        {:ok, entry} = Oneliners.create_entry(author, %{body: "line #{System.unique_integer()}"})
+        before_action_count = Repo.aggregate(Action, :count)
+
+        assert {:error, :forbidden} = Oneliners.hide_entry(actor, entry.id, "abuse")
+
+        reloaded_entry = Repo.get!(Entry, entry.id)
+        refute reloaded_entry.hidden
+        assert is_nil(reloaded_entry.hidden_reason)
+        assert is_nil(reloaded_entry.hidden_by_id)
+        assert Repo.aggregate(Action, :count) == before_action_count
+      end
+    end
+
+    test "blank and whitespace reasons are invalid before persistence and create no audit" do
+      actor = operator_fixture(:mod)
+      author = AccountsFixtures.user_fixture()
+
+      for reason <- ["", "   "] do
+        {:ok, entry} = Oneliners.create_entry(author, %{body: "line #{System.unique_integer()}"})
+        before_action_count = Repo.aggregate(Action, :count)
+
+        assert {:error, %Ecto.Changeset{} = changeset} = Oneliners.hide_entry(actor, entry, reason)
+        assert {"can't be blank", _} = Keyword.fetch!(changeset.errors, :hidden_reason)
+
+        reloaded_entry = Repo.get!(Entry, entry.id)
+        refute reloaded_entry.hidden
+        assert is_nil(reloaded_entry.hidden_reason)
+        assert is_nil(reloaded_entry.hidden_by_id)
+        assert Repo.aggregate(Action, :count) == before_action_count
+      end
+    end
+
+    test "missing target returns not_found and creates no audit" do
+      actor = operator_fixture(:mod)
+      before_action_count = Repo.aggregate(Action, :count)
+
+      assert {:error, :not_found} = Oneliners.hide_entry(actor, Ecto.UUID.generate(), "abuse")
+      assert Repo.aggregate(Action, :count) == before_action_count
+    end
+
+    test "successful hide inserts exactly one audit row with target metadata" do
+      actor = operator_fixture(:mod)
+      author = AccountsFixtures.user_fixture()
+      {:ok, entry} = Oneliners.create_entry(author, %{body: "metadata body"})
+
+      before_action_count = Repo.aggregate(Action, :count)
+
+      assert {:ok, %Entry{} = hidden_entry} = Oneliners.hide_entry(actor, entry.id, " abuse ")
+
+      assert Repo.aggregate(Action, :count) == before_action_count + 1
+      [action] = Repo.all(from action in Action, where: action.target_id == ^hidden_entry.id)
+      assert action.kind == :hide_oneliner
+      assert action.target_kind == :oneliner
+      assert action.reason == "abuse"
+      assert action.mod_id == actor.id
+      assert action.metadata == %{"body" => "metadata body", "author_handle" => author.handle}
+    end
+
+    test "after hide, list_recent_visible excludes hidden entry and preserves newest-first order" do
+      actor = operator_fixture(:mod)
+      first_author = AccountsFixtures.user_fixture()
+      second_author = AccountsFixtures.user_fixture()
+
+      assert {:ok, oldest} = Oneliners.create_entry(first_author, %{body: "oldest"})
+      assert {:ok, hidden} = Oneliners.create_entry(second_author, %{body: "hide me"})
+      assert {:ok, newest} = Oneliners.create_entry(first_author, %{body: "newest"})
+
+      assert {:ok, %Entry{}} = Oneliners.hide_entry(actor, hidden, "abuse")
+
+      assert Enum.map(Oneliners.list_recent_visible(3), & &1.id) == [newest.id, oldest.id]
+    end
+  end
+
+  defp operator_fixture(role, attrs \\ %{}) when role in [:mod, :sysop] do
+    user = AccountsFixtures.user_fixture()
+
+    user
+    |> Ecto.Changeset.change(Map.merge(%{role: role}, attrs))
+    |> Repo.update!()
+  end
+
+  defp deleted_operator_fixture do
+    operator_fixture(:mod, %{deleted_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)})
+  end
+
+  defp board_scope_only_actor_fixture do
+    operator_fixture(:mod, %{role: :user})
   end
 end
