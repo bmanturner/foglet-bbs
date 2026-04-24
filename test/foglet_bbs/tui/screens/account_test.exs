@@ -33,6 +33,42 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert ss.active_tab == 0
       assert %Foglet.TUI.Widgets.Input.Tabs{} = ss.tabs
     end
+
+    test "seeds profile and prefs drafts from current_user without mutating session context" do
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        location: "Mist Harbor",
+        tagline: "low clouds, loud modems",
+        real_name: "Alice Example",
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "24h"},
+        theme: "amber"
+      }
+
+      ss = Account.init_screen_state(current_user: user)
+
+      assert ss.profile_draft == %{
+               location: "Mist Harbor",
+               tagline: "low clouds, loud modems",
+               real_name: "Alice Example"
+             }
+
+      assert ss.prefs_draft == %{
+               timezone: "America/Chicago",
+               time_format: "24h",
+               theme: "amber"
+             }
+
+      assert ss.profile_focus == :location
+      assert ss.prefs_focus == :timezone
+      assert ss.profile_errors == %{}
+      assert ss.prefs_errors == %{}
+      refute ss.profile_dirty?
+      refute ss.prefs_dirty?
+      assert ss.candidate_theme_id == nil
+    end
   end
 
   describe "render/1" do
