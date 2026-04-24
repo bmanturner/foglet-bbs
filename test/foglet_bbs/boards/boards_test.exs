@@ -6,7 +6,7 @@ defmodule Foglet.BoardsTest do
 
   alias Ecto.Adapters.SQL.Sandbox
   alias Foglet.Accounts.User
-  alias Foglet.Boards.{Category, ReadPointer, Subscription}
+  alias Foglet.Boards.{Board, Category, ReadPointer, Subscription}
   alias FogletBbs.Repo
 
   # Board Server is started by Foglet.Boards.create_board/3 via BoardSupervisor.
@@ -71,6 +71,56 @@ defmodule Foglet.BoardsTest do
       cs = Foglet.Boards.Board.archive_changeset(board)
       assert is_nil(Ecto.Changeset.get_change(cs, :name))
       assert is_nil(Ecto.Changeset.get_change(cs, :slug))
+    end
+  end
+
+  describe "Board.changeset/2 required subscription policy (SUBS-03)" do
+    test "accepts required subscriptions when default subscriptions are enabled" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "required-default",
+          name: "Required Default",
+          default_subscription: true,
+          required_subscription: true
+        })
+
+      assert changeset.valid?
+      assert Ecto.Changeset.get_field(changeset, :required_subscription) == true
+    end
+
+    test "rejects required subscriptions without default subscriptions" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "required-non-default",
+          name: "Required Non Default",
+          default_subscription: false,
+          required_subscription: true
+        })
+
+      refute changeset.valid?
+
+      assert "requires default_subscription to be true" in errors_on(changeset).required_subscription
+    end
+
+    test "database constraint rejects required subscriptions without default subscriptions" do
+      category = category_fixture()
+
+      assert {:error, changeset} =
+               %Board{category_id: category.id}
+               |> Board.changeset(%{
+                 slug: "required-db",
+                 name: "Required DB",
+                 default_subscription: true,
+                 required_subscription: true
+               })
+               |> Ecto.Changeset.put_change(:default_subscription, false)
+               |> Repo.insert()
+
+      assert "requires default_subscription to be true" in errors_on(changeset).required_subscription
     end
   end
 
@@ -381,6 +431,160 @@ defmodule Foglet.BoardsTest do
         )
 
       assert count == 1
+    end
+  end
+
+  describe "board_directory_for/1 (SUBS-01)" do
+    test "returns active subscribed and unsubscribed boards grouped by category order" do
+      category_b = category_fixture(%{name: "Beta", display_order: 2})
+      category_a = category_fixture(%{name: "Alpha", display_order: 1})
+
+      subscribed_board =
+        board_fixture(category_a, %{
+          slug: "subscribed-directory",
+          name: "Subscribed Directory",
+          display_order: 2,
+          required_subscription: false
+        })
+
+      unsubscribed_board =
+        board_fixture(category_a, %{
+          slug: "unsubscribed-directory",
+          name: "Unsubscribed Directory",
+          display_order: 1
+        })
+
+      other_category_board =
+        board_fixture(category_b, %{
+          slug: "other-category-directory",
+          name: "Other Category Directory",
+          display_order: 1
+        })
+
+      archived_board = board_fixture(category_a, %{slug: "archived-directory", archived: true})
+      archived_category = category_fixture(%{name: "Archived", display_order: 0, archived: true})
+      hidden_board = board_fixture(archived_category, %{slug: "hidden-directory"})
+      user = user_fixture()
+      subscribed_board_id = subscribed_board.id
+      unsubscribed_board_id = unsubscribed_board.id
+      other_category_board_id = other_category_board.id
+
+      assert {:ok, :subscribed} =
+               Foglet.Boards.subscribe_user_to_board(user, subscribed_board.id)
+
+      directory = Foglet.Boards.board_directory_for(user)
+
+      assert Enum.map(directory, & &1.category.id) == [category_a.id, category_b.id]
+
+      assert [
+               %{
+                 subscribed?: false,
+                 unread_count: nil,
+                 board: %{id: ^unsubscribed_board_id}
+               },
+               %{
+                 subscribed?: true,
+                 required_subscription?: false,
+                 unread_count: 0,
+                 board: %{id: ^subscribed_board_id}
+               }
+             ] = hd(directory).boards
+
+      assert [%{subscribed?: false, board: %{id: ^other_category_board_id}}] =
+               List.last(directory).boards
+
+      refute Enum.any?(directory, fn category ->
+               Enum.any?(category.boards, &(&1.board.id in [archived_board.id, hidden_board.id]))
+             end)
+    end
+
+    test "returns an empty directory for nil users" do
+      assert Foglet.Boards.board_directory_for(nil) == []
+    end
+  end
+
+  describe "subscribe_user_to_board/2 and unsubscribe_user_from_board/2 (SUBS-02, SUBS-03)" do
+    test "subscribe is idempotent for active boards" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      assert {:ok, :subscribed} = Foglet.Boards.subscribe_user_to_board(user, board.id)
+      assert {:ok, :subscribed} = Foglet.Boards.subscribe_user_to_board(user.id, board.id)
+
+      assert Repo.aggregate(
+               from(s in Subscription, where: s.user_id == ^user.id and s.board_id == ^board.id),
+               :count,
+               :id
+             ) == 1
+    end
+
+    test "subscribe rejects unknown and archived boards" do
+      category = category_fixture()
+      archived_board = board_fixture(category, %{archived: true})
+      archived_category = category_fixture(%{archived: true})
+      hidden_board = board_fixture(archived_category)
+      user = user_fixture()
+
+      assert {:error, :not_found} =
+               Foglet.Boards.subscribe_user_to_board(user, Ecto.UUID.generate())
+
+      assert {:error, :board_archived} =
+               Foglet.Boards.subscribe_user_to_board(user, archived_board.id)
+
+      assert {:error, :board_archived} =
+               Foglet.Boards.subscribe_user_to_board(user, hidden_board.id)
+    end
+
+    test "unsubscribe deletes allowed rows and permits zero remaining subscriptions" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+
+      assert {:ok, :subscribed} = Foglet.Boards.subscribe_user_to_board(user, board.id)
+      assert {:ok, :unsubscribed} = Foglet.Boards.unsubscribe_user_from_board(user.id, board.id)
+
+      assert Repo.aggregate(
+               from(s in Subscription, where: s.user_id == ^user.id),
+               :count,
+               :id
+             ) == 0
+    end
+
+    test "unsubscribe from a required board is blocked and leaves the row intact" do
+      category = category_fixture()
+
+      required_board =
+        board_fixture(category, %{
+          default_subscription: true,
+          required_subscription: true
+        })
+
+      user = user_fixture()
+
+      assert {:ok, :subscribed} = Foglet.Boards.subscribe_user_to_board(user, required_board.id)
+
+      assert {:error, :required_subscription} =
+               Foglet.Boards.unsubscribe_user_from_board(user, required_board.id)
+
+      assert Repo.get_by(Subscription, user_id: user.id, board_id: required_board.id)
+    end
+
+    test "unsubscribe rejects unknown and archived boards" do
+      category = category_fixture()
+      archived_board = board_fixture(category, %{archived: true})
+      archived_category = category_fixture(%{archived: true})
+      hidden_board = board_fixture(archived_category)
+      user = user_fixture()
+
+      assert {:error, :not_found} =
+               Foglet.Boards.unsubscribe_user_from_board(user, Ecto.UUID.generate())
+
+      assert {:error, :board_archived} =
+               Foglet.Boards.unsubscribe_user_from_board(user, archived_board.id)
+
+      assert {:error, :board_archived} =
+               Foglet.Boards.unsubscribe_user_from_board(user, hidden_board.id)
     end
   end
 

@@ -210,6 +210,55 @@ defmodule Foglet.Boards do
     )
   end
 
+  @type directory_board :: %{
+          board: Board.t(),
+          subscribed?: boolean(),
+          required_subscription?: boolean(),
+          unread_count: non_neg_integer() | nil
+        }
+
+  @type directory_category :: %{
+          category: Category.t(),
+          boards: [directory_board()]
+        }
+
+  @doc """
+  Return active boards in active categories grouped for the user-facing board directory.
+
+  Subscribed board entries include unread counts; unsubscribed entries keep
+  `unread_count` nil so callers do not imply unread state for boards the user
+  has not joined.
+  """
+  @spec board_directory_for(Foglet.Accounts.User.t() | nil) :: [directory_category()]
+  def board_directory_for(nil), do: []
+
+  def board_directory_for(actor) do
+    user_id = user_id(actor)
+    subscribed_board_ids = subscribed_board_ids(user_id)
+    unread_counts = unread_counts(user_id)
+
+    list_boards()
+    |> Enum.chunk_by(& &1.category.id)
+    |> Enum.map(fn boards ->
+      category = hd(boards).category
+
+      %{
+        category: category,
+        boards:
+          Enum.map(boards, fn board ->
+            subscribed? = MapSet.member?(subscribed_board_ids, board.id)
+
+            %{
+              board: board,
+              subscribed?: subscribed?,
+              required_subscription?: board.required_subscription,
+              unread_count: if(subscribed?, do: Map.get(unread_counts, board.id, 0), else: nil)
+            }
+          end)
+      }
+    end)
+  end
+
   # ---------- Subscriptions (BOARD-07) ----------
 
   @doc """
@@ -251,6 +300,47 @@ defmodule Foglet.Boards do
     |> Repo.insert(on_conflict: :nothing, conflict_target: [:user_id, :board_id])
   end
 
+  @doc """
+  Subscribe a user to an active board through the context rule boundary.
+
+  Accepts a user struct or user id string. Archived boards and boards in
+  archived categories are rejected before attempting the insert.
+  """
+  @spec subscribe_user_to_board(Foglet.Accounts.User.t() | String.t(), String.t()) ::
+          {:ok, :subscribed}
+          | {:error, :not_found}
+          | {:error, :board_archived}
+          | {:error, Ecto.Changeset.t()}
+  def subscribe_user_to_board(actor, board_id) do
+    with {:ok, _board} <- fetch_active_board(board_id),
+         {:ok, _subscription} <- subscribe(user_id(actor), board_id) do
+      {:ok, :subscribed}
+    end
+  end
+
+  @doc """
+  Unsubscribe a user from an active board unless the board requires subscription.
+
+  Missing subscription rows are treated as an idempotent successful unsubscribe;
+  users are allowed to end with zero board subscriptions.
+  """
+  @spec unsubscribe_user_from_board(Foglet.Accounts.User.t() | String.t(), String.t()) ::
+          {:ok, :unsubscribed}
+          | {:error, :not_found}
+          | {:error, :board_archived}
+          | {:error, :required_subscription}
+  def unsubscribe_user_from_board(actor, board_id) do
+    with {:ok, board} <- fetch_active_board(board_id),
+         :ok <- reject_required_subscription(board) do
+      Repo.delete_all(
+        from s in Subscription,
+          where: s.user_id == ^user_id(actor) and s.board_id == ^board_id
+      )
+
+      {:ok, :unsubscribed}
+    end
+  end
+
   @doc "List all subscriptions for a user. Preloads :board."
   @spec list_subscriptions(String.t()) :: [Subscription.t()]
   def list_subscriptions(user_id) do
@@ -284,6 +374,29 @@ defmodule Foglet.Boards do
     counts = unread_counts(user_id)
     Enum.map(boards, fn b -> %{b | unread_count: Map.get(counts, b.id, 0)} end)
   end
+
+  defp user_id(%{id: id}), do: id
+  defp user_id(id) when is_binary(id), do: id
+
+  defp subscribed_board_ids(user_id) do
+    Repo.all(from s in Subscription, where: s.user_id == ^user_id, select: s.board_id)
+    |> MapSet.new()
+  end
+
+  defp fetch_active_board(board_id) do
+    case Repo.get(Board, board_id) |> Repo.preload(:category) do
+      nil -> {:error, :not_found}
+      %Board{archived: true} -> {:error, :board_archived}
+      %Board{category: %Category{archived: true}} -> {:error, :board_archived}
+      %Board{} = board -> {:ok, board}
+    end
+  end
+
+  defp reject_required_subscription(%Board{required_subscription: true}) do
+    {:error, :required_subscription}
+  end
+
+  defp reject_required_subscription(%Board{}), do: :ok
 
   # ---------- Read Pointers (BOARD-08) ----------
 
