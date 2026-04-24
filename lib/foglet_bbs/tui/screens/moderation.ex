@@ -171,13 +171,7 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp synced_screen_state(state) do
     ss = get_screen_state(state)
 
-    invites? =
-      ShellVisibility.invites_visible?(
-        Map.get(state, :current_user),
-        Map.get(state, :session_context)
-      )
-
-    labels = State.tab_labels(invites?)
+    labels = State.tab_labels(moderation_invites_visible?(state))
     active = min(ss.active_tab, length(labels) - 1)
 
     if tab_labels_from_tabs(ss.tabs) == labels and active == ss.active_tab do
@@ -186,6 +180,15 @@ defmodule Foglet.TUI.Screens.Moderation do
       %{ss | tabs: Tabs.init(tabs: labels, active: active), active_tab: active}
     end
   end
+
+  defp moderation_invites_visible?(%{current_user: %{role: :mod}} = state) do
+    ShellVisibility.invites_visible?(
+      Map.get(state, :current_user),
+      Map.get(state, :session_context)
+    )
+  end
+
+  defp moderation_invites_visible?(_state), do: false
 
   defp tab_labels_from_tabs(%Tabs{raxol_state: %{tabs: tabs}}) when is_list(tabs) do
     Enum.map(tabs, fn

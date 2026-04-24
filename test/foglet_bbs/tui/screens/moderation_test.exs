@@ -135,6 +135,19 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       refute Enum.any?(nil_flat, &String.contains?(&1, "INVITES"))
     end
 
+    test "hides INVITES from sysop users under every invite policy" do
+      for policy <- ["any_user", "mods", "sysop_only"] do
+        flat =
+          :sysop
+          |> build_state_with_policy(policy)
+          |> Moderation.render()
+          |> collect_text_values()
+
+        refute Enum.any?(flat, &String.contains?(&1, "INVITES")),
+               "Expected sysop policy #{policy} to hide Moderation INVITES; got #{inspect(flat)}"
+      end
+    end
+
     test "renders scaffold-only placeholder copy (no fake moderation actions)", %{state: state} do
       flat = Moderation.render(state) |> collect_text_values()
       # Forbidden substrings that would indicate fake operator actions in key-bar or buttons
