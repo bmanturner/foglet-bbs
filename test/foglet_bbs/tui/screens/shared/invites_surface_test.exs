@@ -21,12 +21,9 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurfaceTest do
   # ---------------------------------------------------------------------------
 
   describe "default_state/0" do
-    test "returns a struct with items: [] (placeholder, not loading)" do
+    test "returns an unloaded live invite state" do
       state = InvitesSurface.default_state()
-      # items: [] means placeholder branch (D-12: nil = loading, [] = scaffold)
-      assert %{items: []} = state
-      # Must be [] not nil — Phase 0 default is placeholder, not loading
-      refute is_nil(state.items)
+      assert %{items: nil, selected_index: 0, error: nil, last_generated_code: nil} = state
     end
   end
 
@@ -88,23 +85,94 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurfaceTest do
              "Expected loading text in: #{inspect(flat)}"
     end
 
-    test "with %{items: []} state renders placeholder copy that is obviously scaffold-only",
-         %{theme: theme} do
+    test "with %{items: []} state renders an empty invite list", %{theme: theme} do
       result = InvitesSurface.render(%{items: []}, theme)
       flat = collect_text_values(result)
       joined = Enum.join(flat, " ")
 
-      assert String.contains?(joined, "scaffold") or
-               String.contains?(joined, "not yet") or
-               String.contains?(joined, "later phase"),
-             "Expected scaffold-only copy in: #{inspect(flat)}"
+      assert String.contains?(joined, "No invites issued yet.")
+      assert String.contains?(joined, "G Generate")
+      assert String.contains?(joined, "R Refresh")
+      assert String.contains?(joined, "D Revoke")
+      assert String.contains?(joined, "↑/↓ Select")
     end
 
-    test "with %{items: [_|_]} state does NOT crash (future-facing)", %{theme: theme} do
-      result = InvitesSurface.render(%{items: [%{code: "XYZ"}]}, theme)
+    test "with live rows renders available consumed revoked lifecycle fields", %{theme: theme} do
+      inserted_at = ~U[2026-04-24 01:00:00Z]
+      consumed_at = ~U[2026-04-24 01:05:00Z]
+      revoked_at = ~U[2026-04-24 01:10:00Z]
 
-      assert is_map(result) or is_list(result),
-             "Expected a map or list render tree, got: #{inspect(result)}"
+      result =
+        InvitesSurface.render(
+          %{
+            items: [
+              %{
+                code: "AVAILABLECODE001",
+                issuer_id: "issuer-1",
+                inserted_at: inserted_at,
+                consumed_at: nil,
+                consumed_by_user_id: nil,
+                revoked_at: nil,
+                status: :available
+              },
+              %{
+                code: "CONSUMEDCODE001",
+                issuer_id: "issuer-2",
+                inserted_at: inserted_at,
+                consumed_at: consumed_at,
+                consumed_by_user_id: "consumer-1",
+                revoked_at: nil,
+                status: :consumed
+              },
+              %{
+                code: "REVOKEDCODE001",
+                issuer_id: "issuer-3",
+                inserted_at: inserted_at,
+                consumed_at: nil,
+                consumed_by_user_id: nil,
+                revoked_at: revoked_at,
+                status: :revoked
+              }
+            ],
+            selected_index: 1
+          },
+          theme
+        )
+
+      joined = result |> collect_text_values() |> Enum.join(" ")
+
+      assert String.contains?(joined, "AVAILABLECODE001")
+      assert String.contains?(joined, "issuer_id: issuer-1")
+      assert String.contains?(joined, "inserted_at: 2026-04-24 01:00:00Z")
+      assert String.contains?(joined, "available")
+      assert String.contains?(joined, "CONSUMEDCODE001")
+      assert String.contains?(joined, "consumed")
+      assert String.contains?(joined, "consumed_at: 2026-04-24 01:05:00Z")
+      assert String.contains?(joined, "consumed_by_user_id: consumer-1")
+      assert String.contains?(joined, "REVOKEDCODE001")
+      assert String.contains?(joined, "revoked")
+      assert String.contains?(joined, "revoked_at: 2026-04-24 01:10:00Z")
+    end
+
+    test "renders New invite code banner, error, and key hints", %{theme: theme} do
+      result =
+        InvitesSurface.render(
+          %{
+            items: [],
+            last_generated_code: "NEWCODE001",
+            error: "Invite generation limit reached."
+          },
+          theme
+        )
+
+      joined = result |> collect_text_values() |> Enum.join(" ")
+
+      assert String.contains?(joined, "New invite code: NEWCODE001")
+      assert String.contains?(joined, "Invite generation limit reached.")
+      assert String.contains?(joined, "G Generate")
+      assert String.contains?(joined, "R Refresh")
+      assert String.contains?(joined, "D Revoke")
+      assert String.contains?(joined, "↑/↓ Select")
     end
   end
 
