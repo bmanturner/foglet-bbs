@@ -61,7 +61,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
   def handle_key(%{key: :backspace}, state), do: {apply_backspace(state), []}
 
   def handle_key(%{key: :char, char: c} = event, state) when is_binary(c) do
-    if Map.get(event, :ctrl) or Map.get(event, :meta) do
+    if Map.get(event, :ctrl) || Map.get(event, :meta) do
       {state, []}
     else
       {apply_char(c, state), []}

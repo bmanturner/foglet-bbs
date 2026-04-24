@@ -115,7 +115,10 @@ defmodule Foglet.Boards do
   Returns `{:error, :forbidden}` if the actor is not permitted (D-15).
   """
   @spec create_board(Foglet.Accounts.User.t() | nil, String.t(), map()) ::
-          {:ok, Board.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+          {:ok, Board.t()}
+          | {:error, Ecto.Changeset.t()}
+          | {:error, :forbidden}
+          | {:error, :board_server_unavailable}
   def create_board(actor, category_id, attrs) do
     with :ok <- Bodyguard.permit(Foglet.Authorization, :create_board, actor, :site) do
       result =
@@ -125,7 +128,7 @@ defmodule Foglet.Boards do
 
       case result do
         {:ok, board} ->
-          case BoardSupervisor.start_board(board.id) do
+          case start_board_server(board.id) do
             {:ok, _pid} ->
               {:ok, board}
 
@@ -146,6 +149,12 @@ defmodule Foglet.Boards do
           error
       end
     end
+  end
+
+  defp start_board_server(board_id) do
+    BoardSupervisor.start_board(board_id)
+  catch
+    :exit, reason -> {:error, reason}
   end
 
   @doc """

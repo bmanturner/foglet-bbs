@@ -471,6 +471,9 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       {:error, :forbidden} ->
         {reset_modal(state),
          [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}
+
+      {:error, reason} when is_atom(reason) ->
+        {reset_modal(state), [{:error_modal, db_error_message(reason), :main_menu}]}
     end
   end
 
@@ -529,8 +532,14 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     |> Map.new()
   end
 
+  defp db_error_message(:board_server_unavailable),
+    do: "Board server unavailable. Please retry."
+
   defp db_error_message(kind) when kind in [:create_board, :edit_board, :archive_board],
     do: "Database error saving board."
+
+  defp db_error_message(reason) when is_atom(reason),
+    do: "Board operation failed: #{inspect(reason)}"
 
   defp db_error_message(_), do: "Database error saving category."
 

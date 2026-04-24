@@ -436,6 +436,24 @@ defmodule Foglet.TUI.Screens.SysopTest do
                "Expected description for #{inspect(key)} in LIMITS render output"
       end
     end
+
+    test "ordinary character input %{key: :char, char: \"x\"} does not raise", %{
+      state: state
+    } do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      before_drafts = state.screen_state.sysop.limits_form.drafts
+
+      result = Sysop.handle_key(%{key: :char, char: "x"}, state)
+
+      new_state =
+        case result do
+          {:update, state, _cmds} -> state
+          :no_match -> state
+        end
+
+      assert new_state.screen_state.sysop.limits_form.drafts == before_drafts
+    end
   end
 
   # =========================================================================
@@ -908,6 +926,72 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert %Foglet.TUI.Modal{type: :error} = new_state.modal
       assert new_state.current_screen == :main_menu
+    end
+
+    test "{:error, :board_server_unavailable} from create_board routes to error modal + :main_menu",
+         %{state: state, sysop: sysop, category: category} do
+      sup = Process.whereis(Foglet.Boards.Supervisor)
+      ref = Process.monitor(sup)
+
+      :ok = Supervisor.terminate_child(FogletBbs.Supervisor, Foglet.Boards.Supervisor)
+      assert_receive {:DOWN, ^ref, :process, ^sup, _reason}
+
+      on_exit(fn ->
+        case Process.whereis(Foglet.Boards.Supervisor) do
+          nil -> Supervisor.restart_child(FogletBbs.Supervisor, Foglet.Boards.Supervisor)
+          _pid -> :ok
+        end
+      end)
+
+      state = activate_boards_tab(state, sysop)
+      bv = state.screen_state.sysop.boards_view
+
+      fields = [
+        %{name: :slug, type: :text, label: "Slug", max_length: 50, value: "offline"},
+        %{name: :name, type: :text, label: "Name", max_length: 100, value: "Offline Board"},
+        %{name: :description, type: :textarea, label: "Description", value: ""},
+        %{
+          name: :category_id,
+          type: :enum,
+          label: "Category",
+          choices: [category.id],
+          value: category.id
+        },
+        %{
+          name: :postable_by,
+          type: :enum,
+          label: "Postable by",
+          choices: ["members"],
+          value: "members"
+        },
+        %{
+          name: :default_subscription,
+          type: :boolean,
+          label: "Default subscription",
+          value: false
+        }
+      ]
+
+      form =
+        ModalForm.init(
+          title: "New board",
+          fields: fields,
+          on_submit: fn payload ->
+            Process.put({BoardsView, :pending_submit}, payload)
+            :ok
+          end,
+          on_cancel: fn -> :ok end
+        )
+
+      bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
+      state = put_boards_view(state, bv)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+
+      assert %Foglet.TUI.Modal{type: :error, message: message} = new_state.modal
+      assert message == "Board server unavailable. Please retry."
+      assert new_state.current_screen == :main_menu
+      assert new_state.screen_state.sysop.boards_view.modal == nil
     end
   end
 end
