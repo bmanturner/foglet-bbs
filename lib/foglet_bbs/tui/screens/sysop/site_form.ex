@@ -10,6 +10,16 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   (`▸`) instead of the `TextInput`/`Checkbox`/`RadioGroup` primitives, to
   avoid per-field adapter plumbing for this first inline-form consumer.
   `Modal.Form` remains the required primitive for BOARDS (Plan 04).
+
+  ## Enum entry ordering
+
+  For string-enum fields, typed single characters select the first
+  enum value whose name starts with that character (see
+  `apply_char/2`). This means enum option order in
+  `Foglet.Config.Schema` is load-bearing: if two enum values share a
+  prefix (e.g. `"mods"` and `"mods_only"`), the one listed first wins.
+  Add new enum values with disjoint leading characters where possible,
+  or place the shorter/more-common value first.
   """
 
   alias Foglet.Config
