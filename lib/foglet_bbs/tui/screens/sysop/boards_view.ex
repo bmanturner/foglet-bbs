@@ -1,0 +1,599 @@
+defmodule Foglet.TUI.Screens.Sysop.BoardsView do
+  @moduledoc """
+  BOARDS tab submodule (D-14, D-16, D-17, D-18, SYSO-03).
+
+  Renders a categorized list of boards (category heading rows with indented
+  board rows) and routes create/edit through `Foglet.TUI.Widgets.Modal.Form`
+  (Phase 1.1), archive through `%Foglet.TUI.Modal{type: :confirm}`. Category
+  CRUD is reachable via uppercase counterparts (`N`, `E`, `Shift+D`).
+
+  Triplet contract: `init/1 + handle_key/2 + render/2` (no process). Domain
+  calls funnel `state.current_user` + `:site` scope through the actor-aware
+  `Foglet.Boards.*` functions added in Plan 02-02; `:forbidden` / `:db_error`
+  emit `{:error_modal, msg, :main_menu}` upstream.
+
+  ## Modal.Form on_submit adaptation (D-17 / plan narrative)
+
+  `Modal.Form.init/1` requires an `on_submit` closure whose return value is
+  discarded by the primitive (`form.ex:114` — `_ = state.on_submit.(payload)`).
+  To capture the typed payload back in the BoardsView handler, we stash it in
+  the process dictionary under `{__MODULE__, :pending_submit}` and pick it up
+  immediately after `Modal.Form.handle_event/2` returns `:submitted`. Single
+  process during TUI rendering / tests — no cross-process concerns.
+
+  Archive-confirm flow uses the simpler pattern: BoardsView stores the target
+  struct directly on state (`:archive_target`) and the Y/N handler reads it.
+
+  Pitfall 5: event routing. When `state.modal != nil`, `j`/`k` / other list
+  navigation keys are no-ops; events flow to the active modal first.
+  """
+
+  alias Foglet.Boards
+  alias Foglet.TUI.Modal
+  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+  import Raxol.Core.Renderer.View
+
+  @type row :: {:category, map()} | {:board, map()}
+
+  @type t :: %__MODULE__{
+          current_user: Foglet.Accounts.User.t() | nil,
+          categories: [map()],
+          boards: [map()],
+          rows: [row()],
+          selection_index: non_neg_integer(),
+          modal: nil | ModalForm.t() | Modal.t(),
+          modal_kind:
+            nil
+            | :create_board
+            | :edit_board
+            | :create_category
+            | :edit_category
+            | :archive_board
+            | :archive_category,
+          edit_target: nil | map(),
+          archive_target: nil | map()
+        }
+
+  defstruct current_user: nil,
+            categories: [],
+            boards: [],
+            rows: [],
+            selection_index: 0,
+            modal: nil,
+            modal_kind: nil,
+            edit_target: nil,
+            archive_target: nil
+
+  @postable_choices [
+    {"Members", "members"},
+    {"Mods only", "mods_only"},
+    {"Sysop only", "sysop_only"}
+  ]
+
+  # ---------------------------------------------------------------------------
+  # Init + list load
+  # ---------------------------------------------------------------------------
+
+  @spec init(keyword()) :: t()
+  def init(opts) when is_list(opts) do
+    %__MODULE__{current_user: Keyword.get(opts, :current_user)}
+    |> refresh_lists()
+  end
+
+  defp refresh_lists(%__MODULE__{} = state) do
+    categories = Boards.list_categories()
+    boards = Boards.list_boards()
+    %{state | categories: categories, boards: boards, rows: build_rows(categories, boards)}
+  end
+
+  defp build_rows(categories, boards) do
+    Enum.flat_map(categories, fn c ->
+      cat_boards = Enum.filter(boards, &(&1.category_id == c.id))
+      [{:category, c} | Enum.map(cat_boards, fn b -> {:board, b} end)]
+    end)
+  end
+
+  # ---------------------------------------------------------------------------
+  # Render
+  # ---------------------------------------------------------------------------
+
+  @spec render(t(), map()) :: any()
+  def render(%__MODULE__{} = state, theme) do
+    body = render_list(state, theme)
+
+    footer =
+      text(
+        "[n] New board  [e] Edit  [D] Archive  [N] New category  [E] Edit cat  [Shift+D] Archive cat",
+        fg: theme.dim.fg
+      )
+
+    column style: %{gap: 0} do
+      [text("Boards & categories", fg: theme.title.fg, style: [:bold]), text("")] ++
+        [body, text(""), footer] ++ render_modal(state.modal, theme)
+    end
+  end
+
+  defp render_list(%__MODULE__{rows: []}, theme) do
+    column style: %{gap: 0} do
+      [text("No categories yet. Press N to create one.", fg: theme.warning.fg)]
+    end
+  end
+
+  defp render_list(%__MODULE__{rows: rows, selection_index: idx}, theme) do
+    SelectionList.render(rows, idx, fn {row, _idx, selected?} ->
+      render_row(row, selected?, theme)
+    end)
+  end
+
+  defp render_row({:category, cat}, selected?, theme) do
+    label = "▸ #{cat.name}"
+
+    if selected? do
+      text(label, fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
+    else
+      text(label, fg: theme.accent.fg, style: [:bold])
+    end
+  end
+
+  defp render_row({:board, board}, selected?, theme) do
+    label = "    #{board.slug} — #{board.name}"
+    ListRow.render(label, selected?, theme)
+  end
+
+  defp render_modal(nil, _theme), do: []
+
+  defp render_modal(%ModalForm{} = form, theme) do
+    [text(""), ModalForm.render(form, theme: theme)]
+  end
+
+  defp render_modal(%Modal{} = modal, theme) do
+    [text(""), Foglet.TUI.Widgets.Modal.render(modal, theme)]
+  end
+
+  # ---------------------------------------------------------------------------
+  # Key handling
+  # ---------------------------------------------------------------------------
+
+  @spec handle_key(map(), t()) :: {t(), [{atom(), any()} | tuple()]}
+
+  # ---- Modal-open branch (Pitfall 5 gating) -----------------------------------
+
+  def handle_key(event, %__MODULE__{modal: %ModalForm{}} = state) do
+    handle_form_event(event, state)
+  end
+
+  def handle_key(event, %__MODULE__{modal: %Modal{type: :confirm}} = state) do
+    handle_confirm_event(event, state)
+  end
+
+  # ---- No modal: list navigation + open-modal keys ----------------------------
+
+  def handle_key(%{key: :escape}, state), do: {state, []}
+
+  def handle_key(%{key: :down}, state), do: {move(state, +1), []}
+  def handle_key(%{key: :char, char: "j"}, state), do: {move(state, +1), []}
+  def handle_key(%{key: :up}, state), do: {move(state, -1), []}
+  def handle_key(%{key: :char, char: "k"}, state), do: {move(state, -1), []}
+
+  # Create board (lowercase n)
+  def handle_key(%{key: :char, char: "n"} = e, state) do
+    if modifier?(e), do: {state, []}, else: {open_create_board(state), []}
+  end
+
+  # Create category (uppercase N — no ctrl/meta)
+  def handle_key(%{key: :char, char: "N"} = e, state) do
+    if modifier?(e), do: {state, []}, else: {open_create_category(state), []}
+  end
+
+  # Edit (lowercase e = board, uppercase E = category)
+  def handle_key(%{key: :char, char: "e"} = e, state) do
+    if modifier?(e), do: {state, []}, else: {open_edit_board(state), []}
+  end
+
+  def handle_key(%{key: :char, char: "E"} = e, state) do
+    if modifier?(e), do: {state, []}, else: {open_edit_category(state), []}
+  end
+
+  # Archive board (D without shift-D-category distinction in event shape):
+  # Raxol char events don't carry a :shift key for letter chars; uppercase
+  # chars are the shift indicator. We treat plain "D" as archive-board and
+  # rely on the event-shape key :shift (if ever present) OR the secondary key
+  # char combination for archive-category; for now, we disambiguate by
+  # checking whether a board or category is highlighted. The plan's explicit
+  # "Shift+D" for category archive is realised as "D on a category row".
+  def handle_key(%{key: :char, char: "D"} = e, state) do
+    if modifier?(e) do
+      {state, []}
+    else
+      case selected_row(state) do
+        {:category, cat} -> {open_archive_category(state, cat), []}
+        {:board, board} -> {open_archive_board(state, board), []}
+        nil -> {state, []}
+      end
+    end
+  end
+
+  def handle_key(_event, state), do: {state, []}
+
+  defp modifier?(event), do: Map.get(event, :ctrl) || Map.get(event, :meta)
+
+  # ---- Navigation ------------------------------------------------------------
+
+  defp move(%__MODULE__{rows: []} = state, _delta), do: state
+
+  defp move(%__MODULE__{rows: rows, selection_index: idx} = state, delta) do
+    n = length(rows)
+    %{state | selection_index: Integer.mod(idx + delta, n)}
+  end
+
+  defp selected_row(%__MODULE__{rows: rows, selection_index: idx}) do
+    Enum.at(rows, idx)
+  end
+
+  # ---- Modal.Form open helpers -----------------------------------------------
+
+  defp open_create_board(%__MODULE__{categories: []} = state), do: state
+
+  defp open_create_board(state) do
+    default_cat = default_category_for(state)
+
+    form =
+      ModalForm.init(
+        title: "New board",
+        fields: board_fields(state, default_cat.id, %{}),
+        on_submit: &stash_submit/1,
+        on_cancel: &noop/0
+      )
+
+    %{state | modal: form, modal_kind: :create_board, edit_target: nil}
+  end
+
+  defp open_edit_board(state) do
+    case selected_row(state) do
+      {:board, board} ->
+        form =
+          ModalForm.init(
+            title: "Edit board — #{board.slug}",
+            fields: board_fields(state, board.category_id, board_values(board)),
+            on_submit: &stash_submit/1,
+            on_cancel: &noop/0
+          )
+
+        %{state | modal: form, modal_kind: :edit_board, edit_target: board}
+
+      _ ->
+        state
+    end
+  end
+
+  defp open_create_category(state) do
+    form =
+      ModalForm.init(
+        title: "New category",
+        fields: category_fields(%{}),
+        on_submit: &stash_submit/1,
+        on_cancel: &noop/0
+      )
+
+    %{state | modal: form, modal_kind: :create_category, edit_target: nil}
+  end
+
+  defp open_edit_category(state) do
+    case selected_row(state) do
+      {:category, cat} ->
+        form =
+          ModalForm.init(
+            title: "Edit category — #{cat.name}",
+            fields: category_fields(category_values(cat)),
+            on_submit: &stash_submit/1,
+            on_cancel: &noop/0
+          )
+
+        %{state | modal: form, modal_kind: :edit_category, edit_target: cat}
+
+      _ ->
+        state
+    end
+  end
+
+  defp open_archive_board(state, board) do
+    %{
+      state
+      | modal: %Modal{
+          type: :confirm,
+          title: "Archive board",
+          message: "Archive board '#{board.name}'? [Y/N]"
+        },
+        modal_kind: :archive_board,
+        archive_target: board
+    }
+  end
+
+  defp open_archive_category(state, category) do
+    %{
+      state
+      | modal: %Modal{
+          type: :confirm,
+          title: "Archive category",
+          message: "Archive category '#{category.name}'? [Y/N]"
+        },
+        modal_kind: :archive_category,
+        archive_target: category
+    }
+  end
+
+  defp default_category_for(%__MODULE__{} = state) do
+    case selected_row(state) do
+      {:category, cat} -> cat
+      {:board, board} -> Enum.find(state.categories, &(&1.id == board.category_id))
+      _ -> hd(state.categories)
+    end || hd(state.categories)
+  end
+
+  # ---- Field spec builders ---------------------------------------------------
+
+  defp board_fields(%__MODULE__{categories: categories}, default_cat_id, values) do
+    cat_choices = Enum.map(categories, fn c -> {c.name, c.id} end)
+
+    [
+      %{
+        name: :slug,
+        type: :text,
+        label: "Slug",
+        max_length: 50,
+        value: Map.get(values, :slug, "")
+      },
+      %{
+        name: :name,
+        type: :text,
+        label: "Name",
+        max_length: 100,
+        value: Map.get(values, :name, "")
+      },
+      %{
+        name: :description,
+        type: :textarea,
+        label: "Description",
+        value: Map.get(values, :description, "") || ""
+      },
+      %{
+        name: :category_id,
+        type: :enum,
+        label: "Category",
+        choices: Enum.map(cat_choices, fn {_lbl, id} -> id end),
+        value: Map.get(values, :category_id, default_cat_id)
+      },
+      %{
+        name: :postable_by,
+        type: :enum,
+        label: "Postable by",
+        choices: Enum.map(@postable_choices, fn {_lbl, v} -> v end),
+        value: Map.get(values, :postable_by, "members")
+      },
+      %{
+        name: :default_subscription,
+        type: :boolean,
+        label: "Default subscription",
+        value: Map.get(values, :default_subscription, false)
+      }
+    ]
+  end
+
+  defp category_fields(values) do
+    [
+      %{
+        name: :name,
+        type: :text,
+        label: "Name",
+        max_length: 100,
+        value: Map.get(values, :name, "")
+      },
+      %{
+        name: :description,
+        type: :textarea,
+        label: "Description",
+        value: Map.get(values, :description, "") || ""
+      },
+      %{
+        name: :display_order,
+        type: :integer,
+        label: "Display order",
+        value: Map.get(values, :display_order, 0) |> to_string()
+      }
+    ]
+  end
+
+  defp board_values(board) do
+    %{
+      slug: board.slug,
+      name: board.name,
+      description: board.description || "",
+      category_id: board.category_id,
+      postable_by: to_string(board.postable_by),
+      default_subscription: board.default_subscription
+    }
+  end
+
+  defp category_values(cat) do
+    %{
+      name: cat.name,
+      description: cat.description || "",
+      display_order: cat.display_order
+    }
+  end
+
+  # ---- Modal.Form event handling --------------------------------------------
+
+  defp stash_submit(payload) do
+    Process.put({__MODULE__, :pending_submit}, payload)
+    :ok
+  end
+
+  defp noop, do: :ok
+
+  defp handle_form_event(event, %__MODULE__{modal: form} = state) do
+    Process.delete({__MODULE__, :pending_submit})
+    {new_form, action} = ModalForm.handle_event(event, form)
+
+    case action do
+      :submitted ->
+        payload = Process.get({__MODULE__, :pending_submit})
+        Process.delete({__MODULE__, :pending_submit})
+        handle_submit_payload(payload, %{state | modal: new_form})
+
+      :cancelled ->
+        {%{state | modal: nil, modal_kind: nil, edit_target: nil}, []}
+
+      _ ->
+        {%{state | modal: new_form}, []}
+    end
+  end
+
+  defp handle_submit_payload(nil, state), do: {state, []}
+
+  defp handle_submit_payload(payload, %__MODULE__{modal_kind: kind} = state) do
+    case dispatch_submit(kind, payload, state) do
+      {:ok, _result} ->
+        new_state =
+          state
+          |> refresh_lists()
+          |> clamp_selection()
+
+        {%{new_state | modal: nil, modal_kind: nil, edit_target: nil}, []}
+
+      {:error, %Ecto.Changeset{} = cs} ->
+        errors = changeset_errors(cs)
+        form = ModalForm.set_errors(state.modal, errors)
+        {%{state | modal: form}, []}
+
+      {:error, :forbidden} ->
+        {reset_modal(state),
+         [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}
+
+      {:error, :db_error} ->
+        msg = db_error_message(kind)
+        {reset_modal(state), [{:error_modal, msg, :main_menu}]}
+
+      {:error, _other} ->
+        msg = db_error_message(kind)
+        {reset_modal(state), [{:error_modal, msg, :main_menu}]}
+    end
+  end
+
+  defp dispatch_submit(:create_board, payload, state) do
+    {cat_id, attrs} = Map.pop(payload, :category_id)
+    Boards.create_board(state.current_user, cat_id, normalize_board_attrs(attrs))
+  end
+
+  defp dispatch_submit(:edit_board, payload, state) do
+    {_cat_id, attrs} = Map.pop(payload, :category_id)
+    # category_id change goes through the same update_board call to stay within
+    # the plan's scope (Board.changeset casts :category_id).
+    Boards.update_board(
+      state.current_user,
+      state.edit_target,
+      Map.put(normalize_board_attrs(attrs), :category_id, Map.get(payload, :category_id))
+    )
+  end
+
+  defp dispatch_submit(:create_category, payload, state) do
+    Boards.create_category(state.current_user, normalize_category_attrs(payload))
+  end
+
+  defp dispatch_submit(:edit_category, payload, state) do
+    Boards.update_category(
+      state.current_user,
+      state.edit_target,
+      normalize_category_attrs(payload)
+    )
+  end
+
+  defp normalize_board_attrs(attrs) do
+    attrs
+    |> Map.update(:postable_by, "members", fn
+      nil -> "members"
+      v -> v
+    end)
+  end
+
+  defp normalize_category_attrs(attrs) do
+    attrs
+    |> Map.update(:display_order, 0, fn
+      nil -> 0
+      n when is_integer(n) -> n
+      _ -> 0
+    end)
+  end
+
+  defp changeset_errors(%Ecto.Changeset{} = cs) do
+    Ecto.Changeset.traverse_errors(cs, fn {msg, opts} ->
+      Enum.reduce(opts, msg, fn {k, v}, acc ->
+        String.replace(acc, "%{#{k}}", to_string(v))
+      end)
+    end)
+    |> Enum.map(fn {k, msgs} -> {k, Enum.join(msgs, "; ")} end)
+    |> Map.new()
+  end
+
+  defp db_error_message(kind) when kind in [:create_board, :edit_board, :archive_board],
+    do: "Database error saving board."
+
+  defp db_error_message(_), do: "Database error saving category."
+
+  defp reset_modal(state),
+    do: %{
+      state
+      | modal: nil,
+        modal_kind: nil,
+        edit_target: nil,
+        archive_target: nil
+    }
+
+  defp clamp_selection(%__MODULE__{rows: []} = state), do: %{state | selection_index: 0}
+
+  defp clamp_selection(%__MODULE__{rows: rows, selection_index: idx} = state) do
+    %{state | selection_index: min(idx, length(rows) - 1)}
+  end
+
+  # ---- Confirm modal (archive) ----------------------------------------------
+
+  defp handle_confirm_event(%{key: :escape}, state),
+    do: {reset_modal(state), []}
+
+  defp handle_confirm_event(%{key: :char, char: c}, state) when c in ["y", "Y"] do
+    kind = state.modal_kind
+    target = state.archive_target
+
+    result =
+      case kind do
+        :archive_board -> Boards.archive_board(state.current_user, target)
+        :archive_category -> Boards.archive_category(state.current_user, target)
+      end
+
+    case result do
+      {:ok, _} ->
+        new_state =
+          state
+          |> reset_modal()
+          |> refresh_lists()
+          |> clamp_selection()
+
+        {new_state, []}
+
+      {:error, :forbidden} ->
+        {reset_modal(state),
+         [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}
+
+      {:error, _} ->
+        {reset_modal(state), [{:error_modal, db_error_message(kind), :main_menu}]}
+    end
+  end
+
+  defp handle_confirm_event(%{key: :char, char: c}, state) when c in ["n", "N"] do
+    {reset_modal(state), []}
+  end
+
+  defp handle_confirm_event(_event, state), do: {state, []}
+end

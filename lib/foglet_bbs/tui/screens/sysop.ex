@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.SiteForm
   alias Foglet.TUI.Screens.Sysop.State
@@ -91,8 +92,12 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
-  defp render_tab_body("BOARDS", _ss, theme),
-    do: placeholder("Board and category management will arrive in Phase 2.", theme)
+  defp render_tab_body("BOARDS", ss, theme) do
+    case ss.boards_view do
+      nil -> placeholder("Press any key to load boards and categories.", theme)
+      view -> BoardsView.render(view, theme)
+    end
+  end
 
   defp render_tab_body("LIMITS", ss, theme) do
     case ss.limits_form do
@@ -150,6 +155,11 @@ defmodule Foglet.TUI.Screens.Sysop do
         sub = ss.limits_form || LimitsForm.init(current_user: state.current_user)
         {new_sub, events} = LimitsForm.handle_key(event, sub)
         apply_submodule_result(state, ss, :limits_form, new_sub, sub, events)
+
+      "BOARDS" ->
+        sub = ss.boards_view || BoardsView.init(current_user: state.current_user)
+        {new_sub, events} = BoardsView.handle_key(event, sub)
+        apply_submodule_result(state, ss, :boards_view, new_sub, sub, events)
 
       _ ->
         :no_match
