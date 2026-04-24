@@ -15,17 +15,13 @@ defmodule FogletBbs.Repo.Migrations.CreateModActions do
       timestamps(type: :utc_datetime_usec, updated_at: false)
     end
 
-    create constraint(:mod_actions, :kind_must_be_hide_oneliner,
-             check: "kind = 'hide_oneliner'"
-           )
+    create constraint(:mod_actions, :kind_must_be_hide_oneliner, check: "kind = 'hide_oneliner'")
 
     create constraint(:mod_actions, :target_kind_must_be_oneliner,
              check: "target_kind = 'oneliner'"
            )
 
-    create constraint(:mod_actions, :reason_must_not_be_blank,
-             check: "btrim(reason) <> ''"
-           )
+    create constraint(:mod_actions, :reason_must_not_be_blank, check: "btrim(reason) <> ''")
 
     create index(:mod_actions, [:inserted_at])
     create index(:mod_actions, [:mod_id, :inserted_at])

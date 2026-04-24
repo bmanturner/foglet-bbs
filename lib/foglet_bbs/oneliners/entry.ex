@@ -35,4 +35,18 @@ defmodule Foglet.Oneliners.Entry do
     |> validate_required([:body, :user_id])
     |> validate_length(:body, min: 1, max: 120)
   end
+
+  @doc """
+  Builds a changeset for a trusted moderation hide operation.
+
+  The moderator id is passed separately and applied programmatically; it is not
+  accepted from caller-controlled attrs.
+  """
+  @spec hide_changeset(t(), String.t(), Ecto.UUID.t()) :: Ecto.Changeset.t()
+  def hide_changeset(entry, reason, moderator_id) do
+    entry
+    |> change(hidden: true, hidden_reason: reason, hidden_by_id: moderator_id)
+    |> update_change(:hidden_reason, &String.trim/1)
+    |> validate_required([:hidden, :hidden_reason, :hidden_by_id])
+  end
 end

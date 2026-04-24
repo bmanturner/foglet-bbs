@@ -9,6 +9,8 @@ defmodule Foglet.Oneliners do
   import Ecto.Query, warn: false
 
   alias Foglet.Accounts.User
+  alias Foglet.Authorization
+  alias Foglet.Moderation
   alias Foglet.Oneliners.Entry
   alias FogletBbs.Repo
 
@@ -56,11 +58,42 @@ defmodule Foglet.Oneliners do
     )
   end
 
+  @doc """
+  Hides a visible oneliner after actor authorization and reason validation.
+
+  Oneliners are site-scoped in v1.1. The actor must have a permitted `:site`
+  scope for `:hide_oneliner`; board-only scopes intentionally do not authorize
+  this mutation.
+  """
+  @spec hide_entry(User.t() | nil, Entry.t() | Ecto.UUID.t(), String.t()) ::
+          {:ok, Entry.t()} | {:error, :forbidden | :not_found | Ecto.Changeset.t()}
+  def hide_entry(actor, entry_or_id, reason) do
+    with {:ok, entry} <- fetch_entry(entry_or_id),
+         :ok <- authorize_hide(actor),
+         {:ok, changeset} <- hide_changeset(entry, actor, reason) do
+      Repo.transact(fn ->
+        with {:ok, hidden_entry} <- Repo.update(changeset) do
+          hidden_entry = Repo.preload(hidden_entry, :user)
+
+          _action =
+            Moderation.record_hide_oneliner!(
+              actor,
+              hidden_entry,
+              hidden_entry.hidden_reason,
+              oneliner_metadata(hidden_entry)
+            )
+
+          {:ok, hidden_entry}
+        end
+      end)
+    end
+  end
+
   defp ensure_not_latest_visible_user(repo, %User{} = user) do
     latest =
       repo.one(
         from e in Entry,
-          where: e.hidden == false,
+          where: not e.hidden,
           order_by: [desc: e.inserted_at],
           limit: 1
       )
@@ -78,4 +111,48 @@ defmodule Foglet.Oneliners do
   end
 
   defp bounded_limit(_limit), do: @entry_limit_default
+
+  defp fetch_entry(%Entry{} = entry), do: {:ok, Repo.preload(entry, :user)}
+
+  defp fetch_entry(entry_id) when is_binary(entry_id) do
+    case Repo.get(Entry, entry_id) do
+      nil -> {:error, :not_found}
+      entry -> {:ok, Repo.preload(entry, :user)}
+    end
+  end
+
+  defp fetch_entry(_entry_or_id), do: {:error, :not_found}
+
+  defp authorize_hide(%User{} = actor) do
+    actor
+    |> Authorization.scopes_for(:hide_oneliner)
+    |> Enum.filter(&(&1 == :site))
+    |> Enum.find(fn scope ->
+      Bodyguard.permit(Foglet.Authorization, :hide_oneliner, actor, scope) == :ok
+    end)
+    |> case do
+      nil -> {:error, :forbidden}
+      _scope -> :ok
+    end
+  end
+
+  defp authorize_hide(_actor), do: {:error, :forbidden}
+
+  defp hide_changeset(%Entry{} = entry, %User{} = actor, reason) do
+    hidden_by_id = actor.id
+    changeset = Entry.hide_changeset(entry, to_string(reason), hidden_by_id)
+
+    if changeset.valid? do
+      {:ok, changeset}
+    else
+      {:error, changeset}
+    end
+  end
+
+  defp oneliner_metadata(%Entry{} = entry) do
+    %{
+      "body" => entry.body,
+      "author_handle" => entry.user.handle
+    }
+  end
 end

@@ -3,9 +3,9 @@ defmodule Foglet.OnelinersTest do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.Moderation.Action
   alias Foglet.Oneliners
   alias Foglet.Oneliners.Entry
-  alias Foglet.Moderation.Action
   alias FogletBbs.AccountsFixtures
   alias FogletBbs.Repo
 
@@ -152,7 +152,6 @@ defmodule Foglet.OnelinersTest do
     end
 
     test "regular, nil, pending, suspended, deleted, and board-scope-only actors are forbidden without side effects" do
-      author = AccountsFixtures.user_fixture()
       actors = [
         AccountsFixtures.user_fixture(),
         nil,
@@ -163,6 +162,7 @@ defmodule Foglet.OnelinersTest do
       ]
 
       for actor <- actors do
+        author = AccountsFixtures.user_fixture()
         {:ok, entry} = Oneliners.create_entry(author, %{body: "line #{System.unique_integer()}"})
         before_action_count = Repo.aggregate(Action, :count)
 
@@ -178,13 +178,15 @@ defmodule Foglet.OnelinersTest do
 
     test "blank and whitespace reasons are invalid before persistence and create no audit" do
       actor = operator_fixture(:mod)
-      author = AccountsFixtures.user_fixture()
 
       for reason <- ["", "   "] do
+        author = AccountsFixtures.user_fixture()
         {:ok, entry} = Oneliners.create_entry(author, %{body: "line #{System.unique_integer()}"})
         before_action_count = Repo.aggregate(Action, :count)
 
-        assert {:error, %Ecto.Changeset{} = changeset} = Oneliners.hide_entry(actor, entry, reason)
+        assert {:error, %Ecto.Changeset{} = changeset} =
+                 Oneliners.hide_entry(actor, entry, reason)
+
         assert {"can't be blank", _} = Keyword.fetch!(changeset.errors, :hidden_reason)
 
         reloaded_entry = Repo.get!(Entry, entry.id)
