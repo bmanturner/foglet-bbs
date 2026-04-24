@@ -5,6 +5,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
   alias Foglet.Accounts
   alias Foglet.Config
+  alias Foglet.Sessions.Session
+  alias Foglet.TUI.App
   alias Foglet.TUI.Screens.Account
   alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
@@ -281,6 +283,153 @@ defmodule Foglet.TUI.Screens.AccountTest do
             :ok
         end
       end
+    end
+  end
+
+  describe "App Account save command handling" do
+    test "successful save persists profile and preferences and refreshes active session snapshots" do
+      user = AccountsFixtures.user_fixture()
+
+      {:ok, session_pid} =
+        start_supervised(
+          {Session, [user_id: user.id, handle: user.handle, role: user.role]},
+          id: :account_save_success_session
+        )
+
+      state = %App{
+        current_screen: :account,
+        current_user: user,
+        session_context: %{
+          session_pid: session_pid,
+          timezone: "Etc/UTC",
+          time_format: "12h",
+          theme_id: "gray",
+          theme: Theme.resolve(:gray)
+        },
+        session_pid: session_pid,
+        terminal_size: {80, 24},
+        screen_state: %{
+          account:
+            Account.init_screen_state(current_user: user)
+            |> Map.put(:profile_dirty?, true)
+            |> Map.put(:prefs_dirty?, true)
+            |> Map.put(:candidate_theme_id, "amber")
+        }
+      }
+
+      {state, []} =
+        App.update(
+          {:account_save_profile,
+           %{location: "Mist Harbor", tagline: "low clouds", real_name: "Alice Example"}},
+          state
+        )
+
+      {state, []} =
+        App.update(
+          {:account_save_prefs,
+           %{
+             timezone: "America/Chicago",
+             preferences: %{"time_format" => "24h"},
+             theme: "amber"
+           }},
+          state
+        )
+
+      persisted = Accounts.get_user!(user.id)
+
+      assert persisted.location == "Mist Harbor"
+      assert persisted.tagline == "low clouds"
+      assert persisted.real_name == "Alice Example"
+      assert persisted.timezone == "America/Chicago"
+      assert persisted.preferences["time_format"] == "24h"
+      assert persisted.theme == "amber"
+
+      assert state.current_user.id == user.id
+      assert state.current_user.location == "Mist Harbor"
+      assert state.current_user.timezone == "America/Chicago"
+      assert state.current_user.preferences["time_format"] == "24h"
+      assert state.current_user.theme == "amber"
+
+      assert state.session_context.timezone == "America/Chicago"
+      assert state.session_context.time_format == "24h"
+      assert state.session_context.theme_id == "amber"
+      assert state.session_context.theme == Theme.resolve(:amber)
+
+      account_state = state.screen_state.account
+      refute account_state.profile_dirty?
+      refute account_state.prefs_dirty?
+      assert account_state.candidate_theme_id == nil
+      assert account_state.profile_errors == %{}
+      assert account_state.prefs_errors == %{}
+
+      _ = :sys.get_state(session_pid)
+      session_state = Session.get_state(session_pid)
+      assert session_state.timezone == "America/Chicago"
+      assert session_state.time_format == "24h"
+      assert session_state.theme_id == "amber"
+      assert session_state.theme == Theme.resolve(:amber)
+    end
+
+    test "failed save renders errors and leaves active snapshots unchanged" do
+      user =
+        AccountsFixtures.user_fixture(%{
+          location: "Original Cove",
+          timezone: "Etc/UTC",
+          preferences: %{"time_format" => "12h"},
+          theme: "gray"
+        })
+
+      {:ok, session_pid} =
+        start_supervised(
+          {Session, [user_id: user.id, handle: user.handle, role: user.role]},
+          id: :account_save_failure_session
+        )
+
+      state = %App{
+        current_screen: :account,
+        current_user: user,
+        session_context: %{
+          session_pid: session_pid,
+          timezone: "Etc/UTC",
+          time_format: "12h",
+          theme_id: "gray",
+          theme: Theme.resolve(:gray)
+        },
+        session_pid: session_pid,
+        terminal_size: {80, 24},
+        screen_state: %{
+          account: Account.init_screen_state(current_user: user) |> Map.put(:prefs_dirty?, true)
+        }
+      }
+
+      original_user = state.current_user
+      original_context = state.session_context
+      original_session = Session.get_state(session_pid)
+
+      {new_state, []} =
+        App.update(
+          {:account_save_prefs,
+           %{
+             timezone: "Not/AZone",
+             preferences: %{"time_format" => "24h"},
+             theme: "amber"
+           }},
+          state
+        )
+
+      assert new_state.current_user == original_user
+      assert new_state.session_context == original_context
+
+      _ = :sys.get_state(session_pid)
+      assert Session.get_state(session_pid).timezone == original_session.timezone
+      assert Session.get_state(session_pid).time_format == original_session.time_format
+      assert Session.get_state(session_pid).theme_id == original_session.theme_id
+
+      assert %{timezone: message} = new_state.screen_state.account.prefs_errors
+      assert String.contains?(message, "invalid")
+
+      flat = Account.render(Map.from_struct(new_state)) |> collect_text_values()
+      assert Enum.any?(flat, &String.contains?(&1, "Timezone error:"))
     end
   end
 
