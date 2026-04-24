@@ -186,6 +186,9 @@ defmodule Foglet.Accounts do
   defp ensure_not_deleted(%User{deleted_at: nil}), do: :ok
   defp ensure_not_deleted(%User{}), do: {:error, :deleted}
 
+  defp ensure_not_self(%User{id: id}, %User{id: id}), do: {:error, :invalid_transition}
+  defp ensure_not_self(_actor, _user), do: :ok
+
   defp permit_status_transition(:pending, :active), do: :ok
   defp permit_status_transition(:pending, :rejected), do: :ok
   defp permit_status_transition(:active, :suspended), do: :ok
@@ -268,6 +271,7 @@ defmodule Foglet.Accounts do
     with :ok <- Bodyguard.permit(Foglet.Authorization, :manage_user_status, actor, :site),
          {:ok, status} <- normalize_status(target_status),
          {:ok, user} <- fetch_status_target(target),
+         :ok <- ensure_not_self(actor, user),
          :ok <- ensure_not_deleted(user),
          :ok <- permit_status_transition(user.status, status),
          {:ok, updated} <- user |> User.status_changeset(%{status: status}) |> Repo.update() do

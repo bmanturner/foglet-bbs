@@ -292,6 +292,15 @@ defmodule Foglet.AccountsTest do
       end
     end
 
+    test "sysop cannot change their own status through the administration boundary" do
+      sysop = user_with_status(:active, "sysopself", :sysop)
+
+      assert {:error, :invalid_transition} =
+               Accounts.transition_user_status(sysop, sysop, :suspended)
+
+      assert Accounts.get_user!(sysop.id).status == :active
+    end
+
     test "non-active non-sysop actors are forbidden before target mutation" do
       target = user_with_status(:pending, "forbiddentarget")
 
