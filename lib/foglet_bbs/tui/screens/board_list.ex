@@ -3,8 +3,8 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   @behaviour Foglet.TUI.Screen
 
-  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.BoardList.State
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Display.Tree
@@ -193,7 +193,7 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp category_node(%{category: category, boards: boards}) do
     %{
-      id: :"category-#{category.id}",
+      id: {:category, category.id},
       label: category.name,
       children: Enum.map(boards, &board_node/1),
       data: %{kind: :category, category: category}
@@ -207,7 +207,7 @@ defmodule Foglet.TUI.Screens.BoardList do
          unread_count: unread_count
        }) do
     %{
-      id: :"board-#{board.id}",
+      id: {:board, board.id},
       label: board_label(board, subscribed?, required?, unread_count),
       children: [],
       data: %{
