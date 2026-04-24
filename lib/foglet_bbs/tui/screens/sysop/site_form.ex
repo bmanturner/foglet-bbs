@@ -210,6 +210,32 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   end
 
   defp submit(state) do
+    case validate_delivery_verification_pair(state) do
+      {:ok, state} ->
+        submit_visible_keys(state)
+
+      {:error, state} ->
+        {state, []}
+    end
+  end
+
+  defp validate_delivery_verification_pair(state) do
+    delivery_mode = Map.get(state.drafts, "delivery_mode")
+    require_verification = Map.get(state.drafts, "require_email_verification")
+
+    if delivery_mode == "no_email" and require_verification == true do
+      state =
+        state
+        |> set_error("delivery_mode", "No-email mode cannot require email verification")
+        |> set_error("require_email_verification", "Email verification requires delivery_mode=email")
+
+      {:error, state}
+    else
+      {:ok, state}
+    end
+  end
+
+  defp submit_visible_keys(state) do
     visible = visible_keys(state)
 
     Enum.reduce_while(visible, {state, []}, fn key, {acc_state, acc_events} ->
