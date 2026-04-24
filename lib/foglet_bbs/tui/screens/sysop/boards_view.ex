@@ -469,8 +469,6 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         {%{state | modal: form}, []}
 
       {:error, :forbidden} ->
-        _ = kind
-
         {reset_modal(state),
          [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}
     end
