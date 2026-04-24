@@ -14,12 +14,16 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   """
 
   alias Foglet.TUI.Widgets.Input.Tabs
+  alias Foglet.TUI.Screens.Shared.InvitesState
+  alias Foglet.TUI.Screens.ShellVisibility
 
-  @tabs ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS"]
+  @base_tabs ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS"]
 
   @type t :: %__MODULE__{
           tabs: Tabs.t(),
           active_tab: non_neg_integer(),
+          tab_labels: [String.t()],
+          invites: InvitesState.t(),
           site_form: term() | nil,
           limits_form: term() | nil,
           boards_view: term() | nil,
@@ -29,6 +33,8 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   defstruct [
     :tabs,
     active_tab: 0,
+    tab_labels: @base_tabs,
+    invites: InvitesState.new(),
     site_form: nil,
     limits_form: nil,
     boards_view: nil,
@@ -38,9 +44,66 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
     active = Keyword.get(opts, :active, 0)
-    %__MODULE__{tabs: Tabs.init(tabs: @tabs, active: active), active_tab: active}
+    labels = tab_labels(opts)
+    active = clamp_active(active, labels)
+
+    %__MODULE__{
+      tabs: Tabs.init(tabs: labels, active: active),
+      active_tab: active,
+      tab_labels: labels,
+      invites: Keyword.get(opts, :invites, InvitesState.new())
+    }
   end
 
   @spec tab_labels() :: [String.t()]
-  def tab_labels, do: @tabs
+  def tab_labels, do: @base_tabs
+
+  @spec tab_labels(t() | keyword() | boolean()) :: [String.t()]
+  def tab_labels(%__MODULE__{tab_labels: labels}), do: labels
+
+  def tab_labels(opts) when is_list(opts) do
+    opts
+    |> invites_visible?()
+    |> tab_labels()
+  end
+
+  def tab_labels(invites_visible?) when is_boolean(invites_visible?) do
+    if invites_visible?, do: @base_tabs ++ ["INVITES"], else: @base_tabs
+  end
+
+  @spec refresh_tabs(t(), keyword()) :: t()
+  def refresh_tabs(%__MODULE__{} = state, opts) do
+    labels = tab_labels(opts)
+    active = clamp_active(state.active_tab, labels)
+
+    if labels == state.tab_labels and active == state.active_tab do
+      state
+    else
+      %{
+        state
+        | tabs: Tabs.init(tabs: labels, active: active),
+          active_tab: active,
+          tab_labels: labels
+      }
+    end
+  end
+
+  defp invites_visible?(opts) do
+    case Keyword.fetch(opts, :invites_visible?) do
+      {:ok, visible?} when is_boolean(visible?) ->
+        visible?
+
+      :error ->
+        ShellVisibility.invites_visible?(
+          Keyword.get(opts, :current_user),
+          Keyword.get(opts, :session_context)
+        )
+    end
+  end
+
+  defp clamp_active(active, labels) when is_integer(active) do
+    active |> max(0) |> min(length(labels) - 1)
+  end
+
+  defp clamp_active(_active, _labels), do: 0
 end

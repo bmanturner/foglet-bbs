@@ -104,7 +104,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
     test "appends INVITES for sysop_only, mods, and any_user sysop policies", %{state: state} do
       for policy <- ["sysop_only", "mods", "any_user"] do
         state = with_invite_policy(state, policy)
-        ss = Sysop.init_screen_state(current_user: state.current_user, session_context: state.session_context)
+
+        ss =
+          Sysop.init_screen_state(
+            current_user: state.current_user,
+            session_context: state.session_context
+          )
 
         assert SysopState.tab_labels(ss) == [
                  "SITE",
@@ -129,7 +134,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
     test "does not expose Sysop INVITES to nil or non-sysop users" do
       for role <- [nil, :user, :mod] do
         state = build_state(role) |> with_invite_policy("sysop_only")
-        ss = Sysop.init_screen_state(current_user: state.current_user, session_context: state.session_context)
+
+        ss =
+          Sysop.init_screen_state(
+            current_user: state.current_user,
+            session_context: state.session_context
+          )
 
         refute "INVITES" in SysopState.tab_labels(ss)
 
@@ -155,7 +165,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: state}
     end
 
-    test "advances through all five tabs with Right arrow (0→1→2→3→4, then wraps)", %{
+    test "advances through visible tabs with Right arrow", %{
       state: state
     } do
       {state1, tab1} =
@@ -178,10 +188,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
         end
 
-      # Past the last tab, the Raxol Tabs widget wraps back to 0; handle_key
-      # simply reflects that (WR-03: no wrap-detection heuristic). Accept either
-      # clamp-at-4 or wrap-to-0 so this test survives a future widget-behavior
-      # change without silently re-introducing the "lie about :no_match" hack.
       {_state5, tab5} =
         case Sysop.handle_key(%{key: :right}, state4) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
@@ -192,7 +198,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert tab2 == 2
       assert tab3 == 3
       assert tab4 == 4
-      assert tab5 in [0, 4]
+      assert tab5 == 5
     end
 
     test "digit '5' jumps to USERS tab (index 4)", %{state: state} do
@@ -202,7 +208,13 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "digit '6' jumps to INVITES tab when visible", %{state: state} do
       state = with_invite_policy(state, "sysop_only")
-      ss = Sysop.init_screen_state(current_user: state.current_user, session_context: state.session_context)
+
+      ss =
+        Sysop.init_screen_state(
+          current_user: state.current_user,
+          session_context: state.session_context
+        )
+
       state = put_in(state, [:screen_state, :sysop], ss)
 
       {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "6"}, state)

@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.SiteForm
@@ -54,10 +55,11 @@ defmodule Foglet.TUI.Screens.Sysop do
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
     content = build_content(ss, theme)
+    jump_hint = if "INVITES" in State.tab_labels(ss), do: "1-6", else: "1-5"
 
     ScreenFrame.render(state, "Sysop", content, [
       {"←/→", "Tab"},
-      {"1-5", "Jump"},
+      {jump_hint, "Jump"},
       {"Q", "Back"}
     ])
   end
@@ -74,7 +76,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp build_content(ss, theme) do
-    active_label = Enum.at(State.tab_labels(), ss.active_tab)
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
     body = render_tab_body(active_label, ss, theme)
 
     column style: %{gap: 0} do
@@ -117,6 +119,9 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp render_tab_body("USERS", _ss, theme),
     do: placeholder("User administration will arrive in a later phase.", theme)
 
+  defp render_tab_body("INVITES", ss, theme),
+    do: InvitesSurface.render(ss.invites, theme)
+
   defp placeholder(copy, theme) do
     column style: %{gap: 0} do
       [text(copy, fg: theme.warning.fg)]
@@ -150,7 +155,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp delegate_to_active_tab(event, state, ss) do
-    case Enum.at(State.tab_labels(), ss.active_tab) do
+    case Enum.at(State.tab_labels(ss), ss.active_tab) do
       "SITE" -> delegate_to_submodule(event, state, ss, :site_form, SiteForm)
       "LIMITS" -> delegate_to_submodule(event, state, ss, :limits_form, LimitsForm)
       "BOARDS" -> delegate_to_submodule(event, state, ss, :boards_view, BoardsView)
@@ -197,9 +202,21 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp get_screen_state(state) do
-    case get_in(state.screen_state, [:sysop]) do
-      %State{} = ss -> ss
-      _ -> init_screen_state([])
-    end
+    ss =
+      case get_in(state.screen_state, [:sysop]) do
+        %State{} = ss ->
+          ss
+
+        _ ->
+          init_screen_state(
+            current_user: state.current_user,
+            session_context: state.session_context
+          )
+      end
+
+    State.refresh_tabs(ss,
+      invites_visible?:
+        ShellVisibility.invites_visible?(state.current_user, state.session_context)
+    )
   end
 end
