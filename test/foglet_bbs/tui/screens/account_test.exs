@@ -1,23 +1,28 @@
 defmodule Foglet.TUI.Screens.AccountTest do
-  use ExUnit.Case, async: true
+  use FogletBbs.DataCase, async: false
 
   import Foglet.TUI.RenderHelpers
 
   alias Foglet.TUI.Screens.Account
+  alias FogletBbs.AccountsFixtures
 
-  defp build_state(role \\ :user) do
+  defp build_state(user \\ %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}, session_context \\ %{}) do
     %Foglet.TUI.App{
       current_screen: :account,
-      current_user: %Foglet.Accounts.User{id: "u1", handle: "alice", role: role},
-      session_context: %{},
+      current_user: user,
+      session_context: session_context,
       terminal_size: {80, 24},
       screen_state: %{}
     }
     |> Map.from_struct()
   end
 
+  defp build_state_for_role(role, session_context \\ %{}) do
+    build_state(%Foglet.Accounts.User{id: "u1", handle: "alice", role: role}, session_context)
+  end
+
   setup do
-    %{state: build_state(:user)}
+    %{state: build_state_for_role(:user)}
   end
 
   describe "init_screen_state/1" do
@@ -41,19 +46,68 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "PREFS"))
     end
 
-    test "omits INVITES when InvitesSurface.visible?/2 returns false", %{state: state} do
+    test "omits INVITES when InvitesSurface.visible?/2 returns false" do
       # role: :user with sysop_only policy => not visible
-      state = put_in(state, [:screen_state, :account], Account.init_screen_state())
+      state =
+        :user
+        |> build_state_for_role(%{invite_code_generators: "sysop_only"})
+        |> put_in([:screen_state, :account], Account.init_screen_state())
+
       flat = Account.render(state) |> collect_text_values()
       refute Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
     test "includes INVITES when InvitesSurface.visible?/2 returns true" do
       # role: :sysop => always visible per D-07
-      state = build_state(:sysop)
+      state = build_state_for_role(:sysop)
       state = put_in(state, [:screen_state, :account], Account.init_screen_state(role: :sysop))
       flat = Account.render(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
+    end
+
+    test "any_user policy shows INVITES for a regular user" do
+      # any_user
+      state =
+        :user
+        |> build_state_for_role(%{invite_code_generators: "any_user"})
+        |> put_in([:screen_state, :account], Account.init_screen_state())
+
+      flat = Account.render(state) |> collect_text_values()
+      assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
+    end
+
+    test "mods and sysop_only policies hide INVITES for a regular user" do
+      # mods sysop_only
+      for policy <- ["mods", "sysop_only"] do
+        state =
+          :user
+          |> build_state_for_role(%{invite_code_generators: policy})
+          |> put_in([:screen_state, :account], Account.init_screen_state())
+
+        flat = Account.render(state) |> collect_text_values()
+        refute Enum.any?(flat, &String.contains?(&1, "INVITES"))
+      end
+    end
+
+    test "nil user does not see INVITES under any_user policy" do
+      # nil user
+      state = build_state(nil, %{invite_code_generators: "any_user"})
+      flat = Account.render(state) |> collect_text_values()
+      refute Enum.any?(flat, &String.contains?(&1, "INVITES"))
+    end
+
+    test "visibility changes in session_context rebuild tab list on render" do
+      state =
+        :user
+        |> build_state_for_role(%{invite_code_generators: "sysop_only"})
+        |> put_in([:screen_state, :account], Account.init_screen_state())
+
+      hidden_flat = Account.render(state) |> collect_text_values()
+      refute Enum.any?(hidden_flat, &String.contains?(&1, "INVITES"))
+
+      visible_state = %{state | session_context: %{invite_code_generators: "any_user"}}
+      visible_flat = Account.render(visible_state) |> collect_text_values()
+      assert Enum.any?(visible_flat, &String.contains?(&1, "INVITES"))
     end
 
     test "renders scaffold-only placeholder copy (no fake save buttons)", %{state: state} do
@@ -77,6 +131,16 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "Right arrow advances active_tab via Tabs.handle_event/2", %{state: state} do
       {:update, new_state, _cmds} = Account.handle_key(%{key: :right}, state)
       assert new_state.screen_state.account.active_tab == 1
+    end
+
+    test "visibility changes in session_context rebuild tab list on handle-key", %{state: state} do
+      state = %{state | session_context: %{invite_code_generators: "any_user"}}
+
+      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "3"}, state)
+
+      assert new_state.screen_state.account.active_tab == 2
+      flat = Account.render(new_state) |> collect_text_values()
+      assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
     test "digit '2' jumps to second tab (index 1)", %{state: state} do
