@@ -28,7 +28,7 @@ defmodule Foglet.TUI.Screens.BoardList do
         {"j/k", "Select"},
         {"←/→", "Collapse/Expand"},
         {"Enter", "Open"},
-        {"s/u", "Subscribe"},
+        {"s/u", "Subscribe/Unsubscribe"},
         {"Q", "Back"}
       ]
     )
