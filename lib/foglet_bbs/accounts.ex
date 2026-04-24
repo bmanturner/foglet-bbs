@@ -51,10 +51,10 @@ defmodule Foglet.Accounts do
   """
   @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def register_user(attrs) do
-    if Foglet.Config.registration_mode() == "invite_only" do
-      register_invite_only_user(attrs)
-    else
-      register_open_user(attrs)
+    case Foglet.Config.registration_mode() do
+      "invite_only" -> register_invite_only_user(attrs)
+      "sysop_approved" -> register_pending_user(attrs)
+      _open -> register_open_user(attrs)
     end
   end
 

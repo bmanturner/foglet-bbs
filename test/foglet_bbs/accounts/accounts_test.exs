@@ -1,14 +1,27 @@
 defmodule Foglet.AccountsTest do
-  use FogletBbs.DataCase, async: true
+  use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts
   alias Foglet.Accounts.{SSHKey, User, UserToken}
   alias Foglet.Boards.{Board, Category}
+  alias Foglet.Config
   alias Foglet.Posts.Post
   alias Foglet.Threads.Thread
   alias FogletBbs.AccountsFixtures
 
   describe "register_user/1 (IDNT-01)" do
+    setup do
+      Config.init_cache()
+      current_registration_mode = Config.get("registration_mode", "open")
+
+      on_exit(fn ->
+        Config.put!("registration_mode", current_registration_mode)
+        Config.invalidate("registration_mode")
+      end)
+
+      :ok
+    end
+
     test "creates a user with hashed password" do
       attrs = AccountsFixtures.valid_user_attributes(%{password: "opensesame"})
       assert {:ok, %User{} = user} = Accounts.register_user(attrs)
@@ -19,6 +32,13 @@ defmodule Foglet.AccountsTest do
     test "returns {:error, changeset} on invalid attrs" do
       assert {:error, cs} = Accounts.register_user(%{})
       refute cs.valid?
+    end
+
+    test "creates pending users in sysop-approved registration mode" do
+      Config.put!("registration_mode", "sysop_approved")
+
+      attrs = AccountsFixtures.valid_user_attributes()
+      assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
     end
   end
 
