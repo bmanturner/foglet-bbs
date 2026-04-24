@@ -1,9 +1,11 @@
 defmodule Foglet.TUI.Screens.LoginTest do
   use FogletBbs.DataCase, async: false
 
+  alias Foglet.Config
   alias Foglet.TUI.Screens.Login
   alias Foglet.TUI.Widgets.Input.TextInput
 
+  import Foglet.TUI.RenderHelpers
   import FogletBbs.AccountsFixtures
 
   defp base_state(mode \\ "open") do
@@ -53,6 +55,36 @@ defmodule Foglet.TUI.Screens.LoginTest do
     |> Map.from_struct()
   end
 
+  defp reset_request_state(identifier) do
+    identifier_input = TextInput.init(value: identifier) |> text_input_at_end()
+
+    %Foglet.TUI.App{
+      current_screen: :login,
+      session_context: %{registration_mode: "open"},
+      terminal_size: {80, 24},
+      screen_state: %{
+        login: %{
+          sub: :reset_request,
+          focused_field: :identifier,
+          identifier_input: identifier_input,
+          message: nil
+        }
+      }
+    }
+    |> Map.from_struct()
+  end
+
+  setup do
+    original_delivery_mode = Config.get("delivery_mode", "no_email")
+
+    on_exit(fn ->
+      Config.put!("delivery_mode", original_delivery_mode)
+      Config.invalidate("delivery_mode")
+    end)
+
+    :ok
+  end
+
   describe "init_screen_state/1 (AUDIT-19)" do
     test "returns minimal menu sub-state" do
       assert Login.init_screen_state([]) == %{sub: :menu}
@@ -74,6 +106,27 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "renders login form without crashing when in login_form sub" do
       assert _ = Login.render(form_state(handle: "alice", password: "secret"))
+    end
+
+    test "renders forgot password only in email delivery mode" do
+      Config.put!("delivery_mode", "email")
+      email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
+      assert email_text =~ "[F] Forgot password"
+
+      Config.put!("delivery_mode", "no_email")
+      no_email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
+      refute no_email_text =~ "Forgot password"
+    end
+
+    test "reset request form renders browser-free copy" do
+      Config.put!("delivery_mode", "email")
+
+      text = Login.render(reset_request_state("alice")) |> collect_text_values() |> Enum.join("\n")
+
+      assert text =~ "Handle or email:"
+      refute text =~ "/users/reset_password"
+      refute text =~ "http://"
+      refute text =~ "https://"
     end
   end
 
@@ -104,6 +157,17 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:update, new_state, _} = Login.handle_key(%{key: :char, char: "L"}, base_state())
       assert get_in(new_state, [:screen_state, :login, :sub]) == :login_form
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
+    end
+
+    test "'F' enters reset_request sub-state only in email delivery mode" do
+      Config.put!("delivery_mode", "email")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "F"}, base_state())
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :identifier
+
+      Config.put!("delivery_mode", "no_email")
+      assert :no_match = Login.handle_key(%{key: :char, char: "F"}, base_state())
     end
 
     test "unknown key returns :no_match in menu sub" do
@@ -224,6 +288,62 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
   end
 
+  describe "handle_key/2 — reset request subflow" do
+    test "typing updates the identifier field" do
+      Config.put!("delivery_mode", "email")
+      state = reset_request_state("ali")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "c"}, state)
+
+      assert get_in(new_state, [
+               :screen_state,
+               :login,
+               :identifier_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "alic"
+    end
+
+    test "enter submits and shows generic success copy for unknown identifiers" do
+      Config.put!("delivery_mode", "email")
+      state = reset_request_state("unknown@example.test")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :message]) ==
+               "If an active account matches, reset instructions will be sent by email."
+
+      rendered =
+        Login.render(new_state)
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert rendered =~ "If an active account matches"
+      refute rendered =~ "/users/reset_password"
+      refute rendered =~ "http://"
+      refute rendered =~ "https://"
+    end
+
+    test "enter reports unavailable if delivery mode is disabled" do
+      Config.put!("delivery_mode", "no_email")
+      state = reset_request_state("alice")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :message]) ==
+               "Password reset by email is unavailable on this Foglet."
+    end
+
+    test "escape returns to menu" do
+      state = reset_request_state("alice")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :escape}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
+      assert get_in(new_state, [:screen_state, :login, :identifier_input]) == nil
+    end
+  end
+
   describe "login form submission" do
     test "valid credentials emit {:promote_session, user} command" do
       password = "correcthorsebatterystaple"
@@ -314,6 +434,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       assert %{type: :error, message: msg} = new_state.modal
       assert msg =~ "pending"
+      refute msg =~ "notification"
+      refute msg =~ "email"
     end
   end
 
