@@ -303,6 +303,30 @@ defmodule Foglet.Accounts do
   end
 
   @doc """
+  Request terminal-native password reset delivery for a handle or email.
+
+  In email delivery mode this function is enumeration-safe: active matches,
+  unknown identifiers, deleted accounts, inactive accounts, and provider
+  failures all return the same outward result.
+  """
+  @spec request_password_reset_delivery(String.t()) ::
+          {:ok, :generic_response} | {:error, :unavailable}
+  def request_password_reset_delivery(identifier) when is_binary(identifier) do
+    case Foglet.Config.delivery_mode() do
+      "no_email" ->
+        {:error, :unavailable}
+
+      "email" ->
+        identifier
+        |> String.trim()
+        |> find_reset_delivery_user()
+        |> maybe_deliver_password_reset()
+
+        {:ok, :generic_response}
+    end
+  end
+
+  @doc """
   Verify an email code for `user`. On success, confirms the user (sets `confirmed_at`)
   and returns `{:ok, confirmed_user}`. On failure returns:
     - `{:error, :invalid_code}` — code did not match any non-expired verify token
@@ -346,6 +370,26 @@ defmodule Foglet.Accounts do
             t.inserted_at <= ago(^validity, "minute")
 
     Repo.exists?(query)
+  end
+
+  defp find_reset_delivery_user(""), do: nil
+
+  defp find_reset_delivery_user(identifier) do
+    case get_user_by_handle(identifier) || get_user_by_email(identifier) do
+      %User{status: :active, deleted_at: nil} = user -> user
+      _other -> nil
+    end
+  end
+
+  defp maybe_deliver_password_reset(nil), do: :ok
+
+  defp maybe_deliver_password_reset(%User{} = user) do
+    {raw_token, token_struct} = UserToken.build_email_token(user, "reset_password")
+
+    with {:ok, _token} <- Repo.insert(token_struct) do
+      _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
+      :ok
+    end
   end
 
   @doc """

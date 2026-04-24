@@ -1,3 +1,8 @@
+defmodule FogletBbs.AccountsTest.FailingMailerAdapter do
+  def validate_config(_config), do: :ok
+  def deliver(_email, _config), do: {:error, :forced_failure}
+end
+
 defmodule Foglet.AccountsTest do
   use FogletBbs.DataCase, async: false
 
@@ -10,10 +15,6 @@ defmodule Foglet.AccountsTest do
   alias FogletBbs.AccountsFixtures
 
   import Swoosh.TestAssertions
-
-  defmodule FailingMailerAdapter do
-    def deliver(_email, _config), do: {:error, :forced_failure}
-  end
 
   describe "register_user/1 (IDNT-01)" do
     setup do
@@ -489,12 +490,15 @@ defmodule Foglet.AccountsTest do
         refute email.text_body =~ "/users/reset_password"
         refute email.text_body =~ "http://"
         refute email.text_body =~ "https://"
+        true
       end)
     end
 
     test "email mode returns a generic response and delivers for an active email match" do
       Config.put!("delivery_mode", "email")
-      user = AccountsFixtures.user_fixture(%{handle: "emailreset", email: "emailreset@example.test"})
+
+      user =
+        AccountsFixtures.user_fixture(%{handle: "emailreset", email: "emailreset@example.test"})
 
       assert {:ok, :generic_response} =
                Accounts.request_password_reset_delivery("emailreset@example.test")
@@ -511,6 +515,7 @@ defmodule Foglet.AccountsTest do
       Config.put!("delivery_mode", "email")
       deleted = AccountsFixtures.user_fixture(%{handle: "deletedreset"})
       {:ok, _deleted} = Accounts.delete_user(deleted)
+
       pending =
         AccountsFixtures.user_fixture(%{handle: "pendingreset"})
         |> User.status_changeset(%{status: :pending})
