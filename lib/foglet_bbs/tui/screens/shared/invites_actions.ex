@@ -101,8 +101,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
   defp error_message(%Changeset{} = changeset) do
     changeset
     |> Changeset.traverse_errors(fn {message, _opts} -> message end)
-    |> Enum.map(fn {field, messages} -> "#{field} #{Enum.join(messages, ", ")}" end)
-    |> Enum.join("; ")
+    |> Enum.map_join("; ", fn {field, messages} -> "#{field} #{Enum.join(messages, ", ")}" end)
     |> case do
       "" -> "Invite could not be saved."
       message -> message
