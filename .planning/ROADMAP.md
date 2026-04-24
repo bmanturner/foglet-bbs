@@ -38,7 +38,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Milestone Goal:** Offered registration, account, posting, subscription, and sysop configuration flows are honest, operational, and enforce their rules before Foglet is presented as a credible pre-alpha.
 
 - [ ] **Phase 9: Delivery Modes and Onboarding Honesty** - Verification, reset, and no-email onboarding paths match the configured delivery mode.
-- [ ] **Phase 10: User Status Administration** - Sysops can approve, reject, suspend, and reactivate users through actor-aware terminal and break-glass workflows. Sysop receive email upon new user awaiting approval when email is available.
+- [x] **Phase 10: User Status Administration** - Sysops can approve, reject, suspend, and reactivate users through actor-aware terminal and break-glass workflows. Sysop receive email upon new user awaiting approval when email is available. (completed 2026-04-24)
 - [ ] **Phase 11: Posting Policy Enforcement** - Board posting policy and locked-thread restrictions are enforced before board-server writes.
 - [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata (when last successful login with key was made).
 - [ ] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions.
@@ -81,7 +81,7 @@ Plans:
 - [x] 10-01-PLAN.md — Rejected status persistence and Accounts transition boundary
 - [x] 10-02-PLAN.md — Sysop USERS tab status administration
 - [x] 10-03-PLAN.md — Break-glass user status Mix task
-- [ ] 10-04-PLAN.md — Approval/rejection delivery and status login copy
+- [x] 10-04-PLAN.md — Approval/rejection delivery and status login copy
 **UI hint**: yes
 
 ### Phase 11: Posting Policy Enforcement
@@ -165,7 +165,7 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 7. Oneliners and Main Menu Social Strip | v1.1 | 3/3 | Complete | 2026-04-24 |
 | 8. Moderation Workspace Population and Scope-Aware Operations | v1.1 | 4/4 | Complete | 2026-04-24 |
 | 9. Delivery Modes and Onboarding Honesty | v1.2 | 0/TBD | Not started | - |
-| 10. User Status Administration | v1.2 | 3/4 | In Progress|  |
+| 10. User Status Administration | v1.2 | 4/4 | Complete   | 2026-04-24 |
 | 11. Posting Policy Enforcement | v1.2 | 0/TBD | Not started | - |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 1/4 | In Progress|  |
