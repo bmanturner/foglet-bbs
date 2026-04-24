@@ -194,6 +194,14 @@ defmodule Foglet.Boards do
   @spec get_board_by_slug!(String.t()) :: Board.t()
   def get_board_by_slug!(slug), do: Repo.get_by!(Board, slug: slug)
 
+  @doc "Get a board by slug. Returns nil if not found."
+  @spec get_board_by_slug(String.t()) :: Board.t() | nil
+  def get_board_by_slug(slug) when is_binary(slug), do: Repo.get_by(Board, slug: slug)
+
+  @doc "Get a board by slug. Returns nil if not found."
+  @spec get_board_by_slug(String.t()) :: Board.t() | nil
+  def get_board_by_slug(slug) when is_binary(slug), do: Repo.get_by(Board, slug: slug)
+
   @doc """
   List all non-archived boards in non-archived categories, ordered by
   category.display_order then board.display_order. Preloads :category.
