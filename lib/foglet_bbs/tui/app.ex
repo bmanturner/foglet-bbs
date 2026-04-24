@@ -192,6 +192,13 @@ defmodule Foglet.TUI.App do
         []
       end
 
+    clock =
+      if state.current_screen == :main_menu do
+        [subscribe_interval(60_000, :main_menu_clock_tick)]
+      else
+        []
+      end
+
     # PubSub subscriptions (Audit #12).
     #
     # Raxol's Lifecycle and Dispatcher do NOT route arbitrary Erlang messages
@@ -214,7 +221,7 @@ defmodule Foglet.TUI.App do
         []
       end
 
-    heartbeat ++ pubsub_subs
+    heartbeat ++ clock ++ pubsub_subs
   end
 
   # Compute which PubSub topics to subscribe to based on current screen and user.
