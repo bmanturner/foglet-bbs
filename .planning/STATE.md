@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 08 context gathered (assumptions mode)
-last_updated: "2026-04-24T04:12:18.771Z"
-last_activity: 2026-04-24 -- Phase 08 planning complete
+stopped_at: Phase 08 human UAT required
+last_updated: "2026-04-24T13:37:01Z"
+last_activity: 2026-04-24 -- Phase 08 code verification passed; human UAT required
 progress:
   total_phases: 10
   completed_phases: 9
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 07 — oneliners-and-main-menu-social-strip
+**Current focus:** Phase 08 — moderation-workspace-population-and-scope-aware-operations
 
 ## Current Position
 
-Phase: 07 (oneliners-and-main-menu-social-strip) — EXECUTING
-Plan: 1 of 3
-Status: Ready to execute
-Last activity: 2026-04-24 -- Phase 08 planning complete
+Phase: 08 (moderation-workspace-population-and-scope-aware-operations) — EXECUTING
+Plan: 4 of 4
+Status: Human UAT required before phase completion
+Last activity: 2026-04-24 -- Phase 08 code verification passed; human UAT required
 
 Progress: [█████████░] 85%
 
