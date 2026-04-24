@@ -416,19 +416,7 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp valid_invite_code?(code) when is_binary(code) and byte_size(code) > 0 do
-    if function_exported?(Foglet.Accounts, :consume_invite_code, 1) do
-      # apply/3 is intentional here: Accounts.consume_invite_code/1 does not exist yet
-      # (Phase 8). Using apply avoids a compile-time undefined-function warning.
-      # credo:disable-for-next-line Credo.Check.Refactor.Apply
-      case apply(Foglet.Accounts, :consume_invite_code, [code]) do
-        :ok -> true
-        _ -> false
-      end
-    else
-      # Accept any non-empty alphanumeric code when invite_codes table isn't ready.
-      # Phase 8 wires real invite code generation (D-04).
-      Regex.match?(~r/\A[A-Za-z0-9]{4,32}\z/, code)
-    end
+    Regex.match?(~r/\A[A-Z0-9]{16,64}\z/i, code)
   end
 
   defp valid_invite_code?(_), do: false

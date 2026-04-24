@@ -306,26 +306,29 @@ defmodule Foglet.TUI.Screens.RegisterTest do
   end
 
   describe "handle_wizard_event/2 — {:submit_step, :invite_code, value}" do
-    test "valid invite_code advances to :combined step, stores code in :collected, focused_field becomes :handle" do
-      state = invite_state(invite_code: "VALIDCODE1")
+    test "does not consume invite code during preflight and stores it for final registration" do
+      state = invite_state(invite_code: "VALIDINVITECODE1")
 
       {new_state, []} =
-        Register.handle_wizard_event({:submit_step, :invite_code, "VALIDCODE1"}, state)
+        Register.handle_wizard_event({:submit_step, :invite_code, "VALIDINVITECODE1"}, state)
 
       assert get_in(new_state, [:screen_state, :register, :step]) == :combined
       assert get_in(new_state, [:screen_state, :register, :focused_field]) == :handle
 
       assert get_in(new_state, [:screen_state, :register, :collected, :invite_code]) ==
-               "VALIDCODE1"
+               "VALIDINVITECODE1"
 
       assert get_in(new_state, [:screen_state, :register, :error]) == nil
     end
 
     test "invalid invite_code (too short / contains punctuation) stays on :invite_code with error" do
-      state = invite_state(invite_code: "no")
-      {new_state, _cmds} = Register.handle_wizard_event({:submit_step, :invite_code, "no"}, state)
+      state = invite_state(invite_code: "SHORTCODE123456")
+
+      {new_state, _cmds} =
+        Register.handle_wizard_event({:submit_step, :invite_code, "SHORTCODE123456"}, state)
+
       assert get_in(new_state, [:screen_state, :register, :step]) == :invite_code
-      assert get_in(new_state, [:screen_state, :register, :error]) != nil
+      assert get_in(new_state, [:screen_state, :register, :error]) == "Invalid code."
     end
 
     test "empty invite_code stays on :invite_code with error" do
@@ -378,7 +381,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       alias Foglet.TUI.App
 
       # Build state with :invite_code step and a pre-typed valid code.
-      state = invite_state(invite_code: "VALIDCODE1")
+      state = invite_state(invite_code: "VALIDINVITECODE1")
 
       # App.update returns {new_state, commands}.
       {new_state, _commands} = App.update({:key, %{key: :enter}}, state)
@@ -391,7 +394,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
              "expected focused_field to be :handle after advancing to :combined"
 
       assert get_in(new_state, [:screen_state, :register, :collected, :invite_code]) ==
-               "VALIDCODE1",
+               "VALIDINVITECODE1",
              "expected invite_code to be stored in :collected"
     end
   end
