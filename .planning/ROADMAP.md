@@ -118,9 +118,9 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   3. Invite-tab behavior is shared across surfaces rather than implemented in separate duplicated flows.
 **Plans**: 5 plans
   - [x] 04-01-PLAN.md — Wave 1: shared live invite state, actions, rendering, and tests [INVT-01, MODR-04, SYSO-05]
-  - [ ] 04-02-PLAN.md — Wave 2: Account INVITES policy-live visibility and shared action delegation [INVT-01]
-  - [ ] 04-03-PLAN.md — Wave 2: Moderation INVITES tab and shared moderator invite actions [INVT-01, MODR-04]
-  - [ ] 04-04-PLAN.md — Wave 2: Sysop INVITES tab and shared sysop invite actions [INVT-01, SYSO-05]
+  - [x] 04-02-PLAN.md — Wave 2: Account INVITES policy-live visibility and shared action delegation [INVT-01]
+  - [x] 04-03-PLAN.md — Wave 2: Moderation INVITES tab and shared moderator invite actions [INVT-01, MODR-04]
+  - [x] 04-04-PLAN.md — Wave 2: Sysop INVITES tab and shared sysop invite actions [INVT-01, SYSO-05]
   - [ ] 04-05-PLAN.md — Wave 3: cross-surface revoke/error regression coverage and `mix precommit` gate [INVT-01, MODR-04, SYSO-05]
 **UI hint**: yes
 
