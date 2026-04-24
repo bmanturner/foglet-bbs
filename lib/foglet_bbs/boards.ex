@@ -9,6 +9,8 @@ defmodule Foglet.Boards do
     * Phase 3: SSH/TUI (list_boards, subscribe, read pointer management)
   """
 
+  require Logger
+
   import Ecto.Query, warn: false
 
   alias Foglet.Boards.{Board, Category, ReadPointer, Subscription}
@@ -131,14 +133,13 @@ defmodule Foglet.Boards do
               {:ok, board}
 
             {:error, reason} ->
-              require Logger
-
               Logger.error(
                 "Failed to start Board Server for #{board.slug} (#{board.id}): #{inspect(reason)}. " <>
-                  "Board is inserted; a future application restart will start its server."
+                  "Rolling back the board insert so the caller can retry."
               )
 
-              {:ok, board}
+              _ = Repo.delete(board)
+              {:error, :board_server_unavailable}
           end
 
         error ->
