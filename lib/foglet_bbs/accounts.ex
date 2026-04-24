@@ -20,7 +20,7 @@ defmodule Foglet.Accounts do
 
   import Ecto.Query, warn: false
 
-  alias Foglet.Accounts.{Invite, SSHKey, User, UserToken}
+  alias Foglet.Accounts.{Email, Invite, SSHKey, User, UserToken}
   alias Foglet.Posts.Post
   alias FogletBbs.Repo
 
@@ -274,6 +274,31 @@ defmodule Foglet.Accounts do
     case Repo.insert(token_struct) do
       {:ok, _} -> {:ok, raw_code}
       {:error, cs} -> {:error, cs}
+    end
+  end
+
+  @doc """
+  Persist and attempt delivery of an email verification code.
+
+  Delivery is available only when `Foglet.Config.delivery_mode/0` is `"email"`.
+  Provider-specific errors are intentionally collapsed so TUI callers can keep
+  user-facing copy generic.
+  """
+  @spec deliver_verification_code(User.t()) ::
+          {:ok, :attempted} | {:error, :unavailable | :delivery_failed | Ecto.Changeset.t()}
+  def deliver_verification_code(%User{} = user) do
+    case Foglet.Config.delivery_mode() do
+      "email" ->
+        with {:ok, code} <- build_verify_code(user),
+             {:ok, _delivery} <- Foglet.Mailer.deliver(Email.verification_code(user, code)) do
+          {:ok, :attempted}
+        else
+          {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
+          {:error, _reason} -> {:error, :delivery_failed}
+        end
+
+      "no_email" ->
+        {:error, :unavailable}
     end
   end
 
