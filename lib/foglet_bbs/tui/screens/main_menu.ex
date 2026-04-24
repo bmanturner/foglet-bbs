@@ -22,6 +22,9 @@ defmodule Foglet.TUI.Screens.MainMenu do
   import Raxol.Core.Renderer.View
 
   @default_terminal_size {80, 24}
+  @oneliner_display_limit 5
+  @oneliner_handle_limit 12
+  @oneliner_body_limit 22
 
   @base_items [
     {"B", "Browse Boards"},
@@ -33,6 +36,8 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {"C", "Compose"}
   ]
 
+  @oneliner_item {"O", "Post Oneliner"}
+  @oneliner_key {"O", "Oneliner"}
   @logout_item {"Q", "Logout"}
   @logout_key {"Q", "Logout"}
 
@@ -46,13 +51,26 @@ defmodule Foglet.TUI.Screens.MainMenu do
     items = visible_menu_items(user)
     keys = visible_menu_keys(user)
 
-    content =
+    menu_panel =
       column style: %{gap: 0} do
         [text("Welcome back, #{handle || "guest"}.", fg: theme.primary.fg), text("")] ++
           Enum.map(items, fn {k, label} ->
             text("  [#{k}] #{label}", fg: theme.primary.fg)
           end)
       end
+
+    oneliners_panel =
+      column style: %{gap: 0} do
+        [text("Oneliners", fg: theme.primary.fg), text("")] ++ oneliner_rows(state, theme)
+      end
+
+    content =
+      split_pane(
+        direction: :horizontal,
+        ratio: {2, 3},
+        min_size: 24,
+        children: [menu_panel, oneliners_panel]
+      )
 
     ScreenFrame.render(state, "Main Menu", content, keys)
   end
@@ -74,6 +92,14 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
     {:update, %{state | current_screen: :new_thread, screen_state: new_screen_state},
      [{:load_boards_for_new_thread}]}
+  end
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["o", "O"] do
+    if state.current_user do
+      {:update, state, [{:open_oneliner_composer}]}
+    else
+      :no_match
+    end
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["a", "A"] do
@@ -119,15 +145,74 @@ defmodule Foglet.TUI.Screens.MainMenu do
     account = if ShellVisibility.account_visible?(user), do: [{"A", "Account"}], else: []
     moderation = if ShellVisibility.moderation_visible?(user), do: [{"M", "Moderation"}], else: []
     sysop = if ShellVisibility.sysop_visible?(user), do: [{"S", "Sysop"}], else: []
+    oneliner = if user, do: [@oneliner_item], else: []
 
-    @base_items ++ account ++ moderation ++ sysop ++ [@logout_item]
+    @base_items ++ account ++ moderation ++ sysop ++ oneliner ++ [@logout_item]
   end
 
   defp visible_menu_keys(user) do
     account = if ShellVisibility.account_visible?(user), do: [{"A", "Account"}], else: []
     moderation = if ShellVisibility.moderation_visible?(user), do: [{"M", "Mod"}], else: []
     sysop = if ShellVisibility.sysop_visible?(user), do: [{"S", "Sysop"}], else: []
+    oneliner = if user, do: [@oneliner_key], else: []
 
-    @base_keys ++ account ++ moderation ++ sysop ++ [@logout_key]
+    @base_keys ++ account ++ moderation ++ sysop ++ oneliner ++ [@logout_key]
+  end
+
+  defp oneliner_rows(state, theme) do
+    state
+    |> Map.get(:recent_oneliners, [])
+    |> Kernel.||([])
+    |> Enum.take(@oneliner_display_limit)
+    |> case do
+      [] ->
+        [text("No oneliners yet.", fg: theme.primary.fg)]
+
+      entries ->
+        Enum.map(entries, fn entry ->
+          text(oneliner_row(entry), fg: theme.primary.fg)
+        end)
+    end
+  end
+
+  defp oneliner_row(entry) do
+    handle =
+      entry
+      |> Map.get(:user)
+      |> user_handle()
+      |> clip(@oneliner_handle_limit)
+
+    body =
+      entry
+      |> Map.get(:body, "")
+      |> to_string()
+      |> single_line()
+      |> clip(@oneliner_body_limit)
+
+    "@#{handle}  #{body}"
+  end
+
+  defp user_handle(nil), do: "unknown"
+
+  defp user_handle(user) do
+    user
+    |> Map.get(:handle, "unknown")
+    |> case do
+      handle when is_binary(handle) and handle != "" -> handle
+      _other -> "unknown"
+    end
+  end
+
+  defp single_line(value) do
+    value
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+  end
+
+  defp clip(value, limit) do
+    value
+    |> String.graphemes()
+    |> Enum.take(limit)
+    |> Enum.join()
   end
 end

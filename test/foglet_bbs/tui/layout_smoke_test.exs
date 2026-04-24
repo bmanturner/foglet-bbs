@@ -132,7 +132,12 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   test "main_menu renders welcome and all menu items at distinct y positions" do
     user = %{handle: "bob", id: "u1", status: :active, role: :member}
-    state = %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
+
+    state =
+      %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
+      |> Map.from_struct()
+      |> Map.put(:recent_oneliners, [%{body: "hello", user: %{handle: "alice"}}])
+
     tree = MainMenu.render(state)
     positioned = apply(tree)
 
@@ -147,6 +152,12 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     assert Enum.any?(texts, &String.contains?(&1, "[Q]")),
            "expected '[Q] Logout' text, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &String.contains?(&1, "Oneliners")),
+           "expected 'Oneliners' panel title, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &String.contains?(&1, "@alice  hello")),
+           "expected '@alice  hello' row, got: #{inspect(texts)}"
 
     ys = elements |> Enum.map(& &1.y) |> Enum.uniq()
 
