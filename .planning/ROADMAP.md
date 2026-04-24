@@ -60,7 +60,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 Plans:
 - [x] 09-01-PLAN.md — Delivery-mode config and Swoosh foundation
 - [x] 09-02-PLAN.md — Verification delivery and Verify resend honesty
-- [ ] 09-03-PLAN.md — Terminal password-reset request flow
+- [x] 09-03-PLAN.md — Terminal password-reset request flow
 - [x] 09-04-PLAN.md — Sysop delivery-mode visibility and invalid-combo blocking
 - [ ] 09-05-PLAN.md — Break-glass reset task delivery-mode honesty
 - [ ] 09-06-PLAN.md — Cross-surface delivery-copy regression guard
@@ -127,7 +127,12 @@ Plans:
   3. User can unsubscribe from a board when doing so does not break required access assumptions.
   4. Sysop can inspect or adjust a user's board subscriptions from the Sysop surface or a break-glass Mix task.
   5. Empty board-list and new-thread states point to the real available subscription action instead of nonexistent sysop work.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 13-01-PLAN.md — Board subscription policy and context boundary
+- [ ] 13-02-PLAN.md — Terminal board directory subscribe/unsubscribe workflow
+- [ ] 13-03-PLAN.md — Break-glass board subscription Mix task
+- [ ] 13-04-PLAN.md — Sysop board policy field and Phase 13 regression gate
 **UI hint**: yes
 
 ### Phase 14: Launch Hygiene and Operator Notes
