@@ -165,6 +165,11 @@ defmodule Foglet.TUI.Screens.Sysop do
     apply_submodule_result(state, ss, field, new_sub, sub, events)
   end
 
+  # Submodule contract: a submodule must emit at most one `:error_modal`
+  # event per `handle_key/2` return. Only the first matching event is
+  # surfaced; any additional error_modal events in the same batch are
+  # silently dropped. Multi-error submissions should be combined into a
+  # single message at the submodule boundary.
   defp apply_submodule_result(state, ss, field, new_sub, old_sub, events) do
     new_ss = Map.put(ss, field, new_sub)
     new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
