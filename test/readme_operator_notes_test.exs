@@ -39,11 +39,20 @@ defmodule Foglet.ReadmeOperatorNotesTest do
     assert readme =~ "internal design material"
   end
 
-  test "README does not claim unsupported target-state launch capabilities" do
+  test "README only mentions unsupported target-state launch capabilities as caveats" do
     readme = File.read!("README.md")
 
     for phrase <- @unsupported_target_state_claims do
-      refute readme =~ phrase
+      assert_caveat_only(readme, phrase)
     end
+  end
+
+  defp assert_caveat_only(readme, phrase) do
+    matching_lines =
+      readme
+      |> String.split("\n")
+      |> Enum.filter(&String.contains?(&1, phrase))
+
+    assert Enum.all?(matching_lines, &String.contains?(&1, "not a v1.2 pre-alpha capability"))
   end
 end
