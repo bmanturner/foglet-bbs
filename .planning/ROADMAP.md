@@ -116,7 +116,12 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   1. Authorized actor can open the shared `INVITES` tab from Account, Moderation, or Sysop according to `invite_code_generators`.
   2. When invite generation is restricted to sysops or moderators, the allowed operator invite surfaces provide unlimited invite generation for the permitted role.
   3. Invite-tab behavior is shared across surfaces rather than implemented in separate duplicated flows.
-**Plans**: TBD
+**Plans**: 5 plans
+  - [ ] 04-01-PLAN.md — Wave 1: shared live invite state, actions, rendering, and tests [INVT-01, MODR-04, SYSO-05]
+  - [ ] 04-02-PLAN.md — Wave 2: Account INVITES policy-live visibility and shared action delegation [INVT-01]
+  - [ ] 04-03-PLAN.md — Wave 2: Moderation INVITES tab and shared moderator invite actions [INVT-01, MODR-04]
+  - [ ] 04-04-PLAN.md — Wave 2: Sysop INVITES tab and shared sysop invite actions [INVT-01, SYSO-05]
+  - [ ] 04-05-PLAN.md — Wave 3: cross-surface revoke/error regression coverage and `mix precommit` gate [INVT-01, MODR-04, SYSO-05]
 **UI hint**: yes
 
 ### Phase 5: Account Preferences and Live Session Refresh
