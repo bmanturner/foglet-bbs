@@ -10,6 +10,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.Config.Schema
   alias Foglet.TUI.Screens.Sysop
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
+  alias FogletBbs.Repo
 
   @config_keys Map.keys(Schema.defaults())
 
@@ -453,6 +454,83 @@ defmodule Foglet.TUI.Screens.SysopTest do
         end
 
       assert new_state.screen_state.sysop.limits_form.drafts == before_drafts
+    end
+  end
+
+  # =========================================================================
+  # USERS tab tests (Plan 10-02, USER-01 through USER-03)
+  # =========================================================================
+
+  alias Foglet.TUI.Screens.Sysop.UsersView
+
+  defp put_users_view(state, uv) do
+    ss = state.screen_state.sysop
+    new_ss = %{ss | users_view: uv}
+    %{state | screen_state: Map.put(state.screen_state, :sysop, new_ss)}
+  end
+
+  defp persist_user(attrs) do
+    attrs
+    |> FogletBbs.AccountsFixtures.user_fixture()
+    |> Ecto.Changeset.change(%{
+      role: Map.get(attrs, :role, :user),
+      status: Map.get(attrs, :status, :active),
+      deleted_at: Map.get(attrs, :deleted_at)
+    })
+    |> Repo.update!()
+  end
+
+  defp activate_users_tab(state, sysop) do
+    state = %{state | current_user: sysop}
+    state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
+    {:update, state, _} = Sysop.handle_key(%{key: :down}, state)
+    uv = %{state.screen_state.sysop.users_view | selection_index: 0}
+    put_users_view(state, uv)
+  end
+
+  describe "USERS tab render (USER-01)" do
+    test "renders pending, active, suspended, and rejected non-deleted handles", %{state: state} do
+      sysop = persist_user(%{handle: "sysopusers", role: :sysop})
+      pending = persist_user(%{handle: "pendinguser", email: "pending@example.test", status: :pending})
+      active = persist_user(%{handle: "activeuser", email: "active@example.test"})
+
+      suspended =
+        persist_user(%{handle: "suspendeduser", email: "suspended@example.test", status: :suspended})
+
+      rejected =
+        persist_user(%{handle: "rejecteduser", email: "rejected@example.test", status: :rejected})
+
+      _deleted =
+        persist_user(%{
+          handle: "deleteduser",
+          email: "deleted@example.test",
+          deleted_at: DateTime.utc_now()
+        })
+
+      state = activate_users_tab(state, sysop)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "User status administration")
+
+      for {status, user} <- [
+            {"pending", pending},
+            {"active", active},
+            {"suspended", suspended},
+            {"rejected", rejected}
+          ] do
+        assert String.contains?(flat, "#{status}  @#{user.handle}  #{user.email}")
+      end
+
+      refute String.contains?(flat, "deleteduser")
+    end
+
+    test "renders empty state and key hints when there are no administrable users" do
+      sysop = %Foglet.Accounts.User{id: Ecto.UUID.generate(), role: :sysop, status: :active}
+      view = UsersView.init(current_user: sysop)
+      flat = UsersView.render(view, Foglet.TUI.Theme.default()) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "No administrable users."))
+      assert Enum.any?(flat, &String.contains?(&1, "[A] Approve"))
     end
   end
 
