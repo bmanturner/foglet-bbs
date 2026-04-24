@@ -54,23 +54,23 @@
 
 | ID | Description | Research Support |
 |----|-------------|------------------|
-| MAIL-01 | Operator can configure SMTP delivery mode or explicit no-email mode, and verification/default behavior matches that mode. | Use `Foglet.Config.Schema` enum key, seed default, typed accessor, and `Sysop.SiteForm` placement. [VERIFIED: `.planning/REQUIREMENTS.md`; VERIFIED: `lib/foglet_bbs/config/schema.ex`; VERIFIED: `lib/foglet_bbs/tui/screens/sysop/site_form.ex`] |
-| MAIL-02 | User receives an email verification code after registration when SMTP delivery is configured and verification is required. | Wrap `Accounts.build_verify_code/1` in an Accounts delivery function that creates a Swoosh email and calls `Foglet.Mailer.deliver/1`. [VERIFIED: `lib/foglet_bbs/accounts.ex`; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
+| MAIL-01 | Operator can configure Swoosh email delivery mode or explicit no-email mode, and verification/default behavior matches that mode. | Use `Foglet.Config.Schema` enum key, seed default, typed accessor, and `Sysop.SiteForm` placement. The runtime mailer adapter can be SMTP, Mailgun, SendGrid, Postmark, SES, or any Swoosh-supported provider; the DB-backed mode should only distinguish `email` from `no_email`. [VERIFIED: `.planning/REQUIREMENTS.md`; VERIFIED: `lib/foglet_bbs/config/schema.ex`; VERIFIED: `lib/foglet_bbs/tui/screens/sysop/site_form.ex`; CITED: https://hexdocs.pm/swoosh/Swoosh.html] |
+| MAIL-02 | User receives an email verification code after registration when Swoosh email delivery is configured and verification is required. | Wrap `Accounts.build_verify_code/1` in an Accounts delivery function that creates a Swoosh email and calls `Foglet.Mailer.deliver/1`. [VERIFIED: `lib/foglet_bbs/accounts.ex`; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
 | MAIL-03 | User can request a fresh verification code from the Verify screen with cooldown-aware feedback. | Keep `Verify`'s resend cooldown and invalid-attempt cooldown state, replacing direct code generation with the Accounts delivery function. [VERIFIED: `lib/foglet_bbs/tui/screens/verify.ex`; VERIFIED: `test/foglet_bbs/tui/screens/verify_test.exs`] |
-| MAIL-04 | User can receive a password reset email when SMTP delivery is configured, while the existing Mix task remains available as a break-glass path. | Add a terminal login reset request backed by enumeration-safe Accounts delivery and update the Mix task to reflect delivery mode. [VERIFIED: `lib/foglet_bbs/tui/screens/login.ex`; VERIFIED: `lib/mix/tasks/foglet.user.reset_password.ex`; CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html] |
+| MAIL-04 | User can receive a password reset email when Swoosh email delivery is configured, while the existing Mix task remains available as a break-glass path. | Add a terminal login reset request backed by enumeration-safe Accounts delivery and update the Mix task to reflect delivery mode. [VERIFIED: `lib/foglet_bbs/tui/screens/login.ex`; VERIFIED: `lib/mix/tasks/foglet.user.reset_password.ex`; CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html] |
 | MAIL-05 | User-facing TUI copy never claims a code or notification was emailed unless Foglet actually attempted delivery. | Change Register, Login, Verify, and reset messages currently claiming email/notification without delivery. [VERIFIED: `lib/foglet_bbs/tui/screens/register.ex`; VERIFIED: `lib/foglet_bbs/tui/screens/verify.ex`; VERIFIED: `lib/foglet_bbs/tui/screens/login.ex`] |
-| MAIL-06 | Operator can retrieve verification, reset, or pending-approval delivery details through an explicit no-email/operator-visible workflow when SMTP delivery is disabled. | Phase 9 context narrows this to operator-visible delivery-mode implications and no-email unavailability, not user relay flows. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`] |
+| MAIL-06 | Operator can retrieve verification, reset, or pending-approval delivery details through an explicit no-email/operator-visible workflow when email delivery is disabled. | Phase 9 context narrows this to operator-visible delivery-mode implications and no-email unavailability, not user relay flows. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`] |
 </phase_requirements>
 
 ## Summary
 
-Phase 9 should add a small Swoosh-backed transactional delivery layer, not a general notification system. Swoosh is the locked email library, current on Hex as `1.25.0` as of 2026-04-02, and SMTP delivery still requires the separate `gen_smtp` dependency. [VERIFIED: Hex package page; CITED: https://hex.pm/packages/swoosh; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html]
+Phase 9 should add a small Swoosh-backed transactional delivery layer, not a general notification system. Swoosh is the locked email library, current on Hex as `1.25.0` as of 2026-04-02, and it supports both API-provider adapters and SMTP. SMTP delivery requires the separate `gen_smtp` dependency; API-provider adapters such as Mailgun, SendGrid, Postmark, and Amazon SES use their own Swoosh adapter configuration instead. [VERIFIED: Hex package page; CITED: https://hex.pm/packages/swoosh; CITED: https://hexdocs.pm/swoosh/Swoosh.html; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html]
 
 The established architecture is: runtime mode lives in `Foglet.Config`, delivery orchestration lives in `Foglet.Accounts`, email construction lives in a small mailer/email module pair, and TUI/Mix surfaces only consume typed results. [VERIFIED: `CLAUDE.md`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`; VERIFIED: `lib/foglet_bbs/config.ex`; VERIFIED: `lib/foglet_bbs/accounts.ex`]
 
 The largest implementation risks are false delivery copy, user enumeration in password reset, treating token generation as delivery, and accidentally creating browser or no-email relay workflows that the phase explicitly forbids. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`; CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html]
 
-**Primary recommendation:** Implement `Foglet.Accounts` delivery APIs that return enumeration-safe, UI-oriented result atoms, use `Foglet.Mailer` with `Swoosh.Adapters.SMTP` in email mode, use `Swoosh.Adapters.Test` in tests, and keep no-email mode as an explicit disabling mode rather than a relay path. [VERIFIED: codebase grep; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.Test.html]
+**Primary recommendation:** Implement `Foglet.Accounts` delivery APIs that return enumeration-safe, UI-oriented result atoms, use `Foglet.Mailer` as the only delivery boundary in email mode, use `Swoosh.Adapters.Test` in tests, and keep no-email mode as an explicit disabling mode rather than a relay path. Configure the concrete provider adapter in runtime config so Foglet can support SMTP, Mailgun, SendGrid, Postmark, SES, and other Swoosh adapters without changing Accounts or TUI code. [VERIFIED: codebase grep; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html; CITED: https://hexdocs.pm/swoosh/Swoosh.html; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.Test.html]
 
 ## Project Constraints (from CLAUDE.md)
 
@@ -90,8 +90,8 @@ The largest implementation risks are false delivery copy, user enumeration in pa
 | Capability | Primary Tier | Secondary Tier | Rationale |
 |------------|--------------|----------------|-----------|
 | Delivery mode config | API / Backend (`Foglet.Config`) | Database / Storage (`configuration`) | Non-secret mode is persisted, schematized, cached, and read through typed accessors. [VERIFIED: `lib/foglet_bbs/config.ex`; VERIFIED: `lib/foglet_bbs/config/schema.ex`] |
-| SMTP credentials and adapter settings | Runtime / OTP config | External SMTP provider | Secrets must not be stored in the `configuration` table; Swoosh reads mailer adapter config from OTP app config. [VERIFIED: `CLAUDE.md`; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
-| Verification code delivery | API / Backend (`Foglet.Accounts`) | External SMTP via Swoosh | Code persistence already exists in Accounts and delivery must wrap it rather than live in TUI. [VERIFIED: `lib/foglet_bbs/accounts.ex`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`] |
+| Provider credentials and adapter settings | Runtime / OTP config | External email provider | Secrets must not be stored in the `configuration` table; Swoosh reads mailer adapter config from OTP app config. [VERIFIED: `CLAUDE.md`; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
+| Verification code delivery | API / Backend (`Foglet.Accounts`) | External provider via Swoosh | Code persistence already exists in Accounts and delivery must wrap it rather than live in TUI. [VERIFIED: `lib/foglet_bbs/accounts.ex`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`] |
 | Verify screen cooldown feedback | Browser / Client equivalent: SSH TUI screen | API / Backend (`Foglet.Accounts`) | Screen owns local cooldown/buffer state, while Accounts owns token generation and delivery attempt. [VERIFIED: `lib/foglet_bbs/tui/screens/verify.ex`; VERIFIED: `CLAUDE.md`] |
 | Password reset request | API / Backend (`Foglet.Accounts`) | SSH TUI Login screen | Enumeration-safe lookup, token persistence, and delivery belong in Accounts; Login only collects input and renders generic result copy. [VERIFIED: `lib/foglet_bbs/tui/screens/login.ex`; CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html] |
 | Operator break-glass reset | Mix task | API / Backend (`Foglet.Accounts`, `Foglet.Config`) | Task is an operator shell surface; delivery-mode policy and token operations must stay in contexts. [VERIFIED: `lib/mix/tasks/foglet.user.reset_password.ex`; VERIFIED: `CLAUDE.md`] |
@@ -102,8 +102,8 @@ The largest implementation risks are false delivery copy, user enumeration in pa
 
 | Library | Version | Purpose | Why Standard |
 |---------|---------|---------|--------------|
-| `swoosh` | `~> 1.25` (`1.25.0`, published 2026-04-02) | Compose, deliver, and test transactional email. | Current Swoosh docs define `Swoosh.Mailer` as an adapter wrapper and Hex lists SMTP/test support. [CITED: https://hex.pm/packages/swoosh; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
-| `gen_smtp` | `~> 1.3` (`1.3.0`, published 2025-05-30) | SMTP client used underneath `Swoosh.Adapters.SMTP`. | Swoosh SMTP adapter docs require adding `gen_smtp` to `mix.exs`. [CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html; CITED: https://hex.pm/packages/gen_smtp] |
+| `swoosh` | `~> 1.25` (`1.25.0`, published 2026-04-02) | Compose, deliver, and test transactional email through provider adapters. | Current Swoosh docs define `Swoosh.Mailer` as an adapter wrapper and list API-provider adapters plus SMTP/test support. [CITED: https://hex.pm/packages/swoosh; CITED: https://hexdocs.pm/swoosh/Swoosh.html; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
+| `gen_smtp` | `~> 1.3` (`1.3.0`, published 2025-05-30) | SMTP client used underneath `Swoosh.Adapters.SMTP`. | Add only when Foglet's documented runtime configuration includes SMTP. Swoosh API-provider adapters do not require `gen_smtp`. [CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html; CITED: https://hex.pm/packages/gen_smtp] |
 | `Swoosh.Adapters.Test` | from `swoosh` `1.25.0` | Assert delivered email in ExUnit. | Official adapter sends emails as messages to current process and pairs with `Swoosh.TestAssertions`. [CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.Test.html] |
 | `Foglet.Config` | existing | Runtime delivery mode and verification toggle access. | Existing code already provides schematized keys, validation, DB upsert, ETS invalidation, and typed accessors. [VERIFIED: `lib/foglet_bbs/config.ex`; VERIFIED: `lib/foglet_bbs/config/schema.ex`] |
 | `Foglet.Accounts.UserToken` | existing | Verification/reset token persistence. | Existing Accounts code already builds verification codes and reset email tokens. [VERIFIED: `lib/foglet_bbs/accounts.ex`; VERIFIED: `docs/DATA_MODEL.md`] |
@@ -120,7 +120,7 @@ The largest implementation risks are false delivery copy, user enumeration in pa
 
 | Instead of | Could Use | Tradeoff |
 |------------|-----------|----------|
-| Swoosh SMTP now | Oban-delivered background jobs | Out of scope: durable delivery queues/logs are deferred; current phase only needs attempted synchronous delivery and honest copy. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`; VERIFIED: `.planning/codebase/INTEGRATIONS.md`] |
+| Swoosh synchronous delivery now | Oban-delivered background jobs | Out of scope: durable delivery queues/logs are deferred; current phase only needs attempted synchronous delivery and honest copy. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`; VERIFIED: `.planning/codebase/INTEGRATIONS.md`] |
 | `Phoenix.Swoosh` templates | Plain `Swoosh.Email` text builders | Phoenix templates are useful for HTML/template rendering, but Foglet's product surface is terminal-first and Phase 9 needs simple transactional text copy. [CITED: https://hexdocs.pm/phoenix_swoosh/Phoenix.Swoosh.html; VERIFIED: `CLAUDE.md`] |
 | Browser reset routes | Terminal reset request plus operator break-glass task | Browser reset pages are explicitly out of scope and no route exists today. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`; VERIFIED: `lib/mix/tasks/foglet.user.reset_password.ex`] |
 
@@ -128,7 +128,7 @@ The largest implementation risks are false delivery copy, user enumeration in pa
 ```elixir
 # mix.exs
 {:swoosh, "~> 1.25"},
-{:gen_smtp, "~> 1.3"}
+{:gen_smtp, "~> 1.3"} # only required for Swoosh.Adapters.SMTP
 ```
 
 **Version verification:** `swoosh` latest is `1.25.0`, last updated Apr 02, 2026; `gen_smtp` latest is `1.3.0`, last updated May 30, 2025. [CITED: https://hex.pm/packages/swoosh; CITED: https://hex.pm/packages/gen_smtp]
@@ -146,19 +146,20 @@ Sysop Site Config
 Register / Login / Verify TUI
   -> Foglet.Accounts delivery API
   -> reads Foglet.Config.delivery_mode()
-  -> if "smtp": create token/code -> build Swoosh.Email -> Foglet.Mailer.deliver()
+  -> if "email": create token/code -> build Swoosh.Email -> Foglet.Mailer.deliver()
+  -> runtime config selects Swoosh provider adapter: SMTP, Mailgun, SendGrid, Postmark, SES, etc.
   -> if "no_email": return unavailable/skip result without token relay workflow
   -> TUI renders generic, mode-accurate copy
 
 Login Reset Request
   -> Foglet.Accounts.request_password_reset_delivery(identifier)
   -> same outward response for unknown/deleted/inactive/failure
-  -> for active match in SMTP mode: create reset token -> build email -> deliver
+  -> for active match in email mode: create reset token -> build email -> deliver
   -> TUI renders generic response, never browser URL
 
 Mix Break-Glass Reset
   -> reads Foglet.Config.delivery_mode()
-  -> SMTP mode: preserve operator reset behavior with honest wording
+  -> email mode: preserve operator reset behavior with honest wording
   -> no-email mode: do not present normal user reset delivery as available
 ```
 
@@ -179,7 +180,7 @@ lib/
 
 config/
 ├── config.exs                   # mailer default adapter or non-secret baseline
-├── runtime.exs                  # SMTP adapter settings from env
+├── runtime.exs                  # Swoosh provider adapter settings from env
 └── test.exs                     # Swoosh.Adapters.Test
 
 test/
@@ -211,7 +212,7 @@ end
 ```elixir
 # Source: verified Foglet context pattern + Swoosh.Mailer docs
 def deliver_verification_code(%User{} = user) do
-  if Foglet.Config.delivery_mode() == "smtp" do
+  if Foglet.Config.delivery_mode() == "email" do
     with {:ok, code} <- build_verify_code(user),
          email <- Foglet.Accounts.Email.verify_code(user, code),
          {:ok, _meta} <- Foglet.Mailer.deliver(email) do
@@ -233,7 +234,7 @@ end
 ```elixir
 # Source: OWASP Forgot Password Cheat Sheet + phase SPEC
 def request_password_reset_delivery(identifier) when is_binary(identifier) do
-  if Foglet.Config.delivery_mode() == "smtp" do
+  if Foglet.Config.delivery_mode() == "email" do
     identifier
     |> find_active_reset_candidate()
     |> maybe_deliver_reset_email()
@@ -248,7 +249,7 @@ end
 ### Anti-Patterns to Avoid
 
 - **Calling `Accounts.build_verify_code/1` from TUI as delivery:** This only persists a code; it does not attempt email. [VERIFIED: `lib/foglet_bbs/accounts.ex`; VERIFIED: `lib/foglet_bbs/tui/screens/verify.ex`]
-- **Putting SMTP credentials in `configuration`:** Phase decisions and project rules require secrets in runtime/environment config. [VERIFIED: `CLAUDE.md`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`]
+- **Putting provider credentials in `configuration`:** Phase decisions and project rules require secrets in runtime/environment config. [VERIFIED: `CLAUDE.md`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`]
 - **Returning different reset messages for unknown users:** OWASP identifies user enumeration as a common reset vulnerability and recommends consistent messages. [CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html]
 - **Adding browser reset pages:** Explicitly out of scope for this SSH-first milestone. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`; VERIFIED: `CLAUDE.md`]
 - **Using no-email mode as an operator relay workflow:** Phase 9 explicitly marks no-email verification/reset relay invalid. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`]
@@ -257,6 +258,7 @@ end
 
 | Problem | Don't Build | Use Instead | Why |
 |---------|-------------|-------------|-----|
+| Provider-specific delivery dispatch | Custom Mailgun/SendGrid/Postmark/SES clients or `case provider do` branches in Accounts | `Foglet.Mailer.deliver/1` with the configured Swoosh adapter | Swoosh already owns provider adapters; app code should build email structs and call the mailer boundary. [CITED: https://hexdocs.pm/swoosh/Swoosh.html; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
 | SMTP protocol delivery | Custom `:gen_tcp` SMTP client | `Swoosh.Adapters.SMTP` + `gen_smtp` | Swoosh officially wraps SMTP delivery through `gen_smtp`. [CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html] |
 | Email test capture | Custom process mailbox tracker | `Swoosh.Adapters.Test` + `Swoosh.TestAssertions` | Official test adapter sends emails as messages to the current process and is intended for tests. [CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.Test.html] |
 | Runtime config storage | New config table or env-only mode flag | Existing `Foglet.Config.Schema` + `Foglet.Config` typed accessor | Existing implementation already validates, persists, caches, and actor-authorizes runtime config. [VERIFIED: `lib/foglet_bbs/config.ex`; VERIFIED: `lib/foglet_bbs/config/schema.ex`] |
@@ -277,7 +279,7 @@ end
 ### Pitfall 2: Reset User Enumeration
 **What goes wrong:** Unknown, deleted, inactive, or delivery-failed requests receive distinct copy or timing. [CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html]  
 **Why it happens:** Implementers short-circuit on lookup failure or expose provider errors. [CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html]  
-**How to avoid:** Always return generic terminal copy in SMTP mode and log/provider-detail internally only if needed. [CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`]  
+**How to avoid:** Always return generic terminal copy in email mode and log/provider-detail internally only if needed. [CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`]  
 **Warning signs:** Tests assert "not found", "inactive", or "delivery failed" text on the user-facing reset path. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`]
 
 ### Pitfall 3: Invalid Config Combination Persists
@@ -286,10 +288,10 @@ end
 **How to avoid:** Add cross-field validation at the Sysop form save boundary and any operator Mix path that changes the mode. [VERIFIED: `lib/foglet_bbs/tui/screens/sysop/site_form.ex`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`]  
 **Warning signs:** `Schema.validate/2` alone is expected to catch cross-key invalidity. [VERIFIED: `lib/foglet_bbs/config/schema.ex`]
 
-### Pitfall 4: SMTP Secrets Stored in DB Config
-**What goes wrong:** SMTP username/password/API keys are persisted in `configuration`. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`]  
+### Pitfall 4: Provider Secrets Stored in DB Config
+**What goes wrong:** SMTP usernames/passwords or API provider keys are persisted in `configuration`. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`]  
 **Why it happens:** Delivery mode and adapter credentials are conflated. [VERIFIED: `CLAUDE.md`]  
-**How to avoid:** Store only the non-secret enum in `Foglet.Config`; read SMTP settings from runtime env/OTP config. [CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html; VERIFIED: `CLAUDE.md`]  
+**How to avoid:** Store only the non-secret enum in `Foglet.Config`; read the selected Swoosh adapter and all provider settings from runtime env/OTP config. [CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html; VERIFIED: `CLAUDE.md`]  
 **Warning signs:** New config schema keys contain password, key, token, relay credentials, or provider secrets. [VERIFIED: `CLAUDE.md`]
 
 ### Pitfall 5: Test Adapter Mismatch
@@ -313,10 +315,18 @@ config :foglet_bbs, Foglet.Mailer,
   adapter: Swoosh.Adapters.Test
 ```
 
-### SMTP Runtime Shape
+### Provider Runtime Shape
 
 ```elixir
+# Source: https://hexdocs.pm/swoosh/Swoosh.html
+# Runtime config should choose exactly one concrete Swoosh adapter.
+config :foglet_bbs, Foglet.Mailer,
+  adapter: Swoosh.Adapters.Mailgun,
+  api_key: System.fetch_env!("FOGLET_MAILGUN_API_KEY"),
+  domain: System.fetch_env!("FOGLET_MAILGUN_DOMAIN")
+
 # Source: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html
+# Add {:gen_smtp, "~> 1.3"} only when using this adapter.
 config :foglet_bbs, Foglet.Mailer,
   adapter: Swoosh.Adapters.SMTP,
   relay: System.fetch_env!("FOGLET_SMTP_RELAY"),
@@ -352,7 +362,7 @@ end
 |--------------|------------------|--------------|--------|
 | Token generation named like delivery | Separate token creation from attempted delivery | Phase 9 locked decision, 2026-04-24 | TUI copy must be based on delivery attempt result, not token creation. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`] |
 | No mailer in repo | Swoosh `1.25.0` + SMTP adapter + test adapter | Swoosh latest verified 2026-04-24 | Add dependencies and project mailer instead of custom email logic. [CITED: https://hex.pm/packages/swoosh] |
-| Browser-style reset URL printed by task | Terminal reset request in SMTP mode and break-glass task with honest operator wording | Phase 9 locked decision, 2026-04-24 | User-facing reset must not expose `/users/reset_password/:token`. [VERIFIED: `lib/mix/tasks/foglet.user.reset_password.ex`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`] |
+| Browser-style reset URL printed by task | Terminal reset request in email mode and break-glass task with honest operator wording | Phase 9 locked decision, 2026-04-24 | User-facing reset must not expose `/users/reset_password/:token`. [VERIFIED: `lib/mix/tasks/foglet.user.reset_password.ex`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`] |
 | Pending approval promises email | Pending approval copy must not promise Phase 10 notification delivery | Phase 9 locked decision, 2026-04-24 | Update Register/Login copy before MAIL-07 exists. [VERIFIED: `lib/foglet_bbs/tui/screens/register.ex`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`] |
 
 **Deprecated/outdated:**
@@ -363,15 +373,15 @@ end
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | Use environment variable names like `FOGLET_SMTP_RELAY`, `FOGLET_SMTP_USERNAME`, `FOGLET_SMTP_PASSWORD`, and `FOGLET_SMTP_PORT`. [ASSUMED] | Code Examples | Operator docs/tests may need different env names if project conventions choose alternatives. |
-| A2 | `delivery_mode` enum strings should be `"smtp"` and `"no_email"`. [ASSUMED] | Architecture Patterns | Planner may choose clearer names such as `"swoosh_email"` and `"no_email"`; only exact two-state semantics are locked. |
+| A1 | Runtime env names should be adapter-specific, for example `FOGLET_MAILGUN_API_KEY`/`FOGLET_MAILGUN_DOMAIN` for Mailgun or `FOGLET_SMTP_RELAY`/`FOGLET_SMTP_USERNAME`/`FOGLET_SMTP_PASSWORD`/`FOGLET_SMTP_PORT` for SMTP. [ASSUMED] | Code Examples | Operator docs/tests may need different env names if project conventions choose alternatives. |
+| A2 | `delivery_mode` enum strings should be `"email"` and `"no_email"`. [ASSUMED] | Architecture Patterns | This keeps the persisted runtime mode provider-agnostic while adapter selection remains in OTP runtime config. |
 | A3 | Direct `Swoosh.Adapters.Test` assertions are sufficient for most Phase 9 tests. [ASSUMED] | Common Pitfalls | If delivery moves to a different process, tests may need `Swoosh.Adapters.Sandbox`. |
 
 ## Open Questions
 
 1. **Exact no-email operator retrieval wording**
    - What we know: no-email verification/reset relay is out of scope, but MAIL-06 says operator can retrieve delivery details through an explicit no-email/operator-visible workflow. [VERIFIED: `.planning/REQUIREMENTS.md`; VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-CONTEXT.md`]
-   - What's unclear: whether the planner should implement a read-only operator explanation surface only, or also expose existing break-glass generated details in SMTP mode. [ASSUMED]
+   - What's unclear: whether the planner should implement a read-only operator explanation surface only, or also expose existing break-glass generated details in email mode. [ASSUMED]
    - Recommendation: Follow CONTEXT D-11 and SPEC boundaries: no-email mode should make user reset unavailable and not generate relay details; operator surfaces should explain the implication explicitly. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`]
 
 2. **Email body exact copy**
@@ -386,14 +396,14 @@ end
 | Elixir | Build/tests | yes | 1.19.5 / OTP 28 | none needed. [VERIFIED: `elixir --version`] |
 | Mix | Dependency and test tasks | yes | 1.19.5 / OTP 28 | none needed. [VERIFIED: `mix --version`] |
 | Swoosh | Email delivery | no | not in `mix.exs` or `mix deps` | Add dependency. [VERIFIED: `mix.exs`; VERIFIED: `rtk mix deps`] |
-| gen_smtp | SMTP adapter | no | not in `mix.exs` or `mix deps` | Add dependency with Swoosh SMTP. [VERIFIED: `mix.exs`; VERIFIED: `rtk mix deps`; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html] |
-| SMTP service credentials | Runtime SMTP delivery | unknown | environment-specific | Tests use `Swoosh.Adapters.Test`; production docs must require env config. [ASSUMED] |
+| gen_smtp | SMTP adapter only | no | not in `mix.exs` or `mix deps` | Add dependency only if SMTP is documented as a supported runtime adapter. API-provider adapters do not need it. [VERIFIED: `mix.exs`; VERIFIED: `rtk mix deps`; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html] |
+| Provider credentials | Runtime email delivery | unknown | environment-specific | Tests use `Swoosh.Adapters.Test`; production docs must require env config for the selected Swoosh adapter. [ASSUMED] |
 
 **Missing dependencies with no fallback:**
-- `swoosh` and `gen_smtp` must be added for SMTP mode implementation. [VERIFIED: `mix.exs`; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html]
+- `swoosh` must be added for email mode implementation; `gen_smtp` must be added only if SMTP is included as a supported adapter. [VERIFIED: `mix.exs`; CITED: https://hexdocs.pm/swoosh/Swoosh.html; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html]
 
 **Missing dependencies with fallback:**
-- Real SMTP provider is not needed for automated tests because Swoosh provides a test adapter. [CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.Test.html]
+- Real provider credentials are not needed for automated tests because Swoosh provides a test adapter. [CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.Test.html]
 
 ## Validation Architecture
 
@@ -411,9 +421,9 @@ end
 | Req ID | Behavior | Test Type | Automated Command | File Exists? |
 |--------|----------|-----------|-------------------|--------------|
 | MAIL-01 | delivery mode schema/accessor and invalid no-email+verification config | unit/integration | `rtk mix test test/foglet_bbs/config/schema_test.exs test/foglet_bbs/tui/screens/sysop_site_form_test.exs` | partial; Wave 0 may add Sysop focused tests. [VERIFIED: `.planning/codebase/TESTING.md`] |
-| MAIL-02 | registration/login verification delivery attempts Swoosh in SMTP mode | integration | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/tui/screens/register_test.exs test/foglet_bbs/tui/screens/login_test.exs` | yes, update existing. [VERIFIED: test files grep] |
+| MAIL-02 | registration/login verification delivery attempts Swoosh in email mode | integration | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/tui/screens/register_test.exs test/foglet_bbs/tui/screens/login_test.exs` | yes, update existing. [VERIFIED: test files grep] |
 | MAIL-03 | Verify resend cooldown remains independent and delivery copy is honest | unit | `rtk mix test test/foglet_bbs/tui/screens/verify_test.exs` | yes. [VERIFIED: `test/foglet_bbs/tui/screens/verify_test.exs`] |
-| MAIL-04 | terminal reset request sends email only in SMTP mode and remains generic | unit/integration | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/tui/screens/login_test.exs test/mix/tasks/foglet_user_reset_password_test.exs` | partial; reset request UI tests need additions. [VERIFIED: `.planning/codebase/TESTING.md`] |
+| MAIL-04 | terminal reset request sends email only in email mode and remains generic | unit/integration | `rtk mix test test/foglet_bbs/accounts/accounts_test.exs test/foglet_bbs/tui/screens/login_test.exs test/mix/tasks/foglet_user_reset_password_test.exs` | partial; reset request UI tests need additions. [VERIFIED: `.planning/codebase/TESTING.md`] |
 | MAIL-05 | terminal/Mix copy has no false email/notification claims | unit/snapshot-style assertions | `rtk mix test test/foglet_bbs/tui/screens/register_test.exs test/foglet_bbs/tui/screens/login_test.exs test/foglet_bbs/tui/screens/verify_test.exs test/mix/tasks/foglet_user_reset_password_test.exs` | yes, update existing. [VERIFIED: test files grep] |
 | MAIL-06 | no-email operator-visible workflow makes reset/verification unavailable honestly | unit/integration | `rtk mix test test/foglet_bbs/tui/screens/sysop_site_form_test.exs test/mix/tasks/foglet_user_reset_password_test.exs` | partial; likely add focused tests. [VERIFIED: `.planning/codebase/TESTING.md`] |
 
@@ -441,7 +451,7 @@ end
 | V4 Access Control | yes | Sysop config writes use `Config.put/3` and Bodyguard authorization. [VERIFIED: `lib/foglet_bbs/config.ex`; VERIFIED: `CLAUDE.md`] |
 | V5 Input Validation | yes | Config enum/range validation through `Foglet.Config.Schema`; reset identifier normalized in Accounts. [VERIFIED: `lib/foglet_bbs/config/schema.ex`; ASSUMED] |
 | V6 Cryptography | yes | Reuse existing cryptographically-generated token/code helpers; do not create custom random token logic. [VERIFIED: `lib/foglet_bbs/accounts.ex`; CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html] |
-| V9 Communications | yes | SMTP credentials in runtime env; TLS/auth options configured through Swoosh SMTP. [VERIFIED: `CLAUDE.md`; CITED: https://hexdocs.pm/swoosh/Swoosh.Adapters.SMTP.html] |
+| V9 Communications | yes | Provider credentials in runtime env; TLS/auth options configured through the selected Swoosh adapter. [VERIFIED: `CLAUDE.md`; CITED: https://hexdocs.pm/swoosh/Swoosh.Mailer.html] |
 
 ### Known Threat Patterns for Foglet Phase 9
 
@@ -449,7 +459,7 @@ end
 |---------|--------|---------------------|
 | User enumeration through reset request | Information Disclosure | Uniform outward message for existent and non-existent accounts. [CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html] |
 | False delivery claims | Repudiation / Integrity | Copy only says email was attempted after Accounts calls Swoosh; no-email mode uses unavailable copy. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`] |
-| Secret leakage through DB config | Information Disclosure | Keep SMTP credentials in runtime/environment config. [VERIFIED: `CLAUDE.md`] |
+| Secret leakage through DB config | Information Disclosure | Keep provider credentials in runtime/environment config. [VERIFIED: `CLAUDE.md`] |
 | Token brute force or stale token use | Tampering / Elevation | Reuse existing expiring/single-use token semantics and cooldowns; preserve Verify cooldown tests. [VERIFIED: `lib/foglet_bbs/accounts.ex`; VERIFIED: `lib/foglet_bbs/tui/screens/verify.ex`] |
 | Host-header/browser reset confusion | Spoofing / Information Disclosure | Do not expose browser reset URLs to users in Phase 9. [VERIFIED: `.planning/phases/09-delivery-modes-and-onboarding-honesty/09-SPEC.md`; CITED: https://cheatsheetseries.owasp.org/cheatsheets/Forgot_Password_Cheat_Sheet.html] |
 
