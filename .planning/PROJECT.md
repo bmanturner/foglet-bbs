@@ -11,14 +11,23 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 ## Current State
 
 **Shipped version:** v1.1 Operations Surfaces & Invites on 2026-04-24.
+**Current milestone:** v1.2 Pre-Alpha Gap Closure.
 
 Foglet now has terminal-native Account, Moderation, and Sysop surfaces; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; and moderation hide/audit workflows.
 
 The chrome clock intentionally displays time only. It honors the user's timezone and 12h/24h preference; date display is not part of the accepted v1.1 behavior.
 
-## Next Milestone Goals
+## Current Milestone: v1.2 Pre-Alpha Gap Closure
 
-No next milestone is defined yet. Use `$gsd-new-milestone` to gather fresh requirements and build the next roadmap.
+**Goal:** Close the codebase-first gaps that would make offered Foglet flows or sysop-visible configuration options unusable or misleading before a credible pre-alpha launch.
+
+**Target features:**
+- Make email verification, password reset, pending approval, and no-email operation honest and operational.
+- Let sysops approve, reject, suspend, and reactivate users from both the TUI and break-glass Mix tasks.
+- Enforce board posting policies and locked-thread reply prevention in domain contexts before board-server writes.
+- Let users manage SSH keys from Account and ensure public-key authentication updates key metadata.
+- Add board subscription management so users can reach boards intentionally after account creation.
+- Cover visible sysop configuration options with real behavior, tests, and matching empty-state/help copy.
 
 ## Requirements
 
@@ -47,7 +56,12 @@ No next milestone is defined yet. Use `$gsd-new-milestone` to gather fresh requi
 
 ### Active
 
-- [ ] Define the next milestone requirements.
+- [ ] Email verification, password reset, pending-approval, and no-email flows are honest and operational.
+- [ ] Sysops can manage pending and existing user status through actor-aware workflows.
+- [ ] Board `postable_by` policy and locked-thread restrictions are enforced before post/thread creation.
+- [ ] Users can add, list, and revoke SSH keys from the terminal Account surface.
+- [ ] Users and sysops have a real board subscription management path that matches product copy.
+- [ ] Every visible sysop configuration option in the current product surface has a real effect or honest disabled/no-op copy.
 
 ### Out of Scope
 
@@ -93,10 +107,24 @@ The domain core is organized as Phoenix-style context modules backed by Ecto sch
 | Build a reusable invite-management surface embedded in account, moderation, and sysop screens | Invite generation rules vary by runtime config, but workflows and data model should stay consistent across roles | Good |
 | Store per-user time rendering preferences alongside other presentation preferences | Timezone and 12h/24h display are user-specific UI concerns that drive chrome and future timestamp rendering | Good |
 | Render chrome time without date | The user prefers time-only chrome; date was intentionally removed from the accepted v1.1 behavior | Good |
+| Treat pre-alpha readiness as gap closure before new reach features | The codebase-first audit found several visible flows that are incomplete or misleading; credible pre-alpha should make existing offered behavior complete before adding broader product surface | Pending |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
+**After each phase transition** (via `$gsd-transition`):
+1. Requirements invalidated? -> Move to Out of Scope with reason
+2. Requirements validated? -> Move to Validated with phase reference
+3. New requirements emerged? -> Add to Active
+4. Decisions to log? -> Add to Key Decisions
+5. "What This Is" still accurate? -> Update if drifted
+
+**After each milestone** (via `$gsd-complete-milestone`):
+1. Full review of all sections
+2. Core Value check - still the right priority?
+3. Audit Out of Scope - reasons still valid?
+4. Update Context with current state
+
 ---
-*Last updated: 2026-04-24 after v1.1 milestone completion*
+*Last updated: 2026-04-24 after starting v1.2 Pre-Alpha Gap Closure*

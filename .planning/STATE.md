@@ -1,17 +1,17 @@
 ---
 gsd_state_version: 1.0
-milestone: none
-milestone_name: none
-status: milestone_complete
-stopped_at: v1.1 shipped
-last_updated: "2026-04-24T14:57:01.334Z"
-last_activity: 2026-04-24 -- v1.1 Operations Surfaces & Invites shipped and archived
+milestone: v1.2
+milestone_name: Pre-Alpha Gap Closure
+status: defining_requirements
+stopped_at: requirements
+last_updated: "2026-04-24T15:00:00.000Z"
+last_activity: 2026-04-24 -- Milestone v1.2 Pre-Alpha Gap Closure started from GAP_MILESTONE.md
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 43
-  completed_plans: 43
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,13 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-24)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Planning next milestone.
+**Current focus:** v1.2 Pre-Alpha Gap Closure.
 
 ## Current Position
 
-Milestone v1.1 is complete and archived.
+Phase: Not started (defining requirements)
+Plan: -
+Status: Defining requirements
+Last activity: 2026-04-24 -- Milestone v1.2 started from GAP_MILESTONE.md
 
-Progress: [██████████] 100%
+Progress: [----------] 0%
 
 ## Accumulated Context
 
