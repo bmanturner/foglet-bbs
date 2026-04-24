@@ -11,6 +11,10 @@ defmodule Foglet.Threads do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.Accounts.User
+  alias Foglet.Boards
+  alias Foglet.Boards.Board
+  alias Foglet.PostingPolicy
   alias Foglet.Posts.Post
   alias Foglet.Threads.{ReadPointer, Thread, ThreadEntry}
   alias FogletBbs.Repo
@@ -38,7 +42,14 @@ defmodule Foglet.Threads do
   @spec create_thread(String.t(), String.t(), map()) ::
           {:ok, %{thread: Thread.t(), post: Post.t()}} | {:error, any()}
   def create_thread(board_id, user_id, attrs) do
-    Foglet.Boards.Server.create_thread(board_id, user_id, attrs)
+    user = if is_binary(user_id), do: Repo.get(User, user_id)
+    board = if is_binary(board_id), do: Repo.get(Board, board_id)
+
+    if PostingPolicy.can_post?(user, board) do
+      Boards.Server.create_thread(board_id, user_id, attrs)
+    else
+      {:error, :posting_not_allowed}
+    end
   end
 
   # ---------- Thread queries ----------
