@@ -409,7 +409,7 @@ defmodule Foglet.TUI.App do
 
     task =
       Foglet.TUI.Command.task(:load_boards, fn ->
-        {:boards_loaded, boards_mod.list_subscribed_boards(user)}
+        {:boards_loaded, boards_mod.board_directory_for(user)}
       end)
 
     {state, [task]}
@@ -417,6 +417,56 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:boards_loaded, boards}, state) do
     {%{state | board_list: boards}, []}
+  end
+
+  defp do_update({:subscribe_to_board, board_id}, state) do
+    user = state.current_user
+    boards_mod = domain_module(state, :boards)
+
+    task =
+      Foglet.TUI.Command.task(:subscribe_to_board, fn ->
+        {:board_subscription_changed, :subscribe,
+         boards_mod.subscribe_user_to_board(user, board_id)}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:unsubscribe_from_board, board_id}, state) do
+    user = state.current_user
+    boards_mod = domain_module(state, :boards)
+
+    task =
+      Foglet.TUI.Command.task(:unsubscribe_from_board, fn ->
+        {:board_subscription_changed, :unsubscribe,
+         boards_mod.unsubscribe_user_from_board(user, board_id)}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:board_subscription_changed, action, {:ok, _result}}, state) do
+    feedback =
+      case action do
+        :subscribe -> "Subscribed."
+        :unsubscribe -> "Unsubscribed."
+      end
+
+    state
+    |> put_board_list_feedback(feedback)
+    |> then(&do_update({:load_boards}, &1))
+  end
+
+  defp do_update({:board_subscription_changed, _action, {:error, :required_subscription}}, state) do
+    {put_board_list_feedback(state, "This board is a required subscription."), []}
+  end
+
+  defp do_update({:board_subscription_changed, _action, {:error, :board_archived}}, state) do
+    {put_board_list_feedback(state, "That board is archived."), []}
+  end
+
+  defp do_update({:board_subscription_changed, _action, {:error, reason}}, state) do
+    {put_board_list_feedback(state, "Subscription change failed: #{inspect(reason)}"), []}
   end
 
   defp do_update({:load_oneliners}, state) do
@@ -607,13 +657,29 @@ defmodule Foglet.TUI.App do
 
     task =
       Foglet.TUI.Command.task(:load_boards_for_new_thread, fn ->
-        {:boards_for_new_thread_loaded, boards_mod.list_subscribed_boards(user)}
+        directory = boards_mod.board_directory_for(user)
+
+        boards =
+          directory
+          |> Enum.flat_map(& &1.boards)
+          |> Enum.filter(& &1.subscribed?)
+          |> Enum.map(& &1.board)
+
+        active_board_count =
+          directory
+          |> Enum.reduce(0, fn category, acc -> acc + length(category.boards) end)
+
+        {:boards_for_new_thread_loaded, boards, active_board_count}
       end)
 
     {state, [task]}
   end
 
   defp do_update({:boards_for_new_thread_loaded, boards}, state) do
+    do_update({:boards_for_new_thread_loaded, boards, nil}, state)
+  end
+
+  defp do_update({:boards_for_new_thread_loaded, boards, active_board_count}, state) do
     ss =
       case Map.get(state.screen_state, :new_thread) do
         %Foglet.TUI.Screens.NewThread.State{} = ss -> ss
@@ -621,7 +687,7 @@ defmodule Foglet.TUI.App do
       end ||
         Foglet.TUI.Screens.NewThread.init_screen_state()
 
-    new_ss = %{ss | boards: boards}
+    new_ss = %{ss | boards: boards, active_board_count: active_board_count}
     new_screen_state = Map.put(state.screen_state, :new_thread, new_ss)
     {%{state | screen_state: new_screen_state}, []}
   end
@@ -877,6 +943,19 @@ defmodule Foglet.TUI.App do
       {:ok, mod} -> mod
       {:error, :not_configured} -> default_domain_module(key)
     end
+  end
+
+  defp put_board_list_feedback(state, feedback) do
+    ss =
+      case Map.get(state.screen_state || %{}, :board_list) do
+        %Screens.BoardList.State{} = ss -> ss
+        _other -> Screens.BoardList.init_screen_state()
+      end
+
+    %{
+      state
+      | screen_state: Map.put(state.screen_state || %{}, :board_list, %{ss | feedback: feedback})
+    }
   end
 
   defp default_domain_module(:boards), do: Foglet.Boards

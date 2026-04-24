@@ -3,11 +3,34 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
   alias Foglet.TUI.Screens.BoardList
 
+  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+
   defmodule FakeBoards do
-    def list_subscribed_boards(_user) do
+    def board_directory_for(_user) do
       [
-        %{id: "b1", name: "General", slug: "general", unread_count: 3},
-        %{id: "b2", name: "Tech", slug: "tech", unread_count: 0}
+        %{
+          category: %{id: "c1", name: "Town Square"},
+          boards: [
+            %{
+              board: %{id: "b1", name: "General", slug: "general"},
+              subscribed?: true,
+              required_subscription?: false,
+              unread_count: 3
+            },
+            %{
+              board: %{id: "b2", name: "Tech", slug: "tech"},
+              subscribed?: false,
+              required_subscription?: false,
+              unread_count: nil
+            },
+            %{
+              board: %{id: "b3", name: "Announcements", slug: "announcements"},
+              subscribed?: true,
+              required_subscription?: true,
+              unread_count: 0
+            }
+          ]
+        }
       ]
     end
   end
@@ -27,14 +50,19 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     %{state: state}
   end
 
-  test "init_screen_state/0 returns selected_index default" do
-    assert BoardList.init_screen_state() == %{selected_index: 0}
+  test "init_screen_state/0 returns tree-ready defaults" do
+    ss = BoardList.init_screen_state()
+
+    assert ss.tree == nil
+    assert ss.feedback == nil
   end
 
-  test "load_boards/1 populates state.board_list from domain module", %{state: state} do
+  test "load_boards/1 populates state.board_list with board directory from domain module", %{
+    state: state
+  } do
     {new_state, _} = BoardList.load_boards(state)
-    assert length(new_state.board_list) == 2
-    assert Enum.at(new_state.board_list, 0).name == "General"
+    assert [%{category: %{name: "Town Square"}, boards: boards}] = new_state.board_list
+    assert Enum.map(boards, & &1.board.name) == ["General", "Tech", "Announcements"]
   end
 
   test "render/1 with board_list: nil uses loading branch without crashing", %{state: state} do
@@ -42,32 +70,82 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert _ = BoardList.render(s)
   end
 
-  test "render/1 with boards loaded does not crash", %{state: state} do
+  test "render/1 with boards loaded renders one category tree with subscription labels", %{
+    state: state
+  } do
     {s, _} = BoardList.load_boards(state)
-    assert _ = BoardList.render(s)
+    text = BoardList.render(s) |> flatten_text()
+
+    assert text =~ "Town Square"
+    assert text =~ "General [subscribed] (3 unread)"
+    assert text =~ "Tech [unsubscribed]"
+    assert text =~ "Announcements [required]"
   end
 
-  test "'j'/'down' increments selection bounded by length-1", %{state: state} do
+  test "left collapses the category and right expands it again", %{state: state} do
     {s, _} = BoardList.load_boards(state)
-    {:update, s, _} = BoardList.handle_key(%{key: :char, char: "j"}, s)
-    assert get_in(s.screen_state, [:board_list, :selected_index]) == 1
-    # Bounded at max index
-    {:update, s, _} = BoardList.handle_key(%{key: :char, char: "j"}, s)
-    assert get_in(s.screen_state, [:board_list, :selected_index]) == 1
+    {:update, expanded, _} = BoardList.handle_key(%{key: :right}, s)
+    assert BoardList.render(expanded) |> flatten_text() =~ "Tech [unsubscribed]"
+
+    {:update, collapsed, _} = BoardList.handle_key(%{key: :left}, expanded)
+    refute BoardList.render(collapsed) |> flatten_text() =~ "Tech [unsubscribed]"
+
+    {:update, expanded_again, _} = BoardList.handle_key(%{key: :right}, collapsed)
+    assert BoardList.render(expanded_again) |> flatten_text() =~ "Tech [unsubscribed]"
   end
 
-  test "'k'/'up' decrements selection bounded at 0", %{state: state} do
+  test "enter on a board leaf transitions to :thread_list and emits {:load_threads, board_id}", %{
+    state: state
+  } do
     {s, _} = BoardList.load_boards(state)
-    {:update, s, _} = BoardList.handle_key(%{key: :char, char: "k"}, s)
-    assert get_in(s.screen_state, [:board_list, :selected_index]) == 0
-  end
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
 
-  test "'enter' transitions to :thread_list and emits {:load_threads, board_id}", %{state: state} do
-    {s, _} = BoardList.load_boards(state)
     {:update, s, cmds} = BoardList.handle_key(%{key: :enter}, s)
+
     assert s.current_screen == :thread_list
     assert s.current_board.name == "General"
     assert {:load_threads, "b1"} in cmds
+  end
+
+  test "enter on a category parent does not open a board", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    assert BoardList.handle_key(%{key: :enter}, s) == :no_match
+  end
+
+  test "'s' on an unsubscribed board emits subscribe command", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+
+    {:update, _s, cmds} = BoardList.handle_key(%{key: :char, char: "s"}, s)
+
+    assert {:subscribe_to_board, "b2"} in cmds
+  end
+
+  test "'u' on a subscribed non-required board emits unsubscribe command", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+
+    {:update, _s, cmds} = BoardList.handle_key(%{key: :char, char: "u"}, s)
+
+    assert {:unsubscribe_from_board, "b1"} in cmds
+  end
+
+  test "'u' on a required board renders feedback and emits no command", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+
+    {:update, s, cmds} = BoardList.handle_key(%{key: :char, char: "u"}, s)
+
+    assert cmds == []
+    assert BoardList.render(s) |> flatten_text() =~ "required subscription"
+    assert BoardList.render(s) |> flatten_text() =~ "Announcements [required]"
   end
 
   test "'Q' returns to :main_menu", %{state: state} do

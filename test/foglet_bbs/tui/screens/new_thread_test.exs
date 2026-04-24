@@ -159,6 +159,24 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert _ = NewThread.render(state)
   end
 
+  test "render/1 board step with no subscriptions points to Boards when active boards exist" do
+    ss = NewThread.init_screen_state(boards: [], active_board_count: 2)
+    state = Map.put(base_state(), :screen_state, %{new_thread: ss})
+    text = NewThread.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Subscribe from Boards"
+    refute text =~ "Ask your sysop"
+  end
+
+  test "render/1 board step with no active boards says none are available" do
+    ss = NewThread.init_screen_state(boards: [], active_board_count: 0)
+    state = Map.put(base_state(), :screen_state, %{new_thread: ss})
+    text = NewThread.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "No active boards are available"
+    refute text =~ "Ask your sysop"
+  end
+
   # ---------------------------------------------------------------------------
   # Render — compose step
   # ---------------------------------------------------------------------------
