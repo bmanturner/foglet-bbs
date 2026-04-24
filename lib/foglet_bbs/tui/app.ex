@@ -416,7 +416,16 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:boards_loaded, boards}, state) do
-    {%{state | board_list: boards}, []}
+    screen_state =
+      case Map.get(state.screen_state || %{}, :board_list) do
+        %Screens.BoardList.State{} = board_list_state ->
+          Map.put(state.screen_state || %{}, :board_list, %{board_list_state | tree: nil})
+
+        _other ->
+          state.screen_state || %{}
+      end
+
+    {%{state | board_list: boards, screen_state: screen_state}, []}
   end
 
   defp do_update({:subscribe_to_board, board_id}, state) do

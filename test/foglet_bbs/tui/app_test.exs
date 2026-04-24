@@ -986,6 +986,28 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
+    test "{:boards_loaded, boards} clears a cached board_list tree", %{state: state} do
+      fake_boards = [%{id: "b1", name: "General", unread_count: 0}]
+      tree = %{selected_id: {:board, "b1"}}
+
+      state = %{
+        state
+        | screen_state: %{
+            board_list: %Foglet.TUI.Screens.BoardList.State{
+              tree: tree,
+              feedback: "Subscribed"
+            }
+          }
+      }
+
+      {new_state, cmds} = App.update({:boards_loaded, fake_boards}, state)
+
+      assert new_state.board_list == fake_boards
+      assert new_state.screen_state.board_list.tree == nil
+      assert new_state.screen_state.board_list.feedback == "Subscribed"
+      assert cmds == []
+    end
+
     test "{:load_threads, board_id} returns a Command.task", %{state: state} do
       {_new_state, cmds} = App.update({:load_threads, "b1"}, state)
       assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
