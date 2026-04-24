@@ -13,7 +13,6 @@ defmodule Foglet.TUI.Screens.Account.State do
   """
 
   alias Foglet.TUI.Screens.Shared.InvitesState
-  alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Widgets.Input.Tabs
 
   @base_tabs ["PROFILE", "PREFS"]
@@ -35,17 +34,8 @@ defmodule Foglet.TUI.Screens.Account.State do
       future-facing `INVITES` tab in the tab set (D-09).
     * `:active` — initial active tab index (default `0`).
 
-  ## Invariant (IN-02)
-
-  The INVITES tab's presence is decided once at construction time from
-  `:invites_visible?` and baked into the underlying `Tabs` widget. Phase 0
-  treats role and `invite_code_generators` policy as immutable for the
-  lifetime of a screen_state — if either changes mid-session (e.g. a sysop
-  edits policy), the tab bar stays frozen until the screen_state is rebuilt
-  (typically on navigating away and back). `Account.render/1` recomputes
-  tab-body visibility each frame, so the INVITES body itself reacts even
-  when the tab bar does not. Phases 4+ that mutate policy should rebuild
-  the Tabs widget from `tab_labels(invites?)` when visibility changes.
+  The INVITES tab's presence is synchronized from runtime
+  `:invites_visible?` policy by `ensure_visibility/2`.
   """
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
@@ -55,12 +45,42 @@ defmodule Foglet.TUI.Screens.Account.State do
     %__MODULE__{
       tabs: Tabs.init(tabs: tab_labels(invites?), active: active),
       active_tab: active,
-      invites: InvitesSurface.default_state()
+      invites: InvitesState.new()
     }
+  end
+
+  @doc """
+  Rebuilds the tab widget when runtime INVITES visibility changes.
+
+  Preserves PROFILE/PREFS order and clamps the active tab if INVITES
+  disappears while selected.
+  """
+  @spec ensure_visibility(t(), boolean()) :: t()
+  def ensure_visibility(%__MODULE__{} = state, invites_visible?) do
+    labels = tab_labels(invites_visible?)
+
+    if current_tab_labels(state.tabs) == labels do
+      state
+    else
+      active = clamp_active(state.active_tab, labels)
+      %{state | tabs: Tabs.init(tabs: labels, active: active), active_tab: active}
+    end
   end
 
   @doc "Returns the tab label list in the order they appear on screen."
   @spec tab_labels(boolean()) :: [String.t()]
   def tab_labels(true), do: @base_tabs ++ [@invites_tab]
   def tab_labels(false), do: @base_tabs
+
+  defp current_tab_labels(%Tabs{raxol_state: raxol_state}) do
+    raxol_state
+    |> Map.get(:tabs, [])
+    |> Enum.map(&Map.fetch!(&1, :label))
+  end
+
+  defp clamp_active(active, labels) when is_integer(active) do
+    active |> max(0) |> min(length(labels) - 1)
+  end
+
+  defp clamp_active(_active, _labels), do: 0
 end

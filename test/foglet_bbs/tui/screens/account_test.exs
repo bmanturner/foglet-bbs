@@ -4,9 +4,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
   import Foglet.TUI.RenderHelpers
 
   alias Foglet.TUI.Screens.Account
-  alias FogletBbs.AccountsFixtures
 
-  defp build_state(user \\ %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}, session_context \\ %{}) do
+  defp build_state(user, session_context) do
     %Foglet.TUI.App{
       current_screen: :account,
       current_user: user,

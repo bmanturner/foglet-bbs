@@ -26,13 +26,14 @@ defmodule Foglet.TUI.Screens.Account do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Screens.Account.State
+  alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @key_bar [{"←/→", "Tab"}, {"1-9", "Jump"}, {"Q", "Back"}]
+  @key_bar [{"←/→", "Tab"}, {"1-9", "Jump"}, {"G/R/D", "Invites"}, {"Q", "Back"}]
 
   @impl true
   @spec init_screen_state(keyword()) :: State.t()
@@ -43,24 +44,9 @@ defmodule Foglet.TUI.Screens.Account do
   @impl true
   @spec render(map()) :: any()
   def render(state) do
-    ss = get_screen_state(state)
+    ss = synced_screen_state(state)
     theme = Theme.from_state(state)
-
-    # IN-01: `invites?` is recomputed here each render and also inside
-    # `init_opts_from_state/1` on the first render (when `screen_state.account`
-    # is nil). The duplicate call is bounded to the first frame, and the
-    # predicate is pattern-match-only (no I/O — see ShellVisibility.resolve_policy/1),
-    # so the clarity trade-off is intentional for Phase 0. Phases 4+ that
-    # mutate role/policy mid-session should either memoize `invites?` in
-    # screen_state at init time or thread it through a single call site.
-    invites? =
-      ShellVisibility.invites_visible?(
-        Map.get(state, :current_user),
-        Map.get(state, :session_context)
-      )
-
-    labels = State.tab_labels(invites?)
-    active_label = Enum.at(labels, ss.active_tab, "PROFILE")
+    active_label = active_label(ss) || "PROFILE"
 
     content =
       column style: %{gap: 0} do
@@ -81,7 +67,7 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   def handle_key(event, state) do
-    ss = get_screen_state(state)
+    ss = synced_screen_state(state)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
     new_active =
@@ -90,16 +76,35 @@ defmodule Foglet.TUI.Screens.Account do
         _ -> ss.active_tab
       end
 
-    if action == nil and new_tabs == ss.tabs do
-      :no_match
-    else
-      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-      new_screen_state = Map.put(state.screen_state, :account, new_ss)
-      {:update, %{state | screen_state: new_screen_state}, []}
+    new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
+
+    cond do
+      action != nil or new_tabs != ss.tabs ->
+        new_ss = maybe_load_invites(new_ss, Map.get(state, :current_user))
+        {:update, put_screen_state(state, new_ss), []}
+
+      active_label(new_ss) == "INVITES" ->
+        delegate_invites_key(event, state, new_ss)
+
+      true ->
+        :no_match
     end
   end
 
   # --- private helpers ---
+
+  defp synced_screen_state(state) do
+    state
+    |> get_screen_state()
+    |> State.ensure_visibility(invites_visible?(state))
+  end
+
+  defp invites_visible?(state) do
+    ShellVisibility.invites_visible?(
+      Map.get(state, :current_user),
+      Map.get(state, :session_context)
+    )
+  end
 
   defp get_screen_state(state) do
     case get_in(state.screen_state, [:account]) do
@@ -129,6 +134,41 @@ defmodule Foglet.TUI.Screens.Account do
         visible? = InvitesSurface.visible?(%{role: role}, nil)
         Keyword.put_new(opts, :invites_visible?, visible?)
     end
+  end
+
+  defp tab_labels(%State{tabs: %Tabs{raxol_state: raxol_state}}) do
+    raxol_state
+    |> Map.get(:tabs, [])
+    |> Enum.map(&Map.fetch!(&1, :label))
+  end
+
+  defp active_label(%State{} = ss), do: Enum.at(tab_labels(ss), ss.active_tab)
+
+  defp maybe_load_invites(%State{} = ss, actor) do
+    if active_label(ss) == "INVITES" and not is_list(ss.invites.items) do
+      {:ok, invites} = InvitesActions.load(actor, ss.invites)
+      %{ss | invites: invites}
+    else
+      ss
+    end
+  end
+
+  defp delegate_invites_key(%{key: :char, char: char}, state, %State{} = ss) do
+    case InvitesActions.handle_key(char, Map.get(state, :current_user), ss.invites) do
+      {:ok, invites} -> {:update, put_screen_state(state, %{ss | invites: invites}), []}
+      :no_match -> :no_match
+    end
+  end
+
+  defp delegate_invites_key(%{key: key}, state, %State{} = ss) do
+    case InvitesActions.handle_key(key, Map.get(state, :current_user), ss.invites) do
+      {:ok, invites} -> {:update, put_screen_state(state, %{ss | invites: invites}), []}
+      :no_match -> :no_match
+    end
+  end
+
+  defp put_screen_state(state, %State{} = ss) do
+    %{state | screen_state: Map.put(state.screen_state, :account, ss)}
   end
 
   defp render_tab_body("PROFILE", _ss, theme) do
