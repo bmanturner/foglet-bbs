@@ -130,8 +130,8 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 13-01-PLAN.md — Board subscription policy and context boundary
-- [ ] 13-02-PLAN.md — Terminal board directory subscribe/unsubscribe workflow
-- [ ] 13-03-PLAN.md — Break-glass board subscription Mix task
+- [x] 13-02-PLAN.md — Terminal board directory subscribe/unsubscribe workflow
+- [x] 13-03-PLAN.md — Break-glass board subscription Mix task
 - [ ] 13-04-PLAN.md — Sysop board policy field and Phase 13 regression gate
 **UI hint**: yes
 
@@ -168,5 +168,5 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 10. User Status Administration | v1.2 | 4/4 | Complete   | 2026-04-24 |
 | 11. Posting Policy Enforcement | v1.2 | 0/TBD | Not started | - |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
-| 13. Board Subscription Management | v1.2 | 1/4 | In Progress|  |
+| 13. Board Subscription Management | v1.2 | 3/4 | In Progress|  |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 0/TBD | Not started | - |
