@@ -20,6 +20,8 @@ defmodule Foglet.Config do
   See `docs/DATA_MODEL.md` §11.
   """
 
+  require Logger
+
   alias Foglet.Config.Entry
   alias Foglet.Config.InvalidValueError
   alias Foglet.Config.Schema
@@ -149,8 +151,6 @@ defmodule Foglet.Config do
             {:ok, do_put!(key, value, actor && actor.id)}
           rescue
             e in [Ecto.InvalidChangesetError, Postgrex.Error, DBConnection.ConnectionError] ->
-              require Logger
-
               Logger.error(
                 "Foglet.Config.put/3 DB failure for key #{inspect(key)}: #{inspect(e)}"
               )
