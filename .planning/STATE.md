@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 07 context gathered (assumptions mode)
-last_updated: "2026-04-24T01:35:12.053Z"
-last_activity: 2026-04-24 -- Phase 04 execution started
+stopped_at: Completed 04-01-PLAN.md
+last_updated: "2026-04-24T01:40:23.725Z"
+last_activity: 2026-04-24
 progress:
   total_phases: 10
   completed_phases: 5
   total_plans: 27
-  completed_plans: 22
-  percent: 81
+  completed_plans: 23
+  percent: 85
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-23)
 ## Current Position
 
 Phase: 04 (shared-invite-surface-activation) — EXECUTING
-Plan: 1 of 5
-Status: Executing Phase 04
-Last activity: 2026-04-24 -- Phase 04 execution started
+Plan: 2 of 5
+Status: Ready to execute
+Last activity: 2026-04-24
 
-Progress: [░░░░░░░░░░] 0%
+Progress: [█████████░] 85%
 
 ## Performance Metrics
 
@@ -61,6 +61,8 @@ Progress: [░░░░░░░░░░] 0%
 - Last 5 plans: -
 - Trend: -
 
+| Phase 04 P01 | 7min | 2 tasks | 5 files |
+
 ## Accumulated Context
 
 ### Decisions
@@ -72,6 +74,8 @@ Recent decisions affecting current work:
 - Shared invite flows stay single-use in v1.1 and reuse one `INVITES` surface across allowed screens.
 - Moderation remains scope-aware so future board-scoped moderators fit without reworking authorization later.
 - Main-menu clock placement is in the top-right chrome, with new-user defaults of system timezone and 12-hour time.
+- [Phase 04]: Successful shared invite generate and revoke operations refresh display state from Accounts.list_invites/1.
+- [Phase 04]: Shared INVITES actions delegate live behavior only through Foglet.Accounts.create_invite/1, list_invites/1, and revoke_invite/2.
 
 ### Roadmap Evolution
 
@@ -95,6 +99,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-04-24T01:35:12.043Z
-Stopped at: Phase 07 context gathered (assumptions mode)
-Resume file: .planning/phases/07-oneliners-and-main-menu-social-strip/07-CONTEXT.md
+Last session: 2026-04-24T01:40:09.310Z
+Stopped at: Completed 04-01-PLAN.md
+Resume file: None

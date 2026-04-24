@@ -16,7 +16,7 @@
 
 ### Invite Workflows
 
-- [ ] **INVT-01**: Authorized actor can open a shared `INVITES` tab from Account, Moderation, or Sysop according to `invite_code_generators`.
+- [x] **INVT-01**: Authorized actor can open a shared `INVITES` tab from Account, Moderation, or Sysop according to `invite_code_generators`.
 - [ ] **INVT-02**: Authorized actor can generate a single-use invite code and view it once for sharing.
 - [ ] **INVT-03**: Authorized actor can review invite status including issuer, created time, consumed state, and revocation state.
 - [ ] **INVT-04**: Authorized actor can revoke an unused invite code.
@@ -29,7 +29,7 @@
 - [ ] **MODR-01**: Moderator can open a Moderation workspace with `QUEUE`, `LOG`, `USERS`, `SANCTIONS`, and `BOARDS` tabs.
 - [ ] **MODR-02**: Moderation workspace only shows actions and data for scopes the current operator is authorized to manage.
 - [ ] **MODR-03**: Moderation actions exposed in v1.1 are enforced through actor-aware authorization rather than screen-only visibility checks.
-- [ ] **MODR-04**: If `invite_code_generators` is `mods`, moderator workspace includes the shared `INVITES` tab with unlimited invite generation.
+- [x] **MODR-04**: If `invite_code_generators` is `mods`, moderator workspace includes the shared `INVITES` tab with unlimited invite generation.
 - [ ] **MODR-05**: Moderator can hide an oneliner through moderation tooling so abusive shoutbox content can be removed without direct database edits.
 
 ### Sysop Operations
@@ -38,7 +38,7 @@
 - [ ] **SYSO-02**: Sysop can edit seeded runtime config values for registration, invite policy, and limits from the Sysop workspace.
 - [ ] **SYSO-03**: Sysop can create, update, list, and archive categories and boards from the `BOARDS` tab.
 - [ ] **SYSO-04**: Sysop can inspect system details from the `SYSTEM` tab.
-- [ ] **SYSO-05**: If `invite_code_generators` is `sysop_only`, Sysop workspace includes the shared `INVITES` tab with unlimited invite generation.
+- [x] **SYSO-05**: If `invite_code_generators` is `sysop_only`, Sysop workspace includes the shared `INVITES` tab with unlimited invite generation.
 
 ### Main Menu & Oneliners
 
@@ -93,7 +93,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | ACCT-04 | Phase 5 | Pending |
 | ACCT-05 | Phase 5 | Pending |
 | ACCT-06 | Phase 5 | Pending |
-| INVT-01 | Phase 4 | Pending |
+| INVT-01 | Phase 4 | Complete |
 | INVT-02 | Phase 3 | Pending |
 | INVT-03 | Phase 3 | Pending |
 | INVT-04 | Phase 3 | Pending |
@@ -103,13 +103,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MODR-01 | Phase 0 | Pending |
 | MODR-02 | Phase 1 | Pending |
 | MODR-03 | Phase 1 | Pending |
-| MODR-04 | Phase 4 | Pending |
+| MODR-04 | Phase 4 | Complete |
 | MODR-05 | Phase 8 | Pending |
 | SYSO-01 | Phase 0 | Pending |
 | SYSO-02 | Phase 2 | Pending |
 | SYSO-03 | Phase 2 | Pending |
 | SYSO-04 | Phase 2 | Pending |
-| SYSO-05 | Phase 4 | Pending |
+| SYSO-05 | Phase 4 | Complete |
 | MENU-01 | Phase 6 | Pending |
 | MENU-02 | Phase 6 | Pending |
 | ONEL-01 | Phase 7 | Pending |
