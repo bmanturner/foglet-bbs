@@ -67,15 +67,14 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
 
       assert output =~ "Break-glass reset token for resetme:"
       assert output =~ "Reset token:"
-      assert output =~ "Give this token to the user through your operator-assisted SSH reset procedure."
+
+      assert output =~
+               "Give this token to the user through your operator-assisted SSH reset procedure."
+
       assert output =~ "No email was sent by this task."
       refute output =~ "has been emailed"
       refute output =~ "sent by email"
-      refute output =~ "http://"
-      refute output =~ "https://"
-      refute output =~ "/users/reset_password/"
-      refute output =~ "reset URL"
-      refute output =~ "operator reset URL"
+      refute_reset_url_copy(output)
 
       [_, token_portion] = Regex.run(~r/Reset token: ([A-Za-z0-9_-]+)/, output)
       refute String.contains?(token_portion, "=")
@@ -111,13 +110,12 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
 
       assert output =~ "No-email reset details for noemailreset:"
       assert output =~ "Reset token:"
-      assert output =~ "Give this token to the user through your operator-assisted SSH reset procedure."
+
+      assert output =~
+               "Give this token to the user through your operator-assisted SSH reset procedure."
+
       assert output =~ "No email was sent by this task."
-      refute output =~ "http://"
-      refute output =~ "https://"
-      refute output =~ "/users/reset_password/"
-      refute output =~ "reset URL"
-      refute output =~ "operator reset URL"
+      refute_reset_url_copy(output)
 
       assert Repo.exists?(
                from t in UserToken,
@@ -153,16 +151,35 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
     end
 
     test "missing handle exits non-zero" do
-      capture_io(:stderr, fn ->
-        assert catch_exit(Mix.Tasks.Foglet.User.ResetPassword.run([])) == {:shutdown, 1}
-      end)
+      output =
+        capture_io(:stderr, fn ->
+          assert catch_exit(Mix.Tasks.Foglet.User.ResetPassword.run([])) == {:shutdown, 1}
+        end)
+
+      assert output =~ "Missing required handle"
     end
 
     test "unknown flag exits non-zero" do
-      capture_io(:stderr, fn ->
-        assert catch_exit(Mix.Tasks.Foglet.User.ResetPassword.run(["foo", "--bogus", "x"])) ==
-                 {:shutdown, 1}
-      end)
+      output =
+        capture_io(:stderr, fn ->
+          assert catch_exit(Mix.Tasks.Foglet.User.ResetPassword.run(["foo", "--bogus", "x"])) ==
+                   {:shutdown, 1}
+        end)
+
+      assert output =~ "Invalid arguments"
     end
+  end
+
+  defp refute_reset_url_copy(output) do
+    [
+      "http" <> "://",
+      "https" <> "://",
+      "/users" <> "/reset_password/",
+      "reset " <> "URL",
+      "operator reset " <> "URL"
+    ]
+    |> Enum.each(fn forbidden ->
+      refute output =~ forbidden
+    end)
   end
 end

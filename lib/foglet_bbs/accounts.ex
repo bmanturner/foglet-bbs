@@ -532,7 +532,8 @@ defmodule Foglet.Accounts do
   Returns the raw token once so the caller can hand it to the user through a
   supported operator-controlled channel. Only the hashed token row is stored.
   """
-  @spec generate_reset_token_for_operator(User.t()) :: {:ok, String.t()} | {:error, Ecto.Changeset.t()}
+  @spec generate_reset_token_for_operator(User.t()) ::
+          {:ok, String.t()} | {:error, Ecto.Changeset.t()}
   def generate_reset_token_for_operator(%User{} = user) do
     {raw_token, token_struct} = UserToken.build_email_token(user, "reset_password")
 
