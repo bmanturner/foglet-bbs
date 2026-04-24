@@ -15,6 +15,20 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     |> Map.from_struct()
   end
 
+  defp with_oneliners(state, recent_oneliners) do
+    Map.put(state, :recent_oneliners, recent_oneliners)
+  end
+
+  defp oneliner(handle, body, attrs \\ %{}) do
+    Map.merge(
+      %{
+        body: body,
+        user: %{handle: handle}
+      },
+      attrs
+    )
+  end
+
   defp role_cases do
     [
       {:user, :account, "A", "Account", "Account", &ShellVisibility.account_visible?/1},
@@ -45,6 +59,68 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   test "MainMenu has no public init_screen_state/1" do
     refute function_exported?(MainMenu, :init_screen_state, 1)
+  end
+
+  describe "oneliners strip" do
+    test "nil recent_oneliners renders panel title and empty state", %{state: state} do
+      texts = state |> with_oneliners(nil) |> rendered_text()
+
+      assert "Oneliners" in texts
+      assert "No oneliners yet." in texts
+    end
+
+    test "empty recent_oneliners renders panel title and empty state", %{state: state} do
+      texts = state |> with_oneliners([]) |> rendered_text()
+
+      assert "Oneliners" in texts
+      assert "No oneliners yet." in texts
+    end
+
+    test "one oneliner renders as handle body without timestamp", %{state: state} do
+      texts =
+        state
+        |> with_oneliners([oneliner("alice", "hello", %{inserted_at: ~U[2026-04-24 12:00:00Z]})])
+        |> rendered_text()
+
+      assert "@alice  hello" in texts
+
+      row = Enum.find(texts, &String.contains?(&1, "@alice  hello"))
+      refute row =~ "2026-"
+      refute row =~ "AM"
+      refute row =~ "PM"
+    end
+
+    test "many oneliners render no more than five rows", %{state: state} do
+      entries =
+        for index <- 1..7 do
+          oneliner("user#{index}", "line #{index}")
+        end
+
+      rows =
+        state
+        |> with_oneliners(entries)
+        |> rendered_text()
+        |> Enum.filter(&String.starts_with?(&1, "@user"))
+
+      assert length(rows) == 5
+      assert "@user1  line 1" in rows
+      refute Enum.any?(rows, &String.contains?(&1, "line 6"))
+    end
+
+    test "long handle and body are clipped to one presentation row", %{state: state} do
+      texts =
+        state
+        |> with_oneliners([oneliner("averyverylonghandle", String.duplicate("body ", 30))])
+        |> rendered_text()
+
+      row = Enum.find(texts, &String.starts_with?(&1, "@averyverylo"))
+
+      assert row
+      assert String.starts_with?(row, "@averyverylon")
+      assert String.length(row) <= 37
+      refute String.contains?(row, "\n")
+      refute String.contains?(row, "body body body body body body body body body body")
+    end
   end
 
   test "render includes main menu owned text rows", %{state: state} do
@@ -86,6 +162,16 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
     {:update, _, cmds2} = MainMenu.handle_key(%{key: :char, char: "q"}, state)
     assert {:terminate, :logout} in cmds2
+  end
+
+  test "'O'/'o' emits open oneliner composer command", %{state: state} do
+    {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "O"}, state)
+    assert s == state
+    assert [{:open_oneliner_composer}] = cmds
+
+    {:update, s2, cmds2} = MainMenu.handle_key(%{key: :char, char: "o"}, state)
+    assert s2 == state
+    assert [{:open_oneliner_composer}] = cmds2
   end
 
   test "unknown key returns :no_match", %{state: state} do
