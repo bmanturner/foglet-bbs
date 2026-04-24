@@ -3,7 +3,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
   import Foglet.TUI.RenderHelpers
 
+  alias Foglet.Accounts
+  alias Foglet.Config
   alias Foglet.TUI.Screens.Account
+  alias FogletBbs.AccountsFixtures
 
   defp build_state(user, session_context) do
     %Foglet.TUI.App{
@@ -188,5 +191,75 @@ defmodule Foglet.TUI.Screens.AccountTest do
         end
       end
     end
+  end
+
+  describe "live INVITES actions" do
+    setup :restore_invite_config
+
+    test "persists exactly one invite and displays last_generated_code under any_user" do
+      # persists exactly one invite last_generated_code any_user
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{invite_code_generators: "any_user"})
+
+      assert {:ok, []} = Accounts.list_invites(user)
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
+
+      assert {:ok, [invite]} = Accounts.list_invites(user)
+      assert state.screen_state.account.invites.last_generated_code == invite.code
+      assert [%{code: code, status: :available}] = state.screen_state.account.invites.items
+      assert code == invite.code
+
+      flat = Account.render(state) |> collect_text_values()
+      assert Enum.any?(flat, &String.contains?(&1, "New invite code: #{invite.code}"))
+    end
+
+    test "refresh, select, and revoke delegate through shared Account INVITES actions" do
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{invite_code_generators: "any_user"})
+
+      {:ok, first} = Accounts.create_invite(user)
+      {:ok, second} = Accounts.create_invite(user)
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      assert Enum.count(state.screen_state.account.invites.items) == 2
+
+      {:update, state, []} = Account.handle_key(%{key: :down}, state)
+      assert state.screen_state.account.invites.selected_index == 1
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+      assert {:ok, %{status: :revoked}} = Accounts.get_invite_status(first.code)
+      assert {:ok, %{status: :available}} = Accounts.get_invite_status(second.code)
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "r"}, state)
+      assert Enum.any?(state.screen_state.account.invites.items, &(&1.code == first.code))
+      assert state.screen_state.account.invites.error == nil
+    end
+
+    test "hidden INVITES tab leaves generate unavailable for disallowed Account policy" do
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{invite_code_generators: "sysop_only"})
+
+      assert :no_match = Account.handle_key(%{key: :char, char: "g"}, state)
+      assert {:ok, []} = Accounts.list_invites(user)
+    end
+  end
+
+  defp restore_invite_config(_context) do
+    Config.init_cache()
+    current_generators = Config.get("invite_code_generators", "sysops")
+    current_limit = Config.get("invite_generation_per_user_limit", 0)
+
+    on_exit(fn ->
+      Config.put!("invite_code_generators", current_generators)
+      Config.put!("invite_generation_per_user_limit", current_limit)
+      Config.invalidate("invite_code_generators")
+      Config.invalidate("invite_generation_per_user_limit")
+    end)
+
+    Config.put!("invite_code_generators", "any_user")
+    Config.put!("invite_generation_per_user_limit", 0)
+    :ok
   end
 end
