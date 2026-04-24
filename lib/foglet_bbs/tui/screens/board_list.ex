@@ -28,6 +28,7 @@ defmodule Foglet.TUI.Screens.BoardList do
         {"j/k", "Select"},
         {"←/→", "Collapse/Expand"},
         {"Enter", "Open"},
+        {"s/u", "Subscribe"},
         {"Q", "Back"}
       ]
     )
@@ -73,6 +74,8 @@ defmodule Foglet.TUI.Screens.BoardList do
   def handle_key(%{key: :up}, state), do: handle_tree_key(%{key: :up}, state)
   def handle_key(%{key: :left}, state), do: handle_tree_key(%{key: :left}, state)
   def handle_key(%{key: :right}, state), do: handle_tree_key(%{key: :right}, state)
+  def handle_key(%{key: :char, char: "s"}, state), do: subscribe_focused_board(state)
+  def handle_key(%{key: :char, char: "u"}, state), do: unsubscribe_focused_board(state)
 
   def handle_key(%{key: :enter}, state) do
     ss = screen_state(state)
@@ -80,11 +83,11 @@ defmodule Foglet.TUI.Screens.BoardList do
 
     case Tree.handle_event(%{key: :enter}, tree) do
       {%Tree{} = new_tree, :node_activated} ->
-        case focused_board(new_tree) do
+        case focused_board_entry(new_tree) do
           nil ->
             :no_match
 
-          board ->
+          %{board: board} ->
             new_state = %{
               state
               | current_board: board,
@@ -126,6 +129,44 @@ defmodule Foglet.TUI.Screens.BoardList do
     tree = ss.tree || build_tree(state.board_list || [])
     {new_tree, _action} = Tree.handle_event(key, tree)
     {:update, put_ss(state, %{ss | tree: new_tree}), []}
+  end
+
+  defp subscribe_focused_board(state) do
+    ss = screen_state(state)
+    tree = ss.tree || build_tree(state.board_list || [])
+
+    case focused_board_entry(tree) do
+      %{board: board, subscribed?: false} ->
+        {:update, put_ss(state, %{ss | tree: tree, feedback: nil}),
+         [{:subscribe_to_board, board.id}]}
+
+      %{subscribed?: true} ->
+        {:update, put_ss(state, %{ss | tree: tree, feedback: "Already subscribed."}), []}
+
+      _other ->
+        :no_match
+    end
+  end
+
+  defp unsubscribe_focused_board(state) do
+    ss = screen_state(state)
+    tree = ss.tree || build_tree(state.board_list || [])
+
+    case focused_board_entry(tree) do
+      %{required_subscription?: true} ->
+        feedback = "This board is a required subscription."
+        {:update, put_ss(state, %{ss | tree: tree, feedback: feedback}), []}
+
+      %{board: board, subscribed?: true} ->
+        {:update, put_ss(state, %{ss | tree: tree, feedback: nil}),
+         [{:unsubscribe_from_board, board.id}]}
+
+      %{subscribed?: false} ->
+        {:update, put_ss(state, %{ss | tree: tree, feedback: "Not subscribed."}), []}
+
+      _other ->
+        :no_match
+    end
   end
 
   defp screen_state(state) do
@@ -191,9 +232,9 @@ defmodule Foglet.TUI.Screens.BoardList do
   defp unread_suffix(n) when is_integer(n) and n > 0, do: " (#{n} unread)"
   defp unread_suffix(_), do: ""
 
-  defp focused_board(%Tree{raxol_state: %{cursor: cursor, nodes: nodes}}) do
+  defp focused_board_entry(%Tree{raxol_state: %{cursor: cursor, nodes: nodes}}) do
     case find_node(nodes, cursor) do
-      %{data: %{kind: :board, board: board}} -> board
+      %{data: %{kind: :board} = data} -> data
       _ -> nil
     end
   end

@@ -65,12 +65,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
         [] ->
           column style: %{gap: 0} do
-            [
-              text(
-                "You aren't subscribed to any boards. Ask your sysop to subscribe you.",
-                fg: theme.warning.fg
-              )
-            ]
+            [text(empty_board_message(ss), fg: theme.warning.fg)]
           end
 
         boards ->
@@ -138,6 +133,19 @@ defmodule Foglet.TUI.Screens.NewThread do
       {"Ctrl+S", "Submit"},
       {"Ctrl+C", "Cancel"}
     ])
+  end
+
+  defp empty_board_message(%State{active_board_count: 0}) do
+    "No active boards are available."
+  end
+
+  defp empty_board_message(%State{active_board_count: count})
+       when is_integer(count) and count > 0 do
+    "You aren't subscribed to any boards. Subscribe from Boards."
+  end
+
+  defp empty_board_message(_ss) do
+    "You aren't subscribed to any boards. Subscribe from Boards."
   end
 
   defp compose_tab_hint(%{focused: :body, mode: :edit}), do: "Preview"

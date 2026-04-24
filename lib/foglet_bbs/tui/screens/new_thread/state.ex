@@ -14,6 +14,7 @@ defmodule Foglet.TUI.Screens.NewThread.State do
   @type t :: %__MODULE__{
           step: :board | :compose,
           boards: list(map()) | nil,
+          active_board_count: non_neg_integer() | nil,
           selected_board_index: non_neg_integer(),
           board: map() | nil,
           title_input_state: TextInput.t(),
@@ -26,6 +27,7 @@ defmodule Foglet.TUI.Screens.NewThread.State do
 
   defstruct step: :board,
             boards: nil,
+            active_board_count: nil,
             selected_board_index: 0,
             board: nil,
             title_input_state: nil,
@@ -57,6 +59,7 @@ defmodule Foglet.TUI.Screens.NewThread.State do
     %__MODULE__{
       step: Keyword.get(opts, :step, :board),
       boards: Keyword.get(opts, :boards, nil),
+      active_board_count: Keyword.get(opts, :active_board_count, nil),
       selected_board_index: Keyword.get(opts, :selected_board_index, 0),
       board: Keyword.get(opts, :board, nil),
       title_input_state:
