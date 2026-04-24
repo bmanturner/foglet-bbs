@@ -28,6 +28,7 @@ defmodule Foglet.TUI.Screens.LaunchCopyAuditTest do
     failures =
       for path <- audited_files,
           source = File.read!(path),
+          source = source_without_readme_caveats(path, source),
           pattern <- @forbidden_launch_claims,
           Regex.match?(pattern, source) do
         "#{path}:#{inspect(pattern)}"
@@ -53,5 +54,19 @@ defmodule Foglet.TUI.Screens.LaunchCopyAuditTest do
     |> Enum.filter(&File.regular?/1)
     |> Enum.uniq()
     |> Enum.sort()
+  end
+
+  defp source_without_readme_caveats("README.md", source) do
+    source
+    |> String.split("\n")
+    |> Enum.reject(&readme_caveat_line?/1)
+    |> Enum.join("\n")
+  end
+
+  defp source_without_readme_caveats(_path, source), do: source
+
+  defp readme_caveat_line?(line) do
+    String.contains?(line, "not a v1.2 pre-alpha capability") ||
+      String.contains?(line, "not an end-user browser workflow")
   end
 end
