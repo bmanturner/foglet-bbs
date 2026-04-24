@@ -19,10 +19,21 @@ defmodule Foglet.TUI.Screens.Sysop.State do
 
   @type t :: %__MODULE__{
           tabs: Tabs.t(),
-          active_tab: non_neg_integer()
+          active_tab: non_neg_integer(),
+          site_form: term() | nil,
+          limits_form: term() | nil,
+          boards_view: term() | nil,
+          system_snapshot: term() | nil
         }
 
-  defstruct [:tabs, active_tab: 0]
+  defstruct [
+    :tabs,
+    active_tab: 0,
+    site_form: nil,
+    limits_form: nil,
+    boards_view: nil,
+    system_snapshot: nil
+  ]
 
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
