@@ -35,8 +35,8 @@
 ### Sysop Operations
 
 - [ ] **SYSO-01**: Sysop can open a Sysop workspace with `SITE`, `BOARDS`, `LIMITS`, `SYSTEM`, and `USERS` tabs.
-- [ ] **SYSO-02**: Sysop can edit seeded runtime config values for registration, invite policy, and limits from the Sysop workspace.
-- [ ] **SYSO-03**: Sysop can create, update, list, and archive categories and boards from the `BOARDS` tab.
+- [x] **SYSO-02**: Sysop can edit seeded runtime config values for registration, invite policy, and limits from the Sysop workspace.
+- [x] **SYSO-03**: Sysop can create, update, list, and archive categories and boards from the `BOARDS` tab.
 - [ ] **SYSO-04**: Sysop can inspect system details from the `SYSTEM` tab.
 - [x] **SYSO-05**: If `invite_code_generators` is `sysop_only`, Sysop workspace includes the shared `INVITES` tab with unlimited invite generation.
 
@@ -106,8 +106,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MODR-04 | Phase 4 | Complete |
 | MODR-05 | Phase 8 | Pending |
 | SYSO-01 | Phase 0 | Pending |
-| SYSO-02 | Phase 2 | Pending |
-| SYSO-03 | Phase 2 | Pending |
+| SYSO-02 | Phase 2 | Complete |
+| SYSO-03 | Phase 2 | Complete |
 | SYSO-04 | Phase 2 | Pending |
 | SYSO-05 | Phase 4 | Complete |
 | MENU-01 | Phase 6 | Pending |
