@@ -177,7 +177,11 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   1. The moderation workspace shows real queue, log, user, sanction, and board data within the current operator's authorized scope.
   2. Moderator can hide an oneliner through moderation tooling so abusive shoutbox content can be removed without direct database edits.
   3. Populated moderation behavior preserves room for future board-scoped moderation instead of assuming every moderator is global.
-**Plans**: TBD
+**Plans**: 4 plans
+  - [ ] 08-01-PLAN.md — Wave 1: Domain Hide and Audit Persistence [MODR-05]
+  - [ ] 08-02-PLAN.md — Wave 2: Scope-Aware Moderation Data Loading and Tab Rendering [MODR-05]
+  - [ ] 08-03-PLAN.md — Wave 2: Main-Menu Oneliner Selection and Hide Modal Command [MODR-05]
+  - [ ] 08-04-PLAN.md — Wave 3: Integration, Layout, and Final Verification [MODR-05]
 **UI hint**: yes
 
 ## Progress
