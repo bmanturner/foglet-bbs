@@ -166,7 +166,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     |> then(fn s ->
       {:update, new_state, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
       assert new_state.modal.type == :error
-      assert new_state.modal.message == "Failed to create post."
+      assert new_state.modal.message == ":nope"
       assert new_state.current_screen == :post_composer
       assert Map.has_key?(new_state.screen_state, :post_composer)
     end)

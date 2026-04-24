@@ -290,9 +290,9 @@ defmodule Foglet.TUI.Screens.PostComposer do
       # selected_post_index to the last post (the user's new reply).
       {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
     else
-      {:error, _cs} ->
+      {:error, reason} ->
         {:update,
-         %{state | modal: %Foglet.TUI.Modal{type: :error, message: "Failed to create post."}}, []}
+         %{state | modal: %Foglet.TUI.Modal{type: :error, message: format_error(reason)}}, []}
     end
   end
 
@@ -312,6 +312,16 @@ defmodule Foglet.TUI.Screens.PostComposer do
       post -> %{body: draft, reply_to_id: post.id}
     end
   end
+
+  defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."
+  defp format_error(:thread_locked), do: "This thread is locked"
+
+  defp format_error(%Ecto.Changeset{} = cs) do
+    Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+  end
+
+  defp format_error(reason) when is_binary(reason), do: reason
+  defp format_error(reason), do: inspect(reason)
 
   # ---------------------------------------------------------------------------
   # Cancel (D-30)
