@@ -2,7 +2,6 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
   use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.Invite
   alias Foglet.Config
   alias Foglet.TUI.Screens.Shared.{InvitesActions, InvitesState}
   alias FogletBbs.AccountsFixtures
@@ -53,7 +52,9 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
     test "maps Accounts errors and preserves local state on failed generate" do
       sysop = actor_fixture(:sysop)
       user = AccountsFixtures.user_fixture()
-      state = InvitesState.new(items: [%{code: "KEEP", status: :available}], last_generated_code: "OLD")
+
+      state =
+        InvitesState.new(items: [%{code: "KEEP", status: :available}], last_generated_code: "OLD")
 
       Config.put!("invite_code_generators", "sysop_only", sysop.id)
 
@@ -70,8 +71,17 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       state = InvitesState.new(items: [%{code: "A"}, %{code: "B"}])
 
       assert InvitesActions.select_next(state).selected_index == 1
-      assert state |> InvitesActions.select_next() |> InvitesActions.select_next() |> Map.fetch!(:selected_index) == 1
-      assert state |> InvitesActions.select_next() |> InvitesActions.select_prev() |> Map.fetch!(:selected_index) == 0
+
+      assert state
+             |> InvitesActions.select_next()
+             |> InvitesActions.select_next()
+             |> Map.fetch!(:selected_index) == 1
+
+      assert state
+             |> InvitesActions.select_next()
+             |> InvitesActions.select_prev()
+             |> Map.fetch!(:selected_index) == 0
+
       assert InvitesActions.select_prev(state).selected_index == 0
     end
   end
@@ -87,7 +97,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       state = InvitesState.new(items: items, selected_index: selected_index)
 
       assert {:ok, revoked_state} = InvitesActions.revoke_selected(sysop, state)
-      assert %{status: :revoked, revoked_at: %DateTime{}} = Enum.find(revoked_state.items, &(&1.code == "INVITEAVAILABLE001"))
+
+      assert %{status: :revoked, revoked_at: %DateTime{}} =
+               Enum.find(revoked_state.items, &(&1.code == "INVITEAVAILABLE001"))
+
       assert revoked_state.error == nil
     end
 
@@ -134,12 +147,19 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       invite = AccountsFixtures.invite_fixture(sysop)
       {:ok, state} = InvitesActions.load(sysop, InvitesState.new())
 
-      assert {:ok, %InvitesState{last_generated_code: code}} = InvitesActions.handle_key("g", sysop, state)
+      assert {:ok, %InvitesState{last_generated_code: code}} =
+               InvitesActions.handle_key("g", sysop, state)
+
       assert is_binary(code)
       assert {:ok, %InvitesState{}} = InvitesActions.handle_key("R", sysop, state)
       assert {:ok, %InvitesState{}} = InvitesActions.handle_key("D", sysop, state)
-      assert {:ok, %InvitesState{selected_index: 0}} = InvitesActions.handle_key(:down, sysop, state)
-      assert {:ok, %InvitesState{selected_index: 0}} = InvitesActions.handle_key(:up, sysop, state)
+
+      assert {:ok, %InvitesState{selected_index: 0}} =
+               InvitesActions.handle_key(:down, sysop, state)
+
+      assert {:ok, %InvitesState{selected_index: 0}} =
+               InvitesActions.handle_key(:up, sysop, state)
+
       assert :no_match = InvitesActions.handle_key("x", sysop, state)
 
       assert {:ok, %{code: status_code}} = Accounts.get_invite_status(invite.code)
