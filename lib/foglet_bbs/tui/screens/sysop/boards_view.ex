@@ -562,8 +562,20 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
     result =
       case kind do
-        :archive_board -> Boards.archive_board(state.current_user, target)
-        :archive_category -> Boards.archive_category(state.current_user, target)
+        :archive_board ->
+          Boards.archive_board(state.current_user, target)
+
+        :archive_category ->
+          Boards.archive_category(state.current_user, target)
+
+        other ->
+          require Logger
+
+          Logger.error(
+            "BoardsView confirm: unexpected modal_kind #{inspect(other)}"
+          )
+
+          {:error, :unknown_confirm_kind}
       end
 
     case result do
