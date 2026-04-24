@@ -67,6 +67,7 @@ schema "users" do
   field :preferences, :map, default: %{}
 
   # Lifecycle
+  field :status, Ecto.Enum, values: [:active, :pending, :rejected, :suspended], default: :active
   field :deleted_at, :utc_datetime_usec
 
   has_many :ssh_keys, Foglet.Accounts.SSHKey
@@ -85,8 +86,10 @@ end
 - `handle` and `email` are `citext` columns, both `NOT NULL`, both unique.
 - A unique index on `handle` and another on `email` — case-insensitive by virtue of `citext`.
 - `role` as a Postgres enum: `CREATE TYPE user_role AS ENUM ('user', 'mod', 'sysop');`
+- `status` is a string-backed `Ecto.Enum`, not a Postgres enum, with lifecycle values `:active`, `:pending`, `:rejected`, and `:suspended`.
 - Partial index on `last_seen_at` for "who's been around recently" queries: `WHERE deleted_at IS NULL`.
 - A tombstone user row is inserted in seeds — id fixed, handle like `[deleted]`. Post anonymization rewrites `user_id` to this row.
+- Rejected users remain non-deleted rows. A rejected registration reserves its handle and email and is distinct from soft deletion.
 
 **Changesets:**
 

@@ -15,6 +15,7 @@ defmodule Foglet.AuthorizationTest do
   defp actor(:user), do: %User{role: :user, status: :active, deleted_at: nil}
   defp actor(:suspended), do: %User{role: :mod, status: :suspended, deleted_at: nil}
   defp actor(:pending), do: %User{role: :mod, status: :pending, deleted_at: nil}
+  defp actor(:rejected), do: %User{role: :sysop, status: :rejected, deleted_at: nil}
 
   defp actor(:deleted),
     do: %User{role: :mod, status: :active, deleted_at: ~U[2026-01-01 00:00:00Z]}
@@ -33,6 +34,7 @@ defmodule Foglet.AuthorizationTest do
     {:sysop, :archive_category, :site, :ok},
     {:sysop, :generate_invite, :site, :ok},
     {:sysop, :revoke_invite, :site, :ok},
+    {:sysop, :manage_user_status, :site, :ok},
     {:sysop, :hide_oneliner, :site, :ok},
     {:sysop, :lock_thread, :site, :ok},
     {:sysop, :delete_post, :site, :ok},
@@ -67,6 +69,7 @@ defmodule Foglet.AuthorizationTest do
     {:mod, :create_category, :site, {:error, :forbidden}},
     {:mod, :update_category, :site, {:error, :forbidden}},
     {:mod, :archive_category, :site, {:error, :forbidden}},
+    {:mod, :manage_user_status, :site, {:error, :forbidden}},
     # Regular user — can pass only the coarse invite generation gate.
     # Runtime invite policy and caps are enforced by Foglet.Accounts.create_invite/1.
     {:user, :create_board, :site, {:error, :forbidden}},
@@ -78,6 +81,7 @@ defmodule Foglet.AuthorizationTest do
     {:suspended, :create_board, :site, {:error, :forbidden}},
     {:suspended, :lock_thread, :site, {:error, :forbidden}},
     {:pending, :create_board, :site, {:error, :forbidden}},
+    {:rejected, :manage_user_status, :site, {:error, :forbidden}},
     {:deleted, :create_board, :site, {:error, :forbidden}}
   ]
 
@@ -146,6 +150,10 @@ defmodule Foglet.AuthorizationTest do
 
     test "pending mod returns []" do
       assert Authorization.scopes_for(actor(:pending), :lock_thread) == []
+    end
+
+    test "rejected sysop returns []" do
+      assert Authorization.scopes_for(actor(:rejected), :manage_user_status) == []
     end
 
     test "deleted mod returns []" do

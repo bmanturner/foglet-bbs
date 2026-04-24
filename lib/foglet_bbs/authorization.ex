@@ -41,6 +41,7 @@ defmodule Foglet.Authorization do
     :update_category,
     :archive_category,
     :edit_config,
+    :manage_user_status,
     :generate_invite,
     :revoke_invite
   ]
@@ -91,6 +92,7 @@ defmodule Foglet.Authorization do
 
   def authorize(_action, %User{status: :suspended}, _scope), do: {:error, :forbidden}
   def authorize(_action, %User{status: :pending}, _scope), do: {:error, :forbidden}
+  def authorize(_action, %User{status: :rejected}, _scope), do: {:error, :forbidden}
 
   # Unknown action (D-13) — safe default, warning, no raise.
   def authorize(action, _actor, _scope) when action not in @valid_actions do
@@ -140,7 +142,7 @@ defmodule Foglet.Authorization do
   def scopes_for(nil, _action), do: []
   def scopes_for(%User{deleted_at: d}, _action) when not is_nil(d), do: []
 
-  def scopes_for(%User{status: status}, _action) when status in [:suspended, :pending],
+  def scopes_for(%User{status: status}, _action) when status in [:suspended, :pending, :rejected],
     do: []
 
   def scopes_for(%User{role: :sysop}, _action), do: [:site]
