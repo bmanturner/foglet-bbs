@@ -3,7 +3,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   import Foglet.TUI.RenderHelpers
 
-  alias Foglet.TUI.Screens.MainMenu
+  alias Foglet.TUI.Screens.{MainMenu, ShellVisibility}
 
   defp build_state(role) do
     %Foglet.TUI.App{
@@ -13,6 +13,26 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       terminal_size: {80, 24}
     }
     |> Map.from_struct()
+  end
+
+  defp role_cases do
+    [
+      {:user, :account, "A", "Account", "Account", &ShellVisibility.account_visible?/1},
+      {:user, :moderation, "M", "Moderation", "Mod", &ShellVisibility.moderation_visible?/1},
+      {:user, :sysop, "S", "Sysop", "Sysop", &ShellVisibility.sysop_visible?/1},
+      {:mod, :account, "A", "Account", "Account", &ShellVisibility.account_visible?/1},
+      {:mod, :moderation, "M", "Moderation", "Mod", &ShellVisibility.moderation_visible?/1},
+      {:mod, :sysop, "S", "Sysop", "Sysop", &ShellVisibility.sysop_visible?/1},
+      {:sysop, :account, "A", "Account", "Account", &ShellVisibility.account_visible?/1},
+      {:sysop, :moderation, "M", "Moderation", "Mod", &ShellVisibility.moderation_visible?/1},
+      {:sysop, :sysop, "S", "Sysop", "Sysop", &ShellVisibility.sysop_visible?/1}
+    ]
+  end
+
+  defp rendered_text(state), do: MainMenu.render(state) |> collect_text_values()
+
+  defp handle_key_result(state, key) do
+    MainMenu.handle_key(%{key: :char, char: key}, state)
   end
 
   setup do
@@ -154,5 +174,43 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert :no_match = MainMenu.handle_key(%{key: :char, char: "S"}, state)
       assert :no_match = MainMenu.handle_key(%{key: :char, char: "s"}, state)
     end
+
+    test "rendered shell rows and key bar labels follow ShellVisibility for every role" do
+      for {role, _screen, key, menu_label, key_label, predicate} <- role_cases() do
+        state = build_state(role)
+        user = state.current_user
+        visible? = predicate.(user)
+        texts = rendered_text(state)
+
+        menu_row? = "  [#{key}] #{menu_label}" in texts
+        key_bar? = "[#{key}] " in texts and "#{key_label}  " in texts
+
+        assert menu_row? == visible?,
+               "expected #{menu_label} menu row visibility for #{role} to be #{visible?}"
+
+        assert key_bar? == visible?,
+               "expected #{key_label} key-bar visibility for #{role} to be #{visible?}"
+      end
+    end
+
+    test "A, M, and S key handling follows ShellVisibility for every role" do
+      for {role, screen, key, _menu_label, _key_label, predicate} <- role_cases() do
+        state = build_state(role)
+        user = state.current_user
+        visible? = predicate.(user)
+
+        assert_key_visibility(state, key, screen, visible?)
+        assert_key_visibility(state, String.downcase(key), screen, visible?)
+      end
+    end
+  end
+
+  defp assert_key_visibility(state, key, screen, true) do
+    assert {:update, new_state, _cmds} = handle_key_result(state, key)
+    assert new_state.current_screen == screen
+  end
+
+  defp assert_key_visibility(state, key, _screen, false) do
+    assert :no_match = handle_key_result(state, key)
   end
 end
