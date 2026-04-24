@@ -31,8 +31,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
           user(timezone: "America/Chicago", preferences: %{"time_format" => "24h"})
         )
 
-      assert text =~ "2026-04-24"
-      assert text =~ "13:05"
+      assert text == "13:05"
       refute text =~ "AM"
       refute text =~ "PM"
     end
@@ -44,9 +43,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
           user(timezone: "Etc/UTC", preferences: %{"time_format" => "12h"})
         )
 
-      assert text =~ "2026-04-24"
-      assert text =~ "12:05"
-      assert text =~ "AM"
+      assert text == "12:05 AM"
     end
 
     test "falls back to UTC and 12-hour time for invalid preferences" do
@@ -56,9 +53,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
           user(timezone: "Not/AZone", preferences: %{"time_format" => "weird"})
         )
 
-      assert text =~ "2026-04-24"
-      assert text =~ "12:05"
-      assert text =~ "AM"
+      assert text == "12:05 AM"
     end
 
     test "falls back to UTC and 12-hour time for missing preferences" do
@@ -68,14 +63,12 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
           user(timezone: nil, preferences: %{})
         )
 
-      assert text =~ "2026-04-24"
-      assert text =~ "12:05"
-      assert text =~ "AM"
+      assert text == "12:05 AM"
     end
   end
 
   describe "StatusBar.render/2" do
-    test "main menu includes fixed clock text and handle" do
+    test "main menu shows handle before time-only clock" do
       state = %{
         current_screen: :main_menu,
         session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
@@ -85,9 +78,9 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
       texts = StatusBar.render(state, "Main Menu") |> collect_text_values()
       rendered = Enum.join(texts, " ")
 
-      assert rendered =~ "2026-04-24"
+      assert rendered =~ "@alice | 13:05"
       assert rendered =~ "13:05"
-      assert rendered =~ "@alice"
+      refute rendered =~ "2026-04-24"
     end
 
     test "main menu accepts real App struct state for fixed clock text" do
@@ -100,12 +93,12 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
       texts = StatusBar.render(state, "Main Menu") |> collect_text_values()
       rendered = Enum.join(texts, " ")
 
-      assert rendered =~ "2026-04-24"
+      assert rendered =~ "@alice | 13:05"
       assert rendered =~ "13:05"
-      assert rendered =~ "@alice"
+      refute rendered =~ "2026-04-24"
     end
 
-    test "non-main-menu screens keep handle-only status text" do
+    test "non-main-menu screens also show handle before time-only clock" do
       state = %{
         current_screen: :board_list,
         session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
@@ -113,11 +106,10 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
       }
 
       texts = StatusBar.render(state, "Boards") |> collect_text_values()
-
-      assert "@alice " in texts
       rendered = Enum.join(texts, " ")
+
+      assert rendered =~ "@alice | 13:05"
       refute rendered =~ "2026-04-24"
-      refute rendered =~ "13:05"
     end
   end
 end

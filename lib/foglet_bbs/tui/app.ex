@@ -200,7 +200,7 @@ defmodule Foglet.TUI.App do
       end
 
     clock =
-      if state.current_screen == :main_menu do
+      if state.current_user do
         [subscribe_interval(60_000, :main_menu_clock_tick)]
       else
         []

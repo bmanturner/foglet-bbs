@@ -63,10 +63,10 @@ defmodule Foglet.TUI.Widgets.Chrome.ClockFormatter do
   end
 
   defp format_local(%DateTime{} = datetime, "24h") do
-    Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
+    Calendar.strftime(datetime, "%H:%M")
   end
 
   defp format_local(%DateTime{} = datetime, "12h") do
-    Calendar.strftime(datetime, "%Y-%m-%d %I:%M %p")
+    Calendar.strftime(datetime, "%I:%M %p")
   end
 end

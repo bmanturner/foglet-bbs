@@ -53,13 +53,11 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
     end
   end
 
-  defp right_text(%{current_screen: :main_menu, current_user: %{handle: handle} = user} = state)
-       when is_binary(handle) do
+  defp right_text(%{current_user: %{handle: handle} = user} = state) when is_binary(handle) do
     clock = ClockFormatter.format(clock_instant(state), user)
-    "#{clock}  @#{handle}"
+    "@#{handle} | #{clock}"
   end
 
-  defp right_text(%{current_user: %{handle: handle}}) when is_binary(handle), do: "@#{handle}"
   defp right_text(_state), do: "guest"
 
   defp clock_instant(state) do

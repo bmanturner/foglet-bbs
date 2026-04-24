@@ -675,7 +675,7 @@ defmodule Foglet.TUI.AppTest do
       assert subs != []
     end
 
-    test "main_menu screen adds main-menu clock interval subscription" do
+    test "main_menu screen adds chrome clock interval subscription" do
       user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
 
       {:ok, state} =
@@ -694,7 +694,7 @@ defmodule Foglet.TUI.AppTest do
       assert data.interval <= 60_000
     end
 
-    test "non-main-menu screens do not add main-menu clock interval subscription" do
+    test "non-main-menu screens also add chrome clock interval subscription" do
       user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
 
       {:ok, state} =
@@ -706,7 +706,11 @@ defmodule Foglet.TUI.AppTest do
       state = %{state | current_screen: :board_list}
       subs = App.subscribe(state)
 
-      refute interval_subscription(subs, :main_menu_clock_tick)
+      assert %Raxol.Core.Runtime.Subscription{type: :interval, data: data} =
+               interval_subscription(subs, :main_menu_clock_tick)
+
+      assert is_integer(data.interval)
+      assert data.interval <= 60_000
     end
 
     test "returns PubSub custom subscription when current_user is set (Audit #12)" do
