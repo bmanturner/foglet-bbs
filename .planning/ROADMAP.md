@@ -162,10 +162,10 @@ Plans:
   2. SMTP password reset and no-email/operator retrieval copy expose a token or supported terminal-native reset instruction without claiming unsupported browser behavior.
   3. Focused reset blocker tests assert happy path, forbidden path, and user/operator-facing copy for the supported reset flow.
   4. README operator notes and Phase 14 blocker records agree about reset support and no longer contradict each other.
-**Plans**: TBD
+**Plans**: 2 plans
 Plans:
-- [ ] TBD — Replace unsupported reset URL flow with supported reset-token handling or honest operator output
-- [ ] TBD — Align reset tests, README operator notes, and blocker records
+- [ ] 15-01-PLAN.md — Replace unsupported reset URL output with Accounts-owned raw reset-token handling
+- [ ] 15-02-PLAN.md — Align reset copy guards, README operator notes, and Phase 14 blocker records
 **UI hint**: yes
 
 ## Progress
