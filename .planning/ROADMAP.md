@@ -41,7 +41,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 10: User Status Administration** - Sysops can approve, reject, suspend, and reactivate users through actor-aware terminal and break-glass workflows. Sysop receive email upon new user awaiting approval when email is available. (completed 2026-04-24)
 - [x] **Phase 11: Posting Policy Enforcement** - Board posting policy and locked-thread restrictions are enforced before board-server writes. (completed 2026-04-24)
 - [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata (when last successful login with key was made).
-- [ ] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions.
+- [x] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions. (completed 2026-04-24)
 - [ ] **Phase 14: Launch Hygiene and Operator Notes** - Visible sysop settings, tests, copy, and operator docs are aligned for pre-alpha.
 
 ## Phase Details
@@ -132,7 +132,7 @@ Plans:
 - [x] 13-01-PLAN.md — Board subscription policy and context boundary
 - [x] 13-02-PLAN.md — Terminal board directory subscribe/unsubscribe workflow
 - [x] 13-03-PLAN.md — Break-glass board subscription Mix task
-- [ ] 13-04-PLAN.md — Sysop board policy field and Phase 13 regression gate
+- [x] 13-04-PLAN.md — Sysop board policy field and Phase 13 regression gate
 **UI hint**: yes
 
 ### Phase 14: Launch Hygiene and Operator Notes
@@ -172,5 +172,5 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 10. User Status Administration | v1.2 | 4/4 | Complete   | 2026-04-24 |
 | 11. Posting Policy Enforcement | v1.2 | 3/3 | Complete   | 2026-04-24 |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
-| 13. Board Subscription Management | v1.2 | 3/4 | In Progress|  |
+| 13. Board Subscription Management | v1.2 | 4/4 | Complete   | 2026-04-24 |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 0/TBD | Not started | - |
