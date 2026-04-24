@@ -182,12 +182,28 @@ defmodule Foglet.AccountsTest do
   end
 
   describe "transition_user_status/3" do
+    setup :set_swoosh_global
+
+    setup do
+      original_delivery_mode = Config.get("delivery_mode", "no_email")
+      original_mailer_config = Application.fetch_env!(:foglet_bbs, Foglet.Mailer)
+
+      on_exit(fn ->
+        Config.put!("delivery_mode", original_delivery_mode)
+        Config.invalidate("delivery_mode")
+        Application.put_env(:foglet_bbs, Foglet.Mailer, original_mailer_config)
+      end)
+
+      :ok
+    end
+
     test "active sysop can perform the locked transition graph" do
+      Config.put!("delivery_mode", "no_email")
       sysop = user_with_status(:active, "sysoptransition", :sysop)
 
       pending_to_active = user_with_status(:pending, "pendingactive")
       assert {:ok, result} = Accounts.transition_user_status(sysop, pending_to_active, :active)
-      assert %{from: :pending, to: :active, delivery: :not_applicable} = result
+      assert %{from: :pending, to: :active, delivery: :skipped_no_email} = result
       assert result.user.status == :active
 
       pending_to_rejected = user_with_status(:pending, "pendingrejected")
@@ -195,7 +211,7 @@ defmodule Foglet.AccountsTest do
       assert {:ok, result} =
                Accounts.transition_user_status(sysop, pending_to_rejected.handle, "rejected")
 
-      assert %{from: :pending, to: :rejected, delivery: :not_applicable} = result
+      assert %{from: :pending, to: :rejected, delivery: :skipped_no_email} = result
       assert result.user.status == :rejected
 
       active_to_suspended = AccountsFixtures.user_fixture(%{handle: "activesuspended"})
@@ -210,6 +226,54 @@ defmodule Foglet.AccountsTest do
       assert {:ok, result} = Accounts.transition_user_status(sysop, suspended_to_active, :active)
       assert %{from: :suspended, to: :active, delivery: :not_applicable} = result
       assert result.user.status == :active
+    end
+
+    test "email mode sends approval and rejection notifications for pending transitions" do
+      Config.put!("delivery_mode", "email")
+      sysop = user_with_status(:active, "sysopnotify", :sysop)
+
+      approve =
+        user_with_status(:pending, "notifyapprove")
+        |> Ecto.Changeset.change(%{email: "notifyapprove@example.test"})
+        |> Repo.update!()
+
+      reject =
+        user_with_status(:pending, "notifyreject")
+        |> Ecto.Changeset.change(%{email: "notifyreject@example.test"})
+        |> Repo.update!()
+
+      assert {:ok, %{delivery: :attempted}} =
+               Accounts.transition_user_status(sysop, approve, :active)
+
+      assert_email_sent(fn email ->
+        assert email.to == [{"notifyapprove", "notifyapprove@example.test"}]
+        assert email.subject == "Your Foglet account was approved"
+      end)
+
+      assert {:ok, %{delivery: :attempted}} =
+               Accounts.transition_user_status(sysop, reject, :rejected)
+
+      assert_email_sent(fn email ->
+        assert email.to == [{"notifyreject", "notifyreject@example.test"}]
+        assert email.subject == "Your Foglet registration was rejected"
+      end)
+    end
+
+    test "status delivery failure does not roll back a valid transition" do
+      Config.put!("delivery_mode", "email")
+
+      Application.put_env(:foglet_bbs, Foglet.Mailer,
+        adapter: FogletBbs.AccountsTest.FailingMailerAdapter
+      )
+
+      sysop = user_with_status(:active, "sysopfailnotify", :sysop)
+      pending = user_with_status(:pending, "failnotify")
+
+      assert {:ok, %{delivery: {:failed, :forced_failure}, user: updated}} =
+               Accounts.transition_user_status(sysop, pending, :active)
+
+      assert updated.status == :active
+      assert Accounts.get_user!(pending.id).status == :active
     end
 
     test "invalid transitions do not mutate persisted status" do
@@ -658,6 +722,25 @@ defmodule Foglet.AccountsTest do
       refute email.text_body =~ "/users/reset_password"
       refute email.text_body =~ "http://"
       refute email.text_body =~ "https://"
+    end
+
+    test "approval and rejection notifications build status email messages" do
+      approved =
+        AccountsFixtures.user_fixture(%{handle: "approvedmail", email: "approved@example.test"})
+
+      rejected =
+        AccountsFixtures.user_fixture(%{handle: "rejectedmail", email: "rejected@example.test"})
+
+      approval = Foglet.Accounts.Email.approval_notification(approved)
+      rejection = Foglet.Accounts.Email.rejection_notification(rejected)
+
+      assert approval.to == [{"approvedmail", "approved@example.test"}]
+      assert approval.from == {"Foglet BBS", "no-reply@localhost"}
+      assert approval.subject == "Your Foglet account was approved"
+
+      assert rejection.to == [{"rejectedmail", "rejected@example.test"}]
+      assert rejection.from == {"Foglet BBS", "no-reply@localhost"}
+      assert rejection.subject == "Your Foglet registration was rejected"
     end
   end
 

@@ -438,9 +438,28 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
 
       assert %{type: :error, message: msg} = new_state.modal
-      assert msg =~ "pending"
+      assert msg == "Your account is pending sysop approval."
       refute msg =~ "notification"
       refute msg =~ "email"
+    end
+
+    test "rejected user shows rejection modal and does not promote session" do
+      password = "correct horse battery"
+
+      user =
+        user_fixture(%{password: password})
+        |> Foglet.Accounts.User.status_changeset(%{status: :rejected})
+        |> FogletBbs.Repo.update!()
+
+      state = form_state([handle: user.handle, password: password], :password)
+
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+
+      assert %{type: :error, message: "Your registration was rejected. Contact the sysop."} =
+               new_state.modal
+
+      assert new_state.screen_state == %{}
+      refute Enum.any?(cmds, &match?({:promote_session, _}, &1))
     end
   end
 

@@ -373,7 +373,15 @@ defmodule Foglet.TUI.Screens.Login do
       :pending ->
         modal = %Foglet.TUI.Modal{
           type: :error,
-          message: "Your account is pending sysop approval. Please wait for sysop approval."
+          message: "Your account is pending sysop approval."
+        }
+
+        {:update, %{state | modal: modal, screen_state: %{}}, []}
+
+      :rejected ->
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Your registration was rejected. Contact the sysop."
         }
 
         {:update, %{state | modal: modal, screen_state: %{}}, []}
