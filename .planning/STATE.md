@@ -4,8 +4,8 @@ milestone: v1.2
 milestone_name: Pre-Alpha Gap Closure
 status: executing
 stopped_at: Phase 12 context gathered (assumptions mode)
-last_updated: "2026-04-24T16:42:01.837Z"
-last_activity: 2026-04-24 -- Phase 09 planning complete
+last_updated: "2026-04-24T16:43:54.866Z"
+last_activity: 2026-04-24 -- Phase 09 execution started
 progress:
   total_phases: 6
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-24)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 9 - Delivery Modes and Onboarding Honesty
+**Current focus:** Phase 09 — delivery-modes-and-onboarding-honesty
 
 ## Current Position
 
-Phase: 9 of 14 (v1.2 phase 1 of 6 - Delivery Modes and Onboarding Honesty)
-Plan: TBD
-Status: Ready to execute
-Last activity: 2026-04-24 -- Phase 09 planning complete
+Phase: 09 (delivery-modes-and-onboarding-honesty) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 09
+Last activity: 2026-04-24 -- Phase 09 execution started
 
 Progress: [----------] 0%
 
