@@ -1,71 +1,135 @@
-This is a web application written using the Phoenix web framework.
+# Foglet BBS Agent Context
 
-## Project guidelines
+Foglet BBS is an SSH-first bulletin board system. The primary product
+experience is the terminal UI served over SSH. Phoenix is infrastructure for
+endpoint, PubSub, telemetry, LiveDashboard, and future structured clients; do
+not add end-user browser workflows unless the architecture docs are updated to
+make that product surface intentional.
 
-- Run `mix precommit` when you are done with all changes and fix any pending issues. It runs `compile --warnings-as-errors`, `format`, `credo --strict`, `sobelow`, and `dialyzer` — trust it to catch formatting, predicate names, `String.to_atom` misuse, list-Access warnings, and type/security issues so this file doesn't have to.
-- Use the already included `:req` (`Req`) library for HTTP requests. **Avoid** `:httpoison`, `:tesla`, and `:httpc`.
-- Prefer Elixir's stdlib (`Time`, `Date`, `DateTime`, `Calendar`) for date/time work. **Never** add a dep for this unless asked — `date_time_parser` is the only sanctioned exception (parsing).
+Use `rtk` as the shell command prefix in this repo, for example
+`rtk mix test` or `rtk git status`.
 
-## Project docs
+## Read First
 
-Consult these before making non-trivial changes in the relevant area:
+Consult the narrowest relevant docs before non-trivial changes:
 
-- `docs/ARCHITECTURE.md` — system architecture, module boundaries, the "why" behind major structural decisions.
-- `docs/DATA_MODEL.md` — schemas, relationships, invariants. Read before touching Ecto schemas or migrations.
-- `docs/ROADMAP.md` — milestone scope and sequencing.
-- `docs/raxol/` — vendored Raxol documentation. Reach for this whenever you're reading or writing Raxol code; start at `docs/raxol/README.md`.
-  - **TUI work:** `docs/raxol/getting-started/WIDGET_GALLERY.md` for the primitives we have available, plus `lib/foglet_bbs/tui/widgets/README.md` for an overview of the themed widgets we have in foglet_bbs
-  - **ADRs / deeper dives:** `docs/raxol/adr/`, `docs/raxol/core/`, `docs/raxol/guides/`.
-- `.planning/` — GSD planning artifacts (requirements, ADRs, phase plans, verification). Search here for the reasoning behind existing decisions before proposing changes to them.
+- `docs/DATA_MODEL.md` before touching schemas, migrations, associations, or
+  persistence invariants.
+- Before TUI/Raxol work. For widgets, also read
+  `docs/raxol/getting-started/WIDGET_GALLERY.md` and
+  `lib/foglet_bbs/tui/widgets/README.md`.
 
-## Elixir gotchas
+## Boundaries
 
-These aren't caught by precommit — keep them in mind:
+`Foglet.*` is the application/domain namespace:
 
-- **Block expressions rebind, they don't mutate.** In `if`/`case`/`cond`, bind the whole expression to a variable; don't try to reassign inside the block:
+- `Foglet.Accounts`: users, auth, roles, invites, tokens, SSH keys, deletion.
+- `Foglet.Boards`: categories, boards, subscriptions, read pointers,
+  per-board servers.
+- `Foglet.Threads`: thread queries, thread read pointers, thread moderation.
+- `Foglet.Posts`: post queries, replies, edits, soft deletion.
+- `Foglet.Config`: runtime configuration and ETS-backed caching.
+- `Foglet.Authorization`: Bodyguard policies and operator scopes.
+- `Foglet.Sessions.*`: live session identity and one-session-per-user behavior.
+- `Foglet.SSH.*`: Erlang `:ssh` daemon/channel integration.
+- `Foglet.TUI.*`: Raxol app, screens, state, and widgets.
 
-      # INVALID — rebind inside `if` is lost
-      if connected?(socket) do
-        socket = assign(socket, :val, val)
-      end
+`FogletBbs.*` and `FogletBbsWeb.*` are Phoenix infrastructure. Keep domain
+workflows in contexts, not controllers, SSH callbacks, or TUI render functions.
 
-      # VALID
-      socket =
-        if connected?(socket) do
-          assign(socket, :val, val)
-        else
-          socket
-        end
+## Persistence And Contexts
 
-- **Never nest multiple modules in the same file** — causes cyclic dependency and compilation headaches.
-- **Structs don't implement `Access`.** Use `my_struct.field` directly, or `Ecto.Changeset.get_field/2` for changesets — never `struct[:field]`.
-- **OTP primitives need names in the child spec.** `DynamicSupervisor` and `Registry` require `name:` in their child_spec so you can address them later:
+Postgres is authoritative for durable state. ETS and processes are ephemeral and
+must be reconstructable after restart.
 
-      {DynamicSupervisor, name: MyApp.MyDynamicSup}
+Use context modules as public boundaries. Contexts own transactions,
+authorization checks, preload choices, PubSub side effects, and cross-schema
+invariants. Schemas own changesets, associations, and data-shape rules.
 
-- **Concurrent enumeration:** use `Task.async_stream(collection, callback, options)` with `timeout: :infinity` in almost all cases — it gives you back-pressure for free.
+Programmatically set foreign keys on structs before changeset construction; do
+not add fields such as `user_id` to `cast/3` just to make callers convenient.
+Preload associations in the query when renderers or serializers will access
+them later.
 
-## Mix
+## Core Invariants
 
-- Read `mix help <task>` before reaching for unfamiliar tasks.
-- Debug a single test file with `mix test path/to/test.exs`; re-run only failures with `mix test --failed`.
-- `mix deps.clean --all` is almost never the right answer — diagnose first.
+Per-board message numbers are stable and important:
 
-## Test guidelines
+- Thread and post creation must route through `Foglet.Boards.Server`.
+- The board server is the single writer for message-number allocation.
+- Soft-deleted posts keep their message numbers; do not fill gaps.
+- Moving a thread updates denormalized `board_id` on posts, but existing
+  message numbers remain historical.
 
-- **Always use `start_supervised!/1`** to start processes in tests — it guarantees cleanup between tests.
-- **Avoid `Process.sleep/1` and `Process.alive?/1`.** Synchronize deterministically instead:
-  - To wait for a process to finish, monitor it and assert on `:DOWN`:
+Use `Foglet.Boards.scope_for/1`, `Foglet.Threads.scope_for/1`, and
+`Foglet.Posts.scope_for/1` for authorization scope shapes. Do not duplicate
+scope derivation in screens or widgets.
 
-        ref = Process.monitor(pid)
-        assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+Read pointers are monotonic persisted user state. Advance them through the
+owning context and keep UI-local scroll/read state separate.
 
-  - To wait until a process has handled prior messages, use `_ = :sys.get_state(pid)`.
+## Authorization
 
-## Ecto
+`Foglet.Authorization` implements `Bodyguard.Policy`.
 
-- **Preload associations** in the query when they'll be accessed later (templates, JSON serializers) — don't rely on lazy loads that don't exist.
-- Remember to `import Ecto.Query` (and friends) when writing `seeds.exs`.
-- `Ecto.Schema` uses `:string` for both `:string` and `:text` DB columns: `field :name, :string`.
-- Programmatically-set fields like `user_id` must **not** appear in `cast/3` — set them explicitly on the struct before changeset construction.
-- Generate migrations with `mix ecto.gen.migration migration_name_using_underscores` so timestamps and naming stay consistent.
+Use `Bodyguard.permit/4` before domain side effects, `Bodyguard.permit?/4` only
+for advisory UI rendering, and `Foglet.Authorization.scopes_for/2` for filtering
+operator-visible data. Hidden or disabled UI is never authorization; context
+mutations must still check policy.
+
+Stable scope shapes are `:site` and `{:board, board_id}`.
+
+## Runtime Config
+
+`Foglet.Config` is a read-through ETS cache over the `configuration` table.
+
+- Use `get!/1`, `get/2`, and `fetch/1` for reads.
+- Use `put!/3` only for trusted setup paths such as seeds, tests, and Mix tasks.
+- Use actor-aware `put/3` for interactive TUI or future API writes.
+- Add typed accessors for schematized keys; do not scatter string keys.
+- Keep secrets in environment/runtime config, not DB-backed config.
+
+## SSH And TUI
+
+`Foglet.SSH.CLIHandler` owns the SSH channel lifecycle: peer/auth context,
+session start or promotion, Raxol lifecycle startup, input/resize forwarding,
+and cleanup. Keep UI behavior in `Foglet.TUI.App` and screens.
+
+`Foglet.TUI.App` owns global UI state, current screen, modal routing, PubSub
+subscription wiring, commands/tasks, and routing messages to screens. Screen
+modules own screen-local rendering and key handling. Complex screen state
+belongs in a sibling state module such as `screens/post_reader/state.ex`.
+
+Widgets are reusable primitives. Stateful widgets expose `init/1`,
+`handle_event/2`, and `render/2`; stateless widgets expose render functions.
+Route colors through `Foglet.TUI.Theme`, pass theme explicitly, and keep render
+functions pure over already-loaded state.
+
+## Workflows
+
+For domain mutations: start at the owning context, add changeset fields only for
+caller-settable data, authorize actor-triggered side effects, use
+`Repo.transact/1` for multi-row invariants, preload what consumers need, and add
+focused tests under the mirrored `test/foglet_bbs/...` path.
+
+For TUI flows: keep global navigation in `Foglet.TUI.App`, screen-local state in
+the screen or sibling `state.ex`, data/mutations in domain contexts,
+off-process work in `Foglet.TUI.Command`/Raxol commands, and reusable display in
+widgets.
+
+For runtime config: add the key spec in `Foglet.Config.Schema`, seed defaults,
+add a typed accessor, use `Config.put/3` for actor-aware writes, and test
+validation, persistence, cache invalidation, and consuming UI.
+
+For migrations/schemas: read `docs/DATA_MODEL.md`, generate with
+`mix ecto.gen.migration name_using_underscores`, use `Foglet.Schema`, and keep
+migration, schema, changeset, context, fixtures, and tests aligned.
+
+## Testing And Finish Line
+
+Use `start_supervised!/1` for processes in tests. Avoid `Process.sleep/1` and
+`Process.alive?/1`; synchronize with monitors, explicit messages, or
+`:sys.get_state/1`.
+
+Run `mix precommit` when changes are complete and fix any issues. It runs
+compile with warnings as errors, formatter, Credo, Sobelow, and Dialyzer.
