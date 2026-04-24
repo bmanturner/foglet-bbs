@@ -577,6 +577,8 @@ defmodule Foglet.TUI.App do
     {state, []}
   end
 
+  defp do_update(:main_menu_clock_tick, state), do: {state, []}
+
   # A new SSH connection for the same user replaced this session.
   # Show a notice modal and quit cleanly.
   defp do_update({:session_replaced, _user_id}, state) do
