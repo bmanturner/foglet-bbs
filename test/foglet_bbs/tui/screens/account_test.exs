@@ -8,8 +8,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.Sessions.Session
   alias Foglet.TUI.App
   alias Foglet.TUI.Screens.Account
+  alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
+
+  @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
 
   defp build_state(user, session_context) do
     %Foglet.TUI.App{
@@ -23,7 +26,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   defp build_state_for_role(role, session_context \\ %{}) do
-    build_state(%Foglet.Accounts.User{id: "u1", handle: "alice", role: role}, session_context)
+    build_state(
+      %Foglet.Accounts.User{
+        id: "00000000-0000-0000-0000-000000000001",
+        handle: "alice",
+        role: role
+      },
+      session_context
+    )
   end
 
   setup do
@@ -85,6 +95,59 @@ defmodule Foglet.TUI.Screens.AccountTest do
       flat = Account.render(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "PROFILE"))
       assert Enum.any?(flat, &String.contains?(&1, "PREFS"))
+      assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
+    end
+
+    test "SSH KEYS tab renders an empty key-list state", %{state: state} do
+      account_state =
+        Account.init_screen_state()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
+
+      state = put_in(state, [:screen_state, :account], account_state)
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet."))
+    end
+
+    test "SSH KEYS tab renders key metadata without raw public key material", %{state: state} do
+      inserted_at = ~U[2026-04-24 10:11:12.123456Z]
+      last_used_at = ~U[2026-04-24 11:12:13.123456Z]
+
+      account_state =
+        Account.init_screen_state()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(
+          :ssh_keys,
+          SSHKeysState.loaded(SSHKeysState.new(), [
+            %{
+              label: "laptop",
+              fingerprint: "SHA256:abc123",
+              inserted_at: inserted_at,
+              last_used_at: last_used_at,
+              public_key: AccountsFixtures.default_ssh_public_key()
+            },
+            %{
+              label: "backup",
+              fingerprint: "SHA256:def456",
+              inserted_at: inserted_at,
+              last_used_at: nil,
+              public_key: "ssh-ed25519 AAAAC3raw-material backup@example"
+            }
+          ])
+        )
+
+      state = put_in(state, [:screen_state, :account], account_state)
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "laptop"))
+      assert Enum.any?(flat, &String.contains?(&1, "backup"))
+      assert Enum.any?(flat, &String.contains?(&1, "SHA256:abc123"))
+      assert Enum.any?(flat, &String.contains?(&1, "created: 2026-04-24 10:11:12Z"))
+      assert Enum.any?(flat, &String.contains?(&1, "last used: 2026-04-24 11:12:13Z"))
+      assert Enum.any?(flat, &String.contains?(&1, "Never used"))
+      refute Enum.any?(flat, &String.contains?(&1, "ssh-ed25519"))
+      refute Enum.any?(flat, &String.contains?(&1, "AAAAC3"))
     end
 
     test "omits INVITES when InvitesSurface.visible?/2 returns false" do
@@ -231,9 +294,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "visibility changes in session_context rebuild tab list on handle-key", %{state: state} do
       state = %{state | session_context: %{invite_code_generators: "any_user"}}
 
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "4"}, state)
 
-      assert new_state.screen_state.account.active_tab == 2
+      assert new_state.screen_state.account.active_tab == 3
       flat = Account.render(new_state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
@@ -241,6 +304,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "digit '2' jumps to second tab (index 1)", %{state: state} do
       {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "2"}, state)
       assert new_state.screen_state.account.active_tab == 1
+    end
+
+    test "digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
+      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "3"}, state)
+      assert new_state.screen_state.account.active_tab == 2
+
+      flat = Account.render(new_state) |> collect_text_values()
+      assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
     end
 
     test "'Q' returns to :main_menu", %{state: state} do
@@ -446,7 +517,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert {:ok, []} = Accounts.list_invites(user)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
       {:update, state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
 
       assert {:ok, [invite]} = Accounts.list_invites(user)
@@ -465,7 +536,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:ok, first} = Accounts.create_invite(user)
       {:ok, second} = Accounts.create_invite(user)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
       assert Enum.count(state.screen_state.account.invites.items) == 2
 
       {:update, state, []} = Account.handle_key(%{key: :down}, state)
@@ -492,6 +563,160 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
+  describe "live SSH KEYS actions" do
+    test "entering SSH KEYS and refreshing load only the current user's keys" do
+      user = AccountsFixtures.user_fixture()
+      other_user = AccountsFixtures.user_fixture()
+      own_key = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
+
+      _other_key =
+        AccountsFixtures.ssh_key_fixture(other_user, %{public_key: @alternate_ssh_public_key})
+
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+
+      assert [%{id: key_id, label: "laptop"}] = state.screen_state.account.ssh_keys.items
+      assert key_id == own_key.id
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "r"}, state)
+      assert [%{id: ^key_id}] = state.screen_state.account.ssh_keys.items
+
+      flat = Account.render(state) |> collect_text_values()
+      assert Enum.any?(flat, &String.contains?(&1, "Refresh"))
+      assert Enum.any?(flat, &String.contains?(&1, "Revoke"))
+    end
+
+    test "add flow stores a valid key, refreshes list, and shows status" do
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "a"}, state)
+
+      account_state =
+        put_ssh_key_form(state.screen_state.account, %{
+          label: "workstation",
+          public_key: @alternate_ssh_public_key
+        })
+
+      state = put_in(state, [:screen_state, :account], account_state)
+
+      {:update, state, []} = Account.handle_key(%{key: :enter}, state)
+
+      assert [%{label: "workstation", fingerprint: "SHA256:" <> _}] = Accounts.list_ssh_keys(user)
+      assert state.screen_state.account.ssh_keys.status_message == "SSH key added."
+      assert [%{label: "workstation"}] = state.screen_state.account.ssh_keys.items
+    end
+
+    test "add flow shows terminal-visible validation errors" do
+      user = AccountsFixtures.user_fixture()
+      _existing = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "a"}, state)
+      {:update, blank_state, []} = Account.handle_key(%{key: :enter}, state)
+
+      blank_flat = Account.render(blank_state) |> collect_text_values()
+      assert Enum.any?(blank_flat, &String.contains?(&1, "label"))
+      assert Enum.any?(blank_flat, &String.contains?(&1, "public_key"))
+
+      account_state =
+        put_ssh_key_form(blank_state.screen_state.account, %{
+          label: "bad",
+          public_key: "invalid OpenSSH material"
+        })
+
+      invalid_state = put_in(blank_state, [:screen_state, :account], account_state)
+
+      {:update, invalid_state, []} = Account.handle_key(%{key: :enter}, invalid_state)
+      invalid_flat = Account.render(invalid_state) |> collect_text_values()
+      assert Enum.any?(invalid_flat, &String.contains?(&1, "invalid OpenSSH"))
+
+      account_state =
+        put_ssh_key_form(invalid_state.screen_state.account, %{
+          label: "other",
+          public_key: AccountsFixtures.default_ssh_public_key()
+        })
+
+      duplicate_fingerprint_state =
+        put_in(invalid_state, [:screen_state, :account], account_state)
+
+      {:update, duplicate_fingerprint_state, []} =
+        Account.handle_key(%{key: :enter}, duplicate_fingerprint_state)
+
+      duplicate_fingerprint_flat =
+        duplicate_fingerprint_state |> Account.render() |> collect_text_values()
+
+      assert Enum.any?(duplicate_fingerprint_flat, &String.contains?(&1, "already been taken"))
+
+      account_state =
+        put_ssh_key_form(duplicate_fingerprint_state.screen_state.account, %{
+          label: "laptop",
+          public_key: @alternate_ssh_public_key
+        })
+
+      duplicate_label_state =
+        put_in(duplicate_fingerprint_state, [:screen_state, :account], account_state)
+
+      {:update, duplicate_label_state, []} =
+        Account.handle_key(%{key: :enter}, duplicate_label_state)
+
+      duplicate_label_flat = duplicate_label_state |> Account.render() |> collect_text_values()
+      assert Enum.any?(duplicate_label_flat, &String.contains?(&1, "already been taken"))
+    end
+
+    test "revoke selected key refreshes list and reports missing selections" do
+      user = AccountsFixtures.user_fixture()
+      first = AccountsFixtures.ssh_key_fixture(user, %{label: "first"})
+
+      second =
+        AccountsFixtures.ssh_key_fixture(user, %{
+          label: "second",
+          public_key: @alternate_ssh_public_key
+        })
+
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = Account.handle_key(%{key: :down}, state)
+      assert state.screen_state.account.ssh_keys.selected_index == 1
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+
+      assert state.screen_state.account.ssh_keys.status_message == "SSH key revoked."
+      assert [%{id: remaining_id}] = state.screen_state.account.ssh_keys.items
+      assert remaining_id == first.id
+      assert [%{id: ^remaining_id}] = Accounts.list_ssh_keys(user)
+      refute Enum.any?(Accounts.list_ssh_keys(user), &(&1.id == second.id))
+
+      account_state = %{
+        state.screen_state.account
+        | ssh_keys: SSHKeysState.loaded(state.screen_state.account.ssh_keys, [])
+      }
+
+      empty_state = put_in(state, [:screen_state, :account], account_state)
+
+      {:update, empty_state, []} = Account.handle_key(%{key: :char, char: "d"}, empty_state)
+      assert empty_state.screen_state.account.ssh_keys.errors.general == "No SSH key is selected."
+    end
+
+    test "revoke handles not found without crashing" do
+      user = AccountsFixtures.user_fixture()
+      key = AccountsFixtures.ssh_key_fixture(user)
+      state = build_state(user, %{})
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:ok, _revoked} = Accounts.revoke_ssh_key(user, key.id)
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+
+      assert state.screen_state.account.ssh_keys.errors.general ==
+               "That SSH key could not be found."
+    end
+  end
+
   defp restore_invite_config(_context) do
     Config.init_cache()
     current_generators = Config.get("invite_code_generators", "sysops")
@@ -507,5 +732,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
     Config.put!("invite_code_generators", "any_user")
     Config.put!("invite_generation_per_user_limit", 0)
     :ok
+  end
+
+  defp put_ssh_key_form(account_state, form) do
+    %{account_state | ssh_keys: %{account_state.ssh_keys | form: form}}
   end
 end

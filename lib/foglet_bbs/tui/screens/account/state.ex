@@ -8,24 +8,26 @@ defmodule Foglet.TUI.Screens.Account.State do
   drafts are screen-local structs/maps, not user-supplied persistence params.
 
   Tabs (D-08, D-09):
-    * base — `["PROFILE", "PREFS"]`
-    * with INVITES visibility — `["PROFILE", "PREFS", "INVITES"]`
+    * base — `["PROFILE", "PREFS", "SSH KEYS"]`
+    * with INVITES visibility — `["PROFILE", "PREFS", "SSH KEYS", "INVITES"]`
 
   Profile and preference drafts are seeded from the current user. They remain
   local until Account save handling emits an explicit command; `candidate_theme_id`
   is only a render preview and does not mutate session context.
   """
 
+  alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @base_tabs ["PROFILE", "PREFS"]
+  @base_tabs ["PROFILE", "PREFS", "SSH KEYS"]
   @invites_tab "INVITES"
 
   @type t :: %__MODULE__{
           tabs: Tabs.t(),
           active_tab: non_neg_integer(),
+          ssh_keys: SSHKeysState.t(),
           invites: InvitesState.t(),
           profile_draft: map(),
           prefs_draft: map(),
@@ -42,6 +44,7 @@ defmodule Foglet.TUI.Screens.Account.State do
   defstruct [
     :tabs,
     active_tab: 0,
+    ssh_keys: nil,
     invites: nil,
     profile_draft: %{},
     prefs_draft: %{},
@@ -77,6 +80,7 @@ defmodule Foglet.TUI.Screens.Account.State do
     %__MODULE__{
       tabs: Tabs.init(tabs: tab_labels(invites?), active: active),
       active_tab: active,
+      ssh_keys: SSHKeysState.new(),
       invites: InvitesSurface.default_state()
     }
     |> seed_from_user(current_user)

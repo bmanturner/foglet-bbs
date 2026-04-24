@@ -5,6 +5,7 @@ defmodule Foglet.TUI.Screens.Account do
   Implements `Foglet.TUI.Screen` behaviour with three tabs:
     * PROFILE  — inline private profile draft form
     * PREFS    — inline presentation preference draft form with local theme preview
+    * SSH KEYS — self-service SSH public-key management
     * INVITES  — conditional; shown when `ShellVisibility.invites_visible?/2` returns
                  true (D-09). Rendered via the shared `InvitesSurface` primitive (D-06).
 
@@ -27,6 +28,8 @@ defmodule Foglet.TUI.Screens.Account do
 
   alias Foglet.TUI.Screens.Account.PrefsForm
   alias Foglet.TUI.Screens.Account.ProfileForm
+  alias Foglet.TUI.Screens.Account.SSHKeysActions
+  alias Foglet.TUI.Screens.Account.SSHKeysSurface
   alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
@@ -88,8 +91,17 @@ defmodule Foglet.TUI.Screens.Account do
 
     cond do
       action != nil ->
-        new_ss = maybe_load_invites(new_ss, Map.get(state, :current_user))
+        actor = Map.get(state, :current_user)
+
+        new_ss =
+          new_ss
+          |> maybe_load_ssh_keys(actor)
+          |> maybe_load_invites(actor)
+
         {:update, put_screen_state(state, new_ss), []}
+
+      active_label(ss) == "SSH KEYS" ->
+        delegate_ssh_keys_key(event, state, ss)
 
       active_label(ss) == "INVITES" ->
         delegate_invites_key(event, state, ss)
@@ -168,6 +180,29 @@ defmodule Foglet.TUI.Screens.Account do
     end
   end
 
+  defp maybe_load_ssh_keys(%State{} = ss, actor) do
+    if active_label(ss) == "SSH KEYS" and not is_list(ss.ssh_keys.items) do
+      {:ok, ssh_keys} = SSHKeysActions.load(actor, ss.ssh_keys)
+      %{ss | ssh_keys: ssh_keys}
+    else
+      ss
+    end
+  end
+
+  defp delegate_ssh_keys_key(%{key: :char, char: char}, state, %State{} = ss) do
+    case SSHKeysActions.handle_key(char, Map.get(state, :current_user), ss.ssh_keys) do
+      {:ok, ssh_keys} -> {:update, put_screen_state(state, %{ss | ssh_keys: ssh_keys}), []}
+      :no_match -> :no_match
+    end
+  end
+
+  defp delegate_ssh_keys_key(%{key: key}, state, %State{} = ss) do
+    case SSHKeysActions.handle_key(key, Map.get(state, :current_user), ss.ssh_keys) do
+      {:ok, ssh_keys} -> {:update, put_screen_state(state, %{ss | ssh_keys: ssh_keys}), []}
+      :no_match -> :no_match
+    end
+  end
+
   defp delegate_invites_key(%{key: :char, char: char}, state, %State{} = ss) do
     case InvitesActions.handle_key(char, Map.get(state, :current_user), ss.invites) do
       {:ok, invites} -> {:update, put_screen_state(state, %{ss | invites: invites}), []}
@@ -225,6 +260,8 @@ defmodule Foglet.TUI.Screens.Account do
   defp render_tab_body("PROFILE", ss, theme), do: ProfileForm.render(ss, theme)
 
   defp render_tab_body("PREFS", ss, theme), do: PrefsForm.render(ss, theme)
+
+  defp render_tab_body("SSH KEYS", ss, theme), do: SSHKeysSurface.render(ss.ssh_keys, theme)
 
   defp render_tab_body("INVITES", ss, theme) do
     InvitesSurface.render(ss.invites, theme)
