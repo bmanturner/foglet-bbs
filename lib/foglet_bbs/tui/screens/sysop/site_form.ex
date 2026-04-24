@@ -76,7 +76,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
 
   def handle_key(%{key: :char, char: c} = event, state) when is_binary(c) do
     # Ignore ctrl/meta-modified characters (they belong to Ctrl+... handlers).
-    if Map.get(event, :ctrl) or Map.get(event, :meta) do
+    if Map.get(event, :ctrl) || Map.get(event, :meta) do
       {state, []}
     else
       {apply_char(c, state), []}
