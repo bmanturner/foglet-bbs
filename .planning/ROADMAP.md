@@ -149,10 +149,10 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   2. Main-menu time display refreshes at least once per minute without requiring reconnect.
   3. Main-menu navigation cleanly exposes Account, Moderation, and Sysop entry points according to current role and policy state.
 **Plans**: 4 plans
-  - [ ] 06-01-PLAN.md — Wave 0: deterministic chrome clock, refresh, and ShellVisibility regression tests [MENU-01, MENU-02]
-  - [ ] 06-02-PLAN.md — Wave 1: StatusBar chrome clock formatter and main-menu integration [MENU-01]
-  - [ ] 06-03-PLAN.md — Wave 1: main-menu-only clock interval and no-op tick handling [MENU-02]
-  - [ ] 06-04-PLAN.md — Wave 2: ShellVisibility integration, layout smoke, roadmap, and precommit gate [MENU-01, MENU-02]
+  - [x] 06-01-PLAN.md — Wave 0: deterministic chrome clock, refresh, and ShellVisibility regression tests [MENU-01, MENU-02]
+  - [x] 06-02-PLAN.md — Wave 1: StatusBar chrome clock formatter and main-menu integration [MENU-01]
+  - [x] 06-03-PLAN.md — Wave 1: main-menu-only clock interval and no-op tick handling [MENU-02]
+  - [x] 06-04-PLAN.md — Wave 2: ShellVisibility integration, layout smoke, roadmap, and precommit gate [MENU-01, MENU-02]
 **UI hint**: yes
 
 ### Phase 7: Oneliners and Main Menu Social Strip
