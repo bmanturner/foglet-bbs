@@ -5,7 +5,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
   alias Foglet.TUI.Screens.Moderation
 
-  defp build_state(role \\ :mod) do
+  defp build_state(role) do
     %Foglet.TUI.App{
       current_screen: :moderation,
       current_user: %Foglet.Accounts.User{id: "u1", handle: "alice", role: role},

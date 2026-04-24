@@ -40,7 +40,7 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @key_list [{"←/→", "Tab"}, {"1-5", "Jump"}, {"Q", "Back"}]
+  @key_list [{"←/→", "Tab"}, {"1-6", "Jump"}, {"Q", "Back"}]
 
   # ---------------------------------------------------------------------------
   # Screen behaviour callbacks
@@ -73,7 +73,8 @@ defmodule Foglet.TUI.Screens.Moderation do
     do: {:update, %{state | current_screen: :main_menu}, []}
 
   def handle_key(event, state) do
-    ss = get_screen_state(state)
+    old_ss = get_screen_state(state)
+    ss = synced_screen_state(state)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
     new_active =
@@ -82,7 +83,7 @@ defmodule Foglet.TUI.Screens.Moderation do
         _ -> ss.active_tab
       end
 
-    if action == nil and new_tabs == ss.tabs do
+    if action == nil and new_tabs == ss.tabs and ss == old_ss do
       # Tabs widget neither recognized the key nor persisted any internal
       # state mutation — treat as unhandled so global_key_handler can run.
       :no_match
@@ -103,53 +104,80 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_authorized(state) do
-    ss = get_screen_state(state)
+    ss = synced_screen_state(state)
     theme = Theme.from_state(state)
     content = render_content(ss, theme)
     ScreenFrame.render(state, "Moderation", content, @key_list)
   end
 
   defp render_content(ss, theme) do
-    tab_body = render_tab_body(ss.active_tab, theme)
+    active_label = Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab, "QUEUE")
+    tab_body = render_tab_body(active_label, ss, theme)
 
     column style: %{gap: 0} do
       [Tabs.render(ss.tabs, theme: theme), tab_body]
     end
   end
 
-  defp render_tab_body(0, theme) do
+  defp render_tab_body("QUEUE", _ss, theme) do
     column style: %{gap: 0} do
       [text("Report queue will arrive in Phase 8.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_tab_body(1, theme) do
+  defp render_tab_body("LOG", _ss, theme) do
     column style: %{gap: 0} do
       [text("Audit log will arrive in Phase 8.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_tab_body(2, theme) do
+  defp render_tab_body("USERS", _ss, theme) do
     column style: %{gap: 0} do
       [text("User administration will arrive in Phase 8.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_tab_body(3, theme) do
+  defp render_tab_body("SANCTIONS", _ss, theme) do
     column style: %{gap: 0} do
       [text("Sanctions tooling will arrive in Phase 8.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_tab_body(4, theme) do
+  defp render_tab_body("BOARDS", _ss, theme) do
     column style: %{gap: 0} do
       [text("Board-scoped moderation will arrive in Phase 8.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_tab_body(_idx, theme) do
+  defp render_tab_body(_label, _ss, theme) do
     column style: %{gap: 0} do
       [text("Report queue will arrive in Phase 8.", fg: theme.warning.fg)]
     end
+  end
+
+  defp synced_screen_state(state) do
+    ss = get_screen_state(state)
+
+    invites? =
+      ShellVisibility.invites_visible?(
+        Map.get(state, :current_user),
+        Map.get(state, :session_context)
+      )
+
+    labels = State.tab_labels(invites?)
+    active = min(ss.active_tab, length(labels) - 1)
+
+    if tab_labels_from_tabs(ss.tabs) == labels and active == ss.active_tab do
+      ss
+    else
+      %{ss | tabs: Tabs.init(tabs: labels, active: active), active_tab: active}
+    end
+  end
+
+  defp tab_labels_from_tabs(%Tabs{raxol_state: %{tabs: tabs}}) when is_list(tabs) do
+    Enum.map(tabs, fn
+      %{label: label} -> label
+      other -> to_string(other)
+    end)
   end
 end
