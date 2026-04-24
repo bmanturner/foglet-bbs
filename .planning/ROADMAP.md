@@ -112,7 +112,7 @@ Plans:
   5. User can authenticate with a registered SSH public key, and successful public-key authentication records last-used metadata.
 **Plans**: 3 plans
 Plans:
-- [ ] 12-01-PLAN.md — Accounts SSH key lifecycle and public-key auth metadata
+- [x] 12-01-PLAN.md — Accounts SSH key lifecycle and public-key auth metadata
 - [ ] 12-02-PLAN.md — Account SSH KEYS terminal tab
 - [ ] 12-03-PLAN.md — Phase 12 regression validation and precommit
 **UI hint**: yes
@@ -167,6 +167,6 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 9. Delivery Modes and Onboarding Honesty | v1.2 | 0/TBD | Not started | - |
 | 10. User Status Administration | v1.2 | 0/TBD | Not started | - |
 | 11. Posting Policy Enforcement | v1.2 | 0/TBD | Not started | - |
-| 12. Account SSH Key Management | v1.2 | 0/TBD | Not started | - |
+| 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 0/TBD | Not started | - |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 0/TBD | Not started | - |
