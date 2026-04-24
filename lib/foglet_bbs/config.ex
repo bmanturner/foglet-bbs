@@ -198,6 +198,10 @@ defmodule Foglet.Config do
   @spec max_thread_title_length() :: integer()
   def max_thread_title_length, do: get!("max_thread_title_length")
 
+  @doc "Outbound transactional delivery mode (MAIL-01)."
+  @spec delivery_mode() :: String.t()
+  def delivery_mode, do: get!("delivery_mode")
+
   @doc "Whether new registrations must verify email before gaining access (Phase 6 D-01)."
   @spec require_email_verification?() :: boolean()
   def require_email_verification?, do: get!("require_email_verification")

@@ -14,7 +14,7 @@ defmodule Foglet.Config.Schema do
 
   ## Scope
 
-  Only the 6 currently-seeded keys are schematized here. "Aspirational"
+  Only the 8 currently-seeded keys are schematized here. "Aspirational"
   keys listed in `docs/DATA_MODEL.md` §11 (e.g. `archive_enabled`,
   `themes_available`) are intentionally **not** schematized in this phase
   — they will be added as they graduate from aspirational to seeded.
@@ -81,6 +81,15 @@ defmodule Foglet.Config.Schema do
       description: "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)",
       enum: nil,
       min: 1,
+      max: nil
+    },
+    %{
+      key: "delivery_mode",
+      type: :string,
+      default: "no_email",
+      description: "Outbound transactional delivery mode (MAIL-01): email | no_email",
+      enum: ["email", "no_email"],
+      min: nil,
       max: nil
     },
     %{

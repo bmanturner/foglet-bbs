@@ -3,7 +3,8 @@
 #     mix run priv/repo/seeds/config.exs
 #
 # Seeds the `configuration` table with one row per schematized key in
-# `Foglet.Config.Schema`, using each key's declared default value.
+# `Foglet.Config.Schema`, including "delivery_mode", using each key's declared
+# default value.
 #
 # Split out from `priv/repo/seeds.exs` so the `test` mix alias can seed ONLY
 # config (required by `Foglet.Config.get!/1` and all typed accessors) without
