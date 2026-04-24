@@ -81,7 +81,9 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
           ])
         end)
 
-      assert output =~ "Changed pending_user from pending to active. Notification: not_applicable"
+      assert output =~
+               "Changed pending_user from pending to active. Notification: skipped_no_email"
+
       assert Accounts.get_user_by_handle("pending_user").status == :active
     end
 
@@ -101,7 +103,7 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
         end)
 
       assert output =~
-               "Changed pending_reject from pending to rejected. Notification: not_applicable"
+               "Changed pending_reject from pending to rejected. Notification: skipped_no_email"
 
       assert Accounts.get_user_by_handle("pending_reject").status == :rejected
     end
