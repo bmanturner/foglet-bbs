@@ -84,13 +84,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
-  describe "render/1" do
+  describe "render/1 (Account.render/1 traceability)" do
     test "does not crash with default screen state", %{state: state} do
       state = put_in(state, [:screen_state, :account], Account.init_screen_state())
       assert _ = Account.render(state)
     end
 
-    test "shows PROFILE and PREFS tab labels by default", %{state: state} do
+    test "KEYS-01 shows PROFILE, PREFS, and SSH KEYS tab labels by default", %{state: state} do
       state = put_in(state, [:screen_state, :account], Account.init_screen_state())
       flat = Account.render(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "PROFILE"))
@@ -98,7 +98,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
     end
 
-    test "SSH KEYS tab renders an empty key-list state", %{state: state} do
+    test "KEYS-01 SSH KEYS tab renders an empty key-list state", %{state: state} do
       account_state =
         Account.init_screen_state()
         |> Map.put(:active_tab, 2)
@@ -110,7 +110,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet."))
     end
 
-    test "SSH KEYS tab renders key metadata without raw public key material", %{state: state} do
+    test "KEYS-03 SSH KEYS tab renders key metadata without raw public key material", %{
+      state: state
+    } do
       inserted_at = ~U[2026-04-24 10:11:12.123456Z]
       last_used_at = ~U[2026-04-24 11:12:13.123456Z]
 
@@ -280,7 +282,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
-  describe "handle_key/2" do
+  describe "handle_key/2 (Account.handle_key/2 traceability)" do
     setup %{state: state} do
       state = put_in(state, [:screen_state, :account], Account.init_screen_state())
       %{state: state}
@@ -306,7 +308,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert new_state.screen_state.account.active_tab == 1
     end
 
-    test "digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
+    test "KEYS-01 digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
       {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "3"}, state)
       assert new_state.screen_state.account.active_tab == 2
 
@@ -564,7 +566,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   describe "live SSH KEYS actions" do
-    test "entering SSH KEYS and refreshing load only the current user's keys" do
+    test "KEYS-03 entering SSH KEYS and refreshing load only the current user's keys" do
       user = AccountsFixtures.user_fixture()
       other_user = AccountsFixtures.user_fixture()
       own_key = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
@@ -587,7 +589,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "Revoke"))
     end
 
-    test "add flow stores a valid key, refreshes list, and shows status" do
+    test "KEYS-02 add flow stores a valid key, refreshes list, and shows status" do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{})
 
@@ -609,7 +611,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert [%{label: "workstation"}] = state.screen_state.account.ssh_keys.items
     end
 
-    test "add flow shows terminal-visible validation errors" do
+    test "KEYS-02 add flow shows terminal-visible validation errors" do
       user = AccountsFixtures.user_fixture()
       _existing = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
       state = build_state(user, %{})
@@ -667,7 +669,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(duplicate_label_flat, &String.contains?(&1, "already been taken"))
     end
 
-    test "revoke selected key refreshes list and reports missing selections" do
+    test "KEYS-04 revoke selected key refreshes list and reports missing selections" do
       user = AccountsFixtures.user_fixture()
       first = AccountsFixtures.ssh_key_fixture(user, %{label: "first"})
 
@@ -702,7 +704,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert empty_state.screen_state.account.ssh_keys.errors.general == "No SSH key is selected."
     end
 
-    test "revoke handles not found without crashing" do
+    test "KEYS-04 revoke handles not found without crashing" do
       user = AccountsFixtures.user_fixture()
       key = AccountsFixtures.ssh_key_fixture(user)
       state = build_state(user, %{})

@@ -22,8 +22,8 @@ defmodule Foglet.Accounts.SSHKeyTest do
     |> SSHKey.changeset(attrs)
   end
 
-  describe "SSHKey changeset (IDNT-04)" do
-    test "computes fingerprint from public_key at insert time" do
+  describe "SSHKey changeset (IDNT-04, KEYS-02)" do
+    test "KEYS-02 computes fingerprint from public_key at insert time" do
       user = insert_user!()
 
       {:ok, key} =
@@ -35,7 +35,7 @@ defmodule Foglet.Accounts.SSHKeyTest do
       assert String.starts_with?(key.fingerprint, "SHA256:")
     end
 
-    test "rejects duplicate fingerprint across users" do
+    test "KEYS-02 rejects duplicate fingerprint across users" do
       user_a = insert_user!(%{handle: "user_a", email: "a@example.com"})
       user_b = insert_user!(%{handle: "user_b", email: "b@example.com"})
 
@@ -48,7 +48,7 @@ defmodule Foglet.Accounts.SSHKeyTest do
       assert "has already been taken" in errors_on(changeset).fingerprint
     end
 
-    test "rejects duplicate label per user" do
+    test "KEYS-02 rejects duplicate label per user" do
       user = insert_user!()
 
       {:ok, _} =
@@ -60,14 +60,14 @@ defmodule Foglet.Accounts.SSHKeyTest do
       assert "has already been taken" in errors_on(changeset).label
     end
 
-    test "rejects invalid public key text" do
+    test "KEYS-02 rejects invalid public key text" do
       user = insert_user!()
       changeset = key_changeset(user, %{label: "bogus", public_key: "this is not a key"})
       refute changeset.valid?
       assert Map.has_key?(errors_on(changeset), :public_key)
     end
 
-    test "requires label and public_key" do
+    test "KEYS-02 requires label and public_key" do
       user = insert_user!()
       changeset = key_changeset(user, %{})
       refute changeset.valid?

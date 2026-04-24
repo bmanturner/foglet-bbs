@@ -152,12 +152,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
     end
   end
 
-  describe "pubkey → user resolution (context-building logic)" do
+  describe "pubkey → user resolution (context-building logic, KEYS-05)" do
     # These tests verify the CLIHandler's pubkey resolution path by calling
     # the domain functions the CLIHandler calls internally. We don't invoke
     # CLIHandler callbacks directly (they require live SSH infrastructure).
 
-    test "pubkey matching a registered user returns that user" do
+    test "KEYS-05 pubkey matching a registered user returns that user" do
       user = user_fixture()
 
       {:ok, _ssh_key} =
@@ -168,11 +168,11 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert found_user.handle == user.handle
     end
 
-    test "pubkey NOT registered returns {:error, :not_found}" do
+    test "KEYS-05 pubkey NOT registered returns {:error, :not_found}" do
       assert {:error, :not_found} = Accounts.authenticate_by_public_key(@static_openssh_key)
     end
 
-    test "pubkey for a deleted user returns {:error, :not_found}" do
+    test "KEYS-05 pubkey for a deleted user returns {:error, :not_found}" do
       user = user_fixture()
 
       {:ok, _} =
@@ -183,7 +183,18 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert {:error, :not_found} = Accounts.authenticate_by_public_key(@static_openssh_key)
     end
 
-    test "guest channel startup does not update SSH key last_used_at" do
+    test "KEYS-05 revoked pubkey returns {:error, :not_found} without last_used_at writes" do
+      user = user_fixture()
+
+      {:ok, ssh_key} =
+        Accounts.register_ssh_key(user, %{label: "laptop", public_key: @static_openssh_key})
+
+      assert {:ok, _revoked} = Accounts.revoke_ssh_key(user, ssh_key.id)
+      assert {:error, :not_found} = Accounts.authenticate_by_public_key(@static_openssh_key)
+      assert FogletBbs.Repo.get(Foglet.Accounts.SSHKey, ssh_key.id) == nil
+    end
+
+    test "KEYS-05 guest channel startup does not update SSH key last_used_at" do
       user = user_fixture()
 
       {:ok, ssh_key} =
