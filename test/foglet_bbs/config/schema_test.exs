@@ -103,7 +103,7 @@ defmodule Foglet.Config.SchemaTest do
       assert spec == %{
                key: "require_email_verification",
                type: :boolean,
-               default: true,
+               default: false,
                description:
                  "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)",
                enum: nil,
@@ -178,10 +178,18 @@ defmodule Foglet.Config.SchemaTest do
                "max_post_length" => 8192,
                "max_thread_title_length" => 60,
                "delivery_mode" => "no_email",
-               "require_email_verification" => true,
+               "require_email_verification" => false,
                "email_verify_resend_cooldown_seconds" => 60,
                "invite_generation_per_user_limit" => 0
              }
+    end
+
+    test "schema defaults avoid no_email verification dead end" do
+      defaults = Schema.defaults()
+
+      assert defaults["delivery_mode"] == "no_email"
+      assert defaults["registration_mode"] == "open"
+      assert defaults["require_email_verification"] == false
     end
   end
 

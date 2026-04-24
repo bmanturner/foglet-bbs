@@ -95,7 +95,7 @@ defmodule Foglet.Config.Schema do
     %{
       key: "require_email_verification",
       type: :boolean,
-      default: true,
+      default: false,
       description:
         "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)",
       enum: nil,
