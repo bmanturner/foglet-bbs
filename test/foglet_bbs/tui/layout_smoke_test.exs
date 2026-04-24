@@ -132,6 +132,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   test "main_menu renders welcome and all menu items at distinct y positions" do
     user = %{handle: "bob", id: "u1", status: :active, role: :member}
+
     state =
       %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
       |> Map.from_struct()
