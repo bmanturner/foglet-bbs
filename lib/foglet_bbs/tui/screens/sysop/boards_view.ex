@@ -480,13 +480,13 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   end
 
   defp dispatch_submit(:edit_board, payload, state) do
-    {_cat_id, attrs} = Map.pop(payload, :category_id)
     # category_id change goes through the same update_board call to stay within
-    # the plan's scope (Board.changeset casts :category_id).
+    # the plan's scope (Board.changeset casts :category_id). normalize_board_attrs/1
+    # only touches :postable_by, so passing the full payload preserves :category_id.
     Boards.update_board(
       state.current_user,
       state.edit_target,
-      Map.put(normalize_board_attrs(attrs), :category_id, Map.get(payload, :category_id))
+      normalize_board_attrs(payload)
     )
   end
 
