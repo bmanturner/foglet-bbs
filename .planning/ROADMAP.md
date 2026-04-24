@@ -78,9 +78,9 @@ Plans:
   5. Pending, rejected, suspended, and reactivated users see accurate login outcomes, TUI copy, and approval or rejection notification behavior when SMTP is configured.
 **Plans**: 4 plans
 Plans:
-- [ ] 10-01-PLAN.md — Rejected status persistence and Accounts transition boundary
-- [ ] 10-02-PLAN.md — Sysop USERS tab status administration
-- [ ] 10-03-PLAN.md — Break-glass user status Mix task
+- [x] 10-01-PLAN.md — Rejected status persistence and Accounts transition boundary
+- [x] 10-02-PLAN.md — Sysop USERS tab status administration
+- [x] 10-03-PLAN.md — Break-glass user status Mix task
 - [ ] 10-04-PLAN.md — Approval/rejection delivery and status login copy
 **UI hint**: yes
 
@@ -165,7 +165,7 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 7. Oneliners and Main Menu Social Strip | v1.1 | 3/3 | Complete | 2026-04-24 |
 | 8. Moderation Workspace Population and Scope-Aware Operations | v1.1 | 4/4 | Complete | 2026-04-24 |
 | 9. Delivery Modes and Onboarding Honesty | v1.2 | 0/TBD | Not started | - |
-| 10. User Status Administration | v1.2 | 0/TBD | Not started | - |
+| 10. User Status Administration | v1.2 | 3/4 | In Progress|  |
 | 11. Posting Policy Enforcement | v1.2 | 0/TBD | Not started | - |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 1/4 | In Progress|  |
