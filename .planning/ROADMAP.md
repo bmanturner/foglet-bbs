@@ -146,8 +146,8 @@ Plans:
   4. A sysop reviewing the terminal surfaces sees no offered browser admin, webhook notification, email digest, or full case-management moderation workflow for this milestone.
 **Plans**: 3 plans
 Plans:
-- [ ] 14-01-PLAN.md — Sysop config accountability and blocker audit
-- [ ] 14-02-PLAN.md — Launch-copy and blocker-flow test audit
+- [x] 14-01-PLAN.md — Sysop config accountability and blocker audit
+- [x] 14-02-PLAN.md — Launch-copy and blocker-flow test audit
 - [ ] 14-03-PLAN.md — Root README operator notes and hygiene gate
 **UI hint**: yes
 
@@ -173,4 +173,4 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 11. Posting Policy Enforcement | v1.2 | 3/3 | Complete   | 2026-04-24 |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 4/4 | Complete   | 2026-04-24 |
-| 14. Launch Hygiene and Operator Notes | v1.2 | 0/TBD | Not started | - |
+| 14. Launch Hygiene and Operator Notes | v1.2 | 2/3 | In Progress|  |
