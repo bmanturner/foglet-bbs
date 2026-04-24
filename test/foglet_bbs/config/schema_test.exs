@@ -7,10 +7,10 @@ defmodule Foglet.Config.SchemaTest do
   alias Foglet.Config.UnknownKeyError
 
   describe "entries/0" do
-    test "returns exactly 6 entries in the documented order" do
+    test "returns exactly 7 entries in the documented order" do
       entries = Schema.entries()
 
-      assert length(entries) == 6
+      assert length(entries) == 7
 
       assert Enum.map(entries, & &1.key) == [
                "registration_mode",
@@ -18,7 +18,8 @@ defmodule Foglet.Config.SchemaTest do
                "max_post_length",
                "max_thread_title_length",
                "require_email_verification",
-               "email_verify_resend_cooldown_seconds"
+               "email_verify_resend_cooldown_seconds",
+               "invite_generation_per_user_limit"
              ]
     end
 
@@ -124,6 +125,21 @@ defmodule Foglet.Config.SchemaTest do
                max: nil
              }
     end
+
+    test "invite_generation_per_user_limit spec matches the locked decision table" do
+      {:ok, spec} = Schema.fetch_spec("invite_generation_per_user_limit")
+
+      assert spec == %{
+               key: "invite_generation_per_user_limit",
+               type: :integer,
+               default: 0,
+               description:
+                 "Per-user invite generation cap when invite_code_generators == \"any_user\" (INVT-07 D-04). 0 = unlimited.",
+               enum: nil,
+               min: 0,
+               max: nil
+             }
+    end
   end
 
   describe "fetch_spec/1" do
@@ -138,7 +154,7 @@ defmodule Foglet.Config.SchemaTest do
   end
 
   describe "defaults/0" do
-    test "returns a map of key → default covering exactly the 6 schematized keys" do
+    test "returns a map of key → default covering exactly the 7 schematized keys" do
       defaults = Schema.defaults()
 
       assert defaults == %{
@@ -147,7 +163,8 @@ defmodule Foglet.Config.SchemaTest do
                "max_post_length" => 8192,
                "max_thread_title_length" => 60,
                "require_email_verification" => true,
-               "email_verify_resend_cooldown_seconds" => 60
+               "email_verify_resend_cooldown_seconds" => 60,
+               "invite_generation_per_user_limit" => 0
              }
     end
   end

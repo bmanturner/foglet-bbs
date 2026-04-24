@@ -67,10 +67,11 @@ defmodule Foglet.AuthorizationTest do
     {:mod, :create_category, :site, {:error, :forbidden}},
     {:mod, :update_category, :site, {:error, :forbidden}},
     {:mod, :archive_category, :site, {:error, :forbidden}},
-    # Regular user — always forbidden
+    # Regular user — can pass only the coarse invite generation gate.
+    # Runtime invite policy and caps are enforced by Foglet.Accounts.create_invite/1.
     {:user, :create_board, :site, {:error, :forbidden}},
     {:user, :lock_thread, :site, {:error, :forbidden}},
-    {:user, :generate_invite, :site, {:error, :forbidden}},
+    {:user, :generate_invite, :site, :ok},
     {:user, :hide_oneliner, :site, {:error, :forbidden}},
     # Invalid actor states (D-24)
     {:nil_actor, :create_board, :site, {:error, :forbidden}},
