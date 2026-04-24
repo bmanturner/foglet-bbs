@@ -58,7 +58,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   5. Operator can retrieve verification or reset delivery details through an explicit no-email workflow when SMTP is disabled.
 **Plans**: 6 plans
 Plans:
-- [ ] 09-01-PLAN.md — Delivery-mode config and Swoosh foundation
+- [x] 09-01-PLAN.md — Delivery-mode config and Swoosh foundation
 - [ ] 09-02-PLAN.md — Verification delivery and Verify resend honesty
 - [ ] 09-03-PLAN.md — Terminal password-reset request flow
 - [ ] 09-04-PLAN.md — Sysop delivery-mode visibility and invalid-combo blocking
