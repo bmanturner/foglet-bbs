@@ -288,6 +288,7 @@ defmodule Foglet.AccountsTest do
 
     test "stores key with computed fingerprint" do
       user = AccountsFixtures.user_fixture()
+
       assert {:ok, key} =
                Accounts.register_ssh_key(user, %{
                  label: "laptop",
@@ -350,6 +351,7 @@ defmodule Foglet.AccountsTest do
       other_user = AccountsFixtures.user_fixture()
       k1 = AccountsFixtures.ssh_key_fixture(user)
       k2 = AccountsFixtures.ssh_key_fixture(user, %{public_key: @alternate_ssh_public_key})
+
       _other_key =
         AccountsFixtures.ssh_key_fixture(other_user, %{
           public_key:
@@ -408,6 +410,66 @@ defmodule Foglet.AccountsTest do
       {:ok, _} = Accounts.delete_user(user)
       # delete_user removes ssh_keys — we expect :not_found
       assert {:error, :not_found} = Accounts.get_user_by_public_key(default_key)
+    end
+  end
+
+  describe "authenticate_by_public_key/1 (KEYS-05)" do
+    test "finds a registered active user and records last_used_at only on the matched key" do
+      user = AccountsFixtures.user_fixture()
+      default_key = AccountsFixtures.default_ssh_public_key()
+      other_key = @alternate_ssh_public_key
+      registered = AccountsFixtures.ssh_key_fixture(user, %{public_key: default_key})
+      untouched = AccountsFixtures.ssh_key_fixture(user, %{public_key: other_key})
+
+      assert registered.last_used_at == nil
+      assert untouched.last_used_at == nil
+
+      assert {:ok, %User{id: user_id}} = Accounts.authenticate_by_public_key(default_key)
+      assert user_id == user.id
+
+      assert %SSHKey{last_used_at: %DateTime{} = last_used_at} = Repo.get(SSHKey, registered.id)
+      assert last_used_at == DateTime.truncate(last_used_at, :microsecond)
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, untouched.id)
+    end
+
+    test "invalid, unregistered, revoked, and deleted-user keys return not_found without writes" do
+      user = AccountsFixtures.user_fixture()
+      default_key = AccountsFixtures.default_ssh_public_key()
+      unregistered_key = @alternate_ssh_public_key
+      registered = AccountsFixtures.ssh_key_fixture(user, %{public_key: default_key})
+
+      assert {:error, :not_found} = Accounts.authenticate_by_public_key("not a key at all")
+      assert {:error, :not_found} = Accounts.authenticate_by_public_key(unregistered_key)
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, registered.id)
+
+      assert {:ok, _revoked} = Accounts.revoke_ssh_key(user, registered.id)
+      assert {:error, :not_found} = Accounts.authenticate_by_public_key(default_key)
+
+      deleted_owner = AccountsFixtures.user_fixture()
+      deleted_owner_key_text = @alternate_ssh_public_key
+
+      deleted_owner_key =
+        AccountsFixtures.ssh_key_fixture(deleted_owner, %{public_key: deleted_owner_key_text})
+
+      {:ok, deleted_owner} =
+        deleted_owner
+        |> User.deletion_changeset()
+        |> Repo.update()
+
+      assert deleted_owner.deleted_at
+      assert {:error, :not_found} = Accounts.authenticate_by_public_key(deleted_owner_key_text)
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, deleted_owner_key.id)
+    end
+
+    test "password authentication does not update SSH key last_used_at" do
+      user = AccountsFixtures.user_fixture(%{password: "letmein12"})
+      key = AccountsFixtures.ssh_key_fixture(user)
+
+      assert {:ok, %User{id: user_id}} =
+               Accounts.authenticate_by_password(user.handle, "letmein12")
+
+      assert user_id == user.id
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
     end
   end
 

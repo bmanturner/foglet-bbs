@@ -611,6 +611,33 @@ defmodule Foglet.Accounts do
     end
   end
 
+  @spec authenticate_by_public_key(String.t()) :: {:ok, User.t()} | {:error, :not_found}
+  def authenticate_by_public_key(public_key_text) when is_binary(public_key_text) do
+    with {:ok, fp} <- SSHKey.compute_fingerprint(public_key_text),
+         {%SSHKey{} = key, %User{} = user} <- get_active_ssh_key_and_user(fp) do
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+      case Repo.update_all(from(k in SSHKey, where: k.id == ^key.id),
+             set: [last_used_at: now, updated_at: now]
+           ) do
+        {1, _rows} -> {:ok, user}
+        _ -> {:error, :not_found}
+      end
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp get_active_ssh_key_and_user(fingerprint) do
+    Repo.one(
+      from k in SSHKey,
+        where: k.fingerprint == ^fingerprint,
+        join: u in assoc(k, :user),
+        where: is_nil(u.deleted_at),
+        select: {k, u}
+    )
+  end
+
   # ---------- Tokens (no mailer in Phase 1 — D-01) ----------
 
   @doc """
