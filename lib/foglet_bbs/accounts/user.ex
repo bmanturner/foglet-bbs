@@ -108,9 +108,18 @@ defmodule Foglet.Accounts.User do
       :theme,
       :preferences,
       :show_in_last_callers,
-      :email_digest
+      :email_digest,
+      :timezone
     ])
+    |> normalize_private_profile_fields()
+    |> merge_preferences(user.preferences)
+    |> validate_length(:location, max: 80)
+    |> validate_length(:tagline, max: 120)
+    |> validate_length(:real_name, max: 120)
     |> validate_inclusion(:email_digest, @valid_email_digests)
+    |> validate_timezone()
+    |> validate_time_format()
+    |> validate_theme()
   end
 
   @doc """
@@ -200,5 +209,77 @@ defmodule Foglet.Accounts.User do
     else
       _ -> @default_timezone
     end
+  end
+
+  defp normalize_private_profile_fields(changeset) do
+    changeset
+    |> update_change(:location, &blank_to_nil/1)
+    |> update_change(:tagline, &blank_to_nil/1)
+    |> update_change(:real_name, &blank_to_nil/1)
+  end
+
+  defp blank_to_nil(value) when is_binary(value) do
+    case String.trim(value) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp blank_to_nil(value), do: value
+
+  defp merge_preferences(changeset, existing_preferences) do
+    case get_change(changeset, :preferences) do
+      nil ->
+        changeset
+
+      incoming_preferences when is_map(incoming_preferences) ->
+        merged_preferences =
+          existing_preferences
+          |> normalize_preferences()
+          |> Map.merge(normalize_preferences(incoming_preferences))
+
+        put_change(changeset, :preferences, merged_preferences)
+
+      _other ->
+        add_error(changeset, :preferences, "must be a map")
+    end
+  end
+
+  defp normalize_preferences(nil), do: %{}
+
+  defp normalize_preferences(preferences) when is_map(preferences) do
+    Map.new(preferences, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  defp validate_timezone(changeset) do
+    validate_change(changeset, :timezone, fn :timezone, timezone ->
+      if is_binary(timezone) and Timex.Timezone.exists?(timezone) do
+        []
+      else
+        [timezone: "must be a valid IANA timezone"]
+      end
+    end)
+  end
+
+  defp validate_time_format(changeset) do
+    preferences = get_field(changeset, :preferences) || %{}
+
+    case Map.get(preferences, "time_format") do
+      nil -> changeset
+      time_format when time_format in ["12h", "24h"] -> changeset
+      _invalid -> add_error(changeset, :preferences, "time_format must be 12h or 24h")
+    end
+  end
+
+  defp validate_theme(changeset) do
+    valid_theme_ids = Enum.map(Foglet.TUI.Theme.ids(), &Atom.to_string/1)
+
+    validate_change(changeset, :theme, fn :theme, theme ->
+      if theme in valid_theme_ids do
+        []
+      else
+        [theme: "is not a registered theme"]
+      end
+    end)
   end
 end
