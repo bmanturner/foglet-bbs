@@ -12,9 +12,9 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
 
 - [x] **Phase 0: Screen Shells and Shared Surface Primitives** - Scaffold Account, Moderation, Sysop, and shared tab/screen state without shipping fake business behavior.
 - [x] **Phase 1: Authorization and Scope Backbone** - Add actor-aware policy and future-safe moderation scope rules before operator actions ship.
-- [ ] **Phase 1.1: Shared Modal Form Primitive** (INSERTED) - Deliver a reusable modal-form widget with typed fields, focus navigation, and validation so Phase 2+ CRUD workflows share one container.
-- [ ] **Phase 2: Sysop Config and Board Management** - Expose typed site policy, invite controls, board/category lifecycle, and system details from the TUI.
-- [ ] **Phase 3: Invite Persistence and Registration Enforcement** - Make invite-only onboarding real through persisted single-use invites and transactional redemption.
+- [x] **Phase 1.1: Shared Modal Form Primitive** (INSERTED) - Deliver a reusable modal-form widget with typed fields, focus navigation, and validation so Phase 2+ CRUD workflows share one container.
+- [x] **Phase 2: Sysop Config and Board Management** - Expose typed site policy, invite controls, board/category lifecycle, and system details from the TUI.
+- [x] **Phase 3: Invite Persistence and Registration Enforcement** - Make invite-only onboarding real through persisted single-use invites and transactional redemption.
 - [ ] **Phase 4: Shared Invite Surface Activation** - Turn on the reusable `INVITES` tab across allowed surfaces according to config and role.
 - [ ] **Phase 5: Account Preferences and Live Session Refresh** - Let users manage private profile and display defaults with immediate session updates.
 - [ ] **Phase 6: Chrome Clock and Main Menu Wiring** - Wire the top-right chrome clock and main-menu navigation to the new preference and role model.
