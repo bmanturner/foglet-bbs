@@ -25,6 +25,18 @@ if ssh_port = System.get_env("FOGLET_SSH_PORT") do
   config :foglet_bbs, :ssh_port, String.to_integer(ssh_port)
 end
 
+if smtp_relay = System.get_env("FOGLET_SMTP_RELAY") || System.get_env("FOGLET_SMTP_HOST") do
+  config :foglet_bbs, Foglet.Mailer,
+    adapter: Swoosh.Adapters.SMTP,
+    relay: smtp_relay,
+    port: String.to_integer(System.get_env("FOGLET_SMTP_PORT") || "587"),
+    username: System.get_env("FOGLET_SMTP_USERNAME"),
+    password: System.get_env("FOGLET_SMTP_PASSWORD"),
+    ssl: System.get_env("FOGLET_SMTP_SSL") in ~w(true 1),
+    tls: String.to_atom(System.get_env("FOGLET_SMTP_TLS") || "if_available"),
+    auth: String.to_atom(System.get_env("FOGLET_SMTP_AUTH") || "if_available")
+end
+
 config :foglet_bbs, FogletBbsWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
 

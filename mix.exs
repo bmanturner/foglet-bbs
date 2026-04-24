@@ -64,7 +64,9 @@ defmodule FogletBbs.MixProject do
       {:raxol, path: "vendor/raxol"},
       {:hammer, "~> 7.3.0"},
       {:bodyguard, "~> 2.4"},
-      {:timex, "~> 3.7"}
+      {:timex, "~> 3.7"},
+      {:swoosh, "~> 1.25"},
+      {:gen_smtp, "~> 1.3"}
     ]
   end
 

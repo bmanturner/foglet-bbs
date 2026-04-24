@@ -30,6 +30,10 @@ config :logger, :default_formatter,
 # Use Jason for JSON parsing in Phoenix
 config :phoenix, :json_library, Jason
 
+# Default outbound mail adapter. Production deployments can override this in
+# runtime config with env-backed SMTP settings.
+config :foglet_bbs, Foglet.Mailer, adapter: Swoosh.Adapters.Local
+
 # Disable Raxol's performance monitoring feature to prevent a DevHints startup crash
 # (Raxol 2.4.0 bug: DevHints.normalize_init_result/1 doesn't handle :ignore when
 # the module was compiled in test env and @mix_env == :dev evaluates to false).
