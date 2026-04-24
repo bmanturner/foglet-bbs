@@ -9,11 +9,17 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     %Foglet.TUI.App{
       current_screen: :moderation,
       current_user: %Foglet.Accounts.User{id: "u1", handle: "alice", role: role},
-      session_context: %{},
+      session_context: %{invite_code_generators: "sysop_only"},
       terminal_size: {80, 24},
       screen_state: %{}
     }
     |> Map.from_struct()
+  end
+
+  defp build_state_with_policy(role, policy) do
+    role
+    |> build_state()
+    |> put_in([:session_context, :invite_code_generators], policy)
   end
 
   setup do
@@ -67,6 +73,43 @@ defmodule Foglet.TUI.Screens.ModerationTest do
                "Got positions: #{inspect(Enum.zip(expected_tabs, tab_positions))}"
     end
 
+    test "shows INVITES for mod users only under mods runtime policy" do
+      flat = build_state_with_policy(:mod, "mods") |> Moderation.render() |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
+    end
+
+    test "hides INVITES for mod users under any_user and sysop_only policies" do
+      for policy <- ["any_user", "sysop_only"] do
+        flat =
+          :mod
+          |> build_state_with_policy(policy)
+          |> Moderation.render()
+          |> collect_text_values()
+
+        refute Enum.any?(flat, &String.contains?(&1, "INVITES")),
+               "Expected mod policy #{policy} to hide INVITES; got #{inspect(flat)}"
+      end
+    end
+
+    test "hides INVITES from regular and nil users" do
+      regular_flat =
+        :user
+        |> build_state_with_policy("mods")
+        |> Moderation.render()
+        |> collect_text_values()
+
+      nil_flat =
+        :mod
+        |> build_state_with_policy("mods")
+        |> Map.put(:current_user, nil)
+        |> Moderation.render()
+        |> collect_text_values()
+
+      refute Enum.any?(regular_flat, &String.contains?(&1, "INVITES"))
+      refute Enum.any?(nil_flat, &String.contains?(&1, "INVITES"))
+    end
+
     test "renders scaffold-only placeholder copy (no fake moderation actions)", %{state: state} do
       flat = Moderation.render(state) |> collect_text_values()
       # Forbidden substrings that would indicate fake operator actions in key-bar or buttons
@@ -110,6 +153,32 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     test "End jumps to last tab", %{state: state} do
       {:update, new_state, _cmds} = Moderation.handle_key(%{key: :end}, state)
       assert new_state.screen_state.moderation.active_tab == 4
+    end
+
+    test "digit '6' reaches INVITES only for mods policy" do
+      state =
+        :mod
+        |> build_state_with_policy("mods")
+        |> put_in([:screen_state, :moderation], Moderation.init_screen_state(invites_visible?: true))
+
+      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "6"}, state)
+
+      assert new_state.screen_state.moderation.active_tab == 5
+    end
+
+    test "clamps stale INVITES active tab when runtime policy changes" do
+      state =
+        :mod
+        |> build_state_with_policy("any_user")
+        |> put_in([:screen_state, :moderation], Moderation.init_screen_state(invites_visible?: true, active: 5))
+
+      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :end}, state)
+
+      assert new_state.screen_state.moderation.active_tab == 4
+      refute Enum.any?(
+               new_state.screen_state.moderation.tabs.raxol_state.tabs,
+               &(&1.label == "INVITES")
+             )
     end
 
     test "'Q' returns to :main_menu", %{state: state} do
