@@ -76,7 +76,12 @@ Plans:
   3. Sysop can suspend or reactivate existing users through actor-aware Accounts workflows.
   4. Operator can approve, reject, suspend, or reactivate users through a break-glass Mix task.
   5. Pending, rejected, suspended, and reactivated users see accurate login outcomes, TUI copy, and approval or rejection notification behavior when SMTP is configured.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 10-01-PLAN.md — Rejected status persistence and Accounts transition boundary
+- [ ] 10-02-PLAN.md — Sysop USERS tab status administration
+- [ ] 10-03-PLAN.md — Break-glass user status Mix task
+- [ ] 10-04-PLAN.md — Approval/rejection delivery and status login copy
 **UI hint**: yes
 
 ### Phase 11: Posting Policy Enforcement

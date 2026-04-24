@@ -367,6 +367,41 @@ defmodule Foglet.AccountsTest do
     end
   end
 
+  describe "transactional email builders (MAIL-02)" do
+    test "Foglet.Mailer is the Swoosh mailer boundary using the test adapter" do
+      assert Foglet.Mailer.module_info(:module) == Foglet.Mailer
+      assert Application.fetch_env!(:foglet_bbs, Foglet.Mailer)[:adapter] == Swoosh.Adapters.Test
+    end
+
+    test "verification_code/2 builds a text email addressed to the user" do
+      user = AccountsFixtures.user_fixture(%{handle: "mailuser", email: "mailuser@example.test"})
+
+      email = Foglet.Accounts.Email.verification_code(user, "ABC123")
+
+      assert %Swoosh.Email{} = email
+      assert email.to == [{"mailuser", "mailuser@example.test"}]
+      assert email.from == {"Foglet BBS", "no-reply@localhost"}
+      assert email.subject == "Your Foglet verification code"
+      assert email.text_body =~ "ABC123"
+    end
+
+    test "password_reset/2 builds terminal-native reset instructions without browser URLs" do
+      user = AccountsFixtures.user_fixture(%{handle: "resetter", email: "resetter@example.test"})
+
+      email = Foglet.Accounts.Email.password_reset(user, "RESET-TOKEN")
+
+      assert %Swoosh.Email{} = email
+      assert email.to == [{"resetter", "resetter@example.test"}]
+      assert email.from == {"Foglet BBS", "no-reply@localhost"}
+      assert email.subject == "Foglet password reset instructions"
+      assert email.text_body =~ "RESET-TOKEN"
+      assert email.text_body =~ "SSH terminal"
+      refute email.text_body =~ "/users/reset_password"
+      refute email.text_body =~ "http://"
+      refute email.text_body =~ "https://"
+    end
+  end
+
   describe "reset_user_password/2 (IDNT-08)" do
     test "updates password and invalidates outstanding reset tokens" do
       user = AccountsFixtures.user_fixture(%{password: "original1"})
