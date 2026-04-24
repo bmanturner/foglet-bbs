@@ -19,9 +19,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     Map.put(state, :recent_oneliners, recent_oneliners)
   end
 
+  defp with_selected_oneliner(state, index) do
+    Map.put(state, :selected_oneliner_index, index)
+  end
+
   defp oneliner(handle, body, attrs \\ %{}) do
     Map.merge(
       %{
+        id: "ol-#{handle}",
         body: body,
         user: %{handle: handle}
       },
@@ -120,6 +125,102 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert String.length(row) <= 37
       refute String.contains?(row, "\n")
       refute String.contains?(row, "body body body body body body body body body body")
+    end
+
+    test "Up and Down change app-owned selected_oneliner_index without screen-local state", %{
+      state: state
+    } do
+      state =
+        state
+        |> with_oneliners([
+          oneliner("alice", "first", %{id: "ol1"}),
+          oneliner("bob", "second", %{id: "ol2"})
+        ])
+        |> with_selected_oneliner(0)
+
+      {:update, down_state, []} = MainMenu.handle_key(%{key: :down}, state)
+      assert down_state.selected_oneliner_index == 1
+      refute Map.has_key?(down_state.screen_state, :main_menu)
+
+      {:update, clamped_down_state, []} = MainMenu.handle_key(%{key: :down}, down_state)
+      assert clamped_down_state.selected_oneliner_index == 1
+
+      {:update, up_state, []} = MainMenu.handle_key(%{key: :up}, clamped_down_state)
+      assert up_state.selected_oneliner_index == 0
+
+      {:update, clamped_up_state, []} = MainMenu.handle_key(%{key: :up}, up_state)
+      assert clamped_up_state.selected_oneliner_index == 0
+    end
+
+    test "all authenticated roles render a visible marker on the selected oneliner" do
+      for role <- [:user, :mod, :sysop] do
+        texts =
+          role
+          |> build_state()
+          |> with_oneliners([
+            oneliner("alice", "selected", %{id: "ol1"}),
+            oneliner("bob", "not selected", %{id: "ol2"})
+          ])
+          |> with_selected_oneliner(0)
+          |> rendered_text()
+
+        assert "> @alice  selected" in texts
+        assert "  @bob  not selected" in texts
+      end
+    end
+
+    test "regular users do not see Hide oneliner and H returns no match", %{state: state} do
+      state =
+        state
+        |> with_oneliners([oneliner("alice", "visible", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      texts = rendered_text(state)
+
+      refute Enum.any?(texts, &String.contains?(&1, "Hide oneliner"))
+      assert :no_match = MainMenu.handle_key(%{key: :char, char: "H"}, state)
+      assert :no_match = MainMenu.handle_key(%{key: :char, char: "h"}, state)
+    end
+
+    test "mods and sysops see Hide oneliner only for authorized selected rows with ids" do
+      for role <- [:mod, :sysop] do
+        hideable_state =
+          role
+          |> build_state()
+          |> with_oneliners([oneliner("alice", "hideable", %{id: "ol1"})])
+          |> with_selected_oneliner(0)
+
+        assert Enum.any?(rendered_text(hideable_state), &String.contains?(&1, "Hide oneliner"))
+
+        assert {:update, ^hideable_state, [{:open_hide_oneliner_modal, "ol1"}]} =
+                 MainMenu.handle_key(%{key: :char, char: "H"}, hideable_state)
+
+        assert {:update, ^hideable_state, [{:open_hide_oneliner_modal, "ol1"}]} =
+                 MainMenu.handle_key(%{key: :char, char: "h"}, hideable_state)
+
+        missing_id_state =
+          role
+          |> build_state()
+          |> with_oneliners([oneliner("alice", "no id", %{id: nil})])
+          |> with_selected_oneliner(0)
+
+        refute Enum.any?(rendered_text(missing_id_state), &String.contains?(&1, "Hide oneliner"))
+        assert :no_match = MainMenu.handle_key(%{key: :char, char: "H"}, missing_id_state)
+      end
+    end
+
+    test "Enter on a selected oneliner is reserved and performs no Profile navigation", %{
+      state: state
+    } do
+      state =
+        state
+        |> with_oneliners([oneliner("alice", "profile later", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      assert :no_match = MainMenu.handle_key(%{key: :enter}, state)
+
+      refute inspect(MainMenu.handle_key(%{key: :enter}, state)) =~ "Profile"
+      refute inspect(MainMenu.handle_key(%{key: :enter}, state)) =~ "profile"
     end
   end
 
