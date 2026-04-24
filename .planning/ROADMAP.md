@@ -39,7 +39,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [ ] **Phase 9: Delivery Modes and Onboarding Honesty** - Verification, reset, and no-email onboarding paths match the configured delivery mode.
 - [x] **Phase 10: User Status Administration** - Sysops can approve, reject, suspend, and reactivate users through actor-aware terminal and break-glass workflows. Sysop receive email upon new user awaiting approval when email is available. (completed 2026-04-24)
-- [ ] **Phase 11: Posting Policy Enforcement** - Board posting policy and locked-thread restrictions are enforced before board-server writes.
+- [x] **Phase 11: Posting Policy Enforcement** - Board posting policy and locked-thread restrictions are enforced before board-server writes. (completed 2026-04-24)
 - [ ] **Phase 12: Account SSH Key Management** - Users can manage SSH keys from Account and successful public-key auth records usage metadata (when last successful login with key was made).
 - [ ] **Phase 13: Board Subscription Management** - Users have real terminal paths to inspect and change board subscriptions.
 - [ ] **Phase 14: Launch Hygiene and Operator Notes** - Visible sysop settings, tests, copy, and operator docs are aligned for pre-alpha.
@@ -95,9 +95,9 @@ Plans:
   4. User sees a clear terminal error when submission is rejected by posting policy or locked-thread state.
 **Plans**: 3 plans
 Plans:
-- [ ] 11-01-PLAN.md — Thread posting-policy preflight and side-effect invariants
-- [ ] 11-02-PLAN.md — Reply posting-policy and locked-thread preflight
-- [ ] 11-03-PLAN.md — Terminal rejection copy for posting denials
+- [x] 11-01-PLAN.md — Thread posting-policy preflight and side-effect invariants
+- [x] 11-02-PLAN.md — Reply posting-policy and locked-thread preflight
+- [x] 11-03-PLAN.md — Terminal rejection copy for posting denials
 **UI hint**: yes
 
 ### Phase 12: Account SSH Key Management
@@ -166,7 +166,7 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 8. Moderation Workspace Population and Scope-Aware Operations | v1.1 | 4/4 | Complete | 2026-04-24 |
 | 9. Delivery Modes and Onboarding Honesty | v1.2 | 0/TBD | Not started | - |
 | 10. User Status Administration | v1.2 | 4/4 | Complete   | 2026-04-24 |
-| 11. Posting Policy Enforcement | v1.2 | 0/TBD | Not started | - |
+| 11. Posting Policy Enforcement | v1.2 | 3/3 | Complete   | 2026-04-24 |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
 | 13. Board Subscription Management | v1.2 | 3/4 | In Progress|  |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 0/TBD | Not started | - |
