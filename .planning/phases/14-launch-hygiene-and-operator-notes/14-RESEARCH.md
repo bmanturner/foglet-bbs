@@ -327,7 +327,8 @@ refute String.contains?(flat, "webhook notification")
 
 | # | Claim | Section | Risk if Wrong |
 |---|-------|---------|---------------|
-| A1 | None; all recommendations are based on local phase artifacts, local source, local tests, or observed dependency output. | All | Low. |
+| A1 | PostgreSQL test DB is assumed available because the project test alias requires it, but this research did not run the full suite. | Environment Availability | Medium; planner may need a setup/remediation task if DB is missing. |
+| A2 | Put the durable config visibility ledger in `README.md` only if operator-facing; otherwise encode it in tests plus phase implementation notes. | Open Questions | Low; artifact location can be adjusted during planning. |
 
 ## Open Questions
 
@@ -346,12 +347,12 @@ refute String.contains?(flat, "webhook notification")
 | Dependency | Required By | Available | Version | Fallback |
 |------------|------------|-----------|---------|----------|
 | Elixir / Mix | Tests, tasks, precommit | yes | Elixir 1.19.5 observed in Mix error output and codebase stack | None needed. [VERIFIED: .planning/codebase/STACK.md, rtk mix test --list-tags output] |
-| PostgreSQL test DB | `rtk mix test` aliases | assumed available | not probed | Planner should rely on existing `rtk mix test` alias; if DB fails, use the project setup path. [VERIFIED: mix.exs] |
+| PostgreSQL test DB | `rtk mix test` aliases | assumed available [ASSUMED] | not probed | Planner should rely on existing `rtk mix test` alias; if DB fails, use the project setup path. [VERIFIED: mix.exs] |
 | `rtk` wrapper | All repo commands | yes | not versioned | Use raw `mix` only if `rtk` itself is unavailable. [VERIFIED: successful rtk mix deps] |
 | ExUnit | Validation | yes | stdlib | None needed. [VERIFIED: test/test_helper.exs] |
 
 **Missing dependencies with no fallback:**
-- None found during research. [VERIFIED: successful rtk mix deps]
+- None found for dependency resolution; PostgreSQL runtime availability was not probed. [VERIFIED: successful rtk mix deps] [ASSUMED]
 
 **Missing dependencies with fallback:**
 - `rtk mix test --list-tags` is not supported by this Mix version; use explicit targeted test commands instead. [VERIFIED: rtk mix test --list-tags output]
