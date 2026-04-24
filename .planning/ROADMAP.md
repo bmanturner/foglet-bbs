@@ -134,8 +134,8 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   3. User can choose 12-hour or 24-hour time display plus a registered Foglet theme from Account, and new accounts default to 12-hour time until changed.
   4. User sees saved Account preference changes reflected in the active session without reconnecting.
 **Plans**: 4 plans
-  - [ ] 05-01-PLAN.md — Wave 1: Accounts persistence, Timex timezone storage/defaulting, and profile/preference validation [ACCT-02, ACCT-03, ACCT-04, ACCT-05]
-  - [ ] 05-02-PLAN.md — Wave 1: Session preference snapshot API and SSH startup seeding [ACCT-03, ACCT-04, ACCT-05, ACCT-06]
+  - [x] 05-01-PLAN.md — Wave 1: Accounts persistence, Timex timezone storage/defaulting, and profile/preference validation [ACCT-02, ACCT-03, ACCT-04, ACCT-05]
+  - [x] 05-02-PLAN.md — Wave 1: Session preference snapshot API and SSH startup seeding [ACCT-03, ACCT-04, ACCT-05, ACCT-06]
   - [ ] 05-03-PLAN.md — Wave 2: inline Account PROFILE/PREFS forms and unsaved theme preview [ACCT-02, ACCT-03, ACCT-04, ACCT-05]
   - [ ] 05-04-PLAN.md — Wave 3: Account save live refresh, failed-save behavior, and `mix precommit` gate [ACCT-02, ACCT-03, ACCT-04, ACCT-05, ACCT-06]
 **UI hint**: yes
