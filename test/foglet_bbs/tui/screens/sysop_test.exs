@@ -51,6 +51,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
       Config.put!(key, default, nil)
     end
 
+    Config.put!("delivery_mode", "email", nil)
+
     on_exit(fn -> for key <- @config_keys, do: Config.invalidate(key) end)
 
     %{state: build_state(:sysop)}
