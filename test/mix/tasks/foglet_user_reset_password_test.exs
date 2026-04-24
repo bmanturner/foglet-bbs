@@ -56,7 +56,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
              )
     end
 
-    test "in email mode prints a break-glass reset URL containing a url-encoded token to stdout" do
+    test "in email mode prints a break-glass raw reset token to stdout" do
       Config.put!("delivery_mode", "email", nil)
       user = AccountsFixtures.user_fixture(%{handle: "resetme"})
 
@@ -65,17 +65,19 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
           Mix.Tasks.Foglet.User.ResetPassword.run(["resetme"])
         end)
 
-      assert output =~ "Break-glass reset URL for resetme:"
-      assert output =~ "This URL was generated for operator use; no email was sent by this task."
-      assert output =~ "no email was sent by this task"
-      assert output =~ "/users/reset_password/"
+      assert output =~ "Break-glass reset token for resetme:"
+      assert output =~ "Reset token:"
+      assert output =~ "Give this token to the user through your operator-assisted SSH reset procedure."
+      assert output =~ "No email was sent by this task."
       refute output =~ "has been emailed"
       refute output =~ "sent by email"
+      refute output =~ "http://"
+      refute output =~ "https://"
+      refute output =~ "/users/reset_password/"
+      refute output =~ "reset URL"
+      refute output =~ "operator reset URL"
 
-      # Extract the raw token portion and verify it's url-safe base64
-      [url_line] = Regex.run(~r{https://\S+}, output) |> List.wrap()
-      token_portion = url_line |> String.split("/") |> List.last()
-      assert token_portion =~ ~r/\A[A-Za-z0-9_-]+\z/
+      [_, token_portion] = Regex.run(~r/Reset token: ([A-Za-z0-9_-]+)/, output)
       refute String.contains?(token_portion, "=")
 
       # Round-trip the token against the API
@@ -108,11 +110,14 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
         end)
 
       assert output =~ "No-email reset details for noemailreset:"
-
-      assert output =~
-               "This reset URL was generated for operator retrieval; no email was sent by this task."
-
-      assert output =~ "/users/reset_password/"
+      assert output =~ "Reset token:"
+      assert output =~ "Give this token to the user through your operator-assisted SSH reset procedure."
+      assert output =~ "No email was sent by this task."
+      refute output =~ "http://"
+      refute output =~ "https://"
+      refute output =~ "/users/reset_password/"
+      refute output =~ "reset URL"
+      refute output =~ "operator reset URL"
 
       assert Repo.exists?(
                from t in UserToken,
