@@ -17,13 +17,20 @@ defmodule Foglet.AccountsTest do
   import Swoosh.TestAssertions
 
   describe "register_user/1 (IDNT-01)" do
+    setup :set_swoosh_global
+
     setup do
       Config.init_cache()
       current_registration_mode = Config.get("registration_mode", "open")
+      current_delivery_mode = Config.get("delivery_mode", "no_email")
+      original_mailer_config = Application.fetch_env!(:foglet_bbs, Foglet.Mailer)
 
       on_exit(fn ->
         Config.put!("registration_mode", current_registration_mode)
+        Config.put!("delivery_mode", current_delivery_mode)
         Config.invalidate("registration_mode")
+        Config.invalidate("delivery_mode")
+        Application.put_env(:foglet_bbs, Foglet.Mailer, original_mailer_config)
       end)
 
       :ok
@@ -58,6 +65,52 @@ defmodule Foglet.AccountsTest do
 
       attrs = AccountsFixtures.valid_user_attributes()
       assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
+    end
+
+    test "sysop-approved registration emails active sysops when delivery is available" do
+      sysop =
+        AccountsFixtures.user_fixture(%{
+          handle: "approvalsysop",
+          email: "approvalsysop@example.test"
+        })
+
+      assert {:ok, sysop} = Accounts.update_role(sysop, :sysop)
+
+      Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "email")
+
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          handle: "pendingnew",
+          email: "pendingnew@example.test"
+        })
+
+      assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
+
+      assert_email_sent(fn email ->
+        assert email.to == [{sysop.handle, sysop.email}]
+        assert email.subject == "Foglet account awaiting approval"
+        assert email.text_body =~ "Handle: pendingnew"
+        assert email.text_body =~ "Email: pendingnew@example.test"
+      end)
+    end
+
+    test "sysop-approved registration skips sysop email in no-email mode" do
+      sysop =
+        AccountsFixtures.user_fixture(%{
+          handle: "noemailsysop",
+          email: "noemailsysop@example.test"
+        })
+
+      assert {:ok, _sysop} = Accounts.update_role(sysop, :sysop)
+
+      Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "no_email")
+
+      attrs = AccountsFixtures.valid_user_attributes(%{handle: "pendingnoemail"})
+
+      assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
+      refute_email_sent()
     end
   end
 

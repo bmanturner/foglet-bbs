@@ -102,6 +102,7 @@ defmodule Mix.Tasks.Foglet.User.Status do
   defp format_delivery(:attempted), do: "attempted"
   defp format_delivery({:failed, _reason}), do: "failed"
 
+  @spec fail(String.t()) :: no_return()
   defp fail(message) do
     Mix.shell().error(message)
     exit({:shutdown, 1})

@@ -20,8 +20,8 @@ defmodule Foglet.Accounts do
 
   import Ecto.Query, warn: false
 
-  alias Foglet.{Config, Mailer}
   alias Foglet.Accounts.{Email, Invite, SSHKey, User, UserToken}
+  alias Foglet.{Config, Mailer}
   alias Foglet.Posts.Post
   alias FogletBbs.Repo
 
@@ -202,9 +202,19 @@ defmodule Foglet.Accounts do
   """
   @spec register_pending_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def register_pending_user(attrs) do
-    %User{status: :pending}
-    |> User.registration_changeset(attrs)
-    |> Repo.insert()
+    result =
+      %User{status: :pending}
+      |> User.registration_changeset(attrs)
+      |> Repo.insert()
+
+    case result do
+      {:ok, %User{} = user} ->
+        notify_sysops_pending_registration(user)
+        {:ok, user}
+
+      error ->
+        error
+    end
   end
 
   @spec get_user(String.t()) :: User.t() | nil
@@ -514,6 +524,25 @@ defmodule Foglet.Accounts do
     with {:ok, _token} <- Repo.insert(token_struct) do
       _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
       :ok
+    end
+  end
+
+  defp notify_sysops_pending_registration(%User{} = pending_user) do
+    case Config.delivery_mode() do
+      "email" ->
+        Repo.all(
+          from u in User,
+            where:
+              u.role == :sysop and u.status == :active and is_nil(u.deleted_at) and
+                not is_nil(u.email)
+        )
+        |> Enum.each(fn sysop ->
+          _ = Mailer.deliver(Email.pending_approval_notification(sysop, pending_user))
+          :ok
+        end)
+
+      "no_email" ->
+        :ok
     end
   end
 

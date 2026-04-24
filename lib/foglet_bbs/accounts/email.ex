@@ -72,4 +72,21 @@ defmodule Foglet.Accounts.Email do
     Contact the sysop if you believe this was a mistake.
     """)
   end
+
+  @doc "Build a sysop notification for a pending registration."
+  @spec pending_approval_notification(User.t(), User.t()) :: Swoosh.Email.t()
+  def pending_approval_notification(%User{} = sysop, %User{} = pending_user) do
+    new()
+    |> to({sysop.handle, sysop.email})
+    |> from(@from)
+    |> subject("Foglet account awaiting approval")
+    |> text_body("""
+    A new Foglet account is awaiting sysop approval.
+
+    Handle: #{pending_user.handle}
+    Email: #{pending_user.email}
+
+    Return to the SSH terminal Sysop USERS tab to approve or reject this account.
+    """)
+  end
 end
