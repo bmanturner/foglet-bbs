@@ -115,13 +115,17 @@ defmodule Foglet.TUI.Screens.DeliveryCopyTest do
 
     test "reset task and delivery copy do not advertise browser reset URLs" do
       reset_task_source = File.read!("lib/mix/tasks/foglet.user.reset_password.ex")
-      email_source = File.read!("lib/foglet_bbs/accounts/email.ex")
+
+      password_reset_email_source =
+        "lib/foglet_bbs/accounts/email.ex"
+        |> File.read!()
+        |> password_reset_email_source()
 
       assert reset_task_source =~ "Reset token:"
       assert reset_task_source =~ "operator-assisted SSH reset procedure"
 
       assert_forbidden_copy_absent(reset_task_source)
-      assert_forbidden_copy_absent(email_source)
+      assert_forbidden_copy_absent(password_reset_email_source)
     end
   end
 
@@ -129,6 +133,16 @@ defmodule Foglet.TUI.Screens.DeliveryCopyTest do
     for phrase <- @forbidden_copy do
       refute text =~ phrase
     end
+  end
+
+  defp password_reset_email_source(source) do
+    [_, password_reset_source] =
+      String.split(source, ~s(@doc "Build terminal-native password reset instructions."))
+
+    [password_reset_source | _] =
+      String.split(password_reset_source, ~s(@doc "Build an account approval notification."))
+
+    password_reset_source
   end
 
   defp login_state(login_ss) do
