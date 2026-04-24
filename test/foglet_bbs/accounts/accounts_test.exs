@@ -284,15 +284,28 @@ defmodule Foglet.AccountsTest do
   end
 
   describe "register_ssh_key/2 (IDNT-04)" do
+    @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
+
     test "stores key with computed fingerprint" do
       user = AccountsFixtures.user_fixture()
-      key = AccountsFixtures.ssh_key_fixture(user)
+      assert {:ok, key} =
+               Accounts.register_ssh_key(user, %{
+                 label: "laptop",
+                 public_key: AccountsFixtures.default_ssh_public_key()
+               })
+
       assert key.user_id == user.id
       assert String.starts_with?(key.fingerprint, "SHA256:")
     end
 
-    test "returns {:error, changeset} for invalid key text" do
+    test "returns {:error, changeset} for blank and invalid key attrs" do
       user = AccountsFixtures.user_fixture()
+
+      assert {:error, blank_cs} =
+               Accounts.register_ssh_key(user, %{label: "", public_key: ""})
+
+      refute blank_cs.valid?
+      assert %{label: ["can't be blank"], public_key: ["can't be blank"]} = errors_on(blank_cs)
 
       assert {:error, cs} =
                Accounts.register_ssh_key(user, %{label: "bad", public_key: "nope"})
@@ -300,11 +313,71 @@ defmodule Foglet.AccountsTest do
       refute cs.valid?
     end
 
+    test "rejects duplicate global fingerprint" do
+      user_a = AccountsFixtures.user_fixture()
+      user_b = AccountsFixtures.user_fixture()
+      public_key = AccountsFixtures.default_ssh_public_key()
+
+      assert {:ok, _key} =
+               Accounts.register_ssh_key(user_a, %{label: "laptop", public_key: public_key})
+
+      assert {:error, changeset} =
+               Accounts.register_ssh_key(user_b, %{label: "workstation", public_key: public_key})
+
+      assert "has already been taken" in errors_on(changeset).fingerprint
+    end
+
+    test "rejects duplicate label for the same user" do
+      user = AccountsFixtures.user_fixture()
+
+      assert {:ok, _key} =
+               Accounts.register_ssh_key(user, %{
+                 label: "laptop",
+                 public_key: AccountsFixtures.default_ssh_public_key()
+               })
+
+      assert {:error, changeset} =
+               Accounts.register_ssh_key(user, %{
+                 label: "laptop",
+                 public_key: @alternate_ssh_public_key
+               })
+
+      assert "has already been taken" in errors_on(changeset).label
+    end
+
     test "list_ssh_keys/1 returns user's keys ordered by inserted_at" do
       user = AccountsFixtures.user_fixture()
+      other_user = AccountsFixtures.user_fixture()
       k1 = AccountsFixtures.ssh_key_fixture(user)
-      assert [%SSHKey{id: found_id}] = Accounts.list_ssh_keys(user)
-      assert found_id == k1.id
+      k2 = AccountsFixtures.ssh_key_fixture(user, %{public_key: @alternate_ssh_public_key})
+      _other_key =
+        AccountsFixtures.ssh_key_fixture(other_user, %{
+          public_key:
+            "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKwR0WDlTnrzZcQ36aGfcf70IUiKVrR0P0gnMPD6e1qR third@example"
+        })
+
+      assert [%SSHKey{id: first_id}, %SSHKey{id: second_id}] = Accounts.list_ssh_keys(user)
+      assert first_id == k1.id
+      assert second_id == k2.id
+    end
+
+    test "revoke_ssh_key/2 hard-deletes an owned key" do
+      user = AccountsFixtures.user_fixture()
+      key = AccountsFixtures.ssh_key_fixture(user)
+
+      assert {:ok, %SSHKey{id: key_id}} = Accounts.revoke_ssh_key(user, key.id)
+      assert key_id == key.id
+      assert Repo.get(SSHKey, key.id) == nil
+    end
+
+    test "revoke_ssh_key/2 rejects another user's key without deleting it" do
+      owner = AccountsFixtures.user_fixture()
+      other_user = AccountsFixtures.user_fixture()
+      key = AccountsFixtures.ssh_key_fixture(owner)
+
+      assert {:error, :not_found} = Accounts.revoke_ssh_key(other_user, key.id)
+      assert %SSHKey{id: key_id} = Repo.get(SSHKey, key.id)
+      assert key_id == key.id
     end
   end
 

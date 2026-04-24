@@ -40,7 +40,7 @@ defmodule Foglet.Accounts.SSHKey do
     |> validate_length(:label, min: @label_min, max: @label_max)
     |> put_fingerprint()
     |> unique_constraint(:fingerprint)
-    |> unique_constraint([:user_id, :label], name: :ssh_keys_user_id_label_index)
+    |> unique_constraint(:label, name: :ssh_keys_user_id_label_index)
   end
 
   @doc """

@@ -580,6 +580,15 @@ defmodule Foglet.Accounts do
     Repo.all(from k in SSHKey, where: k.user_id == ^user.id, order_by: [asc: :inserted_at])
   end
 
+  @spec revoke_ssh_key(User.t(), Ecto.UUID.t() | String.t()) ::
+          {:ok, SSHKey.t()} | {:error, :not_found}
+  def revoke_ssh_key(%User{} = actor, key_id) do
+    case Repo.get_by(SSHKey, id: key_id, user_id: actor.id) do
+      %SSHKey{} = key -> Repo.delete(key)
+      nil -> {:error, :not_found}
+    end
+  end
+
   @doc """
   Lookup a user by an OpenSSH-format public key. Used by Phase 3 SSH
   pubkey auth. Returns `{:ok, user}` if the fingerprint matches a
