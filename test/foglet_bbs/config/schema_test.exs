@@ -7,16 +7,17 @@ defmodule Foglet.Config.SchemaTest do
   alias Foglet.Config.UnknownKeyError
 
   describe "entries/0" do
-    test "returns exactly 7 entries in the documented order" do
+    test "returns exactly 8 entries in the documented order" do
       entries = Schema.entries()
 
-      assert length(entries) == 7
+      assert length(entries) == 8
 
       assert Enum.map(entries, & &1.key) == [
                "registration_mode",
                "invite_code_generators",
                "max_post_length",
                "max_thread_title_length",
+               "delivery_mode",
                "require_email_verification",
                "email_verify_resend_cooldown_seconds",
                "invite_generation_per_user_limit"
@@ -111,6 +112,20 @@ defmodule Foglet.Config.SchemaTest do
              }
     end
 
+    test "delivery_mode spec matches the MAIL-01 delivery-mode contract" do
+      {:ok, spec} = Schema.fetch_spec("delivery_mode")
+
+      assert spec == %{
+               key: "delivery_mode",
+               type: :string,
+               default: "no_email",
+               description: "Outbound transactional delivery mode (MAIL-01): email | no_email",
+               enum: ["email", "no_email"],
+               min: nil,
+               max: nil
+             }
+    end
+
     test "email_verify_resend_cooldown_seconds spec matches the locked decision table" do
       {:ok, spec} = Schema.fetch_spec("email_verify_resend_cooldown_seconds")
 
@@ -154,7 +169,7 @@ defmodule Foglet.Config.SchemaTest do
   end
 
   describe "defaults/0" do
-    test "returns a map of key → default covering exactly the 7 schematized keys" do
+    test "returns a map of key → default covering exactly the 8 schematized keys" do
       defaults = Schema.defaults()
 
       assert defaults == %{
@@ -162,6 +177,7 @@ defmodule Foglet.Config.SchemaTest do
                "invite_code_generators" => "sysop_only",
                "max_post_length" => 8192,
                "max_thread_title_length" => 60,
+               "delivery_mode" => "no_email",
                "require_email_verification" => true,
                "email_verify_resend_cooldown_seconds" => 60,
                "invite_generation_per_user_limit" => 0
@@ -186,6 +202,12 @@ defmodule Foglet.Config.SchemaTest do
     test "accepts each enum member for invite_code_generators" do
       for v <- ["sysop_only", "mods", "any_user"] do
         assert Schema.validate("invite_code_generators", v) == :ok
+      end
+    end
+
+    test "accepts each enum member for delivery_mode" do
+      for v <- ["email", "no_email"] do
+        assert Schema.validate("delivery_mode", v) == :ok
       end
     end
 
@@ -247,6 +269,18 @@ defmodule Foglet.Config.SchemaTest do
                   expected: ["sysop_only", "mods", "any_user"],
                   got: "everyone"
                 }}
+    end
+
+    test "rejects provider names outside the delivery_mode enum" do
+      for invalid <- ["smtp", "mailgun"] do
+        assert Schema.validate("delivery_mode", invalid) ==
+                 {:error,
+                  %{
+                    reason: :not_in_enum,
+                    expected: ["email", "no_email"],
+                    got: invalid
+                  }}
+      end
     end
   end
 

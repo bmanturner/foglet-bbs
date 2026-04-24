@@ -227,6 +227,10 @@ defmodule Foglet.ConfigTest do
       assert Config.max_thread_title_length() == 60
     end
 
+    test "delivery_mode/0 returns the seeded default" do
+      assert Config.delivery_mode() == "no_email"
+    end
+
     test "require_email_verification?/0 returns the seeded default with ? suffix" do
       assert Config.require_email_verification?() == true
     end
@@ -238,6 +242,11 @@ defmodule Foglet.ConfigTest do
     test "typed accessor reflects subsequent writes" do
       Config.put!("max_post_length", 2048, nil)
       assert Config.max_post_length() == 2048
+    end
+
+    test "delivery_mode/0 reflects subsequent writes" do
+      Config.put!("delivery_mode", "email", nil)
+      assert Config.delivery_mode() == "email"
     end
   end
 
