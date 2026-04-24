@@ -56,7 +56,14 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. User can request password reset delivery when SMTP is configured, while operators retain the existing break-glass reset path.
   4. User-facing terminal copy never claims an email or notification was sent unless delivery was attempted.
   5. Operator can retrieve verification or reset delivery details through an explicit no-email workflow when SMTP is disabled.
-**Plans**: TBD
+**Plans**: 6 plans
+Plans:
+- [ ] 09-01-PLAN.md — Delivery-mode config and Swoosh foundation
+- [ ] 09-02-PLAN.md — Verification delivery and Verify resend honesty
+- [ ] 09-03-PLAN.md — Terminal password-reset request flow
+- [ ] 09-04-PLAN.md — Sysop delivery-mode visibility and invalid-combo blocking
+- [ ] 09-05-PLAN.md — Break-glass reset task delivery-mode honesty
+- [ ] 09-06-PLAN.md — Cross-surface delivery-copy regression guard
 **UI hint**: yes
 
 ### Phase 10: User Status Administration
