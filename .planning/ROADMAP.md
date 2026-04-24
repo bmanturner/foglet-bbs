@@ -172,5 +172,5 @@ Phases execute in numeric order: 9 -> 10 -> 11 -> 12 -> 13 -> 14
 | 10. User Status Administration | v1.2 | 4/4 | Complete   | 2026-04-24 |
 | 11. Posting Policy Enforcement | v1.2 | 3/3 | Complete   | 2026-04-24 |
 | 12. Account SSH Key Management | v1.2 | 1/3 | In Progress|  |
-| 13. Board Subscription Management | v1.2 | 4/4 | Complete   | 2026-04-24 |
+| 13. Board Subscription Management | v1.2 | 4/4 | Complete    | 2026-04-24 |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 2/3 | In Progress|  |
