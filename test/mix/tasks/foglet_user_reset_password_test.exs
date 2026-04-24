@@ -6,15 +6,24 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.UserToken
+  alias Foglet.Config
   alias FogletBbs.AccountsFixtures
 
   setup do
+    original_delivery_mode = Config.get("delivery_mode", "no_email")
+
+    on_exit(fn ->
+      Config.put!("delivery_mode", original_delivery_mode, nil)
+      Config.invalidate("delivery_mode")
+    end)
+
     Mix.shell(Mix.Shell.IO)
     :ok
   end
 
   describe "mix foglet.user.reset_password (IDNT-08)" do
-    test "prints a reset URL containing a url-encoded token to stdout" do
+    test "in email mode prints a break-glass reset URL containing a url-encoded token to stdout" do
+      Config.put!("delivery_mode", "email", nil)
       user = AccountsFixtures.user_fixture(%{handle: "resetme"})
 
       output =
@@ -22,8 +31,12 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
           Mix.Tasks.Foglet.User.ResetPassword.run(["resetme"])
         end)
 
-      assert output =~ "Reset URL for resetme"
+      assert output =~ "Break-glass reset URL for resetme:"
+      assert output =~ "This URL was generated for operator use; no email was sent by this task."
       assert output =~ "/users/reset_password/"
+      refute output =~ "has been emailed"
+      refute output =~ "email was sent"
+      refute output =~ "sent by email"
 
       # Extract the raw token portion and verify it's url-safe base64
       [url_line] = Regex.run(~r{https://\S+}, output) |> List.wrap()
@@ -38,6 +51,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
     end
 
     test "inserts a user_tokens row with context=\"reset_password\"" do
+      Config.put!("delivery_mode", "email", nil)
       user = AccountsFixtures.user_fixture(%{handle: "dbrow"})
 
       capture_io(fn ->
@@ -50,7 +64,33 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
              )
     end
 
+    test "in no-email mode exits non-zero and explains reset delivery is unavailable" do
+      Config.put!("delivery_mode", "no_email", nil)
+      user = AccountsFixtures.user_fixture(%{handle: "noemailreset"})
+
+      output =
+        capture_io(:stderr, fn ->
+          assert catch_exit(Mix.Tasks.Foglet.User.ResetPassword.run([user.handle])) ==
+                   {:shutdown, 1}
+        end)
+
+      assert output =~
+               "Password reset delivery is unavailable because Foglet is in no-email mode."
+
+      assert output =~
+               "Use an operator break-glass password change procedure instead of relaying a reset link."
+
+      refute output =~ "/users/reset_password/"
+
+      refute Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+    end
+
     test "unknown handle exits non-zero" do
+      Config.put!("delivery_mode", "email", nil)
+
       output =
         capture_io(:stderr, fn ->
           assert catch_exit(Mix.Tasks.Foglet.User.ResetPassword.run(["no_such_user"])) ==
@@ -61,6 +101,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
     end
 
     test "deleted user is rejected" do
+      Config.put!("delivery_mode", "email", nil)
       user = AccountsFixtures.user_fixture(%{handle: "graveyard"})
       {:ok, _} = Accounts.delete_user(user)
 
