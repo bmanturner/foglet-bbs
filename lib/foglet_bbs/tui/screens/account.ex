@@ -79,12 +79,12 @@ defmodule Foglet.TUI.Screens.Account do
     new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
 
     cond do
-      action != nil or new_tabs != ss.tabs ->
+      action != nil ->
         new_ss = maybe_load_invites(new_ss, Map.get(state, :current_user))
         {:update, put_screen_state(state, new_ss), []}
 
-      active_label(new_ss) == "INVITES" ->
-        delegate_invites_key(event, state, new_ss)
+      active_label(ss) == "INVITES" ->
+        delegate_invites_key(event, state, ss)
 
       true ->
         :no_match

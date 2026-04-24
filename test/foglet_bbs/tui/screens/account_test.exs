@@ -227,13 +227,16 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       {:update, state, []} = Account.handle_key(%{key: :down}, state)
       assert state.screen_state.account.invites.selected_index == 1
+      selected_code = Enum.at(state.screen_state.account.invites.items, 1).code
+      other_code = Enum.find([first.code, second.code], &(&1 != selected_code))
 
       {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
-      assert {:ok, %{status: :revoked}} = Accounts.get_invite_status(first.code)
-      assert {:ok, %{status: :available}} = Accounts.get_invite_status(second.code)
+      assert state.screen_state.account.invites.error == "You are not allowed to manage invites."
+      assert {:ok, %{status: :available}} = Accounts.get_invite_status(selected_code)
+      assert {:ok, %{status: :available}} = Accounts.get_invite_status(other_code)
 
       {:update, state, []} = Account.handle_key(%{key: :char, char: "r"}, state)
-      assert Enum.any?(state.screen_state.account.invites.items, &(&1.code == first.code))
+      assert Enum.any?(state.screen_state.account.invites.items, &(&1.code == selected_code))
       assert state.screen_state.account.invites.error == nil
     end
 
