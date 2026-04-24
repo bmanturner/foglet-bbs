@@ -426,10 +426,12 @@ defmodule Foglet.TUI.AppTest do
 
       assert cmds == []
       assert new_state.pending_hide_oneliner_id == "ol1"
+
       assert %Foglet.TUI.Modal{type: :form, title: "Hide Oneliner", message: %Form{} = form} =
                new_state.modal
 
       assert form.title == "Hide Oneliner"
+
       assert [%{name: :reason, type: :text, label: "Reason", placeholder: "Required"}] =
                form.fields
 

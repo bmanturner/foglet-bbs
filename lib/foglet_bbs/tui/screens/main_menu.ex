@@ -138,6 +138,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     if ShellVisibility.moderation_visible?(state.current_user) do
       ss = Moderation.init_screen_state([])
       new_screen_state = Map.put(state.screen_state, :moderation, ss)
+
       {:update, %{state | current_screen: :moderation, screen_state: new_screen_state},
        [{:load_moderation_workspace}]}
     else

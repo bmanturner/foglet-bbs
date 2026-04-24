@@ -579,7 +579,8 @@ defmodule Foglet.TUI.App do
        | modal: nil,
          pending_hide_oneliner_id: nil,
          recent_oneliners: recent_oneliners,
-         selected_oneliner_index: clamp_selected_oneliner_index(state.selected_oneliner_index, recent_oneliners)
+         selected_oneliner_index:
+           clamp_selected_oneliner_index(state.selected_oneliner_index, recent_oneliners)
      }, []}
   end
 
@@ -1001,7 +1002,8 @@ defmodule Foglet.TUI.App do
     |> min(length(entries) - 1)
   end
 
-  defp clamp_selected_oneliner_index(_index, entries), do: clamp_selected_oneliner_index(0, entries)
+  defp clamp_selected_oneliner_index(_index, entries),
+    do: clamp_selected_oneliner_index(0, entries)
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
