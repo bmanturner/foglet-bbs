@@ -81,33 +81,45 @@ defmodule Foglet.Accounts do
     user_changeset = User.registration_changeset(%User{}, attrs)
 
     cond do
-      is_nil(invite_code) or String.trim(to_string(invite_code)) == "" ->
+      blank_invite_code?(invite_code) ->
         {:error, invite_code_error(user_changeset)}
 
       not user_changeset.valid? ->
         {:error, user_changeset}
 
       true ->
-        code = String.trim(to_string(invite_code))
-
-        case Repo.transact(fn ->
-               with {:ok, user} <- Repo.insert(user_changeset),
-                    {:ok, user} <- consume_invite_for_user(Repo, code, user) do
-                 {:ok, user}
-               end
-             end) do
-          {:ok, user} ->
-            # D-06: subscribe to default boards after successful registration.
-            Foglet.Boards.subscribe_to_defaults(user.id)
-            {:ok, user}
-
-          {:error, :invalid_invite_code} ->
-            {:error, invite_code_error(user_changeset)}
-
-          {:error, %Ecto.Changeset{} = changeset} ->
-            {:error, changeset}
-        end
+        invite_code
+        |> redeem_invite_registration(user_changeset)
+        |> handle_invite_registration_result(user_changeset)
     end
+  end
+
+  defp blank_invite_code?(nil), do: true
+  defp blank_invite_code?(code), do: String.trim(to_string(code)) == ""
+
+  defp redeem_invite_registration(invite_code, user_changeset) do
+    code = String.trim(to_string(invite_code))
+
+    Repo.transact(fn ->
+      case Repo.insert(user_changeset) do
+        {:ok, user} -> consume_invite_for_user(Repo, code, user)
+        {:error, changeset} -> {:error, changeset}
+      end
+    end)
+  end
+
+  defp handle_invite_registration_result({:ok, user}, _user_changeset) do
+    # D-06: subscribe to default boards after successful registration.
+    Foglet.Boards.subscribe_to_defaults(user.id)
+    {:ok, user}
+  end
+
+  defp handle_invite_registration_result({:error, :invalid_invite_code}, user_changeset) do
+    {:error, invite_code_error(user_changeset)}
+  end
+
+  defp handle_invite_registration_result({:error, %Ecto.Changeset{} = changeset}, _user_changeset) do
+    {:error, changeset}
   end
 
   defp consume_invite_for_user(repo, code, %User{} = user) do
