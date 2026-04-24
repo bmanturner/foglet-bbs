@@ -1,18 +1,14 @@
 ---
-status: testing
+status: complete
 phase: 12-account-ssh-key-management
 source: [.planning/phases/12-account-ssh-key-management/12-01-SUMMARY.md, .planning/phases/12-account-ssh-key-management/12-02-SUMMARY.md, .planning/phases/12-account-ssh-key-management/12-03-SUMMARY.md]
 started: 2026-04-24T20:25:11Z
-updated: 2026-04-24T20:28:44Z
+updated: 2026-04-24T20:34:36Z
 ---
 
 ## Current Test
 
-number: 4
-name: Refresh And Revoke Owned Key
-expected: |
-  The user can refresh the SSH key list, select an owned key, revoke it from the Account screen, receive terminal feedback, and see the list update so the revoked key is gone.
-awaiting: user response
+[testing complete]
 
 ## Tests
 
@@ -30,22 +26,22 @@ result: pass
 
 ### 4. Refresh And Revoke Owned Key
 expected: The user can refresh the SSH key list, select an owned key, revoke it from the Account screen, receive terminal feedback, and see the list update so the revoked key is gone.
-result: [pending]
+result: pass
 
 ### 5. Revoked And Foreign Keys Cannot Authenticate Or Be Revoked
 expected: Revoked keys no longer authenticate, unregistered or invalid keys fail closed, deleted-user keys fail closed, and attempts to revoke another user's key fail without changing that other user's key.
-result: [pending]
+result: pass
 
 ### 6. Successful Public-Key Login Records Last Used
 expected: A successful registered-key SSH login updates last-used metadata only for the key that authenticated. Failed key attempts, revoked/deleted-user keys, password login, and guest login do not update SSH key last-used metadata.
-result: [pending]
+result: pass
 
 ## Summary
 
 total: 6
-passed: 3
+passed: 6
 issues: 0
-pending: 3
+pending: 0
 skipped: 0
 blocked: 0
 
