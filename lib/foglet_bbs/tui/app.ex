@@ -17,14 +17,14 @@ defmodule Foglet.TUI.App do
 
   use Raxol.Core.Runtime.Application
 
-  alias Foglet.Threads.ThreadEntry
   alias Foglet.Accounts
   alias Foglet.Sessions.Preferences
   alias Foglet.Sessions.Session
+  alias Foglet.Threads.ThreadEntry
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
-  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.Account.State, as: AccountState
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
