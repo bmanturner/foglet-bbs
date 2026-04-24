@@ -115,6 +115,11 @@ defmodule Foglet.Authorization do
       when action in @mod_board_actions,
       do: :ok
 
+  # Regular users may pass the coarse authorization gate for invite generation.
+  # Runtime configuration in Accounts.create_invite/1 still decides whether
+  # "any_user" generation is enabled and applies user caps.
+  def authorize(:generate_invite, %User{role: :user}, :site), do: :ok
+
   # Safe default deny (D-13 catch-all; mirrors InvitesSurface.visible?/2 final clause).
   def authorize(_action, _actor, _scope), do: {:error, :forbidden}
 
