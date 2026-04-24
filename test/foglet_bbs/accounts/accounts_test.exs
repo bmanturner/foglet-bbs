@@ -11,6 +11,10 @@ defmodule Foglet.AccountsTest do
 
   import Swoosh.TestAssertions
 
+  defmodule FailingMailerAdapter do
+    def deliver(_email, _config), do: {:error, :forced_failure}
+  end
+
   describe "register_user/1 (IDNT-01)" do
     setup do
       Config.init_cache()
@@ -445,6 +449,118 @@ defmodule Foglet.AccountsTest do
       refute Repo.exists?(
                from t in UserToken,
                  where: t.user_id == ^user.id and t.context == "email_verify"
+             )
+
+      refute_email_sent()
+    end
+  end
+
+  describe "request_password_reset_delivery/1 (MAIL-04/MAIL-05)" do
+    setup :set_swoosh_global
+
+    setup do
+      original_delivery_mode = Config.get("delivery_mode", "no_email")
+      original_mailer_config = Application.fetch_env!(:foglet_bbs, Foglet.Mailer)
+
+      on_exit(fn ->
+        Config.put!("delivery_mode", original_delivery_mode)
+        Config.invalidate("delivery_mode")
+        Application.put_env(:foglet_bbs, Foglet.Mailer, original_mailer_config)
+      end)
+
+      :ok
+    end
+
+    test "email mode returns a generic response and delivers for an active handle match" do
+      Config.put!("delivery_mode", "email")
+      user = AccountsFixtures.user_fixture(%{handle: "resetme", email: "resetme@example.test"})
+
+      assert {:ok, :generic_response} = Accounts.request_password_reset_delivery("  resetme  ")
+
+      assert Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+
+      assert_email_sent(fn email ->
+        assert email.to == [{"resetme", "resetme@example.test"}]
+        assert email.subject == "Foglet password reset instructions"
+        assert email.text_body =~ "Return to the SSH terminal reset flow"
+        refute email.text_body =~ "/users/reset_password"
+        refute email.text_body =~ "http://"
+        refute email.text_body =~ "https://"
+      end)
+    end
+
+    test "email mode returns a generic response and delivers for an active email match" do
+      Config.put!("delivery_mode", "email")
+      user = AccountsFixtures.user_fixture(%{handle: "emailreset", email: "emailreset@example.test"})
+
+      assert {:ok, :generic_response} =
+               Accounts.request_password_reset_delivery("emailreset@example.test")
+
+      assert Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+
+      assert_email_sent()
+    end
+
+    test "email mode returns the same generic response for unknown, deleted, pending, and suspended users" do
+      Config.put!("delivery_mode", "email")
+      deleted = AccountsFixtures.user_fixture(%{handle: "deletedreset"})
+      {:ok, _deleted} = Accounts.delete_user(deleted)
+      pending =
+        AccountsFixtures.user_fixture(%{handle: "pendingreset"})
+        |> User.status_changeset(%{status: :pending})
+        |> Repo.update!()
+
+      suspended =
+        AccountsFixtures.user_fixture(%{handle: "suspendedreset"})
+        |> User.status_changeset(%{status: :suspended})
+        |> Repo.update!()
+
+      for identifier <- ["nobody", deleted.handle, pending.handle, suspended.handle] do
+        assert {:ok, :generic_response} = Accounts.request_password_reset_delivery(identifier)
+      end
+
+      for user <- [deleted, pending, suspended] do
+        refute Repo.exists?(
+                 from t in UserToken,
+                   where: t.user_id == ^user.id and t.context == "reset_password"
+               )
+      end
+
+      refute_email_sent()
+    end
+
+    test "email mode returns the same generic response when delivery fails" do
+      Config.put!("delivery_mode", "email")
+
+      Application.put_env(:foglet_bbs, Foglet.Mailer,
+        adapter: FogletBbs.AccountsTest.FailingMailerAdapter
+      )
+
+      user = AccountsFixtures.user_fixture(%{handle: "failreset"})
+
+      assert {:ok, :generic_response} = Accounts.request_password_reset_delivery("failreset")
+
+      assert Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+    end
+
+    test "no-email mode returns unavailable without lookup side effects" do
+      Config.put!("delivery_mode", "no_email")
+      user = AccountsFixtures.user_fixture(%{handle: "noemailreset"})
+
+      assert {:error, :unavailable} = Accounts.request_password_reset_delivery("noemailreset")
+
+      refute Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
              )
 
       refute_email_sent()
