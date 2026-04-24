@@ -8,6 +8,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.Config
   alias Foglet.Config.Schema
   alias Foglet.TUI.Screens.Sysop
+  alias Foglet.TUI.Screens.Sysop.State, as: SysopState
 
   @config_keys Map.keys(Schema.defaults())
 
@@ -34,6 +35,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
       screen_state: %{}
     }
     |> Map.from_struct()
+  end
+
+  defp with_invite_policy(state, policy) do
+    put_in(state, [:session_context, :invite_code_generators], policy)
   end
 
   setup do
@@ -96,6 +101,49 @@ defmodule Foglet.TUI.Screens.SysopTest do
                "Got positions: #{inspect(Enum.zip(expected_tabs, tab_positions))}"
     end
 
+    test "appends INVITES for sysop_only, mods, and any_user sysop policies", %{state: state} do
+      for policy <- ["sysop_only", "mods", "any_user"] do
+        state = with_invite_policy(state, policy)
+        ss = Sysop.init_screen_state(current_user: state.current_user, session_context: state.session_context)
+
+        assert SysopState.tab_labels(ss) == [
+                 "SITE",
+                 "BOARDS",
+                 "LIMITS",
+                 "SYSTEM",
+                 "USERS",
+                 "INVITES"
+               ]
+
+        flat =
+          state
+          |> put_in([:screen_state, :sysop], ss)
+          |> Sysop.render()
+          |> collect_text_values()
+
+        assert Enum.any?(flat, &String.contains?(&1, "INVITES")),
+               "Expected INVITES tab for #{policy}; got #{inspect(flat)}"
+      end
+    end
+
+    test "does not expose Sysop INVITES to nil or non-sysop users" do
+      for role <- [nil, :user, :mod] do
+        state = build_state(role) |> with_invite_policy("sysop_only")
+        ss = Sysop.init_screen_state(current_user: state.current_user, session_context: state.session_context)
+
+        refute "INVITES" in SysopState.tab_labels(ss)
+
+        flat =
+          state
+          |> put_in([:screen_state, :sysop], ss)
+          |> Sysop.render()
+          |> collect_text_values()
+
+        refute Enum.any?(flat, &String.contains?(&1, "INVITES")),
+               "Expected no INVITES tab for #{inspect(role)}; got #{inspect(flat)}"
+      end
+    end
+
     # Former scaffold-only guard removed in Plan 02-03: SITE/LIMITS tabs now
     # genuinely render forms with [Ctrl+S] Save hints — a "Save" refute would
     # always fire. The anti-fake-command guard survives under handle_key/2.
@@ -150,6 +198,17 @@ defmodule Foglet.TUI.Screens.SysopTest do
     test "digit '5' jumps to USERS tab (index 4)", %{state: state} do
       {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "5"}, state)
       assert new_state.screen_state.sysop.active_tab == 4
+    end
+
+    test "digit '6' jumps to INVITES tab when visible", %{state: state} do
+      state = with_invite_policy(state, "sysop_only")
+      ss = Sysop.init_screen_state(current_user: state.current_user, session_context: state.session_context)
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "6"}, state)
+
+      assert new_state.screen_state.sysop.active_tab == 5
+      assert SysopState.tab_labels(new_state.screen_state.sysop) |> Enum.at(5) == "INVITES"
     end
 
     test "'Q' returns to :main_menu", %{state: state} do
