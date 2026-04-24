@@ -4,8 +4,8 @@ milestone: v1.1
 milestone_name: milestone
 status: executing
 stopped_at: Phase 05 context gathered (assumptions mode)
-last_updated: "2026-04-24T01:28:50.113Z"
-last_activity: 2026-04-24 -- Phase 04 planning complete
+last_updated: "2026-04-24T01:30:28.591Z"
+last_activity: 2026-04-24 -- Phase 04 execution started
 progress:
   total_phases: 10
   completed_phases: 5
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-23)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 4 — shared-invite-surface-activation
+**Current focus:** Phase 04 — shared-invite-surface-activation
 
 ## Current Position
 
-Phase: 4 (shared-invite-surface-activation) — READY
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-24 -- Phase 04 planning complete
+Phase: 04 (shared-invite-surface-activation) — EXECUTING
+Plan: 1 of 5
+Status: Executing Phase 04
+Last activity: 2026-04-24 -- Phase 04 execution started
 
 Progress: [░░░░░░░░░░] 0%
 
