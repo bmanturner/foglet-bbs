@@ -144,7 +144,11 @@ Plans:
   2. Pre-alpha blocker flows have focused tests for happy path, forbidden path, and user-facing error or copy behavior.
   3. Operator notes describe how to run Foglet in SMTP mode and no-email mode.
   4. A sysop reviewing the terminal surfaces sees no offered browser admin, webhook notification, email digest, or full case-management moderation workflow for this milestone.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 14-01-PLAN.md — Sysop config accountability and blocker audit
+- [ ] 14-02-PLAN.md — Launch-copy and blocker-flow test audit
+- [ ] 14-03-PLAN.md — Root README operator notes and hygiene gate
 **UI hint**: yes
 
 ## Progress
