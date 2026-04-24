@@ -87,10 +87,8 @@ defmodule Foglet.TUI.Screens.Sysop.SystemSnapshot do
   end
 
   defp safe_dynsup_count(name) do
-    case DynamicSupervisor.count_children(name) do
-      %{active: a} -> a
-      _ -> 0
-    end
+    %{active: a} = DynamicSupervisor.count_children(name)
+    a
   rescue
     _ -> 0
   catch

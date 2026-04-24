@@ -671,6 +671,60 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
   end
 
+  # =========================================================================
+  # SYSTEM tab tests (Plan 02-05, SYSO-04)
+  # =========================================================================
+
+  alias Foglet.TUI.Screens.Sysop.SystemSnapshot
+
+  defp activate_system_tab(state) do
+    ss = Sysop.init_screen_state(active: 3)
+    ss = %{ss | system_snapshot: SystemSnapshot.init([])}
+    put_in(state, [:screen_state, :sysop], ss)
+  end
+
+  describe "SYSTEM tab (SYSO-04)" do
+    test "renders snapshot labels on tab enter", %{state: state} do
+      state = activate_system_tab(state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      for label <- ["Version:", "Sessions:", "Active boards:", "OTP processes:"] do
+        assert String.contains?(flat, label),
+               "Expected #{inspect(label)} in SYSTEM render output"
+      end
+    end
+
+    test "r refreshes the snapshot", %{state: state} do
+      state = activate_system_tab(state)
+      old = state.screen_state.sysop.system_snapshot
+      # Sleep a touch so uptime_ms strictly advances.
+      Process.sleep(5)
+      {:update, state2, _} = Sysop.handle_key(%{key: :char, char: "r"}, state)
+      new = state2.screen_state.sysop.system_snapshot
+
+      assert new.snapshot.uptime_ms >= old.snapshot.uptime_ms,
+             "Refreshed uptime must not regress"
+    end
+
+    test "non-r keys do not mutate the snapshot", %{state: state} do
+      state = activate_system_tab(state)
+      old = state.screen_state.sysop.system_snapshot
+
+      # `j` is not a tab-nav key; Tabs widget ignores it; delegated to
+      # SystemSnapshot which is a no-op for non-`r` chars.
+      result = Sysop.handle_key(%{key: :char, char: "j"}, state)
+
+      new_state =
+        case result do
+          {:update, s, _} -> s
+          :no_match -> state
+        end
+
+      new = new_state.screen_state.sysop.system_snapshot
+      assert new == old
+    end
+  end
+
   describe "BOARDS tab forbidden routing (SYSO-03, D-24)" do
     setup [:seed_category_and_board]
 

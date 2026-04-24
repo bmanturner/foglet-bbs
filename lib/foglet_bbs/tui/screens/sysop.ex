@@ -29,6 +29,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.SiteForm
   alias Foglet.TUI.Screens.Sysop.State
+  alias Foglet.TUI.Screens.Sysop.SystemSnapshot
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -106,8 +107,12 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
-  defp render_tab_body("SYSTEM", _ss, theme),
-    do: placeholder("System details will arrive in Phase 2.", theme)
+  defp render_tab_body("SYSTEM", ss, theme) do
+    case ss.system_snapshot do
+      nil -> placeholder("Press any key to load system snapshot.", theme)
+      snap -> SystemSnapshot.render(snap, theme)
+    end
+  end
 
   defp render_tab_body("USERS", _ss, theme),
     do: placeholder("User administration will arrive in a later phase.", theme)
@@ -149,6 +154,7 @@ defmodule Foglet.TUI.Screens.Sysop do
       "SITE" -> delegate_to_submodule(event, state, ss, :site_form, SiteForm)
       "LIMITS" -> delegate_to_submodule(event, state, ss, :limits_form, LimitsForm)
       "BOARDS" -> delegate_to_submodule(event, state, ss, :boards_view, BoardsView)
+      "SYSTEM" -> delegate_to_submodule(event, state, ss, :system_snapshot, SystemSnapshot)
       _ -> :no_match
     end
   end
