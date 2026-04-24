@@ -90,7 +90,16 @@ defmodule Foglet.TUI.Screens.Account.State do
   """
   @spec seed_from_user(t(), map() | struct() | nil) :: t()
   def seed_from_user(%__MODULE__{} = state, user) do
-    %{state | profile_draft: profile_draft(user), prefs_draft: prefs_draft(user)}
+    %{
+      state
+      | profile_draft: profile_draft(user),
+        prefs_draft: prefs_draft(user),
+        profile_errors: %{},
+        prefs_errors: %{},
+        profile_dirty?: false,
+        prefs_dirty?: false,
+        candidate_theme_id: nil
+    }
   end
 
   @doc """
@@ -141,7 +150,8 @@ defmodule Foglet.TUI.Screens.Account.State do
 
     %{
       timezone: user_value(user, :timezone, "Etc/UTC") || "Etc/UTC",
-      time_format: Map.get(preferences, "time_format") || Map.get(preferences, :time_format) || "12h",
+      time_format:
+        Map.get(preferences, "time_format") || Map.get(preferences, :time_format) || "12h",
       theme: user_value(user, :theme, "gray") || "gray"
     }
   end

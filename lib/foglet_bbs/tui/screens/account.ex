@@ -25,6 +25,8 @@ defmodule Foglet.TUI.Screens.Account do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.Screens.Account.PrefsForm
+  alias Foglet.TUI.Screens.Account.ProfileForm
   alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
@@ -33,7 +35,13 @@ defmodule Foglet.TUI.Screens.Account do
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @key_bar [{"←/→", "Tab"}, {"1-9", "Jump"}, {"G/R/D", "Invites"}, {"Q", "Back"}]
+  @key_bar [
+    {"←/→", "Tab"},
+    {"Tab", "Field"},
+    {"S/Enter", "Save"},
+    {"Esc/C", "Cancel"},
+    {"Q", "Back"}
+  ]
 
   @impl true
   @spec init_screen_state(keyword()) :: State.t()
@@ -45,7 +53,7 @@ defmodule Foglet.TUI.Screens.Account do
   @spec render(map()) :: any()
   def render(state) do
     ss = synced_screen_state(state)
-    theme = Theme.from_state(state)
+    theme = account_theme(state, ss)
     active_label = active_label(ss) || "PROFILE"
 
     content =
@@ -57,7 +65,7 @@ defmodule Foglet.TUI.Screens.Account do
         ]
       end
 
-    ScreenFrame.render(state, "Account", content, @key_bar)
+    ScreenFrame.render(preview_state(state, theme), "Account", content, @key_bar)
   end
 
   @impl true
@@ -85,6 +93,12 @@ defmodule Foglet.TUI.Screens.Account do
 
       active_label(ss) == "INVITES" ->
         delegate_invites_key(event, state, ss)
+
+      active_label(ss) == "PROFILE" ->
+        delegate_profile_key(event, state, ss)
+
+      active_label(ss) == "PREFS" ->
+        delegate_prefs_key(event, state, ss)
 
       true ->
         :no_match
@@ -119,7 +133,8 @@ defmodule Foglet.TUI.Screens.Account do
         ShellVisibility.invites_visible?(
           Map.get(state, :current_user),
           Map.get(state, :session_context)
-        )
+        ),
+      current_user: Map.get(state, :current_user)
     ]
   end
 
@@ -167,21 +182,51 @@ defmodule Foglet.TUI.Screens.Account do
     end
   end
 
+  defp delegate_profile_key(event, state, %State{} = ss) do
+    case ProfileForm.handle_key(event, ss, Map.get(state, :current_user)) do
+      {:ok, new_ss, cmds} -> {:update, put_screen_state(state, new_ss), cmds}
+      :no_match -> :no_match
+    end
+  end
+
+  defp delegate_prefs_key(event, state, %State{} = ss) do
+    case PrefsForm.handle_key(event, ss, Map.get(state, :current_user)) do
+      {:ok, new_ss, cmds} -> {:update, put_screen_state(state, new_ss), cmds}
+      :no_match -> :no_match
+    end
+  end
+
   defp put_screen_state(state, %State{} = ss) do
     %{state | screen_state: Map.put(state.screen_state, :account, ss)}
   end
 
-  defp render_tab_body("PROFILE", _ss, theme) do
-    column style: %{gap: 0} do
-      [text("Profile details will arrive in a later phase.", fg: theme.warning.fg)]
+  defp account_theme(state, %State{candidate_theme_id: nil}), do: Theme.from_state(state)
+
+  defp account_theme(state, %State{candidate_theme_id: theme_id}) do
+    case resolve_theme_id(theme_id) do
+      nil -> Theme.from_state(state)
+      id -> Theme.resolve(id)
     end
   end
 
-  defp render_tab_body("PREFS", _ss, theme) do
-    column style: %{gap: 0} do
-      [text("Preferences will arrive in a later phase.", fg: theme.warning.fg)]
-    end
+  defp preview_state(state, theme) do
+    session_context =
+      state
+      |> Map.get(:session_context, %{})
+      |> Map.put(:theme, theme)
+
+    %{state | session_context: session_context}
   end
+
+  defp resolve_theme_id(theme_id) when is_binary(theme_id) do
+    Enum.find(Theme.ids(), &(Atom.to_string(&1) == theme_id))
+  end
+
+  defp resolve_theme_id(_theme_id), do: nil
+
+  defp render_tab_body("PROFILE", ss, theme), do: ProfileForm.render(ss, theme)
+
+  defp render_tab_body("PREFS", ss, theme), do: PrefsForm.render(ss, theme)
 
   defp render_tab_body("INVITES", ss, theme) do
     InvitesSurface.render(ss.invites, theme)

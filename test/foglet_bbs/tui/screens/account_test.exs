@@ -6,6 +6,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.Accounts
   alias Foglet.Config
   alias Foglet.TUI.Screens.Account
+  alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
 
   defp build_state(user, session_context) do
@@ -148,15 +149,69 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(visible_flat, &String.contains?(&1, "INVITES"))
     end
 
-    test "renders scaffold-only placeholder copy (no fake save buttons)", %{state: state} do
+    test "renders no fake invite or approval buttons", %{state: state} do
       state = put_in(state, [:screen_state, :account], Account.init_screen_state())
       flat = Account.render(state) |> collect_text_values()
-      forbidden = ["Save", "Generate", "Revoke", "Approve"]
+      forbidden = ["Generate", "Revoke", "Approve"]
 
       for word <- forbidden do
         refute Enum.any?(flat, &String.contains?(&1, word)),
                "Expected #{inspect(word)} not to appear in Account render output"
       end
+    end
+
+    test "PROFILE and PREFS render editable field labels", %{state: state} do
+      state =
+        put_in(
+          state,
+          [:screen_state, :account],
+          Account.init_screen_state(current_user: state.current_user)
+        )
+
+      profile_flat = Account.render(state) |> collect_text_values()
+      assert Enum.any?(profile_flat, &String.contains?(&1, "Location"))
+      assert Enum.any?(profile_flat, &String.contains?(&1, "Tagline"))
+      assert Enum.any?(profile_flat, &String.contains?(&1, "Real name"))
+
+      {:update, prefs_state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
+      prefs_flat = Account.render(prefs_state) |> collect_text_values()
+      assert Enum.any?(prefs_flat, &String.contains?(&1, "Timezone"))
+      assert Enum.any?(prefs_flat, &String.contains?(&1, "Time format"))
+      assert Enum.any?(prefs_flat, &String.contains?(&1, "Theme"))
+    end
+
+    test "unsaved theme preview changes Account render and cancel keeps session theme unchanged" do
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "Etc/UTC",
+        preferences: %{"time_format" => "12h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], Account.init_screen_state(current_user: user))
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
+      before_preview = inspect(Account.render(state))
+
+      account_state = %{state.screen_state.account | prefs_focus: :theme}
+      state = put_in(state, [:screen_state, :account], account_state)
+
+      {:update, preview_state, []} = Account.handle_key(%{key: :down}, state)
+
+      assert preview_state.screen_state.account.candidate_theme_id != nil
+      assert preview_state.session_context.theme == Theme.resolve(:gray)
+      assert inspect(Account.render(preview_state)) != before_preview
+
+      {:update, cancelled_state, []} = Account.handle_key(%{key: :escape}, preview_state)
+
+      assert cancelled_state.screen_state.account.candidate_theme_id == nil
+      assert cancelled_state.screen_state.account.prefs_draft.theme == "gray"
+      assert cancelled_state.session_context.theme == Theme.resolve(:gray)
     end
   end
 
@@ -196,8 +251,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert new_state.current_screen == :main_menu
     end
 
-    test "unknown key returns :no_match", %{state: state} do
-      assert :no_match = Account.handle_key(%{key: :char, char: "z"}, state)
+    test "non-text unknown key returns :no_match", %{state: state} do
+      assert :no_match = Account.handle_key(%{key: :f12}, state)
     end
 
     test "Account screen does NOT dispatch any fake operator commands (Save/Generate/Revoke)", %{
@@ -280,7 +335,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{invite_code_generators: "sysop_only"})
 
-      assert :no_match = Account.handle_key(%{key: :char, char: "g"}, state)
+      assert {:update, _state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
       assert {:ok, []} = Accounts.list_invites(user)
     end
   end
