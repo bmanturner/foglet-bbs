@@ -7,6 +7,8 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
   defmodule FakePosts do
     def create_reply(_thread_id, _board_id, _user_id, %{body: "explode"}), do: {:error, :nope}
+    def create_reply(_thread_id, _board_id, _user_id, %{body: "policy"}), do: {:error, :posting_not_allowed}
+    def create_reply(_thread_id, _board_id, _user_id, %{body: "locked"}), do: {:error, :thread_locked}
 
     def create_reply(_thread_id, _board_id, _user_id, attrs),
       do: {:ok, Map.merge(%{id: "new-post"}, attrs)}
@@ -164,10 +166,44 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     |> then(fn s ->
       {:update, new_state, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
       assert new_state.modal.type == :error
-      assert new_state.modal.message == "Failed to create post."
+      assert new_state.modal.message == ":nope"
       assert new_state.current_screen == :post_composer
       assert Map.has_key?(new_state.screen_state, :post_composer)
     end)
+  end
+
+  test "Ctrl+S posting-policy denial shows clear modal and stays composing (POST-04)",
+       %{state: state} do
+    s =
+      for ch <- String.graphemes("policy"), reduce: state do
+        acc ->
+          {:update, next, _} = PostComposer.handle_key(%{key: :char, char: ch}, acc)
+          next
+      end
+
+    {:update, new_state, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+
+    assert new_state.modal.type == :error
+    assert new_state.modal.message == "You are not allowed to post on this board."
+    assert new_state.current_screen == :post_composer
+    assert Map.has_key?(new_state.screen_state, :post_composer)
+  end
+
+  test "Ctrl+S locked-thread denial shows exact modal and stays composing (POST-04)",
+       %{state: state} do
+    s =
+      for ch <- String.graphemes("locked"), reduce: state do
+        acc ->
+          {:update, next, _} = PostComposer.handle_key(%{key: :char, char: ch}, acc)
+          next
+      end
+
+    {:update, new_state, _} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+
+    assert new_state.modal.type == :error
+    assert new_state.modal.message == "This thread is locked"
+    assert new_state.current_screen == :post_composer
+    assert Map.has_key?(new_state.screen_state, :post_composer)
   end
 
   test "Ctrl+S with valid body creates post and transitions to :post_reader (D-29)",

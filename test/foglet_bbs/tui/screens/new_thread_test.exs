@@ -29,6 +29,10 @@ defmodule Foglet.TUI.Screens.NewThreadTest.FakeThreadsMissing do
 end
 
 defmodule Foglet.TUI.Screens.NewThreadTest.FakeThreadsError do
+  def create_thread(_board_id, _user_id, %{title: "policy"}) do
+    {:error, :posting_not_allowed}
+  end
+
   def create_thread(_board_id, _user_id, _attrs) do
     {:error, "board is locked"}
   end
@@ -608,6 +612,31 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     assert final.current_screen == :new_thread
     assert get_ss(final).error != nil
+  end
+
+  test "Ctrl+S with posting-policy denial stays on compose with clear copy (POST-04)" do
+    state =
+      base_state(%{
+        session_context: %{domain: %{boards: FakeBoards, threads: FakeThreadsError}}
+      })
+
+    board = %{id: "b1", name: "General"}
+
+    ss =
+      NewThread.init_screen_state(
+        step: :compose,
+        boards: [board],
+        board: board,
+        title_input_state: TextInput.init(value: "policy", max_length: 60),
+        body_input_state: fresh_input("Hello")
+      )
+
+    s = Map.put(state, :screen_state, %{new_thread: ss})
+    {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+
+    assert final.current_screen == :new_thread
+    assert Map.has_key?(final.screen_state, :new_thread)
+    assert get_ss(final).error == "You are not allowed to post on this board."
   end
 
   test "Ctrl+S without current_user shows error modal" do

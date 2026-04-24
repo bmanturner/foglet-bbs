@@ -399,6 +399,9 @@ defmodule Foglet.TUI.Screens.NewThread do
     end
   end
 
+  defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."
+  defp format_error(:thread_locked), do: "This thread is locked"
+
   defp format_error(%Ecto.Changeset{} = cs) do
     Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
   end
