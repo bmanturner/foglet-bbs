@@ -400,10 +400,10 @@ defmodule Foglet.AccountsTest do
     deleted
   end
 
-  describe "register_ssh_key/2 (IDNT-04)" do
+  describe "register_ssh_key/2 (IDNT-04, KEYS-02, KEYS-03, KEYS-04)" do
     @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
 
-    test "stores key with computed fingerprint" do
+    test "KEYS-02 stores key with computed fingerprint" do
       user = AccountsFixtures.user_fixture()
 
       assert {:ok, key} =
@@ -416,7 +416,7 @@ defmodule Foglet.AccountsTest do
       assert String.starts_with?(key.fingerprint, "SHA256:")
     end
 
-    test "returns {:error, changeset} for blank and invalid key attrs" do
+    test "KEYS-02 returns {:error, changeset} for blank and invalid key attrs" do
       user = AccountsFixtures.user_fixture()
 
       assert {:error, blank_cs} =
@@ -431,7 +431,7 @@ defmodule Foglet.AccountsTest do
       refute cs.valid?
     end
 
-    test "rejects duplicate global fingerprint" do
+    test "KEYS-02 rejects duplicate global fingerprint" do
       user_a = AccountsFixtures.user_fixture()
       user_b = AccountsFixtures.user_fixture()
       public_key = AccountsFixtures.default_ssh_public_key()
@@ -445,7 +445,7 @@ defmodule Foglet.AccountsTest do
       assert "has already been taken" in errors_on(changeset).fingerprint
     end
 
-    test "rejects duplicate label for the same user" do
+    test "KEYS-02 rejects duplicate label for the same user" do
       user = AccountsFixtures.user_fixture()
 
       assert {:ok, _key} =
@@ -463,7 +463,7 @@ defmodule Foglet.AccountsTest do
       assert "has already been taken" in errors_on(changeset).label
     end
 
-    test "list_ssh_keys/1 returns user's keys ordered by inserted_at" do
+    test "KEYS-03 list_ssh_keys/1 returns user's keys ordered by inserted_at" do
       user = AccountsFixtures.user_fixture()
       other_user = AccountsFixtures.user_fixture()
       k1 = AccountsFixtures.ssh_key_fixture(user)
@@ -480,7 +480,7 @@ defmodule Foglet.AccountsTest do
       assert second_id == k2.id
     end
 
-    test "revoke_ssh_key/2 hard-deletes an owned key" do
+    test "KEYS-04 revoke_ssh_key/2 hard-deletes an owned key" do
       user = AccountsFixtures.user_fixture()
       key = AccountsFixtures.ssh_key_fixture(user)
 
@@ -489,7 +489,7 @@ defmodule Foglet.AccountsTest do
       assert Repo.get(SSHKey, key.id) == nil
     end
 
-    test "revoke_ssh_key/2 rejects another user's key without deleting it" do
+    test "KEYS-04 revoke_ssh_key/2 rejects another user's key without deleting it" do
       owner = AccountsFixtures.user_fixture()
       other_user = AccountsFixtures.user_fixture()
       key = AccountsFixtures.ssh_key_fixture(owner)
