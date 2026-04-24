@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.Authorization
   alias Foglet.TUI.Screens.{Account, Moderation, ShellVisibility, Sysop}
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -49,7 +50,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     theme = Theme.from_state(state)
 
     items = visible_menu_items(user)
-    keys = visible_menu_keys(user)
+    keys = visible_menu_keys(state)
 
     menu_panel =
       column style: %{gap: 0} do
@@ -102,6 +103,26 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end
   end
 
+  def handle_key(%{key: :char, char: c}, state) when c in ["h", "H"] do
+    case selected_hideable_oneliner(state) do
+      %{id: id} when is_binary(id) and id != "" ->
+        {:update, state, [{:open_hide_oneliner_modal, id}]}
+
+      _other ->
+        :no_match
+    end
+  end
+
+  def handle_key(%{key: :up}, state) do
+    update_selected_oneliner(state, -1)
+  end
+
+  def handle_key(%{key: :down}, state) do
+    update_selected_oneliner(state, 1)
+  end
+
+  def handle_key(%{key: :enter}, _state), do: :no_match
+
   def handle_key(%{key: :char, char: c}, state) when c in ["a", "A"] do
     if ShellVisibility.account_visible?(state.current_user) do
       invites? = ShellVisibility.invites_visible?(state.current_user, state.session_context)
@@ -150,27 +171,32 @@ defmodule Foglet.TUI.Screens.MainMenu do
     @base_items ++ account ++ moderation ++ sysop ++ oneliner ++ [@logout_item]
   end
 
-  defp visible_menu_keys(user) do
+  defp visible_menu_keys(state) do
+    user = state.current_user
+
     account = if ShellVisibility.account_visible?(user), do: [{"A", "Account"}], else: []
     moderation = if ShellVisibility.moderation_visible?(user), do: [{"M", "Mod"}], else: []
     sysop = if ShellVisibility.sysop_visible?(user), do: [{"S", "Sysop"}], else: []
     oneliner = if user, do: [@oneliner_key], else: []
+    hide_oneliner = if selected_hideable_oneliner(state), do: [{"H", "Hide oneliner"}], else: []
 
-    @base_keys ++ account ++ moderation ++ sysop ++ oneliner ++ [@logout_key]
+    @base_keys ++ account ++ moderation ++ sysop ++ oneliner ++ hide_oneliner ++ [@logout_key]
   end
 
   defp oneliner_rows(state, theme) do
-    state
-    |> Map.get(:recent_oneliners, [])
-    |> Kernel.||([])
-    |> Enum.take(@oneliner_display_limit)
-    |> case do
+    entries = visible_oneliners(state)
+    selected_index = selected_oneliner_index(state, entries)
+
+    case entries do
       [] ->
         [text("No oneliners yet.", fg: theme.primary.fg)]
 
       entries ->
-        Enum.map(entries, fn entry ->
-          text(oneliner_row(entry), fg: theme.primary.fg)
+        entries
+        |> Enum.with_index()
+        |> Enum.map(fn {entry, index} ->
+          marker = if index == selected_index, do: "> ", else: "  "
+          text(marker <> oneliner_row(entry), fg: theme.primary.fg)
         end)
     end
   end
@@ -190,6 +216,63 @@ defmodule Foglet.TUI.Screens.MainMenu do
       |> clip(@oneliner_body_limit)
 
     "@#{handle}  #{body}"
+  end
+
+  defp update_selected_oneliner(state, delta) do
+    entries = visible_oneliners(state)
+
+    case entries do
+      [] ->
+        :no_match
+
+      entries ->
+        selected_index =
+          state
+          |> selected_oneliner_index(entries)
+          |> Kernel.+(delta)
+          |> clamp(0, length(entries) - 1)
+
+        {:update, Map.put(state, :selected_oneliner_index, selected_index), []}
+    end
+  end
+
+  defp selected_hideable_oneliner(state) do
+    entries = visible_oneliners(state)
+    selected_index = selected_oneliner_index(state, entries)
+    entry = Enum.at(entries, selected_index)
+
+    if hideable_oneliner?(state.current_user, entry), do: entry
+  end
+
+  defp hideable_oneliner?(user, %{id: id}) when is_binary(id) and id != "" do
+    Bodyguard.permit?(Authorization, :hide_oneliner, user, :site)
+  end
+
+  defp hideable_oneliner?(_user, _entry), do: false
+
+  defp visible_oneliners(state) do
+    state
+    |> Map.get(:recent_oneliners, [])
+    |> Kernel.||([])
+    |> Enum.take(@oneliner_display_limit)
+  end
+
+  defp selected_oneliner_index(_state, []), do: 0
+
+  defp selected_oneliner_index(state, entries) do
+    state
+    |> Map.get(:selected_oneliner_index, 0)
+    |> normalize_index()
+    |> clamp(0, length(entries) - 1)
+  end
+
+  defp normalize_index(index) when is_integer(index), do: index
+  defp normalize_index(_other), do: 0
+
+  defp clamp(value, min, max) do
+    value
+    |> max(min)
+    |> min(max)
   end
 
   defp user_handle(nil), do: "unknown"

@@ -87,7 +87,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         |> with_oneliners([oneliner("alice", "hello", %{inserted_at: ~U[2026-04-24 12:00:00Z]})])
         |> rendered_text()
 
-      assert "@alice  hello" in texts
+      assert "> @alice  hello" in texts
 
       row = Enum.find(texts, &String.contains?(&1, "@alice  hello"))
       refute row =~ "2026-"
@@ -105,10 +105,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         state
         |> with_oneliners(entries)
         |> rendered_text()
-        |> Enum.filter(&String.starts_with?(&1, "@user"))
+        |> Enum.filter(&String.contains?(&1, "@user"))
 
       assert length(rows) == 5
-      assert "@user1  line 1" in rows
+      assert "> @user1  line 1" in rows
       refute Enum.any?(rows, &String.contains?(&1, "line 6"))
     end
 
@@ -118,11 +118,11 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         |> with_oneliners([oneliner("averyverylonghandle", String.duplicate("body ", 30))])
         |> rendered_text()
 
-      row = Enum.find(texts, &String.starts_with?(&1, "@averyverylo"))
+      row = Enum.find(texts, &String.contains?(&1, "@averyverylo"))
 
       assert row
-      assert String.starts_with?(row, "@averyverylon")
-      assert String.length(row) <= 37
+      assert String.starts_with?(row, "> @averyverylon")
+      assert String.length(row) <= 39
       refute String.contains?(row, "\n")
       refute String.contains?(row, "body body body body body body body body body body")
     end
