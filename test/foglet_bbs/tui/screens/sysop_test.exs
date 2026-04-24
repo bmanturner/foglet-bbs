@@ -365,4 +365,370 @@ defmodule Foglet.TUI.Screens.SysopTest do
       end
     end
   end
+
+  # =========================================================================
+  # BOARDS tab tests (Plan 02-04, SYSO-03)
+  # =========================================================================
+
+  alias Foglet.TUI.Screens.Sysop.BoardsView
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+  defp persist_sysop do
+    FogletBbs.AccountsFixtures.user_fixture()
+    |> Ecto.Changeset.change(%{role: :sysop})
+    |> FogletBbs.Repo.update!()
+  end
+
+  defp seed_category_and_board(_ctx) do
+    sysop = persist_sysop()
+    category = FogletBbs.BoardsFixtures.category_fixture(%{name: "General", display_order: 0})
+    board = FogletBbs.BoardsFixtures.board_fixture(category, %{slug: "chat", name: "Chat"})
+    %{sysop: sysop, category: category, board: board}
+  end
+
+  # Sysop.State is a struct that does not implement Access — `put_in/3` into
+  # `screen_state.sysop.boards_view` fails. This helper writes via struct
+  # update semantics, which is what the CLAUDE.md gotchas call out explicitly.
+  defp put_boards_view(state, bv) do
+    ss = state.screen_state.sysop
+    new_ss = %{ss | boards_view: bv}
+    %{state | screen_state: Map.put(state.screen_state, :sysop, new_ss)}
+  end
+
+  defp activate_boards_tab(state, sysop) do
+    # BOARDS is index 1.
+    state = %{state | current_user: sysop}
+    state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 1))
+    # Lazy-init BoardsView via a :down event (which BoardsView handles as
+    # selection-index rotate — ensures apply_submodule_result sees a state
+    # delta and writes the freshly-initialized submodule back).
+    {:update, state, _} = Sysop.handle_key(%{key: :down}, state)
+    # Rewind the rotation we just caused so tests see selection_index == 0.
+    ss = state.screen_state.sysop
+    bv = ss.boards_view
+    bv = %{bv | selection_index: 0}
+    new_ss = %{ss | boards_view: bv}
+    %{state | screen_state: Map.put(state.screen_state, :sysop, new_ss)}
+  end
+
+  describe "BOARDS tab render (SYSO-03)" do
+    setup [:seed_category_and_board]
+
+    test "renders grouped category + board list", %{state: state, sysop: sysop} do
+      state = activate_boards_tab(state, sysop)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+      assert String.contains?(flat, "General")
+      assert String.contains?(flat, "Chat")
+      assert String.contains?(flat, "chat")
+    end
+  end
+
+  describe "BOARDS tab create flow (SYSO-03)" do
+    setup [:seed_category_and_board]
+
+    test "n opens Modal.Form for new board with expected field specs", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "n"}, state)
+
+      bv = state.screen_state.sysop.boards_view
+      assert %ModalForm{} = bv.modal
+      field_names = Enum.map(bv.modal.fields, & &1.name)
+
+      assert field_names == [
+               :slug,
+               :name,
+               :description,
+               :category_id,
+               :postable_by,
+               :default_subscription
+             ]
+
+      assert bv.modal_kind == :create_board
+    end
+
+    test "valid submit creates board and refreshes list", %{
+      state: state,
+      sysop: sysop,
+      category: category
+    } do
+      state = activate_boards_tab(state, sysop)
+
+      # Open create modal, then install a pre-populated form directly to avoid
+      # simulating every keystroke through the primitive (which is covered by
+      # its own test module).
+      bv = state.screen_state.sysop.boards_view
+
+      fields = [
+        %{name: :slug, type: :text, label: "Slug", max_length: 50, value: "news"},
+        %{name: :name, type: :text, label: "Name", max_length: 100, value: "News"},
+        %{name: :description, type: :textarea, label: "Description", value: ""},
+        %{
+          name: :category_id,
+          type: :enum,
+          label: "Category",
+          choices: [category.id],
+          value: category.id
+        },
+        %{
+          name: :postable_by,
+          type: :enum,
+          label: "Postable by",
+          choices: ["members", "mods_only", "sysop_only"],
+          value: "members"
+        },
+        %{
+          name: :default_subscription,
+          type: :boolean,
+          label: "Default subscription",
+          value: false
+        }
+      ]
+
+      form =
+        ModalForm.init(
+          title: "New board",
+          fields: fields,
+          on_submit: fn payload ->
+            Process.put({BoardsView, :pending_submit}, payload)
+            :ok
+          end,
+          on_cancel: fn -> :ok end
+        )
+
+      bv = %{bv | modal: form, modal_kind: :create_board}
+      state = put_boards_view(state, bv)
+
+      # Focus the last field and press Enter to submit.
+      n = length(fields)
+      bv = state.screen_state.sysop.boards_view
+      bv = %{bv | modal: %{bv.modal | focus_index: n - 1}}
+      state = put_boards_view(state, bv)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+
+      new_bv = new_state.screen_state.sysop.boards_view
+      assert new_bv.modal == nil, "Modal should close on successful submit"
+
+      assert Enum.any?(new_bv.boards, &(&1.slug == "news")),
+             "New board must appear in refreshed list"
+    end
+
+    test "invalid submit surfaces Modal.Form errors, modal stays open", %{
+      state: state,
+      sysop: sysop,
+      category: category
+    } do
+      state = activate_boards_tab(state, sysop)
+      bv = state.screen_state.sysop.boards_view
+
+      fields = [
+        %{name: :slug, type: :text, label: "Slug", max_length: 50, value: "ok-slug"},
+        # Missing required name.
+        %{name: :name, type: :text, label: "Name", max_length: 100, value: ""},
+        %{name: :description, type: :textarea, label: "Description", value: ""},
+        %{
+          name: :category_id,
+          type: :enum,
+          label: "Category",
+          choices: [category.id],
+          value: category.id
+        },
+        %{
+          name: :postable_by,
+          type: :enum,
+          label: "Postable by",
+          choices: ["members"],
+          value: "members"
+        },
+        %{
+          name: :default_subscription,
+          type: :boolean,
+          label: "Default subscription",
+          value: false
+        }
+      ]
+
+      form =
+        ModalForm.init(
+          title: "New board",
+          fields: fields,
+          on_submit: fn payload ->
+            Process.put({BoardsView, :pending_submit}, payload)
+            :ok
+          end,
+          on_cancel: fn -> :ok end
+        )
+
+      bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
+      state = put_boards_view(state, bv)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+
+      new_bv = new_state.screen_state.sysop.boards_view
+      assert %ModalForm{} = new_bv.modal, "Modal must stay open on validation error"
+
+      assert Map.has_key?(new_bv.modal.errors, :name),
+             "Errors must include :name — got #{inspect(new_bv.modal.errors)}"
+    end
+
+    test "Pitfall 5 — j/k navigation no-op while modal open", %{state: state, sysop: sysop} do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "n"}, state)
+
+      bv_before = state.screen_state.sysop.boards_view
+      idx_before = bv_before.selection_index
+
+      # j while a Modal.Form is open must not advance the selection.
+      result = Sysop.handle_key(%{key: :char, char: "j"}, state)
+
+      new_state =
+        case result do
+          {:update, s, _} -> s
+          :no_match -> state
+        end
+
+      new_bv = new_state.screen_state.sysop.boards_view
+      assert new_bv.selection_index == idx_before
+      assert %ModalForm{} = new_bv.modal
+    end
+  end
+
+  describe "BOARDS tab archive flow (SYSO-03)" do
+    setup [:seed_category_and_board]
+
+    test "D on a board opens confirm modal; Y archives and removes it", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+
+      # Selection index 0 is the category row; index 1 is the board row.
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "j"}, state)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "D"}, state)
+
+      bv = state.screen_state.sysop.boards_view
+      assert %Foglet.TUI.Modal{type: :confirm} = bv.modal
+      assert bv.modal_kind == :archive_board
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :char, char: "Y"}, state)
+
+      new_bv = new_state.screen_state.sysop.boards_view
+      assert new_bv.modal == nil
+
+      refute Enum.any?(new_bv.boards, &(&1.slug == "chat")),
+             "Archived board must not appear in refreshed list"
+    end
+  end
+
+  describe "BOARDS tab category flow (SYSO-03)" do
+    setup [:seed_category_and_board]
+
+    test "N opens Modal.Form for new category; valid submit creates it", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "N"}, state)
+
+      bv = state.screen_state.sysop.boards_view
+      assert %ModalForm{} = bv.modal
+      assert bv.modal_kind == :create_category
+
+      field_names = Enum.map(bv.modal.fields, & &1.name)
+      assert field_names == [:name, :description, :display_order]
+
+      # Simulate a valid payload by pre-populating values and pressing Enter
+      # from the last field.
+      fields = [
+        %{name: :name, type: :text, label: "Name", max_length: 100, value: "Announcements"},
+        %{name: :description, type: :textarea, label: "Description", value: ""},
+        %{name: :display_order, type: :integer, label: "Display order", value: "5"}
+      ]
+
+      form =
+        ModalForm.init(
+          title: "New category",
+          fields: fields,
+          on_submit: fn payload ->
+            Process.put({BoardsView, :pending_submit}, payload)
+            :ok
+          end,
+          on_cancel: fn -> :ok end
+        )
+
+      bv = %{bv | modal: %{form | focus_index: length(fields) - 1}}
+      state = put_boards_view(state, bv)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+
+      new_bv = new_state.screen_state.sysop.boards_view
+      assert new_bv.modal == nil
+      assert Enum.any?(new_bv.categories, &(&1.name == "Announcements"))
+    end
+  end
+
+  describe "BOARDS tab forbidden routing (SYSO-03, D-24)" do
+    setup [:seed_category_and_board]
+
+    test ":forbidden from create_board routes to error modal + :main_menu", %{
+      state: state,
+      category: category
+    } do
+      # Non-sysop actor (nil trips authorization immediately).
+      state = %{state | current_user: nil}
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 1))
+      {:update, state, _} = Sysop.handle_key(%{key: :down}, state)
+
+      bv = state.screen_state.sysop.boards_view
+
+      fields = [
+        %{name: :slug, type: :text, label: "Slug", max_length: 50, value: "ok"},
+        %{name: :name, type: :text, label: "Name", max_length: 100, value: "OK Board"},
+        %{name: :description, type: :textarea, label: "Description", value: ""},
+        %{
+          name: :category_id,
+          type: :enum,
+          label: "Category",
+          choices: [category.id],
+          value: category.id
+        },
+        %{
+          name: :postable_by,
+          type: :enum,
+          label: "Postable by",
+          choices: ["members"],
+          value: "members"
+        },
+        %{
+          name: :default_subscription,
+          type: :boolean,
+          label: "Default subscription",
+          value: false
+        }
+      ]
+
+      form =
+        ModalForm.init(
+          title: "New board",
+          fields: fields,
+          on_submit: fn payload ->
+            Process.put({BoardsView, :pending_submit}, payload)
+            :ok
+          end,
+          on_cancel: fn -> :ok end
+        )
+
+      bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
+      state = put_boards_view(state, bv)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+
+      assert %Foglet.TUI.Modal{type: :error} = new_state.modal
+      assert new_state.current_screen == :main_menu
+    end
+  end
 end

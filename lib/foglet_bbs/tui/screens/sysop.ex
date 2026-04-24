@@ -146,24 +146,17 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   defp delegate_to_active_tab(event, state, ss) do
     case Enum.at(State.tab_labels(), ss.active_tab) do
-      "SITE" ->
-        sub = ss.site_form || SiteForm.init(current_user: state.current_user)
-        {new_sub, events} = SiteForm.handle_key(event, sub)
-        apply_submodule_result(state, ss, :site_form, new_sub, sub, events)
-
-      "LIMITS" ->
-        sub = ss.limits_form || LimitsForm.init(current_user: state.current_user)
-        {new_sub, events} = LimitsForm.handle_key(event, sub)
-        apply_submodule_result(state, ss, :limits_form, new_sub, sub, events)
-
-      "BOARDS" ->
-        sub = ss.boards_view || BoardsView.init(current_user: state.current_user)
-        {new_sub, events} = BoardsView.handle_key(event, sub)
-        apply_submodule_result(state, ss, :boards_view, new_sub, sub, events)
-
-      _ ->
-        :no_match
+      "SITE" -> delegate_to_submodule(event, state, ss, :site_form, SiteForm)
+      "LIMITS" -> delegate_to_submodule(event, state, ss, :limits_form, LimitsForm)
+      "BOARDS" -> delegate_to_submodule(event, state, ss, :boards_view, BoardsView)
+      _ -> :no_match
     end
+  end
+
+  defp delegate_to_submodule(event, state, ss, field, module) do
+    sub = Map.get(ss, field) || module.init(current_user: state.current_user)
+    {new_sub, events} = module.handle_key(event, sub)
+    apply_submodule_result(state, ss, field, new_sub, sub, events)
   end
 
   defp apply_submodule_result(state, ss, field, new_sub, old_sub, events) do
