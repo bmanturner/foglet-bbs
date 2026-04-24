@@ -820,7 +820,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: activate_invites_tab(state, sysop), sysop: sysop}
     end
 
-    test "g persists exactly one invite and stores last_generated_code", %{
+    test "g persists exactly one unlimited sysop_only invite and stores last_generated_code", %{
       state: state,
       sysop: sysop
     } do

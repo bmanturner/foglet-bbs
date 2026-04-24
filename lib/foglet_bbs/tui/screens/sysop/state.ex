@@ -13,9 +13,9 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   `invite_code_generators == "sysop_only"` per SYSO-05.
   """
 
-  alias Foglet.TUI.Widgets.Input.Tabs
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Widgets.Input.Tabs
 
   @base_tabs ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS"]
 

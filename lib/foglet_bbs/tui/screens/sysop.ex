@@ -24,8 +24,9 @@ defmodule Foglet.TUI.Screens.Sysop do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.TUI.Modal
-  alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
+  alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.SiteForm
@@ -148,7 +149,11 @@ defmodule Foglet.TUI.Screens.Sysop do
           _ -> ss.active_tab
         end
 
-      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
+      new_ss =
+        ss
+        |> Map.merge(%{tabs: new_tabs, active_tab: new_active})
+        |> maybe_load_invites_on_entry(state)
+
       new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
       {:update, %{state | screen_state: new_screen_state}, []}
     end
@@ -160,9 +165,38 @@ defmodule Foglet.TUI.Screens.Sysop do
       "LIMITS" -> delegate_to_submodule(event, state, ss, :limits_form, LimitsForm)
       "BOARDS" -> delegate_to_submodule(event, state, ss, :boards_view, BoardsView)
       "SYSTEM" -> delegate_to_submodule(event, state, ss, :system_snapshot, SystemSnapshot)
+      "INVITES" -> delegate_to_invites(event, state, ss)
       _ -> :no_match
     end
   end
+
+  defp delegate_to_invites(event, state, ss) do
+    key = invite_key(event)
+
+    case InvitesActions.handle_key(key, state.current_user, ss.invites) do
+      {:ok, invites} ->
+        new_ss = %{ss | invites: invites}
+        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
+        {:update, %{state | screen_state: new_screen_state}, []}
+
+      :no_match ->
+        :no_match
+    end
+  end
+
+  defp maybe_load_invites_on_entry(ss, state) do
+    with "INVITES" <- Enum.at(State.tab_labels(ss), ss.active_tab),
+         nil <- ss.invites.items,
+         {:ok, invites} <- InvitesActions.load(state.current_user, ss.invites) do
+      %{ss | invites: invites}
+    else
+      _ -> ss
+    end
+  end
+
+  defp invite_key(%{key: :char, char: char}) when is_binary(char), do: char
+  defp invite_key(%{key: key}), do: key
+  defp invite_key(event), do: event
 
   defp delegate_to_submodule(event, state, ss, field, module) do
     sub = Map.get(ss, field) || module.init(current_user: state.current_user)
