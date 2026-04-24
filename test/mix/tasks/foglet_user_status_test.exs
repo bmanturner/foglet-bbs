@@ -12,7 +12,9 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
     test "missing target handle exits non-zero" do
       output =
         capture_io(:stderr, fn ->
-          assert catch_exit(Mix.Tasks.Foglet.User.Status.run(["--status", "active", "--actor", "root"])) ==
+          assert catch_exit(
+                   Mix.Tasks.Foglet.User.Status.run(["--status", "active", "--actor", "root"])
+                 ) ==
                    {:shutdown, 1}
         end)
 
@@ -32,7 +34,9 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
     test "missing --actor exits non-zero" do
       output =
         capture_io(:stderr, fn ->
-          assert catch_exit(Mix.Tasks.Foglet.User.Status.run(["pending_user", "--status", "active"])) ==
+          assert catch_exit(
+                   Mix.Tasks.Foglet.User.Status.run(["pending_user", "--status", "active"])
+                 ) ==
                    {:shutdown, 1}
         end)
 
