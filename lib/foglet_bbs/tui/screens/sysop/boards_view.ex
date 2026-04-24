@@ -377,6 +377,12 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         type: :boolean,
         label: "Default subscription",
         value: Map.get(values, :default_subscription, false)
+      },
+      %{
+        name: :required_subscription,
+        type: :boolean,
+        label: "Required subscription",
+        value: Map.get(values, :required_subscription, false)
       }
     ]
   end
@@ -412,7 +418,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       description: board.description || "",
       category_id: board.category_id,
       postable_by: to_string(board.postable_by),
-      default_subscription: board.default_subscription
+      default_subscription: board.default_subscription,
+      required_subscription: board.required_subscription
     }
   end
 

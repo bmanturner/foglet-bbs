@@ -701,10 +701,38 @@ defmodule Foglet.TUI.Screens.SysopTest do
                :description,
                :category_id,
                :postable_by,
-               :default_subscription
+               :default_subscription,
+               :required_subscription
              ]
 
+      required_field = Enum.find(bv.modal.fields, &(&1.name == :required_subscription))
+      assert required_field.label == "Required subscription"
+      assert required_field.type == :boolean
+      assert required_field.value == false
       assert bv.modal_kind == :create_board
+    end
+
+    test "edit board modal pre-fills required subscription", %{
+      state: state,
+      sysop: sysop,
+      board: board
+    } do
+      {:ok, board} =
+        Foglet.Boards.update_board(sysop, board, %{
+          default_subscription: true,
+          required_subscription: true
+        })
+
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "e"}, state)
+
+      bv = state.screen_state.sysop.boards_view
+      assert bv.edit_target.id == board.id
+
+      required_field = Enum.find(bv.modal.fields, &(&1.name == :required_subscription))
+      assert required_field.label == "Required subscription"
+      assert required_field.value == true
     end
 
     test "valid submit creates board and refreshes list", %{
@@ -741,6 +769,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
           name: :default_subscription,
           type: :boolean,
           label: "Default subscription",
+          value: false
+        },
+        %{
+          name: :required_subscription,
+          type: :boolean,
+          label: "Required subscription",
           value: false
         }
       ]
@@ -806,6 +840,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
           type: :boolean,
           label: "Default subscription",
           value: false
+        },
+        %{
+          name: :required_subscription,
+          type: :boolean,
+          label: "Required subscription",
+          value: false
         }
       ]
 
@@ -830,6 +870,69 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Map.has_key?(new_bv.modal.errors, :name),
              "Errors must include :name — got #{inspect(new_bv.modal.errors)}"
+    end
+
+    test "required subscription without default subscription stays in modal with changeset error",
+         %{
+           state: state,
+           sysop: sysop,
+           category: category
+         } do
+      state = activate_boards_tab(state, sysop)
+      bv = state.screen_state.sysop.boards_view
+
+      fields = [
+        %{name: :slug, type: :text, label: "Slug", max_length: 50, value: "required-only"},
+        %{name: :name, type: :text, label: "Name", max_length: 100, value: "Required Only"},
+        %{name: :description, type: :textarea, label: "Description", value: ""},
+        %{
+          name: :category_id,
+          type: :enum,
+          label: "Category",
+          choices: [category.id],
+          value: category.id
+        },
+        %{
+          name: :postable_by,
+          type: :enum,
+          label: "Postable by",
+          choices: ["members"],
+          value: "members"
+        },
+        %{
+          name: :default_subscription,
+          type: :boolean,
+          label: "Default subscription",
+          value: false
+        },
+        %{
+          name: :required_subscription,
+          type: :boolean,
+          label: "Required subscription",
+          value: true
+        }
+      ]
+
+      form =
+        ModalForm.init(
+          title: "New board",
+          fields: fields,
+          on_submit: fn payload ->
+            Process.put({BoardsView, :pending_submit}, payload)
+            :ok
+          end,
+          on_cancel: fn -> :ok end
+        )
+
+      bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
+      state = put_boards_view(state, bv)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+
+      new_bv = new_state.screen_state.sysop.boards_view
+      assert %ModalForm{} = new_bv.modal
+      assert new_bv.modal.errors.required_subscription =~ "requires default_subscription"
+      refute Enum.any?(new_bv.boards, &(&1.slug == "required-only"))
     end
 
     test "Pitfall 5 — j/k navigation no-op while modal open", %{state: state, sysop: sysop} do
