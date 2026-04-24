@@ -163,7 +163,10 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   1. User can view recent oneliners on the main menu.
   2. User can post a short oneliner from the main menu.
   3. Oneliner posts persist across restart and respect a bounded maximum length.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 07-01-PLAN.md — Wave 1: Oneliners Postgres migration, schema, context APIs, and domain tests [ONEL-01, ONEL-03]
+  - [ ] 07-02-PLAN.md — Wave 2: stateless MainMenu split-pane Oneliners strip and render/smoke tests [ONEL-01]
+  - [ ] 07-03-PLAN.md — Wave 3: App-owned composer, load/refresh flow, validation errors, and `mix precommit` gate [ONEL-01, ONEL-02, ONEL-03]
 **UI hint**: yes
 
 ### Phase 8: Moderation Workspace Population and Scope-Aware Operations
