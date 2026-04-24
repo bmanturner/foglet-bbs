@@ -1,8 +1,11 @@
 defmodule Foglet.TUI.Screens.RegisterTest do
-  use FogletBbs.DataCase, async: true
+  use FogletBbs.DataCase, async: false
 
+  alias Foglet.Config
   alias Foglet.TUI.Screens.Register
   alias Foglet.TUI.Widgets.Input.TextInput
+
+  import Swoosh.TestAssertions
 
   # Moves cursor to end so subsequent :backspace tests behave like a user who
   # just finished typing (Phase 1 pattern verbatim).
@@ -214,6 +217,71 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert get_in(new_state, [:screen_state, :register, :focused_field]) == :confirm_password
 
       assert new_state.current_screen == :register
+    end
+  end
+
+  describe "verification delivery on registration (MAIL-02/MAIL-05)" do
+    setup :set_swoosh_global
+
+    setup do
+      original_delivery_mode = Config.get("delivery_mode", "no_email")
+      original_require_verification = Config.get("require_email_verification", true)
+
+      on_exit(fn ->
+        Config.put!("delivery_mode", original_delivery_mode)
+        Config.put!("require_email_verification", original_require_verification)
+        Config.invalidate("delivery_mode")
+        Config.invalidate("require_email_verification")
+      end)
+
+      :ok
+    end
+
+    test "open registration routes to Verify only after attempted email delivery" do
+      Config.put!("delivery_mode", "email")
+      Config.put!("require_email_verification", true)
+
+      state =
+        combined_state(
+          [
+            handle: "mailreg",
+            email: "mailreg@example.test",
+            password: "sekret01",
+            confirm: "sekret01"
+          ],
+          :confirm_password
+        )
+
+      {:update, new_state, []} = Register.handle_key(%{key: :enter}, state)
+
+      assert new_state.current_screen == :verify
+      assert new_state.current_user.handle == "mailreg"
+      assert_email_sent(subject: "Your Foglet verification code")
+    end
+
+    test "no-email registration does not route to Verify as a raw-code relay" do
+      Config.put!("delivery_mode", "no_email")
+      Config.put!("require_email_verification", true)
+
+      state =
+        combined_state(
+          [
+            handle: "nomailreg",
+            email: "nomailreg@example.test",
+            password: "sekret01",
+            confirm: "sekret01"
+          ],
+          :confirm_password
+        )
+
+      {:update, new_state, []} = Register.handle_key(%{key: :enter}, state)
+
+      assert new_state.current_screen == :register
+      assert new_state.modal.type == :error
+      assert new_state.modal.message ==
+               "Email verification is unavailable because email delivery is disabled."
+
+      refute_email_sent()
     end
   end
 

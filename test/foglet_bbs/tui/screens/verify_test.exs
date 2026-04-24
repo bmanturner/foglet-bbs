@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
   alias Foglet.Accounts
   alias Foglet.TUI.Screens.Verify
 
+  import Swoosh.TestAssertions
   import FogletBbs.AccountsFixtures
 
   defp verify_ss(overrides \\ %{}) do
@@ -31,15 +32,32 @@ defmodule Foglet.TUI.Screens.VerifyTest do
   end
 
   setup do
+    original_delivery_mode = Foglet.Config.get("delivery_mode", "no_email")
+    Foglet.Config.put!("delivery_mode", "email")
+
+    on_exit(fn ->
+      Foglet.Config.put!("delivery_mode", original_delivery_mode)
+      Foglet.Config.invalidate("delivery_mode")
+    end)
+
     user = user_fixture()
     {:ok, code} = Accounts.build_verify_code(user)
 
     %{state: base_state(user), user: user, code: code}
   end
 
+  setup :set_swoosh_global
+
   describe "render/1 (D-08)" do
     test "renders without crashing", %{state: state} do
       assert _ = Verify.render(state)
+    end
+
+    test "uses honest prompt copy without claiming a code was emailed", %{state: state} do
+      rendered = inspect(Verify.render(state))
+
+      assert rendered =~ "Enter the 6-character verification code:"
+      refute rendered =~ "emailed to you"
     end
   end
 
@@ -124,13 +142,17 @@ defmodule Foglet.TUI.Screens.VerifyTest do
   end
 
   describe "resend ({:resend} event) (D-12)" do
-    test "generates a new code and resets buffer + attempts", %{state: state} do
+    test "attempts delivery and resets buffer + attempts", %{state: state} do
       s = put_verify_ss(state, verify_ss(%{buffer: "STALE1", attempts: 3}))
 
       {new_state, _} = Verify.handle_verify_event({:resend}, s)
       assert get_verify_ss(new_state).buffer == ""
       assert get_verify_ss(new_state).attempts == 0
       assert new_state.modal.type == :info
+      assert new_state.modal.message ==
+               "If email delivery is available, new verification instructions have been sent."
+
+      assert_email_sent(subject: "Your Foglet verification code")
     end
   end
 
