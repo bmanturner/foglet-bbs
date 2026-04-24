@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.2
 milestone_name: Pre-Alpha Gap Closure
 status: executing
-stopped_at: Phase 14 context gathered (assumptions mode)
-last_updated: "2026-04-24T21:34:49.454Z"
-last_activity: 2026-04-24 -- Phase 13 completed; Phase 14 remains in progress
+stopped_at: Completed 15-01-PLAN.md
+last_updated: "2026-04-24T22:38:12.080Z"
+last_activity: 2026-04-24
 progress:
-  total_phases: 6
-  completed_phases: 5
-  total_plans: 24
-  completed_plans: 23
+  total_phases: 7
+  completed_phases: 6
+  total_plans: 26
+  completed_plans: 25
   percent: 96
 ---
 
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-24)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 14 — launch-hygiene-and-operator-notes
+**Current focus:** Phase 15 — reset-path-gap-closure
 
 ## Current Position
 
-Phase: 14 (launch-hygiene-and-operator-notes) — EXECUTING
-Plan: 3 of 3
-Status: Executing Phase 14
-Last activity: 2026-04-24 -- Phase 13 completed; Phase 14 remains in progress
+Phase: 15 (reset-path-gap-closure) — EXECUTING
+Plan: 2 of 2
+Status: Ready to execute
+Last activity: 2026-04-24
 
-Progress: [######----] 67%
+Progress: [██████████] 96%
 
 ## Performance Metrics
 
@@ -50,6 +50,7 @@ Progress: [######----] 67%
 | 12. Account SSH Key Management | TBD | - | - |
 | 13. Board Subscription Management | TBD | - | - |
 | 14. Launch Hygiene and Operator Notes | TBD | - | - |
+| 15. Reset Path Gap Closure | 1/2 | 6min | 6min |
 
 **Recent Trend:**
 
@@ -68,6 +69,8 @@ Recent decisions affecting current work:
 - Foglet remains SSH-first/TUI-first; no end-user browser workflows are planned.
 - Domain behavior belongs in `Foglet.*` contexts; TUI screens consume and present context results.
 - Webhook notifications, email digests, full moderation case management, and browser admin are out of scope.
+- Phase 15 keeps reset recovery browser-free: the operator Mix task prints raw reset tokens, not HTTP URLs.
+- Operator reset-token generation is centralized in `Foglet.Accounts` using the existing hashed `UserToken` primitive.
 
 ### Pending Todos
 
@@ -91,6 +94,6 @@ Items acknowledged and carried forward from v1.1 close:
 
 ## Session Continuity
 
-Last session: 2026-04-24T16:55:42.011Z
-Stopped at: Phase 14 context gathered (assumptions mode)
-Resume file: .planning/phases/14-launch-hygiene-and-operator-notes/14-CONTEXT.md
+Last session: 2026-04-24T22:38:12.075Z
+Stopped at: Completed 15-01-PLAN.md
+Resume file: None

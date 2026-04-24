@@ -10,9 +10,9 @@
 - [ ] **MAIL-01**: Operator can configure whether Foglet is in SMTP delivery mode or explicit no-email mode, and the verification/default behavior matches that mode.
 - [ ] **MAIL-02**: User receives an email verification code after registration when SMTP delivery is configured and email verification is required.
 - [ ] **MAIL-03**: User can request a fresh verification code from the Verify screen with cooldown-aware feedback.
-- [ ] **MAIL-04**: User can receive a password reset email when SMTP delivery is configured, while the existing Mix task remains available as a break-glass path.
+- [x] **MAIL-04**: User can receive a password reset email when SMTP delivery is configured, while the existing Mix task remains available as a break-glass path.
 - [ ] **MAIL-05**: User-facing TUI copy never claims a code or notification was emailed unless Foglet actually attempted delivery.
-- [ ] **MAIL-06**: Operator can retrieve verification, reset, or pending-approval delivery details through an explicit no-email/operator-visible workflow when SMTP delivery is disabled.
+- [x] **MAIL-06**: Operator can retrieve verification, reset, or pending-approval delivery details through an explicit no-email/operator-visible workflow when SMTP delivery is disabled.
 - [ ] **MAIL-07**: Pending user receives approval or rejection notification by email when SMTP delivery is configured.
 
 ### User Status Administration
@@ -49,7 +49,7 @@
 ### Launch Hygiene
 
 - [ ] **HYGN-01**: Every currently visible Sysop configuration option either changes real runtime behavior or renders as disabled/unavailable with honest copy.
-- [ ] **HYGN-02**: Pre-alpha blocker flows have focused tests for happy path, forbidden path, and user-facing error/copy behavior.
+- [x] **HYGN-02**: Pre-alpha blocker flows have focused tests for happy path, forbidden path, and user-facing error/copy behavior.
 - [ ] **HYGN-03**: Pre-alpha docs or operator notes describe how to run Foglet in SMTP mode and no-email mode.
 
 ## v2 Requirements
@@ -84,9 +84,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MAIL-01 | Phase 9 | Pending |
 | MAIL-02 | Phase 9 | Pending |
 | MAIL-03 | Phase 9 | Pending |
-| MAIL-04 | Phase 15 | Pending |
+| MAIL-04 | Phase 15 | Complete |
 | MAIL-05 | Phase 9 | Pending |
-| MAIL-06 | Phase 15 | Pending |
+| MAIL-06 | Phase 15 | Complete |
 | MAIL-07 | Phase 10 | Pending |
 | USER-01 | Phase 10 | Pending |
 | USER-02 | Phase 10 | Pending |
@@ -108,7 +108,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SUBS-04 | Phase 13 | Pending |
 | SUBS-05 | Phase 13 | Pending |
 | HYGN-01 | Phase 14 | Pending |
-| HYGN-02 | Phase 15 | Pending |
+| HYGN-02 | Phase 15 | Complete |
 | HYGN-03 | Phase 15 | Pending |
 
 **Coverage:**
