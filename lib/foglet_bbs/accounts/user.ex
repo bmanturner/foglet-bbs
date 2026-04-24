@@ -20,6 +20,9 @@ defmodule Foglet.Accounts.User do
   @valid_roles [:user, :mod, :sysop]
   @valid_email_digests [:off, :daily, :weekly]
   @valid_statuses [:active, :pending, :suspended]
+  @default_timezone "Etc/UTC"
+  @default_time_format "12h"
+  @default_theme_id "gray"
 
   schema "users" do
     field :handle, :string
@@ -38,7 +41,8 @@ defmodule Foglet.Accounts.User do
     field :post_count, :integer, default: 0
     field :last_seen_at, :utc_datetime_usec
 
-    field :theme, :string, default: "default"
+    field :timezone, :string, default: @default_timezone
+    field :theme, :string, default: @default_theme_id
     field :show_in_last_callers, :boolean, default: true
     field :email_digest, Ecto.Enum, values: @valid_email_digests, default: :off
     field :preferences, :map, default: %{}
@@ -64,6 +68,7 @@ defmodule Foglet.Accounts.User do
     |> validate_handle()
     |> validate_email()
     |> validate_password()
+    |> put_account_defaults()
     |> put_password_hash()
     |> unsafe_validate_unique(:handle, FogletBbs.Repo)
     |> unsafe_validate_unique(:email, FogletBbs.Repo)
@@ -173,6 +178,27 @@ defmodule Foglet.Accounts.User do
         changeset
         |> put_change(:password_hash, Argon2.hash_pwd_salt(password))
         |> delete_change(:password)
+    end
+  end
+
+  defp put_account_defaults(changeset) do
+    changeset
+    |> put_change(:timezone, default_timezone())
+    |> put_change(:theme, @default_theme_id)
+    |> put_change(:preferences, default_preferences())
+  end
+
+  defp default_preferences do
+    %{"time_format" => @default_time_format}
+  end
+
+  defp default_timezone do
+    with local_timezone <- Timex.Timezone.local(),
+         name when is_binary(name) <- Timex.Timezone.name_of(local_timezone),
+         true <- Timex.Timezone.exists?(name) do
+      name
+    else
+      _ -> @default_timezone
     end
   end
 end

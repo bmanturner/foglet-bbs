@@ -50,7 +50,7 @@ defmodule FogletBbs.MixProject do
       {:phoenix_live_dashboard, "~> 0.8.3"},
       {:telemetry_metrics, "~> 1.0"},
       {:telemetry_poller, "~> 1.0"},
-      {:gettext, "~> 1.0"},
+      {:gettext, "~> 1.0", override: true},
       {:jason, "~> 1.2"},
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
@@ -63,7 +63,8 @@ defmodule FogletBbs.MixProject do
       {:mdex, "~> 0.2"},
       {:raxol, path: "vendor/raxol"},
       {:hammer, "~> 7.3.0"},
-      {:bodyguard, "~> 2.4"}
+      {:bodyguard, "~> 2.4"},
+      {:timex, "~> 3.7"}
     ]
   end
 
