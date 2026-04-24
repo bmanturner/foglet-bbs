@@ -163,13 +163,13 @@ defmodule Foglet.SSH.CLIHandlerTest do
       {:ok, _ssh_key} =
         Accounts.register_ssh_key(user, %{label: "laptop", public_key: @static_openssh_key})
 
-      assert {:ok, found_user} = Accounts.get_user_by_public_key(@static_openssh_key)
+      assert {:ok, found_user} = Accounts.authenticate_by_public_key(@static_openssh_key)
       assert found_user.id == user.id
       assert found_user.handle == user.handle
     end
 
     test "pubkey NOT registered returns {:error, :not_found}" do
-      assert {:error, :not_found} = Accounts.get_user_by_public_key(@static_openssh_key)
+      assert {:error, :not_found} = Accounts.authenticate_by_public_key(@static_openssh_key)
     end
 
     test "pubkey for a deleted user returns {:error, :not_found}" do
@@ -180,7 +180,25 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
       {:ok, _} = Accounts.delete_user(user)
 
-      assert {:error, :not_found} = Accounts.get_user_by_public_key(@static_openssh_key)
+      assert {:error, :not_found} = Accounts.authenticate_by_public_key(@static_openssh_key)
+    end
+
+    test "guest channel startup does not update SSH key last_used_at" do
+      user = user_fixture()
+
+      {:ok, ssh_key} =
+        Accounts.register_ssh_key(user, %{label: "laptop", public_key: @static_openssh_key})
+
+      assert %Foglet.Accounts.SSHKey{last_used_at: nil} =
+               FogletBbs.Repo.get(Foglet.Accounts.SSHKey, ssh_key.id)
+
+      {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()
+      state = Foglet.Sessions.Session.get_state(session_pid)
+
+      assert state.user_id == nil
+
+      assert %Foglet.Accounts.SSHKey{last_used_at: nil} =
+               FogletBbs.Repo.get(Foglet.Accounts.SSHKey, ssh_key.id)
     end
   end
 

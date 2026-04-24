@@ -580,6 +580,15 @@ defmodule Foglet.Accounts do
     Repo.all(from k in SSHKey, where: k.user_id == ^user.id, order_by: [asc: :inserted_at])
   end
 
+  @spec revoke_ssh_key(User.t(), Ecto.UUID.t() | String.t()) ::
+          {:ok, SSHKey.t()} | {:error, :not_found}
+  def revoke_ssh_key(%User{} = actor, key_id) do
+    case Repo.get_by(SSHKey, id: key_id, user_id: actor.id) do
+      %SSHKey{} = key -> Repo.delete(key)
+      nil -> {:error, :not_found}
+    end
+  end
+
   @doc """
   Lookup a user by an OpenSSH-format public key. Used by Phase 3 SSH
   pubkey auth. Returns `{:ok, user}` if the fingerprint matches a
@@ -600,6 +609,33 @@ defmodule Foglet.Accounts do
     else
       _ -> {:error, :not_found}
     end
+  end
+
+  @spec authenticate_by_public_key(String.t()) :: {:ok, User.t()} | {:error, :not_found}
+  def authenticate_by_public_key(public_key_text) when is_binary(public_key_text) do
+    with {:ok, fp} <- SSHKey.compute_fingerprint(public_key_text),
+         {%SSHKey{} = key, %User{} = user} <- get_active_ssh_key_and_user(fp) do
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+      case Repo.update_all(from(k in SSHKey, where: k.id == ^key.id),
+             set: [last_used_at: now, updated_at: now]
+           ) do
+        {1, _rows} -> {:ok, user}
+        _ -> {:error, :not_found}
+      end
+    else
+      _ -> {:error, :not_found}
+    end
+  end
+
+  defp get_active_ssh_key_and_user(fingerprint) do
+    Repo.one(
+      from k in SSHKey,
+        where: k.fingerprint == ^fingerprint,
+        join: u in assoc(k, :user),
+        where: is_nil(u.deleted_at),
+        select: {k, u}
+    )
   end
 
   # ---------- Tokens (no mailer in Phase 1 — D-01) ----------

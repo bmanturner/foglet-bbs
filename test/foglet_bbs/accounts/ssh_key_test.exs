@@ -57,12 +57,7 @@ defmodule Foglet.Accounts.SSHKeyTest do
       assert {:error, changeset} =
                user |> key_changeset(%{label: "laptop", public_key: @key_b}) |> Repo.insert()
 
-      # The unique_constraint target is [:user_id, :label]; Ecto surfaces
-      # the error on :user_id or :label depending on the constraint name.
-      errors = errors_on(changeset)
-
-      assert errors[:user_id] == ["has already been taken"] or
-               errors[:label] == ["has already been taken"]
+      assert "has already been taken" in errors_on(changeset).label
     end
 
     test "rejects invalid public key text" do

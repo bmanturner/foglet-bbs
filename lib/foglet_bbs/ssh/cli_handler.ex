@@ -34,8 +34,9 @@ defmodule Foglet.SSH.CLIHandler do
   1. Obtain the peer address via `:ssh.connection_info(connection_ref, [:peer])`.
   2. Pop the stashed pubkey (or `:miss` if the client used password-based flow,
      which is rejected at the daemon level — all connections use no_auth_needed).
-  3. If a pubkey was offered, look it up in `Accounts.get_user_by_public_key/1`
-     to find the matching user.
+  3. If a pubkey was offered, authenticate it through
+     `Accounts.authenticate_by_public_key/1` to find the matching user and
+     record last-used metadata.
   4. Build the session context accordingly.
 
   ## Connection limit
@@ -311,7 +312,7 @@ defmodule Foglet.SSH.CLIHandler do
       {:ok, public_key} ->
         case encode_public_key(public_key) do
           {:ok, openssh_text} ->
-            case Foglet.Accounts.get_user_by_public_key(openssh_text) do
+            case Foglet.Accounts.authenticate_by_public_key(openssh_text) do
               {:ok, user} -> user
               _ -> nil
             end
