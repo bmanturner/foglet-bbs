@@ -7,8 +7,12 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
   defmodule FakePosts do
     def create_reply(_thread_id, _board_id, _user_id, %{body: "explode"}), do: {:error, :nope}
-    def create_reply(_thread_id, _board_id, _user_id, %{body: "policy"}), do: {:error, :posting_not_allowed}
-    def create_reply(_thread_id, _board_id, _user_id, %{body: "locked"}), do: {:error, :thread_locked}
+
+    def create_reply(_thread_id, _board_id, _user_id, %{body: "policy"}),
+      do: {:error, :posting_not_allowed}
+
+    def create_reply(_thread_id, _board_id, _user_id, %{body: "locked"}),
+      do: {:error, :thread_locked}
 
     def create_reply(_thread_id, _board_id, _user_id, attrs),
       do: {:ok, Map.merge(%{id: "new-post"}, attrs)}

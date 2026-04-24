@@ -187,6 +187,33 @@ defmodule Foglet.ThreadsTest do
       assert after_board.next_message_number == before_board.next_message_number
       assert :sys.get_state(pid).next_number == before_next_number
     end
+
+    test "malformed user and board IDs are rejected without side effects" do
+      {board, pid} = setup_board_with_server(%{postable_by: :members})
+      user = user_with_role!(:user)
+
+      cases = [
+        {board.id, "not-a-uuid"},
+        {"not-a-uuid", user.id}
+      ]
+
+      for {board_id, user_id} <- cases do
+        before_thread_count = Repo.aggregate(Foglet.Threads.Thread, :count, :id)
+        before_post_count = Repo.aggregate(Foglet.Posts.Post, :count, :id)
+        before_board = Repo.get!(Foglet.Boards.Board, board.id)
+        before_next_number = :sys.get_state(pid).next_number
+
+        assert {:error, :posting_not_allowed} =
+                 Foglet.Threads.create_thread(board_id, user_id, posting_attrs("bad id"))
+
+        after_board = Repo.get!(Foglet.Boards.Board, board.id)
+
+        assert Repo.aggregate(Foglet.Threads.Thread, :count, :id) == before_thread_count
+        assert Repo.aggregate(Foglet.Posts.Post, :count, :id) == before_post_count
+        assert after_board.next_message_number == before_board.next_message_number
+        assert :sys.get_state(pid).next_number == before_next_number
+      end
+    end
   end
 
   describe "advance_thread_read_pointer/3 (BOARD-09)" do

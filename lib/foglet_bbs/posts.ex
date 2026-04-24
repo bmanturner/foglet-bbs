@@ -43,9 +43,9 @@ defmodule Foglet.Posts do
   @spec create_reply(String.t(), String.t(), String.t(), map()) ::
           {:ok, Post.t()} | {:error, any()}
   def create_reply(thread_id, board_id, user_id, attrs) do
-    user = if is_binary(user_id), do: Repo.get(User, user_id)
-    board = if is_binary(board_id), do: Repo.get(Board, board_id)
-    thread = if is_binary(thread_id), do: Repo.get(Thread, thread_id)
+    user = safe_get(User, user_id)
+    board = safe_get(Board, board_id)
+    thread = safe_get(Thread, thread_id)
 
     cond do
       not PostingPolicy.can_post?(user, board) ->
@@ -61,6 +61,15 @@ defmodule Foglet.Posts do
         Boards.Server.create_post(board_id, thread_id, user_id, attrs)
     end
   end
+
+  defp safe_get(schema, id) when is_binary(id) do
+    case Ecto.UUID.cast(id) do
+      {:ok, uuid} -> Repo.get(schema, uuid)
+      :error -> nil
+    end
+  end
+
+  defp safe_get(_schema, _id), do: nil
 
   # ---------- Post queries ----------
 
