@@ -17,6 +17,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.ClockFormatter
 
   @doc """
   Renders the status bar.
@@ -35,8 +36,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   @spec render(map(), String.t()) :: any()
   def render(state, title) do
     theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
-    handle = state.current_user && state.current_user.handle
-    right = if handle, do: "@#{handle}", else: "guest"
+    right = right_text(state)
 
     fg = Map.get(theme.status_bar, :fg)
     bg = Map.get(theme.status_bar, :bg)
@@ -50,6 +50,22 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
         text(" Foglet BBS — #{title}", fg: fg, bg: bg),
         text("#{right} ", fg: fg, bg: bg)
       ]
+    end
+  end
+
+  defp right_text(%{current_screen: :main_menu, current_user: %{handle: handle} = user} = state)
+       when is_binary(handle) do
+    clock = ClockFormatter.format(clock_instant(state), user)
+    "#{clock}  @#{handle}"
+  end
+
+  defp right_text(%{current_user: %{handle: handle}}) when is_binary(handle), do: "@#{handle}"
+  defp right_text(_state), do: "guest"
+
+  defp clock_instant(state) do
+    case get_in(state, [:session_context, :clock_now]) do
+      %DateTime{} = instant -> instant
+      _ -> DateTime.utc_now()
     end
   end
 end
