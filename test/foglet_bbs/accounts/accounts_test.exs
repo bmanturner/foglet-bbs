@@ -9,6 +9,8 @@ defmodule Foglet.AccountsTest do
   alias Foglet.Threads.Thread
   alias FogletBbs.AccountsFixtures
 
+  import Swoosh.TestAssertions
+
   describe "register_user/1 (IDNT-01)" do
     setup do
       Config.init_cache()
@@ -399,6 +401,53 @@ defmodule Foglet.AccountsTest do
       refute email.text_body =~ "/users/reset_password"
       refute email.text_body =~ "http://"
       refute email.text_body =~ "https://"
+    end
+  end
+
+  describe "deliver_verification_code/1 (MAIL-02/MAIL-03)" do
+    setup :set_swoosh_global
+
+    setup do
+      original_delivery_mode = Config.get("delivery_mode", "no_email")
+
+      on_exit(fn ->
+        Config.put!("delivery_mode", original_delivery_mode)
+        Config.invalidate("delivery_mode")
+      end)
+
+      :ok
+    end
+
+    test "email mode persists an email_verify token and attempts delivery" do
+      Config.put!("delivery_mode", "email")
+      user = AccountsFixtures.user_fixture(%{handle: "verifyme", email: "verifyme@example.test"})
+
+      assert {:ok, :attempted} = Accounts.deliver_verification_code(user)
+
+      assert Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "email_verify"
+             )
+
+      assert_email_sent(fn email ->
+        assert email.to == [{"verifyme", "verifyme@example.test"}]
+        assert email.subject == "Your Foglet verification code"
+        assert email.text_body =~ "Return to your SSH terminal session"
+      end)
+    end
+
+    test "no-email mode returns unavailable without creating a token or email" do
+      Config.put!("delivery_mode", "no_email")
+      user = AccountsFixtures.user_fixture()
+
+      assert {:error, :unavailable} = Accounts.deliver_verification_code(user)
+
+      refute Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "email_verify"
+             )
+
+      refute_email_sent()
     end
   end
 
