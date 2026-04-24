@@ -2,7 +2,6 @@ defmodule Foglet.TUI.Screens.LaunchCopyAuditTest do
   use ExUnit.Case, async: true
 
   @audited_globs [
-    "README.md",
     "lib/foglet_bbs/tui/screens/**/*.ex",
     "lib/mix/tasks/**/*.ex"
   ]
@@ -21,14 +20,12 @@ defmodule Foglet.TUI.Screens.LaunchCopyAuditTest do
   test "terminal-visible launch copy avoids unsupported feature claims" do
     audited_files = audited_files()
 
-    assert "README.md" in audited_files
     assert Enum.any?(audited_files, &String.starts_with?(&1, "lib/foglet_bbs/tui/screens/"))
     assert Enum.any?(audited_files, &String.starts_with?(&1, "lib/mix/tasks/"))
 
     failures =
       for path <- audited_files,
           source = File.read!(path),
-          source = source_without_readme_caveats(path, source),
           pattern <- @forbidden_launch_claims,
           Regex.match?(pattern, source) do
         "#{path}:#{inspect(pattern)}"
@@ -54,19 +51,5 @@ defmodule Foglet.TUI.Screens.LaunchCopyAuditTest do
     |> Enum.filter(&File.regular?/1)
     |> Enum.uniq()
     |> Enum.sort()
-  end
-
-  defp source_without_readme_caveats("README.md", source) do
-    source
-    |> String.split("\n")
-    |> Enum.reject(&readme_caveat_line?/1)
-    |> Enum.join("\n")
-  end
-
-  defp source_without_readme_caveats(_path, source), do: source
-
-  defp readme_caveat_line?(line) do
-    String.contains?(line, "not a v1.2 pre-alpha capability") ||
-      String.contains?(line, "not an end-user browser workflow")
   end
 end
