@@ -102,7 +102,10 @@ This milestone turns Foglet's SSH client into a fuller operations surface in sma
   2. Authorized actor can review invite status and revoke an unused invite code through real domain behavior.
   3. Registration in `invite_only` mode accepts only persisted, unrevoked, unconsumed invite codes.
   4. Successful registration consumes an invite exactly once, and failed registration attempts do not burn invite codes.
-**Plans**: TBD
+**Plans**: 3 plans
+  - [ ] 03-01-PLAN.md — Wave 1: Invite persistence foundation, Phase 2 dependency verification, and RED lifecycle/registration tests [INVT-02, INVT-03, INVT-04, INVT-05]
+  - [ ] 03-02-PLAN.md — Wave 2: Accounts-domain invite generation, status review, secure codes, policy/cap enforcement, and revocation [INVT-02, INVT-03, INVT-04]
+  - [ ] 03-03-PLAN.md — Wave 3: Invite-only registration transaction, single-use redemption, generic invite_code errors, and register preflight cleanup [INVT-05]
 **UI hint**: no
 
 ### Phase 4: Shared Invite Surface Activation
