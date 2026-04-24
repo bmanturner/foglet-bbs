@@ -284,6 +284,32 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       refute_email_sent()
     end
+
+    test "sysop-approved registration uses no-email-safe pending copy" do
+      Config.put!("delivery_mode", "no_email")
+
+      state =
+        combined_state(
+          [
+            handle: "pendingcopy",
+            email: "pendingcopy@example.test",
+            password: "sekret01",
+            confirm: "sekret01"
+          ],
+          :confirm_password,
+          "sysop_approved"
+        )
+
+      {:update, new_state, [{:terminate_after_modal, :pending_approval}]} =
+        Register.handle_key(%{key: :enter}, state)
+
+      assert new_state.modal.message ==
+               "Your account has been created and is pending sysop approval."
+
+      refute new_state.modal.message =~ "You will be notified by email"
+      refute new_state.modal.message =~ "approval notification"
+      refute new_state.modal.message =~ "notified by email"
+    end
   end
 
   describe "handle_key/2 — character input delegation (D-06)" do
