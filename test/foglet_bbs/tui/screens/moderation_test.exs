@@ -1,14 +1,18 @@
 defmodule Foglet.TUI.Screens.ModerationTest do
-  use ExUnit.Case, async: true
+  use FogletBbs.DataCase, async: false
 
   import Foglet.TUI.RenderHelpers
 
+  alias Foglet.Accounts
+  alias Foglet.Config
   alias Foglet.TUI.Screens.Moderation
+  alias Foglet.TUI.Screens.Shared.InvitesState
+  alias FogletBbs.AccountsFixtures
 
-  defp build_state(role) do
+  defp build_state(role, user \\ nil) do
     %Foglet.TUI.App{
       current_screen: :moderation,
-      current_user: %Foglet.Accounts.User{id: "u1", handle: "alice", role: role},
+      current_user: user || %Foglet.Accounts.User{id: "u1", handle: "alice", role: role},
       session_context: %{invite_code_generators: "sysop_only"},
       terminal_size: {80, 24},
       screen_state: %{}
@@ -19,6 +23,12 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   defp build_state_with_policy(role, policy) do
     role
     |> build_state()
+    |> put_in([:session_context, :invite_code_generators], policy)
+  end
+
+  defp build_state_with_policy(user, policy) do
+    user.role
+    |> build_state(user)
     |> put_in([:session_context, :invite_code_generators], policy)
   end
 
@@ -42,6 +52,17 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
     test "does not crash with default screen state", %{state: state} do
       assert _ = Moderation.render(state)
+    end
+
+    test "renders shared INVITES body when active tab is INVITES" do
+      state =
+        :mod
+        |> build_state_with_policy("mods")
+        |> put_in([:screen_state, :moderation], Moderation.init_screen_state(invites_visible?: true, active: 5))
+
+      flat = Moderation.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Loading"))
     end
 
     test "shows all five tab labels: QUEUE, LOG, USERS, SANCTIONS, BOARDS (in that order)", %{
@@ -223,5 +244,52 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         end
       end
     end
+
+    test "persists exactly one invite and records last_generated_code for unlimited mods policy" do
+      restore_invite_config(%{})
+      sysop = actor_fixture(:sysop)
+      Config.put!("invite_code_generators", "mods", sysop.id)
+      mod = actor_fixture(:mod)
+      assert {:ok, before_items} = Accounts.list_invites(mod)
+
+      state =
+        mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          |> Map.put(:invites, InvitesState.new(items: before_items))
+        )
+
+      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "g"}, state)
+
+      assert {:ok, after_items} = Accounts.list_invites(mod)
+      assert length(after_items) == length(before_items) + 1
+
+      invites = new_state.screen_state.moderation.invites
+      assert invites.items == after_items
+      assert is_binary(invites.last_generated_code)
+    end
+  end
+
+  defp restore_invite_config(_context) do
+    Config.init_cache()
+    current_generators = Config.get("invite_code_generators", "sysops")
+    current_limit = Config.get("invite_generation_per_user_limit", 0)
+
+    on_exit(fn ->
+      Config.put!("invite_code_generators", current_generators)
+      Config.put!("invite_generation_per_user_limit", current_limit)
+      Config.invalidate("invite_code_generators")
+      Config.invalidate("invite_generation_per_user_limit")
+    end)
+
+    :ok
+  end
+
+  defp actor_fixture(role) do
+    user = AccountsFixtures.user_fixture()
+    {:ok, actor} = Accounts.update_role(user, role)
+    actor
   end
 end
