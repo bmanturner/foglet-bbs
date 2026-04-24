@@ -67,8 +67,8 @@ This is not a forum with a terminal option. It's a terminal BBS first, end to en
 - Scopes: within current board, by user (v1)
 
 **Notifications**
-- In-app: mentions, replies, DMs, mod actions on your content, subscribed thread updates
-- Opt-in email digests (daily/weekly)
+- Pre-alpha email is transactional only: verification, password reset, and user-status notices when SMTP is configured.
+- Broader reach features remain future work.
 
 **Sysop tooling**
 - Admin menus inside the SSH TUI for moderation and day-to-day ops
