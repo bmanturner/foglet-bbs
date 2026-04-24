@@ -23,7 +23,9 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
         text("  Time format:", fg: label_color(state, theme, :time_format)),
         RadioGroup.render(
           @time_formats,
-          selected_index(@time_formats, state.prefs_draft.time_format), theme: theme),
+          selected_index(@time_formats, state.prefs_draft.time_format),
+          theme: theme
+        ),
         text("  Theme:", fg: label_color(state, theme, :theme)),
         RadioGroup.render(theme_labels(), selected_index(theme_ids(), preview_theme_id(state)),
           theme: theme
@@ -39,41 +41,63 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
   def handle_key(event, %State{} = state, current_user) do
-    cond do
-      cancel?(event) ->
-        {:ok,
-         State.seed_from_user(
-           %{state | candidate_theme_id: nil, status_message: "Preference changes discarded."},
-           current_user
-         ), []}
-
-      save?(event) ->
-        save(state)
-
-      selection_next?(event) and state.prefs_focus == :theme ->
-        {:ok, cycle_theme(state, 1), []}
-
-      selection_previous?(event) and state.prefs_focus == :theme ->
-        {:ok, cycle_theme(state, -1), []}
-
-      selection_next?(event) and state.prefs_focus == :time_format ->
-        {:ok, cycle_time_format(state, 1), []}
-
-      selection_previous?(event) and state.prefs_focus == :time_format ->
-        {:ok, cycle_time_format(state, -1), []}
-
-      next_focus?(event) ->
-        {:ok, %{state | prefs_focus: move_focus(state.prefs_focus, 1)}, []}
-
-      previous_focus?(event) ->
-        {:ok, %{state | prefs_focus: move_focus(state.prefs_focus, -1)}, []}
-
-      text_input?(event) and state.prefs_focus == :timezone ->
-        {:ok, update_timezone(state, event), []}
-
-      true ->
-        :no_match
+    case route_event(event, state) do
+      :cancel -> cancel(state, current_user)
+      :save -> save(state)
+      {:cycle, delta} -> {:ok, cycle_active_selection(state, delta), []}
+      {:focus, delta} -> {:ok, %{state | prefs_focus: move_focus(state.prefs_focus, delta)}, []}
+      :timezone_input -> {:ok, update_timezone(state, event), []}
+      :no_match -> :no_match
     end
+  end
+
+  defp route_event(event, %State{} = state) do
+    route_command(event) ||
+      route_selection(event, state) ||
+      route_focus(event) ||
+      route_text_input(event, state) ||
+      :no_match
+  end
+
+  defp route_command(event) do
+    cond do
+      cancel?(event) -> :cancel
+      save?(event) -> :save
+      true -> nil
+    end
+  end
+
+  defp route_selection(event, %State{} = state) do
+    cond do
+      not selection_focus?(state) -> nil
+      selection_next?(event) -> {:cycle, 1}
+      selection_previous?(event) -> {:cycle, -1}
+      true -> nil
+    end
+  end
+
+  defp route_focus(event) do
+    cond do
+      next_focus?(event) -> {:focus, 1}
+      previous_focus?(event) -> {:focus, -1}
+      true -> nil
+    end
+  end
+
+  defp route_text_input(event, %State{prefs_focus: :timezone}) do
+    if text_input?(event), do: :timezone_input
+  end
+
+  defp route_text_input(_event, %State{}), do: nil
+
+  defp cancel(%State{} = state, current_user) do
+    state =
+      state
+      |> Map.put(:candidate_theme_id, nil)
+      |> Map.put(:status_message, "Preference changes discarded.")
+      |> State.seed_from_user(current_user)
+
+    {:ok, state, []}
   end
 
   defp text_row(%State{} = state, %Theme{} = theme, field) do
@@ -143,6 +167,14 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
     |> put_prefs_value(:theme, value)
     |> Map.put(:candidate_theme_id, value)
   end
+
+  defp cycle_active_selection(%State{prefs_focus: :theme} = state, delta),
+    do: cycle_theme(state, delta)
+
+  defp cycle_active_selection(%State{prefs_focus: :time_format} = state, delta),
+    do: cycle_time_format(state, delta)
+
+  defp selection_focus?(%State{prefs_focus: focus}), do: focus in [:theme, :time_format]
 
   defp put_prefs_value(%State{} = state, field, value) do
     %{

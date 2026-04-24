@@ -222,8 +222,6 @@ defmodule Foglet.TUI.Screens.Account do
     Enum.find(Theme.ids(), &(Atom.to_string(&1) == theme_id))
   end
 
-  defp resolve_theme_id(_theme_id), do: nil
-
   defp render_tab_body("PROFILE", ss, theme), do: ProfileForm.render(ss, theme)
 
   defp render_tab_body("PREFS", ss, theme), do: PrefsForm.render(ss, theme)
