@@ -3,8 +3,8 @@ defmodule Foglet.TUI.Screens.Account do
   Account shell screen for Foglet BBS (ACCT-01, D-03, D-04, D-05, D-08, D-09, D-12, D-13).
 
   Implements `Foglet.TUI.Screen` behaviour with three tabs:
-    * PROFILE  — scaffold placeholder (Phase 5 adds real profile data)
-    * PREFS    — scaffold placeholder (Phase 5 adds real preferences)
+    * PROFILE  — inline private profile draft form
+    * PREFS    — inline presentation preference draft form with local theme preview
     * INVITES  — conditional; shown when `ShellVisibility.invites_visible?/2` returns
                  true (D-09). Rendered via the shared `InvitesSurface` primitive (D-06).
 
@@ -12,13 +12,13 @@ defmodule Foglet.TUI.Screens.Account do
   Screen-local state lives at `state.screen_state[:account]` as a
   `%Foglet.TUI.Screens.Account.State{}` struct (D-04).
 
-  Phase 0 scope (D-13): read-only. No save_profile, save_prefs, generate_invite, or
-  revoke_invite operations are defined or dispatched. Commands list is always `[]`.
+  Account PROFILE/PREFS save keys emit command tuples for the app layer to persist
+  later in Phase 5. INVITES live actions still delegate to the shared surface.
 
   Security:
     * T-00-01: No Repo/domain imports; no fake operator actions.
     * T-00-04: INVITES tab body delegates entirely to `InvitesSurface.render/2`.
-    * T-00-INPUT: Unknown keys return `:no_match` — no silent state mutation.
+    * T-05-09: Candidate theme previews only through Account rendering.
   """
 
   @behaviour Foglet.TUI.Screen
