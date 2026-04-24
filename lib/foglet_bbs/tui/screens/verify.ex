@@ -55,7 +55,7 @@ defmodule Foglet.TUI.Screens.Verify do
     content =
       column style: %{gap: 0} do
         [
-          text("Enter the 6-character code emailed to you:", fg: theme.primary.fg),
+          text("Enter the 6-character verification code:", fg: theme.primary.fg),
           text(""),
           text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
           text(""),
@@ -161,9 +161,13 @@ defmodule Foglet.TUI.Screens.Verify do
   defp resend_code_raw(%{current_user: nil} = state), do: {state, []}
 
   defp resend_code_raw(state) do
-    case Accounts.build_verify_code(state.current_user) do
-      {:ok, _code} ->
-        modal = %Foglet.TUI.Modal{type: :info, message: "A new code has been sent."}
+    case Accounts.deliver_verification_code(state.current_user) do
+      {:ok, :attempted} ->
+        modal = %Foglet.TUI.Modal{
+          type: :info,
+          message: "If email delivery is available, new verification instructions have been sent."
+        }
+
         cooldown_seconds = resend_cooldown_seconds()
         now = DateTime.utc_now()
         vs = get_verify_ss(state)
@@ -178,10 +182,18 @@ defmodule Foglet.TUI.Screens.Verify do
 
         {put_verify_ss(%{state | modal: modal}, new_vs), []}
 
-      {:error, _cs} ->
+      {:error, :unavailable} ->
         modal = %Foglet.TUI.Modal{
           type: :error,
-          message: "Could not generate a new code. Try again later."
+          message: "Email verification is unavailable because email delivery is disabled."
+        }
+
+        {%{state | modal: modal}, []}
+
+      {:error, _reason} ->
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Verification instructions could not be sent. Please try again later."
         }
 
         {%{state | modal: modal}, []}

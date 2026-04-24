@@ -29,10 +29,6 @@ defmodule Foglet.TUI.Screens.Register do
 
   import Raxol.Core.Renderer.View
 
-  # §2 Module attributes
-
-  @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
-
   @focus_cycle [:handle, :email, :password, :confirm_password]
 
   # §3 init_screen_state/1 (PUBLIC — AUDIT-19, D-05)
@@ -344,7 +340,7 @@ defmodule Foglet.TUI.Screens.Register do
           type: :info,
           title: "Account Pending",
           message:
-            "Your account has been created and is pending sysop approval. You will be notified by email."
+            "Your account has been created and is pending sysop approval. A sysop will review it."
         }
 
         new_state = %{state | modal: modal}
@@ -371,8 +367,8 @@ defmodule Foglet.TUI.Screens.Register do
 
     with {:ok, user} <- Accounts.register_user(data),
          screen <- Accounts.post_login_screen(user),
-         {:ok, code_or_nil} <- maybe_build_verify_code(screen, user) do
-      handle_register_success(state, user, screen, code_or_nil)
+         {:ok, delivery_or_nil} <- maybe_deliver_verification_code(screen, user) do
+      handle_register_success(state, user, screen, delivery_or_nil)
     else
       {:error, changeset} when is_struct(changeset, Ecto.Changeset) ->
         new_reg = %{
@@ -383,24 +379,30 @@ defmodule Foglet.TUI.Screens.Register do
 
         {:update, put_register_ss(state, new_reg), []}
 
-      {:error, _build_code_error} ->
+      {:error, :unavailable} ->
         modal = %Foglet.TUI.Modal{
           type: :error,
-          message: "Could not generate a verification code. Please try again."
+          message: "Email verification is unavailable because email delivery is disabled."
+        }
+
+        {:update, %{state | modal: modal}, []}
+
+      {:error, _delivery_error} ->
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Verification instructions could not be sent. Please try again later."
         }
 
         {:update, %{state | modal: modal}, []}
     end
   end
 
-  # Only build a verify code when the post-login screen is :verify.
-  # For :main_menu, skip code generation by short-circuiting to {:ok, nil}.
-  defp maybe_build_verify_code(:verify, user), do: Accounts.build_verify_code(user)
-  defp maybe_build_verify_code(:main_menu, _user), do: {:ok, nil}
+  # Only attempt verification delivery when the post-login screen is :verify.
+  # For :main_menu, skip delivery by short-circuiting to {:ok, nil}.
+  defp maybe_deliver_verification_code(:verify, user), do: Accounts.deliver_verification_code(user)
+  defp maybe_deliver_verification_code(:main_menu, _user), do: {:ok, nil}
 
-  defp handle_register_success(state, user, :verify, code) do
-    maybe_log_verify_code(user, code)
-
+  defp handle_register_success(state, user, :verify, :attempted) do
     new_state = %{
       state
       | current_user: user,
@@ -433,15 +435,4 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp session_ctx(state), do: Map.get(state, :session_context) || %{}
-
-  if @log_verify_codes do
-    defp maybe_log_verify_code(user, code) when not is_nil(code) do
-      require Logger
-      Logger.info("[verify] code for @#{user.handle}: #{code}")
-    end
-
-    defp maybe_log_verify_code(_user, _code), do: :ok
-  else
-    defp maybe_log_verify_code(_user, _code), do: :ok
-  end
 end
