@@ -2,24 +2,23 @@
 
 ## What This Is
 
-Foglet BBS is an SSH-first bulletin board system built as a Phoenix/Elixir application. Users connect through a terminal UI over SSH to create accounts, browse boards, read threads, write posts, and eventually use presence, chat, moderation, and sysop administration features. The Phoenix endpoint exists for operations and future structured clients, not as an end-user web UI.
+Foglet BBS is an SSH-first bulletin board system built as a Phoenix/Elixir application. Users connect through a terminal UI over SSH to create accounts, browse boards, read threads, write posts, manage account preferences, participate through lightweight oneliners, and use role-appropriate moderation/sysop workflows without leaving the terminal. The Phoenix endpoint exists for operations and future structured clients, not as an end-user web UI.
 
 ## Core Value
 
 A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
 
-## Current Milestone: v1.1 Operations Surfaces & Invites
+## Current State
 
-**Goal:** Add the user, moderator, and sysop TUI surfaces needed to manage preferences, invites, site operations, and main-menu social/status affordances without leaving the terminal.
+**Shipped version:** v1.1 Operations Surfaces & Invites on 2026-04-24.
 
-**Target features:**
-- Account screen for private profile and preferences, including timezone, theme, and 12h/24h display
-- Reusable INVITES tab that appears in Account, Moderation, or Sysop based on `invite_code_generators`
-- Moderation screen scaffolding with tabbed sections for queue, log, users, sanctions, boards, and future board-scoped moderator growth
-- Sysop screen scaffolding with site, boards, limits, system, users, and conditional invites administration
-- Invite generation and redemption wired end to end for `invite_only` registration
-- Main menu timestamp rendered from the logged-in user's display preferences and refreshed every minute
-- Main menu shoutbox/oneliners entry and display
+Foglet now has terminal-native Account, Moderation, and Sysop surfaces; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; and moderation hide/audit workflows.
+
+The chrome clock intentionally displays time only. It honors the user's timezone and 12h/24h preference; date display is not part of the accepted v1.1 behavior.
+
+## Next Milestone Goals
+
+No next milestone is defined yet. Use `$gsd-new-milestone` to gather fresh requirements and build the next roadmap.
 
 ## Requirements
 
@@ -35,18 +34,20 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 - [x] Reusable themed TUI widgets cover chrome, lists, inputs, display elements, modals, post rendering, composition, and progress states - existing code
 - [x] Runtime configuration is persisted in the database and cached through a typed ETS-backed config layer - existing code
 - [x] Markdown rendering, user deletion anonymization, deleted-post preservation, SSH rate limiting, and broad SSH/TUI test coverage are in place - existing code
-- [x] Authorization and UI structure leave room for future board-scoped moderators instead of hard-coding global moderator assumptions - Validated in Phase 01: Authorization and Scope Backbone
-- [x] Read-only Account, Moderation, and Sysop shell screens exist with role-gated main-menu entries, milestone tab sets, placeholder/loading/error states, and a shared `InvitesSurface` primitive — no fake persistence - Validated in Phase 00: Screen Shells and Shared Surface Primitives
-- [x] Persisted single-use invite codes support authorized generation, status review, unused revocation, and transactional `invite_only` registration redemption - Validated in Phase 03: Invite Persistence and Registration Enforcement
-- [x] Invite workflows are surfaced through a shared INVITES tab according to runtime generation policy - Validated in Phase 04: Shared Invite Surface Activation
+- [x] Read-only Account, Moderation, and Sysop shell screens exist with role-gated main-menu entries, milestone tab sets, placeholder/loading/error states, and a shared `InvitesSurface` primitive - v1.1 Phase 0
+- [x] Operator actions are actor-aware and scope-aware, with `:site` and `{:board, board_id}` scope shapes preserved for future board-scoped moderation - v1.1 Phase 1
+- [x] Shared modal form infrastructure supports typed terminal forms used by sysop/account workflows - v1.1 Phase 1.1
+- [x] Sysops can manage typed site policy, invite controls, board/category lifecycle, and system details from the TUI - v1.1 Phase 2
+- [x] Persisted single-use invite codes support authorized generation, status review, unused revocation, and transactional `invite_only` registration redemption - v1.1 Phase 3
+- [x] Invite workflows are surfaced through a shared INVITES tab according to runtime generation policy - v1.1 Phase 4
+- [x] Users can manage private profile and presentation settings from Account and see saved changes reflected without reconnecting - v1.1 Phase 5
+- [x] Main-menu chrome renders preference-aware time and refreshes without reconnecting - v1.1 Phase 6
+- [x] Main menu includes persistent bounded oneliners with quick posting - v1.1 Phase 7
+- [x] Moderation workspace uses real scope-aware data and can hide oneliners through audited moderation tooling - v1.1 Phase 8
 
 ### Active
 
-- [ ] Users can manage private profile and presentation settings from an Account screen without shell access or database edits
-- [ ] Moderators and sysops have dedicated tabbed TUI surfaces that can grow into full operational workspaces without reworking navigation structure later
-- [ ] Sysops can manage site configuration, board/category lifecycle, and operational limits from the TUI rather than ad hoc code or DB edits
-- [ ] The main menu feels more alive and personalized through per-user time rendering and a lightweight shoutbox/oneliners surface
-- [ ] Terminal-first ergonomics, reusable widgets, and strong tests remain intact while these new surfaces are added
+- [ ] Define the next milestone requirements.
 
 ### Out of Scope
 
@@ -59,15 +60,11 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 
 ## Context
 
-Foglet is a brownfield Phoenix project that has already advanced beyond initial scaffolding. The codebase is a single OTP application on the BEAM, with Postgres as the authoritative data store and ETS/Phoenix PubSub used for ephemeral state, runtime config caching, and live event routing.
+Foglet is a brownfield Phoenix project that has advanced beyond initial scaffolding. The codebase is a single OTP application on the BEAM, with Postgres as the authoritative data store and ETS/Phoenix PubSub used for ephemeral state, runtime config caching, and live event routing.
 
-The primary interface is an SSH terminal UI. Erlang's built-in `:ssh` daemon accepts connections, `Foglet.SSH.CLIHandler` handles SSH channel lifecycle events, and Raxol owns the terminal rendering lifecycle. The TUI is intentionally screen-oriented: `Foglet.TUI.App` owns routing, modal handling, PubSub wiring, task command dispatch, and the active screen state; individual screen modules implement the `Foglet.TUI.Screen` behavior.
+The primary interface is an SSH terminal UI. Erlang's built-in `:ssh` daemon accepts connections, `Foglet.SSH.CLIHandler` handles SSH channel lifecycle events, and Raxol owns the terminal rendering lifecycle. The TUI is screen-oriented: `Foglet.TUI.App` owns routing, modal handling, PubSub wiring, task command dispatch, and active screen state; individual screen modules implement the `Foglet.TUI.Screen` behavior.
 
-The domain core is organized as Phoenix-style context modules backed by Ecto schemas. Accounts, boards, threads, posts, configuration, markdown rendering, and sessions already have concrete modules and tests. Board servers are supervised per active board and serialize message-number allocation so the per-board numbering model stays deterministic under concurrency.
-
-Project planning history lives in `.planning/`, including a codebase map, stack analysis, quick-task summaries, and current state. The current planning cycle has focused on tightening SSH handling, TUI domain injection, state structs, typed configuration, post deletion/anonymization semantics, and test coverage.
-
-The v1.1 planning focus is operational depth inside the TUI: user account/preferences management, moderator/sysop control surfaces, invite workflows that actually enforce invite-only mode, and main-menu polish that makes the BBS feel more inhabited. Existing documentation already calls out invites, oneliners, and sysop runtime config as intended system capabilities; this milestone turns those into concrete operator and user-facing surfaces.
+The domain core is organized as Phoenix-style context modules backed by Ecto schemas. Accounts, boards, threads, posts, configuration, oneliners, moderation, markdown rendering, and sessions have concrete modules and tests. Board servers are supervised per active board and serialize message-number allocation so the per-board numbering model stays deterministic under concurrency.
 
 ## Constraints
 
@@ -77,8 +74,7 @@ The v1.1 planning focus is operational depth inside the TUI: user account/prefer
 - **Persistence**: Postgres is authoritative for domain state - ETS and process state must remain reconstructable after restart
 - **Concurrency**: OTP processes own live coordination - use supervisors, registries, PubSub, and GenServers rather than ad hoc shared mutable state
 - **Testing**: Process tests should use supervised processes and deterministic synchronization - avoid sleeps and fragile liveness checks
-- **Security**: SSH auth, password hashing, account deletion, rate limiting, and runtime config changes need conservative handling - this is an internet-facing service
-- **Dependencies**: Prefer project-standard libraries and Elixir/Phoenix/Raxol patterns - use `Req` for HTTP if needed and avoid adding date/time or HTTP client dependencies without a deliberate decision
+- **Security**: SSH auth, password hashing, account deletion, rate limiting, invite workflows, moderation actions, and runtime config changes need conservative handling
 - **Surface reuse**: Account, moderation, and sysop screens should share invite-tab primitives rather than forking near-identical implementations
 - **Authorization**: Moderator and sysop UI must align with role checks and future board-scoped moderation instead of assuming every moderator is global forever
 
@@ -86,33 +82,21 @@ The v1.1 planning focus is operational depth inside the TUI: user account/prefer
 
 | Decision | Rationale | Outcome |
 |----------|-----------|---------|
-| Build Foglet as an SSH-first BBS rather than a web forum | The desired experience is terminal-native and closer to classic BBS interaction than browser-first forum software | - Pending |
-| Use Phoenix as the application foundation even without an end-user web UI | Phoenix supplies endpoint, PubSub, Ecto conventions, LiveDashboard, and operational structure while the primary UI remains SSH | - Pending |
-| Use Raxol for TUI rendering and lifecycle | The project has an existing vendored TUI framework with screen, widget, runtime, and SSH integration patterns | - Pending |
-| Keep SSH and Phoenix interfaces as peers over shared domain/session layers | This prevents the terminal experience from being a wrapper around a web UI and leaves room for future structured clients | - Pending |
-| Store domain truth in Postgres and ephemeral truth in ETS/processes | Durable BBS data needs database consistency; presence, caches, and live UI state can be rebuilt | - Pending |
-| Allocate per-board message numbers through board server processes | A single writer per board gives deterministic numbering without relying on per-board database sequence gymnastics | - Pending |
-| Enforce one active session per user through the session supervisor and registry | BBS presence and terminal state are easier to reason about when a user has a single canonical session | - Pending |
-| Keep sysop administration inside the TUI for day-to-day operations | A sysop should be able to operate the BBS from the same terminal experience users inhabit | - Pending |
-| Build a reusable invite-management surface that can be embedded in account, moderation, and sysop screens | Invite generation rules vary by runtime config, but the workflows and data model should stay consistent across roles | - Pending |
-| Store per-user time rendering preferences alongside other presentation preferences | Timezone and 12h/24h display are user-specific UI concerns that need to drive main-menu rendering and other future timestamps | - Pending |
+| Build Foglet as an SSH-first BBS rather than a web forum | The desired experience is terminal-native and closer to classic BBS interaction than browser-first forum software | Good |
+| Use Phoenix as the application foundation even without an end-user web UI | Phoenix supplies endpoint, PubSub, Ecto conventions, LiveDashboard, and operational structure while the primary UI remains SSH | Good |
+| Use Raxol for TUI rendering and lifecycle | The project has an existing vendored TUI framework with screen, widget, runtime, and SSH integration patterns | Good |
+| Keep SSH and Phoenix interfaces as peers over shared domain/session layers | This prevents the terminal experience from being a wrapper around a web UI and leaves room for future structured clients | Good |
+| Store domain truth in Postgres and ephemeral truth in ETS/processes | Durable BBS data needs database consistency; presence, caches, and live UI state can be rebuilt | Good |
+| Allocate per-board message numbers through board server processes | A single writer per board gives deterministic numbering without relying on per-board database sequence gymnastics | Good |
+| Enforce one active session per user through the session supervisor and registry | BBS presence and terminal state are easier to reason about when a user has a single canonical session | Good |
+| Keep sysop administration inside the TUI for day-to-day operations | A sysop should be able to operate the BBS from the same terminal experience users inhabit | Good |
+| Build a reusable invite-management surface embedded in account, moderation, and sysop screens | Invite generation rules vary by runtime config, but workflows and data model should stay consistent across roles | Good |
+| Store per-user time rendering preferences alongside other presentation preferences | Timezone and 12h/24h display are user-specific UI concerns that drive chrome and future timestamp rendering | Good |
+| Render chrome time without date | The user prefers time-only chrome; date was intentionally removed from the accepted v1.1 behavior | Good |
 
 ## Evolution
 
 This document evolves at phase transitions and milestone boundaries.
 
-**After each phase transition** (via `$gsd-transition`):
-1. Requirements invalidated? Move to Out of Scope with reason.
-2. Requirements validated? Move to Validated with phase reference.
-3. New requirements emerged? Add to Active.
-4. Decisions to log? Add to Key Decisions.
-5. "What This Is" still accurate? Update if drifted.
-
-**After each milestone** (via `$gsd-complete-milestone`):
-1. Full review of all sections.
-2. Core Value check: still the right priority?
-3. Audit Out of Scope: reasons still valid?
-4. Update Context with current state.
-
 ---
-*Last updated: 2026-04-24 after Phase 04: Shared Invite Surface Activation*
+*Last updated: 2026-04-24 after v1.1 milestone completion*
