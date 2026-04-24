@@ -15,7 +15,7 @@ defmodule Foglet.ReadmeOperatorNotesTest do
   ]
 
   @unsupported_target_state_claims [
-    "Opt-in email digests",
+    "email digests",
     "webhook notifications",
     "delivery retry queue",
     "outbound delivery logs",
@@ -53,6 +53,7 @@ defmodule Foglet.ReadmeOperatorNotesTest do
       |> String.split("\n")
       |> Enum.filter(&String.contains?(&1, phrase))
 
+    assert matching_lines != [], "#{inspect(phrase)} is missing from README caveats"
     assert Enum.all?(matching_lines, &String.contains?(&1, "not a v1.2 pre-alpha capability"))
   end
 end
