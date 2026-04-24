@@ -5,6 +5,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   import Foglet.TUI.RenderHelpers
 
+  alias Foglet.Accounts
   alias Foglet.Config
   alias Foglet.Config.Schema
   alias Foglet.TUI.Screens.Sysop
@@ -754,6 +755,22 @@ defmodule Foglet.TUI.Screens.SysopTest do
     put_in(state, [:screen_state, :sysop], ss)
   end
 
+  defp activate_invites_tab(state, sysop) do
+    state =
+      state
+      |> Map.put(:current_user, sysop)
+      |> with_invite_policy("sysop_only")
+
+    ss =
+      Sysop.init_screen_state(
+        active: 5,
+        current_user: state.current_user,
+        session_context: state.session_context
+      )
+
+    put_in(state, [:screen_state, :sysop], ss)
+  end
+
   describe "SYSTEM tab (SYSO-04)" do
     test "renders snapshot labels on tab enter", %{state: state} do
       state = activate_system_tab(state)
@@ -793,6 +810,43 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       new = new_state.screen_state.sysop.system_snapshot
       assert new == old
+    end
+  end
+
+  describe "INVITES tab shared delegation (SYSO-05)" do
+    setup %{state: state} do
+      sysop = persist_sysop()
+      Config.put!("invite_code_generators", "sysop_only", sysop.id)
+      %{state: activate_invites_tab(state, sysop), sysop: sysop}
+    end
+
+    test "g persists exactly one invite and stores last_generated_code", %{
+      state: state,
+      sysop: sysop
+    } do
+      assert {:ok, before_items} = Accounts.list_invites(sysop)
+
+      {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "g"}, state)
+
+      assert {:ok, after_items} = Accounts.list_invites(sysop)
+      assert length(after_items) == length(before_items) + 1
+
+      invites = new_state.screen_state.sysop.invites
+      assert invites.items == after_items
+      assert invites.last_generated_code == hd(after_items).code
+      assert is_binary(invites.last_generated_code)
+      assert invites.error == nil
+    end
+
+    test "sysop.ex delegates invite lifecycle through shared modules only" do
+      source = File.read!("lib/foglet_bbs/tui/screens/sysop.ex")
+
+      assert String.contains?(source, "InvitesSurface.render")
+      assert String.contains?(source, "InvitesActions.handle_key")
+      assert String.contains?(source, "InvitesActions.load")
+
+      refute source =~ ~r/Accounts\.(create_invite|revoke_invite|list_invites)/
+      refute String.contains?(source, "FogletBbs.Repo")
     end
   end
 
