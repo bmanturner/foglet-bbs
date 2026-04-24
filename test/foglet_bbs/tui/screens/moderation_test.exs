@@ -59,7 +59,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       state =
         :mod
         |> build_state_with_policy("mods")
-        |> put_in([:screen_state, :moderation], Moderation.init_screen_state(invites_visible?: true, active: 5))
+        |> put_in(
+          [:screen_state, :moderation],
+          Moderation.init_screen_state(invites_visible?: true, active: 5)
+        )
 
       flat = Moderation.render(state) |> collect_text_values()
 
@@ -181,7 +184,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       state =
         :mod
         |> build_state_with_policy("mods")
-        |> put_in([:screen_state, :moderation], Moderation.init_screen_state(invites_visible?: true))
+        |> put_in(
+          [:screen_state, :moderation],
+          Moderation.init_screen_state(invites_visible?: true)
+        )
 
       {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "6"}, state)
 
@@ -192,11 +198,15 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       state =
         :mod
         |> build_state_with_policy("any_user")
-        |> put_in([:screen_state, :moderation], Moderation.init_screen_state(invites_visible?: true, active: 5))
+        |> put_in(
+          [:screen_state, :moderation],
+          Moderation.init_screen_state(invites_visible?: true, active: 5)
+        )
 
       {:update, new_state, _cmds} = Moderation.handle_key(%{key: :end}, state)
 
       assert new_state.screen_state.moderation.active_tab == 4
+
       refute Enum.any?(
                new_state.screen_state.moderation.tabs.raxol_state.tabs,
                &(&1.label == "INVITES")
