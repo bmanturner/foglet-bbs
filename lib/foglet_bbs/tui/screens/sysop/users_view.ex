@@ -17,7 +17,11 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   @statuses [:pending, :active, :suspended, :rejected]
   @footer "[A] Approve  [R] Reject  [S] Suspend  [U] Reactivate  [j/k] Move"
 
-  @type row :: {:pending, User.t()} | {:active, User.t()} | {:suspended, User.t()} | {:rejected, User.t()}
+  @type row ::
+          {:pending, User.t()}
+          | {:active, User.t()}
+          | {:suspended, User.t()}
+          | {:rejected, User.t()}
 
   @type t :: %__MODULE__{
           current_user: User.t() | nil,
@@ -44,10 +48,19 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   def handle_key(%{key: :char, char: "j"}, state), do: {move(state, +1), []}
   def handle_key(%{key: :up}, state), do: {move(state, -1), []}
   def handle_key(%{key: :char, char: "k"}, state), do: {move(state, -1), []}
-  def handle_key(%{key: :char, char: c}, state) when c in ["A", "a"], do: transition(state, :active)
-  def handle_key(%{key: :char, char: c}, state) when c in ["R", "r"], do: transition(state, :rejected)
-  def handle_key(%{key: :char, char: c}, state) when c in ["S", "s"], do: transition(state, :suspended)
-  def handle_key(%{key: :char, char: c}, state) when c in ["U", "u"], do: transition(state, :active)
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["A", "a"],
+    do: transition(state, :active)
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["R", "r"],
+    do: transition(state, :rejected)
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["S", "s"],
+    do: transition(state, :suspended)
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["U", "u"],
+    do: transition(state, :active)
+
   def handle_key(_event, state), do: {state, []}
 
   @spec render(t(), map()) :: any()

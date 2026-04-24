@@ -506,11 +506,18 @@ defmodule Foglet.TUI.Screens.SysopTest do
   describe "USERS tab render (USER-01)" do
     test "renders pending, active, suspended, and rejected non-deleted handles", %{state: state} do
       sysop = persist_user(%{handle: "sysopusers", role: :sysop})
-      pending = persist_user(%{handle: "pendinguser", email: "pending@example.test", status: :pending})
+
+      pending =
+        persist_user(%{handle: "pendinguser", email: "pending@example.test", status: :pending})
+
       active = persist_user(%{handle: "activeuser", email: "active@example.test"})
 
       suspended =
-        persist_user(%{handle: "suspendeduser", email: "suspended@example.test", status: :suspended})
+        persist_user(%{
+          handle: "suspendeduser",
+          email: "suspended@example.test",
+          status: :suspended
+        })
 
       rejected =
         persist_user(%{handle: "rejecteduser", email: "rejected@example.test", status: :rejected})
@@ -558,6 +565,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, _} = Sysop.handle_key(%{key: :char, char: "A"}, state)
 
       assert Accounts.get_user!(pending.id).status == :active
+
       assert state.screen_state.sysop.users_view.message ==
                "Status changed: @approve_me pending -> active."
     end
@@ -570,6 +578,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, _} = Sysop.handle_key(%{key: :char, char: "R"}, state)
 
       assert Accounts.get_user!(pending.id).status == :rejected
+
       assert state.screen_state.sysop.users_view.message ==
                "Status changed: @reject_me pending -> rejected."
     end
@@ -583,6 +592,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, _} = Sysop.handle_key(%{key: :char, char: "S"}, state)
 
       assert Accounts.get_user!(active.id).status == :suspended
+
       assert state.screen_state.sysop.users_view.message ==
                "Status changed: @suspend_me active -> suspended."
     end
@@ -596,6 +606,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, _} = Sysop.handle_key(%{key: :char, char: "U"}, state)
 
       assert Accounts.get_user!(suspended.id).status == :active
+
       assert state.screen_state.sysop.users_view.message ==
                "Status changed: @reactivate_me suspended -> active."
     end
