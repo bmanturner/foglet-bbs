@@ -8,9 +8,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       ["QUEUE", "LOG", "USERS", "SANCTIONS", "BOARDS"]
 
   Phase 0 scope: UI focus only. Real queue/log/user/sanction/board data arrives
-  in Phase 8 (Moderation Workspace Population). The shared INVITES tab is NOT
-  part of the Phase 0 Moderation tab set; Phase 4 may introduce it when
-  `invite_code_generators == "mods"`, but Phase 0's locked D-10 list excludes it.
+  in Phase 8 (Moderation Workspace Population). Phase 4 appends the shared
+  INVITES tab when runtime invite policy permits moderators to generate codes.
   """
 
   alias Foglet.TUI.Screens.Shared.InvitesState

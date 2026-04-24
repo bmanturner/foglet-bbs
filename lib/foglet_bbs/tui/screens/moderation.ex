@@ -24,10 +24,9 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   ## INVITES Tab
 
-  CONTEXT.md D-10 locks the Phase 0 Moderation tab set to exactly the five
-  listed above. The shared INVITES surface (Plan 02) is NOT included in
-  Phase 0's Moderation tab set. Phase 4 may add it when
-  `invite_code_generators == "mods"`; this module does not wire it.
+  CONTEXT.md D-10 locks the base Moderation tab set to exactly the five
+  listed above. Phase 4 appends the shared INVITES surface when
+  `invite_code_generators == "mods"` and the current actor is a moderator.
   """
 
   @behaviour Foglet.TUI.Screen
