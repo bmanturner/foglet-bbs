@@ -4,7 +4,8 @@ defmodule FogletBbs.AccountsFixtures do
   """
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.{User, UserToken}
+  alias Foglet.Accounts.{Invite, User, UserToken}
+  alias FogletBbs.Repo
 
   @doc "Valid attrs for registration — override any key in the overrides map."
   def valid_user_attributes(overrides \\ %{}) do
@@ -22,6 +23,27 @@ defmodule FogletBbs.AccountsFixtures do
   def user_fixture(attrs \\ %{}) do
     {:ok, user} = attrs |> valid_user_attributes() |> Accounts.register_user()
     user
+  end
+
+  @doc "Insert an invite, optionally for a specific issuer user."
+  def invite_fixture(arg \\ %{})
+
+  def invite_fixture(%User{} = issuer), do: invite_fixture(issuer, %{})
+
+  def invite_fixture(attrs) when is_map(attrs) and not is_struct(attrs) do
+    invite_fixture(user_fixture(), attrs)
+  end
+
+  def invite_fixture(%User{} = issuer, attrs) do
+    attrs =
+      Map.merge(
+        %{code: "INVITECODE#{System.unique_integer([:positive])}XYZCODE"},
+        attrs
+      )
+
+    %Invite{issuer_id: issuer.id}
+    |> Invite.changeset(attrs)
+    |> Repo.insert!()
   end
 
   @doc """
