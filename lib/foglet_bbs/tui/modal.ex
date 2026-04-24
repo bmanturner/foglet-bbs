@@ -1,7 +1,7 @@
 defmodule Foglet.TUI.Modal do
   @moduledoc "Typed modal state for Foglet.TUI.App."
 
-  @type modal_type :: :info | :error | :warning | :confirm
+  @type modal_type :: :info | :error | :warning | :confirm | :form
 
   @type callback ::
           (Foglet.TUI.App.t() -> {Foglet.TUI.App.t(), list()} | tuple())
@@ -11,7 +11,7 @@ defmodule Foglet.TUI.Modal do
   @type t :: %__MODULE__{
           type: modal_type(),
           title: String.t() | nil,
-          message: String.t() | nil,
+          message: String.t() | struct() | nil,
           on_confirm: callback(),
           on_cancel: callback()
         }

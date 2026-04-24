@@ -28,8 +28,11 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
   alias Raxol.Core.Runtime.Command
   alias Raxol.Core.Runtime.Subscription
+
+  @oneliner_limit 5
 
   @type screen ::
           :login
@@ -58,6 +61,7 @@ defmodule Foglet.TUI.App do
           current_thread: ThreadEntry.t() | nil,
           current_thread_list: list() | nil,
           posts: list() | nil,
+          recent_oneliners: list(),
           read_position: map(),
           composer_draft: String.t() | nil
         }
@@ -74,6 +78,7 @@ defmodule Foglet.TUI.App do
             current_thread: nil,
             current_thread_list: nil,
             posts: nil,
+            recent_oneliners: [],
             read_position: %{},
             composer_draft: nil
 
@@ -281,11 +286,17 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:navigate, screen}, state) when is_atom(screen) do
-    {%{state | current_screen: screen, modal: nil}, []}
+    new_state = %{state | current_screen: screen, modal: nil}
+
+    if screen == :main_menu and new_state.current_user do
+      do_update({:load_oneliners}, new_state)
+    else
+      {new_state, []}
+    end
   end
 
   defp do_update({:set_user, user}, state) do
-    {%{state | current_user: user, current_screen: :main_menu}, []}
+    do_update({:load_oneliners}, %{state | current_user: user, current_screen: :main_menu})
   end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
@@ -392,6 +403,80 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:boards_loaded, boards}, state) do
     {%{state | board_list: boards}, []}
+  end
+
+  defp do_update({:load_oneliners}, state) do
+    oneliners_mod = domain_module(state, :oneliners)
+
+    task =
+      Foglet.TUI.Command.task(:load_oneliners, fn ->
+        {:oneliners_loaded, oneliners_mod.list_recent_visible(@oneliner_limit)}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:oneliners_loaded, entries}, state) when is_list(entries) do
+    {%{state | recent_oneliners: entries}, []}
+  end
+
+  defp do_update({:open_oneliner_composer}, state) do
+    form =
+      ModalForm.init(
+        title: "Post Oneliner",
+        fields: [
+          %{
+            name: :body,
+            type: :text,
+            label: "Oneliner",
+            max_length: 120,
+            placeholder: "120 chars max"
+          }
+        ],
+        on_submit: &stash_oneliner_submit/1,
+        on_cancel: fn -> :dismiss_modal end
+      )
+
+    modal = %Foglet.TUI.Modal{type: :form, title: "Post Oneliner", message: form}
+
+    {%{state | current_screen: :main_menu, modal: modal}, []}
+  end
+
+  defp do_update({:submit_oneliner, %{body: body}}, %{current_user: user} = state)
+       when not is_nil(user) do
+    oneliners_mod = domain_module(state, :oneliners)
+
+    task =
+      Foglet.TUI.Command.task(:submit_oneliner, fn ->
+        {:oneliner_created, oneliners_mod.create_entry(user, %{body: body})}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:submit_oneliner, _payload}, state) do
+    {put_oneliner_form_errors(state, %{base: "User session is not available."}), []}
+  end
+
+  defp do_update({:oneliner_created, {:ok, _entry}}, state) do
+    do_update({:load_oneliners}, %{state | current_screen: :main_menu, modal: nil})
+  end
+
+  defp do_update({:oneliner_created, {:error, :same_user_latest_visible}}, state) do
+    {put_oneliner_form_errors(state, %{base: "Let someone else post before posting again."}), []}
+  end
+
+  defp do_update({:oneliner_created, {:error, %Ecto.Changeset{} = changeset}}, state) do
+    errors = changeset_errors(changeset)
+
+    visible_errors =
+      if Map.has_key?(errors, :body) do
+        %{body: "Enter 1-120 characters."}
+      else
+        %{base: "Enter 1-120 characters."}
+      end
+
+    {put_oneliner_form_errors(state, visible_errors), []}
   end
 
   defp do_update({:load_boards_for_new_thread}, state) do
@@ -599,7 +684,7 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
     end
 
-    {%{state | current_user: user, current_screen: :main_menu}, []}
+    do_update({:load_oneliners}, %{state | current_user: user, current_screen: :main_menu})
   end
 
   defp do_update({:account_save_profile, attrs}, state) when is_map(attrs) do
@@ -675,6 +760,31 @@ defmodule Foglet.TUI.App do
   defp default_domain_module(:boards), do: Foglet.Boards
   defp default_domain_module(:threads), do: Foglet.Threads
   defp default_domain_module(:posts), do: Foglet.Posts
+  defp default_domain_module(:oneliners), do: Foglet.Oneliners
+
+  defp stash_oneliner_submit(payload) do
+    Process.put({__MODULE__, :pending_oneliner_submit}, payload)
+    :ok
+  end
+
+  defp take_oneliner_submit do
+    payload = Process.get({__MODULE__, :pending_oneliner_submit})
+    Process.delete({__MODULE__, :pending_oneliner_submit})
+    payload
+  end
+
+  defp put_oneliner_form_errors(
+         %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state,
+         errors
+       ) do
+    form = ModalForm.set_errors(form, errors)
+    %{state | modal: %{state.modal | message: form}}
+  end
+
+  defp put_oneliner_form_errors(state, errors) do
+    {state, []} = do_update({:open_oneliner_composer}, state)
+    put_oneliner_form_errors(state, errors)
+  end
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
@@ -898,6 +1008,30 @@ defmodule Foglet.TUI.App do
 
   defp handle_modal_key(:confirm, %{key: :escape}, state) do
     do_update({:confirm_modal, :no}, state)
+  end
+
+  defp handle_modal_key(
+         :form,
+         key,
+         %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
+       ) do
+    Process.delete({__MODULE__, :pending_oneliner_submit})
+    {new_form, action} = ModalForm.handle_event(key, form)
+    state = %{state | modal: %{state.modal | message: new_form}}
+
+    case action do
+      :submitted ->
+        case take_oneliner_submit() do
+          nil -> {state, []}
+          payload -> do_update({:submit_oneliner, payload}, state)
+        end
+
+      :cancelled ->
+        do_update(:dismiss_modal, state)
+
+      _other ->
+        {state, []}
+    end
   end
 
   # :info/:error/:warning modals — dismiss on Enter, Escape, or Space (spacebar)

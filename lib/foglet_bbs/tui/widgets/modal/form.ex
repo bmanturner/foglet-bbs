@@ -157,8 +157,14 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
         render_field(spec, field_state, focused?, state.errors, theme)
       end)
 
+    base_error_rows =
+      case Map.get(state.errors, :base) do
+        nil -> []
+        msg -> [text(msg, fg: theme.error.fg)]
+      end
+
     column [] do
-      [title_row, divider] ++ field_rows ++ [hint]
+      [title_row, divider] ++ field_rows ++ base_error_rows ++ [hint]
     end
   end
 

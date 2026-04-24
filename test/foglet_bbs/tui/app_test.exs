@@ -7,6 +7,7 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Widgets.Input.TextInput
+  alias Foglet.TUI.Widgets.Modal.Form
 
   defp interval_subscription(subscriptions, message) do
     Enum.find(subscriptions, fn
@@ -39,6 +40,28 @@ defmodule Foglet.TUI.AppTest do
       {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
       assert state.current_screen == :main_menu
       assert state.current_user == user
+    end
+
+    test "authenticated user can trigger bounded oneliner load command" do
+      Process.put(:fake_oneliners_owner, self())
+      Process.put(:fake_oneliners_entries, [%{id: "ol1", body: "hello"}])
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+
+      {:ok, state} =
+        App.init(%{
+          session_context: %{
+            user: user,
+            user_id: "u1",
+            domain: %{oneliners: Foglet.TUI.FakeOneliners}
+          }
+        })
+
+      assert state.current_screen == :main_menu
+      {state, cmds} = App.update({:load_oneliners}, state)
+      assert state.current_screen == :main_menu
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+      assert {:oneliners_loaded, [%{id: "ol1"}]} = task.()
+      assert_received {:list_recent_visible, 5}
     end
 
     test "uses terminal_size from context when provided" do
@@ -86,6 +109,21 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.current_screen == :board_list
     end
 
+    test ":navigate to main_menu queues oneliner load for authenticated user", %{state: state} do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+
+      state = %{
+        state
+        | current_user: user,
+          session_context: %{domain: %{oneliners: Foglet.TUI.FakeOneliners}}
+      }
+
+      {new_state, cmds} = App.update({:navigate, :main_menu}, state)
+
+      assert new_state.current_screen == :main_menu
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+    end
+
     test ":navigate clears an active modal", %{state: state} do
       state_with_modal = %{state | modal: %Foglet.TUI.Modal{message: "old", type: :info}}
       {new_state, _} = App.update({:navigate, :main_menu}, state_with_modal)
@@ -97,6 +135,18 @@ defmodule Foglet.TUI.AppTest do
       {new_state, _} = App.update({:set_user, user}, state)
       assert new_state.current_user == user
       assert new_state.current_screen == :main_menu
+    end
+
+    test ":set_user queues oneliner load command", %{state: state} do
+      user = %Foglet.Accounts.User{id: "u2", handle: "bob"}
+
+      state = %{
+        state
+        | session_context: %{domain: %{oneliners: Foglet.TUI.FakeOneliners}}
+      }
+
+      {_new_state, cmds} = App.update({:set_user, user}, state)
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
     end
 
     test ":show_modal sets modal, :dismiss_modal clears it", %{state: state} do
@@ -184,7 +234,7 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:promote_session, user}, state_with_session)
       assert new_state.current_user == user
       assert new_state.current_screen == :main_menu
-      assert cmds == []
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
     end
 
     test "{:promote_session, user} is safe when session_pid is nil", %{state: state} do
@@ -192,7 +242,97 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:promote_session, user}, state)
       assert new_state.current_user == user
       assert new_state.current_screen == :main_menu
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+    end
+  end
+
+  describe "oneliner lifecycle (Phase 7)" do
+    setup do
+      Process.put(:fake_oneliners_owner, self())
+
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}
+
+      {:ok, state} =
+        App.init(%{
+          session_context: %{
+            user: user,
+            user_id: user.id,
+            domain: %{oneliners: Foglet.TUI.FakeOneliners}
+          }
+        })
+
+      %{state: state, user: user}
+    end
+
+    test "{:oneliners_loaded, entries} stores recent_oneliners", %{state: state} do
+      entries = [%{id: "ol1", body: "first"}]
+
+      {new_state, cmds} = App.update({:oneliners_loaded, entries}, state)
+
+      assert new_state.recent_oneliners == entries
       assert cmds == []
+    end
+
+    test "{:open_oneliner_composer} opens focused Post Oneliner form", %{state: state} do
+      {new_state, cmds} = App.update({:open_oneliner_composer}, state)
+
+      assert cmds == []
+      assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
+      assert form.title == "Post Oneliner"
+      assert [%{name: :body, type: :text, max_length: 120}] = form.fields
+      assert form.focus_index == 0
+      assert inspect(App.view(new_state), limit: :infinity) =~ "Post Oneliner"
+    end
+
+    test "composer cancel clears modal and stays on main menu", %{state: state} do
+      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+
+      {new_state, cmds} = App.update({:key, %{key: :escape}}, with_modal)
+
+      assert new_state.modal == nil
+      assert new_state.current_screen == :main_menu
+      assert cmds == []
+      refute_received {:create_entry, _user, _attrs}
+    end
+
+    test "valid submit creates oneliner with current_user, closes modal, and refreshes", %{
+      state: state,
+      user: user
+    } do
+      Process.put(:fake_oneliners_create_result, {:ok, %{id: "ol2", body: "ship it", user: user}})
+      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+
+      {submitting, submit_cmds} = App.update({:submit_oneliner, %{body: "ship it"}}, with_modal)
+
+      assert submitting.modal == with_modal.modal
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: submit_task}] = submit_cmds
+      assert {:oneliner_created, {:ok, %{id: "ol2"}}} = submit_task.()
+      assert_received {:create_entry, ^user, %{body: "ship it"}}
+
+      {new_state, refresh_cmds} =
+        App.update({:oneliner_created, {:ok, %{id: "ol2", body: "ship it"}}}, submitting)
+
+      assert new_state.modal == nil
+      assert new_state.current_screen == :main_menu
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = refresh_cmds
+      refute inspect(App.view(new_state), limit: :infinity) =~ "Hide oneliner"
+      refute inspect(App.view(new_state), limit: :infinity) =~ "hidden_reason"
+    end
+
+    test "same_user_latest_visible keeps composer focused with visible base error", %{
+      state: state
+    } do
+      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+
+      {new_state, cmds} =
+        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, with_modal)
+
+      assert cmds == []
+      assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
+      assert form.errors.base == "Let someone else post before posting again."
+
+      assert inspect(App.view(new_state), limit: :infinity) =~
+               "Let someone else post before posting again."
     end
   end
 
