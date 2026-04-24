@@ -9,6 +9,10 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.Modal.Form
 
+  defp fake_oneliners_context(extra) do
+    Map.merge(%{domain: %{oneliners: Foglet.TUI.FakeOneliners}}, extra)
+  end
+
   defp interval_subscription(subscriptions, message) do
     Enum.find(subscriptions, fn
       %Raxol.Core.Runtime.Subscription{type: :interval, data: %{message: ^message}} -> true
@@ -36,10 +40,17 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "with user in session_context returns :main_menu and authenticated user" do
+      Process.put(:fake_oneliners_owner, self())
+      Process.put(:fake_oneliners_entries, [%{id: "ol1", body: "hello"}])
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
-      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
       assert state.current_screen == :main_menu
       assert state.current_user == user
+      assert state.recent_oneliners == [%{id: "ol1", body: "hello"}]
+      assert_received {:list_recent_visible, 5}
     end
 
     test "authenticated user can trigger bounded oneliner load command" do
@@ -49,11 +60,7 @@ defmodule Foglet.TUI.AppTest do
 
       {:ok, state} =
         App.init(%{
-          session_context: %{
-            user: user,
-            user_id: "u1",
-            domain: %{oneliners: Foglet.TUI.FakeOneliners}
-          }
+          session_context: fake_oneliners_context(%{user: user, user_id: "u1"})
         })
 
       assert state.current_screen == :main_menu
@@ -79,7 +86,7 @@ defmodule Foglet.TUI.AppTest do
       user = %Foglet.Accounts.User{id: "u2", handle: "bob"}
 
       nested_ctx = %{
-        session_context: %{user: user, user_id: "u2", session_pid: nil},
+        session_context: fake_oneliners_context(%{user: user, user_id: "u2", session_pid: nil}),
         terminal_size: {120, 40}
       }
 
@@ -672,7 +679,10 @@ defmodule Foglet.TUI.AppTest do
       user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
 
       {:ok, state} =
-        App.init(%{session_context: %{user: user, user_id: "u-clock", session_pid: nil}})
+        App.init(%{
+          session_context:
+            fake_oneliners_context(%{user: user, user_id: "u-clock", session_pid: nil})
+        })
 
       state = %{state | current_screen: :main_menu}
       subs = App.subscribe(state)
@@ -688,7 +698,10 @@ defmodule Foglet.TUI.AppTest do
       user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
 
       {:ok, state} =
-        App.init(%{session_context: %{user: user, user_id: "u-clock", session_pid: nil}})
+        App.init(%{
+          session_context:
+            fake_oneliners_context(%{user: user, user_id: "u-clock", session_pid: nil})
+        })
 
       state = %{state | current_screen: :board_list}
       subs = App.subscribe(state)
@@ -698,7 +711,12 @@ defmodule Foglet.TUI.AppTest do
 
     test "returns PubSub custom subscription when current_user is set (Audit #12)" do
       user = %Foglet.Accounts.User{id: "u-pubsub", handle: "alice"}
-      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u-pubsub"}})
+
+      {:ok, state} =
+        App.init(%{
+          session_context: fake_oneliners_context(%{user: user, user_id: "u-pubsub"})
+        })
+
       subs = App.subscribe(state)
 
       assert Enum.any?(subs, fn
@@ -716,7 +734,10 @@ defmodule Foglet.TUI.AppTest do
 
     test "board_list screen adds 'boards' topic" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
-      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
       state = %{state | current_screen: :board_list}
       subs = App.subscribe(state)
 
@@ -728,7 +749,10 @@ defmodule Foglet.TUI.AppTest do
     test "thread_list screen adds board:<id> topic when current_board is set" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
       board = %{id: "b-99", name: "General"}
-      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
       state = %{state | current_screen: :thread_list, current_board: board}
       subs = App.subscribe(state)
 
@@ -740,7 +764,10 @@ defmodule Foglet.TUI.AppTest do
     test "post_reader screen adds thread:<id> topic when current_thread is set" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
       thread = %{id: "t-42", title: "Hello World"}
-      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
       state = %{state | current_screen: :post_reader, current_thread: thread}
       subs = App.subscribe(state)
 
@@ -837,7 +864,10 @@ defmodule Foglet.TUI.AppTest do
   describe "PubSub message handlers (Audit #12)" do
     setup do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
-      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
       %{state: state, user: user}
     end
 
@@ -1011,7 +1041,10 @@ defmodule Foglet.TUI.AppTest do
   describe "Phase 0 screen routing" do
     setup do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}
-      {:ok, state} = App.init(%{session_context: %{user: user, user_id: "u1"}})
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
       %{state: state}
     end
 
