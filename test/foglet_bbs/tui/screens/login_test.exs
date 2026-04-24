@@ -5,8 +5,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
   alias Foglet.TUI.Screens.Login
   alias Foglet.TUI.Widgets.Input.TextInput
 
+  import Ecto.Query
   import Foglet.TUI.RenderHelpers
   import FogletBbs.AccountsFixtures
+  import Swoosh.TestAssertions
 
   defp base_state(mode \\ "open") do
     %Foglet.TUI.App{
@@ -509,24 +511,38 @@ defmodule Foglet.TUI.Screens.LoginTest do
   end
 
   describe "submit_login/1 — VERIFY-01 retroactive bypass" do
+    setup :set_swoosh_global
+
     setup do
       original = Foglet.Config.get("require_email_verification", :not_seeded)
+      original_delivery_mode = Config.get("delivery_mode", "no_email")
 
       on_exit(fn ->
         case original do
           :not_seeded -> :ok
           value -> Foglet.Config.put!("require_email_verification", value)
         end
+
+        Config.put!("delivery_mode", original_delivery_mode)
+        Config.invalidate("delivery_mode")
       end)
 
       :ok
     end
 
-    test "unconfirmed user + toggle=true routes to :verify" do
+    test "unconfirmed user + toggle=true + email mode delivers verification email and routes to :verify" do
       Foglet.Config.put!("require_email_verification", true)
+      Config.put!("delivery_mode", "email")
 
       password = "letmein12"
-      user = user_fixture(%{password: password})
+
+      user =
+        user_fixture(%{
+          password: password,
+          handle: "loginverify",
+          email: "loginverify@example.test"
+        })
+
       assert user.confirmed_at == nil
 
       state = form_state([handle: user.handle, password: password], :password)
@@ -537,6 +553,41 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert new_state.current_user.id == user.id
       refute Map.has_key?(new_state.screen_state || %{}, :verify)
       assert cmds == []
+
+      assert FogletBbs.Repo.exists?(
+               from t in Foglet.Accounts.UserToken,
+                 where: t.user_id == ^user.id and t.context == "email_verify"
+             )
+
+      assert_email_sent(fn email ->
+        assert email.to == [{"loginverify", "loginverify@example.test"}]
+        assert email.subject == "Your Foglet verification code"
+      end)
+    end
+
+    test "unconfirmed user + toggle=true + no-email mode reports unavailable without routing" do
+      Foglet.Config.put!("require_email_verification", true)
+      Config.put!("delivery_mode", "no_email")
+
+      password = "letmein12"
+      user = user_fixture(%{password: password})
+      assert user.confirmed_at == nil
+
+      state = form_state([handle: user.handle, password: password], :password)
+
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+
+      assert new_state.current_screen == :login
+      assert is_nil(new_state.current_user)
+      assert cmds == []
+
+      assert %{type: :error, message: msg} = new_state.modal
+      assert msg == "Email verification is unavailable because email delivery is disabled."
+
+      refute FogletBbs.Repo.exists?(
+               from t in Foglet.Accounts.UserToken,
+                 where: t.user_id == ^user.id and t.context == "email_verify"
+             )
     end
 
     test "unconfirmed user + toggle=false routes to :main_menu via {:promote_session, user}" do

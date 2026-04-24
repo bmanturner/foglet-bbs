@@ -54,8 +54,6 @@ defmodule Foglet.TUI.Screens.Login do
   @reset_success_message "If an active account matches, reset instructions will be sent by email."
   @reset_unavailable_message "Password reset by email is unavailable on this Foglet."
 
-  @log_verify_codes Application.compile_env(:foglet_bbs, :log_verify_codes, false)
-
   @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts), do: %{sub: :menu}
@@ -405,10 +403,8 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   defp start_verify_flow(state, user) do
-    case Accounts.build_verify_code(user) do
-      {:ok, code} ->
-        maybe_log_verify_code(user, code)
-
+    case Accounts.deliver_verification_code(user) do
+      {:ok, :attempted} ->
         {:update,
          %{
            state
@@ -417,22 +413,29 @@ defmodule Foglet.TUI.Screens.Login do
              screen_state: Map.delete(state.screen_state || %{}, :verify)
          }, []}
 
-      {:error, _cs} ->
+      {:error, :unavailable} ->
         modal = %Foglet.TUI.Modal{
           type: :error,
-          message: "Could not generate a verification code. Please try again."
+          message: "Email verification is unavailable because email delivery is disabled."
+        }
+
+        {:update, %{state | modal: modal}, []}
+
+      {:error, :delivery_failed} ->
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Verification instructions could not be sent. Please try again later."
+        }
+
+        {:update, %{state | modal: modal}, []}
+
+      {:error, %Ecto.Changeset{}} ->
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Could not prepare verification instructions. Please try again."
         }
 
         {:update, %{state | modal: modal}, []}
     end
-  end
-
-  if @log_verify_codes do
-    defp maybe_log_verify_code(user, code) do
-      require Logger
-      Logger.info("[verify] code for @#{user.handle}: #{code}")
-    end
-  else
-    defp maybe_log_verify_code(_user, _code), do: :ok
   end
 end

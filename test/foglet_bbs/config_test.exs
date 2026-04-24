@@ -19,6 +19,7 @@ defmodule Foglet.ConfigTest do
   setup do
     Config.init_cache()
     for key <- @test_keys, do: Config.invalidate(key)
+    for {key, default} <- Schema.defaults(), do: Config.put!(key, default, nil)
     on_exit(fn -> for key <- @test_keys, do: Config.invalidate(key) end)
     :ok
   end
@@ -232,7 +233,7 @@ defmodule Foglet.ConfigTest do
     end
 
     test "require_email_verification?/0 returns the seeded default with ? suffix" do
-      assert Config.require_email_verification?() == true
+      assert Config.require_email_verification?() == false
     end
 
     test "email_verify_resend_cooldown_seconds/0 returns the seeded default" do
