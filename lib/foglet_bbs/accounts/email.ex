@@ -44,4 +44,32 @@ defmodule Foglet.Accounts.Email do
     If you did not request this reset, ignore this message.
     """)
   end
+
+  @doc "Build an account approval notification."
+  @spec approval_notification(User.t()) :: Swoosh.Email.t()
+  def approval_notification(%User{} = user) do
+    new()
+    |> to({user.handle, user.email})
+    |> from(@from)
+    |> subject("Your Foglet account was approved")
+    |> text_body("""
+    Your Foglet account was approved.
+
+    You can now return to your SSH terminal and log in.
+    """)
+  end
+
+  @doc "Build a registration rejection notification."
+  @spec rejection_notification(User.t()) :: Swoosh.Email.t()
+  def rejection_notification(%User{} = user) do
+    new()
+    |> to({user.handle, user.email})
+    |> from(@from)
+    |> subject("Your Foglet registration was rejected")
+    |> text_body("""
+    Your Foglet registration was rejected.
+
+    Contact the sysop if you believe this was a mistake.
+    """)
+  end
 end

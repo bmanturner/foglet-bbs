@@ -20,6 +20,7 @@ defmodule Foglet.Accounts do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.{Config, Mailer}
   alias Foglet.Accounts.{Email, Invite, SSHKey, User, UserToken}
   alias Foglet.Posts.Post
   alias FogletBbs.Repo
@@ -270,12 +271,14 @@ defmodule Foglet.Accounts do
          :ok <- ensure_not_deleted(user),
          :ok <- permit_status_transition(user.status, status),
          {:ok, updated} <- user |> User.status_changeset(%{status: status}) |> Repo.update() do
+      delivery = deliver_status_transition_notification(updated, user.status, status)
+
       {:ok,
        %{
          user: updated,
          from: user.status,
          to: status,
-         delivery: :not_applicable
+         delivery: delivery
        }}
     else
       {:error, reason}
@@ -507,6 +510,29 @@ defmodule Foglet.Accounts do
     with {:ok, _token} <- Repo.insert(token_struct) do
       _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
       :ok
+    end
+  end
+
+  defp deliver_status_transition_notification(%User{} = user, :pending, :active) do
+    deliver_status_email(user, &Email.approval_notification/1)
+  end
+
+  defp deliver_status_transition_notification(%User{} = user, :pending, :rejected) do
+    deliver_status_email(user, &Email.rejection_notification/1)
+  end
+
+  defp deliver_status_transition_notification(_user, _from, _to), do: :not_applicable
+
+  defp deliver_status_email(%User{} = user, build_email) when is_function(build_email, 1) do
+    case Config.delivery_mode() do
+      "email" ->
+        case Mailer.deliver(build_email.(user)) do
+          {:ok, _delivery} -> :attempted
+          {:error, reason} -> {:failed, reason}
+        end
+
+      "no_email" ->
+        :skipped_no_email
     end
   end
 
