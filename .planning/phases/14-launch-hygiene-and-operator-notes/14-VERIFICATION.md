@@ -13,18 +13,20 @@ requirements:
 
 ## Verdict
 
-PARTIAL. Phase 14 delivered the Sysop config accountability audit, terminal-copy guardrails, and README operator notes, but it did not complete the requested low-value test pruning audit. README-specific tests were also removed by direct user request after review identified that the README test was brittle/low value.
+FAILED/PARTIAL. Phase 14 delivered the Sysop config accountability audit and some terminal-copy guardrails, but it failed the central launch-honesty goal by preserving and documenting a fake password-reset URL workflow. The reset-password Mix task emits `/users/reset_password/...` HTTP URLs even though Foglet has no supported HTTP reset interaction and no TUI token-consumption path.
+
+Responsible party: Codex, during this Phase 14 execution. Codex failed to identify the reset-password URL as a false promise, documented it in README operator notes, and initially treated the related tests as launch-hygiene evidence instead of flagging them as a blocker.
 
 ## Requirement Coverage
 
 - HYGN-01: Covered. `test/foglet_bbs/tui/screens/sysop/config_accountability_test.exs` enumerates `Foglet.Config.Schema.entries/0`, checks SITE/LIMITS form key coverage, proves actor-aware successful writes, nil-actor forbidden behavior, and no-email plus required-verification blocking.
-- HYGN-02: Partially covered. Existing and added tests cover launch-copy claims, delivery-copy behavior, reset/verification/user-status Mix task copy and forbidden paths, required-board unsubscribe behavior, and Sysop config accountability. The broader audit-and-prune pass for weak tests was not completed.
-- HYGN-03: Covered as documentation. `README.md` now documents SSH-first operation, Email/no-email delivery modes, `delivery_mode=email`, `delivery_mode=no_email`, SMTP secret placement, break-glass Mix tasks, launch caveats, and nested-doc status. README-specific tests were intentionally removed by user request.
+- HYGN-02: Failed/partially covered. Existing and added tests cover some launch-copy claims, delivery-copy behavior, verification/user-status Mix task copy and forbidden paths, required-board unsubscribe behavior, and Sysop config accountability. However, the reset-password Mix task and its tests still assert a browser-style reset URL despite no supported HTTP/TUI consumption path. The broader audit-and-prune pass for weak tests was not completed.
+- HYGN-03: Failed/partially covered. `README.md` was updated with SSH-first and delivery-mode notes, but it also documented `mix foglet.user.reset_password HANDLE` as generating an operator reset URL. That is a false capability claim for this product. README-specific tests were intentionally removed by user request.
 
 ## Evidence
 
 - Sysop config visibility ledger exists and is tied to schema and form key lists.
-- `14-BLOCKERS.md` records no upstream Phase 9-13 blockers found during the three plan audits.
+- `14-BLOCKERS.md` now records a critical blocker: reset-password URL output is a false HTTP workflow promise. Earlier "no blockers" statements in Plan 14 summaries were wrong.
 - Launch-copy audit remains scoped to terminal-visible TUI and Mix task source; it no longer audits `README.md`.
 - README was rewritten as pre-alpha operator notes instead of target-state product copy.
 - README test file was deleted: `test/readme_operator_notes_test.exs`.
@@ -40,13 +42,21 @@ PARTIAL. Phase 14 delivered the Sysop config accountability audit, terminal-copy
 
 ## Gaps
 
-### 1. Low-value test pruning audit was not completed
+### 1. Critical launch-honesty failure: fake reset-password URL workflow
+
+`lib/mix/tasks/foglet.user.reset_password.ex` builds and prints `https://<host>/users/reset_password/<token>`. Foglet does not support end-user HTTP interactions, does not have a supported HTTP reset-password product flow, and has no TUI token-consumption path for that token. Therefore the task output, README wording, and tests that assert `/users/reset_password/` are false launch promises.
+
+Responsible party: Codex. This gap was missed and then documented as acceptable during Phase 14 execution by Codex. It should have been flagged immediately as a blocker under HYGN-02/HYGN-03.
+
+Expected remediation: remove or change `mix foglet.user.reset_password` so it does not emit HTTP URLs, remove README claims that imply a usable reset URL, and rewrite/delete tests that assert `/users/reset_password/` output unless a real SSH/TUI reset-token consumption flow is implemented.
+
+### 2. Low-value test pruning audit was not completed
 
 The phase spec required removing or rewriting tests that are static, redundant, or too shallow to catch meaningful regressions. The executed work added coverage and audited selected blocker-flow tests, but it did not perform or document a real suite-wide weak-test pruning pass.
 
 Expected remediation: run a focused test-quality audit for v1.2 blocker-flow tests, remove/rewrite weak tests only where deeper behavior coverage exists, and document each removal/rewrite with rationale.
 
-### 2. README operator notes are no longer test-backed
+### 3. README operator notes are no longer test-backed
 
 README.md now carries the intended operator notes, but direct README-specific tests were removed by user request. This is accepted for this run, but it means HYGN-03 is verified by file inspection rather than executable tests.
 
