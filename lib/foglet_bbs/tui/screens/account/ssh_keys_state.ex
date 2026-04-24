@@ -49,6 +49,44 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
     %{state | status_message: message, errors: %{}}
   end
 
+  @spec start_add(t()) :: t()
+  def start_add(%__MODULE__{} = state) do
+    %{
+      state
+      | mode: :add,
+        form: %{label: "", public_key: ""},
+        focus: :label,
+        errors: %{},
+        status_message: nil
+    }
+  end
+
+  @spec cancel_add(t()) :: t()
+  def cancel_add(%__MODULE__{} = state) do
+    %{state | mode: :list, form: %{label: "", public_key: ""}, focus: :label, errors: %{}}
+  end
+
+  @spec toggle_focus(t()) :: t()
+  def toggle_focus(%__MODULE__{focus: :label} = state), do: %{state | focus: :public_key}
+  def toggle_focus(%__MODULE__{} = state), do: %{state | focus: :label}
+
+  @spec put_focused_value(t(), String.t()) :: t()
+  def put_focused_value(%__MODULE__{} = state, value) when is_binary(value) do
+    put_in(state.form[state.focus], value)
+  end
+
+  @spec append_focused(t(), String.t()) :: t()
+  def append_focused(%__MODULE__{} = state, char) when is_binary(char) do
+    current = Map.get(state.form, state.focus, "")
+    put_focused_value(state, current <> char)
+  end
+
+  @spec backspace_focused(t()) :: t()
+  def backspace_focused(%__MODULE__{} = state) do
+    current = Map.get(state.form, state.focus, "")
+    put_focused_value(state, String.slice(current, 0, max(String.length(current) - 1, 0)))
+  end
+
   @spec select_next(t()) :: t()
   def select_next(%__MODULE__{items: items} = state) when is_list(items) do
     %{state | selected_index: clamp_index(state.selected_index + 1, items)}

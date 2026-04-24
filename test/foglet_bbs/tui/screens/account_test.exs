@@ -26,7 +26,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   defp build_state_for_role(role, session_context \\ %{}) do
-    build_state(%Foglet.Accounts.User{id: "u1", handle: "alice", role: role}, session_context)
+    build_state(
+      %Foglet.Accounts.User{
+        id: "00000000-0000-0000-0000-000000000001",
+        handle: "alice",
+        role: role
+      },
+      session_context
+    )
   end
 
   setup do
@@ -588,7 +595,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:update, state, []} = Account.handle_key(%{key: :char, char: "a"}, state)
 
       account_state =
-        put_in(state.screen_state.account.ssh_keys.form, %{
+        put_ssh_key_form(state.screen_state.account, %{
           label: "workstation",
           public_key: @alternate_ssh_public_key
         })
@@ -615,23 +622,26 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(blank_flat, &String.contains?(&1, "label"))
       assert Enum.any?(blank_flat, &String.contains?(&1, "public_key"))
 
-      invalid_state =
-        put_in(blank_state.screen_state.account.ssh_keys.form, %{
+      account_state =
+        put_ssh_key_form(blank_state.screen_state.account, %{
           label: "bad",
           public_key: "invalid OpenSSH material"
         })
-        |> then(&put_in(blank_state, [:screen_state, :account], &1))
+
+      invalid_state = put_in(blank_state, [:screen_state, :account], account_state)
 
       {:update, invalid_state, []} = Account.handle_key(%{key: :enter}, invalid_state)
       invalid_flat = Account.render(invalid_state) |> collect_text_values()
       assert Enum.any?(invalid_flat, &String.contains?(&1, "invalid OpenSSH"))
 
-      duplicate_fingerprint_state =
-        put_in(invalid_state.screen_state.account.ssh_keys.form, %{
+      account_state =
+        put_ssh_key_form(invalid_state.screen_state.account, %{
           label: "other",
           public_key: AccountsFixtures.default_ssh_public_key()
         })
-        |> then(&put_in(invalid_state, [:screen_state, :account], &1))
+
+      duplicate_fingerprint_state =
+        put_in(invalid_state, [:screen_state, :account], account_state)
 
       {:update, duplicate_fingerprint_state, []} =
         Account.handle_key(%{key: :enter}, duplicate_fingerprint_state)
@@ -641,12 +651,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert Enum.any?(duplicate_fingerprint_flat, &String.contains?(&1, "already been taken"))
 
-      duplicate_label_state =
-        put_in(duplicate_fingerprint_state.screen_state.account.ssh_keys.form, %{
+      account_state =
+        put_ssh_key_form(duplicate_fingerprint_state.screen_state.account, %{
           label: "laptop",
           public_key: @alternate_ssh_public_key
         })
-        |> then(&put_in(duplicate_fingerprint_state, [:screen_state, :account], &1))
+
+      duplicate_label_state =
+        put_in(duplicate_fingerprint_state, [:screen_state, :account], account_state)
 
       {:update, duplicate_label_state, []} =
         Account.handle_key(%{key: :enter}, duplicate_label_state)
@@ -679,12 +691,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert [%{id: ^remaining_id}] = Accounts.list_ssh_keys(user)
       refute Enum.any?(Accounts.list_ssh_keys(user), &(&1.id == second.id))
 
-      empty_state =
-        put_in(
-          state.screen_state.account.ssh_keys,
-          SSHKeysState.loaded(state.screen_state.account.ssh_keys, [])
-        )
-        |> then(&put_in(state, [:screen_state, :account], &1))
+      account_state = %{
+        state.screen_state.account
+        | ssh_keys: SSHKeysState.loaded(state.screen_state.account.ssh_keys, [])
+      }
+
+      empty_state = put_in(state, [:screen_state, :account], account_state)
 
       {:update, empty_state, []} = Account.handle_key(%{key: :char, char: "d"}, empty_state)
       assert empty_state.screen_state.account.ssh_keys.errors.general == "No SSH key is selected."
@@ -720,5 +732,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
     Config.put!("invite_code_generators", "any_user")
     Config.put!("invite_generation_per_user_limit", 0)
     :ok
+  end
+
+  defp put_ssh_key_form(account_state, form) do
+    %{account_state | ssh_keys: %{account_state.ssh_keys | form: form}}
   end
 end
