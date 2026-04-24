@@ -63,7 +63,9 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   defp right_text(_state), do: "guest"
 
   defp clock_instant(state) do
-    case get_in(state, [:session_context, :clock_now]) do
+    session_context = Map.get(state, :session_context) || %{}
+
+    case Map.get(session_context, :clock_now) do
       %DateTime{} = instant -> instant
       _ -> DateTime.utc_now()
     end

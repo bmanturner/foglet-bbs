@@ -27,6 +27,7 @@ defmodule Foglet.TUI.Widgets.Modal do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Modal.Form
 
   @type modal_spec :: %{
           required(:message) => String.t(),
@@ -39,6 +40,10 @@ defmodule Foglet.TUI.Widgets.Modal do
   @wrap_width 50
 
   @spec render(modal_spec() | Foglet.TUI.Modal.t(), Theme.t()) :: any()
+  def render(%Foglet.TUI.Modal{type: :form, message: %Form{} = form}, %Theme{} = theme) do
+    Form.render(form, theme: theme)
+  end
+
   def render(%Foglet.TUI.Modal{message: msg} = spec, %Theme{} = theme) do
     type = spec.type || :info
     title = spec.title || title_for(type)

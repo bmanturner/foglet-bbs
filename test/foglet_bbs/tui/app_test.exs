@@ -42,12 +42,12 @@ defmodule Foglet.TUI.AppTest do
       assert state.current_user == user
     end
 
-    test "with authenticated user queues bounded oneliner load command" do
+    test "authenticated user can trigger bounded oneliner load command" do
       Process.put(:fake_oneliners_owner, self())
       Process.put(:fake_oneliners_entries, [%{id: "ol1", body: "hello"}])
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
 
-      {:ok, state, cmds} =
+      {:ok, state} =
         App.init(%{
           session_context: %{
             user: user,
@@ -56,6 +56,8 @@ defmodule Foglet.TUI.AppTest do
           }
         })
 
+      assert state.current_screen == :main_menu
+      {state, cmds} = App.update({:load_oneliners}, state)
       assert state.current_screen == :main_menu
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
       assert {:oneliners_loaded, [%{id: "ol1"}]} = task.()
