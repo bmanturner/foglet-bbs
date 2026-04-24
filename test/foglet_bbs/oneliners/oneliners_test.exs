@@ -30,14 +30,20 @@ defmodule Foglet.OnelinersTest do
       user = AccountsFixtures.user_fixture()
 
       blank_changeset = Entry.create_changeset(%Entry{user_id: user.id}, %{body: "   "})
-      overlong_changeset = Entry.create_changeset(%Entry{user_id: user.id}, %{body: String.duplicate("x", 121)})
-      max_changeset = Entry.create_changeset(%Entry{user_id: user.id}, %{body: String.duplicate("x", 120)})
+
+      overlong_changeset =
+        Entry.create_changeset(%Entry{user_id: user.id}, %{body: String.duplicate("x", 121)})
+
+      max_changeset =
+        Entry.create_changeset(%Entry{user_id: user.id}, %{body: String.duplicate("x", 120)})
 
       refute blank_changeset.valid?
       assert {"can't be blank", _} = Keyword.fetch!(blank_changeset.errors, :body)
 
       refute overlong_changeset.valid?
-      assert {"should be at most %{count} character(s)", _} = Keyword.fetch!(overlong_changeset.errors, :body)
+
+      assert {"should be at most %{count} character(s)", _} =
+               Keyword.fetch!(overlong_changeset.errors, :body)
 
       assert max_changeset.valid?
     end
