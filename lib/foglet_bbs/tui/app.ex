@@ -961,7 +961,7 @@ defmodule Foglet.TUI.App do
       |> Map.merge(%{
         scopes: Map.get(snapshot, :scopes, []),
         queue: Map.get(snapshot, :queue, []),
-        mod_log: Map.get(snapshot, :mod_log, []),
+        mod_log: Map.get(snapshot, :log, []),
         users: Map.get(snapshot, :users, []),
         boards: Map.get(snapshot, :boards, []),
         loading?: false,

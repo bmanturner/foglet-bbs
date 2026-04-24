@@ -11,7 +11,7 @@ defmodule Foglet.TUI.FakeModeration do
     %{
       scopes: [:site],
       queue: [],
-      mod_log: [],
+      log: [],
       users: [],
       boards: []
     }

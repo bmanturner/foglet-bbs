@@ -402,7 +402,7 @@ defmodule Foglet.TUI.AppTest do
       snapshot = %{
         scopes: [:site],
         queue: [%{id: "r1"}],
-        mod_log: [%{id: "a1", reason: "spam"}],
+        log: [%{id: "a1", reason: "spam"}],
         users: [%{handle: "alice", role: :user, status: :active}],
         boards: [%{name: "General", slug: "general", category_name: "Main", scope: :site}]
       }
@@ -412,7 +412,7 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
       assert new_state.screen_state.moderation.scopes == [:site]
       assert new_state.screen_state.moderation.queue == snapshot.queue
-      assert new_state.screen_state.moderation.mod_log == snapshot.mod_log
+      assert new_state.screen_state.moderation.mod_log == snapshot.log
       assert new_state.screen_state.moderation.users == snapshot.users
       assert new_state.screen_state.moderation.boards == snapshot.boards
       refute new_state.screen_state.moderation.loading?
