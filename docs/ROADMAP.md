@@ -218,7 +218,7 @@ Exit criteria: the sysop can operate the BBS confidently in production.
 
 Turning the private project into a shareable artifact.
 
-- License file (MIT or Apache 2.0)
+- License file (Apache-2.0)
 - README polish
 - `docs/SYSOP.md` — full install guide, configuration reference, upgrade notes
 - `docs/DEV.md` — contributor onboarding
