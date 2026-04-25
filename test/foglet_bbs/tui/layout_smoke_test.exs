@@ -15,6 +15,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   use FogletBbs.DataCase, async: false
 
+  import Raxol.Core.Renderer.View
+
   alias Foglet.Config
   alias Foglet.TUI.App
   alias Foglet.TUI.TextWidth
@@ -67,6 +69,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   defp apply(tree), do: Engine.apply_layout(tree, @dimensions)
 
+  defp apply_at_size(tree, {width, height}) do
+    Engine.apply_layout(tree, %{width: width, height: height})
+  end
+
   defp collect_text(tree), do: tree |> collect_text([]) |> Enum.reverse()
 
   defp collect_text(nil, acc), do: acc
@@ -104,6 +110,76 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       })
 
     %{input_st | cursor_pos: cursor_pos}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Chrome V2 size contracts
+  # ---------------------------------------------------------------------------
+
+  describe "Chrome V2 size contracts" do
+    test "screen frame text stays positioned within required terminal widths" do
+      alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+
+      user = %{
+        id: "u1",
+        handle: "alice",
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "24h"}
+      }
+
+      for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
+        state = %{
+          current_screen: :thread_list,
+          current_user: user,
+          current_board: %{name: "general"},
+          session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
+          terminal_size: {width, height}
+        }
+
+        positioned =
+          state
+          |> ScreenFrame.render("Threads", text("BODY SENTINEL"), [
+            {"J/K", "Navigate"},
+            {"Enter", "Open"},
+            {"Q", "Back"}
+          ])
+          |> apply_at_size({width, height})
+
+        elements = text_elements(positioned)
+
+        assert elements != [],
+               "expected positioned text elements for #{inspect({width, height})}"
+
+        for element <- elements do
+          text = Map.fetch!(element, :text)
+
+          assert element.x >= 0
+          assert element.y >= 0
+          assert element.x + TextWidth.display_width(text) <= width
+        end
+
+        breadcrumb =
+          Enum.find(elements, fn element ->
+            String.contains?(element.text, "Foglet")
+          end)
+
+        content =
+          Enum.find(elements, fn element ->
+            String.contains?(element.text, "BODY SENTINEL")
+          end)
+
+        command =
+          Enum.find(elements, fn element ->
+            String.contains?(element.text, "Navigate") or String.contains?(element.text, "J/K")
+          end)
+
+        assert breadcrumb, "expected breadcrumb/status text at #{inspect({width, height})}"
+        assert content, "expected body text at #{inspect({width, height})}"
+        assert command, "expected command text at #{inspect({width, height})}"
+        assert breadcrumb.y < content.y
+        assert content.y < command.y
+      end
+    end
   end
 
   # ---------------------------------------------------------------------------
