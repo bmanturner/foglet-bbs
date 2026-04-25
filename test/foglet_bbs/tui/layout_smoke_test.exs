@@ -315,8 +315,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # Main menu screen
   # ---------------------------------------------------------------------------
 
-  test "main_menu renders welcome and all menu items at distinct y positions" do
-    user = %{handle: "bob", id: "u1", status: :active, role: :member}
+  test "main_menu renders Navigation and Oneliners panels at distinct y positions" do
+    # Phase 19 / REVIEWS.md HIGH: use canonical `:user` role atom (was `:member`).
+    user = %{handle: "bob", id: "u1", status: :active, role: :user}
 
     state =
       %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
@@ -329,18 +330,25 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
 
-    assert Enum.any?(texts, &String.contains?(&1, "Welcome")),
-           "expected 'Welcome' text, got: #{inspect(texts)}"
+    # D-11: no Welcome line.
+    refute Enum.any?(texts, &String.contains?(&1, "Welcome")),
+           "Phase 19 D-11 removes the welcome line; got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "[B]")),
-           "expected '[B] Browse Boards' text, got: #{inspect(texts)}"
+    # D-07: boxed Navigation + Oneliners panel headers.
+    assert Enum.any?(texts, &(&1 == "Navigation")),
+           "expected 'Navigation' panel header, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "[Q]")),
-           "expected '[Q] Logout' text, got: #{inspect(texts)}"
+    assert Enum.any?(texts, &(&1 == "Oneliners")),
+           "expected 'Oneliners' panel header, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "Oneliners")),
-           "expected 'Oneliners' panel title, got: #{inspect(texts)}"
+    # D-08: glyph-shaped Navigation rows (not [B] bracket rows).
+    assert Enum.any?(texts, &(&1 =~ ~r/●.*Boards.*B$/)),
+           "expected '● Boards    B' row, got: #{inspect(texts)}"
 
+    assert Enum.any?(texts, &(&1 =~ ~r/↯.*Logout.*Q$/)),
+           "expected '↯ Logout    Q' row, got: #{inspect(texts)}"
+
+    # Existing oneliner row format unchanged.
     assert Enum.any?(texts, &String.contains?(&1, "@alice  hello")),
            "expected '@alice  hello' row, got: #{inspect(texts)}"
 
@@ -351,7 +359,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   end
 
   test "main_menu clips Unicode oneliners to display-width limits" do
-    user = %{handle: "bob", id: "u1", status: :active, role: :member}
+    # Phase 19 / REVIEWS.md HIGH: use canonical `:user` role atom (was `:member`).
+    user = %{handle: "bob", id: "u1", status: :active, role: :user}
 
     state =
       %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
@@ -375,6 +384,169 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     assert row, "expected Unicode oneliner row in positioned text"
     assert row =~ "●"
     assert TextWidth.display_width(row) <= 39
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 19 Main Menu size contracts (D-13, D-16)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 19 Main Menu size contracts" do
+    test "main menu renders Navigation + Oneliners side-by-side without overlap at 64x22, 80x24, 132x50" do
+      # Phase 19 / REVIEWS.md HIGH: canonical `role: :user` (was `:member`).
+      user = %{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        status: :active,
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "24h"}
+      }
+
+      for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
+        state =
+          %App{current_user: user, screen_state: %{}, terminal_size: {width, height}}
+          |> Map.from_struct()
+          |> Map.put(:session_context, %{clock_now: ~U[2026-04-24 18:05:00Z]})
+          |> Map.put(:recent_oneliners, [
+            %{body: "deploy notes are up", user: %{handle: "bea"}},
+            %{body: "maintenance at 23:00", user: %{handle: "sys"}},
+            %{body: "welcome new callers", user: %{handle: "mina"}}
+          ])
+
+        positioned =
+          MainMenu.render(state) |> apply_at_size({width, height})
+
+        elements = text_elements(positioned)
+
+        assert elements != [],
+               "expected positioned text elements at #{inspect({width, height})}"
+
+        # ── Viewport-bound: every element fits inside {width, height}. ──────
+        for element <- elements do
+          text = Map.fetch!(element, :text)
+
+          assert element.x >= 0,
+                 "negative x at #{inspect({width, height})}: #{inspect(element)}"
+
+          assert element.y >= 0,
+                 "negative y at #{inspect({width, height})}: #{inspect(element)}"
+
+          assert element.x + TextWidth.display_width(text) <= width,
+                 "element overflows width at #{inspect({width, height})}: #{inspect(element)}"
+        end
+
+        # ── Both panels present (split_pane has NOT collapsed/stacked). ─────
+        nav_header =
+          Enum.find(elements, fn element -> element.text == "Navigation" end)
+
+        oneliners_header =
+          Enum.find(elements, fn element -> element.text == "Oneliners" end)
+
+        assert nav_header,
+               "expected 'Navigation' header at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
+
+        assert oneliners_header,
+               "expected 'Oneliners' header at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
+
+        # ── Side-by-side: Navigation header LEFT of Oneliners header. ───────
+        assert nav_header.x < oneliners_header.x,
+               "expected Navigation.x (#{nav_header.x}) < Oneliners.x (#{oneliners_header.x}) at #{inspect({width, height})}"
+
+        # ── Range overlap: per-y, sorted-by-x adjacent pairs do not overlap.
+        #    REPLACES the prior identical-`{x, y}` check, which only caught
+        #    elements starting at the same column. Range overlap catches
+        #    elements whose display-width spans collide on the same y.
+        elements_by_y = Enum.group_by(elements, & &1.y)
+
+        for {y, row_elements} <- elements_by_y do
+          sorted = Enum.sort_by(row_elements, & &1.x)
+
+          sorted
+          |> Enum.chunk_every(2, 1, :discard)
+          |> Enum.each(fn [prev, next] ->
+            prev_right = prev.x + TextWidth.display_width(prev.text)
+
+            assert prev_right <= next.x,
+                   "elements overlap on y=#{y} at #{inspect({width, height})}: " <>
+                     "prev=#{inspect(prev)} (right edge x=#{prev_right}) collides with " <>
+                     "next=#{inspect(next)} (starts x=#{next.x})"
+          end)
+        end
+
+        # ── Oneliner rows live inside the right (Oneliners) panel. ─────────
+        #    Anchor: every oneliner row's `x` must be >= the Oneliners
+        #    header's `x`. Catches stacking, panel collapse, AND any
+        #    bleed of oneliner rows into the Navigation panel's column range.
+        oneliner_rows =
+          Enum.filter(elements, fn element ->
+            String.starts_with?(element.text, "> @")
+          end)
+
+        for row <- oneliner_rows do
+          assert row.x >= oneliners_header.x,
+                 "oneliner row bled out of right panel at #{inspect({width, height})}: " <>
+                   "row.x=#{row.x} < oneliners_header.x=#{oneliners_header.x}; row=#{inspect(row)}"
+        end
+      end
+    end
+
+    test "long-Unicode (CJK + combining-mark) oneliner rows clipped to fit inside the right panel at 64x22" do
+      # Phase 19 / REVIEWS.md MEDIUM: real CJK + combining marks, not
+      # ASCII repeated text. Exercises the Phase 16 TextWidth.display_width/1
+      # guarantee the prior ASCII-only fixture did not.
+      user = %{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        status: :active,
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "24h"}
+      }
+
+      # CJK ideographs (each is double-width per TextWidth) + combining acute on `e`.
+      cjk_segment = String.duplicate("界", 20)
+      combining_segment = "café noir café noir"
+      long_body = cjk_segment <> " " <> combining_segment
+      long_handle = "alice" <> String.duplicate("界", 5)
+
+      state =
+        %App{current_user: user, screen_state: %{}, terminal_size: {64, 22}}
+        |> Map.from_struct()
+        |> Map.put(:session_context, %{clock_now: ~U[2026-04-24 18:05:00Z]})
+        |> Map.put(:recent_oneliners, [
+          %{body: long_body, user: %{handle: long_handle}}
+        ])
+
+      positioned = MainMenu.render(state) |> apply_at_size({64, 22})
+      elements = text_elements(positioned)
+
+      # Every element fits inside 64-col viewport — even with double-width
+      # CJK and combining marks, TextWidth.display_width must give the
+      # truthful width and clipping must hold.
+      for element <- elements do
+        text = Map.fetch!(element, :text)
+
+        assert element.x + TextWidth.display_width(text) <= 64,
+               "long-Unicode oneliner overflows 64-wide viewport: #{inspect(element)}"
+      end
+
+      # Right-panel containment also holds for the CJK fixture.
+      oneliners_header =
+        Enum.find(elements, fn element -> element.text == "Oneliners" end)
+
+      assert oneliners_header,
+             "expected 'Oneliners' header in CJK fixture render"
+
+      oneliner_rows =
+        Enum.filter(elements, fn element ->
+          String.starts_with?(element.text, "> @")
+        end)
+
+      for row <- oneliner_rows do
+        assert row.x >= oneliners_header.x,
+               "CJK oneliner row bled out of right panel: row.x=#{row.x} < oneliners_header.x=#{oneliners_header.x}; row=#{inspect(row)}"
+      end
+    end
   end
 
   # ---------------------------------------------------------------------------
