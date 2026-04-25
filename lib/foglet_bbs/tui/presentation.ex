@@ -18,7 +18,42 @@ defmodule Foglet.TUI.Presentation do
 
   @type mode :: :bbs | :operator
   @type screen :: Foglet.TUI.App.screen()
-  @type theme_mapping_category :: :tabs | :rows | :badges | :commands | :editor
+  @type theme_mappings :: %{
+          required(:tabs) => %{
+            required(:selected) => :selected,
+            required(:unselected) => :unselected,
+            required(:indicator) => :accent,
+            required(:border) => :border
+          },
+          required(:rows) => %{
+            required(:selected) => :selected,
+            required(:unread) => :primary,
+            required(:normal) => :unselected,
+            required(:metadata) => :dim,
+            required(:disabled) => :dim
+          },
+          required(:badges) => %{
+            required(:info) => :info,
+            required(:success) => :success,
+            required(:warning) => :warning,
+            required(:error) => :error,
+            required(:accent) => :accent
+          },
+          required(:commands) => %{
+            required(:group) => :dim,
+            required(:key) => :accent,
+            required(:destructive) => :error,
+            required(:inactive) => :dim
+          },
+          required(:editor) => %{
+            required(:focused) => :accent,
+            required(:unfocused) => :border,
+            required(:input) => :primary,
+            required(:counter) => :dim,
+            required(:counter_warning) => :warning,
+            required(:counter_error) => :error
+          }
+        }
 
   @bbs_screens [
     :login,
@@ -77,7 +112,7 @@ defmodule Foglet.TUI.Presentation do
   @doc """
   Returns the locked list of supported presentation modes.
   """
-  @spec modes() :: [mode()]
+  @spec modes() :: [mode(), ...]
   def modes, do: [:bbs, :operator]
 
   @doc """
@@ -99,7 +134,7 @@ defmodule Foglet.TUI.Presentation do
   future widgets and screen facelifts; it does not create visible primitives
   or change rendering behavior.
   """
-  @spec theme_mappings() :: %{required(theme_mapping_category()) => %{required(atom()) => atom()}}
+  @spec theme_mappings() :: theme_mappings()
   def theme_mappings, do: @theme_mappings
 
   @doc """

@@ -58,8 +58,10 @@ defmodule Foglet.TUI.PresentationTest do
 
   describe "theme independence (MODE-01, THEME-02)" do
     test "presentation mode is not an authorization or permission boundary" do
-      assert function_exported?(Presentation, :mode_for!, 1)
-      refute function_exported?(Presentation, :mode_for!, 2)
+      functions = Presentation.__info__(:functions)
+
+      assert {:mode_for!, 1} in functions
+      refute {:mode_for!, 2} in functions
     end
 
     test "theme ids cannot alter BBS or operator screen modes" do
