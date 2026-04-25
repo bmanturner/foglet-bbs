@@ -167,7 +167,12 @@ Plans:
 3. Focused board/category details are visible through a 64x22-safe compact details strip, with a wide inspector only when width permits.
 4. The current single-label tree limitation is solved through row callbacks or a dedicated board-tree wrapper.
 5. Existing tree state and subscribe/open/back workflows continue to work.
-**Plans:** TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 21-01-PLAN.md — Wave 1 data layer: add `:last_post_at` to `Foglet.Boards.directory_board` via single LEFT JOIN aggregate (rooted on Board, not Subscription); extend SUBS-01 describe with four max/nil/deleted/actor-independent test cases (BOARDS-03).
+- [ ] 21-02-PLAN.md — Wave 1 RED test scaffold: `test/foglet_bbs/tui/widgets/list/board_tree_test.exs` locks the BoardTree contract (▾/▸ category glyphs, ⚿/✓/+ subscription title prefix, ◆ read-state cluster, age column / em-dash, 64-cell width contract, theme-routing hygiene) — all RED until Plan 21-03 (BOARDS-01, BOARDS-02).
+- [ ] 21-03-PLAN.md — Wave 2 `Foglet.TUI.Widgets.List.BoardTree` widget GREEN: stateful facade owning a Display.Tree, dispatching categories to inline themed text/2 and boards to RichRow.render/1 with title-prefix subscription glyph and composite "N unread  AGE" metadata; format_age/1 branches on nil before TimeAgo.format/1 (BOARDS-01, BOARDS-02).
+- [ ] 21-04-PLAN.md — Wave 3 BoardList migration: alias swap Display.Tree → BoardTree, State.tree → State.board_tree, glyph + age assertions replace bracket-text in board_list_test.exs, new layout_smoke `board_list — size contract` describe block at [{64,22},{80,24},{132,50}], `mix precommit` gate (BOARDS-04 with BOARDS-01/02 integration).
 **UI hint:** yes
 
 ### Phase 22: Post Reader Facelift
