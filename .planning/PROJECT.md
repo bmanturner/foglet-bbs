@@ -11,7 +11,7 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 ## Current State
 
 **Shipped version:** v1.2 Pre-Alpha Gap Closure on 2026-04-24.
-**Current milestone:** v1.3 TUI Screen Facelift, started 2026-04-25. Phases 16 through 18 are complete; width-aware TUI layout primitives now back Unicode-safe paths, presentation metadata separates BBS/operator modes, and Chrome V2 provides shared breadcrumbs, mode-aware status, grouped command bars, and legacy key-list compatibility.
+**Current milestone:** v1.3 TUI Screen Facelift, started 2026-04-25. Phases 16 through 19 are complete; width-aware TUI layout primitives now back Unicode-safe paths, presentation metadata separates BBS/operator modes, Chrome V2 provides shared breadcrumbs / mode-aware status / grouped command bars / legacy key-list compatibility, and the Main Menu home screen renders boxed Navigation + Oneliners panels with role-gated destinations and right-aligned hotkeys derived from `state.terminal_size`.
 
 Foglet now has terminal-native Account, Moderation, and Sysop surfaces; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; enforced board posting and locked-thread restrictions; Account SSH key management; board subscription management; and pre-alpha operator notes aligned to the shipped SSH-first behavior.
 
@@ -144,4 +144,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 after completing v1.3 Phase 17 remediation and Phase 18 Chrome V2*
+*Last updated: 2026-04-25 after completing v1.3 Phase 19 Main Menu Dashboard*
