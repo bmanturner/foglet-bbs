@@ -122,6 +122,26 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert _ = PostReader.render(s)
   end
 
+  test "render/1 includes Chrome V2 breadcrumb for board and thread context", %{state: state} do
+    {s, _} = PostReader.load_posts(state, "t1")
+    text = PostReader.render(s) |> flatten_text()
+
+    assert text =~ "Foglet"
+    assert text =~ "General"
+    assert text =~ "Hello"
+  end
+
+  test "render/1 delegates breadcrumb formatting to shared chrome" do
+    source =
+      __ENV__.file
+      |> Path.dirname()
+      |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_reader.ex")
+      |> Path.expand()
+      |> File.read!()
+
+    refute source =~ "Thread:"
+  end
+
   # ===========================================================================
   # READER-03 / AUDIT-11: Loading-state spinner render (canonical "Loading…")
   # ===========================================================================

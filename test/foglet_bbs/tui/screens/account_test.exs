@@ -7,6 +7,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.Config
   alias Foglet.Sessions.Session
   alias Foglet.TUI.App
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Account
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Theme
@@ -85,6 +86,18 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   describe "render/1 (Account.render/1 traceability)" do
+    test "renders Chrome V2 operator breadcrumb and declares operator mode", %{state: state} do
+      state = put_in(state, [:screen_state, :account], Account.init_screen_state())
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Foglet"))
+      assert Enum.any?(flat, &String.contains?(&1, "Account"))
+      assert Presentation.mode_for!(:account) == :operator
+
+      assert File.read!("lib/foglet_bbs/tui/screens/account.ex") =~
+               "Presentation.mode_for!(:account)"
+    end
+
     test "does not crash with default screen state", %{state: state} do
       state = put_in(state, [:screen_state, :account], Account.init_screen_state())
       assert _ = Account.render(state)
