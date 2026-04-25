@@ -35,7 +35,7 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBarTest do
                current_screen: :post_composer,
                current_board: %{name: "general"},
                current_thread: %{title: "Unicode screenshots thread"}
-             }) == ["Foglet", "general", "Reply"]
+             }) == ["Foglet", "general", "Unicode screenshots thread", "Reply"]
 
       assert BreadcrumbBar.parts_for(%{
                current_screen: :account,
