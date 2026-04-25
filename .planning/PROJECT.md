@@ -60,12 +60,12 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - [x] Users and sysops have a real board subscription management path that matches product copy - v1.2 Phase 13
 - [x] Every visible sysop configuration option in the current product surface has a real effect or honest disabled/no-op copy - v1.2 Phase 14
 - [x] Width-aware text measurement, truncation, padding, slicing, and cursor/layout helpers exist before Unicode-heavy screen rendering depends on them - v1.3 Phase 16
+- [x] Screens can declare BBS or operator mode, theme slots cover facelift widget states, and Phase 17 primitives have explicit visual-shape contracts - v1.3 Phase 17
 - [x] Shared chrome renders breadcrumb-style titles, grouped key commands, mode-aware right status fields, and fallbacks that remain usable at 64x22 - v1.3 Phase 18
 - [x] Login participates in the Classic Modern BBS mode through shared chrome and mode metadata without requiring a deeper authentication form redesign in this milestone - v1.3 Phase 18
 
 ### Active
 
-- [ ] Screens can declare BBS or operator mode so shared chrome and layout conventions stay consistent without hardcoded per-screen exceptions.
 - [ ] Home, board directory, thread list, post reader, and composer screens implement the Classic Modern BBS direction while preserving keyboard-first behavior.
 - [ ] Operator Console primitives exist before Account, Moderation, and Sysop adopt them for dense workbench layouts.
 - [ ] Account, Moderation, and Sysop implement the Operator Console direction using shared display primitives and honest workflow copy.
@@ -144,4 +144,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 after completing v1.3 Phase 18 Chrome V2*
+*Last updated: 2026-04-25 after completing v1.3 Phase 17 remediation and Phase 18 Chrome V2*
