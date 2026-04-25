@@ -47,7 +47,13 @@ defmodule Foglet.TUI.Screens.MainMenu do
   # (D-12, RESEARCH.md Pitfall 1).
   @nav_panel_min_inner_width 20
 
-  # Glyph atoms per D-08 (SCREENS.md §Main Menu lines 270-280).
+  # Single canonical Main Menu command descriptor list (D-01).
+  # `:kind` partitions entries into body destinations and command-bar actions;
+  # `:visibility` is a tag consumed by the role/state gate inside
+  # visible_destinations/1 and visible_actions/1. Both functions filter this
+  # one list, so destinations vs. actions cannot drift.
+  # Destination entries also carry their D-08 glyph atoms here, keeping the
+  # rendered row shape in the canonical descriptor instead of a parallel map.
   # Theme-routed via theme.<slot>.fg (D-07/D-08); never hardcoded color atoms.
   # Per D-08: per-glyph slot routing (e.g. theme.success.fg for `●`) is
   # DEFERRED — the row text is rendered as a single text node with
@@ -56,27 +62,13 @@ defmodule Foglet.TUI.Screens.MainMenu do
   # text nodes per row; positioned-render tests in Plan 03 still hold
   # because the per-element `x + display_width(text) <= width` assertion
   # shape is unchanged.
-  @nav_glyphs %{
-    "B" => "●",
-    "C" => "✎",
-    "A" => "◇",
-    "M" => "⚑",
-    "S" => "▣",
-    "Q" => "↯"
-  }
-
-  # Single canonical Main Menu command descriptor list (D-01).
-  # `:kind` partitions entries into body destinations and command-bar actions;
-  # `:visibility` is a tag consumed by the role/state gate inside
-  # visible_destinations/1 and visible_actions/1. Both functions filter this
-  # one list, so destinations vs. actions cannot drift.
   @main_menu_commands [
-    %{key: "B", label: "Boards", kind: :destination, visibility: :always},
-    %{key: "C", label: "Compose", kind: :destination, visibility: :always},
-    %{key: "A", label: "Account", kind: :destination, visibility: :account},
-    %{key: "M", label: "Moderation", kind: :destination, visibility: :moderation},
-    %{key: "S", label: "Sysop", kind: :destination, visibility: :sysop},
-    %{key: "Q", label: "Logout", kind: :destination, visibility: :always},
+    %{key: "B", label: "Boards", glyph: "●", kind: :destination, visibility: :always},
+    %{key: "C", label: "Compose", glyph: "✎", kind: :destination, visibility: :always},
+    %{key: "A", label: "Account", glyph: "◇", kind: :destination, visibility: :account},
+    %{key: "M", label: "Moderation", glyph: "⚑", kind: :destination, visibility: :moderation},
+    %{key: "S", label: "Sysop", glyph: "▣", kind: :destination, visibility: :sysop},
+    %{key: "Q", label: "Logout", glyph: "↯", kind: :destination, visibility: :always},
     %{key: "O", label: "Oneliner", kind: :action, visibility: :authenticated},
     %{key: "H", label: "Hide oneliner", kind: :action, visibility: :hide_oneliner_policy},
     %{key: "↑/↓", label: "Select", kind: :action, visibility: :oneliners_present}
@@ -88,7 +80,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     user = state.current_user
     theme = Theme.from_state(state)
 
-    destinations = visible_destinations(user)
+    destinations = visible_destination_entries(user)
     actions = visible_actions(state)
 
     inner_width = nav_panel_inner_width(state)
@@ -199,8 +191,9 @@ defmodule Foglet.TUI.Screens.MainMenu do
   canonical `@main_menu_commands` list for `:destination` entries whose
   `:visibility` tag passes the role gate.
 
-  Returns `[{key, label}]` tuples in declaration order — the same shape the
-  body builder consumes.
+  Returns `[{key, label}]` tuples in declaration order. Rendering consumes the
+  same filtered descriptors internally so destination glyphs remain co-located
+  with this canonical data.
 
   Public so tests can assert role-gating directly without going through
   `render/1` and parsing positioned text (consistent with ShellVisibility's
@@ -208,13 +201,8 @@ defmodule Foglet.TUI.Screens.MainMenu do
   """
   @spec visible_destinations(map() | nil) :: [{String.t(), String.t()}]
   def visible_destinations(user) do
-    # Build a minimal state shim so the shared gate function can run; destination
-    # visibility never depends on oneliner state, so the shim has no oneliners.
-    state = %{current_user: user, recent_oneliners: []}
-
-    @main_menu_commands
-    |> Enum.filter(&(&1.kind == :destination))
-    |> Enum.filter(&command_visible?(&1.visibility, user, state))
+    user
+    |> visible_destination_entries()
     |> Enum.map(&{&1.key, &1.label})
   end
 
@@ -248,6 +236,16 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   # --- private ---
+
+  defp visible_destination_entries(user) do
+    # Build a minimal state shim so the shared gate function can run; destination
+    # visibility never depends on oneliner state, so the shim has no oneliners.
+    state = %{current_user: user, recent_oneliners: []}
+
+    @main_menu_commands
+    |> Enum.filter(&(&1.kind == :destination))
+    |> Enum.filter(&command_visible?(&1.visibility, user, state))
+  end
 
   @spec command_visible?(atom(), map() | nil, map()) :: boolean()
   defp command_visible?(:always, _user, _state), do: true
@@ -306,8 +304,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end
   end
 
-  defp nav_row({key, label}, theme, inner_width) do
-    glyph = Map.fetch!(@nav_glyphs, key)
+  defp nav_row(%{key: key, label: label, glyph: glyph}, theme, inner_width) do
     prefix = glyph <> " " <> label
     prefix_width = TextWidth.display_width(prefix)
     key_width = TextWidth.display_width(key)
