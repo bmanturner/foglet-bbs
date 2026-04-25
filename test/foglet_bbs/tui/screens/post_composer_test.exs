@@ -67,7 +67,8 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   defp reply_post do
     %{
       id: "p1",
-      body: "This is the quoted post body\nwith a second line\nand more text that should collapse",
+      body:
+        "This is the quoted post body\nwith a second line\nand more text that should collapse",
       user: %{handle: "alice"}
     }
   end
@@ -123,11 +124,19 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert text =~ "Composer"
     assert text =~ "Edit"
     assert text =~ "Preview"
-    assert text =~ "Write your post"
     assert text =~ "0 / 1000 chars"
   end
 
-  test "render/1 in preview mode keeps markdown preview inside the composer shell", %{state: state} do
+  test "render/1 in edit mode includes reply body editor text", %{state: state} do
+    state = with_reply(state, "draft body")
+    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "draft body"
+  end
+
+  test "render/1 in preview mode keeps markdown preview inside the composer shell", %{
+    state: state
+  } do
     state = with_reply(state, "# hi")
     {:update, state, _} = PostComposer.handle_key(%{key: :tab}, state)
 

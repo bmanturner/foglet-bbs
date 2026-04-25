@@ -21,8 +21,10 @@ defmodule Foglet.TUI.Screens.PostComposer do
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostComposer.State
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
+  alias Foglet.TUI.Widgets.Composer.EditorFrame
   alias Foglet.TUI.Widgets.Post.MarkdownBody
   alias Foglet.TUI.Widgets.Post.PostCard
   alias Raxol.UI.Components.Input.MultiLineInput
@@ -43,40 +45,21 @@ defmodule Foglet.TUI.Screens.PostComposer do
     input_st = ss.input_state
     draft = input_st.value
     theme = Theme.from_state(state)
-
-    body_items =
-      if ss.reply_to do
-        [
-          text("Replying to @#{get_handle(ss.reply_to)}:", fg: theme.dim.fg),
-          text(quote_preview(ss.reply_to), fg: theme.dim.fg),
-          text("")
-        ]
-      else
-        []
-      end ++
-        case ss.mode do
-          :edit ->
-            [render_input(input_st, state, theme)]
-
-          :preview ->
-            {w, _h} = state.terminal_size || @default_terminal_size
-            body_width = max(w - 4, 20)
-            [MarkdownBody.render(draft, body_width, theme)]
-        end ++
-        if ss.error do
-          [text(""), text(ss.error, fg: theme.error.fg, style: [:bold])]
-        else
-          []
-        end ++
-        [
-          text(""),
-          text("#{String.length(draft)} / #{max_len(state)} chars", fg: theme.dim.fg)
-        ]
+    {width, height} = state.terminal_size || @default_terminal_size
+    max = max_len(state)
 
     content =
-      column style: %{gap: 0} do
-        body_items
-      end
+      EditorFrame.render(
+        mode: ss.mode,
+        focused?: ss.mode == :edit,
+        context: reply_context(ss.reply_to, width, theme),
+        body: composer_body(ss.mode, input_st, draft, state, theme, width),
+        budgets: [%{label: "Body", count: String.length(draft), limit: max}],
+        error: ss.error,
+        width: max(width - 4, 20),
+        height: max(height - 6, 10),
+        theme: theme
+      )
 
     ScreenFrame.render(state, %{}, content, [
       {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
@@ -200,13 +183,47 @@ defmodule Foglet.TUI.Screens.PostComposer do
     Compose.render_input(input_st, focused?, theme)
   end
 
-  defp quote_preview(post) do
+  defp composer_body(:edit, input_st, _draft, state, theme, _width),
+    do: render_input(input_st, state, theme)
+
+  defp composer_body(:preview, _input_st, draft, state, theme, width) do
+    body_width = max(width - 4, 20)
+    render_preview(draft, body_width, state, theme)
+  end
+
+  defp render_preview(draft, body_width, state, theme) do
+    sc = Map.get(state, :session_context) || %{}
+
+    case Domain.get(sc, :markdown) do
+      {:ok, Foglet.Markdown} ->
+        MarkdownBody.render(draft, body_width, theme)
+
+      {:ok, markdown_mod} ->
+        MarkdownBody.render_tuples(markdown_mod.render(draft), body_width, theme)
+
+      {:error, :not_configured} ->
+        MarkdownBody.render(draft, body_width, theme)
+    end
+  end
+
+  defp reply_context(nil, _width, _theme), do: nil
+
+  defp reply_context(post, width, theme) do
+    available = max(width - 10, 20)
+
+    [
+      text("Replying to @#{get_handle(post)}", fg: theme.dim.fg),
+      text(quote_preview(post, available), fg: theme.dim.fg)
+    ]
+  end
+
+  defp quote_preview(post, width) do
     body = Map.get(post, :body, "")
 
     body
     |> String.split("\n")
-    |> Enum.take(5)
-    |> Enum.map_join("\n", fn line -> "> #{line}" end)
+    |> Enum.take(2)
+    |> Enum.map_join("\n", fn line -> "> #{TextWidth.truncate(line, width)}" end)
   end
 
   # Delegate to PostCard.get_handle/1 (strict: returns nil on empty or
