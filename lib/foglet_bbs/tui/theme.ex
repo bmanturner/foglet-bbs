@@ -17,9 +17,9 @@ defmodule Foglet.TUI.Theme do
      `resolve/1` looks up the registered Raxol theme and projects its
      component styles into the flat struct.
 
-  Slots (locked in UI-SPEC D-01/D-02):
-    border, primary, dim, accent, title, error, warning,
-    selected, unselected, status_bar
+  Slots:
+    border, primary, dim, accent, title, success, info, error, warning,
+    badge, selected, unselected, status_bar
 
   Call `Foglet.TUI.Theme.register_all/0` on app boot (see
   `Foglet.Application.start/2`). `resolve/1` falls back to a static
@@ -41,8 +41,11 @@ defmodule Foglet.TUI.Theme do
           dim: style_map(),
           accent: style_map(),
           title: style_map(),
+          success: style_map(),
+          info: style_map(),
           error: style_map(),
           warning: style_map(),
+          badge: style_map(),
           selected: style_map(),
           unselected: style_map(),
           status_bar: style_map()
@@ -53,8 +56,11 @@ defmodule Foglet.TUI.Theme do
             dim: %{},
             accent: %{},
             title: %{},
+            success: %{},
+            info: %{},
             error: %{},
             warning: %{},
+            badge: %{},
             selected: %{},
             unselected: %{},
             status_bar: %{}
@@ -65,8 +71,11 @@ defmodule Foglet.TUI.Theme do
     :dim,
     :accent,
     :title,
+    :success,
+    :info,
     :error,
     :warning,
+    :badge,
     :selected,
     :unselected,
     :status_bar
@@ -81,8 +90,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#888888"},
     accent: %{fg: "#ffb000", style: [:bold]},
     title: %{fg: "#ffb000", style: [:bold]},
+    success: %{fg: "#cccccc", style: [:bold]},
+    info: %{fg: "#ffb000"},
     error: %{fg: "#ff5555", style: [:bold]},
     warning: %{fg: "#ffff55"},
+    badge: %{fg: "#000000", bg: "#aaaaaa", style: [:bold]},
     selected: %{fg: "#000000", bg: "#aaaaaa", style: [:bold]},
     unselected: %{fg: "#cccccc"},
     status_bar: %{fg: "#ffb000"}
@@ -94,8 +106,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#22aa44"},
     accent: %{fg: "#ffb000", style: [:bold]},
     title: %{fg: "#33ff66", style: [:bold]},
+    success: %{fg: "#33ff66", style: [:bold]},
+    info: %{fg: "#ffb000"},
     error: %{fg: "#ff5555", style: [:bold]},
     warning: %{fg: "#ffff55"},
+    badge: %{fg: "#000000", bg: "#33ff66", style: [:bold]},
     selected: %{fg: "#000000", bg: "#33ff66", style: [:bold]},
     unselected: %{fg: "#33ff66"},
     status_bar: %{fg: "#33ff66"}
@@ -107,8 +122,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#aa7700"},
     accent: %{fg: "#ffcc44", style: [:bold]},
     title: %{fg: "#ffcc44", style: [:bold]},
+    success: %{fg: "#ffb000", style: [:bold]},
+    info: %{fg: "#ffcc44"},
     error: %{fg: "#ff5555", style: [:bold]},
     warning: %{fg: "#ffff55"},
+    badge: %{fg: "#000000", bg: "#ffb000", style: [:bold]},
     selected: %{fg: "#000000", bg: "#ffb000", style: [:bold]},
     unselected: %{fg: "#ffb000"},
     status_bar: %{fg: "#ffcc44"}
@@ -120,8 +138,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#00aaaa"},
     accent: %{fg: "#ffff55", style: [:bold]},
     title: %{fg: "#ffffff", style: [:bold]},
+    success: %{fg: "#55ffff", style: [:bold]},
+    info: %{fg: "#ffff55"},
     error: %{fg: "#ff5555", style: [:bold]},
     warning: %{fg: "#ffff55"},
+    badge: %{fg: "#000000", bg: "#55ffff", style: [:bold]},
     selected: %{fg: "#000000", bg: "#55ffff", style: [:bold]},
     unselected: %{fg: "#55ffff"},
     status_bar: %{fg: "#ffff55"}
@@ -133,8 +154,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#555555"},
     accent: %{fg: "#aa0000", style: [:bold]},
     title: %{fg: "#000000", style: [:bold]},
+    success: %{fg: "#000000", style: [:bold]},
+    info: %{fg: "#aa0000"},
     error: %{fg: "#aa0000", style: [:bold]},
     warning: %{fg: "#aa5500"},
+    badge: %{fg: "#cccccc", bg: "#000000", style: [:bold]},
     selected: %{fg: "#cccccc", bg: "#000000", style: [:bold]},
     unselected: %{fg: "#000000"},
     status_bar: %{fg: "#000000"}
@@ -146,8 +170,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#aa00aa"},
     accent: %{fg: "#55ffff", style: [:bold]},
     title: %{fg: "#ff55ff", style: [:bold]},
+    success: %{fg: "#ff55ff", style: [:bold]},
+    info: %{fg: "#55ffff"},
     error: %{fg: "#ff5555", style: [:bold]},
     warning: %{fg: "#ffff55"},
+    badge: %{fg: "#000000", bg: "#ff55ff", style: [:bold]},
     selected: %{fg: "#000000", bg: "#ff55ff", style: [:bold]},
     unselected: %{fg: "#ff55ff"},
     status_bar: %{fg: "#ff55ff"}
@@ -159,8 +186,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#888888"},
     accent: %{fg: "#ff5555", style: [:bold]},
     title: %{fg: "#ff5555", style: [:bold]},
+    success: %{fg: "#ffffff", style: [:bold]},
+    info: %{fg: "#ff5555"},
     error: %{fg: "#ffff55", style: [:bold]},
     warning: %{fg: "#ffb000"},
+    badge: %{fg: "#000000", bg: "#ff5555", style: [:bold]},
     selected: %{fg: "#000000", bg: "#ff5555", style: [:bold]},
     unselected: %{fg: "#ffffff"},
     status_bar: %{fg: "#ff5555"}
@@ -172,8 +202,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#5555ff"},
     accent: %{fg: "#55ffff", style: [:bold]},
     title: %{fg: "#ffffff", style: [:bold]},
+    success: %{fg: "#aaaaaa", style: [:bold]},
+    info: %{fg: "#55ffff"},
     error: %{fg: "#ff5555", style: [:bold]},
     warning: %{fg: "#ffff55"},
+    badge: %{fg: "#000000", bg: "#55ffff", style: [:bold]},
     selected: %{fg: "#000000", bg: "#55ffff", style: [:bold]},
     unselected: %{fg: "#aaaaaa"},
     status_bar: %{fg: "#55ffff"}
@@ -185,8 +218,11 @@ defmodule Foglet.TUI.Theme do
     dim: %{fg: "#888888"},
     accent: %{fg: "#ffffff", style: [:bold]},
     title: %{fg: "#ffffff", style: [:bold]},
+    success: %{fg: "#ffffff", style: [:bold]},
+    info: %{fg: "#ffffff"},
     error: %{fg: "#ffffff", style: [:bold]},
     warning: %{fg: "#aaaaaa", style: [:bold]},
+    badge: %{fg: "#000000", bg: "#ffffff", style: [:bold]},
     selected: %{fg: "#000000", bg: "#ffffff", style: [:bold]},
     unselected: %{fg: "#ffffff"},
     status_bar: %{fg: "#ffffff"}
@@ -223,6 +259,10 @@ defmodule Foglet.TUI.Theme do
   @doc "List of registered theme ids."
   @spec ids() :: [atom()]
   def ids, do: Map.keys(@themes)
+
+  @doc "List of supported theme slot keys."
+  @spec slot_keys() :: [atom()]
+  def slot_keys, do: @slot_keys
 
   @doc "Default theme (`:gray`) for v1.0.1."
   @spec default() :: t()
