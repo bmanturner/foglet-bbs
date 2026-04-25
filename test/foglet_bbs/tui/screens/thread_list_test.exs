@@ -101,6 +101,27 @@ defmodule Foglet.TUI.Screens.ThreadListTest.AnnotatingFakeThreads do
   end
 end
 
+defmodule Foglet.TUI.Screens.ThreadListTest.FakeLockedThreads do
+  def list_threads(_board_id) do
+    [
+      %{
+        id: "t1",
+        title: "Locked thread",
+        sticky: false,
+        locked: true,
+        last_post_at: DateTime.utc_now(),
+        post_count: 4,
+        created_by: %{handle: "alice"}
+      }
+    ]
+  end
+
+  def list_threads(board_id, _user_id) do
+    list_threads(board_id)
+    |> Enum.map(&Map.put(&1, :has_unread, false))
+  end
+end
+
 defmodule Foglet.TUI.Screens.ThreadListTest.OneArityOnly do
   def list_threads(_board_id) do
     [
@@ -124,6 +145,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
   alias Foglet.TUI.Screens.ThreadListTest.AnnotatingFakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.FakeThreads
+  alias Foglet.TUI.Screens.ThreadListTest.FakeLockedThreads
   alias Foglet.TUI.Screens.ThreadListTest.HandlelessFakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.NiltimeFakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.OneArityOnly
@@ -296,6 +318,105 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
       flat = flatten_text(ThreadList.render(s))
       assert flat =~ "new"
       refute flat == ""
+    end
+  end
+
+  describe "render/1 — thread row state glyphs (THREADS-01)" do
+    alias Foglet.TUI.TextWidth
+
+    @describetag :"render/1 — thread row state glyphs"
+
+    defp build_state(fake_module) do
+      %Foglet.TUI.App{
+        current_screen: :thread_list,
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+        current_board: %{id: "b1", name: "General", slug: "general"},
+        session_context: %{domain: %{threads: fake_module}},
+        terminal_size: {80, 24},
+        screen_state: %{thread_list: %{selected_index: 0}}
+      }
+      |> Map.from_struct()
+    end
+
+    # Isolate the per-row leading cluster by anchoring on the row title instead
+    # of measuring whole-screen output.
+    defp leading_cluster_for(flat, title) do
+      case String.split(flat, title, parts: 2) do
+        [before_title, _rest] ->
+          before_title
+          |> String.graphemes()
+          |> Enum.take(-4)
+          |> Enum.join()
+
+        _ ->
+          flunk("title #{inspect(title)} not found in render output: #{inspect(flat)}")
+      end
+    end
+
+    test "unread thread row contains ◆ in leading cluster" do
+      state = build_state(AnnotatingFakeThreads)
+      {s, _} = ThreadList.load_threads(state, "b1")
+      flat = flatten_text(ThreadList.render(s))
+
+      assert flat =~ "◆", "expected ◆ glyph for unread thread, got: #{inspect(flat)}"
+    end
+
+    test "sticky thread row contains ● in leading cluster" do
+      state = build_state(FakeThreads)
+      {s, _} = ThreadList.load_threads(state, "b1")
+      flat = flatten_text(ThreadList.render(s))
+
+      assert flat =~ "●", "expected ● glyph for sticky thread, got: #{inspect(flat)}"
+    end
+
+    test "locked thread row contains ⚿ in leading cluster" do
+      state = build_state(FakeLockedThreads)
+      {s, _} = ThreadList.load_threads(state, "b1")
+      flat = flatten_text(ThreadList.render(s))
+
+      assert flat =~ "⚿", "expected ⚿ glyph for locked thread, got: #{inspect(flat)}"
+    end
+
+    test "no row contains the literal string [S] " do
+      state = build_state(FakeThreads)
+      {s, _} = ThreadList.load_threads(state, "b1")
+      flat = flatten_text(ThreadList.render(s))
+
+      refute flat =~ "[S] ",
+             "expected legacy [S] prefix to be removed; found in: #{inspect(flat)}"
+    end
+
+    test "metadata format @handle · N post(s) · age preserved across pluralizations" do
+      state = build_state(FakeThreads)
+      {s, _} = ThreadList.load_threads(state, "b1")
+      flat = flatten_text(ThreadList.render(s))
+
+      assert flat =~ "@alice"
+      assert flat =~ "20 posts"
+      assert flat =~ "1 post"
+      assert flat =~ "·"
+    end
+
+    test "leading cluster width is identical across plain and locked rows (no whole-screen proxy)" do
+      plain_state = build_state(FakeThreads)
+      {s_plain, _} = ThreadList.load_threads(plain_state, "b1")
+      flat_plain = flatten_text(ThreadList.render(s_plain))
+      plain_cluster = leading_cluster_for(flat_plain, "Older non-sticky")
+
+      locked_state = build_state(FakeLockedThreads)
+      {s_locked, _} = ThreadList.load_threads(locked_state, "b1")
+      flat_locked = flatten_text(ThreadList.render(s_locked))
+      locked_cluster = leading_cluster_for(flat_locked, "Locked thread")
+      flat = flat_plain <> flat_locked
+
+      assert TextWidth.display_width(plain_cluster) == TextWidth.display_width(locked_cluster),
+             "expected identical leading-cluster widths: " <>
+               "plain=#{inspect(plain_cluster)} (#{TextWidth.display_width(plain_cluster)}), " <>
+               "locked=#{inspect(locked_cluster)} (#{TextWidth.display_width(locked_cluster)})"
+
+      refute flat =~ "[S] "
+      refute flat_plain =~ "[S] "
+      refute flat_locked =~ "[S] "
     end
   end
 
