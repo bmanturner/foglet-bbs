@@ -233,6 +233,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
     |> Enum.reject(&(&1.commands == []))
   end
 
+  @doc false
+  @spec __nav_panel_inner_width__(map()) :: pos_integer()
+  def __nav_panel_inner_width__(state), do: nav_panel_inner_width(state)
+
   # --- private ---
 
   defp visible_destination_entries(user) do

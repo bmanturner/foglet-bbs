@@ -446,11 +446,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
           assert nav_rows != [],
                  "expected at least one nav row for role=#{role} at #{inspect({width, height})}; got: #{inspect(texts)}"
 
-          # Compute the same budget the production helper computes (mirror the math).
-          chrome_outer = 4
-          left_alloc = div((width - chrome_outer) * 2, 5)
-          box_border = 2
-          inner_width = max(left_alloc - box_border, 20)
+          inner_width = MainMenu.__nav_panel_inner_width__(state)
 
           for row <- nav_rows do
             assert Foglet.TUI.TextWidth.display_width(row) <= inner_width,
