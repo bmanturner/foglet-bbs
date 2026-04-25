@@ -305,6 +305,57 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
            "Expected 'too long' in rendered output, got: #{inspect(flat)}"
   end
 
+  test "D-19 refreshed body renders title, required markers, and action footer" do
+    fields = [
+      %{name: :slug, type: :text, label: "Slug", required: true},
+      %{name: :name, type: :text, label: "Name", required: true}
+    ]
+
+    state = test_form(fields, title: "Create board")
+    flat = state |> Form.render(theme: theme()) |> flatten_text()
+
+    assert flat =~ "Create board"
+    assert flat =~ "Slug"
+    assert flat =~ "Name"
+    assert flat =~ "*"
+    assert flat =~ "[Enter] Submit"
+    assert flat =~ "[Esc] Cancel"
+  end
+
+  test "D-19 renders inline field errors and base errors" do
+    fields = [
+      %{name: :slug, type: :text, label: "Slug", required: true},
+      %{name: :name, type: :text, label: "Name", required: true}
+    ]
+
+    state =
+      fields
+      |> test_form(title: "Create board")
+      |> Form.set_errors(%{slug: "can't be blank", base: "Board invalid"})
+
+    flat = state |> Form.render(theme: theme()) |> flatten_text()
+
+    assert flat =~ "can't be blank"
+    assert flat =~ "Board invalid"
+  end
+
+  test "D-20 render remains body-only with no modal chrome" do
+    fields = [
+      %{name: :slug, type: :text, label: "Slug", required: true},
+      %{name: :name, type: :text, label: "Name", required: true}
+    ]
+
+    serialized =
+      fields
+      |> test_form(title: "Create board")
+      |> Form.render(theme: theme())
+      |> inspect(printable_limit: :infinity, limit: :infinity)
+
+    refute serialized =~ "border:"
+    refute serialized =~ "type: :box"
+    refute serialized =~ "center"
+  end
+
   test "REQ-7 errors use theme.error.fg slot in rendered tree" do
     t = theme()
     state = test_form()

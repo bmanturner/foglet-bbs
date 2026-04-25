@@ -144,9 +144,9 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   def render(%__MODULE__{} = state, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
-    title_row = text(" #{state.title} ", fg: theme.title.fg, style: [:bold])
+    title_row = text(state.title, fg: theme.title.fg, style: [:bold])
     divider = text(String.duplicate("─", 40), fg: theme.border.fg)
-    hint = text("[Tab] Next  [Shift+Tab] Prev  [Enter] Submit  [Esc] Cancel", fg: theme.dim.fg)
+    footer = text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)
 
     field_rows =
       state.fields
@@ -164,7 +164,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       end
 
     column [] do
-      [title_row, divider] ++ field_rows ++ base_error_rows ++ [hint]
+      [title_row, divider] ++ field_rows ++ base_error_rows ++ [footer]
     end
   end
 
@@ -307,7 +307,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     label_fg = if focused?, do: theme.accent.fg, else: theme.primary.fg
     label_style = if focused?, do: [:bold], else: []
 
-    label_row = text("#{spec.label}:", fg: label_fg, style: label_style)
+    marker = if Map.get(spec, :required, false), do: " *", else: ""
+    label_row = text("#{spec.label}#{marker}:", fg: label_fg, style: label_style)
     widget_row = render_widget(spec, field_state, focused?, theme)
 
     error_rows =
