@@ -146,7 +146,14 @@ Plans:
 2. Thread metadata aligns correctly with Unicode state glyphs and variable-width titles.
 3. Focused-thread details appear without disrupting keyboard navigation.
 4. The row primitive is reusable by later board/operator surfaces.
-**Plans:** TBD
+**Plans:** 6 plans
+Plans:
+- [ ] 20-01-PLAN.md — Wave 0 RichRow widget unit-test scaffold (RED: rich_row_test.exs covers the eight-cell selection×state×metadata matrix, generic-atom acceptance, 64-cell truncation, theme-routing hygiene, focus-marker convention, glyph identity).
+- [ ] 20-02-PLAN.md — Wave 0 ThreadList screen-test extensions (RED: glyph-presence per state, `[S] ` absence, metadata format preserved; FakeLockedThreads adapter added).
+- [ ] 20-03-PLAN.md — Wave 0 layout-smoke `thread_list — size contract` block (RED) at `[{64,22},{80,24},{132,50}]` covering cluster + metadata + truncation + width-budget.
+- [ ] 20-04-PLAN.md — Wave 1 `Foglet.TUI.Widgets.List.RichRow` stateless render-only widget (`▌` focus marker, fixed-width state-glyph cluster ◆/●/⚿, theme-routed via accent/info/warning/dim/selected/unselected slots, no hardcoded colors).
+- [ ] 20-05-PLAN.md — Wave 2 `Foglet.TUI.Screens.ThreadList` migration from `ListRow.render_with_metadata/6` to `RichRow.render/1` (state_cluster built from has_unread/sticky/locked, `[S] ` prefix removed, navigation/handle_key untouched).
+- [ ] 20-06-PLAN.md — Wave 3 `rtk mix precommit` gate + VALIDATION.md sign-off (nyquist_compliant: true, wave_0_complete: true).
 **UI hint:** yes
 
 ### Phase 21: Board Directory Facelift
@@ -245,7 +252,7 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 17. Theme and Mode Metadata | v1.3 | 5/5 | Complete    | 2026-04-25 |
 | 18. Chrome V2 | v1.3 | 7/7 | Complete    | 2026-04-25 |
 | 19. Main Menu Dashboard | v1.3 | 1/3 | In Progress|  |
-| 20. Rich Rows and Thread Flow | v1.3 | 0/TBD | Pending | - |
+| 20. Rich Rows and Thread Flow | v1.3 | 0/6 | Pending | - |
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
 | 22. Post Reader Facelift | v1.3 | 0/TBD | Pending | - |
 | 23. Composer Facelift | v1.3 | 0/TBD | Pending | - |
