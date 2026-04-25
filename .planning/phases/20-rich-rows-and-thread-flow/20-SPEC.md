@@ -12,7 +12,7 @@
 
 `Foglet.TUI.Screens.ThreadList` currently renders rows through `Foglet.TUI.Widgets.List.ListRow.render_with_metadata/6`. Sticky threads receive a `[S] ` text prefix in front of the title, locked threads are not visualized at all (the `:locked` field on `Foglet.Threads.ThreadEntry` exists but is not rendered), and unread is communicated only by a bold title plus dim metadata via `theme.primary.fg + :bold`. Selection is shown as a leading `> ` marker with reverse-color row styling. Metadata reads `@handle · N posts · time-ago` separated by `·` middle-dots. Width math is already display-width safe after Phase 16; theme slots (Phase 17) include `success`, `info`, `accent`, `selected`, etc.; Chrome V2 (Phase 18) wraps the screen.
 
-There is no `RichRow` widget. SCREENS.md proposes one as a shared primitive with leading state glyphs, primary text, right metadata, optional subtitle, selection rendering, and theme routing — and lists it as primary leverage for the v1.3 facelift. Phase 20 introduces this primitive and migrates `ThreadList` to it. Phase 20 also locks the visual semantics for thread state: `●` unread, `◇` (or omitted) read, `◆` sticky, plus a glyph for locked. Phase 19 (Main Menu Dashboard) is in flight on a parallel track and does not touch `ThreadList`.
+There is no `RichRow` widget. SCREENS.md proposes one as a shared primitive with leading state glyphs, primary text, right metadata, optional subtitle, selection rendering, and theme routing — and lists it as primary leverage for the v1.3 facelift. Phase 20 introduces this primitive and migrates `ThreadList` to it. Phase 20 also locks the visual semantics for thread state: `◆` unread (filled diamond), `◇` (or omitted) read (open diamond), `●` sticky (filled circle), plus a glyph for locked. (SCREENS.md proposes `●` for unread; this milestone deliberately substitutes `◆` for unread and `●` for sticky — the diamond family carries read/unread; the filled circle carries sticky/pinned. CONTEXT.md D-05 and the Phase 20 plans already encode this mapping.) Phase 19 (Main Menu Dashboard) is in flight on a parallel track and does not touch `ThreadList`.
 
 This phase is not a `ListRow` rewrite or a sweeping migration. `ListRow.render/3` and `ListRow.render_with_metadata/6` continue to exist for `NewThread` (board picker), `BoardList`, `Sysop` boards/users, `Account` SSH keys, and the shared invites surface. Each of those screens adopts `RichRow` (or its successor) inside its own roadmap phase.
 
@@ -25,8 +25,8 @@ This phase is not a `ListRow` rewrite or a sweeping migration. `ListRow.render/3
 
 2. **Thread row state glyphs**: `ThreadList` rows render unread/read, sticky, and locked state via semantic glyphs in a leading cluster, replacing the existing `[S] ` text prefix.
    - Current: Sticky shows as `[S] ` text prefix; locked is invisible; unread is title-bold only.
-   - Target: Each row begins with a fixed-width state cluster that shows: `●` (or theme-routed equivalent) when unread, a sticky glyph (`◆` or theme-routed equivalent) when sticky, and a locked glyph when locked. Read+normal+unlocked rows show the cluster as visual whitespace of the same width so columns stay aligned. The `[S] ` text prefix is removed from `ThreadList` rendering.
-   - Acceptance: A focused render test asserts that (a) an unread thread row contains the unread glyph in the leading cluster, (b) a sticky thread row contains the sticky glyph, (c) a locked thread row contains the locked glyph, (d) a read+non-sticky+unlocked thread row's leading cluster pads to the same display-width as a fully-glyphed cluster, and (e) no row in any state contains the literal string `"[S] "`.
+   - Target: Each row begins with a fixed-width, multi-cell state cluster with **independent slots** for read/unread, sticky, and locked. The unread slot shows `◆` (filled diamond) when `has_unread`, `◇` (open diamond) when read, or visual whitespace if read state is rendered as whitespace. The sticky slot shows `●` (filled circle) when `sticky`, otherwise visual whitespace. The locked slot shows a single-cell locked glyph when `locked`, otherwise visual whitespace. **Sticky and read/unread are orthogonal**: a sticky+unread thread renders both glyphs (e.g. `◆ ● title…`), a sticky+read thread renders both (`◇ ● title…` or whitespace + `●`), a non-sticky+unread thread renders only the unread glyph in slot 0 with the sticky slot padded as whitespace. Read+normal+unlocked rows show the entire cluster as visual whitespace of the same width so columns stay aligned. The `[S] ` text prefix is removed from `ThreadList` rendering.
+   - Acceptance: A focused render test asserts that (a) an unread thread row contains `◆` in the leading cluster, (b) a sticky thread row contains `●`, (c) a locked thread row contains the locked glyph, (d) a sticky+unread row contains BOTH `◆` AND `●` in the leading cluster, (e) a read+non-sticky+unlocked thread row's leading cluster pads to the same display-width as a fully-glyphed cluster, and (f) no row in any state contains the literal string `"[S] "`.
 
 3. **Thread metadata preserved**: `ThreadList` rows continue to show `@handle · N posts · age` right-aligned with `·` (middle-dot) separators.
    - Current: `ThreadList.thread_metadata/1` formats `"@#{handle} · #{count} #{post_word} · #{time_segment}"` and renders right-aligned through `ListRow.render_with_metadata/6`.
@@ -86,9 +86,10 @@ This phase is not a `ListRow` rewrite or a sweeping migration. `ListRow.render/3
 - [ ] `Foglet.TUI.Widgets.List.RichRow` module exists at `lib/foglet_bbs/tui/widgets/list/rich_row.ex` with a public render entry point and module documentation.
 - [ ] `Foglet.TUI.Screens.ThreadList` renders rows through `RichRow`. No call to `ListRow.render_with_metadata/` remains in `ThreadList`.
 - [ ] No row in any rendered state contains the literal string `"[S] "`.
-- [ ] An unread thread row contains the unread glyph in the leading cluster.
-- [ ] A sticky thread row contains the sticky glyph in the leading cluster.
+- [ ] An unread thread row contains `◆` (filled diamond) in the leading cluster.
+- [ ] A sticky thread row contains `●` (filled circle) in the leading cluster.
 - [ ] A locked thread row contains the locked glyph in the leading cluster.
+- [ ] A sticky+unread thread row contains BOTH `◆` AND `●` in the leading cluster (independent slots).
 - [ ] A read+non-sticky+unlocked thread row's leading cluster pads to the same display-width as a fully-glyphed cluster (column alignment preserved).
 - [ ] At 64-cell content width with a long title, the title truncates with `…` while the full state cluster and full metadata both render without truncation.
 - [ ] The focused row's view has at least one styling property (foreground, background, or `:bold` style) that no non-focused row in the same render shares.
@@ -102,7 +103,7 @@ This phase is not a `ListRow` rewrite or a sweeping migration. `ListRow.render/3
 
 | Dimension          | Score | Min   | Status | Notes                                                                       |
 |--------------------|-------|-------|--------|-----------------------------------------------------------------------------|
-| Goal Clarity       | 0.88  | 0.75  | met    | Glyphs + selection clarity locked; no separate details strip.               |
+| Goal Clarity       | 0.88  | 0.75  | met    | Glyphs (`◆` unread, `●` sticky, `◇` read) + selection clarity locked; no separate details strip. |
 | Boundary Clarity   | 0.92  | 0.70  | met    | `[S]` removal, striping out of scope, ListRow stays for other callers.      |
 | Constraint Clarity | 0.85  | 0.65  | met    | Single Unicode set, fixed-width cluster, 64x22 priority contract locked.    |
 | Acceptance Criteria| 0.80  | 0.70  | met    | Pass/fail tests cover RichRow, glyphs, metadata, selection, 64x22 contract. |
