@@ -51,9 +51,9 @@ defmodule Foglet.TUI.Widgets.Display.BadgeTest do
     end
 
     test "custom label can override built-in compact label" do
-      tree = Badge.render(:healthy, label: "database ok", theme: theme())
+      tree = Badge.render(:healthy, label: "database healthy", theme: theme())
 
-      assert flatten_text(tree) == "[database ok]"
+      assert flatten_text(tree) == "[database healthy]"
       assert TextWidth.display_width(flatten_text(tree)) > 16
     end
   end
