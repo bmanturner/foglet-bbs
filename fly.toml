@@ -1,0 +1,90 @@
+app = "foglet-bbs"
+primary_region = "iad"
+
+[env]
+  ECTO_IPV6 = "true"
+  FOGLET_SSH_PORT = "2222"
+  PHX_HOST = "bbs.foglet.io"
+  PHX_SERVER = "true"
+  PORT = "4000"
+  SSH_HOST_KEY_DIR = "/data/ssh"
+
+[http_service]
+  internal_port = 4000
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[deploy]
+  release_command = "/app/bin/foglet_bbs eval \"Ecto.Migrator.with_repo(FogletBbs.Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true); priv = :foglet_bbs |> :code.priv_dir() |> List.to_string(); Code.eval_file(Path.join(priv, \\\"repo/seeds/config.exs\\\")) end)\""
+
+[[services]]
+  internal_port = 2222
+  protocol = "tcp"
+  auto_stop_machines = "off"
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[services.ports]]
+    port = 22
+
+[mounts]
+  source = "foglet_data"
+  destination = "/data"
+
+[vm]
+  memory = "512mb"
+  cpu_kind = "shared"
+  cpus = 1
+
+# One-time setup commands, in order:
+#   fly auth login
+#   fly launch --no-deploy --name foglet-bbs --region iad
+#   fly volumes create foglet_data --size 1 --region iad --app foglet-bbs
+#   fly postgres create --name foglet-bbs-db --region iad --initial-cluster-size 1 --volume-size 2
+#   fly postgres attach foglet-bbs-db --app foglet-bbs --database-name foglet_bbs --database-user foglet_bbs
+#   fly ips allocate-v4 --app foglet-bbs (can't use shared because SSH)
+#   fly secrets set SECRET_KEY_BASE="$(mix phx.gen.secret)" --app foglet-bbs
+#   fly certs add bbs.foglet.io --app foglet-bbs
+#   fly deploy --app foglet-bbs
+#
+# DNS:
+#   Point bbs.foglet.io at the app using the records shown by:
+#     fly certs show bbs.foglet.io --app foglet-bbs
+#
+# Database connection:
+#   `fly postgres attach ...` creates the app database/user and sets the
+#   application `DATABASE_URL` secret automatically. You do not need to set
+#   DATABASE_URL manually unless you are using a database that was not attached
+#   with `fly postgres attach`.
+#
+# Running database tasks against the deployed database:
+#   Preferred for release-safe operations, run code inside the deployed app:
+#     fly ssh console --app foglet-bbs -C '/app/bin/foglet_bbs eval "FogletBbs.Repo.query!(\"select 1\")"'
+#
+#   For local `mix` tasks pointed at the Fly Postgres database, open a local
+#   proxy to the unmanaged Postgres app, then run the task with DATABASE_URL:
+#     fly proxy 15432:5432 --app foglet-bbs-db
+#     DATABASE_URL="postgres://foglet_bbs:PASSWORD@localhost:15432/foglet_bbs?sslmode=disable" MIX_ENV=prod mix ecto.migrate
+#
+#   Get or rotate the attached database password from the Postgres app's user
+#   management commands if you did not save it when `fly postgres attach` ran:
+#     fly postgres users list --app foglet-bbs-db
+#     fly postgres users reset-password foglet_bbs --app foglet-bbs-db
+#
+# The deploy release_command runs migrations and safe production config seeds:
+#   Ecto migrations
+#   priv/repo/seeds/config.exs
+#
+# Optional demo/dev seed data only, after deploy:
+#   fly ssh console --app foglet-bbs -C '/app/bin/foglet_bbs eval "priv = :foglet_bbs |> :code.priv_dir() |> List.to_string(); Code.eval_file(Path.join(priv, \"repo/seeds.exs\"))"'
+#
+# Do not run the full priv/repo/seeds.exs on a real production instance. It
+# creates demo users with known passwords and sample content.
+#
+# If you rename the Fly app, update both `app` and `PHX_HOST` above.
+# Fly Volumes are per-Machine and region-local. If you later scale beyond one
+# SSH-serving Machine, create one `foglet_data` volume per Machine in that
+# region and intentionally share/copy host keys if users should see one stable
+# SSH server fingerprint across all Machines.

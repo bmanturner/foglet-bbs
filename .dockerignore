@@ -1,0 +1,20 @@
+# Elixir build artifacts
+/_build/
+/deps/
+/.elixir_ls/
+
+# Git and editor state
+/.git/
+/.github/
+/.codex/
+/.planning/
+.DS_Store
+
+# Local runtime files
+/priv/ssh/
+/tmp/
+
+# Test and local-only files
+/test/
+/cover/
+/doc/
