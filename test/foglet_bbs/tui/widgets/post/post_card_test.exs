@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
   import Foglet.TUI.WidgetHelpers,
     only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Post.PostCard
 
@@ -19,6 +20,12 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       },
       overrides
     )
+  end
+
+  defp reader_body_text(line) do
+    line
+    |> flatten_text()
+    |> String.replace_prefix("│", "")
   end
 
   describe "render/4 — header content" do
@@ -149,6 +156,24 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       assert header =~ "ago"
     end
 
+    test "truncates long handles so reader header stays within width" do
+      width = 40
+
+      post =
+        sample_post(%{
+          message_number: 42,
+          user: %{handle: String.duplicate("reader-handle-", 8)}
+        })
+
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), width, theme(),
+          index: 0,
+          total: 1
+        )
+
+      assert TextWidth.display_width(flatten_text(parts.header)) <= width
+    end
+
     test "falls back explicitly for missing reader metadata" do
       post = sample_post(%{message_number: nil, inserted_at: nil, user: nil})
 
@@ -195,6 +220,19 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       refute flatten_text(parts.body_lines) =~ "Posts 3/12"
     end
 
+    test "truncates progress so it stays within narrow reader width" do
+      width = 8
+      post = sample_post(%{message_number: 42})
+
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), width, theme(),
+          index: 123_455,
+          total: 987_654
+        )
+
+      assert TextWidth.display_width(flatten_text(parts.progress)) <= width
+    end
+
     test "returns guttered body lines as separate Raxol view elements" do
       post = sample_post(%{message_number: 42, user: %{handle: "mina"}})
 
@@ -222,6 +260,22 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
 
       refute serialized =~ "**world**"
       assert serialized =~ "world"
+    end
+
+    test "truncates long unbroken reader body text to the reduced body width" do
+      width = 64
+      gutter_width = TextWidth.display_width("│")
+      body_width = width - gutter_width - 2
+      long_body = String.duplicate("x", 100)
+      post = sample_post(%{message_number: 42})
+      tuples = Foglet.Markdown.render(long_body)
+
+      parts = PostCard.reader_parts(post, tuples, width, theme(), index: 0, total: 1)
+      [body_line] = parts.body_lines
+      body_text = reader_body_text(body_line)
+
+      assert TextWidth.display_width(body_text) <= body_width
+      assert gutter_width + 1 + TextWidth.display_width(body_text) <= width
     end
 
     test "narrow widths still return body lines without raising" do

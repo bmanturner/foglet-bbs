@@ -111,8 +111,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     total = Keyword.get(opts, :total, 1)
 
     %{
-      header: reader_header(post, index, total, theme),
-      progress: reader_progress(index, total, theme),
+      header: reader_header(post, index, total, width, theme),
+      progress: reader_progress(index, total, width, theme),
       body_lines: reader_body_lines(tuples, width, theme)
     }
   end
@@ -180,40 +180,106 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end
   end
 
-  defp reader_header(post, index, total, theme) do
+  defp reader_header(post, index, total, width, theme) do
+    text_width = reader_text_width(width)
     message_number = reader_message_number(post)
     handle = get_handle(post) || "unknown"
     age = reader_age(post)
+    position = "Post #{index + 1} of #{total}"
+    message = "##{message_number}"
+    handle_prefix = "@"
+    separator = " • "
+
+    fixed_width =
+      [
+        position,
+        separator,
+        message,
+        separator,
+        handle_prefix,
+        separator,
+        age
+      ]
+      |> Enum.map(&TextWidth.display_width/1)
+      |> Enum.sum()
+
+    handle_width = max(text_width - fixed_width, 1)
+    handle = TextWidth.truncate(handle, handle_width)
+
+    nodes =
+      if fixed_width + TextWidth.display_width(handle) <= text_width do
+        [
+          text(position, fg: theme.title.fg),
+          text(separator, fg: theme.dim.fg),
+          text(message, fg: theme.badge.fg),
+          text(separator, fg: theme.dim.fg),
+          text(handle_prefix <> handle, fg: theme.accent.fg),
+          text(separator, fg: theme.dim.fg),
+          text(age, fg: theme.dim.fg)
+        ]
+      else
+        [text(TextWidth.truncate(position, text_width), fg: theme.title.fg)]
+      end
 
     row style: %{gap: 0} do
-      [
-        text("Post #{index + 1} of #{total}", fg: theme.title.fg),
-        text(" • ", fg: theme.dim.fg),
-        text("##{message_number}", fg: theme.badge.fg),
-        text(" • ", fg: theme.dim.fg),
-        text("@#{handle}", fg: theme.accent.fg),
-        text(" • ", fg: theme.dim.fg),
-        text(age, fg: theme.dim.fg)
-      ]
+      nodes
     end
   end
 
-  defp reader_progress(index, total, theme) do
-    text("Posts #{index + 1}/#{total}", fg: theme.dim.fg)
+  defp reader_progress(index, total, width, theme) do
+    text(TextWidth.truncate("Posts #{index + 1}/#{total}", reader_text_width(width)),
+      fg: theme.dim.fg
+    )
   end
 
   defp reader_body_lines(tuples, width, theme) do
     gutter = "│"
-    body_width = max(width - TextWidth.display_width(gutter) - 1, 1)
+    gutter_gap = 1
+    body_width = max(reader_text_width(width) - TextWidth.display_width(gutter) - gutter_gap, 1)
 
     tuples
     |> MarkdownBody.render_tuples_as_lines(body_width, theme, body_opts([]))
+    |> Enum.map(&clip_body_line(&1, body_width))
     |> Enum.map(fn body_line ->
-      row style: %{gap: 1} do
+      row style: %{gap: gutter_gap} do
         [text(gutter, fg: theme.border.fg), body_line]
       end
     end)
   end
+
+  defp reader_text_width(width), do: max(width - 1, 1)
+
+  defp clip_body_line(%{type: :flex, direction: :row, children: children} = row, width) do
+    {children, _remaining_width} =
+      Enum.map_reduce(children, width, fn child, remaining_width ->
+        clipped = clip_body_line(child, remaining_width)
+        {clipped, max(remaining_width - body_line_width(clipped), 0)}
+      end)
+
+    %{row | children: children}
+  end
+
+  defp clip_body_line(%{content: content} = element, width) when is_binary(content) do
+    %{element | content: TextWidth.truncate(content, width)}
+  end
+
+  defp clip_body_line(%{text: text} = element, width) when is_binary(text) do
+    %{element | text: TextWidth.truncate(text, width)}
+  end
+
+  defp clip_body_line(element, _width), do: element
+
+  defp body_line_width(%{type: :flex, direction: :row, children: children}) do
+    Enum.reduce(children, 0, fn child, width -> width + body_line_width(child) end)
+  end
+
+  defp body_line_width(%{content: content}) when is_binary(content),
+    do: TextWidth.display_width(content)
+
+  defp body_line_width(%{text: text}) when is_binary(text),
+    do: TextWidth.display_width(text)
+
+  defp body_line_width(_element), do: 0
 
   defp reader_message_number(%{message_number: number})
        when is_integer(number) and number > 0 do
