@@ -119,7 +119,11 @@ defmodule Foglet.SSH.Supervisor do
   # input, so there is no traversal surface.
   @sobelow_skip ["Traversal.FileModule"]
   defp ensure_system_dir! do
-    dir = Application.app_dir(:foglet_bbs, "priv/ssh")
+    dir =
+      :foglet_bbs
+      |> Application.get_env(:ssh, [])
+      |> Keyword.get(:host_key_dir, Application.app_dir(:foglet_bbs, "priv/ssh"))
+
     File.mkdir_p!(dir)
     dir
   end
