@@ -26,6 +26,7 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form
 
@@ -84,7 +85,7 @@ defmodule Foglet.TUI.Widgets.Modal do
         current == "" ->
           [word | rest]
 
-        String.length(current) + 1 + String.length(word) <= max_width ->
+        TextWidth.display_width(current) + 1 + TextWidth.display_width(word) <= max_width ->
           ["#{current} #{word}" | rest]
 
         true ->
