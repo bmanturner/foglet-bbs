@@ -4,7 +4,7 @@
 
 - [x] **v1.1 Operations Surfaces & Invites** - Phases 0-8, including inserted Phase 1.1 (shipped 2026-04-24). See [v1.1 roadmap archive](milestones/v1.1-ROADMAP.md).
 - [x] **v1.2 Pre-Alpha Gap Closure** - Phases 9-15 (shipped 2026-04-24). See [v1.2 roadmap archive](milestones/v1.2-ROADMAP.md).
-- [ ] **v1.3 TUI Screen Facelift** - Phases 16-24 (active).
+- [ ] **v1.3 TUI Screen Facelift** - Phases 16-25 (active).
 
 ## Current Status
 
@@ -53,7 +53,8 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 - [ ] **Phase 21: Board Directory Facelift** - Board browsing presents categories, board state, subscriptions, and details as structured rows.
 - [ ] **Phase 22: Post Reader Facelift** - Thread reading emphasizes message numbers, post metadata, body readability, and progress.
 - [ ] **Phase 23: Composer Facelift** - New-thread and reply composition use focused editor surfaces with preview and counters.
-- [ ] **Phase 24: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts.
+- [ ] **Phase 24: Operator Console Primitives** - Shared badges, key/value grids, table presets, inspectors, and modal form treatment land before screen conversion.
+- [ ] **Phase 25: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts.
 
 ## Phase Details
 
@@ -64,7 +65,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 **Requirements:** WIDTH-01, WIDTH-02, WIDTH-03, WIDTH-04
 **Success Criteria** (what must be TRUE):
 1. Aligned rows render correctly with ASCII, accented Latin, combining marks, CJK, and planned UI glyphs.
-2. List rows, key bars, composer cursor paths, and clipping/truncation paths use one shared display-width helper.
+2. List rows, the existing command-footer path, composer cursor paths, and clipping/truncation paths use one shared display-width helper.
 3. Width tests cover the SCREENS.md glyph set: `●`, `◆`, `▸`, `▾`, `✓`, `×`.
 4. Existing ASCII-heavy screens keep their current layout behavior.
 **Plans:** TBD
@@ -87,12 +88,14 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 
 **Goal:** Shared chrome communicates location, status, and commands consistently across all facelifted screens.
 **Depends on:** Phase 17
-**Requirements:** CHROME-01, CHROME-02, CHROME-03, CHROME-04
+**Requirements:** CHROME-01, CHROME-02, CHROME-03, CHROME-04, CHROME-05, LOGIN-01
 **Success Criteria** (what must be TRUE):
-1. Users see breadcrumb-style location such as `Foglet > Boards > general` or `Foglet > Sysop > Users`.
+1. Users see breadcrumb-style location such as `Foglet ▸ Boards ▸ general` or `Foglet ▸ Sysop ▸ Users`, with deliberate ASCII fallback where needed.
 2. Users see mode-appropriate right status fields, such as handle/time/unread for BBS and scope/system status for operator screens.
-3. Key hints are grouped and truncated by priority inside the frame.
-4. Chrome remains usable at 80x24 without overlapping content.
+3. `Chrome.CommandBar` groups commands and truncates lower-priority hints inside the frame.
+4. The existing simple key-list call path can render through `Chrome.CommandBar` rather than a parallel footer implementation.
+5. Login declares Classic Modern BBS mode and receives Chrome V2 without changing authentication behavior.
+6. Chrome remains usable at 80x24 without overlapping content.
 **Plans:** TBD
 **UI hint:** yes
 
@@ -126,12 +129,13 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 
 **Goal:** Board browsing presents categories and board state as structured terminal-native rows.
 **Depends on:** Phase 20
-**Requirements:** BOARDS-01, BOARDS-02, BOARDS-03
+**Requirements:** BOARDS-01, BOARDS-02, BOARDS-03, BOARDS-04
 **Success Criteria** (what must be TRUE):
 1. Users can distinguish expanded/collapsed categories, read/unread boards, and subscription state visually.
 2. Board labels are semantic columns, not embedded bracket text.
 3. Focused board/category details are visible in a compact details strip or wide inspector.
-4. Existing tree state and subscribe/open/back workflows continue to work.
+4. The current single-label tree limitation is solved through row callbacks or a dedicated board-tree wrapper.
+5. Existing tree state and subscribe/open/back workflows continue to work.
 **Plans:** TBD
 **UI hint:** yes
 
@@ -139,12 +143,13 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 
 **Goal:** Thread reading feels message-oriented and BBS-native, with clear metadata, body treatment, and progress.
 **Depends on:** Phase 20
-**Requirements:** READER-01, READER-02, READER-03
+**Requirements:** READER-01, READER-02, READER-03, READER-04
 **Success Criteria** (what must be TRUE):
 1. Users see post position, stable message number, author, and age in a compact header.
 2. Post bodies render with a clear gutter or card treatment without breaking markdown rendering.
-3. Longer threads show progress such as post count or visual progress indicator.
-4. Viewport scroll ownership and reply/back navigation remain intact.
+3. Post rendering uses the shared `PostCard` or an equivalent post unit rather than bespoke loose text rows.
+4. Longer threads show progress such as post count or visual progress indicator.
+5. Viewport scroll ownership and reply/back navigation remain intact.
 **Plans:** TBD
 **UI hint:** yes
 
@@ -152,32 +157,46 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 
 **Goal:** New-thread and reply composition provide a focused editor surface with preview, counters, and validation states.
 **Depends on:** Phase 22
-**Requirements:** COMPOSER-01, COMPOSER-02, COMPOSER-03, COMPOSER-04
+**Requirements:** COMPOSER-01, COMPOSER-02, COMPOSER-03, COMPOSER-04, COMPOSER-05
 **Success Criteria** (what must be TRUE):
-1. Users compose inside a visible editor frame with focused/unfocused styling.
+1. Users compose inside `Composer.EditorFrame`, wrapping the existing multiline input with focused/unfocused styling.
 2. Edit and preview modes are visible as a tab/segmented control, not only hidden in key hints.
-3. Character budgets show normal, warning, and over-limit states.
+3. Character budgets use shared progress/counter treatment for normal, warning, and over-limit states.
 4. Reply composition shows compact quoted context while new-thread composition shows the title field.
+5. Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed.
 **Plans:** TBD
 **UI hint:** yes
 
-### Phase 24: Operator Console Conversion
+### Phase 24: Operator Console Primitives
 
-**Goal:** Account, Moderation, and Sysop become dense, consistent terminal workbenches after shared BBS flow is stable.
+**Goal:** Shared operator-console primitives land before the dense Account, Moderation, and Sysop screen conversion.
 **Depends on:** Phase 21, Phase 23
-**Requirements:** CONSOLE-01, ACCOUNT-01, MOD-01, SYSOP-01
+**Requirements:** CONSOLE-01, CONSOLE-02, CONSOLE-03, CONSOLE-04
 **Success Criteria** (what must be TRUE):
-1. Account tabs use compact forms, swatches, SSH-key tables, and clear dirty/saved/error states.
+1. `Display.Badge` standardizes compact state rendering for required, subscribed, locked, sticky, pending, healthy, and error states.
+2. `Display.KvGrid` renders consistent label/value rows for Account, Sysop System, site settings, limits, and status summaries.
+3. Table presets and optional `Workspace.Inspector` support dense selected-row workflows on operator screens.
+4. `Modal.Form` has stronger headings, labels, inline errors, and action footers while preserving the body-only overlay contract.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 25: Operator Console Conversion
+
+**Goal:** Account, Moderation, and Sysop become dense, consistent terminal workbenches after shared console primitives are stable.
+**Depends on:** Phase 24
+**Requirements:** ACCOUNT-01, MOD-01, SYSOP-01
+**Success Criteria** (what must be TRUE):
+1. Account tabs use compact forms, swatches, SSH-key tables, invite tables, and clear dirty/saved/error states.
 2. Moderation tabs show scope/status summaries, honest empty states, and table-driven log/user/board views.
 3. Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling.
-4. Operator screens reuse shared console primitives such as badges, key/value grids, table presets, and optional inspectors.
+4. Account, Moderation, and Sysop reuse shared badges, key/value grids, table presets, modal form treatment, and optional inspectors rather than bespoke strings.
 **Plans:** TBD
 **UI hint:** yes
 
 ## Progress
 
 **Execution Order:**
-Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
+Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24 -> 25
 
 | Phase | Milestone | Plans Complete | Status | Completed |
 |-------|-----------|----------------|--------|-----------|
@@ -206,4 +225,5 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
 | 22. Post Reader Facelift | v1.3 | 0/TBD | Pending | - |
 | 23. Composer Facelift | v1.3 | 0/TBD | Pending | - |
-| 24. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |
+| 24. Operator Console Primitives | v1.3 | 0/TBD | Pending | - |
+| 25. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |

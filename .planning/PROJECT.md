@@ -27,7 +27,7 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - Add width-safe text/layout primitives so Unicode glyphs can be used in aligned terminal UI without breaking 80x24 behavior.
 - Refresh shared chrome with breadcrumb titles, grouped command bars, mode-aware status fields, and compact fallbacks.
 - Upgrade the main BBS flow - Home, board directory, thread list, post reader, and composers - into the Classic Modern BBS visual direction from `SCREENS.md`.
-- Upgrade Account, Moderation, and Sysop into the Operator Console visual direction using tables, badges, key/value grids, scoped status, and honest action surfaces.
+- Build shared operator-console primitives before upgrading Account, Moderation, and Sysop into the Operator Console visual direction using tables, badges, key/value grids, scoped status, and honest action surfaces.
 
 ## Requirements
 
@@ -66,6 +66,8 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - [ ] Screens can declare BBS or operator mode so shared chrome and layout conventions stay consistent without hardcoded per-screen exceptions.
 - [ ] Shared chrome renders breadcrumb-style titles, grouped key commands, mode-aware right status fields, and compact 80-column fallbacks.
 - [ ] Home, board directory, thread list, post reader, and composer screens implement the Classic Modern BBS direction while preserving keyboard-first behavior.
+- [ ] Login participates in the Classic Modern BBS mode through shared chrome and mode metadata without requiring a deeper authentication form redesign in this milestone.
+- [ ] Operator Console primitives exist before Account, Moderation, and Sysop adopt them for dense workbench layouts.
 - [ ] Account, Moderation, and Sysop implement the Operator Console direction using shared display primitives and honest workflow copy.
 - [ ] TUI facelift work has focused widget/screen tests for width, theme routing, mode behavior, and no-overlap layout regressions.
 

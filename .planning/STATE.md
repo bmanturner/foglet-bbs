@@ -3,11 +3,11 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: ready_to_plan
-stopped_at: Milestone v1.3 roadmap created
+stopped_at: Milestone v1.3 roadmap refined
 last_updated: "2026-04-25T00:00:00.000Z"
 last_activity: 2026-04-25
 progress:
-  total_phases: 9
+  total_phases: 10
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-25)
 Phase: 16 - Unicode Width Foundation
 Plan: -
 Status: Ready to plan
-Last activity: 2026-04-25 - Milestone v1.3 roadmap created
+Last activity: 2026-04-25 - Milestone v1.3 roadmap refined
 
 Progress: [----------] 0%
 
@@ -79,6 +79,8 @@ Recent decisions affecting current work:
 - [v1.3]: `SCREENS.md` is the milestone PRD and defines the Classic Modern BBS plus Operator Console visual split.
 - [v1.3]: Width-aware text/layout helpers should land before Unicode-heavy aligned rows or editor cursor paths.
 - [v1.3]: Active research uses `SCREENS.md` rather than stale v1.2 pre-alpha gap-closure research.
+- [v1.3]: Login is chrome/mode scope only unless a later phase explicitly expands authentication screen layout work.
+- [v1.3]: Operator Console primitives are split from Account/Moderation/Sysop conversion so shared widgets land before dense screen rewrites.
 
 ### Pending Todos
 
@@ -103,5 +105,5 @@ Items acknowledged and carried forward from v1.1 close:
 ## Session Continuity
 
 Last session: 2026-04-24
-Stopped at: Milestone v1.3 roadmap created
+Stopped at: Milestone v1.3 roadmap refined
 Resume file: None
