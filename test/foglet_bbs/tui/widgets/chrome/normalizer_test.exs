@@ -3,6 +3,11 @@ defmodule Foglet.TUI.Widgets.Chrome.NormalizerTest do
 
   alias Foglet.TUI.Widgets.Chrome.Normalizer
 
+  @tui_root Path.expand("../../../../../lib/foglet_bbs/tui", __DIR__)
+  @key_bar_path Path.join(@tui_root, "widgets/chrome/key_bar.ex")
+  @screen_frame_path Path.join(@tui_root, "widgets/chrome/screen_frame.ex")
+  @screen_paths Path.wildcard(Path.join(@tui_root, "screens/**/*.ex"))
+
   describe "commands/1" do
     test "normalizes a simple back key into the System group" do
       assert [
@@ -49,6 +54,45 @@ defmodule Foglet.TUI.Widgets.Chrome.NormalizerTest do
                label: "Actions",
                commands: [%{key: "C", label: "Compose", priority: 30}]
              } = Normalizer.command("Actions", "C", "Compose")
+    end
+  end
+
+  describe "legacy KeyBar compatibility path" do
+    test "KeyBar.render production calls are confined to the compatibility module" do
+      offenders =
+        @tui_root
+        |> Path.join("**/*.ex")
+        |> Path.wildcard()
+        |> Enum.reject(&(&1 == @key_bar_path))
+        |> Enum.filter(&(File.read!(&1) =~ "KeyBar.render"))
+
+      assert offenders == []
+    end
+
+    test "ScreenFrame composes CommandBar and Normalizer instead of KeyBar" do
+      source = File.read!(@screen_frame_path)
+
+      assert source =~ "CommandBar"
+      assert source =~ "Normalizer"
+      refute source =~ "KeyBar"
+    end
+
+    test "KeyBar remains only as a CommandBar delegation adapter" do
+      source = File.read!(@key_bar_path)
+
+      assert source =~ "CommandBar.render(theme, Normalizer.commands(keys), opts)"
+    end
+
+    test "named screen files call ScreenFrame.render and never KeyBar.render" do
+      for path <- @screen_paths do
+        source = File.read!(path)
+
+        refute source =~ "KeyBar.render"
+
+        if source =~ "alias Foglet.TUI.Widgets.Chrome.ScreenFrame" do
+          assert source =~ "ScreenFrame.render"
+        end
+      end
     end
   end
 
