@@ -87,7 +87,11 @@ Plans:
 2. Theme slots cover success/info/badge-like states without hardcoded color atoms in new facelift widgets.
 3. Tabs, rows, badges, command hints, and editor states have consistent theme-slot mappings.
 4. Changing user theme changes color treatment but not screen mode or layout category.
-**Plans:** TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 17-01-PLAN.md — Central presentation-mode contract and unknown-screen tests.
+- [ ] 17-02-PLAN.md — Semantic theme slots and palette-wide coverage.
+- [ ] 17-03-PLAN.md — Theme mapping contract and phase validation.
 **UI hint:** yes
 
 ### Phase 18: Chrome V2
