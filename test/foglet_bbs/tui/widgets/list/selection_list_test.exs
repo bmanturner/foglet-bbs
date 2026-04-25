@@ -24,7 +24,9 @@ defmodule Foglet.TUI.Widgets.List.SelectionListTest do
           0,
           fn {_item, _idx, _selected?} ->
             text("unused")
-          end, theme: theme)
+          end,
+          theme: theme
+        )
 
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
@@ -42,7 +44,9 @@ defmodule Foglet.TUI.Widgets.List.SelectionListTest do
           fn {item, _idx, selected?} ->
             fg = if selected?, do: theme.selected.fg, else: theme.unselected.fg
             text(item, fg: fg)
-          end, theme: theme)
+          end,
+          theme: theme
+        )
 
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 

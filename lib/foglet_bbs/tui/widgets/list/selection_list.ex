@@ -20,6 +20,16 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
   import Raxol.Core.Renderer.View
   alias Foglet.TUI.Theme
 
+  @type flex_column :: %{
+          required(:type) => :flex,
+          required(:direction) => :column,
+          required(:children) => any(),
+          required(:style) => any(),
+          required(:gap) => any(),
+          required(:align) => any(),
+          required(:justify) => any()
+        }
+
   @doc """
   Renders the selection list.
 
@@ -29,7 +39,7 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
   `opts`            — optional `:theme` for built-in empty-state styling
   """
   @spec render(list(), non_neg_integer(), ({any(), non_neg_integer(), boolean()} -> any())) ::
-          any()
+          flex_column()
   def render(items, selected_index, row_renderer_fn)
       when is_list(items) and is_integer(selected_index) and is_function(row_renderer_fn, 1) do
     render(items, selected_index, row_renderer_fn, [])
@@ -40,7 +50,7 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
           non_neg_integer(),
           ({any(), non_neg_integer(), boolean()} -> any()),
           keyword()
-        ) :: any()
+        ) :: flex_column()
   def render(items, selected_index, row_renderer_fn, opts)
       when is_list(items) and is_integer(selected_index) and is_function(row_renderer_fn, 1) and
              is_list(opts) do
