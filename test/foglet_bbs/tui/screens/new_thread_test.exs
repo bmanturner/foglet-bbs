@@ -198,6 +198,71 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert text =~ "New Thread"
   end
 
+  test "render/1 compose step uses composer shell with board and title counter" do
+    text =
+      compose_state()
+      |> NewThread.render()
+      |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Composer"
+    assert text =~ "Edit"
+    assert text =~ "Preview"
+    assert text =~ "General"
+    assert text =~ "Title"
+    assert text =~ "0 / 60 chars"
+  end
+
+  test "render/1 compose step shows title value when present" do
+    text =
+      compose_state()
+      |> put_title("A Thread")
+      |> NewThread.render()
+      |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Title"
+    assert text =~ "A Thread"
+  end
+
+  test "render/1 body-focused edit mode keeps body text and body counter in shell" do
+    state =
+      compose_state()
+      |> put_title("Body Counter")
+
+    ss = %{get_ss(state) | focused: :body, body_input_state: fresh_input("Hello body")}
+    state = put_in(state.screen_state.new_thread, ss)
+
+    text = state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Composer"
+    assert text =~ "Edit"
+    assert text =~ "Preview"
+    assert text =~ "Hello body"
+    assert text =~ "Body 10 /"
+    assert text =~ "chars"
+  end
+
+  test "render/1 preview mode keeps markdown preview inside composer shell" do
+    state =
+      compose_state()
+      |> put_title("Preview Title")
+
+    ss = %{
+      get_ss(state)
+      | focused: :body,
+        mode: :preview,
+        body_input_state: fresh_input("**bold body**")
+    }
+
+    state = put_in(state.screen_state.new_thread, ss)
+
+    text = state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Composer"
+    assert text =~ "Edit"
+    assert text =~ "Preview"
+    assert text =~ "bold body"
+  end
+
   test "render/1 delegates compose breadcrumb formatting to shared chrome" do
     source =
       __ENV__.file
@@ -207,6 +272,20 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       |> File.read!()
 
     refute source =~ "New Thread —"
+  end
+
+  test "source preserves NewThread composer widget boundaries" do
+    source =
+      __ENV__.file
+      |> Path.dirname()
+      |> Path.join("../../../../lib/foglet_bbs/tui/screens/new_thread.ex")
+      |> Path.expand()
+      |> File.read!()
+
+    assert source =~ "EditorFrame.render"
+    assert source =~ "TextInput.render"
+    assert source =~ "TextInput.handle_event"
+    refute source =~ "PostCard.render"
   end
 
   # ---------------------------------------------------------------------------
