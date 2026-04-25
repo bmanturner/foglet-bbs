@@ -186,7 +186,11 @@ Plans:
 3. Post rendering uses the shared `PostCard` or an equivalent post unit rather than bespoke loose text rows.
 4. Longer threads show progress in a 64x22-safe form, using richer visual indicators only when space permits.
 5. Viewport scroll ownership and reply/back navigation remain intact.
-**Plans:** TBD
+**Plans:** 3 plans
+Plans:
+- [ ] 22-01-PLAN.md — Wave 1 shared `PostCard` reader unit: add reader helper contract tests, compact metadata header, compact `Posts X/N` progress, and guttered markdown body rows while keeping header/progress outside `Viewport` body rows (READER-01, READER-02, READER-03, READER-04).
+- [ ] 22-02-PLAN.md — Wave 2 `PostReader` integration: compose selected post from `PostCard` reader parts, preserve viewport ownership, cache warming, navigation, reply/back, and read-pointer behavior; add focused render assertions for header, message number, gutter, and progress (READER-01, READER-02, READER-03, READER-04).
+- [ ] 22-03-PLAN.md — Wave 3 layout and finish-line validation: add PostReader size-contract smoke tests at `[{64,22},{80,24},{132,50}]` and run focused tests plus `rtk mix precommit` (READER-01, READER-02, READER-03, READER-04).
 **UI hint:** yes
 
 ### Phase 23: Composer Facelift
