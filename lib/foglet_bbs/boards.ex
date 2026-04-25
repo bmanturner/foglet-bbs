@@ -225,7 +225,8 @@ defmodule Foglet.Boards do
           board: Board.t(),
           subscribed?: boolean(),
           required_subscription?: boolean(),
-          unread_count: non_neg_integer() | nil
+          unread_count: non_neg_integer() | nil,
+          last_post_at: DateTime.t() | nil
         }
 
   @type directory_category :: %{
@@ -238,7 +239,9 @@ defmodule Foglet.Boards do
 
   Subscribed board entries include unread counts; unsubscribed entries keep
   `unread_count` nil so callers do not imply unread state for boards the user
-  has not joined.
+  has not joined. `:last_post_at` is the max thread last_post_at across
+  non-deleted threads, or nil when the board has no non-deleted threads.
+  Identical for subscribed and unsubscribed actors.
   """
   @spec board_directory_for(Foglet.Accounts.User.t() | nil) :: [directory_category()]
   def board_directory_for(nil), do: []
@@ -247,6 +250,7 @@ defmodule Foglet.Boards do
     user_id = user_id(actor)
     subscribed_board_ids = subscribed_board_ids(user_id)
     unread_counts = unread_counts(user_id)
+    last_post_ats = last_post_ats()
 
     list_boards()
     |> Enum.chunk_by(& &1.category.id)
@@ -263,7 +267,8 @@ defmodule Foglet.Boards do
               board: board,
               subscribed?: subscribed?,
               required_subscription?: board.required_subscription,
-              unread_count: if(subscribed?, do: Map.get(unread_counts, board.id, 0), else: nil)
+              unread_count: if(subscribed?, do: Map.get(unread_counts, board.id, 0), else: nil),
+              last_post_at: Map.get(last_post_ats, board.id)
             }
           end)
       }
@@ -521,6 +526,18 @@ defmodule Foglet.Boards do
             is_nil(p.deleted_at),
         group_by: s.board_id,
         select: {s.board_id, count(p.id)}
+    )
+    |> Map.new()
+  end
+
+  @spec last_post_ats() :: %{String.t() => DateTime.t() | nil}
+  defp last_post_ats do
+    Repo.all(
+      from b in Board,
+        left_join: t in Foglet.Threads.Thread,
+        on: t.board_id == b.id and is_nil(t.deleted_at),
+        group_by: b.id,
+        select: {b.id, max(t.last_post_at)}
     )
     |> Map.new()
   end

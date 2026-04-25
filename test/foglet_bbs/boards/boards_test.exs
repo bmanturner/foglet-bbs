@@ -645,7 +645,9 @@ defmodule Foglet.BoardsTest do
       assert {:ok, :subscribed} = Foglet.Boards.subscribe_user_to_board(subscribed_user, board.id)
 
       sub_entry = find_board_entry(Foglet.Boards.board_directory_for(subscribed_user), board.id)
-      unsub_entry = find_board_entry(Foglet.Boards.board_directory_for(unsubscribed_user), board.id)
+
+      unsub_entry =
+        find_board_entry(Foglet.Boards.board_directory_for(unsubscribed_user), board.id)
 
       assert sub_entry.subscribed? == true
       assert unsub_entry.subscribed? == false
