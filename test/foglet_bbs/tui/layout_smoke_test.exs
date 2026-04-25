@@ -1879,4 +1879,17 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     assert max_y <= 24,
            "new_thread compose step: total height #{max_y} exceeds 24 rows"
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 25 per-tab size-contract registry (D-09, D-11, Codex Concern 3)
+  # Plans 02/03/04 add blocks to the per-screen helper modules below, NOT here.
+  # ---------------------------------------------------------------------------
+
+  require Foglet.TUI.LayoutSmoke.AccountHelper
+  require Foglet.TUI.LayoutSmoke.ModerationHelper
+  require Foglet.TUI.LayoutSmoke.SysopHelper
+
+  Foglet.TUI.LayoutSmoke.AccountHelper.register_account_size_contracts()
+  Foglet.TUI.LayoutSmoke.ModerationHelper.register_moderation_size_contracts()
+  Foglet.TUI.LayoutSmoke.SysopHelper.register_sysop_size_contracts()
 end
