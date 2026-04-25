@@ -9,10 +9,15 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
   API:
     SelectionList.render(items, selected_index, row_renderer_fn)
     SelectionList.render(items, selected_index, row_renderer_fn, theme: theme)
+    SelectionList.render(items, selected_index, theme: theme)
 
   Where row_renderer_fn receives {item, idx, selected?} and must
   return a Raxol view element (typically via List.ListRow.render/3
   or inline text/2 calls).
+
+  Without a row renderer, SelectionList renders simple string/map labels with
+  Foglet's canonical row marks: `▌` for selected and a two-space gutter for
+  normal rows. Complex callers should keep passing a row renderer.
 
   Used by: BoardList, ThreadList, NewThread board picker.
   """
@@ -38,6 +43,14 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
   `row_renderer_fn` — fn({item, idx, selected?}) -> view_element
   `opts`            — optional `:theme` for built-in empty-state styling
   """
+  @spec render(list(), non_neg_integer(), keyword()) :: flex_column()
+  def render(items, selected_index, opts)
+      when is_list(items) and is_integer(selected_index) and is_list(opts) do
+    %Theme{} = theme = Keyword.fetch!(opts, :theme)
+
+    render(items, selected_index, &default_row(&1, theme), opts)
+  end
+
   @spec render(list(), non_neg_integer(), ({any(), non_neg_integer(), boolean()} -> any())) ::
           flex_column()
   def render(items, selected_index, row_renderer_fn)
@@ -74,4 +87,26 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
       rows
     end
   end
+
+  defp default_row({item, _idx, selected?}, theme) do
+    disabled? = item_disabled?(item)
+    label = item_label(item)
+
+    cond do
+      disabled? ->
+        text("  #{label}", fg: theme.dim.fg, style: [:dim])
+
+      selected? ->
+        text("▌ #{label}", fg: theme.selected.fg, style: [:bold])
+
+      true ->
+        text("  #{label}", fg: theme.unselected.fg)
+    end
+  end
+
+  defp item_label(%{label: label}), do: to_string(label)
+  defp item_label(item), do: to_string(item)
+
+  defp item_disabled?(%{disabled: disabled?}), do: disabled?
+  defp item_disabled?(_item), do: false
 end

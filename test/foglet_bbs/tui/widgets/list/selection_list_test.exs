@@ -2,6 +2,7 @@ defmodule Foglet.TUI.Widgets.List.SelectionListTest do
   use ExUnit.Case, async: true
 
   import Raxol.Core.Renderer.View
+  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1, assert_text_run: 3]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.List.SelectionList
@@ -15,6 +16,30 @@ defmodule Foglet.TUI.Widgets.List.SelectionListTest do
   end
 
   describe "render/4 — theme hygiene (D-18)" do
+    test "optional simple-label renderer emits canonical selected and normal row shape" do
+      theme = distinctive_theme()
+
+      tree = SelectionList.render(["Boards", "Account"], 0, theme: theme)
+
+      assert flatten_text(tree) == "▌ Boards  Account"
+      assert_text_run(tree, "▌ Boards", fg: theme.selected.fg, style: [:bold])
+      assert_text_run(tree, "  Account", fg: theme.unselected.fg)
+    end
+
+    test "optional simple-label renderer dims disabled rows" do
+      theme = distinctive_theme()
+
+      tree =
+        SelectionList.render(
+          [%{label: "Boards"}, %{label: "Sysop", disabled: true}],
+          0,
+          theme: theme
+        )
+
+      assert flatten_text(tree) == "▌ Boards  Sysop"
+      assert_text_run(tree, "  Sysop", fg: theme.dim.fg, style: [:dim])
+    end
+
     test "empty state uses theme.dim when the widget owns visible styling" do
       theme = distinctive_theme()
 

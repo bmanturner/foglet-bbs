@@ -2,13 +2,22 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0, assert_text_run: 3]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Checkbox
 
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
+
+  defp distinctive_theme do
+    %Theme{
+      success: %{fg: "#checkbox-success"},
+      error: %{fg: "#checkbox-error"},
+      unselected: %{fg: "#checkbox-unselected"},
+      dim: %{fg: "#checkbox-dim"}
+    }
+  end
 
   describe "render/2 — smoke (D-18)" do
     test "returns a non-nil Raxol element with :type key" do
@@ -18,14 +27,14 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
       assert Map.has_key?(result, :type)
     end
 
-    test "checked marker [x] appears when checked?: true" do
+    test "semantic checked marker appears when checked?: true" do
       result = Checkbox.render("Remember me", checked?: true, theme: theme())
-      assert flatten_text(result) =~ "[x]"
+      assert flatten_text(result) =~ "✓"
     end
 
-    test "unchecked marker [ ] appears when checked?: false" do
+    test "semantic unchecked marker appears when checked?: false" do
       result = Checkbox.render("Remember me", checked?: false, theme: theme())
-      assert flatten_text(result) =~ "[ ]"
+      assert flatten_text(result) =~ "◇"
     end
 
     test "label appears in the rendered text" do
@@ -33,11 +42,11 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
       assert flatten_text(result) =~ "Remember me"
     end
 
-    test "checked state uses theme.selected.fg" do
+    test "checked state uses theme.success.fg" do
       t = theme()
       result = Checkbox.render("x", checked?: true, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ t.selected.fg
+      assert serialized =~ t.success.fg
     end
 
     test "unchecked state uses theme.unselected.fg" do
@@ -64,12 +73,38 @@ defmodule Foglet.TUI.Widgets.Input.CheckboxTest do
       result = Checkbox.render("x", checked?: true, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
 
-      # Should use selected.fg, not dim.fg (since dim.fg != selected.fg in default theme)
-      assert serialized =~ t.selected.fg
+      assert serialized =~ t.success.fg
     end
   end
 
   describe "render/2 — theme hygiene (D-18)" do
+    test "semantic visual contract styles checked, unchecked, disabled, and error states" do
+      t = distinctive_theme()
+
+      checked = Checkbox.render("Subscribed", checked?: true, theme: t)
+      unchecked = Checkbox.render("Available", checked?: false, theme: t)
+      disabled = Checkbox.render("Locked", checked?: true, disabled: true, theme: t)
+      error = Checkbox.render("Blocked", checked?: false, error: true, theme: t)
+
+      assert flatten_text(checked) == "✓ Subscribed"
+      assert flatten_text(unchecked) == "◇ Available"
+      assert flatten_text(disabled) == "✓ Locked"
+      assert flatten_text(error) == "× Blocked"
+
+      assert_text_run(checked, "✓ Subscribed", fg: t.success.fg, style: [:bold])
+      assert_text_run(unchecked, "◇ Available", fg: t.unselected.fg)
+      assert_text_run(disabled, "✓ Locked", fg: t.dim.fg, style: [:dim])
+      assert_text_run(error, "× Blocked", fg: t.error.fg, style: [:bold])
+    end
+
+    test "ascii marker_style preserves legacy checkbox markers" do
+      assert Checkbox.render("x", checked?: true, marker_style: :ascii, theme: theme())
+             |> flatten_text() == "[x] x"
+
+      assert Checkbox.render("x", checked?: false, marker_style: :ascii, theme: theme())
+             |> flatten_text() == "[ ] x"
+    end
+
     test "no hardcoded color atoms leak into the tree (IN-03)" do
       scenarios = [
         [checked?: true, theme: theme()],
