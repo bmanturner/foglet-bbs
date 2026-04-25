@@ -232,18 +232,20 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
     # D-11: Welcome line removed.
     refute Enum.any?(texts, &String.starts_with?(&1, "Welcome back")),
-      "Phase 19 D-11 removes the welcome line; got: #{inspect(texts)}"
+           "Phase 19 D-11 removes the welcome line; got: #{inspect(texts)}"
 
     # D-07: boxed Navigation panel header replaces it.
     assert "Navigation" in texts
 
     # D-08: glyph + label + right-aligned key rows.
     assert Enum.any?(texts, &(&1 =~ ~r/●\s+Boards\s+B$/)),
-      "expected '● Boards    B' shaped row; got: #{inspect(texts)}"
+           "expected '● Boards    B' shaped row; got: #{inspect(texts)}"
+
     assert Enum.any?(texts, &(&1 =~ ~r/✎\s+Compose\s+C$/)),
-      "expected '✎ Compose    C' shaped row; got: #{inspect(texts)}"
+           "expected '✎ Compose    C' shaped row; got: #{inspect(texts)}"
+
     assert Enum.any?(texts, &(&1 =~ ~r/↯\s+Logout\s+Q$/)),
-      "expected '↯ Logout    Q' shaped row; got: #{inspect(texts)}"
+           "expected '↯ Logout    Q' shaped row; got: #{inspect(texts)}"
   end
 
   test "'B'/'b' navigates to :board_list with {:load_boards} command", %{state: state} do
@@ -393,10 +395,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         command_in_bar? = Enum.any?(texts, &(String.trim(&1) == menu_label))
 
         assert menu_row? == visible?,
-          "expected #{menu_label} body row visibility for #{role} to be #{visible?}; got: #{inspect(texts)}"
+               "expected #{menu_label} body row visibility for #{role} to be #{visible?}; got: #{inspect(texts)}"
 
         refute command_in_bar?,
-          "destination #{menu_label} should NOT appear as bare token in command bar (Phase 19 D-01/D-04); got: #{inspect(texts)}"
+               "destination #{menu_label} should NOT appear as bare token in command bar (Phase 19 D-01/D-04); got: #{inspect(texts)}"
       end
     end
 
@@ -442,7 +444,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
             end)
 
           assert nav_rows != [],
-            "expected at least one nav row for role=#{role} at #{inspect({width, height})}; got: #{inspect(texts)}"
+                 "expected at least one nav row for role=#{role} at #{inspect({width, height})}; got: #{inspect(texts)}"
 
           # Compute the same budget the production helper computes (mirror the math).
           chrome_outer = 4
@@ -452,7 +454,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
           for row <- nav_rows do
             assert Foglet.TUI.TextWidth.display_width(row) <= inner_width,
-              "nav row '#{row}' exceeds computed inner_width=#{inner_width} for role=#{role} at #{inspect({width, height})}"
+                   "nav row '#{row}' exceeds computed inner_width=#{inner_width} for role=#{role} at #{inspect({width, height})}"
           end
         end
       end
@@ -468,8 +470,9 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "no Welcome line in any role render" do
       for role <- [:user, :mod, :sysop] do
         texts = role |> build_state() |> rendered_text()
+
         refute Enum.any?(texts, &String.starts_with?(&1, "Welcome")),
-          "Phase 19 D-11 removes the welcome line for role=#{role}; got: #{inspect(texts)}"
+               "Phase 19 D-11 removes the welcome line for role=#{role}; got: #{inspect(texts)}"
       end
     end
   end
