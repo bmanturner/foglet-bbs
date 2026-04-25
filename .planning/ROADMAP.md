@@ -87,10 +87,10 @@ Plans:
 2. Theme slots cover success/info/badge-like states without hardcoded color atoms in new facelift widgets.
 3. Tabs, rows, badges, command hints, and editor states have consistent theme-slot mappings.
 4. Changing user theme changes color treatment but not screen mode or layout category.
-**Plans:** 4 plans
+**Plans:** 2/4 plans executed
 Plans:
-- [ ] 17-01-PLAN.md — Central presentation-mode contract and unknown-screen tests.
-- [ ] 17-02-PLAN.md — Semantic theme slots and palette-wide coverage.
+- [x] 17-01-PLAN.md — Central presentation-mode contract and unknown-screen tests.
+- [x] 17-02-PLAN.md — Semantic theme slots and palette-wide coverage.
 - [ ] 17-03-PLAN.md — Theme mapping contract and phase validation.
 - [ ] 17-04-PLAN.md — Unowned widget primitive theme-routing sweep.
 **UI hint:** yes
@@ -229,7 +229,7 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 14. Launch Hygiene and Operator Notes | v1.2 | 3/3 | Complete | 2026-04-24 |
 | 15. Reset Path Gap Closure | v1.2 | 2/2 | Complete | 2026-04-24 |
 | 16. Unicode Width Foundation | v1.3 | 3/4 | In Progress|  |
-| 17. Theme and Mode Metadata | v1.3 | 0/TBD | Pending | - |
+| 17. Theme and Mode Metadata | v1.3 | 2/4 | In Progress|  |
 | 18. Chrome V2 | v1.3 | 0/TBD | Pending | - |
 | 19. Main Menu Dashboard | v1.3 | 0/TBD | Pending | - |
 | 20. Rich Rows and Thread Flow | v1.3 | 0/TBD | Pending | - |
