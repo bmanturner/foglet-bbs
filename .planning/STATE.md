@@ -1,36 +1,36 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.2
-milestone_name: Pre-Alpha Gap Closure
-status: complete
-stopped_at: Milestone v1.2 archived
-last_updated: "2026-04-24T23:03:05.027Z"
-last_activity: 2026-04-24
+milestone: v1.3
+milestone_name: TUI Screen Facelift
+status: ready_to_plan
+stopped_at: Milestone v1.3 roadmap created
+last_updated: "2026-04-25T00:00:00.000Z"
+last_activity: 2026-04-25
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 26
-  completed_plans: 26
-  percent: 100
+  total_phases: 9
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-24)
+See: .planning/PROJECT.md (updated 2026-04-25)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Milestone v1.2 shipped. Next milestone not started.
+**Current focus:** Phase 16 Unicode Width Foundation.
 
 ## Current Position
 
-Phase: -
+Phase: 16 - Unicode Width Foundation
 Plan: -
-Status: v1.2 shipped and archived
-Last activity: 2026-04-24
+Status: Ready to plan
+Last activity: 2026-04-25 - Milestone v1.3 roadmap created
 
-Progress: [██████████] 100%
+Progress: [----------] 0%
 
 ## Performance Metrics
 
@@ -76,6 +76,9 @@ Recent decisions affecting current work:
 - Operator reset-token generation is centralized in `Foglet.Accounts` using the existing hashed `UserToken` primitive.
 - [Phase 15]: Kept README reset verification manual-only; no README-specific ExUnit tests or automated README gates were added.
 - [Phase 15]: Preserved Phase 14 historical failure language while adding Phase 15 closure evidence.
+- [v1.3]: `SCREENS.md` is the milestone PRD and defines the Classic Modern BBS plus Operator Console visual split.
+- [v1.3]: Width-aware text/layout helpers should land before Unicode-heavy aligned rows or editor cursor paths.
+- [v1.3]: Active research uses `SCREENS.md` rather than stale v1.2 pre-alpha gap-closure research.
 
 ### Pending Todos
 
@@ -100,5 +103,5 @@ Items acknowledged and carried forward from v1.1 close:
 ## Session Continuity
 
 Last session: 2026-04-24
-Stopped at: Milestone v1.2 archived
+Stopped at: Milestone v1.3 roadmap created
 Resume file: None

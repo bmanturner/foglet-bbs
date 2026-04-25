@@ -4,15 +4,16 @@
 
 - [x] **v1.1 Operations Surfaces & Invites** - Phases 0-8, including inserted Phase 1.1 (shipped 2026-04-24). See [v1.1 roadmap archive](milestones/v1.1-ROADMAP.md).
 - [x] **v1.2 Pre-Alpha Gap Closure** - Phases 9-15 (shipped 2026-04-24). See [v1.2 roadmap archive](milestones/v1.2-ROADMAP.md).
+- [ ] **v1.3 TUI Screen Facelift** - Phases 16-24 (active).
 
 ## Current Status
 
-v1.2 is complete. Start the next milestone with `$gsd-new-milestone` to define fresh requirements and roadmap phases.
+v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the SSH terminal UI in dependency order: width-safe primitives, mode/theme contracts, shared chrome, Classic Modern BBS screens, then Operator Console screens.
 
 ## Phases
 
 <details>
-<summary>✅ v1.1 Operations Surfaces & Invites (Phases 0-8) - SHIPPED 2026-04-24</summary>
+<summary>[x] v1.1 Operations Surfaces & Invites (Phases 0-8) - SHIPPED 2026-04-24</summary>
 
 - [x] Phase 0: Screen Shells and Shared Surface Primitives (7/7 plans)
 - [x] Phase 1: Authorization and Scope Backbone (4/4 plans)
@@ -28,7 +29,7 @@ v1.2 is complete. Start the next milestone with `$gsd-new-milestone` to define f
 </details>
 
 <details>
-<summary>✅ v1.2 Pre-Alpha Gap Closure (Phases 9-15) - SHIPPED 2026-04-24</summary>
+<summary>[x] v1.2 Pre-Alpha Gap Closure (Phases 9-15) - SHIPPED 2026-04-24</summary>
 
 - [x] Phase 9: Delivery Modes and Onboarding Honesty (7/7 plans)
 - [x] Phase 10: User Status Administration (4/4 plans)
@@ -40,9 +41,169 @@ v1.2 is complete. Start the next milestone with `$gsd-new-milestone` to define f
 
 </details>
 
+### v1.3 TUI Screen Facelift
+
+**Milestone Goal:** Make Foglet's SSH terminal UI feel like a polished, Unicode-capable BBS while keeping operator workflows dense, honest, and terminal-pragmatic.
+
+- [ ] **Phase 16: Unicode Width Foundation** - Layout-sensitive TUI rendering is width-safe before heavier Unicode adoption.
+- [ ] **Phase 17: Theme and Mode Metadata** - Screens can declare BBS vs operator rhythm without forking the widget stack.
+- [ ] **Phase 18: Chrome V2** - Every screen shares breadcrumb chrome, mode-aware status, and grouped key commands.
+- [ ] **Phase 19: Main Menu Dashboard** - The home screen becomes a selectable, social BBS front porch with activity context.
+- [ ] **Phase 20: Rich Rows and Thread Flow** - Thread browsing uses semantic glyphs, width-safe metadata, and focused details.
+- [ ] **Phase 21: Board Directory Facelift** - Board browsing presents categories, board state, subscriptions, and details as structured rows.
+- [ ] **Phase 22: Post Reader Facelift** - Thread reading emphasizes message numbers, post metadata, body readability, and progress.
+- [ ] **Phase 23: Composer Facelift** - New-thread and reply composition use focused editor surfaces with preview and counters.
+- [ ] **Phase 24: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts.
+
+## Phase Details
+
+### Phase 16: Unicode Width Foundation
+
+**Goal:** Layout-sensitive widgets handle Unicode display width correctly before glyph-heavy aligned layouts ship.
+**Depends on:** Phase 15
+**Requirements:** WIDTH-01, WIDTH-02, WIDTH-03, WIDTH-04
+**Success Criteria** (what must be TRUE):
+1. Aligned rows render correctly with ASCII, accented Latin, combining marks, CJK, and planned UI glyphs.
+2. List rows, key bars, composer cursor paths, and clipping/truncation paths use one shared display-width helper.
+3. Width tests cover the SCREENS.md glyph set: `●`, `◆`, `▸`, `▾`, `✓`, `×`.
+4. Existing ASCII-heavy screens keep their current layout behavior.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 17: Theme and Mode Metadata
+
+**Goal:** Screens can opt into Classic Modern BBS or Operator Console presentation while sharing theme and primitive contracts.
+**Depends on:** Phase 16
+**Requirements:** MODE-01, THEME-01, THEME-02
+**Success Criteria** (what must be TRUE):
+1. BBS-flow screens declare `:bbs`; Account, Moderation, and Sysop declare `:operator`.
+2. Theme slots cover success/info/badge-like states without hardcoded color atoms in new facelift widgets.
+3. Tabs, rows, badges, command hints, and editor states have consistent theme-slot mappings.
+4. Changing user theme changes color treatment but not screen mode or layout category.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 18: Chrome V2
+
+**Goal:** Shared chrome communicates location, status, and commands consistently across all facelifted screens.
+**Depends on:** Phase 17
+**Requirements:** CHROME-01, CHROME-02, CHROME-03, CHROME-04
+**Success Criteria** (what must be TRUE):
+1. Users see breadcrumb-style location such as `Foglet > Boards > general` or `Foglet > Sysop > Users`.
+2. Users see mode-appropriate right status fields, such as handle/time/unread for BBS and scope/system status for operator screens.
+3. Key hints are grouped and truncated by priority inside the frame.
+4. Chrome remains usable at 80x24 without overlapping content.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 19: Main Menu Dashboard
+
+**Goal:** The main menu becomes a selectable, social BBS home screen while preserving direct hotkeys.
+**Depends on:** Phase 18
+**Requirements:** HOME-01, HOME-02, HOME-03
+**Success Criteria** (what must be TRUE):
+1. Users can navigate main-menu destinations with selection keys and existing direct hotkeys.
+2. Role-gated destinations remain absent when unavailable.
+3. Users see useful session/activity context such as unread counts, boards, oneliners, or moderation count when available.
+4. The layout uses side-by-side panels on wide terminals and collapses cleanly at 80 columns.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 20: Rich Rows and Thread Flow
+
+**Goal:** Thread browsing uses semantic, width-safe rows that make unread, sticky, locked, author, count, and age easy to scan.
+**Depends on:** Phase 18
+**Requirements:** RICHROW-01, THREADS-01, THREADS-02
+**Success Criteria** (what must be TRUE):
+1. Users can distinguish unread/read and sticky/locked state without relying only on text labels.
+2. Thread metadata aligns correctly with Unicode state glyphs and variable-width titles.
+3. Focused-thread details appear without disrupting keyboard navigation.
+4. The row primitive is reusable by later board/operator surfaces.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 21: Board Directory Facelift
+
+**Goal:** Board browsing presents categories and board state as structured terminal-native rows.
+**Depends on:** Phase 20
+**Requirements:** BOARDS-01, BOARDS-02, BOARDS-03
+**Success Criteria** (what must be TRUE):
+1. Users can distinguish expanded/collapsed categories, read/unread boards, and subscription state visually.
+2. Board labels are semantic columns, not embedded bracket text.
+3. Focused board/category details are visible in a compact details strip or wide inspector.
+4. Existing tree state and subscribe/open/back workflows continue to work.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 22: Post Reader Facelift
+
+**Goal:** Thread reading feels message-oriented and BBS-native, with clear metadata, body treatment, and progress.
+**Depends on:** Phase 20
+**Requirements:** READER-01, READER-02, READER-03
+**Success Criteria** (what must be TRUE):
+1. Users see post position, stable message number, author, and age in a compact header.
+2. Post bodies render with a clear gutter or card treatment without breaking markdown rendering.
+3. Longer threads show progress such as post count or visual progress indicator.
+4. Viewport scroll ownership and reply/back navigation remain intact.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 23: Composer Facelift
+
+**Goal:** New-thread and reply composition provide a focused editor surface with preview, counters, and validation states.
+**Depends on:** Phase 22
+**Requirements:** COMPOSER-01, COMPOSER-02, COMPOSER-03, COMPOSER-04
+**Success Criteria** (what must be TRUE):
+1. Users compose inside a visible editor frame with focused/unfocused styling.
+2. Edit and preview modes are visible as a tab/segmented control, not only hidden in key hints.
+3. Character budgets show normal, warning, and over-limit states.
+4. Reply composition shows compact quoted context while new-thread composition shows the title field.
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 24: Operator Console Conversion
+
+**Goal:** Account, Moderation, and Sysop become dense, consistent terminal workbenches after shared BBS flow is stable.
+**Depends on:** Phase 21, Phase 23
+**Requirements:** CONSOLE-01, ACCOUNT-01, MOD-01, SYSOP-01
+**Success Criteria** (what must be TRUE):
+1. Account tabs use compact forms, swatches, SSH-key tables, and clear dirty/saved/error states.
+2. Moderation tabs show scope/status summaries, honest empty states, and table-driven log/user/board views.
+3. Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling.
+4. Operator screens reuse shared console primitives such as badges, key/value grids, table presets, and optional inspectors.
+**Plans:** TBD
+**UI hint:** yes
+
 ## Progress
 
-| Milestone | Phases | Plans | Status | Shipped |
-|-----------|--------|-------|--------|---------|
-| v1.1 Operations Surfaces & Invites | 0-8 | 43/43 | Complete | 2026-04-24 |
-| v1.2 Pre-Alpha Gap Closure | 9-15 | 26/26 | Complete | 2026-04-24 |
+**Execution Order:**
+Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
+
+| Phase | Milestone | Plans Complete | Status | Completed |
+|-------|-----------|----------------|--------|-----------|
+| 0. Screen Shells and Shared Surface Primitives | v1.1 | 7/7 | Complete | 2026-04-24 |
+| 1. Authorization and Scope Backbone | v1.1 | 4/4 | Complete | 2026-04-24 |
+| 1.1 Shared Modal Form Primitive | v1.1 | 3/3 | Complete | 2026-04-24 |
+| 2. Sysop Config and Board Management | v1.1 | 6/6 | Complete | 2026-04-24 |
+| 3. Invite Persistence and Registration Enforcement | v1.1 | 3/3 | Complete | 2026-04-24 |
+| 4. Shared Invite Surface Activation | v1.1 | 5/5 | Complete | 2026-04-24 |
+| 5. Account Preferences and Live Session Refresh | v1.1 | 4/4 | Complete | 2026-04-24 |
+| 6. Chrome Clock and Main Menu Wiring | v1.1 | 4/4 | Complete | 2026-04-24 |
+| 7. Oneliners and Main Menu Social Strip | v1.1 | 3/3 | Complete | 2026-04-24 |
+| 8. Moderation Workspace Population and Scope-Aware Operations | v1.1 | 4/4 | Complete | 2026-04-24 |
+| 9. Delivery Modes and Onboarding Honesty | v1.2 | 7/7 | Complete | 2026-04-24 |
+| 10. User Status Administration | v1.2 | 4/4 | Complete | 2026-04-24 |
+| 11. Posting Policy Enforcement | v1.2 | 3/3 | Complete | 2026-04-24 |
+| 12. Account SSH Key Management | v1.2 | 3/3 | Complete | 2026-04-24 |
+| 13. Board Subscription Management | v1.2 | 4/4 | Complete | 2026-04-24 |
+| 14. Launch Hygiene and Operator Notes | v1.2 | 3/3 | Complete | 2026-04-24 |
+| 15. Reset Path Gap Closure | v1.2 | 2/2 | Complete | 2026-04-24 |
+| 16. Unicode Width Foundation | v1.3 | 0/TBD | Pending | - |
+| 17. Theme and Mode Metadata | v1.3 | 0/TBD | Pending | - |
+| 18. Chrome V2 | v1.3 | 0/TBD | Pending | - |
+| 19. Main Menu Dashboard | v1.3 | 0/TBD | Pending | - |
+| 20. Rich Rows and Thread Flow | v1.3 | 0/TBD | Pending | - |
+| 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
+| 22. Post Reader Facelift | v1.3 | 0/TBD | Pending | - |
+| 23. Composer Facelift | v1.3 | 0/TBD | Pending | - |
+| 24. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |
