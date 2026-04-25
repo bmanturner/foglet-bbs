@@ -73,6 +73,15 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
           required(:last_post_at) => DateTime.t() | nil
         }
 
+  @type state_cluster_cell ::
+          :unread
+          | :locked
+          | %{
+              required(:key) => :subscribed_board | :available_board,
+              required(:glyph) => String.t(),
+              required(:slot) => :info | :dim
+            }
+
   defstruct [:tree, :directory, last_action: nil]
 
   @type t :: %__MODULE__{
@@ -254,7 +263,9 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
     )
   end
 
-  @spec build_state_cluster(non_neg_integer() | nil, boolean(), boolean()) :: list()
+  @spec build_state_cluster(non_neg_integer() | nil, boolean(), boolean()) :: [
+          state_cluster_cell()
+        ]
   defp build_state_cluster(unread, subscribed?, required?) do
     read_cells = if unread_present?(unread), do: [:unread], else: []
     sub_cell = subscription_cluster_cell(subscribed?, required?)

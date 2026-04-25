@@ -30,7 +30,7 @@ New widgets should:
 |---|---|---|
 | `Compose` | [`compose.ex`](compose.ex) | Shared plumbing for post/thread composers (COMPOSE-01/02) |
 | `Modal`   | [`modal.ex`](modal.ex)     | Modal body (info/error/warning/confirm) — thin adapter (D-20, Phase 7) |
-| `Modal.Form` | [`modal/form.ex`](modal/form.ex) | Stateful modal-overlay form container with typed fields, Tab/Shift-Tab focus, submit/cancel callbacks, and caller-set inline errors (D-14, Phase 01.1) |
+| `Modal.Form` | [`modal/form.ex`](modal/form.ex) | Stateful body-only modal form with refreshed heading, labels, required markers, inline/base errors, compact submit/cancel footer, typed fields, focus movement, and app-owned overlay chrome (D-14, Phase 24) |
 
 ## Composer
 
@@ -68,9 +68,18 @@ New widgets should:
 
 | Module | File | Description |
 |---|---|---|
-| `Display.Table`    | [`display/table.ex`](display/table.ex)       | Sortable / filterable / selectable table |
-| `Display.Tree`     | [`display/tree.ex`](display/tree.ex)         | Hierarchical tree with expand/collapse |
-| `Display.Progress` | [`display/progress.ex`](display/progress.ex) | Animated progress bar (stateless) |
+| `Display.Table`        | [`display/table.ex`](display/table.ex)                 | Sortable / filterable / selectable table |
+| `Display.Badge`        | [`display/badge.ex`](display/badge.ex)                 | Compact semantic state badge for operator-console rows and summaries |
+| `Display.KvGrid`       | [`display/kv_grid.ex`](display/kv_grid.ex)             | Width-safe caller-provided key/value grid with optional badge metadata |
+| `Display.ConsoleTable` | [`display/console_table.ex`](display/console_table.ex) | Dense operator-console facade over `Display.Table` with compact defaults and empty-state handling |
+| `Display.Tree`         | [`display/tree.ex`](display/tree.ex)                   | Hierarchical tree with expand/collapse |
+| `Display.Progress`     | [`display/progress.ex`](display/progress.ex)           | Animated progress bar (stateless) |
+
+## Workspace (Phase 24)
+
+| Module | File | Description |
+|---|---|---|
+| `Workspace.Inspector` | [`workspace/inspector.ex`](workspace/inspector.ex) | Optional wide-terminal selected-row detail and action descriptor panel for future operator-console screens |
 
 ## Progress (Phase 8)
 

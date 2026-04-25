@@ -39,7 +39,7 @@ defmodule Foglet.TUI.Widgets.Display.Tree do
   @default_indent_size 2
 
   @type tree_node :: %{
-          required(:id) => atom(),
+          required(:id) => term(),
           required(:label) => String.t(),
           required(:children) => [tree_node()],
           optional(:data) => any()
