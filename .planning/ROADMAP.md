@@ -46,7 +46,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 **Milestone Goal:** Make Foglet's SSH terminal UI feel like a polished, Unicode-capable BBS while keeping operator workflows dense, honest, and terminal-pragmatic.
 
 - [x] **Phase 16: Unicode Width Foundation** - Layout-sensitive TUI rendering is width-safe before heavier Unicode adoption. (completed 2026-04-25)
-- [ ] **Phase 17: Theme and Mode Metadata** - Screens can declare BBS vs operator rhythm without forking the widget stack; widget primitives still need SCREENS.md visual-shape remediation.
+- [ ] **Phase 17: Theme and Mode Metadata** - Screens can declare BBS vs operator rhythm without forking the widget stack; widget primitives still need explicit visual-contract remediation.
 - [x] **Phase 18: Chrome V2** - Every screen shares breadcrumb chrome, mode-aware status, and grouped key commands. (completed 2026-04-25)
 - [ ] **Phase 19: Main Menu Dashboard** - The home screen becomes a selectable, social BBS front porch with activity context.
 - [ ] **Phase 20: Rich Rows and Thread Flow** - Thread browsing uses semantic glyphs, width-safe metadata, and focused details.
@@ -93,7 +93,7 @@ Plans:
 - [x] 17-02-PLAN.md — Semantic theme slots and palette-wide coverage.
 - [x] 17-03-PLAN.md — Theme mapping contract and phase validation.
 - [x] 17-04-PLAN.md — Unowned widget primitive theme-routing sweep.
-- [ ] 17-05-PLAN.md — Widget visual contract remediation against SCREENS.md.
+- [ ] 17-05-PLAN.md — Widget visual contract remediation.
 **UI hint:** yes
 
 ### Phase 18: Chrome V2

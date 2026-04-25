@@ -11,6 +11,7 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Screens.Moderation.State, as: ModerationState
   alias Foglet.TUI.Theme
 
   @root "Foglet"
@@ -18,7 +19,6 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
   @ascii_separator " > "
 
   @account_tabs ["Profile", "Prefs", "SSH Keys", "Invites"]
-  @moderation_tabs ["Queue", "Oneliners", "Invites"]
   @sysop_tabs ["Overview", "Users", "Boards", "Config", "Invites"]
 
   @doc """
@@ -131,7 +131,7 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
   end
 
   defp tabs_for(:account), do: @account_tabs
-  defp tabs_for(:moderation), do: @moderation_tabs
+  defp tabs_for(:moderation), do: ModerationState.tab_labels(true)
   defp tabs_for(:sysop), do: @sysop_tabs
 
   defp screen_state_for(state, screen) do

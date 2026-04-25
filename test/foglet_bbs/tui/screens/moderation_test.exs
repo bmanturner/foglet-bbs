@@ -64,6 +64,14 @@ defmodule Foglet.TUI.Screens.ModerationTest do
                "Presentation.mode_for!(:moderation)"
     end
 
+    test "renders active moderation tab label in Chrome V2 breadcrumb", %{state: state} do
+      state = put_in(state, [:screen_state, :moderation], Moderation.init_screen_state(active: 1))
+
+      flat = Moderation.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Foglet ▸ Moderation ▸ LOG"))
+    end
+
     test "does not crash with default screen state", %{state: state} do
       assert _ = Moderation.render(state)
     end
