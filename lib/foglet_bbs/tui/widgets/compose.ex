@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Widgets.Compose do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.MultiLineInput
 
@@ -134,7 +135,7 @@ defmodule Foglet.TUI.Widgets.Compose do
       |> Enum.map(fn {line, idx} ->
         rendered =
           if focused? and idx == cursor_row do
-            {before, after_} = String.split_at(line, cursor_col)
+            {before, after_} = TextWidth.split_at(line, cursor_col)
             "#{before}\u2588#{after_}"
           else
             line

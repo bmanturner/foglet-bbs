@@ -228,7 +228,7 @@ defmodule Foglet.TUI.Widgets.ComposeTest do
     test "focused milestone glyph input inserts cursor by display width", %{theme: theme} do
       input_st = input_with("● ◆ ▸ ▾ ✓ ×", {0, 6})
 
-      assert Compose.render_input(input_st, true, theme) |> flatten_text() == "● ◆ █▸ ▾ ✓ ×"
+      assert Compose.render_input(input_st, true, theme) |> flatten_text() == "● ◆ ▸ █▾ ✓ ×"
     end
 
     test "empty_line_placeholder: \" \" substitutes a space for empty lines", %{theme: _theme} do
