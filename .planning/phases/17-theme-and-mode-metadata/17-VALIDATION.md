@@ -19,7 +19,7 @@ created: 2026-04-25
 |----------|-------|
 | **Framework** | ExUnit bundled with Elixir 1.19.5 |
 | **Config file** | `test/test_helper.exs` |
-| **Quick run command** | `rtk mix test test/foglet_bbs/tui/theme_test.exs test/foglet_bbs/tui/presentation_test.exs` |
+| **Quick run command** | `rtk mix test test/foglet_bbs/tui/theme_test.exs test/foglet_bbs/tui/presentation_test.exs test/foglet_bbs/tui/widgets/input/tabs_test.exs test/foglet_bbs/tui/widgets/input/radio_group_test.exs test/foglet_bbs/tui/widgets/input/checkbox_test.exs test/foglet_bbs/tui/widgets/modal_test.exs` |
 | **Full suite command** | `rtk mix test` |
 | **Estimated runtime** | ~10 seconds for focused tests; full suite runtime varies |
 
@@ -27,7 +27,7 @@ created: 2026-04-25
 
 ## Sampling Rate
 
-- **After every task commit:** Run `rtk mix test test/foglet_bbs/tui/theme_test.exs test/foglet_bbs/tui/presentation_test.exs`
+- **After every task commit:** Run the focused test command for the touched widget group plus `rtk mix test test/foglet_bbs/tui/theme_test.exs test/foglet_bbs/tui/presentation_test.exs`
 - **After every plan wave:** Run `rtk mix test`
 - **Before `$gsd-verify-work`:** `rtk mix precommit` must pass
 - **Max feedback latency:** 10 seconds for focused tests
@@ -42,6 +42,9 @@ created: 2026-04-25
 | 17-01-02 | 01 | 1 | THEME-02 | T-17-02 | Presentation mode remains presentation metadata, not authorization | unit | `rtk mix test test/foglet_bbs/tui/presentation_test.exs` | No - W0 | pending |
 | 17-02-01 | 02 | 1 | THEME-01 | - | Every palette resolves non-empty semantic slots through `Foglet.TUI.Theme` | unit | `rtk mix test test/foglet_bbs/tui/theme_test.exs` | Yes, needs expansion | pending |
 | 17-03-01 | 03 | 1 | THEME-02 | - | Mapping contract references only valid `Foglet.TUI.Theme` slots | unit | `rtk mix test test/foglet_bbs/tui/presentation_test.exs` | No - W0 | pending |
+| 17-04-01 | 04 | 3 | THEME-01 / THEME-02 | T-17-10 | Catalog-only primitives use theme slots instead of hardcoded colors | unit | `rtk mix test test/foglet_bbs/tui/widgets/input/button_test.exs test/foglet_bbs/tui/widgets/input/menu_test.exs test/foglet_bbs/tui/widgets/list/smart_list_test.exs test/foglet_bbs/tui/widgets/display/progress_test.exs` | Yes, needs expansion | pending |
+| 17-04-02 | 04 | 3 | THEME-01 / THEME-02 | T-17-10 | Used input primitives visibly honor theme slot mappings | unit | `rtk mix test test/foglet_bbs/tui/widgets/input/tabs_test.exs test/foglet_bbs/tui/widgets/input/radio_group_test.exs test/foglet_bbs/tui/widgets/input/checkbox_test.exs` | Yes, needs expansion | pending |
+| 17-04-03 | 04 | 3 | THEME-01 / THEME-02 | T-17-10 / T-17-12 | Selection, loading, and generic modal states remain presentational and theme-routed | unit | `rtk mix test test/foglet_bbs/tui/widgets/list/selection_list_test.exs test/foglet_bbs/tui/widgets/progress/spinner_test.exs test/foglet_bbs/tui/widgets/modal_test.exs` | Yes, needs expansion | pending |
 
 *Status: pending / green / red / flaky*
 
@@ -52,6 +55,7 @@ created: 2026-04-25
 - [ ] `test/foglet_bbs/tui/presentation_test.exs` - stubs for MODE-01 and THEME-02.
 - [ ] `test/foglet_bbs/tui/theme_test.exs` - extend existing tests for THEME-01.
 - [ ] Optional public `Foglet.TUI.Theme.slot_keys/0` - needed if mapping validation should avoid duplicating private `@slot_keys`.
+- [ ] Existing widget tests for Button, Menu, SmartList, Display.Progress, Tabs, RadioGroup, Checkbox, SelectionList, Spinner, and generic Modal - extend for semantic theme routing.
 
 ---
 
