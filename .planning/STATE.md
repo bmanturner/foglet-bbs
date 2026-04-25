@@ -4,14 +4,14 @@ milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: executing
 stopped_at: Phase 18 context gathered (assumptions mode)
-last_updated: "2026-04-25T14:15:48.765Z"
-last_activity: 2026-04-25 -- Phase 16 execution started
+last_updated: "2026-04-25T14:54:32.492Z"
+last_activity: 2026-04-25 -- Phase 16 complete
 progress:
   total_phases: 10
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 8
-  completed_plans: 3
-  percent: 38
+  completed_plans: 6
+  percent: 75
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-25)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 16 — unicode-width-foundation
+**Current focus:** Phase 17 — theme-and-mode-metadata
 
 ## Current Position
 
-Phase: 16 (unicode-width-foundation) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 16
-Last activity: 2026-04-25 -- Phase 16 execution started
+Phase: 17
+Plan: Not started
+Status: Phase 16 complete; Phase 17 ready
+Last activity: 2026-04-25 -- Phase 16 complete
 
 Progress: [----------] 0%
 
@@ -36,7 +36,7 @@ Progress: [----------] 0%
 
 **Velocity:**
 
-- Total plans completed: 45 from shipped v1.1; 26 in v1.2
+- Total plans completed: 49 from shipped v1.1; 26 in v1.2
 - Average duration: Not measured for v1.2 yet
 - Total execution time: Not measured for v1.2 yet
 
@@ -52,6 +52,7 @@ Progress: [----------] 0%
 | 14. Launch Hygiene and Operator Notes | TBD | - | - |
 | 15. Reset Path Gap Closure | 1/2 | 6min | 6min |
 | 15 | 2 | - | - |
+| 16 | 4 | - | - |
 
 **Recent Trend:**
 

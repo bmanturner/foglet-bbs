@@ -8,11 +8,11 @@
 
 ### Unicode Width Foundation
 
-- [ ] **WIDTH-01**: TUI widgets can measure, truncate, pad, and slice terminal text by display width through one shared helper.
-- [ ] **WIDTH-02**: Layout-sensitive row, chrome, clipping, and composer cursor paths use the shared display-width helper instead of direct length/slice assumptions.
-- [ ] **WIDTH-03**: Width tests cover ASCII, accented Latin, combining marks, CJK text, and the milestone glyph set from `SCREENS.md`.
-- [ ] **WIDTH-04**: Existing ASCII-heavy screens keep their current layout behavior after width hardening.
-- [ ] **WIDTH-05**: Facelifted widgets and screens have size-contract coverage for the 64x22 minimum, the 80x24 compact design target, and at least one wide/tall terminal layout.
+- [x] **WIDTH-01**: TUI widgets can measure, truncate, pad, and slice terminal text by display width through one shared helper.
+- [x] **WIDTH-02**: Layout-sensitive row, chrome, clipping, and composer cursor paths use the shared display-width helper instead of direct length/slice assumptions.
+- [x] **WIDTH-03**: Width tests cover ASCII, accented Latin, combining marks, CJK text, and the milestone glyph set from `SCREENS.md`.
+- [x] **WIDTH-04**: Existing ASCII-heavy screens keep their current layout behavior after width hardening.
+- [x] **WIDTH-05**: Facelifted widgets and screens have size-contract coverage for the 64x22 minimum, the 80x24 compact design target, and at least one wide/tall terminal layout.
 
 ### Mode And Theme Contracts
 
@@ -105,11 +105,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| WIDTH-01 | Phase 16 | Pending |
-| WIDTH-02 | Phase 16 | Pending |
-| WIDTH-03 | Phase 16 | Pending |
-| WIDTH-04 | Phase 16 | Pending |
-| WIDTH-05 | Phase 16 | Pending |
+| WIDTH-01 | Phase 16 | Complete |
+| WIDTH-02 | Phase 16 | Complete |
+| WIDTH-03 | Phase 16 | Complete |
+| WIDTH-04 | Phase 16 | Complete |
+| WIDTH-05 | Phase 16 | Complete |
 | MODE-01 | Phase 17 | Pending |
 | THEME-01 | Phase 17 | Pending |
 | THEME-02 | Phase 17 | Pending |
