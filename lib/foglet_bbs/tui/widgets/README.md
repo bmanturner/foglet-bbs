@@ -32,6 +32,12 @@ New widgets should:
 | `Modal`   | [`modal.ex`](modal.ex)     | Modal body (info/error/warning/confirm) — thin adapter (D-20, Phase 7) |
 | `Modal.Form` | [`modal/form.ex`](modal/form.ex) | Stateful modal-overlay form container with typed fields, Tab/Shift-Tab focus, submit/cancel callbacks, and caller-set inline errors (D-14, Phase 01.1) |
 
+## Composer
+
+| Module | File | Description |
+|---|---|---|
+| `Composer.EditorFrame` | [`composer/editor_frame.ex`](composer/editor_frame.ex) | Stateless shared composer shell for Edit/Preview, counters, and context; honors D-01, D-04, D-06, D-13, and D-16 |
+
 ## Post (Phase 1–3, unchanged)
 
 | Module | File | Description |
