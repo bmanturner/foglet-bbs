@@ -95,7 +95,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       end
     else
       post = Enum.at(posts, idx)
-      available_height = max(h - 10, 5)
+      available_height = max(h - 12, 5)
 
       tuples =
         case ss.render_cache[{post.id, w}] do
@@ -108,24 +108,18 @@ defmodule Foglet.TUI.Screens.PostReader do
             cached
         end
 
-      # Non-scrolling header (Post X of N, author, divider).
-      header_line_1 = text("Post #{idx + 1} of #{total}", fg: theme.dim.fg)
-      header_line_2 = text(PostCard.author_line(post), fg: theme.dim.fg)
-      header_divider = divider(char: "─", style: %{fg: theme.border.fg})
-
-      # Pre-themed body lines — Viewport passes them through unmodified.
-      body_lines = PostCard.render_body_lines(tuples, w, theme)
+      parts = reader_parts(post, tuples, w, theme, idx, total)
 
       # Wire visible_height and children for this frame. render_post_content
       # is a read-only function — the Viewport state built here is transient,
       # not written back into screen_state. State-writing happens in
       # scroll_post / advance_post / load_posts via warm_viewport.
       {vp, _cmds} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
-      {vp, _cmds} = Viewport.update({:set_children, body_lines}, vp)
+      {vp, _cmds} = Viewport.update({:set_children, parts.body_lines}, vp)
       body_rendered = Viewport.render(vp, %{})
 
       column style: %{gap: 0} do
-        [header_line_1, header_line_2, header_divider, body_rendered]
+        [parts.header, parts.progress, body_rendered]
       end
     end
   end
@@ -454,12 +448,19 @@ defmodule Foglet.TUI.Screens.PostReader do
   # Width-aware: re-runs whenever width changes (via scroll_post caller).
   defp warm_viewport(ss, state, post, w) do
     theme = Theme.from_state(state)
+    posts = state.posts || []
+    idx = ss.selected_post_index
+    total = length(posts)
 
     tuples = ss.render_cache[{post.id, w}] || parse_body(state, post)
-    body_lines = PostCard.render_body_lines(tuples, w, theme)
+    parts = reader_parts(post, tuples, w, theme, idx, total)
 
-    {new_vp, _cmds} = Viewport.update({:set_children, body_lines}, ss.viewport)
+    {new_vp, _cmds} = Viewport.update({:set_children, parts.body_lines}, ss.viewport)
     %{ss | viewport: new_vp}
+  end
+
+  defp reader_parts(post, tuples, w, theme, idx, total) do
+    PostCard.reader_parts(post, tuples, w, theme, index: idx, total: total)
   end
 
   defp advance_post(state, delta) do
@@ -515,7 +516,7 @@ defmodule Foglet.TUI.Screens.PostReader do
         {:update, state, []}
       else
         {w, h} = state.terminal_size || @default_terminal_size
-        available_height = max(h - 10, 5)
+        available_height = max(h - 12, 5)
 
         # Warm the cache + viewport BEFORE scrolling so Viewport has the
         # correct content_height for clamping. Also sync visible_height from
