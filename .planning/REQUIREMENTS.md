@@ -46,10 +46,10 @@
 
 ### Board Directory
 
-- [ ] **BOARDS-01**: Board directory rows distinguish expanded/collapsed categories, read/unread boards, and subscription state with semantic columns and glyphs.
-- [ ] **BOARDS-02**: Focused board or category details are visible through a 64x22-safe compact details strip, with a wide-terminal inspector only when width permits.
-- [ ] **BOARDS-03**: Existing board open, expand/collapse, subscribe, unsubscribe, and back workflows continue to work after the facelift.
-- [ ] **BOARDS-04**: Board directory solves the current single-label tree limitation through `Tree.render_row/3`-style row callbacks or a dedicated `BoardTree` wrapper.
+- [x] **BOARDS-01**: Board directory rows distinguish expanded/collapsed categories, read/unread boards, and subscription state with semantic columns and glyphs.
+- [x] **BOARDS-02**: Focused board or category details are visible through a 64x22-safe compact details strip, with a wide-terminal inspector only when width permits.
+- [x] **BOARDS-03**: Existing board open, expand/collapse, subscribe, unsubscribe, and back workflows continue to work after the facelift.
+- [x] **BOARDS-04**: Board directory solves the current single-label tree limitation through `Tree.render_row/3`-style row callbacks or a dedicated `BoardTree` wrapper.
 
 ### Post Reader
 
@@ -125,10 +125,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RICHROW-01 | Phase 20 | Pending |
 | THREADS-01 | Phase 20 | Pending |
 | THREADS-02 | Phase 20 | Pending |
-| BOARDS-01 | Phase 21 | Pending |
-| BOARDS-02 | Phase 21 | Pending |
-| BOARDS-03 | Phase 21 | Pending |
-| BOARDS-04 | Phase 21 | Pending |
+| BOARDS-01 | Phase 21 | Complete |
+| BOARDS-02 | Phase 21 | Complete |
+| BOARDS-03 | Phase 21 | Complete |
+| BOARDS-04 | Phase 21 | Complete |
 | READER-01 | Phase 22 | Pending |
 | READER-02 | Phase 22 | Pending |
 | READER-03 | Phase 22 | Pending |

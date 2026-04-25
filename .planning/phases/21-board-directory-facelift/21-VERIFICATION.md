@@ -5,7 +5,7 @@ status: passed
 score: 5/5 must-haves verified
 overrides_applied: 0
 re_verification:
-  previous_status: gaps_found
+  previous_status: gap_closed
   previous_score: 4/5
   gaps_closed:
     - "Focused board/category details are now visible through both the 64x22-safe compact details strip and a width-gated wide inspector."
