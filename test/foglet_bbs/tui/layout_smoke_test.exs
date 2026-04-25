@@ -212,7 +212,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       assert_line_within_width!("ListRow #{width}", row, width)
 
       keybar = KeyBar.render(theme, keys, width: width) |> flatten_text()
-      assert keybar =~ "[J/K]"
+      assert keybar =~ "J/K"
+      assert keybar =~ "Navigate"
       assert keybar =~ "●"
       assert_line_within_width!("KeyBar #{width}", keybar, width)
 

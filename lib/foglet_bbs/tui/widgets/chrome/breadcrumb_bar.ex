@@ -94,15 +94,20 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
 
   defp board_name(state) do
     state
-    |> Map.get(:current_board, %{})
+    |> Map.get(:current_board)
+    |> map_or_empty()
     |> Map.get(:name, "Boards")
   end
 
   defp thread_title(state) do
     state
-    |> Map.get(:current_thread, %{})
+    |> Map.get(:current_thread)
+    |> map_or_empty()
     |> Map.get(:title, "Thread")
   end
+
+  defp map_or_empty(value) when is_map(value), do: value
+  defp map_or_empty(_value), do: %{}
 
   defp active_tab(state, screen) do
     tabs = tabs_for(screen)
