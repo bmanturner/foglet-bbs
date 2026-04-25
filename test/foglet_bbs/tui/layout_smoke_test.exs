@@ -17,6 +17,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.TextWidth
 
   alias Foglet.TUI.Screens.{
     Account,
@@ -163,6 +164,33 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     assert length(ys) >= 3,
            "expected at least 3 distinct y positions, got #{length(ys)}: #{inspect(elements)}"
+  end
+
+  test "main_menu clips Unicode oneliners to display-width limits" do
+    user = %{handle: "bob", id: "u1", status: :active, role: :member}
+
+    state =
+      %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
+      |> Map.from_struct()
+      |> Map.put(:recent_oneliners, [
+        %{
+          body: "漢字漢字漢字漢字漢字漢字 ● ◆ ▸ ▾ ✓ × trailing text",
+          user: %{handle: "漢字漢字漢字漢字漢字漢字"}
+        }
+      ])
+
+    tree = MainMenu.render(state)
+    positioned = apply(tree)
+
+    row =
+      positioned
+      |> text_elements()
+      |> Enum.map(& &1.text)
+      |> Enum.find(&String.contains?(&1, "@漢字"))
+
+    assert row, "expected Unicode oneliner row in positioned text"
+    assert row =~ "●"
+    assert TextWidth.display_width(row) <= 39
   end
 
   # ---------------------------------------------------------------------------
