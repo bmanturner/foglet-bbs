@@ -11,7 +11,7 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 ## Current State
 
 **Shipped version:** v1.2 Pre-Alpha Gap Closure on 2026-04-24.
-**Current milestone:** v1.3 TUI Screen Facelift, started 2026-04-25.
+**Current milestone:** v1.3 TUI Screen Facelift, started 2026-04-25. Phase 16 is complete; width-aware TUI layout primitives now back Unicode-safe row, chrome, modal, clipping, and composer cursor paths.
 
 Foglet now has terminal-native Account, Moderation, and Sysop surfaces; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; enforced board posting and locked-thread restrictions; Account SSH key management; board subscription management; and pre-alpha operator notes aligned to the shipped SSH-first behavior.
 
@@ -59,10 +59,10 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - [x] Users can add, list, and revoke SSH keys from the terminal Account surface - v1.2 Phase 12
 - [x] Users and sysops have a real board subscription management path that matches product copy - v1.2 Phase 13
 - [x] Every visible sysop configuration option in the current product surface has a real effect or honest disabled/no-op copy - v1.2 Phase 14
+- [x] Width-aware text measurement, truncation, padding, slicing, and cursor/layout helpers exist before Unicode-heavy screen rendering depends on them - v1.3 Phase 16
 
 ### Active
 
-- [ ] Width-aware text measurement, truncation, padding, and cursor/layout helpers exist before Unicode-heavy screen rendering depends on them.
 - [ ] Screens can declare BBS or operator mode so shared chrome and layout conventions stay consistent without hardcoded per-screen exceptions.
 - [ ] Shared chrome renders breadcrumb-style titles, grouped key commands, mode-aware right status fields, and fallbacks that remain usable at 64x22.
 - [ ] Home, board directory, thread list, post reader, and composer screens implement the Classic Modern BBS direction while preserving keyboard-first behavior.
@@ -124,7 +124,7 @@ The current minimum supported terminal size is 64x22. `SCREENS.md` sketches are 
 | Treat pre-alpha readiness as gap closure before new reach features | The codebase-first audit found several visible flows that were incomplete or misleading; v1.2 completed those code and workflow gaps before adding broader product surface | Good |
 | Keep reset recovery browser-free for v1.2 | Foglet has no supported end-user browser reset flow; operator-assisted SSH reset with raw tokens is honest and testable | Good |
 | Split the v1.3 TUI facelift into Classic Modern BBS and Operator Console modes | User-facing conversation screens should feel social and placeful, while account/operator work should remain compact, exact, and administrative | Pending |
-| Harden terminal display width before relying on rich Unicode glyphs in aligned layouts | Existing screens and widgets still use byte/grapheme-length assumptions in several layout paths; visual polish depends on predictable width math | Pending |
+| Harden terminal display width before relying on rich Unicode glyphs in aligned layouts | Existing screens and widgets used byte/grapheme-length assumptions in several layout paths; visual polish depends on predictable width math | Good |
 
 ## Evolution
 
@@ -144,4 +144,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 after starting v1.3 TUI Screen Facelift*
+*Last updated: 2026-04-25 after completing v1.3 Phase 16 Unicode Width Foundation*
