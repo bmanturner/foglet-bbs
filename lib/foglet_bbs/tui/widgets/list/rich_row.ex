@@ -26,7 +26,16 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
   @typedoc "Built-in state atoms rendered in the fixed cluster."
   @type state_atom :: :unread | :sticky | :locked | atom()
   @typedoc "Explicit caller-owned state glyph rendered in the fixed cluster."
-  @type state_cell :: %{required(:glyph) => String.t(), required(:slot) => Theme.slot()}
+  @type state_cell :: %{required(:glyph) => String.t(), required(:slot) => Theme.slot_key()}
+  @type rendered_row :: %{
+          required(:type) => :flex,
+          required(:direction) => :row,
+          required(:children) => list(),
+          required(:style) => map(),
+          required(:gap) => term(),
+          required(:align) => term(),
+          required(:justify) => term()
+        }
 
   @doc """
   Renders a rich list row.
@@ -51,7 +60,7 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
   caller order, up to the fixed cluster slot count, and route color through the
   supplied theme slot.
   """
-  @spec render(keyword()) :: any()
+  @spec render(keyword()) :: rendered_row()
   def render(opts) when is_list(opts) do
     title = opts |> Keyword.fetch!(:title) |> to_string()
     state_cluster = Keyword.fetch!(opts, :state_cluster)
@@ -89,7 +98,7 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
   end
 
   @doc false
-  @spec cluster_width() :: pos_integer()
+  @spec cluster_width() :: 4
   def cluster_width, do: @cluster_width
 
   @spec normalize_metadata(nil | term()) :: String.t()
@@ -229,7 +238,7 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
 
   defp marker_style(false, theme), do: [fg: theme.unselected.fg]
 
-  @spec glyph_style(Theme.slot(), boolean(), Theme.t()) :: keyword()
+  @spec glyph_style(Theme.slot_key(), boolean(), Theme.t()) :: keyword()
   defp glyph_style(slot, true, theme) do
     slot_style =
       theme
