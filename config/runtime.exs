@@ -25,6 +25,10 @@ if ssh_port = System.get_env("FOGLET_SSH_PORT") do
   config :foglet_bbs, :ssh_port, String.to_integer(ssh_port)
 end
 
+if mail_from = System.get_env("FOGLET_MAIL_FROM") do
+  config :foglet_bbs, :mail_from, mail_from
+end
+
 if smtp_relay = System.get_env("FOGLET_SMTP_RELAY") || System.get_env("FOGLET_SMTP_HOST") do
   config :foglet_bbs, Foglet.Mailer,
     adapter: Swoosh.Adapters.SMTP,

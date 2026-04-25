@@ -7,14 +7,15 @@ defmodule Foglet.Accounts.Email do
 
   alias Foglet.Accounts.User
 
-  @from {"Foglet BBS", "no-reply@localhost"}
+  @from_name "Foglet BBS"
+  @default_from_address "no-reply@localhost"
 
   @doc "Build an email verification-code message."
   @spec verification_code(User.t(), String.t()) :: Swoosh.Email.t()
   def verification_code(%User{} = user, code) when is_binary(code) do
     new()
     |> to({user.handle, user.email})
-    |> from(@from)
+    |> from(from_mailbox())
     |> subject("Your Foglet verification code")
     |> text_body("""
     Your Foglet verification code is:
@@ -30,7 +31,7 @@ defmodule Foglet.Accounts.Email do
   def password_reset(%User{} = user, reset_token) when is_binary(reset_token) do
     new()
     |> to({user.handle, user.email})
-    |> from(@from)
+    |> from(from_mailbox())
     |> subject("Foglet password reset instructions")
     |> text_body("""
     A password reset was requested for your Foglet account.
@@ -50,7 +51,7 @@ defmodule Foglet.Accounts.Email do
   def approval_notification(%User{} = user) do
     new()
     |> to({user.handle, user.email})
-    |> from(@from)
+    |> from(from_mailbox())
     |> subject("Your Foglet account was approved")
     |> text_body("""
     Your Foglet account was approved.
@@ -64,7 +65,7 @@ defmodule Foglet.Accounts.Email do
   def rejection_notification(%User{} = user) do
     new()
     |> to({user.handle, user.email})
-    |> from(@from)
+    |> from(from_mailbox())
     |> subject("Your Foglet registration was rejected")
     |> text_body("""
     Your Foglet registration was rejected.
@@ -78,7 +79,7 @@ defmodule Foglet.Accounts.Email do
   def pending_approval_notification(%User{} = sysop, %User{} = pending_user) do
     new()
     |> to({sysop.handle, sysop.email})
-    |> from(@from)
+    |> from(from_mailbox())
     |> subject("Foglet account awaiting approval")
     |> text_body("""
     A new Foglet account is awaiting sysop approval.
@@ -88,5 +89,9 @@ defmodule Foglet.Accounts.Email do
 
     Return to the SSH terminal Sysop USERS tab to approve or reject this account.
     """)
+  end
+
+  defp from_mailbox do
+    {@from_name, Application.get_env(:foglet_bbs, :mail_from, @default_from_address)}
   end
 end
