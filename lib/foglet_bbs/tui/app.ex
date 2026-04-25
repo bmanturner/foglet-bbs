@@ -419,7 +419,7 @@ defmodule Foglet.TUI.App do
     screen_state =
       case Map.get(state.screen_state || %{}, :board_list) do
         %Screens.BoardList.State{} = board_list_state ->
-          Map.put(state.screen_state || %{}, :board_list, %{board_list_state | tree: nil})
+          Map.put(state.screen_state || %{}, :board_list, %{board_list_state | board_tree: nil})
 
         _other ->
           state.screen_state || %{}
