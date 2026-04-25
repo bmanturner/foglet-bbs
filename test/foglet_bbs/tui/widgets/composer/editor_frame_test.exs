@@ -80,6 +80,7 @@ defmodule Foglet.TUI.Widgets.Composer.EditorFrameTest do
       assert flatten_text(edit) =~ "Preview"
       assert flatten_text(preview) =~ "Edit"
       assert flatten_text(preview) =~ "Preview"
+
       assert inspect(edit, printable_limit: :infinity, limit: :infinity) !=
                inspect(preview, printable_limit: :infinity, limit: :infinity)
     end
