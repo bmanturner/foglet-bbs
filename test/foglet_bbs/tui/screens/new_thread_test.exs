@@ -190,6 +190,25 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert _ = NewThread.render(state)
   end
 
+  test "render/1 compose step includes Chrome V2 board and new-thread location" do
+    text = compose_state() |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Foglet"
+    assert text =~ "General"
+    assert text =~ "New Thread"
+  end
+
+  test "render/1 delegates compose breadcrumb formatting to shared chrome" do
+    source =
+      __ENV__.file
+      |> Path.dirname()
+      |> Path.join("../../../../lib/foglet_bbs/tui/screens/new_thread.ex")
+      |> Path.expand()
+      |> File.read!()
+
+    refute source =~ "New Thread —"
+  end
+
   # ---------------------------------------------------------------------------
   # Board step navigation
   # ---------------------------------------------------------------------------

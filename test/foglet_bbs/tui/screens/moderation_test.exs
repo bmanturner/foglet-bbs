@@ -7,6 +7,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Accounts.User
   alias Foglet.Config
   alias Foglet.Moderation.Action
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Moderation
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias FogletBbs.AccountsFixtures
@@ -50,6 +51,17 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     setup %{state: state} do
       state = put_in(state, [:screen_state, :moderation], Moderation.init_screen_state())
       %{state: state}
+    end
+
+    test "renders Chrome V2 operator breadcrumb and declares operator mode", %{state: state} do
+      flat = Moderation.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Foglet"))
+      assert Enum.any?(flat, &String.contains?(&1, "Moderation"))
+      assert Presentation.mode_for!(:moderation) == :operator
+
+      assert File.read!("lib/foglet_bbs/tui/screens/moderation.ex") =~
+               "Presentation.mode_for!(:moderation)"
     end
 
     test "does not crash with default screen state", %{state: state} do
