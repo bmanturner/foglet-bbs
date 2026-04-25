@@ -2,6 +2,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
   use FogletBbs.DataCase, async: false
 
   alias Foglet.Config
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Login
   alias Foglet.TUI.Widgets.Input.TextInput
 
@@ -102,6 +103,14 @@ defmodule Foglet.TUI.Screens.LoginTest do
   end
 
   describe "render/1 (SSH-04, D-06)" do
+    test "renders BBS Chrome V2 location" do
+      text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
+
+      assert Presentation.mode_for!(:login) == :bbs
+      assert text =~ "Foglet"
+      assert text =~ "Login"
+    end
+
     test "renders without crashing under open mode" do
       assert _ = Login.render(base_state("open"))
     end
