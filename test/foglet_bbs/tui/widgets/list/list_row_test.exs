@@ -2,6 +2,7 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Widgets.List.ListRow
 
   # --- Local helpers (copied from MarkdownBody/PostCard test pattern) ---
@@ -49,10 +50,10 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
           false,
           theme(),
           width: 60
-        )
+      )
 
       flat = flatten_text(result)
-      assert String.length(flat) == 60
+      assert TextWidth.display_width(flat) == 60
       assert String.ends_with?(flat, "@alice · 2h ago")
       assert String.starts_with?(flat, "  Short title")
     end
@@ -86,10 +87,10 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
           false,
           theme(),
           width: 60
-        )
+      )
 
       flat = flatten_text(result)
-      assert String.length(flat) == 60
+      assert TextWidth.display_width(flat) == 60
       assert String.ends_with?(flat, metadata), "metadata must stay fully visible (D-03)"
       assert String.contains?(flat, "…"), "title must be truncated with … (D-03)"
     end
@@ -117,7 +118,7 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
         )
 
       flat = flatten_text(result)
-      assert String.length(flat) == 60
+      assert TextWidth.display_width(flat) == 60
     end
 
     test "minimum gap of 2 spaces between title and metadata when width is tight" do
@@ -129,7 +130,7 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
 
       flat = flatten_text(result)
       assert String.ends_with?(flat, metadata)
-      assert String.length(flat) == 31
+      assert TextWidth.display_width(flat) == 31
     end
 
     test "extremely narrow terminal keeps metadata whole (ellipsis fallback on title)" do
@@ -144,6 +145,82 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
 
       before_metadata = String.replace_trailing(flat, metadata, "")
       assert String.contains?(before_metadata, "…")
+    end
+
+    test "keeps accented Latin rows aligned by display width" do
+      metadata = "@renee · café"
+
+      result =
+        ListRow.render_with_metadata(
+          "café update",
+          metadata,
+          false,
+          false,
+          theme(),
+          width: 42
+        )
+
+      flat = flatten_text(result)
+      assert TextWidth.display_width(flat) == 42
+      assert String.starts_with?(flat, "  café update")
+      assert String.ends_with?(flat, metadata)
+    end
+
+    test "keeps combining mark rows aligned by display width" do
+      metadata = "@zoe · ✓ done"
+
+      result =
+        ListRow.render_with_metadata(
+          "cafe\u0301 update",
+          metadata,
+          false,
+          false,
+          theme(),
+          width: 42
+        )
+
+      flat = flatten_text(result)
+      assert TextWidth.display_width(flat) == 42
+      assert String.starts_with?(flat, "  cafe\u0301 update")
+      assert String.ends_with?(flat, metadata)
+    end
+
+    test "truncates CJK titles without drifting metadata alignment" do
+      metadata = "@lin · ◆ pinned"
+
+      result =
+        ListRow.render_with_metadata(
+          "漢字 board report with a very long title",
+          metadata,
+          false,
+          false,
+          theme(),
+          width: 34
+        )
+
+      flat = flatten_text(result)
+      assert TextWidth.display_width(flat) == 34
+      assert String.ends_with?(flat, metadata)
+      assert String.contains?(flat, "…")
+    end
+
+    test "keeps milestone glyph titles and metadata aligned" do
+      metadata = "▸ nav ▾ open ✓ ok × err"
+
+      result =
+        ListRow.render_with_metadata(
+          "● unread ◆ pinned update",
+          metadata,
+          false,
+          false,
+          theme(),
+          width: 58
+        )
+
+      flat = flatten_text(result)
+      assert TextWidth.display_width(flat) == 58
+      assert String.starts_with?(flat, "  ● unread ◆ pinned update")
+      assert String.ends_with?(flat, metadata)
     end
   end
 
@@ -237,7 +314,7 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
     test "default width (opts omitted) is 80" do
       result = ListRow.render_with_metadata("T", "@a · 1h", false, false, theme())
       flat = flatten_text(result)
-      assert String.length(flat) == 80
+      assert TextWidth.display_width(flat) == 80
     end
   end
 end
