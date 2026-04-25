@@ -98,6 +98,15 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     {%{state | focus_index: new_idx}, nil}
   end
 
+  # Clause 2b: Shift-Tab — Foglet/CLIHandler-translated shape (D-25 Pitfall 1)
+  # CLIHandler emits %{key: :shift_tab} when the terminal sends back-tab (ESC[Z).
+  # Keep this clause adjacent to Clause 2 so the pattern is visually obvious.
+  def handle_event(%{key: :shift_tab}, %__MODULE__{} = state) do
+    n = length(state.fields)
+    new_idx = rem(state.focus_index - 1 + n, n)
+    {%{state | focus_index: new_idx}, nil}
+  end
+
   # Clause 3: Tab — advance with wrap (REQ-4)
   def handle_event(%{key: :tab}, %__MODULE__{} = state) do
     n = length(state.fields)
