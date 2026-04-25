@@ -115,7 +115,7 @@ These supersede the corresponding lines in 21-SPEC.md when read by the planner.
 
 ### Details Strip — REMOVED
 
-- **D-08:** No details strip is rendered below the tree. The `BoardList.render_board_content/3` body composes only the tree (and the existing top-of-tree feedback flash line, see D-12) inside `Chrome.ScreenFrame`. SPEC.md requirement 4 and its associated acceptance criteria are removed by this CONTEXT (see `<spec_lock>` and `<acceptance_overrides>` above).
+- **D-08:** No details strip is rendered below the tree. The `BoardList.render_board_content/3` body composes only the tree (and the existing top-of-tree feedback flash line, see D-10) inside `Chrome.ScreenFrame`. SPEC.md requirement 4 and its associated acceptance criteria are removed by this CONTEXT (see `<spec_lock>` and `<acceptance_overrides>` above).
 
 ### `last_post_at` Query Strategy
 
