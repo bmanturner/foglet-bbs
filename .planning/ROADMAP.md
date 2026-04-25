@@ -52,7 +52,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 - [ ] **Phase 20: Rich Rows and Thread Flow** - Thread browsing uses semantic glyphs, width-safe metadata, and focused details.
 - [ ] **Phase 21: Board Directory Facelift** - Board browsing presents categories, board state, subscriptions, and details as structured rows.
 - [x] **Phase 22: Post Reader Facelift** - Thread reading emphasizes message numbers, post metadata, body readability, and progress. (completed 2026-04-25)
-- [ ] **Phase 23: Composer Facelift** - New-thread and reply composition use focused editor surfaces with preview and counters.
+- [x] **Phase 23: Composer Facelift** - New-thread and reply composition use focused editor surfaces with preview and counters. (completed 2026-04-25)
 - [ ] **Phase 24: Operator Console Primitives** - Shared badges, key/value grids, table presets, inspectors, and modal form treatment land before screen conversion.
 - [ ] **Phase 25: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts.
 
@@ -214,7 +214,7 @@ Cross-cutting constraints:
 3. Character budgets use shared progress/counter treatment for normal, warning, and over-limit states.
 4. Reply composition shows compact quoted context while new-thread composition shows the title field, with nonessential context collapsing first at 64x22.
 5. Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed.
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 **Wave 1**
 - [x] 23-01-PLAN.md — Wave 1 shared `Composer.EditorFrame` widget, visible Edit/Preview segment, theme-routed counters, and widget tests.
@@ -224,7 +224,7 @@ Plans:
 - [x] 23-03-PLAN.md — Wave 2 `NewThread` compose-step migration to the shared shell while preserving title/body input and thread creation behavior.
 
 **Wave 3 *(blocked on Wave 2 completion)***
-- [ ] 23-04-PLAN.md — Wave 3 composer layout smoke coverage at `64x22`, `80x24`, and `132x50`, plus focused validation and precommit gate.
+- [x] 23-04-PLAN.md — Wave 3 composer layout smoke coverage at `64x22`, `80x24`, and `132x50`, plus focused validation and precommit gate.
 
 Cross-cutting constraints:
 - `D-12`: Preview mode uses `MarkdownBody` inside the same composer shell.
@@ -307,6 +307,6 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 20. Rich Rows and Thread Flow | v1.3 | 0/6 | Pending | - |
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
 | 22. Post Reader Facelift | v1.3 | 3/3 | Complete   | 2026-04-25 |
-| 23. Composer Facelift | v1.3 | 3/4 | In Progress|  |
+| 23. Composer Facelift | v1.3 | 4/4 | Complete   | 2026-04-25 |
 | 24. Operator Console Primitives | v1.3 | 0/6 | Pending | - |
 | 25. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |
