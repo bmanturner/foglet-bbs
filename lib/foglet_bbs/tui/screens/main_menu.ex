@@ -33,6 +33,33 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @oneliner_handle_limit 12
   @oneliner_body_limit 22
 
+  # Minimum Navigation panel inner width budget — the FLOOR for the
+  # terminal-size-aware computation in nav_panel_inner_width/1. At 64×22 with
+  # split_pane(ratio: {2,3}) and ScreenFrame outer border, the computed inner
+  # width is ≈22; at 80×24 it is ≈28; at 132×50 it is ≈49. The floor protects
+  # against missing/pathological `state.terminal_size` values and is the
+  # smallest budget at which all glyph + label + key rows still fit
+  # (D-12, RESEARCH.md Pitfall 1).
+  @nav_panel_min_inner_width 20
+
+  # Glyph atoms per D-08 (SCREENS.md §Main Menu lines 270-280).
+  # Theme-routed via theme.<slot>.fg (D-07/D-08); never hardcoded color atoms.
+  # Per D-08: per-glyph slot routing (e.g. theme.success.fg for `●`) is
+  # DEFERRED — the row text is rendered as a single text node with
+  # theme.primary.fg so the right-align math stays simple. If a later phase
+  # wants differentiated glyph colors, nav_row/3 can compose multiple
+  # text nodes per row; positioned-render tests in Plan 03 still hold
+  # because the per-element `x + display_width(text) <= width` assertion
+  # shape is unchanged.
+  @nav_glyphs %{
+    "B" => "●",
+    "C" => "✎",
+    "A" => "◇",
+    "M" => "⚑",
+    "S" => "▣",
+    "Q" => "↯"
+  }
+
   # Single canonical Main Menu command descriptor list (D-01).
   # `:kind` partitions entries into body destinations and command-bar actions;
   # `:visibility` is a tag consumed by the role/state gate inside
@@ -54,31 +81,21 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @spec render(map()) :: any()
   def render(state) do
     user = state.current_user
-    handle = user && user.handle
     theme = Theme.from_state(state)
 
     destinations = visible_destinations(user)
     actions = visible_actions(state)
 
-    menu_panel =
-      column style: %{gap: 0} do
-        [text("Welcome back, #{handle || "guest"}.", fg: theme.primary.fg), text("")] ++
-          Enum.map(destinations, fn {k, label} ->
-            text("  [#{k}] #{label}", fg: theme.primary.fg)
-          end)
-      end
-
-    oneliners_panel =
-      column style: %{gap: 0} do
-        [text("Oneliners", fg: theme.primary.fg), text("")] ++ oneliner_rows(state, theme)
-      end
+    inner_width = nav_panel_inner_width(state)
+    menu_panel = nav_panel(destinations, theme, inner_width)
+    oneliners_panel_widget = oneliners_panel(state, theme)
 
     content =
       split_pane(
         direction: :horizontal,
         ratio: {2, 3},
-        min_size: 24,
-        children: [menu_panel, oneliners_panel]
+        min_size: 18,
+        children: [menu_panel, oneliners_panel_widget]
       )
 
     ScreenFrame.render(state, "Main Menu", content, actions)
@@ -256,6 +273,51 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp command_priority(key, _priority) when key in ["A", "M", "S"], do: -5
   defp command_priority("O", _priority), do: 30
   defp command_priority(_key, priority), do: priority
+
+  @spec nav_panel_inner_width(map()) :: pos_integer()
+  defp nav_panel_inner_width(state) do
+    outer_width =
+      case Map.get(state, :terminal_size) do
+        {w, _h} when is_integer(w) and w > 0 -> w
+        _ -> 80
+      end
+
+    # Match `<panel_width_budget>` math: outer chrome 4 cols, split ratio {2,3},
+    # box border 2 cols. Floor at @nav_panel_min_inner_width.
+    chrome_outer = 4
+    left_alloc = div((outer_width - chrome_outer) * 2, 5)
+    box_border = 2
+    max(left_alloc - box_border, @nav_panel_min_inner_width)
+  end
+
+  defp nav_panel(destinations, theme, inner_width) do
+    box style: %{border: :single, border_fg: theme.border.fg} do
+      column style: %{gap: 0} do
+        [
+          text("Navigation", fg: theme.title.fg)
+          | Enum.map(destinations, &nav_row(&1, theme, inner_width))
+        ]
+      end
+    end
+  end
+
+  defp nav_row({key, label}, theme, inner_width) do
+    glyph = Map.fetch!(@nav_glyphs, key)
+    prefix = glyph <> " " <> label
+    prefix_width = TextWidth.display_width(prefix)
+    key_width = TextWidth.display_width(key)
+    padding_width = max(inner_width - prefix_width - key_width, 1)
+    padding = TextWidth.pad_trailing("", padding_width)
+    text(prefix <> padding <> key, fg: theme.primary.fg)
+  end
+
+  defp oneliners_panel(state, theme) do
+    box style: %{border: :single, border_fg: theme.border.fg} do
+      column style: %{gap: 0} do
+        [text("Oneliners", fg: theme.title.fg) | oneliner_rows(state, theme)]
+      end
+    end
+  end
 
   defp oneliner_rows(state, theme) do
     entries = visible_oneliners(state)

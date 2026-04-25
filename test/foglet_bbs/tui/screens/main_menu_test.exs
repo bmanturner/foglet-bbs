@@ -125,7 +125,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
       assert row
       assert String.starts_with?(row, "> @averyverylon")
-      assert String.length(row) <= 39
+      assert Foglet.TUI.TextWidth.display_width(row) <= 39
       refute String.contains?(row, "\n")
       refute String.contains?(row, "body body body body body body body body body body")
     end
@@ -230,10 +230,22 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   test "render includes main menu owned text rows", %{state: state} do
     texts = MainMenu.render(state) |> collect_text_values()
 
-    assert "Welcome back, alice." in texts
-    assert "  [B] Boards" in texts
-    assert "  [C] Compose" in texts
-    assert "  [Q] Logout" in texts
+    # D-11: Welcome line removed.
+    refute Enum.any?(texts, &String.starts_with?(&1, "Welcome back")),
+           "Phase 19 D-11 removes the welcome line; got: #{inspect(texts)}"
+
+    # D-07: boxed Navigation panel header replaces it.
+    assert "Navigation" in texts
+
+    # D-08: glyph + label + right-aligned key rows.
+    assert Enum.any?(texts, &(&1 =~ ~r/●\s+Boards\s+B$/)),
+           "expected '● Boards    B' shaped row; got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 =~ ~r/✎\s+Compose\s+C$/)),
+           "expected '✎ Compose    C' shaped row; got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 =~ ~r/↯\s+Logout\s+Q$/)),
+           "expected '↯ Logout    Q' shaped row; got: #{inspect(texts)}"
   end
 
   test "'B'/'b' navigates to :board_list with {:load_boards} command", %{state: state} do
@@ -287,7 +299,8 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       state = build_state(:user)
       flat = MainMenu.render(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Account"))
-      assert Enum.any?(flat, &String.contains?(&1, "[A]"))
+      # Phase 19: glyph row shape replaces [A] bracket format
+      assert Enum.any?(flat, &(&1 =~ ~r/◇\s+Account\s+A$/))
     end
 
     test "role :user does NOT see Moderation menu entry" do
@@ -366,19 +379,26 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     end
 
     test "rendered shell rows follow ShellVisibility for every role" do
-      # Phase 19 (Plan 01) note: A, M, S are now pure destinations (body rows only).
-      # They are no longer rendered in the command bar — that is the D-01
-      # single-source-of-truth split. This test checks menu row visibility only.
-      for {role, _screen, key, menu_label, _key_label, predicate} <- role_cases() do
+      # Phase 19 (Plan 01): A, M, S are now pure destinations (body rows only).
+      # Phase 19 (Plan 02): rows are now glyph + label + right-aligned key shape.
+      # D-01 single-source-of-truth split — this test checks menu row visibility only.
+      for {role, _screen, _key, menu_label, _key_label, predicate} <- role_cases() do
         state = build_state(role)
         user = state.current_user
         visible? = predicate.(user)
         texts = rendered_text(state)
 
-        menu_row? = "  [#{key}] #{menu_label}" in texts
+        # Phase 19: rows are now glyph + label + right-aligned key. Look for label presence in any row.
+        menu_row? = Enum.any?(texts, &String.contains?(&1, menu_label))
+
+        # Phase 19: destinations are NOT in the command bar; A/M/S key letters should not appear as bare command tokens.
+        command_in_bar? = Enum.any?(texts, &(String.trim(&1) == menu_label))
 
         assert menu_row? == visible?,
-               "expected #{menu_label} menu row visibility for #{role} to be #{visible?}"
+               "expected #{menu_label} body row visibility for #{role} to be #{visible?}; got: #{inspect(texts)}"
+
+        refute command_in_bar?,
+               "destination #{menu_label} should NOT appear as bare token in command bar (Phase 19 D-01/D-04); got: #{inspect(texts)}"
       end
     end
 
@@ -405,6 +425,57 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   defp role_label_to_role(:anonymous), do: :user
   defp role_label_to_role(other), do: other
+
+  describe "Phase 19 body visual" do
+    test "every Navigation row fits within the computed panel inner width budget at every canonical size" do
+      for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
+        for role <- [:user, :mod, :sysop] do
+          state =
+            role
+            |> build_state()
+            |> Map.put(:terminal_size, {width, height})
+
+          texts = rendered_text(state)
+
+          nav_rows =
+            texts
+            |> Enum.filter(fn row ->
+              Enum.any?(["●", "✎", "◇", "⚑", "▣", "↯"], &String.contains?(row, &1))
+            end)
+
+          assert nav_rows != [],
+                 "expected at least one nav row for role=#{role} at #{inspect({width, height})}; got: #{inspect(texts)}"
+
+          # Compute the same budget the production helper computes (mirror the math).
+          chrome_outer = 4
+          left_alloc = div((width - chrome_outer) * 2, 5)
+          box_border = 2
+          inner_width = max(left_alloc - box_border, 20)
+
+          for row <- nav_rows do
+            assert Foglet.TUI.TextWidth.display_width(row) <= inner_width,
+                   "nav row '#{row}' exceeds computed inner_width=#{inner_width} for role=#{role} at #{inspect({width, height})}"
+          end
+        end
+      end
+    end
+
+    test "Oneliners panel header renders alongside Navigation header", %{state: state} do
+      texts = state |> with_oneliners([oneliner("alice", "hi")]) |> rendered_text()
+
+      assert "Navigation" in texts
+      assert "Oneliners" in texts
+    end
+
+    test "no Welcome line in any role render" do
+      for role <- [:user, :mod, :sysop] do
+        texts = role |> build_state() |> rendered_text()
+
+        refute Enum.any?(texts, &String.starts_with?(&1, "Welcome")),
+               "Phase 19 D-11 removes the welcome line for role=#{role}; got: #{inspect(texts)}"
+      end
+    end
+  end
 
   describe "Phase 19 destinations vs. actions split" do
     test "visible_destinations/1 anonymous returns B, C, Q only (anonymous still sees Compose)" do
