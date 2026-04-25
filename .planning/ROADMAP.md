@@ -129,9 +129,9 @@ Plans:
 2. Role-gated destinations remain absent when unavailable.
 3. Users see useful session/activity context such as unread counts, boards, oneliners, or moderation count when available.
 4. The layout remains navigable at 64x22, reaches the intended compact dashboard rhythm around 80x24, and uses side-by-side panels only when width permits.
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
-- [ ] 19-01-PLAN.md — Destinations-vs-actions data layer split (single source of truth, role-gated, no command-bar duplication).
+- [x] 19-01-PLAN.md — Destinations-vs-actions data layer split (single source of truth, role-gated, no command-bar duplication).
 - [ ] 19-02-PLAN.md — Boxed Navigation + Oneliners body visual (glyph rows, right-aligned keys, theme-routed; Welcome line removed).
 - [ ] 19-03-PLAN.md — Size-contract assertions at 64x22 / 80x24 / 132x50 in existing layout_smoke_test.exs.
 **UI hint:** yes
@@ -244,7 +244,7 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 16. Unicode Width Foundation | v1.3 | 4/4 | Complete    | 2026-04-25 |
 | 17. Theme and Mode Metadata | v1.3 | 5/5 | Complete    | 2026-04-25 |
 | 18. Chrome V2 | v1.3 | 7/7 | Complete    | 2026-04-25 |
-| 19. Main Menu Dashboard | v1.3 | 0/3 | Pending | - |
+| 19. Main Menu Dashboard | v1.3 | 1/3 | In Progress|  |
 | 20. Rich Rows and Thread Flow | v1.3 | 0/TBD | Pending | - |
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
 | 22. Post Reader Facelift | v1.3 | 0/TBD | Pending | - |
