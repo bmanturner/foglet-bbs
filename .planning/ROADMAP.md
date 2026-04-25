@@ -69,7 +69,12 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 3. Width tests cover the SCREENS.md glyph set: `●`, `◆`, `▸`, `▾`, `✓`, `×`.
 4. Facelifted widgets and screens are tested at 64x22, 80x24, and at least one wide/tall terminal size.
 5. Existing ASCII-heavy screens keep their current layout behavior.
-**Plans:** TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 16-01-PLAN.md — Shared `Foglet.TUI.TextWidth` helper and Unicode glyph tests.
+- [ ] 16-02-PLAN.md — Width-aware `ListRow.render_with_metadata/6` migration.
+- [ ] 16-03-PLAN.md — Chrome keybar, modal wrapping, and main-menu clipping migration.
+- [ ] 16-04-PLAN.md — Composer cursor hardening, size contracts, and source-scan closure.
 **UI hint:** yes
 
 ### Phase 17: Theme and Mode Metadata
