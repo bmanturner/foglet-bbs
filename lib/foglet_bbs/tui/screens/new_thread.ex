@@ -18,9 +18,11 @@ defmodule Foglet.TUI.Screens.NewThread do
   alias Foglet.Config
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.NewThread.State
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
+  alias Foglet.TUI.Widgets.Composer.EditorFrame
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Foglet.TUI.Widgets.Post.MarkdownBody
@@ -28,6 +30,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   import Raxol.Core.Renderer.View
 
+  @default_max_post_length 8192
   @default_terminal_size {80, 24}
 
   @doc """
@@ -83,48 +86,27 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp render_compose_step(state, ss) do
     theme = Theme.from_state(state)
-
-    # D-14: render the title line with a live N / cap char counter so users
-    # see the soft limit as they type.
+    {width, height} = state.terminal_size || @default_terminal_size
     cap = max_thread_title_length()
-
     title_value = ss.title_input_state.raxol_state.value
-    title_len = String.length(title_value)
-    counter = "#{title_len} / #{cap} chars"
-    title_focused = ss.focused == :title
-    title_label_fg = if title_focused, do: theme.accent.fg, else: theme.primary.fg
-    title_label_style = if title_focused, do: [:bold], else: []
-
-    title_line =
-      row style: %{gap: 0} do
-        [
-          text("Title: ", fg: title_label_fg, style: title_label_style),
-          TextInput.render(ss.title_input_state, bordered: false, theme: theme)
-        ]
-      end
-
-    title_counter_line = text(counter, fg: theme.dim.fg)
-
-    body_section = render_body_section(state, ss, theme)
-
-    error_items =
-      if ss.error do
-        [text(""), text(ss.error, fg: theme.error.fg, style: [:bold])]
-      else
-        []
-      end
+    body_value = ss.body_input_state.value
 
     content =
-      column style: %{gap: 0} do
-        [
-          text(""),
-          title_line,
-          title_counter_line,
-          text(""),
-          text("Body:", fg: theme.primary.fg),
-          body_section
-        ] ++ error_items ++ [text("")]
-      end
+      EditorFrame.render(
+        mode: ss.mode,
+        focused?: ss.focused == :body and ss.mode == :edit,
+        context: compose_context(ss, title_value, width, theme),
+        title: render_title_input(ss, theme),
+        body: render_body_section(state, ss, theme),
+        budgets: [
+          %{label: "Title", count: String.length(title_value), limit: cap},
+          %{label: "Body", count: String.length(body_value), limit: max_body_length(state)}
+        ],
+        error: ss.error,
+        width: max(width - 4, 20),
+        height: max(height - 6, 10),
+        theme: theme
+      )
 
     ScreenFrame.render(state, %{}, content, [
       {"Tab", compose_tab_hint(ss)},
@@ -149,6 +131,38 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp compose_tab_hint(%{focused: :body, mode: :edit}), do: "Preview"
   defp compose_tab_hint(%{focused: :body, mode: :preview}), do: "Edit"
   defp compose_tab_hint(_ss), do: "Switch field"
+
+  defp compose_context(ss, title_value, width, theme) do
+    available = max(width - 10, 20)
+    board_name = ss.board && Map.get(ss.board, :name, "Unknown board")
+
+    [
+      text("Board #{TextWidth.truncate(board_name || "Unknown board", available)}",
+        fg: theme.dim.fg
+      ),
+      title_context(title_value, available, theme)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp title_context("", _available, _theme), do: nil
+
+  defp title_context(title_value, available, theme) do
+    text("Draft #{TextWidth.truncate(title_value, available)}", fg: theme.dim.fg)
+  end
+
+  defp render_title_input(ss, theme) do
+    title_focused = ss.focused == :title
+    title_label_fg = if title_focused, do: theme.accent.fg, else: theme.primary.fg
+    title_label_style = if title_focused, do: [:bold], else: []
+
+    row style: %{gap: 0} do
+      [
+        text("Title: ", fg: title_label_fg, style: title_label_style),
+        TextInput.render(ss.title_input_state, bordered: false, theme: theme)
+      ]
+    end
+  end
 
   defp render_body_section(state, ss, theme) do
     body_focused = ss.focused == :body
@@ -419,5 +433,26 @@ defmodule Foglet.TUI.Screens.NewThread do
     end
   rescue
     _ -> @default_max_thread_title_length
+  end
+
+  defp max_body_length(state) do
+    sc = Map.get(state, :session_context) || %{}
+
+    case Map.get(sc, :max_post_length) do
+      n when is_integer(n) and n > 0 ->
+        n
+
+      _ ->
+        safe_config_get("max_post_length", @default_max_post_length)
+    end
+  end
+
+  defp safe_config_get(key, default) do
+    case Config.get!(key) do
+      n when is_integer(n) and n > 0 -> n
+      _ -> default
+    end
+  rescue
+    _ -> default
   end
 end
