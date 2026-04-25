@@ -60,11 +60,11 @@
 
 ### Composer
 
-- [ ] **COMPOSER-01**: `Composer.EditorFrame` wraps `MultiLineInput` for new-thread and reply composition with visible editor boundaries and focused/unfocused styling.
-- [ ] **COMPOSER-02**: Edit and preview modes are visible as a tab or segmented control instead of only hidden in key hints.
-- [ ] **COMPOSER-03**: Character budgets use shared progress/counter treatment with normal, warning, and over-limit states for title and body inputs where applicable.
-- [ ] **COMPOSER-04**: Reply composition shows compact quoted context while new-thread composition shows board and title context, with nonessential context collapsing first at 64x22.
-- [ ] **COMPOSER-05**: Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed after the editor-frame refresh.
+- [x] **COMPOSER-01**: `Composer.EditorFrame` wraps `MultiLineInput` for new-thread and reply composition with visible editor boundaries and focused/unfocused styling.
+- [x] **COMPOSER-02**: Edit and preview modes are visible as a tab or segmented control instead of only hidden in key hints.
+- [x] **COMPOSER-03**: Character budgets use shared progress/counter treatment with normal, warning, and over-limit states for title and body inputs where applicable.
+- [x] **COMPOSER-04**: Reply composition shows compact quoted context while new-thread composition shows board and title context, with nonessential context collapsing first at 64x22.
+- [x] **COMPOSER-05**: Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed after the editor-frame refresh.
 
 ### Operator Console Primitives
 
@@ -133,11 +133,11 @@ Which phases cover which requirements. Updated during roadmap creation.
 | READER-02 | Phase 22 | Pending |
 | READER-03 | Phase 22 | Pending |
 | READER-04 | Phase 22 | Pending |
-| COMPOSER-01 | Phase 23 | Pending |
-| COMPOSER-02 | Phase 23 | Pending |
-| COMPOSER-03 | Phase 23 | Pending |
-| COMPOSER-04 | Phase 23 | Pending |
-| COMPOSER-05 | Phase 23 | Pending |
+| COMPOSER-01 | Phase 23 | Complete |
+| COMPOSER-02 | Phase 23 | Complete |
+| COMPOSER-03 | Phase 23 | Complete |
+| COMPOSER-04 | Phase 23 | Complete |
+| COMPOSER-05 | Phase 23 | Complete |
 | CONSOLE-01 | Phase 24 | Pending |
 | CONSOLE-02 | Phase 24 | Pending |
 | CONSOLE-03 | Phase 24 | Pending |
