@@ -37,10 +37,11 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
+  alias Foglet.TUI.Widgets.Display.KvGrid
   alias Foglet.TUI.Widgets.Input.Tabs
 
   @key_list [{"←/→", "Tab"}, {"1-6", "Jump"}, {"Q", "Back"}]
-  @max_rows 20
   @text_limit 48
 
   # ---------------------------------------------------------------------------
@@ -94,6 +95,10 @@ defmodule Foglet.TUI.Screens.Moderation do
         :no_match ->
           update_screen_state(state, ss)
 
+        {:ok, %Foglet.TUI.Screens.Moderation.State{} = new_ss} ->
+          # Table-tab delegates return the full updated screen state
+          update_screen_state(state, new_ss)
+
         {:ok, new_invites} ->
           update_screen_state(state, %{ss | invites: new_invites})
       end
@@ -143,24 +148,26 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("LOG", ss, theme) do
-    column style: %{gap: 0} do
+    log_table = fresh_log_table(ss)
+    log_summary = State.build_log_summary(ss.scopes, ss.error, ss.mod_log)
+
+    column style: %{gap: 1} do
       [
-        status_line(ss, theme),
-        text("hide_oneliner audit log", fg: theme.accent.fg)
-        | audit_rows(ss.mod_log, theme)
+        KvGrid.render(log_summary, theme: theme, width: 78, label_width: 16, gap: 2),
+        ConsoleTable.render(log_table, theme: theme)
       ]
-      |> Enum.reject(&is_nil/1)
     end
   end
 
   defp render_tab_body("USERS", ss, theme) do
-    column style: %{gap: 0} do
+    users_table = fresh_users_table(ss)
+    users_summary = State.build_users_summary(ss.users, ss.error)
+
+    column style: %{gap: 1} do
       [
-        status_line(ss, theme),
-        text("Read-only active user context.", fg: theme.dim.fg)
-        | user_rows(ss.users, theme)
+        KvGrid.render(users_summary, theme: theme, width: 78, label_width: 16, gap: 2),
+        ConsoleTable.render(users_table, theme: theme)
       ]
-      |> Enum.reject(&is_nil/1)
     end
   end
 
@@ -175,15 +182,14 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("BOARDS", ss, theme) do
-    column style: %{gap: 0} do
+    boards_table = fresh_boards_table(ss)
+    boards_summary = State.build_boards_summary(ss.scopes, ss.boards, ss.error)
+
+    column style: %{gap: 1} do
       [
-        status_line(ss, theme),
-        text("Read-only hide_oneliner scope context: #{format_scopes(ss.scopes)}",
-          fg: theme.dim.fg
-        )
-        | board_rows(ss.boards, theme)
+        KvGrid.render(boards_summary, theme: theme, width: 78, label_width: 16, gap: 2),
+        ConsoleTable.render(boards_table, theme: theme)
       ]
-      |> Enum.reject(&is_nil/1)
     end
   end
 
@@ -204,85 +210,6 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp status_line(%{error: error}, theme),
     do: text("Unable to load moderation workspace: #{truncate(error)}", fg: theme.error.fg)
-
-  defp audit_rows([], theme),
-    do: [text("No hide_oneliner audit records in scope.", fg: theme.dim.fg)]
-
-  defp audit_rows(actions, theme) do
-    actions
-    |> Enum.take(@max_rows)
-    |> Enum.map(fn action ->
-      moderator = action |> Map.get(:mod) |> field(:handle, "unknown")
-      metadata = Map.get(action, :metadata) || %{}
-
-      target =
-        Map.get(metadata, "author_handle") || Map.get(metadata, :author_handle) ||
-          target_id(action)
-
-      body = Map.get(metadata, "body") || Map.get(metadata, :body) || ""
-      reason = field(action, :reason, "")
-
-      text(
-        "#{timestamp(action)} hide_oneliner by #{truncate(moderator, 18)} -> #{truncate(target, 18)}: #{truncate(body)} | reason: #{truncate(reason)}",
-        fg: theme.primary.fg
-      )
-    end)
-  end
-
-  defp user_rows([], theme), do: [text("No active users in scope.", fg: theme.dim.fg)]
-
-  defp user_rows(users, theme) do
-    users
-    |> Enum.take(@max_rows)
-    |> Enum.map(fn user ->
-      handle = field(user, :handle, "unknown")
-      role = field(user, :role, "user")
-      status = field(user, :status, "active")
-
-      text("#{truncate(handle, 20)} | role: #{role} | status: #{status}", fg: theme.primary.fg)
-    end)
-  end
-
-  defp board_rows([], theme), do: [text("No board scopes available.", fg: theme.dim.fg)]
-
-  defp board_rows(boards, theme) do
-    boards
-    |> Enum.take(@max_rows)
-    |> Enum.map(fn board ->
-      name = field(board, :name, "unknown")
-      slug = field(board, :slug, "")
-      category = field(board, :category_name, "")
-      scope = board |> Map.get(:scope) |> format_scope()
-
-      text("#{truncate(name, 24)} | #{truncate(slug, 20)} | #{truncate(category, 20)} | #{scope}",
-        fg: theme.primary.fg
-      )
-    end)
-  end
-
-  defp format_scopes([]), do: "none"
-  defp format_scopes(scopes), do: Enum.map_join(scopes, ", ", &format_scope/1)
-
-  defp format_scope(:site), do: "site"
-  defp format_scope({:board, board_id}), do: "board:#{board_id}"
-  defp format_scope(scope), do: to_string(scope)
-
-  defp timestamp(%{inserted_at: %DateTime{} = inserted_at}) do
-    Calendar.strftime(inserted_at, "%Y-%m-%d %H:%M")
-  end
-
-  defp timestamp(_action), do: ""
-
-  defp target_id(action), do: field(action, :target_id, "unknown")
-
-  defp field(nil, _key, default), do: default
-
-  defp field(map, key, default) when is_map(map) do
-    case Map.get(map, key, default) do
-      nil -> default
-      value -> to_string(value)
-    end
-  end
 
   defp truncate(value, limit \\ @text_limit)
 
@@ -332,6 +259,27 @@ defmodule Foglet.TUI.Screens.Moderation do
         |> key_for_invites()
         |> InvitesActions.handle_key(state.current_user, ss.invites)
 
+      "LOG" ->
+        log_table = ss.log_table || State.build_log_table(ss.mod_log)
+        {new_table, _action} = ConsoleTable.handle_event(event, log_table)
+        new_ss = %{ss | log_table: new_table}
+        # LOG is read-only; no domain dispatch (Pitfall 7)
+        {:ok, new_ss}
+
+      "USERS" ->
+        users_table = ss.users_table || State.build_users_table(ss.users)
+        {new_table, _action} = ConsoleTable.handle_event(event, users_table)
+        new_ss = %{ss | users_table: new_table}
+        # USERS is read-only; no domain dispatch
+        {:ok, new_ss}
+
+      "BOARDS" ->
+        boards_table = ss.boards_table || State.build_boards_table(ss.boards)
+        {new_table, _action} = ConsoleTable.handle_event(event, boards_table)
+        new_ss = %{ss | boards_table: new_table}
+        # BOARDS is read-only; no domain dispatch
+        {:ok, new_ss}
+
       _other ->
         :no_match
     end
@@ -347,6 +295,15 @@ defmodule Foglet.TUI.Screens.Moderation do
         ss
     end
   end
+
+  # Always rebuild tables from raw domain rows at render time.
+  # This ensures struct!-based test helpers (which set mod_log/users/boards
+  # without rebuilding the ConsoleTable) still produce correct output.
+  # In production the State.new/1 path pre-builds tables; the rebuild here
+  # is cheap (bounded list) and idempotent.
+  defp fresh_log_table(%{mod_log: rows}), do: State.build_log_table(rows)
+  defp fresh_users_table(%{users: rows}), do: State.build_users_table(rows)
+  defp fresh_boards_table(%{boards: rows}), do: State.build_boards_table(rows)
 
   defp key_for_invites(%{key: :char, char: char}), do: char
   defp key_for_invites(%{key: key}), do: key
