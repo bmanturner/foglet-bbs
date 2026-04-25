@@ -41,7 +41,8 @@ defmodule Foglet.TUI.Widgets.Display.ProgressTest do
     end
 
     test "bracket mode preserves the legacy bar shape behind an option" do
-      tree = Progress.render(0.5, mode: :bracket, width: 6, show_percentage: false, theme: theme())
+      tree =
+        Progress.render(0.5, mode: :bracket, width: 6, show_percentage: false, theme: theme())
 
       assert flatten_text(tree) == "[██  ]"
     end

@@ -59,7 +59,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
 
     test "raises when :message is missing" do
       assert_raise FunctionClauseError, fn ->
-        apply(Modal, :render, [%{type: :info}, theme()])
+        Modal.render(%Foglet.TUI.Modal{type: :info}, theme())
       end
     end
   end
