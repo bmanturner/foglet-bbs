@@ -385,6 +385,129 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert %Form{} = new_state
   end
 
+  # --- D-25 A1: enum field value accessor (D-03 / Pitfall 5) ---
+
+  describe "enum field value accessor" do
+    # D-25 D-03 / Pitfall 5: prefs theme-cycle live preview integration path.
+    # Modal.Form.field_value/2 returns the current post-event enum choice so
+    # screens can implement side effects (e.g. theme preview) without submit.
+
+    defp enum_form do
+      Form.init(
+        title: "Theme",
+        fields: [
+          %{name: :theme_id, type: :enum, label: "Theme",
+            choices: [:dark, :light, :amber], value: :dark}
+        ],
+        on_submit: fn _ -> nil end,
+        on_cancel: fn -> nil end
+      )
+    end
+
+    test "field_value/2 returns initial enum choice before any events" do
+      form = enum_form()
+      assert Form.field_value(form, :theme_id) == :dark
+    end
+
+    test "field_value/2 returns updated choice after :down event (cycle to :light)" do
+      form = enum_form()
+      {form_after, _} = Form.handle_event(%{key: :down}, form)
+      assert Form.field_value(form_after, :theme_id) == :light
+    end
+
+    test "field_value/2 returns :amber after two :down events" do
+      form = enum_form()
+      {f1, _} = Form.handle_event(%{key: :down}, form)
+      {f2, _} = Form.handle_event(%{key: :down}, f1)
+      assert Form.field_value(f2, :theme_id) == :amber
+    end
+
+    test "cycling does NOT mark the form :submitted and returns nil action" do
+      form = enum_form()
+      {_f1, action} = Form.handle_event(%{key: :down}, form)
+      assert action == nil
+    end
+
+    test "field_value/2 returns nil for unknown field name" do
+      form = enum_form()
+      assert Form.field_value(form, :nonexistent) == nil
+    end
+  end
+
+  # --- D-25 Pitfall 1: shift_tab event-shape parity ---
+
+  describe "shift+tab event shapes" do
+    # D-25 Pitfall 1: shift_tab event-shape parity
+    # CLIHandler translates back-tab to %{key: :shift_tab} (Foglet shape).
+    # Raxol native shape is %{key: :tab, shift: true}.
+    # Both must route through the same back-tab branch.
+
+    setup do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :c, type: :text, label: "C"}
+      ]
+
+      {:ok, form: test_form(fields)}
+    end
+
+    test "Raxol shape %{key: :tab, shift: true} moves focus to previous field", %{form: form} do
+      # Start at 0, go to 2 (wrap), then back to 1
+      {at_2, _} = Form.handle_event(%{key: :tab, shift: true}, form)
+      assert at_2.focus_index == 2
+
+      {at_1, _} = Form.handle_event(%{key: :tab, shift: true}, at_2)
+      assert at_1.focus_index == 1
+    end
+
+    test "Foglet shape %{key: :shift_tab} moves focus to previous field (same as Raxol shape)", %{form: form} do
+      # D-25 Pitfall 1: this event shape is translated by CLIHandler and must be handled
+      {at_2, _} = Form.handle_event(%{key: :shift_tab}, form)
+      assert at_2.focus_index == 2
+
+      {at_1, _} = Form.handle_event(%{key: :shift_tab}, at_2)
+      assert at_1.focus_index == 1
+    end
+
+    test "both shift_tab shapes return identical {form, nil} result shape" do
+      fields = [
+        %{name: :x, type: :text, label: "X"},
+        %{name: :y, type: :text, label: "Y"}
+      ]
+
+      form = test_form(fields)
+      {form_raxol, action_raxol} = Form.handle_event(%{key: :tab, shift: true}, form)
+      {form_foglet, action_foglet} = Form.handle_event(%{key: :shift_tab}, form)
+
+      assert form_raxol.focus_index == form_foglet.focus_index
+      assert action_raxol == action_foglet
+      assert action_raxol == nil
+    end
+
+    test "forward tab %{key: :tab} still advances focus (regression)" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"}
+      ]
+
+      form = test_form(fields)
+      {s1, _} = Form.handle_event(%{key: :tab}, form)
+      assert s1.focus_index == 1
+    end
+
+    test "forward tab %{key: :tab, shift: false} still advances focus (regression)" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"}
+      ]
+
+      form = test_form(fields)
+      {s1, _} = Form.handle_event(%{key: :tab, shift: false}, form)
+      assert s1.focus_index == 1
+    end
+  end
+
   # --- REQ-9: E2E fixture ---
 
   test "REQ-9 E2E: open form, type in fields, submit, assert typed payload" do

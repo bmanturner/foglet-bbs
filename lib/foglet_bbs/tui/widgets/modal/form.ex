@@ -16,6 +16,21 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   Body-only render: the modal chrome (border + centering) is provided by
   `Foglet.TUI.App.render_modal_overlay/2`. Do NOT wrap the output in a
   box/border here — that causes double-borders (Phase 01.1 RESEARCH Pitfall 4).
+
+  ## Enum field cycling and screen-side preview (D-25 D-03 / Pitfall 5)
+
+  `:enum` fields update their internal field state on every `:up`/`:down` event
+  (they do NOT wait for submit). Screens that need a live side effect on cycling
+  (e.g. `Foglet.TUI.Screens.Account.PrefsForm` applying instant theme preview)
+  should call `Modal.Form.field_value(form, :field_name)` after every
+  `handle_event/2` and compare to the previous value:
+
+      {form2, _action} = Modal.Form.handle_event(event, form)
+      new_theme = Modal.Form.field_value(form2, :theme_id)
+      if new_theme != old_theme, do: apply_theme_preview(new_theme)
+
+  This avoids adding a public `:on_field_change` callback option (D-19 spirit)
+  and keeps the public API surface minimal. See `field_value/2` for the accessor.
   """
 
   import Raxol.Core.Renderer.View
@@ -98,6 +113,15 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     {%{state | focus_index: new_idx}, nil}
   end
 
+  # Clause 2b: Shift-Tab — Foglet/CLIHandler-translated shape (D-25 Pitfall 1)
+  # CLIHandler emits %{key: :shift_tab} when the terminal sends back-tab (ESC[Z).
+  # Keep this clause adjacent to Clause 2 so the pattern is visually obvious.
+  def handle_event(%{key: :shift_tab}, %__MODULE__{} = state) do
+    n = length(state.fields)
+    new_idx = rem(state.focus_index - 1 + n, n)
+    {%{state | focus_index: new_idx}, nil}
+  end
+
   # Clause 3: Tab — advance with wrap (REQ-4)
   def handle_event(%{key: :tab}, %__MODULE__{} = state) do
     n = length(state.fields)
@@ -126,6 +150,26 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     new_field_state = dispatch_to_field(spec, field_state, event)
     new_states = List.replace_at(state.field_states, state.focus_index, new_field_state)
     {%{state | field_states: new_states}, nil}
+  end
+
+  @doc """
+  Return the current typed value of a named field without submitting.
+
+  Useful for screen-level side effects on enum cycling (D-25 D-03 / Pitfall 5).
+  Screens that need a live preview (e.g. instant theme change on `:theme_id`
+  cycling) should call `Modal.Form.field_value(form, :theme_id)` after every
+  `handle_event/2` and diff against the previous value to trigger the preview.
+  Reference consumer: `Foglet.TUI.Screens.Account.PrefsForm` (Plan 02).
+
+  Returns `nil` when the field name is not present in the form.
+  """
+  @spec field_value(t(), atom()) :: term() | nil
+  def field_value(%__MODULE__{fields: fields, field_states: states}, field_name)
+      when is_atom(field_name) do
+    case Enum.find_index(fields, &(&1.name == field_name)) do
+      nil -> nil
+      idx -> coerce(Enum.at(fields, idx), Enum.at(states, idx))
+    end
   end
 
   @doc "Merge server-side validation errors into the form state (D-18)."
