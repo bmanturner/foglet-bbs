@@ -8,6 +8,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.Accounts
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Sysop
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
   alias FogletBbs.Repo
@@ -75,6 +76,15 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "does not crash with default screen state", %{state: state} do
       assert _ = Sysop.render(state)
+    end
+
+    test "renders operator Chrome V2 breadcrumb for the active sysop tab", %{state: state} do
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
+
+      flat = Sysop.render(state) |> collect_text_values()
+
+      assert Presentation.mode_for!(:sysop) == :operator
+      assert Enum.any?(flat, &String.contains?(&1, "Foglet ▸ Sysop ▸ USERS"))
     end
 
     test "shows all five tab labels in order: SITE, BOARDS, LIMITS, SYSTEM, USERS", %{
