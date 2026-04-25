@@ -10,9 +10,29 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
 
+  defp distinctive_theme do
+    %Theme{
+      border: %{fg: "#menu-border"},
+      primary: %{fg: "#menu-primary"},
+      selected: %{fg: "#menu-selected-fg", bg: "#menu-selected-bg"},
+      unselected: %{fg: "#menu-unselected"},
+      dim: %{fg: "#menu-dim"},
+      accent: %{fg: "#menu-accent"}
+    }
+  end
+
   # A simple flat menu with an explicit :id for action testing
   defp leaf_menu_state do
     Menu.init(items: [%{id: :file_new, label: "New File", children: []}])
+  end
+
+  defp mixed_menu_state do
+    Menu.init(
+      items: [
+        %{id: :open, label: "Open", children: [], shortcut: "o"},
+        %{id: :disabled, label: "Disabled", children: [], disabled: true}
+      ]
+    )
   end
 
   describe "normalize_items/1" do
@@ -126,6 +146,19 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
   end
 
   describe "render/2 — theme hygiene (D-18)" do
+    test "selected, inactive, normal, shortcut, and border states use theme slots" do
+      t = distinctive_theme()
+      result = Menu.render(mixed_menu_state(), theme: t)
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
+      assert serialized =~ t.border.fg
+      assert serialized =~ t.selected.fg
+      assert serialized =~ t.selected.bg
+      assert serialized =~ t.unselected.fg
+      assert serialized =~ t.dim.fg
+      assert serialized =~ t.accent.fg
+    end
+
     test "test 10 — no hardcoded color atoms in rendered tree" do
       state = leaf_menu_state()
       result = Menu.render(state, theme: theme())

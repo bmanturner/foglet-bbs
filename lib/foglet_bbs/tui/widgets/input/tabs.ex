@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.Tabs, as: RaxolTabs
 
@@ -110,10 +111,13 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
   end
 
   defp build_tabs_theme(%Theme{} = t) do
+    mappings = Presentation.theme_mappings().tabs
+
     %{
-      tab: %{fg: t.unselected.fg},
-      active_tab: %{fg: t.selected.fg, style: [:bold]},
-      border: %{fg: t.border.fg}
+      tab: %{fg: Map.fetch!(t, mappings.unselected).fg},
+      active_tab: %{fg: Map.fetch!(t, mappings.selected).fg, style: [:bold]},
+      active_indicator: %{fg: Map.fetch!(t, mappings.indicator).fg, style: [:bold]},
+      border: %{fg: Map.fetch!(t, mappings.border).fg}
     }
   end
 end

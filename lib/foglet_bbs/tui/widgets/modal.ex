@@ -6,15 +6,16 @@ defmodule Foglet.TUI.Widgets.Modal do
   Positioning/overlay centering is handled by `Foglet.TUI.App.render_modal_overlay/2`.
 
   Types:
-    * :info    — neutral message with [Enter] OK hint
+    * :info    — info-slot-colored message with [Enter] OK hint
+    * :success — success-slot-colored message with [Enter] OK hint
     * :error   — error-slot-colored message with [Enter] OK hint
     * :warning — warning-slot-colored message with [Enter] OK hint
-    * :confirm — warning-slot-colored message + [Y]es / [N]o hints
+    * :confirm — accent-slot-colored message + [Y]es / [N]o hints
 
   Modal spec shape (used by callers dispatching {:show_modal, spec}):
 
       %{
-        type: :info | :error | :warning | :confirm,
+        type: :info | :success | :error | :warning | :confirm,
         title: "Optional Title",           # defaults based on type
         message: "Body text here.",
         on_confirm: fn state -> ... end,   # :confirm only — called on Y
@@ -32,7 +33,7 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   @type modal_spec :: %{
           required(:message) => String.t(),
-          optional(:type) => :info | :error | :warning | :confirm,
+          optional(:type) => :info | :success | :error | :warning | :confirm,
           optional(:title) => String.t(),
           optional(:on_confirm) => (map() -> any()) | :dismiss_modal,
           optional(:on_cancel) => (map() -> any()) | :dismiss_modal
@@ -63,14 +64,17 @@ defmodule Foglet.TUI.Widgets.Modal do
   end
 
   defp title_for(:info), do: "Info"
+  defp title_for(:success), do: "Success"
   defp title_for(:error), do: "Error"
   defp title_for(:warning), do: "Warning"
   defp title_for(:confirm), do: "Confirm"
 
+  defp color_for_type(:info, %Theme{} = theme), do: theme.info.fg
+  defp color_for_type(:success, %Theme{} = theme), do: theme.success.fg
   defp color_for_type(:error, %Theme{} = theme), do: theme.error.fg
   defp color_for_type(:warning, %Theme{} = theme), do: theme.warning.fg
-  defp color_for_type(:confirm, %Theme{} = theme), do: theme.warning.fg
-  defp color_for_type(_info, %Theme{} = theme), do: theme.primary.fg
+  defp color_for_type(:confirm, %Theme{} = theme), do: theme.accent.fg
+  defp color_for_type(_default, %Theme{} = theme), do: theme.primary.fg
 
   defp key_hint_for(:confirm), do: "[Y] Yes   [N] No"
   defp key_hint_for(_), do: "[Enter] OK"

@@ -15,8 +15,8 @@ defmodule Foglet.TUI.Widgets.Input.Button do
   UI-SPEC contract:
     :primary   → fg: theme.accent.fg,  style: [:bold]
     :danger    → fg: theme.error.fg,   style: [:bold]
-    :success   → fg: theme.primary.fg, style: [:bold]
-    :secondary → fg: theme.primary.fg, style: []
+    :success   → fg: theme.success.fg, style: [:bold]
+    :secondary → fg: theme.unselected.fg, style: []
     disabled   → fg: theme.dim.fg,     style: [:dim] (any role)
 
   **Unknown `:role` values fall through to the `:secondary` clause** (see
@@ -58,6 +58,6 @@ defmodule Foglet.TUI.Widgets.Input.Button do
   defp role_style(_any, true, theme), do: {theme.dim.fg, [:dim]}
   defp role_style(:primary, false, theme), do: {theme.accent.fg, [:bold]}
   defp role_style(:danger, false, theme), do: {theme.error.fg, [:bold]}
-  defp role_style(:success, false, theme), do: {theme.primary.fg, [:bold]}
-  defp role_style(_secondary, false, theme), do: {theme.primary.fg, []}
+  defp role_style(:success, false, theme), do: {theme.success.fg, [:bold]}
+  defp role_style(_secondary, false, theme), do: {theme.unselected.fg, []}
 end

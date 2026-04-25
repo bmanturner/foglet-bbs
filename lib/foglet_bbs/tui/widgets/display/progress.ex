@@ -49,6 +49,7 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
     filled = floor(progress * bar_inner_width)
     empty = bar_inner_width - filled
 
+    filled_color = if progress >= 1.0, do: theme.success.fg, else: theme.accent.fg
     filled_str = String.duplicate(@filled_char, filled)
     empty_str = String.duplicate(@empty_char, empty)
 
@@ -56,7 +57,7 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
       row style: %{gap: 0} do
         [
           text("[", fg: theme.border.fg),
-          text(filled_str, fg: theme.accent.fg),
+          text(filled_str, fg: filled_color),
           text(empty_str, fg: theme.dim.fg),
           text("]", fg: theme.border.fg)
         ]
