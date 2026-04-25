@@ -461,4 +461,268 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   defp text_index(flat, needle) do
     Enum.find_index(flat, &String.contains?(&1, needle))
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 25 Plan 03 — Primitive-presence tests (LOG, USERS, BOARDS, INVITES)
+  # ---------------------------------------------------------------------------
+
+  describe "LOG primitive presence" do
+    test "LOG tab renders KvGrid summary with Scope label" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(1, mod_log: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Scope")),
+             "Expected KvGrid Scope label in LOG tab, got: #{inspect(flat)}"
+    end
+
+    test "LOG tab renders ConsoleTable header with When/Actor/Action/Target columns" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(1, mod_log: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+      assert joined =~ "When" or joined =~ "Actor" or joined =~ "Action" or joined =~ "Target",
+             "Expected ConsoleTable column header in LOG tab, got: #{inspect(flat)}"
+    end
+
+    test "LOG tab renders empty-state copy when mod_log is empty" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(1, mod_log: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+      assert joined =~ "No moderation events",
+             "Expected empty-state copy in LOG tab, got: #{inspect(flat)}"
+    end
+
+    test "LOG tab status summary contains a badge-style label" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(1, mod_log: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+
+      assert joined =~ ~r/\[.+\]/,
+             "Expected badge label [..] in LOG tab summary, got: #{inspect(flat)}"
+    end
+
+    test "LOG tab Enter keypress does not dispatch any domain action" do
+      state =
+        :mod
+        |> build_state()
+        |> put_moderation_state(1, mod_log: [
+          audit_row("mod1", "body text", "reason1", ~U[2026-01-01 00:00:00Z])
+        ])
+
+      result = Moderation.handle_key(%{key: :enter}, state)
+
+      case result do
+        {:update, _new_state, cmds} ->
+          refute Enum.any?(cmds, fn
+            {:ban_user, _} -> true
+            {:remove_post, _} -> true
+            _ -> false
+          end),
+                 "Expected no domain dispatch from LOG Enter, got: #{inspect(cmds)}"
+
+        :no_match ->
+          :ok
+      end
+    end
+
+    test "LOG tab empty-table handles up/down/enter without crash" do
+      state =
+        :mod
+        |> build_state()
+        |> put_moderation_state(1, mod_log: [])
+
+      for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
+        result = Moderation.handle_key(key, state)
+        assert result != nil, "Expected non-nil result for #{inspect(key)}"
+      end
+    end
+  end
+
+  describe "USERS primitive presence" do
+    test "USERS tab renders KvGrid summary with Scope label" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(2, users: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Scope")),
+             "Expected KvGrid Scope label in USERS tab, got: #{inspect(flat)}"
+    end
+
+    test "USERS tab renders ConsoleTable header with Handle/Role/Status columns" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(2, users: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+      assert joined =~ "Handle" or joined =~ "Role" or joined =~ "Status",
+             "Expected ConsoleTable column header in USERS tab, got: #{inspect(flat)}"
+    end
+
+    test "USERS tab renders empty-state copy when users list is empty" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(2, users: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+      assert joined =~ "No active users",
+             "Expected empty-state copy in USERS tab, got: #{inspect(flat)}"
+    end
+
+    test "USERS tab handles up/down/enter on empty table without crash" do
+      state =
+        :mod
+        |> build_state()
+        |> put_moderation_state(2, users: [])
+
+      for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
+        result = Moderation.handle_key(key, state)
+        assert result != nil, "Expected non-nil result for #{inspect(key)}"
+      end
+    end
+
+    test "USERS tab with user fixture renders badge label" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(2, users: [%{handle: "alice", role: :user, status: :active}])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+
+      assert joined =~ ~r/\[.+\]/,
+             "Expected badge label in USERS tab, got: #{inspect(flat)}"
+    end
+  end
+
+  describe "BOARDS primitive presence" do
+    test "BOARDS tab renders KvGrid summary with Scope label" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(4, boards: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Scope")),
+             "Expected KvGrid Scope label in BOARDS tab, got: #{inspect(flat)}"
+    end
+
+    test "BOARDS tab renders ConsoleTable header with Board/Category/State columns" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(4, boards: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+      assert joined =~ "Board" or joined =~ "Category" or joined =~ "State",
+             "Expected ConsoleTable column header in BOARDS tab, got: #{inspect(flat)}"
+    end
+
+    test "BOARDS tab renders empty-state copy when boards list is empty" do
+      flat =
+        :mod
+        |> build_state()
+        |> put_moderation_state(4, boards: [])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, " ")
+      assert joined =~ "No boards",
+             "Expected empty-state copy in BOARDS tab, got: #{inspect(flat)}"
+    end
+
+    test "BOARDS tab handles up/down/enter on empty table without crash" do
+      state =
+        :mod
+        |> build_state()
+        |> put_moderation_state(4, boards: [])
+
+      for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
+        result = Moderation.handle_key(key, state)
+        assert result != nil, "Expected non-nil result for #{inspect(key)}"
+      end
+    end
+  end
+
+  describe "INVITES ConsoleTable primitive presence" do
+    test "INVITES tab renders ConsoleTable header with Code/Status/Created/Used by columns" do
+      state =
+        :mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          |> Map.put(:invites, %Foglet.TUI.Screens.Shared.InvitesState{items: []})
+        )
+
+      flat = Moderation.render(state) |> collect_text_values()
+      joined = Enum.join(flat, " ")
+
+      assert joined =~ "Code" or joined =~ "Status" or joined =~ "Created" or joined =~ "Used by",
+             "Expected ConsoleTable column header in INVITES tab, got: #{inspect(flat)}"
+    end
+
+    test "INVITES tab renders empty-state copy when items list is empty" do
+      state =
+        :mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          |> Map.put(:invites, %Foglet.TUI.Screens.Shared.InvitesState{items: []})
+        )
+
+      flat = Moderation.render(state) |> collect_text_values()
+      joined = Enum.join(flat, " ")
+
+      assert joined =~ "No invites",
+             "Expected empty-state copy in INVITES tab, got: #{inspect(flat)}"
+    end
+
+    test "INVITES tab handles up/down/enter on empty table without crash" do
+      state =
+        :mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          |> Map.put(:invites, %Foglet.TUI.Screens.Shared.InvitesState{items: []})
+        )
+
+      for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
+        result = Moderation.handle_key(key, state)
+        assert result != nil, "Expected non-nil result for #{inspect(key)}"
+      end
+    end
+  end
 end
