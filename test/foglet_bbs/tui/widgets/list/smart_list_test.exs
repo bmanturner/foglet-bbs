@@ -2,7 +2,7 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0, assert_text_run: 3]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.List.SmartList
@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       border: %{fg: "#smart-border"},
       selected: %{fg: "#smart-selected-fg", bg: "#smart-selected-bg"},
       unselected: %{fg: "#smart-unselected"},
+      success: %{fg: "#smart-success"},
       accent: %{fg: "#smart-accent"},
       dim: %{fg: "#smart-dim"}
     }
@@ -181,6 +182,56 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
   # ---------------------------------------------------------------------------
 
   describe "render/2 — theme hygiene (D-18)" do
+    test "focused item uses canonical state cluster instead of arrow marker" do
+      t = distinctive_theme()
+      tree = SmartList.render(two_item_fixture(), theme: t)
+
+      assert flatten_text(tree) =~ "▌ A\n◇ B\n"
+      refute flatten_text(tree) =~ "> A"
+      assert_text_run(tree, "▌ A\n", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
+      assert_text_run(tree, "◇ B\n", fg: t.unselected.fg)
+    end
+
+    test "multi-select rows render checked and unchecked semantic marks" do
+      t = distinctive_theme()
+
+      state =
+        SmartList.init(options: [{"Alpha", 1}, {"Beta", 2}], multiple: true)
+        |> then(fn state ->
+          %{state | raxol_state: %{state.raxol_state | selected_indices: MapSet.new([0])}}
+        end)
+
+      tree = SmartList.render(state, theme: t)
+
+      assert flatten_text(tree) =~ "✓ Alpha\n◇ Beta\n"
+      assert_text_run(tree, "✓ Alpha\n", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
+      assert_text_run(tree, "◇ Beta\n", fg: t.unselected.fg)
+    end
+
+    test "empty and filtered-empty states are semantic and dim" do
+      t = distinctive_theme()
+
+      empty = SmartList.init(options: [])
+
+      filtered =
+        SmartList.init(options: [{"Alpha", 1}], enable_search: true)
+        |> then(fn state ->
+          %{
+            state
+            | raxol_state: %{
+                state.raxol_state
+                | filtered_options: [],
+                  search_buffer: "zzz"
+              }
+          }
+        end)
+
+      assert flatten_text(SmartList.render(empty, theme: t)) =~ "No items"
+      assert flatten_text(SmartList.render(filtered, theme: t)) =~ "No matches"
+      assert_text_run(SmartList.render(empty, theme: t), "No items", fg: t.dim.fg)
+      assert_text_run(SmartList.render(filtered, theme: t), "No matches", fg: t.dim.fg)
+    end
+
     test "selection, search, pagination, and border affordances use theme slots" do
       state = SmartList.init(options: [{"A", 1}, {"B", 2}], enable_search: true)
       tree = SmartList.render(state, theme: distinctive_theme())

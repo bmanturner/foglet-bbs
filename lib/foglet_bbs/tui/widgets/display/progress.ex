@@ -23,8 +23,11 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
   alias Foglet.TUI.Theme
 
   @default_width 40
+  @default_segments 5
   @filled_char "█"
   @empty_char " "
+  @filled_segment "▰"
+  @empty_segment "▱"
 
   @doc """
   Renders a progress bar.
@@ -33,6 +36,9 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
                out-of-range values clamped)
   `opts`:
     * `:width`           — integer (default `#{@default_width}`)
+    * `:segments`        — integer for compact mode (default `#{@default_segments}`)
+    * `:mode`            — `:compact` (default) or `:bracket`
+    * `:state`           — `:normal | :warning | :error | :complete` override
     * `:label`           — optional string shown above the bar
     * `:show_percentage` — boolean (default `true`)
     * `:theme`           — required `%Foglet.TUI.Theme{}` struct
@@ -41,32 +47,22 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
   def render(progress, opts) when is_number(progress) and is_list(opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
     width = Keyword.get(opts, :width, @default_width)
+    segments = Keyword.get(opts, :segments, @default_segments)
+    mode = Keyword.get(opts, :mode, :compact)
     label = Keyword.get(opts, :label)
     show_pct = Keyword.get(opts, :show_percentage, true)
 
-    progress = progress |> to_float() |> clamp(0.0, 1.0)
-    bar_inner_width = max(1, width - 2)
-    filled = floor(progress * bar_inner_width)
-    empty = bar_inner_width - filled
+    raw_progress = to_float(progress)
+    progress = clamp(raw_progress, 0.0, 1.0)
+    state = Keyword.get(opts, :state, state_for(raw_progress))
+    state_slot = slot_for_state(state, theme)
 
-    filled_color = if progress >= 1.0, do: theme.success.fg, else: theme.accent.fg
-    filled_str = String.duplicate(@filled_char, filled)
-    empty_str = String.duplicate(@empty_char, empty)
-
-    bar_row =
-      row style: %{gap: 0} do
-        [
-          text("[", fg: theme.border.fg),
-          text(filled_str, fg: filled_color),
-          text(empty_str, fg: theme.dim.fg),
-          text("]", fg: theme.border.fg)
-        ]
-      end
+    bar_row = render_bar(progress, mode, width, segments, state_slot, theme)
 
     pct_row =
       if show_pct do
         pct_str = "#{floor(progress * 100)}%"
-        text(pct_str, fg: theme.primary.fg)
+        text(pct_str, fg: state_slot.fg)
       else
         nil
       end
@@ -89,6 +85,44 @@ defmodule Foglet.TUI.Widgets.Display.Progress do
 
   defp to_float(n) when is_integer(n), do: n * 1.0
   defp to_float(n) when is_float(n), do: n
+
+  defp render_bar(progress, :bracket, width, _segments, state_slot, theme) do
+    bar_inner_width = max(1, width - 2)
+    filled = floor(progress * bar_inner_width)
+    empty = bar_inner_width - filled
+
+    row style: %{gap: 0} do
+      [
+        text("[", fg: theme.border.fg),
+        text(String.duplicate(@filled_char, filled), fg: state_slot.fg),
+        text(String.duplicate(@empty_char, empty), fg: theme.dim.fg),
+        text("]", fg: theme.border.fg)
+      ]
+    end
+  end
+
+  defp render_bar(progress, _compact, _width, segments, state_slot, theme) do
+    segments = max(1, segments)
+    filled = floor(progress * segments)
+    empty = segments - filled
+
+    row style: %{gap: 0} do
+      [
+        text(String.duplicate(@filled_segment, filled), fg: state_slot.fg),
+        text(String.duplicate(@empty_segment, empty), fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  defp state_for(progress) when progress > 1.0, do: :error
+  defp state_for(progress) when progress >= 1.0, do: :complete
+  defp state_for(progress) when progress >= 0.8, do: :warning
+  defp state_for(_progress), do: :normal
+
+  defp slot_for_state(:complete, theme), do: theme.success
+  defp slot_for_state(:warning, theme), do: theme.warning
+  defp slot_for_state(:error, theme), do: theme.error
+  defp slot_for_state(_normal, theme), do: theme.accent
 
   defp clamp(value, min_val, _max_val) when value < min_val, do: min_val
   defp clamp(value, _min_val, max_val) when value > max_val, do: max_val

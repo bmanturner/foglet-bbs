@@ -48,6 +48,7 @@ defmodule Foglet.TUI.Widgets.Progress.Spinner do
   `frame` — non-negative integer (wraps around the style's frame set)
   `opts`:
     * `:style` — one of `#{inspect([:dots, :line, :circle, :arrow, :bounce, :pulse, :wave, :dots3, :square, :flip])}` (default `#{inspect(@default_style)}`)
+    * `:message` — optional loading text rendered separately from the glyph
     * `:theme` — required `%Foglet.TUI.Theme{}` struct
   """
   @spec render(non_neg_integer(), keyword()) :: any()
@@ -55,12 +56,23 @@ defmodule Foglet.TUI.Widgets.Progress.Spinner do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
     style = Keyword.get(opts, :style, @default_style)
     accent_style = Map.get(theme.accent, :style, [])
+    message = Keyword.get(opts, :message)
 
     # RaxolSpinner.spinner/3 signature: spinner(message, frame, opts)
     # The :type key selects the spinner style (not :style)
     glyph = RaxolSpinner.spinner(nil, frame, type: style)
 
-    text(glyph, fg: theme.accent.fg, style: accent_style)
+    if is_binary(message) and message != "" do
+      row style: %{gap: 0} do
+        [
+          text(glyph, fg: theme.accent.fg, style: accent_style),
+          text(" ", fg: theme.dim.fg),
+          text(message, fg: theme.dim.fg)
+        ]
+      end
+    else
+      text(glyph, fg: theme.accent.fg, style: accent_style)
+    end
   end
 
   @doc "Recommended frame duration in ms (for caller-driven animation)."

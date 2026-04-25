@@ -38,6 +38,10 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   alias Raxol.UI.Components.Input.SelectList, as: RaxolSelectList
 
   @default_page_size 10
+  @focused_marker "▌"
+  @single_marker "◇"
+  @selected_marker "✓"
+  @unselected_marker "◇"
 
   @type action ::
           {:item_selected, any()}
@@ -241,16 +245,46 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
     focused_index = Map.get(rs, :focused_index, 0)
 
     options
+    |> empty_or_rows(rs, theme, scroll_offset, visible_items, focused_index)
+  end
+
+  defp empty_or_rows([], rs, theme, _scroll_offset, _visible_items, _focused_index) do
+    empty_text =
+      if Map.get(rs, :search_buffer, "") == "" do
+        "No items"
+      else
+        "No matches"
+      end
+
+    [text("#{empty_text}\n", fg: theme.dim.fg)]
+  end
+
+  defp empty_or_rows(options, rs, theme, scroll_offset, visible_items, focused_index) do
+    selected_indices = Map.get(rs, :selected_indices, MapSet.new())
+    multiple? = Map.get(rs, :multiple, false)
+
+    options
     |> Enum.slice(scroll_offset, visible_items)
     |> Enum.with_index(scroll_offset)
     |> Enum.map(fn {{label, _value}, index} ->
-      if index == focused_index do
-        text("> #{label}\n", fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
-      else
-        text("  #{label}\n", fg: theme.unselected.fg)
-      end
+      selected? = MapSet.member?(selected_indices, index)
+      focused? = index == focused_index
+      marker = marker_for(multiple?, selected?, focused?)
+      content = "#{marker} #{label}\n"
+
+      row_style(focused?, selected?, theme)
+      |> then(fn {fg, bg, style} -> text(content, fg: fg, bg: bg, style: style) end)
     end)
   end
+
+  defp marker_for(true, true, _focused?), do: @selected_marker
+  defp marker_for(true, false, _focused?), do: @unselected_marker
+  defp marker_for(false, _selected?, true), do: @focused_marker
+  defp marker_for(false, _selected?, false), do: @single_marker
+
+  defp row_style(true, _selected?, theme), do: {theme.selected.fg, theme.selected.bg, [:bold]}
+  defp row_style(false, true, theme), do: {theme.success.fg, nil, [:bold]}
+  defp row_style(false, false, theme), do: {theme.unselected.fg, nil, []}
 
   defp render_affordances(rs, theme) do
     [

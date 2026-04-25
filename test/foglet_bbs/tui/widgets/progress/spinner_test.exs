@@ -2,7 +2,7 @@ defmodule Foglet.TUI.Widgets.Progress.SpinnerTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0, assert_text_run: 3]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Progress.Spinner
@@ -10,12 +10,14 @@ defmodule Foglet.TUI.Widgets.Progress.SpinnerTest do
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
 
-  describe "render/2 — smoke (D-18)" do
-    test "returns a non-nil result at frame 0" do
-      result = Spinner.render(0, theme: theme())
-      refute is_nil(result)
-    end
+  defp distinctive_theme do
+    %Theme{
+      accent: %{fg: "#spinner-accent", style: [:bold]},
+      dim: %{fg: "#spinner-dim"}
+    }
+  end
 
+  describe "render/2 — smoke (D-18)" do
     test "frame-index advance produces different glyph" do
       t = theme()
       glyph_0 = flatten_text(Spinner.render(0, theme: t))
@@ -28,6 +30,18 @@ defmodule Foglet.TUI.Widgets.Progress.SpinnerTest do
       result = Spinner.render(0, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
       assert serialized =~ t.accent.fg
+    end
+
+    test "message mode emits glyph and loading text as separate styled runs" do
+      t = distinctive_theme()
+      tree = Spinner.render(0, message: "Loading boards", theme: t)
+
+      assert flatten_text(tree) =~ " Loading boards"
+      assert_text_run(tree, "Loading boards", fg: t.dim.fg)
+
+      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+      assert serialized =~ t.accent.fg
+      assert serialized =~ t.dim.fg
     end
   end
 
