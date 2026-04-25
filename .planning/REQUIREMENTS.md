@@ -68,10 +68,10 @@
 
 ### Operator Console Primitives
 
-- [ ] **CONSOLE-01**: `Display.Badge` standardizes compact states such as required, subscribed, locked, sticky, pending, healthy, and error.
-- [ ] **CONSOLE-02**: `Display.KvGrid` renders consistent label/value rows for Account, Sysop System, site settings, limits, and status summaries.
-- [ ] **CONSOLE-03**: Shared table presets and optional `Workspace.Inspector` support dense operator rows and selected-row details, with inspectors treated as wide-terminal progressive enhancement.
-- [ ] **CONSOLE-04**: `Modal.Form` visual refresh provides stronger headings, field labels, inline errors, and action footers while preserving the body-only overlay contract.
+- [x] **CONSOLE-01**: `Display.Badge` standardizes compact states such as required, subscribed, locked, sticky, pending, healthy, and error.
+- [x] **CONSOLE-02**: `Display.KvGrid` renders consistent label/value rows for Account, Sysop System, site settings, limits, and status summaries.
+- [x] **CONSOLE-03**: Shared table presets and optional `Workspace.Inspector` support dense operator rows and selected-row details, with inspectors treated as wide-terminal progressive enhancement.
+- [x] **CONSOLE-04**: `Modal.Form` visual refresh provides stronger headings, field labels, inline errors, and action footers while preserving the body-only overlay contract.
 
 ### Operator Console Screens
 
@@ -138,10 +138,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | COMPOSER-03 | Phase 23 | Complete |
 | COMPOSER-04 | Phase 23 | Complete |
 | COMPOSER-05 | Phase 23 | Complete |
-| CONSOLE-01 | Phase 24 | Pending |
-| CONSOLE-02 | Phase 24 | Pending |
-| CONSOLE-03 | Phase 24 | Pending |
-| CONSOLE-04 | Phase 24 | Pending |
+| CONSOLE-01 | Phase 24 | Complete |
+| CONSOLE-02 | Phase 24 | Complete |
+| CONSOLE-03 | Phase 24 | Complete |
+| CONSOLE-04 | Phase 24 | Complete |
 | ACCOUNT-01 | Phase 25 | Pending |
 | MOD-01 | Phase 25 | Pending |
 | SYSOP-01 | Phase 25 | Pending |

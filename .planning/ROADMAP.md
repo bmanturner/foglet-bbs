@@ -53,7 +53,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 - [ ] **Phase 21: Board Directory Facelift** - Board browsing presents categories, board state, subscriptions, and details as structured rows.
 - [x] **Phase 22: Post Reader Facelift** - Thread reading emphasizes message numbers, post metadata, body readability, and progress. (completed 2026-04-25)
 - [x] **Phase 23: Composer Facelift** - New-thread and reply composition use focused editor surfaces with preview and counters. (completed 2026-04-25)
-- [ ] **Phase 24: Operator Console Primitives** - Shared badges, key/value grids, table presets, inspectors, and modal form treatment land before screen conversion.
+- [x] **Phase 24: Operator Console Primitives** - Shared badges, key/value grids, table presets, inspectors, and modal form treatment land before screen conversion. (completed 2026-04-25)
 - [ ] **Phase 25: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts.
 
 ## Phase Details
@@ -242,19 +242,19 @@ Cross-cutting constraints:
 2. `Display.KvGrid` renders consistent label/value rows for Account, Sysop System, site settings, limits, and status summaries.
 3. Table presets and optional `Workspace.Inspector` support dense selected-row workflows on operator screens, with inspectors treated as wide-terminal enhancement.
 4. `Modal.Form` has stronger headings, labels, inline errors, and action footers while preserving the body-only overlay contract.
-**Plans:** 6 plans
+**Plans:** 6/6 plans complete
 Plans:
 **Wave 1**
-- [ ] 24-01-PLAN.md - Wave 1 `Display.Badge` primitive and tests for required, subscribed, locked, sticky, pending, healthy, error, neutral, and info states with theme-mapping hygiene (CONSOLE-01).
-- [ ] 24-02-PLAN.md - Wave 1 `Display.KvGrid` primitive and tests for Account, Sysop System, site settings, limits, and status summaries with width-safe label/value rows (CONSOLE-02).
+- [x] 24-01-PLAN.md - Wave 1 `Display.Badge` primitive and tests for required, subscribed, locked, sticky, pending, healthy, error, neutral, and info states with theme-mapping hygiene (CONSOLE-01).
+- [x] 24-02-PLAN.md - Wave 1 `Display.KvGrid` primitive and tests for Account, Sysop System, site settings, limits, and status summaries with width-safe label/value rows (CONSOLE-02).
 
 **Wave 2 *(blocked on Wave 1 completion)***
-- [ ] 24-03-PLAN.md - Wave 2 `Display.ConsoleTable` facade over `Display.Table`, dense operator defaults, empty states, row selection actions, and LOG/USERS/BOARDS/SSH-key/invite fixtures (CONSOLE-03).
-- [ ] 24-04-PLAN.md - Wave 2 `Workspace.Inspector` wide-terminal selected-row details/actions primitive with compact-width collapse and board/user/invite fixtures (CONSOLE-03).
+- [x] 24-03-PLAN.md - Wave 2 `Display.ConsoleTable` facade over `Display.Table`, dense operator defaults, empty states, row selection actions, and LOG/USERS/BOARDS/SSH-key/invite fixtures (CONSOLE-03).
+- [x] 24-04-PLAN.md - Wave 2 `Workspace.Inspector` wide-terminal selected-row details/actions primitive with compact-width collapse and board/user/invite fixtures (CONSOLE-03).
 
 **Wave 3 *(blocked on Wave 2 completion)***
-- [ ] 24-05-PLAN.md - Wave 3 in-place `Modal.Form` body refresh preserving event/coercion/body-only overlay behavior while adding heading, labels, required markers, errors, and action footer (CONSOLE-04).
-- [ ] 24-06-PLAN.md - Wave 3 widget catalog update, focused primitive regression suite, screen-conversion boundary check, and `rtk mix precommit` finish-line gate (CONSOLE-01, CONSOLE-02, CONSOLE-03, CONSOLE-04).
+- [x] 24-05-PLAN.md - Wave 3 in-place `Modal.Form` body refresh preserving event/coercion/body-only overlay behavior while adding heading, labels, required markers, errors, and action footer (CONSOLE-04).
+- [x] 24-06-PLAN.md - Wave 3 widget catalog update, focused primitive regression suite, screen-conversion boundary check, and `rtk mix precommit` finish-line gate (CONSOLE-01, CONSOLE-02, CONSOLE-03, CONSOLE-04).
 
 Cross-cutting constraints:
 - New operator-console primitives stay under `Foglet.TUI.Widgets.*`, remain pure over caller-provided state, and do not call domain contexts.
@@ -308,5 +308,5 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
 | 22. Post Reader Facelift | v1.3 | 3/3 | Complete   | 2026-04-25 |
 | 23. Composer Facelift | v1.3 | 4/4 | Complete    | 2026-04-25 |
-| 24. Operator Console Primitives | v1.3 | 0/6 | Pending | - |
+| 24. Operator Console Primitives | v1.3 | 6/6 | Complete    | 2026-04-25 |
 | 25. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |
