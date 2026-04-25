@@ -232,18 +232,17 @@ defmodule Foglet.TUI.Screens.ThreadList do
   # Sort threads newest-first within a group. Threads with nil last_post_at
   # sort last (they are brand-new and have no post activity yet).
   defp sort_by_recency(threads) do
-    threads
-    |> Enum.sort_by(
+    Enum.sort_by(
+      threads,
       fn t ->
         case Map.get(t, :last_post_at) do
-          %DateTime{} = dt -> {0, DateTime.to_unix(dt, :microsecond)}
+          %DateTime{} = dt -> {0, -DateTime.to_unix(dt, :microsecond)}
           # nil sorts last within the group
           _ -> {1, 0}
         end
       end,
       :asc
     )
-    |> Enum.reverse()
   end
 
   defp move_selection(state, delta) do

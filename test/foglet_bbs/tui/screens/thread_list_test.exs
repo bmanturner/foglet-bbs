@@ -79,6 +79,33 @@ defmodule Foglet.TUI.Screens.ThreadListTest.NiltimeFakeThreads do
   def list_threads(board_id, _user_id), do: list_threads(board_id)
 end
 
+defmodule Foglet.TUI.Screens.ThreadListTest.MixedNiltimeFakeThreads do
+  def list_threads(_board_id) do
+    now = DateTime.utc_now()
+
+    [
+      %{
+        id: "nil",
+        title: "Brand new thread",
+        sticky: false,
+        last_post_at: nil,
+        post_count: 1,
+        created_by: %{handle: "alice"}
+      },
+      %{
+        id: "active",
+        title: "Active thread",
+        sticky: false,
+        last_post_at: DateTime.add(now, -60, :second),
+        post_count: 2,
+        created_by: %{handle: "bob"}
+      }
+    ]
+  end
+
+  def list_threads(board_id, _user_id), do: list_threads(board_id)
+end
+
 defmodule Foglet.TUI.Screens.ThreadListTest.AnnotatingFakeThreads do
   def list_threads(board_id), do: stub_data(board_id)
 
@@ -147,6 +174,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   alias Foglet.TUI.Screens.ThreadListTest.FakeLockedThreads
   alias Foglet.TUI.Screens.ThreadListTest.FakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.HandlelessFakeThreads
+  alias Foglet.TUI.Screens.ThreadListTest.MixedNiltimeFakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.NiltimeFakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.OneArityOnly
 
@@ -187,6 +215,18 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     {:update, s, _} = ThreadList.handle_key(%{key: :char, char: "j"}, s)
     {:update, s, _} = ThreadList.handle_key(%{key: :enter}, s)
     assert s.current_thread.id == "t2"
+  end
+
+  test "nil last_post_at threads sort after active threads in the same group", %{state: state} do
+    state = put_in(state.session_context, %{domain: %{threads: MixedNiltimeFakeThreads}})
+
+    {s, _} = ThreadList.load_threads(state, "b1")
+    {:update, s, _} = ThreadList.handle_key(%{key: :enter}, s)
+    assert s.current_thread.id == "active"
+
+    {:update, s, _} = ThreadList.handle_key(%{key: :char, char: "j"}, s)
+    {:update, s, _} = ThreadList.handle_key(%{key: :enter}, s)
+    assert s.current_thread.id == "nil"
   end
 
   test "'C' routes to :new_thread with step: :compose and origin: :thread_list (COMPOSE-03)",
