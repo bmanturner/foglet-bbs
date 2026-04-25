@@ -32,6 +32,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     PostReader,
     Register,
     Sysop,
+    ThreadList,
     Verify
   }
 
@@ -178,6 +179,178 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert command, "expected command text at #{inspect({width, height})}"
         assert breadcrumb.y < content.y
         assert content.y < command.y
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 20 — ThreadList rich-row size contracts (RICHROW-01 / THREADS-01)
+  # ---------------------------------------------------------------------------
+
+  describe "thread_list — size contract" do
+    setup do
+      now = DateTime.utc_now()
+      long_title = String.duplicate("x", 100)
+
+      threads = [
+        %Foglet.Threads.ThreadEntry{
+          id: "t1",
+          title: "Sticky " <> long_title,
+          board_id: "b1",
+          sticky: true,
+          locked: false,
+          has_unread: true,
+          post_count: 5,
+          last_post_at: now,
+          created_by: %{handle: "alice"}
+        },
+        %Foglet.Threads.ThreadEntry{
+          id: "t2",
+          title: "Locked thread title",
+          board_id: "b1",
+          sticky: false,
+          locked: true,
+          has_unread: false,
+          post_count: 3,
+          last_post_at: DateTime.add(now, -3600, :second),
+          created_by: %{handle: "alice"}
+        },
+        %Foglet.Threads.ThreadEntry{
+          id: "t3",
+          title: "Plain thread",
+          board_id: "b1",
+          sticky: false,
+          locked: false,
+          has_unread: false,
+          post_count: 1,
+          last_post_at: DateTime.add(now, -7200, :second),
+          created_by: %{handle: "alice"}
+        }
+      ]
+
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      %{threads: threads, user: user}
+    end
+
+    defp thread_row_elements(positioned, title_substring) do
+      elements = text_elements(positioned)
+
+      anchor =
+        Enum.find(elements, fn el ->
+          text = Map.get(el, :text, "")
+          is_binary(text) and String.contains?(text, title_substring)
+        end)
+
+      case anchor do
+        nil ->
+          flunk(
+            "could not find a text element containing #{inspect(title_substring)} " <>
+              "in positioned render. text_elements=#{inspect(Enum.map(elements, & &1.text))}"
+          )
+
+        %{y: y} ->
+          row =
+            elements
+            |> Enum.filter(fn el -> el.y == y end)
+            |> Enum.sort_by(& &1.x)
+
+          {y, row}
+      end
+    end
+
+    defp row_text(elements) do
+      elements
+      |> Enum.map(&Map.get(&1, :text, ""))
+      |> Enum.join()
+    end
+
+    defp row_display_width(elements) do
+      elements
+      |> Enum.map(fn el ->
+        el.x + TextWidth.display_width(Map.get(el, :text, ""))
+      end)
+      |> Enum.max(fn -> 0 end)
+    end
+
+    for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
+      @width width
+      @height height
+      @tag :"thread_list — size contract"
+      test "at #{width}x#{height} cluster, metadata visible; title truncates only when forced",
+           %{threads: threads, user: user} do
+        width = @width
+        height = @height
+        locked_glyph = "⚿"
+
+        state =
+          %Foglet.TUI.App{
+            current_screen: :thread_list,
+            current_user: user,
+            current_board: %{id: "b1", name: "General", slug: "general"},
+            session_context: %{},
+            terminal_size: {width, height},
+            current_thread_list: threads,
+            screen_state: %{thread_list: %{selected_index: 0}}
+          }
+          |> Map.from_struct()
+
+        tree = ThreadList.render(state)
+        positioned = apply_at_size(tree, {width, height})
+
+        {_y_sticky, sticky_row} = thread_row_elements(positioned, "Sticky")
+        sticky_text = row_text(sticky_row)
+
+        assert sticky_text =~ "◆",
+               "expected unread glyph in sticky row at #{width}x#{height}, got: #{inspect(sticky_text)}"
+
+        assert sticky_text =~ "●",
+               "expected sticky glyph in sticky row at #{width}x#{height}, got: #{inspect(sticky_text)}"
+
+        assert sticky_text =~ "@alice"
+        assert sticky_text =~ "·"
+
+        if width <= 80 do
+          assert sticky_text =~ "…",
+                 "expected title truncation in sticky row at #{width}, got: #{inspect(sticky_text)}"
+        end
+
+        assert row_display_width(sticky_row) <= width,
+               "sticky row width #{row_display_width(sticky_row)} > budget #{width}: #{inspect(sticky_text)}"
+
+        {_y_locked, locked_row} = thread_row_elements(positioned, "Locked thread")
+        locked_text = row_text(locked_row)
+
+        assert locked_text =~ locked_glyph,
+               "expected locked glyph in locked row at #{width}x#{height}, got: #{inspect(locked_text)}"
+
+        assert locked_text =~ "@alice"
+        assert row_display_width(locked_row) <= width
+
+        {_y_plain, plain_row} = thread_row_elements(positioned, "Plain thread")
+        plain_text = row_text(plain_row)
+
+        refute plain_text =~ "◆", "plain row should not have ◆: #{inspect(plain_text)}"
+        refute plain_text =~ "●", "plain row should not have ●: #{inspect(plain_text)}"
+
+        refute plain_text =~ locked_glyph,
+               "plain row should not have locked glyph: #{inspect(plain_text)}"
+
+        assert plain_text =~ "@alice"
+        assert row_display_width(plain_row) <= width
+
+        for element <- text_elements(positioned) do
+          text = Map.fetch!(element, :text)
+
+          assert element.x >= 0
+          assert element.y >= 0
+
+          assert element.x + TextWidth.display_width(text) <= width,
+                 "element #{inspect(text)} at x=#{element.x} exceeds width #{width}"
+        end
+
+        refute sticky_text =~ "[S] "
+        refute locked_text =~ "[S] "
+        refute plain_text =~ "[S] "
       end
     end
   end
