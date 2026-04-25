@@ -214,10 +214,10 @@ Cross-cutting constraints:
 3. Character budgets use shared progress/counter treatment for normal, warning, and over-limit states.
 4. Reply composition shows compact quoted context while new-thread composition shows the title field, with nonessential context collapsing first at 64x22.
 5. Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed.
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 Plans:
 **Wave 1**
-- [ ] 23-01-PLAN.md — Wave 1 shared `Composer.EditorFrame` widget, visible Edit/Preview segment, theme-routed counters, and widget tests.
+- [x] 23-01-PLAN.md — Wave 1 shared `Composer.EditorFrame` widget, visible Edit/Preview segment, theme-routed counters, and widget tests.
 
 **Wave 2 *(blocked on Wave 1 completion)***
 - [ ] 23-02-PLAN.md — Wave 2 `PostComposer` reply composer migration to the shared shell while preserving reply submit, preview, and shortcut behavior.
@@ -307,6 +307,6 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 20. Rich Rows and Thread Flow | v1.3 | 0/6 | Pending | - |
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
 | 22. Post Reader Facelift | v1.3 | 0/TBD | Pending | - |
-| 23. Composer Facelift | v1.3 | 0/TBD | Pending | - |
+| 23. Composer Facelift | v1.3 | 1/4 | In Progress|  |
 | 24. Operator Console Primitives | v1.3 | 0/6 | Pending | - |
 | 25. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |

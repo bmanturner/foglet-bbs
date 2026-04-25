@@ -401,17 +401,19 @@ Add equivalent tests for `EditorFrame`. [VERIFIED: `test/foglet_bbs/tui/widgets/
 |---|-------|---------|---------------|
 | A1 | No registry/package upgrades are required for Phase 23. [ASSUMED] | Standard Stack | If the implementation reveals a missing Raxol primitive, planner may need a dependency or vendor patch task. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Should reply quote be completely hidden at 64x22 or reduced to one line?**
    - What we know: context must collapse before mode control, editor body, and compact budget. [VERIFIED: `23-CONTEXT.md`]
    - What's unclear: exact one-line vs zero-line quote behavior is discretionary. [VERIFIED: `23-CONTEXT.md`]
    - Recommendation: plan for one-line quote only when it does not reduce editor/preview usability; tests should assert required controls survive at 64x22. [VERIFIED: `23-CONTEXT.md`, `test/foglet_bbs/tui/layout_smoke_test.exs`]
+   - RESOLVED: This is implementation discretion under D-09 and D-10. Plans require compact quote context when space allows and layout tests require the mode control, editor/preview content, and compact budget text to survive at 64x22 before quote context.
 
 2. **Should body budget use the same configured limit in NewThread as replies?**
    - What we know: `PostComposer` enforces `max_post_length`; `NewThread` currently shows title cap and validates title/body emptiness through create-thread flow. [VERIFIED: `lib/foglet_bbs/tui/screens/post_composer.ex`, `lib/foglet_bbs/tui/screens/new_thread.ex`]
    - What's unclear: whether new-thread body has a direct local max-length limit or only context-level validation. [VERIFIED: `lib/foglet_bbs/tui/screens/new_thread.ex`]
    - Recommendation: use the same config lookup pattern only if existing domain policy already enforces a body limit; otherwise render body budget only where a limit exists and avoid inventing a new policy. [VERIFIED: `AGENTS.md`, `23-CONTEXT.md`]
+   - RESOLVED: This is implementation discretion under D-06, D-08, and D-14. Plans require counters where a limit exists and explicitly forbid inventing new validation policy; new-thread body budget must mirror existing domain/context policy only if such a limit already exists.
 
 ## Environment Availability
 

@@ -39,9 +39,9 @@ created: 2026-04-25
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 23-01-01 | 01 | 1 | COMPOSER-01, COMPOSER-02, COMPOSER-03 | T-23-01 | Editor chrome remains presentation-only; submit validation remains in existing contexts. | widget | `rtk mix test test/foglet_bbs/tui/widgets/composer/editor_frame_test.exs` | No, Wave 0 | pending |
-| 23-02-01 | 02 | 1 | COMPOSER-02, COMPOSER-04 | T-23-02 | Preview and quote rendering must not create a new mutation path. | screen render | `rtk mix test test/foglet_bbs/tui/screens/post_composer_test.exs` | Yes, extend | pending |
-| 23-03-01 | 03 | 1 | COMPOSER-01, COMPOSER-02, COMPOSER-04, COMPOSER-05 | T-23-03 | Title/body validation and submission stay on existing new-thread path. | screen render | `rtk mix test test/foglet_bbs/tui/screens/new_thread_test.exs` | Yes, extend | pending |
-| 23-04-01 | 04 | 2 | COMPOSER-03, COMPOSER-04, COMPOSER-05 | T-23-04 | Narrow layouts keep required controls visible and preserve width-aware input behavior. | layout smoke | `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` | Yes, extend | pending |
+| 23-02-01 | 02 | 2 | COMPOSER-02, COMPOSER-04 | T-23-02 | Preview and quote rendering must not create a new mutation path. | screen render | `rtk mix test test/foglet_bbs/tui/screens/post_composer_test.exs` | Yes, extend | pending |
+| 23-03-01 | 03 | 2 | COMPOSER-01, COMPOSER-02, COMPOSER-04, COMPOSER-05 | T-23-03 | Title/body validation and submission stay on existing new-thread path. | screen render | `rtk mix test test/foglet_bbs/tui/screens/new_thread_test.exs` | Yes, extend | pending |
+| 23-04-01 | 04 | 3 | COMPOSER-03, COMPOSER-04, COMPOSER-05 | T-23-04 | Narrow layouts keep required controls visible and preserve width-aware input behavior. | layout smoke | `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` | Yes, extend | pending |
 
 *Status: pending, green, red, flaky.*
 
