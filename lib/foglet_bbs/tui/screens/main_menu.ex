@@ -11,6 +11,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   Menu visibility is NOT authorization (Pitfall 3) — real actor-aware authz
   arrives in Phase 1. Phase 0 shells are all read-only placeholders.
+
+  Phase 19 (Plan 01) introduces a single canonical `@main_menu_commands`
+  descriptor list with a `:kind` tag (`:destination` or `:action`). Public
+  `visible_destinations/1` and `visible_actions/1` are derived by filtering this
+  one list, so destinations vs. actions cannot drift (D-01 single-source-of-truth).
   """
 
   @behaviour Foglet.TUI.Screen
@@ -28,20 +33,22 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @oneliner_handle_limit 12
   @oneliner_body_limit 22
 
-  @base_items [
-    {"B", "Browse Boards"},
-    {"C", "Compose New Thread"}
+  # Single canonical Main Menu command descriptor list (D-01).
+  # `:kind` partitions entries into body destinations and command-bar actions;
+  # `:visibility` is a tag consumed by the role/state gate inside
+  # visible_destinations/1 and visible_actions/1. Both functions filter this
+  # one list, so destinations vs. actions cannot drift.
+  @main_menu_commands [
+    %{key: "B", label: "Boards", kind: :destination, visibility: :always},
+    %{key: "C", label: "Compose", kind: :destination, visibility: :always},
+    %{key: "A", label: "Account", kind: :destination, visibility: :account},
+    %{key: "M", label: "Moderation", kind: :destination, visibility: :moderation},
+    %{key: "S", label: "Sysop", kind: :destination, visibility: :sysop},
+    %{key: "Q", label: "Logout", kind: :destination, visibility: :always},
+    %{key: "O", label: "Oneliner", kind: :action, visibility: :authenticated},
+    %{key: "H", label: "Hide oneliner", kind: :action, visibility: :hide_oneliner_policy},
+    %{key: "↑/↓", label: "Select", kind: :action, visibility: :oneliners_present}
   ]
-
-  @base_keys [
-    {"B", "Boards"},
-    {"C", "Compose"}
-  ]
-
-  @oneliner_item {"O", "Post Oneliner"}
-  @oneliner_key {"O", "Oneliner"}
-  @logout_item {"Q", "Logout"}
-  @logout_key {"Q", "Logout"}
 
   @impl true
   @spec render(map()) :: any()
@@ -50,13 +57,13 @@ defmodule Foglet.TUI.Screens.MainMenu do
     handle = user && user.handle
     theme = Theme.from_state(state)
 
-    items = visible_menu_items(user)
-    keys = visible_menu_keys(state)
+    destinations = visible_destinations(user)
+    actions = visible_actions(state)
 
     menu_panel =
       column style: %{gap: 0} do
         [text("Welcome back, #{handle || "guest"}.", fg: theme.primary.fg), text("")] ++
-          Enum.map(items, fn {k, label} ->
+          Enum.map(destinations, fn {k, label} ->
             text("  [#{k}] #{label}", fg: theme.primary.fg)
           end)
       end
@@ -74,7 +81,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
         children: [menu_panel, oneliners_panel]
       )
 
-    ScreenFrame.render(state, "Main Menu", content, keys)
+    ScreenFrame.render(state, "Main Menu", content, actions)
   end
 
   @impl true
@@ -163,32 +170,76 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   def handle_key(_key, _state), do: :no_match
 
-  # --- private ---
+  # --- public data layer (D-01 single-source-of-truth split) ---
 
-  defp visible_menu_items(user) do
-    account = if ShellVisibility.account_visible?(user), do: [{"A", "Account"}], else: []
-    moderation = if ShellVisibility.moderation_visible?(user), do: [{"M", "Moderation"}], else: []
-    sysop = if ShellVisibility.sysop_visible?(user), do: [{"S", "Sysop"}], else: []
-    oneliner = if user, do: [@oneliner_item], else: []
+  @doc """
+  Returns destination entries visible to `user`, derived by filtering the
+  canonical `@main_menu_commands` list for `:destination` entries whose
+  `:visibility` tag passes the role gate.
 
-    @base_items ++ account ++ moderation ++ sysop ++ oneliner ++ [@logout_item]
+  Returns `[{key, label}]` tuples in declaration order — the same shape the
+  body builder consumes.
+
+  Public so tests can assert role-gating directly without going through
+  `render/1` and parsing positioned text (consistent with ShellVisibility's
+  public-predicate convention).
+  """
+  @spec visible_destinations(map() | nil) :: [{String.t(), String.t()}]
+  def visible_destinations(user) do
+    # Build a minimal state shim so the shared gate function can run; destination
+    # visibility never depends on oneliner state, so the shim has no oneliners.
+    state = %{current_user: user, recent_oneliners: []}
+
+    @main_menu_commands
+    |> Enum.filter(&(&1.kind == :destination))
+    |> Enum.filter(&command_visible?(&1.visibility, user, state))
+    |> Enum.map(&{&1.key, &1.label})
   end
 
-  defp visible_menu_keys(state) do
+  @doc """
+  Returns action entries visible for `state`, grouped into command-bar groups
+  for `ScreenFrame.render/4`. Derived by filtering the canonical
+  `@main_menu_commands` list for `:action` entries whose `:visibility` tag
+  passes the role/state gate.
+
+  Public so tests can assert action visibility directly without going through
+  `render/1` (consistent with ShellVisibility's public-predicate convention).
+  """
+  @spec visible_actions(map()) :: [%{label: String.t(), commands: [map()]}]
+  def visible_actions(state) do
     user = state.current_user
 
-    account = if ShellVisibility.account_visible?(user), do: [{"A", "Account"}], else: []
-    moderation = if ShellVisibility.moderation_visible?(user), do: [{"M", "Mod"}], else: []
-    sysop = if ShellVisibility.sysop_visible?(user), do: [{"S", "Sysop"}], else: []
-    oneliner = if user, do: [@oneliner_key], else: []
-    hide_oneliner = if selected_hideable_oneliner(state), do: [{"H", "Hide oneliner"}], else: []
+    visible =
+      @main_menu_commands
+      |> Enum.filter(&(&1.kind == :action))
+      |> Enum.filter(&command_visible?(&1.visibility, user, state))
+
+    hide_oneliner = Enum.filter(visible, &(&1.key == "H")) |> Enum.map(&{&1.key, &1.label})
+    oneliner_post = Enum.filter(visible, &(&1.key == "O")) |> Enum.map(&{&1.key, &1.label})
+    select_oneliner = Enum.filter(visible, &(&1.key == "↑/↓")) |> Enum.map(&{&1.key, &1.label})
 
     [
-      command_group("Navigate", @base_keys, 0),
-      command_group("Actions", account ++ moderation ++ sysop ++ hide_oneliner ++ oneliner, 10),
-      command_group("System", [@logout_key], 0)
+      command_group("Actions", hide_oneliner ++ oneliner_post, 10),
+      command_group("Select", select_oneliner, 20)
     ]
     |> Enum.reject(&(&1.commands == []))
+  end
+
+  # --- private ---
+
+  @spec command_visible?(atom(), map() | nil, map()) :: boolean()
+  defp command_visible?(:always, _user, _state), do: true
+  defp command_visible?(:account, user, _state), do: ShellVisibility.account_visible?(user)
+  defp command_visible?(:moderation, user, _state), do: ShellVisibility.moderation_visible?(user)
+  defp command_visible?(:sysop, user, _state), do: ShellVisibility.sysop_visible?(user)
+  defp command_visible?(:authenticated, user, _state), do: not is_nil(user)
+
+  defp command_visible?(:hide_oneliner_policy, _user, state) do
+    not is_nil(selected_hideable_oneliner(state))
+  end
+
+  defp command_visible?(:oneliners_present, _user, state) do
+    visible_oneliners(state) != []
   end
 
   defp command_group(label, keys, priority) do
