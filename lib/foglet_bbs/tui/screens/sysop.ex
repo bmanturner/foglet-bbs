@@ -59,11 +59,7 @@ defmodule Foglet.TUI.Screens.Sysop do
     content = build_content(ss, theme)
     jump_hint = if "INVITES" in State.tab_labels(ss), do: "1-6", else: "1-5"
 
-    ScreenFrame.render(state, "Sysop", content, [
-      {"←/→", "Tab"},
-      {jump_hint, "Jump"},
-      {"Q", "Back"}
-    ])
+    ScreenFrame.render(state, chrome_model(ss), content, sysop_commands(jump_hint))
   end
 
   defp render_unauthorized(state) do
@@ -74,7 +70,31 @@ defmodule Foglet.TUI.Screens.Sysop do
         [text("Sysop is not available.", fg: theme.warning.fg)]
       end
 
-    ScreenFrame.render(state, "Sysop", empty, [{"Q", "Back"}])
+    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Sysop"]}, empty, [
+      %{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]}
+    ])
+  end
+
+  defp chrome_model(ss) do
+    %{
+      breadcrumb_parts: ["Foglet", "Sysop", Enum.at(State.tab_labels(ss), ss.active_tab)]
+    }
+  end
+
+  defp sysop_commands(jump_hint) do
+    [
+      %{
+        label: "System",
+        commands: [%{key: "Q", label: "Back", priority: 0}]
+      },
+      %{
+        label: "Tabs",
+        commands: [
+          %{key: "←/→", label: "Tab", priority: 10},
+          %{key: jump_hint, label: "Jump", priority: 10}
+        ]
+      }
+    ]
   end
 
   defp build_content(ss, theme) do
