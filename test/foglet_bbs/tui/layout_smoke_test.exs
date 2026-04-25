@@ -354,6 +354,171 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Phase 23 — Composer size contracts (COMPOSER-01/02/03/04/05)
+  # ---------------------------------------------------------------------------
+
+  describe "composer — size contract" do
+    @composer_sizes [{64, 22}, {80, 24}, {132, 50}]
+
+    defp composer_user do
+      %Foglet.Accounts.User{id: "u1", handle: "alice"}
+    end
+
+    defp reply_post do
+      %{
+        id: "p1",
+        body:
+          "Quoted reply context that can safely collapse at the minimum terminal size\nsecond quoted line",
+        user: %{handle: "reader"}
+      }
+    end
+
+    defp post_composer_state(width, height, mode) do
+      %App{
+        current_screen: :post_composer,
+        current_user: composer_user(),
+        current_board: %{id: "b1", name: "General"},
+        current_thread: %{id: "t1", title: "Composer Contract", board_id: "b1"},
+        session_context: %{theme: Foglet.TUI.Theme.default(), max_post_length: 1_000},
+        terminal_size: {width, height},
+        screen_state: %{
+          post_composer:
+            PostComposer.init_screen_state(
+              mode: mode,
+              reply_to: reply_post(),
+              value: "reply body smoke text",
+              width: max(width - 4, 20),
+              height: 10
+            )
+        }
+      }
+      |> Map.from_struct()
+    end
+
+    defp new_thread_state(width, height, mode) do
+      %App{
+        current_screen: :new_thread,
+        current_user: composer_user(),
+        current_board: %{id: "b1", name: "General"},
+        session_context: %{theme: Foglet.TUI.Theme.default(), max_post_length: 1_000},
+        terminal_size: {width, height},
+        screen_state: %{
+          new_thread:
+            NewThread.init_screen_state(
+              step: :compose,
+              board: %{id: "b1", name: "General"},
+              boards: [%{id: "b1", name: "General"}],
+              title_value: "Smoke Title",
+              body_value: "opening body smoke text",
+              focused: :body,
+              mode: mode,
+              width: max(width - 4, 20),
+              height: 10
+            )
+        }
+      }
+      |> Map.from_struct()
+    end
+
+    defp positioned_text(positioned) do
+      positioned
+      |> text_elements()
+      |> Enum.sort_by(fn element -> {element.y, element.x} end)
+    end
+
+    defp joined_positioned_text(elements) do
+      Enum.map_join(elements, "", & &1.text)
+    end
+
+    defp assert_positioned_text_fits!(elements, {width, height}, label) do
+      assert elements != [],
+             "expected #{label} positioned text elements at #{inspect({width, height})}"
+
+      for element <- elements do
+        text = Map.fetch!(element, :text)
+
+        assert element.x >= 0,
+               "#{label} has negative x at #{inspect({width, height})}: #{inspect(element)}"
+
+        assert element.y >= 0,
+               "#{label} has negative y at #{inspect({width, height})}: #{inspect(element)}"
+
+        assert element.x + TextWidth.display_width(text) <= width,
+               "#{label} overflows width at #{inspect({width, height})}: #{inspect(element)}"
+
+        assert element.y < height,
+               "#{label} overflows height at #{inspect({width, height})}: #{inspect(element)}"
+      end
+    end
+
+    defp assert_no_same_row_overlap!(elements, size, label) do
+      elements
+      |> Enum.group_by(& &1.y)
+      |> Enum.each(fn {_y, row_elements} ->
+        row_elements
+        |> Enum.sort_by(& &1.x)
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.each(fn [previous, current] ->
+          previous_end = previous.x + TextWidth.display_width(previous.text)
+
+          assert previous_end <= current.x,
+                 "#{label} overlapping text at #{inspect(size)}: #{inspect(previous.text)} " <>
+                   "ends at #{previous_end}, #{inspect(current.text)} starts at #{current.x}"
+        end)
+      end)
+    end
+
+    test "post composer keeps mode controls, content, and body budget visible" do
+      for {width, height} <- @composer_sizes, mode <- [:edit, :preview] do
+        size = {width, height}
+
+        elements =
+          width
+          |> post_composer_state(height, mode)
+          |> PostComposer.render()
+          |> apply_at_size(size)
+          |> positioned_text()
+
+        flat = joined_positioned_text(elements)
+
+        assert flat =~ "Composer"
+        assert flat =~ "Edit"
+        assert flat =~ "Preview"
+        assert flat =~ "/"
+        assert flat =~ "reply body smoke text"
+
+        assert_positioned_text_fits!(elements, size, "PostComposer.render #{mode}")
+        assert_no_same_row_overlap!(elements, size, "PostComposer.render #{mode}")
+      end
+    end
+
+    test "new thread compose keeps title, mode controls, content, and budgets visible" do
+      for {width, height} <- @composer_sizes, mode <- [:edit, :preview] do
+        size = {width, height}
+
+        elements =
+          width
+          |> new_thread_state(height, mode)
+          |> NewThread.render()
+          |> apply_at_size(size)
+          |> positioned_text()
+
+        flat = joined_positioned_text(elements)
+
+        assert flat =~ "Composer"
+        assert flat =~ "Edit"
+        assert flat =~ "Preview"
+        assert flat =~ "Title"
+        assert flat =~ "60 chars"
+        assert flat =~ "opening body smoke text"
+
+        assert_positioned_text_fits!(elements, size, "NewThread.render #{mode}")
+        assert_no_same_row_overlap!(elements, size, "NewThread.render #{mode}")
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Phase 22 — PostReader size contracts (READER-01/02/03/04)
   # ---------------------------------------------------------------------------
 
