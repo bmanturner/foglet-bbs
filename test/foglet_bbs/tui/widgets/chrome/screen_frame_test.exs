@@ -22,11 +22,7 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
   end
 
   defp content do
-    column do
-      [
-        text("BODY SENTINEL")
-      ]
-    end
+    text("BODY SENTINEL")
   end
 
   describe "render/4" do
