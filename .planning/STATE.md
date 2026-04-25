@@ -4,14 +4,14 @@ milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: executing
 stopped_at: Phase 24 context gathered (assumptions mode)
-last_updated: "2026-04-25T21:40:41.337Z"
-last_activity: 2026-04-25 -- Phase 22 planning complete
+last_updated: "2026-04-25T21:45:23.008Z"
+last_activity: 2026-04-25 -- Phase 23 planning complete
 progress:
   total_phases: 10
   completed_phases: 5
-  total_plans: 32
+  total_plans: 36
   completed_plans: 25
-  percent: 78
+  percent: 69
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-25)
 Phase: 20 (rich-rows-and-thread-flow) — EXECUTING
 Plan: 1 of 6
 Status: Ready to execute
-Last activity: 2026-04-25 -- Phase 22 planning complete
+Last activity: 2026-04-25 -- Phase 23 planning complete
 
 Progress: [----------] 0%
 

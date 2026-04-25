@@ -216,10 +216,20 @@ Cross-cutting constraints:
 5. Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed.
 **Plans:** 4 plans
 Plans:
+**Wave 1**
 - [ ] 23-01-PLAN.md — Wave 1 shared `Composer.EditorFrame` widget, visible Edit/Preview segment, theme-routed counters, and widget tests.
+
+**Wave 2 *(blocked on Wave 1 completion)***
 - [ ] 23-02-PLAN.md — Wave 2 `PostComposer` reply composer migration to the shared shell while preserving reply submit, preview, and shortcut behavior.
 - [ ] 23-03-PLAN.md — Wave 2 `NewThread` compose-step migration to the shared shell while preserving title/body input and thread creation behavior.
+
+**Wave 3 *(blocked on Wave 2 completion)***
 - [ ] 23-04-PLAN.md — Wave 3 composer layout smoke coverage at `64x22`, `80x24`, and `132x50`, plus focused validation and precommit gate.
+
+Cross-cutting constraints:
+- `D-12`: Preview mode uses `MarkdownBody` inside the same composer shell.
+- `D-13/D-14`: Existing Tab, Ctrl+S, Ctrl+C/Esc, submit validation, and domain context behavior remain unchanged.
+- `D-16/D-18`: Screen behavior tests are extended while existing composer behavior tests keep passing.
 **UI hint:** yes
 
 ### Phase 24: Operator Console Primitives
