@@ -7,7 +7,25 @@ defmodule Foglet.BoardsTest do
   alias Ecto.Adapters.SQL.Sandbox
   alias Foglet.Accounts.User
   alias Foglet.Boards.{Board, Category, ReadPointer, Subscription}
+  alias Foglet.Threads.Thread
   alias FogletBbs.Repo
+
+  # Locate a directory entry by board.id rather than destructuring the full
+  # directory shape. Survives fixture growth without test churn.
+  defp find_board_entry(directory, board_id) do
+    directory
+    |> Enum.flat_map(& &1.boards)
+    |> Enum.find(fn %{board: %{id: id}} -> id == board_id end)
+    |> case do
+      nil ->
+        flunk(
+          "no entry found for board_id=#{inspect(board_id)} in directory=#{inspect(directory)}"
+        )
+
+      entry ->
+        entry
+    end
+  end
 
   # Board Server is started by Foglet.Boards.create_board/3 via BoardSupervisor.
   # Look up the PID from the Registry and allow sandbox access.
@@ -462,6 +480,8 @@ defmodule Foglet.BoardsTest do
   end
 
   describe "board_directory_for/1 (SUBS-01)" do
+    @describetag :board_directory
+
     test "returns active subscribed and unsubscribed boards grouped by category order" do
       category_b = category_fixture(%{name: "Beta", display_order: 2})
       category_a = category_fixture(%{name: "Alpha", display_order: 1})
@@ -527,6 +547,110 @@ defmodule Foglet.BoardsTest do
 
     test "returns an empty directory for nil users" do
       assert Foglet.Boards.board_directory_for(nil) == []
+    end
+
+    test "returns max thread last_post_at across non-deleted threads (BOARDS-03)" do
+      category = category_fixture(%{name: "Cat A", display_order: 1})
+      board = board_fixture(category, %{slug: "cat-a-board", name: "Board A"})
+      user = user_fixture()
+      author = user_fixture()
+
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      t_old = DateTime.add(now, -3600, :second)
+      t_mid = DateTime.add(now, -1800, :second)
+      t_new = DateTime.add(now, -60, :second)
+
+      thread1 = thread_fixture(board, author, %{}) |> Repo.preload(:posts)
+      thread2 = thread_fixture(board, author, %{}) |> Repo.preload(:posts)
+      thread3 = thread_fixture(board, author, %{}) |> Repo.preload(:posts)
+
+      Repo.update_all(
+        from(t in Thread, where: t.id == ^thread1.id),
+        set: [last_post_at: t_old]
+      )
+
+      Repo.update_all(
+        from(t in Thread, where: t.id == ^thread2.id),
+        set: [last_post_at: t_mid]
+      )
+
+      Repo.update_all(
+        from(t in Thread, where: t.id == ^thread3.id),
+        set: [last_post_at: t_new]
+      )
+
+      directory = Foglet.Boards.board_directory_for(user)
+
+      entry = find_board_entry(directory, board.id)
+      assert DateTime.compare(entry.last_post_at, t_new) == :eq
+    end
+
+    test "returns nil last_post_at when board has no non-deleted threads (BOARDS-03)" do
+      category = category_fixture(%{name: "Cat B", display_order: 1})
+      board = board_fixture(category, %{slug: "empty-board", name: "Empty"})
+      user = user_fixture()
+
+      directory = Foglet.Boards.board_directory_for(user)
+
+      entry = find_board_entry(directory, board.id)
+      assert entry.last_post_at == nil
+    end
+
+    test "excludes soft-deleted threads from last_post_at max (BOARDS-03)" do
+      category = category_fixture(%{name: "Cat C", display_order: 1})
+      board = board_fixture(category, %{slug: "cat-c-board", name: "Board C"})
+      user = user_fixture()
+      author = user_fixture()
+
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      t_kept = DateTime.add(now, -1800, :second)
+      t_deleted_later = DateTime.add(now, -60, :second)
+
+      kept = thread_fixture(board, author, %{}) |> Repo.preload(:posts)
+      deleted = thread_fixture(board, author, %{}) |> Repo.preload(:posts)
+
+      Repo.update_all(
+        from(t in Thread, where: t.id == ^kept.id),
+        set: [last_post_at: t_kept]
+      )
+
+      Repo.update_all(
+        from(t in Thread, where: t.id == ^deleted.id),
+        set: [last_post_at: t_deleted_later, deleted_at: now]
+      )
+
+      directory = Foglet.Boards.board_directory_for(user)
+
+      entry = find_board_entry(directory, board.id)
+      assert DateTime.compare(entry.last_post_at, t_kept) == :eq
+    end
+
+    test "last_post_at is identical for subscribed and unsubscribed actors on same board (BOARDS-03)" do
+      category = category_fixture(%{name: "Cat D", display_order: 1})
+      board = board_fixture(category, %{slug: "cat-d-board", name: "Board D"})
+      author = user_fixture()
+      subscribed_user = user_fixture()
+      unsubscribed_user = user_fixture()
+
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      t = DateTime.add(now, -300, :second)
+
+      thread = thread_fixture(board, author, %{}) |> Repo.preload(:posts)
+
+      Repo.update_all(
+        from(t in Thread, where: t.id == ^thread.id),
+        set: [last_post_at: t]
+      )
+
+      assert {:ok, :subscribed} = Foglet.Boards.subscribe_user_to_board(subscribed_user, board.id)
+
+      sub_entry = find_board_entry(Foglet.Boards.board_directory_for(subscribed_user), board.id)
+      unsub_entry = find_board_entry(Foglet.Boards.board_directory_for(unsubscribed_user), board.id)
+
+      assert sub_entry.subscribed? == true
+      assert unsub_entry.subscribed? == false
+      assert sub_entry.last_post_at == unsub_entry.last_post_at
+      assert DateTime.compare(sub_entry.last_post_at, t) == :eq
     end
   end
 
