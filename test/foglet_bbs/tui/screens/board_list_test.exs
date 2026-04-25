@@ -124,12 +124,40 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     refute text =~ "[subscribed]"
     refute text =~ "[unsubscribed]"
 
-    # Word-boundary refutes on row text. The feedback-flash test at
-    # the bottom of this file legitimately contains "required subscription" - that
-    # is a flash, not row text. This refute applies here because no flash is rendered.
-    refute text =~ ~r/\brequired\b/i
-    refute text =~ ~r/\bsubscribed\b/i
-    refute text =~ ~r/\bsubscribe\b/i
+    # Detail-strip words are allowed; bracketed row labels are not.
+    assert text =~ "Town Square • 3 boards • 3 unread total"
+  end
+
+  test "render/1 shows focused board details strip at compact width", %{state: state} do
+    {s, _} = BoardList.load_boards(%{state | terminal_size: {64, 22}})
+    {:update, s, _} = BoardList.handle_key(%{key: :right}, s)
+    {:update, s, _} = BoardList.handle_key(%{key: :down}, s)
+
+    text = BoardList.render(s) |> flatten_text()
+
+    assert text =~ "General • subscribed • 3 unread"
+    assert text =~ ~r/General • subscribed • 3 unread • \d+m ago/
+    refute text =~ "Inspector • board"
+  end
+
+  test "render/1 shows focused category details strip at compact width", %{state: state} do
+    {s, _} = BoardList.load_boards(%{state | terminal_size: {64, 22}})
+
+    text = BoardList.render(s) |> flatten_text()
+
+    assert text =~ "Town Square • 3 boards • 3 unread total"
+    refute text =~ "Inspector • category"
+  end
+
+  test "render/1 shows wide inspector only when terminal width permits", %{state: state} do
+    {compact, _} = BoardList.load_boards(%{state | terminal_size: {80, 24}})
+    {wide, _} = BoardList.load_boards(%{state | terminal_size: {132, 50}})
+
+    compact_text = BoardList.render(compact) |> flatten_text()
+    wide_text = BoardList.render(wide) |> flatten_text()
+
+    refute compact_text =~ "Inspector • category"
+    assert wide_text =~ "Inspector • category • Town Square • 3 boards"
   end
 
   test "render/1 board rows render TimeAgo short-form age (regex magnitude) for populated last_post_at",

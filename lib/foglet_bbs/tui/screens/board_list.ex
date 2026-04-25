@@ -3,13 +3,17 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.TimeAgo
   alias Foglet.TUI.Screens.BoardList.State
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.BoardTree
   alias Foglet.TUI.Widgets.Progress.Spinner
   import Raxol.Core.Renderer.View
+
+  @wide_inspector_min_width 100
 
   @impl true
   @spec init_screen_state(keyword()) :: State.t()
@@ -60,10 +64,16 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp render_board_content(state, ss, theme) do
     board_tree = ss.board_tree || build_tree(state.board_list)
+    width = row_width(state)
 
     column style: %{gap: 0} do
       maybe_feedback(ss, theme) ++
-        [BoardTree.render(board_tree, theme: theme, width: row_width(state))]
+        [
+          BoardTree.render(board_tree, theme: theme, width: width),
+          text(""),
+          details_strip(board_tree, state.board_list, theme, width)
+          | wide_inspector(board_tree, state.board_list, theme, width)
+        ]
     end
   end
 
@@ -194,6 +204,102 @@ defmodule Foglet.TUI.Screens.BoardList do
   end
 
   defp maybe_feedback(_ss, _theme), do: []
+
+  defp details_strip(board_tree, directory, theme, width) do
+    line =
+      board_tree
+      |> BoardTree.focused_entry()
+      |> detail_text(directory || [])
+      |> TextWidth.truncate(max(width, 2))
+
+    text(line, fg: theme.dim.fg)
+  end
+
+  defp wide_inspector(_board_tree, _directory, _theme, width)
+       when width < @wide_inspector_min_width,
+       do: []
+
+  defp wide_inspector(board_tree, directory, theme, width) do
+    line =
+      board_tree
+      |> BoardTree.focused_entry()
+      |> inspector_text(directory || [])
+      |> TextWidth.truncate(max(width, 2))
+
+    if line == "" do
+      []
+    else
+      [text(line, fg: theme.info.fg)]
+    end
+  end
+
+  defp inspector_text(%{kind: :board, board: board} = entry, _directory) do
+    [
+      "Inspector",
+      "board",
+      board.name,
+      Map.get(board, :slug),
+      subscription_label(entry),
+      unread_label(entry.unread_count),
+      age_label(entry.last_post_at)
+    ]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(" • ")
+  end
+
+  defp inspector_text(%{kind: :category, category: category}, directory) do
+    boards =
+      directory
+      |> Enum.find_value([], fn
+        %{category: %{id: id}, boards: boards} when id == category.id -> boards
+        _ -> nil
+      end)
+
+    "Inspector • category • #{category.name} • #{length(boards)} boards"
+  end
+
+  defp inspector_text(_entry, _directory), do: ""
+
+  defp detail_text(%{kind: :board} = entry, _directory) do
+    [
+      entry.board.name,
+      subscription_label(entry),
+      unread_label(entry.unread_count),
+      age_label(entry.last_post_at)
+    ]
+    |> Enum.reject(&(&1 in [nil, ""]))
+    |> Enum.join(" • ")
+  end
+
+  defp detail_text(%{kind: :category, category: category}, directory) do
+    boards =
+      directory
+      |> Enum.find_value([], fn
+        %{category: %{id: id}, boards: boards} when id == category.id -> boards
+        _ -> nil
+      end)
+
+    unread_total =
+      boards
+      |> Enum.map(&Map.get(&1, :unread_count))
+      |> Enum.filter(&is_integer/1)
+      |> Enum.sum()
+
+    "#{category.name} • #{length(boards)} boards • #{unread_total} unread total"
+  end
+
+  defp detail_text(_entry, _directory), do: ""
+
+  defp subscription_label(%{required_subscription?: true}), do: "required"
+  defp subscription_label(%{subscribed?: true}), do: "subscribed"
+  defp subscription_label(_entry), do: "subscribe"
+
+  defp unread_label(nil), do: nil
+  defp unread_label(0), do: "all read"
+  defp unread_label(count) when is_integer(count), do: "#{count} unread"
+
+  defp age_label(nil), do: "no posts yet"
+  defp age_label(%DateTime{} = dt), do: TimeAgo.format(dt) <> " ago"
 
   defp row_width(state) do
     case Map.get(state, :terminal_size) do

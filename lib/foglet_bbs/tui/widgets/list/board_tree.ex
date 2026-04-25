@@ -31,7 +31,8 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
       styling layer.
     * D-13 — `focused_board_entry/1 :: t() -> board_entry() | nil`
       encapsulates the cursor → entry lookup so `BoardList` does not
-      pattern-match on internal `Display.Tree.t()` shape.
+      pattern-match on internal `Display.Tree.t()` shape. `focused_entry/1`
+      exposes the same encapsulation for board/category detail rendering.
 
   ## Terminal-rendering caveat (21-RESEARCH.md Pitfall 1)
 
@@ -175,8 +176,37 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   """
   @spec focused_board_entry(t()) :: board_entry() | nil
   def focused_board_entry(%__MODULE__{tree: %Tree{raxol_state: %{cursor: cursor, nodes: nodes}}}) do
+    case focused_data(nodes, cursor) do
+      %{kind: :board} = data -> Map.delete(data, :kind)
+      _ -> nil
+    end
+  end
+
+  @doc """
+  Returns the focused category or board entry data.
+
+  The returned map includes `:kind` so callers can render category and
+  board details without depending on the underlying `Display.Tree` state.
+  """
+  @spec focused_entry(t()) ::
+          %{required(:kind) => :category, required(:category) => map()}
+          | %{
+              required(:kind) => :board,
+              required(:board) => map(),
+              required(:subscribed?) => boolean(),
+              required(:required_subscription?) => boolean(),
+              required(:unread_count) => non_neg_integer() | nil,
+              required(:last_post_at) => DateTime.t() | nil
+            }
+          | nil
+  def focused_entry(%__MODULE__{tree: %Tree{raxol_state: %{cursor: cursor, nodes: nodes}}}) do
+    focused_data(nodes, cursor)
+  end
+
+  @spec focused_data([Tree.tree_node()] | nil, term() | nil) :: map() | nil
+  defp focused_data(nodes, cursor) do
     case find_node(nodes, cursor) do
-      %{data: %{kind: :board} = data} -> Map.delete(data, :kind)
+      %{data: data} when is_map(data) -> data
       _ -> nil
     end
   end
