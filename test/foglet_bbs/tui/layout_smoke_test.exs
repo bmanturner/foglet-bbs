@@ -486,6 +486,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           assert row.x >= oneliners_header.x,
                  "oneliner row bled out of right panel at #{inspect({width, height})}: " <>
                    "row.x=#{row.x} < oneliners_header.x=#{oneliners_header.x}; row=#{inspect(row)}"
+
+          row_right = row.x + TextWidth.display_width(row.text) - 1
+          right_panel_right_inner = width - 2
+
+          assert row_right <= right_panel_right_inner,
+                 "oneliner row overran right panel inner border at #{inspect({width, height})}: " <>
+                   "row_right=#{row_right} > right_panel_right_inner=#{right_panel_right_inner}; row=#{inspect(row)}"
         end
       end
     end
@@ -545,6 +552,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       for row <- oneliner_rows do
         assert row.x >= oneliners_header.x,
                "CJK oneliner row bled out of right panel: row.x=#{row.x} < oneliners_header.x=#{oneliners_header.x}; row=#{inspect(row)}"
+
+        row_right = row.x + TextWidth.display_width(row.text) - 1
+        right_panel_right_inner = 64 - 2
+
+        assert row_right <= right_panel_right_inner,
+               "CJK oneliner row overran right panel inner border: " <>
+                 "row_right=#{row_right} > right_panel_right_inner=#{right_panel_right_inner}; row=#{inspect(row)}"
       end
     end
   end

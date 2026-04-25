@@ -31,12 +31,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @default_terminal_size {80, 24}
   @oneliner_display_limit 5
   @oneliner_handle_limit 12
-  # Body limit reduced from 22 to 20 so the full oneliner row
-  # ("> @" prefix + handle_limit + "  " separator + body_limit = 3+12+2+20=37)
-  # fits inside the right panel at 64-wide where the panel starts at ~x=27
-  # (27 + 37 = 64 — exact fit at the narrowest canonical terminal size).
-  # The existing long-Unicode clip test's `<= 39` bound still holds.
-  @oneliner_body_limit 20
+  # Body limit keeps a selected row within the right panel inner width at the
+  # narrowest canonical terminal size: marker + "@" + handle + separator + body
+  # = 2+1+12+2+17 = 34 columns at 64-wide.
+  @oneliner_body_limit 17
 
   # Minimum Navigation panel inner width budget — the FLOOR for the
   # terminal-size-aware computation in nav_panel_inner_width/1. At 64×22 with
