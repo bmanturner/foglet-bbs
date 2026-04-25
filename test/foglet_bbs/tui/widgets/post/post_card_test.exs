@@ -126,6 +126,93 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
     end
   end
 
+  describe "reader_parts/5" do
+    test "returns compact header atoms for a normal post" do
+      post =
+        sample_post(%{
+          message_number: 42,
+          inserted_at: DateTime.add(DateTime.utc_now(), -5 * 60, :second),
+          user: %{handle: "mina"}
+        })
+
+      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(), index: 0, total: 1)
+      header = flatten_text(parts.header)
+
+      assert header =~ "Post 1 of 1"
+      assert header =~ "#42"
+      assert header =~ "@mina"
+      assert header =~ "ago"
+    end
+
+    test "falls back explicitly for missing reader metadata" do
+      post = sample_post(%{message_number: nil, inserted_at: nil, user: nil})
+
+      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(), index: 0, total: 1)
+      header = flatten_text(parts.header)
+
+      assert header =~ "#?"
+      assert header =~ "@unknown"
+      assert header =~ "age ?"
+    end
+
+    test "routes header styling through theme slots without hardcoded color atoms" do
+      t = theme()
+      post = sample_post(%{message_number: 42, user: %{handle: "mina"}})
+
+      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, t, index: 0, total: 1)
+      serialized = inspect(parts.header, printable_limit: :infinity, limit: :infinity)
+
+      assert serialized =~ t.dim.fg or serialized =~ t.title.fg or serialized =~ t.badge.fg or
+               serialized =~ t.accent.fg
+
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color), "reader header leaked :#{color}"
+      end
+    end
+
+    test "returns compact progress outside body lines" do
+      post = sample_post(%{message_number: 42})
+
+      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(), index: 2, total: 12)
+
+      assert flatten_text(parts.progress) =~ "Posts 3/12"
+      refute flatten_text(parts.body_lines) =~ "Posts 3/12"
+    end
+
+    test "returns guttered body lines as separate Raxol view elements" do
+      post = sample_post(%{message_number: 42, user: %{handle: "mina"}})
+
+      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello reader"), 80, theme(), index: 0, total: 1)
+
+      assert %{header: _header, progress: _progress, body_lines: [_ | _]} = parts
+      assert is_list(parts.body_lines)
+      assert Enum.all?(parts.body_lines, &is_map/1)
+      assert flatten_text(parts.body_lines) =~ "│"
+      assert flatten_text(parts.body_lines) =~ "Hello reader"
+      refute flatten_text(parts.body_lines) =~ "Post 1 of"
+      refute flatten_text(parts.body_lines) =~ "Posts 1/1"
+    end
+
+    test "guttered body preserves markdown styling output" do
+      post = sample_post(%{message_number: 42})
+      tuples = Foglet.Markdown.render("Hello **world**")
+
+      parts = PostCard.reader_parts(post, tuples, 80, theme(), index: 0, total: 1)
+      serialized = inspect(parts.body_lines, printable_limit: :infinity, limit: :infinity)
+
+      refute serialized =~ "**world**"
+      assert serialized =~ "world"
+    end
+
+    test "narrow widths still return body lines without raising" do
+      post = sample_post(%{message_number: 42})
+
+      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 1, theme(), index: 0, total: 1)
+
+      assert is_list(parts.body_lines)
+    end
+  end
+
   describe "body_line_count/1" do
     test "returns 0 for nil" do
       assert PostCard.body_line_count(nil) == 0
