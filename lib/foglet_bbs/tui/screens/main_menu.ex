@@ -219,8 +219,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
     visible =
       @main_menu_commands
-      |> Enum.filter(&(&1.kind == :action))
-      |> Enum.filter(&action_visible?(&1.visibility, user, state))
+      |> Enum.filter(&(&1.kind == :action and action_visible?(&1.visibility, user, state)))
 
     hide_oneliner = Enum.filter(visible, &(&1.key == "H")) |> Enum.map(&{&1.key, &1.label})
     oneliner_post = Enum.filter(visible, &(&1.key == "O")) |> Enum.map(&{&1.key, &1.label})
@@ -241,8 +240,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   defp visible_destination_entries(user) do
     @main_menu_commands
-    |> Enum.filter(&(&1.kind == :destination))
-    |> Enum.filter(&destination_visible?(&1.visibility, user))
+    |> Enum.filter(&(&1.kind == :destination and destination_visible?(&1.visibility, user)))
   end
 
   @spec destination_visible?(atom(), map() | nil) :: boolean()
