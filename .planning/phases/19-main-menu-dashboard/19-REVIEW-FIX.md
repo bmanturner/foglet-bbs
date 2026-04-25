@@ -3,8 +3,8 @@ phase: 19-main-menu-dashboard
 fixed_at: 2026-04-25T20:54:17Z
 review_path: .planning/phases/19-main-menu-dashboard/19-REVIEW.md
 iteration: 1
-findings_in_scope: 3
-fixed: 3
+findings_in_scope: 8
+fixed: 8
 skipped: 0
 status: all_fixed
 ---
@@ -16,8 +16,8 @@ status: all_fixed
 **Iteration:** 1
 
 **Summary:**
-- Findings in scope: 3
-- Fixed: 3
+- Findings in scope: 8
+- Fixed: 8
 - Skipped: 0
 
 ## Fixed Issues
@@ -39,6 +39,36 @@ status: all_fixed
 **Files modified:** `lib/foglet_bbs/tui/screens/main_menu.ex`, `test/foglet_bbs/tui/screens/main_menu_test.exs`
 **Commit:** 61237eb
 **Applied fix:** Added a `@doc false` test-visible wrapper around `nav_panel_inner_width/1` and updated the navigation row budget test to call it directly instead of duplicating allocation constants.
+
+### IN-01: `command_priority/2` clauses for "A", "M", "S" are unreachable
+
+**Files modified:** `lib/foglet_bbs/tui/screens/main_menu.ex`
+**Commit:** 0360b00
+**Applied fix:** Removed the unreachable destination-key priority clause after confirming command priorities only apply to action entries.
+
+### IN-02: `command_priority/2`'s `priority` parameter is effectively unused for "H" and "O"
+
+**Files modified:** `lib/foglet_bbs/tui/screens/main_menu.ex`
+**Commit:** 0360b00
+**Applied fix:** Replaced threaded group priority arguments with fixed action priorities: `H` sorts first, `O` later, and remaining action rows default to the select priority.
+
+### IN-03: `visible_destinations/1` builds a state shim that is fragile against future visibility tags
+
+**Files modified:** `lib/foglet_bbs/tui/screens/main_menu.ex`
+**Commit:** 0360b00
+**Applied fix:** Split destination visibility from state-aware action visibility, removing the synthetic state shim from destination filtering.
+
+### IN-04: `clamp/3` shadows `Kernel.max/2` and `Kernel.min/2` via implicit imports
+
+**Files modified:** `lib/foglet_bbs/tui/screens/main_menu.ex`
+**Commit:** 0360b00
+**Applied fix:** Renamed clamp bounds to `lower` and `upper` and qualified the `Kernel.max/2` and `Kernel.min/2` calls.
+
+### IN-05: `role_label_to_role/1` test helper masks the test's own intent
+
+**Files modified:** `test/foglet_bbs/tui/screens/main_menu_test.exs`
+**Commit:** 0360b00
+**Applied fix:** Added an explicit anonymous `build_state(nil)` branch and removed the role-label shim from the disjointness property test.
 
 ---
 
