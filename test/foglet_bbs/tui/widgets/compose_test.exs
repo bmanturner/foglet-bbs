@@ -5,6 +5,33 @@ defmodule Foglet.TUI.Widgets.ComposeTest do
   alias Foglet.TUI.Widgets.Compose
   alias Raxol.UI.Components.Input.MultiLineInput
 
+  defp flatten_text(tree), do: tree |> collect_text([]) |> Enum.reverse() |> Enum.join("\n")
+
+  defp collect_text(nil, acc), do: acc
+  defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
+
+  defp collect_text(%{children: children}, acc) do
+    collect_text(children, acc)
+  end
+
+  defp collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
+  defp collect_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
+  defp collect_text(_other, acc), do: acc
+
+  defp input_with(value, cursor_pos) do
+    {:ok, input_st} =
+      MultiLineInput.init(%{
+        value: value,
+        placeholder: "",
+        width: 40,
+        height: 5,
+        wrap: :none,
+        focused: true
+      })
+
+    %{input_st | cursor_pos: cursor_pos}
+  end
+
   # ---------------------------------------------------------------------------
   # translate_key/1
   # ---------------------------------------------------------------------------
@@ -178,6 +205,30 @@ defmodule Foglet.TUI.Widgets.ComposeTest do
         })
 
       assert Compose.render_input(input_st, true, theme) != nil
+    end
+
+    test "focused ASCII input inserts cursor at display column", %{theme: theme} do
+      input_st = input_with("hello", {0, 2})
+
+      assert Compose.render_input(input_st, true, theme) |> flatten_text() == "he█llo"
+    end
+
+    test "focused CJK input inserts cursor between full-width glyphs", %{theme: theme} do
+      input_st = input_with("漢字", {0, 2})
+
+      assert Compose.render_input(input_st, true, theme) |> flatten_text() == "漢█字"
+    end
+
+    test "focused combining input keeps accent with base grapheme", %{theme: theme} do
+      input_st = input_with("cafe\u0301", {0, 4})
+
+      assert Compose.render_input(input_st, true, theme) |> flatten_text() == "cafe\u0301█"
+    end
+
+    test "focused milestone glyph input inserts cursor by display width", %{theme: theme} do
+      input_st = input_with("● ◆ ▸ ▾ ✓ ×", {0, 6})
+
+      assert Compose.render_input(input_st, true, theme) |> flatten_text() == "● ◆ █▸ ▾ ✓ ×"
     end
 
     test "empty_line_placeholder: \" \" substitutes a space for empty lines", %{theme: _theme} do
