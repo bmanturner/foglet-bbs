@@ -354,6 +354,133 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Phase 22 — PostReader size contracts (READER-01/02/03/04)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 22 PostReader size contracts" do
+    defp phase_22_posts do
+      Enum.map(31..42, fn message_number ->
+        body =
+          if message_number == 33 do
+            "Selected body sentinel\n\nMore content here."
+          else
+            "Body text for message #{message_number}."
+          end
+
+        %{
+          id: "p#{message_number}",
+          body: body,
+          inserted_at: ~U[2026-04-24 18:00:00Z],
+          message_number: message_number,
+          user: %{handle: "mina"}
+        }
+      end)
+    end
+
+    defp phase_22_state(width, height) do
+      %Foglet.TUI.App{
+        current_screen: :post_reader,
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "reader"},
+        current_board: %{id: "b1", name: "General"},
+        current_thread: %{id: "t1", title: "Reader Contract"},
+        posts: phase_22_posts(),
+        screen_state: %{post_reader: PostReader.init_screen_state(selected_post_index: 2)},
+        session_context: %{theme: Foglet.TUI.Theme.default()},
+        terminal_size: {width, height}
+      }
+      |> Map.from_struct()
+    end
+
+    defp phase_22_text_element!(elements, text, size) do
+      Enum.find(elements, &String.contains?(&1.text, text)) ||
+        flunk("expected #{inspect(text)} in positioned PostReader text at #{inspect(size)}")
+    end
+
+    defp assert_no_phase_22_overlap!(elements, size) do
+      elements
+      |> Enum.group_by(& &1.y)
+      |> Enum.each(fn {_y, row_elements} ->
+        row_elements
+        |> Enum.sort_by(& &1.x)
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.each(fn [previous, current] ->
+          previous_end = previous.x + TextWidth.display_width(previous.text)
+
+          assert previous_end <= current.x,
+                 "overlapping text at #{inspect(size)}: #{inspect(previous.text)} ends at #{previous_end}, " <>
+                   "#{inspect(current.text)} starts at #{current.x}"
+        end)
+      end)
+    end
+
+    test "post reader renders compact metadata, progress, body gutter, and commands at required sizes" do
+      for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
+        size = {width, height}
+
+        positioned =
+          width
+          |> phase_22_state(height)
+          |> PostReader.render()
+          |> apply_at_size(size)
+
+        elements = text_elements(positioned)
+
+        assert elements != [],
+               "expected positioned PostReader text elements at #{inspect(size)}"
+
+        for element <- elements do
+          text = Map.fetch!(element, :text)
+
+          assert element.x >= 0,
+                 "negative x at #{inspect(size)}: #{inspect(element)}"
+
+          assert element.y >= 0,
+                 "negative y at #{inspect(size)}: #{inspect(element)}"
+
+          assert element.x + TextWidth.display_width(text) <= width,
+                 "element overflows width at #{inspect(size)}: #{inspect(element)}"
+        end
+
+        flat = Enum.map_join(elements, "", & &1.text)
+
+        assert flat =~ "Post 3 of 12"
+        assert flat =~ "#33"
+        assert flat =~ "@mina"
+        assert flat =~ "Posts 3/12"
+        assert flat =~ "Selected body sentinel"
+        assert flat =~ "│" or flat =~ "|"
+
+        header = phase_22_text_element!(elements, "Post 3 of 12", size)
+        progress = phase_22_text_element!(elements, "Posts 3/12", size)
+        body = phase_22_text_element!(elements, "Selected body sentinel", size)
+
+        command_elements =
+          Enum.filter(elements, fn element ->
+            String.contains?(element.text, "Next") or String.contains?(element.text, "Prev") or
+              String.contains?(element.text, "Back")
+          end)
+
+        assert command_elements != [],
+               "expected command bar text containing Next, Prev, or Back at #{inspect(size)}"
+
+        command_y =
+          command_elements
+          |> Enum.map(& &1.y)
+          |> Enum.max()
+
+        assert Enum.any?(command_elements, &(&1.y == command_y)),
+               "expected command text on bottom-most occupied command row at #{inspect(size)}"
+
+        assert header.y < body.y
+        assert header.y < progress.y
+        assert progress.y < command_y
+
+        assert_no_phase_22_overlap!(elements, size)
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Phase 16 size contracts
   # ---------------------------------------------------------------------------
 
