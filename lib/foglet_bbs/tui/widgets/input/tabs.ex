@@ -63,9 +63,14 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
     raw_tabs = Keyword.fetch!(opts, :tabs)
     normalized_tabs = Enum.map(raw_tabs, &normalize_tab/1)
 
+    active_index =
+      opts
+      |> Keyword.get(:active, 0)
+      |> clamp_active_index(normalized_tabs)
+
     raxol_opts = [
       tabs: normalized_tabs,
-      active_index: Keyword.get(opts, :active, 0),
+      active_index: active_index,
       active_indicator: @default_active_indicator
     ]
 
@@ -113,6 +118,15 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
           "Foglet.TUI.Widgets.Input.Tabs :tabs entry must be a string, atom, " <>
             "or %{label: _}; got #{inspect(other)}"
   end
+
+  # Clamp `:active` into the valid tab range. An out-of-range index would
+  # render every tab as unselected because `render_tab/4` only marks
+  # `idx == active_index`, leaving the screen with no visible active tab
+  # until a navigation event corrects state. Clamping mirrors the defensive
+  # behavior already used by `Foglet.TUI.Widgets.Input.RadioGroup` (WR-02).
+  defp clamp_active_index(_idx, []), do: 0
+  defp clamp_active_index(idx, _tabs) when idx < 0, do: 0
+  defp clamp_active_index(idx, tabs), do: min(idx, length(tabs) - 1)
 
   defp derive_action(before_rs, after_rs) do
     before_idx = Map.get(before_rs, :active_index, 0)

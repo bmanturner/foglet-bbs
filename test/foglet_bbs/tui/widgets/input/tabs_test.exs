@@ -70,6 +70,35 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
         Tabs.init(tabs: [%{name: "oops"}])
       end
     end
+
+    test "WR-02 — :active above last tab clamps to the final tab" do
+      state = Tabs.init(tabs: ["A", "B", "C"], active: 99)
+      assert Map.get(state.raxol_state, :active_index) == 2
+
+      flat = flatten_text(Tabs.render(state, theme: distinctive_theme()))
+      assert flat == "A   B   ▌ C"
+    end
+
+    test "WR-02 — negative :active clamps to the first tab" do
+      state = Tabs.init(tabs: ["A", "B", "C"], active: -1)
+      assert Map.get(state.raxol_state, :active_index) == 0
+
+      flat = flatten_text(Tabs.render(state, theme: distinctive_theme()))
+      assert flat == "▌ A   B   C"
+    end
+
+    test "WR-02 — empty tab list with non-zero :active falls back to 0" do
+      state = Tabs.init(tabs: [], active: 5)
+      assert Map.get(state.raxol_state, :active_index) == 0
+    end
+
+    test "WR-02 — clamped state still renders exactly one indicator" do
+      tree = Tabs.render(Tabs.init(tabs: ["A", "B"], active: 99), theme: distinctive_theme())
+      flat = flatten_text(tree)
+
+      indicator_count = flat |> String.split("▌") |> length() |> Kernel.-(1)
+      assert indicator_count == 1
+    end
   end
 
   describe "handle_event/2 (D-14)" do
