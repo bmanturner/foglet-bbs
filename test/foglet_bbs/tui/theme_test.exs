@@ -7,6 +7,14 @@ defmodule Foglet.TUI.ThemeTest do
     test "returns a %Theme{} struct" do
       assert %Theme{} = Theme.default()
     end
+
+    test "returns semantic theme slots" do
+      theme = Theme.default()
+
+      assert non_empty_style?(theme.success)
+      assert non_empty_style?(theme.info)
+      assert non_empty_style?(theme.badge)
+    end
   end
 
   describe "from_state/1" do
@@ -31,5 +39,35 @@ defmodule Foglet.TUI.ThemeTest do
     test "returns Theme.default() when :theme value is nil" do
       assert Theme.from_state(%{session_context: %{theme: nil}}) == Theme.default()
     end
+
+    test "returns default semantic theme slots when state has no theme" do
+      theme = Theme.from_state(%{})
+
+      assert non_empty_style?(theme.success)
+      assert non_empty_style?(theme.info)
+      assert non_empty_style?(theme.badge)
+    end
   end
+
+  describe "slot_keys/0" do
+    test "includes semantic theme slots" do
+      assert :success in Theme.slot_keys()
+      assert :info in Theme.slot_keys()
+      assert :badge in Theme.slot_keys()
+    end
+  end
+
+  describe "resolve/1" do
+    test "returns non-empty semantic theme slots for every registered theme id" do
+      for id <- Theme.ids() do
+        theme = Theme.resolve(id)
+
+        assert non_empty_style?(theme.success)
+        assert non_empty_style?(theme.info)
+        assert non_empty_style?(theme.badge)
+      end
+    end
+  end
+
+  defp non_empty_style?(style), do: is_map(style) and map_size(style) > 0
 end
