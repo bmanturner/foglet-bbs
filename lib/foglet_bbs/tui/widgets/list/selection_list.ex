@@ -8,6 +8,7 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
 
   API:
     SelectionList.render(items, selected_index, row_renderer_fn)
+    SelectionList.render(items, selected_index, row_renderer_fn, theme: theme)
 
   Where row_renderer_fn receives {item, idx, selected?} and must
   return a Raxol view element (typically via List.ListRow.render/3
@@ -17,6 +18,7 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
   """
 
   import Raxol.Core.Renderer.View
+  alias Foglet.TUI.Theme
 
   @doc """
   Renders the selection list.
@@ -24,18 +26,39 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
   `items`           — list of items to render (any term)
   `selected_index`  — 0-based index of the currently selected item
   `row_renderer_fn` — fn({item, idx, selected?}) -> view_element
+  `opts`            — optional `:theme` for built-in empty-state styling
   """
   @spec render(list(), non_neg_integer(), ({any(), non_neg_integer(), boolean()} -> any())) ::
           any()
   def render(items, selected_index, row_renderer_fn)
       when is_list(items) and is_integer(selected_index) and is_function(row_renderer_fn, 1) do
+    render(items, selected_index, row_renderer_fn, [])
+  end
+
+  @spec render(
+          list(),
+          non_neg_integer(),
+          ({any(), non_neg_integer(), boolean()} -> any()),
+          keyword()
+        ) :: any()
+  def render(items, selected_index, row_renderer_fn, opts)
+      when is_list(items) and is_integer(selected_index) and is_function(row_renderer_fn, 1) and
+             is_list(opts) do
+    theme = Keyword.get(opts, :theme)
+
     rows =
-      items
-      |> Enum.with_index()
-      |> Enum.map(fn {item, idx} ->
-        selected = idx == selected_index
-        row_renderer_fn.({item, idx, selected})
-      end)
+      case {items, theme} do
+        {[], %Theme{} = theme} ->
+          [text("No items", fg: theme.dim.fg)]
+
+        _ ->
+          items
+          |> Enum.with_index()
+          |> Enum.map(fn {item, idx} ->
+            selected = idx == selected_index
+            row_renderer_fn.({item, idx, selected})
+          end)
+      end
 
     column style: %{gap: 0} do
       rows

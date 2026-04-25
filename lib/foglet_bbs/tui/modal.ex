@@ -1,7 +1,7 @@
 defmodule Foglet.TUI.Modal do
   @moduledoc "Typed modal state for Foglet.TUI.App."
 
-  @type modal_type :: :info | :error | :warning | :confirm | :form
+  @type modal_type :: :info | :success | :error | :warning | :confirm | :form
 
   @type callback ::
           (Foglet.TUI.App.t() -> {Foglet.TUI.App.t(), list()} | tuple())

@@ -62,6 +62,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
             String.trim(s) in [
               "Error",
               "Info",
+              "Success",
               "Warning",
               "Confirm",
               "[Enter] OK",
@@ -165,18 +166,25 @@ defmodule Foglet.TUI.Widgets.ModalTest do
       assert serialized =~ to_string(t.warning.fg)
     end
 
-    test ":confirm modal uses theme.warning.fg for message text" do
+    test ":success modal uses theme.success.fg for message text" do
+      t = theme()
+      tree = Modal.render(%Foglet.TUI.Modal{type: :success, message: "done"}, t)
+      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+      assert serialized =~ to_string(t.success.fg)
+    end
+
+    test ":confirm modal uses theme.accent.fg for message text" do
       t = theme()
       tree = Modal.render(%Foglet.TUI.Modal{type: :confirm, message: "sure?"}, t)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.warning.fg)
+      assert serialized =~ to_string(t.accent.fg)
     end
 
-    test ":info modal uses theme.primary.fg for message text" do
+    test ":info modal uses theme.info.fg for message text" do
       t = theme()
       tree = Modal.render(%Foglet.TUI.Modal{type: :info, message: "ok"}, t)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ to_string(t.primary.fg)
+      assert serialized =~ to_string(t.info.fg)
     end
 
     test "title uses theme.title.fg and key hint uses theme.dim.fg" do
@@ -190,7 +198,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
 
   describe "render/2 — theme hygiene (Phase 7)" do
     test "no hardcoded color atoms appear in the rendered tree" do
-      for type <- [:info, :error, :warning, :confirm] do
+      for type <- [:info, :success, :error, :warning, :confirm] do
         tree = Modal.render(%Foglet.TUI.Modal{type: type, message: "x"}, theme())
         serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
