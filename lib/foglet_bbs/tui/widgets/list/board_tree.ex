@@ -73,6 +73,17 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
           required(:last_post_at) => DateTime.t() | nil
         }
 
+  @typep state_cluster_cell ::
+           :unread | subscription_cluster_cell()
+
+  @typep subscription_cluster_cell ::
+           :locked
+           | %{
+               required(:key) => :available_board | :subscribed_board,
+               required(:glyph) => String.t(),
+               required(:slot) => :dim | :info
+             }
+
   defstruct [:tree, :directory, last_action: nil]
 
   @type t :: %__MODULE__{
@@ -254,7 +265,9 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
     )
   end
 
-  @spec build_state_cluster(non_neg_integer() | nil, boolean(), boolean()) :: list()
+  @spec build_state_cluster(non_neg_integer() | nil, boolean(), boolean()) :: [
+          state_cluster_cell()
+        ]
   defp build_state_cluster(unread, subscribed?, required?) do
     read_cells = if unread_present?(unread), do: [:unread], else: []
     sub_cell = subscription_cluster_cell(subscribed?, required?)
@@ -265,7 +278,7 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   defp unread_present?(unread) when is_integer(unread) and unread >= 1, do: true
   defp unread_present?(_), do: false
 
-  @spec subscription_cluster_cell(boolean(), boolean()) :: atom() | map()
+  @spec subscription_cluster_cell(boolean(), boolean()) :: subscription_cluster_cell()
   defp subscription_cluster_cell(_subscribed?, true), do: :locked
 
   defp subscription_cluster_cell(true, false),
