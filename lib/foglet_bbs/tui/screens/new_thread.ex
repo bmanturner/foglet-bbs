@@ -329,6 +329,7 @@ defmodule Foglet.TUI.Screens.NewThread do
     title = String.trim(ss.title_input_state.raxol_state.value)
     body = ss.body_input_state.value
     board = ss.board
+    max = max_body_length(state)
 
     cond do
       title == "" ->
@@ -336,6 +337,11 @@ defmodule Foglet.TUI.Screens.NewThread do
 
       String.trim(body) == "" ->
         {:update, put_ss(state, %{ss | error: "Post body cannot be empty."}), []}
+
+      String.length(body) > max ->
+        {:update,
+         put_ss(state, %{ss | error: "Post body exceeds maximum length of #{max} characters."}),
+         []}
 
       true ->
         do_create_thread(state, ss, title, body, board)

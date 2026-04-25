@@ -688,6 +688,29 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(final).error =~ "body"
   end
 
+  test "Ctrl+S with body over max_post_length shows error and does not create thread" do
+    state =
+      compose_state()
+      |> Map.put(:session_context, %{
+        max_post_length: 5,
+        domain: %{boards: FakeBoards, threads: FakeThreadsOk}
+      })
+
+    ss = %{
+      get_ss(state)
+      | title_input_state: TextInput.init(value: "Has Title", max_length: 60),
+        body_input_state: fresh_input("too long")
+    }
+
+    state = put_in(state.screen_state.new_thread, ss)
+
+    {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+    assert final.current_screen == :new_thread
+    assert get_ss(final).error =~ "maximum length"
+    refute Enum.any?(cmds, &match?({:load_threads, _}, &1))
+  end
+
   test "Ctrl+S on error from domain stays on compose with error set" do
     state =
       base_state(%{
