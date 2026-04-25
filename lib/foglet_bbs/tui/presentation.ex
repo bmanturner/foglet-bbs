@@ -18,6 +18,42 @@ defmodule Foglet.TUI.Presentation do
 
   @type mode :: :bbs | :operator
   @type screen :: Foglet.TUI.App.screen()
+  @type theme_mappings :: %{
+          required(:tabs) => %{
+            required(:selected) => :selected,
+            required(:unselected) => :unselected,
+            required(:indicator) => :accent,
+            required(:border) => :border
+          },
+          required(:rows) => %{
+            required(:selected) => :selected,
+            required(:unread) => :primary,
+            required(:normal) => :unselected,
+            required(:metadata) => :dim,
+            required(:disabled) => :dim
+          },
+          required(:badges) => %{
+            required(:info) => :info,
+            required(:success) => :success,
+            required(:warning) => :warning,
+            required(:error) => :error,
+            required(:accent) => :accent
+          },
+          required(:commands) => %{
+            required(:group) => :dim,
+            required(:key) => :accent,
+            required(:destructive) => :error,
+            required(:inactive) => :dim
+          },
+          required(:editor) => %{
+            required(:focused) => :accent,
+            required(:unfocused) => :border,
+            required(:input) => :primary,
+            required(:counter) => :dim,
+            required(:counter_warning) => :warning,
+            required(:counter_error) => :error
+          }
+        }
 
   @bbs_screens [
     :login,
@@ -36,6 +72,43 @@ defmodule Foglet.TUI.Presentation do
   @screen_modes Map.new(@bbs_screens, &{&1, :bbs})
                 |> Map.merge(Map.new(@operator_screens, &{&1, :operator}))
 
+  @theme_mappings %{
+    tabs: %{
+      selected: :selected,
+      unselected: :unselected,
+      indicator: :accent,
+      border: :border
+    },
+    rows: %{
+      selected: :selected,
+      unread: :primary,
+      normal: :unselected,
+      metadata: :dim,
+      disabled: :dim
+    },
+    badges: %{
+      info: :info,
+      success: :success,
+      warning: :warning,
+      error: :error,
+      accent: :accent
+    },
+    commands: %{
+      group: :dim,
+      key: :accent,
+      destructive: :error,
+      inactive: :dim
+    },
+    editor: %{
+      focused: :accent,
+      unfocused: :border,
+      input: :primary,
+      counter: :dim,
+      counter_warning: :warning,
+      counter_error: :error
+    }
+  }
+
   @doc """
   Returns the locked list of supported presentation modes.
   """
@@ -53,6 +126,16 @@ defmodule Foglet.TUI.Presentation do
   """
   @spec screen_ids() :: [screen()]
   def screen_ids, do: Map.keys(screen_modes())
+
+  @doc """
+  Returns the locked primitive-state to theme-slot mapping contract.
+
+  Implements Phase 17 decisions D-11 through D-13. This is metadata for
+  future widgets and screen facelifts; it does not create visible primitives
+  or change rendering behavior.
+  """
+  @spec theme_mappings() :: theme_mappings()
+  def theme_mappings, do: @theme_mappings
 
   @doc """
   Returns the presentation mode for a known TUI screen id.

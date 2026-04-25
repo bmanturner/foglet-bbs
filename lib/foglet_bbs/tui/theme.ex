@@ -36,19 +36,19 @@ defmodule Foglet.TUI.Theme do
         }
 
   @type slot_key ::
-          :accent
-          | :badge
-          | :border
-          | :dim
-          | :error
-          | :info
+          :border
           | :primary
-          | :selected
-          | :status_bar
-          | :success
+          | :dim
+          | :accent
           | :title
-          | :unselected
+          | :success
+          | :info
+          | :error
           | :warning
+          | :badge
+          | :selected
+          | :unselected
+          | :status_bar
 
   @type t :: %__MODULE__{
           border: style_map(),

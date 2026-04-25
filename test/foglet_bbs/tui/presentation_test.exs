@@ -58,14 +58,106 @@ defmodule Foglet.TUI.PresentationTest do
 
   describe "theme independence (MODE-01, THEME-02)" do
     test "presentation mode is not an authorization or permission boundary" do
-      assert function_exported?(Presentation, :mode_for!, 1)
-      refute function_exported?(Presentation, :mode_for!, 2)
+      functions = Presentation.__info__(:functions)
+
+      assert {:mode_for!, 1} in functions
+      refute {:mode_for!, 2} in functions
     end
 
     test "theme ids cannot alter BBS or operator screen modes" do
       for _theme_id <- Theme.ids() do
         assert Presentation.mode_for!(:main_menu) == :bbs
         assert Presentation.mode_for!(:account) == :operator
+      end
+    end
+  end
+
+  describe "theme_mappings/0 (THEME-02)" do
+    test "returns the exact current primitive-to-theme-slot mapping contract" do
+      assert Presentation.theme_mappings() == %{
+               tabs: %{
+                 selected: :selected,
+                 unselected: :unselected,
+                 indicator: :accent,
+                 border: :border
+               },
+               rows: %{
+                 selected: :selected,
+                 unread: :primary,
+                 normal: :unselected,
+                 metadata: :dim,
+                 disabled: :dim
+               },
+               badges: %{
+                 info: :info,
+                 success: :success,
+                 warning: :warning,
+                 error: :error,
+                 accent: :accent
+               },
+               commands: %{
+                 group: :dim,
+                 key: :accent,
+                 destructive: :error,
+                 inactive: :dim
+               },
+               editor: %{
+                 focused: :accent,
+                 unfocused: :border,
+                 input: :primary,
+                 counter: :dim,
+                 counter_warning: :warning,
+                 counter_error: :error
+               }
+             }
+    end
+
+    test "covers every required mapping category and state key" do
+      mappings = Presentation.theme_mappings()
+
+      assert Map.keys(mappings) |> Enum.sort() == [:badges, :commands, :editor, :rows, :tabs]
+
+      assert Map.keys(mappings.tabs) |> Enum.sort() == [
+               :border,
+               :indicator,
+               :selected,
+               :unselected
+             ]
+
+      assert Map.keys(mappings.rows) |> Enum.sort() == [
+               :disabled,
+               :metadata,
+               :normal,
+               :selected,
+               :unread
+             ]
+
+      assert Map.keys(mappings.badges) |> Enum.sort() == [
+               :accent,
+               :error,
+               :info,
+               :success,
+               :warning
+             ]
+
+      assert Map.keys(mappings.commands) |> Enum.sort() == [:destructive, :group, :inactive, :key]
+
+      assert Map.keys(mappings.editor) |> Enum.sort() == [
+               :counter,
+               :counter_error,
+               :counter_warning,
+               :focused,
+               :input,
+               :unfocused
+             ]
+    end
+
+    test "every mapping leaf references a real Theme.slot_keys/0 slot" do
+      slots = MapSet.new(Theme.slot_keys())
+
+      for {_category, states} <- Presentation.theme_mappings(),
+          {_state, slot} <- states do
+        assert slot in slots
       end
     end
   end
