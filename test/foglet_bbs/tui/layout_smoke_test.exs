@@ -259,9 +259,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
 
     defp row_text(elements) do
-      elements
-      |> Enum.map(&Map.get(&1, :text, ""))
-      |> Enum.join()
+      Enum.map_join(elements, &Map.get(&1, :text, ""))
     end
 
     defp row_display_width(elements) do

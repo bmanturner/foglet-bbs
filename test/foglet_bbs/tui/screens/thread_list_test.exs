@@ -144,8 +144,8 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   alias Foglet.TUI.Screens.ThreadList
 
   alias Foglet.TUI.Screens.ThreadListTest.AnnotatingFakeThreads
-  alias Foglet.TUI.Screens.ThreadListTest.FakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.FakeLockedThreads
+  alias Foglet.TUI.Screens.ThreadListTest.FakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.HandlelessFakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.NiltimeFakeThreads
   alias Foglet.TUI.Screens.ThreadListTest.OneArityOnly
