@@ -81,28 +81,22 @@ defmodule Foglet.TUI.Widgets.Chrome.Normalizer do
     label_down = String.downcase(label)
 
     cond do
-      label_down in ["back", "quit", "cancel"] ->
-        @system_group
-
-      key_down in ["s/enter", "save"] or label_down =~ "save" ->
-        @save_group
-
-      label_down =~ "refresh" ->
-        @refresh_group
-
-      key_down == "tab" or label_down =~ "field" ->
-        @field_group
-
-      key in ["←/→", "1-5", "1-6"] or label_down =~ "tab" ->
-        @tabs_group
-
-      navigation_key?(key_down) or navigation_label?(label_down) ->
-        @navigate_group
-
-      true ->
-        @actions_group
+      system_command?(label_down) -> @system_group
+      save_command?(key_down, label_down) -> @save_group
+      refresh_command?(label_down) -> @refresh_group
+      field_command?(key_down, label_down) -> @field_group
+      tab_command?(key, label_down) -> @tabs_group
+      navigate_command?(key_down, label_down) -> @navigate_group
+      true -> @actions_group
     end
   end
+
+  defp system_command?(label), do: label in ["back", "quit", "cancel"]
+  defp save_command?(key, label), do: key in ["s/enter", "save"] or label =~ "save"
+  defp refresh_command?(label), do: label =~ "refresh"
+  defp field_command?(key, label), do: key == "tab" or label =~ "field"
+  defp tab_command?(key, label), do: key in ["←/→", "1-5", "1-6"] or label =~ "tab"
+  defp navigate_command?(key, label), do: navigation_key?(key) or navigation_label?(label)
 
   defp navigation_key?(key) do
     key in ["j/k", "↑/↓", "up/down", "enter", "return"]

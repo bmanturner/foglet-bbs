@@ -174,16 +174,14 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
   defp rendered_width(groups), do: groups |> render_text() |> TextWidth.display_width()
 
   defp render_text(groups) do
-    groups
-    |> Enum.map(fn group ->
+    Enum.map_join(groups, @group_gap, fn group ->
       command_text =
-        group.commands
-        |> Enum.map(fn command -> command.key <> @key_gap <> command.label end)
-        |> Enum.join(@command_gap)
+        Enum.map_join(group.commands, @command_gap, fn command ->
+          command.key <> @key_gap <> command.label
+        end)
 
       group.label <> @command_gap <> command_text
     end)
-    |> Enum.join(@group_gap)
   end
 
   defp render_segments(theme, groups, width) do
