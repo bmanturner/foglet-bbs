@@ -76,6 +76,13 @@ One Enum.filter/2 is more efficient than Enum.filter/2 |> Enum.filter/2
 Per the Plan 20-06 execution instruction, these findings are documented here
 instead of broadening scope into non-Phase-20 code.
 
+Additional broad TUI validation was also attempted with
+`rtk mix test test/foglet_bbs/tui/`. The Phase 20 owned files are green, but the
+full directory run currently reports 1034 tests with 3 failures in
+`test/foglet_bbs/tui/app_test.exs` through the login/config DB ownership path.
+That file and failure path are outside Phase 20 RichRow/ThreadList ownership
+and are recorded here rather than widened into this plan.
+
 ---
 
 ## THREADS-02 Reinterpretation (Accepted Product Decision)
