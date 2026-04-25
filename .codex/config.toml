@@ -1,0 +1,9 @@
+# GSD Agent Configuration — managed by get-shit-done installer
+# GSD codex_hooks ownership: section
+
+default_mode_request_user_input = true
+
+[features]
+codex_hooks = true
+default_mode_request_user_input = true
+
