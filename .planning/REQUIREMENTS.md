@@ -12,6 +12,7 @@
 - [ ] **WIDTH-02**: Layout-sensitive row, chrome, clipping, and composer cursor paths use the shared display-width helper instead of direct length/slice assumptions.
 - [ ] **WIDTH-03**: Width tests cover ASCII, accented Latin, combining marks, CJK text, and the milestone glyph set from `SCREENS.md`.
 - [ ] **WIDTH-04**: Existing ASCII-heavy screens keep their current layout behavior after width hardening.
+- [ ] **WIDTH-05**: Facelifted widgets and screens have size-contract coverage for the 64x22 minimum, the 80x24 compact design target, and at least one wide/tall terminal layout.
 
 ### Mode And Theme Contracts
 
@@ -24,7 +25,7 @@
 - [ ] **CHROME-01**: Shared chrome renders breadcrumb-style locations such as `Foglet ▸ Boards ▸ general` and `Foglet ▸ Sysop ▸ Users`, with ASCII fallback handled deliberately where needed.
 - [ ] **CHROME-02**: Shared chrome renders mode-appropriate right-side status fields for BBS and operator screens.
 - [ ] **CHROME-03**: `Chrome.CommandBar` renders grouped commands inside the frame and truncates lower-priority hints first.
-- [ ] **CHROME-04**: Shared chrome remains usable at 80x24 without text overlap or content displacement.
+- [ ] **CHROME-04**: Shared chrome remains usable at 64x22 without text overlap or content displacement, while restoring richer status atoms and command detail at 80x24 and wider sizes.
 - [ ] **CHROME-05**: The existing command-footer path is migrated so simple key-list callers can use `Chrome.CommandBar` through a compatibility adapter rather than a parallel footer implementation.
 
 ### Login
@@ -35,7 +36,7 @@
 
 - [ ] **HOME-01**: User can navigate main-menu destinations with selection keys while existing direct hotkeys continue to work.
 - [ ] **HOME-02**: Home shows useful session and BBS activity context, such as unread counts, boards, oneliners, or moderation counts when available.
-- [ ] **HOME-03**: Home uses side-by-side dashboard panels on wide terminals and collapses cleanly at 80 columns.
+- [ ] **HOME-03**: Home remains navigable at 64x22, reaches the intended compact dashboard rhythm around 80x24, and uses side-by-side activity panels only when width permits.
 
 ### Rich Rows And Thread Flow
 
@@ -46,7 +47,7 @@
 ### Board Directory
 
 - [ ] **BOARDS-01**: Board directory rows distinguish expanded/collapsed categories, read/unread boards, and subscription state with semantic columns and glyphs.
-- [ ] **BOARDS-02**: Focused board or category details are visible through a compact details strip or wide-terminal inspector.
+- [ ] **BOARDS-02**: Focused board or category details are visible through a 64x22-safe compact details strip, with a wide-terminal inspector only when width permits.
 - [ ] **BOARDS-03**: Existing board open, expand/collapse, subscribe, unsubscribe, and back workflows continue to work after the facelift.
 - [ ] **BOARDS-04**: Board directory solves the current single-label tree limitation through `Tree.render_row/3`-style row callbacks or a dedicated `BoardTree` wrapper.
 
@@ -54,7 +55,7 @@
 
 - [ ] **READER-01**: Post reader shows post position, stable message number, author, and age in a compact header.
 - [ ] **READER-02**: Post bodies render with a clear gutter or card treatment while preserving existing markdown rendering behavior.
-- [ ] **READER-03**: Longer threads show reading progress without breaking viewport scrolling, reply, previous/next, or back navigation.
+- [ ] **READER-03**: Longer threads show reading progress in a 64x22-safe form without breaking viewport scrolling, reply, previous/next, or back navigation.
 - [ ] **READER-04**: Post reader uses the shared `PostCard` or an equivalent post unit for header, body, and optional footer treatment instead of bespoke loose text rows.
 
 ### Composer
@@ -62,21 +63,21 @@
 - [ ] **COMPOSER-01**: `Composer.EditorFrame` wraps `MultiLineInput` for new-thread and reply composition with visible editor boundaries and focused/unfocused styling.
 - [ ] **COMPOSER-02**: Edit and preview modes are visible as a tab or segmented control instead of only hidden in key hints.
 - [ ] **COMPOSER-03**: Character budgets use shared progress/counter treatment with normal, warning, and over-limit states for title and body inputs where applicable.
-- [ ] **COMPOSER-04**: Reply composition shows compact quoted context while new-thread composition shows board and title context.
+- [ ] **COMPOSER-04**: Reply composition shows compact quoted context while new-thread composition shows board and title context, with nonessential context collapsing first at 64x22.
 - [ ] **COMPOSER-05**: Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed after the editor-frame refresh.
 
 ### Operator Console Primitives
 
 - [ ] **CONSOLE-01**: `Display.Badge` standardizes compact states such as required, subscribed, locked, sticky, pending, healthy, and error.
 - [ ] **CONSOLE-02**: `Display.KvGrid` renders consistent label/value rows for Account, Sysop System, site settings, limits, and status summaries.
-- [ ] **CONSOLE-03**: Shared table presets and optional `Workspace.Inspector` support dense operator rows, selected-row details, and wide-terminal inspectors.
+- [ ] **CONSOLE-03**: Shared table presets and optional `Workspace.Inspector` support dense operator rows and selected-row details, with inspectors treated as wide-terminal progressive enhancement.
 - [ ] **CONSOLE-04**: `Modal.Form` visual refresh provides stronger headings, field labels, inline errors, and action footers while preserving the body-only overlay contract.
 
 ### Operator Console Screens
 
-- [ ] **ACCOUNT-01**: Account tabs use compact forms, theme swatches, SSH-key tables, invite tables, and clear dirty/saved/error states.
-- [ ] **MOD-01**: Moderation tabs show scope/status summaries, honest empty states, and table-driven log, user, board, and invite views.
-- [ ] **SYSOP-01**: Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling without fake workflows.
+- [ ] **ACCOUNT-01**: Account tabs use compact forms, theme swatches, SSH-key tables, invite tables, and clear dirty/saved/error states that remain usable at 64x22.
+- [ ] **MOD-01**: Moderation tabs show scope/status summaries, honest empty states, and table-driven log, user, board, and invite views that degrade cleanly at 64x22.
+- [ ] **SYSOP-01**: Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling without fake workflows, with wide metric layouts treated as enhancement.
 
 ## v2 Requirements
 
@@ -86,6 +87,7 @@
 - **UI-02**: Operator workbenches can use persistent wide-terminal inspector panes for routine selected-row actions.
 - **UI-03**: Theme palettes can be tuned beyond the new semantic slots after real SSH screenshots show contrast problems.
 - **UI-04**: Future moderation case-management workflows can add queue review inspectors and sanctions once the domain model exists.
+- **UI-05**: Additional large-terminal dashboards can take advantage of terminals far wider or taller than the current sketches once the core responsive contracts are proven.
 
 ## Out of Scope
 
@@ -107,6 +109,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WIDTH-02 | Phase 16 | Pending |
 | WIDTH-03 | Phase 16 | Pending |
 | WIDTH-04 | Phase 16 | Pending |
+| WIDTH-05 | Phase 16 | Pending |
 | MODE-01 | Phase 17 | Pending |
 | THEME-01 | Phase 17 | Pending |
 | THEME-02 | Phase 17 | Pending |
@@ -144,8 +147,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SYSOP-01 | Phase 25 | Pending |
 
 **Coverage:**
-- v1 requirements: 39 total
-- Mapped to phases: 39
+- v1 requirements: 40 total
+- Mapped to phases: 40
 - Unmapped: 0
 
 ---

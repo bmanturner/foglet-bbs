@@ -24,7 +24,7 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 **Goal:** Make Foglet's SSH terminal UI feel like a polished, Unicode-capable BBS while keeping operator workflows dense, honest, and terminal-pragmatic.
 
 **Target features:**
-- Add width-safe text/layout primitives so Unicode glyphs can be used in aligned terminal UI without breaking 80x24 behavior.
+- Add width-safe text/layout primitives so Unicode glyphs can be used in aligned terminal UI without breaking the current 64x22 minimum terminal size.
 - Refresh shared chrome with breadcrumb titles, grouped command bars, mode-aware status fields, and compact fallbacks.
 - Upgrade the main BBS flow - Home, board directory, thread list, post reader, and composers - into the Classic Modern BBS visual direction from `SCREENS.md`.
 - Build shared operator-console primitives before upgrading Account, Moderation, and Sysop into the Operator Console visual direction using tables, badges, key/value grids, scoped status, and honest action surfaces.
@@ -64,7 +64,7 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 
 - [ ] Width-aware text measurement, truncation, padding, and cursor/layout helpers exist before Unicode-heavy screen rendering depends on them.
 - [ ] Screens can declare BBS or operator mode so shared chrome and layout conventions stay consistent without hardcoded per-screen exceptions.
-- [ ] Shared chrome renders breadcrumb-style titles, grouped key commands, mode-aware right status fields, and compact 80-column fallbacks.
+- [ ] Shared chrome renders breadcrumb-style titles, grouped key commands, mode-aware right status fields, and fallbacks that remain usable at 64x22.
 - [ ] Home, board directory, thread list, post reader, and composer screens implement the Classic Modern BBS direction while preserving keyboard-first behavior.
 - [ ] Login participates in the Classic Modern BBS mode through shared chrome and mode metadata without requiring a deeper authentication form redesign in this milestone.
 - [ ] Operator Console primitives exist before Account, Moderation, and Sysop adopt them for dense workbench layouts.
@@ -91,6 +91,8 @@ The domain core is organized as Phoenix-style context modules backed by Ecto sch
 v1.2 completed the pre-alpha gap-closure pass. Remaining known debt is human SSH/TUI confirmation for a few presentation paths, partial Nyquist metadata in several phase validation artifacts, and manual rather than test-backed README operator-note verification.
 
 v1.3 is driven by `SCREENS.md`, a product/design PRD for a TUI facelift. The chosen design splits the experience into two visual modes built from the same widget stack: Classic Modern BBS for user-facing BBS flows, and Operator Console for Account, Moderation, and Sysop workbenches. The PRD explicitly calls out Unicode width hardening as prerequisite work before wide, combining, or ambiguous-width glyphs become common in aligned rows.
+
+The current minimum supported terminal size is 64x22. `SCREENS.md` sketches are best read as the intended compact design language around 80x24 and larger, not as the minimum-size contract. Facelifted screens must remain navigable and non-overlapping at 64x22, should look composed at 80x24, and can progressively add side panels, inspectors, detail strips, and extra status atoms on larger terminals.
 
 ## Constraints
 

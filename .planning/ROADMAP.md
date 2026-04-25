@@ -8,7 +8,7 @@
 
 ## Current Status
 
-v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the SSH terminal UI in dependency order: width-safe primitives, mode/theme contracts, shared chrome, Classic Modern BBS screens, then Operator Console screens.
+v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the SSH terminal UI in dependency order: width-safe primitives, mode/theme contracts, shared chrome, Classic Modern BBS screens, then Operator Console screens. The hard minimum terminal size is 64x22; 80x24 is the compact design target; larger terminals progressively gain panels, inspectors, detail strips, and additional status atoms.
 
 ## Phases
 
@@ -62,12 +62,13 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 
 **Goal:** Layout-sensitive widgets handle Unicode display width correctly before glyph-heavy aligned layouts ship.
 **Depends on:** Phase 15
-**Requirements:** WIDTH-01, WIDTH-02, WIDTH-03, WIDTH-04
+**Requirements:** WIDTH-01, WIDTH-02, WIDTH-03, WIDTH-04, WIDTH-05
 **Success Criteria** (what must be TRUE):
 1. Aligned rows render correctly with ASCII, accented Latin, combining marks, CJK, and planned UI glyphs.
 2. List rows, the existing command-footer path, composer cursor paths, and clipping/truncation paths use one shared display-width helper.
 3. Width tests cover the SCREENS.md glyph set: `●`, `◆`, `▸`, `▾`, `✓`, `×`.
-4. Existing ASCII-heavy screens keep their current layout behavior.
+4. Facelifted widgets and screens are tested at 64x22, 80x24, and at least one wide/tall terminal size.
+5. Existing ASCII-heavy screens keep their current layout behavior.
 **Plans:** TBD
 **UI hint:** yes
 
@@ -95,7 +96,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 3. `Chrome.CommandBar` groups commands and truncates lower-priority hints inside the frame.
 4. The existing simple key-list call path can render through `Chrome.CommandBar` rather than a parallel footer implementation.
 5. Login declares Classic Modern BBS mode and receives Chrome V2 without changing authentication behavior.
-6. Chrome remains usable at 80x24 without overlapping content.
+6. Chrome remains usable at 64x22 without overlapping content, restores the intended compact treatment around 80x24, and progressively shows more status atoms on wider terminals.
 **Plans:** TBD
 **UI hint:** yes
 
@@ -108,7 +109,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 1. Users can navigate main-menu destinations with selection keys and existing direct hotkeys.
 2. Role-gated destinations remain absent when unavailable.
 3. Users see useful session/activity context such as unread counts, boards, oneliners, or moderation count when available.
-4. The layout uses side-by-side panels on wide terminals and collapses cleanly at 80 columns.
+4. The layout remains navigable at 64x22, reaches the intended compact dashboard rhythm around 80x24, and uses side-by-side panels only when width permits.
 **Plans:** TBD
 **UI hint:** yes
 
@@ -133,7 +134,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 **Success Criteria** (what must be TRUE):
 1. Users can distinguish expanded/collapsed categories, read/unread boards, and subscription state visually.
 2. Board labels are semantic columns, not embedded bracket text.
-3. Focused board/category details are visible in a compact details strip or wide inspector.
+3. Focused board/category details are visible through a 64x22-safe compact details strip, with a wide inspector only when width permits.
 4. The current single-label tree limitation is solved through row callbacks or a dedicated board-tree wrapper.
 5. Existing tree state and subscribe/open/back workflows continue to work.
 **Plans:** TBD
@@ -148,7 +149,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 1. Users see post position, stable message number, author, and age in a compact header.
 2. Post bodies render with a clear gutter or card treatment without breaking markdown rendering.
 3. Post rendering uses the shared `PostCard` or an equivalent post unit rather than bespoke loose text rows.
-4. Longer threads show progress such as post count or visual progress indicator.
+4. Longer threads show progress in a 64x22-safe form, using richer visual indicators only when space permits.
 5. Viewport scroll ownership and reply/back navigation remain intact.
 **Plans:** TBD
 **UI hint:** yes
@@ -162,7 +163,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 1. Users compose inside `Composer.EditorFrame`, wrapping the existing multiline input with focused/unfocused styling.
 2. Edit and preview modes are visible as a tab/segmented control, not only hidden in key hints.
 3. Character budgets use shared progress/counter treatment for normal, warning, and over-limit states.
-4. Reply composition shows compact quoted context while new-thread composition shows the title field.
+4. Reply composition shows compact quoted context while new-thread composition shows the title field, with nonessential context collapsing first at 64x22.
 5. Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed.
 **Plans:** TBD
 **UI hint:** yes
@@ -175,7 +176,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 **Success Criteria** (what must be TRUE):
 1. `Display.Badge` standardizes compact state rendering for required, subscribed, locked, sticky, pending, healthy, and error states.
 2. `Display.KvGrid` renders consistent label/value rows for Account, Sysop System, site settings, limits, and status summaries.
-3. Table presets and optional `Workspace.Inspector` support dense selected-row workflows on operator screens.
+3. Table presets and optional `Workspace.Inspector` support dense selected-row workflows on operator screens, with inspectors treated as wide-terminal enhancement.
 4. `Modal.Form` has stronger headings, labels, inline errors, and action footers while preserving the body-only overlay contract.
 **Plans:** TBD
 **UI hint:** yes
@@ -186,9 +187,9 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 **Depends on:** Phase 24
 **Requirements:** ACCOUNT-01, MOD-01, SYSOP-01
 **Success Criteria** (what must be TRUE):
-1. Account tabs use compact forms, swatches, SSH-key tables, invite tables, and clear dirty/saved/error states.
-2. Moderation tabs show scope/status summaries, honest empty states, and table-driven log/user/board views.
-3. Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling.
+1. Account tabs use compact forms, swatches, SSH-key tables, invite tables, and clear dirty/saved/error states that remain usable at 64x22.
+2. Moderation tabs show scope/status summaries, honest empty states, and table-driven log/user/board views that degrade cleanly at 64x22.
+3. Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling, with wide metric layouts treated as enhancement.
 4. Account, Moderation, and Sysop reuse shared badges, key/value grids, table presets, modal form treatment, and optional inspectors rather than bespoke strings.
 **Plans:** TBD
 **UI hint:** yes

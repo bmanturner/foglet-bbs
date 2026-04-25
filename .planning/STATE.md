@@ -81,6 +81,7 @@ Recent decisions affecting current work:
 - [v1.3]: Active research uses `SCREENS.md` rather than stale v1.2 pre-alpha gap-closure research.
 - [v1.3]: Login is chrome/mode scope only unless a later phase explicitly expands authentication screen layout work.
 - [v1.3]: Operator Console primitives are split from Account/Moderation/Sysop conversion so shared widgets land before dense screen rewrites.
+- [v1.3]: 64x22 is the hard minimum terminal size; 80x24 is a compact design target; larger terminals progressively gain panels, inspectors, details, and extra status.
 
 ### Pending Todos
 
