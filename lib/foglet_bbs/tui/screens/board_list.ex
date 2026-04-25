@@ -229,7 +229,7 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp board_label(board, false, _required?, _unread_count), do: "#{board.name} [unsubscribed]"
 
-  defp unread_suffix(n) when is_integer(n) and n > 0, do: " (#{n} unread)"
+  defp unread_suffix(n) when is_integer(n) and n >= 1, do: " (#{n} unread)"
   defp unread_suffix(_), do: ""
 
   defp focused_board_entry(%Tree{raxol_state: %{cursor: cursor, nodes: nodes}}) do

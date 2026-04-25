@@ -183,8 +183,28 @@ defmodule Foglet.TUI.Screens.MainMenu do
     oneliner = if user, do: [@oneliner_key], else: []
     hide_oneliner = if selected_hideable_oneliner(state), do: [{"H", "Hide oneliner"}], else: []
 
-    @base_keys ++ account ++ moderation ++ sysop ++ oneliner ++ hide_oneliner ++ [@logout_key]
+    [
+      command_group("Navigate", @base_keys, 0),
+      command_group("Actions", account ++ moderation ++ sysop ++ hide_oneliner ++ oneliner, 10),
+      command_group("System", [@logout_key], 0)
+    ]
+    |> Enum.reject(&(&1.commands == []))
   end
+
+  defp command_group(label, keys, priority) do
+    %{
+      label: label,
+      commands:
+        Enum.map(keys, fn {key, label} ->
+          %{key: key, label: label, priority: command_priority(key, priority)}
+        end)
+    }
+  end
+
+  defp command_priority("H", _priority), do: -10
+  defp command_priority(key, _priority) when key in ["A", "M", "S"], do: -5
+  defp command_priority("O", _priority), do: 30
+  defp command_priority(_key, priority), do: priority
 
   defp oneliner_rows(state, theme) do
     entries = visible_oneliners(state)

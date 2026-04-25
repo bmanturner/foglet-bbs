@@ -62,6 +62,13 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert _ = MainMenu.render(state)
   end
 
+  test "render/1 includes Chrome V2 home breadcrumb", %{state: state} do
+    text = MainMenu.render(state) |> collect_text_values() |> Enum.join("\n")
+
+    assert text =~ "Foglet"
+    assert text =~ "Home"
+  end
+
   test "MainMenu has no public init_screen_state/1" do
     refute function_exported?(MainMenu, :init_screen_state, 1)
   end
@@ -362,7 +369,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert :no_match = MainMenu.handle_key(%{key: :char, char: "s"}, state)
     end
 
-    test "rendered shell rows and key bar labels follow ShellVisibility for every role" do
+    test "rendered shell rows and command labels follow ShellVisibility for every role" do
       for {role, _screen, key, menu_label, key_label, predicate} <- role_cases() do
         state = build_state(role)
         user = state.current_user
@@ -370,13 +377,13 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         texts = rendered_text(state)
 
         menu_row? = "  [#{key}] #{menu_label}" in texts
-        key_bar? = "[#{key}] " in texts and "#{key_label}  " in texts
+        command? = key in texts and Enum.any?(texts, &(String.trim(&1) == key_label))
 
         assert menu_row? == visible?,
                "expected #{menu_label} menu row visibility for #{role} to be #{visible?}"
 
-        assert key_bar? == visible?,
-               "expected #{key_label} key-bar visibility for #{role} to be #{visible?}"
+        assert command? == visible?,
+               "expected #{key_label} command visibility for #{role} to be #{visible?}"
       end
     end
 

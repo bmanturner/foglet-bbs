@@ -70,6 +70,13 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert _ = BoardList.render(s)
   end
 
+  test "render/1 includes Chrome V2 boards breadcrumb", %{state: state} do
+    text = BoardList.render(%{state | board_list: nil}) |> flatten_text()
+
+    assert text =~ "Foglet"
+    assert text =~ "Boards"
+  end
+
   test "render/1 with boards loaded renders one category tree with subscription labels", %{
     state: state
   } do
