@@ -13,7 +13,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   all previous ones). These tests would have failed on that old code.
   """
 
-  use ExUnit.Case, async: true
+  use FogletBbs.DataCase, async: false
 
   alias Foglet.Config
   alias Foglet.TUI.App
@@ -174,7 +174,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       |> Map.from_struct()
       |> Map.put(:recent_oneliners, [
         %{
-          body: "漢字漢字漢字漢字漢字漢字 ● ◆ ▸ ▾ ✓ × trailing text",
+          body: "● ◆ ▸ ▾ ✓ × 漢字漢字漢字漢字漢字漢字 trailing text",
           user: %{handle: "漢字漢字漢字漢字漢字漢字"}
         }
       ])
@@ -198,17 +198,37 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   test "board_list renders board rows at distinct y positions" do
-    boards = [
-      %{id: "b1", name: "General", unread_count: 3},
-      %{id: "b2", name: "Announcements", unread_count: 0},
-      %{id: "b3", name: "Off-topic", unread_count: 1}
+    board_list = [
+      %{
+        category: %{id: "c1", name: "Public"},
+        boards: [
+          %{
+            board: %{id: "b1", name: "General"},
+            subscribed?: true,
+            required_subscription?: false,
+            unread_count: 3
+          },
+          %{
+            board: %{id: "b2", name: "Announcements"},
+            subscribed?: false,
+            required_subscription?: false,
+            unread_count: 0
+          },
+          %{
+            board: %{id: "b3", name: "Off-topic"},
+            subscribed?: true,
+            required_subscription?: false,
+            unread_count: 1
+          }
+        ]
+      }
     ]
 
     user = %{handle: "carol", id: "u2", status: :active, role: :member}
 
     state = %App{
       current_user: user,
-      board_list: boards,
+      board_list: board_list,
       screen_state: %{board_list: %{selected_index: 0}},
       terminal_size: {80, 24}
     }

@@ -17,6 +17,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   alias Foglet.Authorization
   alias Foglet.TUI.Screens.{Account, Moderation, ShellVisibility, Sysop}
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
@@ -295,9 +296,6 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   defp clip(value, limit) do
-    value
-    |> String.graphemes()
-    |> Enum.take(limit)
-    |> Enum.join()
+    TextWidth.slice_to_width(value, limit)
   end
 end
