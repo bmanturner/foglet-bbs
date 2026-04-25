@@ -242,7 +242,25 @@ Cross-cutting constraints:
 2. `Display.KvGrid` renders consistent label/value rows for Account, Sysop System, site settings, limits, and status summaries.
 3. Table presets and optional `Workspace.Inspector` support dense selected-row workflows on operator screens, with inspectors treated as wide-terminal enhancement.
 4. `Modal.Form` has stronger headings, labels, inline errors, and action footers while preserving the body-only overlay contract.
-**Plans:** TBD
+**Plans:** 6 plans
+Plans:
+**Wave 1**
+- [ ] 24-01-PLAN.md - Wave 1 `Display.Badge` primitive and tests for required, subscribed, locked, sticky, pending, healthy, error, neutral, and info states with theme-mapping hygiene (CONSOLE-01).
+- [ ] 24-02-PLAN.md - Wave 1 `Display.KvGrid` primitive and tests for Account, Sysop System, site settings, limits, and status summaries with width-safe label/value rows (CONSOLE-02).
+
+**Wave 2 *(blocked on Wave 1 completion)***
+- [ ] 24-03-PLAN.md - Wave 2 `Display.ConsoleTable` facade over `Display.Table`, dense operator defaults, empty states, row selection actions, and LOG/USERS/BOARDS/SSH-key/invite fixtures (CONSOLE-03).
+- [ ] 24-04-PLAN.md - Wave 2 `Workspace.Inspector` wide-terminal selected-row details/actions primitive with compact-width collapse and board/user/invite fixtures (CONSOLE-03).
+
+**Wave 3 *(blocked on Wave 2 completion)***
+- [ ] 24-05-PLAN.md - Wave 3 in-place `Modal.Form` body refresh preserving event/coercion/body-only overlay behavior while adding heading, labels, required markers, errors, and action footer (CONSOLE-04).
+- [ ] 24-06-PLAN.md - Wave 3 widget catalog update, focused primitive regression suite, screen-conversion boundary check, and `rtk mix precommit` finish-line gate (CONSOLE-01, CONSOLE-02, CONSOLE-03, CONSOLE-04).
+
+Cross-cutting constraints:
+- New operator-console primitives stay under `Foglet.TUI.Widgets.*`, remain pure over caller-provided state, and do not call domain contexts.
+- Colors route through `Foglet.TUI.Presentation.theme_mappings/0` and `Foglet.TUI.Theme`; new tests refute hardcoded terminal color atoms.
+- Width-sensitive rendering uses `Foglet.TUI.TextWidth` or existing width-safe helpers.
+- Phase 24 proves primitives with fixtures only; broad Account, Moderation, and Sysop tab-body conversion remains Phase 25.
 **UI hint:** yes
 
 ### Phase 25: Operator Console Conversion
@@ -290,5 +308,5 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
 | 22. Post Reader Facelift | v1.3 | 0/TBD | Pending | - |
 | 23. Composer Facelift | v1.3 | 0/TBD | Pending | - |
-| 24. Operator Console Primitives | v1.3 | 0/TBD | Pending | - |
+| 24. Operator Console Primitives | v1.3 | 0/6 | Pending | - |
 | 25. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |

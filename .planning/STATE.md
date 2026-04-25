@@ -4,14 +4,14 @@ milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: executing
 stopped_at: Phase 24 context gathered (assumptions mode)
-last_updated: "2026-04-25T21:45:23.008Z"
-last_activity: 2026-04-25 -- Phase 23 planning complete
+last_updated: "2026-04-25T21:54:18.755Z"
+last_activity: 2026-04-25 -- Phase 24 planning complete
 progress:
   total_phases: 10
   completed_phases: 5
-  total_plans: 36
+  total_plans: 42
   completed_plans: 25
-  percent: 69
+  percent: 60
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-25)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 20 — rich-rows-and-thread-flow
+**Current focus:** Phase 23 — composer-facelift
 
 ## Current Position
 
-Phase: 20 (rich-rows-and-thread-flow) — EXECUTING
-Plan: 1 of 6
+Phase: 23 (composer-facelift) — EXECUTING
+Plan: 1 of 4
 Status: Ready to execute
-Last activity: 2026-04-25 -- Phase 23 planning complete
+Last activity: 2026-04-25 -- Phase 24 planning complete
 
 Progress: [----------] 0%
 
