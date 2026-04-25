@@ -2,7 +2,7 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0, assert_text_run: 3]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Menu
@@ -29,8 +29,9 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
   defp mixed_menu_state do
     Menu.init(
       items: [
-        %{id: :open, label: "Open", children: [], shortcut: "o"},
-        %{id: :disabled, label: "Disabled", children: [], disabled: true}
+        %{id: :boards, glyph: "●", label: "Boards", children: [], shortcut: "B"},
+        %{id: :account, glyph: "◇", label: "Account", children: [], meta: "profile"},
+        %{id: :disabled, glyph: "×", label: "Disabled", children: [], disabled: true}
       ]
     )
   end
@@ -55,11 +56,30 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
       assert item.shortcut == nil
     end
 
+    test "fills visual row fields with nil when absent" do
+      [item] = Menu.normalize_items([%{label: "File", children: []}])
+      assert item.glyph == nil
+      assert item.meta == nil
+    end
+
     test "test 5 — preserves caller-supplied fields" do
-      input = [%{id: :file, label: "File", children: [], disabled: true, shortcut: "Ctrl+F"}]
+      input = [
+        %{
+          id: :file,
+          glyph: "●",
+          label: "File",
+          meta: "meta",
+          children: [],
+          disabled: true,
+          shortcut: "Ctrl+F"
+        }
+      ]
+
       [item] = Menu.normalize_items(input)
       assert item.id == :file
+      assert item.glyph == "●"
       assert item.label == "File"
+      assert item.meta == "meta"
       assert item.disabled == true
       assert item.shortcut == "Ctrl+F"
     end
@@ -165,6 +185,44 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
       assert serialized =~ t.accent.fg
     end
 
+    test "main menu row shape aligns glyph, label column, metadata, and shortcut" do
+      t = distinctive_theme()
+      tree = Menu.render(mixed_menu_state(), theme: t)
+
+      assert flatten_text(tree) =~ "● Boards          B"
+      assert flatten_text(tree) =~ "◇ Account         profile "
+      assert_text_run(tree, "●", fg: t.accent.fg)
+
+      assert_text_run(tree, "Boards          ",
+        fg: t.selected.fg,
+        bg: t.selected.bg,
+        style: [:bold]
+      )
+
+      assert Enum.any?(
+               Foglet.TUI.WidgetHelpers.text_runs(tree),
+               &(Map.get(&1, :content) == "B" and Map.get(&1, :fg) == t.accent.fg and
+                   Map.get(&1, :style) == [:bold])
+             )
+
+      assert_text_run(tree, "profile ", fg: t.dim.fg)
+    end
+
+    test "disabled menu rows use dim styling across glyph, label, and shortcut" do
+      t = distinctive_theme()
+      tree = Menu.render(mixed_menu_state(), theme: t)
+
+      assert flatten_text(tree) =~ "× Disabled"
+      assert_text_run(tree, "×", fg: t.dim.fg, style: [:dim])
+      assert_text_run(tree, "Disabled        ", fg: t.dim.fg, style: [:dim])
+    end
+
+    test "render no longer emits empty sentinel color nodes" do
+      tree = Menu.render(leaf_menu_state(), theme: distinctive_theme())
+
+      refute Enum.any?(Foglet.TUI.WidgetHelpers.text_runs(tree), &(Map.get(&1, :content) == ""))
+    end
+
     test "test 10 — no hardcoded color atoms in rendered tree" do
       state = leaf_menu_state()
       result = Menu.render(state, theme: theme())
@@ -183,14 +241,6 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
 
       refute inspect(default_result, printable_limit: :infinity, limit: :infinity) ==
                inspect(danger_result, printable_limit: :infinity, limit: :infinity)
-    end
-
-    test "smoke — render returns non-nil map" do
-      state = leaf_menu_state()
-      result = Menu.render(state, theme: theme())
-      refute is_nil(result)
-      assert is_map(result)
-      assert Map.has_key?(result, :type)
     end
 
     test "smoke — rendered output contains item label" do

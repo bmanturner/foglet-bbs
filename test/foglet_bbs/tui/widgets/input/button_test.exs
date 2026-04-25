@@ -2,7 +2,7 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0, assert_text_run: 3]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Button
@@ -53,18 +53,18 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
       assert serialized =~ t.error.fg
     end
 
-    test "success role uses theme.primary.fg" do
+    test "success role uses theme.success.fg" do
       t = theme()
       result = Button.render("OK", role: :success, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ t.primary.fg
+      assert serialized =~ t.success.fg
     end
 
-    test "secondary role uses theme.primary.fg (no :bold)" do
+    test "secondary role uses theme.unselected.fg (no :bold)" do
       t = theme()
       result = Button.render("Cancel", role: :secondary, theme: t)
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
-      assert serialized =~ t.primary.fg
+      assert serialized =~ t.unselected.fg
     end
 
     test "disabled uses theme.dim.fg regardless of role" do
@@ -103,6 +103,25 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
   end
 
   describe "render/2 — theme hygiene (D-18)" do
+    test "shortcut key and command label are separate styled runs" do
+      t = distinctive_theme()
+      tree = Button.render("Save", role: :primary, shortcut: "Ctrl+S", theme: t)
+
+      assert flatten_text(tree) == "Ctrl+S Save"
+      assert_text_run(tree, "Ctrl+S ", fg: t.accent.fg, style: [:bold])
+      assert_text_run(tree, "Save", fg: t.accent.fg, style: [:bold])
+    end
+
+    test "destructive labels stay boring and use the error slot" do
+      t = distinctive_theme()
+      tree = Button.render("Delete", role: :danger, shortcut: "D", theme: t)
+
+      assert flatten_text(tree) == "D Delete"
+      assert_text_run(tree, "D ", fg: t.accent.fg, style: [:bold])
+      assert_text_run(tree, "Delete", fg: t.error.fg, style: [:bold])
+      refute flatten_text(tree) =~ "!"
+    end
+
     test "roles route through semantic theme slots" do
       t = distinctive_theme()
 

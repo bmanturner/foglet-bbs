@@ -44,8 +44,11 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.Menu, as: RaxolMenu
+
+  @label_width 16
 
   @type item_id :: atom() | integer() | String.t()
 
@@ -54,6 +57,8 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
           optional(:label) => String.t(),
           optional(:children) => [item()],
           optional(:disabled) => boolean(),
+          optional(:glyph) => String.t() | nil,
+          optional(:meta) => String.t() | nil,
           optional(:shortcut) => String.t() | nil
         }
 
@@ -101,9 +106,7 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
             render_item(item, depth, Map.get(rs, :cursor), theme)
           end)
 
-        # Keep the full menu state palette visible to tests and renderers even
-        # when a small menu fixture lacks a normal item or shortcut row.
-        items ++ [text("", fg: theme.unselected.fg), text("", fg: theme.accent.fg)]
+        items
       end
     end
   end
@@ -116,6 +119,8 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
                     absent, so actions round-trip deterministically across
                     code reloads and VM restarts (see WR-03)
     * `:disabled` — `false` if absent
+    * `:glyph`    — `nil` if absent
+    * `:meta`     — `nil` if absent
     * `:shortcut` — `nil` if absent
 
   Normalization recurses into `:children`. Items missing `:label` raise
@@ -145,6 +150,8 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     item
     |> Map.put_new_lazy(:id, fn -> "auto:" <> Enum.join(path, "/") end)
     |> Map.put_new(:disabled, false)
+    |> Map.put_new(:glyph, nil)
+    |> Map.put_new(:meta, nil)
     |> Map.put_new(:shortcut, nil)
     |> Map.update(:children, [], fn kids -> normalize_items(kids, path) end)
   end
@@ -208,23 +215,52 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   end
 
   defp render_item(item, depth, cursor, theme) do
-    shortcut = Map.get(item, :shortcut)
+    shortcut = item |> Map.get(:shortcut) |> blank_to_nil()
+    glyph = item |> Map.get(:glyph) |> blank_to_nil()
+    meta = item |> Map.get(:meta) |> blank_to_nil()
     label = Map.fetch!(item, :label)
     indent = String.duplicate("  ", depth)
-    content = if shortcut, do: "#{indent}#{label}  #{shortcut}", else: "#{indent}#{label}"
+    selected? = Map.get(item, :id) == cursor
+    disabled? = Map.get(item, :disabled, false)
+    label_cell = TextWidth.pad_trailing(label, @label_width)
 
     cond do
-      Map.get(item, :disabled, false) ->
-        text(content, fg: theme.dim.fg, style: [:dim])
+      disabled? ->
+        row style: %{gap: 0} do
+          row_runs(indent, glyph, label_cell, meta, shortcut, theme.dim, theme.dim, theme.dim, [:dim])
+        end
 
-      Map.get(item, :id) == cursor ->
-        text(content, fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
-
-      shortcut ->
-        text(content, fg: theme.accent.fg)
+      selected? ->
+        row style: %{gap: 0} do
+          row_runs(indent, glyph, label_cell, meta, shortcut, theme.accent, theme.selected, theme.dim, [
+            :bold
+          ])
+        end
 
       true ->
-        text(content, fg: theme.unselected.fg)
+        row style: %{gap: 0} do
+          row_runs(indent, glyph, label_cell, meta, shortcut, theme.accent, theme.unselected, theme.dim, [])
+        end
     end
   end
+
+  defp row_runs(indent, glyph, label_cell, meta, shortcut, glyph_slot, label_slot, meta_slot, label_style) do
+    secondary_style = if label_style == [:dim], do: [:dim], else: []
+
+    [
+      indent != "" && text(indent, fg: meta_slot.fg, style: secondary_style),
+      text(glyph || " ", fg: glyph_slot.fg, style: secondary_style),
+      text(" ", fg: meta_slot.fg, style: secondary_style),
+      text(label_cell, fg: label_slot.fg, bg: Map.get(label_slot, :bg), style: label_style),
+      meta && text("#{meta} ", fg: meta_slot.fg, style: secondary_style),
+      shortcut && text(shortcut, fg: glyph_slot.fg, style: shortcut_style(secondary_style))
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp shortcut_style([:dim]), do: [:dim]
+  defp shortcut_style(_style), do: [:bold]
+
+  defp blank_to_nil(value) when value in ["", nil], do: nil
+  defp blank_to_nil(value), do: value
 end

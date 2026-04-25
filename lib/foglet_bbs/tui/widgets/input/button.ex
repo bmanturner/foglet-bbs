@@ -39,7 +39,8 @@ defmodule Foglet.TUI.Widgets.Input.Button do
   Options:
     * `:role` — `:primary | :secondary | :danger | :success` (default `#{inspect(@default_role)}`)
     * `:disabled` — boolean (default `false`)
-    * `:shortcut` — optional string hint (e.g., `"Ctrl+S"`)
+    * `:shortcut` — optional string hint (e.g., `"Ctrl+S"`) rendered as a
+      separate key run
     * `:theme` — required `%Foglet.TUI.Theme{}` struct
   """
   @spec render(String.t(), keyword()) :: any()
@@ -49,10 +50,16 @@ defmodule Foglet.TUI.Widgets.Input.Button do
     shortcut = Keyword.get(opts, :shortcut)
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
-    {fg, style} = role_style(role, disabled, theme)
-    content = if shortcut, do: " #{label} (#{shortcut}) ", else: " #{label} "
+    {label_fg, label_style} = role_style(role, disabled, theme)
+    {key_fg, key_style} = key_style(disabled, theme)
 
-    text(content, fg: fg, style: style)
+    row style: %{gap: 0} do
+      [
+        shortcut && text("#{shortcut} ", fg: key_fg, style: key_style),
+        text(label, fg: label_fg, style: label_style)
+      ]
+      |> Enum.reject(&is_nil/1)
+    end
   end
 
   defp role_style(_any, true, theme), do: {theme.dim.fg, [:dim]}
@@ -60,4 +67,7 @@ defmodule Foglet.TUI.Widgets.Input.Button do
   defp role_style(:danger, false, theme), do: {theme.error.fg, [:bold]}
   defp role_style(:success, false, theme), do: {theme.success.fg, [:bold]}
   defp role_style(_secondary, false, theme), do: {theme.unselected.fg, []}
+
+  defp key_style(true, theme), do: {theme.dim.fg, [:dim]}
+  defp key_style(false, theme), do: {theme.accent.fg, [:bold]}
 end
