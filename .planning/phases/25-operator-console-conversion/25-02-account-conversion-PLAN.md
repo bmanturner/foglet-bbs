@@ -12,7 +12,7 @@ files_modified:
   - lib/foglet_bbs/tui/screens/account/ssh_keys_state.ex
   - lib/foglet_bbs/tui/screens/account/ssh_keys_surface.ex
   - test/foglet_bbs/tui/screens/account_test.exs
-  - test/foglet_bbs/tui/layout_smoke_test.exs
+  - test/support/foglet/tui/layout_smoke/account_helper.ex
 autonomous: true
 requirements:
   - ACCOUNT-01
@@ -31,6 +31,7 @@ must_haves:
     - "Existing Account behavior tests (save/dirty/error/load/revoke) pass unmodified — no assertion weakening (D-19)."
     - "Account profile, prefs, and ssh_keys tabs render within bounds at 64x22 and 80x24 with at least one Phase 24 primitive sentinel present (D-09, D-10)."
     - "No hardcoded color atoms introduced in converted Account modules (D-12, R8)."
+    - "Account does NOT consume the shared InvitesSurface in this phase — Account scope is profile/prefs/ssh_keys only per CONTEXT D-09; see SPEC §2 amendment (post-Codex review). The shared InvitesSurface is converted in Plan 03 for Moderation only."
   artifacts:
     - path: "lib/foglet_bbs/tui/screens/account/state.ex"
       provides: "Holds %Modal.Form{} for profile + prefs and %ConsoleTable{} for ssh_keys."
@@ -44,8 +45,8 @@ must_haves:
     - path: "lib/foglet_bbs/tui/screens/account/ssh_keys_surface.ex"
       provides: "Renders via ConsoleTable.render/2; SelectionList usage removed."
       contains: "ConsoleTable.render"
-    - path: "test/foglet_bbs/tui/layout_smoke_test.exs"
-      provides: "Per-tab size-contract blocks for `account profile`, `account prefs`, `account ssh_keys` at [{64,22},{80,24}]."
+    - path: "test/support/foglet/tui/layout_smoke/account_helper.ex"
+      provides: "Per-tab size-contract blocks for `account profile`, `account prefs`, `account ssh_keys` at [{64,22},{80,24}] inside register_account_size_contracts/0 (Plan 01 stub)."
       contains: "account profile tab — size contract"
   key_links:
     - from: "lib/foglet_bbs/tui/screens/account.ex"
@@ -203,8 +204,9 @@ asserts (no behavior-test changes); three new per-tab smoke blocks.
     - `grep -c "Modal.Form" lib/foglet_bbs/tui/screens/account/profile_form.ex` returns >= 2.
     - `grep -c "Modal.Form" lib/foglet_bbs/tui/screens/account/prefs_form.ex` returns >= 2.
     - `grep -n "Modal.Form.field_value\|field_value(" lib/foglet_bbs/tui/screens/account/prefs_form.ex` returns at least one match (live-preview integration).
-    - `grep -n "stash_submit\|pending_submit" lib/foglet_bbs/tui/screens/account/profile_form.ex` returns matches (Pitfall 2 stash adapter).
-    - `grep -n "stash_submit\|pending_submit" lib/foglet_bbs/tui/screens/account/prefs_form.ex` returns matches.
+    - `grep -n "Modal.Form.SubmitStash\|SubmitStash" lib/foglet_bbs/tui/screens/account/profile_form.ex` returns at least 1 match (Codex Concern 4 — uses shared helper, not raw Process.put).
+    - `grep -n "Modal.Form.SubmitStash\|SubmitStash" lib/foglet_bbs/tui/screens/account/prefs_form.ex` returns at least 1 match.
+    - `grep -nE "Process\.(put|get)\(" lib/foglet_bbs/tui/screens/account/{profile_form,prefs_form}.ex` returns 0 matches (Codex Concern 4 — raw process-dict access forbidden in converted modules; use SubmitStash instead).
     - `grep -nE "fg: :(cyan|red|yellow|green|blue|magenta|white|black)" lib/foglet_bbs/tui/screens/account/{profile_form,prefs_form,state}.ex` returns 0 matches (theme hygiene per D-12/R8 — Plan 05 also runs the canonical `color_atom_leaked?/2` test).
     - `grep -n "PROFILE Modal.Form primitive presence\|PREFS Modal.Form primitive presence" test/foglet_bbs/tui/screens/account_test.exs` returns matches.
     - `rtk mix test test/foglet_bbs/tui/screens/account_test.exs` exits 0 (all existing + new tests pass).
@@ -230,7 +232,7 @@ asserts (no behavior-test changes); three new per-tab smoke blocks.
     - Test (new, primitive-presence): SSH_KEYS tab body with EMPTY fixture renders the configured empty-state copy (e.g., "No SSH keys registered yet.").
     - Test (new, behavior): Pressing `:down` on a non-empty list moves the ConsoleTable cursor (verify via `ConsoleTable` cursor inspection or rendered-row highlight assertion).
     - Test (new, behavior): Pressing `:enter` on a row dispatches the existing revoke-confirm flow — assert the same downstream effect the bespoke version produced (read existing test for `revoke` flow to mirror its assertion).
-    - Test (new, behavior): Pressing `:down` on an EMPTY list returns cleanly — no crash (Pitfall 3).
+    - Test (new, behavior): Pressing `:up`, `:down`, AND `:enter` on an EMPTY ssh-keys list each returns cleanly — no crash, no revoke dispatch (Pitfall 3 + Codex LOW suggestion — empty-table keypress coverage).
     - Test (preservation): all existing SSH-key load / revoke / confirm tests in `account_test.exs` pass unmodified.
   </behavior>
   <action>
@@ -317,7 +319,7 @@ asserts (no behavior-test changes); three new per-tab smoke blocks.
 
 <task type="auto">
   <name>Task 3: Per-tab layout-smoke blocks for Account PROFILE / PREFS / SSH_KEYS</name>
-  <files>test/foglet_bbs/tui/layout_smoke_test.exs</files>
+  <files>test/support/foglet/tui/layout_smoke/account_helper.ex</files>
   <read_first>
     - test/foglet_bbs/tui/layout_smoke_test.exs (lines 273-353 — Phase 22/20 size-contract precedent per D-11)
     - test/support/foglet/tui/layout_smoke_helpers.ex (set_active_tab/2 from plan 01)
@@ -327,8 +329,13 @@ asserts (no behavior-test changes); three new per-tab smoke blocks.
     - lib/foglet_bbs/tui/widgets/display/console_table.ex (empty_state render copy / column header rendering for sentinel)
   </read_first>
   <action>
-    Add three `describe` blocks to `test/foglet_bbs/tui/layout_smoke_test.exs` adjacent to the
-    plan-01 example block:
+    Add three `describe` blocks INSIDE the `register_account_size_contracts/0` macro body in
+    `test/support/foglet/tui/layout_smoke/account_helper.ex` (the stub created in Plan 01 Task 3).
+    Do NOT modify `test/foglet_bbs/tui/layout_smoke_test.exs` directly — Plan 01 already wired it as a
+    thin registry that invokes the macro. This decoupling avoids merge conflicts with Plans 03/04
+    (Codex Concern 3).
+
+    The three blocks are:
 
     1. `describe "account profile tab — size contract"`
     2. `describe "account prefs tab — size contract"`
@@ -364,9 +371,9 @@ asserts (no behavior-test changes); three new per-tab smoke blocks.
     <automated>rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs --only "account profile size contract" --only "account prefs size contract" --only "account ssh_keys size contract"</automated>
   </verify>
   <acceptance_criteria>
-    - `grep -n "account profile tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match.
-    - `grep -n "account prefs tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match.
-    - `grep -n "account ssh_keys tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match.
+    - `grep -n "account profile tab — size contract" test/support/foglet/tui/layout_smoke/account_helper.ex` returns at least one match.
+    - `grep -n "account prefs tab — size contract" test/support/foglet/tui/layout_smoke/account_helper.ex` returns at least one match.
+    - `grep -n "account ssh_keys tab — size contract" test/support/foglet/tui/layout_smoke/account_helper.ex` returns at least one match.
     - Each describe block contains a `for {width, height} <- [{64, 22}, {80, 24}]` loop.
     - `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs --only "account profile size contract"` runs at least 2 tests and they pass.
     - `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs --only "account prefs size contract"` runs at least 2 tests and they pass.

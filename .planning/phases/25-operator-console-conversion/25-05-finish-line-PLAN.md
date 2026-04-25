@@ -8,6 +8,8 @@ files_modified:
   - test/foglet_bbs/tui/screens/account_test.exs
   - test/foglet_bbs/tui/screens/moderation_test.exs
   - test/foglet_bbs/tui/screens/sysop_test.exs
+  - .planning/phases/25-operator-console-conversion/25-VALIDATION.md
+  - .planning/phases/25-operator-console-conversion/25-05-SUMMARY.md
 autonomous: true
 requirements:
   - ACCOUNT-01
@@ -22,7 +24,7 @@ tags:
 
 must_haves:
   truths:
-    - "For each of the 11 converted tabs, `Foglet.TUI.WidgetHelpers.color_atom_leaked?/2` returns false for every name in `color_names/0` (D-12, R8)."
+    - "For each of the 12 converted tabs, `Foglet.TUI.WidgetHelpers.color_atom_leaked?/2` returns false for every name in `color_names/0` (D-12, R8)."
     - "`Workspace.Inspector` is referenced ZERO times under `lib/foglet_bbs/tui/screens/` (D-20)."
     - "`rtk mix precommit` exits 0 (compile-with-warnings-as-errors, formatter, Credo, Sobelow, Dialyzer) — phase finish-line gate (R8)."
     - "Every Phase 25 acceptance criterion in 25-SPEC.md §Acceptance Criteria checks green."
@@ -48,7 +50,7 @@ must_haves:
 ---
 
 <objective>
-Close Phase 25's finish line: per-tab theme-hygiene assertions across all 11 converted tabs (D-12), the
+Close Phase 25's finish line: per-tab theme-hygiene assertions across all 12 converted tabs (D-12), the
 `Workspace.Inspector` deferral grep gate (D-20), and the canonical `rtk mix precommit` gate (R8).
 This plan adds NO production code; it only adds the hygiene tests that wave-2 plans intentionally
 deferred to a single, consistent place and runs the precommit gate at the end of the phase.
@@ -81,7 +83,7 @@ Output: Three test additions (one per screen test file) + a clean `rtk mix preco
 <tasks>
 
 <task type="auto">
-  <name>Task 1: Per-tab theme-hygiene tests (D-12, R8) for all 11 converted tabs</name>
+  <name>Task 1: Per-tab theme-hygiene tests (D-12, R8) for all 12 converted tabs</name>
   <files>test/foglet_bbs/tui/screens/account_test.exs, test/foglet_bbs/tui/screens/moderation_test.exs, test/foglet_bbs/tui/screens/sysop_test.exs</files>
   <read_first>
     - test/support/foglet/tui/widget_helpers.ex (lines 21, 38, 60 — `color_atom_leaked?/2` and `color_names/0` API)
@@ -153,7 +155,7 @@ Output: Three test additions (one per screen test file) + a clean `rtk mix preco
     - Per-tab loop generates 3 tests (Account) + 4 tests (Moderation) + 5 tests (Sysop) = 12 hygiene tests, all passing.
     - `rtk mix test test/foglet_bbs/tui/screens/account_test.exs test/foglet_bbs/tui/screens/moderation_test.exs test/foglet_bbs/tui/screens/sysop_test.exs` exits 0.
   </acceptance_criteria>
-  <done>All 11 converted tabs (3 Account + 4 Moderation + 4 Sysop wait — 5 Sysop = 12 total tabs… revise: 3 Account + 4 Moderation + 5 Sysop = 12 hygiene tests) have an automated theme-hygiene test that fails if any hardcoded color atom is reintroduced.</done>
+  <done>All 12 converted tabs (3 Account + 4 Moderation + 5 Sysop) have an automated theme-hygiene test that fails if any hardcoded color atom is reintroduced.</done>
 </task>
 
 <task type="auto">

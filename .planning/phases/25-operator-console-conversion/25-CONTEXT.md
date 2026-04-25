@@ -32,7 +32,7 @@ Phase 25 converts Account, Moderation, and Sysop screen tab bodies from bespoke 
 
 ### Layout Smoke Harness Shape
 
-- **D-09:** Extend `test/foglet_bbs/tui/layout_smoke_test.exs` with **per-tab** size-contract blocks for each of the 11 converted tabs (Account: profile, prefs, ssh_keys; Moderation: log, users, boards, invites; Sysop: site, limits, boards, users, system). Activate the tab via the screen's `active_tab` (or equivalent) state key and iterate `[{64, 22}, {80, 24}]`.
+- **D-09:** Extend `test/foglet_bbs/tui/layout_smoke_test.exs` with **per-tab** size-contract blocks for each of the 12 converted tabs (Account: profile, prefs, ssh_keys; Moderation: log, users, boards, invites; Sysop: site, limits, boards, users, system). Activate the tab via the screen's `active_tab` (or equivalent) state key and iterate `[{64, 22}, {80, 24}]`.
 - **D-10:** Each per-tab block asserts (a) rendered output stays within bounds, (b) at least one Phase 24 primitive sentinel is present (e.g., a known empty-state copy line, badge label, or kv-grid label), and (c) primitives do not overlap. Wide-terminal `132x50` is not required this phase.
 - **D-11:** Pattern after the existing Phase 22/20 size-contract loops at `layout_smoke_test.exs:273-353` — not the shell-only operator tests at lines 1735-1824, which only render shells without activated tab bodies.
 
@@ -154,7 +154,7 @@ None — `gsd-sdk query todo.match-phase 25` returned `todo_count: 0`.
 
 - **Account prefs RadioGroup field (D-03):** User chose to extend `Modal.Form` with a RadioGroup-style enum field rather than keep prefs bespoke. The theme-swatch and any other enumerated preference should cycle on arrow keys while preserving the form's submit/dirty/error contract.
 - **Selection moves into ConsoleTable (D-05):** Don't keep parallel `selected_index` state in screen modules; the wrapped `Display.Table` cursor is the single source of truth.
-- **Per-tab smoke fixtures (D-09):** 11 converted tabs at `[{64, 22}, {80, 24}]` — that's the explicit count to plan against.
+- **Per-tab smoke fixtures (D-09):** 12 converted tabs at `[{64, 22}, {80, 24}]` — that's the explicit count to plan against.
 
 </specifics>
 

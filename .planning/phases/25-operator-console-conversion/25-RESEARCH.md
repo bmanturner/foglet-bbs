@@ -24,7 +24,7 @@
 - **D-08:** Do **not** add a new `:destructive` slot to the `Foglet.TUI.Theme` struct. Theme-palette changes are explicitly out of scope (UI-03).
 
 **Layout Smoke Harness Shape**
-- **D-09:** Extend `test/foglet_bbs/tui/layout_smoke_test.exs` with **per-tab** size-contract blocks for each of the 11 converted tabs (Account: profile, prefs, ssh_keys; Moderation: log, users, boards, invites; Sysop: site, limits, boards, users, system). Activate the tab via the screen's `active_tab` (or equivalent) state key and iterate `[{64, 22}, {80, 24}]`.
+- **D-09:** Extend `test/foglet_bbs/tui/layout_smoke_test.exs` with **per-tab** size-contract blocks for each of the 12 converted tabs (Account: profile, prefs, ssh_keys; Moderation: log, users, boards, invites; Sysop: site, limits, boards, users, system). Activate the tab via the screen's `active_tab` (or equivalent) state key and iterate `[{64, 22}, {80, 24}]`.
 - **D-10:** Each per-tab block asserts (a) rendered output stays within bounds, (b) at least one Phase 24 primitive sentinel is present, and (c) primitives do not overlap. Wide-terminal `132x50` is not required this phase.
 - **D-11:** Pattern after the existing Phase 22/20 size-contract loops at `layout_smoke_test.exs:273-353` — not the shell-only operator tests at lines 1735-1824.
 
@@ -689,7 +689,7 @@ end
 | R4 (Sysop site/limits forms) | Same Modal.Form acceptance as R1 | unit + render | `rtk mix test test/foglet_bbs/tui/screens/sysop_test.exs` (and submodule tests) | Existing — extend. |
 | R5 (Sysop boards/users/system) | ConsoleTable for boards/users with selection; KvGrid system snapshot with metric badges | unit + render | `rtk mix test test/foglet_bbs/tui/screens/sysop/*_test.exs` | Existing — extend. |
 | R6 (Destructive styling) | Source/render check confirms `commands.destructive` mapping use; no hardcoded color atoms | unit | `rtk mix test test/foglet_bbs/tui/screens/<screen>_test.exs` (theme-hygiene assertions) | New per-tab assertions. |
-| R7 (64x22 / 80x24 size contract) | Per-tab size loop asserts bounds + primitive sentinel | unit (layout smoke) | `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` | Existing file — extend with 11 per-tab blocks. |
+| R7 (64x22 / 80x24 size contract) | Per-tab size loop asserts bounds + primitive sentinel | unit (layout smoke) | `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` | Existing file — extend with 12 per-tab blocks. |
 | R8 (Behavior preservation + theme hygiene + inspector deferral) | Existing suites pass unmodified; `color_atom_leaked?/2` returns false; grep finds zero `Workspace.Inspector` refs in `lib/foglet_bbs/tui/screens/` | unit + grep + finish-line | `rtk mix precommit && rtk grep -r 'Workspace.Inspector' lib/foglet_bbs/tui/screens/` | Existing tests; new grep step. |
 
 ### Sampling Rate

@@ -6,8 +6,13 @@ wave: 1
 depends_on: []
 files_modified:
   - lib/foglet_bbs/tui/widgets/modal/form.ex
+  - lib/foglet_bbs/tui/widgets/modal/form/submit_stash.ex
   - test/foglet_bbs/tui/widgets/modal/form_test.exs
+  - test/foglet_bbs/tui/widgets/modal/form/submit_stash_test.exs
   - test/support/foglet/tui/layout_smoke_helpers.ex
+  - test/support/foglet/tui/layout_smoke/account_helper.ex
+  - test/support/foglet/tui/layout_smoke/moderation_helper.ex
+  - test/support/foglet/tui/layout_smoke/sysop_helper.ex
   - test/foglet_bbs/tui/layout_smoke_test.exs
 autonomous: true
 requirements:
@@ -27,6 +32,7 @@ must_haves:
     - "Account prefs theme-cycle live preview path (D-03 / Pitfall 5 / A1) has a documented integration approach screens can follow without changing public Modal.Form API surface, OR has a minimal Modal.Form extension shipped."
     - "Layout-smoke tests have a shared helper to activate a named tab inside a screen_state map for the per-tab size-contract loop (D-09, D-11)."
     - "Wave 0 verification confirms whether prefs `:enum` field plus screen-level field-state inspection is sufficient (A1 resolved); decision is recorded in Modal.Form @moduledoc or a code comment."
+    - "Modal.Form.SubmitStash helper exists with stash/2, pop/1, with_stashed/2 and guaranteed cleanup, so converted form consumers (Plans 02/04) avoid raw Process.put/Process.get — Codex Concern 4."
   artifacts:
     - path: "lib/foglet_bbs/tui/widgets/modal/form.ex"
       provides: "Shift+Tab event-shape coverage AND (per A1 outcome) either an on_field_change callback option OR a documented public field_states accessor for screen-level enum-cycle interception."
@@ -34,11 +40,23 @@ must_haves:
     - path: "test/foglet_bbs/tui/widgets/modal/form_test.exs"
       provides: "Unit tests pinning both shift-tab event shapes; tests for the chosen prefs-cycle hook (A1)."
       contains: "shift_tab"
+    - path: "lib/foglet_bbs/tui/widgets/modal/form/submit_stash.ex"
+      provides: "Centralized submit-payload stash with guaranteed cleanup; replaces raw Process.put/Process.get sprinkled across form consumers (Codex Concern 4)."
+      exports: ["stash", "pop", "with_stashed"]
     - path: "test/support/foglet/tui/layout_smoke_helpers.ex"
       provides: "set_active_tab/2 helper for use in per-tab size-contract tests across Account/Moderation/Sysop."
       exports: ["set_active_tab"]
+    - path: "test/support/foglet/tui/layout_smoke/account_helper.ex"
+      provides: "Per-tab smoke-test registry for Account tabs; Plan 02 adds PROFILE/PREFS/SSH_KEYS blocks here (NOT in layout_smoke_test.exs) to avoid wave-2 merge conflicts."
+      exports: ["register_account_size_contracts"]
+    - path: "test/support/foglet/tui/layout_smoke/moderation_helper.ex"
+      provides: "Per-tab smoke-test registry for Moderation tabs; Plan 03 adds LOG/USERS/BOARDS/INVITES blocks here."
+      exports: ["register_moderation_size_contracts"]
+    - path: "test/support/foglet/tui/layout_smoke/sysop_helper.ex"
+      provides: "Per-tab smoke-test registry for Sysop tabs; Plan 04 adds SITE/LIMITS/BOARDS/USERS/SYSTEM blocks here."
+      exports: ["register_sysop_size_contracts"]
     - path: "test/foglet_bbs/tui/layout_smoke_test.exs"
-      provides: "One example per-tab size-contract block that exercises set_active_tab/2 (sentinel for downstream plans)."
+      provides: "Thin registry: imports the three per-screen helpers and invokes their register_*_size_contracts macros. Plans 02/03/04 do NOT modify this file directly — they own their per-screen helper module."
       contains: "set_active_tab"
   key_links:
     - from: "lib/foglet_bbs/tui/widgets/modal/form.ex"
@@ -55,7 +73,7 @@ must_haves:
 Establish the shared Wave 0 scaffolding required before Account, Moderation, and Sysop tab-body conversions
 can run in parallel (D-14, D-15). Resolve assumption A1 (prefs `:enum` live-preview side effect) and
 pitfall 1 (Shift+Tab event-shape mismatch) inside Modal.Form so all four converted forms can rely on a
-single, documented contract. Provide a `set_active_tab/2` test helper so the 11 per-tab layout smoke
+single, documented contract. Provide a `set_active_tab/2` test helper so the 12 per-tab layout smoke
 blocks added in plans 02/03/04/05 share a single fixture pattern (D-09, D-11).
 
 Purpose: Avoid duplicate fixes inside each parallel wave-2 plan and prevent the converted prefs form from
@@ -282,6 +300,55 @@ helper works.
     Add `test/support/foglet/tui/layout_smoke_helpers.ex` to the test_helpers compile path if the
     project does not already auto-load `test/support/**`. Inspect `mix.exs` and `test/test_helper.exs`
     first; do not duplicate existing wiring.
+
+    **Per-screen helper modules (NEW — addresses Codex Concern 3, merge-conflict avoidance):**
+
+    Create three additional support modules so Plans 02/03/04 each own a disjoint test-support file
+    instead of all three modifying `layout_smoke_test.exs` in parallel:
+
+    - `test/support/foglet/tui/layout_smoke/account_helper.ex` — defines
+      `Foglet.TUI.LayoutSmoke.AccountHelper`. Exports a macro `register_account_size_contracts/0`
+      (or equivalent). In this Plan 01 task, ship the module with a stub body (just defines the
+      module + macro shell with NO tab blocks yet). Plan 02 fills in PROFILE/PREFS/SSH_KEYS blocks.
+
+    - `test/support/foglet/tui/layout_smoke/moderation_helper.ex` —
+      `Foglet.TUI.LayoutSmoke.ModerationHelper.register_moderation_size_contracts/0` stub.
+      Plan 03 fills in LOG/USERS/BOARDS/INVITES.
+
+    - `test/support/foglet/tui/layout_smoke/sysop_helper.ex` —
+      `Foglet.TUI.LayoutSmoke.SysopHelper.register_sysop_size_contracts/0` stub.
+      Plan 04 fills in SITE/LIMITS/BOARDS/USERS/SYSTEM.
+
+    Then update `test/foglet_bbs/tui/layout_smoke_test.exs` to act as a thin registry: at the bottom of
+    the test module, invoke each macro:
+
+    ```elixir
+    require Foglet.TUI.LayoutSmoke.AccountHelper
+    require Foglet.TUI.LayoutSmoke.ModerationHelper
+    require Foglet.TUI.LayoutSmoke.SysopHelper
+
+    Foglet.TUI.LayoutSmoke.AccountHelper.register_account_size_contracts()
+    Foglet.TUI.LayoutSmoke.ModerationHelper.register_moderation_size_contracts()
+    Foglet.TUI.LayoutSmoke.SysopHelper.register_sysop_size_contracts()
+    ```
+
+    The Plan-01 example sysop boards block can live either in `layout_smoke_test.exs` directly OR
+    inside the `SysopHelper` macro stub as the first block (preferred — proves the macro pattern works).
+    Either is acceptable; document the choice in the SUMMARY.
+
+    **Fixture realism (Codex LOW suggestion):** Smoke fixtures across plans 02/03/04 should
+    collectively exercise: long handles (>16 chars to test truncation), at least one Unicode glyph
+    (e.g. wide CJK, emoji, or diacritic to exercise `TextWidth`), missing optional fields (nil
+    `last_used`, nil `used_by`), AND empty-state at least once per screen. Each plan does not need
+    every realism case — they can be distributed across tabs as long as the smoke suite as a whole
+    covers all four classes. Plan 05 SUMMARY records which tabs cover which case.
+
+    **Result:** Plans 02/03/04 each modify ONE file (`<screen>_helper.ex`) that no other plan touches.
+    `layout_smoke_test.exs` is touched only by Plan 01. Wave-2 merge conflict surface goes to zero.
+
+    If macros feel heavy for this case, an alternative shape is acceptable: each helper exports a
+    plain function called from inside a `describe` block in `layout_smoke_test.exs` per screen, but
+    that puts text back in the shared file — prefer the macro shape unless macro cost is high.
   </action>
   <verify>
     <automated>rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs --only "sysop boards size contract"</automated>
@@ -289,12 +356,111 @@ helper works.
   <acceptance_criteria>
     - `test/support/foglet/tui/layout_smoke_helpers.ex` exists and defines `Foglet.TUI.LayoutSmokeHelpers`.
     - `grep -n "def set_active_tab" test/support/foglet/tui/layout_smoke_helpers.ex` returns at least one match.
-    - `grep -n "set_active_tab" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match (the example block).
-    - `grep -n "sysop boards tab — size contract\|sysop boards size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns matches.
+    - `test/support/foglet/tui/layout_smoke/account_helper.ex` exists and defines `Foglet.TUI.LayoutSmoke.AccountHelper`.
+    - `test/support/foglet/tui/layout_smoke/moderation_helper.ex` exists and defines `Foglet.TUI.LayoutSmoke.ModerationHelper`.
+    - `test/support/foglet/tui/layout_smoke/sysop_helper.ex` exists and defines `Foglet.TUI.LayoutSmoke.SysopHelper`.
+    - `grep -n "register_account_size_contracts\|register_moderation_size_contracts\|register_sysop_size_contracts" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least 3 matches (registry invocations).
+    - `grep -n "set_active_tab" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match (or inside one of the helper modules — the example block can live in `sysop_helper.ex`).
+    - `grep -rn "sysop boards tab — size contract\|sysop boards size contract" test/support/foglet/tui/layout_smoke/sysop_helper.ex test/foglet_bbs/tui/layout_smoke_test.exs` returns matches.
     - `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` exits 0 (no regression).
     - `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs --only "sysop boards size contract"` runs at least 2 tests (one per `[{64,22},{80,24}]` size) and they pass.
   </acceptance_criteria>
   <done>Shared `set_active_tab/2` helper exists, example per-tab smoke block proves it works at 64x22 and 80x24 against the already-converted Sysop boards tab, and downstream plans 02/03/04 can copy the block pattern verbatim per D-11.</done>
+
+<task type="auto" tdd="true">
+  <name>Task 4: Modal.Form.SubmitStash helper for Process-dictionary submit pattern (Codex Concern 4)</name>
+  <files>lib/foglet_bbs/tui/widgets/modal/form/submit_stash.ex, test/foglet_bbs/tui/widgets/modal/form/submit_stash_test.exs</files>
+  <read_first>
+    - lib/foglet_bbs/tui/screens/sysop/boards_view.ex (lines 436-485 — current raw `Process.put`/`Process.get` precedent)
+    - lib/foglet_bbs/tui/widgets/modal/form.ex (line 114 — `_ = state.on_submit.(payload)` discards return)
+    - .planning/phases/25-operator-console-conversion/25-RESEARCH.md (Pattern 1 / Pitfall 2)
+    - .planning/phases/25-operator-console-conversion/25-REVIEWS.md (Codex Concern 4)
+  </read_first>
+  <behavior>
+    - Test: `SubmitStash.stash(MyModule, payload)` followed by `SubmitStash.pop(MyModule)` returns the same `payload` and clears the entry (subsequent `pop/1` returns `nil`).
+    - Test: `SubmitStash.with_stashed(MyModule, fn payload -> ... end)` runs the function with the stashed payload and guarantees deletion in an `after` clause even when the function raises.
+    - Test: stash key is namespaced by the calling module (passed as the first arg), so two modules can stash concurrently within one process tick without collision.
+    - Test: `pop/1` on empty stash returns `nil` (no crash).
+  </behavior>
+  <action>
+    Create `lib/foglet_bbs/tui/widgets/modal/form/submit_stash.ex`:
+
+    ```elixir
+    defmodule Foglet.TUI.Widgets.Modal.Form.SubmitStash do
+      @moduledoc """
+      Per-process submit-payload stash for `Modal.Form.on_submit` callbacks.
+
+      `Modal.Form` deliberately discards the `on_submit` callback return value
+      (form.ex:114 — `_ = state.on_submit.(payload)`), so screens that need to
+      capture the submitted payload park it in the process dictionary and read
+      it back from `handle_event/2`'s caller after the event returns.
+
+      This helper centralizes the pattern (Phase 25, Codex review Concern 4) so
+      every consumer uses the same key shape and cleanup discipline. Always
+      prefer `with_stashed/2` over manual `stash`/`pop` to guarantee cleanup
+      even on exceptions.
+      """
+
+      @type module_key :: module()
+      @type payload :: term()
+
+      @doc "Stash a payload keyed by the calling module."
+      @spec stash(module_key, payload) :: :ok
+      def stash(mod, payload) when is_atom(mod) do
+        Process.put({__MODULE__, mod}, payload)
+        :ok
+      end
+
+      @doc "Pop a stashed payload (and delete it). Returns nil when absent."
+      @spec pop(module_key) :: payload | nil
+      def pop(mod) when is_atom(mod) do
+        Process.delete({__MODULE__, mod})
+      end
+
+      @doc """
+      Run `fun` with the stashed payload (or `nil`) and guarantee deletion.
+
+          SubmitStash.with_stashed(__MODULE__, fn
+            nil     -> :no_submit
+            payload -> handle_save(payload)
+          end)
+      """
+      @spec with_stashed(module_key, (payload | nil -> term())) :: term()
+      def with_stashed(mod, fun) when is_atom(mod) and is_function(fun, 1) do
+        try do
+          fun.(Process.get({__MODULE__, mod}))
+        after
+          Process.delete({__MODULE__, mod})
+        end
+      end
+    end
+    ```
+
+    Add `test/foglet_bbs/tui/widgets/modal/form/submit_stash_test.exs` covering all four behaviors
+    above. Use `start_supervised!/1` is unnecessary (this is process-dict only). DO NOT use
+    `Process.sleep/1`.
+
+    Plans 02 and 04 will adopt this helper for their Modal.Form on_submit closures (acceptance
+    criteria require `Foglet.TUI.Widgets.Modal.Form.SubmitStash` usage AND assert that raw
+    `Process.put`/`Process.get` does NOT appear in the converted screen modules). Plan 03 does not
+    use this helper because its converted surfaces are listings/read-only (no Modal.Form submits).
+
+    Optionally, refactor `lib/foglet_bbs/tui/screens/sysop/boards_view.ex` to use the new helper for
+    consistency. If touched, add a single test asserting the existing boards_view submit flow still
+    works (do NOT modify any existing boards_view test). If the refactor risks scope creep, defer to
+    Plan 04 Task 1 (which already touches boards_view for D-07 verification).
+  </action>
+  <verify>
+    <automated>rtk mix test test/foglet_bbs/tui/widgets/modal/form/submit_stash_test.exs</automated>
+  </verify>
+  <acceptance_criteria>
+    - `lib/foglet_bbs/tui/widgets/modal/form/submit_stash.ex` exists and defines `Foglet.TUI.Widgets.Modal.Form.SubmitStash`.
+    - `grep -n "def stash\|def pop\|def with_stashed" lib/foglet_bbs/tui/widgets/modal/form/submit_stash.ex` returns at least 3 matches.
+    - `grep -n "after" lib/foglet_bbs/tui/widgets/modal/form/submit_stash.ex` returns at least 1 match (cleanup guarantee).
+    - `test/foglet_bbs/tui/widgets/modal/form/submit_stash_test.exs` exists.
+    - `rtk mix test test/foglet_bbs/tui/widgets/modal/form/submit_stash_test.exs` exits 0 with at least 4 tests run.
+  </acceptance_criteria>
+  <done>SubmitStash helper exists with stash/pop/with_stashed and cleanup-on-raise; downstream form consumers (Plans 02/04) can use it instead of raw Process.put/get.</done>
 </task>
 
 </tasks>

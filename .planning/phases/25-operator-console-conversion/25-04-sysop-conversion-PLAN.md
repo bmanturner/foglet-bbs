@@ -15,7 +15,7 @@ files_modified:
   - test/foglet_bbs/tui/screens/sysop_test.exs
   - test/foglet_bbs/tui/screens/sysop/site_form_test.exs
   - test/foglet_bbs/tui/screens/sysop/config_accountability_test.exs
-  - test/foglet_bbs/tui/layout_smoke_test.exs
+  - test/support/foglet/tui/layout_smoke/sysop_helper.ex
 autonomous: true
 requirements:
   - SYSOP-01
@@ -51,8 +51,8 @@ must_haves:
     - path: "lib/foglet_bbs/tui/screens/sysop/system_snapshot.ex"
       provides: "KvGrid-backed snapshot with metric badges (healthy/info)."
       contains: "KvGrid"
-    - path: "test/foglet_bbs/tui/layout_smoke_test.exs"
-      provides: "Per-tab size-contract blocks for sysop site, limits, boards, users, system."
+    - path: "test/support/foglet/tui/layout_smoke/sysop_helper.ex"
+      provides: "Per-tab size-contract blocks for sysop site, limits, boards, users, system inside register_sysop_size_contracts/0 (Plan 01 stub; the example sysop boards block from Plan 01 may already live here)."
       contains: "sysop site tab — size contract"
   key_links:
     - from: "lib/foglet_bbs/tui/screens/sysop/site_form.ex"
@@ -153,7 +153,7 @@ asserts (no behavior changes); five per-tab smoke blocks.
        each key is `:string`/`:integer`/`:boolean`/`:enum`/etc. and map to Modal.Form field types).
        Mark fields with `required: true` per the schema's required flag.
 
-       Wire `on_submit:` to a Process-dict stash adapter exactly as in `boards_view.ex:436-439`.
+       Wire `on_submit:` to the shared `Foglet.TUI.Widgets.Modal.Form.SubmitStash` helper from Plan 01 (do NOT introduce raw `Process.put`/`Process.get` in this module — Codex Concern 4). Use `SubmitStash.stash(__MODULE__, payload)` inside the closure and drain via `SubmitStash.with_stashed(__MODULE__, fn ... end)` from the screen handle_key after `Modal.Form.handle_event/2`. If `boards_view.ex` still uses raw `Process.put`, refactor it here to use `SubmitStash` for consistency (and add a single regression test, no existing-test modifications).
 
        In `handle_key/2`, after each `Modal.Form.handle_event/2` call, check whether the value of
        `:invite_code_generators` (read via `Modal.Form.field_value/2` from plan 01) has changed. If so,
@@ -194,8 +194,9 @@ asserts (no behavior changes); five per-tab smoke blocks.
     - `grep -c "Modal.Form" lib/foglet_bbs/tui/screens/sysop/limits_form.ex` returns >= 2.
     - `grep -n "visible_keys" lib/foglet_bbs/tui/screens/sysop/site_form.ex` returns at least one match (re-init path uses it).
     - `grep -n "Pitfall 6\|invite_code_generators" lib/foglet_bbs/tui/screens/sysop/site_form.ex` returns at least one match documenting the re-init logic.
-    - `grep -n "stash_submit\|pending_submit" lib/foglet_bbs/tui/screens/sysop/site_form.ex` returns matches.
-    - `grep -n "stash_submit\|pending_submit" lib/foglet_bbs/tui/screens/sysop/limits_form.ex` returns matches.
+    - `grep -n "Modal.Form.SubmitStash\|SubmitStash" lib/foglet_bbs/tui/screens/sysop/site_form.ex` returns at least 1 match (Codex Concern 4).
+    - `grep -n "Modal.Form.SubmitStash\|SubmitStash" lib/foglet_bbs/tui/screens/sysop/limits_form.ex` returns at least 1 match.
+    - `grep -nE "Process\.(put|get)\(" lib/foglet_bbs/tui/screens/sysop/{site_form,limits_form}.ex` returns 0 matches (raw process-dict access forbidden — use SubmitStash).
     - `grep -nE "fg: :(cyan|red|yellow|green|blue|magenta|white|black)" lib/foglet_bbs/tui/screens/sysop/{site_form,limits_form,state}.ex` returns 0 matches.
     - `grep -n "SITE Modal.Form primitive presence\|LIMITS Modal.Form primitive presence" test/foglet_bbs/tui/screens/sysop_test.exs` returns matches.
     - `grep -n "visible_keys re-init\|Pitfall 6" test/foglet_bbs/tui/screens/sysop/site_form_test.exs` returns at least one match.
@@ -220,6 +221,7 @@ asserts (no behavior changes); five per-tab smoke blocks.
   <behavior>
     - Test (new, primitive-presence): USERS tab renders ConsoleTable header (e.g., "Handle", "Role", "Status") + Badge cells for status (route via row metadata where applicable, or via Display.Badge inside an explicit cell render — Claude's discretion).
     - Test (new, behavior): pressing `:enter` on a user row dispatches `Foglet.Accounts.transition_status/3` (or the existing function — read users_view.ex) with the SAME payload shape the bespoke version produced.
+    - Test (new, behavior): empty USERS fixture handles `:up`/`:down`/`:enter` without crash and without dispatching any domain action (Codex LOW suggestion — empty-table keypress coverage).
     - Test (new, primitive-presence): SYSTEM snapshot renders KvGrid label/value rows including at least one cell with `state: :healthy` or `state: :info` (badge appears as `[…]`).
     - Test (new, behavior): SYSTEM `[r] Refresh` continues to refresh the snapshot — preserve existing key handling.
     - Test (new, source check): BOARDS view's destructive command-bar entries (Archive board, Archive category) set `destructive?: true` AND inline destructive emphasis routes through `Foglet.TUI.Presentation.theme_mappings().commands.destructive` (D-07) rather than hardcoded color atoms.
@@ -343,14 +345,19 @@ asserts (no behavior changes); five per-tab smoke blocks.
 
 <task type="auto">
   <name>Task 3: Per-tab layout-smoke blocks for Sysop SITE / LIMITS / BOARDS / USERS / SYSTEM</name>
-  <files>test/foglet_bbs/tui/layout_smoke_test.exs</files>
+  <files>test/support/foglet/tui/layout_smoke/sysop_helper.ex</files>
   <read_first>
     - test/foglet_bbs/tui/layout_smoke_test.exs (lines 273-353 — D-11 precedent; plan 01 example block for sysop boards)
     - test/support/foglet/tui/layout_smoke_helpers.ex
     - .planning/phases/25-operator-console-conversion/25-CONTEXT.md (D-09, D-10, D-11)
   </read_first>
   <action>
-    Add five `describe` blocks to `test/foglet_bbs/tui/layout_smoke_test.exs`:
+    Add five `describe` blocks INSIDE the `register_sysop_size_contracts/0` macro body in
+    `test/support/foglet/tui/layout_smoke/sysop_helper.ex` (Plan 01 stub — may already contain the
+    sysop boards block from Plan 01 Task 3 example; if so, replace/keep it consistent with the
+    canonical version below). Do NOT modify `layout_smoke_test.exs` directly — Plan 01 wired the
+    registry. This decoupling avoids merge conflicts with Plans 02/03 (Codex Concern 3). The five
+    blocks are:
 
     1. `describe "sysop site tab — size contract"`
     2. `describe "sysop limits tab — size contract"`
@@ -380,11 +387,11 @@ asserts (no behavior changes); five per-tab smoke blocks.
     <automated>rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs --only "sysop site size contract" --only "sysop limits size contract" --only "sysop boards size contract" --only "sysop users size contract" --only "sysop system size contract"</automated>
   </verify>
   <acceptance_criteria>
-    - `grep -n "sysop site tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least 1 match.
-    - `grep -n "sysop limits tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least 1 match.
-    - `grep -n "sysop boards tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least 1 match.
-    - `grep -n "sysop users tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least 1 match.
-    - `grep -n "sysop system tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least 1 match.
+    - `grep -n "sysop site tab — size contract" test/support/foglet/tui/layout_smoke/sysop_helper.ex` returns at least 1 match.
+    - `grep -n "sysop limits tab — size contract" test/support/foglet/tui/layout_smoke/sysop_helper.ex` returns at least 1 match.
+    - `grep -n "sysop boards tab — size contract" test/support/foglet/tui/layout_smoke/sysop_helper.ex` returns at least 1 match.
+    - `grep -n "sysop users tab — size contract" test/support/foglet/tui/layout_smoke/sysop_helper.ex` returns at least 1 match.
+    - `grep -n "sysop system tab — size contract" test/support/foglet/tui/layout_smoke/sysop_helper.ex` returns at least 1 match.
     - Each block contains `for {width, height} <- [{64, 22}, {80, 24}]`.
     - Each `--only` filtered run yields at least 2 tests passing.
     - `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` exits 0.

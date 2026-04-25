@@ -10,7 +10,7 @@ files_modified:
   - lib/foglet_bbs/tui/screens/shared/invites_state.ex
   - lib/foglet_bbs/tui/screens/shared/invites_surface.ex
   - test/foglet_bbs/tui/screens/moderation_test.exs
-  - test/foglet_bbs/tui/layout_smoke_test.exs
+  - test/support/foglet/tui/layout_smoke/moderation_helper.ex
 autonomous: true
 requirements:
   - MOD-01
@@ -38,8 +38,8 @@ must_haves:
     - path: "lib/foglet_bbs/tui/screens/shared/invites_surface.ex"
       provides: "InvitesSurface.render/2 delegates to ConsoleTable; both Account and Moderation invite tabs benefit (RESEARCH Open Question 2)."
       contains: "ConsoleTable"
-    - path: "test/foglet_bbs/tui/layout_smoke_test.exs"
-      provides: "Per-tab size-contract blocks for moderation log, users, boards, invites."
+    - path: "test/support/foglet/tui/layout_smoke/moderation_helper.ex"
+      provides: "Per-tab size-contract blocks for moderation log, users, boards, invites inside register_moderation_size_contracts/0 (Plan 01 stub)."
       contains: "moderation log tab — size contract"
   key_links:
     - from: "lib/foglet_bbs/tui/screens/moderation.ex"
@@ -114,6 +114,7 @@ primitive-presence asserts; four new per-tab smoke blocks.
     - Test (new, primitive-presence): USERS tab renders KvGrid summary, ConsoleTable header (e.g., "Handle", "Role", "Status"), Badge cells for status.
     - Test (new, primitive-presence): BOARDS tab renders KvGrid summary, ConsoleTable header (e.g., "Board", "Category", "State"), Badge cells for state where applicable.
     - Test (new, primitive-presence): empty fixtures for each tab render the ConsoleTable empty-state copy.
+    - Test (new, behavior): for each of LOG/USERS/BOARDS, building an EMPTY-rows ConsoleTable and sending `%{key: :up}`, `%{key: :down}`, `%{key: :enter}` returns cleanly with no crash and no domain dispatch (Codex LOW suggestion — empty-table keypress coverage).
     - Test (preservation): all existing moderation_test.exs tests pass unmodified.
   </behavior>
   <action>
@@ -235,6 +236,7 @@ primitive-presence asserts; four new per-tab smoke blocks.
     - Test (new, primitive-presence): INVITES tab body renders ConsoleTable header with column labels (e.g., "Code", "Status", "Created", "Used by").
     - Test (new, primitive-presence): empty INVITES fixture renders empty-state copy "No invites generated yet." (or chosen wording).
     - Test (new, behavior): pressing `:down` and `:up` cycles ConsoleTable cursor; pressing `:enter` on a row dispatches the SAME revoke/copy contract the bespoke version exposed (read existing tests to mirror).
+    - Test (new, behavior): empty INVITES fixture handles `:up`/`:down`/`:enter` keypresses without crash and without dispatching any domain action (Codex LOW suggestion).
     - Test (preservation): all existing invite-flow tests in moderation_test.exs pass unmodified.
   </behavior>
   <action>
@@ -311,7 +313,7 @@ primitive-presence asserts; four new per-tab smoke blocks.
 
 <task type="auto">
   <name>Task 3: Per-tab layout-smoke blocks for Moderation LOG / USERS / BOARDS / INVITES</name>
-  <files>test/foglet_bbs/tui/layout_smoke_test.exs</files>
+  <files>test/support/foglet/tui/layout_smoke/moderation_helper.ex</files>
   <read_first>
     - test/foglet_bbs/tui/layout_smoke_test.exs (lines 273-353 — D-11 precedent; plan 01 example block)
     - test/support/foglet/tui/layout_smoke_helpers.ex
@@ -320,7 +322,10 @@ primitive-presence asserts; four new per-tab smoke blocks.
     - .planning/phases/25-operator-console-conversion/25-CONTEXT.md (D-09, D-10, D-11)
   </read_first>
   <action>
-    Add four `describe` blocks to `test/foglet_bbs/tui/layout_smoke_test.exs`:
+    Add four `describe` blocks INSIDE the `register_moderation_size_contracts/0` macro body in
+    `test/support/foglet/tui/layout_smoke/moderation_helper.ex` (Plan 01 stub). Do NOT modify
+    `layout_smoke_test.exs` directly — Plan 01 wired the registry. This decoupling avoids merge
+    conflicts with Plans 02/04 (Codex Concern 3). The four blocks are:
 
     1. `describe "moderation log tab — size contract"`
     2. `describe "moderation users tab — size contract"`
@@ -352,10 +357,10 @@ primitive-presence asserts; four new per-tab smoke blocks.
     <automated>rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs --only "moderation log size contract" --only "moderation users size contract" --only "moderation boards size contract" --only "moderation invites size contract"</automated>
   </verify>
   <acceptance_criteria>
-    - `grep -n "moderation log tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match.
-    - `grep -n "moderation users tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match.
-    - `grep -n "moderation boards tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match.
-    - `grep -n "moderation invites tab — size contract" test/foglet_bbs/tui/layout_smoke_test.exs` returns at least one match.
+    - `grep -n "moderation log tab — size contract" test/support/foglet/tui/layout_smoke/moderation_helper.ex` returns at least one match.
+    - `grep -n "moderation users tab — size contract" test/support/foglet/tui/layout_smoke/moderation_helper.ex` returns at least one match.
+    - `grep -n "moderation boards tab — size contract" test/support/foglet/tui/layout_smoke/moderation_helper.ex` returns at least one match.
+    - `grep -n "moderation invites tab — size contract" test/support/foglet/tui/layout_smoke/moderation_helper.ex` returns at least one match.
     - Each block contains `for {width, height} <- [{64, 22}, {80, 24}]`.
     - Each `--only` filtered run yields at least 2 tests passing.
     - `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` exits 0.
