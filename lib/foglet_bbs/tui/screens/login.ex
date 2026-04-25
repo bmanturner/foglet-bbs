@@ -71,7 +71,7 @@ defmodule Foglet.TUI.Screens.Login do
           case sub do
             :login_form -> render_login_form(state, theme)
             :reset_request -> render_reset_request(state, theme)
-            _ -> render_menu(mode, theme)
+            _ -> render_menu(mode, theme, state)
           end
         ]
       end
@@ -204,14 +204,15 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp keys_for(_, mode), do: menu_keys(mode)
 
-  defp render_menu(mode, theme) do
-    keys = menu_keys(mode)
+  defp render_menu(_mode, theme, state) do
+    {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
+    top_padding = max(div(max(terminal_height - 8, 1), 2), 0)
 
-    column style: %{gap: 0} do
-      [text("Welcome.", fg: theme.primary.fg)] ++
-        Enum.map(keys, fn {k, label} ->
-          text("  [#{k}] #{label}", fg: theme.primary.fg)
-        end)
+    column style: %{gap: 0, align_items: :center} do
+      List.duplicate(text(" ", fg: theme.primary.fg), top_padding) ++
+        [
+          text("Imagine something cool here", fg: theme.primary.fg)
+        ]
     end
   end
 

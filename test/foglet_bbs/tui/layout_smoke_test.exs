@@ -893,7 +893,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # Login screen — menu sub-state
   # ---------------------------------------------------------------------------
 
-  test "login menu renders welcome and menu items at distinct y positions" do
+  test "login menu renders centered placeholder and command bar actions" do
     state = %App{screen_state: %{}, terminal_size: {80, 24}}
     tree = Login.render(state)
     positioned = apply(tree)
@@ -901,19 +901,43 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
 
-    assert Enum.any?(texts, &String.contains?(&1, "Welcome")),
-           "expected 'Welcome' text, got: #{inspect(texts)}"
+    placeholder =
+      Enum.find(elements, fn element ->
+        String.contains?(element.text, "Imagine something cool here")
+      end)
 
-    assert Enum.any?(texts, &String.contains?(&1, "[L]")),
-           "expected '[L] Login' text, got: #{inspect(texts)}"
+    assert placeholder,
+           "expected centered placeholder text, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "[Q]")),
-           "expected '[Q] Quit' text, got: #{inspect(texts)}"
+    refute Enum.any?(texts, &String.contains?(&1, "Welcome")),
+           "login menu body should not render welcome text, got: #{inspect(texts)}"
 
-    ys = elements |> Enum.map(& &1.y) |> Enum.uniq()
+    refute Enum.any?(texts, &String.contains?(&1, "[L]")),
+           "login menu body should not render bracketed menu items, got: #{inspect(texts)}"
 
-    assert length(ys) >= 3,
-           "expected at least 3 distinct y positions, got #{length(ys)}: #{inspect(elements)}"
+    assert Enum.any?(texts, &(&1 == "L")),
+           "expected command bar Login key, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 == " Login")),
+           "expected command bar Login label, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 == "R")),
+           "expected command bar Register key, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 == " Register")),
+           "expected command bar Register label, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 == "Q")),
+           "expected command bar Quit key, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 == " Quit")),
+           "expected command bar Quit label, got: #{inspect(texts)}"
+
+    assert placeholder.x in 26..28,
+           "expected placeholder near horizontal center, got: #{inspect(placeholder)}"
+
+    assert placeholder.y in 9..11,
+           "expected placeholder near vertical center, got: #{inspect(placeholder)}"
   end
 
   # ---------------------------------------------------------------------------
@@ -1485,9 +1509,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
 
-    # The login screen (default) must show its welcome text
-    assert Enum.any?(texts, &String.contains?(&1, "Welcome")),
-           "expected 'Welcome' in no-modal view, got: #{inspect(texts)}"
+    assert Enum.any?(texts, &String.contains?(&1, "Imagine something cool here")),
+           "expected login placeholder in no-modal view, got: #{inspect(texts)}"
   end
 
   test "with-modal: view/1 with :info modal renders title and message through layout engine" do
