@@ -10,6 +10,16 @@ defmodule Foglet.TUI.Widgets.Display.ProgressTest do
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
 
+  defp distinctive_theme do
+    %Theme{
+      border: %{fg: "#progress-border"},
+      primary: %{fg: "#progress-primary"},
+      accent: %{fg: "#progress-accent"},
+      success: %{fg: "#progress-success"},
+      dim: %{fg: "#progress-dim"}
+    }
+  end
+
   describe "render/2 — smoke (D-18)" do
     test "returns a non-nil result for 0.5 progress" do
       result = Progress.render(0.5, theme: theme())
@@ -24,6 +34,25 @@ defmodule Foglet.TUI.Widgets.Display.ProgressTest do
   end
 
   describe "render/2 — theme hygiene (D-18, Pitfall 8)" do
+    test "progress fill, track, border, label, and percentage use theme slots" do
+      t = distinctive_theme()
+      tree = Progress.render(0.5, label: "Loading", theme: t)
+      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+
+      assert serialized =~ t.accent.fg
+      assert serialized =~ t.dim.fg
+      assert serialized =~ t.border.fg
+      assert serialized =~ t.primary.fg
+    end
+
+    test "complete progress uses theme.success for fill" do
+      t = distinctive_theme()
+      tree = Progress.render(1.0, theme: t)
+      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+
+      assert serialized =~ t.success.fg
+    end
+
     test "Pitfall 8 is documented in moduledoc" do
       assert {:docs_v1, _, _, _, %{"en" => moduledoc}, _, _} = Code.fetch_docs(Progress)
       assert moduledoc =~ "Pitfall 8"

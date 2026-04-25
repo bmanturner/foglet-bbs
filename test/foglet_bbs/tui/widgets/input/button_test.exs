@@ -10,6 +10,17 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
 
+  defp distinctive_theme do
+    %Theme{
+      accent: %{fg: "#button-accent"},
+      primary: %{fg: "#button-primary"},
+      success: %{fg: "#button-success"},
+      error: %{fg: "#button-error"},
+      dim: %{fg: "#button-dim"},
+      unselected: %{fg: "#button-unselected"}
+    }
+  end
+
   describe "render/2 — smoke (D-18)" do
     test "returns a non-nil Raxol element" do
       result = Button.render("Save", role: :primary, theme: theme())
@@ -92,6 +103,34 @@ defmodule Foglet.TUI.Widgets.Input.ButtonTest do
   end
 
   describe "render/2 — theme hygiene (D-18)" do
+    test "roles route through semantic theme slots" do
+      t = distinctive_theme()
+
+      expectations = [
+        primary: t.accent.fg,
+        secondary: t.unselected.fg,
+        danger: t.error.fg,
+        success: t.success.fg
+      ]
+
+      for {role, expected_fg} <- expectations do
+        tree = Button.render("Button", role: role, theme: t)
+        serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+
+        assert serialized =~ expected_fg,
+               "#{role} should use #{expected_fg}"
+      end
+    end
+
+    test "disabled role routes through theme.dim" do
+      t = distinctive_theme()
+      tree = Button.render("Button", role: :success, disabled: true, theme: t)
+      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+
+      assert serialized =~ t.dim.fg
+      refute serialized =~ t.success.fg
+    end
+
     test "no hardcoded color atoms leak into the tree (IN-03)" do
       for role <- [:primary, :secondary, :danger, :success],
           color <- color_names() do

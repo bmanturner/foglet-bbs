@@ -10,6 +10,16 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
 
+  defp distinctive_theme do
+    %Theme{
+      border: %{fg: "#smart-border"},
+      selected: %{fg: "#smart-selected-fg", bg: "#smart-selected-bg"},
+      unselected: %{fg: "#smart-unselected"},
+      accent: %{fg: "#smart-accent"},
+      dim: %{fg: "#smart-dim"}
+    }
+  end
+
   # Shared fixture: two-item single-select list
   defp two_item_fixture do
     SmartList.init(options: [{"A", 1}, {"B", 2}])
@@ -171,6 +181,20 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
   # ---------------------------------------------------------------------------
 
   describe "render/2 — theme hygiene (D-18)" do
+    test "selection, search, pagination, and border affordances use theme slots" do
+      state = SmartList.init(options: [{"A", 1}, {"B", 2}], enable_search: true)
+      tree = SmartList.render(state, theme: distinctive_theme())
+      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+      t = distinctive_theme()
+
+      assert serialized =~ t.border.fg
+      assert serialized =~ t.selected.fg
+      assert serialized =~ t.selected.bg
+      assert serialized =~ t.unselected.fg
+      assert serialized =~ t.accent.fg
+      assert serialized =~ t.dim.fg
+    end
+
     test "no hardcoded color atoms appear in serialized render tree (IN-03)" do
       result = SmartList.render(two_item_fixture(), theme: theme())
       serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
