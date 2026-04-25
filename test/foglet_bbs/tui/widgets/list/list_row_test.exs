@@ -50,7 +50,7 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
           false,
           theme(),
           width: 60
-      )
+        )
 
       flat = flatten_text(result)
       assert TextWidth.display_width(flat) == 60
@@ -87,7 +87,7 @@ defmodule Foglet.TUI.Widgets.List.ListRowTest do
           false,
           theme(),
           width: 60
-      )
+        )
 
       flat = flatten_text(result)
       assert TextWidth.display_width(flat) == 60

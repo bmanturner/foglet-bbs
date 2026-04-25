@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Widgets.List.ListRow do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.TextWidth
 
   @min_title_length 20
   @ellipsis "…"
@@ -80,9 +81,9 @@ defmodule Foglet.TUI.Widgets.List.ListRow do
       ^^ marker (2)   ^^^^^^^^^^^^^^^^^^ padding    ^^^^^^^^^^^^^^^^^^^^^^ metadata
 
   When `title + 2 (gap) + metadata > width`, the title truncates with
-  `"…"`. Minimum kept title length is `@min_title_length` graphemes
+  `"…"`. Minimum kept title length is `@min_title_length` terminal columns
   (20 today); below that the function still preserves the full
-  metadata and emits at least one grapheme of title + `"…"`.
+  metadata and emits a compact title + `"…"` fallback when possible.
   """
   @spec render_with_metadata(
           String.t(),
@@ -118,50 +119,47 @@ defmodule Foglet.TUI.Widgets.List.ListRow do
   @spec compute_parts(String.t(), String.t(), String.t(), pos_integer()) ::
           {String.t(), String.t(), String.t()}
   defp compute_parts(marker, title, metadata, width) do
-    marker_len = String.length(marker)
-    metadata_len = String.length(metadata)
+    marker_width = TextWidth.display_width(marker)
+    metadata_width = TextWidth.display_width(metadata)
     min_gap = 2
 
-    max_title_body = max(width - marker_len - min_gap - metadata_len, 0)
+    max_title_body = max(width - marker_width - min_gap - metadata_width, 0)
     title_body = truncate_title(title, max_title_body)
 
     title_part = marker <> title_body
-    title_part_len = marker_len + String.length(title_body)
+    title_part_width = marker_width + TextWidth.display_width(title_body)
 
-    # Clamp padding so total length does not exceed width.
+    # Clamp padding so total display width does not exceed width.
     # If metadata alone exceeds width, padding collapses to 0 — metadata
     # visibility is the priority contract, so we accept the overflow.
-    padding_len =
-      (width - title_part_len - metadata_len)
+    padding_width =
+      (width - title_part_width - metadata_width)
       |> max(0)
       |> min(width)
 
-    padding_part = String.duplicate(" ", padding_len)
+    padding_part = TextWidth.pad_trailing("", padding_width)
 
     {title_part, padding_part, metadata}
   end
 
   @spec truncate_title(String.t(), non_neg_integer()) :: String.t()
-  defp truncate_title(title, max_len) do
-    # max_len == 0: first clause fires (empty title has length 0 <= 0) → returns ""
-    # max_len == 1: falls to `true` clause → returns @ellipsis
-    # max_len >= 2 and < @min_title_length: below-minimum fallback — emit 1 char + ellipsis
-    # max_len >= @min_title_length: standard truncation with ellipsis
-    title_len = String.length(title)
+  defp truncate_title(title, max_width) do
+    # max_width >= 2 and < @min_title_length: below-minimum fallback keeps
+    # the compact ASCII behavior of one visible title column + ellipsis.
+    title_width = TextWidth.display_width(title)
 
     cond do
-      title_len <= max_len ->
+      title_width <= max_width ->
         title
 
-      max_len >= @min_title_length ->
-        String.slice(title, 0, max_len - 1) <> @ellipsis
+      max_width >= @min_title_length ->
+        TextWidth.truncate(title, max_width)
 
-      max_len >= 2 ->
-        # Below minimum title length — emit at least 1 char + ellipsis
-        String.slice(title, 0, 1) <> @ellipsis
+      max_width >= 2 ->
+        TextWidth.truncate(title, min(max_width, TextWidth.display_width(@ellipsis) + 1))
 
       true ->
-        @ellipsis
+        TextWidth.truncate(title, max_width)
     end
   end
 
