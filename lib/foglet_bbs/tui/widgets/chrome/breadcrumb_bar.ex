@@ -69,7 +69,7 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
   defp parts_for_screen(state, :thread_list), do: [@root, "Boards", board_name(state)]
   defp parts_for_screen(state, :post_reader), do: [@root, board_name(state), thread_title(state)]
   defp parts_for_screen(state, :new_thread), do: [@root, board_name(state), "New Thread"]
-  defp parts_for_screen(state, :post_composer), do: [@root, board_name(state), "Reply"]
+  defp parts_for_screen(state, :post_composer), do: [@root, thread_title(state), "Reply"]
   defp parts_for_screen(state, :account), do: [@root, "Account", active_tab(state, :account)]
 
   defp parts_for_screen(state, :moderation),
@@ -93,10 +93,18 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
   defp screen(state), do: Map.get(state, :current_screen)
 
   defp board_name(state) do
-    state
-    |> Map.get(:current_board)
-    |> map_or_empty()
-    |> Map.get(:name, "Boards")
+    state_board =
+      state
+      |> Map.get(:current_board)
+      |> map_or_empty()
+
+    compose_board =
+      state
+      |> screen_state_for(:new_thread)
+      |> Map.get(:board)
+      |> map_or_empty()
+
+    state_board[:name] || compose_board[:name] || "Boards"
   end
 
   defp thread_title(state) do

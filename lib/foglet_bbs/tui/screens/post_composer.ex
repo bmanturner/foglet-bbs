@@ -78,7 +78,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
         body_items
       end
 
-    ScreenFrame.render(state, title_for(ss.reply_to, state.current_thread), content, [
+    ScreenFrame.render(state, %{}, content, [
       {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
       {"Ctrl+S", "Send"},
       {"Ctrl+C", "Cancel"}
@@ -199,10 +199,6 @@ defmodule Foglet.TUI.Screens.PostComposer do
     focused? = ss.mode == :edit
     Compose.render_input(input_st, focused?, theme)
   end
-
-  defp title_for(nil, nil), do: "New Thread"
-  defp title_for(nil, thread), do: "Reply to: #{thread.title}"
-  defp title_for(reply_to, _), do: "Reply to post ##{Map.get(reply_to, :message_number, "?")}"
 
   defp quote_preview(post) do
     body = Map.get(post, :body, "")

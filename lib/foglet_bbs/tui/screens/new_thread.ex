@@ -74,7 +74,7 @@ defmodule Foglet.TUI.Screens.NewThread do
           end)
       end
 
-    ScreenFrame.render(state, "New Thread — pick a board", board_content, [
+    ScreenFrame.render(state, %{}, board_content, [
       {"j/k", "Select"},
       {"Enter", "Choose"},
       {"Esc", "Cancel"}
@@ -82,8 +82,6 @@ defmodule Foglet.TUI.Screens.NewThread do
   end
 
   defp render_compose_step(state, ss) do
-    board = ss.board
-    board_name = (board && board.name) || "?"
     theme = Theme.from_state(state)
 
     # D-14: render the title line with a live N / cap char counter so users
@@ -128,7 +126,7 @@ defmodule Foglet.TUI.Screens.NewThread do
         ] ++ error_items ++ [text("")]
       end
 
-    ScreenFrame.render(state, "New Thread — #{board_name}", content, [
+    ScreenFrame.render(state, %{}, content, [
       {"Tab", compose_tab_hint(ss)},
       {"Ctrl+S", "Submit"},
       {"Ctrl+C", "Cancel"}
