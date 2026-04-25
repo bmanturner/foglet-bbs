@@ -220,15 +220,15 @@ defmodule Foglet.TUI.Screens.MainMenu do
     visible =
       @main_menu_commands
       |> Enum.filter(&(&1.kind == :action))
-      |> Enum.filter(&command_visible?(&1.visibility, user, state))
+      |> Enum.filter(&action_visible?(&1.visibility, user, state))
 
     hide_oneliner = Enum.filter(visible, &(&1.key == "H")) |> Enum.map(&{&1.key, &1.label})
     oneliner_post = Enum.filter(visible, &(&1.key == "O")) |> Enum.map(&{&1.key, &1.label})
     select_oneliner = Enum.filter(visible, &(&1.key == "↑/↓")) |> Enum.map(&{&1.key, &1.label})
 
     [
-      command_group("Actions", hide_oneliner ++ oneliner_post, 10),
-      command_group("Select", select_oneliner, 20)
+      command_group("Actions", hide_oneliner ++ oneliner_post),
+      command_group("Select", select_oneliner)
     ]
     |> Enum.reject(&(&1.commands == []))
   end
@@ -240,44 +240,41 @@ defmodule Foglet.TUI.Screens.MainMenu do
   # --- private ---
 
   defp visible_destination_entries(user) do
-    # Build a minimal state shim so the shared gate function can run; destination
-    # visibility never depends on oneliner state, so the shim has no oneliners.
-    state = %{current_user: user, recent_oneliners: []}
-
     @main_menu_commands
     |> Enum.filter(&(&1.kind == :destination))
-    |> Enum.filter(&command_visible?(&1.visibility, user, state))
+    |> Enum.filter(&destination_visible?(&1.visibility, user))
   end
 
-  @spec command_visible?(atom(), map() | nil, map()) :: boolean()
-  defp command_visible?(:always, _user, _state), do: true
-  defp command_visible?(:account, user, _state), do: ShellVisibility.account_visible?(user)
-  defp command_visible?(:moderation, user, _state), do: ShellVisibility.moderation_visible?(user)
-  defp command_visible?(:sysop, user, _state), do: ShellVisibility.sysop_visible?(user)
-  defp command_visible?(:authenticated, user, _state), do: not is_nil(user)
+  @spec destination_visible?(atom(), map() | nil) :: boolean()
+  defp destination_visible?(:always, _user), do: true
+  defp destination_visible?(:account, user), do: ShellVisibility.account_visible?(user)
+  defp destination_visible?(:moderation, user), do: ShellVisibility.moderation_visible?(user)
+  defp destination_visible?(:sysop, user), do: ShellVisibility.sysop_visible?(user)
 
-  defp command_visible?(:hide_oneliner_policy, _user, state) do
+  @spec action_visible?(atom(), map() | nil, map()) :: boolean()
+  defp action_visible?(:authenticated, user, _state), do: not is_nil(user)
+
+  defp action_visible?(:hide_oneliner_policy, _user, state) do
     not is_nil(selected_hideable_oneliner(state))
   end
 
-  defp command_visible?(:oneliners_present, _user, state) do
+  defp action_visible?(:oneliners_present, _user, state) do
     visible_oneliners(state) != []
   end
 
-  defp command_group(label, keys, priority) do
+  defp command_group(label, keys) do
     %{
       label: label,
       commands:
         Enum.map(keys, fn {key, label} ->
-          %{key: key, label: label, priority: command_priority(key, priority)}
+          %{key: key, label: label, priority: command_priority(key)}
         end)
     }
   end
 
-  defp command_priority("H", _priority), do: -10
-  defp command_priority(key, _priority) when key in ["A", "M", "S"], do: -5
-  defp command_priority("O", _priority), do: 30
-  defp command_priority(_key, priority), do: priority
+  defp command_priority("H"), do: -10
+  defp command_priority("O"), do: 30
+  defp command_priority(_key), do: 20
 
   @spec nav_panel_inner_width(map()) :: pos_integer()
   defp nav_panel_inner_width(state) do
@@ -409,10 +406,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp normalize_index(index) when is_integer(index), do: index
   defp normalize_index(_other), do: 0
 
-  defp clamp(value, min, max) do
+  defp clamp(value, lower, upper) do
     value
-    |> max(min)
-    |> min(max)
+    |> Kernel.max(lower)
+    |> Kernel.min(upper)
   end
 
   defp user_handle(nil), do: "unknown"

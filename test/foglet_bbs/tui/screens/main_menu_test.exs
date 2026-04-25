@@ -5,6 +5,16 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   alias Foglet.TUI.Screens.{MainMenu, ShellVisibility}
 
+  defp build_state(nil) do
+    %Foglet.TUI.App{
+      current_screen: :main_menu,
+      current_user: nil,
+      session_context: %{},
+      terminal_size: {80, 24}
+    }
+    |> Map.from_struct()
+  end
+
   defp build_state(role) do
     %Foglet.TUI.App{
       current_screen: :main_menu,
@@ -423,9 +433,6 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert :no_match = handle_key_result(state, key)
   end
 
-  defp role_label_to_role(:anonymous), do: :user
-  defp role_label_to_role(other), do: other
-
   describe "Phase 19 body visual" do
     test "every Navigation row fits within the computed panel inner width budget at every canonical size" do
       for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
@@ -606,10 +613,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       # If someone adds a new entry without setting :kind correctly, this fails
       # before the literal-keys sweep above does.
       roles_and_users = [
-        {:anonymous, nil},
-        {:user, %{role: :user}},
-        {:mod, %{role: :mod}},
-        {:sysop, %{role: :sysop}}
+        {:anonymous, nil, nil},
+        {:user, :user, %{role: :user}},
+        {:mod, :mod, %{role: :mod}},
+        {:sysop, :sysop, %{role: :sysop}}
       ]
 
       oneliner_states = [
@@ -617,10 +624,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         {:hideable, [oneliner("alice", "hi", %{id: "ol1"})]}
       ]
 
-      for {role_label, user} <- roles_and_users do
+      for {role_label, state_role, user} <- roles_and_users do
         for {oneliner_label, oneliners} <- oneliner_states do
           state =
-            build_state(role_label_to_role(role_label))
+            build_state(state_role)
             |> Map.put(:current_user, user)
             |> with_oneliners(oneliners)
             |> with_selected_oneliner(if oneliners == [], do: nil, else: 0)
