@@ -7,6 +7,11 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
   defmodule FakeBoards do
     def board_directory_for(_user) do
+      # Timestamps are built at runtime so wall-clock drift between compile
+      # and execution does not flip an `Nm` age on slow CI runs.
+      ten_min_ago = DateTime.add(DateTime.utc_now(), -600, :second)
+      two_h_ago = DateTime.add(DateTime.utc_now(), -7200, :second)
+
       [
         %{
           category: %{id: "c1", name: "Town Square"},
@@ -15,19 +20,22 @@ defmodule Foglet.TUI.Screens.BoardListTest do
               board: %{id: "b1", name: "General", slug: "general"},
               subscribed?: true,
               required_subscription?: false,
-              unread_count: 3
+              unread_count: 3,
+              last_post_at: ten_min_ago
             },
             %{
               board: %{id: "b2", name: "Tech", slug: "tech"},
               subscribed?: false,
               required_subscription?: false,
-              unread_count: nil
+              unread_count: nil,
+              last_post_at: nil
             },
             %{
               board: %{id: "b3", name: "Announcements", slug: "announcements"},
               subscribed?: true,
               required_subscription?: true,
-              unread_count: 0
+              unread_count: 0,
+              last_post_at: two_h_ago
             }
           ]
         }
@@ -53,7 +61,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
   test "init_screen_state/0 returns tree-ready defaults" do
     ss = BoardList.init_screen_state()
 
-    assert ss.tree == nil
+    assert ss.board_tree == nil
     assert ss.feedback == nil
   end
 
@@ -77,28 +85,84 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert text =~ "Boards"
   end
 
-  test "render/1 with boards loaded renders one category tree with subscription labels", %{
+  test "render/1 with boards loaded renders board rows with glyph subscription state and age", %{
     state: state
   } do
     {s, _} = BoardList.load_boards(state)
     text = BoardList.render(s) |> flatten_text()
 
+    # Category row.
     assert text =~ "Town Square"
-    assert text =~ "General [subscribed] (3 unread)"
-    assert text =~ "Tech [unsubscribed]"
-    assert text =~ "Announcements [required]"
+    assert text =~ "▾"
+
+    # Board names appear (not concatenated with glyphs into title - glyphs ride in cluster).
+    assert text =~ "General"
+    assert text =~ "Tech"
+    assert text =~ "Announcements"
+
+    # Subscription cluster glyphs.
+    assert text =~ "✓"
+    assert text =~ "+"
+    assert text =~ "⚿"
+
+    # Read-state cluster glyph (◆ for unread; whitespace for read - refute ◇).
+    assert text =~ "◆"
+    refute text =~ "◇"
+
+    # Trailing metadata: "3 unread" + age for General; "all read" + age for Announcements.
+    assert text =~ "3 unread"
+    assert text =~ "all read"
+
+    # Age magnitude (regex; do not use exact magnitudes).
+    assert text =~ ~r/\d+(s|m|h|d|w|mo|y)\b/
+
+    # Em-dash for the nil-last_post_at board (Tech).
+    assert text =~ "—"
+
+    # Bracketed-text labels MUST be gone.
+    refute text =~ "[required]"
+    refute text =~ "[subscribed]"
+    refute text =~ "[unsubscribed]"
+
+    # Word-boundary refutes on row text. The feedback-flash test at
+    # the bottom of this file legitimately contains "required subscription" - that
+    # is a flash, not row text. This refute applies here because no flash is rendered.
+    refute text =~ ~r/\brequired\b/i
+    refute text =~ ~r/\bsubscribed\b/i
+    refute text =~ ~r/\bsubscribe\b/i
+  end
+
+  test "render/1 board rows render TimeAgo short-form age (regex magnitude) for populated last_post_at",
+       %{
+         state: state
+       } do
+    {s, _} = BoardList.load_boards(state)
+    text = BoardList.render(s) |> flatten_text()
+
+    # General has ten_min_ago -> some `Nm` magnitude.
+    assert text =~ ~r/\d+m\b/, "expected an `Nm` magnitude in #{inspect(text)}"
+    # Announcements has two_h_ago -> some `Nh` magnitude.
+    assert text =~ ~r/\d+h/, "expected an `Nh` magnitude in #{inspect(text)}"
+  end
+
+  test "render/1 board row with nil last_post_at renders em-dash, not '?'", %{state: state} do
+    {s, _} = BoardList.load_boards(state)
+    text = BoardList.render(s) |> flatten_text()
+
+    assert text =~ "—"
+    refute text =~ "?"
   end
 
   test "left collapses the category and right expands it again", %{state: state} do
     {s, _} = BoardList.load_boards(state)
     {:update, expanded, _} = BoardList.handle_key(%{key: :right}, s)
-    assert BoardList.render(expanded) |> flatten_text() =~ "Tech [unsubscribed]"
+    assert BoardList.render(expanded) |> flatten_text() =~ "Tech"
 
     {:update, collapsed, _} = BoardList.handle_key(%{key: :left}, expanded)
-    refute BoardList.render(collapsed) |> flatten_text() =~ "Tech [unsubscribed]"
+    refute BoardList.render(collapsed) |> flatten_text() =~ "Tech"
 
     {:update, expanded_again, _} = BoardList.handle_key(%{key: :right}, collapsed)
-    assert BoardList.render(expanded_again) |> flatten_text() =~ "Tech [unsubscribed]"
+    assert BoardList.render(expanded_again) |> flatten_text() =~ "Tech"
   end
 
   test "enter on a board leaf transitions to :thread_list and emits {:load_threads, board_id}", %{
@@ -151,8 +215,13 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     {:update, s, cmds} = BoardList.handle_key(%{key: :char, char: "u"}, s)
 
     assert cmds == []
-    assert BoardList.render(s) |> flatten_text() =~ "required subscription"
-    assert BoardList.render(s) |> flatten_text() =~ "Announcements [required]"
+    flat = BoardList.render(s) |> flatten_text()
+    # Feedback flash preserved verbatim (top-of-tree).
+    assert flat =~ "required subscription"
+    # Row content uses glyph form (no [required] bracket).
+    assert flat =~ "⚿"
+    assert flat =~ "Announcements"
+    refute flat =~ "[required]"
   end
 
   test "'Q' returns to :main_menu", %{state: state} do

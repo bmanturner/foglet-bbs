@@ -353,6 +353,173 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
   end
 
+  describe "board_list — size contract" do
+    setup do
+      # Timestamps built at runtime to avoid wall-clock drift on slow CI runs.
+      long_name = String.duplicate("a", 80)
+      ten_min_ago = DateTime.add(DateTime.utc_now(), -600, :second)
+      two_h_ago = DateTime.add(DateTime.utc_now(), -7200, :second)
+
+      directory = [
+        %{
+          category: %{id: "c1", name: "Public"},
+          boards: [
+            %{
+              board: %{id: "b1", name: long_name, slug: "long"},
+              subscribed?: true,
+              required_subscription?: true,
+              unread_count: 7,
+              last_post_at: ten_min_ago
+            },
+            %{
+              board: %{id: "b2", name: "Subscribed Board", slug: "subscribed"},
+              subscribed?: true,
+              required_subscription?: false,
+              unread_count: 0,
+              last_post_at: two_h_ago
+            },
+            %{
+              board: %{id: "b3", name: "Available Board", slug: "available"},
+              subscribed?: false,
+              required_subscription?: false,
+              unread_count: nil,
+              last_post_at: nil
+            }
+          ]
+        }
+      ]
+
+      user = %{handle: "carol", id: "u2", status: :active, role: :user}
+      %{directory: directory, long_name: long_name, user: user}
+    end
+
+    defp board_list_row_elements(positioned, title_substring) do
+      elements = text_elements(positioned)
+
+      anchor =
+        Enum.find(elements, fn el ->
+          text = Map.get(el, :text, "")
+          is_binary(text) and String.contains?(text, title_substring)
+        end)
+
+      case anchor do
+        nil ->
+          flunk(
+            "could not find a board row containing #{inspect(title_substring)} " <>
+              "in positioned render. text_elements=#{inspect(Enum.map(elements, & &1.text))}"
+          )
+
+        %{y: y} ->
+          elements
+          |> Enum.filter(fn el -> el.y == y end)
+          |> Enum.sort_by(& &1.x)
+      end
+    end
+
+    defp board_list_row_text(elements) do
+      Enum.map_join(elements, &Map.get(&1, :text, ""))
+    end
+
+    defp assert_board_list_no_row_overlap!(elements, size, label) do
+      elements
+      |> Enum.group_by(& &1.y)
+      |> Enum.each(fn {_y, row_elements} ->
+        row_elements
+        |> Enum.sort_by(& &1.x)
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.each(fn [previous, current] ->
+          previous_end = previous.x + TextWidth.display_width(previous.text)
+
+          assert previous_end <= current.x,
+                 "#{label} overlapping text at #{inspect(size)}: #{inspect(previous.text)} " <>
+                   "ends at #{previous_end}, #{inspect(current.text)} starts at #{current.x}"
+        end)
+      end)
+    end
+
+    for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
+      @width width
+      @height height
+      @tag :"board_list — size contract"
+      test "at #{width}x#{height} cluster cells, unread, age stay visible and rows do not overlap",
+           %{directory: directory, long_name: long_name, user: user} do
+        width = @width
+        height = @height
+        size = {width, height}
+
+        state =
+          %App{
+            current_screen: :board_list,
+            current_user: user,
+            board_list: directory,
+            screen_state: %{board_list: %{selected_index: 0}},
+            terminal_size: size
+          }
+          |> Map.from_struct()
+
+        positioned = BoardList.render(state) |> apply_at_size(size)
+        elements = text_elements(positioned)
+        flat = Enum.map_join(elements, "", & &1.text)
+
+        assert flat =~ "⚿"
+        assert flat =~ "✓"
+        assert flat =~ "+"
+        assert flat =~ "◆"
+        assert flat =~ "7 unread"
+        assert flat =~ ~r/\d+(s|m|h|d|w|mo|y)\b/
+        assert flat =~ "—"
+
+        long_prefix = String.slice(long_name, 0, 12)
+        long_row = board_list_row_elements(positioned, long_prefix)
+        long_text = board_list_row_text(long_row)
+
+        assert long_text =~ "⚿"
+        assert long_text =~ "◆"
+        assert long_text =~ "7 unread"
+        assert long_text =~ ~r/\d+m\b/
+
+        if width <= 80 do
+          assert long_text =~ "…",
+                 "expected long board name truncation at #{inspect(size)}, got: #{inspect(long_text)}"
+        end
+
+        subscribed_row = board_list_row_elements(positioned, "Subscribed Board")
+        subscribed_text = board_list_row_text(subscribed_row)
+
+        assert subscribed_text =~ "✓"
+        assert subscribed_text =~ "all read"
+        assert subscribed_text =~ ~r/\d+h\b/
+
+        available_row = board_list_row_elements(positioned, "Available Board")
+        available_text = board_list_row_text(available_row)
+
+        assert available_text =~ "+"
+        assert available_text =~ "—"
+
+        for element <- elements do
+          text = Map.fetch!(element, :text)
+
+          assert element.x >= 0
+          assert element.y >= 0
+          assert element.x + TextWidth.display_width(text) <= width
+          assert element.y < height
+        end
+
+        elements
+        |> Enum.filter(fn el ->
+          row_text = Map.get(el, :text, "")
+
+          String.contains?(flat, row_text) and
+            Enum.any?(
+              [long_prefix, "Subscribed Board", "Available Board", "⚿", "✓", "+", "◆"],
+              &String.contains?(row_text, &1)
+            )
+        end)
+        |> assert_board_list_no_row_overlap!(size, "BoardList.render")
+      end
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Phase 23 — Composer size contracts (COMPOSER-01/02/03/04/05)
   # ---------------------------------------------------------------------------
@@ -1052,19 +1219,22 @@ defmodule Foglet.TUI.LayoutSmokeTest do
             board: %{id: "b1", name: "General"},
             subscribed?: true,
             required_subscription?: false,
-            unread_count: 3
+            unread_count: 3,
+            last_post_at: DateTime.add(DateTime.utc_now(), -600, :second)
           },
           %{
             board: %{id: "b2", name: "Announcements"},
             subscribed?: false,
             required_subscription?: false,
-            unread_count: 0
+            unread_count: 0,
+            last_post_at: nil
           },
           %{
             board: %{id: "b3", name: "Off-topic"},
             subscribed?: true,
             required_subscription?: false,
-            unread_count: 1
+            unread_count: 1,
+            last_post_at: DateTime.add(DateTime.utc_now(), -3600, :second)
           }
         ]
       }
