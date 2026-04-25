@@ -64,6 +64,26 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   defp composer_ss(state), do: state.screen_state.post_composer
   defp input_value(state), do: composer_ss(state).input_state.value
 
+  defp reply_post do
+    %{
+      id: "p1",
+      body: "This is the quoted post body\nwith a second line\nand more text that should collapse",
+      user: %{handle: "alice"}
+    }
+  end
+
+  defp with_reply(state, body \\ "") do
+    input_st = fresh_input(body)
+
+    ss =
+      PostComposer.init_screen_state(
+        reply_to: reply_post(),
+        input_state: input_st
+      )
+
+    put_in(state.screen_state.post_composer, ss)
+  end
+
   # ---------------------------------------------------------------------------
   # Render
   # ---------------------------------------------------------------------------
@@ -94,6 +114,49 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       |> File.read!()
 
     refute source =~ "Reply to:"
+  end
+
+  test "render/1 in edit mode uses the composer shell with body counter", %{state: state} do
+    state = with_reply(state)
+    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Composer"
+    assert text =~ "Edit"
+    assert text =~ "Preview"
+    assert text =~ "Write your post"
+    assert text =~ "0 / 1000 chars"
+  end
+
+  test "render/1 in preview mode keeps markdown preview inside the composer shell", %{state: state} do
+    state = with_reply(state, "# hi")
+    {:update, state, _} = PostComposer.handle_key(%{key: :tab}, state)
+
+    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Composer"
+    assert text =~ "Edit"
+    assert text =~ "Preview"
+    assert text =~ "MD[# hi]"
+  end
+
+  test "render/1 shows compact reply context with a quote gutter", %{state: state} do
+    state = with_reply(state)
+    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Replying to @alice"
+    assert text =~ ">" or text =~ "┃"
+  end
+
+  test "PostComposer render source delegates to EditorFrame and keeps preview off PostCard" do
+    source =
+      __ENV__.file
+      |> Path.dirname()
+      |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_composer.ex")
+      |> Path.expand()
+      |> File.read!()
+
+    assert source =~ "EditorFrame.render"
+    refute source =~ "PostCard.render"
   end
 
   # ---------------------------------------------------------------------------
