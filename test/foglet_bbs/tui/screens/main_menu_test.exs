@@ -231,8 +231,8 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     texts = MainMenu.render(state) |> collect_text_values()
 
     assert "Welcome back, alice." in texts
-    assert "  [B] Browse Boards" in texts
-    assert "  [C] Compose New Thread" in texts
+    assert "  [B] Boards" in texts
+    assert "  [C] Compose" in texts
     assert "  [Q] Logout" in texts
   end
 
@@ -365,21 +365,20 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert :no_match = MainMenu.handle_key(%{key: :char, char: "s"}, state)
     end
 
-    test "rendered shell rows and command labels follow ShellVisibility for every role" do
-      for {role, _screen, key, menu_label, key_label, predicate} <- role_cases() do
+    test "rendered shell rows follow ShellVisibility for every role" do
+      # Phase 19 (Plan 01) note: A, M, S are now pure destinations (body rows only).
+      # They are no longer rendered in the command bar — that is the D-01
+      # single-source-of-truth split. This test checks menu row visibility only.
+      for {role, _screen, key, menu_label, _key_label, predicate} <- role_cases() do
         state = build_state(role)
         user = state.current_user
         visible? = predicate.(user)
         texts = rendered_text(state)
 
         menu_row? = "  [#{key}] #{menu_label}" in texts
-        command? = key in texts and Enum.any?(texts, &(String.trim(&1) == key_label))
 
         assert menu_row? == visible?,
                "expected #{menu_label} menu row visibility for #{role} to be #{visible?}"
-
-        assert command? == visible?,
-               "expected #{key_label} command visibility for #{role} to be #{visible?}"
       end
     end
 
@@ -402,5 +401,182 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   defp assert_key_visibility(state, key, _screen, false) do
     assert :no_match = handle_key_result(state, key)
+  end
+
+  defp role_label_to_role(:anonymous), do: :user
+  defp role_label_to_role(other), do: other
+
+  describe "Phase 19 destinations vs. actions split" do
+    test "visible_destinations/1 anonymous returns B, C, Q only (anonymous still sees Compose)" do
+      # Anonymous-C: destination row is present even when authenticated; handle_key/2's
+      # anonymous-C route to login is unchanged from pre-Phase-19 contract.
+      assert MainMenu.visible_destinations(nil) == [
+               {"B", "Boards"},
+               {"C", "Compose"},
+               {"Q", "Logout"}
+             ]
+    end
+
+    test "visible_destinations/1 :user adds A but not M or S" do
+      user = %{role: :user}
+
+      assert MainMenu.visible_destinations(user) == [
+               {"B", "Boards"},
+               {"C", "Compose"},
+               {"A", "Account"},
+               {"Q", "Logout"}
+             ]
+    end
+
+    test "visible_destinations/1 :mod adds M but not S" do
+      user = %{role: :mod}
+
+      assert MainMenu.visible_destinations(user) ==
+               [
+                 {"B", "Boards"},
+                 {"C", "Compose"},
+                 {"A", "Account"},
+                 {"M", "Moderation"},
+                 {"Q", "Logout"}
+               ]
+    end
+
+    test "visible_destinations/1 :sysop adds A, M, AND S" do
+      user = %{role: :sysop}
+
+      assert MainMenu.visible_destinations(user) ==
+               [
+                 {"B", "Boards"},
+                 {"C", "Compose"},
+                 {"A", "Account"},
+                 {"M", "Moderation"},
+                 {"S", "Sysop"},
+                 {"Q", "Logout"}
+               ]
+    end
+
+    test "visible_actions/1 with no oneliners returns Post Oneliner only" do
+      state = build_state(:user) |> with_oneliners([])
+
+      keys =
+        state |> MainMenu.visible_actions() |> Enum.flat_map(& &1.commands) |> Enum.map(& &1.key)
+
+      assert keys == ["O"]
+    end
+
+    test "visible_actions/1 with oneliners surfaces ↑/↓ Select for any user" do
+      state =
+        build_state(:user)
+        |> with_oneliners([oneliner("alice", "hi")])
+        |> with_selected_oneliner(0)
+
+      keys =
+        state |> MainMenu.visible_actions() |> Enum.flat_map(& &1.commands) |> Enum.map(& &1.key)
+
+      assert "↑/↓" in keys
+      assert "O" in keys
+      refute "H" in keys
+    end
+
+    test "visible_actions/1 surfaces H for :mod with hideable oneliner selected" do
+      state =
+        build_state(:mod)
+        |> with_oneliners([oneliner("alice", "hi", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      keys =
+        state |> MainMenu.visible_actions() |> Enum.flat_map(& &1.commands) |> Enum.map(& &1.key)
+
+      assert "H" in keys
+      assert "O" in keys
+    end
+
+    test "visible_actions/1 surfaces H for :sysop with hideable oneliner selected" do
+      state =
+        build_state(:sysop)
+        |> with_oneliners([oneliner("alice", "hi", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      keys =
+        state |> MainMenu.visible_actions() |> Enum.flat_map(& &1.commands) |> Enum.map(& &1.key)
+
+      assert "H" in keys
+    end
+
+    test "visible_actions/1 hides H for :user even with hideable oneliner selected" do
+      state =
+        build_state(:user)
+        |> with_oneliners([oneliner("alice", "hi", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      keys =
+        state |> MainMenu.visible_actions() |> Enum.flat_map(& &1.commands) |> Enum.map(& &1.key)
+
+      refute "H" in keys
+    end
+
+    test "command bar non-duplication: B/C/A/M/S/Q never appear in any visible_actions group for any role (literal-keys sweep)" do
+      for role <- [:user, :mod, :sysop] do
+        for oneliners <- [[], [oneliner("alice", "hi", %{id: "ol1"})]] do
+          state = build_state(role) |> with_oneliners(oneliners) |> with_selected_oneliner(0)
+
+          keys =
+            state
+            |> MainMenu.visible_actions()
+            |> Enum.flat_map(& &1.commands)
+            |> Enum.map(& &1.key)
+
+          for forbidden <- ["B", "C", "A", "M", "S", "Q"] do
+            refute forbidden in keys,
+                   "destination key #{forbidden} leaked into command bar for role=#{role}, oneliners=#{length(oneliners)}"
+          end
+        end
+      end
+    end
+
+    test "destinations and actions are disjoint as a DATA property for every role x oneliner state" do
+      # Structural disjointness: derives from the shared @main_menu_commands list.
+      # If someone adds a new entry without setting :kind correctly, this fails
+      # before the literal-keys sweep above does.
+      roles_and_users = [
+        {:anonymous, nil},
+        {:user, %{role: :user}},
+        {:mod, %{role: :mod}},
+        {:sysop, %{role: :sysop}}
+      ]
+
+      oneliner_states = [
+        {:empty, []},
+        {:hideable, [oneliner("alice", "hi", %{id: "ol1"})]}
+      ]
+
+      for {role_label, user} <- roles_and_users do
+        for {oneliner_label, oneliners} <- oneliner_states do
+          state =
+            build_state(role_label_to_role(role_label))
+            |> Map.put(:current_user, user)
+            |> with_oneliners(oneliners)
+            |> with_selected_oneliner(if oneliners == [], do: nil, else: 0)
+
+          destination_keys =
+            user
+            |> MainMenu.visible_destinations()
+            |> Enum.map(&elem(&1, 0))
+            |> MapSet.new()
+
+          action_keys =
+            state
+            |> MainMenu.visible_actions()
+            |> Enum.flat_map(& &1.commands)
+            |> Enum.map(& &1.key)
+            |> MapSet.new()
+
+          assert MapSet.disjoint?(destination_keys, action_keys),
+                 "destinations and actions overlap for role=#{role_label}, oneliners=#{oneliner_label}: " <>
+                   "destinations=#{inspect(MapSet.to_list(destination_keys))}, " <>
+                   "actions=#{inspect(MapSet.to_list(action_keys))}"
+        end
+      end
+    end
   end
 end
