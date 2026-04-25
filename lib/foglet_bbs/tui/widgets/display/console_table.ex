@@ -62,6 +62,10 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTable do
   end
 
   @spec handle_event(map(), t()) :: {t(), Table.action()}
+  def handle_event(%{key: :enter}, %__MODULE__{selectable: false} = state) do
+    {%{state | last_action: nil}, nil}
+  end
+
   def handle_event(event, %__MODULE__{} = state) do
     {table, action} = Table.handle_event(event, state.table)
     {%{state | table: table, last_action: action}, action}

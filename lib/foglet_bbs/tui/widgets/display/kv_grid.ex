@@ -73,17 +73,33 @@ defmodule Foglet.TUI.Widgets.Display.KvGrid do
     |> TextWidth.pad_trailing(label_width)
   end
 
-  defp badge_for(%{badge: state}, theme) when not is_nil(state),
-    do: Badge.render(state, theme: theme)
+  defp badge_for(%{badge: badge}, theme) when not is_nil(badge),
+    do: render_badge(badge, theme)
 
   defp badge_for(%{state: state}, theme) when not is_nil(state),
-    do: Badge.render(state, theme: theme)
+    do: render_badge(state, theme)
 
   defp badge_for(_entry, _theme), do: nil
 
-  defp badge_width(%{badge: state}) when not is_nil(state), do: badge_text_width(state)
+  defp badge_width(%{badge: badge}) when not is_nil(badge), do: badge_text_width(badge)
   defp badge_width(%{state: state}) when not is_nil(state), do: badge_text_width(state)
   defp badge_width(_entry), do: 0
+
+  defp render_badge(%{state: state} = badge, theme) do
+    opts =
+      [theme: theme]
+      |> maybe_put(:label, Map.get(badge, :label))
+      |> maybe_put(:role, Map.get(badge, :role))
+
+    Badge.render(state, opts)
+  end
+
+  defp render_badge(state, theme), do: Badge.render(state, theme: theme)
+
+  defp badge_text_width(%{state: _state} = badge) do
+    label = Map.get(badge, :label, Map.fetch!(badge, :state))
+    TextWidth.display_width("[#{label}]")
+  end
 
   defp badge_text_width(state), do: TextWidth.display_width("[#{state}]")
 
@@ -109,4 +125,7 @@ defmodule Foglet.TUI.Widgets.Display.KvGrid do
   end
 
   defp normalize_width(width) when is_integer(width), do: max(width, 0)
+
+  defp maybe_put(opts, _key, nil), do: opts
+  defp maybe_put(opts, key, value), do: Keyword.put(opts, key, value)
 end

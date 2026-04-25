@@ -46,6 +46,27 @@ defmodule Foglet.TUI.Widgets.Display.KvGridTest do
         assert TextWidth.display_width(flat) <= width * length(status_summary_rows())
       end
     end
+
+    test "renders structured badge metadata without leaking inspected maps", %{theme: theme} do
+      rows = [
+        %{
+          label: "Review",
+          value: "requires action",
+          badge: %{state: :pending, label: "queued", role: :warning}
+        }
+      ]
+
+      tree = KvGrid.render(rows, theme: theme, width: 64)
+      flat = flatten_text(tree)
+
+      assert flat =~ "Review"
+      assert flat =~ "queued"
+      refute flat =~ "%{"
+
+      for line <- text_lines(tree) do
+        assert TextWidth.display_width(line) <= 64
+      end
+    end
   end
 
   describe "render/2 theme hygiene" do

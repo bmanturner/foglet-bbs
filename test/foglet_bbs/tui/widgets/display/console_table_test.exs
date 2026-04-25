@@ -80,6 +80,20 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
       assert row.handle == "alice"
       assert new_state.last_action == {:row_selected, row}
     end
+
+    test "does not emit row selection when selectable is false" do
+      state =
+        ConsoleTable.init(
+          columns: columns([:handle, :status]),
+          rows: moderation_user_rows(),
+          selectable: false
+        )
+
+      {new_state, action} = ConsoleTable.handle_event(%{key: :enter}, state)
+
+      assert action == nil
+      assert new_state.last_action == nil
+    end
   end
 
   describe "theme hygiene" do
