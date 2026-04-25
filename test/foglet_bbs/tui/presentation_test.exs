@@ -2,6 +2,7 @@ defmodule Foglet.TUI.PresentationTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.Presentation
+  alias Foglet.TUI.Theme
 
   describe "screen mode contract (MODE-01)" do
     test "maps every current BBS screen id to :bbs" do
@@ -51,6 +52,20 @@ defmodule Foglet.TUI.PresentationTest do
     test "rejects unknown screen ids deliberately" do
       assert_raise ArgumentError, ~r/unknown TUI screen/, fn ->
         Presentation.mode_for!(:does_not_exist)
+      end
+    end
+  end
+
+  describe "theme independence (MODE-01, THEME-02)" do
+    test "presentation mode is not an authorization or permission boundary" do
+      assert function_exported?(Presentation, :mode_for!, 1)
+      refute function_exported?(Presentation, :mode_for!, 2)
+    end
+
+    test "theme ids cannot alter BBS or operator screen modes" do
+      for _theme_id <- Theme.ids() do
+        assert Presentation.mode_for!(:main_menu) == :bbs
+        assert Presentation.mode_for!(:account) == :operator
       end
     end
   end
