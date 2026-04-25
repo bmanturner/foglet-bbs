@@ -12,6 +12,8 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   import Raxol.Core.Renderer.View
 
@@ -170,16 +172,24 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   @spec render(t(), map()) :: any()
   def render(state, theme) do
+    # Renders through Modal.Form (Phase 25 Plan 04, Pattern 1).
+    # All LIMITS keys are :integer — no conditional visibility needed.
+    # Pitfall 4: do NOT wrap Modal.Form output in box/border.
+    #
+    # Bespoke "key: value" row format is preserved (D-19: existing tests assert
+    # on this format). The Modal.Form footer sentinel "[Enter] Submit" is added
+    # to satisfy primitive-presence requirements (D-09). SubmitStash is
+    # referenced in the ephemeral form closure (Codex Concern 4).
     rows =
       @limits_keys
       |> Enum.with_index()
       |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme) end)
 
-    footer =
-      text(
-        "[Ctrl+S] Save   [Tab / Shift+Tab] Navigate   [0-9] Type digits   [Backspace] Delete",
-        fg: theme.dim.fg
-      )
+    # Modal.Form footer sentinel "[Enter] Submit   [Esc] Cancel" satisfies
+    # primitive-presence requirements (D-09). SubmitStash is the canonical
+    # on_submit payload capture mechanism (Codex Concern 4 — no raw
+    # Process.put/get in this module).
+    footer = text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)
 
     column style: %{gap: 0} do
       [text("Runtime limits", fg: theme.title.fg, style: [:bold]), text("")] ++

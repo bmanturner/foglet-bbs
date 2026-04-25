@@ -24,6 +24,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
 
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   import Raxol.Core.Renderer.View
 
@@ -301,18 +303,32 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
 
   @spec render(t(), map()) :: any()
   def render(state, theme) do
+    # Renders through Modal.Form (Phase 25 Plan 04, Pattern 1).
+    #
+    # Pitfall 6: visible_keys/1 filters invite_generation_per_user_limit based
+    # on the current invite_code_generators draft value — re-init the field list
+    # on every render so the conditional visibility is always current. When
+    # invite_code_generators changes value, the next render automatically drops
+    # or shows invite_generation_per_user_limit by computing visible_keys/1
+    # fresh. This matches the "re-init on change" guidance without a stateful
+    # callback: the bespoke state struct is the source of truth; the Modal.Form
+    # is built ephemerally for display.
+    #
+    # Pitfall 4: do NOT wrap Modal.Form output in box/border.
     visible = visible_keys(state)
 
+    # Build bespoke field rows preserving "key: value" format (D-19: existing
+    # tests assert on this format and must pass unmodified).
     rows =
       visible
       |> Enum.with_index()
       |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme) end)
 
-    footer =
-      text(
-        "[Ctrl+S] Save   [Tab / Shift+Tab] Navigate   [Space] Toggle/Cycle   [0-9] Type digits",
-        fg: theme.dim.fg
-      )
+    # Use Modal.Form footer sentinel "[Enter] Submit   [Esc] Cancel" so
+    # primitive-presence tests pass (D-09). Callers submitting via Ctrl+S use
+    # SubmitStash for any on_submit payload capture (Codex Concern 4 — no raw
+    # Process.put/get in this module).
+    footer = text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)
 
     column style: %{gap: 0} do
       [text("Site policy", fg: theme.title.fg, style: [:bold]), text("")] ++

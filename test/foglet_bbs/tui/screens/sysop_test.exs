@@ -469,6 +469,84 @@ defmodule Foglet.TUI.Screens.SysopTest do
   end
 
   # =========================================================================
+  # SITE Modal.Form primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  describe "SITE Modal.Form primitive presence" do
+    setup %{state: state} do
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      %{state: state}
+    end
+
+    test "SITE tab body renders Modal.Form footer sentinel", %{state: state} do
+      # Lazy-init the SiteForm by delegating a no-op key to the SITE tab.
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "[Enter] Submit"),
+             "Expected Modal.Form footer '[Enter] Submit' in SITE render; got:\n#{flat}"
+    end
+
+    test "SITE tab body renders heading", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Site policy"),
+             "Expected Site policy heading in SITE render"
+    end
+
+    test "SITE tab body renders visible field labels", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "registration_mode"),
+             "Expected registration_mode field label in SITE render"
+
+      assert String.contains?(flat, "invite_code_generators"),
+             "Expected invite_code_generators field label in SITE render"
+    end
+  end
+
+  # =========================================================================
+  # LIMITS Modal.Form primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  describe "LIMITS Modal.Form primitive presence" do
+    setup %{state: state} do
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 2))
+      %{state: state}
+    end
+
+    test "LIMITS tab body renders Modal.Form footer sentinel", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "[Enter] Submit"),
+             "Expected Modal.Form footer '[Enter] Submit' in LIMITS render; got:\n#{flat}"
+    end
+
+    test "LIMITS tab body renders heading", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Runtime limits"),
+             "Expected Runtime limits heading in LIMITS render"
+    end
+
+    test "LIMITS tab body renders field labels with required markers", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "max_post_length"),
+             "Expected max_post_length field label in LIMITS render"
+
+      assert String.contains?(flat, "max_thread_title_length"),
+             "Expected max_thread_title_length field label in LIMITS render"
+    end
+  end
+
+  # =========================================================================
   # USERS tab tests (Plan 10-02, USER-01 through USER-03)
   # =========================================================================
 

@@ -118,6 +118,70 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
     end
   end
 
+  # =========================================================================
+  # visible_keys re-init (Pitfall 6) — Phase 25 Plan 04
+  # =========================================================================
+
+  describe "visible_keys re-init (Pitfall 6)" do
+    test "invite_generation_per_user_limit present when invite_code_generators == any_user" do
+      Config.put!("invite_code_generators", "any_user", nil)
+      form = SiteForm.init([])
+      assert "invite_generation_per_user_limit" in SiteForm.visible_keys(form)
+    end
+
+    test "invite_generation_per_user_limit absent when invite_code_generators != any_user" do
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      form = SiteForm.init([])
+      refute "invite_generation_per_user_limit" in SiteForm.visible_keys(form)
+    end
+
+    test "mutating invite_code_generators draft to any_user makes limit field visible" do
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      form = SiteForm.init([])
+      refute "invite_generation_per_user_limit" in SiteForm.visible_keys(form)
+
+      form = put_draft(form, "invite_code_generators", "any_user")
+      assert "invite_generation_per_user_limit" in SiteForm.visible_keys(form)
+    end
+
+    test "mutating invite_code_generators draft away from any_user hides limit field" do
+      Config.put!("invite_code_generators", "any_user", nil)
+      form = SiteForm.init([])
+      assert "invite_generation_per_user_limit" in SiteForm.visible_keys(form)
+
+      form = put_draft(form, "invite_code_generators", "sysop_only")
+      refute "invite_generation_per_user_limit" in SiteForm.visible_keys(form)
+    end
+
+    test "render with any_user renders invite_generation_per_user_limit in Modal.Form output" do
+      Config.put!("invite_code_generators", "any_user", nil)
+      form = SiteForm.init([])
+
+      rendered_text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(rendered_text, "invite_generation_per_user_limit"),
+             "Expected invite_generation_per_user_limit in rendered output when any_user"
+    end
+
+    test "render without any_user hides invite_generation_per_user_limit" do
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      form = SiteForm.init([])
+
+      rendered_text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute String.contains?(rendered_text, "invite_generation_per_user_limit"),
+             "Expected invite_generation_per_user_limit absent when generators != any_user"
+    end
+  end
+
   defp put_draft(form, key, value) do
     %{form | drafts: Map.put(form.drafts, key, value)}
   end
