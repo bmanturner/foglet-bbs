@@ -26,13 +26,11 @@ defmodule Foglet.TUI.Screens.ThreadList do
   @impl true
   @spec render(map()) :: any()
   def render(state) do
-    board = state.current_board
     ss = get_in(state.screen_state, [:thread_list]) || init_screen_state()
     theme = Theme.from_state(state)
     thread_content = render_thread_content(state, ss, theme)
-    board_name = (board && board.name) || "?"
 
-    ScreenFrame.render(state, "Threads — #{board_name}", thread_content, [
+    ScreenFrame.render(state, %{}, thread_content, [
       {"j/k", "Select"},
       {"Enter", "Open"},
       {"C", "Compose"},

@@ -64,14 +64,12 @@ defmodule Foglet.TUI.Screens.PostReader do
   @impl true
   @spec render(map()) :: any()
   def render(state) do
-    thread = state.current_thread
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
     {w, h} = state.terminal_size || @default_terminal_size
     post_content = render_post_content(state, ss, theme, w, h)
-    thread_title = (thread && thread.title) || "?"
 
-    ScreenFrame.render(state, "Thread: #{thread_title}", post_content, [
+    ScreenFrame.render(state, %{}, post_content, [
       {"N", "Next"},
       {"P", "Prev"},
       {"J", "Scroll ↓"},
