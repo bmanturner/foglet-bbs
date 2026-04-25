@@ -95,11 +95,13 @@ Status: met = dimension meets minimum, below = planner treats as assumption.
 
 ## Interview Log
 
-Interactive question UI is unavailable in this Codex default-mode session, so the workflow fallback was used: conservative defaults were selected from the roadmap, requirements, `SCREENS.md`, and codebase scout.
+Round 1 was discussed with the user after codebase scouting. The user accepted the recommendations to keep the helper as a thin Foglet wrapper around Raxol measurement, keep Phase 16 focused on the core layout-sensitive paths, and exclude emoji correctness from required acceptance targets.
 
 | Round | Perspective | Question summary | Decision locked |
 |-------|-------------|------------------|-----------------|
-| 1 | Researcher | What exists today for Unicode/display width? | Raxol exposes `Raxol.UI.TextMeasure`; Foglet lacks a local helper and has direct string operations in TUI layout-sensitive paths. |
+| 1 | Researcher | Should Foglet define independent width behavior or wrap Raxol? | Use a thin Foglet wrapper around `Raxol.UI.TextMeasure`; add Foglet convenience functions without inventing a separate width policy unless tests prove Raxol cannot satisfy the target cases. |
+| 1 | Researcher | Which paths are must-fix in Phase 16? | Lock `ListRow`, existing chrome/footer key hints, modal wrapping, reusable truncation helpers, and composer cursor display; account/sysop/moderation truncation can migrate only where cheap or reusable. |
+| 1 | Researcher | Should emoji width be a required target? | Do not make emoji correctness required; cover ASCII, accented Latin, combining marks, CJK, and the SCREENS.md glyph set. |
 | 2 | Researcher + Simplifier | What is the irreducible Phase 16 deliverable? | Add one shared Foglet TextWidth helper, migrate the highest-risk current paths, and prove the required glyph/size contracts without starting visual facelift work. |
 | 3 | Boundary Keeper | What is explicitly not this phase? | Chrome V2, mode/theme contracts, rich rows, board/post/composer facelifts, browser UI, and domain changes are out of scope. |
 | 4 | Failure Analyst | What would make the phase fail verification? | Unicode rows still misalign, composer cursor display splits/misplaces glyphs, migrated paths still use grapheme counts for terminal columns, or ASCII layouts regress. |
