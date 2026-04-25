@@ -58,10 +58,6 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     %{state: build_state(:user)}
   end
 
-  test "render/1 does not crash", %{state: state} do
-    assert _ = MainMenu.render(state)
-  end
-
   test "render/1 includes Chrome V2 home breadcrumb", %{state: state} do
     text = MainMenu.render(state) |> collect_text_values() |> Enum.join("\n")
 

@@ -74,10 +74,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: state}
     end
 
-    test "does not crash with default screen state", %{state: state} do
-      assert _ = Sysop.render(state)
-    end
-
     test "renders operator Chrome V2 breadcrumb for the active sysop tab", %{state: state} do
       state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
 

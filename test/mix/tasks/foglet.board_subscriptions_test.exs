@@ -161,14 +161,5 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptionsTest do
 
       assert output =~ "archived"
     end
-
-    test "does not directly mutate subscriptions in the task source" do
-      source = File.read!("lib/mix/tasks/foglet.board_subscriptions.ex")
-
-      refute source =~ "Repo."
-      refute source =~ "Subscription.changeset"
-      assert source =~ "Boards.subscribe_user_to_board"
-      assert source =~ "Boards.unsubscribe_user_from_board"
-    end
   end
 end

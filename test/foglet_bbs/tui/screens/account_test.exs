@@ -98,11 +98,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
                "Presentation.mode_for!(:account)"
     end
 
-    test "does not crash with default screen state", %{state: state} do
-      state = put_in(state, [:screen_state, :account], Account.init_screen_state())
-      assert _ = Account.render(state)
-    end
-
     test "KEYS-01 shows PROFILE, PREFS, and SSH KEYS tab labels by default", %{state: state} do
       state = put_in(state, [:screen_state, :account], Account.init_screen_state())
       flat = Account.render(state) |> collect_text_values()

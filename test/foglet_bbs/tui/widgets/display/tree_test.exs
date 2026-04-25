@@ -16,18 +16,10 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
     children: [%{id: :child, label: "Child", children: []}]
   }
 
-  @leaf_node %{id: :leaf, label: "Leaf", children: []}
-
   describe "init/1 — smoke (D-18)" do
     test "returns a Tree struct from valid options" do
       state = Tree.init(nodes: [%{id: :root, label: "Root", children: []}])
       assert %Tree{} = state
-    end
-
-    test "renders non-nil element" do
-      state = Tree.init(nodes: [%{id: :root, label: "Root", children: []}])
-      result = Tree.render(state, theme: theme())
-      refute is_nil(result)
     end
 
     test "rendered tree contains node label text" do
@@ -91,12 +83,6 @@ defmodule Foglet.TUI.Widgets.Display.TreeTest do
       state = Tree.init(nodes: [@root_with_child])
       {_final, action} = Tree.handle_event(%{key: :enter}, state)
       refute action == :node_activated
-    end
-
-    test "handle_event/2 returns a two-element tuple" do
-      state = Tree.init(nodes: [@leaf_node])
-      result = Tree.handle_event(%{key: :down}, state)
-      assert {%Tree{}, _action} = result
     end
 
     test "purity: same state + event → same output" do

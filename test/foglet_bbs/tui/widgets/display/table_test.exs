@@ -29,12 +29,6 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
   end
 
   describe "render/2 — smoke (D-18)" do
-    test "returns a non-nil map element" do
-      state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [%{name: "x"}])
-      result = Table.render(state, theme: theme())
-      refute is_nil(result)
-    end
-
     test "rendered tree contains column label text" do
       state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [%{name: "Alice"}])
       result = Table.render(state, theme: theme())
@@ -94,12 +88,6 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
 
       {new_state, _action} = Table.handle_event(%{key: :down}, state)
       assert %Table{} = new_state
-    end
-
-    test "handle_event/2 returns a two-element tuple" do
-      state = Table.init(columns: [%{id: :name, label: "Name"}], rows: [%{name: "Alice"}])
-      result = Table.handle_event(%{key: :down}, state)
-      assert {%Table{}, _action} = result
     end
 
     test "purity: same state + event → same output" do

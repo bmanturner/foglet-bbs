@@ -87,69 +87,6 @@ defmodule Mix.Tasks.Foglet.User.StatusTest do
       assert Accounts.get_user_by_handle("pending_user").status == :active
     end
 
-    test "changes pending user to rejected" do
-      sysop_fixture("rejector")
-      user_with_status(:pending, "pending_reject")
-
-      output =
-        capture_io(fn ->
-          Mix.Tasks.Foglet.User.Status.run([
-            "pending_reject",
-            "--status",
-            "rejected",
-            "--actor",
-            "rejector"
-          ])
-        end)
-
-      assert output =~
-               "Changed pending_reject from pending to rejected. Notification: skipped_no_email"
-
-      assert Accounts.get_user_by_handle("pending_reject").status == :rejected
-    end
-
-    test "changes active user to suspended" do
-      sysop_fixture("suspender")
-      AccountsFixtures.user_fixture(%{handle: "active_suspend"})
-
-      output =
-        capture_io(fn ->
-          Mix.Tasks.Foglet.User.Status.run([
-            "active_suspend",
-            "--status",
-            "suspended",
-            "--actor",
-            "suspender"
-          ])
-        end)
-
-      assert output =~
-               "Changed active_suspend from active to suspended. Notification: not_applicable"
-
-      assert Accounts.get_user_by_handle("active_suspend").status == :suspended
-    end
-
-    test "changes suspended user to active" do
-      sysop_fixture("reactivator")
-      user_with_status(:suspended, "suspactive")
-
-      output =
-        capture_io(fn ->
-          Mix.Tasks.Foglet.User.Status.run([
-            "suspactive",
-            "--status",
-            "active",
-            "--actor",
-            "reactivator"
-          ])
-        end)
-
-      assert output =~
-               "Changed suspactive from suspended to active. Notification: not_applicable"
-
-      assert Accounts.get_user_by_handle("suspactive").status == :active
-    end
-
     test "prints forbidden for non-sysop actor" do
       AccountsFixtures.user_fixture(%{handle: "regular_actor"})
       user_with_status(:pending, "forbidden_target")

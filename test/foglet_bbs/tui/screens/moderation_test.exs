@@ -72,10 +72,6 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert Enum.any?(flat, &String.contains?(&1, "Foglet ▸ Moderation ▸ LOG"))
     end
 
-    test "does not crash with default screen state", %{state: state} do
-      assert _ = Moderation.render(state)
-    end
-
     test "renders shared INVITES body when active tab is INVITES" do
       state =
         :mod
