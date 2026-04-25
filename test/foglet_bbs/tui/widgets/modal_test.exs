@@ -1,8 +1,8 @@
 defmodule Foglet.TUI.Widgets.ModalTest do
   use ExUnit.Case, async: true
 
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal
 
   # Recursively collects all text content strings from the view tree.
