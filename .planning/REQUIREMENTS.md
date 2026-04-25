@@ -16,9 +16,9 @@
 
 ### Mode And Theme Contracts
 
-- [ ] **MODE-01**: TUI screens can declare Classic Modern BBS or Operator Console presentation mode without forking the widget stack.
-- [ ] **THEME-01**: Theme slots cover success, informational, badge, selected, dim, warning, error, and accent states needed by facelift widgets.
-- [ ] **THEME-02**: Tabs, rows, badges, command hints, and editor states have documented and tested theme-slot mappings without hardcoded color atoms.
+- [x] **MODE-01**: TUI screens can declare Classic Modern BBS or Operator Console presentation mode without forking the widget stack.
+- [x] **THEME-01**: Theme slots cover success, informational, badge, selected, dim, warning, error, and accent states needed by facelift widgets.
+- [x] **THEME-02**: Tabs, rows, badges, command hints, and editor states have documented and tested theme-slot mappings without hardcoded color atoms.
 
 ### Chrome V2
 
@@ -110,9 +110,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | WIDTH-03 | Phase 16 | Complete |
 | WIDTH-04 | Phase 16 | Complete |
 | WIDTH-05 | Phase 16 | Complete |
-| MODE-01 | Phase 17 | Pending |
-| THEME-01 | Phase 17 | Pending |
-| THEME-02 | Phase 17 | Pending |
+| MODE-01 | Phase 17 | Complete |
+| THEME-01 | Phase 17 | Complete |
+| THEME-02 | Phase 17 | Complete |
 | CHROME-01 | Phase 18 | Complete |
 | CHROME-02 | Phase 18 | Complete |
 | CHROME-03 | Phase 18 | Complete |

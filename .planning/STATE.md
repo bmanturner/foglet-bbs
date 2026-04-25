@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: TUI Screen Facelift
-status: executing
+status: Ready to discuss
 stopped_at: Phase 18 context gathered (assumptions mode)
-last_updated: "2026-04-25T17:57:55.707Z"
+last_updated: "2026-04-25T18:30:19.661Z"
 last_activity: 2026-04-25
 progress:
   total_phases: 10
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 16
-  completed_plans: 15
-  percent: 94
+  completed_plans: 16
+  percent: 100
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-25)
 Phase: 19
 Plan: Not started
 Status: Ready to discuss
-Last activity: 2026-04-25 -- Phase 18 completed
+Last activity: 2026-04-25 -- Phase 17 completed after remediation backfill
 
 Progress: [----------] 0%
 
@@ -36,7 +36,7 @@ Progress: [----------] 0%
 
 **Velocity:**
 
-- Total plans completed: 56 from shipped v1.1; 26 in v1.2
+- Total plans completed: 61 from shipped v1.1; 26 in v1.2
 - Average duration: Not measured for v1.2 yet
 - Total execution time: Not measured for v1.2 yet
 
@@ -54,6 +54,7 @@ Progress: [----------] 0%
 | 15 | 2 | - | - |
 | 16 | 4 | - | - |
 | 18 | 7 | - | - |
+| 17 | 5 | - | - |
 
 **Recent Trend:**
 
