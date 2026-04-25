@@ -34,9 +34,9 @@
 
 ### Main Menu Dashboard
 
-- [ ] **HOME-01**: User can navigate main-menu destinations with selection keys while existing direct hotkeys continue to work.
-- [ ] **HOME-02**: Home shows useful session and BBS activity context, such as unread counts, boards, oneliners, or moderation counts when available.
-- [ ] **HOME-03**: Home remains navigable at 64x22, reaches the intended compact dashboard rhythm around 80x24, and uses side-by-side activity panels only when width permits.
+- [x] **HOME-01**: User can navigate main-menu destinations with selection keys while existing direct hotkeys continue to work.
+- [x] **HOME-02**: Home shows useful session and BBS activity context, such as unread counts, boards, oneliners, or moderation counts when available.
+- [x] **HOME-03**: Home remains navigable at 64x22, reaches the intended compact dashboard rhythm around 80x24, and uses side-by-side activity panels only when width permits.
 
 ### Rich Rows And Thread Flow
 
@@ -119,9 +119,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CHROME-04 | Phase 18 | Complete |
 | CHROME-05 | Phase 18 | Complete |
 | LOGIN-01 | Phase 18 | Complete |
-| HOME-01 | Phase 19 | Pending |
-| HOME-02 | Phase 19 | Pending |
-| HOME-03 | Phase 19 | Pending |
+| HOME-01 | Phase 19 | Complete |
+| HOME-02 | Phase 19 | Complete |
+| HOME-03 | Phase 19 | Complete |
 | RICHROW-01 | Phase 20 | Pending |
 | THREADS-01 | Phase 20 | Pending |
 | THREADS-02 | Phase 20 | Pending |

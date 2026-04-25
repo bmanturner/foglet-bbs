@@ -25,8 +25,8 @@ Phase 21 does NOT ship a details strip below the tree, a wide-terminal inspector
 
 **Overridden by this CONTEXT:**
 - ❌ **Requirement 4 (details strip) is REMOVED.** No focused-row details line below the tree. Per-row age column replaces it (see D-04, D-06 below).
-- ✏️ **Requirement 5 (64x22 priority contract) extended.** Now covers four trailing-priority columns instead of three: state cluster + subscription column + unread column + **age column** all render fully; only the board name truncates with `…`. The 20-cell minimum name attempt is preserved.
-- ✏️ **Requirement 2 extended.** Each board row also carries a trailing age column (see D-04). Affected acceptance criteria from SPEC.md lines 99–116 are restated in `<acceptance_overrides>` below.
+- ✏️ **Requirement 5 (64x22 priority contract) extended.** Now covers four trailing-priority segments: read-state cluster + subscription-glyph prefix + unread column + **age column** all render fully; only the board name truncates with `…`. The 20-cell minimum name attempt is preserved.
+- ✏️ **Requirement 2 substantially modified.** Subscription state renders as a **single glyph only** — no text labels. Mapping: `⚿` (U+26BF Squared Key) for required, `✓` (U+2713 Check Mark) for subscribed, `+` (U+002B Plus Sign) for available-to-subscribe. The literal words `required`, `subscribed`, `subscribe` no longer appear in row text. Each board row also carries a trailing age column (see D-04, D-06). Affected acceptance criteria from SPEC.md lines 99–116 are restated in `<acceptance_overrides>` below.
 
 </spec_lock>
 
@@ -37,9 +37,11 @@ These supersede the corresponding lines in 21-SPEC.md when read by the planner.
 
 - ❌ Removed: "A focused board row renders a details strip line `{name} • {state} • {unread} • {last post age}` at 64x22…" (SPEC.md:110)
 - ❌ Removed: "A focused category row renders a details strip line `{name} • {N boards} • {M unread total}` at 64x22." (SPEC.md:111)
+- ❌ Removed: "A required board row's subscription column reads `✓ required`; a subscribed (non-required) row's reads `✓ subscribed`; an unsubscribed row's reads `+ subscribe`." (SPEC.md:103) — replaced with glyph-only mapping below.
+- ✅ Added: A required board row renders the single glyph `⚿` (U+26BF Squared Key) as the subscription affordance; a subscribed (non-required) row renders `✓` (U+2713 Check Mark); an unsubscribed row renders `+` (U+002B Plus Sign). No subscription state is rendered as multi-character text.
 - ✅ Added: An `unread_count >= 1` board row's age column renders the result of `Foglet.TimeAgo.format/1` over `:last_post_at` (e.g. `12m`, `2h`, `3d`); a board row with `last_post_at == nil` renders `—` (U+2014) in the age column.
-- ✅ Added: At 64-cell content width with a long board name, the leading state cluster, subscription column, unread column, AND age column all render in full; the board name is the only segment that truncates with `…`.
-- ✅ Added: Category rows render only `{▾|▸} {category.name}` — no trailing summary text, no age column. The age column appears on board rows only.
+- ✅ Added: At 64-cell content width with a long board name, the leading read-state cluster, subscription glyph, unread column, AND age column all render in full; the board name is the only segment that truncates with `…`.
+- ✅ Added: Category rows render only `{▾|▸} {category.name}` — no trailing summary text, no age column, no subscription glyph. The subscription glyph and age column appear on board rows only.
 
 </acceptance_overrides>
 
@@ -52,29 +54,36 @@ These supersede the corresponding lines in 21-SPEC.md when read by the planner.
 
 ### RichRow State-Cluster Shape for Board Rows
 
-- **D-02:** `RichRow`'s `:state_cluster` carries **read-state only** (`[:unread]` or `[]`). The subscription column word (`✓ required` / `✓ subscribed` / `+ subscribe`) is composed by `BoardTree` as a left-aligned text segment OUTSIDE the cluster. The trailing unread column (`N unread` / `all read` / absent) and the new trailing age column (`12m` / `2h` / `3d` / `—`) ride together in `RichRow`'s `:metadata` slot as a right-aligned composite string with whitespace separation (e.g. `"3 unread  12m"` or `"all read  2h"` or `"3 unread  —"`).
-  - This keeps the cluster's fixed-width contract (Phase 20 D-03) intact: `:unread` is a single-glyph atom; the subscription word is text and lives outside.
-  - The subscription column's exact placement (prefixed onto `:title` vs delivered through a new `:left_meta` keyword that may or may not exist on RichRow) is **planner discretion** — see Claude's Discretion section. The principle is unchanged: the cluster carries glyphs only; words live in title or a sibling text slot.
+- **D-02:** `RichRow`'s `:state_cluster` carries **read-state only** (`[:unread]` or `[]`). The subscription glyph (`⚿` / `✓` / `+`) is composed by `BoardTree` as a fixed 2-cell **prefix on `RichRow`'s `:title`** (e.g. `:title => "⚿ announcements"` or `"+ marketplace"`). The trailing unread column (`N unread` / `all read` / absent) and the new trailing age column (`12m` / `2h` / `3d` / `—`) ride together in `RichRow`'s `:metadata` slot as a right-aligned composite string with whitespace separation (e.g. `"3 unread  12m"`, `"all read  2h"`, or `"3 unread  —"`).
+  - The cluster's fixed-width contract (Phase 20 D-03) is intact: `:unread` is a single-glyph atom; the subscription glyph lives in the title prefix, not the cluster.
+  - Phase 20 reserved cluster atoms `:subscribed`, `:category`, `:required` for Phase 21 — but this phase does NOT use them, because the subscription glyph set includes `+` (available) which Phase 20 did not reserve, and shipping mixed reserved + unreserved atoms in the cluster is brittle. Title-prefix approach sidesteps Phase 20's atom vocabulary entirely.
+  - Title truncation behavior preserves the prefix: `RichRow` truncates from the right with `…` (Phase 20 contract), so `"⚿ announcements with a very long n…"` keeps `⚿` and the leading name characters intact. `BoardTree` does not pre-truncate; it composes the full prefixed string and lets `RichRow` apply width math.
 
-- **D-03:** ⚠️ **Phase 20 RichRow has not yet shipped.** `lib/foglet_bbs/tui/widgets/list/rich_row.ex` does not exist as of this CONTEXT. Phase 21 plans against `20-CONTEXT.md` D-01/D-02 (the locked Phase 20 contract). When `RichRow` lands, the planner re-validates D-02 against the actual signature before plan 21-01 begins. If RichRow ships with a `:left_meta` keyword, prefer it for the subscription column; otherwise, prefix the subscription column onto `:title`.
+- **D-03:** ⚠️ **Phase 20 RichRow has not yet shipped.** `lib/foglet_bbs/tui/widgets/list/rich_row.ex` does not exist as of this CONTEXT. Phase 21 plans against `20-CONTEXT.md` D-01/D-02 (the locked Phase 20 contract). When `RichRow` lands, the planner re-validates D-02 against the actual signature before plan 21-01 begins. If RichRow's title-truncation behavior diverges from "right-truncate with `…`", D-02's title-prefix approach must be re-examined.
 
-### Row Layout (4-Column Contract, 64x22-Safe)
+### Row Layout (Glyph-Heavy Contract, 64x22-Safe)
 
-- **D-04:** Each board row is composed of these segments, in order:
-  1. **Indent** — 4 cells for boards under a category (preserve current `Display.Tree` indentation).
-  2. **State cluster** — fixed-width `◆ ` (unread) or `◇ ` (read) — 2 cells. Cluster width matches Phase 20's `@cluster_width` for ThreadList consistency.
-  3. **Title (board name)** — variable-width, truncates first.
-  4. **Subscription column** — `✓ required` (10 cells) / `✓ subscribed` (12 cells) / `+ subscribe` (11 cells).
-  5. **Unread column** — `N unread` / `all read` / absent (when `unread_count == nil`).
-  6. **Age column** — `Foglet.TimeAgo.format(last_post_at)` (`12m` / `2h` / `3d`) or `—` (U+2014) when `last_post_at == nil`. Always renders, even for unsubscribed or empty-thread boards.
+- **D-04:** Each board row is composed of these segments, in order, with the corresponding mapping to `RichRow.render/1` inputs:
+  1. **Indent** — 4 cells for boards under a category. Preserve current `Display.Tree` indentation.
+  2. **Read-state cluster** (`RichRow :state_cluster`) — `[:unread]` → `◆ ` (2 cells) or `[]` → `◇ ` or whitespace, padded to Phase 20's `@cluster_width`.
+  3. **Subscription glyph + name** (`RichRow :title`) — composed string `"{glyph} {board.name}"`:
+     - `⚿` (U+26BF Squared Key) when `required_subscription?: true`
+     - `✓` (U+2713 Check Mark) when `subscribed?: true and required_subscription?: false`
+     - `+` (U+002B Plus Sign) when `subscribed?: false`
+     The 2-cell prefix (1 glyph + 1 space) is followed by the board name. RichRow truncates the title from the right with `…` when forced; the prefix is preserved by the right-truncation contract.
+  4. **Unread + age metadata** (`RichRow :metadata`) — right-aligned composite string:
+     - `"N unread  {age}"` when `unread_count >= 1`
+     - `"all read  {age}"` when `unread_count == 0`
+     - `"{age}"` (age column only) when `unread_count == nil`
+     - `{age}` is `Foglet.TimeAgo.format(last_post_at)` (`12m` / `2h` / `3d`) or `—` (U+2014) when `last_post_at == nil`.
 
-  Separator between columns is whitespace (planner picks gap width based on `TextWidth.pad_to_width/2` budget; the SCREENS.md sketch uses multi-space separation, not `•` or `·`).
+  Separator within metadata is two spaces. Gap between title and metadata is RichRow's standard right-alignment behavior.
 
-- **D-05:** Width math at 64x22 (60-cell body width assumed after `ScreenFrame` overhead):
-  - Fixed: indent (4) + cluster (2) + max subscription (12) + max unread (9) + age (3) = **30 cells**.
-  - Three column gaps × 2 cells = 6 cells of separators.
-  - Name budget: 60 − 30 − 6 = **24 cells** ≥ 20-cell minimum (Phase 20 contract preserved).
-  - The age column uses the **short** form from `Foglet.TimeAgo.format/1` exclusively. The long form (`"12m ago"`, `"no posts yet"`) is rejected because `"no posts yet"` is 12 cells, which would push the name below the 20-cell minimum.
+- **D-05:** Width math at 64x22 (assume 60-cell body width after `ScreenFrame` overhead):
+  - Fixed: indent (4) + cluster (2) + subscription prefix (2) + max metadata (14, e.g. `"99 unread  12m"`) = **22 cells**.
+  - Title↔metadata gap (RichRow internal): ≥ 2 cells.
+  - Name budget: 60 − 22 − 2 = **36 cells** ≥ 20-cell minimum (Phase 20 contract preserved with comfortable headroom).
+  - The age column uses the **short** form from `Foglet.TimeAgo.format/1` exclusively. The long form (`"12m ago"`, `"no posts yet"`) remains rejected — even though headroom now permits it, short form keeps the metadata column visually compact and aligned with how `Foglet.TUI.Widgets.Post.PostCard` already consumes the helper.
 
 ### Age Column Format
 
@@ -109,22 +118,31 @@ These supersede the corresponding lines in 21-SPEC.md when read by the planner.
 
 - **D-10:** Subscription feedback **preserves the existing top-of-tree flash mechanism** via `BoardList.maybe_feedback/2` (`lib/foglet_bbs/tui/screens/board_list.ex:252-256`) and the `BoardList.State.feedback` field. The strings (`"Already subscribed."`, `"Not subscribed."`, `"This board is a required subscription."` at `board_list.ex:144,158,165`) are preserved verbatim. The new row layout does not absorb feedback, and since the details strip is removed (D-08), feedback has no alternative surface. This is the lowest-churn path and preserves the existing feedback acceptance test at `board_list_test.exs:154`.
 
+### Subscription Glyph Theme Routing
+
+- **D-10b:** Subscription glyphs route through `Foglet.TUI.Theme` slots (no hardcoded color atoms). Recommended slot mapping, mirroring Phase 20's semantic alignment:
+  - `⚿` (required) → `theme.warning.fg` — same slot Phase 20 D-06 maps to `:locked`. Both atoms communicate "this state is fixed; you can't change it." Cross-screen consistency is intentional.
+  - `✓` (subscribed) → `theme.info.fg` — affirmative status; Phase 20 also routes `:sticky` here (or to `theme.badge.fg`).
+  - `+` (available) → `theme.dim.fg` — unobtrusive affordance; should fade visually so the eye lands on `⚿`/`✓` first.
+  - Final slot picks are planner discretion within these recommendations after a quick visual pass across all nine themes.
+
 ### Test Placement
 
 - **D-11:** Tests follow Phase 20 D-11 precedent exactly:
-  - **NEW** `test/foglet_bbs/tui/widgets/list/board_tree_test.exs` — widget-level unit tests sibling to `list_row_test.exs`, `selection_list_test.exs`, `smart_list_test.exs`. Coverage includes (a) expanded vs collapsed category glyphs (`▾`/`▸`), (b) board row composition with each `(read/unread, subscribed/required/unsubscribed, has_unread/no_unread/nil_unread, posted/no_posts)` shape, (c) RichRow `:state_cluster` carries read-state only, (d) age column renders `TimeAgo.format/1` output or `—`, (e) 64-cell long-name truncation: cluster + subscription + unread + age all present in full, name contains `…`, total row width ≤ 64 cells, name ≥ 20 cells, (f) theme-routing audit (no hardcoded color atoms).
-  - **EXTEND** `test/foglet_bbs/tui/screens/board_list_test.exs` — replace existing `[subscribed]` / `[required]` / `[unsubscribed]` literal-string assertions at lines 87–101, 155 with column-text assertions (`✓ subscribed` / `✓ required` / `+ subscribe`) plus state-cluster glyph assertions (`◆` / `◇`). Add age-column assertions for at least one populated and one `nil` `last_post_at` case. Preserve the existing required-subscription feedback test at line 154 verbatim.
+  - **NEW** `test/foglet_bbs/tui/widgets/list/board_tree_test.exs` — widget-level unit tests sibling to `list_row_test.exs`, `selection_list_test.exs`, `smart_list_test.exs`. Coverage includes (a) expanded vs collapsed category glyphs (`▾`/`▸`), (b) board row composition with each `(read/unread, subscribed/required/unsubscribed, has_unread/no_unread/nil_unread, posted/no_posts)` shape, (c) `RichRow :state_cluster` carries read-state only, (d) `RichRow :title` carries the subscription glyph prefix (`⚿ `/`✓ `/`+ `) followed by the board name, (e) age column renders `TimeAgo.format/1` output or `—`, (f) 64-cell long-name truncation: cluster + subscription glyph + unread + age all present in full, name contains `…`, total row width ≤ 64 cells, name ≥ 20 cells, (g) theme-routing audit (no hardcoded color atoms in `BoardTree` source).
+  - **EXTEND** `test/foglet_bbs/tui/screens/board_list_test.exs` — replace existing `[subscribed]` / `[required]` / `[unsubscribed]` literal-string assertions at lines 87–101, 155 with **glyph-only** assertions: `⚿` (required), `✓` (subscribed), `+` (available). Add an explicit absence assertion: no row contains the literal substrings `"required"`, `"subscribed"`, or `"subscribe"` as words (other than within the board's own name). Add read-state cluster glyph assertions (`◆` / `◇`). Add age-column assertions for at least one populated and one `nil` `last_post_at` case. Preserve the existing required-subscription feedback test at line 154 verbatim — feedback strings still contain the word `"required"`, but they appear in the flash line, not in row text.
   - **EXTEND** `test/foglet_bbs/tui/layout_smoke_test.exs` — add `describe "board_list — size contract"` block at the standard `[{64,22}, {80,24}, {132,50}]` triple Phase 18/19/20 use. The existing `board_list renders board rows at distinct y positions` test at line 384 is absorbed or preserved as appropriate; the new block asserts (a) all four trailing columns fully rendered, (b) name truncates only when forced, (c) no two text elements share `{x, y}` coordinates such that they overlap.
   - **EXTEND** `test/foglet_bbs/boards/boards_test.exs` `describe "board_directory_for/1 (SUBS-01)"` block at line 464 with `:last_post_at` cases: (a) board with three non-deleted threads of known `last_post_at` returns max in `:last_post_at`, (b) board with no non-deleted threads returns `nil`, (c) value identical for subscribed and unsubscribed actors on the same board, (d) deleted threads are excluded from the max computation.
 
 ### Claude's Discretion
 
-- Exact placement mechanism for the subscription column word: prefix onto `RichRow`'s `:title` (e.g. `"✓ subscribed  Board Name"`) vs. a new `:left_meta` keyword on `RichRow.render/1` if Phase 20 ships one. Decision deferred until Phase 20 RichRow lands and its actual signature is known. Either approach satisfies D-02; planner picks based on what Phase 20 ships.
+- Final theme-slot picks for the subscription glyphs (D-10b recommends `theme.warning.fg` / `theme.info.fg` / `theme.dim.fg` for `⚿` / `✓` / `+`; planner validates after a quick visual pass across all nine themes).
 - Exact whitespace/separator strategy between row segments — single space, double space, or `TextWidth.pad_to_width/2`-based fixed columns. The constraint is column alignment across all rows in the visible viewport; planner picks based on what reads cleanest in the layout-smoke triple.
-- Exact value of the cluster width attribute in `BoardTree` if it differs from Phase 20's `RichRow.@cluster_width` (sticky/locked atoms don't apply to BoardList, so a 1-glyph + 1-space cluster is sufficient). Recommended: reuse Phase 20's value verbatim for cross-screen consistency.
+- Exact value of the read-state cluster width in `BoardTree` if it differs from Phase 20's `RichRow.@cluster_width` (sticky/locked atoms don't apply to BoardList, so a 1-glyph + 1-space cluster is sufficient). Recommended: reuse Phase 20's value verbatim for cross-screen consistency.
 - Whether age column right-padding is fixed at 3 cells or trims trailing whitespace. Both satisfy the size contract.
 - Whether the `last_post_at` aggregation query is a sibling private function to `unread_counts/1` or merged into a single multi-aggregate query that returns both `unread_count` and `last_post_at` per board. Both satisfy D-09 and the no-N+1 constraint; planner picks based on readability and Repo round-trip count.
 - Whether the em-dash `—` for nil age renders through `theme.dim.fg` or the row's default foreground. Subtle visual choice; either is acceptable.
+- Whether `BoardTree` substitutes a different 1-cell BMP glyph for `⚿` if visual testing reveals rendering issues on common SSH terminal/font combos. The user's intent is "lock-shaped"; planner has authority to substitute (within 1-cell BMP) if `⚿` proves problematic, but should flag the substitution in plan output for review.
 
 ### Folded Todos
 
@@ -216,10 +234,12 @@ None — `gsd-sdk query todo.match-phase 21` not run because no todos are flagge
 ## Specific Ideas
 
 - "Get rid of the details strip and show the age on each board row" — locked into D-04, D-06, D-07, D-08. SPEC.md requirement 4 is removed by this CONTEXT; the row gains an age column via `Foglet.TimeAgo.format/1` short form (`12m`/`2h`/`3d`/`—`).
+- "Instead of subscribed, subscribe, and required, just use icons. lock unicode for required, checkmark unicode for subscribed, and plus sign for subscribe" — locked into D-02, D-04, D-10b, D-11, and `<acceptance_overrides>`. The subscription column is glyph-only; no text labels remain in row content.
+- **Lock-glyph constraint:** No 1-cell padlock glyph exists in widely-supported BMP Unicode. The actual lock emoji `🔒` (U+1F512) renders as 2 cells on most terminals, breaking Phase 20's fixed-width cluster contract. The closest 1-cell BMP "locked / mandatory" glyph is `⚿` (U+26BF Squared Key) — locked here in D-04. Phase 20's locked-thread atom is also recommended to use `⚿` (per `20-CONTEXT.md` D-05 / Discretion); the cross-screen overlap ("you can't change this state") is intentional and consistent.
 - The em-dash `—` (U+2014) is the explicit no-posts sentinel — chosen over empty cell or the word `new` to avoid ambiguity with unread state.
 - `Foglet.TimeAgo.format/1` short form (`"7m"` etc.) is the exact format used — no `" ago"` suffix appended, no new helper module added. The existing `PostCard.get_time_ago/1` consumer (`post_card.ex:163-198`) is the integration precedent.
 - Subscription feedback stays as the top-of-tree flash line via existing `maybe_feedback/2` — no migration to inline-row treatment, no migration to a row-level icon flash.
-- 64x22 width math (D-05) preserves Phase 20's 20-cell minimum board-name attempt: 60 (body) − 30 (fixed columns) − 6 (separators) = 24 cells available for the name. The long form `"12m ago"` / `"no posts yet"` is rejected because it pushes the name budget below 20 cells.
+- 64x22 width math (D-05) leaves comfortable headroom: 60 (body) − 22 (fixed segments) − 2 (gap) = 36 cells available for the board name (vs. 20-cell minimum from Phase 20). The text-label form (`✓ subscribed` etc.) would have left only 24 cells; glyph-only frees ~12 cells.
 
 </specifics>
 
