@@ -34,6 +34,7 @@ defmodule Foglet.TUI.Screens.Account do
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -68,7 +69,7 @@ defmodule Foglet.TUI.Screens.Account do
         ]
       end
 
-    ScreenFrame.render(preview_state(state, theme), "Account", content, @key_bar)
+    ScreenFrame.render(preview_state(state, theme), account_chrome(), content, @key_bar)
   end
 
   @impl true
@@ -251,6 +252,10 @@ defmodule Foglet.TUI.Screens.Account do
       |> Map.put(:theme, theme)
 
     %{state | session_context: session_context}
+  end
+
+  defp account_chrome do
+    %{title: "Account", mode: Presentation.mode_for!(:account)}
   end
 
   defp resolve_theme_id(theme_id) when is_binary(theme_id) do
