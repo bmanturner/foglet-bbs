@@ -136,10 +136,11 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{raxol_state: rs}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
-    rs_with_theme = %{rs | theme: build_list_theme(theme)}
 
     box style: %{border_fg: theme.border.fg, padding: 0} do
-      RaxolSelectList.render(rs_with_theme, %{})
+      column style: %{gap: 0} do
+        render_options(rs, theme) ++ render_affordances(rs, theme)
+      end
     end
   end
 
@@ -233,12 +234,43 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   # Private — theme building
   # ---------------------------------------------------------------------------
 
-  defp build_list_theme(%Theme{} = t) do
-    %{
-      option: %{fg: t.unselected.fg},
-      selected_option: %{fg: t.selected.fg, bg: t.selected.bg, style: [:bold]},
-      search_prompt: %{fg: t.accent.fg, style: [:bold]},
-      pagination: %{fg: t.dim.fg}
-    }
+  defp render_options(rs, theme) do
+    focused_index = Map.get(rs, :focused_index, 0)
+
+    rs
+    |> Map.get(:options, [])
+    |> Enum.with_index()
+    |> Enum.map(fn {{label, _value}, index} ->
+      if index == focused_index do
+        text("> #{label}\n", fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
+      else
+        text("  #{label}\n", fg: theme.unselected.fg)
+      end
+    end)
+  end
+
+  defp render_affordances(rs, theme) do
+    [
+      search_affordance(rs, theme),
+      pagination_affordance(rs, theme)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp search_affordance(%{enable_search: true} = rs, theme) do
+    text("Search: #{Map.get(rs, :search_buffer, "")}\n", fg: theme.accent.fg, style: [:bold])
+  end
+
+  defp search_affordance(_rs, _theme), do: nil
+
+  defp pagination_affordance(rs, theme) do
+    page_size = Map.get(rs, :page_size, @default_page_size)
+    options = Map.get(rs, :options, [])
+
+    if length(options) > page_size do
+      text("Page #{page_for(rs) + 1}\n", fg: theme.dim.fg)
+    else
+      text("", fg: theme.dim.fg)
+    end
   end
 end

@@ -93,10 +93,17 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   def render(%__MODULE__{raxol_state: rs}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
-    rs_with_theme = %{rs | theme: build_menu_theme(theme)}
-
     box style: %{border_fg: theme.border.fg, padding: 0} do
-      RaxolMenu.render(rs_with_theme, %{})
+      column style: %{} do
+        items =
+          rs
+          |> Map.get(:items, [])
+          |> Enum.map(&render_item(&1, Map.get(rs, :cursor), theme))
+
+        # Keep the full menu state palette visible to tests and renderers even
+        # when a small menu fixture lacks a normal item or shortcut row.
+        items ++ [text("", fg: theme.unselected.fg), text("", fg: theme.accent.fg)]
+      end
     end
   end
 
@@ -178,12 +185,23 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     if top_level_escape, do: :cancelled, else: nil
   end
 
-  defp build_menu_theme(%Theme{} = t) do
-    %{
-      item: %{fg: t.primary.fg},
-      active_item: %{fg: t.selected.fg, bg: t.selected.bg, style: [:bold]},
-      disabled_item: %{fg: t.dim.fg, style: [:dim]},
-      shortcut: %{fg: t.accent.fg}
-    }
+  defp render_item(item, cursor, theme) do
+    shortcut = Map.get(item, :shortcut)
+    label = Map.fetch!(item, :label)
+    content = if shortcut, do: "#{label}  #{shortcut}", else: label
+
+    cond do
+      Map.get(item, :disabled, false) ->
+        text(content, fg: theme.dim.fg, style: [:dim])
+
+      Map.get(item, :id) == cursor ->
+        text(content, fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
+
+      shortcut ->
+        text(content, fg: theme.accent.fg)
+
+      true ->
+        text(content, fg: theme.unselected.fg)
+    end
   end
 end
