@@ -14,7 +14,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
-  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.List.{RichRow, SelectionList}
   alias Foglet.TUI.Widgets.Progress.Spinner
 
   import Raxol.Core.Renderer.View
@@ -68,11 +68,39 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   defp render_thread_row(thread, selected, width, theme) do
-    sticky_mark = if Map.get(thread, :sticky, false), do: "[S] ", else: ""
-    title = "#{sticky_mark}#{Map.get(thread, :title, "?")}"
+    title = Map.get(thread, :title, "?")
     metadata = thread_metadata(thread)
     unread? = Map.get(thread, :has_unread, false)
-    ListRow.render_with_metadata(title, metadata, selected, unread?, theme, width: width)
+    state_cluster = thread_state_cluster(thread, unread?)
+    emphasis = if unread?, do: :bold, else: nil
+
+    RichRow.render(
+      title: title,
+      metadata: metadata,
+      state_cluster: state_cluster,
+      selected: selected,
+      theme: theme,
+      width: width,
+      emphasis: emphasis
+    )
+  end
+
+  # Builds the RichRow state_cluster from a ThreadEntry-shaped map.
+  #
+  # RichRow places each glyph in a fixed cluster position by membership, so list
+  # order has no visual effect. We construct the list top-to-bottom in priority
+  # order (unread → sticky → locked) for human readability per 20-REVIEWS LOW #9.
+  #
+  # Uses the Map.get(thread, key, false) pattern so the helper works with both
+  # %ThreadEntry{} structs and bare maps from FakeThreads test adapters
+  # (Pitfall 5 in 20-RESEARCH.md).
+  defp thread_state_cluster(thread, unread?) do
+    [
+      unread? && :unread,
+      Map.get(thread, :sticky, false) && :sticky,
+      Map.get(thread, :locked, false) && :locked
+    ]
+    |> Enum.filter(& &1)
   end
 
   defp thread_metadata(thread) do
