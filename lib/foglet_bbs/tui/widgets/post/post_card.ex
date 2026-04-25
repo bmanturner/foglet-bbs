@@ -42,12 +42,14 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TimeAgo
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Post.MarkdownBody
 
   @type post_like :: %{
           optional(:id) => any(),
           optional(:body) => String.t() | nil,
+          optional(:message_number) => pos_integer() | nil,
           optional(:inserted_at) => DateTime.t() | NaiveDateTime.t() | nil,
           optional(:user) => map() | nil
         }
@@ -84,6 +86,35 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
       when is_map(post) and is_list(tuples) and is_integer(width) and width > 0 do
     body_element = MarkdownBody.render_tuples(tuples, width, theme, body_opts(opts))
     assemble_card(post, theme, body_element, opts)
+  end
+
+  @doc """
+  Render reader-oriented post parts from pre-parsed markdown tuples.
+
+  Returns separate non-scrolling `:header` and `:progress` elements plus
+  guttered `:body_lines` suitable for `Viewport.children`.
+  """
+  @spec reader_parts(
+          post_like(),
+          [MarkdownBody.tuple_entry()],
+          pos_integer(),
+          Theme.t(),
+          keyword()
+        ) :: %{
+          header: any(),
+          progress: any(),
+          body_lines: [any()]
+        }
+  def reader_parts(post, tuples, width, %Theme{} = theme, opts \\ [])
+      when is_map(post) and is_list(tuples) and is_integer(width) and width > 0 do
+    index = Keyword.get(opts, :index, 0)
+    total = Keyword.get(opts, :total, 1)
+
+    %{
+      header: reader_header(post, index, total, theme),
+      progress: reader_progress(index, total, theme),
+      body_lines: reader_body_lines(tuples, width, theme)
+    }
   end
 
   @doc """
@@ -146,6 +177,55 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
         header_divider,
         body_element
       ]
+    end
+  end
+
+  defp reader_header(post, index, total, theme) do
+    message_number = reader_message_number(post)
+    handle = get_handle(post) || "unknown"
+    age = reader_age(post)
+
+    row style: %{gap: 0} do
+      [
+        text("Post #{index + 1} of #{total}", fg: theme.title.fg),
+        text(" • ", fg: theme.dim.fg),
+        text("##{message_number}", fg: theme.badge.fg),
+        text(" • ", fg: theme.dim.fg),
+        text("@#{handle}", fg: theme.accent.fg),
+        text(" • ", fg: theme.dim.fg),
+        text(age, fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  defp reader_progress(index, total, theme) do
+    text("Posts #{index + 1}/#{total}", fg: theme.dim.fg)
+  end
+
+  defp reader_body_lines(tuples, width, theme) do
+    gutter = "│"
+    body_width = max(width - TextWidth.display_width(gutter) - 1, 1)
+
+    tuples
+    |> MarkdownBody.render_tuples_as_lines(body_width, theme, body_opts([]))
+    |> Enum.map(fn body_line ->
+      row style: %{gap: 1} do
+        [text(gutter, fg: theme.border.fg), body_line]
+      end
+    end)
+  end
+
+  defp reader_message_number(%{message_number: number})
+       when is_integer(number) and number > 0 do
+    Integer.to_string(number)
+  end
+
+  defp reader_message_number(_post), do: "?"
+
+  defp reader_age(post) do
+    case get_time_ago(post) do
+      nil -> "age ?"
+      time_ago -> "#{time_ago} ago"
     end
   end
 

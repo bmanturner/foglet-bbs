@@ -135,7 +135,12 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
           user: %{handle: "mina"}
         })
 
-      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(), index: 0, total: 1)
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(),
+          index: 0,
+          total: 1
+        )
+
       header = flatten_text(parts.header)
 
       assert header =~ "Post 1 of 1"
@@ -147,7 +152,12 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
     test "falls back explicitly for missing reader metadata" do
       post = sample_post(%{message_number: nil, inserted_at: nil, user: nil})
 
-      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(), index: 0, total: 1)
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(),
+          index: 0,
+          total: 1
+        )
+
       header = flatten_text(parts.header)
 
       assert header =~ "#?"
@@ -159,7 +169,9 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       t = theme()
       post = sample_post(%{message_number: 42, user: %{handle: "mina"}})
 
-      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, t, index: 0, total: 1)
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, t, index: 0, total: 1)
+
       serialized = inspect(parts.header, printable_limit: :infinity, limit: :infinity)
 
       assert serialized =~ t.dim.fg or serialized =~ t.title.fg or serialized =~ t.badge.fg or
@@ -173,7 +185,11 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
     test "returns compact progress outside body lines" do
       post = sample_post(%{message_number: 42})
 
-      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(), index: 2, total: 12)
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, theme(),
+          index: 2,
+          total: 12
+        )
 
       assert flatten_text(parts.progress) =~ "Posts 3/12"
       refute flatten_text(parts.body_lines) =~ "Posts 3/12"
@@ -182,7 +198,11 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
     test "returns guttered body lines as separate Raxol view elements" do
       post = sample_post(%{message_number: 42, user: %{handle: "mina"}})
 
-      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello reader"), 80, theme(), index: 0, total: 1)
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello reader"), 80, theme(),
+          index: 0,
+          total: 1
+        )
 
       assert %{header: _header, progress: _progress, body_lines: [_ | _]} = parts
       assert is_list(parts.body_lines)
@@ -207,7 +227,11 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
     test "narrow widths still return body lines without raising" do
       post = sample_post(%{message_number: 42})
 
-      parts = PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 1, theme(), index: 0, total: 1)
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 1, theme(),
+          index: 0,
+          total: 1
+        )
 
       assert is_list(parts.body_lines)
     end
