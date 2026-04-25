@@ -3,8 +3,8 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: planning
-stopped_at: Phase 16 context gathered (assumptions mode)
-last_updated: "2026-04-25T13:21:02.075Z"
+stopped_at: Phase 17 context gathered (assumptions mode)
+last_updated: "2026-04-25T13:32:05.032Z"
 last_activity: 2026-04-25 - Milestone v1.3 roadmap refined
 progress:
   total_phases: 10
@@ -105,6 +105,6 @@ Items acknowledged and carried forward from v1.1 close:
 
 ## Session Continuity
 
-Last session: 2026-04-25T13:21:02.071Z
-Stopped at: Phase 16 context gathered (assumptions mode)
-Resume file: .planning/phases/16-unicode-width-foundation/16-CONTEXT.md
+Last session: 2026-04-25T13:32:05.026Z
+Stopped at: Phase 17 context gathered (assumptions mode)
+Resume file: .planning/phases/17-theme-and-mode-metadata/17-CONTEXT.md
