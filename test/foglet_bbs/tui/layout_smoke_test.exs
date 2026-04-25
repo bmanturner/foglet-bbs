@@ -703,11 +703,19 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   describe "Phase 22 PostReader size contracts" do
+    defp phase_22_long_unbroken_body do
+      "SelectedBodyNoBreak" <> String.duplicate("X", 100)
+    end
+
+    defp phase_22_long_handle do
+      "mina-" <> String.duplicate("readerhandle", 12)
+    end
+
     defp phase_22_posts do
       Enum.map(31..42, fn message_number ->
         body =
           if message_number == 33 do
-            "Selected body sentinel\n\nMore content here."
+            "Selected body sentinel\n\n#{phase_22_long_unbroken_body()}\n\nMore content here."
           else
             "Body text for message #{message_number}."
           end
@@ -717,7 +725,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           body: body,
           inserted_at: ~U[2026-04-24 18:00:00Z],
           message_number: message_number,
-          user: %{handle: "mina"}
+          user: %{handle: if(message_number == 33, do: phase_22_long_handle(), else: "mina")}
         }
       end)
     end
@@ -793,11 +801,22 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert flat =~ "@mina"
         assert flat =~ "Posts 3/12"
         assert flat =~ "Selected body sentinel"
+        assert flat =~ String.slice(phase_22_long_unbroken_body(), 0, 20)
         assert flat =~ "│" or flat =~ "|"
 
         header = phase_22_text_element!(elements, "Post 3 of 12", size)
         progress = phase_22_text_element!(elements, "Posts 3/12", size)
         body = phase_22_text_element!(elements, "Selected body sentinel", size)
+
+        long_body =
+          phase_22_text_element!(
+            elements,
+            String.slice(phase_22_long_unbroken_body(), 0, 20),
+            size
+          )
+
+        assert long_body.x + TextWidth.display_width(long_body.text) <= width,
+               "long selected body text overflows at #{inspect(size)}: #{inspect(long_body)}"
 
         command_elements =
           Enum.filter(elements, fn element ->
