@@ -121,21 +121,40 @@ defmodule Foglet.TUI.Widgets.List.RichRowTest do
             [:unread, :locked],
             [:sticky, :locked],
             [:unread, :sticky, :locked],
-            [:subscribed, :required]
+            generic_state_cells()
           ] do
         cluster = rendered_cluster(theme, states)
         assert TextWidth.display_width(cluster) == @cluster_width
       end
     end
 
-    test "generic state atoms render without domain coupling and keep cluster width", %{
+    test "explicit state cells render without domain coupling and keep cluster width", %{
       theme: theme
     } do
       empty = rendered_cluster(theme, [])
-      generic = rendered_cluster(theme, [:subscribed, :required])
+      generic = rendered_cluster(theme, generic_state_cells())
 
       assert TextWidth.display_width(generic) == TextWidth.display_width(empty)
-      refute rendered_cluster(theme, [:subscribed, :required]) =~ "subscribed"
+      assert generic =~ "◆"
+      assert generic =~ "!"
+      refute generic =~ "subscribed"
+
+      assert_text_run(render_row(theme, state_cluster: generic_state_cells()), "◆",
+        fg: theme.success.fg
+      )
+
+      assert_text_run(render_row(theme, state_cluster: generic_state_cells()), "!",
+        fg: theme.warning.fg
+      )
+    end
+
+    test "selected explicit state cells stack selection background over caller theme slots", %{
+      theme: theme
+    } do
+      tree = render_row(theme, selected: true, state_cluster: generic_state_cells())
+
+      assert_text_run(tree, "◆", fg: theme.success.fg, bg: theme.selected.bg, style: [:bold])
+      assert_text_run(tree, "!", fg: theme.warning.fg, bg: theme.selected.bg, style: [:bold])
     end
   end
 
@@ -177,7 +196,14 @@ defmodule Foglet.TUI.Widgets.List.RichRowTest do
       theme: theme
     } do
       for selected <- [true, false],
-          states <- [[], [:unread], [:sticky], [:locked], [:unread, :sticky, :locked]],
+          states <- [
+            [],
+            [:unread],
+            [:sticky],
+            [:locked],
+            [:unread, :sticky, :locked],
+            generic_state_cells()
+          ],
           metadata <- [@metadata, "", nil] do
         serialized =
           theme
@@ -278,6 +304,13 @@ defmodule Foglet.TUI.Widgets.List.RichRowTest do
     |> render_row(title: "Title", metadata: "", state_cluster: states, selected: false)
     |> flatten_text()
     |> String.slice(2, @cluster_width)
+  end
+
+  defp generic_state_cells do
+    [
+      %{key: :subscribed, glyph: "◆", slot: :success},
+      %{key: :required, glyph: "!", slot: :warning}
+    ]
   end
 
   defp metadata_run?(tree) do

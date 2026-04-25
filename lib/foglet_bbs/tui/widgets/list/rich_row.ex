@@ -12,6 +12,7 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
 
+  @cluster_slots 3
   @cluster_width 4
   @focus_marker "▌ "
   @no_focus_marker "  "
@@ -22,8 +23,10 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
   @glyph_locked "⚿"
   @glyph_space " "
 
-  @typedoc "State atoms rendered in the fixed cluster."
+  @typedoc "Built-in state atoms rendered in the fixed cluster."
   @type state_atom :: :unread | :sticky | :locked | atom()
+  @typedoc "Explicit caller-owned state glyph rendered in the fixed cluster."
+  @type state_cell :: %{required(:glyph) => String.t(), required(:slot) => Theme.slot()}
 
   @doc """
   Renders a rich list row.
@@ -41,6 +44,12 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
     * `:width` - defaults to `80`
     * `:focus_marker` - defaults to `"▌ "`
     * `:emphasis` - currently supports `:bold`
+
+  `:state_cluster` accepts the built-in ThreadList atoms (`:unread`,
+  `:sticky`, `:locked`) and explicit glyph cells such as
+  `%{key: :subscribed, glyph: "◆", slot: :success}`. Explicit cells render in
+  caller order, up to the fixed cluster slot count, and route color through the
+  supplied theme slot.
   """
   @spec render(keyword()) :: any()
   def render(opts) when is_list(opts) do
@@ -87,29 +96,54 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
   defp normalize_metadata(nil), do: ""
   defp normalize_metadata(metadata), do: to_string(metadata)
 
-  @spec emphasis_for([state_atom()]) :: :bold | nil
+  @spec emphasis_for([state_atom() | state_cell()]) :: :bold | nil
   defp emphasis_for(state_cluster) when is_list(state_cluster) do
-    if :unread in state_cluster, do: :bold
+    if Enum.any?(state_cluster, &unread_state?/1), do: :bold
   end
 
-  @spec glyph_nodes([state_atom()], boolean(), Theme.t()) :: [any()]
+  @spec glyph_nodes([state_atom() | state_cell()], boolean(), Theme.t()) :: [any()]
   defp glyph_nodes(state_cluster, selected, theme) when is_list(state_cluster) do
-    state_set = MapSet.new(state_cluster)
-
-    [
-      glyph_node(state_set, :unread, @glyph_unread, :accent, selected, theme),
-      glyph_node(state_set, :sticky, @glyph_sticky, :info, selected, theme),
-      glyph_node(state_set, :locked, @glyph_locked, :warning, selected, theme)
-    ]
+    state_cluster
+    |> state_cells()
+    |> Enum.take(@cluster_slots)
+    |> then(&(&1 ++ List.duplicate(nil, @cluster_slots - length(&1))))
+    |> Enum.map(&glyph_node(&1, selected, theme))
   end
 
-  @spec glyph_node(MapSet.t(), atom(), String.t(), atom(), boolean(), Theme.t()) :: any()
-  defp glyph_node(state_set, state, glyph, slot, selected, theme) do
-    if MapSet.member?(state_set, state) do
-      text(glyph, glyph_style(slot, selected, theme))
-    else
-      text(@glyph_space, absent_glyph_style(selected, theme))
-    end
+  @spec unread_state?(state_atom() | state_cell()) :: boolean()
+  defp unread_state?(:unread), do: true
+  defp unread_state?(%{key: :unread}), do: true
+  defp unread_state?(_state), do: false
+
+  @spec state_cells([state_atom() | state_cell()]) :: [state_cell()]
+  defp state_cells(state_cluster) do
+    state_cluster
+    |> Enum.flat_map(&state_cell/1)
+    |> Enum.uniq_by(&Map.get(&1, :key, {Map.fetch!(&1, :glyph), Map.fetch!(&1, :slot)}))
+  end
+
+  @spec state_cell(state_atom() | state_cell()) :: [state_cell()]
+  defp state_cell(:unread), do: [%{key: :unread, glyph: @glyph_unread, slot: :accent}]
+  defp state_cell(:sticky), do: [%{key: :sticky, glyph: @glyph_sticky, slot: :info}]
+  defp state_cell(:locked), do: [%{key: :locked, glyph: @glyph_locked, slot: :warning}]
+
+  defp state_cell(%{glyph: glyph, slot: slot} = cell) when is_binary(glyph) and is_atom(slot) do
+    [cell]
+  end
+
+  defp state_cell(_state), do: []
+
+  @spec glyph_node(state_cell() | nil, boolean(), Theme.t()) :: any()
+  defp glyph_node(nil, selected, theme),
+    do: text(@glyph_space, absent_glyph_style(selected, theme))
+
+  defp glyph_node(%{glyph: glyph, slot: slot}, selected, theme) do
+    glyph =
+      glyph
+      |> TextWidth.truncate(1)
+      |> TextWidth.pad_trailing(1)
+
+    text(glyph, glyph_style(slot, selected, theme))
   end
 
   @spec compute_parts(String.t(), String.t(), String.t(), pos_integer()) ::
@@ -195,7 +229,7 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
 
   defp marker_style(false, theme), do: [fg: theme.unselected.fg]
 
-  @spec glyph_style(:accent | :info | :warning, boolean(), Theme.t()) :: keyword()
+  @spec glyph_style(Theme.slot(), boolean(), Theme.t()) :: keyword()
   defp glyph_style(slot, true, theme) do
     slot_style =
       theme
