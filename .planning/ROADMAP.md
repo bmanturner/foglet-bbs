@@ -107,7 +107,15 @@ Plans:
 4. The existing simple key-list call path can render through `Chrome.CommandBar` rather than a parallel footer implementation.
 5. Login declares Classic Modern BBS mode and receives Chrome V2 without changing authentication behavior.
 6. Chrome remains usable at 64x22 without overlapping content, restores the intended compact treatment around 80x24, and progressively shows more status atoms on wider terminals.
-**Plans:** TBD
+**Plans:** 7 plans
+Plans:
+- [ ] 18-01-PLAN.md — Breadcrumb and mode-aware status primitives.
+- [ ] 18-02-PLAN.md — Grouped command bar and legacy key-list normalizer.
+- [ ] 18-03-PLAN.md — ScreenFrame Chrome V2 integration and size contracts.
+- [ ] 18-04-PLAN.md — Login, Home, and Board Directory caller migration.
+- [ ] 18-05-PLAN.md — Thread and composer flow caller migration.
+- [ ] 18-06-PLAN.md — Account and Moderation operator caller migration.
+- [ ] 18-07-PLAN.md — Sysop caller migration and legacy footer closure.
 **UI hint:** yes
 
 ### Phase 19: Main Menu Dashboard
