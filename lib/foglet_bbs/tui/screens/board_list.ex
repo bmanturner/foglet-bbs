@@ -7,7 +7,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
-  alias Foglet.TUI.Widgets.Display.Tree
+  alias Foglet.TUI.Widgets.List.BoardTree
   alias Foglet.TUI.Widgets.Progress.Spinner
   import Raxol.Core.Renderer.View
 
@@ -59,10 +59,11 @@ defmodule Foglet.TUI.Screens.BoardList do
   end
 
   defp render_board_content(state, ss, theme) do
-    tree = ss.tree || build_tree(state.board_list)
+    board_tree = ss.board_tree || build_tree(state.board_list)
 
     column style: %{gap: 0} do
-      maybe_feedback(ss, theme) ++ [Tree.render(tree, theme: theme)]
+      maybe_feedback(ss, theme) ++
+        [BoardTree.render(board_tree, theme: theme, width: row_width(state))]
     end
   end
 
@@ -79,11 +80,11 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   def handle_key(%{key: :enter}, state) do
     ss = screen_state(state)
-    tree = ss.tree || build_tree(state.board_list || [])
+    tree = ss.board_tree || build_tree(state.board_list || [])
 
-    case Tree.handle_event(%{key: :enter}, tree) do
-      {%Tree{} = new_tree, :node_activated} ->
-        case focused_board_entry(new_tree) do
+    case BoardTree.handle_event(%{key: :enter}, tree) do
+      {%BoardTree{} = new_tree, :node_activated} ->
+        case BoardTree.focused_board_entry(new_tree) do
           nil ->
             :no_match
 
@@ -94,7 +95,7 @@ defmodule Foglet.TUI.Screens.BoardList do
                 current_screen: :thread_list,
                 screen_state:
                   state.screen_state
-                  |> Map.put(:board_list, %{ss | tree: new_tree})
+                  |> Map.put(:board_list, %{ss | board_tree: new_tree})
                   |> Map.put(:thread_list, %{selected_index: 0})
             }
 
@@ -126,22 +127,22 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp handle_tree_key(key, state) do
     ss = screen_state(state)
-    tree = ss.tree || build_tree(state.board_list || [])
-    {new_tree, _action} = Tree.handle_event(key, tree)
-    {:update, put_ss(state, %{ss | tree: new_tree}), []}
+    tree = ss.board_tree || build_tree(state.board_list || [])
+    {new_tree, _action} = BoardTree.handle_event(key, tree)
+    {:update, put_ss(state, %{ss | board_tree: new_tree}), []}
   end
 
   defp subscribe_focused_board(state) do
     ss = screen_state(state)
-    tree = ss.tree || build_tree(state.board_list || [])
+    tree = ss.board_tree || build_tree(state.board_list || [])
 
-    case focused_board_entry(tree) do
+    case BoardTree.focused_board_entry(tree) do
       %{board: board, subscribed?: false} ->
-        {:update, put_ss(state, %{ss | tree: tree, feedback: nil}),
+        {:update, put_ss(state, %{ss | board_tree: tree, feedback: nil}),
          [{:subscribe_to_board, board.id}]}
 
       %{subscribed?: true} ->
-        {:update, put_ss(state, %{ss | tree: tree, feedback: "Already subscribed."}), []}
+        {:update, put_ss(state, %{ss | board_tree: tree, feedback: "Already subscribed."}), []}
 
       _other ->
         :no_match
@@ -150,19 +151,19 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp unsubscribe_focused_board(state) do
     ss = screen_state(state)
-    tree = ss.tree || build_tree(state.board_list || [])
+    tree = ss.board_tree || build_tree(state.board_list || [])
 
-    case focused_board_entry(tree) do
+    case BoardTree.focused_board_entry(tree) do
       %{required_subscription?: true} ->
         feedback = "This board is a required subscription."
-        {:update, put_ss(state, %{ss | tree: tree, feedback: feedback}), []}
+        {:update, put_ss(state, %{ss | board_tree: tree, feedback: feedback}), []}
 
       %{board: board, subscribed?: true} ->
-        {:update, put_ss(state, %{ss | tree: tree, feedback: nil}),
+        {:update, put_ss(state, %{ss | board_tree: tree, feedback: nil}),
          [{:unsubscribe_from_board, board.id}]}
 
       %{subscribed?: false} ->
-        {:update, put_ss(state, %{ss | tree: tree, feedback: "Not subscribed."}), []}
+        {:update, put_ss(state, %{ss | board_tree: tree, feedback: "Not subscribed."}), []}
 
       _other ->
         :no_match
@@ -177,7 +178,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   end
 
   defp put_tree_for_directory(state, directory) do
-    put_ss(state, %{screen_state(state) | tree: build_tree(directory)})
+    put_ss(state, %{screen_state(state) | board_tree: build_tree(directory)})
   end
 
   defp put_ss(state, %State{} = ss) do
@@ -185,68 +186,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   end
 
   defp build_tree(directory) when is_list(directory) do
-    nodes = Enum.map(directory, &category_node/1)
-    tree = Tree.init(id: "board-directory", nodes: nodes)
-    expanded = nodes |> Enum.map(& &1.id) |> MapSet.new()
-    put_in(tree.raxol_state.expanded, expanded)
-  end
-
-  defp category_node(%{category: category, boards: boards}) do
-    %{
-      id: {:category, category.id},
-      label: category.name,
-      children: Enum.map(boards, &board_node/1),
-      data: %{kind: :category, category: category}
-    }
-  end
-
-  defp board_node(%{
-         board: board,
-         subscribed?: subscribed?,
-         required_subscription?: required?,
-         unread_count: unread_count
-       }) do
-    %{
-      id: {:board, board.id},
-      label: board_label(board, subscribed?, required?, unread_count),
-      children: [],
-      data: %{
-        kind: :board,
-        board: board,
-        subscribed?: subscribed?,
-        required_subscription?: required?
-      }
-    }
-  end
-
-  defp board_label(board, _subscribed?, true, unread_count) do
-    "#{board.name} [required]#{unread_suffix(unread_count)}"
-  end
-
-  defp board_label(board, true, _required?, unread_count) do
-    "#{board.name} [subscribed]#{unread_suffix(unread_count)}"
-  end
-
-  defp board_label(board, false, _required?, _unread_count), do: "#{board.name} [unsubscribed]"
-
-  defp unread_suffix(n) when is_integer(n) and n >= 1, do: " (#{n} unread)"
-  defp unread_suffix(_), do: ""
-
-  defp focused_board_entry(%Tree{raxol_state: %{cursor: cursor, nodes: nodes}}) do
-    case find_node(nodes, cursor) do
-      %{data: %{kind: :board} = data} -> data
-      _ -> nil
-    end
-  end
-
-  defp find_node(_nodes, nil), do: nil
-
-  defp find_node(nodes, id) do
-    Enum.find_value(nodes, fn
-      %{id: ^id} = node -> node
-      %{children: children} -> find_node(children, id)
-      _ -> nil
-    end)
+    BoardTree.init(directory: directory, id: "board-directory")
   end
 
   defp maybe_feedback(%State{feedback: feedback}, theme) when is_binary(feedback) do
@@ -254,6 +194,13 @@ defmodule Foglet.TUI.Screens.BoardList do
   end
 
   defp maybe_feedback(_ss, _theme), do: []
+
+  defp row_width(state) do
+    case Map.get(state, :terminal_size) do
+      {cols, _rows} when is_integer(cols) and cols > 4 -> cols - 4
+      _ -> 80
+    end
+  end
 
   defp domain_module(state, :boards) do
     ctx = Map.get(state, :session_context) || %{}
