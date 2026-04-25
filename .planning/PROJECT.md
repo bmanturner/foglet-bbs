@@ -11,7 +11,7 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 ## Current State
 
 **Shipped version:** v1.2 Pre-Alpha Gap Closure on 2026-04-24.
-**Current milestone:** v1.3 TUI Screen Facelift, started 2026-04-25. Phases 16 through 19 are complete; width-aware TUI layout primitives now back Unicode-safe paths, presentation metadata separates BBS/operator modes, Chrome V2 provides shared breadcrumbs / mode-aware status / grouped command bars / legacy key-list compatibility, and the Main Menu home screen renders boxed Navigation + Oneliners panels with role-gated destinations and right-aligned hotkeys derived from `state.terminal_size`.
+**Current milestone:** v1.3 TUI Screen Facelift, started 2026-04-25. Phases 16 through 23 are complete; width-aware TUI layout primitives now back Unicode-safe paths, presentation metadata separates BBS/operator modes, Chrome V2 provides shared breadcrumbs / mode-aware status / grouped command bars / legacy key-list compatibility, the Main Menu home screen renders boxed Navigation + Oneliners panels with role-gated destinations and right-aligned hotkeys derived from `state.terminal_size`, and new-thread/reply composers use a shared editor shell with visible edit/preview modes, counters, context, and layout smoke coverage.
 
 Foglet now has terminal-native Account, Moderation, and Sysop surfaces; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; enforced board posting and locked-thread restrictions; Account SSH key management; board subscription management; and pre-alpha operator notes aligned to the shipped SSH-first behavior.
 
@@ -63,10 +63,11 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - [x] Screens can declare BBS or operator mode, theme slots cover facelift widget states, and Phase 17 primitives have explicit visual-shape contracts - v1.3 Phase 17
 - [x] Shared chrome renders breadcrumb-style titles, grouped key commands, mode-aware right status fields, and fallbacks that remain usable at 64x22 - v1.3 Phase 18
 - [x] Login participates in the Classic Modern BBS mode through shared chrome and mode metadata without requiring a deeper authentication form redesign in this milestone - v1.3 Phase 18
+- [x] New-thread and reply composers use a shared focused editor shell with visible edit/preview controls, character counters, compact context, and 64x22/80x24/132x50 layout smoke coverage - v1.3 Phase 23
 
 ### Active
 
-- [ ] Home, board directory, thread list, post reader, and composer screens implement the Classic Modern BBS direction while preserving keyboard-first behavior.
+- [ ] Home, board directory, thread list, and post reader screens implement the Classic Modern BBS direction while preserving keyboard-first behavior.
 - [ ] Operator Console primitives exist before Account, Moderation, and Sysop adopt them for dense workbench layouts.
 - [ ] Account, Moderation, and Sysop implement the Operator Console direction using shared display primitives and honest workflow copy.
 - [ ] TUI facelift work has focused widget/screen tests for width, theme routing, mode behavior, and no-overlap layout regressions.
@@ -144,4 +145,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-25 after completing v1.3 Phase 19 Main Menu Dashboard*
+*Last updated: 2026-04-25 after completing v1.3 Phase 23 Composer Facelift*
