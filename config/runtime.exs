@@ -89,8 +89,7 @@ if config_env() == :prod do
     ],
     secret_key_base: secret_key_base
 
-  config :foglet_bbs, :ssh,
-    host_key_dir: System.get_env("SSH_HOST_KEY_DIR") || "priv/ssh"
+  config :foglet_bbs, :ssh, host_key_dir: System.get_env("SSH_HOST_KEY_DIR") || "priv/ssh"
 
   # ## SSL Support
   #
