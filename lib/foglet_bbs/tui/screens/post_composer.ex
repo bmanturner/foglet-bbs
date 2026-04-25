@@ -20,8 +20,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
   alias Foglet.Config
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostComposer.State
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Composer.EditorFrame
@@ -211,19 +211,19 @@ defmodule Foglet.TUI.Screens.PostComposer do
   defp reply_context(post, width, theme) do
     available = max(width - 10, 20)
 
-    [
-      text("Replying to @#{get_handle(post)}", fg: theme.dim.fg),
-      text(quote_preview(post, available), fg: theme.dim.fg)
-    ]
+    [text("Replying to @#{get_handle(post)}", fg: theme.dim.fg)] ++
+      quote_preview_lines(post, available, theme)
   end
 
-  defp quote_preview(post, width) do
+  defp quote_preview_lines(post, width, theme) do
     body = Map.get(post, :body, "")
 
     body
     |> String.split("\n")
     |> Enum.take(2)
-    |> Enum.map_join("\n", fn line -> "> #{TextWidth.truncate(line, width)}" end)
+    |> Enum.map(fn line ->
+      text("> #{TextWidth.truncate(line, max(width - 2, 1))}", fg: theme.dim.fg)
+    end)
   end
 
   # Delegate to PostCard.get_handle/1 (strict: returns nil on empty or

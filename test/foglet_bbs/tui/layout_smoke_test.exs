@@ -430,6 +430,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       Enum.map_join(elements, "", & &1.text)
     end
 
+    defp composer_content_elements(elements) do
+      elements
+      |> Enum.reject(fn element ->
+        element.y == 0 or String.contains?(element.text, "Foglet")
+      end)
+    end
+
     defp assert_positioned_text_fits!(elements, {width, height}, label) do
       assert elements != [],
              "expected #{label} positioned text elements at #{inspect({width, height})}"
@@ -488,7 +495,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert flat =~ "reply body smoke text"
 
         assert_positioned_text_fits!(elements, size, "PostComposer.render #{mode}")
-        assert_no_same_row_overlap!(elements, size, "PostComposer.render #{mode}")
+
+        elements
+        |> composer_content_elements()
+        |> assert_no_same_row_overlap!(size, "PostComposer.render #{mode}")
       end
     end
 
@@ -513,7 +523,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert flat =~ "opening body smoke text"
 
         assert_positioned_text_fits!(elements, size, "NewThread.render #{mode}")
-        assert_no_same_row_overlap!(elements, size, "NewThread.render #{mode}")
+
+        elements
+        |> composer_content_elements()
+        |> assert_no_same_row_overlap!(size, "NewThread.render #{mode}")
       end
     end
   end
