@@ -45,7 +45,10 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBarTest do
       assert flat =~ "j/k Move"
       assert flat =~ "C Compose"
 
-      assert String.match?(flat, ~r/System.*Q Back.*Navigate.*j\/k Move.*Enter Open.*Actions.*C Compose/s)
+      assert String.match?(
+               flat,
+               ~r/System.*Q Back.*Navigate.*j\/k Move.*Enter Open.*Actions.*C Compose/s
+             )
     end
 
     test "drops lower priority commands first under constrained width" do
