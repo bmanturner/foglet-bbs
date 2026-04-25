@@ -214,7 +214,12 @@ Cross-cutting constraints:
 3. Character budgets use shared progress/counter treatment for normal, warning, and over-limit states.
 4. Reply composition shows compact quoted context while new-thread composition shows the title field, with nonessential context collapsing first at 64x22.
 5. Title `TextInput` and body `MultiLineInput` behavior remains width-aware and theme-routed.
-**Plans:** TBD
+**Plans:** 4 plans
+Plans:
+- [ ] 23-01-PLAN.md — Wave 1 shared `Composer.EditorFrame` widget, visible Edit/Preview segment, theme-routed counters, and widget tests.
+- [ ] 23-02-PLAN.md — Wave 2 `PostComposer` reply composer migration to the shared shell while preserving reply submit, preview, and shortcut behavior.
+- [ ] 23-03-PLAN.md — Wave 2 `NewThread` compose-step migration to the shared shell while preserving title/body input and thread creation behavior.
+- [ ] 23-04-PLAN.md — Wave 3 composer layout smoke coverage at `64x22`, `80x24`, and `132x50`, plus focused validation and precommit gate.
 **UI hint:** yes
 
 ### Phase 24: Operator Console Primitives
