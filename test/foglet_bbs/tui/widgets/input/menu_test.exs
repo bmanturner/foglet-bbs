@@ -100,9 +100,15 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
       assert item.id == :explicit
     end
 
-    test "WR-03 — item missing both :id and :label raises ArgumentError" do
-      assert_raise ArgumentError, ~r/require :id or :label/, fn ->
+    test "WR-03 — item missing :label raises ArgumentError" do
+      assert_raise ArgumentError, ~r/require :label/, fn ->
         Menu.normalize_items([%{children: []}])
+      end
+    end
+
+    test "WR-03 — id-only item fails during normalization instead of render" do
+      assert_raise ArgumentError, ~r/require :label/, fn ->
+        Menu.normalize_items([%{id: :id_only, children: []}])
       end
     end
   end
@@ -192,6 +198,28 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
       result = Menu.render(state, theme: theme())
       flat = flatten_text(result)
       assert flat =~ "New File"
+    end
+
+    test "WR-01 — rendered output includes opened submenu children" do
+      state =
+        Menu.init(
+          items: [
+            %{
+              id: :file,
+              label: "File",
+              children: [
+                %{id: :new, label: "New", children: []}
+              ]
+            }
+          ]
+        )
+
+      opened = %{state | raxol_state: %{state.raxol_state | open_path: [:file], cursor: :new}}
+      result = Menu.render(opened, theme: theme())
+      flat = flatten_text(result)
+
+      assert flat =~ "File"
+      assert flat =~ "New"
     end
   end
 end

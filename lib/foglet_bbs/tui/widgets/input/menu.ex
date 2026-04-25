@@ -16,9 +16,8 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     * `:disabled` → `false` if absent
     * `:shortcut` → `nil` if absent
 
-  Normalization recurses through `:children`. Items missing BOTH
-  `:id` and `:label` raise `ArgumentError` — there is no sane
-  auto-id to derive for a label-less item.
+  Normalization recurses through `:children`. Items missing `:label`
+  raise `ArgumentError` because render output always needs visible text.
 
   ## Item shape (after normalization)
 
@@ -97,8 +96,10 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
       column style: %{} do
         items =
           rs
-          |> Map.get(:items, [])
-          |> Enum.map(&render_item(&1, Map.get(rs, :cursor), theme))
+          |> visible_items()
+          |> Enum.map(fn {item, depth} ->
+            render_item(item, depth, Map.get(rs, :cursor), theme)
+          end)
 
         # Keep the full menu state palette visible to tests and renderers even
         # when a small menu fixture lacks a normal item or shortcut row.
@@ -117,9 +118,8 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     * `:disabled` — `false` if absent
     * `:shortcut` — `nil` if absent
 
-  Normalization recurses into `:children`. Items missing BOTH `:id` and
-  `:label` raise `ArgumentError` — a label-less item cannot produce a
-  stable derived id.
+  Normalization recurses into `:children`. Items missing `:label` raise
+  `ArgumentError` because a menu item without visible text cannot render.
   """
   @spec normalize_items([map()]) :: [item()]
   def normalize_items(items) when is_list(items) do
@@ -133,13 +133,13 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   end
 
   defp normalize_item(item, parent_path) when is_map(item) do
-    unless Map.has_key?(item, :id) or Map.has_key?(item, :label) do
+    unless Map.has_key?(item, :label) do
       raise ArgumentError,
-            "Foglet.TUI.Widgets.Input.Menu items require :id or :label; " <>
+            "Foglet.TUI.Widgets.Input.Menu items require :label; " <>
               "got #{inspect(item)}"
     end
 
-    label = Map.get(item, :label)
+    label = Map.fetch!(item, :label)
     path = parent_path ++ [to_string(label)]
 
     item
@@ -185,10 +185,33 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     if top_level_escape, do: :cancelled, else: nil
   end
 
-  defp render_item(item, cursor, theme) do
+  defp visible_items(%{items: items} = rs) do
+    flatten_visible(items, Map.get(rs, :open_path, []), 0)
+  end
+
+  defp visible_items(_rs), do: []
+
+  defp flatten_visible([], _open_path, _depth), do: []
+
+  defp flatten_visible([item | rest], open_path, depth) do
+    children = Map.get(item, :children, [])
+    id = Map.get(item, :id)
+
+    opened_children =
+      if id in open_path and children != [] do
+        flatten_visible(children, open_path, depth + 1)
+      else
+        []
+      end
+
+    [{item, depth}] ++ opened_children ++ flatten_visible(rest, open_path, depth)
+  end
+
+  defp render_item(item, depth, cursor, theme) do
     shortcut = Map.get(item, :shortcut)
     label = Map.fetch!(item, :label)
-    content = if shortcut, do: "#{label}  #{shortcut}", else: label
+    indent = String.duplicate("  ", depth)
+    content = if shortcut, do: "#{indent}#{label}  #{shortcut}", else: "#{indent}#{label}"
 
     cond do
       Map.get(item, :disabled, false) ->

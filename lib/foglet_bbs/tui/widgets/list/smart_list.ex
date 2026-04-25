@@ -235,11 +235,14 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   # ---------------------------------------------------------------------------
 
   defp render_options(rs, theme) do
+    options = Map.get(rs, :filtered_options) || Map.get(rs, :options, [])
+    visible_items = Map.get(rs, :visible_items) || Map.get(rs, :page_size, @default_page_size)
+    scroll_offset = Map.get(rs, :scroll_offset, 0)
     focused_index = Map.get(rs, :focused_index, 0)
 
-    rs
-    |> Map.get(:options, [])
-    |> Enum.with_index()
+    options
+    |> Enum.slice(scroll_offset, visible_items)
+    |> Enum.with_index(scroll_offset)
     |> Enum.map(fn {{label, _value}, index} ->
       if index == focused_index do
         text("> #{label}\n", fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
@@ -265,7 +268,7 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
 
   defp pagination_affordance(rs, theme) do
     page_size = Map.get(rs, :page_size, @default_page_size)
-    options = Map.get(rs, :options, [])
+    options = Map.get(rs, :filtered_options) || Map.get(rs, :options, [])
 
     if length(options) > page_size do
       text("Page #{page_for(rs) + 1}\n", fg: theme.dim.fg)

@@ -213,5 +213,46 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
 
       refute s1 == s2, "default and danger themes must produce different render trees"
     end
+
+    test "WR-02 — render honors visible window state" do
+      state =
+        SmartList.init(
+          options: Enum.map(1..5, fn i -> {"Item #{i}", i} end),
+          page_size: 2
+        )
+
+      windowed = %{
+        state
+        | raxol_state: %{state.raxol_state | visible_items: 2, scroll_offset: 2, focused_index: 3}
+      }
+
+      flat = flatten_text(SmartList.render(windowed, theme: theme()))
+
+      refute flat =~ "Item 1"
+      assert flat =~ "Item 3"
+      assert flat =~ "Item 4"
+      refute flat =~ "Item 5"
+    end
+
+    test "WR-02 — render honors filtered options state" do
+      state = SmartList.init(options: [{"Alpha", 1}, {"Beta", 2}, {"Alpine", 3}], page_size: 10)
+
+      filtered = %{
+        state
+        | raxol_state: %{
+            state.raxol_state
+            | filtered_options: [{"Alpha", 1}, {"Alpine", 3}],
+              visible_items: 10,
+              scroll_offset: 0,
+              focused_index: 0
+          }
+      }
+
+      flat = flatten_text(SmartList.render(filtered, theme: theme()))
+
+      assert flat =~ "Alpha"
+      assert flat =~ "Alpine"
+      refute flat =~ "Beta"
+    end
   end
 end
