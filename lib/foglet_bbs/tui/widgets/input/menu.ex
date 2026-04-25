@@ -115,9 +115,13 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   Normalizes a list of menu items, filling in defaults for missing fields.
 
   Every item receives:
-    * `:id`       — derived from the label path `{:auto, [labels...]}` if
-                    absent, so actions round-trip deterministically across
-                    code reloads and VM restarts (see WR-03)
+    * `:id`       — derived from the indexed label path
+                    `"auto:<idx>:<label>/<idx>:<label>/..."` if absent, so
+                    actions round-trip deterministically across code reloads
+                    and VM restarts (see WR-03). The sibling index disambiguates
+                    duplicate labels at the same level (see WR-01) — two
+                    sibling items both labelled `"Open"` get distinct
+                    `"auto:0:Open"` and `"auto:1:Open"` ids.
     * `:disabled` — `false` if absent
     * `:glyph`    — `nil` if absent
     * `:meta`     — `nil` if absent
@@ -134,10 +138,12 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
   # --- private ---
 
   defp normalize_items(items, parent_path) when is_list(items) do
-    Enum.map(items, &normalize_item(&1, parent_path))
+    items
+    |> Enum.with_index()
+    |> Enum.map(fn {item, index} -> normalize_item(item, parent_path, index) end)
   end
 
-  defp normalize_item(item, parent_path) when is_map(item) do
+  defp normalize_item(item, parent_path, index) when is_map(item) do
     unless Map.has_key?(item, :label) do
       raise ArgumentError,
             "Foglet.TUI.Widgets.Input.Menu items require :label; " <>
@@ -145,7 +151,7 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     end
 
     label = Map.fetch!(item, :label)
-    path = parent_path ++ [to_string(label)]
+    path = parent_path ++ ["#{index}:#{label}"]
 
     item
     |> Map.put_new_lazy(:id, fn -> "auto:" <> Enum.join(path, "/") end)

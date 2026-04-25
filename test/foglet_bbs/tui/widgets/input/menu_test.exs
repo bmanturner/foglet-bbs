@@ -112,7 +112,8 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
       input = [%{label: "File", children: [%{label: "New", children: []}]}]
       [parent] = Menu.normalize_items(input)
       [child] = parent.children
-      assert child.id == "auto:File/New"
+      assert parent.id == "auto:0:File"
+      assert child.id == "auto:0:File/0:New"
     end
 
     test "WR-03 — explicit :id wins over auto-derivation" do
@@ -130,6 +131,50 @@ defmodule Foglet.TUI.Widgets.Input.MenuTest do
       assert_raise ArgumentError, ~r/require :label/, fn ->
         Menu.normalize_items([%{id: :id_only, children: []}])
       end
+    end
+
+    test "WR-01 — sibling items with duplicate labels get distinct auto-ids" do
+      [a, b] =
+        Menu.normalize_items([
+          %{label: "Open", children: []},
+          %{label: "Open", children: []}
+        ])
+
+      assert a.id != b.id
+      assert a.id == "auto:0:Open"
+      assert b.id == "auto:1:Open"
+    end
+
+    test "WR-01 — duplicate labels under different parents stay distinct" do
+      input = [
+        %{
+          label: "File",
+          children: [%{label: "Delete", children: []}]
+        },
+        %{
+          label: "Edit",
+          children: [%{label: "Delete", children: []}]
+        }
+      ]
+
+      [file, edit] = Menu.normalize_items(input)
+      [file_delete] = file.children
+      [edit_delete] = edit.children
+
+      assert file_delete.id != edit_delete.id
+      assert file_delete.id == "auto:0:File/0:Delete"
+      assert edit_delete.id == "auto:1:Edit/0:Delete"
+    end
+
+    test "WR-01 — explicit :id on a duplicate-label sibling still wins" do
+      [a, b] =
+        Menu.normalize_items([
+          %{label: "Open", children: []},
+          %{id: :explicit_open, label: "Open", children: []}
+        ])
+
+      assert a.id == "auto:0:Open"
+      assert b.id == :explicit_open
     end
   end
 
