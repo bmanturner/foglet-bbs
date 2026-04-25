@@ -46,7 +46,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 **Milestone Goal:** Make Foglet's SSH terminal UI feel like a polished, Unicode-capable BBS while keeping operator workflows dense, honest, and terminal-pragmatic.
 
 - [x] **Phase 16: Unicode Width Foundation** - Layout-sensitive TUI rendering is width-safe before heavier Unicode adoption. (completed 2026-04-25)
-- [ ] **Phase 17: Theme and Mode Metadata** - Screens can declare BBS vs operator rhythm without forking the widget stack.
+- [x] **Phase 17: Theme and Mode Metadata** - Screens can declare BBS vs operator rhythm without forking the widget stack. (completed 2026-04-25)
 - [ ] **Phase 18: Chrome V2** - Every screen shares breadcrumb chrome, mode-aware status, and grouped key commands.
 - [ ] **Phase 19: Main Menu Dashboard** - The home screen becomes a selectable, social BBS front porch with activity context.
 - [ ] **Phase 20: Rich Rows and Thread Flow** - Thread browsing uses semantic glyphs, width-safe metadata, and focused details.
@@ -87,12 +87,12 @@ Plans:
 2. Theme slots cover success/info/badge-like states without hardcoded color atoms in new facelift widgets.
 3. Tabs, rows, badges, command hints, and editor states have consistent theme-slot mappings.
 4. Changing user theme changes color treatment but not screen mode or layout category.
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 - [x] 17-01-PLAN.md — Central presentation-mode contract and unknown-screen tests.
 - [x] 17-02-PLAN.md — Semantic theme slots and palette-wide coverage.
 - [x] 17-03-PLAN.md — Theme mapping contract and phase validation.
-- [ ] 17-04-PLAN.md — Unowned widget primitive theme-routing sweep.
+- [x] 17-04-PLAN.md — Unowned widget primitive theme-routing sweep.
 **UI hint:** yes
 
 ### Phase 18: Chrome V2
@@ -237,7 +237,7 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 14. Launch Hygiene and Operator Notes | v1.2 | 3/3 | Complete | 2026-04-24 |
 | 15. Reset Path Gap Closure | v1.2 | 2/2 | Complete | 2026-04-24 |
 | 16. Unicode Width Foundation | v1.3 | 4/4 | Complete    | 2026-04-25 |
-| 17. Theme and Mode Metadata | v1.3 | 3/4 | In Progress|  |
+| 17. Theme and Mode Metadata | v1.3 | 4/4 | Complete   | 2026-04-25 |
 | 18. Chrome V2 | v1.3 | 0/TBD | Pending | - |
 | 19. Main Menu Dashboard | v1.3 | 0/TBD | Pending | - |
 | 20. Rich Rows and Thread Flow | v1.3 | 0/TBD | Pending | - |
