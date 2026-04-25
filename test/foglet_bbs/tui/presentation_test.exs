@@ -114,9 +114,30 @@ defmodule Foglet.TUI.PresentationTest do
       mappings = Presentation.theme_mappings()
 
       assert Map.keys(mappings) |> Enum.sort() == [:badges, :commands, :editor, :rows, :tabs]
-      assert Map.keys(mappings.tabs) |> Enum.sort() == [:border, :indicator, :selected, :unselected]
-      assert Map.keys(mappings.rows) |> Enum.sort() == [:disabled, :metadata, :normal, :selected, :unread]
-      assert Map.keys(mappings.badges) |> Enum.sort() == [:accent, :error, :info, :success, :warning]
+
+      assert Map.keys(mappings.tabs) |> Enum.sort() == [
+               :border,
+               :indicator,
+               :selected,
+               :unselected
+             ]
+
+      assert Map.keys(mappings.rows) |> Enum.sort() == [
+               :disabled,
+               :metadata,
+               :normal,
+               :selected,
+               :unread
+             ]
+
+      assert Map.keys(mappings.badges) |> Enum.sort() == [
+               :accent,
+               :error,
+               :info,
+               :success,
+               :warning
+             ]
+
       assert Map.keys(mappings.commands) |> Enum.sort() == [:destructive, :group, :inactive, :key]
 
       assert Map.keys(mappings.editor) |> Enum.sort() == [
