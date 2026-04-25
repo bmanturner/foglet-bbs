@@ -107,10 +107,10 @@ Plans:
 4. The existing simple key-list call path can render through `Chrome.CommandBar` rather than a parallel footer implementation.
 5. Login declares Classic Modern BBS mode and receives Chrome V2 without changing authentication behavior.
 6. Chrome remains usable at 64x22 without overlapping content, restores the intended compact treatment around 80x24, and progressively shows more status atoms on wider terminals.
-**Plans:** 7 plans
+**Plans:** 2/7 plans executed
 Plans:
-- [ ] 18-01-PLAN.md — Breadcrumb and mode-aware status primitives.
-- [ ] 18-02-PLAN.md — Grouped command bar and legacy key-list normalizer.
+- [x] 18-01-PLAN.md — Breadcrumb and mode-aware status primitives.
+- [x] 18-02-PLAN.md — Grouped command bar and legacy key-list normalizer.
 - [ ] 18-03-PLAN.md — ScreenFrame Chrome V2 integration and size contracts.
 - [ ] 18-04-PLAN.md — Login, Home, and Board Directory caller migration.
 - [ ] 18-05-PLAN.md — Thread and composer flow caller migration.
@@ -238,7 +238,7 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 15. Reset Path Gap Closure | v1.2 | 2/2 | Complete | 2026-04-24 |
 | 16. Unicode Width Foundation | v1.3 | 4/4 | Complete    | 2026-04-25 |
 | 17. Theme and Mode Metadata | v1.3 | 4/4 | Complete   | 2026-04-25 |
-| 18. Chrome V2 | v1.3 | 0/TBD | Pending | - |
+| 18. Chrome V2 | v1.3 | 2/7 | In Progress|  |
 | 19. Main Menu Dashboard | v1.3 | 0/TBD | Pending | - |
 | 20. Rich Rows and Thread Flow | v1.3 | 0/TBD | Pending | - |
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |

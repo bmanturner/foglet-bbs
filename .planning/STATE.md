@@ -4,8 +4,8 @@ milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: executing
 stopped_at: Phase 18 context gathered (assumptions mode)
-last_updated: "2026-04-25T15:14:10.948Z"
-last_activity: 2026-04-25 -- Phase 18 planning complete
+last_updated: "2026-04-25T16:57:22.564Z"
+last_activity: 2026-04-25 -- Phase 18 execution started
 progress:
   total_phases: 10
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-25)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 17 — theme-and-mode-metadata
+**Current focus:** Phase 18 — chrome-v2
 
 ## Current Position
 
-Phase: 17
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-25 -- Phase 18 planning complete
+Phase: 18 (chrome-v2) — EXECUTING
+Plan: 1 of 7
+Status: Executing Phase 18
+Last activity: 2026-04-25 -- Phase 18 execution started
 
 Progress: [----------] 0%
 
