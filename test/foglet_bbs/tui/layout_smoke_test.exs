@@ -33,11 +33,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     Verify
   }
 
+  alias Foglet.TUI.Widgets.Chrome.KeyBar
+  alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Input.TextInput
+  alias Foglet.TUI.Widgets.List.ListRow
+  alias Foglet.TUI.Widgets.Modal
   alias Raxol.UI.Components.Input.MultiLineInput
   alias Raxol.UI.Layout.Engine
 
   @dimensions %{width: 80, height: 24}
+  @phase_16_dimensions [{64, 22}, {80, 24}, {132, 50}]
 
   # Seed the ETS config cache so render paths that call Config.get/2
   # (Login, Register, Verify screens) do not hit the DB.
@@ -61,6 +66,108 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   end
 
   defp apply(tree), do: Engine.apply_layout(tree, @dimensions)
+
+  defp collect_text(tree), do: tree |> collect_text([]) |> Enum.reverse()
+
+  defp collect_text(nil, acc), do: acc
+  defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
+
+  defp collect_text(%{children: children} = node, acc) do
+    acc = collect_node_text(node, acc)
+    collect_text(children, acc)
+  end
+
+  defp collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
+  defp collect_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
+  defp collect_text(_other, acc), do: acc
+
+  defp collect_node_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
+  defp collect_node_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
+  defp collect_node_text(_node, acc), do: acc
+
+  defp flatten_text(tree), do: tree |> collect_text() |> Enum.join("")
+
+  defp assert_line_within_width!(label, line, width) do
+    assert TextWidth.display_width(line) <= width,
+           "#{label}: expected #{inspect(line)} to fit #{width} columns, got #{TextWidth.display_width(line)}"
+  end
+
+  defp unicode_compose_input(value, cursor_pos, width) do
+    {:ok, input_st} =
+      MultiLineInput.init(%{
+        value: value,
+        placeholder: "",
+        width: width,
+        height: 5,
+        wrap: :none,
+        focused: true
+      })
+
+    %{input_st | cursor_pos: cursor_pos}
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 16 size contracts
+  # ---------------------------------------------------------------------------
+
+  test "phase 16 representative row, keybar, modal, and compose paths fit terminal widths" do
+    theme = Foglet.TUI.Theme.default()
+
+    keys = [
+      {"J/K", "Navigate"},
+      {"Enter", "Open 漢字"},
+      {"● ◆", "▸ ▾ ✓ ×"}
+    ]
+
+    for {width, _height} <- @phase_16_dimensions do
+      row =
+        ListRow.render_with_metadata(
+          "● ◆ ▸ ▾ ✓ × cafe\u0301 漢字 thread title with trailing detail",
+          "@alice · ✓ subscribed",
+          false,
+          true,
+          theme,
+          width: width
+        )
+        |> flatten_text()
+
+      assert row =~ "●"
+      assert row =~ "@alice"
+      assert_line_within_width!("ListRow #{width}", row, width)
+
+      keybar = KeyBar.render(theme, keys, width: width) |> flatten_text()
+      assert keybar =~ "[J/K]"
+      assert keybar =~ "●"
+      assert_line_within_width!("KeyBar #{width}", keybar, width)
+
+      modal_lines =
+        %Foglet.TUI.Modal{
+          type: :info,
+          message: "Unicode modal ● ◆ ▸ ▾ ✓ × cafe\u0301 漢字 stays inside wrapped display columns"
+        }
+        |> Modal.render(theme)
+        |> collect_text()
+        |> Enum.reject(fn text ->
+          String.trim(text) in ["Info", "[Enter] OK"] or text == ""
+        end)
+
+      assert Enum.any?(modal_lines, &String.contains?(&1, "Unicode"))
+
+      for line <- modal_lines do
+        assert_line_within_width!("Modal #{width}", line, width)
+      end
+
+      compose =
+        "● ◆ ▸ ▾ ✓ × cafe\u0301 漢字"
+        |> unicode_compose_input({0, 6}, width)
+        |> Compose.render_input(true, theme)
+        |> flatten_text()
+
+      assert compose =~ "█"
+      assert compose =~ "●"
+      assert_line_within_width!("Compose #{width}", compose, width)
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # Login screen — menu sub-state
