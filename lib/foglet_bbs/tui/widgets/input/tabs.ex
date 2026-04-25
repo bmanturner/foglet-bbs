@@ -2,8 +2,12 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
   @moduledoc """
   Themed tab-bar widget (D-02, D-13, D-14).
 
-  Stateless facade over `Raxol.UI.Components.Input.Tabs`. Supports
-  Left/Right navigation, Home/End, and digit shortcuts 1–9.
+  Stateful facade over `Raxol.UI.Components.Input.Tabs` event handling.
+  Rendering is Foglet-owned so the default tab strip shape stays stable:
+
+      ▌ Profile   Prefs   SSH Keys   Invites
+
+  Supports Left/Right navigation, Home/End, and digit shortcuts 1–9.
 
   **Pitfall 6 (RESEARCH.md):** Digit shortcuts 1–9 are consumed
   unconditionally by the underlying Raxol component. D-15 places
@@ -81,10 +85,17 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
   def render(%__MODULE__{raxol_state: rs}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
-    rs_with_theme = %{rs | theme: build_tabs_theme(theme)}
+    mappings = Presentation.theme_mappings().tabs
 
-    box style: %{border_fg: theme.border.fg, padding: 0} do
-      RaxolTabs.render(rs_with_theme, %{})
+    box style: %{border_fg: Map.fetch!(theme, mappings.border).fg, padding: 0} do
+      row style: %{gap: 0} do
+        rs
+        |> Map.get(:tabs, [])
+        |> Enum.with_index()
+        |> Enum.map(&render_tab(&1, Map.get(rs, :active_index, 0), theme, mappings))
+        |> Enum.intersperse([text("   ", fg: Map.fetch!(theme, mappings.border).fg)])
+        |> List.flatten()
+      end
     end
   end
 
@@ -110,14 +121,16 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
     if before_idx != after_idx, do: {:tab_changed, after_idx}, else: nil
   end
 
-  defp build_tabs_theme(%Theme{} = t) do
-    mappings = Presentation.theme_mappings().tabs
+  defp render_tab({tab, idx}, active_index, theme, mappings) do
+    label = Map.fetch!(tab, :label)
 
-    %{
-      tab: %{fg: Map.fetch!(t, mappings.unselected).fg},
-      active_tab: %{fg: Map.fetch!(t, mappings.selected).fg, style: [:bold]},
-      active_indicator: %{fg: Map.fetch!(t, mappings.indicator).fg, style: [:bold]},
-      border: %{fg: Map.fetch!(t, mappings.border).fg}
-    }
+    if idx == active_index do
+      [
+        text(@default_active_indicator <> " ", fg: Map.fetch!(theme, mappings.indicator).fg),
+        text(label, fg: Map.fetch!(theme, mappings.selected).fg, style: [:bold])
+      ]
+    else
+      [text(label, fg: Map.fetch!(theme, mappings.unselected).fg)]
+    end
   end
 end

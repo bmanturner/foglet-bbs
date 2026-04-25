@@ -2,13 +2,28 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
+    only: [
+      flatten_text: 1,
+      color_atom_leaked?: 2,
+      color_names: 0,
+      assert_text_run: 3,
+      text_runs: 1
+    ]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Tabs
 
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
+
+  defp distinctive_theme do
+    %Theme{
+      border: %{fg: "#tabs-border"},
+      accent: %{fg: "#tabs-indicator"},
+      selected: %{fg: "#tabs-selected", bg: "#tabs-selected-bg"},
+      unselected: %{fg: "#tabs-unselected"}
+    }
+  end
 
   defp tabs_state do
     Tabs.init(tabs: ["Home", "Posts", "Settings"])
@@ -98,6 +113,39 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       result = Tabs.render(state, theme: theme())
       flat = flatten_text(result)
       assert flat =~ "Home"
+    end
+  end
+
+  describe "render/2 — visual contract" do
+    test "default tab strip owns indicator, active label, inactive labels, and spacing" do
+      state = Tabs.init(tabs: ["Profile", "Prefs", "SSH Keys", "Invites"], active: 0)
+      tree = Tabs.render(state, theme: distinctive_theme())
+      flat = flatten_text(tree)
+
+      assert flat == "▌ Profile   Prefs   SSH Keys   Invites"
+      assert flat |> String.split("▌") |> length() |> Kernel.-(1) == 1
+      refute flat =~ "(active)"
+      refute flat =~ "[selected]"
+    end
+
+    test "active indicator moves with active index" do
+      state = Tabs.init(tabs: ["Profile", "Prefs", "SSH Keys", "Invites"], active: 2)
+      flat = flatten_text(Tabs.render(state, theme: distinctive_theme()))
+
+      assert flat == "Profile   Prefs   ▌ SSH Keys   Invites"
+    end
+
+    test "active and inactive tab runs use distinct theme contracts" do
+      t = distinctive_theme()
+      tree = Tabs.render(Tabs.init(tabs: ["Profile", "Prefs"], active: 0), theme: t)
+
+      assert_text_run(tree, "▌ ", fg: t.accent.fg)
+      assert_text_run(tree, "Profile", fg: t.selected.fg, style: [:bold])
+      inactive = assert_text_run(tree, "Prefs", fg: t.unselected.fg)
+
+      refute Map.get(inactive, :bg) == t.selected.bg
+      refute Map.get(inactive, :style, []) == [:bold]
+      refute Enum.any?(text_runs(tree), &(Map.get(&1, :bg) == t.selected.bg))
     end
   end
 
