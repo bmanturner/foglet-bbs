@@ -105,6 +105,28 @@ defmodule Foglet.TUI.Widgets.ModalTest do
                "Line exceeds 50 columns (#{TextWidth.display_width(line)}): #{inspect(line)}"
       end
     end
+
+    test "unbroken Unicode message chunks to the modal display width" do
+      msg = String.duplicate("漢字●◆▸▾✓×", 12)
+
+      tree = Modal.render(%Foglet.TUI.Modal{type: :info, message: msg}, theme())
+      all_text = collect_text_content(tree)
+
+      message_lines =
+        Enum.reject(all_text, fn s ->
+          String.trim(s) in [
+            "Info",
+            "[Enter] OK"
+          ]
+        end)
+
+      assert length(message_lines) > 1
+
+      for line <- message_lines do
+        assert TextWidth.display_width(line) <= 50,
+               "Line exceeds 50 columns (#{TextWidth.display_width(line)}): #{inspect(line)}"
+      end
+    end
   end
 
   describe "key hint (Gap 3c)" do

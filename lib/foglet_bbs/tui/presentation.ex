@@ -39,7 +39,7 @@ defmodule Foglet.TUI.Presentation do
   @doc """
   Returns the locked list of supported presentation modes.
   """
-  @spec modes() :: [mode()]
+  @spec modes() :: [mode(), ...]
   def modes, do: [:bbs, :operator]
 
   @doc """

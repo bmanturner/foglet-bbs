@@ -35,6 +35,21 @@ defmodule Foglet.TUI.Theme do
           optional(:style) => [atom()]
         }
 
+  @type slot_key ::
+          :accent
+          | :badge
+          | :border
+          | :dim
+          | :error
+          | :info
+          | :primary
+          | :selected
+          | :status_bar
+          | :success
+          | :title
+          | :unselected
+          | :warning
+
   @type t :: %__MODULE__{
           border: style_map(),
           primary: style_map(),
@@ -261,7 +276,7 @@ defmodule Foglet.TUI.Theme do
   def ids, do: Map.keys(@themes)
 
   @doc "List of supported theme slot keys."
-  @spec slot_keys() :: [atom()]
+  @spec slot_keys() :: [slot_key(), ...]
   def slot_keys, do: @slot_keys
 
   @doc "Default theme (`:gray`) for v1.0.1."

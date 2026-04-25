@@ -75,11 +75,12 @@ defmodule Foglet.TUI.Widgets.Modal do
   defp key_hint_for(:confirm), do: "[Y] Yes   [N] No"
   defp key_hint_for(_), do: "[Enter] OK"
 
-  # Wrap a string to <= max_width columns on whitespace boundaries.
-  # Words longer than max_width are placed on their own line (not split mid-word).
+  # Wrap a string to <= max_width columns, preserving whitespace word breaks
+  # while chunking oversized tokens so modal bodies cannot overflow.
   defp word_wrap(text, max_width) when is_binary(text) and is_integer(max_width) do
     text
     |> String.split(~r/\s+/, trim: true)
+    |> Enum.flat_map(&word_chunks(&1, max_width))
     |> Enum.reduce([""], fn word, [current | rest] ->
       cond do
         current == "" ->
@@ -93,5 +94,17 @@ defmodule Foglet.TUI.Widgets.Modal do
       end
     end)
     |> Enum.reverse()
+  end
+
+  defp word_chunks("", _max_width), do: []
+
+  defp word_chunks(word, max_width) do
+    if TextWidth.display_width(word) <= max_width do
+      [word]
+    else
+      {chunk, rest} = TextWidth.split_at(word, max_width)
+
+      [chunk | word_chunks(rest, max_width)]
+    end
   end
 end
