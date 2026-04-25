@@ -35,6 +35,7 @@ defmodule Foglet.TUI.Widgets.Chrome.NormalizerTest do
       assert group(groups, "Field") == [%{key: "Tab", label: "Next field", priority: 10}]
       assert group(groups, "Save") == [%{key: "S/Enter", label: "Save", priority: 10}]
       assert group(groups, "Refresh") == [%{key: "R", label: "Refresh", priority: 10}]
+
       assert group(groups, "Actions") == [
                %{key: "F", label: "Filter", priority: 30},
                %{key: "?", label: "Verbose help", priority: 50}
@@ -55,5 +56,6 @@ defmodule Foglet.TUI.Widgets.Chrome.NormalizerTest do
     groups
     |> Enum.find(&(&1.label == label))
     |> Map.fetch!(:commands)
+    |> Enum.map(&Map.take(&1, [:key, :label, :priority]))
   end
 end

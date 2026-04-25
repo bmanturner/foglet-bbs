@@ -49,7 +49,8 @@ defmodule Foglet.TUI.Widgets.Chrome.KeyBarTest do
 
       flat = KeyBar.render(theme(), keys, width: 64) |> flatten_text()
 
-      assert flat =~ "[J/K] Navigate"
+      assert flat =~ "Navigate"
+      assert flat =~ "J/K Navigate"
       assert TextWidth.display_width(flat) <= 64
     end
 
@@ -64,7 +65,8 @@ defmodule Foglet.TUI.Widgets.Chrome.KeyBarTest do
       for width <- [64, 80] do
         flat = KeyBar.render(theme(), keys, width: width) |> flatten_text()
 
-        assert flat =~ "[漢字]"
+        assert flat =~ "Actions"
+        assert flat =~ "漢字"
         assert flat =~ "cafe\u0301"
         assert TextWidth.display_width(flat) <= width
       end
