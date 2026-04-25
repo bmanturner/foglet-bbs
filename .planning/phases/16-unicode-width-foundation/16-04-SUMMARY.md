@@ -81,7 +81,7 @@ completed: 2026-04-25
 
 - Kept `Compose.translate_key/1`, placeholder behavior, and caller-owned editor sizing unchanged.
 - Treated the initial Task 2 pass as expected because previous Phase 16 plans had already migrated row, keybar, modal, and main-menu paths; Task 2 was coverage hardening.
-- Left pre-existing Credo findings outside 16-04 untouched to honor the plan boundary.
+- Left the initial Credo findings to the orchestrator finish-line cleanup because they were outside 16-04's composer and scan task boundary.
 
 ## Deviations from Plan
 
@@ -102,10 +102,7 @@ completed: 2026-04-25
 
 ## Issues Encountered
 
-- `rtk mix precommit` fails on pre-existing Credo issues outside 16-04 scope:
-  - `lib/foglet_bbs/tui/widgets/list/list_row.ex` alias ordering.
-  - `test/foglet_bbs/tui/widgets/list/list_row_test.exs` alias ordering.
-  - `lib/foglet_bbs/tui/text_width.ex` single-condition `cond` refactor suggestion.
+- `rtk mix precommit` initially failed on Phase 16 Credo findings outside 16-04's composer and scan task scope. The orchestrator resolved them after plan completion.
 - Vendored Raxol continues to emit existing compile warnings during test/precommit runs.
 - Focused Phase 16 tests emit an existing type warning in `test/foglet_bbs/tui/widgets/modal_test.exs` for an intentional `FunctionClauseError` assertion.
 
@@ -131,7 +128,7 @@ None.
 - `rtk rg -n "cafe\\\\u0301|漢字|●|◆|▸|▾|✓|×|█" test/foglet_bbs/tui/widgets/compose_test.exs` - matched required coverage.
 - `rtk rg -n "64, 22|80, 24|132, 50|TextWidth\\.display_width|ListRow|KeyBar|Modal|Compose|●|◆|▸|▾|✓|×" test/foglet_bbs/tui/layout_smoke_test.exs` - matched required coverage.
 - `rtk rg -n "String\\\\\\.\\(length\\|slice\\|split_at\\|pad_leading\\|pad_trailing\\)|character-count|post body length|thread title length|Foglet\\.TUI\\.TextWidth" .planning/phases/16-unicode-width-foundation/16-WIDTH-SCAN.md` - matched required scan documentation.
-- `rtk mix precommit` - failed on out-of-scope pre-existing Credo findings listed above.
+- `rtk mix precommit` - initially failed on Credo findings listed above; passed after orchestrator cleanup.
 
 ## Orchestrator Notes
 
@@ -139,7 +136,7 @@ Per the user request, this executor did not update `.planning/STATE.md`, `.plann
 
 ## Next Phase Readiness
 
-Phase 16's width foundation is complete from this plan's perspective: composer cursor rendering, representative terminal-size contracts, and the migrated-path scan are in place. Remaining precommit cleanup is localized to prior Phase 16 helper/list-row code.
+Phase 16's width foundation is complete from this plan's perspective: composer cursor rendering, representative terminal-size contracts, and the migrated-path scan are in place. Precommit cleanup was resolved before phase completion.
 
 ## Self-Check: PASSED
 

@@ -83,7 +83,7 @@ Each task was committed atomically:
 - `lib/foglet_bbs/tui/widgets/chrome/key_bar.ex` - Width-aware optional render path using `TextWidth`.
 - `lib/foglet_bbs/tui/widgets/modal.ex` - Word wrapping checks terminal display width.
 - `lib/foglet_bbs/tui/screens/main_menu.ex` - Oneliner clipping uses `TextWidth.slice_to_width/2`.
-- `.planning/phases/16-unicode-width-foundation/deferred-items.md` - Out-of-scope precommit blockers discovered during execution.
+  - `.planning/phases/16-unicode-width-foundation/deferred-items.md` - Precommit blockers discovered during execution and later resolved by orchestrator finish-line cleanup.
 
 ## Decisions Made
 
@@ -110,10 +110,7 @@ Each task was committed atomically:
 
 ## Issues Encountered
 
-- `rtk mix precommit` still fails on pre-existing Credo findings outside 16-03 scope:
-  - `lib/foglet_bbs/tui/widgets/list/list_row.ex` alias ordering.
-  - `test/foglet_bbs/tui/widgets/list/list_row_test.exs` alias ordering.
-  - `lib/foglet_bbs/tui/text_width.ex` single-condition `cond` refactor suggestion.
+- `rtk mix precommit` initially failed on Phase 16 Credo findings outside 16-03's keybar/modal/main-menu scope. The orchestrator resolved them after all Phase 16 plans completed.
 - Vendored Raxol emitted existing compile warnings during test/precommit runs.
 
 ## Known Stubs
@@ -127,11 +124,11 @@ None - no external service configuration required.
 ## Verification
 
 - `rtk mix test test/foglet_bbs/tui/widgets/chrome/key_bar_test.exs test/foglet_bbs/tui/widgets/modal_test.exs test/foglet_bbs/tui/layout_smoke_test.exs` - 35 tests, 0 failures
-- `rtk mix precommit` - failed on pre-existing Credo findings listed in Issues Encountered.
+- `rtk mix precommit` - initially failed on Credo findings listed in Issues Encountered; passed after orchestrator cleanup.
 
 ## Next Phase Readiness
 
-Chrome footer hints, modal body wrapping, and main-menu oneliner rows are ready for later Unicode-heavy facelift work. Remaining precommit cleanup belongs to prior helper/list-row scope or a dedicated cleanup pass.
+Chrome footer hints, modal body wrapping, and main-menu oneliner rows are ready for later Unicode-heavy facelift work. Precommit cleanup was resolved before phase completion.
 
 ## Self-Check: PASSED
 
