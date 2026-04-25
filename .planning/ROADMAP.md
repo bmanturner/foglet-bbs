@@ -69,11 +69,11 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 3. Width tests cover the SCREENS.md glyph set: `●`, `◆`, `▸`, `▾`, `✓`, `×`.
 4. Facelifted widgets and screens are tested at 64x22, 80x24, and at least one wide/tall terminal size.
 5. Existing ASCII-heavy screens keep their current layout behavior.
-**Plans:** 4 plans
+**Plans:** 3/4 plans executed
 Plans:
-- [ ] 16-01-PLAN.md — Shared `Foglet.TUI.TextWidth` helper and Unicode glyph tests.
-- [ ] 16-02-PLAN.md — Width-aware `ListRow.render_with_metadata/6` migration.
-- [ ] 16-03-PLAN.md — Chrome keybar, modal wrapping, and main-menu clipping migration.
+- [x] 16-01-PLAN.md — Shared `Foglet.TUI.TextWidth` helper and Unicode glyph tests.
+- [x] 16-02-PLAN.md — Width-aware `ListRow.render_with_metadata/6` migration.
+- [x] 16-03-PLAN.md — Chrome keybar, modal wrapping, and main-menu clipping migration.
 - [ ] 16-04-PLAN.md — Composer cursor hardening, size contracts, and source-scan closure.
 **UI hint:** yes
 
@@ -228,7 +228,7 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 13. Board Subscription Management | v1.2 | 4/4 | Complete | 2026-04-24 |
 | 14. Launch Hygiene and Operator Notes | v1.2 | 3/3 | Complete | 2026-04-24 |
 | 15. Reset Path Gap Closure | v1.2 | 2/2 | Complete | 2026-04-24 |
-| 16. Unicode Width Foundation | v1.3 | 0/TBD | Pending | - |
+| 16. Unicode Width Foundation | v1.3 | 3/4 | In Progress|  |
 | 17. Theme and Mode Metadata | v1.3 | 0/TBD | Pending | - |
 | 18. Chrome V2 | v1.3 | 0/TBD | Pending | - |
 | 19. Main Menu Dashboard | v1.3 | 0/TBD | Pending | - |
