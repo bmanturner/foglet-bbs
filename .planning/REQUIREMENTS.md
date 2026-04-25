@@ -22,15 +22,15 @@
 
 ### Chrome V2
 
-- [ ] **CHROME-01**: Shared chrome renders breadcrumb-style locations such as `Foglet ▸ Boards ▸ general` and `Foglet ▸ Sysop ▸ Users`, with ASCII fallback handled deliberately where needed.
-- [ ] **CHROME-02**: Shared chrome renders mode-appropriate right-side status fields for BBS and operator screens.
-- [ ] **CHROME-03**: `Chrome.CommandBar` renders grouped commands inside the frame and truncates lower-priority hints first.
-- [ ] **CHROME-04**: Shared chrome remains usable at 64x22 without text overlap or content displacement, while restoring richer status atoms and command detail at 80x24 and wider sizes.
-- [ ] **CHROME-05**: The existing command-footer path is migrated so simple key-list callers can use `Chrome.CommandBar` through a compatibility adapter rather than a parallel footer implementation.
+- [x] **CHROME-01**: Shared chrome renders breadcrumb-style locations such as `Foglet ▸ Boards ▸ general` and `Foglet ▸ Sysop ▸ Users`, with ASCII fallback handled deliberately where needed.
+- [x] **CHROME-02**: Shared chrome renders mode-appropriate right-side status fields for BBS and operator screens.
+- [x] **CHROME-03**: `Chrome.CommandBar` renders grouped commands inside the frame and truncates lower-priority hints first.
+- [x] **CHROME-04**: Shared chrome remains usable at 64x22 without text overlap or content displacement, while restoring richer status atoms and command detail at 80x24 and wider sizes.
+- [x] **CHROME-05**: The existing command-footer path is migrated so simple key-list callers can use `Chrome.CommandBar` through a compatibility adapter rather than a parallel footer implementation.
 
 ### Login
 
-- [ ] **LOGIN-01**: Login declares Classic Modern BBS mode and receives the shared Chrome V2 treatment while preserving existing authentication behavior and form flow.
+- [x] **LOGIN-01**: Login declares Classic Modern BBS mode and receives the shared Chrome V2 treatment while preserving existing authentication behavior and form flow.
 
 ### Main Menu Dashboard
 
@@ -113,12 +113,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MODE-01 | Phase 17 | Pending |
 | THEME-01 | Phase 17 | Pending |
 | THEME-02 | Phase 17 | Pending |
-| CHROME-01 | Phase 18 | Pending |
-| CHROME-02 | Phase 18 | Pending |
-| CHROME-03 | Phase 18 | Pending |
-| CHROME-04 | Phase 18 | Pending |
-| CHROME-05 | Phase 18 | Pending |
-| LOGIN-01 | Phase 18 | Pending |
+| CHROME-01 | Phase 18 | Complete |
+| CHROME-02 | Phase 18 | Complete |
+| CHROME-03 | Phase 18 | Complete |
+| CHROME-04 | Phase 18 | Complete |
+| CHROME-05 | Phase 18 | Complete |
+| LOGIN-01 | Phase 18 | Complete |
 | HOME-01 | Phase 19 | Pending |
 | HOME-02 | Phase 19 | Pending |
 | HOME-03 | Phase 19 | Pending |
