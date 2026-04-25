@@ -385,6 +385,55 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert %Form{} = new_state
   end
 
+  # --- D-25 A1: enum field value accessor (D-03 / Pitfall 5) ---
+
+  describe "enum field value accessor" do
+    # D-25 D-03 / Pitfall 5: prefs theme-cycle live preview integration path.
+    # Modal.Form.field_value/2 returns the current post-event enum choice so
+    # screens can implement side effects (e.g. theme preview) without submit.
+
+    defp enum_form do
+      Form.init(
+        title: "Theme",
+        fields: [
+          %{name: :theme_id, type: :enum, label: "Theme",
+            choices: [:dark, :light, :amber], value: :dark}
+        ],
+        on_submit: fn _ -> nil end,
+        on_cancel: fn -> nil end
+      )
+    end
+
+    test "field_value/2 returns initial enum choice before any events" do
+      form = enum_form()
+      assert Form.field_value(form, :theme_id) == :dark
+    end
+
+    test "field_value/2 returns updated choice after :down event (cycle to :light)" do
+      form = enum_form()
+      {form_after, _} = Form.handle_event(%{key: :down}, form)
+      assert Form.field_value(form_after, :theme_id) == :light
+    end
+
+    test "field_value/2 returns :amber after two :down events" do
+      form = enum_form()
+      {f1, _} = Form.handle_event(%{key: :down}, form)
+      {f2, _} = Form.handle_event(%{key: :down}, f1)
+      assert Form.field_value(f2, :theme_id) == :amber
+    end
+
+    test "cycling does NOT mark the form :submitted and returns nil action" do
+      form = enum_form()
+      {_f1, action} = Form.handle_event(%{key: :down}, form)
+      assert action == nil
+    end
+
+    test "field_value/2 returns nil for unknown field name" do
+      form = enum_form()
+      assert Form.field_value(form, :nonexistent) == nil
+    end
+  end
+
   # --- D-25 Pitfall 1: shift_tab event-shape parity ---
 
   describe "shift+tab event shapes" do
