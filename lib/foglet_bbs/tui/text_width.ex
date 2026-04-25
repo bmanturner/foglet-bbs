@@ -109,29 +109,27 @@ defmodule Foglet.TUI.TextWidth do
   defp split_at_grapheme_boundary(text, candidate_bytes, width) do
     boundaries = grapheme_boundaries(text)
 
-    cond do
-      candidate_bytes in boundaries ->
-        split_at_bytes(text, candidate_bytes)
+    if candidate_bytes in boundaries do
+      split_at_bytes(text, candidate_bytes)
+    else
+      bytes =
+        boundaries
+        |> Enum.find(fn bytes ->
+          bytes > candidate_bytes and display_width(binary_part(text, 0, bytes)) <= width
+        end)
+        |> case do
+          nil ->
+            boundaries
+            |> Enum.filter(fn bytes ->
+              bytes < candidate_bytes and display_width(binary_part(text, 0, bytes)) <= width
+            end)
+            |> List.last()
 
-      true ->
-        bytes =
-          boundaries
-          |> Enum.find(fn bytes ->
-            bytes > candidate_bytes and display_width(binary_part(text, 0, bytes)) <= width
-          end)
-          |> case do
-            nil ->
-              boundaries
-              |> Enum.filter(fn bytes ->
-                bytes < candidate_bytes and display_width(binary_part(text, 0, bytes)) <= width
-              end)
-              |> List.last()
+          bytes ->
+            bytes
+        end
 
-            bytes ->
-              bytes
-          end
-
-        split_at_bytes(text, bytes || 0)
+      split_at_bytes(text, bytes || 0)
     end
   end
 

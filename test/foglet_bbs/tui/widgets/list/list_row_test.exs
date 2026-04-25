@@ -1,8 +1,8 @@
 defmodule Foglet.TUI.Widgets.List.ListRowTest do
   use ExUnit.Case, async: true
 
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.List.ListRow
 
   # --- Local helpers (copied from MarkdownBody/PostCard test pattern) ---

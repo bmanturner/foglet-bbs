@@ -29,8 +29,8 @@ defmodule Foglet.TUI.Widgets.List.ListRow do
 
   import Raxol.Core.Renderer.View
 
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Theme
 
   @min_title_length 20
   @ellipsis "…"
