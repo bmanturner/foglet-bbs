@@ -2,6 +2,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Widgets.Modal
 
   # Recursively collects all text content strings from the view tree.
@@ -46,7 +47,7 @@ defmodule Foglet.TUI.Widgets.ModalTest do
   end
 
   describe "word-wrap (Gap 3a)" do
-    test "Test A: 120-char message is wrapped so no single text line exceeds 50 chars" do
+    test "Test A: 120-char message is wrapped so no single text line exceeds 50 display columns" do
       # Build a 120-char message with spaces so word_wrap can break it
       msg =
         "This is a very long pending approval message that definitely exceeds fifty characters in total length yes."
@@ -73,8 +74,35 @@ defmodule Foglet.TUI.Widgets.ModalTest do
              "Expected wrapped message lines in tree, found none. All text: #{inspect(all_text)}"
 
       for line <- message_lines do
-        assert String.length(line) <= 50,
-               "Line exceeds 50 chars (#{String.length(line)}): #{inspect(line)}"
+        assert TextWidth.display_width(line) <= 50,
+               "Line exceeds 50 columns (#{TextWidth.display_width(line)}): #{inspect(line)}"
+      end
+    end
+
+    test "Unicode message wraps by display width for CJK and milestone glyphs" do
+      msg =
+        "漢字 cafe\u0301 status ● ◆ ▸ ▾ ✓ × " <>
+          "漢字 cafe\u0301 status ● ◆ ▸ ▾ ✓ × " <>
+          "漢字 cafe\u0301 status ● ◆ ▸ ▾ ✓ ×"
+
+      tree = Modal.render(%Foglet.TUI.Modal{type: :info, message: msg}, theme())
+      all_text = collect_text_content(tree)
+
+      message_lines =
+        Enum.reject(all_text, fn s ->
+          String.trim(s) in [
+            "Info",
+            "[Enter] OK"
+          ]
+        end)
+
+      assert Enum.any?(message_lines, &String.contains?(&1, "漢字"))
+      assert Enum.any?(message_lines, &String.contains?(&1, "●"))
+      assert Enum.any?(message_lines, &String.contains?(&1, "×"))
+
+      for line <- message_lines do
+        assert TextWidth.display_width(line) <= 50,
+               "Line exceeds 50 columns (#{TextWidth.display_width(line)}): #{inspect(line)}"
       end
     end
   end
