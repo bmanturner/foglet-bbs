@@ -34,6 +34,7 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -63,7 +64,7 @@ defmodule Foglet.TUI.Screens.Moderation do
           [text("Moderation is not available.", fg: theme.warning.fg)]
         end
 
-      ScreenFrame.render(state, "Moderation", empty, [{"Q", "Back"}])
+      ScreenFrame.render(state, moderation_chrome(), empty, [{"Q", "Back"}])
     end
   end
 
@@ -115,7 +116,11 @@ defmodule Foglet.TUI.Screens.Moderation do
     ss = synced_screen_state(state)
     theme = Theme.from_state(state)
     content = render_content(ss, theme)
-    ScreenFrame.render(state, "Moderation", content, @key_list)
+    ScreenFrame.render(state, moderation_chrome(), content, @key_list)
+  end
+
+  defp moderation_chrome do
+    %{title: "Moderation", mode: Presentation.mode_for!(:moderation)}
   end
 
   defp render_content(ss, theme) do
