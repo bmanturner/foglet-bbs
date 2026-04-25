@@ -188,9 +188,19 @@ Plans:
 5. Viewport scroll ownership and reply/back navigation remain intact.
 **Plans:** 3 plans
 Plans:
+**Wave 1**
 - [ ] 22-01-PLAN.md — Wave 1 shared `PostCard` reader unit: add reader helper contract tests, compact metadata header, compact `Posts X/N` progress, and guttered markdown body rows while keeping header/progress outside `Viewport` body rows (READER-01, READER-02, READER-03, READER-04).
+
+**Wave 2 *(blocked on Wave 1 completion)***
 - [ ] 22-02-PLAN.md — Wave 2 `PostReader` integration: compose selected post from `PostCard` reader parts, preserve viewport ownership, cache warming, navigation, reply/back, and read-pointer behavior; add focused render assertions for header, message number, gutter, and progress (READER-01, READER-02, READER-03, READER-04).
+
+**Wave 3 *(blocked on Wave 2 completion)***
 - [ ] 22-03-PLAN.md — Wave 3 layout and finish-line validation: add PostReader size-contract smoke tests at `[{64,22},{80,24},{132,50}]` and run focused tests plus `rtk mix precommit` (READER-01, READER-02, READER-03, READER-04).
+
+Cross-cutting constraints:
+- Header and compact progress remain outside `Viewport`; only guttered body rows are assigned to `Viewport.children`.
+- Guttered body rows preserve existing markdown rendering behavior and remain suitable for `Viewport.children`.
+- Compact `Posts X/N` progress is always visible for the selected post.
 **UI hint:** yes
 
 ### Phase 23: Composer Facelift
