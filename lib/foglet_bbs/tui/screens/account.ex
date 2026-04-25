@@ -26,6 +26,7 @@ defmodule Foglet.TUI.Screens.Account do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Account.PrefsForm
   alias Foglet.TUI.Screens.Account.ProfileForm
   alias Foglet.TUI.Screens.Account.SSHKeysActions
@@ -34,7 +35,6 @@ defmodule Foglet.TUI.Screens.Account do
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.ShellVisibility
-  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
