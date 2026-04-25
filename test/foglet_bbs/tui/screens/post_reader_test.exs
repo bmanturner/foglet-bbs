@@ -164,6 +164,85 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
+  describe "render/1 - Phase 22 reader facelift" do
+    test "renders compact reader metadata for the selected post" do
+      post =
+        p2_post(
+          id: "p42",
+          body: "Reader body",
+          inserted_at: DateTime.add(DateTime.utc_now(), -5 * 60, :second),
+          message_number: 42,
+          user: %{handle: "mina"}
+        )
+
+      s = p2_state(%{posts: [post]})
+      flat = flatten_text(PostReader.render(s))
+
+      assert flat =~ "Post 1 of 1"
+      assert flat =~ "#42"
+      assert flat =~ "@mina"
+      assert Regex.match?(~r/\d+[smhd] ago/, flat)
+    end
+
+    test "renders compact progress for longer threads" do
+      posts =
+        Enum.map(1..12, fn idx ->
+          p2_post(
+            id: "p#{idx}",
+            body: "Body #{idx}",
+            message_number: idx,
+            user: %{handle: "mina"}
+          )
+        end)
+
+      ss = PostReader.init_screen_state(selected_post_index: 2)
+      s = p2_state(%{posts: posts, screen_state: %{post_reader: ss}})
+
+      assert PostReader.render(s) |> flatten_text() =~ "Posts 3/12"
+    end
+
+    test "renders guttered selected body text" do
+      s = p2_state(%{posts: [p2_post(body: "Selected body text")]})
+      flat = flatten_text(PostReader.render(s))
+
+      assert flat =~ "│"
+      assert flat =~ "Selected body text"
+    end
+
+    test "keeps markdown rendering delegated and strips raw markdown syntax" do
+      s = p2_state(%{posts: [p2_post(body: "Hello **world**")]})
+      tree = PostReader.render(s)
+      serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
+
+      refute serialized =~ "**world**"
+      assert serialized =~ "world"
+    end
+
+    test "keeps compact header and progress outside viewport children" do
+      s = p2_state(%{posts: [p2_post(body: "Viewport-only body")]})
+      tree = PostReader.render(s)
+      viewport = find_node(tree, &match?(%{id: "post_reader_vp"}, &1))
+      viewport_text = flatten_text(viewport)
+
+      assert viewport_text =~ "Viewport-only body"
+      refute viewport_text =~ "Post 1 of 1"
+      refute viewport_text =~ "Posts 1/1"
+    end
+
+    test "PostReader delegates reader assembly to PostCard reader helper" do
+      source =
+        __ENV__.file
+        |> Path.dirname()
+        |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_reader.ex")
+        |> Path.expand()
+        |> File.read!()
+
+      assert source =~ "PostCard.reader_parts"
+      refute source =~ "PostCard.author_line(post)"
+      refute source =~ ~s(text("Post \#{idx + 1} of \#{total}")
+    end
+  end
+
   test "'n' advances to next post and updates read_position", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
     {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
@@ -367,6 +446,24 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   defp p2_maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
   defp p2_maybe_add_content(_node, acc), do: acc
+
+  defp find_node(tree, predicate) when is_function(predicate, 1) do
+    do_find_node(tree, predicate)
+  end
+
+  defp do_find_node(list, predicate) when is_list(list) do
+    Enum.find_value(list, &do_find_node(&1, predicate))
+  end
+
+  defp do_find_node(%{children: children} = node, predicate) do
+    if predicate.(node), do: node, else: do_find_node(children, predicate)
+  end
+
+  defp do_find_node(node, predicate) when is_map(node) do
+    if predicate.(node), do: node, else: nil
+  end
+
+  defp do_find_node(_other, _predicate), do: nil
 
   # =================================================================
   # RENDER-01: markdown renders without literal \n artifacts
