@@ -86,7 +86,6 @@ if config_env() == :prod do
     secret_key_base: secret_key_base
 
   config :foglet_bbs, :ssh,
-    port: String.to_integer(System.get_env("SSH_PORT") || "2222"),
     host_key_dir: System.get_env("SSH_HOST_KEY_DIR") || "priv/ssh"
 
   # ## SSL Support

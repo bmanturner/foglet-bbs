@@ -1,5 +1,7 @@
 app = "foglet-bbs"
 primary_region = "iad"
+kill_signal = "SIGTERM"
+kill_timeout = "30s"
 
 [env]
   ECTO_IPV6 = "true"
@@ -15,6 +17,13 @@ primary_region = "iad"
   auto_stop_machines = "stop"
   auto_start_machines = true
   min_machines_running = 0
+
+  [[http_service.checks]]
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/"
 
 [deploy]
   release_command = "/app/bin/foglet_bbs eval \"Ecto.Migrator.with_repo(FogletBbs.Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true); priv = :foglet_bbs |> :code.priv_dir() |> List.to_string(); Code.eval_file(Path.join(priv, \\\"repo/seeds/config.exs\\\")) end)\""
@@ -37,6 +46,7 @@ primary_region = "iad"
   memory = "512mb"
   cpu_kind = "shared"
   cpus = 1
+  swap_size_mb = 256
 
 # One-time setup commands, in order:
 #   fly auth login
