@@ -16,8 +16,9 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets.Chrome.ClockFormatter
+  alias Foglet.TUI.Widgets.Chrome.{BreadcrumbBar, ClockFormatter}
 
   @doc """
   Renders the status bar.
@@ -33,10 +34,18 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   behind the visible characters only — the gap between stays the
   terminal default.
   """
-  @spec render(map(), String.t()) :: any()
-  def render(state, title) do
+  def render(state, title), do: render(state, title, [])
+
+  @doc """
+  Renders the status bar with optional Chrome V2 title data.
+
+  `title` may be the legacy screen title, breadcrumb parts, or a small chrome
+  model containing `:breadcrumb_parts`, `:parts`, or `:title`.
+  """
+  def render(state, title, opts) do
     theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
-    right = right_text(state)
+    left = left_text(title, opts)
+    right = status_atoms(state) |> Enum.join(" | ")
 
     fg = Map.get(theme.status_bar, :fg)
     bg = Map.get(theme.status_bar, :bg)
@@ -47,18 +56,88 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
     # caller-computed widths.
     row style: %{justify_content: :space_between} do
       [
-        text(" Foglet BBS — #{title}", fg: fg, bg: bg),
+        text(" #{left}", fg: fg, bg: bg),
         text("#{right} ", fg: fg, bg: bg)
       ]
     end
   end
 
-  defp right_text(%{current_user: %{handle: handle} = user} = state) when is_binary(handle) do
-    clock = ClockFormatter.format(clock_instant(state), user)
-    "@#{handle} | #{clock}"
+  @doc """
+  Returns ordered right-side status atoms for the state's presentation mode.
+
+  Presentation mode is display metadata only; this function does not authorize
+  or unlock any operator behavior.
+  """
+  @spec status_atoms(map()) :: [String.t()]
+  def status_atoms(state) when is_map(state) do
+    mode = Presentation.mode_for!(Map.get(state, :current_screen))
+
+    case authenticated_user(state) do
+      nil -> ["guest"]
+      user -> user_status_atoms(state, user, mode)
+    end
   end
 
-  defp right_text(_state), do: "guest"
+  defp left_text(parts, opts) when is_list(parts), do: BreadcrumbBar.format(parts, opts)
+
+  defp left_text(%{} = model, opts) do
+    cond do
+      is_list(Map.get(model, :breadcrumb_parts)) ->
+        BreadcrumbBar.format(Map.get(model, :breadcrumb_parts), opts)
+
+      is_list(Map.get(model, :parts)) ->
+        BreadcrumbBar.format(Map.get(model, :parts), opts)
+
+      is_binary(Map.get(model, :title)) ->
+        legacy_title(Map.get(model, :title))
+
+      true ->
+        legacy_title("")
+    end
+  end
+
+  defp left_text(title, _opts), do: legacy_title(title)
+
+  defp legacy_title(title), do: "Foglet BBS — #{title}"
+
+  defp user_status_atoms(state, user, :bbs) do
+    [
+      user_atom(user),
+      unread_atom(state),
+      present_string(Map.get(state, :activity_label)),
+      ClockFormatter.format(clock_instant(state), user)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp user_status_atoms(state, user, :operator) do
+    [
+      user_atom(user),
+      scope_atom(state),
+      present_string(Map.get(state, :system_status)),
+      ClockFormatter.format(clock_instant(state), user)
+    ]
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp authenticated_user(%{current_user: %{handle: handle} = user}) when is_binary(handle),
+    do: user
+
+  defp authenticated_user(_state), do: nil
+
+  defp user_atom(%{handle: handle}), do: "@#{handle}"
+
+  defp unread_atom(%{unread_count: count}) when is_integer(count) and count > 0,
+    do: "unread #{count}"
+
+  defp unread_atom(_state), do: nil
+
+  defp scope_atom(%{operator_scope: scope}), do: present_string(scope, "scope ")
+  defp scope_atom(_state), do: nil
+
+  defp present_string(value, prefix \\ "")
+  defp present_string(value, _prefix) when value in [nil, ""], do: nil
+  defp present_string(value, prefix), do: prefix <> to_string(value)
 
   defp clock_instant(state) do
     session_context = Map.get(state, :session_context) || %{}
