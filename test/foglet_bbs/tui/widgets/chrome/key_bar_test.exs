@@ -25,6 +25,21 @@ defmodule Foglet.TUI.Widgets.Chrome.KeyBarTest do
   defp theme, do: Theme.default()
 
   describe "render/3 width contract" do
+    test "delegates legacy keys into grouped command chrome" do
+      keys = [
+        {"J/K", "Navigate"},
+        {"Enter", "Select"},
+        {"Q", "Back"}
+      ]
+
+      flat = KeyBar.render(theme(), keys, width: 80) |> flatten_text()
+
+      assert flat =~ "System"
+      assert flat =~ "Navigate"
+      assert flat =~ "Q Back"
+      assert flat =~ "J/K Navigate"
+    end
+
     test "ASCII hints stay within a 64-column keybar" do
       keys = [
         {"J/K", "Navigate"},
