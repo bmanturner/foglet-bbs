@@ -989,13 +989,13 @@ defmodule Foglet.TUI.AppTest do
 
     test "{:boards_loaded, boards} clears a cached board_list tree", %{state: state} do
       fake_boards = [%{id: "b1", name: "General", unread_count: 0}]
-      tree = %{selected_id: {:board, "b1"}}
+      board_tree = %{selected_id: {:board, "b1"}}
 
       state = %{
         state
         | screen_state: %{
             board_list: %Foglet.TUI.Screens.BoardList.State{
-              tree: tree,
+              board_tree: board_tree,
               feedback: "Subscribed"
             }
           }
@@ -1004,7 +1004,7 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:boards_loaded, fake_boards}, state)
 
       assert new_state.board_list == fake_boards
-      assert new_state.screen_state.board_list.tree == nil
+      assert new_state.screen_state.board_list.board_tree == nil
       assert new_state.screen_state.board_list.feedback == "Subscribed"
       assert cmds == []
     end
