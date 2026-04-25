@@ -57,9 +57,9 @@ defmodule Foglet.TUI.Widgets.Modal do
       |> Enum.map(fn line -> text(line, fg: msg_fg) end)
 
     column [] do
-      [text(" #{title} ", fg: theme.title.fg, style: [:bold]), divider()] ++
+      [title_row(title, theme), divider_row(theme)] ++
         wrapped_lines ++
-        [text(key_hint_for(type), fg: theme.dim.fg)]
+        [footer_row(type, theme)]
     end
   end
 
@@ -76,8 +76,41 @@ defmodule Foglet.TUI.Widgets.Modal do
   defp color_for_type(:confirm, %Theme{} = theme), do: theme.accent.fg
   defp color_for_type(_default, %Theme{} = theme), do: theme.primary.fg
 
-  defp key_hint_for(:confirm), do: "[Y] Yes   [N] No"
-  defp key_hint_for(_), do: "[Enter] OK"
+  defp title_row(title, theme) do
+    row style: %{gap: 0} do
+      [
+        text("▌ ", fg: theme.accent.fg),
+        text(title, fg: theme.title.fg, style: [:bold])
+      ]
+    end
+  end
+
+  defp divider_row(theme), do: text(String.duplicate("─", @wrap_width), fg: theme.border.fg)
+
+  defp footer_row(:confirm, theme) do
+    row style: %{gap: 0} do
+      [
+        text("[Y]", fg: theme.accent.fg, style: [:bold]),
+        text(" Yes   ", fg: theme.primary.fg),
+        text("[N]", fg: theme.accent.fg, style: [:bold]),
+        text(" No", fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  defp footer_row(type, theme) do
+    row style: %{gap: 0} do
+      [
+        text("[Enter]", fg: theme.accent.fg, style: [:bold]),
+        text(" OK", fg: footer_label_color(type, theme))
+      ]
+    end
+  end
+
+  defp footer_label_color(:error, theme), do: theme.error.fg
+  defp footer_label_color(:warning, theme), do: theme.warning.fg
+  defp footer_label_color(:success, theme), do: theme.success.fg
+  defp footer_label_color(_type, theme), do: theme.dim.fg
 
   # Wrap a string to <= max_width columns, preserving whitespace word breaks
   # while chunking oversized tokens so modal bodies cannot overflow.

@@ -1,6 +1,8 @@
 defmodule Foglet.TUI.Widgets.ModalTest do
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1, assert_text_run: 3]
+
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal
@@ -28,6 +30,20 @@ defmodule Foglet.TUI.Widgets.ModalTest do
 
   defp theme, do: Theme.default()
 
+  defp distinctive_theme do
+    %Theme{
+      border: %{fg: "#modal-border"},
+      title: %{fg: "#modal-title"},
+      accent: %{fg: "#modal-accent"},
+      primary: %{fg: "#modal-primary"},
+      dim: %{fg: "#modal-dim"},
+      info: %{fg: "#modal-info"},
+      success: %{fg: "#modal-success"},
+      warning: %{fg: "#modal-warning"},
+      error: %{fg: "#modal-error"}
+    }
+  end
+
   describe "render/2 (Phase 7 thin adapter)" do
     test "returns a non-nil view element for :info" do
       assert _ = Modal.render(%Foglet.TUI.Modal{type: :info, message: "Hello"}, theme())
@@ -42,7 +58,9 @@ defmodule Foglet.TUI.Widgets.ModalTest do
     end
 
     test "raises when :message is missing" do
-      assert_raise FunctionClauseError, fn -> Modal.render(%{type: :info}, theme()) end
+      assert_raise FunctionClauseError, fn ->
+        apply(Modal, :render, [%{type: :info}, theme()])
+      end
     end
   end
 
@@ -65,10 +83,16 @@ defmodule Foglet.TUI.Widgets.ModalTest do
               "Success",
               "Warning",
               "Confirm",
-              "[Enter] OK",
-              "[Y] Yes   [N] No"
+              "▌",
+              "─",
+              "[Enter]",
+              "OK",
+              "[Y]",
+              "Yes",
+              "[N]",
+              "No"
             ] or
-            (String.starts_with?(String.trim(s), " ") and String.ends_with?(String.trim(s), " "))
+            String.match?(s, ~r/^─+$/)
         end)
 
       assert message_lines != [],
@@ -93,8 +117,10 @@ defmodule Foglet.TUI.Widgets.ModalTest do
         Enum.reject(all_text, fn s ->
           String.trim(s) in [
             "Info",
-            "[Enter] OK"
-          ]
+            "▌",
+            "[Enter]",
+            "OK"
+          ] or String.match?(s, ~r/^─+$/)
         end)
 
       assert Enum.any?(message_lines, &String.contains?(&1, "漢字"))
@@ -117,8 +143,10 @@ defmodule Foglet.TUI.Widgets.ModalTest do
         Enum.reject(all_text, fn s ->
           String.trim(s) in [
             "Info",
-            "[Enter] OK"
-          ]
+            "▌",
+            "[Enter]",
+            "OK"
+          ] or String.match?(s, ~r/^─+$/)
         end)
 
       assert length(message_lines) > 1
@@ -133,25 +161,46 @@ defmodule Foglet.TUI.Widgets.ModalTest do
   describe "key hint (Gap 3c)" do
     test "Test B: :info modal ends with '[Enter] OK' (no Esc)" do
       tree = Modal.render(%Foglet.TUI.Modal{type: :info, message: "short"}, theme())
-      all_text = collect_text_content(tree)
+      flat = flatten_text(tree)
 
-      assert "[Enter] OK" in all_text,
-             "Expected '[Enter] OK' in text elements, found: #{inspect(all_text)}"
+      assert flat =~ "[Enter] OK"
 
-      refute Enum.any?(all_text, &String.contains?(&1, "Esc")),
-             "Expected no 'Esc' in key hint, found: #{inspect(all_text)}"
+      refute flat =~ "Esc"
     end
 
     test "Test C: :confirm modal still shows '[Y] Yes   [N] No'" do
       tree = Modal.render(%Foglet.TUI.Modal{type: :confirm, message: "yn"}, theme())
-      all_text = collect_text_content(tree)
+      flat = flatten_text(tree)
 
-      assert "[Y] Yes   [N] No" in all_text,
-             "Expected '[Y] Yes   [N] No' in text elements, found: #{inspect(all_text)}"
+      assert flat =~ "[Y] Yes   [N] No"
     end
   end
 
   describe "render/2 — theme slot routing (Phase 7)" do
+    test "non-form modal body has compact title, divider, message, and action footer regions" do
+      t = distinctive_theme()
+      tree = Modal.render(%Foglet.TUI.Modal{type: :info, title: "Notice", message: "Ready"}, t)
+
+      assert flatten_text(tree) == "▌ Notice#{String.duplicate("─", 50)}Ready[Enter] OK"
+      assert_text_run(tree, "▌ ", fg: t.accent.fg)
+      assert_text_run(tree, "Notice", fg: t.title.fg, style: [:bold])
+      assert_text_run(tree, String.duplicate("─", 50), fg: t.border.fg)
+      assert_text_run(tree, "Ready", fg: t.info.fg)
+      assert_text_run(tree, "[Enter]", fg: t.accent.fg, style: [:bold])
+      assert_text_run(tree, " OK", fg: t.dim.fg)
+    end
+
+    test "confirm footer styles keys and labels separately" do
+      t = distinctive_theme()
+      tree = Modal.render(%Foglet.TUI.Modal{type: :confirm, message: "Proceed?"}, t)
+
+      assert flatten_text(tree) =~ "[Y] Yes   [N] No"
+      assert_text_run(tree, "[Y]", fg: t.accent.fg, style: [:bold])
+      assert_text_run(tree, " Yes   ", fg: t.primary.fg)
+      assert_text_run(tree, "[N]", fg: t.accent.fg, style: [:bold])
+      assert_text_run(tree, " No", fg: t.dim.fg)
+    end
+
     test ":error modal uses theme.error.fg for message text" do
       t = theme()
       tree = Modal.render(%Foglet.TUI.Modal{type: :error, message: "fail"}, t)

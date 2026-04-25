@@ -80,7 +80,9 @@ defmodule Foglet.TUI.WidgetHelpers do
 
     case Enum.find(runs, &String.contains?(run_content(&1), content)) do
       nil ->
-        flunk("expected text run containing #{inspect(content)}, got #{inspect(Enum.map(runs, &run_content/1))}")
+        flunk(
+          "expected text run containing #{inspect(content)}, got #{inspect(Enum.map(runs, &run_content/1))}"
+        )
 
       run ->
         Enum.each(expected, fn {key, value} ->

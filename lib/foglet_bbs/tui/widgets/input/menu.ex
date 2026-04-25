@@ -227,24 +227,56 @@ defmodule Foglet.TUI.Widgets.Input.Menu do
     cond do
       disabled? ->
         row style: %{gap: 0} do
-          row_runs(indent, glyph, label_cell, meta, shortcut, theme.dim, theme.dim, theme.dim, [:dim])
+          row_runs(indent, glyph, label_cell, meta, shortcut, theme.dim, theme.dim, theme.dim, [
+            :dim
+          ])
         end
 
       selected? ->
         row style: %{gap: 0} do
-          row_runs(indent, glyph, label_cell, meta, shortcut, theme.accent, theme.selected, theme.dim, [
-            :bold
-          ])
+          row_runs(
+            indent,
+            glyph,
+            label_cell,
+            meta,
+            shortcut,
+            theme.accent,
+            theme.selected,
+            theme.dim,
+            [
+              :bold
+            ]
+          )
         end
 
       true ->
         row style: %{gap: 0} do
-          row_runs(indent, glyph, label_cell, meta, shortcut, theme.accent, theme.unselected, theme.dim, [])
+          row_runs(
+            indent,
+            glyph,
+            label_cell,
+            meta,
+            shortcut,
+            theme.accent,
+            theme.unselected,
+            theme.dim,
+            []
+          )
         end
     end
   end
 
-  defp row_runs(indent, glyph, label_cell, meta, shortcut, glyph_slot, label_slot, meta_slot, label_style) do
+  defp row_runs(
+         indent,
+         glyph,
+         label_cell,
+         meta,
+         shortcut,
+         glyph_slot,
+         label_slot,
+         meta_slot,
+         label_style
+       ) do
     secondary_style = if label_style == [:dim], do: [:dim], else: []
 
     [
