@@ -51,7 +51,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 - [x] **Phase 19: Main Menu Dashboard** - The home screen becomes a selectable, social BBS front porch with activity context. (completed 2026-04-25)
 - [ ] **Phase 20: Rich Rows and Thread Flow** - Thread browsing uses semantic glyphs, width-safe metadata, and focused details.
 - [ ] **Phase 21: Board Directory Facelift** - Board browsing presents categories, board state, subscriptions, and details as structured rows.
-- [ ] **Phase 22: Post Reader Facelift** - Thread reading emphasizes message numbers, post metadata, body readability, and progress.
+- [x] **Phase 22: Post Reader Facelift** - Thread reading emphasizes message numbers, post metadata, body readability, and progress. (completed 2026-04-25)
 - [ ] **Phase 23: Composer Facelift** - New-thread and reply composition use focused editor surfaces with preview and counters.
 - [ ] **Phase 24: Operator Console Primitives** - Shared badges, key/value grids, table presets, inspectors, and modal form treatment land before screen conversion.
 - [ ] **Phase 25: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts.
@@ -186,16 +186,16 @@ Plans:
 3. Post rendering uses the shared `PostCard` or an equivalent post unit rather than bespoke loose text rows.
 4. Longer threads show progress in a 64x22-safe form, using richer visual indicators only when space permits.
 5. Viewport scroll ownership and reply/back navigation remain intact.
-**Plans:** 3 plans
+**Plans:** 3/3 plans complete
 Plans:
 **Wave 1**
-- [ ] 22-01-PLAN.md — Wave 1 shared `PostCard` reader unit: add reader helper contract tests, compact metadata header, compact `Posts X/N` progress, and guttered markdown body rows while keeping header/progress outside `Viewport` body rows (READER-01, READER-02, READER-03, READER-04).
+- [x] 22-01-PLAN.md — Wave 1 shared `PostCard` reader unit: add reader helper contract tests, compact metadata header, compact `Posts X/N` progress, and guttered markdown body rows while keeping header/progress outside `Viewport` body rows (READER-01, READER-02, READER-03, READER-04).
 
 **Wave 2 *(blocked on Wave 1 completion)***
-- [ ] 22-02-PLAN.md — Wave 2 `PostReader` integration: compose selected post from `PostCard` reader parts, preserve viewport ownership, cache warming, navigation, reply/back, and read-pointer behavior; add focused render assertions for header, message number, gutter, and progress (READER-01, READER-02, READER-03, READER-04).
+- [x] 22-02-PLAN.md — Wave 2 `PostReader` integration: compose selected post from `PostCard` reader parts, preserve viewport ownership, cache warming, navigation, reply/back, and read-pointer behavior; add focused render assertions for header, message number, gutter, and progress (READER-01, READER-02, READER-03, READER-04).
 
 **Wave 3 *(blocked on Wave 2 completion)***
-- [ ] 22-03-PLAN.md — Wave 3 layout and finish-line validation: add PostReader size-contract smoke tests at `[{64,22},{80,24},{132,50}]` and run focused tests plus `rtk mix precommit` (READER-01, READER-02, READER-03, READER-04).
+- [x] 22-03-PLAN.md — Wave 3 layout and finish-line validation: add PostReader size-contract smoke tests at `[{64,22},{80,24},{132,50}]` and run focused tests plus `rtk mix precommit` (READER-01, READER-02, READER-03, READER-04).
 
 Cross-cutting constraints:
 - Header and compact progress remain outside `Viewport`; only guttered body rows are assigned to `Viewport.children`.
@@ -306,7 +306,7 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 19. Main Menu Dashboard | v1.3 | 3/3 | Complete    | 2026-04-25 |
 | 20. Rich Rows and Thread Flow | v1.3 | 0/6 | Pending | - |
 | 21. Board Directory Facelift | v1.3 | 0/TBD | Pending | - |
-| 22. Post Reader Facelift | v1.3 | 0/TBD | Pending | - |
+| 22. Post Reader Facelift | v1.3 | 3/3 | Complete   | 2026-04-25 |
 | 23. Composer Facelift | v1.3 | 3/4 | In Progress|  |
 | 24. Operator Console Primitives | v1.3 | 0/6 | Pending | - |
 | 25. Operator Console Conversion | v1.3 | 0/TBD | Pending | - |

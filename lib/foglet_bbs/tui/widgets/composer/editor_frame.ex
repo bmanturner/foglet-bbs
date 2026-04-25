@@ -30,6 +30,18 @@ defmodule Foglet.TUI.Widgets.Composer.EditorFrame do
           required(:count) => non_neg_integer(),
           required(:limit) => pos_integer()
         }
+  @type rendered_frame :: %{
+          required(:type) => :box,
+          required(:children) => list(),
+          required(:title) => term(),
+          required(:padding) => tuple(),
+          required(:margin) => tuple(),
+          required(:border) => term(),
+          required(:fg) => term(),
+          required(:bg) => term(),
+          required(:size) => term(),
+          required(:style) => term()
+        }
 
   @doc """
   Renders a composer frame around already-rendered child content.
@@ -49,7 +61,7 @@ defmodule Foglet.TUI.Widgets.Composer.EditorFrame do
     * `:error` — inline error string
     * `:width` / `:height` — shell sizing hints
   """
-  @spec render(keyword()) :: any()
+  @spec render(keyword()) :: rendered_frame()
   def render(opts) when is_list(opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
     mode = Keyword.fetch!(opts, :mode)
