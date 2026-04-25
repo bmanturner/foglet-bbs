@@ -3,9 +3,9 @@ gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: executing
-stopped_at: Phase 17 context gathered (assumptions mode)
-last_updated: "2026-04-25T13:43:08.460Z"
-last_activity: 2026-04-25 -- Phase 16 planning complete
+stopped_at: Phase 18 context gathered (assumptions mode)
+last_updated: "2026-04-25T13:46:04.059Z"
+last_activity: 2026-04-25 -- Phase 16 execution started
 progress:
   total_phases: 10
   completed_phases: 0
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-25)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 16 Unicode Width Foundation.
+**Current focus:** Phase 16 — unicode-width-foundation
 
 ## Current Position
 
-Phase: 16 - Unicode Width Foundation
-Plan: -
-Status: Ready to execute
-Last activity: 2026-04-25 -- Phase 16 planning complete
+Phase: 16 (unicode-width-foundation) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 16
+Last activity: 2026-04-25 -- Phase 16 execution started
 
 Progress: [----------] 0%
 
@@ -105,6 +105,6 @@ Items acknowledged and carried forward from v1.1 close:
 
 ## Session Continuity
 
-Last session: 2026-04-25T13:32:05.026Z
-Stopped at: Phase 17 context gathered (assumptions mode)
-Resume file: .planning/phases/17-theme-and-mode-metadata/17-CONTEXT.md
+Last session: 2026-04-25T13:46:04.054Z
+Stopped at: Phase 18 context gathered (assumptions mode)
+Resume file: .planning/phases/18-chrome-v2/18-CONTEXT.md
