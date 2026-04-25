@@ -251,10 +251,38 @@ defmodule Foglet.ConfigTest do
     end
   end
 
+  describe "priv/repo/seeds/config.exs" do
+    setup do
+      original_relay = System.get_env("FOGLET_SMTP_RELAY")
+      original_host = System.get_env("FOGLET_SMTP_HOST")
+
+      on_exit(fn ->
+        restore_env("FOGLET_SMTP_RELAY", original_relay)
+        restore_env("FOGLET_SMTP_HOST", original_host)
+        Config.invalidate("delivery_mode")
+      end)
+
+      :ok
+    end
+
+    test "seeds delivery_mode as email when SMTP is enabled" do
+      Repo.delete_all(from e in Entry, where: e.key == "delivery_mode")
+      Config.invalidate("delivery_mode")
+
+      System.put_env("FOGLET_SMTP_RELAY", "smtp.example.test")
+      Code.eval_file(Path.expand("../../priv/repo/seeds/config.exs", __DIR__))
+
+      assert Config.get!("delivery_mode") == "email"
+    end
+  end
+
   # Helper actors — plain structs (no DB insert needed; policy is pure).
   defp sysop_actor, do: %User{role: :sysop, status: :active, deleted_at: nil}
   defp mod_actor, do: %User{role: :mod, status: :active, deleted_at: nil}
   defp regular_user_actor, do: %User{role: :user, status: :active, deleted_at: nil}
+
+  defp restore_env(key, nil), do: System.delete_env(key)
+  defp restore_env(key, value), do: System.put_env(key, value)
 
   describe "put/3 (actor-aware, D-19)" do
     test "sysop can write a valid key/value — returns {:ok, %Entry{}} and value is readable via get!/1" do
