@@ -57,6 +57,20 @@ defmodule Foglet.TUI.ThemeTest do
     end
   end
 
+  describe "slot_keys/0 (THEME-01)" do
+    test "includes every required facelift state slot" do
+      for slot <- required_slots() do
+        assert slot in Theme.slot_keys()
+      end
+    end
+
+    test "all required slots resolve to non-empty maps for every theme id" do
+      for id <- Theme.ids(), slot <- required_slots() do
+        assert non_empty_style?(Map.fetch!(Theme.resolve(id), slot))
+      end
+    end
+  end
+
   describe "resolve/1" do
     test "returns non-empty semantic theme slots for every registered theme id" do
       for id <- Theme.ids() do
@@ -68,6 +82,8 @@ defmodule Foglet.TUI.ThemeTest do
       end
     end
   end
+
+  defp required_slots, do: [:success, :info, :badge, :selected, :dim, :warning, :error, :accent]
 
   defp non_empty_style?(style), do: is_map(style) and map_size(style) > 0
 end
