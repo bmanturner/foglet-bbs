@@ -16,7 +16,10 @@ defmodule Foglet.TUI.WidgetHelpers do
   `import Foglet.TUI.WidgetHelpers` from a widget test file.
   """
 
+  import ExUnit.Assertions
+
   @color_names ~w(red green cyan yellow blue magenta white black)
+  @milestone_glyphs ~w(▌ ✓ × ● ◇ ▰ ▱)
 
   @doc """
   Flattens a Raxol render tree to a single string by concatenating the
@@ -33,6 +36,12 @@ defmodule Foglet.TUI.WidgetHelpers do
   """
   @spec color_names() :: [String.t()]
   def color_names, do: @color_names
+
+  @doc """
+  Returns the representative milestone glyphs widget visual contracts pin.
+  """
+  @spec milestone_glyphs() :: [String.t()]
+  def milestone_glyphs, do: @milestone_glyphs
 
   @doc """
   True when `serialized` contains the atom literal `:<color>` as a
@@ -54,6 +63,33 @@ defmodule Foglet.TUI.WidgetHelpers do
     # :<color>   : the literal colon + color name
     # (?![\w-])  : no trailing word-char or hyphen
     Regex.match?(~r/(?<![\w-]):#{color}(?![\w-])/, serialized)
+  end
+
+  @doc """
+  Returns text-bearing nodes in document order for targeted style-run checks.
+  """
+  @spec text_runs(any()) :: [map()]
+  def text_runs(tree), do: tree |> collect_text_runs([]) |> Enum.reverse()
+
+  @doc """
+  Asserts that a text run containing `content` exists with matching style keys.
+  """
+  @spec assert_text_run(any(), String.t(), keyword()) :: map()
+  def assert_text_run(tree, content, expected) when is_binary(content) and is_list(expected) do
+    runs = text_runs(tree)
+
+    case Enum.find(runs, &String.contains?(run_content(&1), content)) do
+      nil ->
+        flunk("expected text run containing #{inspect(content)}, got #{inspect(Enum.map(runs, &run_content/1))}")
+
+      run ->
+        Enum.each(expected, fn {key, value} ->
+          assert run_value(run, key) == value,
+                 "expected #{inspect(content)} run #{key} to be #{inspect(value)}, got #{inspect(run_value(run, key))}"
+        end)
+
+        run
+    end
   end
 
   # --- private ---
@@ -78,4 +114,30 @@ defmodule Foglet.TUI.WidgetHelpers do
     do: [content | acc]
 
   defp maybe_add_content(_node, acc), do: acc
+
+  defp collect_text_runs(nil, acc), do: acc
+
+  defp collect_text_runs(list, acc) when is_list(list),
+    do: Enum.reduce(list, acc, &collect_text_runs/2)
+
+  defp collect_text_runs(%{children: children} = node, acc) do
+    acc = maybe_add_run(node, acc)
+    collect_text_runs(children, acc)
+  end
+
+  defp collect_text_runs(node, acc) when is_map(node), do: maybe_add_run(node, acc)
+  defp collect_text_runs(_other, acc), do: acc
+
+  defp maybe_add_run(%{content: content} = node, acc) when is_binary(content), do: [node | acc]
+  defp maybe_add_run(%{text: text} = node, acc) when is_binary(text), do: [node | acc]
+  defp maybe_add_run(_node, acc), do: acc
+
+  defp run_content(%{content: content}) when is_binary(content), do: content
+  defp run_content(%{text: text}) when is_binary(text), do: text
+  defp run_content(_run), do: ""
+
+  defp run_value(%{style: style}, key) when is_map(style) and is_map_key(style, key),
+    do: Map.fetch!(style, key)
+
+  defp run_value(run, key), do: Map.get(run, key)
 end
