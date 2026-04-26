@@ -328,6 +328,31 @@ defmodule Foglet.PostsTest do
     end
   end
 
+  describe "delete_post/3 actor-aware gate" do
+    test "sysop can soft-delete a post" do
+      board = setup_board_with_server()
+      user = user_fixture()
+      sysop = active_user_fixture(%{role: :sysop})
+      {thread, _root} = setup_thread(board, user)
+
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Gone"})
+
+      assert {:ok, deleted} = Foglet.Posts.delete_post(sysop, post, "mod action")
+      assert deleted.deleted_at != nil
+    end
+
+    test "unauthorized actor is forbidden" do
+      board = setup_board_with_server()
+      user = user_fixture()
+      regular = active_user_fixture()
+      {thread, _root} = setup_thread(board, user)
+
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Gone"})
+
+      assert {:error, :forbidden} = Foglet.Posts.delete_post(regular, post, nil)
+    end
+  end
+
   describe "scope_for/1 (D-08)" do
     test "returns {:board, board_id} for a Post struct" do
       post = %Foglet.Posts.Post{

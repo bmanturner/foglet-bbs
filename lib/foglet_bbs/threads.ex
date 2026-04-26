@@ -176,6 +176,22 @@ defmodule Foglet.Threads do
 
   # ---------- Mod/sysop operations (BOARD-12) ----------
 
+  @doc """
+  Lock a thread as the given actor (mod/sysop).
+
+  Gates via `Bodyguard.permit/4` before delegating to the trusted single-arity
+  variant. Returns `{:error, :forbidden}` when the actor is not authorized.
+  Prefer this arity for general callers that have an actor in scope.
+  """
+  @spec lock_thread(User.t() | nil, Thread.t()) ::
+          {:ok, Thread.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def lock_thread(actor, %Thread{} = thread) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :lock_thread, actor, scope_for(thread)) do
+      lock_thread(thread)
+    end
+  end
+
+  # Trusted internal variant; callers MUST authorize. Prefer the actor-aware arity above for general callers.
   @doc "Lock a thread (mod/sysop). Returns {:ok, thread} or {:error, changeset}."
   @spec lock_thread(Thread.t()) :: {:ok, Thread.t()} | {:error, Ecto.Changeset.t()}
   def lock_thread(%Thread{} = thread) do
@@ -200,6 +216,22 @@ defmodule Foglet.Threads do
     thread |> Thread.sticky_changeset(false) |> Repo.update()
   end
 
+  @doc """
+  Move a thread to another board as the given actor (mod/sysop — BOARD-12).
+
+  Gates via `Bodyguard.permit/4` before delegating to the trusted two-arity
+  variant. Returns `{:error, :forbidden}` when the actor is not authorized.
+  Prefer this arity for general callers that have an actor in scope.
+  """
+  @spec move_thread(User.t() | nil, Thread.t(), String.t()) ::
+          {:ok, Thread.t()} | {:error, any()} | {:error, :forbidden}
+  def move_thread(actor, %Thread{} = thread, new_board_id) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :move_thread, actor, scope_for(thread)) do
+      move_thread(thread, new_board_id)
+    end
+  end
+
+  # Trusted internal variant; callers MUST authorize. Prefer the actor-aware arity above for general callers.
   @doc """
   Move a thread to another board (mod/sysop — BOARD-12).
 

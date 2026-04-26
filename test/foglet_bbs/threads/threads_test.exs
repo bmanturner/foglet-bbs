@@ -329,6 +329,66 @@ defmodule Foglet.ThreadsTest do
     end
   end
 
+  describe "lock_thread/2 actor-aware gate" do
+    test "sysop can lock a thread" do
+      {board, _pid} = setup_board_with_server()
+      user = user_fixture()
+      sysop = user_with_role!(:sysop)
+
+      {:ok, %{thread: thread}} =
+        Foglet.Threads.create_thread(board.id, user.id, %{title: "T", body: "b"})
+
+      assert {:ok, locked} = Foglet.Threads.lock_thread(sysop, thread)
+      assert locked.locked == true
+    end
+
+    test "unauthorized actor is forbidden" do
+      {board, _pid} = setup_board_with_server()
+      user = user_fixture()
+      regular = user_with_role!(:user)
+
+      {:ok, %{thread: thread}} =
+        Foglet.Threads.create_thread(board.id, user.id, %{title: "T", body: "b"})
+
+      assert {:error, :forbidden} = Foglet.Threads.lock_thread(regular, thread)
+    end
+  end
+
+  describe "move_thread/3 actor-aware gate" do
+    test "sysop can move a thread" do
+      category = category_fixture()
+      board_a = board_fixture(category)
+      board_b = board_fixture(category)
+      user = user_fixture()
+      sysop = user_with_role!(:sysop)
+
+      allow_board_server!(board_a.id)
+      allow_board_server!(board_b.id)
+
+      {:ok, %{thread: thread}} =
+        Foglet.Threads.create_thread(board_a.id, user.id, %{title: "T", body: "b"})
+
+      assert {:ok, moved} = Foglet.Threads.move_thread(sysop, thread, board_b.id)
+      assert moved.board_id == board_b.id
+    end
+
+    test "unauthorized actor is forbidden" do
+      category = category_fixture()
+      board_a = board_fixture(category)
+      board_b = board_fixture(category)
+      user = user_fixture()
+      regular = user_with_role!(:user)
+
+      allow_board_server!(board_a.id)
+      allow_board_server!(board_b.id)
+
+      {:ok, %{thread: thread}} =
+        Foglet.Threads.create_thread(board_a.id, user.id, %{title: "T", body: "b"})
+
+      assert {:error, :forbidden} = Foglet.Threads.move_thread(regular, thread, board_b.id)
+    end
+  end
+
   describe "list_threads/2 — unread annotation (LIST-03)" do
     test "returns empty list for a board with no threads" do
       {board, _pid} = setup_board_with_server()

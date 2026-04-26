@@ -128,6 +128,24 @@ defmodule Foglet.Posts do
   # ---------- Post soft-delete (BOARD-11) ----------
 
   @doc """
+  Soft-delete a post as the given actor (mod/sysop).
+
+  Gates via `Bodyguard.permit/4` before delegating to the trusted single-arity
+  variant. Returns `{:error, :forbidden}` when the actor is not authorized.
+  Prefer this arity for general callers that have an actor in scope.
+
+  `reason` is optional — nil for user self-delete, string for mod action.
+  """
+  @spec delete_post(User.t() | nil, Post.t(), String.t() | nil) ::
+          {:ok, Post.t()} | {:error, Ecto.Changeset.t()} | {:error, :forbidden}
+  def delete_post(actor, %Post{} = post, reason) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :delete_post, actor, scope_for(post)) do
+      delete_post(post, reason)
+    end
+  end
+
+  # Trusted internal variant; callers MUST authorize. Prefer the actor-aware arity above for general callers.
+  @doc """
   Soft-delete a post. Sets deleted_at; message number is preserved permanently
   (no gap filling). The post body remains in the DB but should be shown as
   a tombstone ([deleted]) when rendered.
@@ -136,9 +154,12 @@ defmodule Foglet.Posts do
   """
   @spec delete_post(Post.t(), String.t() | nil) ::
           {:ok, Post.t()} | {:error, Ecto.Changeset.t()}
-  def delete_post(%Post{} = post, reason \\ nil) do
+  def delete_post(%Post{} = post, reason) do
     post
     |> Post.delete_changeset(reason)
     |> Repo.update()
   end
+
+  @spec delete_post(Post.t()) :: {:ok, Post.t()} | {:error, Ecto.Changeset.t()}
+  def delete_post(%Post{} = post), do: delete_post(post, nil)
 end
