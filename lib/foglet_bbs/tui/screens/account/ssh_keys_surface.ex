@@ -1,20 +1,21 @@
 defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
   @moduledoc """
-  Pure renderer for the Account SSH KEYS tab.
+  Pure renderer for the Account SSH KEYS tab (Phase 25, Plan 02).
 
-  Renders loaded SSH key metadata only. Raw OpenSSH public-key material is
-  intentionally omitted from the list surface.
+  Renders the key list via `ConsoleTable.render/2` (D-05).
+  Raw OpenSSH public-key material is intentionally omitted from the list surface.
+
+  Per D-12 / R8: no hardcoded color atoms — all colors via `theme.<slot>`.
   """
 
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.Progress.Spinner
 
   @key_hints "A Add   R Refresh   D Revoke   ↑/↓ Select"
-  @empty_state "No SSH keys registered yet."
 
   @spec render(SSHKeysState.t(), Theme.t()) :: any()
   def render(%SSHKeysState{items: nil}, %Theme{} = theme), do: render_loading(theme)
@@ -25,7 +26,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
         maybe_status(state.status_message, theme),
         maybe_errors(state.errors, theme),
         maybe_form(state, theme),
-        key_rows(state.items, state.selected_index, theme),
+        ConsoleTable.render(state.table, theme: theme),
         text(@key_hints, fg: theme.dim.fg)
       ]
       |> Enum.reject(&is_nil/1)
@@ -71,45 +72,4 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
   end
 
   defp maybe_form(_state, _theme), do: nil
-
-  defp key_rows([], _selected_index, theme), do: text(@empty_state, fg: theme.dim.fg)
-
-  defp key_rows(items, selected_index, theme) when is_list(items) do
-    SelectionList.render(items, selected_index, fn {item, _idx, selected?} ->
-      item
-      |> row_label()
-      |> ListRow.render(selected?, theme)
-    end)
-  end
-
-  defp row_label(item) do
-    [
-      field(item, :label),
-      field(item, :fingerprint),
-      "created: #{timestamp_field(item, :inserted_at)}",
-      last_used_field(item)
-    ]
-    |> Enum.join(" | ")
-  end
-
-  defp last_used_field(item) do
-    case Map.get(item, :last_used_at) do
-      nil -> "Never used"
-      timestamp -> "last used: #{format_timestamp(timestamp)}"
-    end
-  end
-
-  defp field(item, key) do
-    item
-    |> Map.get(key)
-    |> to_string()
-  end
-
-  defp timestamp_field(item, key), do: item |> Map.get(key) |> format_timestamp()
-
-  defp format_timestamp(%DateTime{} = timestamp),
-    do: Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%SZ")
-
-  defp format_timestamp(nil), do: ""
-  defp format_timestamp(other), do: to_string(other)
 end
