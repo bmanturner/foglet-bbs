@@ -54,7 +54,7 @@ v1.3 is ready to plan. The milestone is driven by `SCREENS.md` and upgrades the 
 - [x] **Phase 22: Post Reader Facelift** - Thread reading emphasizes message numbers, post metadata, body readability, and progress. (completed 2026-04-25)
 - [x] **Phase 23: Composer Facelift** - New-thread and reply composition use focused editor surfaces with preview and counters. (completed 2026-04-25)
 - [x] **Phase 24: Operator Console Primitives** - Shared badges, key/value grids, table presets, inspectors, and modal form treatment land before screen conversion. (completed 2026-04-25)
-- [ ] **Phase 25: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts.
+- [x] **Phase 25: Operator Console Conversion** - Account, Moderation, and Sysop become dense shared-console layouts. (completed 2026-04-26)
 
 ## Phase Details
 
@@ -273,13 +273,13 @@ Cross-cutting constraints:
 2. Moderation tabs show scope/status summaries, honest empty states, and table-driven log/user/board views that degrade cleanly at 64x22.
 3. Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling, with wide metric layouts treated as enhancement.
 4. Account, Moderation, and Sysop reuse shared badges, key/value grids, table presets, modal form treatment, and optional inspectors rather than bespoke strings.
-**Plans:** 3/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 - [x] 25-01-shared-scaffolding-PLAN.md — Wave 1 shared scaffolding: Modal.Form Shift+Tab event-shape parity, field_value/2 accessor for prefs live preview (D-03 / Pitfall 5), and per-tab layout-smoke set_active_tab/2 helper.
 - [x] 25-02-account-conversion-PLAN.md — Wave 2 Account: PROFILE + PREFS via Modal.Form (live preview preserved); SSH_KEYS via ConsoleTable; per-tab smoke at 64x22 / 80x24.
 - [x] 25-03-moderation-conversion-PLAN.md — Wave 2 Moderation: LOG/USERS/BOARDS render KvGrid + Badge + ConsoleTable (read-only honesty preserved, Pitfall 7); shared InvitesSurface migrates to ConsoleTable; per-tab smoke.
-- [ ] 25-04-sysop-conversion-PLAN.md — Wave 2 Sysop: SITE + LIMITS via Modal.Form with visible_keys re-init (Pitfall 6); USERS via ConsoleTable; SYSTEM via KvGrid + metric badges; BOARDS destructive styling routed via commands.destructive (D-07); per-tab smoke.
-- [ ] 25-05-finish-line-PLAN.md — Wave 3 finish line: per-tab theme-hygiene tests for all 11 converted tabs (D-12), Workspace.Inspector deferral grep gate (D-20), and rtk mix precommit (R8).
+- [x] 25-04-sysop-conversion-PLAN.md — Wave 2 Sysop: SITE + LIMITS via Modal.Form with visible_keys re-init (Pitfall 6); USERS via ConsoleTable; SYSTEM via KvGrid + metric badges; BOARDS destructive styling routed via commands.destructive (D-07); per-tab smoke.
+- [x] 25-05-finish-line-PLAN.md — Wave 3 finish line: per-tab theme-hygiene tests for all 11 converted tabs (D-12), Workspace.Inspector deferral grep gate (D-20), and rtk mix precommit (R8).
 **UI hint:** yes
 
 ## Progress
@@ -315,4 +315,4 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 22. Post Reader Facelift | v1.3 | 3/3 | Complete   | 2026-04-25 |
 | 23. Composer Facelift | v1.3 | 4/4 | Complete    | 2026-04-25 |
 | 24. Operator Console Primitives | v1.3 | 6/6 | Complete    | 2026-04-25 |
-| 25. Operator Console Conversion | v1.3 | 3/5 | In Progress|  |
+| 25. Operator Console Conversion | v1.3 | 5/5 | Complete   | 2026-04-26 |
