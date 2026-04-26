@@ -72,6 +72,59 @@ defmodule Foglet.TUI.TextWidthTest do
     end
   end
 
+  describe "wrap/2" do
+    test "wraps ASCII words without exceeding display width" do
+      lines = TextWidth.wrap("alpha beta gamma", 10)
+
+      assert lines == ["alpha beta", "gamma"]
+      assert Enum.all?(lines, &(TextWidth.display_width(&1) <= 10))
+    end
+
+    test "preserves newline boundaries and blank input lines" do
+      assert TextWidth.wrap("first\n\nsecond", 8) == ["first", "", "second"]
+    end
+
+    test "wraps CJK graphemes without emitting oversized lines" do
+      lines = TextWidth.wrap("あああああ", 2)
+
+      assert length(lines) > 1
+      assert Enum.join(lines) == "あああああ"
+      assert Enum.all?(lines, &(TextWidth.display_width(&1) <= 2))
+    end
+
+    test "keeps combining marks with their base grapheme" do
+      lines = TextWidth.wrap("cafe\u0301 noir", 5)
+
+      assert lines == ["cafe\u0301", "noir"]
+      assert Enum.all?(lines, &(TextWidth.display_width(&1) <= 5))
+    end
+
+    test "keeps ZWJ emoji grapheme clusters intact" do
+      emoji = "👩‍💻"
+      lines = TextWidth.wrap("#{emoji}#{emoji}#{emoji}", 4)
+
+      assert length(lines) > 1
+      assert Enum.join(lines) == "#{emoji}#{emoji}#{emoji}"
+      assert Enum.all?(lines, &(TextWidth.display_width(&1) <= 4))
+      assert Enum.all?(lines, fn line -> Enum.all?(String.graphemes(line), &(&1 == emoji)) end)
+    end
+
+    test "splits no-space ssh-rsa shaped blobs only when necessary" do
+      blob = "ssh-rsa-AAAAB3NzaC1yc2EAAAADAQABAAABAQC"
+      lines = TextWidth.wrap(blob, 12)
+
+      assert length(lines) > 1
+      assert Enum.join(lines) == blob
+      assert Enum.all?(lines, &(TextWidth.display_width(&1) <= 12))
+    end
+
+    test "returns no lines for empty text or non-positive widths" do
+      assert TextWidth.wrap("", 8) == []
+      assert TextWidth.wrap("alpha", 0) == []
+      assert TextWidth.wrap("alpha", -1) == []
+    end
+  end
+
   describe "pad_trailing/2 and pad_leading/2" do
     test "pads ASCII text to the requested display width" do
       assert TextWidth.pad_trailing("abc", 5) == "abc  "

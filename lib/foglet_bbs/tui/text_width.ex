@@ -83,6 +83,27 @@ defmodule Foglet.TUI.TextWidth do
   end
 
   @doc """
+  Wraps `text` into terminal display-width bounded lines.
+
+  Existing newline boundaries are preserved before visual wrapping. Blank input
+  lines are returned as empty strings.
+  """
+  @spec wrap(term(), integer()) :: [String.t()]
+  def wrap(_text, width) when is_integer(width) and width <= 0, do: []
+
+  def wrap(text, width) when is_integer(width) do
+    text = to_string(text)
+
+    if text == "" do
+      []
+    else
+      text
+      |> String.split("\n")
+      |> Enum.flat_map(&wrap_line(&1, width))
+    end
+  end
+
+  @doc """
   Pads the right side of `text` with spaces until it reaches `width` columns.
   """
   @spec pad_trailing(term(), integer()) :: String.t()
@@ -104,6 +125,85 @@ defmodule Foglet.TUI.TextWidth do
     " "
     |> List.duplicate(max(width - display_width(text), 0))
     |> Enum.join()
+  end
+
+  defp wrap_line("", _width), do: [""]
+
+  defp wrap_line(line, width) do
+    {lines, current} =
+      line
+      |> String.split(~r/(\s+)/, include_captures: true, trim: true)
+      |> Enum.reduce({[], ""}, fn token, acc ->
+        append_wrap_token(acc, token, width)
+      end)
+
+    if current == "" do
+      lines
+    else
+      lines ++ [String.trim_trailing(current)]
+    end
+  end
+
+  defp append_wrap_token({lines, current}, token, width) do
+    cond do
+      String.match?(token, ~r/^\s+$/) ->
+        append_whitespace({lines, current}, token, width)
+
+      current == "" ->
+        start_new_line(lines, String.trim_leading(token), width)
+
+      display_width(current <> token) <= width ->
+        {lines, current <> token}
+
+      true ->
+        start_new_line(
+          lines ++ [String.trim_trailing(current)],
+          String.trim_leading(token),
+          width
+        )
+    end
+  end
+
+  defp append_whitespace({lines, current}, token, width) do
+    if current != "" and display_width(current <> token) <= width do
+      {lines, current <> token}
+    else
+      {lines, current}
+    end
+  end
+
+  defp start_new_line(lines, "", _width), do: {lines, ""}
+
+  defp start_new_line(lines, token, width) do
+    chunks = split_token(token, width, [])
+
+    case chunks do
+      [] ->
+        {lines, ""}
+
+      [current] ->
+        {lines, current}
+
+      chunks ->
+        {complete, [current]} = Enum.split(chunks, -1)
+        {lines ++ complete, current}
+    end
+  end
+
+  defp split_token("", _width, chunks), do: Enum.reverse(chunks)
+
+  defp split_token(token, width, chunks) do
+    if display_width(token) <= width do
+      Enum.reverse([token | chunks])
+    else
+      {left, right} = split_at(token, width)
+
+      if left == "" do
+        Enum.reverse(chunks)
+      else
+        split_token(right, width, [left | chunks])
+      end
+    end
   end
 
   defp split_at_grapheme_boundary(text, candidate_bytes, width) do
