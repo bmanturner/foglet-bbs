@@ -1422,7 +1422,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
       ss = state.screen_state.sysop
-      state = %{state | screen_state: Map.put(state.screen_state, :sysop, %{ss | users_view: view})}
+
+      state = %{
+        state
+        | screen_state: Map.put(state.screen_state, :sysop, %{ss | users_view: view})
+      }
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Sysop.handle_key(key, state)
@@ -1567,6 +1571,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, _} = Sysop.handle_key(%{key: :char, char: "D"}, state)
 
       bv = state.screen_state.sysop.boards_view
+
       assert bv.modal_kind in [:archive_board, :archive_category],
              "Expected archive confirm modal after D key"
 

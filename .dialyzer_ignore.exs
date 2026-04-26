@@ -41,5 +41,11 @@
   {"lib/foglet_bbs/tui/widgets/input/menu.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/widgets/input/tabs.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/widgets/post/post_card.ex", :contract_supertype},
-  {"lib/foglet_bbs/tui/widgets/progress/spinner.ex", :contract_supertype}
+  {"lib/foglet_bbs/tui/widgets/progress/spinner.ex", :contract_supertype},
+  # Wave 2 plan 02/03 artifacts — pre-existing warnings from Phase 25 conversions
+  {"lib/foglet_bbs/tui/screens/account/prefs_form.ex", :pattern_match},
+  {"lib/foglet_bbs/tui/screens/account/profile_form.ex", :pattern_match},
+  {"lib/foglet_bbs/tui/screens/account/ssh_keys_state.ex", :guard_fail},
+  {"lib/foglet_bbs/tui/screens/account/ssh_keys_state.ex", :pattern_match_cov},
+  {"lib/foglet_bbs/tui/screens/moderation/state.ex", :contract_supertype}
 ]

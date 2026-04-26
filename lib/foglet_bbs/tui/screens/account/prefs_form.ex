@@ -80,9 +80,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
       :cancelled ->
         reseeded = State.seed_from_user(state, current_user)
 
-        {:ok,
-         %{reseeded | status_message: "Preference changes discarded."},
-         []}
+        {:ok, %{reseeded | status_message: "Preference changes discarded."}, []}
 
       _ ->
         dirty? = action == nil and text_input_event?(event)

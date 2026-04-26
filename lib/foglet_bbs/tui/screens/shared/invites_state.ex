@@ -141,12 +141,6 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  defp selected_row_index(%ConsoleTable{table: table}) when not is_nil(table) do
-    Map.get(table.raxol_state, :selected_row)
-  end
-
-  defp selected_row_index(_), do: nil
-
   defp validate_items!(nil), do: :ok
   defp validate_items!(items) when is_list(items), do: :ok
 

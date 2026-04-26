@@ -396,8 +396,13 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       Form.init(
         title: "Theme",
         fields: [
-          %{name: :theme_id, type: :enum, label: "Theme",
-            choices: [:dark, :light, :amber], value: :dark}
+          %{
+            name: :theme_id,
+            type: :enum,
+            label: "Theme",
+            choices: [:dark, :light, :amber],
+            value: :dark
+          }
         ],
         on_submit: fn _ -> nil end,
         on_cancel: fn -> nil end
@@ -461,7 +466,9 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       assert at_1.focus_index == 1
     end
 
-    test "Foglet shape %{key: :shift_tab} moves focus to previous field (same as Raxol shape)", %{form: form} do
+    test "Foglet shape %{key: :shift_tab} moves focus to previous field (same as Raxol shape)", %{
+      form: form
+    } do
       # D-25 Pitfall 1: this event shape is translated by CLIHandler and must be handled
       {at_2, _} = Form.handle_event(%{key: :shift_tab}, form)
       assert at_2.focus_index == 2

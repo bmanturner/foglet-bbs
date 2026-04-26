@@ -829,7 +829,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
-      ss_with_error = %{ss | profile_form: ModalForm.set_errors(ss.profile_form, %{location: "is too short"})}
+      ss_with_error = %{
+        ss
+        | profile_form: ModalForm.set_errors(ss.profile_form, %{location: "is too short"})
+      }
 
       state =
         build_state_for_role(:user)
@@ -963,6 +966,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Account.handle_key(key, state)
+
         assert match?({:update, _, _}, result) or result == :no_match,
                "expected no crash for key #{inspect(key)} on empty SSH KEYS list"
       end

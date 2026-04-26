@@ -55,10 +55,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form.SubmitStash do
   """
   @spec with_stashed(module_key(), (payload() | nil -> term())) :: term()
   def with_stashed(mod, fun) when is_atom(mod) and is_function(fun, 1) do
-    try do
-      fun.(Process.get({__MODULE__, mod}))
-    after
-      Process.delete({__MODULE__, mod})
-    end
+    fun.(Process.get({__MODULE__, mod}))
+  after
+    Process.delete({__MODULE__, mod})
   end
 end
