@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: Phase 26 context gathered (assumptions mode)
-last_updated: "2026-04-26T21:28:23.277Z"
-last_activity: 2026-04-26 -- Phase 27 planning complete
+stopped_at: Completed 26-01-width-table-primitives-PLAN.md
+last_updated: "2026-04-26T21:55:03.271Z"
+last_activity: 2026-04-26
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 7
-  completed_plans: 0
-  percent: 0
+  completed_plans: 1
+  percent: 14
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** v1.4 Post-Facelift Polish & Bug Fixes — driven by ISSUES.md
+**Current focus:** Phase 26 — layout-width-foundations
 
 ## Current Position
 
-Phase: 26 (planned, not started)
-Plan: —
+Phase: 26 (layout-width-foundations) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-04-26 -- Phase 27 planning complete
+Last activity: 2026-04-26
 
 ## Performance Metrics
 
@@ -57,6 +57,7 @@ Last activity: 2026-04-26 -- Phase 27 planning complete
 - Trend: Not established
 
 | Phase 15 P02 | 5min | 3 tasks | 5 files |
+| Phase 26 P01 | 9min | 2 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -84,6 +85,9 @@ Recent decisions affecting current work:
 - [v1.4]: `ISSUES.md` is the milestone PRD — surfaced bugs from human SSH/TUI verification of v1.3.
 - [v1.4]: Stabilization milestone, not feature expansion. SEED-001 and SEED-002 remain dormant.
 - [v1.4]: Two ISSUES.md items resolved before milestone start and struck from scope: Boards-screen freeze on board select, and Main Menu Up/Down keys being inert.
+- [Phase 26 Plan 01]: Table width budgets are drawable content widths; callers subtract screen frame borders before passing `:width`.
+- [Phase 26 Plan 01]: Foglet resolves table column widths before Raxol rendering because Raxol adds separator padding per cell.
+- [Phase 26 Plan 01]: No-space wrapping and table elision use `TextWidth` grapheme-aware helpers rather than byte or character slicing.
 
 ### Pending Todos
 
@@ -128,6 +132,6 @@ Items acknowledged and deferred at v1.3 close on 2026-04-26:
 
 ## Session Continuity
 
-Last session: 2026-04-26T21:19:16.029Z
-Stopped at: Phase 26 context gathered (assumptions mode)
-Resume file: .planning/phases/26-layout-width-foundations/26-CONTEXT.md
+Last session: 2026-04-26T21:55:03.267Z
+Stopped at: Completed 26-01-width-table-primitives-PLAN.md
+Resume file: None

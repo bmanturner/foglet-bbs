@@ -154,7 +154,7 @@ Plans:
 | 0-8 | v1.1 | 43/43 | Complete | 2026-04-24 |
 | 9-15 | v1.2 | 26/26 | Complete | 2026-04-24 |
 | 16-25 | v1.3 | 48/48 | Complete | 2026-04-26 |
-| 26 | v1.4 | 0/0 | Not started | - |
+| 26 | v1.4 | 1/4 | In Progress | - |
 | 27 | v1.4 | 0/0 | Not started | - |
 | 28 | v1.4 | 0/0 | Not started | - |
 | 29 | v1.4 | 0/0 | Not started | - |
