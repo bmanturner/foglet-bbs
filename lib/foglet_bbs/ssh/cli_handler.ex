@@ -208,11 +208,18 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:window_change, _ch, width, height, _pxw, _pxh}}, state) do
-    # Keep :resize here so the dispatcher applies its system resize path
-    # (rendering engine resize + runtime width/height tracking) in addition to
-    # the App update path, which now normalizes :resize into :window_change.
-    event = Raxol.Core.Events.Event.new(:resize, %{width: width, height: height})
-    dispatch_events(state.lifecycle_pid, [event])
+    # Two dispatches, on purpose:
+    #   1. :resize hits Raxol's dispatcher system-event path
+    #      (vendor/raxol/.../dispatcher.ex:615) — resizes the rendering engine
+    #      but never reaches App.update/2.
+    #   2. :window is not a system event, so it flows through to App.update/2
+    #      where normalize_message/1 turns it into {:window_change, w, h} and
+    #      do_update/2 updates state.terminal_size. Without this second
+    #      dispatch, SizeGate.too_small? stays stuck on the initial PTY size
+    #      and the gate never triggers on resize.
+    resize = Raxol.Core.Events.Event.new(:resize, %{width: width, height: height})
+    window = Raxol.Core.Events.Event.new(:window, %{width: width, height: height})
+    dispatch_events(state.lifecycle_pid, [resize, window])
 
     if is_pid(state.session_pid) do
       Sessions.Session.set_terminal_size(state.session_pid, {width, height})

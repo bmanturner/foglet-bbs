@@ -79,17 +79,24 @@ defmodule Foglet.TUI.SizeGate do
         _ -> {0, 0}
       end
 
-    # Kept `justify_content: :center` over `spacer()` per 08-06 audit
-    # (spacer/1 is fixed-size — vendor/raxol/lib/raxol/view/components.ex:164).
-    column style: %{justify_content: :center, align_items: :center} do
+    # Raxol's Flex.column reads top-level :align/:justify (not nested CSS-style
+    # :align_items/:justify_content under :style — those are silently dropped,
+    # leaving the gate text rendered at the top-left and effectively invisible
+    # in the chrome-less gate path). Match the working modal-overlay pattern in
+    # App.render_modal_overlay/2.
+    column justify: :center, align: :center do
       [
-        text("Terminal too small.", fg: fg),
-        text(
-          "Foglet BBS requires at least #{@user_facing_min_cols}×#{@user_facing_min_rows}.",
-          fg: fg
-        ),
-        text("Your terminal is currently: #{cols}×#{rows}.", fg: fg),
-        text("Please resize.", fg: fg)
+        column align: :center do
+          [
+            text("Terminal too small.", fg: fg),
+            text(
+              "Foglet BBS requires at least #{@user_facing_min_cols}×#{@user_facing_min_rows}.",
+              fg: fg
+            ),
+            text("Your terminal is currently: #{cols}×#{rows}.", fg: fg),
+            text("Please resize.", fg: fg)
+          ]
+        end
       ]
     end
   end
