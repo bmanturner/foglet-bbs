@@ -166,14 +166,9 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
 
   defp active_tab_index(screen_state) do
     cond do
-      is_integer(Map.get(screen_state, :active_tab)) ->
-        Map.get(screen_state, :active_tab)
-
-      is_integer(Map.get(screen_state, :active_tab_index)) ->
-        Map.get(screen_state, :active_tab_index)
-
-      true ->
-        nil
+      is_integer(val = Map.get(screen_state, :active_tab)) -> val
+      is_integer(val = Map.get(screen_state, :active_tab_index)) -> val
+      true -> nil
     end
   end
 
