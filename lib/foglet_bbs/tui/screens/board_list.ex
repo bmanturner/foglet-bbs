@@ -13,8 +13,6 @@ defmodule Foglet.TUI.Screens.BoardList do
   alias Foglet.TUI.Widgets.Progress.Spinner
   import Raxol.Core.Renderer.View
 
-  @wide_inspector_min_width 100
-
   @impl true
   @spec init_screen_state(keyword()) :: State.t()
   def init_screen_state(opts \\ []), do: State.new(opts)
@@ -68,14 +66,10 @@ defmodule Foglet.TUI.Screens.BoardList do
     height = body_height(state)
     feedback_rows = feedback_row_count(ss)
     detail? = detail_strip?(height, feedback_rows)
-    spacer? = detail? and height - feedback_rows >= 20
-    inspector? = wide_inspector?(width, height, feedback_rows, detail?, spacer?)
 
     reserved_rows =
       feedback_rows +
-        if(detail?, do: 1, else: 0) +
-        if(spacer?, do: 1, else: 0) +
-        if(inspector?, do: 1, else: 0)
+        if(detail?, do: 1, else: 0)
 
     visible_height = visible_tree_rows(max(height - reserved_rows, 3))
 
@@ -83,9 +77,7 @@ defmodule Foglet.TUI.Screens.BoardList do
       [
         maybe_feedback(ss, theme),
         BoardTree.render(board_tree, theme: theme, width: width, visible_height: visible_height),
-        if(spacer?, do: text("")),
-        if(detail?, do: details_strip(board_tree, state.board_list, theme, width)),
-        if(inspector?, do: wide_inspector(board_tree, state.board_list, theme, width), else: [])
+        if(detail?, do: details_strip(board_tree, state.board_list, theme, width))
       ]
       |> List.flatten()
       |> Enum.reject(&is_nil/1)
@@ -225,11 +217,6 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp detail_strip?(height, feedback_rows), do: height - feedback_rows >= 4
 
-  defp wide_inspector?(width, height, feedback_rows, detail?, spacer?) do
-    width >= @wide_inspector_min_width and
-      height - feedback_rows - if(detail?, do: 1, else: 0) - if(spacer?, do: 1, else: 0) >= 4
-  end
-
   defp visible_tree_rows(row_budget), do: max(row_budget, 3)
 
   defp details_strip(board_tree, directory, theme, width) do
@@ -241,47 +228,6 @@ defmodule Foglet.TUI.Screens.BoardList do
 
     text(line, fg: theme.dim.fg)
   end
-
-  defp wide_inspector(board_tree, directory, theme, width) do
-    line =
-      board_tree
-      |> BoardTree.focused_entry()
-      |> inspector_text(directory || [])
-      |> TextWidth.truncate(max(width, 2))
-
-    if line == "" do
-      []
-    else
-      [text(line, fg: theme.info.fg)]
-    end
-  end
-
-  defp inspector_text(%{kind: :board, board: board} = entry, _directory) do
-    [
-      "Inspector",
-      "board",
-      board.name,
-      Map.get(board, :slug),
-      subscription_label(entry),
-      unread_label(entry.unread_count),
-      age_label(entry.last_post_at)
-    ]
-    |> Enum.reject(&(&1 in [nil, ""]))
-    |> Enum.join(" • ")
-  end
-
-  defp inspector_text(%{kind: :category, category: category}, directory) do
-    boards =
-      directory
-      |> Enum.find_value([], fn
-        %{category: %{id: id}, boards: boards} when id == category.id -> boards
-        _ -> nil
-      end)
-
-    "Inspector • category • #{category.name} • #{length(boards)} boards"
-  end
-
-  defp inspector_text(_entry, _directory), do: ""
 
   defp detail_text(%{kind: :board} = entry, _directory) do
     [

@@ -81,7 +81,10 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
         fail("Unknown board: #{board_slug}")
 
       {:error, changeset} ->
-        MixTaskHelpers.fail_changeset("Failed to subscribe #{user.handle} to #{board.slug}:", changeset)
+        MixTaskHelpers.fail_changeset(
+          "Failed to subscribe #{user.handle} to #{board.slug}:",
+          changeset
+        )
     end
   end
 

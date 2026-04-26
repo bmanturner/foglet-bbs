@@ -197,7 +197,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert moved_text =~ "Overlarge Board 25"
   end
 
-  test "render/1 shows wide inspector only when terminal width permits", %{state: state} do
+  test "render/1 never shows a separate inspector strip even at wide terminal widths", %{state: state} do
     {compact, _} = BoardList.load_boards(%{state | terminal_size: {80, 24}})
     {wide, _} = BoardList.load_boards(%{state | terminal_size: {132, 50}})
 
@@ -205,7 +205,8 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     wide_text = BoardList.render(wide) |> flatten_text()
 
     refute compact_text =~ "Inspector • category"
-    assert wide_text =~ "Inspector • category • Town Square • 3 boards"
+    refute wide_text =~ "Inspector • category"
+    assert wide_text =~ "Town Square • 3 boards • 3 unread total"
   end
 
   test "render/1 board rows render TimeAgo short-form age (regex magnitude) for populated last_post_at",
