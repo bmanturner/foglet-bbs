@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v1.3
 milestone_name: TUI Screen Facelift
-status: executing
-stopped_at: Phase 25 context gathered (assumptions mode)
-last_updated: "2026-04-26T03:00:29.993Z"
+status: planning_next_milestone
+stopped_at: v1.3 milestone archived
+last_updated: "2026-04-26T14:10:41.886Z"
 last_activity: 2026-04-26
 progress:
   total_phases: 10
@@ -18,19 +18,19 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-25)
+See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 25 — operator-console-conversion
+**Current focus:** Planning next milestone
 
 ## Current Position
 
-Phase: 25
-Plan: Not started
-Status: Ready to execute
+Phase: -
+Plan: -
+Status: v1.3 shipped; ready to define next milestone
 Last activity: 2026-04-26
 
-Progress: [----------] 0%
+Progress: [##########] 100% for v1.3
 
 ## Performance Metrics
 
@@ -90,6 +90,7 @@ Recent decisions affecting current work:
 - [v1.3]: Login is chrome/mode scope only unless a later phase explicitly expands authentication screen layout work.
 - [v1.3]: Operator Console primitives are split from Account/Moderation/Sysop conversion so shared widgets land before dense screen rewrites.
 - [v1.3]: 64x22 is the hard minimum terminal size; 80x24 is a compact design target; larger terminals progressively gain panels, inspectors, details, and extra status.
+- [v1.3]: Milestone archived with deferred human SSH/TUI checks tracked as non-blocking close debt.
 
 ### Pending Todos
 
@@ -111,8 +112,19 @@ Items acknowledged and carried forward from v1.1 close:
 | seed | SEED-001 user notifications over webhook | out of scope for v1.2 |
 | seed | SEED-002 email verification UX | partially incorporated into Phase 9 |
 
+Items acknowledged and deferred at v1.3 close on 2026-04-26:
+
+| Category | Item | Status |
+|----------|------|--------|
+| uat_gap | Phase 18 Chrome V2 human terminal scenarios | deferred |
+| uat_gap | Phase 19 Main Menu human terminal scenarios | deferred |
+| verification_gap | Phase 18 Chrome V2 real terminal visual and keyboard-flow checks | human_needed |
+| verification_gap | Phase 19 Main Menu real SSH rendering and live oneliner PubSub checks | human_needed |
+| seed | SEED-001 user notifications over webhook | dormant |
+| seed | SEED-002 email verification UX | dormant |
+
 ## Session Continuity
 
-Last session: 2026-04-25T23:00:15.549Z
-Stopped at: Phase 25 context gathered (assumptions mode)
-Resume file: .planning/phases/25-operator-console-conversion/25-CONTEXT.md
+Last session: 2026-04-26
+Stopped at: v1.3 milestone archived
+Resume file: .planning/PROJECT.md

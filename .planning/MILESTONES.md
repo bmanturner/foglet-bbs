@@ -1,5 +1,22 @@
 # Project Milestones: Foglet BBS
 
+## v1.3 TUI Screen Facelift (Shipped: 2026-04-26)
+
+**Phases completed:** 10 phases, 48 plans, 68 tasks
+
+**Key accomplishments:**
+
+- Centralized terminal display-width handling in `Foglet.TUI.TextWidth` and migrated row, chrome, modal, main-menu, and composer layout paths to width-safe helpers.
+- Added presentation-mode metadata, semantic theme slots, and explicit widget visual contracts for Classic Modern BBS and Operator Console surfaces.
+- Shipped Chrome V2 with breadcrumb titles, mode-aware status atoms, grouped command bars, and legacy key-list compatibility across all primary TUI screens.
+- Refreshed BBS conversation flows: Home dashboard, rich ThreadList rows, BoardTree directory rows, shared PostCard reader parts, and shared composer editor shell.
+- Added operator-console primitives for badges, key/value grids, dense tables, inspectors, and modal forms.
+- Converted Account, Moderation, and Sysop into shared-primitives-based terminal workbenches with per-tab smoke coverage.
+
+**Known deferred items at close:** Human SSH/TUI checks remain for Chrome V2 visual flow, Main Menu live PubSub refresh, and glyph contrast/font coverage. Advisory cleanup remains for partial Nyquist metadata and Main Menu review warnings.
+
+---
+
 ## v1.2 Pre-Alpha Gap Closure (Shipped: 2026-04-24)
 
 **Phases completed:** 7 phases, 26 plans, 46 tasks
