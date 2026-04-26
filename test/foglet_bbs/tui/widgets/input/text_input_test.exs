@@ -54,6 +54,30 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
       result2 = TextInput.handle_event(%{key: :enter}, state)
       assert result1 == result2
     end
+
+    test "test 11 — backspace to empty then replace preserves replacement text" do
+      state = TextInput.init(value: "")
+
+      state =
+        Enum.reduce(1..5, state, fn _, st ->
+          {next_state, _action} = TextInput.handle_event(%{key: :char, char: "z"}, st)
+          next_state
+        end)
+
+      assert state.raxol_state.value == "zzzzz"
+
+      cleared_state =
+        Enum.reduce(1..5, state, fn _, st ->
+          {next_state, _action} = TextInput.handle_event(%{key: :backspace}, st)
+          next_state
+        end)
+
+      assert cleared_state.raxol_state.value == ""
+      assert cleared_state.raxol_state.cursor_pos == 0
+
+      {retyped_state, _action} = TextInput.handle_event(%{key: :char, char: "x"}, cleared_state)
+      assert retyped_state.raxol_state.value == "x"
+    end
   end
 
   describe "render/2 — smoke (D-18)" do

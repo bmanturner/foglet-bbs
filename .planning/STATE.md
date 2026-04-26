@@ -100,6 +100,12 @@ None yet.
 
 No active blockers. Phase planning should preserve delivery honesty, context-level enforcement, and break-glass operator paths where the roadmap calls for them.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Status | Directory |
+|---|-------------|------|--------|--------|-----------|
+| 260426-g0k | There is an issue with text input. If I type five characters and backspace to erase the whole string, the first character is always present and impossible to replace, and if I begin typing more characters, that first character gets pushed to the right by the inserted characters | 2026-04-26 | 8b9c3f3 | Verified | [260426-g0k-there-is-an-issue-with-text-input-if-i-t](./quick/260426-g0k-there-is-an-issue-with-text-input-if-i-t/) |
+
 ## Deferred Items
 
 Items acknowledged and carried forward from v1.1 close:

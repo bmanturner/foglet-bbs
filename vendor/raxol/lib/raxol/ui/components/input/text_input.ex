@@ -406,7 +406,7 @@ defmodule Raxol.UI.Components.Input.TextInput.EditingHandler do
   end
 
   defp handle_backspace_operation(true, state, current_pos, current_value) do
-    before_part = String.slice(current_value, 0..(current_pos - 2))
+    before_part = String.slice(current_value, 0, current_pos - 1)
     remaining_part = String.slice(current_value, current_pos..-1//1)
     new_value = before_part <> remaining_part
     new_state = %{state | cursor_pos: current_pos - 1, value: new_value}
