@@ -93,23 +93,39 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
   Options:
     * `:theme`   — required Theme struct
     * `:bordered` — whether to render with surrounding box (default `false`)
+    * `:focused` — whether to show the active cursor marker (default `false`)
   """
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{raxol_state: rs}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
-    rs_with_theme = %{rs | theme: build_input_theme(theme)}
+    focused? = Keyword.get(opts, :focused, false)
+    rs_with_theme = %{rs | focused: focused?, theme: build_input_theme(theme)}
+    rendered_input = render_with_cursor_marker(rs_with_theme, focused?, theme)
 
     if Keyword.get(opts, :bordered, false) do
       box style: %{border_fg: theme.border.fg, padding: 0} do
-        RaxolTextInput.render(rs_with_theme, %{})
+        rendered_input
       end
     else
-      RaxolTextInput.render(rs_with_theme, %{})
+      rendered_input
     end
   end
 
   # --- private ---
+
+  defp render_with_cursor_marker(rs_with_theme, true, %Theme{} = theme) do
+    row style: %{gap: 0} do
+      [
+        text("▌ ", fg: theme.accent.fg, style: [:bold]),
+        RaxolTextInput.render(rs_with_theme, %{})
+      ]
+    end
+  end
+
+  defp render_with_cursor_marker(rs_with_theme, false, _theme) do
+    RaxolTextInput.render(rs_with_theme, %{})
+  end
 
   # Translate Foglet key event map to Raxol KeyHandler-compatible data.
   # KeyHandler calls: handle_key(state, key_data.key, key_data.modifiers || [])

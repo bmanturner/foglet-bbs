@@ -95,6 +95,20 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
       flat = flatten_text(result)
       assert flat =~ "mytext"
     end
+
+    test "focused: true shows active cursor marker before input text" do
+      state = TextInput.init(value: "mytext")
+      result = TextInput.render(state, theme: theme(), focused: true)
+
+      assert flatten_text(result) == "▌ mytext"
+    end
+
+    test "focused: false does not show active cursor marker" do
+      state = TextInput.init(value: "mytext")
+      result = TextInput.render(state, theme: theme(), focused: false)
+
+      assert flatten_text(result) == "mytext"
+    end
   end
 
   describe "render/2 — theme hygiene (D-18)" do

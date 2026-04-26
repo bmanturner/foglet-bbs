@@ -257,13 +257,21 @@ defmodule Foglet.TUI.Screens.Login do
         row style: %{gap: 0} do
           [
             text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
-            TextInput.render(login_ss.handle_input, bordered: false, theme: theme)
+            TextInput.render(login_ss.handle_input,
+              bordered: false,
+              focused: focused == :handle,
+              theme: theme
+            )
           ]
         end,
         row style: %{gap: 0} do
           [
             text("Password: ", fg: password_label_fg, style: password_label_style),
-            TextInput.render(login_ss.password_input, bordered: false, theme: theme)
+            TextInput.render(login_ss.password_input,
+              bordered: false,
+              focused: focused == :password,
+              theme: theme
+            )
           ]
         end
       ] ++ error_items
@@ -286,7 +294,11 @@ defmodule Foglet.TUI.Screens.Login do
         row style: %{gap: 0} do
           [
             text("Handle or email: ", fg: theme.accent.fg, style: [:bold]),
-            TextInput.render(login_ss.identifier_input, bordered: false, theme: theme)
+            TextInput.render(login_ss.identifier_input,
+              bordered: false,
+              focused: true,
+              theme: theme
+            )
           ]
         end
       ] ++ message_items

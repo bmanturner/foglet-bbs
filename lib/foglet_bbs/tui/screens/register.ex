@@ -243,7 +243,7 @@ defmodule Foglet.TUI.Screens.Register do
         row style: %{gap: 0} do
           [
             text("Invite code: ", fg: fg, style: st),
-            TextInput.render(reg.invite_code_input, bordered: false, theme: theme)
+            TextInput.render(reg.invite_code_input, bordered: false, focused: true, theme: theme)
           ]
         end
       ] ++ error_items
@@ -268,7 +268,7 @@ defmodule Foglet.TUI.Screens.Register do
         row style: %{gap: 0} do
           [
             text(label, fg: fg, style: st),
-            TextInput.render(input, bordered: false, theme: theme)
+            TextInput.render(input, bordered: false, focused: focused == field, theme: theme)
           ]
         end
       end)

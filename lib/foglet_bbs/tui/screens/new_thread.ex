@@ -159,7 +159,11 @@ defmodule Foglet.TUI.Screens.NewThread do
     row style: %{gap: 0} do
       [
         text("Title: ", fg: title_label_fg, style: title_label_style),
-        TextInput.render(ss.title_input_state, bordered: false, theme: theme)
+        TextInput.render(ss.title_input_state,
+          bordered: false,
+          focused: title_focused,
+          theme: theme
+        )
       ]
     end
   end

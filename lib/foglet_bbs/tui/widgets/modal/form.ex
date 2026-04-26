@@ -364,9 +364,9 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     [label_row, widget_row] ++ error_rows
   end
 
-  defp render_widget(%{type: type}, field_state, _focused?, theme)
+  defp render_widget(%{type: type}, field_state, focused?, theme)
        when type in [:text, :integer] do
-    TextInput.render(field_state, theme: theme)
+    TextInput.render(field_state, focused: focused?, theme: theme)
   end
 
   defp render_widget(%{type: :boolean, label: label}, field_state, _focused?, theme) do
