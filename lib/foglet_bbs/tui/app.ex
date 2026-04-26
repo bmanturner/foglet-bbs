@@ -1226,8 +1226,37 @@ defmodule Foglet.TUI.App do
       |> account_screen_state(state.current_user)
       |> Map.put(error_field(section), errors)
       |> Map.put(:status_message, "Account save failed.")
+      |> apply_form_errors(section, errors)
 
     put_account_screen_state(state, account_state)
+  end
+
+  @profile_labels %{location: "Location", tagline: "Tagline", real_name: "Real name"}
+  @prefs_labels %{timezone: "Timezone", time_format: "Time format", theme: "Theme"}
+
+  defp apply_form_errors(%{profile_form: form} = account_state, :profile, errors)
+       when not is_nil(form) do
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+    prefixed = prefix_errors(errors, @profile_labels)
+    %{account_state | profile_form: ModalForm.set_errors(form, prefixed)}
+  end
+
+  defp apply_form_errors(%{prefs_form: form} = account_state, :prefs, errors)
+       when not is_nil(form) do
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+    prefixed = prefix_errors(errors, @prefs_labels)
+    %{account_state | prefs_form: ModalForm.set_errors(form, prefixed)}
+  end
+
+  defp apply_form_errors(account_state, _section, _errors), do: account_state
+
+  # Prefix each error value with "FieldLabel error: " so Modal.Form inline
+  # error display matches the pre-Phase-25 test expectations (D-19).
+  defp prefix_errors(errors, labels) do
+    Map.new(errors, fn {field, message} ->
+      label = Map.get(labels, field, to_string(field))
+      {field, "#{label} error: #{message}"}
+    end)
   end
 
   defp account_screen_state(state, user) do

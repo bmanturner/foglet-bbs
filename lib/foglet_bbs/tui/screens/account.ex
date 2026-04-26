@@ -226,11 +226,30 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp delegate_prefs_key(event, state, %State{} = ss) do
+    # Sync form focus_index from prefs_focus so tests that set prefs_focus
+    # directly (D-19 compatibility) also update the form's active field.
+    ss = sync_prefs_focus(ss)
+
     case PrefsForm.handle_key(event, ss, Map.get(state, :current_user)) do
       {:ok, new_ss, cmds} -> {:update, put_screen_state(state, new_ss), cmds}
       :no_match -> :no_match
     end
   end
+
+  @prefs_focus_index %{timezone: 0, time_format: 1, theme: 2}
+
+  defp sync_prefs_focus(%State{prefs_focus: pf, prefs_form: form} = ss)
+       when not is_nil(form) do
+    idx = Map.get(@prefs_focus_index, pf, 0)
+
+    if form.focus_index == idx do
+      ss
+    else
+      %{ss | prefs_form: %{form | focus_index: idx}}
+    end
+  end
+
+  defp sync_prefs_focus(ss), do: ss
 
   defp put_screen_state(state, %State{} = ss) do
     %{state | screen_state: Map.put(state.screen_state, :account, ss)}
