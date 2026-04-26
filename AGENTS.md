@@ -131,5 +131,5 @@ Use `start_supervised!/1` for processes in tests. Avoid `Process.sleep/1` and
 `Process.alive?/1`; synchronize with monitors, explicit messages, or
 `:sys.get_state/1`.
 
-Run `mix precommit` when changes are complete and fix any issues. It runs
+Run `mix precommit` when code changes are complete and fix any issues. It runs
 compile with warnings as errors, formatter, Credo, Sobelow, and Dialyzer.
