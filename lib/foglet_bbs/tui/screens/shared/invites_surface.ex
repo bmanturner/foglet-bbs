@@ -11,13 +11,17 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   Pitfall 3 (RESEARCH.md): menu visibility is NOT authorization — this predicate
   controls UI rendering only. Real authz enforcement is owned by Phase 1.
+
+  Phase 25 Plan 03: listing renders through `Display.ConsoleTable` with selection
+  ownership inside the widget (D-05). The bespoke SelectionList+ListRow render
+  is replaced; both Account and Moderation benefit from a single code path.
   """
 
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.Progress.Spinner
 
   @title "INVITES"
@@ -47,10 +51,6 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   def render(%{items: [_ | _]} = state, %Theme{} = theme), do: render_items(state, theme)
 
   # Monotonic-clock fallback frame when the caller does not supply one.
-  # Kept so Phase 0 callers (which pass no :frame) still see an animated
-  # spinner. Later phases that want deterministic / snapshot-friendly
-  # rendering should thread :frame through state (e.g. from a
-  # subscribe_interval tick) and avoid this branch.
   defp current_frame do
     System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
   end
@@ -69,15 +69,20 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   end
 
   defp render_items(%{items: items} = state, theme) when is_list(items) do
-    selected_index = Map.get(state, :selected_index, 0)
     last_generated_code = Map.get(state, :last_generated_code)
     error = Map.get(state, :error)
+
+    table =
+      case Map.get(state, :table) do
+        nil -> InvitesState.build_table(items)
+        t -> t
+      end
 
     column style: %{gap: 1} do
       [
         maybe_banner(last_generated_code, theme),
         maybe_error(error, theme),
-        invite_rows(items, selected_index, theme),
+        ConsoleTable.render(table, theme: theme),
         text(@key_hints, fg: theme.dim.fg)
       ]
       |> Enum.reject(&is_nil/1)
@@ -94,58 +99,5 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   defp maybe_error(error, theme) when is_binary(error) do
     text(error, fg: theme.error.fg)
-  end
-
-  defp invite_rows([], _selected_index, theme) do
-    text("No invites issued yet.", fg: theme.dim.fg)
-  end
-
-  defp invite_rows(items, selected_index, theme) do
-    SelectionList.render(items, selected_index, fn {item, _idx, selected?} ->
-      item
-      |> row_label()
-      |> ListRow.render(selected?, theme)
-    end)
-  end
-
-  defp row_label(item) do
-    base = [
-      field(item, :code),
-      "status: #{field(item, :status)}",
-      "issuer_id: #{field(item, :issuer_id)}",
-      "inserted_at: #{timestamp_field(item, :inserted_at)}"
-    ]
-
-    item
-    |> lifecycle_fields()
-    |> then(&(base ++ &1))
-    |> Enum.join(" | ")
-  end
-
-  defp lifecycle_fields(%{status: :consumed} = item) do
-    [
-      "consumed_at: #{timestamp_field(item, :consumed_at)}",
-      "consumed_by_user_id: #{field(item, :consumed_by_user_id)}"
-    ]
-  end
-
-  defp lifecycle_fields(%{status: :revoked} = item) do
-    ["revoked_at: #{timestamp_field(item, :revoked_at)}"]
-  end
-
-  defp lifecycle_fields(_item), do: []
-
-  defp field(item, key) do
-    item
-    |> Map.get(key)
-    |> to_string()
-  end
-
-  defp timestamp_field(item, key) do
-    case Map.get(item, key) do
-      %DateTime{} = timestamp -> Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%SZ")
-      nil -> ""
-      other -> to_string(other)
-    end
   end
 end
