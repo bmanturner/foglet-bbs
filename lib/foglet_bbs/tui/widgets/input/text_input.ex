@@ -87,7 +87,9 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
   @spec handle_event(map(), t()) :: {t(), action()}
   def handle_event(event, %__MODULE__{raxol_state: rs} = st) do
     raxol_event = %Raxol.Core.Events.Event{type: :key, data: translate_event_data(event)}
-    {new_rs, _cmds} = RaxolTextInput.handle_event(raxol_event, rs, %{})
+    # Commands from Raxol are intentionally dropped; TextInput's contract exposes
+    # only the semantic action. Revisit if Raxol gains side-effecting commands.
+    {new_rs, _raxol_cmds} = RaxolTextInput.handle_event(raxol_event, rs, %{})
     action = derive_action(rs, new_rs, event)
     {%{st | raxol_state: new_rs, last_action: action}, action}
   end
