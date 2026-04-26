@@ -15,7 +15,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 
 | Phase | Name | Goal (one-line) | Requirements | UI |
 |-------|------|-----------------|--------------|-----|
-| 26 | Layout & Width Foundations | 3/4 | In Progress|  |
+| 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | Text inputs show a real cursor and Login sub-flows update their breadcrumb | CURSOR-01, BREAD-01 (2) | yes |
 | 28 | Modal.Form Substrate | Forms route keystrokes to the focused field, accept Up/Down/Shift+Tab/Esc/Enter as advertised, and never double-submit | FORM-01..06 (6) | yes |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
@@ -29,7 +29,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] v1.1 Operations Surfaces & Invites (Phases 0-8)
 - [x] v1.2 Pre-Alpha Gap Closure (Phases 9-15)
 - [x] v1.3 TUI Screen Facelift (Phases 16-25)
-- [ ] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation
+- [x] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation (completed 2026-04-26)
 - [ ] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume)
 - [ ] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc
 - [ ] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency

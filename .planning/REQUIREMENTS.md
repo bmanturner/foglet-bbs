@@ -66,7 +66,7 @@ Requirements for the v1.4 stabilization milestone. Every requirement traces to o
 
 ### Post Rendering & Composer
 
-- [ ] **POST-01**: The shared markdown renderer preserves paragraph breaks — two consecutive newlines render as one blank visible line, soft breaks render as line breaks, and three or more consecutive newlines clamp to one blank line — so post bodies are readable rather than cramped (Globally #2).
+- [x] **POST-01**: The shared markdown renderer preserves paragraph breaks — two consecutive newlines render as one blank visible line, soft breaks render as line breaks, and three or more consecutive newlines clamp to one blank line — so post bodies are readable rather than cramped (Globally #2).
 - [ ] **POST-02**: The post composer (new-thread and reply) soft-wraps lines that exceed the editor's column width using the `TextWidth` wrap helper; submitted post text retains logical (un-wrapped) content; a terminal resize re-flows the visual wrap without altering the underlying buffer (Globally #3).
 
 ### Boards Screen Interaction
@@ -139,7 +139,7 @@ Which phases cover which requirements. Filled by the roadmapper.
 | LAYOUT-04 | Phase 26 | Complete |
 | LAYOUT-05 | Phase 26 | Complete |
 | LAYOUT-06 | Phase 26 | Complete |
-| POST-01 | Phase 26 | Pending |
+| POST-01 | Phase 26 | Complete |
 | CURSOR-01 | Phase 27 | Pending |
 | BREAD-01 | Phase 27 | Pending |
 | FORM-01 | Phase 28 | Pending |

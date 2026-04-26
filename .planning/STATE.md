@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
-status: executing
-stopped_at: Completed 26-03-boards-viewport-PLAN.md
-last_updated: "2026-04-26T22:22:11.561Z"
+status: verifying
+stopped_at: Completed 26-04-markdown-verification-PLAN.md
+last_updated: "2026-04-26T22:31:57.386Z"
 last_activity: 2026-04-26
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 7
-  completed_plans: 3
-  percent: 43
+  completed_plans: 4
+  percent: 57
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 
 Phase: 26 (layout-width-foundations) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-26
 
 ## Performance Metrics
@@ -60,6 +60,7 @@ Last activity: 2026-04-26
 | Phase 26 P01 | 9min | 2 tasks | 6 files |
 | Phase 26 P02 | 6min | 3 tasks | 10 files |
 | Phase 26 P03 | 6min | 2 tasks | 5 files |
+| Phase 26 P04 | 6min | 3 tasks | 7 files |
 
 ## Accumulated Context
 
@@ -96,6 +97,9 @@ Recent decisions affecting current work:
 - [Phase 26]: BoardTree windowing derives the focused row from Raxol tree cursor and visible nodes without mutating tree state.
 - [Phase 26]: Boards screen passes drawable content width and a compact logical tree-row budget into BoardTree.
 - [Phase 26]: Compact Boards rendering reserves detail, feedback, and inspector rows only when they fit, with the tree winning at small heights.
+- [Phase 26]: Preserve consecutive newline tuples in Foglet.Markdown.render/1; MarkdownBody owns clamping paragraph separators to one blank visible row. — Required so shared post rendering can distinguish soft line breaks from paragraph separators.
+- [Phase 26]: Keep list-item rendering to one logical line per item by stripping MDEx list container structural newlines. — Preserving paragraph newline tuples exposed MDEx list tag whitespace that would otherwise create blank rows between bullets.
+- [Phase 26]: Leave Phase 26 human SSH verification pending when real fixed-size terminal checks are not run in the execution session. — Human terminal-fit acceptance requires real SSH visual verification at exact terminal dimensions.
 
 ### Pending Todos
 
@@ -104,6 +108,8 @@ None yet.
 ### Blockers/Concerns
 
 No active blockers. Phase planning should preserve delivery honesty, context-level enforcement, and break-glass operator paths where the roadmap calls for them.
+
+- Phase 26 manual SSH UAT remains pending at fixed terminal sizes; rtk mix precommit is blocked by pre-existing out-of-scope Dialyzer warnings documented in 26-04-SUMMARY.md.
 
 ### Quick Tasks Completed
 
@@ -140,6 +146,6 @@ Items acknowledged and deferred at v1.3 close on 2026-04-26:
 
 ## Session Continuity
 
-Last session: 2026-04-26T22:22:11.556Z
-Stopped at: Completed 26-03-boards-viewport-PLAN.md
+Last session: 2026-04-26T22:31:24.886Z
+Stopped at: Completed 26-04-markdown-verification-PLAN.md
 Resume file: None
