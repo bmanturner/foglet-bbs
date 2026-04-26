@@ -2053,4 +2053,334 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   Foglet.TUI.LayoutSmoke.AccountHelper.register_account_size_contracts()
   Foglet.TUI.LayoutSmoke.ModerationHelper.register_moderation_size_contracts()
   Foglet.TUI.LayoutSmoke.SysopHelper.register_sysop_size_contracts()
+
+  # ---------------------------------------------------------------------------
+  # Phase 27 cursor surfaces (CURSOR-01)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 27 cursor surfaces (CURSOR-01)" do
+    @cursor_sizes [{64, 22}, {80, 24}]
+
+    defp login_form_fixture do
+      %App{
+        current_screen: :login,
+        terminal_size: {80, 24},
+        screen_state: %{
+          login: %{
+            sub: :login_form,
+            focused_field: :handle,
+            handle_input: TextInput.init(value: "alice"),
+            password_input: TextInput.init(mask_char: "*"),
+            error: nil
+          }
+        }
+      }
+    end
+
+    defp register_fixture do
+      %App{
+        current_screen: :register,
+        terminal_size: {80, 24},
+        screen_state: %{
+          register: %{
+            mode: "open",
+            step: :combined,
+            focused_field: :handle,
+            invite_code_input: TextInput.init([]),
+            handle_input: TextInput.init(value: "bob"),
+            email_input: TextInput.init([]),
+            password_input: TextInput.init(mask_char: "*"),
+            confirm_input: TextInput.init(mask_char: "*"),
+            collected: %{},
+            error: nil
+          }
+        }
+      }
+    end
+
+    defp forgot_password_fixture do
+      %App{
+        current_screen: :login,
+        terminal_size: {80, 24},
+        screen_state: %{
+          login: %{
+            sub: :reset_request,
+            focused_field: :identifier,
+            identifier_input: TextInput.init([]),
+            message: nil
+          }
+        }
+      }
+    end
+
+    defp collect_cursor_markers(positioned) do
+      positioned
+      |> text_elements()
+      |> Enum.filter(&String.contains?(&1.text, "▌"))
+    end
+
+    test "Login form renders exactly one focused cursor marker at 64x22 and 80x24" do
+      for {width, height} <- @cursor_sizes do
+        state = %{login_form_fixture() | terminal_size: {width, height}}
+        positioned = state |> Login.render() |> apply_at_size({width, height})
+        cursors = collect_cursor_markers(positioned)
+
+        assert length(cursors) == 1,
+               "Login form at #{width}x#{height}: expected exactly 1 cursor marker, " <>
+                 "got #{length(cursors)}: #{inspect(Enum.map(cursors, & &1.text))}"
+      end
+    end
+
+    test "Register combined form renders exactly one focused cursor marker at 64x22 and 80x24" do
+      for {width, height} <- @cursor_sizes do
+        state = %{register_fixture() | terminal_size: {width, height}}
+        positioned = state |> Register.render() |> apply_at_size({width, height})
+        cursors = collect_cursor_markers(positioned)
+
+        assert length(cursors) == 1,
+               "Register at #{width}x#{height}: expected exactly 1 cursor marker, " <>
+                 "got #{length(cursors)}: #{inspect(Enum.map(cursors, & &1.text))}"
+      end
+    end
+
+    test "Forgot Password form renders exactly one focused cursor marker at 64x22 and 80x24" do
+      for {width, height} <- @cursor_sizes do
+        state = %{forgot_password_fixture() | terminal_size: {width, height}}
+        positioned = state |> Login.render() |> apply_at_size({width, height})
+        cursors = collect_cursor_markers(positioned)
+
+        assert length(cursors) == 1,
+               "Forgot Password at #{width}x#{height}: expected exactly 1 cursor marker, " <>
+                 "got #{length(cursors)}: #{inspect(Enum.map(cursors, & &1.text))}"
+      end
+    end
+
+    test "cursor marker ▌ appears after typed value after 5 chars then 2 backspaces" do
+      input = TextInput.init([])
+
+      input =
+        Enum.reduce(~w[a b c d e], input, fn char, acc ->
+          {updated, _action} = TextInput.handle_event(%{key: :char, char: char}, acc)
+          updated
+        end)
+
+      input =
+        Enum.reduce(1..2, input, fn _i, acc ->
+          {updated, _action} = TextInput.handle_event(%{key: :backspace}, acc)
+          updated
+        end)
+
+      theme = Foglet.TUI.Theme.default()
+      rendered = TextInput.render(input, focused: true, theme: theme)
+      positioned = Engine.apply_layout(rendered, %{width: 80, height: 1})
+      elements = text_elements(positioned)
+      flat = Enum.map_join(elements, "", & &1.text)
+
+      assert String.contains?(flat, "▌"),
+             "expected cursor marker ▌ after typing 5 chars and 2 backspaces, got: #{inspect(flat)}"
+
+      assert String.contains?(flat, "abc"),
+             "expected 'abc' to remain after 5 chars then 2 backspaces, got: #{inspect(flat)}"
+    end
+
+    test "Verify renders existing slot-buffer surface without TextInput (slot-buffer coverage)" do
+      # Verify is a custom slot-buffer surface, deliberately not converted to TextInput.
+      # This test asserts the buffer text is visible and NO TextInput cursor marker appears,
+      # confirming Phase 27 scope: Verify covered as custom surface without TextInput conversion.
+      for {width, height} <- @cursor_sizes do
+        state = %App{
+          current_screen: :verify,
+          current_user: %{id: "u1", handle: "alice"},
+          terminal_size: {width, height},
+          screen_state: %{
+            verify: %{
+              buffer: "XK7",
+              attempts: 0,
+              cooldown_until: nil,
+              resend_cooldown_until: nil
+            }
+          }
+        }
+
+        positioned = state |> Verify.render() |> apply_at_size({width, height})
+        elements = text_elements(positioned)
+        flat = Enum.map_join(elements, "", & &1.text)
+
+        assert String.contains?(flat, "XK7"),
+               "Verify slot-buffer at #{width}x#{height}: expected 'XK7' in render, " <>
+                 "got: #{inspect(flat)}"
+
+        cursors = collect_cursor_markers(positioned)
+
+        assert cursors == [],
+               "Verify at #{width}x#{height}: expected no TextInput cursor marker, " <>
+                 "got: #{inspect(Enum.map(cursors, & &1.text))}"
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 27 auth breadcrumbs (BREAD-01)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 27 auth breadcrumbs (BREAD-01)" do
+    @breadcrumb_sizes [{64, 22}, {80, 24}]
+
+    defp all_text(positioned) do
+      positioned |> text_elements() |> Enum.map_join("", & &1.text)
+    end
+
+    test "Register render output contains Foglet, Login, Register in breadcrumb at 64x22 and 80x24" do
+      for {width, height} <- @breadcrumb_sizes do
+        state = %App{
+          current_screen: :register,
+          terminal_size: {width, height},
+          screen_state: %{
+            register: %{
+              mode: "open",
+              step: :combined,
+              focused_field: :handle,
+              invite_code_input: TextInput.init([]),
+              handle_input: TextInput.init([]),
+              email_input: TextInput.init([]),
+              password_input: TextInput.init(mask_char: "*"),
+              confirm_input: TextInput.init(mask_char: "*"),
+              collected: %{},
+              error: nil
+            }
+          }
+        }
+
+        flat = state |> Register.render() |> apply_at_size({width, height}) |> all_text()
+
+        assert String.contains?(flat, "Foglet"),
+               "Register breadcrumb at #{width}x#{height}: expected 'Foglet', got: #{inspect(flat)}"
+
+        assert String.contains?(flat, "Login"),
+               "Register breadcrumb at #{width}x#{height}: expected 'Login', got: #{inspect(flat)}"
+
+        assert String.contains?(flat, "Register"),
+               "Register breadcrumb at #{width}x#{height}: expected 'Register', got: #{inspect(flat)}"
+      end
+    end
+
+    test "Forgot Password render output contains Foglet, Login, Forgot Password at 64x22 and 80x24" do
+      for {width, height} <- @breadcrumb_sizes do
+        state = %App{
+          current_screen: :login,
+          terminal_size: {width, height},
+          screen_state: %{
+            login: %{
+              sub: :reset_request,
+              focused_field: :identifier,
+              identifier_input: TextInput.init([]),
+              message: nil
+            }
+          }
+        }
+
+        flat = state |> Login.render() |> apply_at_size({width, height}) |> all_text()
+
+        assert String.contains?(flat, "Foglet"),
+               "Forgot Password breadcrumb at #{width}x#{height}: expected 'Foglet'"
+
+        assert String.contains?(flat, "Login"),
+               "Forgot Password breadcrumb at #{width}x#{height}: expected 'Login'"
+
+        assert String.contains?(flat, "Forgot Password"),
+               "Forgot Password breadcrumb at #{width}x#{height}: expected 'Forgot Password', " <>
+                 "got: #{inspect(flat)}"
+      end
+    end
+
+    test "Verify render output contains Foglet, Login, Verify in breadcrumb at 64x22 and 80x24" do
+      for {width, height} <- @breadcrumb_sizes do
+        state = %App{
+          current_screen: :verify,
+          current_user: %{id: "u1", handle: "alice"},
+          terminal_size: {width, height},
+          screen_state: %{
+            verify: %{
+              buffer: "",
+              attempts: 0,
+              cooldown_until: nil,
+              resend_cooldown_until: nil
+            }
+          }
+        }
+
+        flat = state |> Verify.render() |> apply_at_size({width, height}) |> all_text()
+
+        assert String.contains?(flat, "Foglet"),
+               "Verify breadcrumb at #{width}x#{height}: expected 'Foglet'"
+
+        assert String.contains?(flat, "Login"),
+               "Verify breadcrumb at #{width}x#{height}: expected 'Login'"
+
+        assert String.contains?(flat, "Verify"),
+               "Verify breadcrumb at #{width}x#{height}: expected 'Verify', got: #{inspect(flat)}"
+      end
+    end
+
+    test "reset_consume Login state produces breadcrumb with Foglet, Login, Forgot Password, Enter Token" do
+      for {width, height} <- @breadcrumb_sizes do
+        state = %App{
+          current_screen: :login,
+          terminal_size: {width, height},
+          screen_state: %{
+            login: %{
+              sub: :reset_consume
+            }
+          }
+        }
+
+        # BreadcrumbBar.parts_for/1 must map :reset_consume to the four-segment path.
+        parts = Foglet.TUI.Widgets.Chrome.BreadcrumbBar.parts_for(state)
+
+        assert "Foglet" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Foglet' in #{inspect(parts)}"
+
+        assert "Login" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Login' in #{inspect(parts)}"
+
+        assert "Forgot Password" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Forgot Password' in #{inspect(parts)}"
+
+        assert "Enter Token" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Enter Token' in #{inspect(parts)}"
+      end
+    end
+
+    test "Login menu state breadcrumb parts are only Foglet and Login (no sub-path)" do
+      for {width, height} <- @breadcrumb_sizes do
+        state = %App{
+          current_screen: :login,
+          terminal_size: {width, height},
+          screen_state: %{}
+        }
+
+        # Check breadcrumb parts directly — the rendered text includes command bar
+        # labels (e.g. "R Register") which are not breadcrumb content.
+        parts = Foglet.TUI.Widgets.Chrome.BreadcrumbBar.parts_for(state)
+
+        assert "Foglet" in parts,
+               "Login menu breadcrumb at #{width}x#{height}: expected 'Foglet' in #{inspect(parts)}"
+
+        assert "Login" in parts,
+               "Login menu breadcrumb at #{width}x#{height}: expected 'Login' in #{inspect(parts)}"
+
+        refute "Forgot Password" in parts,
+               "Login menu breadcrumb at #{width}x#{height}: should NOT contain 'Forgot Password', " <>
+                 "got: #{inspect(parts)}"
+
+        refute "Verify" in parts,
+               "Login menu breadcrumb at #{width}x#{height}: should NOT contain 'Verify', " <>
+                 "got: #{inspect(parts)}"
+
+        refute "Enter Token" in parts,
+               "Login menu breadcrumb at #{width}x#{height}: should NOT contain 'Enter Token', " <>
+                 "got: #{inspect(parts)}"
+      end
+    end
+  end
 end
