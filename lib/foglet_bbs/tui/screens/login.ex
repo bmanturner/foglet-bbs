@@ -29,6 +29,8 @@ defmodule Foglet.TUI.Screens.Login do
 
   alias Foglet.{Accounts, Config}
   alias Foglet.Accounts.{Auth, Verification}
+  alias Foglet.TUI.Screens.Login.State, as: LoginState
+  alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -143,7 +145,10 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp update_focused_input(state, new_input) do
     login_ss = LoginState.get(state)
-    new_login_ss = FocusInput.update_focused(login_ss, new_input, &LoginState.input_key/1, :handle)
+
+    new_login_ss =
+      FocusInput.update_focused(login_ss, new_input, &LoginState.input_key/1, :handle)
+
     LoginState.put(state, new_login_ss)
   end
 

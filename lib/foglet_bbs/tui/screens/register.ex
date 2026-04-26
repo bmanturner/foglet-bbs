@@ -24,6 +24,8 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.{Accounts, Config}
   alias Foglet.Accounts.Verification
+  alias Foglet.TUI.Screens.Register.State, as: RegisterState
+  alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput

@@ -13,6 +13,7 @@ defmodule Foglet.TUI.Screens.Verify do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Accounts.Verification
+  alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
