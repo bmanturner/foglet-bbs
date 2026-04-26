@@ -38,7 +38,8 @@
     "plan_bounce_passes": 2,
     "auto_prune_state": false,
     "use_worktrees": true,
-    "_auto_chain_active": false
+    "_auto_chain_active": false,
+    "security_enforcement": false
   },
   "hooks": {
     "context_warnings": true
