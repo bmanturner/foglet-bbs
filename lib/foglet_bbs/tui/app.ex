@@ -52,7 +52,7 @@ defmodule Foglet.TUI.App do
   @type t :: %__MODULE__{
           current_screen: screen(),
           current_user: Foglet.Accounts.User.t() | nil,
-          session_context: map(),
+          session_context: Foglet.TUI.SessionContext.t() | map(),
           session_pid: pid() | nil,
           terminal_size: {pos_integer(), pos_integer()},
           modal: Foglet.TUI.Modal.t() | nil,
@@ -71,7 +71,7 @@ defmodule Foglet.TUI.App do
 
   defstruct current_screen: :login,
             current_user: nil,
-            session_context: %{},
+            session_context: %Foglet.TUI.SessionContext{},
             session_pid: nil,
             terminal_size: {80, 24},
             modal: nil,
@@ -98,8 +98,8 @@ defmodule Foglet.TUI.App do
     # top level — we support both to keep tests working unchanged.
     {session_context, terminal_size} = extract_context(context)
 
-    user = session_context[:user]
-    session_pid = session_context[:session_pid]
+    user = Map.get(session_context, :user)
+    session_pid = Map.get(session_context, :session_pid)
 
     # Register TUI pid with the Session so it can receive replace/heartbeat msgs.
     if is_pid(session_pid) do
@@ -126,20 +126,25 @@ defmodule Foglet.TUI.App do
 
   # Extract session_context + terminal_size from either:
   #   (a) Lifecycle-produced map: %{width:, height:, options: [context: %{...}]}
-  #   (b) Direct test call: %{session_context: %{...}, terminal_size: {w, h}}
+  #   (b) Direct test call: %{session_context: %SessionContext{} | %{...}, terminal_size: {w, h}}
+  #
+  # The session_context value may be a `%Foglet.TUI.SessionContext{}` struct
+  # (the production path via SSH.CLIHandler) or a plain map (tests and legacy
+  # callers). Both are accepted so that test helpers can pass partial maps
+  # without constructing a full struct.
   defp extract_context(context) do
     if is_map(context) and is_list(Map.get(context, :options)) do
       # Lifecycle path — context is in options[:context]
       opts = Map.get(context, :options, [])
       nested = Keyword.get(opts, :context, %{})
-      session_context = Map.get(nested, :session_context, %{})
+      session_context = Map.get(nested, :session_context, %Foglet.TUI.SessionContext{})
       w = Map.get(context, :width, 80)
       h = Map.get(context, :height, 24)
       terminal_size = Map.get(nested, :terminal_size, {w, h})
       {session_context, terminal_size}
     else
       # Direct/test path — session_context at top level
-      session_context = Map.get(context, :session_context, %{})
+      session_context = Map.get(context, :session_context, %Foglet.TUI.SessionContext{})
       terminal_size = Map.get(context, :terminal_size, {80, 24})
       {session_context, terminal_size}
     end
