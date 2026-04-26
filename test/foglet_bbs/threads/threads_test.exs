@@ -67,6 +67,24 @@ defmodule Foglet.ThreadsTest do
       assert post.user_id == user.id
     end
 
+    test "persists content at schema limits above varchar defaults" do
+      {board, _pid} = setup_board_with_server()
+      user = user_fixture()
+      title = String.duplicate("T", 300)
+      body = String.duplicate("Long markdown body. ", 20)
+
+      assert String.length(body) > 255
+
+      assert {:ok, %{thread: thread, post: post}} =
+               Foglet.Threads.create_thread(board.id, user.id, %{
+                 title: title,
+                 body: body
+               })
+
+      assert thread.title == title
+      assert post.body == body
+    end
+
     test "thread.post_count is 1 after creation" do
       {board, _pid} = setup_board_with_server()
       user = user_fixture()
