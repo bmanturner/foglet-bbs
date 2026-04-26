@@ -4,7 +4,7 @@ milestone: v1.3
 milestone_name: TUI Screen Facelift
 status: planning_next_milestone
 stopped_at: v1.3 milestone archived
-last_updated: "2026-04-26T14:10:41.886Z"
+last_updated: "2026-04-26T17:36:00.000Z"
 last_activity: 2026-04-26
 progress:
   total_phases: 10
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 Phase: -
 Plan: -
 Status: v1.3 shipped; ready to define next milestone
-Last activity: 2026-04-26 - Completed quick task 260426-gnq: screen border chrome placement
+Last activity: 2026-04-26 - Completed quick task 260426-hbu: active text input cursor marker
 
 Progress: [##########] 100% for v1.3
 
@@ -106,6 +106,7 @@ No active blockers. Phase planning should preserve delivery honesty, context-lev
 |---|-------------|------|--------|--------|-----------|
 | 260426-g0k | There is an issue with text input. If I type five characters and backspace to erase the whole string, the first character is always present and impossible to replace, and if I begin typing more characters, that first character gets pushed to the right by the inserted characters | 2026-04-26 | 8b9c3f3 | Verified | [260426-g0k-there-is-an-issue-with-text-input-if-i-t](./quick/260426-g0k-there-is-an-issue-with-text-input-if-i-t/) |
 | 260426-gnq | Put Chrome V2 breadcrumb/status and command hints on the screen border rows | 2026-04-26 | ae623da | Verified | [260426-gnq-the-recent-milestone-was-supposed-to-cha](./quick/260426-gnq-the-recent-milestone-was-supposed-to-cha/) |
+| 260426-hbu | Add a cursor icon to active text inputs | 2026-04-26 | 9a9fedc | Verified | [260426-hbu-we-need-a-cursor-icon-to-appear-on-the-t](./quick/260426-hbu-we-need-a-cursor-icon-to-appear-on-the-t/) |
 
 ## Deferred Items
 
