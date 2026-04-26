@@ -18,27 +18,18 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
   alias Foglet.Accounts
   alias Foglet.Accounts.User
   alias Foglet.Config
+  alias Foglet.MixTaskHelpers
 
   @impl Mix.Task
   def run(args) do
-    {:ok, _} = Application.ensure_all_started(:foglet_bbs)
+    MixTaskHelpers.start_app!()
 
-    {[], positional} =
-      try do
-        OptionParser.parse!(args, strict: [])
-      rescue
-        e in OptionParser.ParseError ->
-          Mix.shell().error("Invalid arguments: #{Exception.message(e)}")
-          Mix.shell().error(usage())
-          exit({:shutdown, 1})
-      end
+    {[], positional} = MixTaskHelpers.parse_args!(args, [], usage())
 
     handle = Enum.at(positional, 0)
 
     if is_nil(handle) do
-      Mix.shell().error("Missing required handle.")
-      Mix.shell().error(usage())
-      exit({:shutdown, 1})
+      MixTaskHelpers.fail("Missing required handle.", usage())
     else
       reset(handle)
     end
@@ -47,12 +38,10 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
   defp reset(handle) do
     case Accounts.get_user_by_handle(handle) do
       nil ->
-        Mix.shell().error("User not found: #{handle}")
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("User not found: #{handle}")
 
       %User{deleted_at: deleted} when not is_nil(deleted) ->
-        Mix.shell().error("User #{handle} has been deleted; cannot reset password.")
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("User #{handle} has been deleted; cannot reset password.")
 
       %User{} = user ->
         reset_existing_user(user)
@@ -83,8 +72,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
         :ok
 
       {:error, changeset} ->
-        Mix.shell().error("Could not generate reset token: #{inspect(changeset.errors)}")
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("Could not generate reset token: #{inspect(changeset.errors)}")
     end
   end
 

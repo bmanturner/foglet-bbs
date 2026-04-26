@@ -16,27 +16,18 @@ defmodule Mix.Tasks.Foglet.User.VerificationCode do
   alias Foglet.Accounts
   alias Foglet.Accounts.User
   alias Foglet.Config
+  alias Foglet.MixTaskHelpers
 
   @impl Mix.Task
   def run(args) do
-    {:ok, _} = Application.ensure_all_started(:foglet_bbs)
+    MixTaskHelpers.start_app!()
 
-    {[], positional} =
-      try do
-        OptionParser.parse!(args, strict: [])
-      rescue
-        e in OptionParser.ParseError ->
-          Mix.shell().error("Invalid arguments: #{Exception.message(e)}")
-          Mix.shell().error(usage())
-          exit({:shutdown, 1})
-      end
+    {[], positional} = MixTaskHelpers.parse_args!(args, [], usage())
 
     handle = Enum.at(positional, 0)
 
     if is_nil(handle) do
-      Mix.shell().error("Missing required handle.")
-      Mix.shell().error(usage())
-      exit({:shutdown, 1})
+      MixTaskHelpers.fail("Missing required handle.", usage())
     else
       generate(handle)
     end
@@ -45,16 +36,13 @@ defmodule Mix.Tasks.Foglet.User.VerificationCode do
   defp generate(handle) do
     case Accounts.get_user_by_handle(handle) do
       nil ->
-        Mix.shell().error("User not found: #{handle}")
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("User not found: #{handle}")
 
       %User{deleted_at: deleted} when not is_nil(deleted) ->
-        Mix.shell().error("User #{handle} has been deleted; cannot generate verification code.")
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("User #{handle} has been deleted; cannot generate verification code.")
 
       %User{confirmed_at: confirmed_at} when not is_nil(confirmed_at) ->
-        Mix.shell().error("User #{handle} is already confirmed.")
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("User #{handle} is already confirmed.")
 
       %User{} = user ->
         generate_for_user(user)
@@ -64,11 +52,9 @@ defmodule Mix.Tasks.Foglet.User.VerificationCode do
   defp generate_for_user(%User{} = user) do
     case Config.delivery_mode() do
       "email" ->
-        Mix.shell().error(
+        MixTaskHelpers.fail(
           "Verification delivery is handled by email mode; use the normal Login or Verify resend flow."
         )
-
-        exit({:shutdown, 1})
 
       "no_email" ->
         case Accounts.build_verify_code(user) do
@@ -83,8 +69,7 @@ defmodule Mix.Tasks.Foglet.User.VerificationCode do
             :ok
 
           {:error, _changeset} ->
-            Mix.shell().error("Could not generate verification code.")
-            exit({:shutdown, 1})
+            MixTaskHelpers.fail("Could not generate verification code.")
         end
     end
   end

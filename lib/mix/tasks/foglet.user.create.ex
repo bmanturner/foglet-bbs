@@ -17,32 +17,22 @@ defmodule Mix.Tasks.Foglet.User.Create do
   @requirements ["app.config"]
 
   alias Foglet.Accounts
+  alias Foglet.MixTaskHelpers
 
   @switches [handle: :string, email: :string, password: :string]
 
   @impl Mix.Task
   def run(args) do
-    {:ok, _} = Application.ensure_all_started(:foglet_bbs)
+    MixTaskHelpers.start_app!()
 
-    opts =
-      try do
-        {parsed, _rest} = OptionParser.parse!(args, strict: @switches)
-        parsed
-      rescue
-        e in OptionParser.ParseError ->
-          Mix.shell().error("Invalid arguments: #{Exception.message(e)}")
-          Mix.shell().error(usage())
-          exit({:shutdown, 1})
-      end
+    {opts, _rest} = MixTaskHelpers.parse_args!(args, @switches, usage())
 
     handle = Keyword.get(opts, :handle)
     email = Keyword.get(opts, :email)
     password = Keyword.get(opts, :password)
 
     if is_nil(handle) or is_nil(email) or is_nil(password) do
-      Mix.shell().error("Missing required flag.")
-      Mix.shell().error(usage())
-      exit({:shutdown, 1})
+      MixTaskHelpers.fail("Missing required flag.", usage())
     else
       create_user(handle, email, password)
     end
@@ -57,22 +47,8 @@ defmodule Mix.Tasks.Foglet.User.Create do
         :ok
 
       {:error, changeset} ->
-        Mix.shell().error("Failed to create user:")
-
-        for {field, errors} <- format_errors(changeset), err <- errors do
-          Mix.shell().error("  * #{field}: #{err}")
-        end
-
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail_changeset("Failed to create user:", changeset)
     end
-  end
-
-  defp format_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", if(is_list(v), do: inspect(v), else: to_string(v)))
-      end)
-    end)
   end
 
   defp usage do
