@@ -74,7 +74,7 @@ defmodule Foglet.TUI.Presentation do
 
   @theme_mappings %{
     tabs: %{
-      selected: :selected,
+      selected: :accent,
       unselected: :unselected,
       indicator: :accent,
       border: :border
