@@ -88,9 +88,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
     :ok
   end
 
-  defp forbidden_reset_route, do: "/" <> "users" <> "/" <> "reset_password"
-  defp forbidden_http_prefix, do: "http" <> "://"
-  defp forbidden_https_prefix, do: "https" <> "://"
+  defp forbidden_reset_route, do: "/users/reset_password"
+  defp forbidden_http_prefix, do: "http://"
+  defp forbidden_https_prefix, do: "https://"
 
   describe "init_screen_state/1 (AUDIT-19)" do
     test "returns minimal menu sub-state" do
