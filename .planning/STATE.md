@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: Completed 26-02-tabs-moderation-fit-PLAN.md
-last_updated: "2026-04-26T22:12:47.782Z"
+stopped_at: Completed 26-03-boards-viewport-PLAN.md
+last_updated: "2026-04-26T22:22:11.561Z"
 last_activity: 2026-04-26
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 7
-  completed_plans: 2
-  percent: 29
+  completed_plans: 3
+  percent: 43
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 26 (layout-width-foundations) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
 Last activity: 2026-04-26
 
@@ -59,6 +59,7 @@ Last activity: 2026-04-26
 | Phase 15 P02 | 5min | 3 tasks | 5 files |
 | Phase 26 P01 | 9min | 2 tasks | 6 files |
 | Phase 26 P02 | 6min | 3 tasks | 10 files |
+| Phase 26 P03 | 6min | 2 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -92,6 +93,9 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 26 Plan 02]: Tabbed operator screens pass drawable content width, not raw terminal columns, into Tabs.render/2.
 - [Phase ?]: [Phase 26 Plan 02]: Moderation compact height prioritizes ConsoleTable content over KvGrid summaries.
 - [Phase ?]: [Phase 26 Plan 02]: Shared invite tables use ratio columns resolved against a conservative drawable width when callers omit :width.
+- [Phase 26]: BoardTree windowing derives the focused row from Raxol tree cursor and visible nodes without mutating tree state.
+- [Phase 26]: Boards screen passes drawable content width and a compact logical tree-row budget into BoardTree.
+- [Phase 26]: Compact Boards rendering reserves detail, feedback, and inspector rows only when they fit, with the tree winning at small heights.
 
 ### Pending Todos
 
@@ -136,6 +140,6 @@ Items acknowledged and deferred at v1.3 close on 2026-04-26:
 
 ## Session Continuity
 
-Last session: 2026-04-26T22:12:47.776Z
-Stopped at: Completed 26-02-tabs-moderation-fit-PLAN.md
+Last session: 2026-04-26T22:22:11.556Z
+Stopped at: Completed 26-03-boards-viewport-PLAN.md
 Resume file: None
