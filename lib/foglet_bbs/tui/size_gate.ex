@@ -7,11 +7,10 @@ defmodule Foglet.TUI.SizeGate do
   pure render-time branch — `state.current_screen`, `state.screen_state`,
   composer drafts, and selected indices are preserved across resize.
 
-  Thresholds (D-02, D-13):
-    - User-facing minimum: 60×20 (shown in the gate message)
-    - Code-level threshold: 64×22 strict inequality (accounts for chrome:
-      outer border 2×2 + padding 2×2 + StatusBar 1 row + divider 1 row +
-      KeyBar 1 row). Effective content area at 64×22 = 60×15.
+  Threshold (D-02, D-13): 64×22 strict inequality. Below this, chrome
+  (outer border 2×2 + padding 2×2 + StatusBar 1 row + divider 1 row +
+  KeyBar 1 row) leaves no usable content area. The gate message quotes
+  the same number so users know exactly what size makes the gate go away.
 
   See `05-CONTEXT.md` D-01..D-13 for the full decision trail.
   """
@@ -22,8 +21,6 @@ defmodule Foglet.TUI.SizeGate do
 
   @min_cols 64
   @min_rows 22
-  @user_facing_min_cols 60
-  @user_facing_min_rows 20
 
   @doc "Returns the code-level minimum columns. 64."
   @spec min_cols() :: pos_integer()
@@ -51,16 +48,15 @@ defmodule Foglet.TUI.SizeGate do
   @doc """
   Renders the centered four-line "terminal too small" message.
 
-  Copy per D-07:
+  Copy:
     Terminal too small.
-    Foglet BBS requires at least 60×20.
+    Foglet BBS requires at least 64×22.
     Your terminal is currently: {cols}×{rows}.
     Please resize.
 
-  Centering uses `column` with `justify_content: :center` and
-  `align_items: :center`. Color comes from `theme.dim.fg` (D-07),
-  falling back to `Theme.default()` when `session_context.theme` is
-  absent (same pattern as StatusBar and ScreenFrame).
+  Color comes from `theme.dim.fg` (D-07), falling back to `Theme.default()`
+  when `session_context.theme` is absent (same pattern as StatusBar and
+  ScreenFrame).
   """
   @spec render(map()) :: any()
   def render(state) do
@@ -90,7 +86,7 @@ defmodule Foglet.TUI.SizeGate do
           [
             text("Terminal too small.", fg: fg),
             text(
-              "Foglet BBS requires at least #{@user_facing_min_cols}×#{@user_facing_min_rows}.",
+              "Foglet BBS requires at least #{@min_cols}×#{@min_rows}.",
               fg: fg
             ),
             text("Your terminal is currently: #{cols}×#{rows}.", fg: fg),

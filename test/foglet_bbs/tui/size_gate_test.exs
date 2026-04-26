@@ -63,17 +63,17 @@ defmodule Foglet.TUI.SizeGateTest do
       assert serialized =~ "55×18"
     end
 
-    test "includes the user-facing minimum 60×20 in the message" do
+    test "includes the minimum 64×22 in the message" do
       element = SizeGate.render(%{terminal_size: {40, 10}, session_context: %{}})
       serialized = inspect(element, limit: :infinity)
-      assert serialized =~ "60×20"
+      assert serialized =~ "64×22"
     end
 
     test "includes all four required lines" do
       element = SizeGate.render(%{terminal_size: {40, 10}, session_context: %{}})
       serialized = inspect(element, limit: :infinity)
       assert serialized =~ "Terminal too small."
-      assert serialized =~ "Foglet BBS requires at least 60×20."
+      assert serialized =~ "Foglet BBS requires at least 64×22."
       assert serialized =~ "Your terminal is currently: 40×10."
       assert serialized =~ "Please resize."
     end

@@ -569,7 +569,7 @@ defmodule Foglet.TUI.AppTest do
       element = App.view(state)
       serialized = inspect(element, limit: :infinity)
       assert serialized =~ "Terminal too small."
-      assert serialized =~ "Foglet BBS requires at least 60×20."
+      assert serialized =~ "Foglet BBS requires at least 64×22."
       assert serialized =~ "40×30"
     end
 
