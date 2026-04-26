@@ -26,6 +26,9 @@ defmodule Foglet.TUI.PubSubForwarder do
 
   ## Topic conventions (Audit #12)
 
+  Topic strings are constructed by `Foglet.PubSub`, which is the canonical
+  source of truth. The four patterns are:
+
   - `"user:<user_id>"` — per-user notifications / DMs
   - `"boards"` — aggregate board activity (new posts, read-pointer changes)
   - `"board:<board_id>"` — per-board thread activity

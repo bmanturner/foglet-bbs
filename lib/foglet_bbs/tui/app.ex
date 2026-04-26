@@ -18,6 +18,7 @@ defmodule Foglet.TUI.App do
   use Raxol.Core.Runtime.Application
 
   alias Foglet.Accounts
+  alias Foglet.PubSub
   alias Foglet.Sessions.Preferences
   alias Foglet.Sessions.Session
   alias Foglet.Threads.ThreadEntry
@@ -250,28 +251,28 @@ defmodule Foglet.TUI.App do
   defp build_pubsub_topics(state) do
     topics =
       if state.current_user do
-        ["user:#{state.current_user.id}"]
+        [PubSub.user_topic(state.current_user.id)]
       else
         []
       end
 
     topics =
       if state.current_screen in [:board_list] do
-        ["boards" | topics]
+        [PubSub.boards_aggregate() | topics]
       else
         topics
       end
 
     topics =
       if state.current_screen in [:thread_list] and state.current_board do
-        ["board:#{state.current_board.id}" | topics]
+        [PubSub.board_topic(state.current_board.id) | topics]
       else
         topics
       end
 
     topics =
       if state.current_screen in [:post_reader, :post_composer] and state.current_thread do
-        ["thread:#{state.current_thread.id}" | topics]
+        [PubSub.thread_topic(state.current_thread.id) | topics]
       else
         topics
       end
