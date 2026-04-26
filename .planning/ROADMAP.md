@@ -273,7 +273,7 @@ Cross-cutting constraints:
 2. Moderation tabs show scope/status summaries, honest empty states, and table-driven log/user/board views that degrade cleanly at 64x22.
 3. Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling, with wide metric layouts treated as enhancement.
 4. Account, Moderation, and Sysop reuse shared badges, key/value grids, table presets, modal form treatment, and optional inspectors rather than bespoke strings.
-**Plans:** 5/5 plans complete
+**Plans:** 6/6 plans complete
 Plans:
 - [x] 25-01-shared-scaffolding-PLAN.md — Wave 1 shared scaffolding: Modal.Form Shift+Tab event-shape parity, field_value/2 accessor for prefs live preview (D-03 / Pitfall 5), and per-tab layout-smoke set_active_tab/2 helper.
 - [x] 25-02-account-conversion-PLAN.md — Wave 2 Account: PROFILE + PREFS via Modal.Form (live preview preserved); SSH_KEYS via ConsoleTable; per-tab smoke at 64x22 / 80x24.
@@ -315,4 +315,4 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 22. Post Reader Facelift | v1.3 | 3/3 | Complete   | 2026-04-25 |
 | 23. Composer Facelift | v1.3 | 4/4 | Complete    | 2026-04-25 |
 | 24. Operator Console Primitives | v1.3 | 6/6 | Complete    | 2026-04-25 |
-| 25. Operator Console Conversion | v1.3 | 5/5 | Complete   | 2026-04-26 |
+| 25. Operator Console Conversion | v1.3 | 6/6 | Complete   | 2026-04-26 |
