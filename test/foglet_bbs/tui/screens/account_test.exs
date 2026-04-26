@@ -324,8 +324,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
     end
 
-    test "'Q' returns to :main_menu", %{state: state} do
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "Q"}, state)
+    test "Ctrl+Q returns to :main_menu", %{state: state} do
+      {:update, new_state, _cmds} =
+        Account.handle_key(%{key: :char, char: "Q", ctrl: true}, state)
+
       assert new_state.current_screen == :main_menu
     end
 
