@@ -133,22 +133,50 @@ Which phases cover which requirements. Filled by the roadmapper.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 through LAYOUT-06 | TBD | Pending |
-| CURSOR-01 | TBD | Pending |
-| BREAD-01 | TBD | Pending |
-| FORM-01 through FORM-06 | TBD | Pending |
-| SYSOP-01 through SYSOP-07 | TBD | Pending |
-| ACCT-01 through ACCT-05 | TBD | Pending |
-| AUTH-01 through AUTH-04 | TBD | Pending |
-| MENU-01 through MENU-05 | TBD | Pending |
-| POST-01, POST-02 | TBD | Pending |
-| BOARD-01 | TBD | Pending |
+| LAYOUT-01 | Phase 26 | Pending |
+| LAYOUT-02 | Phase 26 | Pending |
+| LAYOUT-03 | Phase 26 | Pending |
+| LAYOUT-04 | Phase 26 | Pending |
+| LAYOUT-05 | Phase 26 | Pending |
+| LAYOUT-06 | Phase 26 | Pending |
+| POST-01 | Phase 26 | Pending |
+| CURSOR-01 | Phase 27 | Pending |
+| BREAD-01 | Phase 27 | Pending |
+| FORM-01 | Phase 28 | Pending |
+| FORM-02 | Phase 28 | Pending |
+| FORM-03 | Phase 28 | Pending |
+| FORM-04 | Phase 28 | Pending |
+| FORM-05 | Phase 28 | Pending |
+| FORM-06 | Phase 28 | Pending |
+| SYSOP-01 | Phase 29 | Pending |
+| SYSOP-02 | Phase 29 | Pending |
+| SYSOP-03 | Phase 29 | Pending |
+| SYSOP-04 | Phase 29 | Pending |
+| SYSOP-05 | Phase 29 | Pending |
+| SYSOP-06 | Phase 29 | Pending |
+| SYSOP-07 | Phase 29 | Pending |
+| ACCT-01 | Phase 30 | Pending |
+| ACCT-02 | Phase 30 | Pending |
+| ACCT-03 | Phase 30 | Pending |
+| ACCT-04 | Phase 30 | Pending |
+| ACCT-05 | Phase 30 | Pending |
+| AUTH-01 | Phase 31 | Pending |
+| AUTH-02 | Phase 31 | Pending |
+| AUTH-03 | Phase 31 | Pending |
+| AUTH-04 | Phase 31 | Pending |
+| MENU-01 | Phase 32 | Pending |
+| MENU-02 | Phase 32 | Pending |
+| MENU-03 | Phase 32 | Pending |
+| MENU-04 | Phase 32 | Pending |
+| MENU-05 | Phase 32 | Pending |
+| POST-02 | Phase 33 | Pending |
+| BOARD-01 | Phase 33 | Pending |
 
 **Coverage:**
-- v1.4 requirements: 32 total
-- Mapped to phases: 0 (roadmapper to fill)
-- Unmapped: 32 ⚠️ (will be 0 after roadmap creation)
+- v1.4 requirements: 38 total (corrected from initial 32 estimate; the actual REQ-ID list contains 38 distinct items: LAYOUT 6 + CURSOR 1 + BREAD 1 + FORM 6 + SYSOP 7 + ACCT 5 + AUTH 4 + MENU 5 + POST 2 + BOARD 1)
+- Mapped to phases: 38
+- Unmapped: 0 ✓
 
 ---
 *Requirements defined: 2026-04-26 — derived from ISSUES.md and v1.4 research synthesis*
-*Last updated: 2026-04-26 at v1.4 milestone start*
+*Last updated: 2026-04-26 — Traceability table populated by roadmapper at milestone-roadmap creation*
