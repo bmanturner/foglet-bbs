@@ -69,7 +69,11 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
       placeholder: Keyword.get(opts, :placeholder, "")
     }
 
-    {:ok, raxol_state} = RaxolTextInput.init(raxol_props)
+    raxol_state =
+      case RaxolTextInput.init(raxol_props) do
+        {:ok, rs} -> rs
+        {:error, reason} -> raise "TextInput: RaxolTextInput.init failed: #{inspect(reason)}"
+      end
 
     %__MODULE__{
       raxol_state: raxol_state,
