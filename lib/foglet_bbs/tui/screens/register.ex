@@ -21,6 +21,7 @@ defmodule Foglet.TUI.Screens.Register do
   """
 
   alias Foglet.{Accounts, Config}
+  alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -206,15 +207,12 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp focused_input(state) do
-    reg = get_register_ss(state)
-    focused = Map.get(reg, :focused_field, :handle)
-    Map.get(reg, input_key(focused))
+    FocusInput.get_focused(get_register_ss(state), &input_key/1, :handle)
   end
 
   defp update_focused_input(state, new_input) do
     reg = get_register_ss(state)
-    focused = Map.get(reg, :focused_field, :handle)
-    new_reg = Map.put(reg, input_key(focused), new_input)
+    new_reg = FocusInput.update_focused(reg, new_input, &input_key/1, :handle)
     put_register_ss(state, new_reg)
   end
 
