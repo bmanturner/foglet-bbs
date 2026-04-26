@@ -9,6 +9,9 @@
 2. Oneliners box has strange '|||||||||||||||||||||' appearing along the top border.
 3. Command bar says "↑/↓ Select" but up and down arrow don't appear to do anything.
 4. The navigation keys should be accent color
+5. Indent the navigation items 1, also move the navigation keys to the left by 1
+6. Apply theme properly to navigation items
+7. Apply theme to oneliners properly
 
 # Account Screen
 1. Command bar says "Esc Cancel" but pressing Escape does nothing
