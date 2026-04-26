@@ -107,8 +107,10 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
       |> Map.get(:board)
       |> map_or_empty()
 
-    state_board[:name] || compose_board[:name] || "Boards"
+    board_label(state_board) || board_label(compose_board) || "Boards"
   end
+
+  defp board_label(board), do: Map.get(board, :name)
 
   defp thread_title(state) do
     state
