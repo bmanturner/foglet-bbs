@@ -1422,7 +1422,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
       ss = state.screen_state.sysop
-      state = %{state | screen_state: Map.put(state.screen_state, :sysop, %{ss | users_view: view})}
+
+      state = %{
+        state
+        | screen_state: Map.put(state.screen_state, :sysop, %{ss | users_view: view})
+      }
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Sysop.handle_key(key, state)
@@ -1490,6 +1494,66 @@ defmodule Foglet.TUI.Screens.SysopTest do
   # BOARDS destructive styling routes through commands.destructive (D-07)
   # =========================================================================
 
+  # =========================================================================
+  # Phase 25 Plan 05 — Per-tab theme hygiene (D-12) + Inspector deferral (D-20)
+  # =========================================================================
+
+  describe "Phase 25 theme hygiene (D-12)" do
+    import Foglet.TUI.WidgetHelpers
+    import Foglet.TUI.LayoutSmokeHelpers
+
+    for tab <- ["SITE", "LIMITS", "BOARDS", "SYSTEM"] do
+      @tab tab
+      test "converted Sysop #{tab} tab leaks no color atoms", %{state: state} do
+        ss =
+          Sysop.init_screen_state()
+          |> set_active_tab(@tab)
+
+        state = put_in(state, [:screen_state, :sysop], ss)
+        serialized = state |> Sysop.render() |> inspect(limit: :infinity)
+
+        for color <- color_names() do
+          refute color_atom_leaked?(serialized, color),
+                 "leaked :#{color} in converted Sysop #{@tab} tab"
+        end
+      end
+    end
+
+    test "converted Sysop USERS tab leaks no color atoms", %{state: state} do
+      sysop = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "hygiene_sysop",
+        role: :sysop,
+        status: :active
+      }
+
+      state = activate_users_tab(state, sysop)
+      serialized = state |> Sysop.render() |> inspect(limit: :infinity)
+
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
+               "leaked :#{color} in converted Sysop USERS tab"
+      end
+    end
+  end
+
+  describe "Phase 25 Workspace.Inspector deferral (D-20)" do
+    test "no screen module references Workspace.Inspector" do
+      offenders =
+        "lib/foglet_bbs/tui/screens/"
+        |> Path.expand()
+        |> Path.join("**/*.ex")
+        |> Path.wildcard()
+        |> Enum.filter(fn path ->
+          path |> File.read!() |> String.contains?("Workspace.Inspector")
+        end)
+
+      assert offenders == [],
+             "Phase 25 D-20: Workspace.Inspector must not be referenced from screens; " <>
+               "offending files: #{inspect(offenders)}"
+    end
+  end
+
   describe "BOARDS destructive styling routes through commands.destructive (D-07)" do
     test "Foglet.TUI.Presentation.theme_mappings().commands.destructive maps to :error" do
       mapping = Foglet.TUI.Presentation.theme_mappings()
@@ -1507,6 +1571,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, _} = Sysop.handle_key(%{key: :char, char: "D"}, state)
 
       bv = state.screen_state.sysop.boards_view
+
       assert bv.modal_kind in [:archive_board, :archive_category],
              "Expected archive confirm modal after D key"
 

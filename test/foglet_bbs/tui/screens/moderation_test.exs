@@ -417,6 +417,53 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # Phase 25 Plan 05 — Per-tab theme hygiene (D-12)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 25 theme hygiene (D-12)" do
+    import Foglet.TUI.WidgetHelpers
+    import Foglet.TUI.LayoutSmokeHelpers
+
+    for tab <- ["LOG", "USERS", "BOARDS"] do
+      @tab tab
+      test "converted Moderation #{tab} tab leaks no color atoms" do
+        ss =
+          Moderation.init_screen_state()
+          |> set_active_tab(@tab)
+
+        state =
+          build_state(:mod)
+          |> put_in([:screen_state, :moderation], ss)
+
+        serialized = state |> Moderation.render() |> inspect(limit: :infinity)
+
+        for color <- color_names() do
+          refute color_atom_leaked?(serialized, color),
+                 "leaked :#{color} in converted Moderation #{@tab} tab"
+        end
+      end
+    end
+
+    test "converted Moderation INVITES tab leaks no color atoms" do
+      ss =
+        Moderation.init_screen_state(invites_visible?: true)
+        |> set_active_tab("INVITES")
+
+      state =
+        :mod
+        |> build_state_with_policy("mods")
+        |> put_in([:screen_state, :moderation], ss)
+
+      serialized = state |> Moderation.render() |> inspect(limit: :infinity)
+
+      for color <- color_names() do
+        refute color_atom_leaked?(serialized, color),
+               "leaked :#{color} in converted Moderation INVITES tab"
+      end
+    end
+  end
+
   defp restore_invite_config(_context) do
     Config.init_cache()
     current_generators = Config.get("invite_code_generators", "sysops")
@@ -490,6 +537,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
+
       assert joined =~ "When" or joined =~ "Actor" or joined =~ "Body" or joined =~ "Reason",
              "Expected ConsoleTable column header in LOG tab, got: #{inspect(flat)}"
     end
@@ -503,6 +551,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
+
       assert joined =~ "No moderation events",
              "Expected empty-state copy in LOG tab, got: #{inspect(flat)}"
     end
@@ -525,19 +574,21 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       state =
         :mod
         |> build_state()
-        |> put_moderation_state(1, mod_log: [
-          audit_row("mod1", "body text", "reason1", ~U[2026-01-01 00:00:00Z])
-        ])
+        |> put_moderation_state(1,
+          mod_log: [
+            audit_row("mod1", "body text", "reason1", ~U[2026-01-01 00:00:00Z])
+          ]
+        )
 
       result = Moderation.handle_key(%{key: :enter}, state)
 
       case result do
         {:update, _new_state, cmds} ->
           refute Enum.any?(cmds, fn
-            {:ban_user, _} -> true
-            {:remove_post, _} -> true
-            _ -> false
-          end),
+                   {:ban_user, _} -> true
+                   {:remove_post, _} -> true
+                   _ -> false
+                 end),
                  "Expected no domain dispatch from LOG Enter, got: #{inspect(cmds)}"
 
         :no_match ->
@@ -553,7 +604,9 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Moderation.handle_key(key, state)
-        assert is_tuple(result) or result == :no_match, "Expected valid result for #{inspect(key)}"
+
+        assert is_tuple(result) or result == :no_match,
+               "Expected valid result for #{inspect(key)}"
       end
     end
   end
@@ -580,6 +633,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
+
       assert joined =~ "Handle" or joined =~ "Role" or joined =~ "Status",
              "Expected ConsoleTable column header in USERS tab, got: #{inspect(flat)}"
     end
@@ -593,6 +647,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
+
       assert joined =~ "No active users",
              "Expected empty-state copy in USERS tab, got: #{inspect(flat)}"
     end
@@ -605,7 +660,9 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Moderation.handle_key(key, state)
-        assert is_tuple(result) or result == :no_match, "Expected valid result for #{inspect(key)}"
+
+        assert is_tuple(result) or result == :no_match,
+               "Expected valid result for #{inspect(key)}"
       end
     end
 
@@ -642,12 +699,15 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         :mod
         |> build_state()
         |> put_moderation_state(4,
-          boards: [%{name: "General", slug: "general", category_name: "Main", scope: {:board, "b1"}}]
+          boards: [
+            %{name: "General", slug: "general", category_name: "Main", scope: {:board, "b1"}}
+          ]
         )
         |> Moderation.render()
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
+
       assert joined =~ "Board" or joined =~ "Category" or joined =~ "State",
              "Expected ConsoleTable column header in BOARDS tab, got: #{inspect(flat)}"
     end
@@ -661,6 +721,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
+
       assert joined =~ "No boards",
              "Expected empty-state copy in BOARDS tab, got: #{inspect(flat)}"
     end
@@ -673,7 +734,9 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Moderation.handle_key(key, state)
-        assert is_tuple(result) or result == :no_match, "Expected valid result for #{inspect(key)}"
+
+        assert is_tuple(result) or result == :no_match,
+               "Expected valid result for #{inspect(key)}"
       end
     end
   end
@@ -732,7 +795,9 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Moderation.handle_key(key, state)
-        assert is_tuple(result) or result == :no_match, "Expected valid result for #{inspect(key)}"
+
+        assert is_tuple(result) or result == :no_match,
+               "Expected valid result for #{inspect(key)}"
       end
     end
   end

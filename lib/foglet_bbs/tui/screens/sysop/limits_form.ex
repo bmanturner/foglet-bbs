@@ -12,8 +12,6 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   alias Foglet.Config
   alias Foglet.Config.Schema
-  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   import Raxol.Core.Renderer.View
 

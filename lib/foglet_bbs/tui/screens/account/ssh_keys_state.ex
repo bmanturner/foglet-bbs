@@ -177,11 +177,17 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   # "created: YYYY-MM-DD HH:MM:SSZ" matches the format the old row_label
   # function used, so existing KEYS-03 render tests continue to pass (D-19).
   defp format_created(nil), do: ""
-  defp format_created(%DateTime{} = ts), do: "created: " <> Calendar.strftime(ts, "%Y-%m-%d %H:%M:%SZ")
+
+  defp format_created(%DateTime{} = ts),
+    do: "created: " <> Calendar.strftime(ts, "%Y-%m-%d %H:%M:%SZ")
+
   defp format_created(other), do: to_string(other)
 
   # "Never used" or "last used: YYYY-MM-DD HH:MM:SSZ" — old KEYS-03 format.
   defp format_last_used(nil), do: "Never used"
-  defp format_last_used(%DateTime{} = ts), do: "last used: " <> Calendar.strftime(ts, "%Y-%m-%d %H:%M:%SZ")
+
+  defp format_last_used(%DateTime{} = ts),
+    do: "last used: " <> Calendar.strftime(ts, "%Y-%m-%d %H:%M:%SZ")
+
   defp format_last_used(other), do: to_string(other)
 end

@@ -727,6 +727,35 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # Phase 25 Plan 05 — Per-tab theme hygiene (D-12)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 25 theme hygiene (D-12)" do
+    import Foglet.TUI.WidgetHelpers
+    import Foglet.TUI.LayoutSmokeHelpers
+
+    for tab <- ["PROFILE", "PREFS", "SSH KEYS"] do
+      @tab tab
+      test "converted Account #{tab} tab leaks no color atoms" do
+        ss =
+          Account.init_screen_state()
+          |> set_active_tab(@tab)
+
+        state =
+          build_state_for_role(:user)
+          |> put_in([:screen_state, :account], ss)
+
+        serialized = state |> Account.render() |> inspect(limit: :infinity)
+
+        for color <- color_names() do
+          refute color_atom_leaked?(serialized, color),
+                 "leaked :#{color} in converted Account #{@tab} tab"
+        end
+      end
+    end
+  end
+
   defp restore_invite_config(_context) do
     Config.init_cache()
     current_generators = Config.get("invite_code_generators", "sysops")
@@ -800,7 +829,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
-      ss_with_error = %{ss | profile_form: ModalForm.set_errors(ss.profile_form, %{location: "is too short"})}
+      ss_with_error = %{
+        ss
+        | profile_form: ModalForm.set_errors(ss.profile_form, %{location: "is too short"})
+      }
 
       state =
         build_state_for_role(:user)
@@ -934,6 +966,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Account.handle_key(key, state)
+
         assert match?({:update, _, _}, result) or result == :no_match,
                "expected no crash for key #{inspect(key)} on empty SSH KEYS list"
       end
