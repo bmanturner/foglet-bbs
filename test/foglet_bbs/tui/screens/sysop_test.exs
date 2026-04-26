@@ -1193,8 +1193,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
     test "r refreshes the snapshot", %{state: state} do
       state = activate_system_tab(state)
       old = state.screen_state.sysop.system_snapshot
-      # Sleep a touch so uptime_ms strictly advances.
-      Process.sleep(5)
       {:update, state2, _} = Sysop.handle_key(%{key: :char, char: "r"}, state)
       new = state2.screen_state.sysop.system_snapshot
 
