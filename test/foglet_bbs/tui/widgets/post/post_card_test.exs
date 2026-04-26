@@ -104,8 +104,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
 
     test "scroll_offset is forwarded to MarkdownBody" do
       post = sample_post(%{body: "line A\n\nline B\n\nline C"})
-      # With scroll_offset 2, only line C should remain in body text
-      result = PostCard.render(post, 80, theme(), scroll_offset: 2, max_lines: :all)
+      # With paragraph blanks preserved, offset 4 reaches the third content line.
+      result = PostCard.render(post, 80, theme(), scroll_offset: 4, max_lines: :all)
       flat = flatten_text(result)
       refute flat =~ "line A"
       refute flat =~ "line B"
@@ -324,7 +324,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       tuples = Foglet.Markdown.render(body)
       result = PostCard.render_body_lines(tuples, 80, theme())
       assert length(result) == Foglet.TUI.Widgets.Post.MarkdownBody.line_count(body)
-      assert length(result) == 3
+      assert length(result) == 5
     end
 
     test "body content is included but header content is NOT" do

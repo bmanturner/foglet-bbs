@@ -484,6 +484,26 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       refute String.contains?(flat, "First paragraph.\nSecond paragraph.")
     end
 
+    test "inherits MarkdownBody paragraph grouping for soft and blank line breaks" do
+      s =
+        p2_state(%{
+          posts: [p2_post(body: "soft\nbreak\n\nFirst\n\nSecond\n\n\nThird")]
+        })
+
+      tree = PostReader.render(s)
+      viewport = find_node(tree, &match?(%{id: "post_reader_vp"}, &1))
+      serialized = inspect(viewport, printable_limit: :infinity, limit: :infinity)
+      flat = flatten_text(viewport)
+
+      assert flat =~ "soft"
+      assert flat =~ "break"
+      assert flat =~ "First"
+      assert flat =~ "Second"
+      assert flat =~ "Third"
+      refute String.contains?(flat, "\n")
+      refute serialized =~ ~s(content: "\\n")
+    end
+
     test "bold markdown renders formatted (not raw **asterisks**)" do
       s = p2_state(%{posts: [p2_post(body: "Hello **world**.")]})
 
@@ -715,6 +735,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       """
 
       s = p2_state(%{posts: [p2_post(body: welcome_body)]})
+      s = %{s | terminal_size: {80, 40}}
       tree = PostReader.render(s)
       flat = flatten_text(tree)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)

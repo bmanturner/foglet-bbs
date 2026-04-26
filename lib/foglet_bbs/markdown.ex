@@ -115,7 +115,10 @@ defmodule Foglet.Markdown do
     # Paragraphs → text + newline
     |> String.replace(~r/<p>(.*?)<\/p>/s, "\\1\n")
     # List items
-    |> String.replace(~r/<li>(.*?)<\/li>/s, "  \u2022 \\1\n")
+    |> String.replace(~r/<li>(.*?)<\/li>\s*/s, "  \u2022 \\1\n")
+    # Lists contribute structural tag newlines in MDEx HTML; remove those so
+    # list items stay one rendered line each while paragraphs keep separators.
+    |> String.replace(~r/<\/?(?:ul|ol)[^>]*>\s*/s, "")
     # Blockquotes → indented
     |> String.replace(~r/<blockquote>(.*?)<\/blockquote>/s, "  | \\1")
     # Strip remaining HTML tags (keep their text content)
@@ -255,21 +258,5 @@ defmodule Foglet.Markdown do
       end
     end)
     |> Enum.reject(fn {s, _} -> s == "" end)
-    # Merge adjacent plain+newline tuples and deduplicate consecutive newlines
-    |> deduplicate_newlines()
-  end
-
-  defp deduplicate_newlines(tuples) do
-    Enum.reduce(tuples, [], fn item, acc ->
-      case {item, acc} do
-        {{"\n", :plain}, [{"\n", :plain} | _]} ->
-          # Skip duplicate consecutive newlines
-          acc
-
-        _ ->
-          [item | acc]
-      end
-    end)
-    |> Enum.reverse()
   end
 end

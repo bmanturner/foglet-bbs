@@ -131,23 +131,46 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
   # Private — line grouping
   # ------------------------------------------------------------------
 
-  # Splits a flat `[{text, style}]` list into a list of line-groups,
-  # dropping `{"\n", :plain}` separator tuples and empty groups.
-  # Each group is a `[{text, style}]` list of one or more styled runs
-  # that belong on the same physical line.
+  # Splits a flat `[{text, style}]` list into line groups while preserving
+  # exactly one blank visible line for paragraph separators.
   @spec group_by_newline([tuple_entry()]) :: [[tuple_entry()]]
   defp group_by_newline(tuples) do
     tuples
-    |> Enum.chunk_by(&newline?/1)
-    |> Enum.reject(&newline_group?/1)
+    |> Enum.reduce({[], [], 0}, &group_tuple/2)
+    |> finish_line_groups()
   end
 
   defp newline?({"\n", :plain}), do: true
   defp newline?(_), do: false
 
-  defp newline_group?([{"\n", :plain} | _]), do: true
-  defp newline_group?([]), do: true
-  defp newline_group?(_), do: false
+  defp group_tuple(tuple, {groups, current, newline_count}) do
+    if newline?(tuple) do
+      {groups, current, newline_count + 1}
+    else
+      if newline_count > 0 do
+        groups = flush_newlines(groups, current, newline_count)
+        {groups, [tuple], 0}
+      else
+        {groups, [tuple | current], 0}
+      end
+    end
+  end
+
+  defp finish_line_groups({groups, current, newline_count}) do
+    groups
+    |> flush_newlines(current, newline_count)
+    |> Enum.reverse()
+  end
+
+  defp flush_newlines(groups, [], _newline_count), do: groups
+
+  defp flush_newlines(groups, current, newline_count) when newline_count >= 2 do
+    [[], Enum.reverse(current) | groups]
+  end
+
+  defp flush_newlines(groups, current, _newline_count) do
+    [Enum.reverse(current) | groups]
+  end
 
   # Apply scroll_offset / max_lines to the list of line-groups.
   defp window_lines(lines, 0, :all), do: lines
@@ -190,6 +213,10 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
   # A row with a single plain run collapses to a bare `text/2` (avoids
   # an unnecessary row wrapper and matches the terseness of
   # `text("", ...)` used elsewhere).
+  defp line_group_to_row([], theme) do
+    text("", fg: theme.primary.fg)
+  end
+
   defp line_group_to_row([{s, style}], theme) do
     styled_text(s, style, theme)
   end

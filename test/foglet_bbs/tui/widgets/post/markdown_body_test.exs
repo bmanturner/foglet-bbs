@@ -64,14 +64,25 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
   end
 
   describe "render/4 — line grouping (RENDER-01)" do
-    test "two-paragraph input produces exactly 2 line groups" do
-      result = MarkdownBody.render("First.\n\nSecond.", 80, theme())
+    test "soft line break produces adjacent line groups with no blank group" do
+      result = MarkdownBody.render("First\nSecond", 80, theme())
       assert top_level_line_count(result) == 2
+      assert flatten_text(result) == "FirstSecond"
     end
 
-    test "heading followed by paragraph produces exactly 2 line groups" do
+    test "two-paragraph input produces one blank visible line between paragraphs" do
+      result = MarkdownBody.render("First.\n\nSecond.", 80, theme())
+      assert top_level_line_count(result) == 3
+    end
+
+    test "three newline separators still produce exactly one blank visible line" do
+      result = MarkdownBody.render("First\n\n\nSecond", 80, theme())
+      assert top_level_line_count(result) == 3
+    end
+
+    test "heading followed by paragraph produces one blank visible line between groups" do
       result = MarkdownBody.render("# Title\n\nBody text.", 80, theme())
-      assert top_level_line_count(result) == 2
+      assert top_level_line_count(result) == 3
     end
 
     test "bulleted list produces one line per bullet" do
@@ -130,13 +141,13 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
     test "scroll_offset: 0, max_lines: :all renders all lines" do
       input = "line 1\n\nline 2\n\nline 3"
       result = MarkdownBody.render(input, 80, theme(), scroll_offset: 0, max_lines: :all)
-      assert top_level_line_count(result) == 3
+      assert top_level_line_count(result) == 5
     end
 
     test "scroll_offset: 1 drops the first line" do
       input = "line 1\n\nline 2\n\nline 3"
       result = MarkdownBody.render(input, 80, theme(), scroll_offset: 1, max_lines: :all)
-      assert top_level_line_count(result) == 2
+      assert top_level_line_count(result) == 4
       flat = flatten_text(result)
       refute flat =~ "line 1"
       assert flat =~ "line 2"
@@ -172,7 +183,11 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
     end
 
     test "counts each paragraph as one logical line" do
-      assert MarkdownBody.line_count("first\n\nsecond") == 2
+      assert MarkdownBody.line_count("first\n\nsecond") == 3
+    end
+
+    test "collapses longer paragraph separators to one blank logical line" do
+      assert MarkdownBody.line_count("first\n\n\nsecond") == 3
     end
 
     test "counts each bullet as one logical line" do
@@ -206,7 +221,17 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
       tuples = Foglet.Markdown.render(body)
       result = MarkdownBody.render_tuples_as_lines(tuples, 80, theme())
       assert length(result) == MarkdownBody.line_count(body)
+      assert length(result) == 5
+    end
+
+    test "blank groups render as empty themed text nodes without literal newline content" do
+      tuples = Foglet.Markdown.render("First\n\nSecond")
+      result = MarkdownBody.render_tuples_as_lines(tuples, 80, theme())
+
       assert length(result) == 3
+      blank = Enum.at(result, 1)
+      assert flatten_text(blank) == ""
+      refute inspect(blank, printable_limit: :infinity, limit: :infinity) =~ ~s(content: "\\n")
     end
 
     test "each element is a Raxol view element map" do

@@ -204,6 +204,18 @@ defmodule Foglet.MarkdownTest do
       assert String.contains?(all_text, "Second paragraph.")
     end
 
+    test "paragraph separators preserve consecutive newline tuples" do
+      result = Markdown.render("First paragraph.\n\nSecond paragraph.")
+
+      assert [
+               {"First paragraph.", :plain},
+               {"\n", :plain},
+               {"\n", :plain},
+               {"Second paragraph.", :plain},
+               {"\n", :plain}
+             ] = result
+    end
+
     test "HTML entities in output are decoded" do
       result = Markdown.render("Cats & dogs")
       all_text = Enum.map_join(result, "", fn {s, _} -> s end)
