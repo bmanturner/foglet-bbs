@@ -267,12 +267,8 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp preview_state(state, theme) do
-    session_context =
-      state
-      |> Map.get(:session_context, %{})
-      |> Map.put(:theme, theme)
-
-    %{state | session_context: session_context}
+    sc = Map.get(state, :session_context) || %Foglet.TUI.SessionContext{}
+    %{state | session_context: Map.put(sc, :theme, theme)}
   end
 
   defp account_chrome do

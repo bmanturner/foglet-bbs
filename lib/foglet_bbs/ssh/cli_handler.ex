@@ -404,7 +404,7 @@ defmodule Foglet.SSH.CLIHandler do
     preferences = Preferences.from_user(user)
 
     %{
-      session_context: %{
+      session_context: %Foglet.TUI.SessionContext{
         user: user,
         user_id: user && user.id,
         session_pid: state.session_pid,

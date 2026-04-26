@@ -34,7 +34,13 @@ defmodule Foglet.TUI.Screens.Domain do
   """
   @spec get(map(), domain_key()) :: result()
   def get(ctx, key) when key in @supported_keys do
-    case get_in(ctx, [:domain, key]) do
+    mod =
+      case Map.get(ctx, :domain) do
+        domain when is_map(domain) -> Map.get(domain, key)
+        _ -> nil
+      end
+
+    case mod do
       mod when is_atom(mod) and not is_nil(mod) -> {:ok, mod}
       _ -> {:error, :not_configured}
     end

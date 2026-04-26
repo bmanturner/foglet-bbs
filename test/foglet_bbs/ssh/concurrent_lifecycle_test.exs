@@ -27,12 +27,11 @@ defmodule Foglet.SSH.ConcurrentLifecycleTest do
     width: 80,
     height: 24,
     context: %{
-      session_context: %{
+      session_context: %Foglet.TUI.SessionContext{
         user: nil,
         user_id: nil,
         session_pid: nil,
-        peer: nil,
-        pubkey_user: nil
+        pubkey_authenticated: false
       },
       terminal_size: {80, 24}
     }

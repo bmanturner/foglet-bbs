@@ -156,7 +156,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
     test "guest context (no pubkey match) produces login screen" do
       guest_ctx = %{
-        session_context: %{
+        session_context: %Foglet.TUI.SessionContext{
           user: nil,
           user_id: nil,
           session_pid: nil,
@@ -182,7 +182,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
       }
 
       auth_ctx = %{
-        session_context: %{
+        session_context: %Foglet.TUI.SessionContext{
           user: user,
           user_id: user.id,
           session_pid: nil,
