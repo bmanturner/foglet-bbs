@@ -22,6 +22,15 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
     end
   end
 
+  defp width_before_cursor!(rendered) do
+    flat = flatten_text(rendered)
+
+    case String.split(flat, "▌", parts: 2) do
+      [before, _after] -> TextWidth.display_width(before)
+      [_no_cursor] -> flunk("expected cursor marker ▌ in rendered output, got: #{inspect(flat)}")
+    end
+  end
+
   describe "init/1" do
     test "test 2 — default value produces struct with empty raxol_state value" do
       state = TextInput.init([])
@@ -135,7 +144,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
       assert state.raxol_state.cursor_pos == 3
 
       result = TextInput.render(state, theme: theme(), focused: true)
-      assert width_before_cursor(result) == TextWidth.display_width("abc")
+      assert width_before_cursor!(result) == TextWidth.display_width("abc")
     end
 
     test "wide grapheme: cursor after 'a中' is at cell column 3 (not 2)" do
@@ -146,7 +155,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
       state = %{state | raxol_state: %{state.raxol_state | cursor_pos: 2}}
 
       result = TextInput.render(state, theme: theme(), focused: true)
-      assert width_before_cursor(result) == 3
+      assert width_before_cursor!(result) == 3
     end
 
     test "focused: false renders no cursor marker" do
