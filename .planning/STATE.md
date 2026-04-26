@@ -2,10 +2,10 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
-status: verifying
+status: executing
 stopped_at: Completed 26-04-markdown-verification-PLAN.md
-last_updated: "2026-04-26T22:31:57.386Z"
-last_activity: 2026-04-26
+last_updated: "2026-04-26T22:55:10.600Z"
+last_activity: 2026-04-26 -- Phase 27 execution started
 progress:
   total_phases: 8
   completed_phases: 1
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 26 — layout-width-foundations
+**Current focus:** Phase 27 — cursor-breadcrumb-polish
 
 ## Current Position
 
-Phase: 26 (layout-width-foundations) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-04-26
+Phase: 27 (cursor-breadcrumb-polish) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 27
+Last activity: 2026-04-26 -- Phase 27 execution started
 
 ## Performance Metrics
 

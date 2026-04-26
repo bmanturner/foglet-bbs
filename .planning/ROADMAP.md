@@ -16,7 +16,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | Phase | Name | Goal (one-line) | Requirements | UI |
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
-| 27 | Cursor & Breadcrumb Polish | Text inputs show a real cursor and Login sub-flows update their breadcrumb | CURSOR-01, BREAD-01 (2) | yes |
+| 27 | Cursor & Breadcrumb Polish | 0/3 | Planned    |  |
 | 28 | Modal.Form Substrate | Forms route keystrokes to the focused field, accept Up/Down/Shift+Tab/Esc/Enter as advertised, and never double-submit | FORM-01..06 (6) | yes |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
