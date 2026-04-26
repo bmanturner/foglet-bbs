@@ -45,6 +45,7 @@
 
 # Moderation Screen
 1. LOG, USERS, BOARDS tabs break the entire interface. Interface extends above the terminal dimensions
+2. LOG table truncates early even though there's plenty of space. Table should be responsive.
 
 # Boards Screen
 1. Entire interface is broken. Interface extends above the terminal dimensions
