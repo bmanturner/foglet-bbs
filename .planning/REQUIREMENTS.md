@@ -10,8 +10,8 @@ Requirements for the v1.4 stabilization milestone. Every requirement traces to o
 
 ### Layout & Width Foundations
 
-- [ ] **LAYOUT-01**: The Tabs widget renders no trailing border-glyph artifacts to the right of the rightmost tab on any tabbed screen, at every supported terminal width (Globally #1).
-- [ ] **LAYOUT-02**: Moderation LOG, USERS, and BOARDS tabs render fully within the user's terminal at the 64×22 minimum, scrolling or paginating within the content region instead of overflowing above the top edge (Moderation #1).
+- [x] **LAYOUT-01**: The Tabs widget renders no trailing border-glyph artifacts to the right of the rightmost tab on any tabbed screen, at every supported terminal width (Globally #1).
+- [x] **LAYOUT-02**: Moderation LOG, USERS, and BOARDS tabs render fully within the user's terminal at the 64×22 minimum, scrolling or paginating within the content region instead of overflowing above the top edge (Moderation #1).
 - [ ] **LAYOUT-03**: The Boards screen renders fully within the user's terminal at the 64×22 minimum, with the categories+boards content scrolled inside the list region rather than overflowing the screen frame (Boards #1).
 - [x] **LAYOUT-04**: The Sysop INVITES table allocates proportional, separated columns (Code, Status, Created, Used by) using `Display.Table` auto-width semantics so columns are visibly distinct at every supported terminal width (Sysop #12).
 - [x] **LAYOUT-05**: The Moderation LOG table is responsive — it consumes available width up to the terminal limit, elides long messages with `…` rather than truncating mid-word, and renders timestamps in the user's preferred timezone (Moderation #2).
@@ -133,8 +133,8 @@ Which phases cover which requirements. Filled by the roadmapper.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| LAYOUT-01 | Phase 26 | Pending |
-| LAYOUT-02 | Phase 26 | Pending |
+| LAYOUT-01 | Phase 26 | Complete |
+| LAYOUT-02 | Phase 26 | Complete |
 | LAYOUT-03 | Phase 26 | Pending |
 | LAYOUT-04 | Phase 26 | Complete |
 | LAYOUT-05 | Phase 26 | Complete |

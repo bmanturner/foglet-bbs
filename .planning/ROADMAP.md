@@ -15,7 +15,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 
 | Phase | Name | Goal (one-line) | Requirements | UI |
 |-------|------|-----------------|--------------|-----|
-| 26 | Layout & Width Foundations | Width-math primitives stop overflowing terminals and over-collapsing markdown | LAYOUT-01..06, POST-01 (7) | yes |
+| 26 | Layout & Width Foundations | 2/4 | In Progress|  |
 | 27 | Cursor & Breadcrumb Polish | Text inputs show a real cursor and Login sub-flows update their breadcrumb | CURSOR-01, BREAD-01 (2) | yes |
 | 28 | Modal.Form Substrate | Forms route keystrokes to the focused field, accept Up/Down/Shift+Tab/Esc/Enter as advertised, and never double-submit | FORM-01..06 (6) | yes |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
