@@ -4,11 +4,23 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
   import Foglet.TUI.WidgetHelpers,
     only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.TextInput
 
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
+
+  # Walks the flattened text and returns the display width of the text
+  # before the first "▌" cursor marker.
+  defp width_before_cursor(rendered) do
+    flat = flatten_text(rendered)
+
+    case String.split(flat, "▌", parts: 2) do
+      [before, _after] -> TextWidth.display_width(before)
+      [_no_cursor] -> nil
+    end
+  end
 
   describe "init/1" do
     test "test 2 — default value produces struct with empty raxol_state value" do
@@ -96,18 +108,69 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
       assert flat =~ "mytext"
     end
 
-    test "focused: true shows active cursor marker before input text" do
-      state = TextInput.init(value: "mytext")
-      result = TextInput.render(state, theme: theme(), focused: true)
-
-      assert flatten_text(result) == "▌ mytext"
-    end
-
     test "focused: false does not show active cursor marker" do
       state = TextInput.init(value: "mytext")
       result = TextInput.render(state, theme: theme(), focused: false)
 
       assert flatten_text(result) == "mytext"
+    end
+  end
+
+  describe "render/2 — insertion cursor (CURSOR-01)" do
+    test "cursor_pos after typing 5 then backspace 2 is 3, width before cursor equals display_width('abc')" do
+      state = TextInput.init([])
+
+      state =
+        Enum.reduce(~w(a b c d e), state, fn char, st ->
+          {next, _} = TextInput.handle_event(%{key: :char, char: char}, st)
+          next
+        end)
+
+      state =
+        Enum.reduce(1..2, state, fn _, st ->
+          {next, _} = TextInput.handle_event(%{key: :backspace}, st)
+          next
+        end)
+
+      assert state.raxol_state.cursor_pos == 3
+
+      result = TextInput.render(state, theme: theme(), focused: true)
+      assert width_before_cursor(result) == TextWidth.display_width("abc")
+    end
+
+    test "wide grapheme: cursor after 'a中' is at cell column 3 (not 2)" do
+      # "中" measures as 2 terminal cells — proves cell width, not char count
+      state = TextInput.init(value: "a中e")
+
+      # Move cursor to after "a中" (position 2)
+      state = %{state | raxol_state: %{state.raxol_state | cursor_pos: 2}}
+
+      result = TextInput.render(state, theme: theme(), focused: true)
+      assert width_before_cursor(result) == 3
+    end
+
+    test "focused: false renders no cursor marker" do
+      state = TextInput.init(value: "mytext")
+      result = TextInput.render(state, theme: theme(), focused: false)
+
+      refute flatten_text(result) =~ "▌"
+    end
+
+    test "disabled: true renders no cursor marker" do
+      state = TextInput.init(value: "mytext")
+      result = TextInput.render(state, theme: theme(), focused: true, disabled: true)
+
+      refute flatten_text(result) =~ "▌"
+    end
+
+    test "masked focused input renders masked chars and cursor but does not leak raw value" do
+      state = TextInput.init(value: "secret", mask_char: "*")
+      result = TextInput.render(state, theme: theme(), focused: true)
+
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+      refute serialized =~ "secret"
+      assert flatten_text(result) =~ "▌"
+      assert flatten_text(result) =~ "***"
     end
   end
 

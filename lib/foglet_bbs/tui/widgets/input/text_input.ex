@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.TextInput, as: RaxolTextInput
 
@@ -100,8 +101,9 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
     focused? = Keyword.get(opts, :focused, false)
+    disabled? = Keyword.get(opts, :disabled, Map.get(rs, :disabled, false))
     rs_with_theme = %{rs | focused: focused?, theme: build_input_theme(theme)}
-    rendered_input = render_with_cursor_marker(rs_with_theme, focused?, theme)
+    rendered_input = render_with_cursor_marker(rs_with_theme, focused? and not disabled?, theme)
 
     if Keyword.get(opts, :bordered, false) do
       box style: %{border_fg: theme.border.fg, padding: 0} do
@@ -114,11 +116,28 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
 
   # --- private ---
 
-  defp render_with_cursor_marker(rs_with_theme, true, %Theme{} = theme) do
+  defp render_with_cursor_marker(rs, true, %Theme{} = theme) do
+    value = Map.get(rs, :value, "")
+    mask_char = Map.get(rs, :mask_char)
+    cursor_pos = Map.get(rs, :cursor_pos, 0)
+
+    display_text =
+      if mask_char do
+        String.duplicate(mask_char, length(String.graphemes(value)))
+      else
+        value
+      end
+
+    graphemes = String.graphemes(display_text)
+    {left_graphemes, right_graphemes} = Enum.split(graphemes, cursor_pos)
+    left_text = Enum.join(left_graphemes)
+    right_text = Enum.join(right_graphemes)
+
     row style: %{gap: 0} do
       [
-        text("▌ ", fg: theme.accent.fg, style: [:bold]),
-        RaxolTextInput.render(rs_with_theme, %{})
+        text(left_text, fg: theme.primary.fg),
+        text("▌", fg: theme.accent.fg, style: [:bold]),
+        text(right_text, fg: theme.primary.fg)
       ]
     end
   end
