@@ -49,6 +49,25 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
     ]
   end
 
+  defp large_directory(count \\ 24) do
+    boards =
+      for index <- 1..count do
+        %{
+          board: %{
+            id: "b#{index}",
+            name: "Board #{String.pad_leading(Integer.to_string(index), 2, "0")}",
+            slug: "board-#{index}"
+          },
+          subscribed?: true,
+          required_subscription?: false,
+          unread_count: rem(index, 4),
+          last_post_at: ten_min_ago()
+        }
+      end
+
+    [%{category: %{id: "c-large", name: "Large"}, boards: boards}]
+  end
+
   defp render_text(state, theme, opts \\ []) do
     BoardTree.render(state, [theme: theme] ++ opts) |> flatten_text()
   end
@@ -524,6 +543,35 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
       text = render_text(state, theme, width: 80)
 
       assert text =~ "▌ "
+    end
+  end
+
+  describe "render/2 - visible_height windowing" do
+    test "limits large visible trees to the requested rendered row count", %{theme: theme} do
+      state = BoardTree.init(directory: large_directory(), id: "bt-visible-height")
+
+      text = render_text(state, theme, width: 60, visible_height: 8)
+
+      rendered_rows = String.split(text, "\n", trim: true)
+      assert length(rendered_rows) <= 8
+      assert text =~ "Large"
+    end
+
+    test "keeps the focused board visible after cursor moves below the initial window",
+         %{theme: theme} do
+      state = BoardTree.init(directory: large_directory(), id: "bt-visible-focused")
+
+      state =
+        Enum.reduce(1..15, state, fn _index, acc ->
+          {next, _action} = BoardTree.handle_event(%{key: :down}, acc)
+          next
+        end)
+
+      text = render_text(state, theme, width: 60, visible_height: 8)
+
+      assert length(String.split(text, "\n", trim: true)) <= 8
+      assert text =~ "Board 15"
+      refute text =~ "Board 01"
     end
   end
 

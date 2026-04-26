@@ -141,14 +141,17 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   Optional keyword:
 
     * `:width` — display width budget (default `#{@default_width}`).
+    * `:visible_height` — maximum visible rows to render, or `:all`
+      for the full tree.
   """
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{tree: %Tree{raxol_state: rs}}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
     width = Keyword.get(opts, :width, @default_width)
+    visible_height = Keyword.get(opts, :visible_height, :all)
     cursor = Map.get(rs, :cursor)
     expanded = Map.get(rs, :expanded, MapSet.new())
-    visible = RaxolTree.visible_nodes(rs)
+    visible = rs |> RaxolTree.visible_nodes() |> visible_window(cursor, visible_height)
 
     rows =
       Enum.map(visible, fn {node, depth} ->
@@ -228,6 +231,27 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   end
 
   defp find_node(_, _), do: nil
+
+  @spec visible_window(
+          [{Tree.tree_node(), non_neg_integer()}],
+          term() | nil,
+          :all | pos_integer() | term()
+        ) ::
+          [{Tree.tree_node(), non_neg_integer()}]
+  defp visible_window(visible, _cursor, :all), do: visible
+  defp visible_window(visible, _cursor, height) when not is_integer(height), do: visible
+  defp visible_window(_visible, _cursor, height) when height <= 0, do: []
+
+  defp visible_window(visible, cursor, height) do
+    cursor_index =
+      Enum.find_index(visible, fn {node, _depth} ->
+        node.id == cursor
+      end) || 0
+
+    start = cursor_index |> min(length(visible) - height) |> max(0)
+
+    Enum.slice(visible, start, height)
+  end
 
   @spec separate_rows([any()], Theme.t()) :: [any()]
   defp separate_rows([], _theme), do: []
