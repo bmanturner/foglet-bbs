@@ -235,30 +235,9 @@ defmodule Foglet.Accounts do
   end
 
   @doc """
-  Verify handle + password. Always runs an Argon2 hash comparison
-  (even on unknown handle) to prevent timing-based user enumeration.
-  Rejects deleted users.
+  Verify handle + password. Delegates to `Foglet.Accounts.Auth`.
   """
-  @spec authenticate_by_password(String.t(), String.t()) ::
-          {:ok, User.t()} | {:error, :invalid_credentials}
-  def authenticate_by_password(handle, password)
-      when is_binary(handle) and is_binary(password) do
-    user = get_user_by_handle(handle)
-
-    cond do
-      user && is_nil(user.deleted_at) && Argon2.verify_pass(password, user.password_hash) ->
-        {:ok, user}
-
-      user ->
-        # real user, wrong password (or deleted)
-        {:error, :invalid_credentials}
-
-      true ->
-        # unknown handle — still burn a hash to equalize timing
-        Argon2.no_user_verify()
-        {:error, :invalid_credentials}
-    end
-  end
+  defdelegate authenticate_by_password(handle, password), to: Foglet.Accounts.Auth
 
   @doc "Apply role change (sysop pathway — used by `mix foglet.user.promote`)."
   @spec update_role(User.t(), atom() | String.t()) ::
@@ -345,20 +324,8 @@ defmodule Foglet.Accounts do
     |> Repo.update()
   end
 
-  @doc """
-  Reset a user's password. After update, deletes any outstanding
-  reset_password tokens for that user so a used token can't be replayed.
-  """
-  @spec reset_user_password(User.t(), map()) ::
-          {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  def reset_user_password(%User{} = user, attrs) do
-    Repo.transact(fn ->
-      with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
-        Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
-        {:ok, updated}
-      end
-    end)
-  end
+  @doc "Reset a user's password. Delegates to `Foglet.Accounts.Verification`."
+  defdelegate reset_user_password(user, attrs), to: Foglet.Accounts.Verification
 
   @spec confirm_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def confirm_user(%User{} = user) do
@@ -396,152 +363,20 @@ defmodule Foglet.Accounts do
     end
   end
 
-  @doc """
-  Build and persist an email verification code for `user`. Returns the raw 6-char
-  alphanumeric code (the value to show/email/log to the user). The code expires in
-  15 minutes. See D-08, D-10.
-  """
-  @spec build_verify_code(User.t()) :: {:ok, String.t()} | {:error, Ecto.Changeset.t()}
-  def build_verify_code(%User{} = user) do
-    {raw_code, token_struct} = UserToken.build_verify_code(user)
+  @doc "Build a verification code. Delegates to `Foglet.Accounts.Verification`."
+  defdelegate build_verify_code(user), to: Foglet.Accounts.Verification
 
-    case Repo.insert(token_struct) do
-      {:ok, _} -> {:ok, raw_code}
-      {:error, cs} -> {:error, cs}
-    end
-  end
+  @doc "Deliver a verification code. Delegates to `Foglet.Accounts.Verification`."
+  defdelegate deliver_verification_code(user), to: Foglet.Accounts.Verification
 
-  @doc """
-  Persist and attempt delivery of an email verification code.
+  @doc "Request terminal-native password reset delivery. Delegates to `Foglet.Accounts.Verification`."
+  defdelegate request_password_reset_delivery(identifier), to: Foglet.Accounts.Verification
 
-  Delivery is available only when `Foglet.Config.delivery_mode/0` is `"email"`.
-  Provider-specific errors are intentionally collapsed so TUI callers can keep
-  user-facing copy generic.
-  """
-  @spec deliver_verification_code(User.t()) ::
-          {:ok, :attempted} | {:error, :unavailable | :delivery_failed | Ecto.Changeset.t()}
-  def deliver_verification_code(%User{} = user) do
-    case Foglet.Config.delivery_mode() do
-      "email" ->
-        with {:ok, code} <- build_verify_code(user),
-             {:ok, _delivery} <- Foglet.Mailer.deliver(Email.verification_code(user, code)) do
-          {:ok, :attempted}
-        else
-          {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
-          {:error, _reason} -> {:error, :delivery_failed}
-        end
+  @doc "Verify an email code. Delegates to `Foglet.Accounts.Verification`."
+  defdelegate verify_email_code(user, code), to: Foglet.Accounts.Verification
 
-      "no_email" ->
-        {:error, :unavailable}
-    end
-  end
-
-  @doc """
-  Request terminal-native password reset delivery for a handle or email.
-
-  In email delivery mode this function is enumeration-safe: active matches,
-  unknown identifiers, deleted accounts, inactive accounts, and provider
-  failures all return the same outward result.
-  """
-  @spec request_password_reset_delivery(String.t()) ::
-          {:ok, :generic_response} | {:error, :unavailable}
-  def request_password_reset_delivery(identifier) when is_binary(identifier) do
-    case Foglet.Config.delivery_mode() do
-      "no_email" ->
-        {:error, :unavailable}
-
-      "email" ->
-        identifier
-        |> String.trim()
-        |> find_reset_delivery_user()
-        |> maybe_deliver_password_reset()
-
-        {:ok, :generic_response}
-    end
-  end
-
-  @doc """
-  Verify an email code for `user`. On success, confirms the user (sets `confirmed_at`)
-  and returns `{:ok, confirmed_user}`. On failure returns:
-    - `{:error, :invalid_code}` — code did not match any non-expired verify token
-    - `{:error, :expired}` — token exists but inserted_at > 15 minutes ago
-  See D-10, D-12.
-  """
-  @spec verify_email_code(User.t(), String.t()) ::
-          {:ok, User.t()} | {:error, :invalid_code | :expired}
-  def verify_email_code(%User{email: email} = user, code)
-      when is_binary(code) and byte_size(code) > 0 do
-    valid_row =
-      code
-      |> UserToken.verify_code_query(email)
-      |> Repo.one()
-
-    cond do
-      valid_row != nil and valid_row.user_id == user.id ->
-        Repo.transact(fn ->
-          with {:ok, confirmed} <- user |> User.confirm_changeset() |> Repo.update() do
-            Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["email_verify"]))
-            {:ok, confirmed}
-          end
-        end)
-
-      expired_exists?(user, code) ->
-        {:error, :expired}
-
-      true ->
-        {:error, :invalid_code}
-    end
-  end
-
-  defp expired_exists?(%User{id: user_id, email: email}, code) do
-    validity = UserToken.email_verify_validity_minutes()
-
-    query =
-      from t in UserToken,
-        where:
-          t.token == ^code and t.context == "email_verify" and
-            t.sent_to == ^email and t.user_id == ^user_id and
-            t.inserted_at <= ago(^validity, "minute")
-
-    Repo.exists?(query)
-  end
-
-  defp find_reset_delivery_user(""), do: nil
-
-  defp find_reset_delivery_user(identifier) do
-    case get_user_by_handle(identifier) || get_user_by_email(identifier) do
-      %User{status: :active, deleted_at: nil} = user -> user
-      _other -> nil
-    end
-  end
-
-  defp maybe_deliver_password_reset(nil), do: :ok
-
-  defp maybe_deliver_password_reset(%User{} = user) do
-    {raw_token, token_struct} = UserToken.build_email_token(user, "reset_password")
-
-    with {:ok, _token} <- Repo.insert(token_struct) do
-      _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
-      :ok
-    end
-  end
-
-  @doc """
-  Build and persist a reset-password token for operator-assisted retrieval.
-
-  Returns the raw token once so the caller can hand it to the user through a
-  supported operator-controlled channel. Only the hashed token row is stored.
-  """
-  @spec generate_reset_token_for_operator(User.t()) ::
-          {:ok, String.t()} | {:error, Ecto.Changeset.t()}
-  def generate_reset_token_for_operator(%User{} = user) do
-    {raw_token, token_struct} = UserToken.build_email_token(user, "reset_password")
-
-    case Repo.insert(token_struct) do
-      {:ok, _token} -> {:ok, raw_token}
-      {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
-    end
-  end
+  @doc "Generate a reset token for operator-assisted retrieval. Delegates to `Foglet.Accounts.Verification`."
+  defdelegate generate_reset_token_for_operator(user), to: Foglet.Accounts.Verification
 
   defp notify_sysops_pending_registration(%User{} = pending_user) do
     case Config.delivery_mode() do
@@ -612,148 +447,17 @@ defmodule Foglet.Accounts do
 
   # ---------- Invites ----------
 
-  @spec create_invite(User.t()) ::
-          {:ok, Invite.t()} | {:error, :forbidden | :limit_reached | Ecto.Changeset.t()}
-  def create_invite(%User{} = actor) do
-    with :ok <- Bodyguard.permit(Foglet.Authorization, :generate_invite, actor, :site),
-         :ok <- ensure_invite_generation_policy(actor),
-         :ok <- ensure_invite_generation_limit(actor) do
-      insert_invite(actor, 5)
-    else
-      {:error, :forbidden} -> {:error, :forbidden}
-      {:error, :limit_reached} -> {:error, :limit_reached}
-    end
-  end
+  @doc "Generate an invite code. Delegates to `Foglet.Accounts.Invites`."
+  defdelegate create_invite(actor), to: Foglet.Accounts.Invites
 
-  @spec list_invites(User.t()) :: {:ok, [invite_status()]} | {:error, :forbidden}
-  def list_invites(%User{} = actor) do
-    with :ok <- Bodyguard.permit(Foglet.Authorization, :generate_invite, actor, :site) do
-      invites =
-        Repo.all(from(i in Invite, order_by: [desc: i.inserted_at]))
-        |> Enum.map(&invite_status_map/1)
+  @doc "List all invites with status. Delegates to `Foglet.Accounts.Invites`."
+  defdelegate list_invites(actor), to: Foglet.Accounts.Invites
 
-      {:ok, invites}
-    end
-  end
+  @doc "Look up invite status by code. Delegates to `Foglet.Accounts.Invites`."
+  defdelegate get_invite_status(code), to: Foglet.Accounts.Invites
 
-  @spec get_invite_status(String.t()) :: {:ok, invite_status()} | {:error, :not_found}
-  def get_invite_status(code) when is_binary(code) do
-    case Repo.get_by(Invite, code: code) do
-      %Invite{} = invite -> {:ok, invite_status_map(invite)}
-      nil -> {:error, :not_found}
-    end
-  end
-
-  @spec revoke_invite(User.t(), String.t()) ::
-          {:ok, Invite.t()} | {:error, :forbidden | :not_found | :unavailable}
-  def revoke_invite(%User{} = actor, code) when is_binary(code) do
-    with :ok <- Bodyguard.permit(Foglet.Authorization, :revoke_invite, actor, :site) do
-      case Repo.get_by(Invite, code: code) do
-        nil ->
-          {:error, :not_found}
-
-        %Invite{} = invite ->
-          revoke_available_invite(invite, code)
-      end
-    end
-  end
-
-  defp ensure_invite_generation_policy(%User{role: :sysop}), do: :ok
-
-  defp ensure_invite_generation_policy(%User{role: :mod}) do
-    case Foglet.Config.invite_code_generators() do
-      policy when policy in ["mods", "any_user"] -> :ok
-      _policy -> {:error, :forbidden}
-    end
-  end
-
-  defp ensure_invite_generation_policy(%User{role: :user}) do
-    case Foglet.Config.invite_code_generators() do
-      "any_user" -> :ok
-      _policy -> {:error, :forbidden}
-    end
-  end
-
-  defp ensure_invite_generation_policy(%User{}), do: {:error, :forbidden}
-
-  defp ensure_invite_generation_limit(%User{role: :user, id: user_id}) do
-    if Foglet.Config.invite_code_generators() == "any_user" do
-      case Foglet.Config.invite_generation_per_user_limit() do
-        0 ->
-          :ok
-
-        limit when is_integer(limit) and limit > 0 ->
-          count = Repo.aggregate(from(i in Invite, where: i.issuer_id == ^user_id), :count)
-
-          if count >= limit do
-            {:error, :limit_reached}
-          else
-            :ok
-          end
-      end
-    else
-      :ok
-    end
-  end
-
-  defp ensure_invite_generation_limit(%User{}), do: :ok
-
-  defp insert_invite(%User{} = actor, attempts_remaining) do
-    %Invite{issuer_id: actor.id}
-    |> Invite.changeset(%{code: generate_invite_code()})
-    |> Repo.insert()
-    |> case do
-      {:ok, invite} ->
-        {:ok, invite}
-
-      {:error, changeset} = error ->
-        if invite_code_collision?(changeset) and attempts_remaining > 1 do
-          insert_invite(actor, attempts_remaining - 1)
-        else
-          error
-        end
-    end
-  end
-
-  defp invite_code_collision?(%Ecto.Changeset{errors: errors}) do
-    Keyword.has_key?(errors, :code)
-  end
-
-  defp generate_invite_code do
-    16
-    |> :crypto.strong_rand_bytes()
-    |> Base.encode32(case: :upper, padding: false)
-    |> String.replace(~r/[^A-Z0-9]/, "")
-  end
-
-  defp invite_status_map(%Invite{} = invite) do
-    %{
-      code: invite.code,
-      issuer_id: invite.issuer_id,
-      inserted_at: invite.inserted_at,
-      consumed_at: invite.consumed_at,
-      consumed_by_user_id: invite.consumed_by_user_id,
-      revoked_at: invite.revoked_at,
-      status: Invite.status(invite)
-    }
-  end
-
-  defp revoke_available_invite(%Invite{} = invite, code) do
-    if Invite.status(invite) == :available do
-      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
-
-      query =
-        from i in Invite,
-          where: i.code == ^code and is_nil(i.consumed_at) and is_nil(i.revoked_at)
-
-      case Repo.update_all(query, set: [revoked_at: now, updated_at: now]) do
-        {1, _rows} -> {:ok, Repo.get!(Invite, invite.id)}
-        {0, _rows} -> {:error, :unavailable}
-      end
-    else
-      {:error, :unavailable}
-    end
-  end
+  @doc "Revoke an unredeemed invite. Delegates to `Foglet.Accounts.Invites`."
+  defdelegate revoke_invite(actor, code), to: Foglet.Accounts.Invites
 
   # ---------- SSH Keys ----------
 
@@ -779,54 +483,11 @@ defmodule Foglet.Accounts do
     end
   end
 
-  @doc """
-  Lookup a user by an OpenSSH-format public key. Used by Phase 3 SSH
-  pubkey auth. Returns `{:ok, user}` if the fingerprint matches a
-  registered active user.
-  """
-  @spec get_user_by_public_key(String.t()) :: {:ok, User.t()} | {:error, :not_found}
-  def get_user_by_public_key(public_key_text) when is_binary(public_key_text) do
-    with {:ok, fp} <- SSHKey.compute_fingerprint(public_key_text),
-         %User{deleted_at: nil} = user <-
-           Repo.one(
-             from k in SSHKey,
-               where: k.fingerprint == ^fp,
-               join: u in assoc(k, :user),
-               where: is_nil(u.deleted_at) and u.status == :active,
-               select: u
-           ) do
-      {:ok, user}
-    else
-      _ -> {:error, :not_found}
-    end
-  end
+  @doc "Lookup a user by an OpenSSH-format public key. Delegates to `Foglet.Accounts.Auth`."
+  defdelegate get_user_by_public_key(public_key_text), to: Foglet.Accounts.Auth
 
-  @spec authenticate_by_public_key(String.t()) :: {:ok, User.t()} | {:error, :not_found}
-  def authenticate_by_public_key(public_key_text) when is_binary(public_key_text) do
-    with {:ok, fp} <- SSHKey.compute_fingerprint(public_key_text),
-         {%SSHKey{} = key, %User{} = user} <- get_active_ssh_key_and_user(fp) do
-      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
-
-      case Repo.update_all(from(k in SSHKey, where: k.id == ^key.id),
-             set: [last_used_at: now, updated_at: now]
-           ) do
-        {1, _rows} -> {:ok, user}
-        _ -> {:error, :not_found}
-      end
-    else
-      _ -> {:error, :not_found}
-    end
-  end
-
-  defp get_active_ssh_key_and_user(fingerprint) do
-    Repo.one(
-      from k in SSHKey,
-        where: k.fingerprint == ^fingerprint,
-        join: u in assoc(k, :user),
-        where: is_nil(u.deleted_at) and u.status == :active,
-        select: {k, u}
-    )
-  end
+  @doc "Authenticate via SSH public key. Delegates to `Foglet.Accounts.Auth`."
+  defdelegate authenticate_by_public_key(public_key_text), to: Foglet.Accounts.Auth
 
   # ---------- Tokens (no mailer in Phase 1 — D-01) ----------
 
