@@ -24,13 +24,12 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
 
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
-  def handle_key(event, %State{} = state, current_user) do
-    if form_event?(event) do
-      do_handle_key(event, state, current_user)
-    else
-      :no_match
-    end
+  def handle_key(%{key: key} = event, %State{} = state, current_user)
+      when key in [:char, :backspace, :enter, :escape, :tab, :shift_tab, :up, :down] do
+    do_handle_key(event, state, current_user)
   end
+
+  def handle_key(_event, %State{}, _current_user), do: :no_match
 
   defp do_handle_key(event, %State{profile_form: form} = state, current_user) do
     {new_form, action} = ModalForm.handle_event(event, form)
@@ -38,26 +37,16 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
 
     case action do
       :submitted ->
-        SubmitStash.with_stashed(__MODULE__, fn
-          nil ->
-            {:ok, state, []}
+        {:profile, payload} = SubmitStash.pop(__MODULE__)
 
-          {:profile, payload} ->
-            errors = validate_profile(payload)
+        attrs = %{
+          location: payload.location,
+          tagline: payload.tagline,
+          real_name: payload.real_name
+        }
 
-            if map_size(errors) == 0 do
-              attrs = %{
-                location: payload.location,
-                tagline: payload.tagline,
-                real_name: payload.real_name
-              }
-
-              {:ok, %{state | profile_dirty?: false, status_message: "Profile ready to save."},
-               [{:account_save_profile, attrs}]}
-            else
-              {:ok, %{state | profile_form: ModalForm.set_errors(new_form, errors)}, []}
-            end
-        end)
+        {:ok, %{state | profile_dirty?: false, status_message: "Profile ready to save."},
+         [{:account_save_profile, attrs}]}
 
       :cancelled ->
         reseeded = State.seed_from_user(state, current_user)
@@ -70,35 +59,7 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
     end
   end
 
-  defp validate_profile(payload) do
-    max_lengths = %{location: 80, tagline: 120, real_name: 120}
-
-    Enum.reduce(max_lengths, %{}, fn {field, max_len}, errors ->
-      value = Map.get(payload, field) || ""
-
-      if String.length(value) > max_len do
-        Map.put(errors, field, "must be at most #{max_len} characters")
-      else
-        errors
-      end
-    end)
-  end
-
   defp text_input_event?(%{key: :char}), do: true
   defp text_input_event?(%{key: :backspace}), do: true
   defp text_input_event?(_), do: false
-
-  # Events that a text form should process — everything that has meaning inside
-  # a text field, plus form navigation (Tab/Shift-Tab) and form commands
-  # (Enter/Esc). Function keys, mouse events, and other unknown keys are
-  # forwarded as :no_match so the screen layer can handle them.
-  defp form_event?(%{key: :char}), do: true
-  defp form_event?(%{key: :backspace}), do: true
-  defp form_event?(%{key: :enter}), do: true
-  defp form_event?(%{key: :escape}), do: true
-  defp form_event?(%{key: :tab}), do: true
-  defp form_event?(%{key: :shift_tab}), do: true
-  defp form_event?(%{key: :up}), do: true
-  defp form_event?(%{key: :down}), do: true
-  defp form_event?(_event), do: false
 end

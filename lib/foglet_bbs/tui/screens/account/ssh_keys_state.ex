@@ -146,10 +146,8 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   end
 
   defp cursor_index(%ConsoleTable{table: table}) do
-    Map.get(table.raxol_state || %{}, :selected_row) || 0
+    Map.get(table.raxol_state, :selected_row, 0) || 0
   end
-
-  defp cursor_index(_), do: 0
 
   # ---------------------------------------------------------------------------
   # Private helpers

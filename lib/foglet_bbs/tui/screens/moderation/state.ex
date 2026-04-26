@@ -27,6 +27,12 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @base_tabs ["QUEUE", "LOG", "USERS", "SANCTIONS", "BOARDS"]
   @invites_tab "INVITES"
 
+  @type summary_entry :: %{
+          required(:label) => String.t(),
+          required(:value) => String.t(),
+          optional(:state) => :error | :info
+        }
+
   @type t :: %__MODULE__{
           tabs: Tabs.t(),
           active_tab: non_neg_integer(),
@@ -42,9 +48,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
           log_table: ConsoleTable.t(),
           users_table: ConsoleTable.t(),
           boards_table: ConsoleTable.t(),
-          log_summary: [map()],
-          users_summary: [map()],
-          boards_summary: [map()]
+          log_summary: [summary_entry()],
+          users_summary: [summary_entry()],
+          boards_summary: [summary_entry()]
         }
 
   defstruct [
@@ -167,7 +173,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @doc """
   Builds the KvGrid summary entries for the LOG tab.
   """
-  @spec build_log_summary(list(), term(), list()) :: [map()]
+  @spec build_log_summary(list(), term(), list()) :: [summary_entry()]
   def build_log_summary(scopes, error, mod_log) do
     scope_label = format_scopes(scopes)
     count = length(mod_log)
@@ -191,7 +197,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @doc """
   Builds the KvGrid summary entries for the USERS tab.
   """
-  @spec build_users_summary(list(), term()) :: [map()]
+  @spec build_users_summary(list(), term()) :: [summary_entry()]
   def build_users_summary(users, error) do
     scope_label = "site"
     active_count = Enum.count(users, fn u -> Map.get(u, :status) in [:active, "active"] end)
@@ -216,7 +222,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @doc """
   Builds the KvGrid summary entries for the BOARDS tab.
   """
-  @spec build_boards_summary(list(), list(), term()) :: [map()]
+  @spec build_boards_summary(list(), list(), term()) :: [summary_entry()]
   def build_boards_summary(scopes, boards, error) do
     scope_label = format_scopes(scopes)
     count = length(boards)

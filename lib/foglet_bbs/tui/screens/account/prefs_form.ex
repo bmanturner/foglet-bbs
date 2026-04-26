@@ -18,8 +18,6 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
   alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
-  @time_formats ["12h", "24h"]
-
   @spec render(State.t(), Theme.t()) :: any()
   def render(%State{prefs_form: form}, %Theme{} = theme) do
     ModalForm.render(form, theme: theme)
@@ -27,13 +25,12 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
-  def handle_key(event, %State{} = state, current_user) do
-    if form_event?(event) do
-      do_handle_key(event, state, current_user)
-    else
-      :no_match
-    end
+  def handle_key(%{key: key} = event, %State{} = state, current_user)
+      when key in [:char, :backspace, :enter, :escape, :tab, :shift_tab, :up, :down] do
+    do_handle_key(event, state, current_user)
   end
+
+  def handle_key(_event, %State{}, _current_user), do: :no_match
 
   defp do_handle_key(event, %State{prefs_form: form} = state, current_user) do
     # Capture current theme value before event for diffing (A1 / Pitfall 5)
@@ -51,31 +48,21 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
     case action do
       :submitted ->
-        SubmitStash.with_stashed(__MODULE__, fn
-          nil ->
-            {:ok, state, []}
+        {:prefs, payload} = SubmitStash.pop(__MODULE__)
 
-          {:prefs, payload} ->
-            errors = validate_prefs(payload)
+        attrs = %{
+          timezone: payload.timezone,
+          preferences: %{"time_format" => payload.time_format},
+          theme: payload.theme
+        }
 
-            if map_size(errors) == 0 do
-              attrs = %{
-                timezone: payload.timezone,
-                preferences: %{"time_format" => payload.time_format},
-                theme: payload.theme
-              }
-
-              {:ok,
-               %{
-                 state
-                 | prefs_dirty?: false,
-                   status_message: "Preferences ready to save.",
-                   candidate_theme_id: nil
-               }, [{:account_save_prefs, attrs}]}
-            else
-              {:ok, %{state | prefs_form: ModalForm.set_errors(new_form, errors)}, []}
-            end
-        end)
+        {:ok,
+         %{
+           state
+           | prefs_dirty?: false,
+             status_message: "Preferences ready to save.",
+             candidate_theme_id: nil
+         }, [{:account_save_prefs, attrs}]}
 
       :cancelled ->
         reseeded = State.seed_from_user(state, current_user)
@@ -95,32 +82,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
   defp maybe_update_candidate_theme(state, _old, _new), do: state
 
-  defp validate_prefs(payload) do
-    %{}
-    |> maybe_put_error(:timezone, blank?(payload.timezone), "can't be blank")
-    |> maybe_put_error(
-      :time_format,
-      payload.time_format not in @time_formats,
-      "must be 12h or 24h"
-    )
-  end
-
-  defp maybe_put_error(errors, field, true, message), do: Map.put(errors, field, message)
-  defp maybe_put_error(errors, _field, false, _message), do: errors
-
-  defp blank?(value), do: value in [nil, ""]
-
   defp text_input_event?(%{key: :char}), do: true
   defp text_input_event?(%{key: :backspace}), do: true
   defp text_input_event?(_), do: false
-
-  defp form_event?(%{key: :char}), do: true
-  defp form_event?(%{key: :backspace}), do: true
-  defp form_event?(%{key: :enter}), do: true
-  defp form_event?(%{key: :escape}), do: true
-  defp form_event?(%{key: :tab}), do: true
-  defp form_event?(%{key: :shift_tab}), do: true
-  defp form_event?(%{key: :up}), do: true
-  defp form_event?(%{key: :down}), do: true
-  defp form_event?(_event), do: false
 end

@@ -42,10 +42,10 @@
   {"lib/foglet_bbs/tui/widgets/input/tabs.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/widgets/post/post_card.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/widgets/progress/spinner.ex", :contract_supertype},
-  # Wave 2 plan 02/03 artifacts — pre-existing warnings from Phase 25 conversions
-  {"lib/foglet_bbs/tui/screens/account/prefs_form.ex", :pattern_match},
-  {"lib/foglet_bbs/tui/screens/account/profile_form.ex", :pattern_match},
-  {"lib/foglet_bbs/tui/screens/account/ssh_keys_state.ex", :guard_fail},
-  {"lib/foglet_bbs/tui/screens/account/ssh_keys_state.ex", :pattern_match_cov},
-  {"lib/foglet_bbs/tui/screens/moderation/state.ex", :contract_supertype}
+  # Phase 25 Account forms intentionally expose a defensive :no_match fallback
+  # even though current call sites only route supported form events.
+  {"lib/foglet_bbs/tui/screens/account/prefs_form.ex",
+   "The pattern can never match the type true."},
+  {"lib/foglet_bbs/tui/screens/account/profile_form.ex",
+   "The pattern can never match the type true."}
 ]
