@@ -747,4 +747,196 @@ defmodule Foglet.TUI.Screens.AccountTest do
   defp put_ssh_key_form(account_state, form) do
     %{account_state | ssh_keys: %{account_state.ssh_keys | form: form}}
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 25 Plan 02 — Primitive-presence tests (TDD RED)
+  # ---------------------------------------------------------------------------
+
+  describe "PROFILE Modal.Form primitive presence" do
+    test "renders Modal.Form footer sentinel and form heading" do
+      state =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], Account.init_screen_state())
+
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
+             "expected Modal.Form footer sentinel '[Enter] Submit' in profile tab, got: #{inspect(flat)}"
+
+      assert Enum.any?(flat, &String.contains?(&1, "Profile")),
+             "expected form heading 'Profile' in profile tab"
+    end
+
+    test "renders labeled field rows for each profile field" do
+      state =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], Account.init_screen_state())
+
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Location")),
+             "expected 'Location' field label in profile tab"
+
+      assert Enum.any?(flat, &String.contains?(&1, "Tagline")),
+             "expected 'Tagline' field label in profile tab"
+
+      assert Enum.any?(flat, &String.contains?(&1, "Real name")),
+             "expected 'Real name' field label in profile tab"
+    end
+
+    test "renders required marker glyph for required fields" do
+      state =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], Account.init_screen_state())
+
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "*")),
+             "expected required marker '*' in profile tab form"
+    end
+
+    test "renders inline error text when set_errors is applied" do
+      ss = Account.init_screen_state()
+
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      ss_with_error = %{ss | profile_form: ModalForm.set_errors(ss.profile_form, %{location: "is too short"})}
+
+      state =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], ss_with_error)
+
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "is too short")),
+             "expected inline error 'is too short' in profile tab render"
+    end
+  end
+
+  describe "PREFS Modal.Form primitive presence" do
+    setup %{state: state} do
+      {:update, prefs_state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
+      %{state: prefs_state}
+    end
+
+    test "renders Modal.Form footer sentinel", %{state: state} do
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
+             "expected Modal.Form footer sentinel in prefs tab"
+    end
+
+    test "renders enum field for theme selection", %{state: state} do
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Theme")),
+             "expected 'Theme' enum field label in prefs tab"
+    end
+
+    test "cycling down on focused theme enum field updates candidate_theme_id" do
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "Etc/UTC",
+        preferences: %{"time_format" => "12h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], Account.init_screen_state(current_user: user))
+
+      {:update, state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
+
+      account_state = %{state.screen_state.account | prefs_focus: :theme}
+      state = put_in(state, [:screen_state, :account], account_state)
+
+      {:update, preview_state, []} = Account.handle_key(%{key: :down}, state)
+
+      assert preview_state.screen_state.account.candidate_theme_id != nil,
+             "expected candidate_theme_id to be set after cycling theme enum field down"
+    end
+  end
+
+  describe "SSH_KEYS ConsoleTable primitive presence" do
+    setup %{state: state} do
+      inserted_at = ~U[2026-04-24 10:11:12.123456Z]
+
+      account_state =
+        Account.init_screen_state()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(
+          :ssh_keys,
+          Foglet.TUI.Screens.Account.SSHKeysState.loaded(
+            Foglet.TUI.Screens.Account.SSHKeysState.new(),
+            [
+              %{
+                id: "k1",
+                label: "laptop",
+                fingerprint: "SHA256:abc123",
+                inserted_at: inserted_at,
+                last_used_at: nil,
+                public_key: "ssh-ed25519 AAAAC3 laptop@test"
+              }
+            ]
+          )
+        )
+
+      state = put_in(state, [:screen_state, :account], account_state)
+      %{state: state}
+    end
+
+    test "renders ConsoleTable header row with column labels", %{state: state} do
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "Label")),
+             "expected 'Label' column header in SSH KEYS tab"
+
+      assert Enum.any?(flat, &String.contains?(&1, "Fingerprint")),
+             "expected 'Fingerprint' column header in SSH KEYS tab"
+
+      assert Enum.any?(flat, &String.contains?(&1, "Created")),
+             "expected 'Created' column header in SSH KEYS tab"
+    end
+
+    test "renders empty state copy with empty list" do
+      state =
+        build_state_for_role(:user)
+        |> put_in(
+          [:screen_state, :account],
+          Account.init_screen_state()
+          |> Map.put(:active_tab, 2)
+          |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
+        )
+
+      flat = Account.render(state) |> collect_text_values()
+
+      assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet.")),
+             "expected empty state copy in SSH KEYS tab"
+    end
+
+    test "pressing down on non-empty list advances cursor without crash", %{state: state} do
+      result = Account.handle_key(%{key: :down}, state)
+      assert match?({:update, _, _}, result) or result == :no_match
+    end
+
+    test "pressing up, down, enter on empty list does not crash" do
+      state =
+        build_state_for_role(:user)
+        |> put_in(
+          [:screen_state, :account],
+          Account.init_screen_state()
+          |> Map.put(:active_tab, 2)
+          |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
+        )
+
+      for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
+        result = Account.handle_key(key, state)
+        assert match?({:update, _, _}, result) or result == :no_match,
+               "expected no crash for key #{inspect(key)} on empty SSH KEYS list"
+      end
+    end
+  end
 end

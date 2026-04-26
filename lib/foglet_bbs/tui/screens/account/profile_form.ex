@@ -1,151 +1,104 @@
 defmodule Foglet.TUI.Screens.Account.ProfileForm do
   @moduledoc """
-  Inline PROFILE tab form for Account (D-10, D-13, D-16).
+  PROFILE tab body for Account (D-10, D-13, D-16, Phase 25 Plan 02).
 
+  Delegates rendering and event handling to Modal.Form (D-01 / Pattern 1).
   Draft keys are atoms matching `Foglet.TUI.Screens.Account.State`.
-  """
 
-  import Raxol.Core.Renderer.View
+  Per RESEARCH Pitfall 4: this module renders Modal.Form body-only — no
+  outer box/border. The screen chrome (ScreenFrame) provides the border.
+
+  Per RESEARCH Pitfall 2 / Codex Concern 4: submit payloads are captured
+  via `Modal.Form.SubmitStash` rather than raw `Process.put/get`.
+  """
 
   alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Theme
-
-  @fields [:location, :tagline, :real_name]
-  @labels %{location: "Location", tagline: "Tagline", real_name: "Real name"}
-  @max_lengths %{location: 80, tagline: 120, real_name: 120}
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   @spec render(State.t(), Theme.t()) :: any()
-  def render(%State{} = state, %Theme{} = theme) do
-    column style: %{gap: 0} do
-      [
-        form_rows(state, theme),
-        error_rows(state.profile_errors, theme),
-        status_row(state.status_message, theme),
-        text("Tab/Up/Down: field  Enter/S: save  Esc/C: cancel", fg: theme.dim.fg)
-      ]
-      |> List.flatten()
-    end
+  def render(%State{profile_form: form}, %Theme{} = theme) do
+    ModalForm.render(form, theme: theme)
   end
 
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
   def handle_key(event, %State{} = state, current_user) do
-    cond do
-      next_focus?(event) ->
-        {:ok, %{state | profile_focus: move_focus(state.profile_focus, 1)}, []}
-
-      previous_focus?(event) ->
-        {:ok, %{state | profile_focus: move_focus(state.profile_focus, -1)}, []}
-
-      cancel?(event) ->
-        {:ok,
-         State.seed_from_user(
-           %{state | status_message: "Profile changes discarded."},
-           current_user
-         ), []}
-
-      save?(event) ->
-        save(state)
-
-      text_input?(event) ->
-        {:ok, update_text(state, event), []}
-
-      true ->
-        :no_match
-    end
-  end
-
-  defp form_rows(%State{} = state, %Theme{} = theme) do
-    Enum.map(@fields, fn field ->
-      label = Map.fetch!(@labels, field)
-      value = Map.get(state.profile_draft, field) || ""
-      marker = if state.profile_focus == field, do: "> ", else: "  "
-      fg = if state.profile_focus == field, do: theme.selected.fg, else: theme.primary.fg
-      text("#{marker}#{label}: #{value}", fg: fg)
-    end)
-  end
-
-  defp error_rows(errors, %Theme{} = theme) do
-    Enum.map(errors, fn {field, message} ->
-      text("#{Map.fetch!(@labels, field)} error: #{message}", fg: theme.error.fg)
-    end)
-  end
-
-  defp status_row(nil, _theme), do: []
-  defp status_row(message, %Theme{} = theme), do: [text(message, fg: theme.warning.fg)]
-
-  defp save(%State{} = state) do
-    errors = validate(state.profile_draft)
-
-    if map_size(errors) == 0 do
-      attrs = Map.take(state.profile_draft, @fields)
-
-      {:ok, %{state | profile_errors: %{}, status_message: "Profile ready to save."},
-       [{:account_save_profile, attrs}]}
+    if form_event?(event) do
+      do_handle_key(event, state, current_user)
     else
-      {:ok, %{state | profile_errors: errors, status_message: "Profile has errors."}, []}
+      :no_match
     end
   end
 
-  defp validate(draft) do
-    Enum.reduce(@max_lengths, %{}, fn {field, max_length}, errors ->
-      value = Map.get(draft, field) || ""
+  defp do_handle_key(event, %State{profile_form: form} = state, current_user) do
+    {new_form, action} = ModalForm.handle_event(event, form)
+    state = %{state | profile_form: new_form}
 
-      if String.length(value) > max_length do
-        Map.put(errors, field, "must be at most #{max_length} characters")
+    case action do
+      :submitted ->
+        SubmitStash.with_stashed(__MODULE__, fn
+          nil ->
+            {:ok, state, []}
+
+          {:profile, payload} ->
+            errors = validate_profile(payload)
+
+            if map_size(errors) == 0 do
+              attrs = %{
+                location: payload.location,
+                tagline: payload.tagline,
+                real_name: payload.real_name
+              }
+
+              {:ok, %{state | profile_dirty?: false, status_message: "Profile ready to save."},
+               [{:account_save_profile, attrs}]}
+            else
+              {:ok, %{state | profile_form: ModalForm.set_errors(new_form, errors)}, []}
+            end
+        end)
+
+      :cancelled ->
+        reseeded = State.seed_from_user(state, current_user)
+        {:ok, %{reseeded | status_message: "Profile changes discarded."}, []}
+
+      _ ->
+        dirty? = action == nil and text_input_event?(event)
+
+        {:ok, %{state | profile_dirty?: state.profile_dirty? or dirty?}, []}
+    end
+  end
+
+  defp validate_profile(payload) do
+    max_lengths = %{location: 80, tagline: 120, real_name: 120}
+
+    Enum.reduce(max_lengths, %{}, fn {field, max_len}, errors ->
+      value = Map.get(payload, field) || ""
+
+      if String.length(value) > max_len do
+        Map.put(errors, field, "must be at most #{max_len} characters")
       else
         errors
       end
     end)
   end
 
-  defp update_text(%State{} = state, %{key: :char, char: char}) do
-    put_profile_value(
-      state,
-      state.profile_focus,
-      (Map.get(state.profile_draft, state.profile_focus) || "") <> char
-    )
-  end
+  defp text_input_event?(%{key: :char}), do: true
+  defp text_input_event?(%{key: :backspace}), do: true
+  defp text_input_event?(_), do: false
 
-  defp update_text(%State{} = state, %{key: :backspace}) do
-    value = Map.get(state.profile_draft, state.profile_focus) || ""
-
-    put_profile_value(
-      state,
-      state.profile_focus,
-      String.slice(value, 0, max(String.length(value) - 1, 0))
-    )
-  end
-
-  defp put_profile_value(%State{} = state, field, value) do
-    %{
-      state
-      | profile_draft: Map.put(state.profile_draft, field, value),
-        profile_dirty?: true,
-        status_message: nil
-    }
-  end
-
-  defp move_focus(field, delta) do
-    idx = Enum.find_index(@fields, &(&1 == field)) || 0
-    Enum.at(@fields, rem(idx + delta + length(@fields), length(@fields)))
-  end
-
-  defp next_focus?(%{key: key}) when key in [:tab, :down], do: true
-  defp next_focus?(_event), do: false
-
-  defp previous_focus?(%{key: key}) when key in [:shift_tab, :up], do: true
-  defp previous_focus?(_event), do: false
-
-  defp cancel?(%{key: :escape}), do: true
-  defp cancel?(%{key: :char, char: char}) when char in ["c", "C"], do: true
-  defp cancel?(_event), do: false
-
-  defp save?(%{key: :enter}), do: true
-  defp save?(%{key: :char, char: char}) when char in ["s", "S"], do: true
-  defp save?(_event), do: false
-
-  defp text_input?(%{key: :char, char: char}), do: String.length(char) == 1
-  defp text_input?(%{key: :backspace}), do: true
-  defp text_input?(_event), do: false
+  # Events that a text form should process — everything that has meaning inside
+  # a text field, plus form navigation (Tab/Shift-Tab) and form commands
+  # (Enter/Esc). Function keys, mouse events, and other unknown keys are
+  # forwarded as :no_match so the screen layer can handle them.
+  defp form_event?(%{key: :char}), do: true
+  defp form_event?(%{key: :backspace}), do: true
+  defp form_event?(%{key: :enter}), do: true
+  defp form_event?(%{key: :escape}), do: true
+  defp form_event?(%{key: :tab}), do: true
+  defp form_event?(%{key: :shift_tab}), do: true
+  defp form_event?(%{key: :up}), do: true
+  defp form_event?(%{key: :down}), do: true
+  defp form_event?(_event), do: false
 end

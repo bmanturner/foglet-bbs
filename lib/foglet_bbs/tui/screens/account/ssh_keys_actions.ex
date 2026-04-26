@@ -40,7 +40,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysActions do
 
   @spec revoke_selected(User.t(), SSHKeysState.t()) :: {:ok, SSHKeysState.t()}
   def revoke_selected(%User{} = actor, %SSHKeysState{items: items} = state) when is_list(items) do
-    case Enum.at(items, state.selected_index) do
+    case Enum.at(items, SSHKeysState.selected_index(state)) do
       %{id: id} ->
         revoke_key(actor, id, state)
 

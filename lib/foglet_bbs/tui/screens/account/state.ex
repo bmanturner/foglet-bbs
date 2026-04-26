@@ -19,7 +19,10 @@ defmodule Foglet.TUI.Screens.Account.State do
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Tabs
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   @base_tabs ["PROFILE", "PREFS", "SSH KEYS"]
   @invites_tab "INVITES"
@@ -27,8 +30,11 @@ defmodule Foglet.TUI.Screens.Account.State do
   @type t :: %__MODULE__{
           tabs: Tabs.t(),
           active_tab: non_neg_integer(),
+          tab_labels: [String.t()],
           ssh_keys: SSHKeysState.t(),
           invites: InvitesState.t(),
+          profile_form: ModalForm.t() | nil,
+          prefs_form: ModalForm.t() | nil,
           profile_draft: map(),
           prefs_draft: map(),
           profile_focus: atom(),
@@ -44,8 +50,11 @@ defmodule Foglet.TUI.Screens.Account.State do
   defstruct [
     :tabs,
     active_tab: 0,
+    tab_labels: @base_tabs,
     ssh_keys: nil,
     invites: nil,
+    profile_form: nil,
+    prefs_form: nil,
     profile_draft: %{},
     prefs_draft: %{},
     profile_focus: :location,
@@ -74,12 +83,13 @@ defmodule Foglet.TUI.Screens.Account.State do
   def new(opts \\ []) do
     invites? = Keyword.get(opts, :invites_visible?, false)
     active = Keyword.get(opts, :active, 0)
-
     current_user = Keyword.get(opts, :current_user)
+    labels = tab_labels(invites?)
 
     %__MODULE__{
-      tabs: Tabs.init(tabs: tab_labels(invites?), active: active),
+      tabs: Tabs.init(tabs: labels, active: active),
       active_tab: active,
+      tab_labels: labels,
       ssh_keys: SSHKeysState.new(),
       invites: InvitesSurface.default_state()
     }
@@ -94,10 +104,15 @@ defmodule Foglet.TUI.Screens.Account.State do
   """
   @spec seed_from_user(t(), map() | struct() | nil) :: t()
   def seed_from_user(%__MODULE__{} = state, user) do
+    pd = profile_draft(user)
+    prd = prefs_draft(user)
+
     %{
       state
-      | profile_draft: profile_draft(user),
-        prefs_draft: prefs_draft(user),
+      | profile_draft: pd,
+        prefs_draft: prd,
+        profile_form: build_profile_form(pd),
+        prefs_form: build_prefs_form(prd),
         profile_errors: %{},
         prefs_errors: %{},
         profile_dirty?: false,
@@ -165,4 +180,62 @@ defmodule Foglet.TUI.Screens.Account.State do
   defp user_value(user, key, default) when is_map(user) do
     Map.get(user, key, default)
   end
+
+  # ---------------------------------------------------------------------------
+  # Modal.Form builders (Plan 02 — D-01 / Pattern 1)
+  # ---------------------------------------------------------------------------
+
+  defp build_profile_form(draft) do
+    ModalForm.init(
+      title: "Profile",
+      fields: [
+        %{name: :location, type: :text, label: "Location", value: draft.location || ""},
+        %{name: :tagline, type: :text, label: "Tagline", value: draft.tagline || ""},
+        %{
+          name: :real_name,
+          type: :text,
+          label: "Real name",
+          required: true,
+          value: draft.real_name || ""
+        }
+      ],
+      on_submit: fn payload -> SubmitStash.stash(__MODULE__, {:profile, payload}) end,
+      on_cancel: fn -> :ok end
+    )
+  end
+
+  defp build_prefs_form(draft) do
+    theme_ids = theme_id_strings()
+
+    ModalForm.init(
+      title: "Preferences",
+      fields: [
+        %{
+          name: :timezone,
+          type: :text,
+          label: "Timezone",
+          required: true,
+          value: draft.timezone || "Etc/UTC"
+        },
+        %{
+          name: :time_format,
+          type: :enum,
+          label: "Time format",
+          choices: ["12h", "24h"],
+          value: draft.time_format || "12h"
+        },
+        %{
+          name: :theme,
+          type: :enum,
+          label: "Theme",
+          choices: theme_ids,
+          value: draft.theme || "gray"
+        }
+      ],
+      on_submit: fn payload -> SubmitStash.stash(__MODULE__, {:prefs, payload}) end,
+      on_cancel: fn -> :ok end
+    )
+  end
+
+  defp theme_id_strings, do: Enum.map(Theme.ids(), &Atom.to_string/1)
 end
