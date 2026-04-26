@@ -1,8 +1,8 @@
 {
-  "version": "1.38.4",
-  "timestamp": "2026-04-25T20:18:40.952Z",
+  "version": "1.38.5",
+  "timestamp": "2026-04-26T02:45:29.036Z",
   "files": {
-    "get-shit-done/VERSION": "c52a02db14217ebe26e3928fc7917c86e5236c42354bb1a50033db6871af54a2",
+    "get-shit-done/VERSION": "ca01f24d74058369620ecf6739fea01c6b4cd9f5488ab847da8805d559e04716",
     "get-shit-done/bin/gsd-tools.cjs": "764d5a2d8ce387f046240eb41a9cabb4f8a9dec81198e7ab8e95bc7acded28d2",
     "get-shit-done/bin/lib/artifacts.cjs": "d24829e831ad0dccaeab97732f67a72b26049730b6ba7d3248e9a7adcde9d4ca",
     "get-shit-done/bin/lib/audit.cjs": "2dd47b2587bce43364f0cda8280706a13eef63025b7e7f0ab706cb29e829b07c",
@@ -176,7 +176,7 @@
     "get-shit-done/workflows/explore.md": "a394ffab9a090666e2adccbe52182a3a750414bd331f2b685eb922a5009632f7",
     "get-shit-done/workflows/extract_learnings.md": "83a9f9606e47a6ed619fd2b46129785afd2fa004ba20c6d9796d4c21d8831f75",
     "get-shit-done/workflows/fast.md": "92c5d3c80109d29e95b5b14c2c6c6e77da60278de28eaaed4fdc2a31fab27be8",
-    "get-shit-done/workflows/forensics.md": "cf1f1de12f32e6a5e58fb5c975b2828e95c1e495a1a9daf761f7d8e3cf4210a0",
+    "get-shit-done/workflows/forensics.md": "ddb7e097b10d61ab2f2cf6a3e67e4b0080f21e3d98b72cfd7ea178367db87a2c",
     "get-shit-done/workflows/graduation.md": "0b7c6e8b77556d491336fc9cc855146e3f40ce856839829cb769e6d438a68e8f",
     "get-shit-done/workflows/health.md": "db6ed855782170a87a2d7946fecdef0919da8cbbe5a496a196ae757c32ad0b36",
     "get-shit-done/workflows/help.md": "79272a7342b06ed4ce576322eeaf41615e1ad3dfa0c15e49ef5dece8d6fd1921",

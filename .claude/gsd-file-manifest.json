@@ -1,8 +1,8 @@
 {
-  "version": "1.38.4",
-  "timestamp": "2026-04-25T20:18:40.719Z",
+  "version": "1.38.5",
+  "timestamp": "2026-04-26T02:45:28.802Z",
   "files": {
-    "get-shit-done/VERSION": "c52a02db14217ebe26e3928fc7917c86e5236c42354bb1a50033db6871af54a2",
+    "get-shit-done/VERSION": "ca01f24d74058369620ecf6739fea01c6b4cd9f5488ab847da8805d559e04716",
     "get-shit-done/bin/gsd-tools.cjs": "764d5a2d8ce387f046240eb41a9cabb4f8a9dec81198e7ab8e95bc7acded28d2",
     "get-shit-done/bin/lib/artifacts.cjs": "d24829e831ad0dccaeab97732f67a72b26049730b6ba7d3248e9a7adcde9d4ca",
     "get-shit-done/bin/lib/audit.cjs": "2dd47b2587bce43364f0cda8280706a13eef63025b7e7f0ab706cb29e829b07c",
@@ -176,7 +176,7 @@
     "get-shit-done/workflows/explore.md": "d62ef86058d3efbc4ec87e75e8322554dfc201ceeeaf9a8dc3143f79ad4aa197",
     "get-shit-done/workflows/extract_learnings.md": "cf1ba7b9be3d1e3c6d52b2042665a1e5f3f3719d69cb93bc4bd2cb82cdeb655a",
     "get-shit-done/workflows/fast.md": "0f5240366bb835a913d7711e68eedb68dea3bc5e20e632c14d81f6db2dc75da5",
-    "get-shit-done/workflows/forensics.md": "a456b4f4231314e4a815a50934d2eb1820724abc0178325d3967254cc9b646d0",
+    "get-shit-done/workflows/forensics.md": "256c31ee4a5cb58935f3e99a746f435d39eb7082a076dbf21a9385759f2b37f5",
     "get-shit-done/workflows/graduation.md": "0b7c6e8b77556d491336fc9cc855146e3f40ce856839829cb769e6d438a68e8f",
     "get-shit-done/workflows/health.md": "bfc8fb685ade5ef16c52bbf3eec8f78cf2ded59522eeb17cb727ce7fc2e3ee2b",
     "get-shit-done/workflows/help.md": "67aa1b947dd4c107e180ad22ad1908490b4a3df0c460c2e7b58cbbde29704cfa",
@@ -265,16 +265,16 @@
     "agents/gsd-ui-researcher.md": "8c1cfc95abb5ab2993864d4d097ea585f7dac008b524520e1fa26080f1572a17",
     "agents/gsd-user-profiler.md": "66d63c1ad6ca85c58db2ae79f52fb3089c5d59eec81ebdc71e1316a276c8746b",
     "agents/gsd-verifier.md": "baad2ff385468f9ca4adc2983b2109097fa40d0ee05c523a7ac99f482a102cfc",
-    "hooks/gsd-check-update-worker.js": "52be452c694bbf5e52c779af53a72d4ae9bbff1e6fbc7ae77386f1b2a0a2a9b1",
-    "hooks/gsd-check-update.js": "4dff06799e53c37825f2c1732f13da8147d9b36eb067f785596b411dea9d6ca2",
-    "hooks/gsd-context-monitor.js": "ee3df041dd86da857a11fb8674c89c4ceb152ad788d8bb003ca2d0ffbb903375",
-    "hooks/gsd-phase-boundary.sh": "84bf43428b01297d27139670d04650ffed342b438eed157d83e6c57cf48c15f1",
-    "hooks/gsd-prompt-guard.js": "a21d26a5a1e6a49da05a1fee7277fc28ec79eb76e29ad55a6988929c7f62f3f2",
-    "hooks/gsd-read-guard.js": "1489d6f120f28c08e69cc39e8fe0386e5ef192e9a230018dc7ab9ab39a6d683d",
-    "hooks/gsd-read-injection-scanner.js": "620f79a28e109a2d33fedd8c1b602c22aa040aaa5af84f76d98263e7f649541c",
-    "hooks/gsd-session-state.sh": "77c3fe8a0d5d8608015f09938c69b1bedb55a1c7267d070d693c808ceb6e6fff",
-    "hooks/gsd-statusline.js": "8c7e8b264b681bfc483d740665ac9e312361aad5dbdd22c9381c8edfe6fc9ffd",
-    "hooks/gsd-validate-commit.sh": "a0b0143545983df0ccdf5c55f91d7e8c637344e727e6befd14d0532f797da732",
-    "hooks/gsd-workflow-guard.js": "97665451288946f09602c3c05793c0f530548d18f9829a0c5eb876fd249e4e97"
+    "hooks/gsd-check-update-worker.js": "62c79ccc1e31868d4c0f8ce68d34261e563704c2071040c0aec9edf22da3af00",
+    "hooks/gsd-check-update.js": "bb77cc766ed31e776517108e95e514afc6ed078429549cc2752c8aed9d1e3724",
+    "hooks/gsd-context-monitor.js": "0609eac9c47949957c87dcd76c53b8c770093f892890854b8654466b3303178f",
+    "hooks/gsd-phase-boundary.sh": "a63afdfb4213c08b94ba57a2e9a30112a6f738388ca0dc7de54da2203684b2b2",
+    "hooks/gsd-prompt-guard.js": "7364374783016abfbddc921f05d61b7c64504cf6a713eb7dbcf1eab8b767da69",
+    "hooks/gsd-read-guard.js": "664b005ffca8ee6a75ff4f306a3c60f98eda2a4dbe4037b6b85bdf0766e79957",
+    "hooks/gsd-read-injection-scanner.js": "f1c9e54ca9f10ec5b2f3675eedb76d1a0b8cc7c67b121ac13f201a63329370e7",
+    "hooks/gsd-session-state.sh": "3bf080a595dd72dc1a00cf153f8b1e2127ad88cc4cde67b10f5055866cfc4cee",
+    "hooks/gsd-statusline.js": "f2767d0eedff19bb63a6687ebdbfc769d403edbcdcca028f25dca28372f32218",
+    "hooks/gsd-validate-commit.sh": "4f37c75831b030e50660c7d0f5dc6a5fc535d3bbeeb549b160eb90d9be65eb5e",
+    "hooks/gsd-workflow-guard.js": "de178634ee1c96fcd5d02e4f3735cf31aa080f37fe9ddbcf6bbb285d15405830"
   }
 }
