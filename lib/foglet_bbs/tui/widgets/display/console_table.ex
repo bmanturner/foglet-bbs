@@ -18,7 +18,7 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTable do
   @default_page_size 10
   @default_width 12
 
-  defstruct [:table, :columns, :rows, :empty_state, :selectable, last_action: nil]
+  defstruct [:table, :columns, :rows, :empty_state, :selectable, :width, last_action: nil]
 
   @type t :: %__MODULE__{
           table: Table.t(),
@@ -26,6 +26,7 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTable do
           rows: [map()],
           empty_state: String.t(),
           selectable: boolean(),
+          width: pos_integer() | nil,
           last_action: Table.action()
         }
 
@@ -41,6 +42,7 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTable do
     filterable = Keyword.get(opts, :filterable, false)
     selectable = Keyword.get(opts, :selectable, false)
     page_size = Keyword.get(opts, :page_size, @default_page_size)
+    width = Keyword.get(opts, :width)
 
     table =
       Table.init(
@@ -48,7 +50,8 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTable do
         rows: rows,
         sortable: sortable,
         filterable: filterable,
-        page_size: page_size
+        page_size: page_size,
+        width: width
       )
 
     %__MODULE__{
@@ -57,6 +60,7 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTable do
       rows: rows,
       empty_state: empty_state,
       selectable: selectable,
+      width: width,
       last_action: nil
     }
   end

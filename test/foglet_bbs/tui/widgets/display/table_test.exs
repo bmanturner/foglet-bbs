@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
   import Foglet.TUI.WidgetHelpers,
     only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.Table
 
@@ -26,6 +27,29 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       assert state.sortable == true
       assert state.filterable == true
     end
+
+    test "stores page size and drawable width budget" do
+      state = Table.init(columns: [%{id: :name, label: "Name"}], page_size: 5, width: 24)
+
+      assert state.available_width == 24
+      assert state.raxol_state.options.page_size == 5
+    end
+
+    test "resolves auto and ratio columns inside framed drawable width" do
+      state =
+        Table.init(
+          columns: [
+            %{id: :code, label: "Code", width: 8},
+            %{id: :status, label: "Status", width: :auto},
+            %{id: :notes, label: "Notes", width: {:ratio, 2}}
+          ],
+          rows: [%{code: "ABC", status: "pending", notes: "Long moderation note"}],
+          width: 24
+        )
+
+      assert table_line_width(state) <= 24
+      assert Enum.all?(state.raxol_state.columns, &(&1.width >= 3))
+    end
   end
 
   describe "render/2 — smoke (D-18)" do
@@ -34,6 +58,47 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       result = Table.render(state, theme: theme())
       flat = flatten_text(result)
       assert flat =~ "Name"
+    end
+
+    test "elides long cells at compact width" do
+      state =
+        Table.init(
+          columns: [
+            %{id: :code, label: "Code", width: 6},
+            %{id: :message, label: "Message", width: :auto}
+          ],
+          rows: [
+            %{code: "ABC123", message: "This message is intentionally too long for the cell"}
+          ],
+          width: 24
+        )
+
+      assert table_line_width(state) <= 24
+      assert get_in(state.raxol_state.data, [Access.at(0), :message]) =~ "…"
+
+      message_width = Enum.find(state.raxol_state.columns, &(&1.id == :message)).width
+
+      assert TextWidth.display_width(get_in(state.raxol_state.data, [Access.at(0), :message])) <=
+               message_width
+    end
+
+    test "uses drawable frame width rather than raw terminal columns" do
+      terminal_columns = 64
+      drawable_width = terminal_columns - 2
+
+      state =
+        Table.init(
+          columns: [
+            %{id: :code, label: "Code", width: {:ratio, 1}},
+            %{id: :status, label: "Status", width: {:ratio, 1}},
+            %{id: :body, label: "Body", width: {:ratio, 3}}
+          ],
+          rows: [%{code: "ABC", status: "pending", body: String.duplicate("wide ", 20)}],
+          width: drawable_width
+        )
+
+      assert state.available_width == 62
+      assert table_line_width(state) <= drawable_width
     end
   end
 
@@ -143,5 +208,11 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
 
       assert s1 != s2, "Expected different rendering with different themes"
     end
+  end
+
+  defp table_line_width(%Table{raxol_state: %{columns: columns}}) do
+    Enum.reduce(columns, 0, fn column, width ->
+      width + column.width + 1
+    end)
   end
 end

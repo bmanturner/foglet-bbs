@@ -64,6 +64,63 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
       assert state.empty_state == "No rows."
       assert ConsoleTable.render(state, theme: theme) |> flatten_text() == "No rows."
     end
+
+    test "passes framed drawable width into Display.Table", %{theme: theme} do
+      terminal_columns = 64
+      drawable_width = terminal_columns - 2
+
+      state =
+        ConsoleTable.init(
+          columns: columns([:code, :status, :inserted_at, :used_by]),
+          rows: [
+            %{
+              code: "INVITE-CODE-LONG",
+              status: "available",
+              inserted_at: "2026-04-26 12:00",
+              used_by: "not consumed"
+            }
+          ],
+          width: drawable_width
+        )
+
+      flat = ConsoleTable.render(state, theme: theme) |> flatten_text()
+
+      assert state.width == 62
+      assert state.table.available_width == 62
+      assert table_line_width(state) <= drawable_width
+      assert flat =~ "Code"
+      assert flat =~ "Status"
+      assert flat =~ "Inserted at"
+      assert flat =~ "Used by"
+      assert flat =~ ~r/Code\s+Status\s+Inserted at\s+Used by/
+    end
+
+    test "keeps invite columns separated at compact width", %{theme: theme} do
+      state =
+        ConsoleTable.init(
+          columns: [
+            %{key: :code, label: "Code", width: {:ratio, 2}},
+            %{key: :status, label: "Status", width: {:ratio, 1}},
+            %{key: :inserted_at, label: "Created", width: {:ratio, 2}},
+            %{key: :used_by, label: "Used by", width: {:ratio, 2}}
+          ],
+          rows: [
+            %{
+              code: "INVITE1",
+              status: "available",
+              inserted_at: "2026-04-26 12:00",
+              used_by: "alice@example.test"
+            }
+          ],
+          width: 48
+        )
+
+      flat = ConsoleTable.render(state, theme: theme) |> flatten_text()
+
+      assert table_line_width(state) <= 48
+      assert flat =~ ~r/Code\s+Status\s+Created\s+Used by/
+      assert flat =~ "INVITE1"
+    end
   end
 
   describe "handle_event/2" do
@@ -147,6 +204,12 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
     |> Atom.to_string()
     |> String.replace("_", " ")
     |> String.capitalize()
+  end
+
+  defp table_line_width(%ConsoleTable{table: %{raxol_state: %{columns: columns}}}) do
+    Enum.reduce(columns, 0, fn column, width ->
+      width + column.width + 1
+    end)
   end
 
   defp moderation_log_rows do

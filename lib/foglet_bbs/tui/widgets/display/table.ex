@@ -33,10 +33,12 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   """
 
   import Raxol.Core.Renderer.View
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Table, as: RaxolTable
 
   @default_page_size 10
+  @min_column_width 3
 
   @type action ::
           {:row_selected, map()}
@@ -44,13 +46,14 @@ defmodule Foglet.TUI.Widgets.Display.Table do
           | {:filter_changed, String.t()}
           | nil
 
-  defstruct [:raxol_state, :columns, :sortable, :filterable, last_action: nil]
+  defstruct [:raxol_state, :columns, :sortable, :filterable, :available_width, last_action: nil]
 
   @type t :: %__MODULE__{
           raxol_state: map(),
           columns: list(map()),
           sortable: boolean(),
           filterable: boolean(),
+          available_width: pos_integer() | nil,
           last_action: action()
         }
 
@@ -63,14 +66,23 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     * `:sortable`   — boolean, default `false`
     * `:filterable` — boolean, default `false`
     * `:page_size`  — integer, default `#{@default_page_size}`
+    * `:width`      — drawable content width available inside the caller container
   """
   @spec init(keyword()) :: t()
   def init(opts) when is_list(opts) do
-    columns = Keyword.fetch!(opts, :columns) |> Enum.map(&normalize_column/1)
+    available_width = Keyword.get(opts, :width)
+
+    columns =
+      opts
+      |> Keyword.fetch!(:columns)
+      |> Enum.map(&normalize_column/1)
+      |> resolve_columns(available_width)
+
     rows = Keyword.get(opts, :rows, Keyword.get(opts, :data, []))
     sortable = Keyword.get(opts, :sortable, false)
     filterable = Keyword.get(opts, :filterable, false)
     page_size = Keyword.get(opts, :page_size, @default_page_size)
+    rows = normalize_rows(rows, columns, available_width)
 
     raxol_props = %{
       id: :foglet_table,
@@ -96,6 +108,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
       columns: columns,
       sortable: sortable,
       filterable: filterable,
+      available_width: available_width,
       last_action: nil
     }
   end
@@ -117,12 +130,12 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   end
 
   @spec render(t(), keyword()) :: any()
-  def render(%__MODULE__{raxol_state: rs}, opts) do
+  def render(%__MODULE__{raxol_state: rs, available_width: available_width}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
     rs_with_theme = %{rs | theme: build_table_theme(theme)}
 
     box style: %{border_fg: theme.border.fg, padding: 0} do
-      RaxolTable.render(rs_with_theme, %{})
+      RaxolTable.render(rs_with_theme, %{available_width: available_width})
     end
   end
 
@@ -193,5 +206,115 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     |> Map.put_new(:align, :left)
     |> Map.put_new(:width, 20)
     |> Map.put_new(:format, nil)
+  end
+
+  defp resolve_columns(columns, width) when is_integer(width) and width > 0 do
+    column_count = length(columns)
+    data_budget = max(width - column_count, column_count * @min_column_width)
+    widths = resolve_widths(columns, data_budget)
+
+    columns
+    |> Enum.zip(widths)
+    |> Enum.map(fn {column, width} ->
+      column
+      |> Map.put(:width, width)
+      |> Map.update!(:label, &format_header(&1, width))
+      |> wrap_formatter(width)
+    end)
+  end
+
+  defp resolve_columns(columns, _width), do: columns
+
+  defp resolve_widths(columns, data_budget) do
+    fixed_width = fixed_width(columns)
+
+    if fixed_width > data_budget do
+      compact_widths(columns, data_budget)
+    else
+      distribute_flexible_widths(columns, data_budget - fixed_width)
+    end
+  end
+
+  defp fixed_width(columns) do
+    Enum.reduce(columns, 0, fn
+      %{width: width}, total when is_integer(width) -> total + max(width, @min_column_width)
+      _column, total -> total
+    end)
+  end
+
+  defp compact_widths(columns, data_budget) do
+    column_count = length(columns)
+    base = div(data_budget, column_count)
+    extra = rem(data_budget, column_count)
+
+    columns
+    |> Enum.with_index()
+    |> Enum.map(fn {_column, index} ->
+      max(base + if(index < extra, do: 1, else: 0), @min_column_width)
+    end)
+  end
+
+  defp distribute_flexible_widths(columns, remaining_width) do
+    flexible = Enum.reject(columns, &integer_width?/1)
+    flexible_count = length(flexible)
+    ratio_total = Enum.reduce(flexible, 0, &(&2 + ratio_weight(&1)))
+    minimum_flexible = flexible_count * @min_column_width
+    flexible_extra = max(remaining_width - minimum_flexible, 0)
+
+    columns
+    |> Enum.map(fn
+      %{width: width} when is_integer(width) ->
+        max(width, @min_column_width)
+
+      column ->
+        @min_column_width + div(flexible_extra * ratio_weight(column), max(ratio_total, 1))
+    end)
+    |> distribute_remainder(remaining_width + fixed_width(columns))
+  end
+
+  defp distribute_remainder(widths, data_budget) do
+    remainder = data_budget - Enum.sum(widths)
+
+    widths
+    |> Enum.with_index()
+    |> Enum.map(fn {width, index} ->
+      width + if(index < remainder, do: 1, else: 0)
+    end)
+  end
+
+  defp integer_width?(%{width: width}), do: is_integer(width)
+
+  defp ratio_weight(%{width: {:ratio, weight}}) when is_integer(weight) and weight > 0, do: weight
+  defp ratio_weight(_column), do: 1
+
+  defp wrap_formatter(%{format: nil} = column, _width), do: column
+
+  defp wrap_formatter(%{format: formatter} = column, width) when is_function(formatter, 1) do
+    Map.put(column, :format, fn value ->
+      value
+      |> formatter.()
+      |> TextWidth.truncate(width)
+    end)
+  end
+
+  defp format_header(label, width) do
+    label
+    |> TextWidth.truncate(width)
+    |> TextWidth.pad_trailing(width)
+    |> Kernel.<>(" ")
+  end
+
+  defp normalize_rows(rows, _columns, width) when not is_integer(width) or width <= 0, do: rows
+
+  defp normalize_rows(rows, columns, _width) do
+    Enum.map(rows, fn row ->
+      Enum.reduce(columns, row, fn
+        %{id: id, width: width, format: nil}, acc ->
+          Map.update(acc, id, "", &TextWidth.truncate(to_string(&1), width))
+
+        _column, acc ->
+          acc
+      end)
+    end)
   end
 end
