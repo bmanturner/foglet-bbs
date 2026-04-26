@@ -1019,20 +1019,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     assert Enum.any?(rendered_rows, &String.contains?(&1, "L Login")),
            "expected command bar Login key, got: #{inspect(texts)}"
 
-    assert Enum.any?(rendered_rows, &String.contains?(&1, "L Login")),
-           "expected command bar Login label, got: #{inspect(texts)}"
-
     assert Enum.any?(rendered_rows, &String.contains?(&1, "R Register")),
            "expected command bar Register key, got: #{inspect(texts)}"
 
-    assert Enum.any?(rendered_rows, &String.contains?(&1, "R Register")),
-           "expected command bar Register label, got: #{inspect(texts)}"
-
     assert Enum.any?(rendered_rows, &String.contains?(&1, "Q Quit")),
            "expected command bar Quit key, got: #{inspect(texts)}"
-
-    assert Enum.any?(rendered_rows, &String.contains?(&1, "Q Quit")),
-           "expected command bar Quit label, got: #{inspect(texts)}"
 
     assert placeholder.x in 26..28,
            "expected placeholder near horizontal center, got: #{inspect(placeholder)}"
