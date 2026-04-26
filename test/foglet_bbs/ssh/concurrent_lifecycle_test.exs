@@ -67,9 +67,8 @@ defmodule Foglet.SSH.ConcurrentLifecycleTest do
     {:ok, pid2} = Lifecycle.start_link(Foglet.TUI.App, @opts_template)
 
     assert pid1 != pid2
-    assert Process.alive?(pid1)
-    assert Process.alive?(pid2)
 
+    # Synchronous GenServer.call below proves liveness without Process.alive?/1 (per AGENTS.md).
     %{dispatcher_pid: d1, rendering_engine_pid: r1} =
       GenServer.call(pid1, :get_full_state)
 

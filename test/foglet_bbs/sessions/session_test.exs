@@ -121,7 +121,8 @@ defmodule Foglet.Sessions.SessionTest do
   describe "guest sessions (user_id: nil)" do
     test "start_link with user_id: nil does NOT register in Registry" do
       {:ok, pid} = start_supervised({Session, [user_id: nil]})
-      assert Process.alive?(pid)
+      # :sys.get_state/1 proves liveness without Process.alive?/1 (per AGENTS.md).
+      _ = :sys.get_state(pid)
       # No user_id key to look up — Registry should have no entry for nil
       assert Registry.lookup(Foglet.Sessions.Registry, nil) == []
     end
