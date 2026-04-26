@@ -75,9 +75,9 @@
 
 ### Operator Console Screens
 
-- [ ] **ACCOUNT-01**: Account tabs use compact forms, theme swatches, SSH-key tables, invite tables, and clear dirty/saved/error states that remain usable at 64x22.
-- [ ] **MOD-01**: Moderation tabs show scope/status summaries, honest empty states, and table-driven log, user, board, and invite views that degrade cleanly at 64x22.
-- [ ] **SYSOP-01**: Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling without fake workflows, with wide metric layouts treated as enhancement.
+- [x] **ACCOUNT-01**: Account tabs use compact forms, theme swatches, SSH-key tables, invite tables, and clear dirty/saved/error states that remain usable at 64x22.
+- [x] **MOD-01**: Moderation tabs show scope/status summaries, honest empty states, and table-driven log, user, board, and invite views that degrade cleanly at 64x22.
+- [x] **SYSOP-01**: Sysop tabs use tables, metric cells, board/category rows, and cautious destructive-action styling without fake workflows, with wide metric layouts treated as enhancement.
 
 ## v2 Requirements
 
@@ -142,9 +142,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONSOLE-02 | Phase 24 | Complete |
 | CONSOLE-03 | Phase 24 | Complete |
 | CONSOLE-04 | Phase 24 | Complete |
-| ACCOUNT-01 | Phase 25 | Pending |
-| MOD-01 | Phase 25 | Pending |
-| SYSOP-01 | Phase 25 | Pending |
+| ACCOUNT-01 | Phase 25 | Complete |
+| MOD-01 | Phase 25 | Complete |
+| SYSOP-01 | Phase 25 | Complete |
 
 **Coverage:**
 - v1 requirements: 40 total

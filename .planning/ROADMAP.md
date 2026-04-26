@@ -315,4 +315,4 @@ Phases execute in dependency order: 16 -> 17 -> 18 -> 19/20 -> 21/22 -> 23 -> 24
 | 22. Post Reader Facelift | v1.3 | 3/3 | Complete   | 2026-04-25 |
 | 23. Composer Facelift | v1.3 | 4/4 | Complete    | 2026-04-25 |
 | 24. Operator Console Primitives | v1.3 | 6/6 | Complete    | 2026-04-25 |
-| 25. Operator Console Conversion | v1.3 | 6/6 | Complete   | 2026-04-26 |
+| 25. Operator Console Conversion | v1.3 | 6/6 | Complete    | 2026-04-26 |
