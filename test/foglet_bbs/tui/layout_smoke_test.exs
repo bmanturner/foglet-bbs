@@ -582,6 +582,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       positioned = BoardList.render(state) |> apply_at_size(size)
       elements = text_elements(positioned)
       flat = Enum.map_join(elements, "", & &1.text)
+
       visible_board_rows =
         Regex.scan(~r/Overlarge Board \d+/, flat)
         |> length()
@@ -600,6 +601,40 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert element.x + TextWidth.display_width(text) <= width
         assert TextWidth.display_width(text) <= 60
       end
+    end
+
+    test "at 64x22 the details strip occupies the last screen-body row and no inspector strip renders",
+         %{
+           user: user
+         } do
+      width = 64
+      height = 22
+      size = {width, height}
+
+      state =
+        %App{
+          current_screen: :board_list,
+          current_user: user,
+          board_list: overlarge_board_directory(30),
+          screen_state: %{},
+          terminal_size: size
+        }
+        |> Map.from_struct()
+
+      positioned = BoardList.render(state) |> apply_at_size(size)
+      elements = text_elements(positioned)
+
+      detail_row =
+        Enum.find(elements, fn element ->
+          String.contains?(Map.get(element, :text, ""), "Overlarge • 30 boards •")
+        end)
+
+      assert detail_row, "expected category details strip in board list render"
+      assert detail_row.y == height - 4
+
+      refute Enum.any?(elements, fn element ->
+               String.contains?(Map.get(element, :text, ""), "Inspector •")
+             end)
     end
   end
 
@@ -2250,9 +2285,6 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert String.contains?(flat, "Foglet"),
                "Register breadcrumb at #{width}x#{height}: expected 'Foglet', got: #{inspect(flat)}"
 
-        assert String.contains?(flat, "Login"),
-               "Register breadcrumb at #{width}x#{height}: expected 'Login', got: #{inspect(flat)}"
-
         assert String.contains?(flat, "Register"),
                "Register breadcrumb at #{width}x#{height}: expected 'Register', got: #{inspect(flat)}"
       end
@@ -2278,16 +2310,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert String.contains?(flat, "Foglet"),
                "Forgot Password breadcrumb at #{width}x#{height}: expected 'Foglet'"
 
-        assert String.contains?(flat, "Login"),
-               "Forgot Password breadcrumb at #{width}x#{height}: expected 'Login'"
-
         assert String.contains?(flat, "Forgot Password"),
                "Forgot Password breadcrumb at #{width}x#{height}: expected 'Forgot Password', " <>
                  "got: #{inspect(flat)}"
       end
     end
 
-    test "Verify render output contains Foglet, Login, Verify in breadcrumb at 64x22 and 80x24" do
+    test "Verify render output contains Foglet, Verify in breadcrumb at 64x22 and 80x24" do
       for {width, height} <- @breadcrumb_sizes do
         state = %App{
           current_screen: :verify,
@@ -2308,15 +2337,12 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert String.contains?(flat, "Foglet"),
                "Verify breadcrumb at #{width}x#{height}: expected 'Foglet'"
 
-        assert String.contains?(flat, "Login"),
-               "Verify breadcrumb at #{width}x#{height}: expected 'Login'"
-
         assert String.contains?(flat, "Verify"),
                "Verify breadcrumb at #{width}x#{height}: expected 'Verify', got: #{inspect(flat)}"
       end
     end
 
-    test "reset_consume Login state produces breadcrumb with Foglet, Login, Forgot Password, Enter Token" do
+    test "reset_consume Login state produces breadcrumb with Foglet, Forgot Password, Enter Token" do
       for {width, height} <- @breadcrumb_sizes do
         state = %App{
           current_screen: :login,
@@ -2334,9 +2360,6 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert "Foglet" in parts,
                "reset_consume breadcrumb at #{width}x#{height}: expected 'Foglet' in #{inspect(parts)}"
 
-        assert "Login" in parts,
-               "reset_consume breadcrumb at #{width}x#{height}: expected 'Login' in #{inspect(parts)}"
-
         assert "Forgot Password" in parts,
                "reset_consume breadcrumb at #{width}x#{height}: expected 'Forgot Password' in #{inspect(parts)}"
 
@@ -2345,7 +2368,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end
     end
 
-    test "Login menu state breadcrumb parts are only Foglet and Login (no sub-path)" do
+    test "Login menu state breadcrumb parts are only Foglet (no sub-path)" do
       for {width, height} <- @breadcrumb_sizes do
         state = %App{
           current_screen: :login,
@@ -2360,8 +2383,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         assert "Foglet" in parts,
                "Login menu breadcrumb at #{width}x#{height}: expected 'Foglet' in #{inspect(parts)}"
 
-        assert "Login" in parts,
-               "Login menu breadcrumb at #{width}x#{height}: expected 'Login' in #{inspect(parts)}"
+        refute "Login" in parts,
+               "Login menu breadcrumb at #{width}x#{height}: should NOT contain 'Login', " <>
+                 "got: #{inspect(parts)}"
 
         refute "Forgot Password" in parts,
                "Login menu breadcrumb at #{width}x#{height}: should NOT contain 'Forgot Password', " <>

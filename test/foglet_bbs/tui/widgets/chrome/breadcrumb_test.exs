@@ -10,7 +10,13 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBarTest do
 
   describe "parts_for/1" do
     test "returns central paths rooted at Foglet for BBS screens" do
-      assert BreadcrumbBar.parts_for(%{current_screen: :login}) == ["Foglet", "Login"]
+      assert BreadcrumbBar.parts_for(%{current_screen: :login}) == ["Foglet"]
+
+      assert BreadcrumbBar.parts_for(%{
+               current_screen: :login,
+               screen_state: %{login: %{sub: :login_form}}
+             }) == ["Foglet", "Login"]
+
       assert BreadcrumbBar.parts_for(%{current_screen: :main_menu}) == ["Foglet", "Home"]
       assert BreadcrumbBar.parts_for(%{current_screen: :board_list}) == ["Foglet", "Boards"]
 
