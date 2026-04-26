@@ -464,6 +464,25 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end)
     end
 
+    defp overlarge_board_directory(count) do
+      boards =
+        for index <- 1..count do
+          %{
+            board: %{
+              id: "overlarge-#{index}",
+              name: "Overlarge Board #{String.pad_leading(Integer.to_string(index), 2, "0")}",
+              slug: "overlarge-#{index}"
+            },
+            subscribed?: true,
+            required_subscription?: false,
+            unread_count: rem(index, 6),
+            last_post_at: DateTime.add(DateTime.utc_now(), -600, :second)
+          }
+        end
+
+      [%{category: %{id: "overlarge", name: "Overlarge"}, boards: boards}]
+    end
+
     for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
       @width width
       @height height
@@ -543,6 +562,40 @@ defmodule Foglet.TUI.LayoutSmokeTest do
             )
         end)
         |> assert_board_list_no_row_overlap!(size, "BoardList.render")
+      end
+    end
+
+    test "at 64x22 overlarge directories stay inside frame height and width", %{user: user} do
+      width = 64
+      height = 22
+      size = {width, height}
+
+      state =
+        %App{
+          current_screen: :board_list,
+          current_user: user,
+          board_list: overlarge_board_directory(30),
+          screen_state: %{},
+          terminal_size: size
+        }
+        |> Map.from_struct()
+
+      positioned = BoardList.render(state) |> apply_at_size(size)
+      elements = text_elements(positioned)
+      flat = Enum.map_join(elements, "", & &1.text)
+
+      assert flat =~ "Overlarge"
+      assert flat =~ "Overlarge Board 01"
+      refute flat =~ "Overlarge Board 30"
+
+      for element <- elements do
+        text = Map.fetch!(element, :text)
+
+        assert element.x >= 0
+        assert element.y >= 0
+        assert element.y < height
+        assert element.x + TextWidth.display_width(text) <= width
+        assert TextWidth.display_width(text) <= 60
       end
     end
   end

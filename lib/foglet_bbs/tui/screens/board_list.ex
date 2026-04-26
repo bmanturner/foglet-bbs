@@ -65,15 +65,30 @@ defmodule Foglet.TUI.Screens.BoardList do
   defp render_board_content(state, ss, theme) do
     board_tree = ss.board_tree || build_tree(state.board_list)
     width = row_width(state)
+    height = body_height(state)
+    feedback_rows = feedback_row_count(ss)
+    detail? = detail_strip?(height, feedback_rows)
+    spacer? = detail? and height - feedback_rows >= 5
+    inspector? = wide_inspector?(width, height, feedback_rows, detail?, spacer?)
+
+    reserved_rows =
+      feedback_rows +
+        if(detail?, do: 1, else: 0) +
+        if(spacer?, do: 1, else: 0) +
+        if(inspector?, do: 1, else: 0)
+
+    visible_height = visible_tree_rows(max(height - reserved_rows, 3))
 
     column style: %{gap: 0} do
-      maybe_feedback(ss, theme) ++
-        [
-          BoardTree.render(board_tree, theme: theme, width: width),
-          text(""),
-          details_strip(board_tree, state.board_list, theme, width)
-          | wide_inspector(board_tree, state.board_list, theme, width)
-        ]
+      [
+        maybe_feedback(ss, theme),
+        BoardTree.render(board_tree, theme: theme, width: width, visible_height: visible_height),
+        if(spacer?, do: text("")),
+        if(detail?, do: details_strip(board_tree, state.board_list, theme, width)),
+        if(inspector?, do: wide_inspector(board_tree, state.board_list, theme, width), else: [])
+      ]
+      |> List.flatten()
+      |> Enum.reject(&is_nil/1)
     end
   end
 
@@ -205,6 +220,18 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp maybe_feedback(_ss, _theme), do: []
 
+  defp feedback_row_count(%State{feedback: feedback}) when is_binary(feedback), do: 2
+  defp feedback_row_count(_ss), do: 0
+
+  defp detail_strip?(height, feedback_rows), do: height - feedback_rows >= 4
+
+  defp wide_inspector?(width, height, feedback_rows, detail?, spacer?) do
+    width >= @wide_inspector_min_width and
+      height - feedback_rows - if(detail?, do: 1, else: 0) - if(spacer?, do: 1, else: 0) >= 4
+  end
+
+  defp visible_tree_rows(row_budget), do: max(div(row_budget, 2) - 1, 3)
+
   defp details_strip(board_tree, directory, theme, width) do
     line =
       board_tree
@@ -214,10 +241,6 @@ defmodule Foglet.TUI.Screens.BoardList do
 
     text(line, fg: theme.dim.fg)
   end
-
-  defp wide_inspector(_board_tree, _directory, _theme, width)
-       when width < @wide_inspector_min_width,
-       do: []
 
   defp wide_inspector(board_tree, directory, theme, width) do
     line =
@@ -305,6 +328,13 @@ defmodule Foglet.TUI.Screens.BoardList do
     case Map.get(state, :terminal_size) do
       {cols, _rows} when is_integer(cols) and cols > 4 -> cols - 4
       _ -> 80
+    end
+  end
+
+  defp body_height(state) do
+    case Map.get(state, :terminal_size) do
+      {_cols, rows} when is_integer(rows) -> max(rows - 4, 0)
+      _ -> 20
     end
   end
 

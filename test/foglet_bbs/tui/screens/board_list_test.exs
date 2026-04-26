@@ -43,6 +43,25 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     end
   end
 
+  defp overlarge_directory(count \\ 28) do
+    boards =
+      for index <- 1..count do
+        %{
+          board: %{
+            id: "big-#{index}",
+            name: "Overlarge Board #{String.pad_leading(Integer.to_string(index), 2, "0")}",
+            slug: "overlarge-#{index}"
+          },
+          subscribed?: true,
+          required_subscription?: false,
+          unread_count: rem(index, 5),
+          last_post_at: DateTime.add(DateTime.utc_now(), -600, :second)
+        }
+      end
+
+    [%{category: %{id: "big", name: "Overlarge"}, boards: boards}]
+  end
+
   setup do
     state =
       %Foglet.TUI.App{
@@ -147,6 +166,30 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
     assert text =~ "Town Square • 3 boards • 3 unread total"
     refute text =~ "Inspector • category"
+  end
+
+  test "render/1 bounds overlarge compact directories while navigation reaches hidden boards", %{
+    state: state
+  } do
+    s = %{state | terminal_size: {64, 22}, board_list: overlarge_directory()}
+
+    initial_text = BoardList.render(s) |> flatten_text()
+    initial_rows = String.split(initial_text, "\n", trim: true)
+
+    assert length(initial_rows) <= 22
+    assert initial_text =~ "Overlarge"
+    refute initial_text =~ "Overlarge Board 28"
+
+    s =
+      Enum.reduce(1..25, s, fn _index, acc ->
+        {:update, next, _cmds} = BoardList.handle_key(%{key: :down}, acc)
+        next
+      end)
+
+    moved_text = BoardList.render(s) |> flatten_text()
+
+    assert length(String.split(moved_text, "\n", trim: true)) <= 22
+    assert moved_text =~ "Overlarge Board 25"
   end
 
   test "render/1 shows wide inspector only when terminal width permits", %{state: state} do
