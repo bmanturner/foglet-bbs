@@ -36,7 +36,6 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
       rendered = Enum.join(texts, " ")
       top_border = Enum.find(texts, &String.starts_with?(&1, "┌"))
       bottom_border = Enum.find(texts, &String.starts_with?(&1, "└"))
-
       assert rendered =~ "Foglet"
       assert rendered =~ "Foglet ▸ Boards"
       assert rendered =~ "@alice | 13:05"

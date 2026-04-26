@@ -48,17 +48,11 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
         column style: %{gap: 0} do
           [
             border_text(top_border(chrome, frame_width), theme),
-            content_box(content_element)
+            content_element
           ]
         end,
         border_text(bottom_border(chrome, frame_width), theme)
       ]
-    end
-  end
-
-  defp content_box(content_element) do
-    box style: %{padding: 1} do
-      content_element
     end
   end
 
