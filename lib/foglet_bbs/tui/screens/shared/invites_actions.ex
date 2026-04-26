@@ -10,6 +10,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
   alias Foglet.Accounts
   alias Foglet.Accounts.User
   alias Foglet.TUI.Screens.Shared.InvitesState
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   @type action_result :: {:ok, InvitesState.t()} | :no_match
 
@@ -38,15 +39,9 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
     end
   end
 
-  @spec select_next(InvitesState.t()) :: InvitesState.t()
-  def select_next(%InvitesState{} = state), do: InvitesState.select_next(state)
-
-  @spec select_prev(InvitesState.t()) :: InvitesState.t()
-  def select_prev(%InvitesState{} = state), do: InvitesState.select_prev(state)
-
   @spec revoke_selected(User.t(), InvitesState.t()) :: {:ok, InvitesState.t()}
-  def revoke_selected(%User{} = actor, %InvitesState{items: items} = state) when is_list(items) do
-    case Enum.at(items, state.selected_index) do
+  def revoke_selected(%User{} = actor, %InvitesState{} = state) do
+    case InvitesState.selected_item(state) do
       %{code: code} when is_binary(code) ->
         revoke_code(actor, code, state)
 
@@ -55,8 +50,29 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
     end
   end
 
-  def revoke_selected(%User{}, %InvitesState{} = state) do
-    {:ok, InvitesState.with_error(state, "No invite is selected.")}
+  @doc """
+  Advances the selection by one row, clamped to the last item.
+  Updates both `selected_index` and the ConsoleTable widget cursor.
+  """
+  @spec select_next(InvitesState.t()) :: InvitesState.t()
+  def select_next(%InvitesState{items: items, selected_index: idx} = state) do
+    max_idx = max(length(items || []) - 1, 0)
+    new_idx = min(idx + 1, max_idx)
+    table = state.table || InvitesState.build_table(items || [])
+    {new_table, _action} = ConsoleTable.handle_event(%{key: :down}, table)
+    %{state | selected_index: new_idx, table: new_table}
+  end
+
+  @doc """
+  Moves the selection back one row, clamped to the first item.
+  Updates both `selected_index` and the ConsoleTable widget cursor.
+  """
+  @spec select_prev(InvitesState.t()) :: InvitesState.t()
+  def select_prev(%InvitesState{items: items, selected_index: idx} = state) do
+    new_idx = max(idx - 1, 0)
+    table = state.table || InvitesState.build_table(items || [])
+    {new_table, _action} = ConsoleTable.handle_event(%{key: :up}, table)
+    %{state | selected_index: new_idx, table: new_table}
   end
 
   @spec handle_key(term(), User.t(), InvitesState.t()) :: action_result()
@@ -72,8 +88,14 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
     revoke_selected(actor, state)
   end
 
-  def handle_key(:down, %User{}, %InvitesState{} = state), do: {:ok, select_next(state)}
-  def handle_key(:up, %User{}, %InvitesState{} = state), do: {:ok, select_prev(state)}
+  def handle_key(:down, %User{}, %InvitesState{} = state) do
+    {:ok, select_next(state)}
+  end
+
+  def handle_key(:up, %User{}, %InvitesState{} = state) do
+    {:ok, select_prev(state)}
+  end
+
   def handle_key(_key, %User{}, %InvitesState{}), do: :no_match
 
   defp revoke_code(actor, code, state) do

@@ -11,12 +11,17 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   Pitfall 3 (RESEARCH.md): menu visibility is NOT authorization — this predicate
   controls UI rendering only. Real authz enforcement is owned by Phase 1.
+
+  Phase 25 Plan 03: listing renders through `Display.ConsoleTable` with selection
+  ownership inside the widget (D-05). The bespoke SelectionList+ListRow render
+  is replaced; both Account and Moderation benefit from a single code path.
   """
 
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Foglet.TUI.Widgets.Progress.Spinner
 
@@ -47,10 +52,6 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   def render(%{items: [_ | _]} = state, %Theme{} = theme), do: render_items(state, theme)
 
   # Monotonic-clock fallback frame when the caller does not supply one.
-  # Kept so Phase 0 callers (which pass no :frame) still see an animated
-  # spinner. Later phases that want deterministic / snapshot-friendly
-  # rendering should thread :frame through state (e.g. from a
-  # subscribe_interval tick) and avoid this branch.
   defp current_frame do
     System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
   end
@@ -68,6 +69,26 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
     end
   end
 
+  # InvitesState struct path — renders via ConsoleTable (D-05, Phase 25 Plan 03).
+  defp render_items(%InvitesState{items: items} = state, theme) when is_list(items) do
+    last_generated_code = state.last_generated_code
+    error = state.error
+
+    table = state.table || InvitesState.build_table(items)
+
+    column style: %{gap: 1} do
+      [
+        maybe_banner(last_generated_code, theme),
+        maybe_error(error, theme),
+        ConsoleTable.render(table, theme: theme),
+        text(@key_hints, fg: theme.dim.fg)
+      ]
+      |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  # Legacy raw-map path — preserves SelectionList+ListRow rendering for backward
+  # compatibility with callers and tests that pass plain maps (D-19).
   defp render_items(%{items: items} = state, theme) when is_list(items) do
     selected_index = Map.get(state, :selected_index, 0)
     last_generated_code = Map.get(state, :last_generated_code)
@@ -82,18 +103,6 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
       ]
       |> Enum.reject(&is_nil/1)
     end
-  end
-
-  defp maybe_banner(nil, _theme), do: nil
-
-  defp maybe_banner(code, theme) when is_binary(code) do
-    text("New invite code: #{code}", fg: theme.accent.fg)
-  end
-
-  defp maybe_error(nil, _theme), do: nil
-
-  defp maybe_error(error, theme) when is_binary(error) do
-    text(error, fg: theme.error.fg)
   end
 
   defp invite_rows([], _selected_index, theme) do
@@ -136,9 +145,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   defp lifecycle_fields(_item), do: []
 
   defp field(item, key) do
-    item
-    |> Map.get(key)
-    |> to_string()
+    item |> Map.get(key) |> to_string()
   end
 
   defp timestamp_field(item, key) do
@@ -147,5 +154,17 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
       nil -> ""
       other -> to_string(other)
     end
+  end
+
+  defp maybe_banner(nil, _theme), do: nil
+
+  defp maybe_banner(code, theme) when is_binary(code) do
+    text("New invite code: #{code}", fg: theme.accent.fg)
+  end
+
+  defp maybe_error(nil, _theme), do: nil
+
+  defp maybe_error(error, theme) when is_binary(error) do
+    text(error, fg: theme.error.fg)
   end
 end

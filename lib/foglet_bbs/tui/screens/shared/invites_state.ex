@@ -5,12 +5,26 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   `items: nil` means loading or not-yet-loaded. A list contains status maps
   returned by `Foglet.Accounts.list_invites/1`; the TUI does not query or shape
   invite persistence directly.
+
+  Selection is owned by `%ConsoleTable{}` in the `:table` field (D-05, Phase 25
+  Plan 03). The bespoke index field has been replaced by the widget cursor inside
+  `table.table.raxol_state.selected_row` (D-05 — selection owned by widget).
   """
+
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
+
+  @invite_columns [
+    %{key: :code, label: "Code", width: 18},
+    %{key: :status, label: "Status", width: 10},
+    %{key: :created, label: "Created", width: 11},
+    %{key: :used_by, label: "Used by", width: 16}
+  ]
 
   @type invite_status :: map()
 
   @type t :: %__MODULE__{
           items: nil | [invite_status()],
+          table: ConsoleTable.t(),
           selected_index: non_neg_integer(),
           loading?: boolean(),
           last_generated_code: String.t() | nil,
@@ -19,6 +33,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
         }
 
   defstruct items: nil,
+            table: nil,
             selected_index: 0,
             loading?: false,
             last_generated_code: nil,
@@ -29,10 +44,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   def new(opts \\ []) do
     items = Keyword.get(opts, :items, nil)
     validate_items!(items)
+    idx = Keyword.get(opts, :selected_index, 0)
 
     %__MODULE__{
       items: items,
-      selected_index: Keyword.get(opts, :selected_index, 0) |> normalize_index(items),
+      table: build_table(items || [], idx),
+      selected_index: idx,
       loading?: Keyword.get(opts, :loading?, false),
       last_generated_code: Keyword.get(opts, :last_generated_code),
       error: Keyword.get(opts, :error),
@@ -42,12 +59,14 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
 
   @spec loaded(t(), [invite_status()]) :: t()
   def loaded(%__MODULE__{} = state, items) when is_list(items) do
+    # After loading new items, reset selection to first item (index 0)
     %__MODULE__{
       state
       | items: items,
+        table: build_table(items, 0),
+        selected_index: 0,
         loading?: false,
-        error: nil,
-        selected_index: normalize_index(state.selected_index, items)
+        error: nil
     }
   end
 
@@ -66,15 +85,67 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
     %__MODULE__{state | last_generated_code: code}
   end
 
-  @spec select_next(t()) :: t()
-  def select_next(%__MODULE__{items: items, selected_index: index} = state) do
-    %__MODULE__{state | selected_index: normalize_index(index + 1, items)}
+  @doc """
+  Returns the currently selected invite item, or nil if no selection.
+  Uses `selected_index` field as the authoritative selection.
+  """
+  @spec selected_item(t()) :: invite_status() | nil
+  def selected_item(%__MODULE__{items: items, selected_index: idx}) when is_list(items) do
+    Enum.at(items, idx)
   end
 
-  @spec select_prev(t()) :: t()
-  def select_prev(%__MODULE__{items: items, selected_index: index} = state) do
-    %__MODULE__{state | selected_index: normalize_index(index - 1, items)}
+  def selected_item(_state), do: nil
+
+  @doc """
+  Builds the default ConsoleTable for the INVITES tab.
+  """
+  @spec build_table([invite_status()]) :: ConsoleTable.t()
+  def build_table(items), do: build_table(items, 0)
+
+  @spec build_table([invite_status()], non_neg_integer()) :: ConsoleTable.t()
+  def build_table(items, _selected_idx) when is_list(items) do
+    rows =
+      Enum.map(items, fn item ->
+        status_str = item |> Map.get(:status) |> to_string()
+
+        created_str =
+          case Map.get(item, :inserted_at) do
+            %DateTime{} = dt -> Calendar.strftime(dt, "%Y-%m-%d")
+            nil -> ""
+            other -> to_string(other)
+          end
+
+        used_by_str =
+          case Map.get(item, :consumed_by_user_id) do
+            nil -> ""
+            id -> to_string(id)
+          end
+
+        %{
+          code: to_string(Map.get(item, :code, "")),
+          status: status_str,
+          created: created_str,
+          used_by: used_by_str
+        }
+      end)
+
+    ConsoleTable.init(
+      columns: @invite_columns,
+      rows: rows,
+      selectable: true,
+      empty_state: "No invites issued yet."
+    )
   end
+
+  # ---------------------------------------------------------------------------
+  # Private helpers
+  # ---------------------------------------------------------------------------
+
+  defp selected_row_index(%ConsoleTable{table: table}) when not is_nil(table) do
+    Map.get(table.raxol_state, :selected_row)
+  end
+
+  defp selected_row_index(_), do: nil
 
   defp validate_items!(nil), do: :ok
   defp validate_items!(items) when is_list(items), do: :ok
@@ -83,13 +154,4 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
     raise ArgumentError,
           "Foglet.TUI.Screens.Shared.InvitesState :items must be a list or nil; got #{inspect(other)}"
   end
-
-  defp normalize_index(_index, nil), do: 0
-  defp normalize_index(_index, []), do: 0
-
-  defp normalize_index(index, items) when is_integer(index) and is_list(items) do
-    index |> max(0) |> min(length(items) - 1)
-  end
-
-  defp normalize_index(_index, _items), do: 0
 end
