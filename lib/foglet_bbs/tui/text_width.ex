@@ -198,13 +198,20 @@ defmodule Foglet.TUI.TextWidth do
     else
       {left, right} = split_at(token, width)
 
-      if left == "" do
-        Enum.reverse(chunks)
-      else
-        split_token(right, width, [left | chunks])
+      cond do
+        left == "" ->
+          Enum.reverse([wide_grapheme_placeholder(width) | chunks])
+
+        display_width(left) > width ->
+          Enum.reverse([wide_grapheme_placeholder(width) | chunks])
+
+        true ->
+          split_token(right, width, [left | chunks])
       end
     end
   end
+
+  defp wide_grapheme_placeholder(width), do: @default_ellipsis |> slice_to_width(width)
 
   defp split_at_grapheme_boundary(text, candidate_bytes, width) do
     boundaries = grapheme_boundaries(text)

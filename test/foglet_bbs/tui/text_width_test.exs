@@ -92,6 +92,13 @@ defmodule Foglet.TUI.TextWidthTest do
       assert Enum.all?(lines, &(TextWidth.display_width(&1) <= 2))
     end
 
+    test "wraps unsplittable wide graphemes without exceeding narrow widths" do
+      lines = TextWidth.wrap("あ", 1)
+
+      assert lines != []
+      assert Enum.all?(lines, &(TextWidth.display_width(&1) <= 1))
+    end
+
     test "keeps combining marks with their base grapheme" do
       lines = TextWidth.wrap("cafe\u0301 noir", 5)
 

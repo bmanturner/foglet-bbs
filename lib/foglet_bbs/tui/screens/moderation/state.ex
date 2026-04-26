@@ -106,7 +106,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
         }
       end)
 
-    ConsoleTable.init(
+    [
       columns: [
         %{key: :when, label: "When", width: 10},
         %{key: :actor, label: "Actor", width: 9},
@@ -117,9 +117,10 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       rows: items,
       selectable: false,
       width: Keyword.get(opts, :width),
-      page_size: Keyword.get(opts, :page_size),
       empty_state: "No moderation events in scope."
-    )
+    ]
+    |> maybe_put_page_size(opts)
+    |> ConsoleTable.init()
   end
 
   @doc """
@@ -136,7 +137,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
         }
       end)
 
-    ConsoleTable.init(
+    [
       columns: [
         %{key: :handle, label: "Handle", width: 16},
         %{key: :role, label: "Role", width: 8},
@@ -145,9 +146,10 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       rows: items,
       selectable: false,
       width: Keyword.get(opts, :width),
-      page_size: Keyword.get(opts, :page_size),
       empty_state: "No active users in scope."
-    )
+    ]
+    |> maybe_put_page_size(opts)
+    |> ConsoleTable.init()
   end
 
   @doc """
@@ -164,7 +166,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
         }
       end)
 
-    ConsoleTable.init(
+    [
       columns: [
         %{key: :name, label: "Board", width: 18},
         %{key: :category, label: "Category", width: 14},
@@ -173,9 +175,20 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       rows: items,
       selectable: false,
       width: Keyword.get(opts, :width),
-      page_size: Keyword.get(opts, :page_size),
       empty_state: "No boards in scope."
-    )
+    ]
+    |> maybe_put_page_size(opts)
+    |> ConsoleTable.init()
+  end
+
+  defp maybe_put_page_size(table_opts, opts) do
+    case Keyword.fetch(opts, :page_size) do
+      {:ok, page_size} when is_integer(page_size) ->
+        Keyword.put(table_opts, :page_size, page_size)
+
+      _ ->
+        table_opts
+    end
   end
 
   @doc """

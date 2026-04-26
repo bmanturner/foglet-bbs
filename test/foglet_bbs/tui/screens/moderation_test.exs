@@ -9,6 +9,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Moderation.Action
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Moderation
+  alias Foglet.TUI.Screens.Moderation.State, as: ModerationState
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.ConsoleTable
@@ -627,6 +628,12 @@ defmodule Foglet.TUI.Screens.ModerationTest do
                "Expected valid result for #{inspect(key)}"
       end
     end
+
+    test "LOG table keeps ConsoleTable default page size when not provided" do
+      table = ModerationState.build_log_table([])
+
+      assert table.table.raxol_state.options.page_size == 10
+    end
   end
 
   describe "USERS primitive presence" do
@@ -697,6 +704,12 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert joined =~ ~r/\[.+\]/,
              "Expected badge label in USERS tab, got: #{inspect(flat)}"
     end
+
+    test "USERS table keeps ConsoleTable default page size when not provided" do
+      table = ModerationState.build_users_table([])
+
+      assert table.table.raxol_state.options.page_size == 10
+    end
   end
 
   describe "BOARDS primitive presence" do
@@ -756,6 +769,12 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         assert is_tuple(result) or result == :no_match,
                "Expected valid result for #{inspect(key)}"
       end
+    end
+
+    test "BOARDS table keeps ConsoleTable default page size when not provided" do
+      table = ModerationState.build_boards_table([])
+
+      assert table.table.raxol_state.options.page_size == 10
     end
   end
 
