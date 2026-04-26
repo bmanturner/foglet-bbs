@@ -91,7 +91,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     element |> Map.get(:attrs, %{}) |> Map.get(:chrome_frame?, false)
   end
 
-  defp apply(tree), do: Engine.apply_layout(tree, @dimensions)
+  defp layout(tree), do: Engine.apply_layout(tree, @dimensions)
 
   defp apply_at_size(tree, {width, height}) do
     Engine.apply_layout(tree, %{width: width, height: height})
@@ -996,7 +996,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   test "login menu renders centered placeholder and command bar actions" do
     state = %App{screen_state: %{}, terminal_size: {80, 24}}
     tree = Login.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1053,7 +1053,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = Login.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1084,7 +1084,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       |> Map.put(:recent_oneliners, [%{body: "hello", user: %{handle: "alice"}}])
 
     tree = MainMenu.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1132,7 +1132,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       ])
 
     tree = MainMenu.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     row =
       positioned
@@ -1369,7 +1369,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = BoardList.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1433,7 +1433,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = PostReader.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1474,7 +1474,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = Login.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1515,7 +1515,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = Register.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1544,7 +1544,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = Verify.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1583,7 +1583,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     tree = PostComposer.render(state)
 
     # apply_layout must not raise — this is the primary Bug B assertion
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1599,7 +1599,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   test "no-modal: view/1 without modal renders screen content through layout engine" do
     state = %App{screen_state: %{}, terminal_size: {80, 24}}
     tree = App.view(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1616,7 +1616,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = App.view(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1650,7 +1650,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = App.view(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     ys = Enum.map(elements, & &1.y)
@@ -1745,7 +1745,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     ]
 
     for {name, tree} <- screens do
-      positioned = apply(tree)
+      positioned = layout(tree)
       elements = text_elements(positioned)
 
       max_y =
@@ -1779,7 +1779,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = NewThread.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1825,7 +1825,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = Account.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1931,7 +1931,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = Moderation.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -1961,7 +1961,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = Sysop.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
@@ -2011,7 +2011,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
 
     tree = NewThread.render(state)
-    positioned = apply(tree)
+    positioned = layout(tree)
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
