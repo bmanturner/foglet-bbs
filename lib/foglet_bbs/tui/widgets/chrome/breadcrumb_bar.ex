@@ -175,8 +175,8 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
 
   defp breadcrumb_slot(theme) do
     case theme.title do
-      empty when empty == %{} -> theme.status_bar
-      title -> title
+      slot when slot in [nil, %{}] -> theme.status_bar
+      slot -> slot
     end
   end
 end
