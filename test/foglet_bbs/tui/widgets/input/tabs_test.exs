@@ -10,8 +10,8 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       text_runs: 1
     ]
 
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Tabs
 
   defp theme, do: Theme.default()
