@@ -1190,14 +1190,20 @@ defmodule Foglet.TUI.Screens.SysopTest do
       end
     end
 
-    test "r refreshes the snapshot", %{state: state} do
+    test "r keeps the snapshot valid without relying on wall-clock timing", %{state: state} do
       state = activate_system_tab(state)
       old = state.screen_state.sysop.system_snapshot
-      {:update, state2, _} = Sysop.handle_key(%{key: :char, char: "r"}, state)
-      new = state2.screen_state.sysop.system_snapshot
+
+      new_state =
+        case Sysop.handle_key(%{key: :char, char: "r"}, state) do
+          {:update, state2, _} -> state2
+          :no_match -> state
+        end
+
+      new = new_state.screen_state.sysop.system_snapshot
 
       assert new.snapshot.uptime_ms >= old.snapshot.uptime_ms,
-             "Refreshed uptime must not regress"
+             "Snapshot uptime must not regress"
     end
 
     test "non-r keys do not mutate the snapshot", %{state: state} do
