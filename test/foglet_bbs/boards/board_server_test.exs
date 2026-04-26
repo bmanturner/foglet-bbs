@@ -50,8 +50,7 @@ defmodule Foglet.Boards.ServerTest do
 
       {pid, _sup_id} = start_server!(board.id)
 
-      assert Process.alive?(pid)
-
+      # Registry.lookup below proves registration (and thus liveness) without Process.alive?/1 (per AGENTS.md).
       assert [{^pid, nil}] =
                Registry.lookup(Foglet.BoardRegistry, board.id)
     end
