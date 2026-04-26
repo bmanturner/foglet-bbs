@@ -34,7 +34,7 @@ defmodule Foglet.TUI.Widgets.Chrome.KeyBarTest do
 
       flat = KeyBar.render(theme(), keys, width: 80) |> flatten_text()
 
-      assert flat =~ "System"
+      refute flat =~ "System"
       assert flat =~ "Navigate"
       assert flat =~ "Q Back"
       assert flat =~ "J/K Navigate"

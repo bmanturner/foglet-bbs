@@ -40,13 +40,13 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
       assert rendered =~ "Foglet"
       assert rendered =~ "Foglet ▸ Boards"
       assert rendered =~ "@alice | 13:05"
-      assert rendered =~ "System"
+      refute rendered =~ "System"
       assert rendered =~ "Q"
       assert rendered =~ "Back"
       assert top_border =~ "Foglet ▸ Boards"
       assert top_border =~ "@alice | 13:05"
       assert String.ends_with?(top_border, "┐")
-      assert bottom_border =~ "System"
+      refute bottom_border =~ "System"
       assert bottom_border =~ "Q Back"
       assert String.ends_with?(bottom_border, "┘")
     end

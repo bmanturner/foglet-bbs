@@ -18,6 +18,7 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
   @group_gap "   "
   @command_gap "  "
   @key_gap " "
+  @hidden_group_labels MapSet.new(["System"])
 
   @type command :: %{
           required(:key) => String.t(),
@@ -193,7 +194,10 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
           command.key <> @key_gap <> command.label
         end)
 
-      group.label <> @command_gap <> command_text
+      case display_group_label(group.label) do
+        "" -> command_text
+        label -> label <> @command_gap <> command_text
+      end
     end)
   end
 
@@ -203,16 +207,38 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
     nodes =
       groups
       |> Enum.map(fn group ->
-        [
-          text(group.label, style_attrs(theme, mappings.group)),
-          text(@command_gap)
-          | render_commands(theme, group.commands, mappings)
-        ]
+        render_group(theme, group, mappings)
       end)
       |> Enum.intersperse([text(@group_gap)])
       |> List.flatten()
 
     trim_to_width(nodes, width)
+  end
+
+  defp render_group(theme, group, mappings) do
+    command_nodes = render_commands(theme, group.commands, mappings)
+
+    case display_group_label(group.label) do
+      "" ->
+        command_nodes
+
+      label ->
+        [
+          text(label, style_attrs(theme, mappings.group)),
+          text(@command_gap)
+          | command_nodes
+        ]
+    end
+  end
+
+  defp display_group_label(label) do
+    label = to_string(label)
+
+    if MapSet.member?(@hidden_group_labels, label) do
+      ""
+    else
+      label
+    end
   end
 
   defp render_commands(theme, commands, mappings) do

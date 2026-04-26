@@ -38,7 +38,7 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBarTest do
     test "renders grouped commands in stable priority order" do
       flat = CommandBar.render(theme(), command_groups(), width: 120) |> flatten_text()
 
-      assert flat =~ "System"
+      refute flat =~ "System"
       assert flat =~ "Navigate"
       assert flat =~ "Actions"
       assert flat =~ "Q Back"
@@ -47,7 +47,7 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBarTest do
 
       assert String.match?(
                flat,
-               ~r/System.*Q Back.*Navigate.*j\/k Move.*Enter Open.*Actions.*C Compose/s
+               ~r/Q Back.*Navigate.*j\/k Move.*Enter Open.*Actions.*C Compose/s
              )
     end
 
