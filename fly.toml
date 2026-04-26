@@ -81,8 +81,8 @@ kill_timeout = "30s"
 #
 #   Get or rotate the attached database password from the Postgres app's user
 #   management commands if you did not save it when `fly postgres attach` ran:
-#     fly postgres users list --app foglet-bbs-db
-#     fly postgres users reset-password foglet_bbs --app foglet-bbs-db
+#     fly postgres detach --app foglet-bbs --postgres-app foglet-bbs-db                                                                             
+#     fly postgres attach foglet-bbs-db --app foglet-bbs --database-name foglet_bbs --database-user foglet_bbs
 #
 # The deploy release_command runs migrations and safe production config seeds:
 #   Ecto migrations

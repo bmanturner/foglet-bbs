@@ -1,5 +1,18 @@
 import Config
 
+# In dev, load .env.local (if present) into the process environment so the
+# System.get_env reads further down — and the Repo override below — pick it
+# up. Real environment variables take precedence over file values.
+if config_env() == :dev do
+  case Dotenvy.source([".env.local", System.get_env()]) do
+    {:ok, vars} ->
+      Enum.each(vars, fn {k, v} -> System.put_env(k, v) end)
+
+    {:error, _} ->
+      :ok
+  end
+end
+
 # config/runtime.exs is executed for all environments, including
 # during releases. It is executed after compilation and before the
 # system starts, so it is typically used to load production configuration
@@ -43,6 +56,12 @@ end
 
 config :foglet_bbs, FogletBbsWeb.Endpoint,
   http: [port: String.to_integer(System.get_env("PORT", "4000"))]
+
+if config_env() == :dev do
+  if database_url = System.get_env("DATABASE_URL") do
+    config :foglet_bbs, FogletBbs.Repo, url: database_url
+  end
+end
 
 if config_env() == :prod do
   database_url =
