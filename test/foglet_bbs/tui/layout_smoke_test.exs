@@ -1802,6 +1802,39 @@ defmodule Foglet.TUI.LayoutSmokeTest do
            "account shell: total height #{max_y} exceeds 24 rows"
   end
 
+  test "account shell clamps tab row to 64-column framed content budget" do
+    user = %{
+      id: "u1",
+      handle: "alice",
+      role: :user,
+      status: :active,
+      timezone: "Etc/UTC",
+      preferences: %{"time_format" => "12h"}
+    }
+
+    state = %App{
+      current_screen: :account,
+      current_user: user,
+      session_context: %{invite_code_generators: "users"},
+      screen_state: %{account: Account.init_screen_state(role: :sysop)},
+      terminal_size: {64, 22}
+    }
+
+    positioned = state |> Account.render() |> apply_at_size({64, 22})
+
+    tab_row =
+      positioned
+      |> content_text_elements()
+      |> Enum.group_by(& &1.y)
+      |> Map.values()
+      |> Enum.find([], fn row -> Enum.any?(row, &String.contains?(&1.text, "PROFILE")) end)
+      |> Enum.sort_by(& &1.x)
+      |> Enum.map_join(& &1.text)
+
+    assert TextWidth.display_width(tab_row) <= 60
+    assert tab_row =~ "PROFILE"
+  end
+
   test "moderation shell renders all five tab labels within height=24" do
     user = %{id: "u2", handle: "alice", role: :mod, status: :active}
 

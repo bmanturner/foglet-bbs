@@ -11,6 +11,7 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
     ]
 
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Widgets.Input.Tabs
 
   defp theme, do: Theme.default()
@@ -175,6 +176,32 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       refute Map.get(inactive, :bg) == t.selected.bg
       refute Map.get(inactive, :style, []) == [:bold]
       refute Enum.any?(text_runs(tree), &(Map.get(&1, :bg) == t.selected.bg))
+    end
+
+    test "compact width clamps tab strip to drawable frame budget" do
+      state =
+        Tabs.init(
+          tabs: ["Profile", "Preferences", "SSH Public Keys", "Invite Management"],
+          active: 2
+        )
+
+      flat = flatten_text(Tabs.render(state, theme: distinctive_theme(), width: 60))
+
+      assert TextWidth.display_width(flat) <= 60
+      assert flat =~ "▌ S"
+    end
+
+    test "active tab keeps indicator and a visible label character when labels overflow" do
+      state =
+        Tabs.init(
+          tabs: ["Queue Review", "Moderation Log", "User Administration", "Sanctions", "Boards"],
+          active: 2
+        )
+
+      flat = flatten_text(Tabs.render(state, theme: distinctive_theme(), width: 24))
+
+      assert TextWidth.display_width(flat) <= 24
+      assert flat =~ "▌ U"
     end
   end
 

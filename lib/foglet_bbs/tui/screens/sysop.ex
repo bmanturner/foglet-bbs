@@ -56,7 +56,8 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp render_authorized(state) do
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
-    content = build_content(ss, theme)
+    width = inner_width(state)
+    content = build_content(ss, theme, width)
     jump_hint = if "INVITES" in State.tab_labels(ss), do: "1-6", else: "1-5"
 
     ScreenFrame.render(state, chrome_model(ss), content, sysop_commands(jump_hint))
@@ -97,13 +98,21 @@ defmodule Foglet.TUI.Screens.Sysop do
     ]
   end
 
-  defp build_content(ss, theme) do
+  # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
+  defp inner_width(state) do
+    case Map.get(state, :terminal_size) do
+      {w, _} when is_integer(w) -> max(w - 4, 0)
+      _ -> 76
+    end
+  end
+
+  defp build_content(ss, theme, width) do
     active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
     body = render_tab_body(active_label, ss, theme)
 
     column style: %{gap: 0} do
       [
-        Tabs.render(ss.tabs, theme: theme),
+        Tabs.render(ss.tabs, theme: theme, width: width),
         divider(char: "─", style: %{fg: theme.border.fg}),
         body
       ]

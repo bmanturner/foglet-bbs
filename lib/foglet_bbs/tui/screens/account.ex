@@ -59,11 +59,12 @@ defmodule Foglet.TUI.Screens.Account do
     ss = synced_screen_state(state)
     theme = account_theme(state, ss)
     active_label = active_label(ss) || "PROFILE"
+    width = inner_width(state)
 
     content =
       column style: %{gap: 0} do
         [
-          Tabs.render(ss.tabs, theme: theme),
+          Tabs.render(ss.tabs, theme: theme, width: width),
           divider(char: "─", style: %{fg: theme.border.fg}),
           render_tab_body(active_label, ss, theme)
         ]
@@ -121,6 +122,14 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   # --- private helpers ---
+
+  # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
+  defp inner_width(state) do
+    case Map.get(state, :terminal_size) do
+      {w, _} when is_integer(w) -> max(w - 4, 0)
+      _ -> 76
+    end
+  end
 
   defp synced_screen_state(state) do
     state

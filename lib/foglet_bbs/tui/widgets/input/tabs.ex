@@ -37,10 +37,12 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.Presentation
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.Tabs, as: RaxolTabs
 
   @default_active_indicator "▌"
+  @tab_gap "   "
 
   @type action :: {:tab_changed, non_neg_integer()} | nil
 
@@ -89,6 +91,7 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{raxol_state: rs}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
+    width = Keyword.get(opts, :width)
 
     mappings = Presentation.theme_mappings().tabs
 
@@ -97,8 +100,9 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
         rs
         |> Map.get(:tabs, [])
         |> Enum.with_index()
+        |> clamp_tab_labels(Map.get(rs, :active_index, 0), width)
         |> Enum.map(&render_tab(&1, Map.get(rs, :active_index, 0), theme, mappings))
-        |> Enum.intersperse([text("   ", fg: Map.fetch!(theme, mappings.border).fg)])
+        |> Enum.intersperse([text(@tab_gap, fg: Map.fetch!(theme, mappings.border).fg)])
         |> List.flatten()
       end
     end
@@ -133,6 +137,96 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
     after_idx = Map.get(after_rs, :active_index, 0)
 
     if before_idx != after_idx, do: {:tab_changed, after_idx}, else: nil
+  end
+
+  defp clamp_tab_labels(indexed_tabs, _active_index, nil), do: indexed_tabs
+
+  defp clamp_tab_labels(_indexed_tabs, _active_index, width)
+       when not is_integer(width) or width <= 0,
+       do: []
+
+  defp clamp_tab_labels(indexed_tabs, active_index, width) do
+    indexed_tabs
+    |> Enum.map(fn {tab, idx} ->
+      label = tab |> Map.fetch!(:label) |> to_string()
+      min_width = if idx == active_index, do: 1, else: 0
+      %{tab: %{tab | label: label}, idx: idx, min_width: min_width}
+    end)
+    |> shrink_to_width(active_index, width)
+    |> Enum.map(fn %{tab: tab, idx: idx} -> {tab, idx} end)
+  end
+
+  defp shrink_to_width(entries, active_index, width) do
+    if rendered_width(entries, active_index) <= width do
+      entries
+    else
+      entries
+      |> shrink_inactive_labels(active_index, width)
+      |> shrink_active_label(active_index, width)
+    end
+  end
+
+  defp shrink_inactive_labels(entries, active_index, width) do
+    shrunk =
+      Enum.reduce_while(entries, entries, fn %{idx: idx}, acc ->
+        if rendered_width(acc, active_index) <= width do
+          {:halt, acc}
+        else
+          {:cont, shrink_entry(acc, idx, 0)}
+        end
+      end)
+
+    if rendered_width(shrunk, active_index) <= width or shrunk == entries do
+      shrunk
+    else
+      shrink_inactive_labels(shrunk, active_index, width)
+    end
+  end
+
+  defp shrink_active_label(entries, active_index, width) do
+    if rendered_width(entries, active_index) <= width do
+      entries
+    else
+      shrunk = shrink_entry(entries, active_index, 1)
+
+      if rendered_width(shrunk, active_index) <= width or shrunk == entries do
+        shrunk
+      else
+        shrink_active_label(shrunk, active_index, width)
+      end
+    end
+  end
+
+  defp shrink_entry(entries, idx, min_width) do
+    Enum.map(entries, fn
+      %{idx: ^idx, tab: tab} = entry ->
+        label = Map.fetch!(tab, :label)
+        current_width = TextWidth.display_width(label)
+        target_width = max(current_width - 1, min_width)
+        %{entry | tab: %{tab | label: TextWidth.truncate(label, target_width)}}
+
+      entry ->
+        entry
+    end)
+  end
+
+  defp rendered_width(entries, active_index) do
+    label_widths =
+      Enum.map(entries, fn %{tab: %{label: label}, idx: idx} ->
+        label_width = TextWidth.display_width(label)
+
+        if idx == active_index do
+          TextWidth.display_width(@default_active_indicator <> " ") + label_width
+        else
+          label_width
+        end
+      end)
+
+    Enum.sum(label_widths) + gap_width(entries)
+  end
+
+  defp gap_width(entries) do
+    max(length(entries) - 1, 0) * TextWidth.display_width(@tab_gap)
   end
 
   defp render_tab({tab, idx}, active_index, theme, mappings) do
