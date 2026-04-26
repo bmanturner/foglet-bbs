@@ -324,28 +324,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
     end
 
-    test "Ctrl+Q returns to :main_menu", %{state: state} do
-      {:update, new_state, _cmds} =
-        Account.handle_key(%{key: :char, char: "q", ctrl: true}, state)
-
+    test "'Q' returns to :main_menu", %{state: state} do
+      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "Q"}, state)
       assert new_state.current_screen == :main_menu
     end
 
-    test "Ctrl+Shift+Q returns to :main_menu", %{state: state} do
-      {:update, new_state, _cmds} =
-        Account.handle_key(%{key: :char, char: "Q", ctrl: true}, state)
-
-      assert new_state.current_screen == :main_menu
-    end
-
-    test "bare 'q' does NOT leave the screen (would eat form input)", %{state: state} do
-      result = Account.handle_key(%{key: :char, char: "q"}, state)
-      # Either delegated to a form (returns :update with same screen) or :no_match —
-      # but never navigates away.
-      case result do
-        {:update, new_state, _} -> assert new_state.current_screen != :main_menu
-        :no_match -> :ok
-      end
+    test "'q' is delegated to the active form", %{state: state} do
+      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "q"}, state)
+      assert new_state.current_screen == :account
+      assert new_state.screen_state.account.profile_dirty?
     end
 
     test "non-text unknown key returns :no_match", %{state: state} do
