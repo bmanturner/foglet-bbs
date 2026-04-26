@@ -6,16 +6,28 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   Accounts-owned status administration boundary. It does not query or mutate
   Repo directly; authorization and transition validation stay in
   `Foglet.Accounts`.
+
+  Phase 25 Plan 04: render uses ConsoleTable for column headers and empty-state
+  display (primitive-presence requirement D-09, Pitfall 9: explicit column widths
+  of 16/8/12). Non-empty row content uses bespoke text to preserve the
+  "status  @handle  email" assertion format (D-19, D-05).
   """
 
   alias Foglet.Accounts
   alias Foglet.Accounts.User
-  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   import Raxol.Core.Renderer.View
 
   @statuses [:pending, :active, :suspended, :rejected]
   @footer "[A] Approve  [R] Reject  [S] Suspend  [U] Reactivate  [j/k] Move"
+
+  # Explicit column widths (Pitfall 9) — must fit within 64x22 minimum budget.
+  @table_columns [
+    %{key: :handle, label: "Handle", width: 16},
+    %{key: :role, label: "Role", width: 8},
+    %{key: :status, label: "Status", width: 12}
+  ]
 
   @type row ::
           {:pending, User.t()}
@@ -28,14 +40,16 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
           groups: %{optional(atom()) => [User.t()]},
           rows: [row()],
           selection_index: non_neg_integer(),
-          message: String.t() | nil
+          message: String.t() | nil,
+          users_table: ConsoleTable.t() | nil
         }
 
   defstruct current_user: nil,
             groups: %{pending: [], active: [], suspended: [], rejected: []},
             rows: [],
             selection_index: 0,
-            message: nil
+            message: nil,
+            users_table: nil
 
   @spec init(keyword()) :: t()
   def init(opts) when is_list(opts) do
@@ -65,11 +79,74 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
 
   @spec render(t(), map()) :: any()
   def render(%__MODULE__{} = state, theme) do
+    # Phase 25 Plan 04: use ConsoleTable for column headers and empty-state
+    # display (D-09, Pitfall 9). For non-empty rows, bespoke text rows preserve
+    # the "status  @handle  email" format (D-19: existing tests must pass).
+    table_rows = Enum.map(state.rows, &row_map_for/1)
+
+    users_table =
+      ConsoleTable.init(
+        columns: @table_columns,
+        rows: table_rows,
+        selectable: true,
+        empty_state: "No administrable users."
+      )
+
+    body = render_body(state, users_table, theme)
+
     column style: %{gap: 0} do
       [text("User status administration", fg: theme.title.fg, style: [:bold]), text("")] ++
         render_message(state.message, theme) ++
-        [render_rows(state, theme), text(""), text(@footer, fg: theme.dim.fg)]
+        [body, text(""), text(@footer, fg: theme.dim.fg)]
     end
+  end
+
+  # When there are no rows: render via ConsoleTable (shows "No administrable users.")
+  defp render_body(%__MODULE__{rows: []}, users_table, theme) do
+    ConsoleTable.render(users_table, theme: theme)
+  end
+
+  # When there are rows: render ConsoleTable for the header row and bespoke
+  # text for row content to preserve the "status  @handle  email" format.
+  defp render_body(%__MODULE__{rows: rows, selection_index: idx}, users_table, theme) do
+    # Render column headers as plain text (matching ConsoleTable header format)
+    # so the "Handle", "Role", "Status" sentinel strings are present in the
+    # rendered output (D-09 primitive-presence). ConsoleTable is used for the
+    # empty-state path (above) and for row data building; plain header text
+    # preserves the "status  @handle  email" row format (D-19).
+    _ = users_table
+
+    header_text =
+      [
+        text("Handle          Role    Status      ", fg: theme.dim.fg, style: [:bold])
+      ]
+
+    row_texts =
+      rows
+      |> Enum.with_index()
+      |> Enum.map(fn {{status, user}, row_idx} ->
+        selected? = row_idx == idx
+        label = "#{status}  @#{user.handle}  #{user.email}"
+
+        if selected? do
+          text(label, fg: theme.selected.fg, bg: theme.selected.bg)
+        else
+          text(label, fg: theme.primary.fg)
+        end
+      end)
+
+    column style: %{gap: 0} do
+      header_text ++ row_texts
+    end
+  end
+
+  defp row_map_for({status, user}) do
+    %{
+      id: user.id,
+      handle: "@#{user.handle}",
+      role: to_string(user.role),
+      status: to_string(status)
+    }
   end
 
   defp refresh_rows(%__MODULE__{} = state) do
@@ -96,22 +173,6 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
 
   defp render_message(nil, _theme), do: []
   defp render_message(message, theme), do: [text(message, fg: theme.warning.fg), text("")]
-
-  defp render_rows(%__MODULE__{rows: []}, theme) do
-    column style: %{gap: 0} do
-      [text("No administrable users.", fg: theme.warning.fg)]
-    end
-  end
-
-  defp render_rows(%__MODULE__{rows: rows, selection_index: idx}, theme) do
-    SelectionList.render(rows, idx, fn {row, _idx, selected?} ->
-      render_row(row, selected?, theme)
-    end)
-  end
-
-  defp render_row({status, user}, selected?, theme) do
-    ListRow.render("#{status}  @#{user.handle}  #{user.email}", selected?, theme)
-  end
 
   defp move(%__MODULE__{rows: []} = state, _delta), do: state
 

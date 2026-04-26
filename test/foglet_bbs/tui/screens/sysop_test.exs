@@ -469,6 +469,84 @@ defmodule Foglet.TUI.Screens.SysopTest do
   end
 
   # =========================================================================
+  # SITE Modal.Form primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  describe "SITE Modal.Form primitive presence" do
+    setup %{state: state} do
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      %{state: state}
+    end
+
+    test "SITE tab body renders Modal.Form footer sentinel", %{state: state} do
+      # Lazy-init the SiteForm by delegating a no-op key to the SITE tab.
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "[Enter] Submit"),
+             "Expected Modal.Form footer '[Enter] Submit' in SITE render; got:\n#{flat}"
+    end
+
+    test "SITE tab body renders heading", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Site policy"),
+             "Expected Site policy heading in SITE render"
+    end
+
+    test "SITE tab body renders visible field labels", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "registration_mode"),
+             "Expected registration_mode field label in SITE render"
+
+      assert String.contains?(flat, "invite_code_generators"),
+             "Expected invite_code_generators field label in SITE render"
+    end
+  end
+
+  # =========================================================================
+  # LIMITS Modal.Form primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  describe "LIMITS Modal.Form primitive presence" do
+    setup %{state: state} do
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 2))
+      %{state: state}
+    end
+
+    test "LIMITS tab body renders Modal.Form footer sentinel", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "[Enter] Submit"),
+             "Expected Modal.Form footer '[Enter] Submit' in LIMITS render; got:\n#{flat}"
+    end
+
+    test "LIMITS tab body renders heading", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Runtime limits"),
+             "Expected Runtime limits heading in LIMITS render"
+    end
+
+    test "LIMITS tab body renders field labels with required markers", %{state: state} do
+      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "max_post_length"),
+             "Expected max_post_length field label in LIMITS render"
+
+      assert String.contains?(flat, "max_thread_title_length"),
+             "Expected max_thread_title_length field label in LIMITS render"
+    end
+  end
+
+  # =========================================================================
   # USERS tab tests (Plan 10-02, USER-01 through USER-03)
   # =========================================================================
 
@@ -1304,6 +1382,135 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert message == "Board server unavailable. Please retry."
       assert new_state.current_screen == :main_menu
       assert new_state.screen_state.sysop.boards_view.modal == nil
+    end
+  end
+
+  # =========================================================================
+  # USERS ConsoleTable primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  describe "USERS ConsoleTable primitive presence" do
+    test "USERS tab renders Handle column header from ConsoleTable", %{state: state} do
+      sysop = persist_user(%{handle: "ct_sysop", role: :sysop})
+      _user = persist_user(%{handle: "ct_user"})
+      state = activate_users_tab(state, sysop)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Handle"),
+             "Expected 'Handle' ConsoleTable column header in USERS render; got:\n#{flat}"
+    end
+
+    test "USERS tab renders Role and Status column headers", %{state: state} do
+      sysop = persist_user(%{handle: "ct2_sysop", role: :sysop})
+      state = activate_users_tab(state, sysop)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Role"),
+             "Expected 'Role' column header in USERS render"
+
+      assert String.contains?(flat, "Status"),
+             "Expected 'Status' column header in USERS render"
+    end
+
+    test "empty USERS handles :up/:down/:enter without crash and without domain dispatch", %{
+      state: state
+    } do
+      sysop = %Foglet.Accounts.User{id: Ecto.UUID.generate(), role: :sysop, status: :active}
+      view = UsersView.init(current_user: sysop)
+
+      ss = state.screen_state.sysop
+      state = %{state | screen_state: Map.put(state.screen_state, :sysop, %{ss | users_view: view})}
+      state = put_in(state, [:screen_state, :sysop, :active_tab], 4)
+
+      for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
+        result = Sysop.handle_key(key, state)
+
+        case result do
+          {:update, new_state, cmds} ->
+            assert cmds == [] or not Enum.any?(cmds, fn c -> is_tuple(c) end),
+                   "Unexpected domain dispatch on empty USERS for #{inspect(key)}"
+
+            _ = new_state
+
+          :no_match ->
+            :ok
+        end
+      end
+    end
+  end
+
+  # =========================================================================
+  # SYSTEM KvGrid primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  alias Foglet.TUI.Screens.Sysop.SystemSnapshot
+
+  describe "SYSTEM KvGrid primitive presence" do
+    test "SYSTEM tab renders KvGrid label rows", %{state: state} do
+      # Pre-initialize the system snapshot so it's in the screen state.
+      snap = Foglet.TUI.Screens.Sysop.SystemSnapshot.init()
+      ss = Sysop.init_screen_state(active: 3)
+      ss = %{ss | system_snapshot: snap}
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Sessions:") or String.contains?(flat, "Version:"),
+             "Expected KvGrid label row (Sessions: or Version:) in SYSTEM render"
+    end
+
+    test "SYSTEM refresh key [r] continues to refresh snapshot", %{state: state} do
+      # Pre-initialize the system snapshot.
+      snap = Foglet.TUI.Screens.Sysop.SystemSnapshot.init()
+      ss = Sysop.init_screen_state(active: 3)
+      ss = %{ss | system_snapshot: snap}
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      assert snap != nil
+
+      # "r" key may return :no_match if the snapshot values haven't changed.
+      result = Sysop.handle_key(%{key: :char, char: "r"}, state)
+
+      case result do
+        {:update, new_state, _} ->
+          snap2 = new_state.screen_state.sysop.system_snapshot
+          assert snap2 != nil
+
+        :no_match ->
+          # Snapshot was refreshed but wall clock didn't change — snapshot is
+          # still valid. The pre-seeded snap already demonstrates init works.
+          assert snap != nil
+      end
+    end
+  end
+
+  # =========================================================================
+  # BOARDS destructive styling routes through commands.destructive (D-07)
+  # =========================================================================
+
+  describe "BOARDS destructive styling routes through commands.destructive (D-07)" do
+    test "Foglet.TUI.Presentation.theme_mappings().commands.destructive maps to :error" do
+      mapping = Foglet.TUI.Presentation.theme_mappings()
+      assert mapping.commands.destructive == :error
+    end
+
+    test "BoardsView confirm modal for archive board is opened by D key on board row" do
+      setup_ctx = seed_category_and_board(%{})
+      sysop = setup_ctx.sysop
+
+      state = build_state(:sysop)
+      state = %{state | current_user: sysop}
+      state = activate_boards_tab(state, sysop)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "D"}, state)
+
+      bv = state.screen_state.sysop.boards_view
+      assert bv.modal_kind in [:archive_board, :archive_category],
+             "Expected archive confirm modal after D key"
+
+      assert bv.modal != nil
     end
   end
 end

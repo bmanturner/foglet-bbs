@@ -7,9 +7,14 @@ defmodule Foglet.TUI.Screens.Sysop.SystemSnapshot do
   (`:erlang.statistics`, `Registry.count/1`,
   `DynamicSupervisor.count_children/1`, `:erlang.system_info/1`,
   `FogletBbs.Repo.config/0`) — see RESEARCH Pattern 7, D-21.
+
+  Phase 25 Plan 04: render through KvGrid primitive (D-09). `state:` fields
+  on metric entries drive Badge display (`:healthy`/`:info`/`:pending`).
   """
 
   import Raxol.Core.Renderer.View
+
+  alias Foglet.TUI.Widgets.Display.KvGrid
 
   @type snapshot :: %{
           version: String.t(),
@@ -35,25 +40,32 @@ defmodule Foglet.TUI.Screens.Sysop.SystemSnapshot do
 
   @spec render(t(), map()) :: any()
   def render(%__MODULE__{snapshot: s}, theme) do
-    rows = [
-      snapshot_row("Version:", s.version, theme),
-      snapshot_row("Uptime:", format_uptime(s.uptime_ms), theme),
-      snapshot_row("Sessions:", Integer.to_string(s.session_count), theme),
-      snapshot_row("Active boards:", Integer.to_string(s.board_count), theme),
-      snapshot_row("OTP processes:", Integer.to_string(s.process_count), theme),
-      snapshot_row("DB pool size:", Integer.to_string(s.db_pool_size), theme)
+    # Phase 25 Plan 04: render through KvGrid primitive (D-09).
+    # `state:` badges convey metric health status without hardcoded colors (D-12).
+    # Sessions and board_count are healthy (live counters). db_pool_size is info
+    # (configuration datum). process_count and version/uptime have no implied
+    # alert threshold so they carry no badge. Conservative badge assignment per
+    # the plan instruction.
+    entries = [
+      %{label: "Version:", value: s.version},
+      %{label: "Uptime:", value: format_uptime(s.uptime_ms)},
+      %{label: "Sessions:", value: Integer.to_string(s.session_count), state: :healthy},
+      %{label: "Active boards:", value: Integer.to_string(s.board_count), state: :healthy},
+      %{label: "OTP processes:", value: Integer.to_string(s.process_count)},
+      %{label: "DB pool size:", value: Integer.to_string(s.db_pool_size), state: :info}
     ]
 
     footer = text("[r] Refresh", fg: theme.dim.fg)
 
     column style: %{gap: 0} do
-      [text("System snapshot", fg: theme.title.fg, style: [:bold]), text("")] ++
-        rows ++ [text(""), footer]
+      [
+        text("System snapshot", fg: theme.title.fg, style: [:bold]),
+        text(""),
+        KvGrid.render(entries, theme: theme, width: 60, label_width: 16, gap: 2),
+        text(""),
+        footer
+      ]
     end
-  end
-
-  defp snapshot_row(label, value, theme) do
-    text("  #{String.pad_trailing(label, 16)}#{value}", fg: theme.primary.fg)
   end
 
   @spec take_snapshot() :: snapshot()

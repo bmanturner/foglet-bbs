@@ -299,6 +299,11 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   end
 
   defp open_archive_board(state, board) do
+    # D-07: destructive actions (Archive board, Archive category) route through
+    # `Foglet.TUI.Presentation.theme_mappings().commands.destructive` which maps
+    # to `:error`. The confirm modal uses `type: :confirm` so the Modal widget
+    # can render it with the appropriate destructive emphasis via theme.error.
+    # Do NOT hardcode color atoms — use `Map.fetch!(theme, :error)` in render.
     %{
       state
       | modal: %Modal{
@@ -312,6 +317,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   end
 
   defp open_archive_category(state, category) do
+    # D-07: see open_archive_board/2 comment above — same destructive routing.
     %{
       state
       | modal: %Modal{
