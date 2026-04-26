@@ -145,6 +145,19 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
+    test "updates terminal_size on %Raxol.Core.Events.Event{type: :resize, ...} (SSH-06)", %{
+      state: state
+    } do
+      resize_event = %Raxol.Core.Events.Event{
+        type: :resize,
+        data: %{width: 120, height: 40}
+      }
+
+      {new_state, cmds} = App.update(resize_event, state)
+      assert new_state.terminal_size == {120, 40}
+      assert cmds == []
+    end
+
     test ":navigate changes current_screen", %{state: state} do
       {new_state, _} = App.update({:navigate, :board_list}, state)
       assert new_state.current_screen == :board_list
@@ -582,6 +595,22 @@ defmodule Foglet.TUI.AppTest do
       element = App.view(state)
       serialized = inspect(element, limit: :infinity)
       refute serialized =~ "Terminal too small."
+    end
+
+    test "renders SizeGate after receiving a resize event that drops below minimum" do
+      {:ok, state} = App.init(%{terminal_size: {100, 30}})
+
+      resize_event = %Raxol.Core.Events.Event{
+        type: :resize,
+        data: %{width: 40, height: 10}
+      }
+
+      {new_state, _cmds} = App.update(resize_event, state)
+      element = App.view(new_state)
+      serialized = inspect(element, limit: :infinity)
+
+      assert serialized =~ "Terminal too small."
+      assert serialized =~ "40×10"
     end
 
     test "gate takes precedence over modal (D-04 ordering)" do

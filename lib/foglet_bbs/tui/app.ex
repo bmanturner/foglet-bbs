@@ -151,12 +151,17 @@ defmodule Foglet.TUI.App do
 
   # Pass Raxol %Event{} key structs through as {:key, event_data_map} so that
   # screens can pattern-match directly on the Raxol-native data shape.
-  # Window events are still unpacked into a plain {width, height} tuple.
+  # Window and resize events are still unpacked into a plain
+  # {width, height} tuple.
   defp normalize_message(%Raxol.Core.Events.Event{type: :key, data: data}) do
     {:key, data}
   end
 
   defp normalize_message(%Raxol.Core.Events.Event{type: :window, data: %{width: w, height: h}}) do
+    {:window_change, w, h}
+  end
+
+  defp normalize_message(%Raxol.Core.Events.Event{type: :resize, data: %{width: w, height: h}}) do
     {:window_change, w, h}
   end
 

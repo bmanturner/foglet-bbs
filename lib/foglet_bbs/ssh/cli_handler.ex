@@ -205,11 +205,9 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:window_change, _ch, width, height, _pxw, _pxh}}, state) do
-    # Use Event.new(:resize,...) so Raxol's Dispatcher routes this through
-    # handle_resize_event/2 (type: :resize is in system_event?/1's allowlist).
-    # Event.window/3 produces type: :window, which is NOT a system event and
-    # goes to the app update/2 path, leaving the Rendering Engine dimensions
-    # unchanged. This is the root cause of Gap 6 (terminal resize ignored).
+    # Keep :resize here so the dispatcher applies its system resize path
+    # (rendering engine resize + runtime width/height tracking) in addition to
+    # the App update path, which now normalizes :resize into :window_change.
     event = Raxol.Core.Events.Event.new(:resize, %{width: width, height: height})
     dispatch_events(state.lifecycle_pid, [event])
 
