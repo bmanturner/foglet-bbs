@@ -81,6 +81,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   def handle_key(%{key: :shift_tab}, state), do: {rotate_focus(state, -1), []}
   def handle_key(%{key: :backtab}, state), do: {rotate_focus(state, -1), []}
 
+  def handle_key(%{key: :enter}, state), do: submit(state)
   def handle_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
 
   def handle_key(%{key: :backspace}, state), do: {apply_backspace(state), []}
