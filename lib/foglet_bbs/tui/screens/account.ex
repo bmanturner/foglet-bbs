@@ -74,7 +74,7 @@ defmodule Foglet.TUI.Screens.Account do
 
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
+  def handle_key(%{key: :char, char: "Q"}, state) do
     {:update, %{state | current_screen: :main_menu}, []}
   end
 
