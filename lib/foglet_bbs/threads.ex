@@ -11,6 +11,8 @@ defmodule Foglet.Threads do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.QueryHelpers
+
   alias Foglet.Accounts.User
   alias Foglet.Boards
   alias Foglet.Boards.Board
@@ -73,12 +75,13 @@ defmodule Foglet.Threads do
   @doc "List all non-deleted threads in a board, stickies first then by last_post_at desc."
   @spec list_threads(String.t()) :: [Thread.t()]
   def list_threads(board_id) do
-    Repo.all(
-      from t in Thread,
-        where: t.board_id == ^board_id and is_nil(t.deleted_at),
-        order_by: [desc: t.sticky, desc: t.last_post_at],
-        preload: [:created_by]
+    from(t in Thread,
+      where: t.board_id == ^board_id,
+      order_by: [desc: t.sticky, desc: t.last_post_at],
+      preload: [:created_by]
     )
+    |> QueryHelpers.not_deleted()
+    |> Repo.all()
   end
 
   @doc """
@@ -112,7 +115,7 @@ defmodule Foglet.Threads do
       from t in Thread,
         left_join: trp in ReadPointer,
         on: trp.thread_id == t.id and trp.user_id == ^user_id,
-        where: t.board_id == ^board_id and is_nil(t.deleted_at),
+        where: t.board_id == ^board_id,
         order_by: [desc: t.sticky, desc: t.last_post_at],
         select: %{
           id: t.id,
@@ -132,6 +135,7 @@ defmodule Foglet.Threads do
         }
 
     query
+    |> QueryHelpers.not_deleted()
     |> Repo.all()
     |> Enum.map(&struct(ThreadEntry, &1))
     |> preload_created_by()

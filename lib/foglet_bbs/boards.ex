@@ -13,6 +13,8 @@ defmodule Foglet.Boards do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.QueryHelpers
+
   alias Foglet.Accounts.User
   alias Foglet.Boards.{Board, Category, ReadPointer, Subscription}
   alias Foglet.Boards.Supervisor, as: BoardSupervisor
@@ -36,7 +38,9 @@ defmodule Foglet.Boards do
   """
   @spec boot_board_servers() :: :ok
   def boot_board_servers do
-    active_board_ids = Repo.all(from b in Board, where: b.archived == false, select: b.id)
+    active_board_ids =
+      Repo.all(from(b in Board) |> QueryHelpers.not_archived() |> select([b], b.id))
+
     Enum.each(active_board_ids, &BoardSupervisor.start_board/1)
     :ok
   end
@@ -104,7 +108,11 @@ defmodule Foglet.Boards do
   @doc "List all non-archived categories, ordered by display_order."
   @spec list_categories() :: [Category.t()]
   def list_categories do
-    Repo.all(from c in Category, where: c.archived == false, order_by: [asc: :display_order])
+    Repo.all(
+      from(c in Category)
+      |> QueryHelpers.not_archived()
+      |> order_by([c], asc: c.display_order)
+    )
   end
 
   # ---------- Boards ----------
@@ -211,14 +219,12 @@ defmodule Foglet.Boards do
   """
   @spec list_boards() :: [Board.t()]
   def list_boards do
-    Repo.all(
-      from b in Board,
-        where: b.archived == false,
-        join: c in assoc(b, :category),
-        where: c.archived == false,
-        order_by: [asc: c.display_order, asc: b.display_order],
-        preload: [:category]
-    )
+    from(b in Board, as: :b)
+    |> join(:inner, [b: b], c in assoc(b, :category), as: :c)
+    |> QueryHelpers.active_boards()
+    |> order_by([b: b, c: c], asc: c.display_order, asc: b.display_order)
+    |> preload([b: b, c: c], category: c)
+    |> Repo.all()
   end
 
   @type directory_board :: %{
@@ -337,7 +343,8 @@ defmodule Foglet.Boards do
   defp maybe_subscribe_existing_users_to_required_board(
          %Board{required_subscription: true} = board
        ) do
-    from(u in User, where: is_nil(u.deleted_at), select: u.id)
+    from(u in User, select: u.id)
+    |> QueryHelpers.not_deleted()
     |> Repo.all()
     |> Enum.reduce_while(:ok, fn user_id, :ok ->
       case subscribe(user_id, board.id) do
@@ -392,15 +399,13 @@ defmodule Foglet.Boards do
 
   def list_subscribed_boards(%{id: user_id}) do
     boards =
-      Repo.all(
-        from b in Board,
-          join: s in Subscription,
-          on: s.board_id == b.id and s.user_id == ^user_id,
-          join: c in assoc(b, :category),
-          where: b.archived == false and c.archived == false,
-          order_by: [asc: c.display_order, asc: b.display_order],
-          preload: [category: c]
-      )
+      from(b in Board, as: :b)
+      |> join(:inner, [b: b], s in Subscription, on: s.board_id == b.id and s.user_id == ^user_id)
+      |> join(:inner, [b: b], c in assoc(b, :category), as: :c)
+      |> QueryHelpers.active_boards()
+      |> order_by([b: b, c: c], asc: c.display_order, asc: b.display_order)
+      |> preload([b: b, c: c], category: c)
+      |> Repo.all()
 
     counts = unread_counts(user_id)
     Enum.map(boards, fn b -> %{b | unread_count: Map.get(counts, b.id, 0)} end)
@@ -496,16 +501,11 @@ defmodule Foglet.Boards do
         ptr -> ptr.last_read_message_number
       end
 
-    Repo.aggregate(
-      from(p in Foglet.Posts.Post,
-        where:
-          p.board_id == ^board_id and
-            p.message_number > ^last_read and
-            is_nil(p.deleted_at)
-      ),
-      :count,
-      :id
+    from(p in Foglet.Posts.Post,
+      where: p.board_id == ^board_id and p.message_number > ^last_read
     )
+    |> QueryHelpers.not_deleted()
+    |> Repo.aggregate(:count, :id)
   end
 
   @doc """
