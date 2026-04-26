@@ -91,20 +91,20 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
         %{
           when: when_label,
-          actor: truncate(mod_handle, 13),
-          action: truncate(action_label, 13),
-          body: truncate(body, 19),
-          reason: truncate(reason, 14)
+          actor: truncate(mod_handle, 8),
+          action: truncate(action_label, 8),
+          body: truncate(body, 13),
+          reason: truncate(reason, 9)
         }
       end)
 
     ConsoleTable.init(
       columns: [
-        %{key: :when, label: "When", width: 11},
-        %{key: :actor, label: "Actor", width: 14},
-        %{key: :action, label: "Action", width: 14},
-        %{key: :body, label: "Body", width: 20},
-        %{key: :reason, label: "Reason", width: 15}
+        %{key: :when, label: "When", width: 10},
+        %{key: :actor, label: "Actor", width: 9},
+        %{key: :action, label: "Action", width: 9},
+        %{key: :body, label: "Body", width: 14},
+        %{key: :reason, label: "Reason", width: 10}
       ],
       rows: items,
       selectable: false,
@@ -172,6 +172,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     scope_label = format_scopes(scopes)
     count = length(mod_log)
 
+    # Status entry uses :state for badge rendering (required by LOG primitive test)
     status_entry =
       if error do
         %{label: "Status", value: to_string(error), state: :error}
@@ -180,9 +181,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       end
 
     [
-      %{label: "Scope", value: scope_label, state: :info},
-      %{label: "Type", value: "hide_oneliner audit log", state: :neutral},
-      %{label: "Events", value: Integer.to_string(count), state: :neutral},
+      %{label: "Scope", value: scope_label},
+      %{label: "Type", value: "hide_oneliner audit log"},
+      %{label: "Events", value: Integer.to_string(count)},
       status_entry
     ]
   end
@@ -196,6 +197,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     active_count = Enum.count(users, fn u -> Map.get(u, :status) in [:active, "active"] end)
     pending = length(users) - active_count
 
+    # Status entry uses :state for badge rendering (required by USERS primitive test)
     status_entry =
       if error do
         %{label: "Status", value: to_string(error), state: :error}
@@ -204,13 +206,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       end
 
     [
-      %{label: "Scope", value: scope_label, state: :info},
-      %{label: "Active", value: Integer.to_string(active_count), state: :healthy},
-      %{
-        label: "Pending review",
-        value: Integer.to_string(pending),
-        badge: %{state: :pending, label: "pending", role: :warning}
-      },
+      %{label: "Scope", value: scope_label},
+      %{label: "Active", value: Integer.to_string(active_count)},
+      %{label: "Pending review", value: Integer.to_string(pending)},
       status_entry
     ]
   end
@@ -223,18 +221,13 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     scope_label = format_scopes(scopes)
     count = length(boards)
 
-    status_entry =
-      if error do
-        %{label: "Status", value: to_string(error), state: :error}
-      else
-        %{label: "Status", value: "Read-only", state: :info}
-      end
+    status_value = if error, do: to_string(error), else: "Read-only"
 
     [
-      %{label: "Scope", value: scope_label, state: :info},
-      %{label: "Context", value: "hide_oneliner scope: #{scope_label}", state: :neutral},
-      %{label: "Boards", value: Integer.to_string(count), state: :neutral},
-      status_entry
+      %{label: "Scope", value: scope_label},
+      %{label: "Context", value: "hide_oneliner scope: #{scope_label}"},
+      %{label: "Boards", value: Integer.to_string(count)},
+      %{label: "Status", value: status_value}
     ]
   end
 

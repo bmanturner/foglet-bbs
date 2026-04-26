@@ -120,7 +120,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp render_authorized(state) do
     ss = synced_screen_state(state)
     theme = Theme.from_state(state)
-    content = render_content(ss, theme)
+    width = inner_width(state)
+    content = render_content(ss, theme, width)
     ScreenFrame.render(state, moderation_chrome(), content, @key_list)
   end
 
@@ -128,16 +129,24 @@ defmodule Foglet.TUI.Screens.Moderation do
     %{title: "Moderation", mode: Presentation.mode_for!(:moderation)}
   end
 
-  defp render_content(ss, theme) do
+  # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
+  defp inner_width(state) do
+    case Map.get(state, :terminal_size) do
+      {w, _} when is_integer(w) -> max(w - 4, 0)
+      _ -> 76
+    end
+  end
+
+  defp render_content(ss, theme, width) do
     active_label = Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab, "QUEUE")
-    tab_body = render_tab_body(active_label, ss, theme)
+    tab_body = render_tab_body(active_label, ss, theme, width)
 
     column style: %{gap: 0} do
       [Tabs.render(ss.tabs, theme: theme), tab_body]
     end
   end
 
-  defp render_tab_body("QUEUE", ss, theme) do
+  defp render_tab_body("QUEUE", ss, theme, _width) do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
@@ -147,31 +156,27 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("LOG", ss, theme) do
+  defp render_tab_body("LOG", ss, theme, width) do
     log_table = fresh_log_table(ss)
     log_summary = State.build_log_summary(ss.scopes, ss.error, ss.mod_log)
+    summary_col = kv_grid_column(log_summary, theme, width)
 
     column style: %{gap: 1} do
-      [
-        KvGrid.render(log_summary, theme: theme, width: 78, label_width: 16, gap: 2),
-        ConsoleTable.render(log_table, theme: theme)
-      ]
+      [summary_col, ConsoleTable.render(log_table, theme: theme)]
     end
   end
 
-  defp render_tab_body("USERS", ss, theme) do
+  defp render_tab_body("USERS", ss, theme, width) do
     users_table = fresh_users_table(ss)
     users_summary = State.build_users_summary(ss.users, ss.error)
+    summary_col = kv_grid_column(users_summary, theme, width)
 
     column style: %{gap: 1} do
-      [
-        KvGrid.render(users_summary, theme: theme, width: 78, label_width: 16, gap: 2),
-        ConsoleTable.render(users_table, theme: theme)
-      ]
+      [summary_col, ConsoleTable.render(users_table, theme: theme)]
     end
   end
 
-  defp render_tab_body("SANCTIONS", ss, theme) do
+  defp render_tab_body("SANCTIONS", ss, theme, _width) do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
@@ -181,23 +186,21 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("BOARDS", ss, theme) do
+  defp render_tab_body("BOARDS", ss, theme, width) do
     boards_table = fresh_boards_table(ss)
     boards_summary = State.build_boards_summary(ss.scopes, ss.boards, ss.error)
+    summary_col = kv_grid_column(boards_summary, theme, width)
 
     column style: %{gap: 1} do
-      [
-        KvGrid.render(boards_summary, theme: theme, width: 78, label_width: 16, gap: 2),
-        ConsoleTable.render(boards_table, theme: theme)
-      ]
+      [summary_col, ConsoleTable.render(boards_table, theme: theme)]
     end
   end
 
-  defp render_tab_body("INVITES", ss, theme) do
+  defp render_tab_body("INVITES", ss, theme, _width) do
     InvitesSurface.render(ss.invites, theme)
   end
 
-  defp render_tab_body(_label, _ss, theme) do
+  defp render_tab_body(_label, _ss, theme, _width) do
     column style: %{gap: 0} do
       [text("No report queue workflow is available in v1.1.", fg: theme.dim.fg)]
     end
@@ -293,6 +296,21 @@ defmodule Foglet.TUI.Screens.Moderation do
 
       _other ->
         ss
+    end
+  end
+
+  # Wraps KvGrid output in a column container. KvGrid.render/2 can return a list
+  # containing [text, badge] pairs (when entries have badge metadata). Raxol's
+  # flexbox cannot process nested lists as children; List.flatten/1 normalises
+  # the list so every child is a single element map before the column is built.
+  # This does NOT touch the internals of map values — only collapses list nesting.
+  defp kv_grid_column(summary, theme, width) do
+    flat =
+      KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
+      |> List.flatten()
+
+    column style: %{gap: 0} do
+      flat
     end
   end
 

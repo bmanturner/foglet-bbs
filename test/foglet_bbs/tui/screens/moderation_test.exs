@@ -679,14 +679,21 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   end
 
   describe "INVITES ConsoleTable primitive presence" do
-    test "INVITES tab renders ConsoleTable header with Code/Status/Created/Used by columns" do
+    test "INVITES tab renders ConsoleTable header with Code/Status/Created/Used by columns when rows present" do
+      sample_invite = %{
+        code: "ABC123",
+        status: :active,
+        inserted_at: ~U[2026-01-01 00:00:00Z],
+        consumed_by_user_id: nil
+      }
+
       state =
         :mod
         |> build_state_with_policy("mods")
         |> put_in(
           [:screen_state, :moderation],
           Moderation.init_screen_state(invites_visible?: true, active: 5)
-          |> Map.put(:invites, %Foglet.TUI.Screens.Shared.InvitesState{items: []})
+          |> Map.put(:invites, InvitesState.new(items: [sample_invite]))
         )
 
       flat = Moderation.render(state) |> collect_text_values()

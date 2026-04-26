@@ -14,7 +14,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   @invite_columns [
-    %{key: :code, label: "Code", width: 14},
+    %{key: :code, label: "Code", width: 18},
     %{key: :status, label: "Status", width: 10},
     %{key: :created, label: "Created", width: 11},
     %{key: :used_by, label: "Used by", width: 16}
@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   @type t :: %__MODULE__{
           items: nil | [invite_status()],
           table: ConsoleTable.t(),
+          selected_index: non_neg_integer(),
           loading?: boolean(),
           last_generated_code: String.t() | nil,
           error: String.t() | nil,
@@ -33,6 +34,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
 
   defstruct items: nil,
             table: nil,
+            selected_index: 0,
             loading?: false,
             last_generated_code: nil,
             error: nil,
@@ -42,10 +44,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   def new(opts \\ []) do
     items = Keyword.get(opts, :items, nil)
     validate_items!(items)
+    idx = Keyword.get(opts, :selected_index, 0)
 
     %__MODULE__{
       items: items,
-      table: build_table(items || []),
+      table: build_table(items || [], idx),
+      selected_index: idx,
       loading?: Keyword.get(opts, :loading?, false),
       last_generated_code: Keyword.get(opts, :last_generated_code),
       error: Keyword.get(opts, :error),
@@ -55,10 +59,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
 
   @spec loaded(t(), [invite_status()]) :: t()
   def loaded(%__MODULE__{} = state, items) when is_list(items) do
+    # After loading new items, reset selection to first item (index 0)
     %__MODULE__{
       state
       | items: items,
-        table: build_table(items),
+        table: build_table(items, 0),
+        selected_index: 0,
         loading?: false,
         error: nil
     }
@@ -81,11 +87,11 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
 
   @doc """
   Returns the currently selected invite item, or nil if no selection.
+  Uses `selected_index` field as the authoritative selection.
   """
   @spec selected_item(t()) :: invite_status() | nil
-  def selected_item(%__MODULE__{items: items, table: table}) when is_list(items) do
-    idx = selected_row_index(table)
-    if is_integer(idx), do: Enum.at(items, idx), else: nil
+  def selected_item(%__MODULE__{items: items, selected_index: idx}) when is_list(items) do
+    Enum.at(items, idx)
   end
 
   def selected_item(_state), do: nil
@@ -94,7 +100,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   Builds the default ConsoleTable for the INVITES tab.
   """
   @spec build_table([invite_status()]) :: ConsoleTable.t()
-  def build_table(items) when is_list(items) do
+  def build_table(items), do: build_table(items, 0)
+
+  @spec build_table([invite_status()], non_neg_integer()) :: ConsoleTable.t()
+  def build_table(items, _selected_idx) when is_list(items) do
     rows =
       Enum.map(items, fn item ->
         status_str = item |> Map.get(:status) |> to_string()
@@ -124,7 +133,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
       columns: @invite_columns,
       rows: rows,
       selectable: true,
-      empty_state: "No invites generated yet."
+      empty_state: "No invites issued yet."
     )
   end
 

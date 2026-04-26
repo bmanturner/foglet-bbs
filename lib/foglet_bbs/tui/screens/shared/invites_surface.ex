@@ -22,6 +22,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.ConsoleTable
+  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Foglet.TUI.Widgets.Progress.Spinner
 
   @title "INVITES"
@@ -68,15 +69,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
     end
   end
 
-  defp render_items(%{items: items} = state, theme) when is_list(items) do
-    last_generated_code = Map.get(state, :last_generated_code)
-    error = Map.get(state, :error)
+  # InvitesState struct path — renders via ConsoleTable (D-05, Phase 25 Plan 03).
+  defp render_items(%InvitesState{items: items} = state, theme) when is_list(items) do
+    last_generated_code = state.last_generated_code
+    error = state.error
 
-    table =
-      case Map.get(state, :table) do
-        nil -> InvitesState.build_table(items)
-        t -> t
-      end
+    table = state.table || InvitesState.build_table(items)
 
     column style: %{gap: 1} do
       [
@@ -86,6 +84,75 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
         text(@key_hints, fg: theme.dim.fg)
       ]
       |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  # Legacy raw-map path — preserves SelectionList+ListRow rendering for backward
+  # compatibility with callers and tests that pass plain maps (D-19).
+  defp render_items(%{items: items} = state, theme) when is_list(items) do
+    selected_index = Map.get(state, :selected_index, 0)
+    last_generated_code = Map.get(state, :last_generated_code)
+    error = Map.get(state, :error)
+
+    column style: %{gap: 1} do
+      [
+        maybe_banner(last_generated_code, theme),
+        maybe_error(error, theme),
+        invite_rows(items, selected_index, theme),
+        text(@key_hints, fg: theme.dim.fg)
+      ]
+      |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  defp invite_rows([], _selected_index, theme) do
+    text("No invites issued yet.", fg: theme.dim.fg)
+  end
+
+  defp invite_rows(items, selected_index, theme) do
+    SelectionList.render(items, selected_index, fn {item, _idx, selected?} ->
+      item
+      |> row_label()
+      |> ListRow.render(selected?, theme)
+    end)
+  end
+
+  defp row_label(item) do
+    base = [
+      field(item, :code),
+      "status: #{field(item, :status)}",
+      "issuer_id: #{field(item, :issuer_id)}",
+      "inserted_at: #{timestamp_field(item, :inserted_at)}"
+    ]
+
+    item
+    |> lifecycle_fields()
+    |> then(&(base ++ &1))
+    |> Enum.join(" | ")
+  end
+
+  defp lifecycle_fields(%{status: :consumed} = item) do
+    [
+      "consumed_at: #{timestamp_field(item, :consumed_at)}",
+      "consumed_by_user_id: #{field(item, :consumed_by_user_id)}"
+    ]
+  end
+
+  defp lifecycle_fields(%{status: :revoked} = item) do
+    ["revoked_at: #{timestamp_field(item, :revoked_at)}"]
+  end
+
+  defp lifecycle_fields(_item), do: []
+
+  defp field(item, key) do
+    item |> Map.get(key) |> to_string()
+  end
+
+  defp timestamp_field(item, key) do
+    case Map.get(item, key) do
+      %DateTime{} = timestamp -> Calendar.strftime(timestamp, "%Y-%m-%d %H:%M:%SZ")
+      nil -> ""
+      other -> to_string(other)
     end
   end
 

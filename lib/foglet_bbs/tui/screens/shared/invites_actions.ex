@@ -50,6 +50,31 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
     end
   end
 
+  @doc """
+  Advances the selection by one row, clamped to the last item.
+  Updates both `selected_index` and the ConsoleTable widget cursor.
+  """
+  @spec select_next(InvitesState.t()) :: InvitesState.t()
+  def select_next(%InvitesState{items: items, selected_index: idx} = state) do
+    max_idx = max(length(items || []) - 1, 0)
+    new_idx = min(idx + 1, max_idx)
+    table = state.table || InvitesState.build_table(items || [])
+    {new_table, _action} = ConsoleTable.handle_event(%{key: :down}, table)
+    %{state | selected_index: new_idx, table: new_table}
+  end
+
+  @doc """
+  Moves the selection back one row, clamped to the first item.
+  Updates both `selected_index` and the ConsoleTable widget cursor.
+  """
+  @spec select_prev(InvitesState.t()) :: InvitesState.t()
+  def select_prev(%InvitesState{items: items, selected_index: idx} = state) do
+    new_idx = max(idx - 1, 0)
+    table = state.table || InvitesState.build_table(items || [])
+    {new_table, _action} = ConsoleTable.handle_event(%{key: :up}, table)
+    %{state | selected_index: new_idx, table: new_table}
+  end
+
   @spec handle_key(term(), User.t(), InvitesState.t()) :: action_result()
   def handle_key(key, %User{} = actor, %InvitesState{} = state) when key in ["g", "G"] do
     generate(actor, state)
@@ -63,26 +88,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
     revoke_selected(actor, state)
   end
 
-  def handle_key(:down, %User{}, %InvitesState{table: nil, items: items} = state) do
-    table = InvitesState.build_table(items || [])
-    {new_table, _action} = ConsoleTable.handle_event(%{key: :down}, table)
-    {:ok, %{state | table: new_table}}
+  def handle_key(:down, %User{}, %InvitesState{} = state) do
+    {:ok, select_next(state)}
   end
 
-  def handle_key(:down, %User{}, %InvitesState{table: table} = state) do
-    {new_table, _action} = ConsoleTable.handle_event(%{key: :down}, table)
-    {:ok, %{state | table: new_table}}
-  end
-
-  def handle_key(:up, %User{}, %InvitesState{table: nil, items: items} = state) do
-    table = InvitesState.build_table(items || [])
-    {new_table, _action} = ConsoleTable.handle_event(%{key: :up}, table)
-    {:ok, %{state | table: new_table}}
-  end
-
-  def handle_key(:up, %User{}, %InvitesState{table: table} = state) do
-    {new_table, _action} = ConsoleTable.handle_event(%{key: :up}, table)
-    {:ok, %{state | table: new_table}}
+  def handle_key(:up, %User{}, %InvitesState{} = state) do
+    {:ok, select_prev(state)}
   end
 
   def handle_key(_key, %User{}, %InvitesState{}), do: :no_match
