@@ -177,6 +177,10 @@ defmodule Foglet.SSH.CLIHandler do
       ) do
     context = build_context(state, width, height)
 
+    # Enter the alternate screen immediately on PTY allocation, before Raxol
+    # initialization or the first render can write to the primary buffer.
+    send_alt_screen_enter(state)
+
     {:ok, lifecycle_pid} =
       Raxol.Core.Runtime.Lifecycle.start_link(Foglet.TUI.App,
         environment: :ssh,
@@ -260,6 +264,18 @@ defmodule Foglet.SSH.CLIHandler do
     _ = stop_session(state.session_pid)
     :ok
   end
+
+  # Emit the alt-screen ENTER escape (DECSET 1049) directly from the SSH channel
+  # handler so the client's scrollback is isolated before any TUI frame writes.
+  defp send_alt_screen_enter(%{connection_ref: ref, channel_id: ch})
+       when not is_nil(ref) and not is_nil(ch) do
+    _ = :ssh_connection.send(ref, ch, "\e[?1049h\e[H\e[2J")
+    :ok
+  rescue
+    _ -> :ok
+  end
+
+  defp send_alt_screen_enter(_state), do: :ok
 
   # Emit the alt-screen LEAVE escape (DECRST 1049) directly to the SSH channel
   # so the client's terminal restores the primary screen buffer on disconnect.

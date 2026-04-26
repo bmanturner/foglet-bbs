@@ -17,13 +17,13 @@ defmodule Foglet.SSH.CLIHandlerTest do
   @ssh_timeout 5_000
 
   describe "real SSH channel startup" do
-    test "PTY allocation and shell startup emit alternate-screen ENTER" do
+    test "PTY allocation emits alternate-screen ENTER before terminal output" do
       %{conn: conn} = start_test_daemon!()
       channel_id = open_shell!(conn)
 
       bytes = collect_channel_bytes(conn, channel_id, &String.contains?(&1, @alt_screen_enter))
 
-      assert bytes =~ @alt_screen_enter
+      assert String.starts_with?(bytes, @alt_screen_enter)
     end
 
     test "initial terminal output is CRLF-normalized" do
