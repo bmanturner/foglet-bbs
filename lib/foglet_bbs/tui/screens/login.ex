@@ -206,13 +206,15 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp render_menu(_mode, theme, state) do
     {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
-    top_padding = max(div(max(terminal_height - 8, 1), 2), 0)
+    available = max(terminal_height - 8, 1)
+    top_padding = div(available, 2)
+    bottom_padding = max(available - top_padding - 1, 0)
+    pad = text(" ", fg: theme.primary.fg)
 
     column style: %{gap: 0, align_items: :center} do
-      List.duplicate(text(" ", fg: theme.primary.fg), top_padding) ++
-        [
-          text("Imagine something cool here", fg: theme.primary.fg)
-        ]
+      List.duplicate(pad, top_padding) ++
+        [text("Imagine something cool here", fg: theme.primary.fg)] ++
+        List.duplicate(pad, bottom_padding)
     end
   end
 
