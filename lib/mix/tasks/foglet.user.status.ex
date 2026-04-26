@@ -14,23 +14,16 @@ defmodule Mix.Tasks.Foglet.User.Status do
   @requirements ["app.config"]
 
   alias Foglet.Accounts
+  alias Foglet.MixTaskHelpers
 
   @switches [status: :string, actor: :string]
   @valid_status_strings ["active", "rejected", "suspended"]
 
   @impl Mix.Task
   def run(args) do
-    {:ok, _} = Application.ensure_all_started(:foglet_bbs)
+    MixTaskHelpers.start_app!()
 
-    {opts, positional} =
-      try do
-        OptionParser.parse!(args, strict: @switches)
-      rescue
-        e in OptionParser.ParseError ->
-          Mix.shell().error("Invalid arguments: #{Exception.message(e)}")
-          Mix.shell().error(usage())
-          exit({:shutdown, 1})
-      end
+    {opts, positional} = MixTaskHelpers.parse_args!(args, @switches, usage())
 
     handle = Enum.at(positional, 0)
     status = Keyword.get(opts, :status)
@@ -38,26 +31,18 @@ defmodule Mix.Tasks.Foglet.User.Status do
 
     cond do
       is_nil(handle) ->
-        Mix.shell().error("Missing required target handle.")
-        Mix.shell().error(usage())
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("Missing required target handle.", usage())
 
       is_nil(status) ->
-        Mix.shell().error("Missing required --status flag.")
-        Mix.shell().error(usage())
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("Missing required --status flag.", usage())
 
       is_nil(actor) ->
-        Mix.shell().error("Missing required --actor flag.")
-        Mix.shell().error(usage())
-        exit({:shutdown, 1})
+        MixTaskHelpers.fail("Missing required --actor flag.", usage())
 
       status not in @valid_status_strings ->
-        Mix.shell().error(
+        MixTaskHelpers.fail(
           "Invalid status: #{inspect(status)}. Valid statuses: #{Enum.join(@valid_status_strings, ", ")}"
         )
-
-        exit({:shutdown, 1})
 
       true ->
         change_status(handle, status, actor)
@@ -104,11 +89,7 @@ defmodule Mix.Tasks.Foglet.User.Status do
   defp format_delivery(:attempted), do: "attempted"
   defp format_delivery({:failed, _reason}), do: "failed"
 
-  @spec fail(String.t()) :: no_return()
-  defp fail(message) do
-    Mix.shell().error(message)
-    exit({:shutdown, 1})
-  end
+  defp fail(message), do: MixTaskHelpers.fail(message)
 
   defp usage do
     """

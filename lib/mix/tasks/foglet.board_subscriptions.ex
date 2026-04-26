@@ -19,13 +19,14 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
   alias Foglet.Accounts
   alias Foglet.Boards
   alias Foglet.Boards.Board
+  alias Foglet.MixTaskHelpers
 
   @switches [user: :string, board: :string]
   @actions ["list", "subscribe", "unsubscribe"]
 
   @impl Mix.Task
   def run(args) do
-    {:ok, _} = Application.ensure_all_started(:foglet_bbs)
+    MixTaskHelpers.start_app!()
 
     {opts, positional} = parse_args(args)
     action = List.first(positional)
@@ -48,10 +49,7 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
   end
 
   defp parse_args(args) do
-    OptionParser.parse!(args, strict: @switches)
-  rescue
-    e in OptionParser.ParseError ->
-      fail("Invalid arguments: #{Exception.message(e)}", usage())
+    MixTaskHelpers.parse_args!(args, @switches, usage())
   end
 
   defp dispatch("list", user_identifier, _board_slug) do
@@ -83,7 +81,7 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
         fail("Unknown board: #{board_slug}")
 
       {:error, changeset} ->
-        fail_changeset("Failed to subscribe #{user.handle} to #{board.slug}:", changeset)
+        MixTaskHelpers.fail_changeset("Failed to subscribe #{user.handle} to #{board.slug}:", changeset)
     end
   end
 
@@ -123,36 +121,7 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
   defp status_label(%{subscribed?: true}), do: "[subscribed]"
   defp status_label(%{subscribed?: false}), do: "[unsubscribed]"
 
-  @spec fail(String.t()) :: no_return()
-  @spec fail(String.t(), String.t() | nil) :: no_return()
-  defp fail(message, detail \\ nil) do
-    Mix.shell().error(message)
-
-    if detail do
-      Mix.shell().error(detail)
-    end
-
-    exit({:shutdown, 1})
-  end
-
-  @spec fail_changeset(String.t(), Ecto.Changeset.t()) :: no_return()
-  defp fail_changeset(message, changeset) do
-    Mix.shell().error(message)
-
-    for {field, errors} <- format_errors(changeset), err <- errors do
-      Mix.shell().error("  * #{field}: #{err}")
-    end
-
-    exit({:shutdown, 1})
-  end
-
-  defp format_errors(changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-      Enum.reduce(opts, msg, fn {k, v}, acc ->
-        String.replace(acc, "%{#{k}}", if(is_list(v), do: inspect(v), else: to_string(v)))
-      end)
-    end)
-  end
+  defp fail(message, detail \\ nil), do: MixTaskHelpers.fail(message, detail)
 
   defp usage do
     """
