@@ -7,10 +7,12 @@ kill_timeout = "30s"
   ECTO_IPV6 = "true"
   FOGLET_MAIL_FROM = "no-reply@foglet.io"
   FOGLET_SSH_PORT = "2222"
+  HOME = "/data"
   PHX_HOST = "bbs.foglet.io"
   PHX_SERVER = "true"
   PORT = "4000"
   SSH_HOST_KEY_DIR = "/data/ssh"
+  XDG_CONFIG_HOME = "/data/.config"
 
 [http_service]
   internal_port = 4000
@@ -24,7 +26,7 @@ kill_timeout = "30s"
     timeout = "5s"
     grace_period = "30s"
     method = "GET"
-    path = "/"
+    path = "/up"
 
 [deploy]
   release_command = "/app/bin/foglet_bbs eval \"Ecto.Migrator.with_repo(FogletBbs.Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true); priv = :foglet_bbs |> :code.priv_dir() |> List.to_string(); Code.eval_file(Path.join(priv, \\\"repo/seeds/config.exs\\\")) end)\""

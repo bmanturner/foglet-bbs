@@ -27,6 +27,10 @@ defmodule FogletBbsWeb.Router do
     get "/", PageController, :home
   end
 
+  scope "/" do
+    get "/up", FogletBbsWeb.HealthController, :index
+  end
+
   scope "/api", FogletBbsWeb do
     pipe_through :api
   end
