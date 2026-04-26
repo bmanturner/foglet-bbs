@@ -18,9 +18,12 @@ defmodule Foglet.TUI.Screens.Register do
     * "sysop_approved" success       → Accounts.register_pending_user/1 + terminate
 
   SSH keys are NEVER collected here (D-24).
+
+  State shape is owned by `Foglet.TUI.Screens.Register.State`.
   """
 
   alias Foglet.{Accounts, Config}
+  alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -29,8 +32,6 @@ defmodule Foglet.TUI.Screens.Register do
   @behaviour Foglet.TUI.Screen
 
   import Raxol.Core.Renderer.View
-
-  @focus_cycle [:handle, :email, :password, :confirm_password]
 
   # §3 init_screen_state/1 (PUBLIC — AUDIT-19, D-05)
 
@@ -49,18 +50,7 @@ defmodule Foglet.TUI.Screens.Register do
   @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts \\ []) do
-    %{
-      mode: "open",
-      step: :combined,
-      focused_field: :handle,
-      invite_code_input: TextInput.init([]),
-      handle_input: TextInput.init([]),
-      email_input: TextInput.init([]),
-      password_input: TextInput.init(mask_char: "*"),
-      confirm_input: TextInput.init(mask_char: "*"),
-      collected: %{},
-      error: nil
-    }
+    RegisterState.default()
   end
 
   # §4 render/1 (PUBLIC)
@@ -89,7 +79,7 @@ defmodule Foglet.TUI.Screens.Register do
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()}
   def handle_key(%{key: :escape}, state) do
-    {:update, clear_register_ss(%{state | current_screen: :login}), []}
+    {:update, RegisterState.clear(%{state | current_screen: :login}), []}
   end
 
   def handle_key(key_event, state) do
@@ -114,13 +104,13 @@ defmodule Foglet.TUI.Screens.Register do
           map()
         ) :: {map(), list()}
   def handle_wizard_event({:cancel}, state) do
-    {clear_register_ss(%{state | current_screen: :login}), []}
+    {RegisterState.clear(%{state | current_screen: :login}), []}
   end
 
   def handle_wizard_event({:submit_step, :invite_code, value}, state) do
     reg = get_register_ss(state)
 
-    if valid_invite_code?(value) do
+    if RegisterState.valid_invite_code?(value) do
       new_reg = %{
         reg
         | step: :combined,
@@ -129,10 +119,10 @@ defmodule Foglet.TUI.Screens.Register do
           error: nil
       }
 
-      {put_register_ss(state, new_reg), []}
+      {RegisterState.put(state, new_reg), []}
     else
       new_reg = %{reg | error: "Invalid code."}
-      {put_register_ss(state, new_reg), []}
+      {RegisterState.put(state, new_reg), []}
     end
   end
 
@@ -158,15 +148,15 @@ defmodule Foglet.TUI.Screens.Register do
     reg = get_register_ss(state)
     {new_input, _action} = TextInput.handle_event(event, reg.invite_code_input)
     new_reg = %{reg | invite_code_input: new_input}
-    {:update, put_register_ss(state, new_reg), []}
+    {:update, RegisterState.put(state, new_reg), []}
   end
 
   # --- :combined step key handlers ---
 
   defp handle_combined_key(%{key: :tab}, state) do
     reg = get_register_ss(state)
-    new_reg = %{reg | focused_field: next_field(reg.focused_field), error: nil}
-    {:update, put_register_ss(state, new_reg), []}
+    new_reg = %{reg | focused_field: RegisterState.next_field(reg.focused_field), error: nil}
+    {:update, RegisterState.put(state, new_reg), []}
   end
 
   defp handle_combined_key(%{key: :enter}, state) do
@@ -177,8 +167,8 @@ defmodule Foglet.TUI.Screens.Register do
         validate_and_submit(reg, state)
 
       field ->
-        new_reg = %{reg | focused_field: next_field(field), error: nil}
-        {:update, put_register_ss(state, new_reg), []}
+        new_reg = %{reg | focused_field: RegisterState.next_field(field), error: nil}
+        {:update, RegisterState.put(state, new_reg), []}
     end
   end
 
@@ -197,30 +187,19 @@ defmodule Foglet.TUI.Screens.Register do
       submit(reg, state)
     else
       new_reg = %{reg | error: "Passwords do not match."}
-      {:update, put_register_ss(state, new_reg), []}
+      {:update, RegisterState.put(state, new_reg), []}
     end
   end
 
-  defp next_field(current) do
-    idx = Enum.find_index(@focus_cycle, &(&1 == current)) || 0
-    Enum.at(@focus_cycle, rem(idx + 1, length(@focus_cycle)))
-  end
-
   defp focused_input(state) do
-    FocusInput.get_focused(get_register_ss(state), &input_key/1, :handle)
+    FocusInput.get_focused(RegisterState.get(state), &RegisterState.input_key/1, :handle)
   end
 
   defp update_focused_input(state, new_input) do
-    reg = get_register_ss(state)
-    new_reg = FocusInput.update_focused(reg, new_input, &input_key/1, :handle)
-    put_register_ss(state, new_reg)
+    reg = RegisterState.get(state)
+    new_reg = FocusInput.update_focused(reg, new_input, &RegisterState.input_key/1, :handle)
+    RegisterState.put(state, new_reg)
   end
-
-  defp input_key(:invite_code), do: :invite_code_input
-  defp input_key(:handle), do: :handle_input
-  defp input_key(:email), do: :email_input
-  defp input_key(:password), do: :password_input
-  defp input_key(:confirm_password), do: :confirm_input
 
   # §8 Private render helpers
 
@@ -291,36 +270,11 @@ defmodule Foglet.TUI.Screens.Register do
   # §9 Private state plumbing
 
   defp get_register_ss(state) do
-    Map.get(state.screen_state || %{}, :register) || init_screen_state_for(state)
-  end
-
-  defp put_register_ss(state, reg) do
-    new_screen_state = Map.put(state.screen_state || %{}, :register, reg)
-    %{state | screen_state: new_screen_state}
-  end
-
-  defp clear_register_ss(state) do
-    new_screen_state = Map.delete(state.screen_state || %{}, :register)
-    %{state | screen_state: new_screen_state}
+    RegisterState.get(state) || init_screen_state_for(state)
   end
 
   defp init_screen_state_for(state) do
-    mode = registration_mode(state)
-    step = if mode == "invite_only", do: :invite_code, else: :combined
-    focused = if step == :invite_code, do: :invite_code, else: :handle
-
-    %{
-      mode: mode,
-      step: step,
-      focused_field: focused,
-      invite_code_input: TextInput.init([]),
-      handle_input: TextInput.init([]),
-      email_input: TextInput.init([]),
-      password_input: TextInput.init(mask_char: "*"),
-      confirm_input: TextInput.init(mask_char: "*"),
-      collected: %{},
-      error: nil
-    }
+    RegisterState.for_mode(registration_mode(state))
   end
 
   # §10 Private domain plumbing
@@ -341,16 +295,16 @@ defmodule Foglet.TUI.Screens.Register do
         }
 
         new_state = %{state | modal: modal}
-        {:update, clear_register_ss(new_state), [{:terminate_after_modal, :pending_approval}]}
+        {:update, RegisterState.clear(new_state), [{:terminate_after_modal, :pending_approval}]}
 
       {:error, changeset} ->
         new_reg = %{
           reg
-          | error: changeset_error_text(changeset),
+          | error: RegisterState.changeset_error_text(changeset),
             focused_field: :handle
         }
 
-        {:update, put_register_ss(state, new_reg), []}
+        {:update, RegisterState.put(state, new_reg), []}
     end
   end
 
@@ -370,11 +324,11 @@ defmodule Foglet.TUI.Screens.Register do
       {:error, changeset} when is_struct(changeset, Ecto.Changeset) ->
         new_reg = %{
           reg
-          | error: changeset_error_text(changeset),
+          | error: RegisterState.changeset_error_text(changeset),
             focused_field: :handle
         }
 
-        {:update, put_register_ss(state, new_reg), []}
+        {:update, RegisterState.put(state, new_reg), []}
 
       {:error, :unavailable} ->
         modal = %Foglet.TUI.Modal{
@@ -408,22 +362,12 @@ defmodule Foglet.TUI.Screens.Register do
         current_screen: :verify
     }
 
-    {:update, clear_register_ss(new_state), []}
+    {:update, RegisterState.clear(new_state), []}
   end
 
   defp handle_register_success(state, user, :main_menu, _code) do
     new_state = %{state | current_user: user}
-    {:update, clear_register_ss(new_state), [{:promote_session, user}]}
-  end
-
-  defp valid_invite_code?(code) when is_binary(code) and byte_size(code) > 0 do
-    Regex.match?(~r/\A[A-Z0-9]{16,64}\z/i, code)
-  end
-
-  defp valid_invite_code?(_), do: false
-
-  defp changeset_error_text(cs) do
-    Enum.map_join(cs.errors, "; ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+    {:update, RegisterState.clear(new_state), [{:promote_session, user}]}
   end
 
   defp registration_mode(state) do
