@@ -555,11 +555,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         |> Enum.filter(fn el ->
           row_text = Map.get(el, :text, "")
 
-          String.contains?(flat, row_text) and
-            Enum.any?(
-              [long_prefix, "Subscribed Board", "Available Board", "⚿", "✓", "+", "◆"],
-              &String.contains?(row_text, &1)
-            )
+          Enum.any?(
+            [long_prefix, "Subscribed Board", "Available Board", "⚿", "✓", "+", "◆"],
+            &String.contains?(row_text, &1)
+          )
         end)
         |> assert_board_list_no_row_overlap!(size, "BoardList.render")
       end
