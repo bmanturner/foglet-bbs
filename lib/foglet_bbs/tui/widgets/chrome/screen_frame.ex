@@ -43,91 +43,131 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
     chrome = chrome_model(state, title_or_chrome, commands)
     frame_width = frame_width(state)
 
-    column style: %{gap: 0, justify_content: :space_between} do
-      [
-        column style: %{gap: 0} do
-          [
-            border_text(top_border(chrome, frame_width), theme),
-            content_element
-          ]
-        end,
-        border_text(bottom_border(chrome, frame_width), theme)
-      ]
-    end
+    top_segments = top_border_segments(chrome, theme, frame_width)
+    bottom_segments = bottom_border_segments(chrome, theme, frame_width)
+
+    %{
+      type: :foglet_screen_frame,
+      content: content_element,
+      top_segments: top_segments,
+      bottom_segments: bottom_segments,
+      children: [
+        segment_row(top_segments),
+        content_element,
+        segment_row(bottom_segments)
+      ],
+      border_fg: theme.border.fg
+    }
   end
 
-  defp border_text(content, theme) do
+  defp segment_row(segments), do: %{type: :row, attrs: %{gap: 0}, children: segments}
+
+  defp border_segment(content, theme) do
     text(content, fg: theme.border.fg)
   end
 
-  defp top_border(chrome, nil) do
-    @border.top_left <>
-      " " <>
-      breadcrumb(chrome, nil) <>
-      " " <>
-      status(chrome) <>
-      " " <>
-      @border.top_right
+  defp status_segment(content, theme) do
+    text(content,
+      fg: Map.get(theme.status_bar, :fg),
+      bg: Map.get(theme.status_bar, :bg),
+      style: Map.get(theme.status_bar, :style, [])
+    )
   end
 
-  defp top_border(chrome, width) do
+  defp top_border_segments(chrome, theme, nil) do
+    [
+      border_segment(@border.top_left <> " ", theme),
+      BreadcrumbBar.render(theme, chrome.breadcrumb_parts),
+      border_segment(" ", theme),
+      status_segment(status(chrome), theme),
+      border_segment(" " <> @border.top_right, theme)
+    ]
+  end
+
+  defp top_border_segments(chrome, theme, width) do
     inside_width = max(width - 2, 0)
-    left = " " <> breadcrumb(chrome, max(inside_width - 2, 0)) <> " "
-    right = status(chrome) |> status_segment()
+    raw_status = status(chrome)
+    status_width = TextWidth.display_width(raw_status)
+    breadcrumb_width = max(inside_width - status_width - 4, 0)
 
-    @border.top_left <> fitted_top_inside(left, right, inside_width) <> @border.top_right
+    breadcrumb_node =
+      BreadcrumbBar.render(theme, chrome.breadcrumb_parts, width: breadcrumb_width)
+
+    breadcrumb_width = node_width(breadcrumb_node)
+    status_width = min(status_width, max(inside_width - breadcrumb_width - 4, 0))
+
+    status_node =
+      raw_status
+      |> TextWidth.truncate(status_width)
+      |> status_segment(theme)
+
+    content_width = breadcrumb_width + node_width(status_node) + 4
+    fill_width = max(inside_width - content_width, 0)
+
+    [
+      border_segment(@border.top_left <> " ", theme),
+      breadcrumb_node,
+      border_segment(" " <> String.duplicate(@border.horizontal, fill_width) <> " ", theme),
+      status_node,
+      border_segment(" " <> @border.top_right, theme)
+    ]
   end
 
-  defp fitted_top_inside(left, right, inside_width) do
-    left_width = TextWidth.display_width(left)
-    right_width = TextWidth.display_width(right)
+  defp bottom_border_segments(chrome, theme, nil) do
+    command_nodes = command_segments(theme, chrome.command_groups)
 
-    if left_width + right_width <= inside_width do
-      fill = String.duplicate(@border.horizontal, inside_width - left_width - right_width)
-      left <> fill <> right
-    else
-      right = TextWidth.truncate(right, min(right_width, div(inside_width, 2)))
-      right_width = TextWidth.display_width(right)
-      left = TextWidth.truncate(left, max(inside_width - right_width, 0))
-      left <> right
-    end
+    [
+      border_segment(@border.bottom_left <> " ", theme),
+      command_nodes,
+      border_segment(" " <> @border.bottom_right, theme)
+    ]
+    |> List.flatten()
   end
 
-  defp bottom_border(chrome, nil) do
-    commands = CommandBar.render_text(chrome.command_groups)
-
-    @border.bottom_left <> " " <> commands <> " " <> @border.bottom_right
-  end
-
-  defp bottom_border(chrome, width) do
+  defp bottom_border_segments(chrome, theme, width) do
     inside_width = max(width - 2, 0)
 
-    command_segment =
-      chrome.command_groups
-      |> CommandBar.render_text(width: max(inside_width - 2, 0))
-      |> case do
-        "" -> ""
-        commands -> " " <> commands <> " "
-      end
+    command_nodes =
+      command_segments(theme, chrome.command_groups, width: max(inside_width - 2, 0))
 
-    command_width = TextWidth.display_width(command_segment)
+    command_width = nodes_width(command_nodes)
 
-    inside =
-      if command_width <= inside_width do
-        command_segment <> String.duplicate(@border.horizontal, inside_width - command_width)
+    {leading, trailing, fill_width} =
+      if command_width > 0 do
+        {" ", " ", max(inside_width - command_width - 2, 0)}
       else
-        TextWidth.truncate(command_segment, inside_width)
+        {"", "", inside_width}
       end
 
-    @border.bottom_left <> inside <> @border.bottom_right
+    [
+      border_segment(@border.bottom_left <> leading, theme),
+      command_nodes,
+      border_segment(
+        trailing <> String.duplicate(@border.horizontal, fill_width) <> @border.bottom_right,
+        theme
+      )
+    ]
+    |> List.flatten()
   end
 
-  defp breadcrumb(chrome, width), do: BreadcrumbBar.format(chrome.breadcrumb_parts, width: width)
+  defp command_segments(theme, groups, opts \\ []) do
+    theme
+    |> CommandBar.render(groups, opts)
+    |> Map.get(:children, [])
+  end
 
   defp status(chrome), do: chrome.status_atoms |> Enum.join(" | ")
 
-  defp status_segment(""), do: ""
-  defp status_segment(status), do: " " <> status <> " "
+  defp node_width(node), do: node |> node_text() |> TextWidth.display_width()
+
+  defp nodes_width(nodes) do
+    nodes
+    |> List.flatten()
+    |> Enum.map(&node_width/1)
+    |> Enum.sum()
+  end
+
+  defp node_text(node), do: Map.get(node, :content, Map.get(node, :text, ""))
 
   defp frame_width(state) do
     case Map.get(state, :terminal_size) do

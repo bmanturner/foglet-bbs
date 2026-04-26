@@ -68,6 +68,29 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end)
   end
 
+  defp content_text_elements(positioned) do
+    positioned
+    |> text_elements()
+    |> Enum.reject(&chrome_frame_element?/1)
+  end
+
+  defp text_rows(elements) do
+    elements
+    |> Enum.group_by(& &1.y)
+    |> Map.new(fn {y, row_elements} ->
+      row_text =
+        row_elements
+        |> Enum.sort_by(& &1.x)
+        |> Enum.map_join(& &1.text)
+
+      {y, row_text}
+    end)
+  end
+
+  defp chrome_frame_element?(element) do
+    element |> Map.get(:attrs, %{}) |> Map.get(:chrome_frame?, false)
+  end
+
   defp apply(tree), do: Engine.apply_layout(tree, @dimensions)
 
   defp apply_at_size(tree, {width, height}) do
@@ -159,25 +182,25 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           assert element.x + TextWidth.display_width(text) <= width
         end
 
-        breadcrumb =
-          Enum.find(elements, fn element ->
-            String.starts_with?(element.text, "┌") and String.contains?(element.text, "Foglet")
-          end)
+        rows = text_rows(elements)
+        top_row = Map.get(rows, 0, "")
+        bottom_row = Map.get(rows, height - 1, "")
+        breadcrumb = Enum.find(elements, &String.contains?(&1.text, "Foglet"))
 
         content =
           Enum.find(elements, fn element ->
             String.contains?(element.text, "BODY SENTINEL")
           end)
 
-        command =
-          Enum.find(elements, fn element ->
-            String.starts_with?(element.text, "└") and
-              (String.contains?(element.text, "Navigate") or String.contains?(element.text, "J/K"))
-          end)
+        command = Enum.find(elements, &(&1.y == height - 1 and &1.text in ["J/K", "Navigate"]))
 
         assert breadcrumb, "expected breadcrumb/status text at #{inspect({width, height})}"
         assert content, "expected body text at #{inspect({width, height})}"
         assert command, "expected command text at #{inspect({width, height})}"
+        assert String.starts_with?(top_row, "┌")
+        assert String.ends_with?(top_row, "┐")
+        assert String.starts_with?(bottom_row, "└")
+        assert String.ends_with?(bottom_row, "┘")
         assert breadcrumb.y == 0
         assert breadcrumb.y < content.y
         assert content.y < command.y
@@ -425,6 +448,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     defp assert_board_list_no_row_overlap!(elements, size, label) do
       elements
+      |> Enum.reject(&chrome_frame_element?/1)
       |> Enum.group_by(& &1.y)
       |> Enum.each(fn {_y, row_elements} ->
         row_elements
@@ -630,6 +654,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     defp assert_no_same_row_overlap!(elements, size, label) do
       elements
+      |> Enum.reject(&chrome_frame_element?/1)
       |> Enum.group_by(& &1.y)
       |> Enum.each(fn {_y, row_elements} ->
         row_elements
@@ -754,6 +779,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     defp assert_no_phase_22_overlap!(elements, size) do
       elements
+      |> Enum.reject(&chrome_frame_element?/1)
       |> Enum.group_by(& &1.y)
       |> Enum.each(fn {_y, row_elements} ->
         row_elements
@@ -922,6 +948,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     elements = text_elements(positioned)
     texts = Enum.map(elements, & &1.text)
+    rendered_rows = elements |> text_rows() |> Map.values()
 
     placeholder =
       Enum.find(elements, fn element ->
@@ -937,22 +964,22 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     refute Enum.any?(texts, &String.contains?(&1, "[L]")),
            "login menu body should not render bracketed menu items, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "L Login")),
+    assert Enum.any?(rendered_rows, &String.contains?(&1, "L Login")),
            "expected command bar Login key, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "L Login")),
+    assert Enum.any?(rendered_rows, &String.contains?(&1, "L Login")),
            "expected command bar Login label, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "R Register")),
+    assert Enum.any?(rendered_rows, &String.contains?(&1, "R Register")),
            "expected command bar Register key, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "R Register")),
+    assert Enum.any?(rendered_rows, &String.contains?(&1, "R Register")),
            "expected command bar Register label, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "Q Quit")),
+    assert Enum.any?(rendered_rows, &String.contains?(&1, "Q Quit")),
            "expected command bar Quit key, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &String.contains?(&1, "Q Quit")),
+    assert Enum.any?(rendered_rows, &String.contains?(&1, "Q Quit")),
            "expected command bar Quit label, got: #{inspect(texts)}"
 
     assert placeholder.x in 26..28,
@@ -1145,7 +1172,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         #    REPLACES the prior identical-`{x, y}` check, which only caught
         #    elements starting at the same column. Range overlap catches
         #    elements whose display-width spans collide on the same y.
-        elements_by_y = Enum.group_by(elements, & &1.y)
+        elements_by_y =
+          elements
+          |> Enum.reject(&chrome_frame_element?/1)
+          |> Enum.group_by(& &1.y)
 
         for {y, row_elements} <- elements_by_y do
           sorted = Enum.sort_by(row_elements, & &1.x)

@@ -64,7 +64,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             positioned =
               state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
 
-            elements = text_elements(positioned)
+            elements = content_text_elements(positioned)
 
             for el <- elements do
               assert el.x + Foglet.TUI.TextWidth.display_width(el.text) <= width,
@@ -110,7 +110,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             positioned =
               state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
 
-            elements = text_elements(positioned)
+            elements = content_text_elements(positioned)
 
             for el <- elements do
               assert el.x + Foglet.TUI.TextWidth.display_width(el.text) <= width,
@@ -164,7 +164,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             positioned =
               state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
 
-            elements = text_elements(positioned)
+            elements = content_text_elements(positioned)
 
             for el <- elements do
               assert el.x + Foglet.TUI.TextWidth.display_width(el.text) <= width,
@@ -224,7 +224,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             positioned =
               state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
 
-            elements = text_elements(positioned)
+            elements = content_text_elements(positioned)
 
             for el <- elements do
               assert el.x + Foglet.TUI.TextWidth.display_width(el.text) <= width,

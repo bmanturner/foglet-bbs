@@ -193,21 +193,6 @@ defmodule Raxol.UI.Layout.Engine do
     [text_element | acc]
   end
 
-  # Text components expose :style as a list of atoms ([:bold, :underline]) in the
-  # high-level DSL. StyleInheritance may also produce keyword-like lists with
-  # {key, value} tuples when inheritable parent styles are merged in. Handle both
-  # forms so fg/bg AND text attributes survive layout.
-  defp style_to_map(styles) when is_list(styles) do
-    Enum.reduce(styles, %{}, fn
-      {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
-      attr, acc when is_atom(attr) -> Map.put(acc, attr, true)
-      _other, acc -> acc
-    end)
-  end
-
-  defp style_to_map(styles) when is_map(styles), do: styles
-  defp style_to_map(_), do: %{}
-
   def process_element(%{type: :button, attrs: attrs} = _element, space, acc) do
     text = Map.get(attrs, :label, "Button")
     component_attrs = Map.put(attrs, :component_type, :button)
@@ -229,8 +214,7 @@ defmodule Raxol.UI.Layout.Engine do
         type: :box,
         x: space.x,
         y: space.y,
-        width:
-          min(Raxol.UI.TextMeasure.display_width(display_text) + 4, space.width),
+        width: min(Raxol.UI.TextMeasure.display_width(display_text) + 4, space.width),
         height: 3,
         attrs: component_attrs
       },
@@ -299,6 +283,45 @@ defmodule Raxol.UI.Layout.Engine do
 
     children_acc = process_children(children, inner_space, [])
     [box_element | children_acc] ++ acc
+  end
+
+  def process_element(%{type: :foglet_screen_frame} = frame, space, acc) do
+    width = max(space.width, 0)
+    height = max(space.height, 0)
+    border_fg = Map.get(frame, :border_fg)
+
+    content_space = %{
+      space
+      | x: space.x + 1,
+        y: space.y + 1,
+        width: max(width - 2, 0),
+        height: max(height - 2, 0)
+    }
+
+    content_acc =
+      if height > 2 do
+        process_element(Map.fetch!(frame, :content), content_space, [])
+      else
+        []
+      end
+
+    top_elements =
+      frame
+      |> Map.get(:top_segments, [])
+      |> foglet_frame_segment_elements(space.x, space.y)
+
+    bottom_elements =
+      if height > 1 do
+        frame
+        |> Map.get(:bottom_segments, [])
+        |> foglet_frame_segment_elements(space.x, space.y + height - 1)
+      else
+        []
+      end
+
+    frame_elements = foglet_frame_side_elements(space, width, height, border_fg)
+
+    content_acc ++ top_elements ++ bottom_elements ++ frame_elements ++ acc
   end
 
   # Process button elements in new View DSL format (no :attrs key)
@@ -398,6 +421,21 @@ defmodule Raxol.UI.Layout.Engine do
     acc
   end
 
+  # Text components expose :style as a list of atoms ([:bold, :underline]) in the
+  # high-level DSL. StyleInheritance may also produce keyword-like lists with
+  # {key, value} tuples when inheritable parent styles are merged in. Handle both
+  # forms so fg/bg AND text attributes survive layout.
+  defp style_to_map(styles) when is_list(styles) do
+    Enum.reduce(styles, %{}, fn
+      {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
+      attr, acc when is_atom(attr) -> Map.put(acc, attr, true)
+      _other, acc -> acc
+    end)
+  end
+
+  defp style_to_map(styles) when is_map(styles), do: styles
+  defp style_to_map(_), do: %{}
+
   defp build_button_elements(text, component_attrs, space) do
     [
       %{
@@ -425,6 +463,70 @@ defmodule Raxol.UI.Layout.Engine do
     Enum.reduce(children, acc, fn child, current_acc ->
       process_element(child, space, current_acc)
     end)
+  end
+
+  defp foglet_frame_side_elements(_space, width, height, _border_fg)
+       when width <= 1 or height <= 2,
+       do: []
+
+  defp foglet_frame_side_elements(space, width, height, border_fg) do
+    1..(height - 2)
+    |> Enum.flat_map(fn offset ->
+      y = space.y + offset
+
+      [
+        foglet_frame_text(space.x, y, "│", border_fg),
+        foglet_frame_text(space.x + width - 1, y, "│", border_fg)
+      ]
+    end)
+  end
+
+  defp foglet_frame_text(x, y, text, fg) do
+    %{
+      type: :text,
+      x: x,
+      y: y,
+      text: text,
+      style: %{},
+      fg: fg,
+      bg: nil,
+      attrs: %{style: %{}, original_type: :text, chrome_frame?: true}
+    }
+  end
+
+  defp foglet_frame_segment_elements(segments, x, y) do
+    segments
+    |> List.flatten()
+    |> Enum.reduce({x, []}, fn segment, {current_x, acc} ->
+      text = Map.get(segment, :content, Map.get(segment, :text, ""))
+      width = Raxol.UI.TextMeasure.display_width(text)
+
+      element =
+        segment
+        |> foglet_frame_segment_text(current_x, y, text)
+
+      {current_x + width, acc ++ [element]}
+    end)
+    |> elem(1)
+  end
+
+  defp foglet_frame_segment_text(segment, x, y, text) do
+    style_map = style_to_map(Map.get(segment, :style, %{}))
+
+    %{
+      type: :text,
+      x: x,
+      y: y,
+      text: text,
+      fg: Map.get(segment, :fg),
+      bg: Map.get(segment, :bg),
+      style: style_map,
+      attrs: %{
+        style: style_map,
+        id: Map.get(segment, :id),
+        original_type: :text
+      }
+    }
   end
 
   # --- End Element Processing ---
@@ -520,6 +622,13 @@ defmodule Raxol.UI.Layout.Engine do
     inner_space = shrink_space_by(available_space, overhead)
 
     resolve_box_size(width, height, children, inner_space, overhead)
+  end
+
+  def measure_element(%{type: :foglet_screen_frame}, available_space) do
+    %{
+      width: Map.get(available_space, :width, 0),
+      height: Map.get(available_space, :height, 0)
+    }
   end
 
   # Flex with top-level properties (new View DSL format from Flex.row/1 etc.)
@@ -779,8 +888,7 @@ defmodule Raxol.UI.Layout.Engine do
       justify_content:
         Map.get(style, :justify_content) ||
           Map.get(flex, :justify, :flex_start),
-      align_items:
-        Map.get(style, :align_items) || Map.get(flex, :align, :stretch),
+      align_items: Map.get(style, :align_items) || Map.get(flex, :align, :stretch),
       gap: Map.get(style, :gap) || Map.get(flex, :gap, 0),
       padding: Map.get(style, :padding) || Map.get(flex, :padding, 0)
     }
