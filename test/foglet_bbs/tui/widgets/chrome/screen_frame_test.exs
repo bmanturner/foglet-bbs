@@ -34,7 +34,9 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
 
       rendered = Enum.join(texts, " ")
 
-      assert rendered =~ "BODY SENTINEL"
+      assert rendered =~ "Foglet"
+      assert rendered =~ "Foglet ▸ Boards"
+      assert rendered =~ "@alice | 13:05"
       assert rendered =~ "System"
       assert rendered =~ "Q"
       assert rendered =~ "Back"
@@ -46,11 +48,14 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
         |> ScreenFrame.render("Boards", content(), [{"Q", "Back"}])
         |> collect_text_values()
 
+      top_index = Enum.find_index(texts, &String.contains?(&1, "Foglet ▸ Boards"))
       content_index = Enum.find_index(texts, &String.contains?(&1, "BODY SENTINEL"))
       command_index = Enum.find_index(texts, &String.contains?(&1, "System"))
 
+      assert top_index
       assert content_index
       assert command_index
+      assert top_index < content_index
       assert content_index < command_index
     end
   end
