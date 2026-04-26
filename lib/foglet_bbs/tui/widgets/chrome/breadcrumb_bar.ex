@@ -63,7 +63,9 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
     )
   end
 
-  defp parts_for_screen(_state, :login), do: [@root, "Login"]
+  defp parts_for_screen(state, :login), do: login_parts(state)
+  defp parts_for_screen(_state, :register), do: [@root, "Login", "Register"]
+  defp parts_for_screen(_state, :verify), do: [@root, "Login", "Verify"]
   defp parts_for_screen(_state, :main_menu), do: [@root, "Home"]
   defp parts_for_screen(_state, :board_list), do: [@root, "Boards"]
   defp parts_for_screen(state, :thread_list), do: [@root, "Boards", board_name(state)]
@@ -80,6 +82,20 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
 
   defp parts_for_screen(state, :sysop), do: [@root, "Sysop", active_tab(state, :sysop)]
   defp parts_for_screen(_state, _screen), do: [@root]
+
+  defp login_parts(state) do
+    sub =
+      state
+      |> Map.get(:screen_state, %{})
+      |> Map.get(:login, %{})
+      |> Map.get(:sub)
+
+    case sub do
+      :reset_request -> [@root, "Login", "Forgot Password"]
+      :reset_consume -> [@root, "Login", "Forgot Password", "Enter Token"]
+      _ -> [@root, "Login"]
+    end
+  end
 
   defp normalize_parts(parts) do
     parts
