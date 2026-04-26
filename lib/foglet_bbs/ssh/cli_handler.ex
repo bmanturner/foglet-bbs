@@ -183,6 +183,12 @@ defmodule Foglet.SSH.CLIHandler do
 
     {:ok, lifecycle_pid} =
       Raxol.Core.Runtime.Lifecycle.start_link(Foglet.TUI.App,
+        # Pid-only registration: Raxol derives a globally-unique name from the
+        # app module unless `:name` is present, which collapses every SSH
+        # session onto one Lifecycle and rejects concurrent connections with
+        # `{:error, {:already_started, _}}`. CLIHandler tracks the pid in
+        # state, so a registered name is unnecessary.
+        name: nil,
         environment: :ssh,
         io_writer: make_crlf_writer(state.connection_ref, state.channel_id),
         width: width,

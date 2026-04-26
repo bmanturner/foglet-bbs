@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 Phase: -
 Plan: -
 Status: v1.3 shipped; ready to define next milestone
-Last activity: 2026-04-26 - Completed quick task 260426-jdz: board breadcrumb struct access fix
+Last activity: 2026-04-26 - Completed quick task 260426-jbn: fix one-connection-at-a-time bottleneck in SSH/Raxol stack
 
 Progress: [##########] 100% for v1.3
 
@@ -108,6 +108,7 @@ No active blockers. Phase planning should preserve delivery honesty, context-lev
 | 260426-gnq | Put Chrome V2 breadcrumb/status and command hints on the screen border rows | 2026-04-26 | ae623da | Verified | [260426-gnq-the-recent-milestone-was-supposed-to-cha](./quick/260426-gnq-the-recent-milestone-was-supposed-to-cha/) |
 | 260426-hbu | Add a cursor icon to active text inputs | 2026-04-26 | 9a9fedc | Verified | [260426-hbu-we-need-a-cursor-icon-to-appear-on-the-t](./quick/260426-hbu-we-need-a-cursor-icon-to-appear-on-the-t/) |
 | 260426-jdz | Fix board breadcrumb struct access view error | 2026-04-26 | c357fc6 | Verified | [260426-jdz-gsd-quick-full-id-56e39788-5cba-41d3-abb](./quick/260426-jdz-gsd-quick-full-id-56e39788-5cba-41d3-abb/) |
+| 260426-jbn | Fix one-connection-at-a-time bottleneck in SSH/Raxol stack (filed raxol#228, #229) | 2026-04-26 | _pending_ | Verified | [260426-jbn-the-application-only-allows-one-active-c](./quick/260426-jbn-the-application-only-allows-one-active-c/) |
 
 ## Deferred Items
 

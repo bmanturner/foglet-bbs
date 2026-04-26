@@ -126,6 +126,17 @@ defmodule Raxol.Core.Runtime.Lifecycle.Initializer do
 
         {:ok, pm_pid}
 
+      # PluginLifecycle registers as a VM-singleton (name: __MODULE__) and all
+      # client calls go through the registered name, so concurrent Raxol
+      # Lifecycles share one plugin manager. Adopt the existing pid instead of
+      # failing init when a second Lifecycle (e.g. a second SSH channel) starts.
+      {:error, {:already_started, pm_pid}} ->
+        Log.info_with_context(
+          "[Lifecycle.Initializer] PluginManager already started; adopting PID: #{inspect(pm_pid)}"
+        )
+
+        {:ok, pm_pid}
+
       {:error, reason} ->
         {:error, {:plugin_manager_start_failed, reason}, fn -> :ok end}
     end
@@ -207,8 +218,11 @@ defmodule Raxol.Core.Runtime.Lifecycle.Initializer do
 
     environment = Keyword.get(options, :environment, :terminal)
 
+    # `:ssh` is multi-instance per channel (one Lifecycle per SSH session), so
+    # the Dispatcher must not hold a globally-registered name — same reasoning
+    # as the existing :agent and :liveview branches.
     dispatcher_opts =
-      if environment in [:agent, :liveview], do: [name: nil], else: []
+      if environment in [:agent, :liveview, :ssh], do: [name: nil], else: []
 
     case Dispatcher.start_link(
            self(),
