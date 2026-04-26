@@ -50,7 +50,11 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
   3. The Sysop Invites table at 80×24 renders Code, Status, Created, and Used by as visibly distinct columns with separator whitespace; the Moderation LOG table at 80×24 fills available width and elides long messages with `…`.
   4. `Foglet.TUI.TextWidth.wrap/2` exists, is grapheme-cluster-aware, and is exercised by a unit test using `あ`, combining `é`, ZWJ emoji, and a no-space ssh-rsa-shaped blob.
   5. A post body with two consecutive newlines renders as one blank visible line in the post reader; three or more newlines clamp to one blank; soft breaks render as line breaks.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 27-01-PLAN.md — Implement insertion-point cursor rendering in shared TextInput
+- [ ] 27-02-PLAN.md — Map Login/Register/Forgot/Verify/reset-consume breadcrumbs in shared chrome
+- [ ] 27-03-PLAN.md — Add 64x22 and 80x24 cursor/breadcrumb render-smoke validation
 **UI hint**: yes
 
 ### Phase 27: Cursor & Breadcrumb Polish
