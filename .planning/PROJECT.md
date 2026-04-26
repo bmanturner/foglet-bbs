@@ -11,15 +11,32 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 ## Current State
 
 **Shipped version:** v1.3 TUI Screen Facelift on 2026-04-26.
-**Current milestone:** Planning next milestone. v1.3 is archived with phases 16 through 25 complete: width-aware TUI layout primitives back Unicode-safe paths, presentation metadata separates BBS/operator modes, Chrome V2 provides shared breadcrumbs / mode-aware status / grouped command bars / legacy key-list compatibility, the Main Menu home screen renders boxed Navigation + Oneliners panels, BBS conversation screens use shared rich rows / board rows / post cards / composer shells, and Account, Moderation, and Sysop use shared operator-console primitives.
+**Current milestone:** v1.4 Post-Facelift Polish & Bug Fixes — closing out human SSH/TUI verification debt from v1.3 by repairing broken loads, form interactions, layout regressions, and stubbed auth flows surfaced during real-terminal use.
 
 Foglet now has terminal-native Account, Moderation, and Sysop workbenches; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; enforced board posting and locked-thread restrictions; Account SSH key management; board subscription management; pre-alpha operator notes; and a polished Unicode-capable SSH/TUI visual foundation aligned to `SCREENS.md`.
 
 The chrome clock intentionally displays time only. It honors the user's timezone and 12h/24h preference; date display is not part of the accepted behavior.
 
-## Next Milestone Goals
+## Current Milestone: v1.4 Post-Facelift Polish & Bug Fixes
 
-Define the next milestone with `$gsd-new-milestone`. Candidate areas from current deferred items are real SSH/TUI human verification, Nyquist metadata cleanup, Main Menu advisory cleanup, notification seeds, or the next product expansion chosen during requirements discovery.
+**Goal:** Close out the v1.3 TUI facelift by fixing the bugs and polish issues surfaced during human SSH/TUI verification, restoring broken interactions across Login, Main Menu, Account, Sysop, Moderation, and Boards screens.
+
+**Source of truth:** `ISSUES.md` (filed during human verification of v1.3).
+
+**Target features:**
+- Repair layout regressions where Boards, Moderation tabs, and other surfaces extend above the terminal, including trailing tab-row border glyphs and cramped Invites table columns.
+- Fix form interaction across Account and Sysop screens — Esc/Enter handling, Tab/Shift+Tab navigation, focus routing, paste support for SSH keys, and visible submit/persistence feedback.
+- Restore broken Sysop tab loads (Boards, Limits, System, Users) and remove "press any key" gating; reconcile the Users-tab status transition error.
+- Close auth-flow gaps: text-input cursor that follows typing, breadcrumbs that update on Register/Forgot, full forgot-password validation, reset-email cropping at small terminals, and an honest no-email reset path with a token-consume entry point.
+- Polish Main Menu chrome — Navigation/Oneliners titles on the box border, theme application for navigation/oneliners, accent-colored navigation keys, indent corrections, and removal of the Oneliners glyph artifact.
+- Fix editor and rendering regressions — long-line word wrapping in the composer and respect for markdown line breaks (no over-collapsing whitespace).
+- Resolve Boards-screen interaction so Enter on a category expands/collapses it.
+
+**Out of milestone scope:** New product features. SEED-001 (webhook notifications) and SEED-002 (email verification UX resend / configurable requirement) remain dormant — they trigger on Phase 10 / email-notification work, not this stabilization milestone.
+
+**Already resolved between ISSUES.md filing and milestone start (struck from scope):**
+- Boards Screen — selecting a board freezing the screen.
+- Main Menu — Up/Down arrows being inert on navigation.
 
 ## Requirements
 
@@ -63,7 +80,13 @@ Define the next milestone with `$gsd-new-milestone`. Candidate areas from curren
 
 ### Active
 
-- [ ] Define the next milestone requirements and roadmap.
+- [ ] v1.4 — Repair TUI screens that extend above the terminal (Moderation LOG/USERS/BOARDS tabs, Boards interface) and remove trailing tab-row border-glyph artifacts.
+- [ ] v1.4 — Restore form interaction across Account and Sysop tabs: Esc/Enter handling, Tab/Shift+Tab navigation, focus routing, SSH-key paste support, and visible submit/persistence feedback.
+- [ ] v1.4 — Restore broken Sysop tab loads (Boards, Limits, System) and reconcile inconsistent Users-tab loading plus the "Invalid status transition" surfaced error.
+- [ ] v1.4 — Close auth-flow gaps: cursor follows text input, breadcrumbs update on Register/Forgot Password, full forgot-password validation, reset-email rendering at small terminals, and an honest no-email reset path with a token-consume entry point.
+- [ ] v1.4 — Apply Main Menu chrome polish: Navigation/Oneliners titles on the box border, theme/accent application, indent corrections, and removal of the Oneliners top-border glyph artifact.
+- [ ] v1.4 — Fix composer editor word wrap on long lines and restore markdown newline rendering so paragraphs are not over-collapsed.
+- [ ] v1.4 — Make Enter on a Boards-screen category expand/collapse it.
 
 ### Out of Scope
 
@@ -138,4 +161,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-26 after v1.3 milestone archive*
+*Last updated: 2026-04-26 — started v1.4 Post-Facelift Polish & Bug Fixes*

@@ -1,17 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v1.3
-milestone_name: TUI Screen Facelift
-status: planning_next_milestone
-stopped_at: v1.3 milestone archived
-last_updated: "2026-04-26T17:36:00.000Z"
+milestone: v1.4
+milestone_name: Post-Facelift Polish & Bug Fixes
+status: planning
+last_updated: "2026-04-26T20:23:51.350Z"
 last_activity: 2026-04-26
 progress:
-  total_phases: 10
-  completed_phases: 10
-  total_plans: 48
-  completed_plans: 48
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -21,16 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Planning next milestone
+**Current focus:** v1.4 Post-Facelift Polish & Bug Fixes — driven by ISSUES.md
 
 ## Current Position
 
-Phase: -
-Plan: -
-Status: v1.3 shipped; ready to define next milestone
-Last activity: 2026-04-26 - Completed quick task 260426-jbn: fix one-connection-at-a-time bottleneck in SSH/Raxol stack
-
-Progress: [##########] 100% for v1.3
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-26 — Milestone v1.4 started
 
 ## Performance Metrics
 
@@ -91,6 +88,9 @@ Recent decisions affecting current work:
 - [v1.3]: Operator Console primitives are split from Account/Moderation/Sysop conversion so shared widgets land before dense screen rewrites.
 - [v1.3]: 64x22 is the hard minimum terminal size; 80x24 is a compact design target; larger terminals progressively gain panels, inspectors, details, and extra status.
 - [v1.3]: Milestone archived with deferred human SSH/TUI checks tracked as non-blocking close debt.
+- [v1.4]: `ISSUES.md` is the milestone PRD — surfaced bugs from human SSH/TUI verification of v1.3.
+- [v1.4]: Stabilization milestone, not feature expansion. SEED-001 and SEED-002 remain dormant.
+- [v1.4]: Two ISSUES.md items resolved before milestone start and struck from scope: Boards-screen freeze on board select, and Main Menu Up/Down keys being inert.
 
 ### Pending Todos
 
@@ -136,5 +136,5 @@ Items acknowledged and deferred at v1.3 close on 2026-04-26:
 ## Session Continuity
 
 Last session: 2026-04-26
-Stopped at: v1.3 milestone archived
+Stopped at: v1.4 milestone started — defining requirements next
 Resume file: .planning/PROJECT.md
