@@ -1,5 +1,5 @@
 ---
-status: complete
+status: testing
 phase: 26-layout-width-foundations
 source:
   - .planning/phases/26-layout-width-foundations/26-01-SUMMARY.md
@@ -7,21 +7,23 @@ source:
   - .planning/phases/26-layout-width-foundations/26-03-SUMMARY.md
   - .planning/phases/26-layout-width-foundations/26-04-SUMMARY.md
 started: 2026-04-26T22:32:00Z
-updated: 2026-04-26T22:59:12Z
+updated: 2026-04-26T23:31:00Z
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[testing complete]
+number: 5
+name: 64x22 Sysop Tab Row
+expected: |
+  Open an SSH terminal session at exactly 64x22, sign in as a sysop, and open Sysop. The rightmost tab-row column aligns with the screen frame vertical border, no trailing border glyphs render to the right of the rightmost tab, and the tab row remains inside the frame.
+awaiting: user response
 
 ## Tests
 
 ### 1. 64x22 Account Tab Row
 expected: Open an SSH terminal session at exactly 64x22, sign in as a user with access to Account, and open Account. The rightmost tab-row column aligns with the screen frame vertical border, no trailing border glyphs render to the right of the rightmost tab, and the tab row remains inside the frame.
-result: issue
-reported: "┌ Foglet ▸ Account ▸ Profile ─────────────── @needz | 10:50 PM ┐\n│▌ PROFILE   PREFS   SSH KEYS   INVITES───────────────────────┐│\n│──────────────────────────────────────────────────────────────│"
-severity: cosmetic
+result: pass
 
 ### 2. 64x22 Moderation LOG Tab Row and Primary Table
 expected: Open an SSH terminal session at exactly 64x22, sign in as a moderator or sysop, open Moderation, switch to LOG, and inspect the tab row and table. The tab row aligns with the frame with no trailing border glyph artifacts, LOG primary table rows remain inside the frame and above the command bar, and the table remains readable and navigable at compact height.
@@ -37,15 +39,11 @@ result: pass
 
 ### 5. 64x22 Sysop Tab Row
 expected: Open an SSH terminal session at exactly 64x22, sign in as a sysop, and open Sysop. The rightmost tab-row column aligns with the screen frame vertical border, no trailing border glyphs render to the right of the rightmost tab, and the tab row remains inside the frame.
-result: issue
-reported: "┌ Foglet ▸ Sysop ▸ SITE ──────────────────── @needz | 10:54 PM ┐\n│▌ SITE   BOARDS   LIMITS   SYSTEM   USERS   INVITES──────────┐│\n│──────────────────────────────────────────────────────────────│"
-severity: cosmetic
+result: [pending]
 
 ### 6. 64x22 Boards Overlarge Directory
 expected: Open an SSH terminal session at exactly 64x22, use a dataset with enough categories and boards to exceed the visible body, and open Boards. Category and board rows remain inside the screen frame, no list rows draw above the top border or below the command bar, and selection remains visible while navigating through the overlarge directory.
-result: issue
-reported: "│\n                                                             │\n│                                                              │\n│  ⚿     Announcements                            all read  —  │\n│\n                                                             │\n│                                                              │\n│  ✓     Lounge                                   all read  —  │\n│                                                              │\n│General • 2 boards • 0 unread total                           │\n│                                                              │\n│                                                              │\n│                                                              │\n│                                                              │\n│                                                              │\n│                                                              │\n│                                                              │\n│                                                              │\n│                                                              │\n└ Navigate  j/k Select  Enter Open   Q Back ───────────────────"
-severity: major
+result: [pending]
 
 ### 7. 80x24 Sysop INVITES With Available, Consumed, Revoked Rows
 expected: Open an SSH terminal session at exactly 80x24, sign in as a sysop, and open Sysop INVITES with representative available, consumed, and revoked invite rows. Code, Status, Created, and Used by columns are visibly separated, values do not overlap or concatenate across column boundaries, and available, consumed, and revoked states are readable.
@@ -53,9 +51,7 @@ result: pass
 
 ### 8. 80x24 Moderation LOG With Long Body/Reason and Non-UTC User Timezone
 expected: Open an SSH terminal session at exactly 80x24, sign in as a moderator or sysop with a non-UTC IANA timezone preference, and open Moderation LOG with a representative long body or reason field. The LOG table consumes available body width without crossing the frame, long body or reason text elides with `...` or `…` at cell boundaries, and the timestamp reflects the current user's configured non-UTC timezone.
-result: issue
-reported: "┌ Foglet ▸ Moderation ▸ LOG ──────────────── @needz | 10:57 PM ┐\n│QUEUE   ▌ LOG   USERS   SANCTIONS   BOARDS───────────────────┐│\n│┌────────────────────────────────────────────────────────────┐│\n││When        Actor      Action     Body           Reason     ││\n││04-26 19:29 needz      hide_on…   I have arrive… Because I… ││\n│└────────────────────────────────────────────────────────────┘│ it's not taking my 12 hour preference into account"
-severity: major
+result: [pending]
 
 ### 9. Post Reader Paragraph Breaks
 expected: Open an SSH terminal session and open a post reader view for a post containing the fixture body `soft`, `break`, blank line, `First`, blank line, `Second`, three newlines, `Third`. `soft` and `break` render as adjacent physical lines with no blank line between them, `First` and `Second` render with exactly one blank visible line between them, `Second` and `Third` render with exactly one blank visible line between them even though the source has three newline separators, and no literal `\n` text appears in the post body.
@@ -65,8 +61,9 @@ result: pass
 
 total: 9
 passed: 5
-issues: 4
-pending: 0
+passed: 6
+issues: 0
+pending: 3
 skipped: 0
 blocked: 0
 

@@ -16,7 +16,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | Phase | Name | Goal (one-line) | Requirements | UI |
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
-| 27 | Cursor & Breadcrumb Polish | 0/3 | Planned    |  |
+| 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
 | 28 | Modal.Form Substrate | Forms route keystrokes to the focused field, accept Up/Down/Shift+Tab/Esc/Enter as advertised, and never double-submit | FORM-01..06 (6) | yes |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
@@ -30,7 +30,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] v1.2 Pre-Alpha Gap Closure (Phases 9-15)
 - [x] v1.3 TUI Screen Facelift (Phases 16-25)
 - [x] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation (completed 2026-04-26)
-- [ ] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume)
+- [x] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume) (completed 2026-04-26)
 - [ ] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc
 - [ ] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
@@ -52,9 +52,9 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
   5. A post body with two consecutive newlines renders as one blank visible line in the post reader; three or more newlines clamp to one blank; soft breaks render as line breaks.
 **Plans**: 3 plans
 Plans:
-- [ ] 27-01-PLAN.md — Implement insertion-point cursor rendering in shared TextInput
-- [ ] 27-02-PLAN.md — Map Login/Register/Forgot/Verify/reset-consume breadcrumbs in shared chrome
-- [ ] 27-03-PLAN.md — Add 64x22 and 80x24 cursor/breadcrumb render-smoke validation
+- [x] 27-01-PLAN.md — Implement insertion-point cursor rendering in shared TextInput
+- [x] 27-02-PLAN.md — Map Login/Register/Forgot/Verify/reset-consume breadcrumbs in shared chrome
+- [x] 27-03-PLAN.md — Add 64x22 and 80x24 cursor/breadcrumb render-smoke validation
 **UI hint**: yes
 
 ### Phase 27: Cursor & Breadcrumb Polish
