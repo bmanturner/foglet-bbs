@@ -12,18 +12,19 @@ defmodule Foglet.SSH.CLIHandlerTest do
   alias Foglet.SSH.PubkeyStash
 
   @static_openssh_key FogletBbs.AccountsFixtures.default_ssh_public_key()
+  @terminal_takeover "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J"
   @alt_screen_enter "\e[?1049h"
   @alt_screen_leave "\e[?1049l"
   @ssh_timeout 5_000
 
   describe "real SSH channel startup" do
-    test "PTY allocation emits alternate-screen ENTER before terminal output" do
+    test "PTY allocation clears scrollback and enters alternate screen before terminal output" do
       %{conn: conn} = start_test_daemon!()
       channel_id = open_shell!(conn)
 
       bytes = collect_channel_bytes(conn, channel_id, &String.contains?(&1, @alt_screen_enter))
 
-      assert String.starts_with?(bytes, @alt_screen_enter)
+      assert String.starts_with?(bytes, @terminal_takeover)
     end
 
     test "initial terminal output is CRLF-normalized" do

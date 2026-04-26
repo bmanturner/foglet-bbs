@@ -177,7 +177,7 @@ defmodule Foglet.SSH.CLIHandler do
       ) do
     context = build_context(state, width, height)
 
-    # Enter the alternate screen immediately on PTY allocation, before Raxol
+    # Take over the terminal immediately on PTY allocation, before Raxol
     # initialization or the first render can write to the primary buffer.
     send_alt_screen_enter(state)
 
@@ -188,9 +188,8 @@ defmodule Foglet.SSH.CLIHandler do
         width: width,
         height: height,
         context: context,
-        # Take over the SSH client's terminal with the alternate screen buffer
-        # (DECSET 1049). The TUI runs on the alt buffer; on disconnect the
-        # client's primary buffer is restored, leaving its scrollback untouched.
+        # Keep Raxol's own alt-screen lifecycle enabled as a backup. The direct
+        # CLIHandler takeover above runs earlier and also clears scrollback.
         alternate_screen: true
       )
 
@@ -265,11 +264,12 @@ defmodule Foglet.SSH.CLIHandler do
     :ok
   end
 
-  # Emit the alt-screen ENTER escape (DECSET 1049) directly from the SSH channel
-  # handler so the client's scrollback is isolated before any TUI frame writes.
+  # Clear the primary screen + scrollback, enter alt-screen, then clear the alt
+  # buffer. `CSI 3 J` is what prevents scroll-up from revealing the caller's
+  # pre-SSH shell history while the TUI is active.
   defp send_alt_screen_enter(%{connection_ref: ref, channel_id: ch})
        when not is_nil(ref) and not is_nil(ch) do
-    _ = :ssh_connection.send(ref, ch, "\e[?1049h\e[H\e[2J")
+    _ = :ssh_connection.send(ref, ch, "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J")
     :ok
   rescue
     _ -> :ok
