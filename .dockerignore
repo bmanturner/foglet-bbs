@@ -19,6 +19,8 @@
 /.github/
 /.codex/
 /.planning/
+/.claude/
+/.codex/
 .DS_Store
 
 # Common development/test artifacts
