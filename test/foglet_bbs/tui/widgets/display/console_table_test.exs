@@ -121,6 +121,45 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
       assert flat =~ ~r/Code\s+Status\s+Created\s+Used by/
       assert flat =~ "INVITE1"
     end
+
+    test "exposes more visible content when surplus width exists", %{theme: theme} do
+      columns = [
+        %{key: :when, label: "When", width: 14},
+        %{key: :actor, label: "Actor", width: 9},
+        %{key: :body, label: "Body", width: 14, grow: 3},
+        %{key: :reason, label: "Reason", width: 10, grow: 2}
+      ]
+
+      rows = [
+        %{
+          when: "04-26 07:29 PM",
+          actor: "needz",
+          body: "I have arrived! Because I want to stay a while.",
+          reason: "Because I am here for the whole story."
+        }
+      ]
+
+      narrow =
+        ConsoleTable.init(
+          columns: columns,
+          rows: rows,
+          width: 41
+        )
+
+      wide =
+        ConsoleTable.init(
+          columns: columns,
+          rows: rows,
+          width: 60
+        )
+
+      narrow_flat = ConsoleTable.render(narrow, theme: theme) |> flatten_text()
+      wide_flat = ConsoleTable.render(wide, theme: theme) |> flatten_text()
+
+      refute narrow_flat =~ "I have arrived! Be"
+      assert wide_flat =~ "I have arrived! Be"
+      assert wide_flat =~ "Because I am"
+    end
   end
 
   describe "handle_event/2" do

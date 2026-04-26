@@ -113,8 +113,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
         %{key: :when, label: "When", width: 14},
         %{key: :actor, label: "Actor", width: 9},
         %{key: :action, label: "Action", width: 9},
-        %{key: :body, label: "Body", width: 14},
-        %{key: :reason, label: "Reason", width: 10}
+        %{key: :body, label: "Body", width: 14, grow: 5},
+        %{key: :reason, label: "Reason", width: 10, grow: 3}
       ],
       rows: items,
       selectable: false,
@@ -141,9 +141,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
     [
       columns: [
-        %{key: :handle, label: "Handle", width: 16},
+        %{key: :handle, label: "Handle", width: 16, grow: 2},
         %{key: :role, label: "Role", width: 8},
-        %{key: :status, label: "Status", width: 12}
+        %{key: :status, label: "Status", width: 12, grow: 1}
       ],
       rows: items,
       selectable: false,
@@ -170,8 +170,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
     [
       columns: [
-        %{key: :name, label: "Board", width: 18},
-        %{key: :category, label: "Category", width: 14},
+        %{key: :name, label: "Board", width: 18, grow: 2},
+        %{key: :category, label: "Category", width: 14, grow: 1},
         %{key: :state, label: "State", width: 12}
       ],
       rows: items,

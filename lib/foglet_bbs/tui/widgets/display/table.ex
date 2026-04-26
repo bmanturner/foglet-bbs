@@ -22,7 +22,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
 
   ## Column spec shape
 
-      %{id: atom(), label: String.t(), width: integer() | :auto}
+      %{id: atom(), label: String.t(), width: integer() | :auto, grow: non_neg_integer()}
 
   ## Actions returned from `handle_event/2`
 
@@ -61,7 +61,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   Pure constructor.
 
   Options:
-    * `:columns`    — list of column specs (required). Each: `%{id: atom(), label: String.t(), width: integer() | :auto}`
+    * `:columns`    — list of column specs (required). Each: `%{id: atom(), label: String.t(), width: integer() | :auto, grow: non_neg_integer()}`
     * `:rows`       — list of row maps keyed by column `:id` (alias for `:data`)
     * `:sortable`   — boolean, default `false`
     * `:filterable` — boolean, default `false`
@@ -191,7 +191,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     }
   end
 
-  # Ensure each column has the required :id, :align, :width, and :format fields that Raxol
+  # Ensure each column has the required :id, :align, :width, :grow, and :format fields that Raxol
   # accesses directly. Callers may pass either :id or :key for the column identifier; both
   # forms are normalised so Raxol's create_cells/7 (which reads column.id) finds the field.
   defp normalize_column(col) when is_map(col) do
@@ -205,6 +205,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     end)
     |> Map.put_new(:align, :left)
     |> Map.put_new(:width, 20)
+    |> Map.put_new(:grow, 0)
     |> Map.put_new(:format, nil)
   end
 
@@ -226,21 +227,16 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   defp resolve_columns(columns, _width), do: columns
 
   defp resolve_widths(columns, data_budget) do
-    fixed_width = fixed_width(columns)
+    base_width = base_width(columns)
 
-    if fixed_width > data_budget do
+    if base_width > data_budget do
       compact_widths(columns, data_budget)
     else
-      distribute_flexible_widths(columns, data_budget - fixed_width)
+      distribute_flexible_widths(columns, data_budget - base_width)
     end
   end
 
-  defp fixed_width(columns) do
-    Enum.reduce(columns, 0, fn
-      %{width: width}, total when is_integer(width) -> total + max(width, @min_column_width)
-      _column, total -> total
-    end)
-  end
+  defp base_width(columns), do: columns |> Enum.map(&minimum_width/1) |> Enum.sum()
 
   defp compact_widths(columns, data_budget) do
     column_count = length(columns)
@@ -255,37 +251,58 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   end
 
   defp distribute_flexible_widths(columns, remaining_width) do
-    flexible = Enum.reject(columns, &integer_width?/1)
-    flexible_count = length(flexible)
-    ratio_total = Enum.reduce(flexible, 0, &(&2 + ratio_weight(&1)))
-    minimum_flexible = flexible_count * @min_column_width
-    flexible_extra = max(remaining_width - minimum_flexible, 0)
+    widths = Enum.map(columns, &minimum_width/1)
+    growth_weights = Enum.map(columns, &grow_weight/1)
 
-    columns
-    |> Enum.map(fn
-      %{width: width} when is_integer(width) ->
-        max(width, @min_column_width)
+    active_weights =
+      if Enum.sum(growth_weights) > 0, do: growth_weights, else: Enum.map(widths, fn _ -> 1 end)
 
-      column ->
-        @min_column_width + div(flexible_extra * ratio_weight(column), max(ratio_total, 1))
-    end)
-    |> distribute_remainder(remaining_width + fixed_width(columns))
+    weight_total = Enum.sum(active_weights)
+
+    additions =
+      Enum.map(active_weights, fn weight ->
+        div(remaining_width * weight, weight_total)
+      end)
+
+    remainder = remaining_width - Enum.sum(additions)
+    priority_indexes = remainder_priority(active_weights)
+
+    widths
+    |> Enum.zip(additions)
+    |> Enum.map(fn {width, addition} -> width + addition end)
+    |> distribute_weighted_remainder(remainder, priority_indexes)
   end
 
-  defp distribute_remainder(widths, data_budget) do
-    remainder = data_budget - Enum.sum(widths)
+  defp distribute_weighted_remainder(widths, remainder, _priority_indexes) when remainder <= 0,
+    do: widths
+
+  defp distribute_weighted_remainder(widths, remainder, priority_indexes) do
+    remainder_indexes = Enum.take(Stream.cycle(priority_indexes), remainder)
 
     widths
     |> Enum.with_index()
     |> Enum.map(fn {width, index} ->
-      width + if(index < remainder, do: 1, else: 0)
+      width + Enum.count(remainder_indexes, &(&1 == index))
     end)
   end
 
-  defp integer_width?(%{width: width}), do: is_integer(width)
+  defp minimum_width(%{width: width}) when is_integer(width), do: max(width, @min_column_width)
+  defp minimum_width(_column), do: @min_column_width
 
-  defp ratio_weight(%{width: {:ratio, weight}}) when is_integer(weight) and weight > 0, do: weight
-  defp ratio_weight(_column), do: 1
+  defp grow_weight(%{grow: grow}) when is_integer(grow) and grow > 0, do: grow
+
+  defp grow_weight(%{width: {:ratio, weight}}) when is_integer(weight) and weight > 0,
+    do: weight
+
+  defp grow_weight(%{width: :auto}), do: 1
+  defp grow_weight(_column), do: 0
+
+  defp remainder_priority(weights) do
+    weights
+    |> Enum.with_index()
+    |> Enum.sort_by(fn {weight, index} -> {-weight, index} end)
+    |> Enum.map(fn {_weight, index} -> index end)
+  end
 
   defp wrap_formatter(%{format: nil} = column, _width), do: column
 

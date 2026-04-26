@@ -32,7 +32,7 @@ Expected:
 - The tab row remains inside the frame.
 
 Result notes:
-- Pending manual SSH verification.
+- Pending manual SSH verification. Automated regression coverage now passes for compact overlarge-directory density and navigation in `test/foglet_bbs/tui/screens/board_list_test.exs` and `test/foglet_bbs/tui/layout_smoke_test.exs`.
 
 ### 64x22 Moderation LOG Tab Row and Primary Table
 
@@ -51,7 +51,7 @@ Expected:
 - The table remains readable and navigable at compact height.
 
 Result notes:
-- Pending manual SSH verification.
+- Pending manual SSH verification. Automated regression coverage now passes for the shared table-width fix and representative Moderation LOG rendering in `test/foglet_bbs/tui/widgets/display/table_test.exs`, `test/foglet_bbs/tui/widgets/display/console_table_test.exs`, and `test/foglet_bbs/tui/screens/moderation_test.exs`.
 
 ### 64x22 Moderation USERS Tab Row and Primary Table
 

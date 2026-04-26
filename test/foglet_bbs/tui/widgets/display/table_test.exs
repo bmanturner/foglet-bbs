@@ -100,6 +100,37 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       assert state.available_width == 62
       assert table_line_width(state) <= drawable_width
     end
+
+    test "keeps fixed metadata widths and gives remainder to flexible value columns" do
+      state =
+        Table.init(
+          columns: [
+            %{id: :when, label: "When", width: 14},
+            %{id: :actor, label: "Actor", width: 9},
+            %{id: :body, label: "Body", width: 14, grow: 3},
+            %{id: :reason, label: "Reason", width: 10, grow: 2}
+          ],
+          rows: [
+            %{
+              when: "04-26 07:29 PM",
+              actor: "needz",
+              body: "I have arrived! Because I want to stay a while.",
+              reason: "Because I am here for the whole story."
+            }
+          ],
+          width: 58
+        )
+
+      widths =
+        Map.new(state.raxol_state.columns, fn column ->
+          {column.id, column.width}
+        end)
+
+      assert widths.when == 14
+      assert widths.actor == 9
+      assert widths.body > 14
+      assert widths.reason > 10
+    end
   end
 
   describe "render/2 — theme slot routing (D-18)" do

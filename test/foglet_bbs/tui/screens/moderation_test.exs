@@ -237,6 +237,34 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       refute joined =~ "2026-04-24"
     end
 
+    test "LOG uses available width for longer body and reason content at 80x24", %{state: state} do
+      row =
+        audit_row(
+          "needz",
+          "I have arrived! Because I want to stay a while.",
+          "Because I am here for the whole story.",
+          ~U[2026-04-24 13:05:00Z]
+        )
+
+      user = %{
+        state.current_user
+        | timezone: "America/Chicago",
+          preferences: %{"time_format" => "12h"}
+      }
+
+      flat =
+        %{state | current_user: user}
+        |> put_moderation_state(1, mod_log: [row])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+
+      assert joined =~ "04-24 08:05 AM"
+      assert joined =~ "I have arrived! Be"
+      assert joined =~ "Because I am"
+    end
+
     test "QUEUE renders honest report workflow unavailable state and no work items", %{
       state: state
     } do
