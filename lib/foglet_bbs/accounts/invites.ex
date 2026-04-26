@@ -1,13 +1,6 @@
 defmodule Foglet.Accounts.Invites do
   @moduledoc """
-  Invite generation, listing, revocation.
-
-  Public surface remains `Foglet.Accounts` via `defdelegate`. This module
-  owns the implementations.
-
-  Note: invite redemption during registration (`redeem_invite_registration`,
-  `consume_invite_for_user`) is registration plumbing and remains co-located
-  with `register_user/1` in `Foglet.Accounts`.
+  Invite management functions for `Foglet.Accounts`.
   """
 
   import Ecto.Query, warn: false

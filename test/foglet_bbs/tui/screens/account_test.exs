@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
   import Foglet.TUI.RenderHelpers
 
   alias Foglet.Accounts
+  alias Foglet.Accounts.Invites
   alias Foglet.Config
   alias Foglet.Sessions.Session
   alias Foglet.TUI.App
@@ -528,12 +529,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{invite_code_generators: "any_user"})
 
-      assert {:ok, []} = Accounts.list_invites(user)
+      assert {:ok, []} = Invites.list_invites(user)
 
       {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
       {:update, state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
 
-      assert {:ok, [invite]} = Accounts.list_invites(user)
+      assert {:ok, [invite]} = Invites.list_invites(user)
       assert state.screen_state.account.invites.last_generated_code == invite.code
       assert [%{code: code, status: :available}] = state.screen_state.account.invites.items
       assert code == invite.code
@@ -546,8 +547,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{invite_code_generators: "any_user"})
 
-      {:ok, first} = Accounts.create_invite(user)
-      {:ok, second} = Accounts.create_invite(user)
+      {:ok, first} = Invites.create_invite(user)
+      {:ok, second} = Invites.create_invite(user)
 
       {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
       assert Enum.count(state.screen_state.account.invites.items) == 2
@@ -559,8 +560,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
       assert state.screen_state.account.invites.error == "You are not allowed to manage invites."
-      assert {:ok, %{status: :available}} = Accounts.get_invite_status(selected_code)
-      assert {:ok, %{status: :available}} = Accounts.get_invite_status(other_code)
+      assert {:ok, %{status: :available}} = Invites.get_invite_status(selected_code)
+      assert {:ok, %{status: :available}} = Invites.get_invite_status(other_code)
 
       {:update, state, []} = Account.handle_key(%{key: :char, char: "r"}, state)
       assert Enum.any?(state.screen_state.account.invites.items, &(&1.code == selected_code))
@@ -572,7 +573,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state = build_state(user, %{invite_code_generators: "sysop_only"})
 
       assert {:update, _state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
-      assert {:ok, []} = Accounts.list_invites(user)
+      assert {:ok, []} = Invites.list_invites(user)
     end
   end
 

@@ -1,7 +1,7 @@
 defmodule Foglet.TUI.Screens.VerifyTest do
   use FogletBbs.DataCase, async: false
 
-  alias Foglet.Accounts
+  alias Foglet.Accounts.Verification
   alias Foglet.TUI.Screens.Verify
 
   import Swoosh.TestAssertions
@@ -41,7 +41,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
     end)
 
     user = user_fixture()
-    {:ok, code} = Accounts.build_verify_code(user)
+    {:ok, code} = Verification.build_verify_code(user)
 
     %{state: base_state(user), user: user, code: code}
   end

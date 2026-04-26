@@ -14,7 +14,7 @@ defmodule Mix.Tasks.Foglet.User.VerificationCode do
   @requirements ["app.config"]
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.User
+  alias Foglet.Accounts.{User, Verification}
   alias Foglet.Config
   alias Foglet.MixTaskHelpers
 
@@ -57,7 +57,7 @@ defmodule Mix.Tasks.Foglet.User.VerificationCode do
         )
 
       "no_email" ->
-        case Accounts.build_verify_code(user) do
+        case Verification.build_verify_code(user) do
           {:ok, code} ->
             Mix.shell().info("No-email verification code for #{user.handle}:")
             Mix.shell().info("  #{code}")

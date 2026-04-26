@@ -50,6 +50,7 @@ defmodule Foglet.SSH.CLIHandler do
 
   require Logger
 
+  alias Foglet.Accounts.Auth
   alias Foglet.Sessions
   alias Foglet.Sessions.Preferences
   alias Raxol.SSH.IOAdapter
@@ -339,7 +340,7 @@ defmodule Foglet.SSH.CLIHandler do
       {:ok, public_key} ->
         case encode_public_key(public_key) do
           {:ok, openssh_text} ->
-            case Foglet.Accounts.authenticate_by_public_key(openssh_text) do
+            case Auth.authenticate_by_public_key(openssh_text) do
               {:ok, user} -> user
               _ -> nil
             end

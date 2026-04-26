@@ -3,7 +3,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   Live INVITES state shared by Account, Moderation, and Sysop shells.
 
   `items: nil` means loading or not-yet-loaded. A list contains status maps
-  returned by `Foglet.Accounts.list_invites/1`; the TUI does not query or shape
+  returned by `Foglet.Accounts.Invites.list_invites/1`; the TUI does not query or shape
   invite persistence directly.
 
   Selection is owned by `%ConsoleTable{}` in the `:table` field (D-05, Phase 25

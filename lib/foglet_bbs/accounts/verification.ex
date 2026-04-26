@@ -1,30 +1,12 @@
 defmodule Foglet.Accounts.Verification do
   @moduledoc """
-  Email verification codes and password-reset tokens.
-
-  Public surface remains `Foglet.Accounts` via `defdelegate`. This module
-  owns the implementations.
+  Email-verification and password-reset functions for `Foglet.Accounts`.
   """
 
   import Ecto.Query, warn: false
 
   alias Foglet.Accounts.{Email, User, UserToken}
   alias FogletBbs.Repo
-
-  @doc """
-  Reset a user's password. After update, deletes any outstanding
-  reset_password tokens for that user so a used token can't be replayed.
-  """
-  @spec reset_user_password(User.t(), map()) ::
-          {:ok, User.t()} | {:error, Ecto.Changeset.t()}
-  def reset_user_password(%User{} = user, attrs) do
-    Repo.transact(fn ->
-      with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
-        Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
-        {:ok, updated}
-      end
-    end)
-  end
 
   @doc """
   Build and persist an email verification code for `user`. Returns the raw 6-char
@@ -67,30 +49,6 @@ defmodule Foglet.Accounts.Verification do
   end
 
   @doc """
-  Request terminal-native password reset delivery for a handle or email.
-
-  In email delivery mode this function is enumeration-safe: active matches,
-  unknown identifiers, deleted accounts, inactive accounts, and provider
-  failures all return the same outward result.
-  """
-  @spec request_password_reset_delivery(String.t()) ::
-          {:ok, :generic_response} | {:error, :unavailable}
-  def request_password_reset_delivery(identifier) when is_binary(identifier) do
-    case Foglet.Config.delivery_mode() do
-      "no_email" ->
-        {:error, :unavailable}
-
-      "email" ->
-        identifier
-        |> String.trim()
-        |> find_reset_delivery_user()
-        |> maybe_deliver_password_reset()
-
-        {:ok, :generic_response}
-    end
-  end
-
-  @doc """
   Verify an email code for `user`. On success, confirms the user (sets `confirmed_at`)
   and returns `{:ok, confirmed_user}`. On failure returns:
     - `{:error, :invalid_code}` — code did not match any non-expired verify token
@@ -121,6 +79,45 @@ defmodule Foglet.Accounts.Verification do
       true ->
         {:error, :invalid_code}
     end
+  end
+
+  @doc """
+  Request terminal-native password reset delivery for a handle or email.
+
+  In email delivery mode this function is enumeration-safe: active matches,
+  unknown identifiers, deleted accounts, inactive accounts, and provider
+  failures all return the same outward result.
+  """
+  @spec request_password_reset_delivery(String.t()) ::
+          {:ok, :generic_response} | {:error, :unavailable}
+  def request_password_reset_delivery(identifier) when is_binary(identifier) do
+    case Foglet.Config.delivery_mode() do
+      "no_email" ->
+        {:error, :unavailable}
+
+      "email" ->
+        identifier
+        |> String.trim()
+        |> find_reset_delivery_user()
+        |> maybe_deliver_password_reset()
+
+        {:ok, :generic_response}
+    end
+  end
+
+  @doc """
+  Reset a user's password. After update, deletes any outstanding
+  reset_password tokens for that user so a used token can't be replayed.
+  """
+  @spec reset_user_password(User.t(), map()) ::
+          {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  def reset_user_password(%User{} = user, attrs) do
+    Repo.transact(fn ->
+      with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
+        Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
+        {:ok, updated}
+      end
+    end)
   end
 
   @doc """
@@ -156,9 +153,7 @@ defmodule Foglet.Accounts.Verification do
   defp find_reset_delivery_user(""), do: nil
 
   defp find_reset_delivery_user(identifier) do
-    user = Repo.get_by(User, handle: identifier) || Repo.get_by(User, email: identifier)
-
-    case user do
+    case Repo.get_by(User, handle: identifier) || Repo.get_by(User, email: identifier) do
       %User{status: :active, deleted_at: nil} = user -> user
       _other -> nil
     end

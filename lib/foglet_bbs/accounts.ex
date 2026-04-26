@@ -28,16 +28,6 @@ defmodule Foglet.Accounts do
 
   @tombstone_user_id "00000000-0000-0000-0000-000000000001"
 
-  @type invite_status :: %{
-          code: String.t(),
-          issuer_id: Ecto.UUID.t(),
-          inserted_at: DateTime.t(),
-          consumed_at: DateTime.t() | nil,
-          consumed_by_user_id: Ecto.UUID.t() | nil,
-          revoked_at: DateTime.t() | nil,
-          status: :available | :consumed | :revoked
-        }
-
   @type status_transition_delivery ::
           :not_applicable | :skipped_no_email | :attempted | {:failed, term()}
 
@@ -53,6 +43,10 @@ defmodule Foglet.Accounts do
   def tombstone_user_id, do: @tombstone_user_id
 
   # ---------- Users ----------
+  #
+  # Authentication: see Foglet.Accounts.Auth
+  # Email verification / password reset: see Foglet.Accounts.Verification
+  # Invites: see Foglet.Accounts.Invites
 
   @doc """
   Create a new user account and subscribe to default boards (D-06).
@@ -234,11 +228,6 @@ defmodule Foglet.Accounts do
     Repo.get_by(User, email: email)
   end
 
-  @doc """
-  Verify handle + password. Delegates to `Foglet.Accounts.Auth`.
-  """
-  defdelegate authenticate_by_password(handle, password), to: Foglet.Accounts.Auth
-
   @doc "Apply role change (sysop pathway — used by `mix foglet.user.promote`)."
   @spec update_role(User.t(), atom() | String.t()) ::
           {:ok, User.t()} | {:error, Ecto.Changeset.t()}
@@ -324,9 +313,6 @@ defmodule Foglet.Accounts do
     |> Repo.update()
   end
 
-  @doc "Reset a user's password. Delegates to `Foglet.Accounts.Verification`."
-  defdelegate reset_user_password(user, attrs), to: Foglet.Accounts.Verification
-
   @spec confirm_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def confirm_user(%User{} = user) do
     user |> User.confirm_changeset() |> Repo.update()
@@ -362,21 +348,6 @@ defmodule Foglet.Accounts do
         :verify
     end
   end
-
-  @doc "Build a verification code. Delegates to `Foglet.Accounts.Verification`."
-  defdelegate build_verify_code(user), to: Foglet.Accounts.Verification
-
-  @doc "Deliver a verification code. Delegates to `Foglet.Accounts.Verification`."
-  defdelegate deliver_verification_code(user), to: Foglet.Accounts.Verification
-
-  @doc "Request terminal-native password reset delivery. Delegates to `Foglet.Accounts.Verification`."
-  defdelegate request_password_reset_delivery(identifier), to: Foglet.Accounts.Verification
-
-  @doc "Verify an email code. Delegates to `Foglet.Accounts.Verification`."
-  defdelegate verify_email_code(user, code), to: Foglet.Accounts.Verification
-
-  @doc "Generate a reset token for operator-assisted retrieval. Delegates to `Foglet.Accounts.Verification`."
-  defdelegate generate_reset_token_for_operator(user), to: Foglet.Accounts.Verification
 
   defp notify_sysops_pending_registration(%User{} = pending_user) do
     case Config.delivery_mode() do
@@ -445,20 +416,6 @@ defmodule Foglet.Accounts do
     end)
   end
 
-  # ---------- Invites ----------
-
-  @doc "Generate an invite code. Delegates to `Foglet.Accounts.Invites`."
-  defdelegate create_invite(actor), to: Foglet.Accounts.Invites
-
-  @doc "List all invites with status. Delegates to `Foglet.Accounts.Invites`."
-  defdelegate list_invites(actor), to: Foglet.Accounts.Invites
-
-  @doc "Look up invite status by code. Delegates to `Foglet.Accounts.Invites`."
-  defdelegate get_invite_status(code), to: Foglet.Accounts.Invites
-
-  @doc "Revoke an unredeemed invite. Delegates to `Foglet.Accounts.Invites`."
-  defdelegate revoke_invite(actor, code), to: Foglet.Accounts.Invites
-
   # ---------- SSH Keys ----------
 
   @spec register_ssh_key(User.t(), map()) ::
@@ -482,12 +439,6 @@ defmodule Foglet.Accounts do
       nil -> {:error, :not_found}
     end
   end
-
-  @doc "Lookup a user by an OpenSSH-format public key. Delegates to `Foglet.Accounts.Auth`."
-  defdelegate get_user_by_public_key(public_key_text), to: Foglet.Accounts.Auth
-
-  @doc "Authenticate via SSH public key. Delegates to `Foglet.Accounts.Auth`."
-  defdelegate authenticate_by_public_key(public_key_text), to: Foglet.Accounts.Auth
 
   # ---------- Tokens (no mailer in Phase 1 — D-01) ----------
 

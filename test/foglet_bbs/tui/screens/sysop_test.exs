@@ -6,6 +6,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   import Foglet.TUI.RenderHelpers
 
   alias Foglet.Accounts
+  alias Foglet.Accounts.Invites
   alias Foglet.Config
   alias Foglet.Config.Schema
   alias Foglet.TUI.Presentation
@@ -1236,11 +1237,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state: state,
       sysop: sysop
     } do
-      assert {:ok, before_items} = Accounts.list_invites(sysop)
+      assert {:ok, before_items} = Invites.list_invites(sysop)
 
       {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "g"}, state)
 
-      assert {:ok, after_items} = Accounts.list_invites(sysop)
+      assert {:ok, after_items} = Invites.list_invites(sysop)
       assert length(after_items) == length(before_items) + 1
 
       invites = new_state.screen_state.sysop.invites

@@ -4,7 +4,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   import Foglet.TUI.RenderHelpers
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.User
+  alias Foglet.Accounts.{Invites, User}
   alias Foglet.Config
   alias Foglet.Moderation.Action
   alias Foglet.TUI.Presentation
@@ -414,7 +414,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       sysop = actor_fixture(:sysop)
       Config.put!("invite_code_generators", "mods", sysop.id)
       mod = actor_fixture(:mod)
-      assert {:ok, before_items} = Accounts.list_invites(mod)
+      assert {:ok, before_items} = Invites.list_invites(mod)
 
       state =
         mod
@@ -427,7 +427,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "g"}, state)
 
-      assert {:ok, after_items} = Accounts.list_invites(mod)
+      assert {:ok, after_items} = Invites.list_invites(mod)
       assert length(after_items) == length(before_items) + 1
 
       invites = new_state.screen_state.moderation.invites

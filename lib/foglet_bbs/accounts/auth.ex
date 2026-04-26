@@ -1,9 +1,8 @@
 defmodule Foglet.Accounts.Auth do
   @moduledoc """
-  Authentication: password and public key.
+  Authentication functions for `Foglet.Accounts`.
 
-  Public surface remains `Foglet.Accounts` via `defdelegate`. This module
-  owns the implementations.
+  Handles password-based and public-key-based authentication.
   """
 
   import Ecto.Query, warn: false
@@ -27,9 +26,11 @@ defmodule Foglet.Accounts.Auth do
         {:ok, user}
 
       user ->
+        # real user, wrong password (or deleted)
         {:error, :invalid_credentials}
 
       true ->
+        # unknown handle — still burn a hash to equalize timing
         Argon2.no_user_verify()
         {:error, :invalid_credentials}
     end
