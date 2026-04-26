@@ -175,10 +175,14 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
     initial_text = BoardList.render(s) |> flatten_text()
     initial_rows = String.split(initial_text, "\n", trim: true)
+    visible_board_rows =
+      Regex.scan(~r/Overlarge Board \d+/, initial_text)
+      |> length()
 
     assert length(initial_rows) <= 22
     assert initial_text =~ "Overlarge"
     assert initial_text =~ "Overlarge Board 06"
+    assert visible_board_rows >= 8
     refute initial_text =~ "Overlarge Board 28"
 
     s =

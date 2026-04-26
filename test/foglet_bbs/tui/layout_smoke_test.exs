@@ -582,9 +582,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       positioned = BoardList.render(state) |> apply_at_size(size)
       elements = text_elements(positioned)
       flat = Enum.map_join(elements, "", & &1.text)
+      visible_board_rows =
+        Regex.scan(~r/Overlarge Board \d+/, flat)
+        |> length()
 
       assert flat =~ "Overlarge"
       assert flat =~ "Overlarge Board 01"
+      assert visible_board_rows >= 8
       refute flat =~ "Overlarge Board 30"
 
       for element <- elements do

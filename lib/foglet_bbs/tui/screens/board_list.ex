@@ -230,7 +230,7 @@ defmodule Foglet.TUI.Screens.BoardList do
       height - feedback_rows - if(detail?, do: 1, else: 0) - if(spacer?, do: 1, else: 0) >= 4
   end
 
-  defp visible_tree_rows(row_budget), do: max(div(row_budget, 2) - 1, 3)
+  defp visible_tree_rows(row_budget), do: max(row_budget, 3)
 
   defp details_strip(board_tree, directory, theme, width) do
     line =

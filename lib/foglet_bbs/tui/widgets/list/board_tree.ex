@@ -165,7 +165,7 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
       end)
 
     column style: %{gap: 0} do
-      separate_rows(rows, theme)
+      rows
     end
   end
 
@@ -251,14 +251,6 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
     start = cursor_index |> min(length(visible) - height) |> max(0)
 
     Enum.slice(visible, start, height)
-  end
-
-  @spec separate_rows([any()], Theme.t()) :: [any()]
-  defp separate_rows([], _theme), do: []
-
-  defp separate_rows(rows, theme) do
-    separator = text("\n", fg: theme.dim.fg)
-    Enum.intersperse(rows, separator)
   end
 
   @spec render_category(map(), non_neg_integer(), MapSet.t(), boolean(), Theme.t(), pos_integer()) ::
