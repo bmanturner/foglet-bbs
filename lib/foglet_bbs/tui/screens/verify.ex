@@ -66,7 +66,7 @@ defmodule Foglet.TUI.Screens.Verify do
     ScreenFrame.render(state, "Verify Email", content, [
       {"Enter", "Submit"},
       {"Backspace", "Delete"},
-      {"R", "Resend code"},
+      {"Ctrl+R", "Resend code"},
       {"Esc", "Cancel"}
     ])
   end
@@ -89,7 +89,8 @@ defmodule Foglet.TUI.Screens.Verify do
     {:update, new_state, cmds}
   end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["R", "r"], do: resend_code(state)
+  def handle_key(%{key: :char, char: c, ctrl: true}, state) when c in ["R", "r"],
+    do: resend_code(state)
 
   # Typed character from Raxol: %{key: :char, char: c}.
   def handle_key(%{key: :char, char: c}, state) do

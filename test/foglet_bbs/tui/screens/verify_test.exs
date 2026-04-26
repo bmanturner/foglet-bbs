@@ -157,25 +157,35 @@ defmodule Foglet.TUI.Screens.VerifyTest do
     end
   end
 
-  describe "handle_key/2 — resend ordering (r must not append to buffer)" do
-    test "'r' triggers resend, NOT append to buffer", %{state: state} do
+  describe "handle_key/2 — resend uses Ctrl+R (R is a valid code char)" do
+    test "Ctrl+R triggers resend (lowercase)", %{state: state} do
       s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
 
-      # resend_code calls Accounts.build_verify_code which needs a real user (set in setup)
-      result = Verify.handle_key(%{key: :char, char: "r"}, s)
-      # Should be {:update, _, []} from resend — buffer should NOT be "ABR"
+      result = Verify.handle_key(%{key: :char, char: "r", ctrl: true}, s)
       assert {:update, new_state, []} = result
-
-      refute get_verify_ss(new_state).buffer == "ABR",
-             "'r' was appended to buffer instead of triggering resend"
+      assert get_verify_ss(new_state).buffer == ""
     end
 
-    test "'R' triggers resend, NOT append to buffer", %{state: state} do
+    test "Ctrl+R triggers resend (uppercase)", %{state: state} do
       s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
 
-      result = Verify.handle_key(%{key: :char, char: "R"}, s)
+      result = Verify.handle_key(%{key: :char, char: "R", ctrl: true}, s)
       assert {:update, new_state, []} = result
-      refute get_verify_ss(new_state).buffer == "ABR"
+      assert get_verify_ss(new_state).buffer == ""
+    end
+
+    test "bare 'R' is appended to buffer (it's a valid [A-Z0-9] code char)", %{state: state} do
+      s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
+
+      {:update, new_state, []} = Verify.handle_key(%{key: :char, char: "R"}, s)
+      assert get_verify_ss(new_state).buffer == "ABR"
+    end
+
+    test "bare 'r' is appended to buffer (upcased to R)", %{state: state} do
+      s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
+
+      {:update, new_state, []} = Verify.handle_key(%{key: :char, char: "r"}, s)
+      assert get_verify_ss(new_state).buffer == "ABR"
     end
   end
 
@@ -260,7 +270,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
 
       s = put_verify_ss(state, verify_ss(%{resend_cooldown_until: future}))
 
-      result = Foglet.TUI.Screens.Verify.handle_key(%{key: :char, char: "r"}, s)
+      result = Foglet.TUI.Screens.Verify.handle_key(%{key: :char, char: "r", ctrl: true}, s)
       assert {:update, new_state, []} = result
       assert new_state.modal.type == :error
       assert new_state.modal.message =~ "wait"
@@ -279,7 +289,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       # The resend_code path should SUCCEED, setting resend_cooldown_until
       # and (per D-09) clearing cooldown_until + attempts as a side effect.
       {:update, new_state, []} =
-        Foglet.TUI.Screens.Verify.handle_key(%{key: :char, char: "R"}, s)
+        Foglet.TUI.Screens.Verify.handle_key(%{key: :char, char: "R", ctrl: true}, s)
 
       assert new_state.modal.type == :info
       assert %DateTime{} = get_verify_ss(new_state).resend_cooldown_until

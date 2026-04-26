@@ -42,9 +42,9 @@ defmodule Foglet.TUI.Screens.Account do
   @key_bar [
     {"←/→", "Tab"},
     {"Tab", "Field"},
-    {"S/Enter", "Save"},
-    {"Esc/C", "Cancel"},
-    {"Q", "Back"}
+    {"Enter", "Save"},
+    {"Esc", "Cancel"},
+    {"Ctrl+Q", "Back"}
   ]
 
   @impl true
@@ -74,7 +74,9 @@ defmodule Foglet.TUI.Screens.Account do
 
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: :char, char: "Q"}, state) do
+  # Ctrl+Q leaves the screen. Bare q/Q would eat input on form fields, and Esc
+  # is reserved for in-form cancel (e.g., dropping a theme preview).
+  def handle_key(%{key: :char, char: c, ctrl: true}, state) when c in ["q", "Q"] do
     {:update, %{state | current_screen: :main_menu}, []}
   end
 
