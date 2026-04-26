@@ -50,21 +50,5 @@
 
 # Globally
 1. There are border glyphs to the right of the right-most tab filling up the remainder of the spacing.
-
-# One session per users
-1. Unable to 
-
-# Errors
-1. The application only allows one person to be connected to it at a time.
-2. 
-    {
-  "id": "56e39788-5cba-41d3-abb4-7b4ad97e72b5",
-  "message": "Error: {:view_error, %UndefinedFunctionError{module: Foglet.Boards.Board, function: :fetch, arity: 2, reason: \"Foglet.Boards.Board does not implement the Access behaviour\\n\\nYou can use the \\\"struct.field\\\" syntax to access struct fields. You can also use Access.key!/1 to access struct fields dynamically inside get_in/put_in/update_in\", message: nil}}",
-  "timestamp": "2026-04-26T18:49:17.426Z",
-  "level": "info",
-  "instance": "6830372c3d0628",
-  "provider": "app",
-  "region": "iad",
-  "process_group": "app"
-}
-  
+2. Respect newlines a bit better in markdown so all lines aren't cramped together (max 1 line whitespace between lines).
+3. The editor doesn't wrap text if a line gets too long.
