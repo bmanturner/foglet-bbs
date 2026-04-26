@@ -76,8 +76,10 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @doc """
   Builds the ConsoleTable for the LOG tab. Always `selectable: false` (Pitfall 7 — read-only).
   """
-  @spec build_log_table([map()]) :: ConsoleTable.t()
-  def build_log_table(rows) do
+  @spec build_log_table([map()], keyword()) :: ConsoleTable.t()
+  def build_log_table(rows, opts \\ []) do
+    timezone = Keyword.get(opts, :timezone)
+
     items =
       Enum.map(rows, fn row ->
         mod_handle = row |> Map.get(:mod) |> field(:handle, "unknown")
@@ -88,7 +90,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
         when_label =
           case Map.get(row, :inserted_at) do
-            %DateTime{} = dt -> Calendar.strftime(dt, "%Y-%m-%d")
+            %DateTime{} = dt -> format_log_timestamp(dt, timezone)
             _ -> ""
           end
 
@@ -99,8 +101,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
           when: when_label,
           actor: truncate(mod_handle, 8),
           action: truncate(action_label, 8),
-          body: truncate(body, 13),
-          reason: truncate(reason, 9)
+          body: to_string(body),
+          reason: to_string(reason)
         }
       end)
 
@@ -114,6 +116,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       ],
       rows: items,
       selectable: false,
+      width: Keyword.get(opts, :width),
+      page_size: Keyword.get(opts, :page_size),
       empty_state: "No moderation events in scope."
     )
   end
@@ -121,8 +125,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @doc """
   Builds the ConsoleTable for the USERS tab. Read-only — no selection-driven domain action.
   """
-  @spec build_users_table([map()]) :: ConsoleTable.t()
-  def build_users_table(rows) do
+  @spec build_users_table([map()], keyword()) :: ConsoleTable.t()
+  def build_users_table(rows, opts \\ []) do
     items =
       Enum.map(rows, fn user ->
         %{
@@ -140,6 +144,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       ],
       rows: items,
       selectable: false,
+      width: Keyword.get(opts, :width),
+      page_size: Keyword.get(opts, :page_size),
       empty_state: "No active users in scope."
     )
   end
@@ -147,8 +153,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @doc """
   Builds the ConsoleTable for the BOARDS tab. Read-only — no selection-driven domain action.
   """
-  @spec build_boards_table([map()]) :: ConsoleTable.t()
-  def build_boards_table(rows) do
+  @spec build_boards_table([map()], keyword()) :: ConsoleTable.t()
+  def build_boards_table(rows, opts \\ []) do
     items =
       Enum.map(rows, fn board ->
         %{
@@ -166,6 +172,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       ],
       rows: items,
       selectable: false,
+      width: Keyword.get(opts, :width),
+      page_size: Keyword.get(opts, :page_size),
       empty_state: "No boards in scope."
     )
   end
@@ -297,6 +305,24 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       value -> to_string(value)
     end
   end
+
+  defp format_log_timestamp(dt, timezone) do
+    timezone = valid_timezone(timezone)
+
+    dt
+    |> DateTime.shift_zone!(timezone)
+    |> Calendar.strftime("%m-%d %H:%M")
+  rescue
+    _ -> Calendar.strftime(dt, "%m-%d %H:%M")
+  end
+
+  defp valid_timezone(timezone) when is_binary(timezone) do
+    timezone = String.trim(timezone)
+
+    if timezone != "" and Timex.Timezone.exists?(timezone), do: timezone, else: "Etc/UTC"
+  end
+
+  defp valid_timezone(_timezone), do: "Etc/UTC"
 
   defp truncate(value, limit) do
     value = to_string(value)

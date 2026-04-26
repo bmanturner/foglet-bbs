@@ -212,6 +212,22 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert text_index(flat, "new-mod") < text_index(flat, "old-mod")
     end
 
+    test "LOG renders compact timestamps in the current user's timezone", %{state: state} do
+      row = audit_row("mod", "timezone body", "reason", ~U[2026-04-24 13:05:00Z])
+      user = %{state.current_user | timezone: "America/Chicago"}
+
+      flat =
+        %{state | current_user: user}
+        |> put_moderation_state(1, mod_log: [row])
+        |> Moderation.render()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+
+      assert joined =~ "04-24 08:05"
+      refute joined =~ "2026-04-24"
+    end
+
     test "QUEUE renders honest report workflow unavailable state and no work items", %{
       state: state
     } do

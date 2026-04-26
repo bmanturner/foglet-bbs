@@ -121,7 +121,8 @@ defmodule Foglet.TUI.Screens.Moderation do
     ss = synced_screen_state(state)
     theme = Theme.from_state(state)
     width = inner_width(state)
-    content = render_content(ss, theme, width)
+    height = body_height(state)
+    content = render_content(ss, theme, width, height, user_timezone(state))
     ScreenFrame.render(state, moderation_chrome(), content, @key_list)
   end
 
@@ -137,16 +138,23 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_content(ss, theme, width) do
-    active_label = Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab, "QUEUE")
-    tab_body = render_tab_body(active_label, ss, theme, width)
-
-    column style: %{gap: 0} do
-      [Tabs.render(ss.tabs, theme: theme), tab_body]
+  defp body_height(state) do
+    case Map.get(state, :terminal_size) do
+      {_, h} when is_integer(h) -> max(h - 4, 0)
+      _ -> 20
     end
   end
 
-  defp render_tab_body("QUEUE", ss, theme, _width) do
+  defp render_content(ss, theme, width, height, timezone) do
+    active_label = Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab, "QUEUE")
+    tab_body = render_tab_body(active_label, ss, theme, width, height, timezone)
+
+    column style: %{gap: 0} do
+      [Tabs.render(ss.tabs, theme: theme, width: width), tab_body]
+    end
+  end
+
+  defp render_tab_body("QUEUE", ss, theme, _width, _height, _timezone) do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
@@ -156,27 +164,27 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("LOG", ss, theme, width) do
-    log_table = fresh_log_table(ss)
+  defp render_tab_body("LOG", ss, theme, width, height, timezone) do
+    log_table = fresh_log_table(ss, width, height, timezone)
     log_summary = State.build_log_summary(ss.scopes, ss.error, ss.mod_log)
-    summary_col = kv_grid_column(log_summary, theme, width)
+    children = compact_table_children(log_summary, log_table, theme, width, height)
 
     column style: %{gap: 1} do
-      [summary_col, ConsoleTable.render(log_table, theme: theme)]
+      children
     end
   end
 
-  defp render_tab_body("USERS", ss, theme, width) do
-    users_table = fresh_users_table(ss)
+  defp render_tab_body("USERS", ss, theme, width, height, _timezone) do
+    users_table = fresh_users_table(ss, width, height)
     users_summary = State.build_users_summary(ss.users, ss.error)
-    summary_col = kv_grid_column(users_summary, theme, width)
+    children = compact_table_children(users_summary, users_table, theme, width, height)
 
     column style: %{gap: 1} do
-      [summary_col, ConsoleTable.render(users_table, theme: theme)]
+      children
     end
   end
 
-  defp render_tab_body("SANCTIONS", ss, theme, _width) do
+  defp render_tab_body("SANCTIONS", ss, theme, _width, _height, _timezone) do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
@@ -186,21 +194,21 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("BOARDS", ss, theme, width) do
-    boards_table = fresh_boards_table(ss)
+  defp render_tab_body("BOARDS", ss, theme, width, height, _timezone) do
+    boards_table = fresh_boards_table(ss, width, height)
     boards_summary = State.build_boards_summary(ss.scopes, ss.boards, ss.error)
-    summary_col = kv_grid_column(boards_summary, theme, width)
+    children = compact_table_children(boards_summary, boards_table, theme, width, height)
 
     column style: %{gap: 1} do
-      [summary_col, ConsoleTable.render(boards_table, theme: theme)]
+      children
     end
   end
 
-  defp render_tab_body("INVITES", ss, theme, _width) do
+  defp render_tab_body("INVITES", ss, theme, _width, _height, _timezone) do
     InvitesSurface.render(ss.invites, theme)
   end
 
-  defp render_tab_body(_label, _ss, theme, _width) do
+  defp render_tab_body(_label, _ss, theme, _width, _height, _timezone) do
     column style: %{gap: 0} do
       [text("No report queue workflow is available in v1.1.", fg: theme.dim.fg)]
     end
@@ -314,14 +322,45 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
+  defp compact_table_children(summary, table, theme, width, height) do
+    table_node = ConsoleTable.render(table, theme: theme)
+
+    if height <= 18 do
+      [table_node]
+    else
+      [kv_grid_column(summary, theme, width), table_node]
+    end
+  end
+
   # Always rebuild tables from raw domain rows at render time.
   # This ensures struct!-based test helpers (which set mod_log/users/boards
   # without rebuilding the ConsoleTable) still produce correct output.
   # In production the State.new/1 path pre-builds tables; the rebuild here
   # is cheap (bounded list) and idempotent.
-  defp fresh_log_table(%{mod_log: rows}), do: State.build_log_table(rows)
-  defp fresh_users_table(%{users: rows}), do: State.build_users_table(rows)
-  defp fresh_boards_table(%{boards: rows}), do: State.build_boards_table(rows)
+  defp fresh_log_table(%{mod_log: rows}, width, height, timezone) do
+    State.build_log_table(rows,
+      width: width,
+      page_size: page_size(height),
+      timezone: timezone
+    )
+  end
+
+  defp fresh_users_table(%{users: rows}, width, height) do
+    State.build_users_table(rows, width: width, page_size: page_size(height))
+  end
+
+  defp fresh_boards_table(%{boards: rows}, width, height) do
+    State.build_boards_table(rows, width: width, page_size: page_size(height))
+  end
+
+  defp page_size(height), do: max(height - 4, 3)
+
+  defp user_timezone(state) do
+    case Map.get(state, :current_user) do
+      %{timezone: timezone} -> timezone
+      _ -> nil
+    end
+  end
 
   defp key_for_invites(%{key: :char, char: char}), do: char
   defp key_for_invites(%{key: key}), do: key

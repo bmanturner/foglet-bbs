@@ -69,7 +69,24 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             for el <- elements do
               assert el.x + Foglet.TUI.TextWidth.display_width(el.text) <= width,
                      "element #{inspect(el.text)} at x=#{el.x} exceeds width #{width}"
+
+              assert el.y < height,
+                     "element #{inspect(el.text)} at y=#{el.y} exceeds height #{height}"
             end
+
+            tab_row =
+              elements
+              |> Enum.group_by(& &1.y)
+              |> Map.values()
+              |> Enum.find([], fn row ->
+                Enum.any?(row, &String.contains?(&1.text, "QUEUE")) and
+                  Enum.any?(row, &String.contains?(&1.text, "LOG"))
+              end)
+              |> Enum.sort_by(& &1.x)
+              |> Enum.map_join(& &1.text)
+
+            assert Foglet.TUI.TextWidth.display_width(tab_row) <= 60,
+                   "tab row exceeded 60-column frame budget: #{inspect(tab_row)}"
 
             all_text = Enum.map_join(elements, " ", & &1.text)
 
@@ -115,7 +132,24 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             for el <- elements do
               assert el.x + Foglet.TUI.TextWidth.display_width(el.text) <= width,
                      "element #{inspect(el.text)} at x=#{el.x} exceeds width #{width}"
+
+              assert el.y < height,
+                     "element #{inspect(el.text)} at y=#{el.y} exceeds height #{height}"
             end
+
+            tab_row =
+              elements
+              |> Enum.group_by(& &1.y)
+              |> Map.values()
+              |> Enum.find([], fn row ->
+                Enum.any?(row, &String.contains?(&1.text, "QUEUE")) and
+                  Enum.any?(row, &String.contains?(&1.text, "USERS"))
+              end)
+              |> Enum.sort_by(& &1.x)
+              |> Enum.map_join(& &1.text)
+
+            assert Foglet.TUI.TextWidth.display_width(tab_row) <= 60,
+                   "tab row exceeded 60-column frame budget: #{inspect(tab_row)}"
 
             all_text = Enum.map_join(elements, " ", & &1.text)
 
@@ -169,7 +203,24 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             for el <- elements do
               assert el.x + Foglet.TUI.TextWidth.display_width(el.text) <= width,
                      "element #{inspect(el.text)} at x=#{el.x} exceeds width #{width}"
+
+              assert el.y < height,
+                     "element #{inspect(el.text)} at y=#{el.y} exceeds height #{height}"
             end
+
+            tab_row =
+              elements
+              |> Enum.group_by(& &1.y)
+              |> Map.values()
+              |> Enum.find([], fn row ->
+                Enum.any?(row, &String.contains?(&1.text, "QUEUE")) and
+                  Enum.any?(row, &String.contains?(&1.text, "BOARDS"))
+              end)
+              |> Enum.sort_by(& &1.x)
+              |> Enum.map_join(& &1.text)
+
+            assert Foglet.TUI.TextWidth.display_width(tab_row) <= 60,
+                   "tab row exceeded 60-column frame budget: #{inspect(tab_row)}"
 
             all_text = Enum.map_join(elements, " ", & &1.text)
 
