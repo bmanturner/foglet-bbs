@@ -571,10 +571,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   defp activate_users_tab(state, sysop) do
     state = %{state | current_user: sysop}
-    state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
-    {:update, state, _} = Sysop.handle_key(%{key: :down}, state)
-    uv = %{state.screen_state.sysop.users_view | selection_index: 0}
-    put_users_view(state, uv)
+    ss = Sysop.init_screen_state(active: 4)
+    uv = UsersView.init(current_user: sysop)
+    ss = %{ss | users_view: %{uv | selection_index: 0}}
+    put_in(state, [:screen_state, :sysop], ss)
   end
 
   defp select_user_row(state, handle) do
@@ -1420,9 +1420,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
       sysop = %Foglet.Accounts.User{id: Ecto.UUID.generate(), role: :sysop, status: :active}
       view = UsersView.init(current_user: sysop)
 
+      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
       ss = state.screen_state.sysop
       state = %{state | screen_state: Map.put(state.screen_state, :sysop, %{ss | users_view: view})}
-      state = put_in(state, [:screen_state, :sysop, :active_tab], 4)
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
         result = Sysop.handle_key(key, state)
