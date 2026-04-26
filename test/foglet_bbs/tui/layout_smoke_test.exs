@@ -161,7 +161,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
         breadcrumb =
           Enum.find(elements, fn element ->
-            String.contains?(element.text, "Foglet")
+            String.starts_with?(element.text, "┌") and String.contains?(element.text, "Foglet")
           end)
 
         content =
@@ -171,14 +171,17 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
         command =
           Enum.find(elements, fn element ->
-            String.contains?(element.text, "Navigate") or String.contains?(element.text, "J/K")
+            String.starts_with?(element.text, "└") and
+              (String.contains?(element.text, "Navigate") or String.contains?(element.text, "J/K"))
           end)
 
         assert breadcrumb, "expected breadcrumb/status text at #{inspect({width, height})}"
         assert content, "expected body text at #{inspect({width, height})}"
         assert command, "expected command text at #{inspect({width, height})}"
+        assert breadcrumb.y == 0
         assert breadcrumb.y < content.y
         assert content.y < command.y
+        assert command.y == height - 1
       end
     end
   end
@@ -934,22 +937,22 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     refute Enum.any?(texts, &String.contains?(&1, "[L]")),
            "login menu body should not render bracketed menu items, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 == "L")),
+    assert Enum.any?(texts, &String.contains?(&1, "L Login")),
            "expected command bar Login key, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 == " Login")),
+    assert Enum.any?(texts, &String.contains?(&1, "L Login")),
            "expected command bar Login label, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 == "R")),
+    assert Enum.any?(texts, &String.contains?(&1, "R Register")),
            "expected command bar Register key, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 == " Register")),
+    assert Enum.any?(texts, &String.contains?(&1, "R Register")),
            "expected command bar Register label, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 == "Q")),
+    assert Enum.any?(texts, &String.contains?(&1, "Q Quit")),
            "expected command bar Quit key, got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 == " Quit")),
+    assert Enum.any?(texts, &String.contains?(&1, "Q Quit")),
            "expected command bar Quit label, got: #{inspect(texts)}"
 
     assert placeholder.x in 26..28,

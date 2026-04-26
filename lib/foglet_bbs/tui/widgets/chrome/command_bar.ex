@@ -50,6 +50,19 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
   end
 
   @doc """
+  Returns the plain grouped command text for embedding in enclosing chrome.
+  """
+  @spec render_text([map() | struct()], keyword()) :: String.t()
+  def render_text(groups, opts \\ []) when is_list(groups) do
+    width = Keyword.get(opts, :width)
+
+    groups
+    |> normalize_groups()
+    |> visible_groups(width)
+    |> groups_text()
+  end
+
+  @doc """
   Normalizes map or struct command groups into the Chrome V2 command shape.
   """
   @spec normalize_groups([map() | struct()]) :: [group()]
@@ -171,9 +184,9 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
     |> Enum.reject(&(&1.commands == []))
   end
 
-  defp rendered_width(groups), do: groups |> render_text() |> TextWidth.display_width()
+  defp rendered_width(groups), do: groups |> groups_text() |> TextWidth.display_width()
 
-  defp render_text(groups) do
+  defp groups_text(groups) do
     Enum.map_join(groups, @group_gap, fn group ->
       command_text =
         Enum.map_join(group.commands, @command_gap, fn command ->

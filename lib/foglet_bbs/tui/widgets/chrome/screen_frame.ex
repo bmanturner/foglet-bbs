@@ -3,7 +3,7 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
   Outer screen chrome widget for Foglet BBS (FRAME-01, FRAME-02).
 
   Wraps every screen with:
-    outer bordered box → column → StatusBar → divider → content_element → divider → CommandBar
+    top border/status row → content_element → bottom border/commands row
 
   Signature (locked — D-05):
     ScreenFrame.render(state, title_or_chrome, content_element, commands)
@@ -16,14 +16,23 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
                       column/row/box do...end block in the screen module)
     commands        — grouped Chrome V2 commands or legacy key tuples
 
-  Internal layout (locked — D-06):
-    outer bordered box → column → StatusBar → divider → content_element → divider → CommandBar
+  The border rows embed Chrome V2 text directly in the border line:
+    ┌ Foglet ▸ Breadcrumb ───────── @handle | time ┐
+    └ Commands ────────────────────────────────────┘
   """
 
   import Raxol.Core.Renderer.View
 
-  alias Foglet.TUI.Theme
+  alias Foglet.TUI.{TextWidth, Theme}
   alias Foglet.TUI.Widgets.Chrome.{BreadcrumbBar, CommandBar, Normalizer, StatusBar}
+
+  @border %{
+    top_left: "┌",
+    top_right: "┐",
+    bottom_left: "└",
+    bottom_right: "┘",
+    horizontal: "─"
+  }
 
   @doc """
   Renders the full screen chrome wrapping the caller-provided content.
@@ -32,24 +41,104 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
   def render(state, title_or_chrome, content_element, commands) do
     theme = Theme.from_state(state)
     chrome = chrome_model(state, title_or_chrome, commands)
-    inner_width = inner_width(state)
+    frame_width = frame_width(state)
 
-    box style: %{border: :single, padding: 1, border_fg: theme.border.fg} do
-      # Kept `justify_content: :space_between` over `spacer()` per 08-06 audit —
-      # would require knowing `content_element`'s height at call time.
-      column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              StatusBar.render(state, chrome, width: inner_width),
-              divider(char: "─", style: %{fg: theme.border.fg}),
-              content_element,
-              divider(char: "─", style: %{fg: theme.border.fg})
-            ]
-          end,
-          CommandBar.render(theme, chrome.command_groups, width: inner_width)
-        ]
+    column style: %{gap: 0, justify_content: :space_between} do
+      [
+        column style: %{gap: 0} do
+          [
+            border_text(top_border(chrome, frame_width), theme),
+            content_box(content_element)
+          ]
+        end,
+        border_text(bottom_border(chrome, frame_width), theme)
+      ]
+    end
+  end
+
+  defp content_box(content_element) do
+    box style: %{padding: 1} do
+      content_element
+    end
+  end
+
+  defp border_text(content, theme) do
+    text(content, fg: theme.border.fg)
+  end
+
+  defp top_border(chrome, nil) do
+    @border.top_left <>
+      " " <>
+      breadcrumb(chrome, nil) <>
+      " " <>
+      status(chrome) <>
+      " " <>
+      @border.top_right
+  end
+
+  defp top_border(chrome, width) do
+    inside_width = max(width - 2, 0)
+    left = " " <> breadcrumb(chrome, max(inside_width - 2, 0)) <> " "
+    right = status(chrome) |> status_segment()
+
+    @border.top_left <> fitted_top_inside(left, right, inside_width) <> @border.top_right
+  end
+
+  defp fitted_top_inside(left, right, inside_width) do
+    left_width = TextWidth.display_width(left)
+    right_width = TextWidth.display_width(right)
+
+    if left_width + right_width <= inside_width do
+      fill = String.duplicate(@border.horizontal, inside_width - left_width - right_width)
+      left <> fill <> right
+    else
+      right = TextWidth.truncate(right, min(right_width, div(inside_width, 2)))
+      right_width = TextWidth.display_width(right)
+      left = TextWidth.truncate(left, max(inside_width - right_width, 0))
+      left <> right
+    end
+  end
+
+  defp bottom_border(chrome, nil) do
+    commands = CommandBar.render_text(chrome.command_groups)
+
+    @border.bottom_left <> " " <> commands <> " " <> @border.bottom_right
+  end
+
+  defp bottom_border(chrome, width) do
+    inside_width = max(width - 2, 0)
+
+    command_segment =
+      chrome.command_groups
+      |> CommandBar.render_text(width: max(inside_width - 2, 0))
+      |> case do
+        "" -> ""
+        commands -> " " <> commands <> " "
       end
+
+    command_width = TextWidth.display_width(command_segment)
+
+    inside =
+      if command_width <= inside_width do
+        command_segment <> String.duplicate(@border.horizontal, inside_width - command_width)
+      else
+        TextWidth.truncate(command_segment, inside_width)
+      end
+
+    @border.bottom_left <> inside <> @border.bottom_right
+  end
+
+  defp breadcrumb(chrome, width), do: BreadcrumbBar.format(chrome.breadcrumb_parts, width: width)
+
+  defp status(chrome), do: chrome.status_atoms |> Enum.join(" | ")
+
+  defp status_segment(""), do: ""
+  defp status_segment(status), do: " " <> status <> " "
+
+  defp frame_width(state) do
+    case Map.get(state, :terminal_size) do
+      {width, _height} when is_integer(width) and width > 0 -> width
+      _other -> nil
     end
   end
 
@@ -85,12 +174,5 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
       %{commands: nested} when is_list(nested) -> true
       _other -> false
     end)
-  end
-
-  defp inner_width(state) do
-    case Map.get(state, :terminal_size) do
-      {width, _height} when is_integer(width) -> max(width - 4, 0)
-      _other -> nil
-    end
   end
 end
