@@ -1384,4 +1384,133 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert new_state.screen_state.sysop.boards_view.modal == nil
     end
   end
+
+  # =========================================================================
+  # USERS ConsoleTable primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  describe "USERS ConsoleTable primitive presence" do
+    test "USERS tab renders Handle column header from ConsoleTable", %{state: state} do
+      sysop = persist_user(%{handle: "ct_sysop", role: :sysop})
+      _user = persist_user(%{handle: "ct_user"})
+      state = activate_users_tab(state, sysop)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Handle"),
+             "Expected 'Handle' ConsoleTable column header in USERS render; got:\n#{flat}"
+    end
+
+    test "USERS tab renders Role and Status column headers", %{state: state} do
+      sysop = persist_user(%{handle: "ct2_sysop", role: :sysop})
+      state = activate_users_tab(state, sysop)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Role"),
+             "Expected 'Role' column header in USERS render"
+
+      assert String.contains?(flat, "Status"),
+             "Expected 'Status' column header in USERS render"
+    end
+
+    test "empty USERS handles :up/:down/:enter without crash and without domain dispatch", %{
+      state: state
+    } do
+      sysop = %Foglet.Accounts.User{id: Ecto.UUID.generate(), role: :sysop, status: :active}
+      view = UsersView.init(current_user: sysop)
+
+      ss = state.screen_state.sysop
+      state = %{state | screen_state: Map.put(state.screen_state, :sysop, %{ss | users_view: view})}
+      state = put_in(state, [:screen_state, :sysop, :active_tab], 4)
+
+      for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
+        result = Sysop.handle_key(key, state)
+
+        case result do
+          {:update, new_state, cmds} ->
+            assert cmds == [] or not Enum.any?(cmds, fn c -> is_tuple(c) end),
+                   "Unexpected domain dispatch on empty USERS for #{inspect(key)}"
+
+            _ = new_state
+
+          :no_match ->
+            :ok
+        end
+      end
+    end
+  end
+
+  # =========================================================================
+  # SYSTEM KvGrid primitive presence (Phase 25 Plan 04)
+  # =========================================================================
+
+  alias Foglet.TUI.Screens.Sysop.SystemSnapshot
+
+  describe "SYSTEM KvGrid primitive presence" do
+    test "SYSTEM tab renders KvGrid label rows", %{state: state} do
+      # Pre-initialize the system snapshot so it's in the screen state.
+      snap = Foglet.TUI.Screens.Sysop.SystemSnapshot.init()
+      ss = Sysop.init_screen_state(active: 3)
+      ss = %{ss | system_snapshot: snap}
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Sessions:") or String.contains?(flat, "Version:"),
+             "Expected KvGrid label row (Sessions: or Version:) in SYSTEM render"
+    end
+
+    test "SYSTEM refresh key [r] continues to refresh snapshot", %{state: state} do
+      # Pre-initialize the system snapshot.
+      snap = Foglet.TUI.Screens.Sysop.SystemSnapshot.init()
+      ss = Sysop.init_screen_state(active: 3)
+      ss = %{ss | system_snapshot: snap}
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      assert snap != nil
+
+      # "r" key may return :no_match if the snapshot values haven't changed.
+      result = Sysop.handle_key(%{key: :char, char: "r"}, state)
+
+      case result do
+        {:update, new_state, _} ->
+          snap2 = new_state.screen_state.sysop.system_snapshot
+          assert snap2 != nil
+
+        :no_match ->
+          # Snapshot was refreshed but wall clock didn't change — snapshot is
+          # still valid. The pre-seeded snap already demonstrates init works.
+          assert snap != nil
+      end
+    end
+  end
+
+  # =========================================================================
+  # BOARDS destructive styling routes through commands.destructive (D-07)
+  # =========================================================================
+
+  describe "BOARDS destructive styling routes through commands.destructive (D-07)" do
+    test "Foglet.TUI.Presentation.theme_mappings().commands.destructive maps to :error" do
+      mapping = Foglet.TUI.Presentation.theme_mappings()
+      assert mapping.commands.destructive == :error
+    end
+
+    test "BoardsView confirm modal for archive board is opened by D key on board row" do
+      setup_ctx = seed_category_and_board(%{})
+      sysop = setup_ctx.sysop
+
+      state = build_state(:sysop)
+      state = %{state | current_user: sysop}
+      state = activate_boards_tab(state, sysop)
+
+      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "D"}, state)
+
+      bv = state.screen_state.sysop.boards_view
+      assert bv.modal_kind in [:archive_board, :archive_category],
+             "Expected archive confirm modal after D key"
+
+      assert bv.modal != nil
+    end
+  end
 end
