@@ -125,6 +125,7 @@ defmodule Foglet.SSH.Supervisor do
       |> Keyword.get(:host_key_dir, Application.app_dir(:foglet_bbs, "priv/ssh"))
 
     File.mkdir_p!(dir)
+    :ok = Foglet.SSH.HostKey.ensure!(dir)
     dir
   end
 end
