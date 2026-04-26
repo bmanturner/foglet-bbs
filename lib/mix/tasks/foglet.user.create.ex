@@ -14,6 +14,8 @@ defmodule Mix.Tasks.Foglet.User.Create do
 
   use Mix.Task
 
+  @requirements ["app.config"]
+
   alias Foglet.Accounts
 
   @switches [handle: :string, email: :string, password: :string]

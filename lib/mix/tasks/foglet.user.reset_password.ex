@@ -13,6 +13,8 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
 
   use Mix.Task
 
+  @requirements ["app.config"]
+
   alias Foglet.Accounts
   alias Foglet.Accounts.User
   alias Foglet.Config

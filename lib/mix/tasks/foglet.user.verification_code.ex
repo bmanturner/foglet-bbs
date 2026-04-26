@@ -11,6 +11,8 @@ defmodule Mix.Tasks.Foglet.User.VerificationCode do
 
   use Mix.Task
 
+  @requirements ["app.config"]
+
   alias Foglet.Accounts
   alias Foglet.Accounts.User
   alias Foglet.Config

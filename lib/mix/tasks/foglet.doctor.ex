@@ -1,6 +1,8 @@
 defmodule Mix.Tasks.Foglet.Doctor do
   use Mix.Task
 
+  @requirements ["app.config"]
+
   @moduledoc "Verifies the development environment is correctly configured."
   @shortdoc "Verifies the development environment is correctly configured"
 

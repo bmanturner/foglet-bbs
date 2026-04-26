@@ -11,6 +11,8 @@ defmodule Mix.Tasks.Foglet.User.Status do
 
   use Mix.Task
 
+  @requirements ["app.config"]
+
   alias Foglet.Accounts
 
   @switches [status: :string, actor: :string]

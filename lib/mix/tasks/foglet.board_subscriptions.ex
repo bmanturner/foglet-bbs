@@ -14,6 +14,8 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
 
   use Mix.Task
 
+  @requirements ["app.config"]
+
   alias Foglet.Accounts
   alias Foglet.Boards
   alias Foglet.Boards.Board

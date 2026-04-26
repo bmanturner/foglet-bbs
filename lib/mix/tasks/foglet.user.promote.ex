@@ -11,6 +11,8 @@ defmodule Mix.Tasks.Foglet.User.Promote do
 
   use Mix.Task
 
+  @requirements ["app.config"]
+
   alias Foglet.Accounts
   alias Foglet.Accounts.User
 
