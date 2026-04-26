@@ -25,7 +25,7 @@ defmodule Foglet.TUI.Screens.Verify do
   """
   @behaviour Foglet.TUI.Screen
 
-  alias Foglet.Accounts
+  alias Foglet.Accounts.Verification
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
@@ -162,7 +162,7 @@ defmodule Foglet.TUI.Screens.Verify do
   defp resend_code_raw(%{current_user: nil} = state), do: {state, []}
 
   defp resend_code_raw(state) do
-    case Accounts.deliver_verification_code(state.current_user) do
+    case Verification.deliver_verification_code(state.current_user) do
       {:ok, :attempted} ->
         modal = %Foglet.TUI.Modal{
           type: :info,
@@ -247,7 +247,7 @@ defmodule Foglet.TUI.Screens.Verify do
   end
 
   defp verify_code(state, vs) do
-    case Accounts.verify_email_code(state.current_user, vs.buffer) do
+    case Verification.verify_email_code(state.current_user, vs.buffer) do
       {:ok, confirmed} ->
         {clear_verify_ss(%{state | current_user: confirmed, current_screen: :main_menu}), []}
 

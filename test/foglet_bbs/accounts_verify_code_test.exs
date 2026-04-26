@@ -2,7 +2,7 @@ defmodule Foglet.AccountsVerifyCodeTest do
   use FogletBbs.DataCase, async: true
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.UserToken
+  alias Foglet.Accounts.{UserToken, Verification}
   alias FogletBbs.Repo
 
   import FogletBbs.AccountsFixtures
@@ -33,7 +33,7 @@ defmodule Foglet.AccountsVerifyCodeTest do
   describe "Accounts.build_verify_code/1" do
     test "persists a token row with context = \"email_verify\"" do
       user = user_fixture()
-      {:ok, code} = Accounts.build_verify_code(user)
+      {:ok, code} = Verification.build_verify_code(user)
 
       assert String.length(code) == 6
       row = Repo.get_by!(UserToken, token: code, context: "email_verify")
@@ -45,18 +45,18 @@ defmodule Foglet.AccountsVerifyCodeTest do
   describe "Accounts.verify_email_code/2" do
     test "returns {:ok, confirmed_user} on match" do
       user = user_fixture()
-      {:ok, code} = Accounts.build_verify_code(user)
+      {:ok, code} = Verification.build_verify_code(user)
 
-      assert {:ok, confirmed} = Accounts.verify_email_code(user, code)
+      assert {:ok, confirmed} = Verification.verify_email_code(user, code)
       assert confirmed.confirmed_at != nil
       assert confirmed.id == user.id
     end
 
     test "returns {:error, :invalid_code} for wrong code" do
       user = user_fixture()
-      {:ok, _code} = Accounts.build_verify_code(user)
+      {:ok, _code} = Verification.build_verify_code(user)
 
-      assert {:error, :invalid_code} = Accounts.verify_email_code(user, "WRONG1")
+      assert {:error, :invalid_code} = Verification.verify_email_code(user, "WRONG1")
     end
 
     test "returns {:error, :expired} for code older than 15 minutes" do
@@ -71,22 +71,22 @@ defmodule Foglet.AccountsVerifyCodeTest do
         |> Ecto.Changeset.change(%{inserted_at: sixteen_min_ago})
         |> Repo.insert()
 
-      assert {:error, :expired} = Accounts.verify_email_code(user, inserted.token)
+      assert {:error, :expired} = Verification.verify_email_code(user, inserted.token)
     end
 
     test "rejects code when email does not match user" do
       user_a = user_fixture()
       user_b = user_fixture()
-      {:ok, code_for_a} = Accounts.build_verify_code(user_a)
+      {:ok, code_for_a} = Verification.build_verify_code(user_a)
 
       # user_b tries to use user_a's code — sent_to mismatch
-      assert {:error, :invalid_code} = Accounts.verify_email_code(user_b, code_for_a)
+      assert {:error, :invalid_code} = Verification.verify_email_code(user_b, code_for_a)
     end
 
     test "deletes all email_verify tokens after successful verification" do
       user = user_fixture()
-      {:ok, code} = Accounts.build_verify_code(user)
-      {:ok, _} = Accounts.verify_email_code(user, code)
+      {:ok, code} = Verification.build_verify_code(user)
+      {:ok, _} = Verification.verify_email_code(user, code)
 
       remaining =
         Repo.all(UserToken.by_user_and_contexts_query(user, ["email_verify"]))

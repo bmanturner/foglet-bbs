@@ -7,8 +7,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
   """
 
   alias Ecto.Changeset
-  alias Foglet.Accounts
-  alias Foglet.Accounts.User
+  alias Foglet.Accounts.{Invites, User}
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
@@ -17,7 +16,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
   @spec load(User.t(), InvitesState.t()) :: {:ok, InvitesState.t()}
   def load(%User{} = actor, %InvitesState{} = state) do
     actor
-    |> Accounts.list_invites()
+    |> Invites.list_invites()
     |> handle_list_result(state)
   end
 
@@ -26,12 +25,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
 
   @spec generate(User.t(), InvitesState.t()) :: {:ok, InvitesState.t()}
   def generate(%User{} = actor, %InvitesState{} = state) do
-    case Accounts.create_invite(actor) do
+    case Invites.create_invite(actor) do
       {:ok, invite} ->
         state = InvitesState.with_last_generated(state, invite.code)
 
         actor
-        |> Accounts.list_invites()
+        |> Invites.list_invites()
         |> handle_list_result(state)
 
       {:error, reason} ->
@@ -99,10 +98,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
   def handle_key(_key, %User{}, %InvitesState{}), do: :no_match
 
   defp revoke_code(actor, code, state) do
-    case Accounts.revoke_invite(actor, code) do
+    case Invites.revoke_invite(actor, code) do
       {:ok, _invite} ->
         actor
-        |> Accounts.list_invites()
+        |> Invites.list_invites()
         |> handle_list_result(state)
 
       {:error, reason} ->

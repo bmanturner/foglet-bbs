@@ -6,6 +6,7 @@ defmodule Foglet.TUI.Screens.DeliveryCopyTest do
   import Swoosh.TestAssertions
 
   alias Foglet.Accounts
+  alias Foglet.Accounts.Verification
   alias Foglet.Config
   alias Foglet.TUI.Screens.Login
   alias Foglet.TUI.Screens.Register
@@ -82,7 +83,7 @@ defmodule Foglet.TUI.Screens.DeliveryCopyTest do
     test "Verify prompt and resend copy describe verification instructions honestly" do
       Config.put!("delivery_mode", "email", nil)
       user = user_fixture()
-      {:ok, _code} = Accounts.build_verify_code(user)
+      {:ok, _code} = Verification.build_verify_code(user)
       state = verify_state(user)
 
       text = Verify.render(state) |> flatten_text()

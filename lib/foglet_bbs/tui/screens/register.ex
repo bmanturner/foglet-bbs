@@ -21,6 +21,7 @@ defmodule Foglet.TUI.Screens.Register do
   """
 
   alias Foglet.{Accounts, Config}
+  alias Foglet.Accounts.Verification
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -399,7 +400,7 @@ defmodule Foglet.TUI.Screens.Register do
   # Only attempt verification delivery when the post-login screen is :verify.
   # For :main_menu, skip delivery by short-circuiting to {:ok, nil}.
   defp maybe_deliver_verification_code(:verify, user),
-    do: Accounts.deliver_verification_code(user)
+    do: Verification.deliver_verification_code(user)
 
   defp maybe_deliver_verification_code(:main_menu, _user), do: {:ok, nil}
 

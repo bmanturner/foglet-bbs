@@ -16,7 +16,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
   @requirements ["app.config"]
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.User
+  alias Foglet.Accounts.{User, Verification}
   alias Foglet.Config
 
   @impl Mix.Task
@@ -70,7 +70,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPassword do
   end
 
   defp print_reset_token(%User{} = user, heading) do
-    case Accounts.generate_reset_token_for_operator(user) do
+    case Verification.generate_reset_token_for_operator(user) do
       {:ok, token} ->
         Mix.shell().info(heading)
         Mix.shell().info("Reset token: #{token}")

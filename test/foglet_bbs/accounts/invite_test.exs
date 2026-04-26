@@ -2,7 +2,7 @@ defmodule Foglet.Accounts.InviteTest do
   use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.Invite
+  alias Foglet.Accounts.{Invite, Invites}
   alias Foglet.Config
   alias FogletBbs.AccountsFixtures
 
@@ -35,7 +35,7 @@ defmodule Foglet.Accounts.InviteTest do
     test "creates an available invite for a sysop" do
       sysop = actor_fixture(:sysop)
 
-      assert {:ok, %Invite{} = invite} = Accounts.create_invite(sysop)
+      assert {:ok, %Invite{} = invite} = Invites.create_invite(sysop)
       assert invite.issuer_id == sysop.id
       assert is_binary(invite.code)
       assert invite.code != ""
@@ -48,16 +48,16 @@ defmodule Foglet.Accounts.InviteTest do
       user = AccountsFixtures.user_fixture()
 
       Config.put!("invite_code_generators", "sysop_only", sysop.id)
-      assert {:ok, %Invite{}} = Accounts.create_invite(sysop)
-      assert {:error, :forbidden} = Accounts.create_invite(mod)
-      assert {:error, :forbidden} = Accounts.create_invite(user)
+      assert {:ok, %Invite{}} = Invites.create_invite(sysop)
+      assert {:error, :forbidden} = Invites.create_invite(mod)
+      assert {:error, :forbidden} = Invites.create_invite(user)
 
       Config.put!("invite_code_generators", "mods", sysop.id)
-      assert {:ok, %Invite{}} = Accounts.create_invite(mod)
-      assert {:error, :forbidden} = Accounts.create_invite(user)
+      assert {:ok, %Invite{}} = Invites.create_invite(mod)
+      assert {:error, :forbidden} = Invites.create_invite(user)
 
       Config.put!("invite_code_generators", "any_user", sysop.id)
-      assert {:ok, %Invite{}} = Accounts.create_invite(user)
+      assert {:ok, %Invite{}} = Invites.create_invite(user)
     end
 
     test "enforces per-user generation cap only for any_user policy" do
@@ -67,12 +67,12 @@ defmodule Foglet.Accounts.InviteTest do
       Config.put!("invite_code_generators", "any_user", sysop.id)
       Config.put!("invite_generation_per_user_limit", 1, sysop.id)
 
-      assert {:ok, %Invite{}} = Accounts.create_invite(user)
-      assert {:error, :limit_reached} = Accounts.create_invite(user)
+      assert {:ok, %Invite{}} = Invites.create_invite(user)
+      assert {:error, :limit_reached} = Invites.create_invite(user)
 
       Config.put!("invite_generation_per_user_limit", 0, sysop.id)
-      assert {:ok, %Invite{}} = Accounts.create_invite(user)
-      assert {:ok, %Invite{}} = Accounts.create_invite(user)
+      assert {:ok, %Invite{}} = Invites.create_invite(user)
+      assert {:ok, %Invite{}} = Invites.create_invite(user)
     end
   end
 
@@ -92,7 +92,7 @@ defmodule Foglet.Accounts.InviteTest do
                   revoked_at: nil,
                   status: :available
                 }
-              ]} = Accounts.list_invites(sysop)
+              ]} = Invites.list_invites(sysop)
 
       assert code == invite.code
       assert issuer_id == sysop.id
@@ -103,12 +103,12 @@ defmodule Foglet.Accounts.InviteTest do
     test "returns status map for existing invite code" do
       invite = AccountsFixtures.invite_fixture()
 
-      assert {:ok, %{code: code, status: :available}} = Accounts.get_invite_status(invite.code)
+      assert {:ok, %{code: code, status: :available}} = Invites.get_invite_status(invite.code)
       assert code == invite.code
     end
 
     test "returns not_found for unknown invite code" do
-      assert {:error, :not_found} = Accounts.get_invite_status("UNKNOWNINVITECODE1")
+      assert {:error, :not_found} = Invites.get_invite_status("UNKNOWNINVITECODE1")
     end
   end
 
@@ -117,7 +117,7 @@ defmodule Foglet.Accounts.InviteTest do
       sysop = actor_fixture(:sysop)
       invite = AccountsFixtures.invite_fixture(sysop)
 
-      assert {:ok, %Invite{} = revoked} = Accounts.revoke_invite(sysop, invite.code)
+      assert {:ok, %Invite{} = revoked} = Invites.revoke_invite(sysop, invite.code)
       assert revoked.revoked_at != nil
       assert Invite.status(revoked) == :revoked
     end
@@ -125,7 +125,7 @@ defmodule Foglet.Accounts.InviteTest do
     test "returns not_found for unknown invite code" do
       sysop = actor_fixture(:sysop)
 
-      assert {:error, :not_found} = Accounts.revoke_invite(sysop, "UNKNOWNINVITECODE1")
+      assert {:error, :not_found} = Invites.revoke_invite(sysop, "UNKNOWNINVITECODE1")
     end
 
     test "returns unavailable for consumed invite" do
@@ -138,14 +138,14 @@ defmodule Foglet.Accounts.InviteTest do
       |> Ecto.Changeset.change(consumed_at: now, consumed_by_user_id: user.id)
       |> Repo.update!()
 
-      assert {:error, :unavailable} = Accounts.revoke_invite(sysop, invite.code)
+      assert {:error, :unavailable} = Invites.revoke_invite(sysop, invite.code)
     end
 
     test "returns forbidden for unauthorized actors" do
       user = AccountsFixtures.user_fixture()
       invite = AccountsFixtures.invite_fixture()
 
-      assert {:error, :forbidden} = Accounts.revoke_invite(user, invite.code)
+      assert {:error, :forbidden} = Invites.revoke_invite(user, invite.code)
     end
   end
 

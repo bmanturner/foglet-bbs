@@ -5,7 +5,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
   import Ecto.Query
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.UserToken
+  alias Foglet.Accounts.{UserToken, Verification}
   alias Foglet.Config
   alias FogletBbs.AccountsFixtures
 
@@ -25,7 +25,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
     test "Accounts helper persists only the hashed reset token row" do
       user = AccountsFixtures.user_fixture(%{handle: "helperhash"})
 
-      assert {:ok, raw_token} = Accounts.generate_reset_token_for_operator(user)
+      assert {:ok, raw_token} = Verification.generate_reset_token_for_operator(user)
       {:ok, decoded_token} = Base.url_decode64(raw_token, padding: false)
       hashed_token = :crypto.hash(UserToken.hash_algorithm(), decoded_token)
 

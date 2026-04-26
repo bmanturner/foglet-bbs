@@ -2,6 +2,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
   use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts
+  alias Foglet.Accounts.Invites
   alias Foglet.Config
   alias Foglet.TUI.Screens.Shared.{InvitesActions, InvitesState}
   alias FogletBbs.AccountsFixtures
@@ -38,11 +39,11 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
 
     test "generate persists exactly one invite and refreshes from Accounts list" do
       sysop = actor_fixture(:sysop)
-      assert {:ok, before_items} = Accounts.list_invites(sysop)
+      assert {:ok, before_items} = Invites.list_invites(sysop)
 
       assert {:ok, state} = InvitesActions.generate(sysop, InvitesState.new(items: before_items))
 
-      assert {:ok, after_items} = Accounts.list_invites(sysop)
+      assert {:ok, after_items} = Invites.list_invites(sysop)
       assert length(after_items) == length(before_items) + 1
       assert state.items == after_items
       assert state.last_generated_code == hd(after_items).code
@@ -91,7 +92,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       sysop = actor_fixture(:sysop)
       AccountsFixtures.invite_fixture(sysop, %{code: "INVITEAVAILABLE001"})
       AccountsFixtures.invite_fixture(sysop, %{code: "INVITEAVAILABLE002"})
-      {:ok, items} = Accounts.list_invites(sysop)
+      {:ok, items} = Invites.list_invites(sysop)
       selected_index = Enum.find_index(items, &(&1.code == "INVITEAVAILABLE001"))
 
       state = InvitesState.new(items: items, selected_index: selected_index)
@@ -104,14 +105,14 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert revoked_state.error == nil
 
       assert {:ok, %{status: :revoked, revoked_at: %DateTime{}}} =
-               Accounts.get_invite_status("INVITEAVAILABLE001")
+               Invites.get_invite_status("INVITEAVAILABLE001")
     end
 
     test "unauthorized actor revoke sets error and leaves persisted invite fields unchanged" do
       sysop = actor_fixture(:sysop)
       user = AccountsFixtures.user_fixture()
       invite = AccountsFixtures.invite_fixture(sysop)
-      {:ok, items} = Accounts.list_invites(sysop)
+      {:ok, items} = Invites.list_invites(sysop)
       state = InvitesState.new(items: items, selected_index: 0, last_generated_code: "OLD")
       before_status = invite_status!(invite.code)
 
@@ -134,7 +135,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       |> Ecto.Changeset.change(consumed_at: now, consumed_by_user_id: user.id)
       |> Repo.update!()
 
-      {:ok, items} = Accounts.list_invites(sysop)
+      {:ok, items} = Invites.list_invites(sysop)
       state = InvitesState.new(items: items)
       before_status = invite_status!(invite.code)
 
@@ -155,7 +156,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       |> Ecto.Changeset.change(revoked_at: now)
       |> Repo.update!()
 
-      {:ok, items} = Accounts.list_invites(sysop)
+      {:ok, items} = Invites.list_invites(sysop)
       state = InvitesState.new(items: items)
       before_status = invite_status!(invite.code)
 
@@ -236,7 +237,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
 
       assert :no_match = InvitesActions.handle_key("x", sysop, state)
 
-      assert {:ok, %{code: status_code}} = Accounts.get_invite_status(invite.code)
+      assert {:ok, %{code: status_code}} = Invites.get_invite_status(invite.code)
       assert status_code == invite.code
     end
   end
@@ -263,7 +264,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
   end
 
   defp invite_status!(code) do
-    assert {:ok, status} = Accounts.get_invite_status(code)
+    assert {:ok, status} = Invites.get_invite_status(code)
     status
   end
 end

@@ -43,6 +43,7 @@ defmodule Foglet.TUI.Screens.Login do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.{Accounts, Config}
+  alias Foglet.Accounts.{Auth, Verification}
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -350,7 +351,7 @@ defmodule Foglet.TUI.Screens.Login do
     identifier = login_ss.identifier_input.raxol_state.value
 
     message =
-      case Accounts.request_password_reset_delivery(identifier) do
+      case Verification.request_password_reset_delivery(identifier) do
         {:ok, :generic_response} -> @reset_success_message
         {:error, :unavailable} -> @reset_unavailable_message
       end
@@ -367,7 +368,7 @@ defmodule Foglet.TUI.Screens.Login do
     # post_login_screen/1 returns :verify | :main_menu directly (no {:ok, _} wrapper).
     # Status check is inside the success branch — pending/suspended users authenticate
     # successfully but must not reach the main flow.
-    with {:ok, user} <- Accounts.authenticate_by_password(handle_value, password_value),
+    with {:ok, user} <- Auth.authenticate_by_password(handle_value, password_value),
          :active <- user.status do
       screen = Accounts.post_login_screen(user)
       handle_auth_success(state, user, screen)
@@ -418,7 +419,7 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   defp start_verify_flow(state, user) do
-    case Accounts.deliver_verification_code(user) do
+    case Verification.deliver_verification_code(user) do
       {:ok, :attempted} ->
         {:update,
          %{
