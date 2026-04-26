@@ -26,6 +26,7 @@ must_haves:
   truths:
     - "`Foglet.TUI.TextWidth.wrap/2` exists, returns a list of strings, preserves grapheme clusters, prefers word boundaries, and never emits a line wider than the requested display width."
     - "`Display.Table` and `ConsoleTable` can be initialized with a width budget and resolve compact/responsive column widths before rendering."
+    - "Width budgets are drawable content widths, not raw terminal widths. The screen frame border consumes at least 2 columns, so a string whose display width equals the terminal column count is already too wide for framed content."
     - "Table cell values are elided at cell boundaries with `…` using `TextWidth.truncate/2` or `TextWidth.truncate/3`, not pre-truncated with `String.slice/3` in screen state builders."
   artifacts:
     - path: "lib/foglet_bbs/tui/text_width.ex"
@@ -101,6 +102,7 @@ Add the shared width primitives that later Phase 26 screen fixes depend on: `Tex
   </read_first>
   <action>
     Extend `Display.Table.init/1` to accept optional `:width` and `:page_size`, store the resolved width in the table state, and normalize columns before Raxol render:
+    - Treat `:width` as the drawable content width available inside the caller's container, not the raw terminal width. If a caller only has `{terminal_cols, terminal_rows}`, it must subtract the outer frame border first; at minimum `terminal_cols - 2` for left/right border glyphs, and usually `terminal_cols - 4` when `ScreenFrame` padding is also in play.
     - Integer column widths remain honored when total width fits.
     - `:auto` columns receive a share of remaining width.
     - Optional ratio columns may be represented as `%{width: {:ratio, n}}`; resolve ratios to integers.
@@ -116,6 +118,7 @@ Add the shared width primitives that later Phase 26 screen fixes depend on: `Tex
   <acceptance_criteria>
     - `rtk rg -n "TextWidth\\.truncate" lib/foglet_bbs/tui/widgets/display/table.ex` returns at least one match.
     - `rtk rg -n "width:" lib/foglet_bbs/tui/widgets/display/console_table.ex` returns at least one match.
+    - Table and ConsoleTable tests include a framed-width case: given a 64-column terminal, the width budget passed to table rendering is no greater than 62, and no flattened table line exceeds that drawable width.
     - Table tests assert a long cell at width 24 renders `…` and no flattened line exceeds 24 display columns.
     - ConsoleTable tests assert Code/Status/Created/Used by columns remain present with a compact width and rendered text includes separator whitespace between headers.
     - `rtk mix test test/foglet_bbs/tui/widgets/display/table_test.exs test/foglet_bbs/tui/widgets/display/console_table_test.exs` exits 0.
@@ -138,4 +141,3 @@ Phase 26 Plan 01 is presentation-only. It introduces no new domain mutations, pe
 - Table rendering can fit compact widths without overflowing flattened render output.
 - Existing table and ConsoleTable behavior tests still pass.
 </success_criteria>
-
