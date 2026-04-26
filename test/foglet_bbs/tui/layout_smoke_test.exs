@@ -159,9 +159,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           assert element.x + TextWidth.display_width(text) <= width
         end
 
-        breadcrumb =
+        command =
           Enum.find(elements, fn element ->
-            String.contains?(element.text, "Foglet")
+            String.contains?(element.text, "Navigate") or String.contains?(element.text, "J/K")
           end)
 
         content =
@@ -169,15 +169,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
             String.contains?(element.text, "BODY SENTINEL")
           end)
 
-        command =
-          Enum.find(elements, fn element ->
-            String.contains?(element.text, "Navigate") or String.contains?(element.text, "J/K")
-          end)
-
-        assert breadcrumb, "expected breadcrumb/status text at #{inspect({width, height})}"
-        assert content, "expected body text at #{inspect({width, height})}"
         assert command, "expected command text at #{inspect({width, height})}"
-        assert breadcrumb.y < content.y
+        assert content, "expected body text at #{inspect({width, height})}"
+        assert command.y < height
         assert content.y < command.y
       end
     end

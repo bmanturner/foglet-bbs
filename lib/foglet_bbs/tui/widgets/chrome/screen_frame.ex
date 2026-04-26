@@ -3,7 +3,7 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
   Outer screen chrome widget for Foglet BBS (FRAME-01, FRAME-02).
 
   Wraps every screen with:
-    outer bordered box → column → StatusBar → divider → content_element → divider → CommandBar
+    outer bordered box with top title → column → content_element → CommandBar
 
   Signature (locked — D-05):
     ScreenFrame.render(state, title_or_chrome, content_element, commands)
@@ -16,12 +16,13 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
                       column/row/box do...end block in the screen module)
     commands        — grouped Chrome V2 commands or legacy key tuples
 
-  Internal layout (locked — D-06):
-    outer bordered box → column → StatusBar → divider → content_element → divider → CommandBar
+  Internal layout:
+    outer bordered box with title → column → content_element → CommandBar
   """
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.{BreadcrumbBar, CommandBar, Normalizer, StatusBar}
 
@@ -34,24 +35,52 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
     chrome = chrome_model(state, title_or_chrome, commands)
     inner_width = inner_width(state)
 
-    box style: %{border: :single, padding: 1, border_fg: theme.border.fg} do
+    title = frame_title(state, chrome, inner_width)
+
+    box_opts = [
+      style: %{border: :single, padding: 1, border_fg: theme.border.fg, fg: theme.status_bar.fg},
+      title: title
+    ]
+
+    box box_opts do
       # Kept `justify_content: :space_between` over `spacer()` per 08-06 audit —
       # would require knowing `content_element`'s height at call time.
       column style: %{gap: 0, justify_content: :space_between} do
-        [
-          column style: %{gap: 0} do
-            [
-              StatusBar.render(state, chrome, width: inner_width),
-              divider(char: "─", style: %{fg: theme.border.fg}),
-              content_element,
-              divider(char: "─", style: %{fg: theme.border.fg})
-            ]
-          end,
-          CommandBar.render(theme, chrome.command_groups, width: inner_width)
-        ]
+        [content_element, CommandBar.render(theme, chrome.command_groups, width: inner_width)]
       end
     end
   end
+
+  defp frame_title(state, chrome, width) do
+    title = BreadcrumbBar.format(chrome.breadcrumb_parts, width: width)
+    status_atoms = Map.get(chrome, :status_atoms, StatusBar.status_atoms(state))
+    status = Enum.join(status_atoms, " | ")
+
+    format_frame_title(title, status, width)
+  end
+
+  defp format_frame_title(left, right, nil), do: combine_title_parts(left, right)
+
+  defp format_frame_title(left, right, width) when is_integer(width) do
+    right_width = TextWidth.display_width(right)
+
+    case right do
+      "" ->
+        TextWidth.truncate(left, width)
+
+      _ ->
+        left_space = max(width - right_width - 1, 0)
+
+        truncated_left = TextWidth.truncate(left, left_space)
+        truncated_left_width = TextWidth.display_width(truncated_left)
+        padding = max(width - truncated_left_width - right_width - 1, 0)
+
+        truncated_left <> String.duplicate(" ", padding) <> " " <> right
+    end
+  end
+
+  defp combine_title_parts(left, ""), do: left
+  defp combine_title_parts(left, right), do: left <> " " <> right
 
   defp chrome_model(state, title_or_chrome, commands) do
     title_or_chrome
