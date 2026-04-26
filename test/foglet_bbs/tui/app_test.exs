@@ -34,7 +34,7 @@ defmodule Foglet.TUI.AppTest do
   setup do
     Config.init_cache()
     :ets.insert(:foglet_config, {"registration_mode", "open"})
-    :ets.insert(:foglet_config, {"delivery_mode", "none"})
+    :ets.insert(:foglet_config, {"delivery_mode", "no_email"})
     :ets.insert(:foglet_config, {"require_email_verification", false})
     :ets.insert(:foglet_config, {"email_verify_resend_cooldown_seconds", 60})
     :ok

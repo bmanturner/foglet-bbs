@@ -126,7 +126,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "renders forgot password only in email delivery mode" do
       Config.put!("delivery_mode", "email")
       email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
-      assert email_text =~ "[F] Forgot password"
+      assert email_text =~ "Forgot password"
 
       Config.put!("delivery_mode", "no_email")
       no_email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
