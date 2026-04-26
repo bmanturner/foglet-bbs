@@ -10,6 +10,8 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Moderation
   alias Foglet.TUI.Screens.Shared.InvitesState
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias FogletBbs.AccountsFixtures
 
   defp build_state(role, user \\ nil) do
@@ -758,6 +760,24 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   end
 
   describe "INVITES ConsoleTable primitive presence" do
+    test "shared invite table keeps all headers visible at compact width" do
+      sample_invite = %{
+        code: "ABCDEFGH12345678",
+        status: :available,
+        inserted_at: ~U[2026-01-01 00:00:00Z],
+        consumed_by_user_id: "user-123"
+      }
+
+      table = InvitesState.build_table([sample_invite], width: 60)
+      flat = table |> ConsoleTable.render(theme: Theme.default()) |> collect_text_values()
+      joined = Enum.join(flat, " ")
+
+      for header <- ["Code", "Status", "Created", "Used by"] do
+        assert joined =~ header,
+               "Expected #{header} to render at compact width, got: #{inspect(flat)}"
+      end
+    end
+
     test "INVITES tab renders ConsoleTable header with Code/Status/Created/Used by columns when rows present" do
       sample_invite = %{
         code: "ABC123",

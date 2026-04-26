@@ -14,11 +14,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   @invite_columns [
-    %{key: :code, label: "Code", width: 18},
-    %{key: :status, label: "Status", width: 10},
-    %{key: :created, label: "Created", width: 11},
-    %{key: :used_by, label: "Used by", width: 16}
+    %{key: :code, label: "Code", width: {:ratio, 4}},
+    %{key: :status, label: "Status", width: {:ratio, 2}},
+    %{key: :created, label: "Created", width: {:ratio, 2}},
+    %{key: :used_by, label: "Used by", width: {:ratio, 3}}
   ]
+  @default_width 60
 
   @type invite_status :: map()
 
@@ -99,11 +100,17 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   @doc """
   Builds the default ConsoleTable for the INVITES tab.
   """
-  @spec build_table([invite_status()]) :: ConsoleTable.t()
-  def build_table(items), do: build_table(items, 0)
+  @spec build_table([invite_status()], keyword() | non_neg_integer()) :: ConsoleTable.t()
+  def build_table(items, opts_or_selected_idx \\ [])
+
+  def build_table(items, opts) when is_list(opts), do: build_table(items, 0, opts)
 
   @spec build_table([invite_status()], non_neg_integer()) :: ConsoleTable.t()
-  def build_table(items, _selected_idx) when is_list(items) do
+  def build_table(items, selected_idx) when is_integer(selected_idx),
+    do: build_table(items, selected_idx, [])
+
+  @spec build_table([invite_status()], non_neg_integer(), keyword()) :: ConsoleTable.t()
+  def build_table(items, _selected_idx, opts) when is_list(items) and is_list(opts) do
     rows =
       Enum.map(items, fn item ->
         status_str = item |> Map.get(:status) |> to_string()
@@ -133,6 +140,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
       columns: @invite_columns,
       rows: rows,
       selectable: true,
+      width: Keyword.get(opts, :width, @default_width),
       empty_state: "No invites issued yet."
     )
   end
