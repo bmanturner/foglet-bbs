@@ -178,6 +178,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
     assert length(initial_rows) <= 22
     assert initial_text =~ "Overlarge"
+    assert initial_text =~ "Overlarge Board 06"
     refute initial_text =~ "Overlarge Board 28"
 
     s =

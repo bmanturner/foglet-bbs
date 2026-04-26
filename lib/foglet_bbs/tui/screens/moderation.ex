@@ -122,7 +122,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     theme = Theme.from_state(state)
     width = inner_width(state)
     height = body_height(state)
-    content = render_content(ss, theme, width, height, user_timezone(state))
+    content = render_content(ss, theme, width, height, state.current_user, user_timezone(state))
     ScreenFrame.render(state, moderation_chrome(), content, @key_list)
   end
 
@@ -145,16 +145,16 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_content(ss, theme, width, height, timezone) do
+  defp render_content(ss, theme, width, height, user, timezone) do
     active_label = Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab, "QUEUE")
-    tab_body = render_tab_body(active_label, ss, theme, width, height, timezone)
+    tab_body = render_tab_body(active_label, ss, theme, width, height, user, timezone)
 
     column style: %{gap: 0} do
       [Tabs.render(ss.tabs, theme: theme, width: width), tab_body]
     end
   end
 
-  defp render_tab_body("QUEUE", ss, theme, _width, _height, _timezone) do
+  defp render_tab_body("QUEUE", ss, theme, _width, _height, _user, _timezone) do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
@@ -164,8 +164,8 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("LOG", ss, theme, width, height, timezone) do
-    log_table = fresh_log_table(ss, width, height, timezone)
+  defp render_tab_body("LOG", ss, theme, width, height, user, timezone) do
+    log_table = fresh_log_table(ss, width, height, user, timezone)
     log_summary = State.build_log_summary(ss.scopes, ss.error, ss.mod_log)
     children = compact_table_children(log_summary, log_table, theme, width, height)
 
@@ -174,7 +174,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("USERS", ss, theme, width, height, _timezone) do
+  defp render_tab_body("USERS", ss, theme, width, height, _user, _timezone) do
     users_table = fresh_users_table(ss, width, height)
     users_summary = State.build_users_summary(ss.users, ss.error)
     children = compact_table_children(users_summary, users_table, theme, width, height)
@@ -184,7 +184,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("SANCTIONS", ss, theme, _width, _height, _timezone) do
+  defp render_tab_body("SANCTIONS", ss, theme, _width, _height, _user, _timezone) do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
@@ -194,7 +194,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("BOARDS", ss, theme, width, height, _timezone) do
+  defp render_tab_body("BOARDS", ss, theme, width, height, _user, _timezone) do
     boards_table = fresh_boards_table(ss, width, height)
     boards_summary = State.build_boards_summary(ss.scopes, ss.boards, ss.error)
     children = compact_table_children(boards_summary, boards_table, theme, width, height)
@@ -204,11 +204,11 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("INVITES", ss, theme, _width, _height, _timezone) do
+  defp render_tab_body("INVITES", ss, theme, _width, _height, _user, _timezone) do
     InvitesSurface.render(ss.invites, theme)
   end
 
-  defp render_tab_body(_label, _ss, theme, _width, _height, _timezone) do
+  defp render_tab_body(_label, _ss, theme, _width, _height, _user, _timezone) do
     column style: %{gap: 0} do
       [text("No report queue workflow is available in v1.1.", fg: theme.dim.fg)]
     end
@@ -337,10 +337,11 @@ defmodule Foglet.TUI.Screens.Moderation do
   # without rebuilding the ConsoleTable) still produce correct output.
   # In production the State.new/1 path pre-builds tables; the rebuild here
   # is cheap (bounded list) and idempotent.
-  defp fresh_log_table(%{mod_log: rows}, width, height, timezone) do
+  defp fresh_log_table(%{mod_log: rows}, width, height, user, timezone) do
     State.build_log_table(rows,
       width: width,
       page_size: page_size(height),
+      user: user,
       timezone: timezone
     )
   end

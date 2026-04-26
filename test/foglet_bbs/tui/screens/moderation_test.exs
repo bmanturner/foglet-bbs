@@ -215,9 +215,15 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert text_index(flat, "new-mod") < text_index(flat, "old-mod")
     end
 
-    test "LOG renders compact timestamps in the current user's timezone", %{state: state} do
+    test "LOG renders compact timestamps in the current user's timezone and time format",
+         %{state: state} do
       row = audit_row("mod", "timezone body", "reason", ~U[2026-04-24 13:05:00Z])
-      user = %{state.current_user | timezone: "America/Chicago"}
+
+      user = %{
+        state.current_user
+        | timezone: "America/Chicago",
+          preferences: %{"time_format" => "12h"}
+      }
 
       flat =
         %{state | current_user: user}
@@ -227,7 +233,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       joined = Enum.join(flat, "\n")
 
-      assert joined =~ "04-24 08:05"
+      assert joined =~ "04-24 08:05 AM"
       refute joined =~ "2026-04-24"
     end
 

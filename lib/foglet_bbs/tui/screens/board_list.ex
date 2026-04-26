@@ -68,7 +68,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     height = body_height(state)
     feedback_rows = feedback_row_count(ss)
     detail? = detail_strip?(height, feedback_rows)
-    spacer? = detail? and height - feedback_rows >= 5
+    spacer? = detail? and height - feedback_rows >= 20
     inspector? = wide_inspector?(width, height, feedback_rows, detail?, spacer?)
 
     reserved_rows =

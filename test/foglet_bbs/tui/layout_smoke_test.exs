@@ -1880,12 +1880,54 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       |> content_text_elements()
       |> Enum.group_by(& &1.y)
       |> Map.values()
-      |> Enum.find([], fn row -> Enum.any?(row, &String.contains?(&1.text, "PROFILE")) end)
+      |> Enum.find([], fn row ->
+        Enum.any?(row, &String.contains?(&1.text, "PROFILE")) and
+          Enum.any?(row, &String.contains?(&1.text, "PREFS"))
+      end)
       |> Enum.sort_by(& &1.x)
       |> Enum.map_join(& &1.text)
 
     assert TextWidth.display_width(tab_row) <= 60
     assert tab_row =~ "PROFILE"
+    refute tab_row =~ "┐"
+    refute tab_row =~ "│"
+  end
+
+  test "sysop shell clamps tab row to 64-column framed content budget without inner border glyphs" do
+    user = %{
+      id: "u2",
+      handle: "root",
+      role: :sysop,
+      status: :active,
+      timezone: "Etc/UTC",
+      preferences: %{"time_format" => "12h"}
+    }
+
+    state = %App{
+      current_screen: :sysop,
+      current_user: user,
+      screen_state: %{sysop: Sysop.init_screen_state(invites_visible?: true)},
+      terminal_size: {64, 22}
+    }
+
+    positioned = state |> Sysop.render() |> apply_at_size({64, 22})
+
+    tab_row =
+      positioned
+      |> content_text_elements()
+      |> Enum.group_by(& &1.y)
+      |> Map.values()
+      |> Enum.find([], fn row ->
+        Enum.any?(row, &String.contains?(&1.text, "BOARDS")) and
+          Enum.any?(row, &String.contains?(&1.text, "LIMITS"))
+      end)
+      |> Enum.sort_by(& &1.x)
+      |> Enum.map_join(& &1.text)
+
+    assert TextWidth.display_width(tab_row) <= 60
+    assert tab_row =~ "SITE"
+    refute tab_row =~ "┐"
+    refute tab_row =~ "│"
   end
 
   test "moderation shell renders all five tab labels within height=24" do

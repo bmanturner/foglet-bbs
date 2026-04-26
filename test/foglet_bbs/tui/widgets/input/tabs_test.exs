@@ -136,6 +136,7 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       refute is_nil(result)
       assert is_map(result)
       assert Map.has_key?(result, :type)
+      assert result.type in [:row, :flex]
     end
 
     test "rendered output contains tab labels" do

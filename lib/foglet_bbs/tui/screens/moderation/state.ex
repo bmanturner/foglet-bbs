@@ -21,6 +21,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
+  alias Foglet.TUI.Widgets.Chrome.ClockFormatter
   alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.Input.Tabs
 
@@ -79,6 +80,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   @spec build_log_table([map()], keyword()) :: ConsoleTable.t()
   def build_log_table(rows, opts \\ []) do
     timezone = Keyword.get(opts, :timezone)
+    user = Keyword.get(opts, :user)
 
     items =
       Enum.map(rows, fn row ->
@@ -90,7 +92,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
         when_label =
           case Map.get(row, :inserted_at) do
-            %DateTime{} = dt -> format_log_timestamp(dt, timezone)
+            %DateTime{} = dt -> format_log_timestamp(dt, user, timezone)
             _ -> ""
           end
 
@@ -108,7 +110,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
     [
       columns: [
-        %{key: :when, label: "When", width: 10},
+        %{key: :when, label: "When", width: 14},
         %{key: :actor, label: "Actor", width: 9},
         %{key: :action, label: "Action", width: 9},
         %{key: :body, label: "Body", width: 14},
@@ -319,14 +321,10 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     end
   end
 
-  defp format_log_timestamp(dt, timezone) do
-    timezone = valid_timezone(timezone)
+  defp format_log_timestamp(dt, user, timezone) do
+    localized = shift_log_datetime(dt, user, timezone)
 
-    dt
-    |> DateTime.shift_zone!(timezone)
-    |> Calendar.strftime("%m-%d %H:%M")
-  rescue
-    _ -> Calendar.strftime(dt, "%m-%d %H:%M")
+    "#{Calendar.strftime(localized, "%m-%d")} #{ClockFormatter.format(dt, normalize_clock_user(user, timezone))}"
   end
 
   defp valid_timezone(timezone) when is_binary(timezone) do
@@ -336,6 +334,26 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   end
 
   defp valid_timezone(_timezone), do: "Etc/UTC"
+
+  defp shift_log_datetime(dt, user, timezone) do
+    timezone = log_timezone(user, timezone)
+
+    case DateTime.shift_zone(dt, timezone) do
+      {:ok, localized} -> localized
+      _ -> dt
+    end
+  rescue
+    _ -> dt
+  end
+
+  defp normalize_clock_user(user, timezone) when is_map(user) do
+    Map.put(user, :timezone, log_timezone(user, timezone))
+  end
+
+  defp normalize_clock_user(_user, timezone), do: %{timezone: log_timezone(nil, timezone)}
+
+  defp log_timezone(%{timezone: timezone}, _fallback), do: valid_timezone(timezone)
+  defp log_timezone(_user, fallback), do: valid_timezone(fallback)
 
   defp truncate(value, limit) do
     value = to_string(value)

@@ -95,16 +95,14 @@ defmodule Foglet.TUI.Widgets.Input.Tabs do
 
     mappings = Presentation.theme_mappings().tabs
 
-    box style: %{border_fg: Map.fetch!(theme, mappings.border).fg, padding: 0} do
-      row style: %{gap: 0} do
-        rs
-        |> Map.get(:tabs, [])
-        |> Enum.with_index()
-        |> clamp_tab_labels(Map.get(rs, :active_index, 0), width)
-        |> Enum.map(&render_tab(&1, Map.get(rs, :active_index, 0), theme, mappings))
-        |> Enum.intersperse([text(@tab_gap, fg: Map.fetch!(theme, mappings.border).fg)])
-        |> List.flatten()
-      end
+    row style: %{gap: 0} do
+      rs
+      |> Map.get(:tabs, [])
+      |> Enum.with_index()
+      |> clamp_tab_labels(Map.get(rs, :active_index, 0), width)
+      |> Enum.map(&render_tab(&1, Map.get(rs, :active_index, 0), theme, mappings))
+      |> Enum.intersperse([text(@tab_gap, fg: Map.fetch!(theme, mappings.border).fg)])
+      |> List.flatten()
     end
   end
 
