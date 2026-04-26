@@ -194,11 +194,14 @@ defmodule Raxol.UI.Layout.Engine do
   end
 
   # Text components expose :style as a list of atoms ([:bold, :underline]) in the
-  # high-level DSL. Downstream consumers (StyleProcessor, ElementRenderer) expect
-  # a map. Normalize both here so fg/bg AND text attributes survive layout.
+  # high-level DSL. StyleInheritance may also produce keyword-like lists with
+  # {key, value} tuples when inheritable parent styles are merged in. Handle both
+  # forms so fg/bg AND text attributes survive layout.
   defp style_to_map(styles) when is_list(styles) do
-    Enum.reduce(styles, %{}, fn attr, acc when is_atom(attr) ->
-      Map.put(acc, attr, true)
+    Enum.reduce(styles, %{}, fn
+      {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
+      attr, acc when is_atom(attr) -> Map.put(acc, attr, true)
+      _other, acc -> acc
     end)
   end
 
