@@ -73,7 +73,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
     mode = Presentation.mode_for!(Map.get(state, :current_screen))
 
     case authenticated_user(state) do
-      nil -> ["guest"]
+      nil -> ["guest", ClockFormatter.format(clock_instant(state), nil)]
       user -> user_status_atoms(state, user, mode)
     end
   end

@@ -149,7 +149,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
       assert StatusBar.status_atoms(state) == ["@alice", "scope site", "mail degraded", "13:05"]
     end
 
-    test "guest state renders guest without fabricated optional atoms" do
+    test "guest state renders guest with clock and without fabricated optional atoms" do
       state = %{
         current_screen: :account,
         unread_count: 9,
@@ -158,7 +158,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
         session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]}
       }
 
-      assert StatusBar.status_atoms(state) == ["guest"]
+      assert StatusBar.status_atoms(state) == ["guest", "06:05 PM"]
     end
 
     test "uses Presentation.mode_for! with current_screen" do
