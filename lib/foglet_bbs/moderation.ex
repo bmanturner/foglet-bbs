@@ -8,6 +8,8 @@ defmodule Foglet.Moderation do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.QueryHelpers
+
   alias Foglet.Accounts.User
   alias Foglet.Authorization
   alias Foglet.Boards
@@ -116,7 +118,7 @@ defmodule Foglet.Moderation do
 
     scope_query =
       if :site in scopes do
-        dynamic([b], true)
+        dynamic([b: b], true)
       else
         board_ids =
           scopes
@@ -125,38 +127,38 @@ defmodule Foglet.Moderation do
             _scope -> []
           end)
 
-        dynamic([b], b.id in ^board_ids)
+        dynamic([b: b], b.id in ^board_ids)
       end
 
-    Repo.all(
-      from b in Board,
-        join: c in assoc(b, :category),
-        where: b.archived == false and c.archived == false,
-        where: ^scope_query,
-        order_by: [asc: c.display_order, asc: b.display_order],
-        limit: ^limit,
-        preload: [category: c]
-    )
+    from(b in Board, as: :b)
+    |> join(:inner, [b: b], c in assoc(b, :category), as: :c)
+    |> where(^scope_query)
+    |> order_by([b: b, c: c], asc: c.display_order, asc: b.display_order)
+    |> limit(^limit)
+    |> preload([b: b, c: c], category: c)
+    |> QueryHelpers.active_boards()
+    |> Repo.all()
     |> Enum.map(&board_row/1)
   end
 
   defp active_user_rows(opts) do
     limit = bounded_limit(Keyword.get(opts, :limit, @workspace_limit))
 
-    Repo.all(
-      from user in User,
-        where: user.status == :active and is_nil(user.deleted_at),
-        order_by: [asc: user.handle],
-        limit: ^limit,
-        select: %{
-          id: user.id,
-          handle: user.handle,
-          role: user.role,
-          status: user.status,
-          inserted_at: user.inserted_at,
-          last_seen_at: user.last_seen_at
-        }
+    from(user in User,
+      where: user.status == :active,
+      order_by: [asc: user.handle],
+      limit: ^limit,
+      select: %{
+        id: user.id,
+        handle: user.handle,
+        role: user.role,
+        status: user.status,
+        inserted_at: user.inserted_at,
+        last_seen_at: user.last_seen_at
+      }
     )
+    |> QueryHelpers.not_deleted()
+    |> Repo.all()
   end
 
   defp board_row(%Board{} = board) do

@@ -19,6 +19,8 @@ defmodule Foglet.Accounts do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.QueryHelpers
+
   alias Foglet.Accounts.{Email, Invite, SSHKey, User, UserToken}
   alias Foglet.{Config, Mailer}
   alias Foglet.Posts.Post
@@ -317,11 +319,9 @@ defmodule Foglet.Accounts do
     case Bodyguard.permit(Foglet.Authorization, :manage_user_status, actor, :site) do
       :ok ->
         users =
-          Repo.all(
-            from u in User,
-              where: is_nil(u.deleted_at),
-              order_by: [asc: u.inserted_at]
-          )
+          from(u in User, order_by: [asc: u.inserted_at])
+          |> QueryHelpers.not_deleted()
+          |> Repo.all()
 
         grouped = Enum.group_by(users, & &1.status)
 
@@ -546,12 +546,9 @@ defmodule Foglet.Accounts do
   defp notify_sysops_pending_registration(%User{} = pending_user) do
     case Config.delivery_mode() do
       "email" ->
-        Repo.all(
-          from u in User,
-            where:
-              u.role == :sysop and u.status == :active and is_nil(u.deleted_at) and
-                not is_nil(u.email)
-        )
+        from(u in User, where: u.role == :sysop and u.status == :active and not is_nil(u.email))
+        |> QueryHelpers.not_deleted()
+        |> Repo.all()
         |> Enum.each(fn sysop ->
           _ = Mailer.deliver(Email.pending_approval_notification(sysop, pending_user))
           :ok
