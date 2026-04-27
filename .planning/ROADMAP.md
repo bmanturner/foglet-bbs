@@ -80,7 +80,12 @@ Plans:
   4. Pressing Enter twice in rapid succession on a submittable form invokes the boundary call exactly once (`submit_state` enum gates re-entry); a `:submitting` state is visible during async work.
   5. Pressing `:tab :tab :char "x"` on a `[text, text, text]` form (initial `focus_index: 0`) lands the `"x"` in the third field's buffer, not the first, second, or any default field; widget-internal focus state is asserted absent for form-bearing widgets.
   6. Pressing Esc on a focused form on Account and Sysop Site visibly cancels the active edit context (or shows an honest "draft discarded" affordance) — the command bar's `[Esc] Cancel` hint is no longer a lie; verified at 64×22 and 80×24 SSH.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 28-01-PLAN.md — Modal.Form Up/Down focus, `:backtab`, configurable footer, single-source-of-truth tests (FORM-01..04)
+- [ ] 28-02-PLAN.md — Submit-state machine, input lock, `set_submit_state/2`, status row (FORM-05)
+- [ ] 28-03-PLAN.md — Honest Esc on Account Profile + Account Preferences (FORM-06)
+- [ ] 28-04-PLAN.md — Migrate Sysop SiteForm to Modal.Form wrapper, preserve Ctrl+S + validation + visibility (FORM-04, FORM-06)
 **UI hint**: yes
 
 ### Phase 29: Sysop Tab Lifecycle & Bodies
@@ -156,7 +161,7 @@ Plans:
 | 16-25 | v1.3 | 48/48 | Complete | 2026-04-26 |
 | 26 | v1.4 | 1/4 | In Progress | - |
 | 27 | v1.4 | 0/0 | Not started | - |
-| 28 | v1.4 | 0/0 | Not started | - |
+| 28 | v1.4 | 0/4 | Not started | - |
 | 29 | v1.4 | 0/0 | Not started | - |
 | 30 | v1.4 | 0/0 | Not started | - |
 | 31 | v1.4 | 0/0 | Not started | - |
