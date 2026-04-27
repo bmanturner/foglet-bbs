@@ -124,10 +124,18 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       `theme.dim.fg`. Tab-body consumers (Account Profile/Prefs, Sysop Site)
       should leave this default-off so the global command bar is the single
       advertiser of those keys; true overlay callers (centered modals) opt in.
+
+  Raises `ArgumentError` if `:fields` is an empty list (Phase 28 BL-03).
   """
   @spec init(keyword()) :: t()
   def init(opts) when is_list(opts) do
     fields = Keyword.fetch!(opts, :fields)
+
+    if fields == [] do
+      raise ArgumentError,
+            "Modal.Form requires at least one field; received an empty :fields list"
+    end
+
     field_states = Enum.map(fields, &build_field_state/1)
 
     %__MODULE__{
