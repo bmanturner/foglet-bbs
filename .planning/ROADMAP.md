@@ -133,7 +133,12 @@ Plans:
   2. The reset confirmation screen at 64×22 SSH wraps long messages across multiple rows via `TextWidth.wrap`; resizing from 132×50 to 64×22 mid-flow keeps content accessible (no silent truncation).
   3. With `delivery_mode = :no_email`, the reset confirmation copy honestly names the operator-assisted SSH path and points to the token-consume entry; the token-consume entry is reachable from both the Forgot Password flow and the Login menu.
   4. A user can enter a raw reset token plus new password in the new `:reset_consume` sub-state; on success they are returned to a logged-out menu and the token is single-use (a concurrent-consume test asserts exactly one of two parallel attempts wins, atomically inside `Repo.transact/1`); the token never appears in chrome/breadcrumb/status.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 31-01-PLAN.md — Accounts/Verification email reset side effects, sysop contacts, and atomic raw-token consume
+- [ ] 31-02-PLAN.md — Login Forgot Password menu, email validation, wrapped reset/no-email copy
+- [ ] 31-03-PLAN.md — Login reset-consume form and Accounts consume submission
+- [ ] 31-04-PLAN.md — Compact reset rendering and raw-token non-leak validation
 **UI hint**: yes
 
 ### Phase 32: Main Menu Chrome Polish
