@@ -150,8 +150,12 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
         {sync_back(new_state, new_form2), []}
 
       _other ->
-        # Defensive: stash empty or unexpected — treat as no-op submit.
-        {sync_back(state, new_form), []}
+        # Defensive: stash empty or unexpected — drive submit_state out of
+        # :submitting so the next event isn't lock-swallowed (BL-01 contract).
+        # Without this reset, sync_back/2 would persist `:submitting` back onto
+        # SState and the per-render rebuild would re-seed a locked form forever.
+        reset_form = ModalForm.set_submit_state(new_form, :idle)
+        {sync_back(state, reset_form), []}
     end
   end
 
