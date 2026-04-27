@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: milestone
 status: executing
 stopped_at: Completed 26-04-markdown-verification-PLAN.md
-last_updated: "2026-04-26T22:55:10.600Z"
-last_activity: 2026-04-26 -- Phase 27 execution started
+last_updated: "2026-04-26T23:25:47.061Z"
+last_activity: 2026-04-26 -- Phase 26 execution started
 progress:
   total_phases: 8
   completed_phases: 1
-  total_plans: 7
-  completed_plans: 4
-  percent: 57
+  total_plans: 8
+  completed_plans: 7
+  percent: 88
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 27 — cursor-breadcrumb-polish
+**Current focus:** Phase 26 — layout-width-foundations
 
 ## Current Position
 
-Phase: 27 (cursor-breadcrumb-polish) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 27
-Last activity: 2026-04-26 -- Phase 27 execution started
+Phase: 26 (layout-width-foundations) — EXECUTING
+Plan: 1 of 1
+Status: Executing Phase 26
+Last activity: 2026-04-26 -- Phase 26 execution started
 
 ## Performance Metrics
 
