@@ -76,27 +76,21 @@ defmodule Foglet.Accounts.VerificationTest do
       :ok
     end
 
-    test "email mode returns a generic response and delivers for an active handle match" do
+    test "email mode does not create a reset_password token for a handle-only identifier" do
+      # D-02/D-03: handle-only reset requests no longer create a token.
+      # The reset request path is email-only at the boundary level too.
       Config.put!("delivery_mode", "email")
       user = AccountsFixtures.user_fixture(%{handle: "resetme", email: "resetme@example.test"})
 
       assert {:ok, :generic_response} =
                Verification.request_password_reset_delivery("  resetme  ")
 
-      assert Repo.exists?(
+      refute Repo.exists?(
                from t in UserToken,
                  where: t.user_id == ^user.id and t.context == "reset_password"
              )
 
-      assert_email_sent(fn email ->
-        assert email.to == [{"resetme", "resetme@example.test"}]
-        assert email.subject == "Foglet password reset instructions"
-        assert email.text_body =~ "Return to the SSH terminal reset flow"
-        refute email.text_body =~ "/users/reset_password"
-        refute email.text_body =~ "http://"
-        refute email.text_body =~ "https://"
-        true
-      end)
+      refute_email_sent()
     end
 
     test "email mode returns a generic response and delivers for an active email match" do
@@ -113,35 +107,84 @@ defmodule Foglet.Accounts.VerificationTest do
                  where: t.user_id == ^user.id and t.context == "reset_password"
              )
 
-      assert_email_sent()
+      assert_email_sent(fn email ->
+        assert email.to == [{"emailreset", "emailreset@example.test"}]
+        assert email.subject == "Foglet password reset instructions"
+        assert email.text_body =~ "Return to the SSH terminal reset flow"
+        refute email.text_body =~ "/users/reset_password"
+        refute email.text_body =~ "http://"
+        refute email.text_body =~ "https://"
+        true
+      end)
     end
 
-    test "email mode returns the same generic response for unknown, deleted, pending, and suspended users" do
+    test "email mode returns the same generic response for unknown, deleted, pending, suspended, and rejected emails without creating tokens" do
+      # D-03/D-16: valid email-shaped submissions for unknown, deleted, pending,
+      # suspended, and rejected accounts return the same generic response and
+      # create no reset_password token rows.
       Config.put!("delivery_mode", "email")
-      deleted = AccountsFixtures.user_fixture(%{handle: "deletedreset"})
+
+      deleted =
+        AccountsFixtures.user_fixture(%{
+          handle: "deletedreset",
+          email: "deletedreset@example.test"
+        })
+
       {:ok, _deleted} = Accounts.delete_user(deleted)
 
       pending =
-        AccountsFixtures.user_fixture(%{handle: "pendingreset"})
+        AccountsFixtures.user_fixture(%{
+          handle: "pendingreset",
+          email: "pendingreset@example.test"
+        })
         |> User.status_changeset(%{status: :pending})
         |> Repo.update!()
 
       suspended =
-        AccountsFixtures.user_fixture(%{handle: "suspendedreset"})
+        AccountsFixtures.user_fixture(%{
+          handle: "suspendedreset",
+          email: "suspendedreset@example.test"
+        })
         |> User.status_changeset(%{status: :suspended})
         |> Repo.update!()
 
-      for identifier <- ["nobody", deleted.handle, pending.handle, suspended.handle] do
+      rejected =
+        AccountsFixtures.user_fixture(%{
+          handle: "rejectedreset",
+          email: "rejectedreset@example.test"
+        })
+        |> User.status_changeset(%{status: :rejected})
+        |> Repo.update!()
+
+      identifiers = [
+        "nobody@example.test",
+        # original (pre-deletion) email — deleted_user.email is rewritten by
+        # deletion_changeset to deleted-<id>@localhost, so this shape no longer
+        # matches anything in the DB.
+        "deletedreset@example.test",
+        pending.email,
+        suspended.email,
+        rejected.email
+      ]
+
+      for identifier <- identifiers do
         assert {:ok, :generic_response} =
                  Verification.request_password_reset_delivery(identifier)
       end
 
-      for user <- [deleted, pending, suspended] do
+      for user <- [pending, suspended, rejected] do
         refute Repo.exists?(
                  from t in UserToken,
                    where: t.user_id == ^user.id and t.context == "reset_password"
                )
       end
+
+      # Deleted user's email was rewritten on anonymization; assert no
+      # reset_password token exists for that user_id either.
+      refute Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^deleted.id and t.context == "reset_password"
+             )
 
       refute_email_sent()
     end
@@ -153,9 +196,11 @@ defmodule Foglet.Accounts.VerificationTest do
         adapter: FogletBbs.VerificationTest.FailingMailerAdapter
       )
 
-      user = AccountsFixtures.user_fixture(%{handle: "failreset"})
+      user =
+        AccountsFixtures.user_fixture(%{handle: "failreset", email: "failreset@example.test"})
 
-      assert {:ok, :generic_response} = Verification.request_password_reset_delivery("failreset")
+      assert {:ok, :generic_response} =
+               Verification.request_password_reset_delivery("failreset@example.test")
 
       assert Repo.exists?(
                from t in UserToken,
@@ -193,6 +238,189 @@ defmodule Foglet.Accounts.VerificationTest do
       assert Argon2.verify_pass("brandnew1", updated.password_hash)
       refute Argon2.verify_pass("original1", updated.password_hash)
 
+      refute Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+    end
+  end
+
+  describe "active_sysop_contact_emails/0 (D-13/D-14)" do
+    test "returns only active, non-deleted sysop emails sorted deterministically" do
+      # Two active sysops (visible).
+      active_sysop_a = persist_sysop(%{handle: "sysopalpha", email: "alpha@sysop.test"})
+      active_sysop_b = persist_sysop(%{handle: "sysopbravo", email: "bravo@sysop.test"})
+
+      # Inactive sysops in each non-active status (must NOT appear).
+      _pending_sysop =
+        persist_sysop(%{handle: "syspending", email: "pending@sysop.test"})
+        |> User.status_changeset(%{status: :pending})
+        |> Repo.update!()
+
+      _suspended_sysop =
+        persist_sysop(%{handle: "syssuspended", email: "suspended@sysop.test"})
+        |> User.status_changeset(%{status: :suspended})
+        |> Repo.update!()
+
+      _rejected_sysop =
+        persist_sysop(%{handle: "sysrejected", email: "rejected@sysop.test"})
+        |> User.status_changeset(%{status: :rejected})
+        |> Repo.update!()
+
+      # Deleted sysop (must NOT appear).
+      deleted_sysop = persist_sysop(%{handle: "sysdeleted", email: "deleted@sysop.test"})
+      {:ok, _} = Accounts.delete_user(deleted_sysop)
+
+      # Active non-sysop user (must NOT appear).
+      _active_user =
+        AccountsFixtures.user_fixture(%{handle: "regularuser", email: "regular@user.test"})
+
+      # Active mod (must NOT appear).
+      _active_mod =
+        AccountsFixtures.user_fixture(%{handle: "modonly", email: "mod@only.test"})
+        |> User.role_changeset(%{role: :mod})
+        |> Repo.update!()
+
+      result = Verification.active_sysop_contact_emails()
+
+      assert result == [active_sysop_a.email, active_sysop_b.email] |> Enum.sort()
+      refute "pending@sysop.test" in result
+      refute "suspended@sysop.test" in result
+      refute "rejected@sysop.test" in result
+      refute "regular@user.test" in result
+      refute "mod@only.test" in result
+      # Anonymized email of the deleted user is in deleted-<id>@localhost form.
+      refute "deleted@sysop.test" in result
+    end
+
+    test "returns an empty list when no active sysops exist" do
+      # Make sure there are no active sysops in the DB.
+      assert Verification.active_sysop_contact_emails() == []
+    end
+
+    defp persist_sysop(attrs) do
+      AccountsFixtures.user_fixture(attrs)
+      |> User.role_changeset(%{role: :sysop})
+      |> Repo.update!()
+    end
+  end
+
+  describe "consume_reset_token/2 (D-08/D-09/D-10/D-16)" do
+    test "valid raw token updates the password and removes outstanding reset tokens" do
+      user = AccountsFixtures.user_fixture(%{password: "original1"})
+      {raw_token, _struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
+      # Add a second outstanding reset token to prove all are removed.
+      {_other_raw, _} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      assert {:ok, %User{id: id}} =
+               Verification.consume_reset_token(raw_token, %{password: "brandnew1"})
+
+      assert id == user.id
+
+      reloaded = Repo.get!(User, user.id)
+      assert Argon2.verify_pass("brandnew1", reloaded.password_hash)
+      refute Argon2.verify_pass("original1", reloaded.password_hash)
+
+      refute Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+    end
+
+    test "an already-used raw token cannot be consumed a second time" do
+      user = AccountsFixtures.user_fixture(%{password: "original1"})
+      {raw_token, _struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      assert {:ok, _user} =
+               Verification.consume_reset_token(raw_token, %{password: "brandnew1"})
+
+      assert {:error, :invalid_or_expired} =
+               Verification.consume_reset_token(raw_token, %{password: "anothernew1"})
+
+      reloaded = Repo.get!(User, user.id)
+      assert Argon2.verify_pass("brandnew1", reloaded.password_hash)
+      refute Argon2.verify_pass("anothernew1", reloaded.password_hash)
+    end
+
+    test "an unknown raw token returns invalid_or_expired without changing any password" do
+      user = AccountsFixtures.user_fixture(%{password: "original1"})
+      # Generate a properly-encoded but unrelated token (never inserted).
+      bogus_raw =
+        :crypto.strong_rand_bytes(UserToken.rand_size())
+        |> Base.url_encode64(padding: false)
+
+      assert {:error, :invalid_or_expired} =
+               Verification.consume_reset_token(bogus_raw, %{password: "brandnew1"})
+
+      reloaded = Repo.get!(User, user.id)
+      assert Argon2.verify_pass("original1", reloaded.password_hash)
+    end
+
+    test "a malformed raw token returns invalid_or_expired" do
+      assert {:error, :invalid_or_expired} =
+               Verification.consume_reset_token("not!valid!base64*", %{password: "brandnew1"})
+    end
+
+    test "an expired raw token returns invalid_or_expired and does not change the password" do
+      user = AccountsFixtures.user_fixture(%{password: "original1"})
+      {raw_token, struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      # Backdate inserted_at past the reset_password validity window.
+      validity_days = UserToken.validity_days("reset_password")
+      backdate = DateTime.utc_now() |> DateTime.add(-(validity_days + 1) * 86_400, :second)
+
+      Repo.update_all(from(t in UserToken, where: t.id == ^struct.id),
+        set: [inserted_at: backdate]
+      )
+
+      assert {:error, :invalid_or_expired} =
+               Verification.consume_reset_token(raw_token, %{password: "brandnew1"})
+
+      reloaded = Repo.get!(User, user.id)
+      assert Argon2.verify_pass("original1", reloaded.password_hash)
+    end
+
+    test "an invalid password returns a changeset error and does not consume the token" do
+      user = AccountsFixtures.user_fixture(%{password: "original1"})
+      {raw_token, _struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      assert {:error, %Ecto.Changeset{}} =
+               Verification.consume_reset_token(raw_token, %{password: "short"})
+
+      reloaded = Repo.get!(User, user.id)
+      assert Argon2.verify_pass("original1", reloaded.password_hash)
+
+      # Token row must NOT have been deleted on validation failure.
+      assert Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+    end
+
+    test "concurrent consumption of the same raw token yields exactly one success" do
+      user = AccountsFixtures.user_fixture(%{password: "original1"})
+      {raw_token, _struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      parent = self()
+
+      # Each parallel task must check itself out of the SQL sandbox.
+      tasks =
+        for i <- 1..2 do
+          Task.async(fn ->
+            Ecto.Adapters.SQL.Sandbox.allow(FogletBbs.Repo, parent, self())
+            Verification.consume_reset_token(raw_token, %{password: "winner#{i}1"})
+          end)
+        end
+
+      results = Task.await_many(tasks, 5_000)
+
+      successes = Enum.count(results, &match?({:ok, %User{}}, &1))
+      failures = Enum.count(results, &match?({:error, :invalid_or_expired}, &1))
+
+      assert successes == 1
+      assert failures == 1
+
+      # No reset tokens remain after the winning consume.
       refute Repo.exists?(
                from t in UserToken,
                  where: t.user_id == ^user.id and t.context == "reset_password"
