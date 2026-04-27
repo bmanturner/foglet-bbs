@@ -17,7 +17,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
-| 28 | Modal.Form Substrate | 2/4 | In Progress|  |
+| 28 | Modal.Form Substrate | 4/4 | Complete   | 2026-04-27 |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
@@ -31,7 +31,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] v1.3 TUI Screen Facelift (Phases 16-25)
 - [x] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation (completed 2026-04-26)
 - [x] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume) (completed 2026-04-26)
-- [ ] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc
+- [x] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc (completed 2026-04-27)
 - [ ] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
 - [ ] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary)
@@ -84,8 +84,8 @@ Plans:
 Plans:
 - [x] 28-01-PLAN.md — Modal.Form Up/Down focus, `:backtab`, configurable footer, single-source-of-truth tests (FORM-01..04)
 - [x] 28-02-PLAN.md — Submit-state machine, input lock, `set_submit_state/2`, status row (FORM-05)
-- [ ] 28-03-PLAN.md — Honest Esc on Account Profile + Account Preferences (FORM-06)
-- [ ] 28-04-PLAN.md — Migrate Sysop SiteForm to Modal.Form wrapper, preserve Ctrl+S + validation + visibility (FORM-04, FORM-06)
+- [x] 28-03-PLAN.md — Honest Esc on Account Profile + Account Preferences (FORM-06)
+- [x] 28-04-PLAN.md — Migrate Sysop SiteForm to Modal.Form wrapper, preserve Ctrl+S + validation + visibility (FORM-04, FORM-06)
 **UI hint**: yes
 
 ### Phase 29: Sysop Tab Lifecycle & Bodies
