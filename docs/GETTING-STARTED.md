@@ -7,8 +7,7 @@ ten minutes.
 
 For deeper development workflow, see [DEVELOPMENT.md](DEVELOPMENT.md). For
 runtime configuration knobs and environment variables, see
-[CONFIGURATION.md](CONFIGURATION.md). For project conventions and contributor
-boundaries, see [AGENTS.md](../AGENTS.md).
+[CONFIGURATION.md](CONFIGURATION.md).
 
 ## Prerequisites
 
@@ -26,16 +25,12 @@ If you use `asdf` (or another `.tool-versions`-aware version manager), running
 `asdf install` from the repo root will install the pinned Elixir and Erlang
 versions.
 
-> Shell prefix: per repo convention, prefix every command with `rtk` (e.g.
-> `rtk mix test`). The examples below show the bare `mix` form for clarity;
-> prepend `rtk` when running them locally.
-
 ## 1. Clone and install dependencies
 
 ```bash
 git clone <your-fork-or-origin-url> foglet_bbs
 cd foglet_bbs
-rtk mix setup
+mix setup
 ```
 
 The `setup` alias defined in `mix.exs` runs:
@@ -49,7 +44,7 @@ If you prefer to run the database steps explicitly (or need to re-seed), use
 the `ecto.setup` alias on its own:
 
 ```bash
-rtk mix ecto.setup
+mix ecto.setup
 ```
 
 That alias chains `ecto.create`, `ecto.migrate`, and `run priv/repo/seeds.exs`.
@@ -82,7 +77,7 @@ Postgres reachability, the `citext` extension, the SSH host key, and required
 environment variables:
 
 ```bash
-rtk mix foglet.doctor
+mix foglet.doctor
 ```
 
 ## 2. Run the application
@@ -90,13 +85,13 @@ rtk mix foglet.doctor
 Start the Phoenix endpoint and the SSH daemon together:
 
 ```bash
-rtk mix phx.server
+mix phx.server
 ```
 
 Or, with an interactive shell attached:
 
 ```bash
-rtk iex -S mix phx.server
+iex -S mix phx.server
 ```
 
 Two listeners come up:
@@ -147,7 +142,7 @@ Two Mix tasks back the operator account-management workflow.
 an auto-confirmed account. All three flags are required:
 
 ```bash
-rtk mix foglet.user.create \
+mix foglet.user.create \
   --handle bman \
   --email bman@example.com \
   --password 'a-strong-password'
@@ -160,7 +155,7 @@ the role on an existing user. Valid roles are `user`, `mod`, and `sysop`.
 The handle is positional; the role is a flag:
 
 ```bash
-rtk mix foglet.user.promote bman --role sysop
+mix foglet.user.promote bman --role sysop
 ```
 
 A few related helpers also live in `lib/mix/tasks/`:
@@ -197,7 +192,7 @@ key handling. Global navigation lives in `Foglet.TUI.App`.
 | `citext extension` check fails in `mix foglet.doctor` | Connect to your Postgres as a superuser and run `CREATE EXTENSION IF NOT EXISTS citext;` against the `foglet_bbs_dev` database. |
 | `ssh -p 2222 ...` hangs or refuses the connection | The SSH daemon did not start. Confirm `mix phx.server` is running, that `config :foglet_bbs, :start_ssh_daemon, true` has not been overridden, and that nothing else is bound to port `2222` (override with `FOGLET_SSH_PORT=2200`). |
 | Compiler complains about Elixir/Erlang versions | Your runtime does not match `.tool-versions` (Elixir `1.19.5-otp-28`, Erlang `28.3.1`). Install the pinned versions via `asdf install` or your version manager of choice. |
-| Seeds skip threads with "general board not found" | The Phase-2 seed (default board) failed earlier in the run. Re-run `rtk mix ecto.reset` to drop and rebuild from scratch. |
+| Seeds skip threads with "general board not found" | The Phase-2 seed (default board) failed earlier in the run. Re-run `mix ecto.reset` to drop and rebuild from scratch. |
 
 ## Next steps
 
@@ -207,6 +202,3 @@ key handling. Global navigation lives in `Foglet.TUI.App`.
   `Foglet.Config`, environment variables, and per-environment overrides.
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** — system overview, contexts, and
   the SSH/TUI/Phoenix boundaries.
-- **[AGENTS.md](../AGENTS.md)** — project conventions, context boundaries,
-  and the rules every contributor (human or agent) should follow before
-  making non-trivial changes.

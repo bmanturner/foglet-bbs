@@ -7,24 +7,7 @@ assumes the app boots, the database is migrated, and you can SSH into the BBS.
 
 For the high-level system shape see `ARCHITECTURE.md`. For schema and
 persistence invariants see `DATA_MODEL.md`. For runtime configuration see
-`CONFIGURATION.md`. The terse, authoritative agent rules live in `AGENTS.md`
-(included from `CLAUDE.md` via an `@AGENTS.md` directive).
-
-## The `rtk` command prefix
-
-All shell commands in this repo run through `rtk`, a token-optimized CLI proxy
-that filters command output to reduce noise (and, for AI agents, token usage).
-Examples:
-
-```bash
-rtk mix test
-rtk mix ecto.migrate
-rtk git status
-rtk iex -S mix
-```
-
-If you do not have `rtk` installed, plain `mix` and `git` work — but if you
-collaborate with AI tooling on this repo, install it. Verify with `rtk --version`.
+`CONFIGURATION.md`.
 
 ## Project layout
 
@@ -85,11 +68,11 @@ From `mix.exs` aliases:
 
 | Command | What it runs |
 |---|---|
-| `rtk mix setup` | `deps.get`, `ecto.setup`, install git hooks |
-| `rtk mix ecto.setup` | `ecto.create`, `ecto.migrate`, run `priv/repo/seeds.exs` |
-| `rtk mix ecto.reset` | drop and recreate the dev DB |
-| `rtk mix test` | creates and migrates the test DB, seeds config, runs the suite |
-| `rtk mix precommit` | the finish line — see below |
+| `mix setup` | `deps.get`, `ecto.setup`, install git hooks |
+| `mix ecto.setup` | `ecto.create`, `ecto.migrate`, run `priv/repo/seeds.exs` |
+| `mix ecto.reset` | drop and recreate the dev DB |
+| `mix test` | creates and migrates the test DB, seeds config, runs the suite |
+| `mix precommit` | the finish line — see below |
 
 The `precommit` alias chains:
 
@@ -100,7 +83,7 @@ The `precommit` alias chains:
 5. `sobelow --exit Low`
 6. `dialyzer`
 
-Run `rtk mix precommit` whenever code changes are complete and fix every
+Run `mix precommit` whenever code changes are complete and fix every
 issue it surfaces. CI runs the same checks; passing locally avoids round trips.
 
 ## Code style
@@ -165,7 +148,7 @@ Read `docs/DATA_MODEL.md` before touching schemas, migrations, associations,
 or persistence invariants.
 
 ```bash
-rtk mix ecto.gen.migration name_using_underscores
+mix ecto.gen.migration name_using_underscores
 ```
 
 Conventions:
@@ -240,11 +223,9 @@ The full reference is `docs/TESTING.md`. The hard rules:
 - Synchronize with monitors, explicit messages, or `:sys.get_state/1`.
 - Mirror `lib/foglet_bbs/...` paths in `test/foglet_bbs/...`.
 - The `mix test` alias creates and migrates the test DB and seeds config
-  before running, so `rtk mix test` is the canonical local test command.
+  before running, so `mix test` is the canonical local test command.
 
 ## Pointers
-
-- `AGENTS.md` / `CLAUDE.md` — terse, authoritative agent rules.
 - `docs/ARCHITECTURE.md` — system overview, supervision tree, data flow.
 - `docs/DATA_MODEL.md` — schemas, associations, persistence invariants.
 - `docs/CONFIGURATION.md` — config keys and runtime settings.

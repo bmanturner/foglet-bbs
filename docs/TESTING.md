@@ -14,14 +14,14 @@ tests use **`stream_data`** via `ExUnitProperties` (`mix.exs` `:stream_data`, de
 Setup before running tests for the first time:
 
 ```bash
-rtk mix deps.get
-rtk mix ecto.create
-rtk mix ecto.migrate
+mix deps.get
+mix ecto.create
+mix ecto.migrate
 ```
 
 The `mix test` alias in `mix.exs` runs `ecto.create --quiet`, `ecto.migrate --quiet`,
 and the test-config seed (`run priv/repo/seeds/config.exs`) before invoking ExUnit, so
-in normal use you only need to run `rtk mix test`.
+in normal use you only need to run `mix test`.
 
 `test/test_helper.exs` starts ExUnit with `exclude: [:pending]` and puts the Ecto SQL
 sandbox in `:manual` mode, meaning every test must check out a connection (handled
@@ -31,16 +31,16 @@ automatically by `FogletBbs.DataCase` and `FogletBbsWeb.ConnCase`).
 
 ```bash
 # Full suite
-rtk mix test
+mix test
 
 # A single file
-rtk mix test test/foglet_bbs/authorization_test.exs
+mix test test/foglet_bbs/authorization_test.exs
 
 # A single test by line number
-rtk mix test test/foglet_bbs/authorization_test.exs:104
+mix test test/foglet_bbs/authorization_test.exs:104
 
 # Only tests tagged with a specific tag
-rtk mix test --only some_tag
+mix test --only some_tag
 ```
 
 ### Partitioned tests in CI
@@ -55,7 +55,7 @@ database: "foglet_bbs_test#{System.get_env("MIX_TEST_PARTITION")}"
 To run partition N of M in CI:
 
 ```bash
-MIX_TEST_PARTITION=1 rtk mix test --partitions 4
+MIX_TEST_PARTITION=1 mix test --partitions 4
 ```
 
 Each partition needs its own database (`foglet_bbs_test1`, `foglet_bbs_test2`, ...).
@@ -160,7 +160,7 @@ end
 
 ## OTP and process testing rules
 
-These rules come from `AGENTS.md` and are enforced across the test suite:
+These rules are enforced across the test suite:
 
 - **Use `start_supervised!/1`** for every process you start in a test. ExUnit shuts it
   down at the end of the test, which keeps the supervision tree clean across runs.
@@ -181,8 +181,7 @@ assert n == 1
 
 ## Per-board message-number invariants
 
-Per-board message numbers are a core invariant (see `AGENTS.md` and
-`docs/ARCHITECTURE.md`). They are tested in
+Per-board message numbers are a core invariant (see `docs/ARCHITECTURE.md`). They are tested in
 `test/foglet_bbs/boards/board_server_test.exs`. The pattern is:
 
 1. Insert a category and board directly via the schemas (the test owns the DB
@@ -385,7 +384,7 @@ precommit: [
 Run it whenever code changes are complete:
 
 ```bash
-rtk mix precommit
+mix precommit
 ```
 
 ## CI integration

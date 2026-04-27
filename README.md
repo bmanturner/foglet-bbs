@@ -23,9 +23,6 @@ rather than supported product surface.
 - PostgreSQL (any currently supported major version)
 - An SSH client for connecting to the running BBS
 
-This repository uses [`rtk`](https://github.com/) as the local command prefix.
-All examples below use `rtk` in front of `mix` and other dev tooling.
-
 ## Quick Start
 
 Clone the repo, install dependencies, and create the database:
@@ -33,7 +30,7 @@ Clone the repo, install dependencies, and create the database:
 ```bash
 git clone <your-fork-or-remote-url> foglet_bbs
 cd foglet_bbs
-rtk mix setup
+mix setup
 ```
 
 `mix setup` runs `deps.get`, `ecto.create`, `ecto.migrate`, `run priv/repo/seeds.exs`,
@@ -42,7 +39,7 @@ and configures the project's git hooks path.
 Start the application:
 
 ```bash
-rtk mix phx.server
+mix phx.server
 ```
 
 Phoenix and the SSH daemon both come up under the OTP supervision tree. The
@@ -87,10 +84,10 @@ Run these from the application release or source checkout against the same
 database and runtime environment as the running node:
 
 ```bash
-rtk mix foglet.user.reset_password HANDLE
-rtk mix foglet.user.verification_code HANDLE
-rtk mix foglet.user.status HANDLE --actor SYSOP --status active
-rtk mix foglet.board_subscriptions list --user HANDLE
+mix foglet.user.reset_password HANDLE
+mix foglet.user.verification_code HANDLE
+mix foglet.user.status HANDLE --actor SYSOP --status active
+mix foglet.board_subscriptions list --user HANDLE
 ```
 
 - `foglet.user.reset_password HANDLE` — generates a raw reset token for
@@ -138,15 +135,13 @@ operated as though they exist yet:
 - `docs/raxol/` — **vendored** Raxol library documentation. These are
   upstream library docs, not Foglet-specific content.
 - `vendor/raxol/` — vendored Raxol TUI library source.
-- `AGENTS.md` — agent/contributor context describing namespaces, boundaries,
-  and workflow conventions.
 
 ## Development
 
 The project finish line is:
 
 ```bash
-rtk mix precommit
+mix precommit
 ```
 
 `precommit` runs `compile --warnings-as-errors`, `deps.unlock --unused`,
@@ -155,7 +150,7 @@ rtk mix precommit
 Run the test suite with:
 
 ```bash
-rtk mix test
+mix test
 ```
 
 `mix test` ensures the test database is created and migrated, seeds runtime
@@ -163,7 +158,7 @@ config, and then runs the suite.
 
 For deeper context on namespaces, persistence invariants, authorization
 scopes, SSH/TUI ownership, and workflow conventions, read
-[`AGENTS.md`](AGENTS.md) before non-trivial changes.
+[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) before non-trivial changes.
 
 ## License
 
