@@ -14,10 +14,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   @invite_columns [
-    %{key: :code, label: "Code", width: {:ratio, 4}},
-    %{key: :status, label: "Status", width: {:ratio, 2}},
-    %{key: :created, label: "Created", width: {:ratio, 2}},
-    %{key: :used_by, label: "Used by", width: {:ratio, 3}}
+    %{key: :code, label: "Code", width: 8, grow: 3, priority: 100, demand: :content},
+    %{key: :status, label: "Status", width: 8, priority: 60, demand: :content},
+    %{key: :created, label: "Created", width: 10, priority: 40, demand: :content},
+    %{key: :used_by, label: "Used by", width: 7, grow: 1, priority: 10, demand: :content}
   ]
   @default_width 60
 

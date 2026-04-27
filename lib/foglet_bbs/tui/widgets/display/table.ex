@@ -22,7 +22,14 @@ defmodule Foglet.TUI.Widgets.Display.Table do
 
   ## Column spec shape
 
-      %{id: atom(), label: String.t(), width: integer() | :auto, grow: non_neg_integer()}
+      %{
+        id: atom(),
+        label: String.t(),
+        width: integer() | :auto,
+        grow: non_neg_integer(),
+        priority: integer(),
+        demand: :content | :header | :minimum | integer()
+      }
 
   ## Actions returned from `handle_event/2`
 
@@ -61,7 +68,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   Pure constructor.
 
   Options:
-    * `:columns`    — list of column specs (required). Each: `%{id: atom(), label: String.t(), width: integer() | :auto, grow: non_neg_integer()}`
+    * `:columns`    — list of column specs (required). Each: `%{id: atom(), label: String.t(), width: integer() | :auto, grow: non_neg_integer(), priority: integer(), demand: :content | :header | :minimum | integer()}`
     * `:rows`       — list of row maps keyed by column `:id` (alias for `:data`)
     * `:sortable`   — boolean, default `false`
     * `:filterable` — boolean, default `false`
@@ -71,14 +78,14 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   @spec init(keyword()) :: t()
   def init(opts) when is_list(opts) do
     available_width = Keyword.get(opts, :width)
+    rows = Keyword.get(opts, :rows, Keyword.get(opts, :data, []))
 
     columns =
       opts
       |> Keyword.fetch!(:columns)
       |> Enum.map(&normalize_column/1)
-      |> resolve_columns(available_width)
+      |> resolve_columns(available_width, rows)
 
-    rows = Keyword.get(opts, :rows, Keyword.get(opts, :data, []))
     sortable = Keyword.get(opts, :sortable, false)
     filterable = Keyword.get(opts, :filterable, false)
     page_size = Keyword.get(opts, :page_size, @default_page_size)
@@ -206,13 +213,15 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     |> Map.put_new(:align, :left)
     |> Map.put_new(:width, 20)
     |> Map.put_new(:grow, 0)
+    |> Map.put_new(:priority, 0)
+    |> Map.put_new(:demand, :content)
     |> Map.put_new(:format, nil)
   end
 
-  defp resolve_columns(columns, width) when is_integer(width) and width > 0 do
+  defp resolve_columns(columns, width, rows) when is_integer(width) and width > 0 do
     column_count = length(columns)
     data_budget = max(width - column_count, column_count * @min_column_width)
-    widths = resolve_widths(columns, data_budget)
+    widths = resolve_widths(columns, rows, data_budget)
 
     columns
     |> Enum.zip(widths)
@@ -224,34 +233,40 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     end)
   end
 
-  defp resolve_columns(columns, _width), do: columns
+  defp resolve_columns(columns, _width, _rows), do: columns
 
-  defp resolve_widths(columns, data_budget) do
-    base_width = base_width(columns)
+  defp resolve_widths(columns, rows, data_budget) do
+    minimums = Enum.map(columns, &minimum_width/1)
+    demands = Enum.map(columns, &demand_width(&1, rows))
+    minimum_total = Enum.sum(minimums)
+    demand_total = Enum.sum(demands)
 
-    if base_width > data_budget do
-      compact_widths(columns, data_budget)
-    else
-      distribute_flexible_widths(columns, data_budget - base_width)
+    cond do
+      minimum_total > data_budget ->
+        compact_widths(columns, minimums, data_budget)
+
+      demand_total <= data_budget ->
+        distribute_flexible_widths(columns, demands, data_budget - demand_total)
+
+      true ->
+        allocate_priority_widths(columns, minimums, demands, data_budget - minimum_total)
     end
   end
 
-  defp base_width(columns), do: columns |> Enum.map(&minimum_width/1) |> Enum.sum()
-
-  defp compact_widths(columns, data_budget) do
-    column_count = length(columns)
-    base = div(data_budget, column_count)
-    extra = rem(data_budget, column_count)
-
-    columns
-    |> Enum.with_index()
-    |> Enum.map(fn {_column, index} ->
-      max(base + if(index < extra, do: 1, else: 0), @min_column_width)
-    end)
+  defp compact_widths(columns, minimums, data_budget) do
+    excess = Enum.sum(minimums) - data_budget
+    sacrifice_width(minimums, columns, excess)
   end
 
-  defp distribute_flexible_widths(columns, remaining_width) do
-    widths = Enum.map(columns, &minimum_width/1)
+  defp allocate_priority_widths(columns, widths, demands, remaining_width) do
+    needs =
+      Enum.zip(widths, demands)
+      |> Enum.map(fn {width, demand} -> max(demand - width, 0) end)
+
+    satisfy_demands(widths, columns, needs, remaining_width)
+  end
+
+  defp distribute_flexible_widths(columns, widths, remaining_width) do
     growth_weights = Enum.map(columns, &grow_weight/1)
 
     active_weights =
@@ -286,8 +301,78 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     end)
   end
 
+  defp sacrifice_width(widths, _columns, excess) when excess <= 0, do: widths
+
+  defp sacrifice_width(widths, columns, excess) do
+    indexes = sacrifice_priority(columns, widths)
+
+    case Enum.find(indexes, fn index -> Enum.at(widths, index) > @min_column_width end) do
+      nil ->
+        widths
+
+      index ->
+        widths
+        |> List.update_at(index, &(&1 - 1))
+        |> sacrifice_width(columns, excess - 1)
+    end
+  end
+
+  defp satisfy_demands(widths, _columns, _needs, remaining_width) when remaining_width <= 0,
+    do: widths
+
+  defp satisfy_demands(widths, columns, needs, remaining_width) do
+    indexes = fulfillment_priority(columns, needs)
+
+    case Enum.find(indexes, fn index -> Enum.at(needs, index) > 0 end) do
+      nil ->
+        widths
+
+      index ->
+        widths = List.update_at(widths, index, &(&1 + 1))
+        needs = List.update_at(needs, index, &max(&1 - 1, 0))
+        satisfy_demands(widths, columns, needs, remaining_width - 1)
+    end
+  end
+
   defp minimum_width(%{width: width}) when is_integer(width), do: max(width, @min_column_width)
   defp minimum_width(_column), do: @min_column_width
+
+  defp demand_width(column, rows) do
+    minimum = minimum_width(column)
+    header = TextWidth.display_width(Map.get(column, :label, ""))
+    content = max_content_width(rows, column)
+
+    case Map.get(column, :demand, :content) do
+      :minimum -> minimum
+      :header -> max(header, minimum)
+      :content -> max(max(header, content), minimum)
+      value when is_integer(value) -> max(value, minimum)
+      _ -> max(max(header, content), minimum)
+    end
+  end
+
+  defp max_content_width(rows, %{id: id, format: formatter}) when is_function(formatter, 1) do
+    rows
+    |> Enum.map(fn row ->
+      row
+      |> Map.get(id, "")
+      |> formatter.()
+      |> to_string()
+      |> TextWidth.display_width()
+    end)
+    |> Enum.max(fn -> 0 end)
+  end
+
+  defp max_content_width(rows, %{id: id}) do
+    rows
+    |> Enum.map(fn row ->
+      row
+      |> Map.get(id, "")
+      |> to_string()
+      |> TextWidth.display_width()
+    end)
+    |> Enum.max(fn -> 0 end)
+  end
 
   defp grow_weight(%{grow: grow}) when is_integer(grow) and grow > 0, do: grow
 
@@ -303,6 +388,27 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     |> Enum.sort_by(fn {weight, index} -> {-weight, index} end)
     |> Enum.map(fn {_weight, index} -> index end)
   end
+
+  defp sacrifice_priority(columns, widths) do
+    columns
+    |> Enum.with_index()
+    |> Enum.sort_by(fn {column, index} ->
+      {column_priority(column), -Enum.at(widths, index), index}
+    end)
+    |> Enum.map(fn {_column, index} -> index end)
+  end
+
+  defp fulfillment_priority(columns, needs) do
+    columns
+    |> Enum.with_index()
+    |> Enum.sort_by(fn {column, index} ->
+      {-column_priority(column), -Enum.at(needs, index), -grow_weight(column), index}
+    end)
+    |> Enum.map(fn {_column, index} -> index end)
+  end
+
+  defp column_priority(%{priority: priority}) when is_integer(priority), do: priority
+  defp column_priority(_column), do: 0
 
   defp wrap_formatter(%{format: nil} = column, _width), do: column
 

@@ -129,7 +129,7 @@ Expected:
 Result notes:
 - Pending manual SSH verification.
 
-### 80x24 Sysop INVITES With Available, Consumed, Revoked Rows
+### 80x24 Sysop INVITES Shared Table Contract
 
 Status: pending
 
@@ -142,13 +142,14 @@ Steps:
 
 Expected:
 - Code, Status, Created, and Used by columns are visibly separated.
-- Values do not overlap or concatenate across column boundaries.
+- If the visible values fit inside the framed width budget, the full Code, Status, Created, and Used by values render with no unnecessary truncation.
+- If they do not all fit, Code yields last, lower-priority metadata columns yield first, and values do not overlap or concatenate across column boundaries.
 - Available, consumed, and revoked states are readable.
 
 Result notes:
-- Pending manual SSH verification.
+- Pending manual SSH verification. The shared widget regression suite now proves the intended contract for full-content fit, priority-based sacrifice, and reclaiming width from empty low-value columns. The exact 80x24 SSH rerun still needs a human verifier.
 
-### 80x24 Moderation LOG With Long Body/Reason and Non-UTC User Timezone
+### 80x24 Shared Table Contract With Moderation LOG and Non-UTC User Timezone
 
 Status: pending
 
@@ -160,8 +161,9 @@ Steps:
 - Open Moderation LOG with a representative long body or reason field.
 
 Expected:
-- The LOG table consumes available body width without crossing the frame.
-- Long body or reason text elides with `...` or `…` at cell boundaries.
+- The shared table widget consumes available body width without crossing the frame.
+- Full visible values render when the current row content fits inside the budget.
+- Long body or reason text elides with `...` or `…` at cell boundaries when the full content does not fit.
 - The timestamp reflects the current user's configured non-UTC timezone.
 
 Result notes:

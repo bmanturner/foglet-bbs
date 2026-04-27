@@ -99,27 +99,82 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
       state =
         ConsoleTable.init(
           columns: [
-            %{key: :code, label: "Code", width: {:ratio, 2}},
-            %{key: :status, label: "Status", width: {:ratio, 1}},
-            %{key: :inserted_at, label: "Created", width: {:ratio, 2}},
-            %{key: :used_by, label: "Used by", width: {:ratio, 2}}
+            %{key: :code, label: "Code", width: 8, priority: 100, demand: :content},
+            %{key: :status, label: "Status", width: 8, priority: 60, demand: :content},
+            %{key: :inserted_at, label: "Created", width: 10, priority: 40, demand: :content},
+            %{key: :used_by, label: "Used by", width: 7, priority: 10, demand: :content}
           ],
           rows: [
             %{
               code: "INVITE1",
               status: "available",
               inserted_at: "2026-04-26 12:00",
-              used_by: "alice@example.test"
+              used_by: ""
             }
           ],
-          width: 48
+          width: 52
         )
 
       flat = ConsoleTable.render(state, theme: theme) |> flatten_text()
 
-      assert table_line_width(state) <= 48
+      assert table_line_width(state) <= 52
       assert flat =~ ~r/Code\s+Status\s+Created\s+Used by/
       assert flat =~ "INVITE1"
+    end
+
+    test "shows full invite codes when visible values fit and low-value columns are empty",
+         %{theme: theme} do
+      state =
+        ConsoleTable.init(
+          columns: [
+            %{key: :code, label: "Code", width: 8, priority: 100, demand: :content},
+            %{key: :status, label: "Status", width: 8, priority: 60, demand: :content},
+            %{key: :created, label: "Created", width: 10, priority: 40, demand: :content},
+            %{key: :used_by, label: "Used by", width: 7, priority: 10, demand: :content}
+          ],
+          rows: [
+            %{
+              code: "A2TGJQGYMI74JITZAA",
+              status: "available",
+              created: "2026-04-26",
+              used_by: ""
+            }
+          ],
+          width: 52
+        )
+
+      flat = ConsoleTable.render(state, theme: theme) |> flatten_text()
+
+      assert flat =~ "A2TGJQGYMI74JITZAA"
+      assert width_map(state).code > width_map(state).used_by
+      assert table_line_width(state) <= 52
+    end
+
+    test "prioritizes code over used-by when not all invite content fits", %{theme: theme} do
+      state =
+        ConsoleTable.init(
+          columns: [
+            %{key: :code, label: "Code", width: 8, priority: 100, demand: :content},
+            %{key: :status, label: "Status", width: 8, priority: 60, demand: :content},
+            %{key: :created, label: "Created", width: 10, priority: 40, demand: :content},
+            %{key: :used_by, label: "Used by", width: 7, priority: 10, demand: :content}
+          ],
+          rows: [
+            %{
+              code: "A2TGJQGYMI74JITZAA",
+              status: "available",
+              created: "2026-04-26",
+              used_by: "very-long-handle@example.test"
+            }
+          ],
+          width: 42
+        )
+
+      flat = ConsoleTable.render(state, theme: theme) |> flatten_text()
+
+      assert width_map(state).code > width_map(state).used_by
+      assert flat =~ "A2TGJQ"
+      assert flat =~ "…"
     end
 
     test "exposes more visible content when surplus width exists", %{theme: theme} do
@@ -150,7 +205,7 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
         ConsoleTable.init(
           columns: columns,
           rows: rows,
-          width: 60
+          width: 64
         )
 
       narrow_flat = ConsoleTable.render(narrow, theme: theme) |> flatten_text()
@@ -158,7 +213,7 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
 
       refute narrow_flat =~ "I have arrived! Be"
       assert wide_flat =~ "I have arrived! Be"
-      assert wide_flat =~ "Because I am"
+      assert wide_flat =~ "Because I a"
     end
   end
 
@@ -249,6 +304,10 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
     Enum.reduce(columns, 0, fn column, width ->
       width + column.width + 1
     end)
+  end
+
+  defp width_map(%ConsoleTable{table: %{raxol_state: %{columns: columns}}}) do
+    Map.new(columns, fn column -> {column.id, column.width} end)
   end
 
   defp moderation_log_rows do

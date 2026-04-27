@@ -175,6 +175,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
     initial_text = BoardList.render(s) |> flatten_text()
     initial_rows = String.split(initial_text, "\n", trim: true)
+
     visible_board_rows =
       Regex.scan(~r/Overlarge Board \d+/, initial_text)
       |> length()
@@ -197,7 +198,9 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert moved_text =~ "Overlarge Board 25"
   end
 
-  test "render/1 never shows a separate inspector strip even at wide terminal widths", %{state: state} do
+  test "render/1 never shows a separate inspector strip even at wide terminal widths", %{
+    state: state
+  } do
     {compact, _} = BoardList.load_boards(%{state | terminal_size: {80, 24}})
     {wide, _} = BoardList.load_boards(%{state | terminal_size: {132, 50}})
 

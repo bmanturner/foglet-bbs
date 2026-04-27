@@ -110,11 +110,11 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
     [
       columns: [
-        %{key: :when, label: "When", width: 14},
-        %{key: :actor, label: "Actor", width: 9},
-        %{key: :action, label: "Action", width: 9},
-        %{key: :body, label: "Body", width: 14, grow: 5},
-        %{key: :reason, label: "Reason", width: 10, grow: 3}
+        %{key: :when, label: "When", width: 14, priority: 80, demand: :content},
+        %{key: :actor, label: "Actor", width: 9, priority: 60, demand: :content},
+        %{key: :action, label: "Action", width: 9, priority: 50, demand: :content},
+        %{key: :body, label: "Body", width: 14, grow: 5, priority: 100, demand: :content},
+        %{key: :reason, label: "Reason", width: 10, grow: 3, priority: 70, demand: :content}
       ],
       rows: items,
       selectable: false,
@@ -141,9 +141,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
     [
       columns: [
-        %{key: :handle, label: "Handle", width: 16, grow: 2},
-        %{key: :role, label: "Role", width: 8},
-        %{key: :status, label: "Status", width: 12, grow: 1}
+        %{key: :handle, label: "Handle", width: 16, grow: 2, priority: 100, demand: :content},
+        %{key: :role, label: "Role", width: 8, priority: 30, demand: :content},
+        %{key: :status, label: "Status", width: 12, grow: 1, priority: 60, demand: :content}
       ],
       rows: items,
       selectable: false,
@@ -170,9 +170,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
     [
       columns: [
-        %{key: :name, label: "Board", width: 18, grow: 2},
-        %{key: :category, label: "Category", width: 14, grow: 1},
-        %{key: :state, label: "State", width: 12}
+        %{key: :name, label: "Board", width: 18, grow: 2, priority: 100, demand: :content},
+        %{key: :category, label: "Category", width: 14, grow: 1, priority: 60, demand: :content},
+        %{key: :state, label: "State", width: 12, priority: 30, demand: :content}
       ],
       rows: items,
       selectable: false,

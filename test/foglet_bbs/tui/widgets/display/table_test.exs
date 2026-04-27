@@ -50,6 +50,69 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       assert table_line_width(state) <= 24
       assert Enum.all?(state.raxol_state.columns, &(&1.width >= 3))
     end
+
+    test "shows full visible content when full content fits inside the budget" do
+      state =
+        Table.init(
+          columns: [
+            %{id: :code, label: "Code", width: 6, priority: 100, demand: :content},
+            %{id: :status, label: "Status", width: 6, priority: 60, demand: :content},
+            %{id: :used_by, label: "Used by", width: 6, priority: 10, demand: :content}
+          ],
+          rows: [
+            %{code: "INVITE-1234", status: "available", used_by: "alice"}
+          ],
+          width: 34
+        )
+
+      assert get_in(state.raxol_state.data, [Access.at(0), :code]) == "INVITE-1234"
+      assert get_in(state.raxol_state.data, [Access.at(0), :status]) == "available"
+      assert get_in(state.raxol_state.data, [Access.at(0), :used_by]) == "alice"
+      assert table_line_width(state) <= 34
+    end
+
+    test "sacrifices low-priority columns before high-priority columns" do
+      state =
+        Table.init(
+          columns: [
+            %{id: :code, label: "Code", width: 6, priority: 100, demand: :content},
+            %{id: :status, label: "Status", width: 6, priority: 50, demand: :content},
+            %{id: :used_by, label: "Used by", width: 6, priority: 10, demand: :content}
+          ],
+          rows: [
+            %{
+              code: "INVITE-ABCDEFGHIJKL",
+              status: "available",
+              used_by: "alice@example.test"
+            }
+          ],
+          width: 27
+        )
+
+      widths = width_map(state)
+
+      assert widths.code > widths.used_by
+      assert get_in(state.raxol_state.data, [Access.at(0), :code]) =~ "INVITE"
+      assert get_in(state.raxol_state.data, [Access.at(0), :used_by]) =~ "…"
+    end
+
+    test "does not let empty low-priority columns hold width hostage" do
+      state =
+        Table.init(
+          columns: [
+            %{id: :code, label: "Code", width: 6, priority: 100, demand: :content},
+            %{id: :status, label: "Status", width: 6, priority: 50, demand: :content},
+            %{id: :used_by, label: "Used by", width: 6, priority: 10, demand: :content}
+          ],
+          rows: [
+            %{code: "INVITE-ABCDEFG", status: "available", used_by: ""}
+          ],
+          width: 31
+        )
+
+      assert get_in(state.raxol_state.data, [Access.at(0), :code]) == "INVITE-ABCDEFG"
+      assert width_map(state).code > width_map(state).used_by
+    end
   end
 
   describe "render/2 — smoke (D-18)" do
@@ -245,5 +308,9 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
     Enum.reduce(columns, 0, fn column, width ->
       width + column.width + 1
     end)
+  end
+
+  defp width_map(%Table{raxol_state: %{columns: columns}}) do
+    Map.new(columns, fn column -> {column.id, column.width} end)
   end
 end

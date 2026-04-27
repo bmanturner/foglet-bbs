@@ -19,10 +19,17 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   # Table rendering truncates to column widths — full strings appear only when
   # the column width covers the string length (KEYS-03 D-19 compatibility).
   @table_columns [
-    %{key: :label, label: "Label", width: 12, grow: 1},
-    %{key: :fingerprint, label: "Fingerprint", width: 20, grow: 2},
-    %{key: :created, label: "Created", width: 30, grow: 2},
-    %{key: :last_used, label: "Last used", width: 30, grow: 2}
+    %{key: :label, label: "Label", width: 12, grow: 1, priority: 90, demand: :content},
+    %{
+      key: :fingerprint,
+      label: "Fingerprint",
+      width: 20,
+      grow: 2,
+      priority: 100,
+      demand: :content
+    },
+    %{key: :created, label: "Created", width: 16, grow: 1, priority: 50, demand: :content},
+    %{key: :last_used, label: "Last used", width: 12, grow: 1, priority: 40, demand: :content}
   ]
 
   @empty_state "No SSH keys registered yet."

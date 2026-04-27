@@ -24,9 +24,9 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
 
   # Explicit column widths (Pitfall 9) — must fit within 64x22 minimum budget.
   @table_columns [
-    %{key: :handle, label: "Handle", width: 16},
-    %{key: :role, label: "Role", width: 8},
-    %{key: :status, label: "Status", width: 12}
+    %{key: :handle, label: "Handle", width: 16, grow: 2, priority: 100, demand: :content},
+    %{key: :role, label: "Role", width: 8, priority: 30, demand: :content},
+    %{key: :status, label: "Status", width: 12, grow: 1, priority: 70, demand: :content}
   ]
 
   @type row ::

@@ -41,14 +41,16 @@ result: pass
 expected: Open an SSH terminal session at exactly 64x22, use a dataset with enough categories and boards to exceed the visible body, and open Boards. Category and board rows remain inside the screen frame, no list rows draw above the top border or below the command bar, and selection remains visible while navigating through the overlarge directory.
 result: pass
 
-### 7. 80x24 Sysop INVITES With Available, Consumed, Revoked Rows
-expected: Open an SSH terminal session at exactly 80x24, sign in as a sysop, and open Sysop INVITES with representative available, consumed, and revoked invite rows. Code, Status, Created, and Used by columns are visibly separated, values do not overlap or concatenate across column boundaries, and available, consumed, and revoked states are readable.
-result: pass
-
-### 8. 80x24 Moderation LOG With Long Body/Reason and Non-UTC User Timezone
-expected: Open an SSH terminal session at exactly 80x24, sign in as a moderator or sysop with a non-UTC IANA timezone preference, and open Moderation LOG with a representative long body or reason field. The LOG table consumes available body width without crossing the frame, long body or reason text elides with `...` or `…` at cell boundaries, and the timestamp reflects the current user's configured non-UTC timezone.
+### 7. 80x24 Sysop INVITES Shared Table Contract
+expected: Open an SSH terminal session at exactly 80x24, sign in as a sysop, and open Sysop INVITES with representative available, consumed, and revoked invite rows. If the visible Code, Status, Created, and Used by values fit inside the framed width budget, the full values render with no unnecessary truncation. If they do not all fit, Code yields last, lower-priority metadata columns yield first, and values remain visibly separated with no overlap or concatenation.
 result: pending
-reported: "The current workspace automation and direct `State.build_log_table/2` render check no longer match the stale failure snapshot. With an 80x24 session budget (`width: 76` inside the frame), the current code resolves LOG column widths to `when=14`, `actor=9`, `action=9`, `body=24`, `reason=15`, keeps the timestamp in the user's timezone (`04-24 08:05 AM` in the representative check), and truncates long values at cell boundaries. The exact SSH rerun from the user's terminal has not been repeated in this execution session, so the human-visible outcome remains pending."
+reported: "The shared widget regression suite now proves the intended contract: full visible values render when they fit, low-priority empty columns do not reserve width, and lower-priority columns sacrifice width before Code. The exact 80x24 Sysop INVITES SSH rerun was not repeated in this execution session after the shared allocator change, so the human-visible outcome remains pending."
+severity: human_needed
+
+### 8. 80x24 Shared Table Contract With Moderation LOG and Non-UTC User Timezone
+expected: Open an SSH terminal session at exactly 80x24, sign in as a moderator or sysop with a non-UTC IANA timezone preference, and open Moderation LOG with a representative long body or reason field. The shared table widget consumes available body width without crossing the frame, shows full visible values when the current row content fits, elides long body or reason text with `...` or `…` at cell boundaries when it does not, and preserves the timestamp in the current user's configured non-UTC timezone.
+result: pending
+reported: "The current workspace automation and direct `State.build_log_table/2` render check no longer match the stale failure snapshot. With an 80x24 session budget (`width: 76` inside the frame), the shared allocator now resolves widths from content demand and column priority, keeps the timestamp in the user's timezone (`04-24 08:05 AM` in the representative check), and truncates long values at cell boundaries. The exact SSH rerun from the user's terminal has not been repeated in this execution session, so the human-visible outcome remains pending."
 severity: human_needed
 
 ### 9. Post Reader Paragraph Breaks
@@ -58,9 +60,9 @@ result: pass
 ## Summary
 
 total: 9
-passed: 8
+passed: 7
 issues: 0
-pending: 1
+pending: 2
 skipped: 0
 blocked: 0
 
@@ -78,4 +80,18 @@ blocked: 0
       issue: "Current shared allocator routes surplus width into growth columns and preserves truncation at cell boundaries."
   missing:
     - "Re-run the exact 80x24 SSH Moderation LOG scenario and record the human outcome."
+  debug_session: ""
+- truth: "The Sysop INVITES table shows the full Code value whenever the visible row values fit inside the 80x24 framed width budget, and only sacrifices lower-priority metadata columns first when they do not."
+  status: human_needed
+  reason: "The shared-widget regression suite proves the allocator contract, but the exact 80x24 Sysop INVITES SSH rerun was not repeated in this session after the allocator changed."
+  severity: human_needed
+  test: 7
+  root_cause: "Previous Phase 26 evidence only proved column separation. This gap closure broadened the acceptance target to full-value visibility when width permits, which still needs live SSH confirmation."
+  artifacts:
+    - path: "lib/foglet_bbs/tui/widgets/display/table.ex"
+      issue: "The shared allocator now sizes from content demand and column priority instead of static width/grow heuristics alone."
+    - path: "lib/foglet_bbs/tui/screens/shared/invites_state.ex"
+      issue: "INVITES now declares Code as the highest-priority content-aware column while Used by yields when empty or lower-value."
+  missing:
+    - "Re-run the exact 80x24 SSH Sysop INVITES scenario with available, consumed, and revoked rows and record whether full Code remains visible when the visible values fit."
   debug_session: ""

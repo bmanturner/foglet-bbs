@@ -32,7 +32,6 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
 
   import Raxol.Core.Renderer.View
 
-  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.TextInput, as: RaxolTextInput
 
@@ -69,11 +68,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
       placeholder: Keyword.get(opts, :placeholder, "")
     }
 
-    raxol_state =
-      case RaxolTextInput.init(raxol_props) do
-        {:ok, rs} -> rs
-        {:error, reason} -> raise "TextInput: RaxolTextInput.init failed: #{inspect(reason)}"
-      end
+    {:ok, raxol_state} = RaxolTextInput.init(raxol_props)
 
     %__MODULE__{
       raxol_state: raxol_state,
