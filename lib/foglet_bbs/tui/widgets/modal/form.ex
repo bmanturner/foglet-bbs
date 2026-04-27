@@ -17,6 +17,31 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   `Foglet.TUI.App.render_modal_overlay/2`. Do NOT wrap the output in a
   box/border here — that causes double-borders (Phase 01.1 RESEARCH Pitfall 4).
 
+  ## Focus navigation (Phase 28 FORM-01 / FORM-02 — D-13, D-14, D-15)
+
+  Focus moves between fields via four equivalent forward keys and four
+  equivalent backward keys:
+
+    * Forward (advance focus, last → 0 wrap):
+        * `%{key: :tab}`
+        * `%{key: :down}` — only on `:text | :integer | :textarea` fields
+    * Backward (retreat focus, 0 → last wrap):
+        * `%{key: :tab, shift: true}`  (raw Raxol shape)
+        * `%{key: :shift_tab}`         (CLIHandler-translated shape)
+        * `%{key: :backtab}`           (CLIHandler-translated terminal `ESC[Z`)
+        * `%{key: :up}`   — only on `:text | :integer | :textarea` fields
+
+  Key equivalence (D-15): `%{key: :backtab}` ≡ `%{key: :shift_tab}` ≡
+  `%{key: :tab, shift: true}`. All three trigger the same backward-with-wrap
+  retreat and produce identical `{state, nil}` results.
+
+  Wrap direction (D-14):
+    * Forward (Tab / Down on text-like) wraps `last → 0`.
+    * Backward (Shift+Tab / `:backtab` / Up on text-like) wraps `0 → last`.
+
+  Up/Down on `:enum` fields cycle the field value via the existing field
+  dispatcher and do NOT change `focus_index` (D-13).
+
   ## Enum field cycling and screen-side preview (D-25 D-03 / Pitfall 5)
 
   `:enum` fields update their internal field state on every `:up`/`:down` event
@@ -122,6 +147,15 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     {%{state | focus_index: new_idx}, nil}
   end
 
+  # Clause 2c: Back-tab — terminal `ESC[Z` after CLIHandler translation (Phase 28 D-15).
+  # Equivalent to %{key: :shift_tab} and %{key: :tab, shift: true}.
+  # Body is intentionally byte-identical to Clause 2b's body.
+  def handle_event(%{key: :backtab}, %__MODULE__{} = state) do
+    n = length(state.fields)
+    new_idx = rem(state.focus_index - 1 + n, n)
+    {%{state | focus_index: new_idx}, nil}
+  end
+
   # Clause 3: Tab — advance with wrap (REQ-4)
   def handle_event(%{key: :tab}, %__MODULE__{} = state) do
     n = length(state.fields)
@@ -143,8 +177,43 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end
   end
 
+  # Clause 4b: Down — focus advance on text-like fields, value cycle on :enum
+  # (Phase 28 D-13, D-14). On :text/:integer/:textarea, advance focus_index with
+  # wrap (last → 0); on :enum, fall through to dispatch_to_field/3 so the field
+  # updates its internal index (existing enum cycling). On any other type
+  # (e.g. :boolean) also fall through, preserving today's per-field semantics.
+  def handle_event(%{key: :down} = event, %__MODULE__{} = state) do
+    case Enum.at(state.fields, state.focus_index) do
+      %{type: type} when type in [:text, :integer, :textarea] ->
+        n = length(state.fields)
+        {%{state | focus_index: rem(state.focus_index + 1, n)}, nil}
+
+      _other ->
+        dispatch_event_to_field(event, state)
+    end
+  end
+
+  # Clause 4c: Up — focus retreat on text-like fields, value cycle on :enum
+  # (Phase 28 D-13, D-14). Backward wrap is 0 → last.
+  def handle_event(%{key: :up} = event, %__MODULE__{} = state) do
+    case Enum.at(state.fields, state.focus_index) do
+      %{type: type} when type in [:text, :integer, :textarea] ->
+        n = length(state.fields)
+        {%{state | focus_index: rem(state.focus_index - 1 + n, n)}, nil}
+
+      _other ->
+        dispatch_event_to_field(event, state)
+    end
+  end
+
   # Clause 5: dispatch to focused field
   def handle_event(event, %__MODULE__{} = state) do
+    dispatch_event_to_field(event, state)
+  end
+
+  # Internal helper extracted so the Up/Down clauses can reuse the
+  # field-dispatch body without duplicating it (Phase 28 D-13).
+  defp dispatch_event_to_field(event, %__MODULE__{} = state) do
     spec = Enum.at(state.fields, state.focus_index)
     field_state = Enum.at(state.field_states, state.focus_index)
     new_field_state = dispatch_to_field(spec, field_state, event)
