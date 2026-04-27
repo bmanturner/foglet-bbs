@@ -103,7 +103,12 @@ Plans:
   4. On Sysop Users, a user that is already `:approved` does not advertise an `[A] Approve` keybind; attempting any disallowed transition is mapped to user-facing copy ("…cannot be moved from active to pending") rather than the raw atom `:invalid_status_transition`.
   5. On Sysop Invites at 80×24 SSH, focusing a row visibly changes the row highlight; Enter on a focused row reveals contextual row-level actions (e.g. `[X] Revoke`) in the command bar.
   6. The command bar on Account, Moderation, and Sysop tabbed screens consistently advertises a `1-N Jump` group at both 64×22 and 80×24 SSH.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [ ] 29-01-PLAN.md — Lifecycle foundation: tagged-enum slots + App load triad + tab-switch dispatch (SYSOP-01, SYSOP-02)
+- [ ] 29-02-PLAN.md — Retry advertising + USERS keybind gating + valid_status_transitions/1 + from→to error copy (SYSOP-02, SYSOP-05)
+- [ ] 29-03-PLAN.md — Site Enter/Esc verification + 5 @site_keys description rewrites + schema regex test (SYSOP-03, SYSOP-04)
+- [ ] 29-04-PLAN.md — INVITES focus highlight + two-step [X] Revoke + 1-N Jump consistency (SYSOP-06, SYSOP-07)
 **UI hint**: yes
 
 ### Phase 30: Account Workflow
