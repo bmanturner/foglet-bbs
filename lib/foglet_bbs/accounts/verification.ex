@@ -6,7 +6,13 @@ defmodule Foglet.Accounts.Verification do
   import Ecto.Query, warn: false
 
   alias Foglet.Accounts.{Email, User, UserToken}
+  alias Foglet.QueryHelpers
   alias FogletBbs.Repo
+
+  # D-02: simple local email shape — non-empty local-part, single `@`,
+  # non-empty domain with at least one dot and non-empty domain segments.
+  # Intentionally not RFC-complete; mirrors `User`'s registration regex.
+  @email_shape_regex ~r/^[^@\s]+@[^@\s]+\.[^@\s]+$/
 
   @doc """
   Build and persist an email verification code for `user`. Returns the raw 6-char
@@ -137,6 +143,79 @@ defmodule Foglet.Accounts.Verification do
     end
   end
 
+  @doc """
+  Atomically consume a raw reset-password token to update a user's password.
+
+  Verifies the raw token, applies `User.password_changeset/2`, deletes the
+  consumed token row, and removes any other outstanding `reset_password`
+  tokens for that user. The verify-claim-update-cleanup sequence runs inside
+  a single `Repo.transact/1` so concurrent consumers of the same raw token
+  race on the row-claim delete and exactly one observes `{1, _}` (D-08, D-09,
+  D-10, D-16).
+
+  Returns:
+    * `{:ok, %User{}}` on success.
+    * `{:error, :invalid_or_expired}` for an unknown, malformed, expired, or
+      already-consumed raw token.
+    * `{:error, %Ecto.Changeset{}}` when the new password fails validation;
+      no token is consumed and no password is changed.
+
+  Generic invalid/expired errors do not leak whether a token existed or
+  whether an associated account exists (D-10).
+  """
+  @spec consume_reset_token(String.t(), map()) ::
+          {:ok, User.t()} | {:error, :invalid_or_expired | Ecto.Changeset.t()}
+  def consume_reset_token(raw_token, attrs) when is_binary(raw_token) and is_map(attrs) do
+    with {:ok, user_query} <- UserToken.verify_email_token_query(raw_token, "reset_password"),
+         {:ok, claim_query} <- UserToken.reset_token_claim_query(raw_token) do
+      Repo.transact(fn ->
+        case Repo.one(user_query) do
+          nil ->
+            {:error, :invalid_or_expired}
+
+          %User{} = user ->
+            # Atomic single-use claim: PostgreSQL row locking ensures exactly
+            # one concurrent transaction observes {1, _}; the rest see {0, _}
+            # and short-circuit to a generic invalid_or_expired error.
+            case Repo.delete_all(claim_query) do
+              {0, _} ->
+                {:error, :invalid_or_expired}
+
+              {_n, _} ->
+                with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
+                  # Defense in depth: drop any other outstanding reset tokens
+                  # for this user so nothing left over can be replayed.
+                  Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
+
+                  {:ok, updated}
+                end
+            end
+        end
+      end)
+    else
+      :error -> {:error, :invalid_or_expired}
+    end
+  end
+
+  @doc """
+  Return active, non-deleted sysop contact emails (D-13/D-14).
+
+  Used by the Login screen's no-email reset copy to list operator-assisted
+  reset contacts. The list excludes deleted, pending, suspended, rejected,
+  non-sysop, and nil-email users. Results are sorted by email so the rendered
+  comma-separated list is deterministic between requests and inside tests.
+  """
+  @spec active_sysop_contact_emails() :: [String.t()]
+  def active_sysop_contact_emails do
+    from(u in User,
+      where: u.role == :sysop and u.status == :active and not is_nil(u.email),
+      order_by: [asc: u.email],
+      select: u.email
+    )
+    |> QueryHelpers.not_deleted()
+    |> Repo.all()
+  end
+
   defp expired_exists?(%User{id: user_id, email: email}, code) do
     validity = UserToken.email_verify_validity_minutes()
 
@@ -153,9 +232,16 @@ defmodule Foglet.Accounts.Verification do
   defp find_reset_delivery_user(""), do: nil
 
   defp find_reset_delivery_user(identifier) do
-    case Repo.get_by(User, handle: identifier) || Repo.get_by(User, email: identifier) do
-      %User{status: :active, deleted_at: nil} = user -> user
-      _other -> nil
+    # D-02/D-13/D-16: email-only lookup. Handle-shaped identifiers no longer
+    # produce token side effects; only valid email-shaped input that matches
+    # an active, non-deleted account creates a reset token.
+    if Regex.match?(@email_shape_regex, identifier) do
+      case Repo.get_by(User, email: identifier) do
+        %User{status: :active, deleted_at: nil} = user -> user
+        _other -> nil
+      end
+    else
+      nil
     end
   end
 
