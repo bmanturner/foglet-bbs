@@ -263,9 +263,12 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   # Phase 29 D-25 (SYSOP-06): Enter on focused non-revoked INVITES row arms
-  # the [X] Revoke advertisement. Enter on any other tab (or on a revoked
-  # row, or when the focused row is missing) hands off to do_handle_key/2 so
-  # SiteForm/LimitsForm/etc. continue to receive Enter for their submit flow.
+  # the [X] Revoke advertisement. Enter on a revoked row surfaces an
+  # explanatory error via InvitesState (WR-07) so the operator gets feedback
+  # rather than a silent no-op when the [X] Revoke advertisement is absent.
+  # Enter on any other tab (or when the focused row is missing) hands off to
+  # do_handle_key/2 so SiteForm/LimitsForm/etc. continue to receive Enter
+  # for their submit flow.
   def handle_key(%{key: :enter} = event, state) do
     ss = get_screen_state(state)
     active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
@@ -273,6 +276,11 @@ defmodule Foglet.TUI.Screens.Sysop do
     case {active_label, InvitesState.selected_item(ss.invites)} do
       {"INVITES", %{status: status}} when status != :revoked ->
         new_ss = %{ss | armed_revoke?: true}
+        {:update, put_sysop_state(state, new_ss), []}
+
+      {"INVITES", %{status: :revoked}} ->
+        new_invites = InvitesState.with_error(ss.invites, "Invite already revoked.")
+        new_ss = %{ss | invites: new_invites, armed_revoke?: false}
         {:update, put_sysop_state(state, new_ss), []}
 
       _ ->

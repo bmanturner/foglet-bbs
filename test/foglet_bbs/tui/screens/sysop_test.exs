@@ -1974,6 +1974,21 @@ defmodule Foglet.TUI.Screens.SysopTest do
              "Expected command bar to NOT gain a [X] Revoke advertisement on a revoked row"
     end
 
+    test "WR-07: Enter on focused :revoked INVITES row surfaces an explanatory error",
+         %{state: state, sysop: sysop} do
+      invites = build_invites([:revoked, :available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      assert {:update, new_state, _cmds} = Sysop.handle_key(%{key: :enter}, state)
+
+      # The revoked-row Enter handler surfaces feedback via InvitesState.error
+      # so the operator gets an explanation rather than a silent no-op when
+      # the [X] Revoke advertisement is absent.
+      new_invites = new_state.screen_state.sysop.invites
+      assert new_invites.error == "Invite already revoked."
+      assert new_state.screen_state.sysop.armed_revoke? == false
+    end
+
     test "X while armed dispatches InvitesActions.revoke_selected/2 (state transitions :available -> :revoked)",
          %{state: state, sysop: sysop} do
       # Persist a sysop_only invite via the existing API so the boundary call
