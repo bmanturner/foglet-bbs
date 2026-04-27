@@ -466,6 +466,142 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
     end
   end
 
+  # =========================================================================
+  # Phase 28 Plan 06 — BL-02: FORM-05 lock + status row persistence on SiteForm
+  # =========================================================================
+  #
+  # These tests assert that SiteForm preserves Modal.Form's `submit_state`
+  # across the per-render rebuild driven by `SState.build_modal_form/1`. Today
+  # `sync_back/2` discards the form's submit_state, so:
+  #   * the FORM-05 lock guard has zero effect on this consumer (a held /
+  #     double Ctrl+S calls Foglet.Config.put/3 multiple times, vs the
+  #     "exactly once" contract documented at form.ex D-02), and
+  #   * the D-08/D-09 status row ("Saved." / "Error: validation") never
+  #     reaches the operator on the Sysop SITE form.
+  #
+  # See .planning/phases/28-modal-form-substrate/28-VERIFICATION.md (BL-02)
+  # and .planning/phases/28-modal-form-substrate/28-REVIEW.md (BL-02 §Fix).
+  describe "BL-02: FORM-05 lock + status row persistence on SiteForm" do
+    test "double Ctrl+S preserves submit_state across the per-render rebuild" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("registration_mode", "open", nil)
+      Config.put!("require_email_verification", false, nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("registration_mode", "invite_only")
+
+      # First Ctrl+S: synchronous Config.put cascade; form should land in :saved.
+      {form1, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      assert form1.submit_state == :saved,
+             "Expected SiteForm.State.submit_state == :saved after a successful " <>
+               "Ctrl+S, got #{inspect(form1.submit_state)}. The Modal.Form's " <>
+               "submit_state must survive sync_back/2 (BL-02)."
+
+      # Mutate the persisted Config row externally to detect a re-fire of the
+      # Config.put cascade on the second Ctrl+S. If the lock + persisted
+      # submit_state is doing its job, the second Ctrl+S triggers the auto-reset
+      # then the form is built fresh from the (mutated) Config draft seed... but
+      # critically, after sync_back, the resulting submit_state must remain a
+      # terminal state, not silently reset to :idle.
+      {form2, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form1)
+
+      # The second Ctrl+S goes through auto-reset (:saved -> :idle) then submits
+      # again with the still-:invite_only draft, landing back in :saved. The
+      # persistence assertion is identical: terminal submit_state must survive.
+      assert form2.submit_state == :saved,
+             "Expected SiteForm.State.submit_state == :saved after a second " <>
+               "Ctrl+S, got #{inspect(form2.submit_state)}. submit_state must " <>
+               "be persisted onto SState by sync_back/2 (BL-02)."
+    end
+
+    test "successful Ctrl+S renders \"Saved.\" status row (D-08/D-09)" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("registration_mode", "open", nil)
+      Config.put!("require_email_verification", false, nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("registration_mode", "invite_only")
+
+      {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert text =~ "Saved.",
+             "Expected the rendered Modal.Form output to contain \"Saved.\" " <>
+               "after a successful Ctrl+S cascade. The D-08/D-09 status row " <>
+               "is silently dropped today because submit_state is not persisted " <>
+               "across the per-render rebuild (BL-02)."
+    end
+
+    test "validation-failure Ctrl+S renders \"Error: validation\" status row" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("require_email_verification", false, nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("delivery_mode", "no_email")
+        |> put_draft("require_email_verification", true)
+
+      {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert text =~ "Error: validation",
+             "Expected the rendered Modal.Form output to contain " <>
+               "\"Error: validation\" after a validate_delivery_verification_pair " <>
+               "rejection. submit_state {:error, \"validation\"} is dropped today " <>
+               "by sync_back/2 (BL-02)."
+    end
+
+    test "auto-reset still collapses :saved to :idle on the next non-locked event" do
+      # Regression guard for the auto-reset preamble (form.ex:178-184). After
+      # the BL-02 fix, sync_back persists the post-event submit_state — which
+      # the preamble has already collapsed to :idle on a non-locked event. So
+      # a Tab after a successful save must NOT leave "Saved." pinned forever.
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("registration_mode", "open", nil)
+      Config.put!("require_email_verification", false, nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("registration_mode", "invite_only")
+
+      {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+      assert form.submit_state == :saved
+
+      {form, []} = SiteForm.handle_key(%{key: :tab}, form)
+
+      assert form.submit_state == :idle,
+             "Expected auto-reset preamble to collapse :saved -> :idle on the " <>
+               "next non-locked event. Got #{inspect(form.submit_state)}."
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute text =~ "Saved.",
+             "Expected \"Saved.\" to disappear after auto-reset on Tab; the " <>
+               "form is editable again per D-04."
+    end
+  end
+
   defp put_draft(form, key, value) do
     %{form | drafts: Map.put(form.drafts, key, value)}
   end
