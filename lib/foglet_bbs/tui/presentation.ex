@@ -20,7 +20,7 @@ defmodule Foglet.TUI.Presentation do
   @type screen :: Foglet.TUI.App.screen()
   @type theme_mappings :: %{
           required(:tabs) => %{
-            required(:selected) => :selected,
+            required(:selected) => :accent,
             required(:unselected) => :unselected,
             required(:indicator) => :accent,
             required(:border) => :border

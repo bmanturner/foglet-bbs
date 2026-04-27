@@ -40,6 +40,7 @@ defmodule Foglet.MixTaskHelpers do
   Print an error message (and optional detail string) to the shell, then exit
   non-zero. Never returns.
   """
+  @spec fail(String.t()) :: no_return()
   @spec fail(String.t(), String.t() | nil) :: no_return()
   def fail(message, detail \\ nil) do
     Mix.shell().error(message)

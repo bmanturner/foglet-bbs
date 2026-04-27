@@ -124,6 +124,8 @@ defmodule Mix.Tasks.Foglet.BoardSubscriptions do
   defp status_label(%{subscribed?: true}), do: "[subscribed]"
   defp status_label(%{subscribed?: false}), do: "[unsubscribed]"
 
+  @spec fail(String.t()) :: no_return()
+  @spec fail(String.t(), String.t() | nil) :: no_return()
   defp fail(message, detail \\ nil), do: MixTaskHelpers.fail(message, detail)
 
   defp usage do
