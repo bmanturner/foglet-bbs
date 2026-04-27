@@ -7,15 +7,7 @@ oneliners, subscriptions, moderation, and sysop workflows all live in the
 terminal experience.
 
 Phoenix is operational infrastructure for the endpoint, PubSub, telemetry,
-LiveDashboard, mail delivery plumbing, and future structured clients. It is
-not a user-facing browser workflow for v1.2 pre-alpha.
-
-## Status
-
-Foglet is **pre-alpha** software (v1.2). The current focus is gap closure:
-making the offered SSH/TUI flows honest and operational before broader launch
-work. Treat anything beyond what this README describes as design context
-rather than supported product surface.
+LiveDashboard, mail delivery plumbing, and future structured clients. 
 
 ## Requirements
 

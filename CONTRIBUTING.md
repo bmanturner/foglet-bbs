@@ -6,7 +6,7 @@ for external contributors opening pull requests against Foglet BBS.
 
 ## Project Status
 
-Foglet BBS is **pre-alpha** software (v1.2). The product surface is
+The product surface is
 intentionally narrow and the architecture is still consolidating. Before
 opening a PR for anything beyond a small fix, please **open an issue or
 discussion first** so we can confirm the change fits the current direction.
