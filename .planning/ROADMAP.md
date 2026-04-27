@@ -17,7 +17,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
-| 28 | Modal.Form Substrate | Forms route keystrokes to the focused field, accept Up/Down/Shift+Tab/Esc/Enter as advertised, and never double-submit | FORM-01..06 (6) | yes |
+| 28 | Modal.Form Substrate | 1/4 | In Progress|  |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
@@ -82,7 +82,7 @@ Plans:
   6. Pressing Esc on a focused form on Account and Sysop Site visibly cancels the active edit context (or shows an honest "draft discarded" affordance) — the command bar's `[Esc] Cancel` hint is no longer a lie; verified at 64×22 and 80×24 SSH.
 **Plans**: 4 plans
 Plans:
-- [ ] 28-01-PLAN.md — Modal.Form Up/Down focus, `:backtab`, configurable footer, single-source-of-truth tests (FORM-01..04)
+- [x] 28-01-PLAN.md — Modal.Form Up/Down focus, `:backtab`, configurable footer, single-source-of-truth tests (FORM-01..04)
 - [ ] 28-02-PLAN.md — Submit-state machine, input lock, `set_submit_state/2`, status row (FORM-05)
 - [ ] 28-03-PLAN.md — Honest Esc on Account Profile + Account Preferences (FORM-06)
 - [ ] 28-04-PLAN.md — Migrate Sysop SiteForm to Modal.Form wrapper, preserve Ctrl+S + validation + visibility (FORM-04, FORM-06)
