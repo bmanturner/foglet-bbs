@@ -56,9 +56,10 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       # Modal.Form renders the label as its own row ("delivery_mode:") and
       # the current enum value via RadioGroup; the optional :description row
       # (Phase 28 Plan 04 substrate add) renders the spec description below.
+      # Phase 29 D-22/D-23: description rewrites land here.
       assert text =~ "delivery_mode:"
       assert text =~ "email"
-      assert text =~ "Outbound transactional delivery mode"
+      assert text =~ "Whether outbound email is sent."
       # Phase 28 Plan 04 D-17: legacy bespoke marker is gone.
       refute text =~ "▸"
     end
@@ -342,8 +343,9 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
 
       refute text =~ "▸"
       # Schema description rendered through Modal.Form's optional :description.
-      assert text =~ "Outbound transactional delivery mode"
-      assert text =~ "Account registration policy"
+      # Phase 29 D-22/D-23: description rewrites land here.
+      assert text =~ "Whether outbound email is sent."
+      assert text =~ "How new accounts are created."
     end
 
     test "FORM-04 routing: char input lands in the focused integer field's draft" do

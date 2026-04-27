@@ -46,8 +46,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "registration_mode",
                type: :string,
                default: "open",
-               description:
-                 "Account registration policy (D-02/D-03): open | invite_only | sysop_approved",
+               description: "How new accounts are created.",
                enum: ["open", "invite_only", "sysop_approved"],
                min: nil,
                max: nil
@@ -61,7 +60,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "invite_code_generators",
                type: :string,
                default: "sysop_only",
-               description: "Who may generate invite codes (D-04): sysop_only | mods | any_user",
+               description: "Who can generate invite codes.",
                enum: ["sysop_only", "mods", "any_user"],
                min: nil,
                max: nil
@@ -104,8 +103,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "require_email_verification",
                type: :boolean,
                default: false,
-               description:
-                 "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)",
+               description: "Require email verification before login.",
                enum: nil,
                min: nil,
                max: nil
@@ -119,7 +117,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "delivery_mode",
                type: :string,
                default: "no_email",
-               description: "Outbound transactional delivery mode (MAIL-01): email | no_email",
+               description: "Whether outbound email is sent.",
                enum: ["email", "no_email"],
                min: nil,
                max: nil
@@ -148,8 +146,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "invite_generation_per_user_limit",
                type: :integer,
                default: 0,
-               description:
-                 "Per-user invite generation cap when invite_code_generators == \"any_user\" (INVT-07 D-04). 0 = unlimited.",
+               description: "Per-user invite cap (0 = unlimited).",
                enum: nil,
                min: 0,
                max: nil
@@ -394,6 +391,51 @@ defmodule Foglet.Config.SchemaTest do
       assert msg =~ "maximum"
       assert msg =~ "100"
       assert msg =~ "999"
+    end
+  end
+
+  # =========================================================================
+  # SYSOP-04 — operator-facing copy hygiene for the @site_keys descriptions
+  # =========================================================================
+  #
+  # Phase 29 D-22 / D-23: the five @site_keys descriptions render to operators
+  # in the Sysop SITE form. They MUST NOT contain planning-ID, phase, pitfall,
+  # or deliverable tokens. This regex test makes the invariant permanent.
+
+  describe "@site_keys descriptions are user-facing operator copy (SYSOP-04)" do
+    @forbidden_pattern ~r/(D-\d+|REQ-[A-Z]+-\d+|Phase \d+|Pitfall \d+|deliverable)/i
+
+    @site_keys [
+      "registration_mode",
+      "invite_code_generators",
+      "delivery_mode",
+      "require_email_verification",
+      "invite_generation_per_user_limit"
+    ]
+
+    test "no description contains a planning-ID, phase, pitfall, or deliverable token" do
+      for key <- @site_keys do
+        {:ok, spec} = Schema.fetch_spec(key)
+        description = spec.description
+
+        refute Regex.match?(@forbidden_pattern, description),
+               "Description for #{inspect(key)} contains a forbidden token: " <>
+                 inspect(description)
+      end
+    end
+
+    test "every @site_keys description is non-empty and ends with a period" do
+      for key <- @site_keys do
+        {:ok, spec} = Schema.fetch_spec(key)
+        description = spec.description
+
+        assert is_binary(description) and byte_size(description) > 0,
+               "Description for #{inspect(key)} is empty"
+
+        assert String.ends_with?(description, "."),
+               "Description for #{inspect(key)} should end with a period: " <>
+                 inspect(description)
+      end
     end
   end
 end
