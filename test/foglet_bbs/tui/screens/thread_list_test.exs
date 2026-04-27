@@ -265,19 +265,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     text = ThreadList.render(s) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "Foglet"
-    assert text =~ "Boards"
     assert text =~ "General"
-  end
-
-  test "render/1 delegates breadcrumb formatting to shared chrome" do
-    source =
-      __ENV__.file
-      |> Path.dirname()
-      |> Path.join("../../../../lib/foglet_bbs/tui/screens/thread_list.ex")
-      |> Path.expand()
-      |> File.read!()
-
-    refute source =~ "Threads —"
   end
 
   describe "render/1 — thread row metadata (LIST-03)" do

@@ -10,16 +10,12 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
 
   import Raxol.Core.Renderer.View
 
-  alias Foglet.TUI.Screens.Moderation.State, as: ModerationState
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
 
   @root "Foglet"
   @separator " ▸ "
   @ascii_separator " > "
-
-  @account_tabs ["Profile", "Prefs", "SSH Keys", "Invites"]
-  @sysop_tabs ["Overview", "Users", "Boards", "Config", "Invites"]
 
   @doc """
   Returns the breadcrumb path for a TUI state map.
@@ -68,19 +64,16 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
   defp parts_for_screen(_state, :verify), do: [@root, "Verify"]
   defp parts_for_screen(_state, :main_menu), do: [@root, "Home"]
   defp parts_for_screen(_state, :board_list), do: [@root, "Boards"]
-  defp parts_for_screen(state, :thread_list), do: [@root, "Boards", board_name(state)]
+  defp parts_for_screen(state, :thread_list), do: [@root, board_name(state)]
   defp parts_for_screen(state, :post_reader), do: [@root, board_name(state), thread_title(state)]
   defp parts_for_screen(state, :new_thread), do: [@root, board_name(state), "New Thread"]
 
   defp parts_for_screen(state, :post_composer),
     do: [@root, board_name(state), thread_title(state), "Reply"]
 
-  defp parts_for_screen(state, :account), do: [@root, "Account", active_tab(state, :account)]
-
-  defp parts_for_screen(state, :moderation),
-    do: [@root, "Moderation", active_tab(state, :moderation)]
-
-  defp parts_for_screen(state, :sysop), do: [@root, "Sysop", active_tab(state, :sysop)]
+  defp parts_for_screen(_state, :account), do: [@root, "Account"]
+  defp parts_for_screen(_state, :moderation), do: [@root, "Moderation"]
+  defp parts_for_screen(_state, :sysop), do: [@root, "Sysop"]
   defp parts_for_screen(_state, _screen), do: [@root]
 
   defp login_parts(state) do
@@ -143,34 +136,10 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBar do
   defp map_or_empty(value) when is_map(value), do: value
   defp map_or_empty(_value), do: %{}
 
-  defp active_tab(state, screen) do
-    tabs = tabs_for(screen)
-
-    state
-    |> screen_state_for(screen)
-    |> active_tab_index()
-    |> then(fn
-      index when is_integer(index) -> Enum.at(tabs, index)
-      _ -> nil
-    end)
-  end
-
-  defp tabs_for(:account), do: @account_tabs
-  defp tabs_for(:moderation), do: ModerationState.tab_labels(true)
-  defp tabs_for(:sysop), do: @sysop_tabs
-
   defp screen_state_for(state, screen) do
     state
     |> Map.get(:screen_state, %{})
     |> Map.get(screen, %{})
-  end
-
-  defp active_tab_index(screen_state) do
-    cond do
-      is_integer(val = Map.get(screen_state, :active_tab)) -> val
-      is_integer(val = Map.get(screen_state, :active_tab_index)) -> val
-      true -> nil
-    end
   end
 
   defp breadcrumb_slot(theme) do

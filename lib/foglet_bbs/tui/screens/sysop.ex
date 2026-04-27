@@ -76,10 +76,8 @@ defmodule Foglet.TUI.Screens.Sysop do
     ])
   end
 
-  defp chrome_model(ss) do
-    %{
-      breadcrumb_parts: ["Foglet", "Sysop", Enum.at(State.tab_labels(ss), ss.active_tab)]
-    }
+  defp chrome_model(_ss) do
+    %{breadcrumb_parts: ["Foglet", "Sysop"]}
   end
 
   defp sysop_commands(jump_hint) do
