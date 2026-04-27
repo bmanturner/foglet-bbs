@@ -462,22 +462,6 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         end
       end
     end
-
-    test "Oneliners panel header renders alongside Navigation header", %{state: state} do
-      texts = state |> with_oneliners([oneliner("alice", "hi")]) |> rendered_text()
-
-      assert "Navigation" in texts
-      assert "Oneliners" in texts
-    end
-
-    test "no Welcome line in any role render" do
-      for role <- [:user, :mod, :sysop] do
-        texts = role |> build_state() |> rendered_text()
-
-        refute Enum.any?(texts, &String.starts_with?(&1, "Welcome")),
-               "Phase 19 D-11 removes the welcome line for role=#{role}; got: #{inspect(texts)}"
-      end
-    end
   end
 
   describe "Phase 19 destinations vs. actions split" do

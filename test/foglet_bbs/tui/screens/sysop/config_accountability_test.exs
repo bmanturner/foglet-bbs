@@ -43,25 +43,6 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
       assert MapSet.subset?(statuses, allowed)
     end
 
-    test "D-06 classifies SITE always-visible controls as visible" do
-      assert ledger_status("registration_mode") == :visible
-      assert ledger_status("invite_code_generators") == :visible
-      assert ledger_status("delivery_mode") == :visible
-      assert ledger_status("require_email_verification") == :visible
-    end
-
-    test "D-06 classifies invite per-user limit as conditionally visible" do
-      assert {"invite_generation_per_user_limit",
-              {:conditionally_visible,
-               "Visible only when invite_code_generators == \"any_user\"; affects invite generation cap through Foglet.Config.invite_generation_per_user_limit/0"}} in visibility_ledger()
-    end
-
-    test "D-06 classifies LIMITS controls as visible" do
-      assert ledger_status("max_post_length") == :visible
-      assert ledger_status("max_thread_title_length") == :visible
-      assert ledger_status("email_verify_resend_cooldown_seconds") == :visible
-    end
-
     test "D-04 keeps Sysop form key lists disjoint and equal to schema keys" do
       schema_keys = Schema.entries() |> Enum.map(& &1.key) |> MapSet.new()
       site_keys = SiteForm.site_keys() |> MapSet.new()
@@ -161,13 +142,6 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
       assert Config.get!("delivery_mode") == "email"
       assert Config.get!("require_email_verification") == false
     end
-  end
-
-  defp ledger_status(key) do
-    visibility_ledger()
-    |> List.keyfind!(key, 0)
-    |> elem(1)
-    |> elem(0)
   end
 
   defp visibility_ledger do

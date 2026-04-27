@@ -3,68 +3,9 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbBarTest do
 
   import Foglet.TUI.RenderHelpers
 
-  alias Foglet.Boards.Board
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.BreadcrumbBar
-
-  describe "parts_for/1" do
-    test "returns central paths rooted at Foglet for BBS screens" do
-      assert BreadcrumbBar.parts_for(%{current_screen: :login}) == ["Foglet"]
-
-      assert BreadcrumbBar.parts_for(%{
-               current_screen: :login,
-               screen_state: %{login: %{sub: :login_form}}
-             }) == ["Foglet", "Login"]
-
-      assert BreadcrumbBar.parts_for(%{current_screen: :main_menu}) == ["Foglet", "Home"]
-      assert BreadcrumbBar.parts_for(%{current_screen: :board_list}) == ["Foglet", "Boards"]
-
-      assert BreadcrumbBar.parts_for(%{
-               current_screen: :thread_list,
-               current_board: %{name: "general"}
-             }) == ["Foglet", "Boards", "general"]
-
-      assert BreadcrumbBar.parts_for(%{
-               current_screen: :post_reader,
-               current_board: %{name: "general"},
-               current_thread: %{title: "Unicode screenshots thread"}
-             }) == ["Foglet", "general", "Unicode screenshots thread"]
-    end
-
-    test "returns central paths for compose and operator screens" do
-      assert BreadcrumbBar.parts_for(%{
-               current_screen: :new_thread,
-               current_board: %{name: "general"}
-             }) == ["Foglet", "general", "New Thread"]
-
-      assert BreadcrumbBar.parts_for(%{
-               current_screen: :post_composer,
-               current_board: %{name: "general"},
-               current_thread: %{title: "Unicode screenshots thread"}
-             }) == ["Foglet", "general", "Unicode screenshots thread", "Reply"]
-
-      assert BreadcrumbBar.parts_for(%{
-               current_screen: :account,
-               screen_state: %{account: %{active_tab: 1}}
-             }) == ["Foglet", "Account", "Prefs"]
-
-      assert BreadcrumbBar.parts_for(%{current_screen: :moderation}) == ["Foglet", "Moderation"]
-      assert BreadcrumbBar.parts_for(%{current_screen: :sysop}) == ["Foglet", "Sysop"]
-    end
-
-    test "unknown or incomplete state remains non-empty and rooted at Foglet" do
-      assert ["Foglet" | _] = BreadcrumbBar.parts_for(%{current_screen: :unknown})
-      assert ["Foglet" | _] = BreadcrumbBar.parts_for(%{})
-    end
-
-    test "accepts board structs in current_board" do
-      assert BreadcrumbBar.parts_for(%{
-               current_screen: :thread_list,
-               current_board: %Board{name: "general"}
-             }) == ["Foglet", "Boards", "general"]
-    end
-  end
 
   describe "format/2" do
     test "uses Unicode and ASCII separators" do

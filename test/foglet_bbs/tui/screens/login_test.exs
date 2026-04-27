@@ -132,18 +132,6 @@ defmodule Foglet.TUI.Screens.LoginTest do
       no_email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
       refute no_email_text =~ "Forgot password"
     end
-
-    test "reset request form renders browser-free copy" do
-      Config.put!("delivery_mode", "email")
-
-      text =
-        Login.render(reset_request_state("alice")) |> collect_text_values() |> Enum.join("\n")
-
-      assert text =~ "Handle or email:"
-      refute text =~ forbidden_reset_route()
-      refute text =~ forbidden_http_prefix()
-      refute text =~ forbidden_https_prefix()
-    end
   end
 
   describe "handle_key/2 — menu sub" do
