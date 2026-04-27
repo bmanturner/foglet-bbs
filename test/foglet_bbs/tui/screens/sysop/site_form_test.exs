@@ -182,6 +182,139 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
     end
   end
 
+  # =========================================================================
+  # Phase 28 Plan 04 Task 1 — SiteForm.State sibling (D-17, D-21)
+  # =========================================================================
+
+  describe "SiteForm.State sibling" do
+    alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SState
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    test "new/1 seeds drafts from Foglet.Config.get!/1 with errors empty + focused 0" do
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("registration_mode", "open", nil)
+
+      state = SState.new([])
+
+      assert state.drafts["delivery_mode"] == "email"
+      assert state.drafts["registration_mode"] == "open"
+      assert state.errors == %{}
+      assert state.focused == 0
+      assert state.current_user == nil
+    end
+
+    test "new/1 stores current_user when provided" do
+      sysop = sysop_fixture()
+      state = SState.new(current_user: sysop)
+      assert state.current_user == sysop
+    end
+
+    test "visible_keys/1 returns 4 keys when invite_code_generators != any_user" do
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      state = SState.new([])
+      visible = SState.visible_keys(state)
+
+      refute "invite_generation_per_user_limit" in visible
+      assert length(visible) == 4
+    end
+
+    test "visible_keys/1 returns 5 keys when invite_code_generators == any_user" do
+      Config.put!("invite_code_generators", "any_user", nil)
+      state = SState.new([])
+      visible = SState.visible_keys(state)
+
+      assert "invite_generation_per_user_limit" in visible
+      assert length(visible) == 5
+    end
+
+    test "build_modal_form/1 returns Modal.Form with fields matching visible_keys" do
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      state = SState.new([])
+      form = SState.build_modal_form(state)
+
+      assert %ModalForm{} = form
+      assert length(form.fields) == length(SState.visible_keys(state))
+      assert length(form.fields) == 4
+    end
+
+    test "build_modal_form/1 maps Schema types to ModalForm field types" do
+      Config.put!("invite_code_generators", "any_user", nil)
+      state = SState.new([])
+      form = SState.build_modal_form(state)
+
+      types_by_label = Map.new(form.fields, fn f -> {f.label, f.type} end)
+
+      # registration_mode: :string + enum -> :enum
+      assert types_by_label["registration_mode"] == :enum
+      # invite_code_generators: :string + enum -> :enum
+      assert types_by_label["invite_code_generators"] == :enum
+      # delivery_mode: :string + enum -> :enum
+      assert types_by_label["delivery_mode"] == :enum
+      # require_email_verification: :boolean -> :boolean
+      assert types_by_label["require_email_verification"] == :boolean
+      # invite_generation_per_user_limit: :integer -> :integer
+      assert types_by_label["invite_generation_per_user_limit"] == :integer
+    end
+
+    test "build_modal_form/1 enum value is preserved in field spec :value" do
+      Config.put!("delivery_mode", "email", nil)
+      state = SState.new([])
+      form = SState.build_modal_form(state)
+
+      delivery_field = Enum.find(form.fields, fn f -> f.label == "delivery_mode" end)
+      assert delivery_field.value == "email"
+      assert delivery_field.type == :enum
+      assert "email" in delivery_field.choices
+      assert "no_email" in delivery_field.choices
+    end
+
+    test "validate_delivery_verification_pair/1 errors on no_email + require_verification true" do
+      payload = %{delivery_mode: "no_email", require_email_verification: true}
+
+      assert {:error, errors} = SState.validate_delivery_verification_pair(payload)
+      assert errors[:delivery_mode] =~ "No-email"
+      assert errors[:require_email_verification] =~ "Email verification"
+    end
+
+    test "validate_delivery_verification_pair/1 returns :ok for valid combinations" do
+      assert :ok =
+               SState.validate_delivery_verification_pair(%{
+                 delivery_mode: "email",
+                 require_email_verification: true
+               })
+
+      assert :ok =
+               SState.validate_delivery_verification_pair(%{
+                 delivery_mode: "email",
+                 require_email_verification: false
+               })
+
+      assert :ok =
+               SState.validate_delivery_verification_pair(%{
+                 delivery_mode: "no_email",
+                 require_email_verification: false
+               })
+    end
+
+    test "reseed_drafts/1 reloads drafts from Foglet.Config.get!/1 and resets errors + focus" do
+      Config.put!("delivery_mode", "email", nil)
+      state = SState.new([])
+
+      mutated = %{
+        state
+        | drafts: Map.put(state.drafts, "delivery_mode", "no_email"),
+          errors: %{"delivery_mode" => "stale"},
+          focused: 3
+      }
+
+      reseeded = SState.reseed_drafts(mutated)
+
+      assert reseeded.drafts["delivery_mode"] == "email"
+      assert reseeded.errors == %{}
+      assert reseeded.focused == 0
+    end
+  end
+
   defp put_draft(form, key, value) do
     %{form | drafts: Map.put(form.drafts, key, value)}
   end
