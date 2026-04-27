@@ -1069,11 +1069,13 @@ defmodule Foglet.TUI.App do
   # BL-01 helper: pick the shortest representative message for the FORM-05
   # status row. Per-field errors continue to flow through ModalForm.set_errors/2;
   # this string is consumed only by the {:error, msg} submit-state value.
+  # With multiple errors we deliberately surface the shortest binary so the
+  # one-line status row stays readable; ties resolve to the first match.
   defp summarize_form_errors(errors) when is_map(errors) do
-    case Map.values(errors) do
-      [first | _] when is_binary(first) -> first
-      _ -> "validation"
-    end
+    errors
+    |> Map.values()
+    |> Enum.filter(&is_binary/1)
+    |> Enum.min_by(&String.length/1, fn -> "validation" end)
   end
 
   defp put_moderation_loading(state) do
