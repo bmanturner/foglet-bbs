@@ -17,7 +17,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
-| 28 | Modal.Form Substrate | 4/4 | Complete   | 2026-04-27 |
+| 28 | Modal.Form Substrate | 4/4 | Gaps Found | 2026-04-27 |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
@@ -31,7 +31,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] v1.3 TUI Screen Facelift (Phases 16-25)
 - [x] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation (completed 2026-04-26)
 - [x] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume) (completed 2026-04-26)
-- [x] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc (completed 2026-04-27)
+- [ ] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc (gaps_found 2026-04-27 — see 28-VERIFICATION.md; gap closure pending)
 - [ ] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
 - [ ] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary)
