@@ -372,6 +372,32 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   end
 
   @doc """
+  Replay a previously-captured `submit_state` onto a freshly-built form
+  (Phase 28 D-17 rebuild-and-replay pattern).
+
+  Unlike `set_submit_state/2`, this accepts the *full* lifecycle including
+  `:submitting`. It is the documented escape hatch for consumers that
+  rebuild the `Modal.Form` per render (e.g. `Foglet.TUI.Screens.Sysop.SiteForm`)
+  and need to faithfully re-seed the new form with the lifecycle value
+  persisted on the wrapper struct between renders.
+
+  Use `set_submit_state/2` for normal terminal-state transitions; this
+  function exists solely for the rebuild path. Callers MUST NOT use it to
+  smuggle `:submitting` from outside the FORM-05 contract — the value
+  passed in must have come from a prior `Modal.Form` instance's
+  `submit_state` field.
+  """
+  @spec replay_submit_state(t(), submit_state()) :: t()
+  def replay_submit_state(%__MODULE__{} = state, value)
+      when value in [:idle, :submitting, :saved] do
+    %{state | submit_state: value}
+  end
+
+  def replay_submit_state(%__MODULE__{} = state, {:error, _term} = value) do
+    %{state | submit_state: value}
+  end
+
+  @doc """
   Render the form body as a bare `column` — no outer box/border (RESEARCH Pitfall 4).
 
   Options:

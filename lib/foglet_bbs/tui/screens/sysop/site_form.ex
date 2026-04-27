@@ -61,13 +61,12 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     # Phase 28 Plan 06 (BL-02): seed the per-render Modal.Form with the
     # persisted SState.submit_state so the D-08/D-09 status row
     # ("Saving…" / "Saved." / "Error: …") survives the rebuild.
-    # Direct Map.put bypasses set_submit_state/2's :submitting raise so we
-    # can faithfully replay any persisted lifecycle value, including
-    # :submitting on the next render after an internal :idle → :submitting
-    # transition.
+    # ModalForm.replay_submit_state/2 accepts the full lifecycle including
+    # :submitting (set_submit_state/2 forbids that to protect the FORM-05
+    # contract); see its @doc for the rebuild-and-replay rationale.
     state
     |> SState.build_modal_form()
-    |> Map.put(:submit_state, state.submit_state)
+    |> ModalForm.replay_submit_state(state.submit_state)
     |> apply_errors(state.errors)
     |> ModalForm.render(theme: theme)
   end
@@ -86,13 +85,15 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   def handle_key(event, %SState{} = state) do
     # Phase 28 Plan 06 (BL-02): seed the freshly-built form with the
     # persisted SState.submit_state BEFORE dispatch so the FORM-05 lock
-    # guard (form.ex:164-166) fires when state.submit_state == :submitting,
-    # and the auto-reset preamble (form.ex:178-184) collapses :saved /
-    # {:error, _} → :idle on the next non-locked event.
+    # guard (Clause 0 in Modal.Form.handle_event/2) fires when
+    # state.submit_state == :submitting, and the auto-reset preamble
+    # (`maybe_auto_reset_submit_state/1`) collapses :saved / {:error, _} →
+    # :idle on the next non-locked event. ModalForm.replay_submit_state/2
+    # is used because it accepts the full lifecycle including :submitting.
     form =
       state
       |> SState.build_modal_form()
-      |> Map.put(:submit_state, state.submit_state)
+      |> ModalForm.replay_submit_state(state.submit_state)
       |> apply_errors(state.errors)
       |> set_focus(state.focused)
 
@@ -112,11 +113,13 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     last_idx = max(0, length(visible) - 1)
 
     # Phase 28 Plan 06 (BL-02): seed submit_state so a held Ctrl+S whose
-    # prior cascade hasn't transitioned out of :submitting is lock-swallowed.
+    # prior cascade hasn't transitioned out of :submitting is lock-swallowed
+    # (FORM-05 lock guard). replay_submit_state/2 is required here because
+    # the persisted value may be :submitting, which set_submit_state/2 rejects.
     form =
       state
       |> SState.build_modal_form()
-      |> Map.put(:submit_state, state.submit_state)
+      |> ModalForm.replay_submit_state(state.submit_state)
       |> apply_errors(state.errors)
       |> set_focus(last_idx)
 
