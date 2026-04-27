@@ -1027,4 +1027,84 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       assert after_tab.focus_index == 1
     end
   end
+
+  # --- Phase 28 Plan 02 Task 2: FORM-05 status row in render/2 ---
+  #
+  # FORM-05 visibility: render/2 emits a status row at the bottom of the form
+  # body when submit_state is :submitting, :saved, or {:error, _}. The status
+  # row REPLACES the footer when both would render (D-09); idle + show_footer:
+  # false produces neither status nor footer (the global command bar advertises
+  # the keys for tab-body consumers, D-06).
+
+  describe "FORM-05 render/2 status row (Phase 28 D-08, D-09)" do
+    defp status_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Status",
+            fields: [
+              %{name: :a, type: :text, label: "A", value: ""},
+              %{name: :b, type: :text, label: "B", value: ""}
+            ],
+            on_submit: fn _ -> send(pid, :submitted) end,
+            on_cancel: fn -> send(pid, :cancelled) end
+          ],
+          opts
+        )
+      )
+    end
+
+    test "FORM-05 :submitting renders Saving… row" do
+      form = %{status_form() | submit_state: :submitting}
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Saving…"),
+             "expected 'Saving…' in render output, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 :saved renders Saved. row" do
+      form = Form.set_submit_state(status_form(), :saved)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Saved."),
+             "expected 'Saved.' in render output, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 {:error, msg} renders Error: <msg> row" do
+      form = Form.set_submit_state(status_form(), {:error, "Disk full"})
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Error: Disk full"),
+             "expected 'Error: Disk full' in render output, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 status row replaces footer when both would render" do
+      form = %{status_form(show_footer: true) | submit_state: :submitting}
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "Saving…")
+
+      refute String.contains?(flat, "[Enter] Submit"),
+             "footer must be suppressed while a status row is shown, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 :idle + default show_footer: false → no status, no footer" do
+      form = status_form()
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      refute String.contains?(flat, "Saving…")
+      refute String.contains?(flat, "Saved.")
+      refute String.contains?(flat, "Error:")
+      refute String.contains?(flat, "[Enter] Submit")
+    end
+
+    test "FORM-05 :idle + show_footer: true → footer present (no status row)" do
+      form = status_form(show_footer: true)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "[Enter] Submit")
+      refute String.contains?(flat, "Saving…")
+      refute String.contains?(flat, "Saved.")
+      refute String.contains?(flat, "Error:")
+    end
+  end
 end
