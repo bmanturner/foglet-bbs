@@ -1116,26 +1116,21 @@ defmodule Foglet.TUI.Screens.SysopTest do
       refute message =~ "invalid_transition"
     end
 
-    test "no rendered output of users_view.ex contains the literal 'invalid_transition'" do
+    test "no rendered string literal in users_view.ex contains 'invalid_transition'" do
       contents = File.read!("lib/foglet_bbs/tui/screens/sysop/users_view.ex")
 
-      # The only allowed occurrence of the substring is in the {:error, :invalid_transition}
-      # pattern-match itself; no rendered string literal may use it.
+      # Render-time guard: scan for double-quoted string literals containing
+      # the substring 'invalid_transition'. Function names, atoms, and
+      # comments are allowed (they don't reach the operator).
+      string_literals = Regex.scan(~r/"([^"\\]|\\.)*"/, contents) |> Enum.map(&hd/1)
+
       offending =
-        contents
-        |> String.split("\n")
-        |> Enum.with_index(1)
-        |> Enum.filter(fn {line, _idx} ->
-          stripped = String.trim_leading(line)
-          # Strip comment-only lines and the legitimate pattern-match lines.
-          String.contains?(stripped, "invalid_transition") and
-            not String.starts_with?(stripped, "#") and
-            not String.contains?(stripped, "{:error, :invalid_transition}") and
-            not String.contains?(stripped, ":invalid_transition,")
+        Enum.filter(string_literals, fn lit ->
+          String.contains?(lit, "invalid_transition")
         end)
 
       assert offending == [],
-             "users_view.ex contains 'invalid_transition' outside the pattern-match: #{inspect(offending)}"
+             "users_view.ex contains a string literal with 'invalid_transition' (D-16): #{inspect(offending)}"
     end
   end
 
