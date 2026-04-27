@@ -31,7 +31,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] v1.3 TUI Screen Facelift (Phases 16-25)
 - [x] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation (completed 2026-04-26)
 - [x] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume) (completed 2026-04-26)
-- [x] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc (gaps_found 2026-04-27 — see 28-VERIFICATION.md; gap closure pending) (completed 2026-04-27)
+- [~] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc. Implementation + gap-closure (28-05/06/07) + code review fixes complete; **4 live-SSH UAT items pending — see 28-HUMAN-UAT.md** (impl complete 2026-04-27)
 - [ ] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
 - [ ] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary)
@@ -80,12 +80,16 @@ Plans:
   4. Pressing Enter twice in rapid succession on a submittable form invokes the boundary call exactly once (`submit_state` enum gates re-entry); a `:submitting` state is visible during async work.
   5. Pressing `:tab :tab :char "x"` on a `[text, text, text]` form (initial `focus_index: 0`) lands the `"x"` in the third field's buffer, not the first, second, or any default field; widget-internal focus state is asserted absent for form-bearing widgets.
   6. Pressing Esc on a focused form on Account and Sysop Site visibly cancels the active edit context (or shows an honest "draft discarded" affordance) — the command bar's `[Esc] Cancel` hint is no longer a lie; verified at 64×22 and 80×24 SSH.
-**Plans**: 4 plans
+**Plans**: 7 plans (4 original + 3 gap-closure)
 Plans:
 - [x] 28-01-PLAN.md — Modal.Form Up/Down focus, `:backtab`, configurable footer, single-source-of-truth tests (FORM-01..04)
 - [x] 28-02-PLAN.md — Submit-state machine, input lock, `set_submit_state/2`, status row (FORM-05)
 - [x] 28-03-PLAN.md — Honest Esc on Account Profile + Account Preferences (FORM-06)
 - [x] 28-04-PLAN.md — Migrate Sysop SiteForm to Modal.Form wrapper, preserve Ctrl+S + validation + visibility (FORM-04, FORM-06)
+- [x] 28-05-PLAN.md — BL-01 release Modal.Form lock on `:form` error paths + WR-01 accept `:backtab` on Account guards
+- [x] 28-06-PLAN.md — BL-02 persist `submit_state` on `Sysop.SiteForm.State` across re-renders
+- [x] 28-07-PLAN.md — BL-03 validate non-empty `:fields` in `Modal.Form.init/1`
+**UAT outstanding**: 4 live-SSH spot-checks at 64×22 and 80×24 — see `.planning/phases/28-modal-form-substrate/28-HUMAN-UAT.md` (FORM-06 Esc UX, FORM-03 footer count, BL-01/02 live reproduction)
 **UI hint**: yes
 
 ### Phase 29: Sysop Tab Lifecycle & Bodies
