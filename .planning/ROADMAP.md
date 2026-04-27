@@ -135,9 +135,16 @@ Plans:
   4. A user can enter a raw reset token plus new password in the new `:reset_consume` sub-state; on success they are returned to a logged-out menu and the token is single-use (a concurrent-consume test asserts exactly one of two parallel attempts wins, atomically inside `Repo.transact/1`); the token never appears in chrome/breadcrumb/status.
 **Plans**: 4 plans
 Plans:
+**Wave 1**
 - [ ] 31-01-PLAN.md — Accounts/Verification email reset side effects, sysop contacts, and atomic raw-token consume
+
+**Wave 2** *(blocked on Wave 1 completion)*
 - [ ] 31-02-PLAN.md — Login Forgot Password menu, email validation, wrapped reset/no-email copy
+
+**Wave 3** *(blocked on Wave 2 completion)*
 - [ ] 31-03-PLAN.md — Login reset-consume form and Accounts consume submission
+
+**Wave 4** *(blocked on Wave 3 completion)*
 - [ ] 31-04-PLAN.md — Compact reset rendering and raw-token non-leak validation
 **UI hint**: yes
 
