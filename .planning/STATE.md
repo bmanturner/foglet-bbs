@@ -8,10 +8,10 @@ last_updated: "2026-04-27T00:00:00.000Z"
 last_activity: 2026-04-27 -- Phase 30 SPEC.md and CONTEXT.md committed
 progress:
   total_phases: 8
-  completed_phases: 1
-  total_plans: 8
-  completed_plans: 7
-  percent: 88
+  completed_phases: 4
+  total_plans: 21
+  completed_plans: 21
+  percent: 100
 ---
 
 # Project State
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 26 — layout-width-foundations
+**Current focus:** Phase 29 — sysop-tab-lifecycle-bodies
 
 ## Current Position
 
-Phase: 26 (layout-width-foundations) — EXECUTING
-Plan: 1 of 1
-Status: Executing Phase 26
-Last activity: 2026-04-26 -- Phase 26 execution started
+Phase: 30
+Plan: Not started
+Status: Executing Phase 29
+Last activity: 2026-04-27
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 84 from shipped v1.1; 26 in v1.2; 48 in v1.3
+- Total plans completed: 88 from shipped v1.1; 26 in v1.2; 48 in v1.3
 - Average duration: Not measured for v1.4 yet
 - Total execution time: Not measured for v1.4 yet
 
@@ -50,6 +50,7 @@ Last activity: 2026-04-26 -- Phase 26 execution started
 | 31. Auth Flow | TBD | - | - |
 | 32. Main Menu Chrome Polish | TBD | - | - |
 | 33. Composer Wrap & Boards Interaction | TBD | - | - |
+| 29 | 4 | - | - |
 
 **Recent Trend:**
 

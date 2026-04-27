@@ -17,8 +17,8 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
-| 28 | Modal.Form Substrate | Forms route keystrokes to the focused field, accept Up/Down/Shift+Tab/Esc/Enter as advertised, and never double-submit | FORM-01..06 (6) | yes |
-| 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
+| 28 | Modal.Form Substrate | 7/7 | Complete   | 2026-04-27 |
+| 29 | Sysop Tab Lifecycle & Bodies | 4/4 | Complete    | 2026-04-27 |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
 | 32 | Main Menu Chrome Polish | Main Menu Navigation and Oneliners panels render with border titles, theme accents, correct indents, and no glyph artifacts | MENU-01..05 (5) | yes |
@@ -31,8 +31,8 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] v1.3 TUI Screen Facelift (Phases 16-25)
 - [x] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation (completed 2026-04-26)
 - [x] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume) (completed 2026-04-26)
-- [ ] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc
-- [ ] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency
+- [~] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc. Implementation + gap-closure (28-05/06/07) + code review fixes complete; **4 live-SSH UAT items pending — see 28-HUMAN-UAT.md** (impl complete 2026-04-27)
+- [x] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency (completed 2026-04-27)
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
 - [ ] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary)
 - [ ] **Phase 32: Main Menu Chrome Polish** — Border-embedded titles, no Oneliners glyph artifact, accent-colored nav keys, indent corrections, theme-routed colors
@@ -78,9 +78,18 @@ Plans:
   2. Pressing Shift+Tab and `:backtab` from field 2 both retreat focus to field 1; pressing Tab/Shift+Tab from the boundary fields wraps deterministically (documented direction).
   3. The Modal.Form footer `[Enter] Submit / [Esc] Cancel` is suppressed by default on form-bearing screens that already advertise those keybinds in the global command bar (Account, Sysop); the footer is rendered for true modal overlays that opt in.
   4. Pressing Enter twice in rapid succession on a submittable form invokes the boundary call exactly once (`submit_state` enum gates re-entry); a `:submitting` state is visible during async work.
-  5. Pressing `:tab :tab :char "x"` lands the `"x"` in the second field's buffer, not the first or any default field; widget-internal focus state is asserted absent for form-bearing widgets.
+  5. Pressing `:tab :tab :char "x"` on a `[text, text, text]` form (initial `focus_index: 0`) lands the `"x"` in the third field's buffer, not the first, second, or any default field; widget-internal focus state is asserted absent for form-bearing widgets.
   6. Pressing Esc on a focused form on Account and Sysop Site visibly cancels the active edit context (or shows an honest "draft discarded" affordance) — the command bar's `[Esc] Cancel` hint is no longer a lie; verified at 64×22 and 80×24 SSH.
-**Plans**: TBD
+**Plans**: 7 plans (4 original + 3 gap-closure)
+Plans:
+- [x] 28-01-PLAN.md — Modal.Form Up/Down focus, `:backtab`, configurable footer, single-source-of-truth tests (FORM-01..04)
+- [x] 28-02-PLAN.md — Submit-state machine, input lock, `set_submit_state/2`, status row (FORM-05)
+- [x] 28-03-PLAN.md — Honest Esc on Account Profile + Account Preferences (FORM-06)
+- [x] 28-04-PLAN.md — Migrate Sysop SiteForm to Modal.Form wrapper, preserve Ctrl+S + validation + visibility (FORM-04, FORM-06)
+- [x] 28-05-PLAN.md — BL-01 release Modal.Form lock on `:form` error paths + WR-01 accept `:backtab` on Account guards
+- [x] 28-06-PLAN.md — BL-02 persist `submit_state` on `Sysop.SiteForm.State` across re-renders
+- [x] 28-07-PLAN.md — BL-03 validate non-empty `:fields` in `Modal.Form.init/1`
+**UAT outstanding**: 4 live-SSH spot-checks at 64×22 and 80×24 — see `.planning/phases/28-modal-form-substrate/28-HUMAN-UAT.md` (FORM-06 Esc UX, FORM-03 footer count, BL-01/02 live reproduction)
 **UI hint**: yes
 
 ### Phase 29: Sysop Tab Lifecycle & Bodies
@@ -94,7 +103,12 @@ Plans:
   4. On Sysop Users, a user that is already `:approved` does not advertise an `[A] Approve` keybind; attempting any disallowed transition is mapped to user-facing copy ("…cannot be moved from active to pending") rather than the raw atom `:invalid_status_transition`.
   5. On Sysop Invites at 80×24 SSH, focusing a row visibly changes the row highlight; Enter on a focused row reveals contextual row-level actions (e.g. `[X] Revoke`) in the command bar.
   6. The command bar on Account, Moderation, and Sysop tabbed screens consistently advertises a `1-N Jump` group at both 64×22 and 80×24 SSH.
-**Plans**: TBD
+**Plans**: 4 plans
+Plans:
+- [x] 29-01-PLAN.md — Lifecycle foundation: tagged-enum slots + App load triad + tab-switch dispatch (SYSOP-01, SYSOP-02)
+- [x] 29-02-PLAN.md — Retry advertising + USERS keybind gating + valid_status_transitions/1 + from→to error copy (SYSOP-02, SYSOP-05)
+- [x] 29-03-PLAN.md — Site Enter/Esc verification + 5 @site_keys description rewrites + schema regex test (SYSOP-03, SYSOP-04)
+- [x] 29-04-PLAN.md — INVITES focus highlight + two-step [X] Revoke + 1-N Jump consistency (SYSOP-06, SYSOP-07)
 **UI hint**: yes
 
 ### Phase 30: Account Workflow
@@ -156,7 +170,7 @@ Plans:
 | 16-25 | v1.3 | 48/48 | Complete | 2026-04-26 |
 | 26 | v1.4 | 1/4 | In Progress | - |
 | 27 | v1.4 | 0/0 | Not started | - |
-| 28 | v1.4 | 0/0 | Not started | - |
+| 28 | v1.4 | 0/4 | Not started | - |
 | 29 | v1.4 | 0/0 | Not started | - |
 | 30 | v1.4 | 0/0 | Not started | - |
 | 31 | v1.4 | 0/0 | Not started | - |

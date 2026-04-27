@@ -69,8 +69,30 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
     end
   end
 
-  # InvitesState struct path — renders via ConsoleTable (D-05, Phase 25 Plan 03).
-  defp render_items(%InvitesState{items: items} = state, theme) when is_list(items) do
+  # InvitesState struct path — renders the ConsoleTable header (so column
+  # labels remain visible) and bespoke focus-aware text rows for the row
+  # content. Phase 29 D-24: focused INVITES row carries theme.selected.fg/bg
+  # styling at 80×24 SSH; the upstream Raxol Table widget flattens cell
+  # styles into `style: [...]` rather than the top-level `:fg`/`:bg`, which
+  # is not visibly distinct on the ANSI-stripped renderer.
+  defp render_items(%InvitesState{items: []} = state, theme) do
+    last_generated_code = state.last_generated_code
+    error = state.error
+    table = state.table || InvitesState.build_table([])
+
+    column style: %{gap: 1} do
+      [
+        maybe_banner(last_generated_code, theme),
+        maybe_error(error, theme),
+        ConsoleTable.render(table, theme: theme),
+        text(@key_hints, fg: theme.dim.fg)
+      ]
+      |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  defp render_items(%InvitesState{items: items, selected_index: selected_index} = state, theme)
+       when is_list(items) do
     last_generated_code = state.last_generated_code
     error = state.error
 
@@ -81,6 +103,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
         maybe_banner(last_generated_code, theme),
         maybe_error(error, theme),
         ConsoleTable.render(table, theme: theme),
+        focused_invite_indicator(items, selected_index, theme),
         text(@key_hints, fg: theme.dim.fg)
       ]
       |> Enum.reject(&is_nil/1)
@@ -109,11 +132,20 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
     text("No invites issued yet.", fg: theme.dim.fg)
   end
 
+  # Phase 29 D-24 (SYSOP-06): focused INVITES row carries theme.selected.fg/bg
+  # so the operator can see which row is focused at 80×24 SSH. Unfocused rows
+  # render with theme.primary.fg via ListRow's `selected?: false` path. This
+  # mirrors the canonical idiom at users_view.ex:189-198. No leading marker
+  # (D-24 explicit rejection).
   defp invite_rows(items, selected_index, theme) do
     SelectionList.render(items, selected_index, fn {item, _idx, selected?} ->
-      item
-      |> row_label()
-      |> ListRow.render(selected?, theme)
+      label = row_label(item)
+
+      if selected? do
+        text(label, fg: theme.selected.fg, bg: theme.selected.bg)
+      else
+        ListRow.render(label, false, theme)
+      end
     end)
   end
 
@@ -143,6 +175,50 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   end
 
   defp lifecycle_fields(_item), do: []
+
+  # Phase 29 D-24 (SYSOP-06): the upstream Raxol Table flattens the
+  # `selected_row` style into nested `style: [...]` entries that aren't
+  # surfaced as visibly-distinct text fg/bg at 80×24 SSH after layout. We
+  # emit a focus-aware status line below the table so the operator can see
+  # which invite row is focused. The line carries `theme.selected.fg/bg`
+  # styling, mirroring the UsersView idiom at users_view.ex:189-198. No
+  # leading per-row marker is emitted (D-24 rejects glyph-marker designs).
+  defp focused_invite_indicator([], _selected_index, _theme), do: nil
+
+  defp focused_invite_indicator(items, selected_index, theme)
+       when is_list(items) and is_integer(selected_index) do
+    case Enum.at(items, selected_index) do
+      nil ->
+        nil
+
+      item ->
+        label = "Focused: #{focused_row_label(item)}"
+        text(label, fg: theme.selected.fg, bg: theme.selected.bg)
+    end
+  end
+
+  defp focused_invite_indicator(_items, _selected_index, _theme), do: nil
+
+  # A compact one-line summary of the focused invite — the row label format
+  # is reused so the focus indicator carries every field a sysop would
+  # consult to confirm which row they're acting on.
+  defp focused_row_label(item) do
+    code = field(item, :code)
+    status = field(item, :status)
+
+    base = "#{code} | status: #{status}"
+
+    case item do
+      %{status: :consumed} ->
+        base <> " | consumed_by_user_id: #{field(item, :consumed_by_user_id)}"
+
+      %{status: :revoked} ->
+        base <> " | revoked_at: #{timestamp_field(item, :revoked_at)}"
+
+      _ ->
+        base
+    end
+  end
 
   defp field(item, key) do
     item |> Map.get(key) |> to_string()

@@ -46,8 +46,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "registration_mode",
                type: :string,
                default: "open",
-               description:
-                 "Account registration policy (D-02/D-03): open | invite_only | sysop_approved",
+               description: "How new accounts are created.",
                enum: ["open", "invite_only", "sysop_approved"],
                min: nil,
                max: nil
@@ -61,7 +60,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "invite_code_generators",
                type: :string,
                default: "sysop_only",
-               description: "Who may generate invite codes (D-04): sysop_only | mods | any_user",
+               description: "Who can generate invite codes.",
                enum: ["sysop_only", "mods", "any_user"],
                min: nil,
                max: nil
@@ -75,7 +74,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "max_post_length",
                type: :integer,
                default: 8192,
-               description: "Maximum post body length in characters (D-31)",
+               description: "Maximum post body length in characters.",
                enum: nil,
                min: 1,
                max: nil
@@ -89,8 +88,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "max_thread_title_length",
                type: :integer,
                default: 60,
-               description:
-                 "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)",
+               description: "Maximum thread title length in characters.",
                enum: nil,
                min: 1,
                max: nil
@@ -104,8 +102,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "require_email_verification",
                type: :boolean,
                default: false,
-               description:
-                 "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)",
+               description: "Require email verification before login.",
                enum: nil,
                min: nil,
                max: nil
@@ -119,7 +116,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "delivery_mode",
                type: :string,
                default: "no_email",
-               description: "Outbound transactional delivery mode (MAIL-01): email | no_email",
+               description: "Whether outbound email is sent.",
                enum: ["email", "no_email"],
                min: nil,
                max: nil
@@ -133,8 +130,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "email_verify_resend_cooldown_seconds",
                type: :integer,
                default: 60,
-               description:
-                 "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)",
+               description: "Minimum seconds between resend-code presses on the Verify screen.",
                enum: nil,
                min: 1,
                max: nil
@@ -148,8 +144,7 @@ defmodule Foglet.Config.SchemaTest do
                key: "invite_generation_per_user_limit",
                type: :integer,
                default: 0,
-               description:
-                 "Per-user invite generation cap when invite_code_generators == \"any_user\" (INVT-07 D-04). 0 = unlimited.",
+               description: "Per-user invite cap (0 = unlimited).",
                enum: nil,
                min: 0,
                max: nil
@@ -394,6 +389,47 @@ defmodule Foglet.Config.SchemaTest do
       assert msg =~ "maximum"
       assert msg =~ "100"
       assert msg =~ "999"
+    end
+  end
+
+  # =========================================================================
+  # SYSOP-04 — operator-facing copy hygiene for every Schema description
+  # =========================================================================
+  #
+  # Phase 29 D-22 / D-23: the SITE form renders the @site_keys descriptions to
+  # operators, and the LIMITS form renders the @limits_keys descriptions in the
+  # same way (sysop_test.exs:845-854 asserts every LimitsForm.limits_keys() spec
+  # description appears in the rendered tab). Both surfaces share the same copy
+  # rule: descriptions MUST NOT contain planning-ID, phase, pitfall, or
+  # deliverable tokens, and MUST end with a period.
+  #
+  # We sweep every Schema entry rather than a hand-maintained subset so that
+  # any future renamed/added key is covered automatically.
+
+  describe "every Schema description is user-facing operator copy (SYSOP-04)" do
+    @forbidden_pattern ~r/(D-\d+|REQ-[A-Z]+-\d+|Phase \d+|Pitfall \d+|deliverable)/i
+
+    test "no description contains a planning-ID, phase, pitfall, or deliverable token" do
+      for spec <- Schema.entries() do
+        description = spec.description
+
+        refute Regex.match?(@forbidden_pattern, description),
+               "Description for #{inspect(spec.key)} contains a forbidden token: " <>
+                 inspect(description)
+      end
+    end
+
+    test "every description is non-empty and ends with a period" do
+      for spec <- Schema.entries() do
+        description = spec.description
+
+        assert is_binary(description) and byte_size(description) > 0,
+               "Description for #{inspect(spec.key)} is empty"
+
+        assert String.ends_with?(description, "."),
+               "Description for #{inspect(spec.key)} should end with a period: " <>
+                 inspect(description)
+      end
     end
   end
 end

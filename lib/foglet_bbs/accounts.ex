@@ -191,6 +191,35 @@ defmodule Foglet.Accounts do
   defp permit_status_transition(_from, _to), do: {:error, :invalid_transition}
 
   @doc """
+  Returns the list of valid target statuses for `from_status` (Phase 29 D-14).
+
+  Sourced from the same predicate `transition_user_status/3` enforces
+  server-side (`permit_status_transition/2`); using this function for
+  UI-side keybind gating guarantees no drift between the writer's allowed
+  transition graph and what the operator sees advertised.
+
+  ## Examples
+
+      iex> Foglet.Accounts.valid_status_transitions(:pending)
+      [:active, :rejected]
+
+      iex> Foglet.Accounts.valid_status_transitions(:active)
+      [:suspended]
+
+      iex> Foglet.Accounts.valid_status_transitions(:suspended)
+      [:active]
+
+      iex> Foglet.Accounts.valid_status_transitions(:rejected)
+      []
+  """
+  @spec valid_status_transitions(:pending | :active | :suspended | :rejected) ::
+          [:active | :suspended | :rejected]
+  def valid_status_transitions(:pending), do: [:active, :rejected]
+  def valid_status_transitions(:active), do: [:suspended]
+  def valid_status_transitions(:suspended), do: [:active]
+  def valid_status_transitions(:rejected), do: []
+
+  @doc """
   Create a new user account in `:pending` status (sysop-approved registration mode, D-05).
   Same validation as `register_user/1`; differs only in the persisted status value.
   Login is blocked for pending users in Phase 3's login flow.
@@ -408,8 +437,14 @@ defmodule Foglet.Accounts do
       Repo.delete_all(UserToken.by_user_and_contexts_query(user, :all))
       Repo.delete_all(from(k in SSHKey, where: k.user_id == ^user.id))
 
+      # Bump `updated_at` on every rewritten post so audit trails / change
+      # detection (moderation log, future ETL, post-edit-detection UI) can
+      # distinguish "post body edited" from "author rewritten by tombstone
+      # flow". Repo.update_all/3 does NOT touch timestamps automatically.
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
       Repo.update_all(from(p in Post, where: p.user_id == ^user.id),
-        set: [user_id: tombstone_user_id()]
+        set: [user_id: tombstone_user_id(), updated_at: now]
       )
 
       user |> User.deletion_changeset() |> Repo.update()

@@ -739,23 +739,162 @@ defmodule Foglet.TUI.Screens.AccountTest do
     %{account_state | ssh_keys: %{account_state.ssh_keys | form: form}}
   end
 
+  defp build_user_with_profile(opts \\ []) do
+    %Foglet.Accounts.User{
+      id: "u-honest-esc",
+      handle: "alice",
+      role: :user,
+      location: Keyword.get(opts, :location, "Berlin"),
+      tagline: Keyword.get(opts, :tagline, "hi"),
+      real_name: Keyword.get(opts, :real_name, "Brendan"),
+      timezone: Keyword.get(opts, :timezone, "Etc/UTC"),
+      preferences: Keyword.get(opts, :preferences, %{"time_format" => "12h"}),
+      theme: Keyword.get(opts, :theme, "gray")
+    }
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 28 Plan 03 — FORM-06 honest Esc (D-10, D-11)
+  # ---------------------------------------------------------------------------
+
+  describe "FORM-06 honest Esc on Account Profile (Phase 28 D-10, D-11)" do
+    alias Foglet.TUI.Screens.Account.ProfileForm
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    test "Esc reseeds profile_draft to saved-user values, clears dirty + status_message" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Mutate the live form by typing a char into the focused field
+      # (focus starts at :location — first field).
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.profile_form)
+
+      # Sanity: the typing event mutated :location away from "Berlin" (we don't
+      # care about cursor position — only that the live form differs from the
+      # saved-user value, which is what Esc must reseed away).
+      assert ModalForm.field_value(form_after_type, :location) != "Berlin"
+      assert ModalForm.field_value(form_after_type, :location) =~ "X"
+
+      ss_dirty = %{ss | profile_form: form_after_type, profile_dirty?: true}
+
+      {:ok, after_esc, cmds} = ProfileForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      assert after_esc.profile_draft == %{
+               location: "Berlin",
+               tagline: "hi",
+               real_name: "Brendan"
+             }
+
+      assert after_esc.profile_dirty? == false
+      assert after_esc.status_message == nil
+      assert cmds == []
+
+      # And the rendered form's first-field value reverted on the next render.
+      assert ModalForm.field_value(after_esc.profile_form, :location) == "Berlin"
+    end
+
+    test "Esc on Account Profile does not produce any 'discarded' status copy" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.profile_form)
+
+      ss_dirty = %{ss | profile_form: form_after_type, profile_dirty?: true}
+
+      {:ok, after_esc, []} = ProfileForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      # No status_message, and no "discarded" text anywhere in the state map.
+      assert after_esc.status_message == nil
+
+      serialized = inspect(after_esc, limit: :infinity)
+      refute serialized =~ "Profile changes discarded"
+      refute serialized =~ "discarded"
+    end
+  end
+
+  describe "FORM-06 honest Esc on Account Preferences (Phase 28 D-10, D-11)" do
+    alias Foglet.TUI.Screens.Account.PrefsForm
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    test "Esc reseeds prefs_draft to saved-user values, clears dirty + status_message" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Mutate the live prefs form by typing a char into the focused field
+      # (focus starts at :timezone — first field).
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.prefs_form)
+
+      # Sanity: typing event mutated :timezone away from "Etc/UTC".
+      assert ModalForm.field_value(form_after_type, :timezone) != "Etc/UTC"
+      assert ModalForm.field_value(form_after_type, :timezone) =~ "X"
+
+      ss_dirty = %{
+        ss
+        | prefs_form: form_after_type,
+          prefs_dirty?: true,
+          candidate_theme_id: "amber"
+      }
+
+      {:ok, after_esc, cmds} = PrefsForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      assert after_esc.prefs_draft == %{
+               timezone: "Etc/UTC",
+               time_format: "12h",
+               theme: "gray"
+             }
+
+      assert after_esc.prefs_dirty? == false
+      assert after_esc.status_message == nil
+      assert after_esc.candidate_theme_id == nil
+      assert cmds == []
+
+      assert ModalForm.field_value(after_esc.prefs_form, :timezone) == "Etc/UTC"
+    end
+
+    test "Esc on Account Preferences does not produce any 'discarded' status copy" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.prefs_form)
+
+      ss_dirty = %{ss | prefs_form: form_after_type, prefs_dirty?: true}
+
+      {:ok, after_esc, []} = PrefsForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      assert after_esc.status_message == nil
+
+      serialized = inspect(after_esc, limit: :infinity)
+      refute serialized =~ "Preference changes discarded"
+      refute serialized =~ "discarded"
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Phase 25 Plan 02 — Primitive-presence tests (TDD RED)
   # ---------------------------------------------------------------------------
 
   describe "PROFILE Modal.Form primitive presence" do
-    test "renders Modal.Form footer sentinel and form heading" do
+    test "renders form heading and suppresses Modal.Form footer (FORM-03 default-off)" do
+      # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
+      # Modal.Form footer; the global command bar is the single advertiser of
+      # [Enter] Submit / [Esc] Cancel. Profile/Prefs build forms without
+      # `show_footer: true`, so render must contain the form heading but NOT
+      # the footer sentinel.
       state =
         build_state_for_role(:user)
         |> put_in([:screen_state, :account], Account.init_screen_state())
 
       flat = Account.render(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
-             "expected Modal.Form footer sentinel '[Enter] Submit' in profile tab, got: #{inspect(flat)}"
-
       assert Enum.any?(flat, &String.contains?(&1, "Profile")),
              "expected form heading 'Profile' in profile tab"
+
+      refute Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
+             "Modal.Form footer must NOT appear in Account tab body (Phase 28 D-06)"
     end
 
     test "renders labeled field rows for each profile field" do
@@ -813,11 +952,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
       %{state: prefs_state}
     end
 
-    test "renders Modal.Form footer sentinel", %{state: state} do
+    test "suppresses Modal.Form footer in prefs tab (FORM-03 default-off)", %{state: state} do
+      # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
+      # Modal.Form footer; the global command bar advertises [Enter]/[Esc].
       flat = Account.render(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
-             "expected Modal.Form footer sentinel in prefs tab"
+      refute Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
+             "Modal.Form footer must NOT appear in Prefs tab body (Phase 28 D-06)"
     end
 
     test "renders enum field for theme selection", %{state: state} do
@@ -932,6 +1073,178 @@ defmodule Foglet.TUI.Screens.AccountTest do
         assert match?({:update, _, _}, result) or result == :no_match,
                "expected no crash for key #{inspect(key)} on empty SSH KEYS list"
       end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 28 Plan 05 — WR-01 :backtab on Account ProfileForm / PrefsForm
+  # ---------------------------------------------------------------------------
+
+  describe "FORM-02 :backtab on Account ProfileForm / PrefsForm (Phase 28 WR-01)" do
+    alias Foglet.TUI.Screens.Account.ProfileForm
+    alias Foglet.TUI.Screens.Account.PrefsForm
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    test "FORM-02 :backtab on ProfileForm retreats focus by one" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Advance focus 0 → 1 via Tab so :backtab has somewhere to retreat to.
+      {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.profile_form.focus_index == 1
+
+      {:ok, after_backtab, []} = ProfileForm.handle_key(%{key: :backtab}, ss, user)
+
+      assert after_backtab.profile_form.focus_index == 0,
+             "WR-01: :backtab on ProfileForm should retreat focus to 0; " <>
+               "got focus_index = #{inspect(after_backtab.profile_form.focus_index)}"
+    end
+
+    test "FORM-02 :backtab on PrefsForm retreats focus by one" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Advance focus 0 → 1 (timezone → time_format enum).
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.prefs_form.focus_index == 1
+
+      {:ok, after_backtab, []} = PrefsForm.handle_key(%{key: :backtab}, ss, user)
+
+      assert after_backtab.prefs_form.focus_index == 0,
+             "WR-01: :backtab on PrefsForm should retreat focus to 0; " <>
+               "got focus_index = #{inspect(after_backtab.prefs_form.focus_index)}"
+    end
+
+    test "WR-01 sanity: :backtab on PrefsForm preserves focused field via Modal.Form path" do
+      # Equivalence check: Modal.Form treats :backtab ≡ :shift_tab. After WR-01
+      # lands, ProfileForm/PrefsForm route :backtab into that path instead of
+      # dropping it on the floor with :no_match.
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.prefs_form.focus_index == 2
+
+      {:ok, after_backtab, []} = PrefsForm.handle_key(%{key: :backtab}, ss, user)
+      assert after_backtab.prefs_form.focus_index == 1
+
+      # Verify the form's enum value was not silently mutated by routing
+      # :backtab through an unintended clause.
+      assert ModalForm.field_value(after_backtab.prefs_form, :time_format) ==
+               ModalForm.field_value(ss.prefs_form, :time_format)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 28 Plan 05 — BL-01 :form modal lock release on async failure
+  # ---------------------------------------------------------------------------
+
+  describe "BL-01 :form modal lock release (Phase 28 FORM-05)" do
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    setup do
+      Process.put(:fake_oneliners_owner, self())
+
+      user = %Foglet.Accounts.User{id: "u-bl01", handle: "alice", role: :user}
+
+      {:ok, state} =
+        App.init(%{
+          session_context: %{
+            user: user,
+            user_id: user.id,
+            domain: %{oneliners: Foglet.TUI.FakeOneliners}
+          }
+        })
+
+      %{state: state, user: user}
+    end
+
+    test "doomed oneliner submit leaves form in {:error, _} (not :submitting)",
+         %{state: state} do
+      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+
+      # Drive the form to :submitting via the natural Enter-on-last-field path.
+      {submitting, _cmds} =
+        App.update({:key, %{key: :enter}}, with_modal)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = locked_form} =
+               submitting.modal
+
+      assert locked_form.submit_state == :submitting,
+             "precondition: form should be locked in :submitting after Enter"
+
+      {after_error, []} =
+        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, submitting)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
+               after_error.modal
+
+      assert match?({:error, _}, form.submit_state),
+             "BL-01: error handler MUST drive submit_state out of :submitting; " <>
+               "got #{inspect(form.submit_state)}"
+    end
+
+    test "doomed hide-oneliner submit leaves form in {:error, _} (not :submitting)",
+         %{state: state} do
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol-bl01"}, state)
+
+      # Type a valid reason then Enter to drive :submitting.
+      {with_text, _} =
+        App.update({:key, %{key: :char, char: "x"}}, with_modal)
+
+      {submitting, _cmds} =
+        App.update({:key, %{key: :enter}}, with_text)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = locked_form} =
+               submitting.modal
+
+      assert locked_form.submit_state == :submitting,
+             "precondition: hide form should be locked in :submitting after Enter"
+
+      {after_error, []} =
+        App.update({:oneliner_hidden, {:error, :forbidden}}, submitting)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
+               after_error.modal
+
+      assert match?({:error, _}, form.submit_state),
+             "BL-01: hide-error handler MUST drive submit_state out of :submitting; " <>
+               "got #{inspect(form.submit_state)}"
+    end
+
+    test "after doomed oneliner error, %{key: :escape} dismisses the modal", %{state: state} do
+      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+      {submitting, _cmds} = App.update({:key, %{key: :enter}}, with_modal)
+
+      {after_error, []} =
+        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, submitting)
+
+      # Today the form is still locked at :submitting and the lock-guard
+      # swallows :escape. After the BL-01 fix, set_submit_state has run, the
+      # auto-reset preamble collapses {:error, _} → :idle, and the Esc cancel
+      # clause fires → modal dismisses.
+      {after_esc, _cmds} = App.update({:key, %{key: :escape}}, after_error)
+
+      assert after_esc.modal == nil,
+             "BL-01: Esc must dismiss modal after a doomed submit; modal still open: " <>
+               inspect(after_esc.modal)
+    end
+
+    test "after doomed hide-oneliner error, %{key: :escape} dismisses the modal",
+         %{state: state} do
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol-bl01"}, state)
+      {with_text, _} = App.update({:key, %{key: :char, char: "x"}}, with_modal)
+      {submitting, _cmds} = App.update({:key, %{key: :enter}}, with_text)
+
+      {after_error, []} =
+        App.update({:oneliner_hidden, {:error, :forbidden}}, submitting)
+
+      {after_esc, _cmds} = App.update({:key, %{key: :escape}}, after_error)
+
+      assert after_esc.modal == nil,
+             "BL-01: Esc must dismiss hide-modal after a doomed submit; modal still open: " <>
+               inspect(after_esc.modal)
     end
   end
 end

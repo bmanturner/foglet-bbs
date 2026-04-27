@@ -1,369 +1,268 @@
 defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   @moduledoc """
-  Inline full-tab editor for schematized SITE keys (D-02, D-03, D-15).
+  SITE tab body for Sysop — Modal.Form-backed wrapper (Phase 28 D-17).
 
-  Renders by iterating `@site_keys` and calling
-  `Foglet.Config.Schema.fetch_spec/1` — never the `configuration` table
-  (D-01 guardrail).
+  Structurally analogous to `Foglet.TUI.Screens.Account.ProfileForm`:
+  rendering delegates to `Modal.Form.render/2`; events route through
+  `Modal.Form.handle_event/2`. The bespoke draft + visibility + validation
+  logic lives in `Foglet.TUI.Screens.Sysop.SiteForm.State`.
 
-  Uses the D-19 fallback render path: plain text rows with a focus marker
-  (`▸`) instead of the `TextInput`/`Checkbox`/`RadioGroup` primitives, to
-  avoid per-field adapter plumbing for this first inline-form consumer.
-  `Modal.Form` remains the required primitive for BOARDS (Plan 04).
+  The Modal.Form is rebuilt fresh per render so D-21 conditional visibility
+  takes effect on the next paint without stateful re-sync. The state struct
+  itself remains the source of truth — drafts, errors, and focus persist on
+  the wrapper struct (`Foglet.TUI.Screens.Sysop.SiteForm.State`).
 
-  ## Enum entry ordering
+  ## Wrapper-owned behavior
 
-  For string-enum fields, typed single characters select the first
-  enum value whose name starts with that character (see
-  `apply_char/2`). This means enum option order in
-  `Foglet.Config.Schema` is load-bearing: if two enum values share a
-  prefix (e.g. `"mods"` and `"mods_only"`), the one listed first wins.
-  Add new enum values with disjoint leading characters where possible,
-  or place the shorter/more-common value first.
+  Two behaviors live at the wrapper boundary rather than inside Modal.Form:
+
+  Ctrl+S (D-19): preserved at the wrapper level; routes to the same
+  validate → `Foglet.Config.put/3` path that Enter-on-last-field uses by
+  driving the form to the last visible index and dispatching `:enter`.
+
+  Esc (FORM-06 / D-12): reseeds drafts via `SiteForm.State.reseed_drafts/1`;
+  no inline status copy is produced.
+
+  ## Sysop screen contract
+
+  Preserved verbatim from the legacy SiteForm: the sysop screen calls
+  `init/1`, `handle_key/2`, and `render/2` with the same signatures, so
+  `lib/foglet_bbs/tui/screens/sysop.ex` (lines 121–124, 196, 234–268) is
+  unchanged across the migration.
   """
 
   alias Foglet.Config
-  alias Foglet.Config.Schema
+  alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SState
+  alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
-  import Raxol.Core.Renderer.View
+  @type t :: SState.t()
 
-  @site_keys [
-    "registration_mode",
-    "invite_code_generators",
-    "delivery_mode",
-    "require_email_verification",
-    "invite_generation_per_user_limit"
-  ]
-
-  @type t :: %__MODULE__{
-          current_user: Foglet.Accounts.User.t() | nil,
-          drafts: %{optional(String.t()) => term()},
-          errors: %{optional(String.t()) => String.t()},
-          focused: non_neg_integer()
-        }
-
-  defstruct current_user: nil, drafts: %{}, errors: %{}, focused: 0
-
+  @doc "The canonical Sysop SITE key list, in render order."
   @spec site_keys() :: [String.t()]
-  def site_keys, do: @site_keys
-
-  @spec init(keyword()) :: t()
-  def init(opts) do
-    drafts =
-      @site_keys
-      |> Enum.map(fn k -> {k, Config.get!(k)} end)
-      |> Map.new()
-
-    %__MODULE__{
-      current_user: Keyword.get(opts, :current_user),
-      drafts: drafts,
-      errors: %{},
-      focused: 0
-    }
-  end
+  defdelegate site_keys, to: SState
 
   @doc """
-  Returns visible keys per D-04: `invite_generation_per_user_limit` is
-  hidden unless `invite_code_generators == "any_user"`.
+  Returns the visible-keys list for `state` per D-21.
+
+  `invite_generation_per_user_limit` is hidden unless
+  `invite_code_generators == "any_user"`. Delegated to
+  `Foglet.TUI.Screens.Sysop.SiteForm.State.visible_keys/1`.
   """
   @spec visible_keys(t()) :: [String.t()]
-  def visible_keys(%__MODULE__{drafts: drafts}) do
-    generators = Map.get(drafts, "invite_code_generators")
+  defdelegate visible_keys(state), to: SState
 
-    Enum.reject(@site_keys, fn
-      "invite_generation_per_user_limit" -> generators != "any_user"
-      _ -> false
-    end)
+  @spec init(keyword()) :: t()
+  def init(opts), do: SState.new(opts)
+
+  @spec render(t(), Theme.t()) :: any()
+  def render(%SState{} = state, %Theme{} = theme) do
+    # Phase 28 Plan 06 (BL-02): seed the per-render Modal.Form with the
+    # persisted SState.submit_state so the D-08/D-09 status row
+    # ("Saving…" / "Saved." / "Error: …") survives the rebuild.
+    # ModalForm.replay_submit_state/2 accepts the full lifecycle including
+    # :submitting (set_submit_state/2 forbids that to protect the FORM-05
+    # contract); see its @doc for the rebuild-and-replay rationale.
+    state
+    |> SState.build_modal_form()
+    |> ModalForm.replay_submit_state(state.submit_state)
+    |> apply_errors(state.errors)
+    |> ModalForm.render(theme: theme)
   end
 
-  @spec handle_key(map(), t()) :: {t(), [{atom(), any()}]}
-  def handle_key(%{key: :tab}, state), do: {rotate_focus(state, +1), []}
-  def handle_key(%{key: :shift_tab}, state), do: {rotate_focus(state, -1), []}
-  def handle_key(%{key: :backtab}, state), do: {rotate_focus(state, -1), []}
+  @spec handle_key(map(), t()) :: {t(), [{atom(), term()}]}
+  def handle_key(%{key: :char, char: "s", ctrl: true}, %SState{} = state) do
+    # D-19: Ctrl+S routes to the same submit path Enter-on-last uses.
+    submit(state)
+  end
 
-  def handle_key(%{key: :enter}, state), do: submit(state)
-  def handle_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
+  def handle_key(%{key: :escape}, %SState{} = state) do
+    # FORM-06 / D-12: reseed drafts; no inline status copy.
+    {SState.reseed_drafts(state), []}
+  end
 
-  def handle_key(%{key: :backspace}, state), do: {apply_backspace(state), []}
+  def handle_key(event, %SState{} = state) do
+    # Phase 28 Plan 06 (BL-02): seed the freshly-built form with the
+    # persisted SState.submit_state BEFORE dispatch so the FORM-05 lock
+    # guard (Clause 0 in Modal.Form.handle_event/2) fires when
+    # state.submit_state == :submitting, and the auto-reset preamble
+    # (`maybe_auto_reset_submit_state/1`) collapses :saved / {:error, _} →
+    # :idle on the next non-locked event. ModalForm.replay_submit_state/2
+    # is used because it accepts the full lifecycle including :submitting.
+    form =
+      state
+      |> SState.build_modal_form()
+      |> ModalForm.replay_submit_state(state.submit_state)
+      |> apply_errors(state.errors)
+      |> set_focus(state.focused)
 
-  def handle_key(%{key: :char, char: c} = event, state) when is_binary(c) do
-    # Ignore ctrl/meta-modified characters (they belong to Ctrl+... handlers).
-    if Map.get(event, :ctrl) || Map.get(event, :meta) do
-      {state, []}
-    else
-      {apply_char(c, state), []}
+    {new_form, action} = ModalForm.handle_event(event, form)
+
+    case action do
+      :submitted -> finalize_submit(state, new_form)
+      :cancelled -> {SState.reseed_drafts(state), []}
+      _ -> {sync_back(state, new_form), []}
     end
   end
-
-  def handle_key(_event, state), do: {state, []}
 
   # ---------- Private ----------
 
-  defp rotate_focus(state, delta) do
-    visible = visible_keys(state)
-    n = length(visible)
+  defp submit(%SState{} = state) do
+    visible = SState.visible_keys(state)
+    last_idx = max(0, length(visible) - 1)
 
-    if n == 0 do
+    # Phase 28 Plan 06 (BL-02): seed submit_state so a held Ctrl+S whose
+    # prior cascade hasn't transitioned out of :submitting is lock-swallowed
+    # (FORM-05 lock guard). replay_submit_state/2 is required here because
+    # the persisted value may be :submitting, which set_submit_state/2 rejects.
+    form =
       state
+      |> SState.build_modal_form()
+      |> ModalForm.replay_submit_state(state.submit_state)
+      |> apply_errors(state.errors)
+      |> set_focus(last_idx)
+
+    {new_form, action} = ModalForm.handle_event(%{key: :enter}, form)
+
+    if action == :submitted do
+      finalize_submit(state, new_form)
     else
-      %{state | focused: Integer.mod(state.focused + delta, n)}
+      {sync_back(state, new_form), []}
     end
   end
 
-  defp focused_key(state) do
-    state |> visible_keys() |> Enum.at(state.focused)
-  end
+  defp finalize_submit(%SState{} = state, %ModalForm{} = new_form) do
+    case SubmitStash.pop(SState) do
+      {:site, {:ok, payload}} ->
+        persist_payload(state, payload, new_form)
 
-  defp apply_char(c, state) do
-    with key when is_binary(key) <- focused_key(state),
-         {:ok, spec} <- Schema.fetch_spec(key) do
-      apply_char_to_field(spec, c, key, state)
-    else
-      _ -> state
+      {:site, {:error, errors_map}} ->
+        # D-20: validation errors flow through Modal.Form.set_errors/2 AND
+        # the wrapper's string-keyed errors map (preserved API).
+        new_form2 = ModalForm.set_errors(new_form, errors_map)
+        new_form2 = ModalForm.set_submit_state(new_form2, {:error, "validation"})
+
+        new_state = %{
+          state
+          | errors: stringify_keys(errors_map),
+            focused: clamp(state.focused, length(SState.visible_keys(state)))
+        }
+
+        # Sync drafts from the form so any in-flight typing is preserved.
+        {sync_back(new_state, new_form2), []}
+
+      _other ->
+        # Defensive: stash empty or unexpected — drive submit_state out of
+        # :submitting so the next event isn't lock-swallowed (BL-01 contract).
+        # Without this reset, sync_back/2 would persist `:submitting` back onto
+        # SState and the per-render rebuild would re-seed a locked form forever.
+        reset_form = ModalForm.set_submit_state(new_form, :idle)
+        {sync_back(state, reset_form), []}
     end
   end
 
-  # Booleans: any space/enter-like char toggles. We also toggle on " " or "t"/"f".
-  defp apply_char_to_field(%{type: :boolean}, " ", key, state) do
-    toggle_boolean(state, key)
-  end
+  defp persist_payload(%SState{current_user: actor} = state, payload, %ModalForm{} = new_form) do
+    visible = SState.visible_keys(state)
 
-  defp apply_char_to_field(%{type: :boolean}, _c, _key, state), do: state
+    {final_state, _final_form, events} =
+      Enum.reduce_while(visible, {state, new_form, []}, fn key,
+                                                           {acc_state, acc_form, acc_events} ->
+        atom_key = String.to_existing_atom(key)
+        value = Map.get(payload, atom_key)
 
-  # Enums: cycle forward on space, or jump to the option starting with char.
-  defp apply_char_to_field(%{type: :string, enum: enum}, " ", key, state)
-       when is_list(enum) do
-    cycle_enum(state, key, enum, +1)
-  end
+        case Config.put(actor, key, value) do
+          {:ok, _entry} ->
+            new_state = %{
+              acc_state
+              | errors: Map.delete(acc_state.errors, key),
+                drafts: Map.put(acc_state.drafts, key, value)
+            }
 
-  defp apply_char_to_field(%{type: :string, enum: enum}, c, key, state) when is_list(enum) do
-    case Enum.find(enum, fn v -> String.starts_with?(v, c) end) do
-      nil -> state
-      match -> %{state | drafts: Map.put(state.drafts, key, match)}
-    end
-  end
+            {:cont, {new_state, acc_form, acc_events}}
 
-  # Plain string (not currently used in @site_keys but handled).
-  defp apply_char_to_field(%{type: :string, enum: nil}, c, key, state) do
-    append_string(state, key, c)
-  end
+          {:error, :invalid_value} ->
+            new_state = put_error(acc_state, key, "Invalid value (see min/max or enum)")
+            {:cont, {new_state, acc_form, acc_events}}
 
-  # Integer: only digit chars mutate.
-  defp apply_char_to_field(%{type: :integer}, c, key, state) do
-    if c =~ ~r/^[0-9]$/ do
-      append_string(state, key, c)
-    else
-      state
-    end
-  end
+          {:error, :unknown_key} ->
+            new_state = put_error(acc_state, key, "Unknown schema key")
+            {:cont, {new_state, acc_form, acc_events}}
 
-  defp apply_backspace(state) do
-    case focused_key(state) do
-      nil ->
-        state
+          {:error, :forbidden} ->
+            {:halt,
+             {acc_state, acc_form,
+              [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}}
 
-      key ->
-        current = Map.get(state.drafts, key)
-
-        case current do
-          s when is_binary(s) and s != "" ->
-            %{state | drafts: Map.put(state.drafts, key, String.slice(s, 0..-2//1))}
-
-          n when is_integer(n) ->
-            s = Integer.to_string(n)
-            trimmed = String.slice(s, 0..-2//1)
-
-            new_val =
-              case Integer.parse(trimmed) do
-                {v, ""} -> v
-                _ -> ""
-              end
-
-            %{state | drafts: Map.put(state.drafts, key, new_val)}
-
-          _ ->
-            state
+          {:error, :db_error} ->
+            {:halt,
+             {acc_state, acc_form,
+              [{:error_modal, "Database error saving site configuration.", :main_menu}]}}
         end
-    end
-  end
+      end)
 
-  defp toggle_boolean(state, key) do
-    current = Map.get(state.drafts, key)
-    %{state | drafts: Map.put(state.drafts, key, !current)}
-  end
-
-  defp cycle_enum(state, key, enum, delta) do
-    current = Map.get(state.drafts, key)
-    idx = Enum.find_index(enum, &(&1 == current)) || 0
-    new_idx = Integer.mod(idx + delta, length(enum))
-    %{state | drafts: Map.put(state.drafts, key, Enum.at(enum, new_idx))}
-  end
-
-  defp append_string(state, key, c) do
-    current =
-      case Map.get(state.drafts, key) do
-        n when is_integer(n) -> Integer.to_string(n)
-        s when is_binary(s) -> s
-        _ -> ""
-      end
-
-    %{state | drafts: Map.put(state.drafts, key, current <> c)}
-  end
-
-  defp submit(state) do
-    case validate_delivery_verification_pair(state) do
-      {:ok, state} ->
-        submit_visible_keys(state)
-
-      {:error, state} ->
-        {state, []}
-    end
-  end
-
-  defp validate_delivery_verification_pair(state) do
-    delivery_mode = Map.get(state.drafts, "delivery_mode")
-    require_verification = Map.get(state.drafts, "require_email_verification")
-
-    if delivery_mode == "no_email" and require_verification == true do
-      state =
-        state
-        |> set_error("delivery_mode", "No-email mode cannot require email verification")
-        |> set_error(
-          "require_email_verification",
-          "Email verification requires delivery_mode=email"
-        )
-
-      {:error, state}
+    if events == [] do
+      # All persisted: drive submit_state to :saved so the form shows "Saved." once.
+      final_form2 = ModalForm.set_submit_state(new_form, :saved)
+      {sync_back(final_state, final_form2), []}
     else
-      {:ok, state}
+      {final_state, events}
     end
   end
 
-  defp submit_visible_keys(state) do
-    visible = visible_keys(state)
+  defp sync_back(%SState{} = state, %ModalForm{focus_index: idx, submit_state: ss} = form) do
+    visible = SState.visible_keys(state)
+    drafts = collect_drafts(form, visible, state.drafts)
+    # Phase 28 Plan 06 (BL-02): persist the form's submit_state back onto
+    # SState so the next render/keystroke rebuild seeds the new form with
+    # the same lifecycle value. This is the missing half of the FORM-05
+    # contract on this consumer — without it, persist_payload/finalize_submit
+    # write :saved / {:error, "validation"} into the form, but those values
+    # vanish here (BL-02 root cause).
+    %{state | drafts: drafts, focused: clamp(idx, length(visible)), submit_state: ss}
+  end
 
-    Enum.reduce_while(visible, {state, []}, fn key, {acc_state, acc_events} ->
-      {:ok, spec} = Schema.fetch_spec(key)
-      draft = Map.get(acc_state.drafts, key)
-
-      case coerce(spec, draft) do
-        {:ok, value} ->
-          case Config.put(acc_state.current_user, key, value) do
-            {:ok, _entry} ->
-              new_state = %{acc_state | errors: Map.delete(acc_state.errors, key)}
-              {:cont, {new_state, acc_events}}
-
-            {:error, :invalid_value} ->
-              new_state = set_error(acc_state, key, "Invalid value (see min/max or enum)")
-              {:cont, {new_state, acc_events}}
-
-            {:error, :unknown_key} ->
-              new_state = set_error(acc_state, key, "Unknown schema key")
-              {:cont, {new_state, acc_events}}
-
-            {:error, :forbidden} ->
-              {:halt,
-               {acc_state,
-                [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}}
-
-            {:error, :db_error} ->
-              {:halt,
-               {acc_state,
-                [{:error_modal, "Database error saving site configuration.", :main_menu}]}}
-          end
-
-        {:error, msg} ->
-          new_state = set_error(acc_state, key, msg)
-          {:cont, {new_state, acc_events}}
-      end
+  defp collect_drafts(%ModalForm{} = form, visible, existing_drafts) do
+    Enum.reduce(visible, existing_drafts, fn key, acc ->
+      # site_keys are compile-time constants in SiteForm.State; the atoms
+      # are reachable via SiteForm.State.build_modal_form/1 at startup.
+      atom_key = String.to_existing_atom(key)
+      val = ModalForm.field_value(form, atom_key)
+      Map.put(acc, key, val)
     end)
   end
 
-  defp set_error(state, key, msg) do
+  defp apply_errors(%ModalForm{} = form, errors) when map_size(errors) == 0, do: form
+
+  defp apply_errors(%ModalForm{} = form, errors) do
+    atom_errors =
+      Enum.reduce(errors, %{}, fn
+        # Error keys are derived from site_keys (well-known atoms) — see
+        # SiteForm.State.validate_delivery_verification_pair/1 for the source.
+        {k, v}, acc when is_binary(k) -> Map.put(acc, String.to_existing_atom(k), v)
+        {k, v}, acc when is_atom(k) -> Map.put(acc, k, v)
+      end)
+
+    ModalForm.set_errors(form, atom_errors)
+  end
+
+  defp set_focus(%ModalForm{fields: fields} = form, focused) do
+    %{form | focus_index: clamp(focused, length(fields))}
+  end
+
+  defp clamp(_idx, 0), do: 0
+  defp clamp(idx, _n) when idx < 0, do: 0
+  defp clamp(idx, n) when idx >= n, do: n - 1
+  defp clamp(idx, _n), do: idx
+
+  defp put_error(%SState{} = state, key, msg) do
     %{state | errors: Map.put(state.errors, key, msg)}
   end
 
-  defp coerce(%{type: :integer}, value) when is_integer(value), do: {:ok, value}
-
-  defp coerce(%{type: :integer}, value) when is_binary(value) do
-    case Integer.parse(value) do
-      {int, ""} -> {:ok, int}
-      _ -> {:error, "Must be an integer"}
-    end
+  defp stringify_keys(errors) do
+    Enum.reduce(errors, %{}, fn
+      {k, v}, acc when is_atom(k) -> Map.put(acc, Atom.to_string(k), v)
+      {k, v}, acc when is_binary(k) -> Map.put(acc, k, v)
+    end)
   end
-
-  defp coerce(%{type: :integer}, _other), do: {:error, "Must be an integer"}
-
-  defp coerce(%{type: :boolean}, value) when is_boolean(value), do: {:ok, value}
-  defp coerce(%{type: :boolean}, _other), do: {:error, "Must be true or false"}
-
-  defp coerce(%{type: :string}, value) when is_binary(value), do: {:ok, value}
-  defp coerce(%{type: :string}, _other), do: {:error, "Must be a string"}
-
-  @spec render(t(), map()) :: any()
-  def render(state, theme) do
-    # Renders through Modal.Form (Phase 25 Plan 04, Pattern 1).
-    #
-    # Pitfall 6: visible_keys/1 filters invite_generation_per_user_limit based
-    # on the current invite_code_generators draft value — re-init the field list
-    # on every render so the conditional visibility is always current. When
-    # invite_code_generators changes value, the next render automatically drops
-    # or shows invite_generation_per_user_limit by computing visible_keys/1
-    # fresh. This matches the "re-init on change" guidance without a stateful
-    # callback: the bespoke state struct is the source of truth; the Modal.Form
-    # is built ephemerally for display.
-    #
-    # Pitfall 4: do NOT wrap Modal.Form output in box/border.
-    visible = visible_keys(state)
-
-    # Build bespoke field rows preserving "key: value" format (D-19: existing
-    # tests assert on this format and must pass unmodified).
-    rows =
-      visible
-      |> Enum.with_index()
-      |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme) end)
-
-    # Use Modal.Form footer sentinel "[Enter] Submit   [Esc] Cancel" so
-    # primitive-presence tests pass (D-09). Callers submitting via Ctrl+S use
-    # SubmitStash for any on_submit payload capture (Codex Concern 4 — no raw
-    # Process.put/get in this module).
-    footer = text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)
-
-    column style: %{gap: 0} do
-      [text("Site policy", fg: theme.title.fg, style: [:bold]), text("")] ++
-        rows ++ [text(""), footer]
-    end
-  end
-
-  defp render_row(state, key, idx, theme) do
-    {:ok, spec} = Schema.fetch_spec(key)
-    focused? = state.focused == idx
-    marker = if focused?, do: "▸ ", else: "  "
-    label_fg = if focused?, do: theme.accent.fg, else: theme.primary.fg
-    label_style = if focused?, do: [:bold], else: []
-    value = format_value(spec, Map.get(state.drafts, key))
-
-    label_line =
-      text(
-        "#{marker}#{key}: #{value}",
-        fg: label_fg,
-        style: label_style
-      )
-
-    description_line = text("    " <> spec.description, fg: theme.dim.fg)
-
-    extras =
-      case Map.get(state.errors, key) do
-        nil -> []
-        msg -> [text("    " <> msg, fg: theme.error.fg, style: [:bold])]
-      end
-
-    [label_line, description_line] ++ extras ++ [text("")]
-  end
-
-  defp format_value(_spec, nil), do: "(unset)"
-  defp format_value(_spec, value) when is_boolean(value), do: to_string(value)
-  defp format_value(_spec, value) when is_integer(value), do: Integer.to_string(value)
-  defp format_value(_spec, value) when is_binary(value), do: value
-  defp format_value(_spec, value), do: inspect(value)
 end

@@ -51,7 +51,7 @@ defmodule Foglet.Config.Schema do
       key: "registration_mode",
       type: :string,
       default: "open",
-      description: "Account registration policy (D-02/D-03): open | invite_only | sysop_approved",
+      description: "How new accounts are created.",
       enum: ["open", "invite_only", "sysop_approved"],
       min: nil,
       max: nil
@@ -60,7 +60,7 @@ defmodule Foglet.Config.Schema do
       key: "invite_code_generators",
       type: :string,
       default: "sysop_only",
-      description: "Who may generate invite codes (D-04): sysop_only | mods | any_user",
+      description: "Who can generate invite codes.",
       enum: ["sysop_only", "mods", "any_user"],
       min: nil,
       max: nil
@@ -69,7 +69,7 @@ defmodule Foglet.Config.Schema do
       key: "max_post_length",
       type: :integer,
       default: 8192,
-      description: "Maximum post body length in characters (D-31)",
+      description: "Maximum post body length in characters.",
       enum: nil,
       min: 1,
       max: nil
@@ -78,7 +78,7 @@ defmodule Foglet.Config.Schema do
       key: "max_thread_title_length",
       type: :integer,
       default: 60,
-      description: "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)",
+      description: "Maximum thread title length in characters.",
       enum: nil,
       min: 1,
       max: nil
@@ -87,7 +87,7 @@ defmodule Foglet.Config.Schema do
       key: "delivery_mode",
       type: :string,
       default: "no_email",
-      description: "Outbound transactional delivery mode (MAIL-01): email | no_email",
+      description: "Whether outbound email is sent.",
       enum: ["email", "no_email"],
       min: nil,
       max: nil
@@ -96,8 +96,7 @@ defmodule Foglet.Config.Schema do
       key: "require_email_verification",
       type: :boolean,
       default: false,
-      description:
-        "When false, new registrations skip verify and existing confirmed_at: nil users gain access on login (Phase 6 D-01)",
+      description: "Require email verification before login.",
       enum: nil,
       min: nil,
       max: nil
@@ -106,8 +105,7 @@ defmodule Foglet.Config.Schema do
       key: "email_verify_resend_cooldown_seconds",
       type: :integer,
       default: 60,
-      description:
-        "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)",
+      description: "Minimum seconds between resend-code presses on the Verify screen.",
       enum: nil,
       min: 1,
       max: nil
@@ -116,8 +114,7 @@ defmodule Foglet.Config.Schema do
       key: "invite_generation_per_user_limit",
       type: :integer,
       default: 0,
-      description:
-        "Per-user invite generation cap when invite_code_generators == \"any_user\" (INVT-07 D-04). 0 = unlimited.",
+      description: "Per-user invite cap (0 = unlimited).",
       enum: nil,
       min: 0,
       max: nil

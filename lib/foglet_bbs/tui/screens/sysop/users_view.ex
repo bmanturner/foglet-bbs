@@ -20,7 +20,6 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   import Raxol.Core.Renderer.View
 
   @statuses [:pending, :active, :suspended, :rejected]
-  @footer "[A] Approve  [R] Reject  [S] Suspend  [U] Reactivate  [j/k] Move"
 
   # Explicit column widths (Pitfall 9) — must fit within 64x22 minimum budget.
   @table_columns [
@@ -57,25 +56,67 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
     |> refresh_rows()
   end
 
+  @doc """
+  Build a `UsersView` struct from a pre-fetched `%{pending: ..., active: ..., ...}`
+  groups map.
+
+  Used by the Phase 29 App-level load triad
+  (`Foglet.TUI.App.do_update({:load_sysop_users}, _)`): the boundary call to
+  `Foglet.Accounts.list_user_status_admin_targets/1` runs inside the
+  `Foglet.TUI.Command.task/2` closure, and this constructor turns the
+  resulting groups payload into the screen-local struct without re-issuing
+  the boundary call.
+  """
+  @spec from_groups(%{optional(atom()) => [User.t()]}, User.t() | nil) :: t()
+  def from_groups(groups, current_user) when is_map(groups) do
+    rows = build_rows(groups)
+
+    %__MODULE__{
+      current_user: current_user,
+      groups: Map.merge(empty_groups(), groups),
+      rows: rows,
+      selection_index: clamp_selection(0, rows)
+    }
+  end
+
   @spec handle_key(map(), t()) :: {t(), list()}
   def handle_key(%{key: :down}, state), do: {move(state, +1), []}
   def handle_key(%{key: :char, char: "j"}, state), do: {move(state, +1), []}
   def handle_key(%{key: :up}, state), do: {move(state, -1), []}
   def handle_key(%{key: :char, char: "k"}, state), do: {move(state, -1), []}
 
+  # Phase 29 D-15 + A2 disambiguation: each transition keybind is gated by
+  # the focused row's *source* status. [A] Approve and [U] Reactivate both
+  # target :active but disambiguate on source — [A] only when source is
+  # :pending; [U] only when source is :suspended. Pressing a non-advertised
+  # key is a no-op (no boundary call, no status_message change).
   def handle_key(%{key: :char, char: c}, state) when c in ["A", "a"],
-    do: transition(state, :active)
+    do: maybe_transition(state, :pending, :active)
 
   def handle_key(%{key: :char, char: c}, state) when c in ["R", "r"],
-    do: transition(state, :rejected)
+    do: maybe_transition(state, :pending, :rejected)
 
   def handle_key(%{key: :char, char: c}, state) when c in ["S", "s"],
-    do: transition(state, :suspended)
+    do: maybe_transition(state, :active, :suspended)
 
   def handle_key(%{key: :char, char: c}, state) when c in ["U", "u"],
-    do: transition(state, :active)
+    do: maybe_transition(state, :suspended, :active)
 
   def handle_key(_event, state), do: {state, []}
+
+  defp maybe_transition(%__MODULE__{rows: []} = state, _required_from, _target),
+    do: {state, []}
+
+  defp maybe_transition(%__MODULE__{} = state, required_from, target) do
+    {focused_status, _user} = Enum.at(state.rows, state.selection_index)
+
+    if focused_status == required_from and
+         target in Accounts.valid_status_transitions(focused_status) do
+      transition(state, target)
+    else
+      {state, []}
+    end
+  end
 
   @spec render(t(), map()) :: any()
   def render(%__MODULE__{} = state, theme) do
@@ -97,8 +138,29 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
     column style: %{gap: 0} do
       [text("User status administration", fg: theme.title.fg, style: [:bold]), text("")] ++
         render_message(state.message, theme) ++
-        [body, text(""), text(@footer, fg: theme.dim.fg)]
+        [body, text(""), text(footer_text(state), fg: theme.dim.fg)]
     end
+  end
+
+  # Phase 29 D-15: footer is render-time. Only keybinds whose target status
+  # is in `Accounts.valid_status_transitions/1` for the focused row's source
+  # status are advertised. A2 disambiguation: [A] Approve targets :active
+  # from :pending only; [U] Reactivate targets :active from :suspended only.
+  defp footer_text(%__MODULE__{rows: []}), do: "[j/k] Move"
+
+  defp footer_text(%__MODULE__{rows: rows, selection_index: idx}) do
+    {focused_status, _user} = Enum.at(rows, idx)
+    allowed = Accounts.valid_status_transitions(focused_status)
+
+    [
+      if(focused_status == :pending and :active in allowed, do: "[A] Approve"),
+      if(focused_status == :pending and :rejected in allowed, do: "[R] Reject"),
+      if(focused_status == :active and :suspended in allowed, do: "[S] Suspend"),
+      if(focused_status == :suspended and :active in allowed, do: "[U] Reactivate"),
+      "[j/k] Move"
+    ]
+    |> Enum.reject(&is_nil/1)
+    |> Enum.join("  ")
   end
 
   # When there are no rows: render via ConsoleTable (shows "No administrable users.")
@@ -183,7 +245,7 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   defp transition(%__MODULE__{rows: []} = state, _target_status), do: {state, []}
 
   defp transition(%__MODULE__{} = state, target_status) do
-    {_status, selected_user} = Enum.at(state.rows, state.selection_index)
+    {focused_status, selected_user} = Enum.at(state.rows, state.selection_index)
 
     case Accounts.transition_user_status(state.current_user, selected_user, target_status) do
       {:ok, %{user: user, from: from, to: to, delivery: delivery}} ->
@@ -195,6 +257,14 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
           |> Map.put(:message, message)
 
         {new_state, []}
+
+      # Phase 29 D-16: from->to copy names the user handle, source status,
+      # and target status — never the raw atom. The source is the focused
+      # row's *displayed* status (so stale-row failures are explained in
+      # operator-visible terms).
+      {:error, :invalid_transition} ->
+        msg = invalid_transition_message(selected_user.handle, focused_status, target_status)
+        {%{state | message: msg}, []}
 
       {:error, reason} ->
         {%{state | message: error_message(reason)}, []}
@@ -210,8 +280,12 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   defp error_message(:forbidden), do: "Forbidden."
   defp error_message(:not_found), do: "User not found."
   defp error_message(:deleted), do: "Deleted users cannot be changed."
-  defp error_message(:invalid_transition), do: "Invalid status transition."
   defp error_message(:invalid_status), do: "Invalid target status."
+
+  # Phase 29 D-16: from->to copy. The raw error atom MUST NOT appear in
+  # rendered output — verified by a grep test against string literals.
+  defp invalid_transition_message(handle, from, to),
+    do: "Cannot change @#{handle} from #{to_string(from)} to #{to_string(to)}."
 
   defp clamp_selection(_idx, []), do: 0
   defp clamp_selection(idx, rows), do: idx |> max(0) |> min(length(rows) - 1)

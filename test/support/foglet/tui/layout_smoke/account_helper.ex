@@ -104,8 +104,15 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
 
             texts = Enum.map(elements, & &1.text)
 
-            assert Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
-                   "expected Modal.Form footer sentinel '[Enter] Submit' at #{width}x#{height}"
+            # Phase 28 FORM-03 / D-06: Account tab-body forms render WITHOUT
+            # Modal.Form's footer; the global command bar advertises [Enter]/[Esc].
+            # Smoke contract: assert the heading is visible (Modal.Form is
+            # present) and the footer sentinel is suppressed.
+            assert Enum.any?(texts, &String.contains?(&1, "Profile")),
+                   "expected 'Profile' heading at #{width}x#{height}, got: #{inspect(texts)}"
+
+            refute Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
+                   "Modal.Form footer must NOT appear at #{width}x#{height} (Phase 28 D-06)"
           end
         end
       end
@@ -138,11 +145,14 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
             state = AccountHelper.account_smoke_state(width, height, ss)
             texts = Account.render(state) |> AccountHelper.collect_render_text()
 
-            assert Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
-                   "expected Modal.Form footer '[Enter] Submit' at #{width}x#{height}, got: #{inspect(texts)}"
-
+            # Phase 28 FORM-03 / D-06: Account tab-body forms render WITHOUT
+            # Modal.Form's footer. Assert the enum field renders and the
+            # footer sentinel is suppressed.
             assert Enum.any?(texts, &String.contains?(&1, "Theme")),
                    "expected 'Theme' enum field label at #{width}x#{height}"
+
+            refute Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
+                   "Modal.Form footer must NOT appear at #{width}x#{height} (Phase 28 D-06)"
           end
         end
       end

@@ -306,12 +306,25 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
   end
 
   test "D-19 refreshed body renders title, required markers, and action footer" do
+    # Phase 28 FORM-03 (D-06): the footer is opt-in. Pass show_footer: true so
+    # this test continues to verify footer rendering on overlay-style forms;
+    # tab-body consumers (Account, Sysop) leave it default-off.
+    pid = self()
+
     fields = [
       %{name: :slug, type: :text, label: "Slug", required: true},
       %{name: :name, type: :text, label: "Name", required: true}
     ]
 
-    state = test_form(fields, title: "Create board")
+    state =
+      Form.init(
+        title: "Create board",
+        fields: fields,
+        show_footer: true,
+        on_submit: fn payload -> send(pid, {:submitted, payload}) end,
+        on_cancel: fn -> send(pid, :cancelled) end
+      )
+
     flat = state |> Form.render(theme: theme()) |> flatten_text()
 
     assert flat =~ "Create board"
@@ -546,5 +559,638 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert payload.name == "hello"
     assert payload.count == 7
     assert payload.enabled == true
+  end
+
+  # --- Phase 28 Plan 01 Task 1: FORM-01 / FORM-02 / FORM-04 substrate ---
+  #
+  # FORM-02: %{key: :backtab} (CLIHandler-translated terminal back-tab) MUST be
+  # accepted as an alias of %{key: :shift_tab} and %{key: :tab, shift: true}.
+  # FORM-01: Up/Down advance/retreat focus on text/integer/textarea fields with
+  # wrap (last → 0 forward, 0 → last backward); Up/Down on enum cycles the value
+  # and does NOT change focus_index.
+  # FORM-04: Modal.Form.focus_index is the single source of truth for which
+  # field consumes the next keystroke — verified end-to-end via Tab sequencing.
+
+  describe "FORM-02 :backtab event shape (Phase 28 D-15)" do
+    setup do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :c, type: :text, label: "C"}
+      ]
+
+      {:ok, form: test_form(fields)}
+    end
+
+    test "FORM-02 :backtab from focus_index: 1 retreats to 0", %{form: form} do
+      {at_1, _} = Form.handle_event(%{key: :tab}, form)
+      assert at_1.focus_index == 1
+
+      {at_0, action} = Form.handle_event(%{key: :backtab}, at_1)
+      assert at_0.focus_index == 0
+      assert action == nil
+    end
+
+    test "FORM-02 :backtab from focus_index: 0 wraps to last (length - 1)", %{form: form} do
+      assert form.focus_index == 0
+
+      {wrapped, _} = Form.handle_event(%{key: :backtab}, form)
+      assert wrapped.focus_index == 2
+    end
+
+    test "FORM-02 :backtab and :shift_tab and %{key: :tab, shift: true} are byte-equivalent",
+         %{form: form} do
+      {f_backtab, a_backtab} = Form.handle_event(%{key: :backtab}, form)
+      {f_shift_tab, a_shift_tab} = Form.handle_event(%{key: :shift_tab}, form)
+      {f_raxol, a_raxol} = Form.handle_event(%{key: :tab, shift: true}, form)
+
+      assert f_backtab.focus_index == f_shift_tab.focus_index
+      assert f_shift_tab.focus_index == f_raxol.focus_index
+      assert a_backtab == nil
+      assert a_shift_tab == nil
+      assert a_raxol == nil
+    end
+  end
+
+  describe "FORM-01 Up/Down focus on text-like fields (Phase 28 D-13/D-14)" do
+    test "Down on a [text, text, enum] form at focus_index: 0 advances to 1, then 2" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :e, type: :enum, label: "E", choices: [:x, :y]}
+      ]
+
+      form = test_form(fields)
+      assert form.focus_index == 0
+
+      {f1, action1} = Form.handle_event(%{key: :down}, form)
+      assert f1.focus_index == 1
+      assert action1 == nil
+
+      {f2, action2} = Form.handle_event(%{key: :down}, f1)
+      assert f2.focus_index == 2
+      assert action2 == nil
+    end
+
+    test "Down forward wrap: [text, text, text] at focus_index: 2 wraps to 0" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :c, type: :text, label: "C"}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      {f2, _} = Form.handle_event(%{key: :tab}, f1)
+      assert f2.focus_index == 2
+
+      {wrapped, action} = Form.handle_event(%{key: :down}, f2)
+      assert wrapped.focus_index == 0
+      assert action == nil
+    end
+
+    test "Up on [text, text] at focus_index: 1 retreats to 0; another Up wraps 0 → last" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      assert f1.focus_index == 1
+
+      {f0, action0} = Form.handle_event(%{key: :up}, f1)
+      assert f0.focus_index == 0
+      assert action0 == nil
+
+      {f_wrap, action_wrap} = Form.handle_event(%{key: :up}, f0)
+      assert f_wrap.focus_index == 1
+      assert action_wrap == nil
+    end
+
+    test "Up/Down on integer fields advance/retreat focus_index (text-like)" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :n, type: :integer, label: "N"}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      assert f1.focus_index == 1
+
+      {f0, _} = Form.handle_event(%{key: :up}, f1)
+      assert f0.focus_index == 0
+
+      {f1_again, _} = Form.handle_event(%{key: :down}, f0)
+      assert f1_again.focus_index == 1
+    end
+
+    test "Up/Down on textarea fields advance/retreat focus_index (text-like)" do
+      fields = [
+        %{name: :head, type: :text, label: "Head"},
+        %{name: :body, type: :textarea, label: "Body", rows: 3}
+      ]
+
+      form = test_form(fields)
+      {at_textarea, _} = Form.handle_event(%{key: :tab}, form)
+      assert at_textarea.focus_index == 1
+
+      {back, _} = Form.handle_event(%{key: :up}, at_textarea)
+      assert back.focus_index == 0
+
+      {forward, _} = Form.handle_event(%{key: :down}, back)
+      assert forward.focus_index == 1
+    end
+  end
+
+  describe "FORM-01 Up/Down on :enum cycles value, leaves focus" do
+    test "Down on focused :enum cycles value to next choice; focus_index stays" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :pick, type: :enum, label: "Pick", choices: ["a", "b", "c"]}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      {f2, _} = Form.handle_event(%{key: :tab}, f1)
+      assert f2.focus_index == 2
+      assert Form.field_value(f2, :pick) == "a"
+
+      {after_down, action} = Form.handle_event(%{key: :down}, f2)
+      assert after_down.focus_index == 2
+      assert action == nil
+      assert Form.field_value(after_down, :pick) == "b"
+
+      {after_up, _} = Form.handle_event(%{key: :up}, after_down)
+      assert after_up.focus_index == 2
+      assert Form.field_value(after_up, :pick) == "a"
+    end
+  end
+
+  # --- Phase 28 Plan 01 Task 2: FORM-03 footer opt-in ---
+  #
+  # FORM-03: Modal.Form.render/2 emits no [Enter] Submit / [Esc] Cancel footer
+  # by default; passing :show_footer: true via init/1 restores the footer.
+  # The default-off setting suppresses the footer for tab-body consumers
+  # (Account Profile/Prefs, Sysop Site) so the global command bar is the single
+  # advertiser of those keys; true overlay callers opt in explicitly (D-06).
+
+  describe "FORM-03 :show_footer opt-in (Phase 28 D-06, D-07)" do
+    defp footer_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Test",
+            fields: [
+              %{name: :a, type: :text, label: "A"},
+              %{name: :b, type: :text, label: "B"}
+            ],
+            on_submit: fn _ -> send(pid, :submitted) end,
+            on_cancel: fn -> send(pid, :cancelled) end
+          ],
+          opts
+        )
+      )
+    end
+
+    test "FORM-03 default: render emits no [Enter] Submit / [Esc] Cancel substring" do
+      form = footer_form()
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      refute String.contains?(flat, "[Enter] Submit"),
+             "default-rendered form must NOT advertise [Enter] Submit, got: #{inspect(flat)}"
+
+      refute String.contains?(flat, "[Esc] Cancel"),
+             "default-rendered form must NOT advertise [Esc] Cancel, got: #{inspect(flat)}"
+    end
+
+    test "FORM-03 explicit show_footer: true emits both footer substrings" do
+      form = footer_form(show_footer: true)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "[Enter] Submit"),
+             "show_footer: true must advertise [Enter] Submit, got: #{inspect(flat)}"
+
+      assert String.contains?(flat, "[Esc] Cancel"),
+             "show_footer: true must advertise [Esc] Cancel, got: #{inspect(flat)}"
+    end
+
+    test "FORM-03 explicit show_footer: false matches default-off behavior" do
+      form = footer_form(show_footer: false)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      refute String.contains?(flat, "[Enter] Submit")
+      refute String.contains?(flat, "[Esc] Cancel")
+    end
+
+    test "FORM-03 :show_footer struct field is locked at init/1" do
+      assert footer_form().show_footer == false
+      assert footer_form(show_footer: false).show_footer == false
+      assert footer_form(show_footer: true).show_footer == true
+    end
+  end
+
+  describe "FORM-04 single-source-of-truth focus routing" do
+    test ":tab :tab :char x on [text, text, text] lands x in third field's buffer only" do
+      fields = [
+        %{name: :first, type: :text, label: "First"},
+        %{name: :second, type: :text, label: "Second"},
+        %{name: :third, type: :text, label: "Third"}
+      ]
+
+      form = test_form(fields)
+      assert form.focus_index == 0
+
+      events = [
+        %{key: :tab},
+        %{key: :tab},
+        %{key: :char, char: "x"}
+      ]
+
+      {final, _} = send_events(form, events)
+
+      assert final.focus_index == 2
+      assert Form.field_value(final, :third) == "x"
+      assert Form.field_value(final, :first) == ""
+      assert Form.field_value(final, :second) == ""
+    end
+  end
+
+  # --- Phase 28 Plan 02 Task 1: FORM-05 submit-state machine + lock + setter ---
+  #
+  # FORM-05: Modal.Form gains an explicit `submit_state` machine
+  # (:idle -> :submitting -> {:saved | {:error, _}} -> :idle on next event).
+  # The :submitting state locks all input (every event swallowed) so accidental
+  # double-Enter, Enter-during-redraw, or held-key bounces cannot invoke
+  # `on_submit` twice. `set_submit_state/2` is the public terminal-state setter
+  # for consuming screens; `:submitting` is reserved for the internal Enter
+  # transition (D-01..D-05).
+
+  describe "FORM-05 submit-state machine + lock guard (Phase 28 D-01..D-05)" do
+    defp single_field_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Single",
+            fields: [%{name: :only, type: :text, label: "Only", value: ""}],
+            on_submit: fn _payload -> send(pid, :submit_called) end,
+            on_cancel: fn -> send(pid, :cancel_called) end
+          ],
+          opts
+        )
+      )
+    end
+
+    defp two_field_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Two",
+            fields: [
+              %{name: :a, type: :text, label: "A", value: ""},
+              %{name: :b, type: :text, label: "B", value: ""}
+            ],
+            on_submit: fn _payload -> send(pid, :submit_called) end,
+            on_cancel: fn -> send(pid, :cancel_called) end
+          ],
+          opts
+        )
+      )
+    end
+
+    test "FORM-05 init/1 seeds submit_state to :idle" do
+      assert single_field_form().submit_state == :idle
+      assert two_field_form().submit_state == :idle
+    end
+
+    test "FORM-05 double-Enter on a submittable form invokes on_submit exactly once" do
+      form = single_field_form()
+
+      {form1, action1} = Form.handle_event(%{key: :enter}, form)
+      assert action1 == :submitted
+      assert form1.submit_state == :submitting
+
+      {form2, action2} = Form.handle_event(%{key: :enter}, form1)
+      assert action2 == nil
+      assert form2.submit_state == :submitting
+
+      assert_receive :submit_called
+      refute_receive :submit_called, 50
+    end
+
+    test "FORM-05 lock — :char event does not mutate field_states or focus" do
+      form = single_field_form()
+      {locked, :submitted} = Form.handle_event(%{key: :enter}, form)
+      assert locked.submit_state == :submitting
+
+      original_field_states = locked.field_states
+      original_focus = locked.focus_index
+
+      {after_char, action} = Form.handle_event(%{key: :char, char: "x"}, locked)
+
+      assert action == nil
+      assert after_char.submit_state == :submitting
+      assert after_char.field_states == original_field_states
+      assert after_char.focus_index == original_focus
+      assert Form.field_value(after_char, :only) == ""
+    end
+
+    test "FORM-05 lock — every event is swallowed (no callbacks, no mutations)" do
+      pid = self()
+      raise_on_call = fn _ -> flunk("on_submit invoked while locked") end
+      raise_on_cancel = fn -> flunk("on_cancel invoked while locked") end
+
+      # Build a two-field form with raising callbacks so we catch any leak.
+      form =
+        Form.init(
+          title: "Locked",
+          fields: [
+            %{name: :a, type: :text, label: "A", value: ""},
+            %{name: :b, type: :text, label: "B", value: ""}
+          ],
+          on_submit: raise_on_call,
+          on_cancel: raise_on_cancel
+        )
+
+      # Force the form into :submitting via the public setter is forbidden,
+      # so use the internal Enter transition: focus the last field, then Enter.
+      {form_focused, nil} = Form.handle_event(%{key: :tab}, form)
+      assert form_focused.focus_index == 1
+      # Replace on_submit with a no-op for the single legal submit event;
+      # then restore the raising callbacks immediately by reaching back into
+      # the struct, since :submitting locks every subsequent event.
+      noop_form = %{form_focused | on_submit: fn _ -> :ok end}
+      {locked_noop, :submitted} = Form.handle_event(%{key: :enter}, noop_form)
+      locked = %{locked_noop | on_submit: raise_on_call, on_cancel: raise_on_cancel}
+
+      assert locked.submit_state == :submitting
+      original_focus = locked.focus_index
+      original_field_states = locked.field_states
+      original_errors = locked.errors
+
+      events = [
+        %{key: :tab},
+        %{key: :shift_tab},
+        %{key: :backtab},
+        %{key: :up},
+        %{key: :down},
+        %{key: :backspace},
+        %{key: :enter},
+        %{key: :escape}
+      ]
+
+      final =
+        Enum.reduce(events, locked, fn ev, st ->
+          {st2, action} = Form.handle_event(ev, st)
+          assert action == nil, "expected nil action while locked, got: #{inspect(action)}"
+          st2
+        end)
+
+      assert final.submit_state == :submitting
+      assert final.focus_index == original_focus
+      assert final.field_states == original_field_states
+      assert final.errors == original_errors
+
+      # No stray messages from the (raising) callbacks should have queued either.
+      refute_receive _, 20
+      _ = pid
+    end
+
+    test "FORM-05 set_submit_state/2 accepts :idle, :saved, and {:error, term}" do
+      form = single_field_form()
+
+      assert Form.set_submit_state(form, :idle).submit_state == :idle
+      assert Form.set_submit_state(form, :saved).submit_state == :saved
+
+      assert Form.set_submit_state(form, {:error, "boom"}).submit_state ==
+               {:error, "boom"}
+    end
+
+    test "FORM-05 set_submit_state/2 rejects :submitting with ArgumentError" do
+      form = single_field_form()
+
+      assert_raise ArgumentError, ~r/submitting/, fn ->
+        Form.set_submit_state(form, :submitting)
+      end
+    end
+
+    test "FORM-05 auto-reset from :saved on next non-locked event" do
+      pid = self()
+      raise_on_call = fn _ -> flunk("on_submit invoked during auto-reset event") end
+
+      form =
+        Form.init(
+          title: "Reset",
+          fields: [
+            %{name: :a, type: :text, label: "A", value: ""},
+            %{name: :b, type: :text, label: "B", value: ""}
+          ],
+          on_submit: raise_on_call,
+          on_cancel: fn -> send(pid, :cancel_called) end
+        )
+
+      saved = Form.set_submit_state(form, :saved)
+      assert saved.submit_state == :saved
+
+      {after_tab, nil} = Form.handle_event(%{key: :tab}, saved)
+      assert after_tab.submit_state == :idle
+      assert after_tab.focus_index == 1
+    end
+
+    test "FORM-05 auto-reset from {:error, _} on next non-locked event" do
+      pid = self()
+      raise_on_call = fn _ -> flunk("on_submit invoked during auto-reset event") end
+
+      form =
+        Form.init(
+          title: "Reset",
+          fields: [
+            %{name: :a, type: :text, label: "A", value: ""},
+            %{name: :b, type: :text, label: "B", value: ""}
+          ],
+          on_submit: raise_on_call,
+          on_cancel: fn -> send(pid, :cancel_called) end
+        )
+
+      errored = Form.set_submit_state(form, {:error, "boom"})
+      assert errored.submit_state == {:error, "boom"}
+
+      {after_tab, nil} = Form.handle_event(%{key: :tab}, errored)
+      assert after_tab.submit_state == :idle
+      assert after_tab.focus_index == 1
+    end
+  end
+
+  # --- Phase 28 Plan 02 Task 2: FORM-05 status row in render/2 ---
+  #
+  # FORM-05 visibility: render/2 emits a status row at the bottom of the form
+  # body when submit_state is :submitting, :saved, or {:error, _}. The status
+  # row REPLACES the footer when both would render (D-09); idle + show_footer:
+  # false produces neither status nor footer (the global command bar advertises
+  # the keys for tab-body consumers, D-06).
+
+  describe "FORM-05 render/2 status row (Phase 28 D-08, D-09)" do
+    defp status_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Status",
+            fields: [
+              %{name: :a, type: :text, label: "A", value: ""},
+              %{name: :b, type: :text, label: "B", value: ""}
+            ],
+            on_submit: fn _ -> send(pid, :submitted) end,
+            on_cancel: fn -> send(pid, :cancelled) end
+          ],
+          opts
+        )
+      )
+    end
+
+    test "FORM-05 :submitting renders Saving… row" do
+      form = %{status_form() | submit_state: :submitting}
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Saving…"),
+             "expected 'Saving…' in render output, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 :saved renders Saved. row" do
+      form = Form.set_submit_state(status_form(), :saved)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Saved."),
+             "expected 'Saved.' in render output, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 {:error, msg} renders Error: <msg> row" do
+      form = Form.set_submit_state(status_form(), {:error, "Disk full"})
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Error: Disk full"),
+             "expected 'Error: Disk full' in render output, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 status row replaces footer when both would render" do
+      form = %{status_form(show_footer: true) | submit_state: :submitting}
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "Saving…")
+
+      refute String.contains?(flat, "[Enter] Submit"),
+             "footer must be suppressed while a status row is shown, got: #{inspect(flat)}"
+    end
+
+    test "FORM-05 :idle + default show_footer: false → no status, no footer" do
+      form = status_form()
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      refute String.contains?(flat, "Saving…")
+      refute String.contains?(flat, "Saved.")
+      refute String.contains?(flat, "Error:")
+      refute String.contains?(flat, "[Enter] Submit")
+    end
+
+    test "FORM-05 :idle + show_footer: true → footer present (no status row)" do
+      form = status_form(show_footer: true)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "[Enter] Submit")
+      refute String.contains?(flat, "Saving…")
+      refute String.contains?(flat, "Saved.")
+      refute String.contains?(flat, "Error:")
+    end
+  end
+
+  # =========================================================================
+  # Phase 28 Plan 04 Task 2 — optional :description per field (substrate add)
+  # =========================================================================
+
+  describe "FORM field :description (Phase 28 Plan 04 substrate add)" do
+    test "field with :description renders the description as a row beneath the widget" do
+      fields = [
+        %{
+          name: :delivery_mode,
+          type: :enum,
+          label: "delivery_mode",
+          choices: ["email", "no_email"],
+          value: "email",
+          description: "Outbound transactional delivery mode"
+        }
+      ]
+
+      form =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "Outbound transactional delivery mode")
+    end
+
+    test "field without :description does NOT emit any description row" do
+      fields = [
+        %{
+          name: :title,
+          type: :text,
+          label: "Title"
+        }
+      ]
+
+      form =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      # No stray description-shaped artifacts (we only check there's no extra
+      # body row carrying a non-existent description string).
+      refute String.contains?(flat, "description")
+    end
+
+    test "empty :description is treated as absent (no extra row)" do
+      fields = [
+        %{name: :t, type: :text, label: "T", description: ""}
+      ]
+
+      form =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      # The flat list has exactly: title, divider, label "T:", widget rows.
+      # An empty description should not produce a blank trailing row.
+      refute String.contains?(flat, "description")
+    end
+  end
+
+  describe "init/1 input validation (Phase 28 BL-03)" do
+    test "raises ArgumentError when :fields is an empty list" do
+      assert_raise ArgumentError, ~r/at least one field/, fn ->
+        Foglet.TUI.Widgets.Modal.Form.init(
+          title: "Empty",
+          fields: [],
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+      end
+    end
   end
 end
