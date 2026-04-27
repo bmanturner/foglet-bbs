@@ -194,6 +194,12 @@ defmodule Foglet.TUI.App do
   # Renders the modal as the sole visible content, centered in the terminal.
   # Extracts theme from state.session_context and passes it through to the
   # theme-aware Modal.render/2 (Phase 7 thin adapter, D-08).
+  #
+  # Modal.Form-backed :form modal callers (future) MUST pass `show_footer: true`
+  # to `Modal.Form.init/1` so the [Enter] Submit / [Esc] Cancel footer is
+  # advertised inside the centered overlay box (Phase 28 D-06). Inline tab-body
+  # consumers (Account Profile/Prefs, Sysop Site) MUST omit the option (default
+  # false) so the global command bar is the single advertiser of those keys.
   defp render_modal_overlay(modal, state) do
     theme = Theme.from_state(state)
 

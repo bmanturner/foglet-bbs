@@ -744,18 +744,23 @@ defmodule Foglet.TUI.Screens.AccountTest do
   # ---------------------------------------------------------------------------
 
   describe "PROFILE Modal.Form primitive presence" do
-    test "renders Modal.Form footer sentinel and form heading" do
+    test "renders form heading and suppresses Modal.Form footer (FORM-03 default-off)" do
+      # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
+      # Modal.Form footer; the global command bar is the single advertiser of
+      # [Enter] Submit / [Esc] Cancel. Profile/Prefs build forms without
+      # `show_footer: true`, so render must contain the form heading but NOT
+      # the footer sentinel.
       state =
         build_state_for_role(:user)
         |> put_in([:screen_state, :account], Account.init_screen_state())
 
       flat = Account.render(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
-             "expected Modal.Form footer sentinel '[Enter] Submit' in profile tab, got: #{inspect(flat)}"
-
       assert Enum.any?(flat, &String.contains?(&1, "Profile")),
              "expected form heading 'Profile' in profile tab"
+
+      refute Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
+             "Modal.Form footer must NOT appear in Account tab body (Phase 28 D-06)"
     end
 
     test "renders labeled field rows for each profile field" do
@@ -813,11 +818,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
       %{state: prefs_state}
     end
 
-    test "renders Modal.Form footer sentinel", %{state: state} do
+    test "suppresses Modal.Form footer in prefs tab (FORM-03 default-off)", %{state: state} do
+      # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
+      # Modal.Form footer; the global command bar advertises [Enter]/[Esc].
       flat = Account.render(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
-             "expected Modal.Form footer sentinel in prefs tab"
+      refute Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
+             "Modal.Form footer must NOT appear in Prefs tab body (Phase 28 D-06)"
     end
 
     test "renders enum field for theme selection", %{state: state} do

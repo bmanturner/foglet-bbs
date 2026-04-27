@@ -82,7 +82,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     :focus_index,
     :errors,
     :on_submit,
-    :on_cancel
+    :on_cancel,
+    show_footer: false
   ]
 
   @type t :: %__MODULE__{
@@ -92,17 +93,23 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
           focus_index: non_neg_integer(),
           errors: %{atom() => String.t()},
           on_submit: (map() -> any()),
-          on_cancel: (-> any())
+          on_cancel: (-> any()),
+          show_footer: boolean()
         }
 
   @doc """
   Initialise the form state.
 
   Options:
-    * `:title`     — heading string
-    * `:fields`    — list of field spec maps (see `field_spec/0`)
-    * `:on_submit` — `(map() -> any())` called with typed payload on submit
-    * `:on_cancel` — `(-> any())` called on Esc
+    * `:title`       — heading string
+    * `:fields`      — list of field spec maps (see `field_spec/0`)
+    * `:on_submit`   — `(map() -> any())` called with typed payload on submit
+    * `:on_cancel`   — `(-> any())` called on Esc
+    * `:show_footer` — boolean, default `false` (Phase 28 D-06 / FORM-03).
+      When `true`, `render/2` appends a `[Enter] Submit   [Esc] Cancel` row in
+      `theme.dim.fg`. Tab-body consumers (Account Profile/Prefs, Sysop Site)
+      should leave this default-off so the global command bar is the single
+      advertiser of those keys; true overlay callers (centered modals) opt in.
   """
   @spec init(keyword()) :: t()
   def init(opts) when is_list(opts) do
@@ -116,7 +123,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       focus_index: 0,
       errors: %{},
       on_submit: Keyword.fetch!(opts, :on_submit),
-      on_cancel: Keyword.fetch!(opts, :on_cancel)
+      on_cancel: Keyword.fetch!(opts, :on_cancel),
+      show_footer: Keyword.get(opts, :show_footer, false)
     }
   end
 
@@ -259,7 +267,6 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
     title_row = text(state.title, fg: theme.title.fg, style: [:bold])
     divider = text(String.duplicate("─", 40), fg: theme.border.fg)
-    footer = text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)
 
     field_rows =
       state.fields
@@ -276,8 +283,18 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
         msg -> [text(msg, fg: theme.error.fg)]
       end
 
+    # Phase 28 FORM-03 / D-06: footer is opt-in via init(show_footer: true).
+    # Default is `false` so tab-body consumers don't double-up against the
+    # global command bar; overlay-style forms opt in explicitly.
+    footer_rows =
+      if state.show_footer do
+        [text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)]
+      else
+        []
+      end
+
     column [] do
-      [title_row, divider] ++ field_rows ++ base_error_rows ++ [footer]
+      [title_row, divider] ++ field_rows ++ base_error_rows ++ footer_rows
     end
   end
 
