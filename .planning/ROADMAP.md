@@ -18,7 +18,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
 | 28 | Modal.Form Substrate | 7/7 | Complete   | 2026-04-27 |
-| 29 | Sysop Tab Lifecycle & Bodies | 4/4 | Complete   | 2026-04-27 |
+| 29 | Sysop Tab Lifecycle & Bodies | 4/4 | Complete    | 2026-04-27 |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
 | 32 | Main Menu Chrome Polish | Main Menu Navigation and Oneliners panels render with border titles, theme accents, correct indents, and no glyph artifacts | MENU-01..05 (5) | yes |
