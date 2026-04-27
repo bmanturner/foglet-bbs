@@ -1,102 +1,169 @@
+<!-- generated-by: gsd-doc-writer -->
 # Foglet BBS
 
 Foglet is an SSH-first bulletin board system built with Elixir, Phoenix,
-Postgres, and a terminal UI served over SSH. The product experience is the
-terminal BBS: accounts, boards, threads, posts, oneliners, subscriptions,
-moderation, and sysop workflows all live there.
+Postgres, and a terminal UI served over SSH. Accounts, boards, threads, posts,
+oneliners, subscriptions, moderation, and sysop workflows all live in the
+terminal experience.
 
 Phoenix is operational infrastructure for the endpoint, PubSub, telemetry,
-LiveDashboard, mail delivery plumbing, and future structured clients. It is not
-a user-facing browser workflow for v1.2 pre-alpha.
+LiveDashboard, mail delivery plumbing, and future structured clients. It is
+not a user-facing browser workflow for v1.2 pre-alpha.
 
 ## Status
 
-Foglet is pre-alpha software. The current v1.2 work is gap closure: making
-offered SSH/TUI flows honest and operational before broader launch work.
+Foglet is **pre-alpha** software (v1.2). The current focus is gap closure:
+making the offered SSH/TUI flows honest and operational before broader launch
+work. Treat anything beyond what this README describes as design context
+rather than supported product surface.
+
+## Requirements
+
+- Elixir `~> 1.17` and a matching Erlang/OTP release
+- PostgreSQL (any currently supported major version)
+- An SSH client for connecting to the running BBS
+
+This repository uses [`rtk`](https://github.com/) as the local command prefix.
+All examples below use `rtk` in front of `mix` and other dev tooling.
+
+## Quick Start
+
+Clone the repo, install dependencies, and create the database:
+
+```bash
+git clone <your-fork-or-remote-url> foglet_bbs
+cd foglet_bbs
+rtk mix setup
+```
+
+`mix setup` runs `deps.get`, `ecto.create`, `ecto.migrate`, `run priv/repo/seeds.exs`,
+and configures the project's git hooks path.
+
+Start the application:
+
+```bash
+rtk mix phx.server
+```
+
+Phoenix and the SSH daemon both come up under the OTP supervision tree. The
+default SSH port is `2222` (override with the `FOGLET_SSH_PORT` environment
+variable).
+
+## Connecting
+
+Connect with any standard SSH client:
+
+```bash
+ssh USERNAME@localhost -p 2222
+```
+
+Foglet supports both **SSH key** and **password** authentication. Users may
+register and add SSH keys through the in-TUI account workflows. Once a key is
+registered, subsequent sessions can authenticate without a password.
+
+Only one active session per user is allowed; opening a second session will
+promote the new connection and close the older one.
 
 ## Operator Notes
-
-Foglet is SSH-first; Phoenix is operational infrastructure and not a
-user-facing browser workflow.
 
 ### Delivery Modes
 
 Foglet stores the active delivery mode in runtime configuration as
 `delivery_mode`.
 
-#### Email mode
+**Email mode** (`delivery_mode=email`): registration verification, password
+reset, and account-status notices may be delivered through the configured
+mail adapter. SMTP host, port, username, password, and adapter settings
+belong in environment/runtime config (`config/runtime.exs` or deployment
+environment variables) and **not** in DB-backed runtime config.
 
-Email mode uses `delivery_mode=email` for transactional delivery. In this mode,
-registration verification, password reset, and account-status notices may be
-delivered through the configured mail adapter.
+**no-email mode** (`delivery_mode=no_email`): no outbound email is sent.
+Operators retrieve reset tokens or verification codes through break-glass
+Mix tasks and communicate them out-of-band.
 
-SMTP host, port, username, password, and adapter settings belong in
-environment/runtime config, not DB-backed runtime config. Keep those secrets in
-`config/runtime.exs` inputs or deployment environment variables.
+### Break-Glass Mix Tasks
 
-#### no-email mode
-
-no-email mode uses `delivery_mode=no_email` and requires explicit operator
-retrieval workflows. No email is sent in this mode. Operators retrieve reset tokens or verification codes through break-glass Mix tasks, then communicate them through an out-of-band process they control.
-
-### Break-Glass Tasks
-
-Run Mix tasks from the application release or source checkout with the same
-database and runtime environment used by the running node.
+Run these from the application release or source checkout against the same
+database and runtime environment as the running node:
 
 ```bash
-mix foglet.user.reset_password HANDLE
-mix foglet.user.verification_code HANDLE
-mix foglet.user.status HANDLE --actor SYSOP --status active
-mix foglet.board_subscriptions list --user HANDLE
+rtk mix foglet.user.reset_password HANDLE
+rtk mix foglet.user.verification_code HANDLE
+rtk mix foglet.user.status HANDLE --actor SYSOP --status active
+rtk mix foglet.board_subscriptions list --user HANDLE
 ```
 
-`mix foglet.user.reset_password HANDLE` generates a raw reset token for operator-assisted SSH reset handling. The task does not send email and does not create a browser reset URL.
+- `foglet.user.reset_password HANDLE` — generates a raw reset token for
+  operator-assisted SSH reset handling. Does not send email and does not
+  produce a browser reset URL.
+- `foglet.user.verification_code HANDLE` — generates a verification code for
+  no-email operation. In email mode, prefer the normal Login or Verify
+  resend flow.
+- `foglet.user.status HANDLE --actor SYSOP --status STATUS` — changes user
+  status through the same Accounts authorization boundary as TUI workflows.
+  Valid statuses are `active`, `rejected`, and `suspended`.
+- `foglet.board_subscriptions list --user HANDLE` — lists a user's board
+  subscription directory. Also supports `subscribe` and `unsubscribe` actions
+  with `--board BOARD_SLUG`. Required-subscription and archived-board rules
+  still route through `Foglet.Boards`.
 
-`mix foglet.user.verification_code HANDLE` generates a verification code for
-no-email operation. In Email mode, use the normal Login or Verify resend flow
-instead.
+Additional operator tasks live in `lib/mix/tasks/`, including
+`foglet.user.create`, `foglet.user.promote`, and `foglet.doctor`.
 
-`mix foglet.user.status HANDLE --actor SYSOP --status active` changes user
-status through the same Accounts authorization boundary as TUI workflows. Valid
-statuses are `active`, `rejected`, and `suspended`.
+## Launch Caveats
 
-`mix foglet.board_subscriptions list --user HANDLE` lists a user's board
-subscription directory. The same task also supports `subscribe` and
-`unsubscribe` actions with `--board BOARD_SLUG`; required-subscription and
-archived-board rules still route through `Foglet.Boards`.
+The following are **not** v1.2 pre-alpha capabilities. Foglet should not be
+operated as though they exist yet:
 
-### Known Launch Blockers
+- No end-user web UI. Browser-facing Phoenix surfaces are operational
+  infrastructure only.
+- No browser admin console.
+- No webhook notifications.
+- No email digests.
+- No delivery retry queues or outbound delivery logs.
+- No full case-management moderation.
 
-The Phase 14 reset-URL blocker is closed by Phase 15 when the reset task,
-tests, and operator notes use raw reset tokens instead of browser URLs. See
-`.planning/phases/14-launch-hygiene-and-operator-notes/14-BLOCKERS.md` for the
-current blocker log and audit notes.
+## Repository Layout
 
-### Launch Caveats
-
-Each item in this list is not a v1.2 pre-alpha capability: browser admin, webhook notifications, email digests, delivery retry queues, outbound delivery logs, and full case-management moderation. Foglet should not be operated as though those workflows exist yet.
-
-There is no end-user web UI; it is not a v1.2 pre-alpha capability. Browser-facing Phoenix surfaces are operational infrastructure only.
-
-### Nested Docs
-
-The root README is the canonical pre-alpha operator guide. The nested docs may
-contain future-oriented or internal design material, so treat them as design
-context unless this README or the current planning artifacts say a workflow is
-supported for v1.2 pre-alpha.
+- `lib/foglet_bbs/` — `Foglet.*` domain code (Accounts, Boards, Threads, Posts,
+  Sessions, SSH, TUI, Authorization, Config) plus `FogletBbs.*` Phoenix
+  infrastructure (Application, Repo, Mailer, etc.). Both namespaces coexist in
+  this directory; the boundary is by module name, not by path.
+- `lib/foglet_bbs_web/` — `FogletBbsWeb.*` Phoenix endpoint, telemetry,
+  LiveDashboard.
+- `lib/mix/tasks/` — operator break-glass Mix tasks.
+- `docs/` — project documentation. See
+  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
+  [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
+- `docs/raxol/` — **vendored** Raxol library documentation. These are
+  upstream library docs, not Foglet-specific content.
+- `vendor/raxol/` — vendored Raxol TUI library source.
+- `AGENTS.md` — agent/contributor context describing namespaces, boundaries,
+  and workflow conventions.
 
 ## Development
 
-Use `rtk` as the local command prefix in this repository:
+The project finish line is:
 
 ```bash
-rtk mix test
 rtk mix precommit
 ```
 
-The project finish line is `rtk mix precommit`, which runs compile checks,
-formatting, Credo, Sobelow, and Dialyzer.
+`precommit` runs `compile --warnings-as-errors`, `deps.unlock --unused`,
+`format`, `credo --strict`, `sobelow --exit Low`, and `dialyzer`.
+
+Run the test suite with:
+
+```bash
+rtk mix test
+```
+
+`mix test` ensures the test database is created and migrated, seeds runtime
+config, and then runs the suite.
+
+For deeper context on namespaces, persistence invariants, authorization
+scopes, SSH/TUI ownership, and workflow conventions, read
+[`AGENTS.md`](AGENTS.md) before non-trivial changes.
 
 ## License
 

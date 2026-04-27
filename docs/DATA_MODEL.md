@@ -64,6 +64,7 @@ schema "users" do
   field :theme, :string, default: "default"
   field :show_in_last_callers, :boolean, default: true
   field :email_digest, Ecto.Enum, values: [:off, :daily, :weekly], default: :off
+  field :timezone, :string, default: "Etc/UTC"
   field :preferences, :map, default: %{}
 
   # Lifecycle
@@ -95,7 +96,7 @@ end
 
 - `registration_changeset/2` — handle, email, password. Validates handle format (length, allowed characters — alphanumeric + `_`/`-`, classic BBS feel), hashes password with Argon2.
 - `profile_changeset/2` — location, tagline, real_name, theme, preferences. Never touches handle or email.
-- `email_changeset/2`, `password_changeset/2` — separate, each requiring current password re-entry.
+- `password_changeset/2` — separate, requires current password re-entry.
 - `role_changeset/2` — sysop-only pathway.
 
 **Anonymization flow** (on account deletion):
@@ -197,7 +198,6 @@ schema "boards" do
   has_many :threads, Foglet.Threads.Thread
   has_many :posts, Foglet.Posts.Post
   has_many :subscriptions, Foglet.Boards.Subscription
-  has_many :moderators, Foglet.Moderation.BoardModerator
 
   timestamps()
 end
