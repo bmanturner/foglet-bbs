@@ -207,12 +207,18 @@ defmodule Foglet.Accounts.User do
   end
 
   defp default_timezone do
-    with local_timezone <- Timex.Timezone.local(),
-         name when is_binary(name) <- Timex.Timezone.name_of(local_timezone),
-         true <- Timex.Timezone.exists?(name) do
-      name
+    configured = Application.get_env(:foglet_bbs, :default_timezone)
+
+    if is_binary(configured) and Timex.Timezone.exists?(configured) do
+      configured
     else
-      _ -> @default_timezone
+      with local_timezone <- Timex.Timezone.local(),
+           name when is_binary(name) <- Timex.Timezone.name_of(local_timezone),
+           true <- Timex.Timezone.exists?(name) do
+        name
+      else
+        _ -> @default_timezone
+      end
     end
   end
 
