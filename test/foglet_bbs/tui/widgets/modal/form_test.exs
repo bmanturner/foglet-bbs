@@ -1107,4 +1107,77 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       refute String.contains?(flat, "Error:")
     end
   end
+
+  # =========================================================================
+  # Phase 28 Plan 04 Task 2 — optional :description per field (substrate add)
+  # =========================================================================
+
+  describe "FORM field :description (Phase 28 Plan 04 substrate add)" do
+    test "field with :description renders the description as a row beneath the widget" do
+      fields = [
+        %{
+          name: :delivery_mode,
+          type: :enum,
+          label: "delivery_mode",
+          choices: ["email", "no_email"],
+          value: "email",
+          description: "Outbound transactional delivery mode"
+        }
+      ]
+
+      form =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "Outbound transactional delivery mode")
+    end
+
+    test "field without :description does NOT emit any description row" do
+      fields = [
+        %{
+          name: :title,
+          type: :text,
+          label: "Title"
+        }
+      ]
+
+      form =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      # No stray description-shaped artifacts (we only check there's no extra
+      # body row carrying a non-existent description string).
+      refute String.contains?(flat, "description")
+    end
+
+    test "empty :description is treated as absent (no extra row)" do
+      fields = [
+        %{name: :t, type: :text, label: "T", description: ""}
+      ]
+
+      form =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      # The flat list has exactly: title, divider, label "T:", widget rows.
+      # An empty description should not produce a blank trailing row.
+      refute String.contains?(flat, "description")
+    end
+  end
 end

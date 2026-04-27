@@ -11,6 +11,12 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
   Per RESEARCH Pitfall 4: body-only render — no outer box/border.
   Per RESEARCH Pitfall 2 / Codex Concern 4: SubmitStash for submit payloads.
+
+  Honest Esc (Phase 28 FORM-06 / D-10, D-11): pressing Esc reseeds drafts
+  via `State.seed_from_user/2` (which clears `candidate_theme_id`); the
+  visible signal is the field values reverting on the next render. No
+  flash status row — Account screens already advertise [Esc] Cancel in
+  the global command bar.
   """
 
   alias Foglet.TUI.Screens.Account.State
@@ -65,9 +71,11 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
          }, [{:account_save_prefs, attrs}]}
 
       :cancelled ->
+        # FORM-06 / D-10, D-11: Esc reseeds drafts (which clears
+        # candidate_theme_id via seed_from_user); no flash status row.
         reseeded = State.seed_from_user(state, current_user)
 
-        {:ok, %{reseeded | status_message: "Preference changes discarded."}, []}
+        {:ok, %{reseeded | status_message: nil}, []}
 
       _ ->
         dirty? = action == nil and text_input_event?(event)

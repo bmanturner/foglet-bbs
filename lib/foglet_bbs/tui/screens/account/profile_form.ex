@@ -10,6 +10,11 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
 
   Per RESEARCH Pitfall 2 / Codex Concern 4: submit payloads are captured
   via `Modal.Form.SubmitStash` rather than raw `Process.put/get`.
+
+  Honest Esc (Phase 28 FORM-06 / D-10, D-11): pressing Esc reseeds drafts
+  via `State.seed_from_user/2`; the visible signal is the field values
+  reverting on the next render. No flash status row — Account screens
+  already advertise [Esc] Cancel in the global command bar.
   """
 
   alias Foglet.TUI.Screens.Account.State
@@ -49,8 +54,12 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
          [{:account_save_profile, attrs}]}
 
       :cancelled ->
+        # FORM-06 / D-10, D-11: Esc reseeds drafts; the visible signal is the
+        # field values reverting on the next render. No flash status row —
+        # Account screens already advertise [Esc] Cancel in the global
+        # command bar.
         reseeded = State.seed_from_user(state, current_user)
-        {:ok, %{reseeded | status_message: "Profile changes discarded."}, []}
+        {:ok, %{reseeded | status_message: nil}, []}
 
       _ ->
         dirty? = action == nil and text_input_event?(event)

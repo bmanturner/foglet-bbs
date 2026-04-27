@@ -555,13 +555,25 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     label_row = text("#{spec.label}#{marker}:", fg: label_fg, style: label_style)
     widget_row = render_widget(spec, field_state, focused?, theme)
 
+    # Phase 28 Plan 04 substrate add: optional :description renders as a dim
+    # row beneath the widget when the field spec carries a non-empty
+    # :description string. Used by Sysop SiteForm to preserve Schema description
+    # copy through the Modal.Form migration. Other consumers may opt in by
+    # adding :description to their field spec.
+    description_rows =
+      case Map.get(spec, :description) do
+        nil -> []
+        "" -> []
+        desc when is_binary(desc) -> [text(desc, fg: theme.dim.fg)]
+      end
+
     error_rows =
       case Map.get(errors, spec.name) do
         nil -> []
         msg -> [text(msg, fg: theme.error.fg)]
       end
 
-    [label_row, widget_row] ++ error_rows
+    [label_row, widget_row] ++ description_rows ++ error_rows
   end
 
   defp render_widget(%{type: type}, field_state, focused?, theme)
