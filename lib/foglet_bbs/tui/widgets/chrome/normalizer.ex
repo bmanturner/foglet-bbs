@@ -95,7 +95,15 @@ defmodule Foglet.TUI.Widgets.Chrome.Normalizer do
   defp save_command?(key, label), do: key in ["s/enter", "save"] or label =~ "save"
   defp refresh_command?(label), do: label =~ "refresh"
   defp field_command?(key, label), do: key == "tab" or label =~ "field"
-  defp tab_command?(key, label), do: key in ["←/→", "1-5", "1-6"] or label =~ "tab"
+  defp tab_command?(key, label), do: key == "←/→" or jump_key?(key) or label =~ "tab"
+
+  # Phase 29 D-26 (SYSOP-07): `1-N` jump hints are computed at render time
+  # from `length(tab_labels(ss))`. Account ranges from 3 to 4, Moderation /
+  # Sysop range from 5 to 6 (and may grow further). Match any `1-<digit>`
+  # so the navigation cluster keeps "Tab" + "Jump" together regardless of
+  # the actor's tab visibility.
+  defp jump_key?(key) when is_binary(key), do: Regex.match?(~r/^1-\d+$/, key)
+  defp jump_key?(_), do: false
   defp navigate_command?(key, label), do: navigation_key?(key) or navigation_label?(label)
 
   defp navigation_key?(key) do
@@ -111,7 +119,13 @@ defmodule Foglet.TUI.Widgets.Chrome.Normalizer do
 
   defp default_priority_for_group(@system_group, _key, _label), do: @system_priority
   defp default_priority_for_group(@navigate_group, _key, _label), do: @navigation_priority
-  defp default_priority_for_group(@tabs_group, _key, _label), do: @structured_priority
+  # Phase 29 D-27 (SYSOP-07): the `←/→ Tab` and `1-N Jump` pair is the primary
+  # tab-navigation affordance. At 64x22 the chrome bar starts dropping items
+  # by descending priority/order — without lifting these keys to the
+  # navigation priority tier, the second item (Jump) is dropped first when
+  # ties are broken by order. Both must survive at the smallest supported
+  # SSH terminal size.
+  defp default_priority_for_group(@tabs_group, _key, _label), do: @navigation_priority
   defp default_priority_for_group(@field_group, _key, _label), do: @structured_priority
   defp default_priority_for_group(@save_group, _key, _label), do: @structured_priority
   defp default_priority_for_group(@refresh_group, _key, _label), do: @structured_priority

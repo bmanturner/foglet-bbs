@@ -59,7 +59,10 @@ defmodule Foglet.TUI.Screens.Sysop do
     theme = Theme.from_state(state)
     width = inner_width(state)
     content = build_content(ss, theme, width)
-    jump_hint = if "INVITES" in State.tab_labels(ss), do: "1-6", else: "1-5"
+    # Phase 29 D-26 (SYSOP-07): jump hint reads `1-N` where N is the
+    # actual tab count. No INVITES special-case — generalises to any
+    # future tab visibility flag.
+    jump_hint = "1-#{length(State.tab_labels(ss))}"
 
     ScreenFrame.render(state, chrome_model(ss), content, sysop_commands(ss, jump_hint))
   end
