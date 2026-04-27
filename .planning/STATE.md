@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: milestone
 status: executing
 stopped_at: Phase 29 context gathered (assumptions mode)
-last_updated: "2026-04-27T20:31:53.684Z"
-last_activity: 2026-04-27 -- Phase 29 planning complete
+last_updated: "2026-04-27T20:34:01.765Z"
+last_activity: 2026-04-27 -- Phase 29 execution started
 progress:
   total_phases: 8
   completed_phases: 3
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 28 — modal-form-substrate
+**Current focus:** Phase 29 — sysop-tab-lifecycle-bodies
 
 ## Current Position
 
-Phase: 28 (modal-form-substrate) — IMPLEMENTATION COMPLETE, UAT PENDING
-Plan: 7 of 7 (all plans done; 5 review fixes applied)
-Status: Ready to execute
-Last activity: 2026-04-27 -- Phase 29 planning complete
+Phase: 29 (sysop-tab-lifecycle-bodies) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 29
+Last activity: 2026-04-27 -- Phase 29 execution started
 
 ## Performance Metrics
 

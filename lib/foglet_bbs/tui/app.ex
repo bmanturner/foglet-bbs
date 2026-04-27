@@ -321,6 +321,9 @@ defmodule Foglet.TUI.App do
       screen == :moderation and new_state.current_user ->
         do_update({:load_moderation_workspace}, new_state)
 
+      screen == :sysop and new_state.current_user ->
+        maybe_dispatch_initial_sysop_load(new_state)
+
       true ->
         {new_state, []}
     end
@@ -531,6 +534,103 @@ defmodule Foglet.TUI.App do
   defp do_update({:moderation_workspace_loaded, {:error, reason}}, state) do
     {%{state | screen_state: put_moderation_error(state, reason)}, []}
   end
+
+  # -------------------------------------------------------------------------
+  # Sysop load triad (Phase 29 — D-01, D-02, D-04, D-06).
+  #
+  # Each lifecycle tab (BOARDS, LIMITS, SYSTEM, USERS) has a dispatch clause
+  # that flips the matching slot to `:loading` and returns a single
+  # `Foglet.TUI.Command.task/2` to run the boundary call off-process.
+  # The result clauses pair with `put_sysop_loaded/3` (success) and
+  # `put_sysop_error/3` (any failure including `:forbidden`).
+  #
+  # Closure capture (Pitfall 8): `user` and `accounts_mod` are bound BEFORE
+  # the task closure so the test override `domain_module/2` swap evaluates
+  # at dispatch time, not at task-execution time.
+  # -------------------------------------------------------------------------
+
+  defp do_update({:load_sysop_users}, state) do
+    user = state.current_user
+    accounts_mod = domain_module(state, :accounts)
+    state = put_sysop_loading(state, :users_view)
+
+    task =
+      Foglet.TUI.Command.task(:load_sysop_users, fn ->
+        result =
+          case accounts_mod.list_user_status_admin_targets(user) do
+            {:ok, groups} ->
+              {:ok, Foglet.TUI.Screens.Sysop.UsersView.from_groups(groups, user)}
+
+            {:error, reason} ->
+              {:error, reason}
+          end
+
+        {:sysop_users_loaded, result}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:load_sysop_boards}, state) do
+    user = state.current_user
+    state = put_sysop_loading(state, :boards_view)
+
+    task =
+      Foglet.TUI.Command.task(:load_sysop_boards, fn ->
+        {:sysop_boards_loaded,
+         {:ok, Foglet.TUI.Screens.Sysop.BoardsView.init(current_user: user)}}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:load_sysop_limits}, state) do
+    user = state.current_user
+    state = put_sysop_loading(state, :limits_form)
+
+    task =
+      Foglet.TUI.Command.task(:load_sysop_limits, fn ->
+        {:sysop_limits_loaded,
+         {:ok, Foglet.TUI.Screens.Sysop.LimitsForm.init(current_user: user)}}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:load_sysop_system}, state) do
+    state = put_sysop_loading(state, :system_snapshot)
+
+    task =
+      Foglet.TUI.Command.task(:load_sysop_system, fn ->
+        {:sysop_system_loaded, {:ok, Foglet.TUI.Screens.Sysop.SystemSnapshot.init([])}}
+      end)
+
+    {state, [task]}
+  end
+
+  defp do_update({:sysop_users_loaded, {:ok, sub}}, state),
+    do: {put_sysop_loaded(state, :users_view, sub), []}
+
+  defp do_update({:sysop_users_loaded, {:error, reason}}, state),
+    do: {put_sysop_error(state, :users_view, reason), []}
+
+  defp do_update({:sysop_boards_loaded, {:ok, sub}}, state),
+    do: {put_sysop_loaded(state, :boards_view, sub), []}
+
+  defp do_update({:sysop_boards_loaded, {:error, reason}}, state),
+    do: {put_sysop_error(state, :boards_view, reason), []}
+
+  defp do_update({:sysop_limits_loaded, {:ok, sub}}, state),
+    do: {put_sysop_loaded(state, :limits_form, sub), []}
+
+  defp do_update({:sysop_limits_loaded, {:error, reason}}, state),
+    do: {put_sysop_error(state, :limits_form, reason), []}
+
+  defp do_update({:sysop_system_loaded, {:ok, sub}}, state),
+    do: {put_sysop_loaded(state, :system_snapshot, sub), []}
+
+  defp do_update({:sysop_system_loaded, {:error, reason}}, state),
+    do: {put_sysop_error(state, :system_snapshot, reason), []}
 
   defp do_update({:open_oneliner_composer}, state) do
     form =
@@ -989,6 +1089,7 @@ defmodule Foglet.TUI.App do
   defp default_domain_module(:posts), do: Foglet.Posts
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
   defp default_domain_module(:moderation), do: Foglet.Moderation
+  defp default_domain_module(:accounts), do: Foglet.Accounts
 
   defp maybe_load_initial_oneliners(%{current_screen: :main_menu, current_user: user} = state)
        when not is_nil(user) do
@@ -1119,6 +1220,82 @@ defmodule Foglet.TUI.App do
     case Map.get(state.screen_state || %{}, :moderation) do
       %Foglet.TUI.Screens.Moderation.State{} = ss -> ss
       _other -> Screens.Moderation.init_screen_state()
+    end
+  end
+
+  # -------------------------------------------------------------------------
+  # Sysop slot helpers (Phase 29 — D-02).
+  #
+  # Each helper writes a tagged-enum value into one of the four lifecycle
+  # slots on `state.screen_state[:sysop]`, mirroring the
+  # `put_moderation_loading|snapshot|error` pattern above. The slot atom is
+  # restricted to the four lifecycle tabs; SITE (`:site_form`) stays sync
+  # (D-03) and is never routed through these helpers.
+  # -------------------------------------------------------------------------
+
+  defp put_sysop_loading(state, slot),
+    do: update_sysop_slot(state, slot, :loading)
+
+  defp put_sysop_loaded(state, slot, sub),
+    do: update_sysop_slot(state, slot, {:loaded, sub})
+
+  defp put_sysop_error(state, slot, reason),
+    do: update_sysop_slot(state, slot, {:error, reason})
+
+  defp update_sysop_slot(state, slot, value)
+       when slot in [:boards_view, :limits_form, :system_snapshot, :users_view] do
+    ss =
+      state
+      |> sysop_screen_state()
+      |> Map.put(slot, value)
+
+    %{state | screen_state: Map.put(state.screen_state || %{}, :sysop, ss)}
+  end
+
+  defp sysop_screen_state(state) do
+    case Map.get(state.screen_state || %{}, :sysop) do
+      %Foglet.TUI.Screens.Sysop.State{} = ss ->
+        ss
+
+      _other ->
+        Foglet.TUI.Screens.Sysop.init_screen_state(
+          current_user: state.current_user,
+          session_context: state.session_context
+        )
+    end
+  end
+
+  # First-entry guard for `{:navigate, :sysop}` (D-06 — secondary defense).
+  # Inspects the active tab on screen entry and re-enters `do_update/2` with
+  # the matching `{:load_sysop_*}` tuple when the slot is `:not_loaded`.
+  # SITE / INVITES / unknown labels short-circuit to `{state, []}`.
+  defp maybe_dispatch_initial_sysop_load(state) do
+    ss = sysop_screen_state(state)
+    labels = Foglet.TUI.Screens.Sysop.State.tab_labels(ss)
+    active_label = Enum.at(labels, ss.active_tab)
+
+    case active_label do
+      "BOARDS" ->
+        dispatch_if_not_loaded_initial(state, ss, :boards_view, {:load_sysop_boards})
+
+      "LIMITS" ->
+        dispatch_if_not_loaded_initial(state, ss, :limits_form, {:load_sysop_limits})
+
+      "SYSTEM" ->
+        dispatch_if_not_loaded_initial(state, ss, :system_snapshot, {:load_sysop_system})
+
+      "USERS" ->
+        dispatch_if_not_loaded_initial(state, ss, :users_view, {:load_sysop_users})
+
+      _ ->
+        {state, []}
+    end
+  end
+
+  defp dispatch_if_not_loaded_initial(state, ss, slot, dispatch_tuple) do
+    case Map.get(ss, slot) do
+      :not_loaded -> do_update(dispatch_tuple, state)
+      _ -> {state, []}
     end
   end
 
