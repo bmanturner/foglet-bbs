@@ -437,8 +437,14 @@ defmodule Foglet.Accounts do
       Repo.delete_all(UserToken.by_user_and_contexts_query(user, :all))
       Repo.delete_all(from(k in SSHKey, where: k.user_id == ^user.id))
 
+      # Bump `updated_at` on every rewritten post so audit trails / change
+      # detection (moderation log, future ETL, post-edit-detection UI) can
+      # distinguish "post body edited" from "author rewritten by tombstone
+      # flow". Repo.update_all/3 does NOT touch timestamps automatically.
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
       Repo.update_all(from(p in Post, where: p.user_id == ^user.id),
-        set: [user_id: tombstone_user_id()]
+        set: [user_id: tombstone_user_id(), updated_at: now]
       )
 
       user |> User.deletion_changeset() |> Repo.update()
