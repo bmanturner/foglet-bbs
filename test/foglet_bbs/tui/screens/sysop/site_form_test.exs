@@ -56,9 +56,10 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       # Modal.Form renders the label as its own row ("delivery_mode:") and
       # the current enum value via RadioGroup; the optional :description row
       # (Phase 28 Plan 04 substrate add) renders the spec description below.
+      # Phase 29 D-22/D-23: description rewrites land here.
       assert text =~ "delivery_mode:"
       assert text =~ "email"
-      assert text =~ "Outbound transactional delivery mode"
+      assert text =~ "Whether outbound email is sent."
       # Phase 28 Plan 04 D-17: legacy bespoke marker is gone.
       refute text =~ "▸"
     end
@@ -342,8 +343,9 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
 
       refute text =~ "▸"
       # Schema description rendered through Modal.Form's optional :description.
-      assert text =~ "Outbound transactional delivery mode"
-      assert text =~ "Account registration policy"
+      # Phase 29 D-22/D-23: description rewrites land here.
+      assert text =~ "Whether outbound email is sent."
+      assert text =~ "How new accounts are created."
     end
 
     test "FORM-04 routing: char input lands in the focused integer field's draft" do
@@ -599,6 +601,182 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       refute text =~ "Saved.",
              "Expected \"Saved.\" to disappear after auto-reset on Tab; the " <>
                "form is editable again per D-04."
+    end
+  end
+
+  # =========================================================================
+  # Phase 29 Plan 03 — D-18 / D-19 Enter persistence and "Saved." status row
+  # =========================================================================
+  #
+  # The Phase 28 substrate (validate_delivery_verification_pair pre-flight,
+  # Foglet.Config.put/3 cascade, Modal.Form.set_submit_state(:saved) on
+  # all-keys-success) already delivers everything D-18 and D-19 require. The
+  # describe block below locks the contract as a Phase 29 invariant — if a
+  # future refactor breaks the Enter→put→Saved. flow, these tests fail with
+  # named acceptance copy.
+
+  describe "Sysop Site Enter persistence (D-18, D-19)" do
+    test "Enter on the last visible field persists every draft via Foglet.Config.put/3" do
+      sysop = sysop_fixture()
+      Config.put!("registration_mode", "open", nil)
+      Config.put!("invite_code_generators", "sysop_only", nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("registration_mode", "invite_only")
+
+      visible = SiteForm.visible_keys(form)
+      last_idx = length(visible) - 1
+      form = %{form | focused: last_idx}
+
+      {form_after_enter, []} = SiteForm.handle_key(%{key: :enter}, form)
+
+      # D-18: persisted via Foglet.Config.put/3
+      assert Config.get!("registration_mode") == "invite_only"
+
+      # D-19: next render contains the Phase 28 D-08 "Saved." substring.
+      text =
+        form_after_enter
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert text =~ "Saved.",
+             "Expected the Phase 28 D-08 \"Saved.\" status row after a " <>
+               "successful Enter cascade. Got: #{inspect(text)}"
+    end
+
+    test "Validation failure does NOT persist and does NOT show Saved." do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("require_email_verification", false, nil)
+
+      # Force validate_delivery_verification_pair/1 to reject:
+      # delivery_mode == "no_email" AND require_email_verification == true.
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("delivery_mode", "no_email")
+        |> put_draft("require_email_verification", true)
+
+      visible = SiteForm.visible_keys(form)
+      last_idx = length(visible) - 1
+      form = %{form | focused: last_idx}
+
+      {form_after_enter, []} = SiteForm.handle_key(%{key: :enter}, form)
+
+      # D-18 failure path: no Config row updated.
+      assert Config.get!("delivery_mode") == "email"
+      assert Config.get!("require_email_verification") == false
+
+      # submit_state is in the {:error, _} terminal — verified directly and
+      # also via the rendered text (no "Saved.").
+      assert match?({:error, _}, form_after_enter.submit_state),
+             "Expected submit_state == {:error, _} after validation rejection, " <>
+               "got #{inspect(form_after_enter.submit_state)}"
+
+      text =
+        form_after_enter
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute text =~ "Saved.",
+             "Expected NO \"Saved.\" status row after a validation rejection. " <>
+               "Got: #{inspect(text)}"
+    end
+  end
+
+  # =========================================================================
+  # Phase 29 Plan 03 — D-20 / D-21 Esc reseed (Phase 28 D-12 honored)
+  # =========================================================================
+  #
+  # SPEC SYSOP-03's "discard status row" acceptance is amended by D-20/D-21:
+  # the visible signal of Esc is field-value reversion on the next render.
+  # SiteForm gains no `status_message` field. No "draft discarded" / "Changes
+  # discarded" / "Discarded" copy may appear. Esc must not navigate.
+
+  describe "Sysop Site Esc reseed (D-20, D-21)" do
+    test "(a) After Esc, drafts equal saved Foglet.Config values" do
+      Config.put!("registration_mode", "open", nil)
+
+      form =
+        SiteForm.init([])
+        |> put_draft("registration_mode", "invite_only")
+
+      # Pre-condition: draft was mutated away from saved.
+      assert form.drafts["registration_mode"] == "invite_only"
+      assert Config.get!("registration_mode") == "open"
+
+      {form_after_esc, []} = SiteForm.handle_key(%{key: :escape}, form)
+
+      # D-20/D-21 (a): drafts reseeded to saved Config values.
+      assert form_after_esc.drafts["registration_mode"] ==
+               Config.get!("registration_mode")
+    end
+
+    test "(b) After Esc, rendered field values reflect saved Foglet.Config" do
+      Config.put!("registration_mode", "open", nil)
+
+      form =
+        SiteForm.init([])
+        |> put_draft("registration_mode", "invite_only")
+
+      {form_after_esc, []} = SiteForm.handle_key(%{key: :escape}, form)
+
+      text =
+        form_after_esc
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      # D-20/D-21 (b): saved value present, mutated draft NOT echoed.
+      saved_value = Config.get!("registration_mode")
+
+      assert text =~ saved_value,
+             "Expected saved value #{inspect(saved_value)} to appear in " <>
+               "rendered output after Esc reseed. Got: #{inspect(text)}"
+    end
+
+    test "(c) Esc does not navigate away from the Sysop Site tab" do
+      Config.put!("registration_mode", "open", nil)
+
+      form =
+        SiteForm.init([])
+        |> put_draft("registration_mode", "invite_only")
+
+      {_form_after_esc, events} = SiteForm.handle_key(%{key: :escape}, form)
+
+      # D-20/D-21 (c): no navigate event in the events list.
+      refute Enum.any?(events, fn
+               {:navigate, _} -> true
+               :pop_screen -> true
+               _ -> false
+             end),
+             "Expected NO navigate/pop event after Esc on Sysop Site. " <>
+               "Got events: #{inspect(events)}"
+    end
+
+    test "After Esc, no inline 'discarded' status row appears (Phase 28 D-12)" do
+      Config.put!("registration_mode", "open", nil)
+
+      form =
+        SiteForm.init([])
+        |> put_draft("registration_mode", "invite_only")
+
+      {form_after_esc, []} = SiteForm.handle_key(%{key: :escape}, form)
+
+      text =
+        form_after_esc
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      # D-20: Phase 28 D-12 honored — no inline discard status copy.
+      for forbidden <- ["draft discarded", "Changes discarded", "Discarded"] do
+        refute text =~ forbidden,
+               "Found forbidden discard substring #{inspect(forbidden)} in: " <>
+                 inspect(text)
+      end
     end
   end
 
