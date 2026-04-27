@@ -57,6 +57,29 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
     |> refresh_rows()
   end
 
+  @doc """
+  Build a `UsersView` struct from a pre-fetched `%{pending: ..., active: ..., ...}`
+  groups map.
+
+  Used by the Phase 29 App-level load triad
+  (`Foglet.TUI.App.do_update({:load_sysop_users}, _)`): the boundary call to
+  `Foglet.Accounts.list_user_status_admin_targets/1` runs inside the
+  `Foglet.TUI.Command.task/2` closure, and this constructor turns the
+  resulting groups payload into the screen-local struct without re-issuing
+  the boundary call.
+  """
+  @spec from_groups(%{optional(atom()) => [User.t()]}, User.t() | nil) :: t()
+  def from_groups(groups, current_user) when is_map(groups) do
+    rows = build_rows(groups)
+
+    %__MODULE__{
+      current_user: current_user,
+      groups: Map.merge(empty_groups(), groups),
+      rows: rows,
+      selection_index: clamp_selection(0, rows)
+    }
+  end
+
   @spec handle_key(map(), t()) :: {t(), list()}
   def handle_key(%{key: :down}, state), do: {move(state, +1), []}
   def handle_key(%{key: :char, char: "j"}, state), do: {move(state, +1), []}

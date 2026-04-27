@@ -8,8 +8,8 @@ defmodule Foglet.TUI.Screens.Domain do
      returns the configured domain module or `{:error, :not_configured}`
      when the key is absent or the domain is not set up.
 
-  Supported keys (locked in AUDIT-02):
-    :boards, :threads, :posts, :markdown, :oneliners, :moderation
+  Supported keys (AUDIT-02 baseline + Phase 29 :accounts):
+    :boards, :threads, :posts, :markdown, :oneliners, :moderation, :accounts
 
   Callers provide `state.session_context` (the narrower input).
   Each call site is responsible for its own default-module fallback
@@ -17,12 +17,15 @@ defmodule Foglet.TUI.Screens.Domain do
   defaults visible and test-injectable at the call site.
 
   See `Foglet.TUI.Screens.BoardList`, `ThreadList`, `PostReader`,
-  `PostComposer`, `NewThread` for call-site examples.
+  `PostComposer`, `NewThread` for call-site examples. The `:accounts`
+  key was added in Phase 29 to swap `Foglet.Accounts` under the
+  Sysop USERS load triad (`{:load_sysop_users}`).
   """
 
-  @supported_keys [:boards, :threads, :posts, :markdown, :oneliners, :moderation]
+  @supported_keys [:boards, :threads, :posts, :markdown, :oneliners, :moderation, :accounts]
 
-  @type domain_key :: :boards | :threads | :posts | :markdown | :oneliners | :moderation
+  @type domain_key ::
+          :boards | :threads | :posts | :markdown | :oneliners | :moderation | :accounts
   @type result :: {:ok, module()} | {:error, :not_configured}
 
   @doc """
