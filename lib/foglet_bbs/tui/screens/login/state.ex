@@ -16,7 +16,10 @@ defmodule Foglet.TUI.Screens.Login.State do
 
   Reset request shape:
     %{sub: :reset_request, focused_field: :identifier,
-      identifier_input: %TextInput{}, message: nil | String.t()}
+      identifier_input: %TextInput{},
+      error: nil | String.t(),
+      message: nil | String.t(),
+      message_category: nil | atom()}
   """
 
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -44,7 +47,9 @@ defmodule Foglet.TUI.Screens.Login.State do
       sub: :reset_request,
       focused_field: :identifier,
       identifier_input: TextInput.init([]),
-      message: nil
+      error: nil,
+      message: nil,
+      message_category: nil
     }
   end
 

@@ -31,6 +31,7 @@ defmodule Foglet.TUI.Screens.Login do
   alias Foglet.Accounts.{Auth, Verification}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.FocusInput
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -39,8 +40,17 @@ defmodule Foglet.TUI.Screens.Login do
 
   @menu_keys [{"L", "Login"}, {"R", "Register"}, {"Q", "Quit"}]
   @menu_keys_no_register [{"L", "Login"}, {"Q", "Quit"}]
-  @reset_success_message "If an active account matches, reset instructions will be sent by email."
-  @reset_unavailable_message "Password reset by email is unavailable on this Foglet."
+
+  # Email-shape regex mirrors Foglet.Accounts.Verification's @email_shape_regex
+  # so reset request input acceptance and Verification's email-shape gate stay
+  # aligned. Local validation happens before the boundary call so malformed
+  # inputs never invoke Verification.request_password_reset_delivery/1 (D-02).
+  @email_shape_regex ~r/^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+  @reset_email_dispatched_message "If an active account matches, reset instructions will be sent by email. To enter a reset token already in hand, press [T] Enter reset token."
+  @reset_invalid_email_message "Please enter an email address (for example: name@example.test)."
+  @reset_no_email_intro "Email delivery is disabled on this Foglet. Contact a sysop or operator over SSH to request a reset token, then press [T] Enter reset token to set a new password."
+  @reset_no_email_no_sysops_fallback "No sysop contact email is published on this Foglet. Reach an operator through your invite or community channel."
 
   @impl true
   @spec init_screen_state(keyword()) :: map()
@@ -156,7 +166,7 @@ defmodule Foglet.TUI.Screens.Login do
     do: [{"Tab", "Switch field"}, {"Enter", "Submit/Next"}, {"Esc", "Cancel"}]
 
   defp keys_for(:reset_request, _),
-    do: [{"Enter", "Request reset"}, {"Esc", "Cancel"}]
+    do: [{"Enter", "Request reset"}, {"T", "Enter reset token"}, {"Esc", "Cancel"}]
 
   defp keys_for(_, mode), do: menu_keys(mode)
 
@@ -168,8 +178,6 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   defp session_ctx(state), do: Map.get(state, :session_context) || %{}
-
-  defp delivery_mode, do: Config.delivery_mode()
 
   defp render_menu(_mode, theme, state) do
     {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
@@ -191,18 +199,17 @@ defmodule Foglet.TUI.Screens.Login do
   defp menu_keys(mode) do
     mode
     |> base_menu_keys()
-    |> maybe_add_reset_key()
+    |> add_reset_key()
   end
 
   defp base_menu_keys("disabled"), do: @menu_keys_no_register
   defp base_menu_keys(_mode), do: @menu_keys
 
-  defp maybe_add_reset_key(keys) do
-    if delivery_mode() == "email" do
-      List.insert_at(keys, max(length(keys) - 1, 0), {"F", "Forgot password"})
-    else
-      keys
-    end
+  # D-01: Forgot Password is always reachable, regardless of delivery_mode.
+  # In email mode it dispatches reset delivery for valid email submissions; in
+  # no_email mode it presents operator-assisted copy plus token-consume entry.
+  defp add_reset_key(keys) do
+    List.insert_at(keys, max(length(keys) - 1, 0), {"F", "Forgot password"})
   end
 
   defp render_login_form(state, theme) do
@@ -250,12 +257,25 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp render_reset_request(state, theme) do
     login_ss = LoginState.get(state)
+    wrap_width = reset_wrap_width(state)
+
+    error_items =
+      case Map.get(login_ss, :error) do
+        nil ->
+          []
+
+        error_text ->
+          [text("")] ++
+            wrapped_text_rows(error_text, wrap_width, fg: theme.error.fg, style: [:bold])
+      end
 
     message_items =
-      if login_ss.message do
-        [text(""), text(login_ss.message, fg: theme.accent.fg)]
-      else
-        []
+      case Map.get(login_ss, :message) do
+        nil ->
+          []
+
+        message_text ->
+          [text("")] ++ wrapped_text_rows(message_text, wrap_width, fg: theme.accent.fg)
       end
 
     column style: %{gap: 0} do
@@ -263,7 +283,7 @@ defmodule Foglet.TUI.Screens.Login do
         text("Password reset", fg: theme.primary.fg, style: [:bold]),
         row style: %{gap: 0} do
           [
-            text("Handle or email: ", fg: theme.accent.fg, style: [:bold]),
+            text("Email: ", fg: theme.accent.fg, style: [:bold]),
             TextInput.render(login_ss.identifier_input,
               bordered: false,
               focused: true,
@@ -271,7 +291,27 @@ defmodule Foglet.TUI.Screens.Login do
             )
           ]
         end
-      ] ++ message_items
+      ] ++ error_items ++ message_items
+    end
+  end
+
+  # Returns one wrapped text/2 node per line emitted by TextWidth.wrap/2 so
+  # compact terminal widths render readable multi-row copy instead of a single
+  # long node that the engine would silently truncate (D-12, AUTH-02).
+  defp wrapped_text_rows(text_value, width, opts) when is_binary(text_value) do
+    text_value
+    |> TextWidth.wrap(width)
+    |> Enum.map(&text(&1, opts))
+  end
+
+  # Wrap target = inside content width. ScreenFrame uses (terminal_width - 2)
+  # for inside_width; the reset request column lives inside that with no
+  # additional indent, so the same budget applies. Defaults to 78 if no
+  # terminal_size is set (matches the historical 80-col default minus border).
+  defp reset_wrap_width(state) do
+    case Map.get(state, :terminal_size) do
+      {width, _height} when is_integer(width) and width > 0 -> max(width - 2, 1)
+      _other -> 78
     end
   end
 
@@ -289,28 +329,73 @@ defmodule Foglet.TUI.Screens.Login do
     end
   end
 
+  # D-01: Forgot Password is unconditionally reachable; the reset request
+  # sub-state handles delivery-mode branching at submit time.
   defp maybe_enter_reset_request(state) do
-    case delivery_mode() do
-      "email" -> enter_reset_request(state)
-      "no_email" -> :no_match
-    end
-  end
-
-  defp enter_reset_request(state) do
     {:update, LoginState.put(state, LoginState.reset_request()), []}
   end
 
   defp submit_reset_request(state) do
     login_ss = LoginState.get(state)
     identifier = login_ss.identifier_input.raxol_state.value
+    trimmed = String.trim(identifier)
 
-    message =
-      case Verification.request_password_reset_delivery(identifier) do
-        {:ok, :generic_response} -> @reset_success_message
-        {:error, :unavailable} -> @reset_unavailable_message
+    new_login_ss =
+      if email_shape?(trimmed) do
+        dispatch_reset_request(login_ss, trimmed)
+      else
+        # D-02: malformed local input never invokes Accounts reset delivery.
+        %{
+          login_ss
+          | error: @reset_invalid_email_message,
+            message: nil,
+            message_category: :invalid_email
+        }
       end
 
-    {:update, LoginState.put(state, %{login_ss | message: message}), []}
+    {:update, LoginState.put(state, new_login_ss), []}
+  end
+
+  defp email_shape?(value) when is_binary(value),
+    do: Regex.match?(@email_shape_regex, value)
+
+  # Valid email shape — branch on delivery mode at the boundary level.
+  # In email mode the same generic outward message_category is set whether or
+  # not the email belongs to an active user (D-03). In no-email mode we present
+  # operator-assisted copy with active sysop emails (D-14, AUTH-03).
+  defp dispatch_reset_request(login_ss, email) do
+    case Foglet.Config.delivery_mode() do
+      "email" ->
+        # Discard return value: the boundary is generic by contract.
+        _ = Verification.request_password_reset_delivery(email)
+
+        %{
+          login_ss
+          | error: nil,
+            message: @reset_email_dispatched_message,
+            message_category: :email_dispatched
+        }
+
+      "no_email" ->
+        %{
+          login_ss
+          | error: nil,
+            message: no_email_operator_message(),
+            message_category: :no_email_operator_assisted
+        }
+    end
+  end
+
+  defp no_email_operator_message do
+    sysops = Verification.active_sysop_contact_emails()
+
+    sysop_line =
+      case sysops do
+        [] -> @reset_no_email_no_sysops_fallback
+        emails -> "Sysop contacts: " <> Enum.join(emails, ", ") <> "."
+      end
+
+    @reset_no_email_intro <> "\n\n" <> sysop_line
   end
 
   defp submit_login(state) do

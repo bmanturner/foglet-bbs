@@ -313,7 +313,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
         |> Enum.join("\n")
 
       assert rendered =~ "Email:"
-      refute rendered =~ "Handle or email"
+      # D-02: field is email-only; the prior dual-mode label is gone.
+      refute rendered =~ ~r/Handle\s+or\s+email/i
     end
 
     test "typing updates the identifier field" do
