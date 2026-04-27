@@ -103,9 +103,10 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
             width = @width
             height = @height
 
+            # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
               Sysop.init_screen_state()
-              |> Map.put(:limits_form, LimitsForm.init([]))
+              |> Map.put(:limits_form, {:loaded, LimitsForm.init([])})
               |> set_active_tab("LIMITS")
 
             state =
@@ -200,9 +201,10 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               current_user: nil
             }
 
+            # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
               Sysop.init_screen_state()
-              |> Map.put(:users_view, users_view)
+              |> Map.put(:users_view, {:loaded, users_view})
               |> set_active_tab("USERS")
 
             state =
@@ -240,9 +242,10 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
             width = @width
             height = @height
 
+            # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
               Sysop.init_screen_state()
-              |> Map.put(:system_snapshot, SystemSnapshot.init())
+              |> Map.put(:system_snapshot, {:loaded, SystemSnapshot.init()})
               |> set_active_tab("SYSTEM")
 
             state =

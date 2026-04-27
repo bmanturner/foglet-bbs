@@ -117,47 +117,78 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
+  # SITE remains synchronous (D-03): SiteForm seeds drafts from
+  # `Foglet.Config.get!/1` inside its own `init/1`; no lifecycle tagging.
+  # On first entry `ss.site_form` is `nil` — lazy-init the form here so
+  # the very first render shows the form rather than a placeholder.
   defp render_tab_body("SITE", ss, theme) do
     case ss.site_form do
-      nil -> placeholder("Press any key to load site policy.", theme)
+      nil -> SiteForm.render(SiteForm.init([]), theme)
       form -> SiteForm.render(form, theme)
     end
   end
 
   defp render_tab_body("BOARDS", ss, theme) do
     case ss.boards_view do
-      nil -> placeholder("Press any key to load boards and categories.", theme)
-      view -> BoardsView.render(view, theme)
+      :not_loaded -> loading_panel(theme)
+      :loading -> loading_panel(theme)
+      {:loaded, sub} -> BoardsView.render(sub, theme)
+      {:error, :forbidden} -> forbidden_panel(theme)
+      {:error, _other} -> error_panel("boards", theme)
     end
   end
 
   defp render_tab_body("LIMITS", ss, theme) do
     case ss.limits_form do
-      nil -> placeholder("Press any key to load runtime limits.", theme)
-      form -> LimitsForm.render(form, theme)
+      :not_loaded -> loading_panel(theme)
+      :loading -> loading_panel(theme)
+      {:loaded, sub} -> LimitsForm.render(sub, theme)
+      {:error, :forbidden} -> forbidden_panel(theme)
+      {:error, _other} -> error_panel("limits", theme)
     end
   end
 
   defp render_tab_body("SYSTEM", ss, theme) do
     case ss.system_snapshot do
-      nil -> placeholder("Press any key to load system snapshot.", theme)
-      snap -> SystemSnapshot.render(snap, theme)
+      :not_loaded -> loading_panel(theme)
+      :loading -> loading_panel(theme)
+      {:loaded, sub} -> SystemSnapshot.render(sub, theme)
+      {:error, :forbidden} -> forbidden_panel(theme)
+      {:error, _other} -> error_panel("system", theme)
     end
   end
 
   defp render_tab_body("USERS", ss, theme) do
     case ss.users_view do
-      nil -> placeholder("Press any key to load user status administration.", theme)
-      view -> UsersView.render(view, theme)
+      :not_loaded -> loading_panel(theme)
+      :loading -> loading_panel(theme)
+      {:loaded, sub} -> UsersView.render(sub, theme)
+      {:error, :forbidden} -> forbidden_panel(theme)
+      {:error, _other} -> error_panel("users", theme)
     end
   end
 
   defp render_tab_body("INVITES", ss, theme),
     do: InvitesSurface.render(ss.invites, theme)
 
-  defp placeholder(copy, theme) do
+  # Lifecycle panels (D-08, D-11, D-12). Pattern-match order in
+  # `render_tab_body/3` MUST keep `{:error, :forbidden}` BEFORE
+  # `{:error, _other}` — see Pitfall 3.
+  defp loading_panel(theme) do
     column style: %{gap: 0} do
-      [text(copy, fg: theme.warning.fg)]
+      [text("Loading…", fg: theme.dim.fg)]
+    end
+  end
+
+  defp forbidden_panel(theme) do
+    column style: %{gap: 0} do
+      [text("Insufficient role to view this tab.", fg: theme.warning.fg)]
+    end
+  end
+
+  defp error_panel(tab, theme) do
+    column style: %{gap: 0} do
+      [text("Could not load #{tab}. Press R to retry.", fg: theme.error.fg)]
     end
   end
 
@@ -186,8 +217,14 @@ defmodule Foglet.TUI.Screens.Sysop do
         |> Map.merge(%{tabs: new_tabs, active_tab: new_active})
         |> maybe_load_invites_on_entry(state)
 
+      # D-05: tab-switch into a lifecycle tab whose slot is :not_loaded
+      # transitions the slot to :loading and emits the matching
+      # {:load_sysop_*} dispatch tuple. Re-entering an already-loaded
+      # / loading / errored tab emits no command (idempotent — D-06).
+      {new_ss, commands} = maybe_dispatch_lifecycle_load(new_ss, new_active)
+
       new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-      {:update, %{state | screen_state: new_screen_state}, []}
+      {:update, %{state | screen_state: new_screen_state}, commands}
     end
   end
 
@@ -231,10 +268,26 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp invite_key(%{key: key}), do: key
   defp invite_key(event), do: event
 
-  defp delegate_to_submodule(event, state, ss, field, module) do
+  # SITE remains synchronous (D-03): `:site_form` defaults to `nil` and is
+  # lazy-initialized on first key delegation, mirroring the pre-Phase-29
+  # contract for this slot only. The four lifecycle slots route through
+  # the {:loaded, sub} branch below — calls during :not_loaded / :loading
+  # / {:error, _} are no-ops (D-09 — Pitfall 1).
+  defp delegate_to_submodule(event, state, ss, :site_form = field, module) do
     sub = Map.get(ss, field) || module.init(current_user: state.current_user)
     {new_sub, events} = module.handle_key(event, sub)
     apply_submodule_result(state, ss, field, new_sub, sub, events)
+  end
+
+  defp delegate_to_submodule(event, state, ss, field, module) do
+    case Map.get(ss, field) do
+      {:loaded, sub} ->
+        {new_sub, events} = module.handle_key(event, sub)
+        apply_submodule_result(state, ss, field, {:loaded, new_sub}, {:loaded, sub}, events)
+
+      _other ->
+        :no_match
+    end
   end
 
   # Submodule contract: a submodule must emit at most one `:error_modal`
@@ -265,6 +318,30 @@ defmodule Foglet.TUI.Screens.Sysop do
         else
           {:update, base_state, []}
         end
+    end
+  end
+
+  # Lifecycle dispatch helpers (D-05, D-06).
+  #
+  # `maybe_dispatch_lifecycle_load/2` inspects the active tab label and
+  # returns `{ss', commands}`. When the matching slot is `:not_loaded`,
+  # the slot is flipped to `:loading` synchronously AND the matching
+  # `{:load_sysop_*}` dispatch tuple is emitted. Any other tag (`:loading`
+  # / `{:loaded, _}` / `{:error, _}`) is a no-op so re-entry is idempotent.
+  defp maybe_dispatch_lifecycle_load(ss, active_idx) do
+    case Enum.at(State.tab_labels(ss), active_idx) do
+      "BOARDS" -> dispatch_if_not_loaded(ss, :boards_view, {:load_sysop_boards})
+      "LIMITS" -> dispatch_if_not_loaded(ss, :limits_form, {:load_sysop_limits})
+      "SYSTEM" -> dispatch_if_not_loaded(ss, :system_snapshot, {:load_sysop_system})
+      "USERS" -> dispatch_if_not_loaded(ss, :users_view, {:load_sysop_users})
+      _ -> {ss, []}
+    end
+  end
+
+  defp dispatch_if_not_loaded(ss, slot, dispatch_tuple) do
+    case Map.get(ss, slot) do
+      :not_loaded -> {Map.put(ss, slot, :loading), [dispatch_tuple]}
+      _ -> {ss, []}
     end
   end
 
