@@ -5,8 +5,12 @@ defmodule FogletBbs.Application do
 
   use Application
 
+  require Logger
+
   @impl true
   def start(_type, _args) do
+    validate_default_timezone()
+
     # Initialize the runtime-config ETS cache before any supervised
     # process might read from it. Idempotent on warm restarts.
     Foglet.Config.init_cache()
@@ -49,6 +53,28 @@ defmodule FogletBbs.Application do
       [Foglet.SSH.Supervisor]
     else
       []
+    end
+  end
+
+  defp validate_default_timezone do
+    case Application.get_env(:foglet_bbs, :default_timezone) do
+      nil ->
+        :ok
+
+      tz when is_binary(tz) ->
+        unless Timex.Timezone.exists?(tz) do
+          Logger.error(
+            "FOGLET_DEFAULT_TIMEZONE=#{inspect(tz)} is not a valid IANA timezone name. " <>
+              "New users and unauthenticated sessions will fall back to the OS-detected " <>
+              "timezone. Set a valid IANA name such as \"America/New_York\" or \"Europe/London\"."
+          )
+        end
+
+      other ->
+        Logger.error(
+          "FOGLET_DEFAULT_TIMEZONE has unexpected value #{inspect(other)} — ignoring. " <>
+            "Set a valid IANA name such as \"America/New_York\" or \"Europe/London\"."
+        )
     end
   end
 

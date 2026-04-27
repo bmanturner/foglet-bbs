@@ -38,6 +38,14 @@ if ssh_port = System.get_env("FOGLET_SSH_PORT") do
   config :foglet_bbs, :ssh_port, String.to_integer(ssh_port)
 end
 
+# System-wide default timezone for new user registrations and unauthenticated
+# sessions. Must be a valid IANA timezone name (e.g. "America/New_York").
+# When unset, falls back to OS-detected timezone, then "Etc/UTC".
+# Invalid values are rejected at startup with a logged error.
+if tz = System.get_env("FOGLET_DEFAULT_TIMEZONE") do
+  config :foglet_bbs, :default_timezone, tz
+end
+
 if mail_from = System.get_env("FOGLET_MAIL_FROM") do
   config :foglet_bbs, :mail_from, mail_from
 end

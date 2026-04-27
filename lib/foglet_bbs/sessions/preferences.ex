@@ -30,7 +30,10 @@ defmodule Foglet.Sessions.Preferences do
   end
 
   def from_user(%User{} = user) do
-    timezone = Map.get(user, :timezone) || @default_timezone
+    timezone =
+      Map.get(user, :timezone) ||
+        Application.get_env(:foglet_bbs, :default_timezone) ||
+        @default_timezone
     time_format = get_in(user.preferences || %{}, ["time_format"]) || @default_time_format
     {theme_id, theme} = resolve_theme(user.theme)
 
@@ -44,7 +47,7 @@ defmodule Foglet.Sessions.Preferences do
 
   defp default_snapshot do
     %{
-      timezone: @default_timezone,
+      timezone: Application.get_env(:foglet_bbs, :default_timezone) || @default_timezone,
       time_format: @default_time_format,
       theme_id: @default_theme_id,
       theme: Theme.default()
