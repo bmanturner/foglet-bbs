@@ -136,6 +136,32 @@ defmodule Foglet.Accounts.UserToken do
     from t in __MODULE__, where: t.token == ^hashed_token and t.context == ^context
   end
 
+  @doc """
+  Build a row-targeting query that matches the single `reset_password` token
+  whose stored SHA256 hash matches the supplied raw token.
+
+  Designed for atomic single-use consumption: callers run this query through
+  `Repo.delete_all/1` inside a `Repo.transact/1` so concurrent consumers race
+  on row deletion (PostgreSQL row locking serializes them) and exactly one
+  caller observes a `{1, _}` claim result.
+
+  Returns `{:ok, query}` for a properly-shaped raw token, or `:error` for
+  malformed input. The query never returns the raw token to the caller and
+  the raw value is not stored anywhere; callers should treat it as
+  write-only.
+  """
+  @spec reset_token_claim_query(String.t()) :: {:ok, Ecto.Query.t()} | :error
+  def reset_token_claim_query(raw_token) when is_binary(raw_token) do
+    case Base.url_decode64(raw_token, padding: false) do
+      {:ok, decoded} ->
+        hashed = :crypto.hash(@hash_algorithm, decoded)
+        {:ok, by_token_and_context_query(hashed, "reset_password")}
+
+      :error ->
+        :error
+    end
+  end
+
   @doc "Query all tokens for a user (used by delete_user/1)."
   def by_user_and_contexts_query(user, :all) do
     from t in __MODULE__, where: t.user_id == ^user.id
