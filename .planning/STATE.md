@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: milestone
 status: executing
 stopped_at: Phase 31 context gathered (assumptions mode)
-last_updated: "2026-04-27T23:08:20.341Z"
-last_activity: 2026-04-27 -- Phase 31 planning complete
+last_updated: "2026-04-27T23:39:12.732Z"
+last_activity: 2026-04-27 -- Phase 31 execution started
 progress:
   total_phases: 8
   completed_phases: 4
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 29 — sysop-tab-lifecycle-bodies
+**Current focus:** Phase 31 — auth-flow
 
 ## Current Position
 
-Phase: 30
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-27 -- Phase 31 planning complete
+Phase: 31 (auth-flow) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 31
+Last activity: 2026-04-27 -- Phase 31 execution started
 
 ## Performance Metrics
 
