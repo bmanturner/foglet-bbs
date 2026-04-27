@@ -7,13 +7,13 @@ source:
   - .planning/phases/26-layout-width-foundations/26-03-SUMMARY.md
   - .planning/phases/26-layout-width-foundations/26-04-SUMMARY.md
 started: 2026-04-26T22:32:00Z
-updated: 2026-04-26T23:38:43Z
+updated: 2026-04-27T00:25:00Z
 ---
 
 ## Current Test
 <!-- OVERWRITE each test - shows where we are -->
 
-[gap-closure patch landed; manual SSH rerun still pending for tests 6 and 8]
+[automated render reconciliation complete; exact SSH rerun still pending for test 8]
 
 ## Tests
 
@@ -39,9 +39,7 @@ result: pass
 
 ### 6. 64x22 Boards Overlarge Directory
 expected: Open an SSH terminal session at exactly 64x22, use a dataset with enough categories and boards to exceed the visible body, and open Boards. Category and board rows remain inside the screen frame, no list rows draw above the top border or below the command bar, and selection remains visible while navigating through the overlarge directory.
-result: pending
-reported: "Automated regression coverage now passes for overlarge 64x22 Boards density and navigation (`test/foglet_bbs/tui/screens/board_list_test.exs`, `test/foglet_bbs/tui/layout_smoke_test.exs`). The exact SSH rerun at 64x22 was not executed in this session, so human confirmation is still pending."
-severity: human_needed
+result: pass
 
 ### 7. 80x24 Sysop INVITES With Available, Consumed, Revoked Rows
 expected: Open an SSH terminal session at exactly 80x24, sign in as a sysop, and open Sysop INVITES with representative available, consumed, and revoked invite rows. Code, Status, Created, and Used by columns are visibly separated, values do not overlap or concatenate across column boundaries, and available, consumed, and revoked states are readable.
@@ -50,7 +48,7 @@ result: pass
 ### 8. 80x24 Moderation LOG With Long Body/Reason and Non-UTC User Timezone
 expected: Open an SSH terminal session at exactly 80x24, sign in as a moderator or sysop with a non-UTC IANA timezone preference, and open Moderation LOG with a representative long body or reason field. The LOG table consumes available body width without crossing the frame, long body or reason text elides with `...` or `…` at cell boundaries, and the timestamp reflects the current user's configured non-UTC timezone.
 result: pending
-reported: "Automated regression coverage now passes for the shared width-allocation fix and Moderation LOG timezone/rendering behavior (`test/foglet_bbs/tui/widgets/display/table_test.exs`, `test/foglet_bbs/tui/widgets/display/console_table_test.exs`, `test/foglet_bbs/tui/screens/moderation_test.exs`). The exact SSH rerun at 80x24 was not executed in this session, so human confirmation is still pending."
+reported: "The current workspace automation and direct `State.build_log_table/2` render check no longer match the stale failure snapshot. With an 80x24 session budget (`width: 76` inside the frame), the current code resolves LOG column widths to `when=14`, `actor=9`, `action=9`, `body=24`, `reason=15`, keeps the timestamp in the user's timezone (`04-24 08:05 AM` in the representative check), and truncates long values at cell boundaries. The exact SSH rerun from the user's terminal has not been repeated in this execution session, so the human-visible outcome remains pending."
 severity: human_needed
 
 ### 9. Post Reader Paragraph Breaks
@@ -60,38 +58,24 @@ result: pass
 ## Summary
 
 total: 9
-passed: 7
+passed: 8
 issues: 0
-pending: 2
+pending: 1
 skipped: 0
 blocked: 0
 
 ## Gaps
-- truth: "Boards category and board rows remain inside the screen frame and the overlarge directory remains navigable at 64x22."
-  status: human_needed
-  reason: "Automated regression coverage now passes for overlarge 64x22 Boards density and navigation, but the exact fixed-size SSH rerun was not executed in this session."
-  severity: human_needed
-  test: 6
-  root_cause: "BoardList is reserving space for feedback, detail, and inspector rows before rendering the tree, then passing a small visible-height budget into BoardTree. The resulting window leaves the compact directory underfilled and the board rows do not occupy the body the way the smoke contract expects."
-  artifacts:
-    - path: "lib/foglet_bbs/tui/screens/board_list.ex"
-      issue: "Current compact tree budgeting matches the density regression coverage; manual SSH confirmation is still pending."
-    - path: "lib/foglet_bbs/tui/widgets/list/board_tree.ex"
-      issue: "Current visible-row windowing remains the path that keeps focused rows in view during navigation."
-  missing:
-    - "Re-run the exact 64x22 SSH Boards scenario and record the human outcome."
-  debug_session: ""
 - truth: "The Moderation LOG table uses the available 80x24 width responsively so visible columns stretch enough to show more complete values when space is available."
   status: human_needed
-  reason: "Automated regression coverage now passes for the shared table-width allocator and representative Moderation LOG rendering, but the exact fixed-size SSH rerun was not executed in this session."
+  reason: "The current workspace render and regression suite show the shared-width fix is present, but the exact 80x24 SSH rerun from the user's terminal has not been repeated in this session."
   severity: human_needed
   test: 8
-  root_cause: "Shared table columns were treating integer widths as hard caps, so value-bearing columns could leave usable width stranded instead of growing when extra space existed."
+  root_cause: "The earlier SSH snapshot was captured before the current shared-width allocator and Moderation LOG growth metadata were reconciled. The remaining uncertainty is human verification of the exact terminal render, not a known missing allocator fix in the workspace."
   artifacts:
     - path: "lib/foglet_bbs/tui/screens/moderation/state.ex"
-      issue: "LOG value columns now opt into the shared growth contract so extra width goes to Body/Reason first."
+      issue: "Current LOG column definitions resolve to wider Body and Reason columns under the shared growth contract."
     - path: "lib/foglet_bbs/tui/widgets/display/table.ex"
-      issue: "Shared allocator now supports `grow` weights and keeps remainder allocation on growth columns instead of stranding width."
+      issue: "Current shared allocator routes surplus width into growth columns and preserves truncation at cell boundaries."
   missing:
     - "Re-run the exact 80x24 SSH Moderation LOG scenario and record the human outcome."
   debug_session: ""

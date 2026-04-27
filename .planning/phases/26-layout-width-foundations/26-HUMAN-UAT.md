@@ -165,7 +165,7 @@ Expected:
 - The timestamp reflects the current user's configured non-UTC timezone.
 
 Result notes:
-- Pending manual SSH verification.
+- Pending manual SSH verification. The current workspace automation and direct render inspection now show the shared-width fix is present: `State.build_log_table/2` at the 80x24 framed width budget (`width: 76`) resolves `when=14`, `actor=9`, `action=9`, `body=24`, `reason=15`, keeps the timestamp in the user's timezone (`04-24 08:05 AM` in the representative check), and truncates long values at cell boundaries. The exact SSH rerun still needs a human verifier.
 
 ### Post Reader Paragraph Breaks
 
