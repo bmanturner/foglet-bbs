@@ -818,4 +818,213 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       assert Form.field_value(final, :second) == ""
     end
   end
+
+  # --- Phase 28 Plan 02 Task 1: FORM-05 submit-state machine + lock + setter ---
+  #
+  # FORM-05: Modal.Form gains an explicit `submit_state` machine
+  # (:idle -> :submitting -> {:saved | {:error, _}} -> :idle on next event).
+  # The :submitting state locks all input (every event swallowed) so accidental
+  # double-Enter, Enter-during-redraw, or held-key bounces cannot invoke
+  # `on_submit` twice. `set_submit_state/2` is the public terminal-state setter
+  # for consuming screens; `:submitting` is reserved for the internal Enter
+  # transition (D-01..D-05).
+
+  describe "FORM-05 submit-state machine + lock guard (Phase 28 D-01..D-05)" do
+    defp single_field_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Single",
+            fields: [%{name: :only, type: :text, label: "Only", value: ""}],
+            on_submit: fn _payload -> send(pid, :submit_called) end,
+            on_cancel: fn -> send(pid, :cancel_called) end
+          ],
+          opts
+        )
+      )
+    end
+
+    defp two_field_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Two",
+            fields: [
+              %{name: :a, type: :text, label: "A", value: ""},
+              %{name: :b, type: :text, label: "B", value: ""}
+            ],
+            on_submit: fn _payload -> send(pid, :submit_called) end,
+            on_cancel: fn -> send(pid, :cancel_called) end
+          ],
+          opts
+        )
+      )
+    end
+
+    test "FORM-05 init/1 seeds submit_state to :idle" do
+      assert single_field_form().submit_state == :idle
+      assert two_field_form().submit_state == :idle
+    end
+
+    test "FORM-05 double-Enter on a submittable form invokes on_submit exactly once" do
+      form = single_field_form()
+
+      {form1, action1} = Form.handle_event(%{key: :enter}, form)
+      assert action1 == :submitted
+      assert form1.submit_state == :submitting
+
+      {form2, action2} = Form.handle_event(%{key: :enter}, form1)
+      assert action2 == nil
+      assert form2.submit_state == :submitting
+
+      assert_receive :submit_called
+      refute_receive :submit_called, 50
+    end
+
+    test "FORM-05 lock — :char event does not mutate field_states or focus" do
+      form = single_field_form()
+      {locked, :submitted} = Form.handle_event(%{key: :enter}, form)
+      assert locked.submit_state == :submitting
+
+      original_field_states = locked.field_states
+      original_focus = locked.focus_index
+
+      {after_char, action} = Form.handle_event(%{key: :char, char: "x"}, locked)
+
+      assert action == nil
+      assert after_char.submit_state == :submitting
+      assert after_char.field_states == original_field_states
+      assert after_char.focus_index == original_focus
+      assert Form.field_value(after_char, :only) == ""
+    end
+
+    test "FORM-05 lock — every event is swallowed (no callbacks, no mutations)" do
+      pid = self()
+      raise_on_call = fn _ -> flunk("on_submit invoked while locked") end
+      raise_on_cancel = fn -> flunk("on_cancel invoked while locked") end
+
+      # Build a two-field form with raising callbacks so we catch any leak.
+      form =
+        Form.init(
+          title: "Locked",
+          fields: [
+            %{name: :a, type: :text, label: "A", value: ""},
+            %{name: :b, type: :text, label: "B", value: ""}
+          ],
+          on_submit: raise_on_call,
+          on_cancel: raise_on_cancel
+        )
+
+      # Force the form into :submitting via the public setter is forbidden,
+      # so use the internal Enter transition: focus the last field, then Enter.
+      {form_focused, nil} = Form.handle_event(%{key: :tab}, form)
+      assert form_focused.focus_index == 1
+      # Replace on_submit with a no-op for the single legal submit event;
+      # then restore the raising callbacks immediately by reaching back into
+      # the struct, since :submitting locks every subsequent event.
+      noop_form = %{form_focused | on_submit: fn _ -> :ok end}
+      {locked_noop, :submitted} = Form.handle_event(%{key: :enter}, noop_form)
+      locked = %{locked_noop | on_submit: raise_on_call, on_cancel: raise_on_cancel}
+
+      assert locked.submit_state == :submitting
+      original_focus = locked.focus_index
+      original_field_states = locked.field_states
+      original_errors = locked.errors
+
+      events = [
+        %{key: :tab},
+        %{key: :shift_tab},
+        %{key: :backtab},
+        %{key: :up},
+        %{key: :down},
+        %{key: :backspace},
+        %{key: :enter},
+        %{key: :escape}
+      ]
+
+      final =
+        Enum.reduce(events, locked, fn ev, st ->
+          {st2, action} = Form.handle_event(ev, st)
+          assert action == nil, "expected nil action while locked, got: #{inspect(action)}"
+          st2
+        end)
+
+      assert final.submit_state == :submitting
+      assert final.focus_index == original_focus
+      assert final.field_states == original_field_states
+      assert final.errors == original_errors
+
+      # No stray messages from the (raising) callbacks should have queued either.
+      refute_receive _, 20
+      _ = pid
+    end
+
+    test "FORM-05 set_submit_state/2 accepts :idle, :saved, and {:error, term}" do
+      form = single_field_form()
+
+      assert Form.set_submit_state(form, :idle).submit_state == :idle
+      assert Form.set_submit_state(form, :saved).submit_state == :saved
+
+      assert Form.set_submit_state(form, {:error, "boom"}).submit_state ==
+               {:error, "boom"}
+    end
+
+    test "FORM-05 set_submit_state/2 rejects :submitting with ArgumentError" do
+      form = single_field_form()
+
+      assert_raise ArgumentError, ~r/submitting/, fn ->
+        Form.set_submit_state(form, :submitting)
+      end
+    end
+
+    test "FORM-05 auto-reset from :saved on next non-locked event" do
+      pid = self()
+      raise_on_call = fn _ -> flunk("on_submit invoked during auto-reset event") end
+
+      form =
+        Form.init(
+          title: "Reset",
+          fields: [
+            %{name: :a, type: :text, label: "A", value: ""},
+            %{name: :b, type: :text, label: "B", value: ""}
+          ],
+          on_submit: raise_on_call,
+          on_cancel: fn -> send(pid, :cancel_called) end
+        )
+
+      saved = Form.set_submit_state(form, :saved)
+      assert saved.submit_state == :saved
+
+      {after_tab, nil} = Form.handle_event(%{key: :tab}, saved)
+      assert after_tab.submit_state == :idle
+      assert after_tab.focus_index == 1
+    end
+
+    test "FORM-05 auto-reset from {:error, _} on next non-locked event" do
+      pid = self()
+      raise_on_call = fn _ -> flunk("on_submit invoked during auto-reset event") end
+
+      form =
+        Form.init(
+          title: "Reset",
+          fields: [
+            %{name: :a, type: :text, label: "A", value: ""},
+            %{name: :b, type: :text, label: "B", value: ""}
+          ],
+          on_submit: raise_on_call,
+          on_cancel: fn -> send(pid, :cancel_called) end
+        )
+
+      errored = Form.set_submit_state(form, {:error, "boom"})
+      assert errored.submit_state == {:error, "boom"}
+
+      {after_tab, nil} = Form.handle_event(%{key: :tab}, errored)
+      assert after_tab.submit_state == :idle
+      assert after_tab.focus_index == 1
+    end
+  end
 end
