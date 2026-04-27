@@ -18,7 +18,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
 | 28 | Modal.Form Substrate | 7/7 | Complete   | 2026-04-27 |
-| 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
+| 29 | Sysop Tab Lifecycle & Bodies | 1/4 | In Progress|  |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
 | 32 | Main Menu Chrome Polish | Main Menu Navigation and Oneliners panels render with border titles, theme accents, correct indents, and no glyph artifacts | MENU-01..05 (5) | yes |
@@ -105,7 +105,7 @@ Plans:
   6. The command bar on Account, Moderation, and Sysop tabbed screens consistently advertises a `1-N Jump` group at both 64×22 and 80×24 SSH.
 **Plans**: 4 plans
 Plans:
-- [ ] 29-01-PLAN.md — Lifecycle foundation: tagged-enum slots + App load triad + tab-switch dispatch (SYSOP-01, SYSOP-02)
+- [x] 29-01-PLAN.md — Lifecycle foundation: tagged-enum slots + App load triad + tab-switch dispatch (SYSOP-01, SYSOP-02)
 - [ ] 29-02-PLAN.md — Retry advertising + USERS keybind gating + valid_status_transitions/1 + from→to error copy (SYSOP-02, SYSOP-05)
 - [ ] 29-03-PLAN.md — Site Enter/Esc verification + 5 @site_keys description rewrites + schema regex test (SYSOP-03, SYSOP-04)
 - [ ] 29-04-PLAN.md — INVITES focus highlight + two-step [X] Revoke + 1-N Jump consistency (SYSOP-06, SYSOP-07)
