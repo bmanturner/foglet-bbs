@@ -1866,6 +1866,229 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
   end
 
+  describe "[X] Revoke gesture (D-25, SYSOP-06)" do
+    @describetag :x_revoke_gesture
+
+    alias Foglet.TUI.Screens.Shared.InvitesState
+
+    # Build an in-memory invites state with the given list of statuses; selection
+    # at `focused`. No Repo round-trip — the gesture-arming/clearing logic lives
+    # entirely in screen state and does not call Accounts unless X actually fires.
+    defp build_invites(statuses, focused) do
+      items =
+        statuses
+        |> Enum.with_index()
+        |> Enum.map(fn {status, idx} ->
+          %{
+            code: "CODE#{String.pad_leading("#{idx}", 4, "0")}",
+            status: status,
+            issuer_id: "issuer-#{idx}",
+            inserted_at: ~U[2026-04-24 01:00:00Z],
+            consumed_at: nil,
+            consumed_by_user_id: nil,
+            revoked_at: nil
+          }
+        end)
+
+      InvitesState.new(items: items, selected_index: focused)
+    end
+
+    defp activate_invites(state, sysop, invites) do
+      state =
+        state
+        |> Map.put(:current_user, sysop)
+        |> with_invite_policy("sysop_only")
+
+      ss =
+        Sysop.init_screen_state(
+          active: 5,
+          current_user: state.current_user,
+          session_context: state.session_context
+        )
+
+      ss = %{ss | invites: invites}
+      put_in(state, [:screen_state, :sysop], ss)
+    end
+
+    setup %{state: state} do
+      sysop = persist_sysop()
+      Config.put!("invite_code_generators", "sysop_only", sysop.id)
+      %{state: state, sysop: sysop}
+    end
+
+    # Counts the number of distinct rendered text tokens whose content contains
+    # the substring "Revoke". The `@key_hints` line in invites_surface.ex
+    # contributes 1 occurrence ("D Revoke" body hint); when armed, the command
+    # bar adds 1 more ("Revoke" label in the [X] Revoke group), totalling 2.
+    defp count_revoke_tokens(state) do
+      state
+      |> Sysop.render()
+      |> collect_text_values()
+      |> Enum.count(&String.contains?(&1, "Revoke"))
+    end
+
+    test "Enter on focused non-revoked INVITES row arms [X] Revoke", %{state: state, sysop: sysop} do
+      invites = build_invites([:available, :available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      # Pre-condition — only the body key hints carry 'Revoke'.
+      assert count_revoke_tokens(state) == 1
+
+      {:update, new_state, _events} = Sysop.handle_key(%{key: :enter}, state)
+
+      assert new_state.screen_state.sysop.armed_revoke? == true
+
+      # After arming — body hint + command-bar [X] Revoke = 2 occurrences.
+      assert count_revoke_tokens(new_state) >= 2,
+             "Expected command bar to gain a [X] Revoke advertisement after Enter"
+    end
+
+    test "Enter on focused :revoked INVITES row does NOT arm and does NOT advertise Revoke",
+         %{state: state, sysop: sysop} do
+      invites = build_invites([:revoked, :available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      result = Sysop.handle_key(%{key: :enter}, state)
+
+      new_state =
+        case result do
+          {:update, s, _} -> s
+          :no_match -> state
+        end
+
+      assert new_state.screen_state.sysop.armed_revoke? == false
+
+      # No additional Revoke advertising — only the body hint persists.
+      assert count_revoke_tokens(new_state) == 1,
+             "Expected command bar to NOT gain a [X] Revoke advertisement on a revoked row"
+    end
+
+    test "X while armed dispatches InvitesActions.revoke_selected/2 (state transitions :available -> :revoked)",
+         %{state: state, sysop: sysop} do
+      # Persist a sysop_only invite via the existing API so the boundary call
+      # has something to revoke. The screen-state items list is then synthesized
+      # to point at the persisted code.
+      {:ok, invite} = Foglet.Accounts.Invites.create_invite(sysop)
+
+      live_item = %{
+        code: invite.code,
+        status: :available,
+        issuer_id: invite.issuer_id,
+        inserted_at: invite.inserted_at,
+        consumed_at: nil,
+        consumed_by_user_id: nil,
+        revoked_at: nil
+      }
+
+      invites_state = InvitesState.new(items: [live_item], selected_index: 0)
+      state = activate_invites(state, sysop, invites_state)
+
+      # Arm the revoke
+      {:update, armed_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      assert armed_state.screen_state.sysop.armed_revoke? == true
+
+      # Press X — dispatches the existing revoke path
+      {:update, fired_state, _events} =
+        Sysop.handle_key(%{key: :char, char: "X"}, armed_state)
+
+      # armed_revoke? cleared after firing
+      assert fired_state.screen_state.sysop.armed_revoke? == false
+
+      # The InvitesActions.revoke_selected/2 path returns the refreshed list;
+      # the persisted invite is now :revoked.
+      assert {:ok, [refreshed | _]} = Foglet.Accounts.Invites.list_invites(sysop)
+      assert refreshed.code == invite.code
+      assert refreshed.status == :revoked
+    end
+
+    test "X while not armed is a no-op (no state change, no boundary call)",
+         %{state: state, sysop: sysop} do
+      invites = build_invites([:available, :available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      # Pre-condition: not armed.
+      assert state.screen_state.sysop.armed_revoke? == false
+
+      result = Sysop.handle_key(%{key: :char, char: "X"}, state)
+
+      new_state =
+        case result do
+          {:update, s, _} -> s
+          :no_match -> state
+        end
+
+      # Still not armed; no revocation happened in InvitesState.
+      assert new_state.screen_state.sysop.armed_revoke? == false
+      assert new_state.screen_state.sysop.invites.items == invites.items
+    end
+
+    test "Moving focus within INVITES clears armed_revoke?", %{state: state, sysop: sysop} do
+      invites = build_invites([:available, :available, :available], 1)
+      state = activate_invites(state, sysop, invites)
+
+      # Arm via Enter
+      {:update, armed_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      assert armed_state.screen_state.sysop.armed_revoke? == true
+
+      # Move focus down (j is not used here — InvitesActions uses :down arrow)
+      {:update, moved_state, _} = Sysop.handle_key(%{key: :down}, armed_state)
+
+      assert moved_state.screen_state.sysop.armed_revoke? == false
+    end
+
+    test "Switching tabs clears armed_revoke?", %{state: state, sysop: sysop} do
+      invites = build_invites([:available, :available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      # Arm via Enter
+      {:update, armed_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      assert armed_state.screen_state.sysop.armed_revoke? == true
+
+      # Move to a different tab via Left arrow (Tabs widget consumes it)
+      {:update, switched_state, _} = Sysop.handle_key(%{key: :left}, armed_state)
+
+      assert switched_state.screen_state.sysop.armed_revoke? == false
+    end
+
+    test "Enter on non-INVITES active tab does not advertise/dispatch revoke",
+         %{state: state, sysop: sysop} do
+      # Activate SITE tab (active: 0) so Enter on the focused row is irrelevant.
+      state =
+        state
+        |> Map.put(:current_user, sysop)
+        |> with_invite_policy("sysop_only")
+
+      ss =
+        Sysop.init_screen_state(
+          active: 0,
+          current_user: state.current_user,
+          session_context: state.session_context
+        )
+
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      result = Sysop.handle_key(%{key: :enter}, state)
+
+      new_state =
+        case result do
+          {:update, s, _} -> s
+          :no_match -> state
+        end
+
+      assert new_state.screen_state.sysop.armed_revoke? == false
+    end
+
+    test "no new revoke logic added in invites_actions.ex (D-25 boundary lock)" do
+      # The existing revoke_selected/2 path is the only side effect. This grep
+      # guard ensures Plan 04 didn't introduce duplicate revoke logic.
+      source = File.read!("lib/foglet_bbs/tui/screens/shared/invites_actions.ex")
+
+      # Should still contain exactly one revoke_selected definition.
+      defs = Regex.scan(~r/def revoke_selected\(/, source)
+      assert length(defs) == 1
+    end
+  end
+
   describe "BOARDS tab forbidden routing (SYSO-03, D-24)" do
     setup [:seed_category_and_board]
 
