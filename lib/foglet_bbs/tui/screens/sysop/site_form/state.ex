@@ -37,6 +37,20 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     "invite_generation_per_user_limit"
   ]
 
+  # Compile-time atom interning — guarantees String.to_existing_atom/1 will
+  # succeed for every site key when build_field/2 derives field-name atoms.
+  # Without this, the rarely-referenced :invite_generation_per_user_limit
+  # would not be in the atom table on a fresh boot.
+  @site_keys_atoms [
+    :registration_mode,
+    :invite_code_generators,
+    :delivery_mode,
+    :require_email_verification,
+    :invite_generation_per_user_limit
+  ]
+  @doc false
+  def __site_keys_atoms__, do: @site_keys_atoms
+
   @type t :: %__MODULE__{
           current_user: term() | nil,
           drafts: %{optional(String.t()) => term()},
@@ -107,7 +121,12 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
 
     ModalForm.init(
       title: "Site policy",
-      show_footer: false,
+      # Phase 28 Plan 04: Sysop's global command bar advertises Q/Tabs/Jump but
+      # NOT Enter/Esc, so the SITE form opts into Modal.Form's footer to
+      # advertise "[Enter] Submit   [Esc] Cancel" at the body level. The Phase 28
+      # D-09 status row (Saving…/Saved./Error: …) replaces this footer when
+      # active. This matches the legacy SiteForm's screen-level footer.
+      show_footer: true,
       fields: fields,
       on_submit: fn payload ->
         case validate_delivery_verification_pair(payload) do
@@ -151,7 +170,17 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
   defp build_field(key, %__MODULE__{drafts: drafts}) do
     {:ok, spec} = Schema.fetch_spec(key)
     raw_value = Map.get(drafts, key)
-    base = %{name: String.to_atom(key), label: key, value: raw_value}
+
+    base = %{
+      # site_keys are listed in @site_keys at compile time, and the
+      # corresponding atoms (e.g. :delivery_mode) are referenced throughout
+      # the codebase (Schema specs, SiteForm wrapper) — safe to use
+      # to_existing_atom here.
+      name: String.to_existing_atom(key),
+      label: key,
+      value: raw_value,
+      description: spec.description
+    }
 
     case spec do
       %{type: :string, enum: enum} when is_list(enum) ->

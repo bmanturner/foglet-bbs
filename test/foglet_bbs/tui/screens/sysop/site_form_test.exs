@@ -356,14 +356,18 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       limit_index = Enum.find_index(visible, &(&1 == "invite_generation_per_user_limit"))
       assert is_integer(limit_index)
 
-      form = %{form | focused: limit_index}
+      # Clear the draft first so TextInput doesn't append to the seeded "0".
+      form = %{
+        form
+        | focused: limit_index,
+          drafts: Map.put(form.drafts, "invite_generation_per_user_limit", nil)
+      }
 
       {form, []} = SiteForm.handle_key(%{key: :char, char: "5"}, form)
 
-      # Modal.Form's :integer field is backed by TextInput; the per-render form
-      # is rebuilt from drafts on the next event, so we sync back the typed
-      # value through the wrapper's drafts map.
-      assert form.drafts["invite_generation_per_user_limit"] in [5, "5"]
+      # Modal.Form's :integer field is backed by TextInput; the typed value
+      # flows back through the wrapper's drafts map (FORM-04 routing).
+      assert form.drafts["invite_generation_per_user_limit"] == 5
     end
 
     test "Ctrl+S invokes Foglet.Config.put/3 (D-19)" do
