@@ -347,6 +347,26 @@ defmodule Foglet.AccountsTest do
     end
   end
 
+  describe "valid_status_transitions/1" do
+    @describetag :valid_status_transitions
+
+    test ":pending -> [:active, :rejected]" do
+      assert Accounts.valid_status_transitions(:pending) == [:active, :rejected]
+    end
+
+    test ":active -> [:suspended]" do
+      assert Accounts.valid_status_transitions(:active) == [:suspended]
+    end
+
+    test ":suspended -> [:active]" do
+      assert Accounts.valid_status_transitions(:suspended) == [:active]
+    end
+
+    test ":rejected -> []" do
+      assert Accounts.valid_status_transitions(:rejected) == []
+    end
+  end
+
   describe "list_user_status_admin_targets/1" do
     test "returns non-deleted users grouped by status for sysops" do
       sysop = user_with_status(:active, "sysoplist", :sysop)
