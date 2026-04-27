@@ -547,4 +547,197 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert payload.count == 7
     assert payload.enabled == true
   end
+
+  # --- Phase 28 Plan 01 Task 1: FORM-01 / FORM-02 / FORM-04 substrate ---
+  #
+  # FORM-02: %{key: :backtab} (CLIHandler-translated terminal back-tab) MUST be
+  # accepted as an alias of %{key: :shift_tab} and %{key: :tab, shift: true}.
+  # FORM-01: Up/Down advance/retreat focus on text/integer/textarea fields with
+  # wrap (last → 0 forward, 0 → last backward); Up/Down on enum cycles the value
+  # and does NOT change focus_index.
+  # FORM-04: Modal.Form.focus_index is the single source of truth for which
+  # field consumes the next keystroke — verified end-to-end via Tab sequencing.
+
+  describe "FORM-02 :backtab event shape (Phase 28 D-15)" do
+    setup do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :c, type: :text, label: "C"}
+      ]
+
+      {:ok, form: test_form(fields)}
+    end
+
+    test "FORM-02 :backtab from focus_index: 1 retreats to 0", %{form: form} do
+      {at_1, _} = Form.handle_event(%{key: :tab}, form)
+      assert at_1.focus_index == 1
+
+      {at_0, action} = Form.handle_event(%{key: :backtab}, at_1)
+      assert at_0.focus_index == 0
+      assert action == nil
+    end
+
+    test "FORM-02 :backtab from focus_index: 0 wraps to last (length - 1)", %{form: form} do
+      assert form.focus_index == 0
+
+      {wrapped, _} = Form.handle_event(%{key: :backtab}, form)
+      assert wrapped.focus_index == 2
+    end
+
+    test "FORM-02 :backtab and :shift_tab and %{key: :tab, shift: true} are byte-equivalent",
+         %{form: form} do
+      {f_backtab, a_backtab} = Form.handle_event(%{key: :backtab}, form)
+      {f_shift_tab, a_shift_tab} = Form.handle_event(%{key: :shift_tab}, form)
+      {f_raxol, a_raxol} = Form.handle_event(%{key: :tab, shift: true}, form)
+
+      assert f_backtab.focus_index == f_shift_tab.focus_index
+      assert f_shift_tab.focus_index == f_raxol.focus_index
+      assert a_backtab == nil
+      assert a_shift_tab == nil
+      assert a_raxol == nil
+    end
+  end
+
+  describe "FORM-01 Up/Down focus on text-like fields (Phase 28 D-13/D-14)" do
+    test "Down on a [text, text, enum] form at focus_index: 0 advances to 1, then 2" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :e, type: :enum, label: "E", choices: [:x, :y]}
+      ]
+
+      form = test_form(fields)
+      assert form.focus_index == 0
+
+      {f1, action1} = Form.handle_event(%{key: :down}, form)
+      assert f1.focus_index == 1
+      assert action1 == nil
+
+      {f2, action2} = Form.handle_event(%{key: :down}, f1)
+      assert f2.focus_index == 2
+      assert action2 == nil
+    end
+
+    test "Down forward wrap: [text, text, text] at focus_index: 2 wraps to 0" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :c, type: :text, label: "C"}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      {f2, _} = Form.handle_event(%{key: :tab}, f1)
+      assert f2.focus_index == 2
+
+      {wrapped, action} = Form.handle_event(%{key: :down}, f2)
+      assert wrapped.focus_index == 0
+      assert action == nil
+    end
+
+    test "Up on [text, text] at focus_index: 1 retreats to 0; another Up wraps 0 → last" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      assert f1.focus_index == 1
+
+      {f0, action0} = Form.handle_event(%{key: :up}, f1)
+      assert f0.focus_index == 0
+      assert action0 == nil
+
+      {f_wrap, action_wrap} = Form.handle_event(%{key: :up}, f0)
+      assert f_wrap.focus_index == 1
+      assert action_wrap == nil
+    end
+
+    test "Up/Down on integer fields advance/retreat focus_index (text-like)" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :n, type: :integer, label: "N"}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      assert f1.focus_index == 1
+
+      {f0, _} = Form.handle_event(%{key: :up}, f1)
+      assert f0.focus_index == 0
+
+      {f1_again, _} = Form.handle_event(%{key: :down}, f0)
+      assert f1_again.focus_index == 1
+    end
+
+    test "Up/Down on textarea fields advance/retreat focus_index (text-like)" do
+      fields = [
+        %{name: :head, type: :text, label: "Head"},
+        %{name: :body, type: :textarea, label: "Body", rows: 3}
+      ]
+
+      form = test_form(fields)
+      {at_textarea, _} = Form.handle_event(%{key: :tab}, form)
+      assert at_textarea.focus_index == 1
+
+      {back, _} = Form.handle_event(%{key: :up}, at_textarea)
+      assert back.focus_index == 0
+
+      {forward, _} = Form.handle_event(%{key: :down}, back)
+      assert forward.focus_index == 1
+    end
+  end
+
+  describe "FORM-01 Up/Down on :enum cycles value, leaves focus" do
+    test "Down on focused :enum cycles value to next choice; focus_index stays" do
+      fields = [
+        %{name: :a, type: :text, label: "A"},
+        %{name: :b, type: :text, label: "B"},
+        %{name: :pick, type: :enum, label: "Pick", choices: ["a", "b", "c"]}
+      ]
+
+      form = test_form(fields)
+      {f1, _} = Form.handle_event(%{key: :tab}, form)
+      {f2, _} = Form.handle_event(%{key: :tab}, f1)
+      assert f2.focus_index == 2
+      assert Form.field_value(f2, :pick) == "a"
+
+      {after_down, action} = Form.handle_event(%{key: :down}, f2)
+      assert after_down.focus_index == 2
+      assert action == nil
+      assert Form.field_value(after_down, :pick) == "b"
+
+      {after_up, _} = Form.handle_event(%{key: :up}, after_down)
+      assert after_up.focus_index == 2
+      assert Form.field_value(after_up, :pick) == "a"
+    end
+  end
+
+  describe "FORM-04 single-source-of-truth focus routing" do
+    test ":tab :tab :char x on [text, text, text] lands x in third field's buffer only" do
+      fields = [
+        %{name: :first, type: :text, label: "First"},
+        %{name: :second, type: :text, label: "Second"},
+        %{name: :third, type: :text, label: "Third"}
+      ]
+
+      form = test_form(fields)
+      assert form.focus_index == 0
+
+      events = [
+        %{key: :tab},
+        %{key: :tab},
+        %{key: :char, char: "x"}
+      ]
+
+      {final, _} = send_events(form, events)
+
+      assert final.focus_index == 2
+      assert Form.field_value(final, :third) == "x"
+      assert Form.field_value(final, :first) == ""
+      assert Form.field_value(final, :second) == ""
+    end
+  end
 end
