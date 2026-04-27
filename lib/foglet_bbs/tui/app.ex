@@ -1167,16 +1167,29 @@ defmodule Foglet.TUI.App do
     end
   end
 
-  # BL-01 helper: pick the shortest representative message for the FORM-05
-  # status row. Per-field errors continue to flow through ModalForm.set_errors/2;
-  # this string is consumed only by the {:error, msg} submit-state value.
-  # With multiple errors we deliberately surface the shortest binary so the
-  # one-line status row stays readable; ties resolve to the first match.
+  # BL-01 helper: build a representative message for the FORM-05 status row.
+  # Per-field errors continue to flow through ModalForm.set_errors/2; this
+  # string is consumed only by the {:error, msg} submit-state value.
+  #
+  # With a single binary error we surface that error directly. With multiple
+  # binary errors we surface a generic prompt rather than picking the
+  # "shortest" one, because length is a poor proxy for relevance — a genuine
+  # high-signal error like "Body cannot be blank." would otherwise be shadowed
+  # by an incidental "Required." on a different field, and the operator's
+  # one-line status row would then disagree with the per-field errors. The
+  # `"Validation error."` fallback is used only when no binary error is
+  # present (defensive — should not happen in practice).
   defp summarize_form_errors(errors) when is_map(errors) do
-    errors
-    |> Map.values()
-    |> Enum.filter(&is_binary/1)
-    |> Enum.min_by(&String.length/1, fn -> "validation" end)
+    binaries =
+      errors
+      |> Map.values()
+      |> Enum.filter(&is_binary/1)
+
+    case binaries do
+      [] -> "Validation error."
+      [single] -> single
+      _multiple -> "Please correct the highlighted fields."
+    end
   end
 
   defp put_moderation_loading(state) do
