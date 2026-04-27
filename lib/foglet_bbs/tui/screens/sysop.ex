@@ -273,8 +273,7 @@ defmodule Foglet.TUI.Screens.Sysop do
     case {active_label, InvitesState.selected_item(ss.invites)} do
       {"INVITES", %{status: status}} when status != :revoked ->
         new_ss = %{ss | armed_revoke?: true}
-        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-        {:update, %{state | screen_state: new_screen_state}, []}
+        {:update, put_sysop_state(state, new_ss), []}
 
       _ ->
         do_handle_key(event, state)
@@ -298,8 +297,7 @@ defmodule Foglet.TUI.Screens.Sysop do
           InvitesActions.revoke_selected(state.current_user, ss.invites)
 
         new_ss = %{ss | invites: new_invites, armed_revoke?: false}
-        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-        {:update, %{state | screen_state: new_screen_state}, []}
+        {:update, put_sysop_state(state, new_ss), []}
 
       _ ->
         do_handle_key(event, state)
@@ -321,9 +319,7 @@ defmodule Foglet.TUI.Screens.Sysop do
     case current do
       {:error, reason} when reason != :forbidden ->
         new_ss = Map.put(ss, slot, :loading)
-        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-
-        {:update, %{state | screen_state: new_screen_state}, [dispatch_for(active_label)]}
+        {:update, put_sysop_state(state, new_ss), [dispatch_for(active_label)]}
 
       _ ->
         do_handle_key(event, state)
@@ -361,8 +357,7 @@ defmodule Foglet.TUI.Screens.Sysop do
       # / loading / errored tab emits no command (idempotent — D-06).
       {new_ss, commands} = maybe_dispatch_lifecycle_load(new_ss, new_active)
 
-      new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-      {:update, %{state | screen_state: new_screen_state}, commands}
+      {:update, put_sysop_state(state, new_ss), commands}
     end
   end
 
@@ -392,8 +387,7 @@ defmodule Foglet.TUI.Screens.Sysop do
             else: ss.armed_revoke?
 
         new_ss = %{ss | invites: invites, armed_revoke?: armed_after}
-        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-        {:update, %{state | screen_state: new_screen_state}, []}
+        {:update, put_sysop_state(state, new_ss), []}
 
       :no_match ->
         :no_match
@@ -443,8 +437,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   # single message at the submodule boundary.
   defp apply_submodule_result(state, ss, field, new_sub, old_sub, events) do
     new_ss = Map.put(ss, field, new_sub)
-    new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
-    base_state = %{state | screen_state: new_screen_state}
+    base_state = put_sysop_state(state, new_ss)
 
     case Enum.find(events, fn
            {:error_modal, _msg, _dest} -> true
@@ -508,5 +501,16 @@ defmodule Foglet.TUI.Screens.Sysop do
       invites_visible?:
         ShellVisibility.invites_visible?(state.current_user, state.session_context)
     )
+  end
+
+  # Defensive write helper. The App default keeps `state.screen_state` as
+  # `%{}`, but the sibling Moderation/Account screens nil-coalesce here too
+  # (see `app.ex` and `moderation.ex`). Routing every Sysop write through
+  # this helper keeps the slot mutation symmetric across screens and prevents
+  # a future App-shape construction (e.g. a typed-struct refactor) from
+  # crashing inside `Map.put/3` with `BadMapError`.
+  defp put_sysop_state(state, sysop_ss) do
+    new_screen_state = Map.put(state.screen_state || %{}, :sysop, sysop_ss)
+    %{state | screen_state: new_screen_state}
   end
 end
