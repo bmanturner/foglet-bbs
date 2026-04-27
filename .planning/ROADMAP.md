@@ -18,7 +18,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
 | 28 | Modal.Form Substrate | 7/7 | Complete   | 2026-04-27 |
-| 29 | Sysop Tab Lifecycle & Bodies | 3/4 | In Progress|  |
+| 29 | Sysop Tab Lifecycle & Bodies | 4/4 | Complete   | 2026-04-27 |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
 | 32 | Main Menu Chrome Polish | Main Menu Navigation and Oneliners panels render with border titles, theme accents, correct indents, and no glyph artifacts | MENU-01..05 (5) | yes |
@@ -32,7 +32,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] **Phase 26: Layout & Width Foundations** — Tab-row glyph fix, responsive tables, viewport clamping, `TextWidth.wrap` helper, markdown blank-line preservation (completed 2026-04-26)
 - [x] **Phase 27: Cursor & Breadcrumb Polish** — TextInput cursor follows insertion point; breadcrumb updates for Login sub-states (Register/Forgot/Verify/reset-consume) (completed 2026-04-26)
 - [~] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc. Implementation + gap-closure (28-05/06/07) + code review fixes complete; **4 live-SSH UAT items pending — see 28-HUMAN-UAT.md** (impl complete 2026-04-27)
-- [ ] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency
+- [x] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency (completed 2026-04-27)
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
 - [ ] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary)
 - [ ] **Phase 32: Main Menu Chrome Polish** — Border-embedded titles, no Oneliners glyph artifact, accent-colored nav keys, indent corrections, theme-routed colors
@@ -108,7 +108,7 @@ Plans:
 - [x] 29-01-PLAN.md — Lifecycle foundation: tagged-enum slots + App load triad + tab-switch dispatch (SYSOP-01, SYSOP-02)
 - [x] 29-02-PLAN.md — Retry advertising + USERS keybind gating + valid_status_transitions/1 + from→to error copy (SYSOP-02, SYSOP-05)
 - [x] 29-03-PLAN.md — Site Enter/Esc verification + 5 @site_keys description rewrites + schema regex test (SYSOP-03, SYSOP-04)
-- [ ] 29-04-PLAN.md — INVITES focus highlight + two-step [X] Revoke + 1-N Jump consistency (SYSOP-06, SYSOP-07)
+- [x] 29-04-PLAN.md — INVITES focus highlight + two-step [X] Revoke + 1-N Jump consistency (SYSOP-06, SYSOP-07)
 **UI hint**: yes
 
 ### Phase 30: Account Workflow
