@@ -44,7 +44,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       assert form.drafts["delivery_mode"] == "email"
     end
 
-    test "render shows delivery_mode description and current value" do
+    test "render shows delivery_mode label, current value, and description" do
       Config.put!("delivery_mode", "email", nil)
 
       text =
@@ -53,20 +53,31 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
         |> collect_text_values()
         |> Enum.join("\n")
 
-      assert text =~ "delivery_mode: email"
+      # Modal.Form renders the label as its own row ("delivery_mode:") and
+      # the current enum value via RadioGroup; the optional :description row
+      # (Phase 28 Plan 04 substrate add) renders the spec description below.
+      assert text =~ "delivery_mode:"
+      assert text =~ "email"
       assert text =~ "Outbound transactional delivery mode"
+      # Phase 28 Plan 04 D-17: legacy bespoke marker is gone.
+      refute text =~ "▸"
     end
 
-    test "enum first-character input selects email and no_email" do
+    test "enum cycles via :down events (Modal.Form contract)" do
+      # Phase 28 Plan 04 behavior change: enum selection moved from first-char
+      # jump (legacy bespoke) to up/down cycling (Modal.Form contract). See
+      # Phase 28 Plan 04 SUMMARY for rationale.
+      Config.put!("delivery_mode", "email", nil)
+
       form = SiteForm.init([])
       delivery_index = Enum.find_index(SiteForm.visible_keys(form), &(&1 == "delivery_mode"))
       form = %{form | focused: delivery_index}
 
-      {form, []} = SiteForm.handle_key(%{key: :char, char: "e"}, form)
-      assert form.drafts["delivery_mode"] == "email"
-
-      {form, []} = SiteForm.handle_key(%{key: :char, char: "n"}, form)
+      {form, []} = SiteForm.handle_key(%{key: :down}, form)
       assert form.drafts["delivery_mode"] == "no_email"
+
+      {form, []} = SiteForm.handle_key(%{key: :up}, form)
+      assert form.drafts["delivery_mode"] == "email"
     end
   end
 
@@ -312,6 +323,142 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       assert reseeded.drafts["delivery_mode"] == "email"
       assert reseeded.errors == %{}
       assert reseeded.focused == 0
+    end
+  end
+
+  # =========================================================================
+  # Phase 28 Plan 04 Task 2 — Modal.Form-backed wrapper (D-17, D-19, D-20, FORM-04, FORM-06)
+  # =========================================================================
+
+  describe "SiteForm Modal.Form wrapper (Phase 28 Plan 04 Task 2)" do
+    test "render delegates to Modal.Form with no legacy ▸ marker" do
+      Config.put!("delivery_mode", "email", nil)
+
+      text =
+        SiteForm.init([])
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute text =~ "▸"
+      # Schema description rendered through Modal.Form's optional :description.
+      assert text =~ "Outbound transactional delivery mode"
+      assert text =~ "Account registration policy"
+    end
+
+    test "FORM-04 routing: char input lands in the focused integer field's draft" do
+      sysop = sysop_fixture()
+      Config.put!("invite_code_generators", "any_user", nil)
+      Config.put!("invite_generation_per_user_limit", 0, nil)
+
+      form = SiteForm.init(current_user: sysop)
+      visible = SiteForm.visible_keys(form)
+      limit_index = Enum.find_index(visible, &(&1 == "invite_generation_per_user_limit"))
+      assert is_integer(limit_index)
+
+      form = %{form | focused: limit_index}
+
+      {form, []} = SiteForm.handle_key(%{key: :char, char: "5"}, form)
+
+      # Modal.Form's :integer field is backed by TextInput; the per-render form
+      # is rebuilt from drafts on the next event, so we sync back the typed
+      # value through the wrapper's drafts map.
+      assert form.drafts["invite_generation_per_user_limit"] in [5, "5"]
+    end
+
+    test "Ctrl+S invokes Foglet.Config.put/3 (D-19)" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("registration_mode", "open", nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("registration_mode", "invite_only")
+
+      {_form, _events} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      assert Config.get!("registration_mode") == "invite_only"
+    end
+
+    test "Enter on last visible field invokes Foglet.Config.put/3 (D-19)" do
+      sysop = sysop_fixture()
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      Config.put!("registration_mode", "open", nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("registration_mode", "sysop_approved")
+
+      visible = SiteForm.visible_keys(form)
+      last_idx = length(visible) - 1
+      form = %{form | focused: last_idx}
+
+      {_form, _events} = SiteForm.handle_key(%{key: :enter}, form)
+
+      assert Config.get!("registration_mode") == "sysop_approved"
+    end
+
+    test "D-20 validation rejects no_email + require_email_verification true; no Config.put" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      Config.put!("require_email_verification", false, nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("delivery_mode", "no_email")
+        |> put_draft("require_email_verification", true)
+
+      {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      # Errors flow through SiteForm's string-keyed errors map (preserved API)
+      # and via Modal.Form.set_errors/2 inside the per-render form.
+      assert form.errors["delivery_mode"] =~ "No-email"
+      assert form.errors["require_email_verification"] =~ "Email verification"
+
+      # Config row was NOT updated.
+      assert Config.get!("delivery_mode") == "email"
+      assert Config.get!("require_email_verification") == false
+    end
+
+    test "D-21 conditional visibility: hiding the limit field removes it from render" do
+      Config.put!("invite_code_generators", "any_user", nil)
+      Config.put!("invite_generation_per_user_limit", 0, nil)
+
+      form = SiteForm.init([])
+      assert "invite_generation_per_user_limit" in SiteForm.visible_keys(form)
+
+      form = put_draft(form, "invite_code_generators", "sysop_only")
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute String.contains?(text, "invite_generation_per_user_limit"),
+             "Expected limit field absent from render after switching away from any_user"
+    end
+
+    test "FORM-06 Esc reseeds drafts from Foglet.Config.get!/1 with no inline status copy" do
+      Config.put!("delivery_mode", "email", nil)
+
+      form =
+        SiteForm.init([])
+        |> put_draft("delivery_mode", "no_email")
+
+      {form, []} = SiteForm.handle_key(%{key: :escape}, form)
+
+      assert form.drafts["delivery_mode"] == "email"
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      # D-12: no inline "discarded" status copy on Esc.
+      refute text =~ "discarded"
+      refute text =~ "Discarded"
     end
   end
 
