@@ -1077,6 +1077,66 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   # ---------------------------------------------------------------------------
+  # Phase 28 Plan 05 — WR-01 :backtab on Account ProfileForm / PrefsForm
+  # ---------------------------------------------------------------------------
+
+  describe "FORM-02 :backtab on Account ProfileForm / PrefsForm (Phase 28 WR-01)" do
+    alias Foglet.TUI.Screens.Account.ProfileForm
+    alias Foglet.TUI.Screens.Account.PrefsForm
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    test "FORM-02 :backtab on ProfileForm retreats focus by one" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Advance focus 0 → 1 via Tab so :backtab has somewhere to retreat to.
+      {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.profile_form.focus_index == 1
+
+      {:ok, after_backtab, []} = ProfileForm.handle_key(%{key: :backtab}, ss, user)
+
+      assert after_backtab.profile_form.focus_index == 0,
+             "WR-01: :backtab on ProfileForm should retreat focus to 0; " <>
+               "got focus_index = #{inspect(after_backtab.profile_form.focus_index)}"
+    end
+
+    test "FORM-02 :backtab on PrefsForm retreats focus by one" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Advance focus 0 → 1 (timezone → time_format enum).
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.prefs_form.focus_index == 1
+
+      {:ok, after_backtab, []} = PrefsForm.handle_key(%{key: :backtab}, ss, user)
+
+      assert after_backtab.prefs_form.focus_index == 0,
+             "WR-01: :backtab on PrefsForm should retreat focus to 0; " <>
+               "got focus_index = #{inspect(after_backtab.prefs_form.focus_index)}"
+    end
+
+    test "WR-01 sanity: :backtab on PrefsForm preserves focused field via Modal.Form path" do
+      # Equivalence check: Modal.Form treats :backtab ≡ :shift_tab. After WR-01
+      # lands, ProfileForm/PrefsForm route :backtab into that path instead of
+      # dropping it on the floor with :no_match.
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.prefs_form.focus_index == 2
+
+      {:ok, after_backtab, []} = PrefsForm.handle_key(%{key: :backtab}, ss, user)
+      assert after_backtab.prefs_form.focus_index == 1
+
+      # Verify the form's enum value was not silently mutated by routing
+      # :backtab through an unintended clause.
+      assert ModalForm.field_value(after_backtab.prefs_form, :time_format) ==
+               ModalForm.field_value(ss.prefs_form, :time_format)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Phase 28 Plan 05 — BL-01 :form modal lock release on async failure
   # ---------------------------------------------------------------------------
 
