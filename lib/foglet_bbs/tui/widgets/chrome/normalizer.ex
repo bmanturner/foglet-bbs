@@ -102,8 +102,7 @@ defmodule Foglet.TUI.Widgets.Chrome.Normalizer do
   # Sysop range from 5 to 6 (and may grow further). Match any `1-<digit>`
   # so the navigation cluster keeps "Tab" + "Jump" together regardless of
   # the actor's tab visibility.
-  defp jump_key?(key) when is_binary(key), do: Regex.match?(~r/^1-\d+$/, key)
-  defp jump_key?(_), do: false
+  defp jump_key?(key), do: Regex.match?(~r/^1-\d+$/, key)
   defp navigate_command?(key, label), do: navigation_key?(key) or navigation_label?(label)
 
   defp navigation_key?(key) do
@@ -139,6 +138,4 @@ defmodule Foglet.TUI.Widgets.Chrome.Normalizer do
       @action_priority
     end
   end
-
-  defp default_priority_for_group(_group, _key, _label), do: @action_priority
 end
