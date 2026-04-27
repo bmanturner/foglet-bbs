@@ -384,13 +384,15 @@ defmodule Foglet.TUI.Screens.Sysop do
 
     case InvitesActions.handle_key(key, state.current_user, ss.invites) do
       {:ok, invites} ->
-        # Phase 29 D-25 (A3 disambiguation): clear the armed [X] Revoke flag
-        # whenever the focused INVITES row changes. The gesture is bound to
-        # a specific row's identity; a focus move invalidates it.
+        # Phase 29 D-25 (A3 disambiguation): the armed [X] Revoke flag is
+        # bound to the row that was focused when Enter was pressed. Any
+        # InvitesActions key that ISN'T a pure vertical move (R Refresh,
+        # G Generate, refresh side effects, etc.) invalidates the gesture
+        # context — even if `selected_index` happened to stay the same.
+        # Only :up/:down/j/k preserve the arm.
         armed_after =
-          if invites.selected_index != ss.invites.selected_index,
-            do: false,
-            else: ss.armed_revoke?
+          ss.armed_revoke? and
+            invites_arm_preserved?(key, invites, ss.invites)
 
         new_ss = %{ss | invites: invites, armed_revoke?: armed_after}
         {:update, put_sysop_state(state, new_ss), []}
@@ -398,6 +400,16 @@ defmodule Foglet.TUI.Screens.Sysop do
       :no_match ->
         :no_match
     end
+  end
+
+  # The arm survives only when the InvitesActions key was a pure vertical
+  # move AND the focused row is unchanged. A focus move on j/k still clears
+  # the arm because the row identity changed; a non-move key (R/G) clears
+  # it unconditionally because the gesture context (focus snapshot at arm
+  # time) is no longer trustworthy.
+  defp invites_arm_preserved?(key, new_invites, old_invites) do
+    key in [:up, :down, "j", "k", "J", "K"] and
+      new_invites.selected_index == old_invites.selected_index
   end
 
   defp maybe_load_invites_on_entry(ss, state) do
