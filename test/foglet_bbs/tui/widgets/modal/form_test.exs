@@ -306,12 +306,25 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
   end
 
   test "D-19 refreshed body renders title, required markers, and action footer" do
+    # Phase 28 FORM-03 (D-06): the footer is opt-in. Pass show_footer: true so
+    # this test continues to verify footer rendering on overlay-style forms;
+    # tab-body consumers (Account, Sysop) leave it default-off.
+    pid = self()
+
     fields = [
       %{name: :slug, type: :text, label: "Slug", required: true},
       %{name: :name, type: :text, label: "Name", required: true}
     ]
 
-    state = test_form(fields, title: "Create board")
+    state =
+      Form.init(
+        title: "Create board",
+        fields: fields,
+        show_footer: true,
+        on_submit: fn payload -> send(pid, {:submitted, payload}) end,
+        on_cancel: fn -> send(pid, :cancelled) end
+      )
+
     flat = state |> Form.render(theme: theme()) |> flatten_text()
 
     assert flat =~ "Create board"
@@ -712,6 +725,71 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       {after_up, _} = Form.handle_event(%{key: :up}, after_down)
       assert after_up.focus_index == 2
       assert Form.field_value(after_up, :pick) == "a"
+    end
+  end
+
+  # --- Phase 28 Plan 01 Task 2: FORM-03 footer opt-in ---
+  #
+  # FORM-03: Modal.Form.render/2 emits no [Enter] Submit / [Esc] Cancel footer
+  # by default; passing :show_footer: true via init/1 restores the footer.
+  # The default-off setting suppresses the footer for tab-body consumers
+  # (Account Profile/Prefs, Sysop Site) so the global command bar is the single
+  # advertiser of those keys; true overlay callers opt in explicitly (D-06).
+
+  describe "FORM-03 :show_footer opt-in (Phase 28 D-06, D-07)" do
+    defp footer_form(opts \\ []) do
+      pid = self()
+
+      Form.init(
+        Keyword.merge(
+          [
+            title: "Test",
+            fields: [
+              %{name: :a, type: :text, label: "A"},
+              %{name: :b, type: :text, label: "B"}
+            ],
+            on_submit: fn _ -> send(pid, :submitted) end,
+            on_cancel: fn -> send(pid, :cancelled) end
+          ],
+          opts
+        )
+      )
+    end
+
+    test "FORM-03 default: render emits no [Enter] Submit / [Esc] Cancel substring" do
+      form = footer_form()
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      refute String.contains?(flat, "[Enter] Submit"),
+             "default-rendered form must NOT advertise [Enter] Submit, got: #{inspect(flat)}"
+
+      refute String.contains?(flat, "[Esc] Cancel"),
+             "default-rendered form must NOT advertise [Esc] Cancel, got: #{inspect(flat)}"
+    end
+
+    test "FORM-03 explicit show_footer: true emits both footer substrings" do
+      form = footer_form(show_footer: true)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "[Enter] Submit"),
+             "show_footer: true must advertise [Enter] Submit, got: #{inspect(flat)}"
+
+      assert String.contains?(flat, "[Esc] Cancel"),
+             "show_footer: true must advertise [Esc] Cancel, got: #{inspect(flat)}"
+    end
+
+    test "FORM-03 explicit show_footer: false matches default-off behavior" do
+      form = footer_form(show_footer: false)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      refute String.contains?(flat, "[Enter] Submit")
+      refute String.contains?(flat, "[Esc] Cancel")
+    end
+
+    test "FORM-03 :show_footer struct field is locked at init/1" do
+      assert footer_form().show_footer == false
+      assert footer_form(show_footer: false).show_footer == false
+      assert footer_form(show_footer: true).show_footer == true
     end
   end
 
