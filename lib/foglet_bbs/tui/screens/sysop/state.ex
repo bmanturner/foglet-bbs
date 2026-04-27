@@ -50,7 +50,8 @@ defmodule Foglet.TUI.Screens.Sysop.State do
           limits_form: lifecycle(LimitsForm.t()),
           boards_view: lifecycle(BoardsView.t()),
           system_snapshot: lifecycle(SystemSnapshot.t()),
-          users_view: lifecycle(UsersView.t())
+          users_view: lifecycle(UsersView.t()),
+          armed_revoke?: boolean()
         }
 
   defstruct [
@@ -62,7 +63,15 @@ defmodule Foglet.TUI.Screens.Sysop.State do
     limits_form: :not_loaded,
     boards_view: :not_loaded,
     system_snapshot: :not_loaded,
-    users_view: :not_loaded
+    users_view: :not_loaded,
+    # Phase 29 D-25: two-step `[X] Revoke` gesture. Pressing Enter on a
+    # focused non-revoked INVITES row arms this flag, advertising the
+    # `[X] Revoke` group in the Sysop command bar. Pressing X (while
+    # armed) dispatches `InvitesActions.revoke_selected/2`. Navigation
+    # away (focus move within INVITES, tab switch) clears the flag back
+    # to false. Lives on Sysop.State (option b) so the shared
+    # InvitesState surface stays free of Sysop-specific UI concepts.
+    armed_revoke?: false
   ]
 
   @spec new(keyword()) :: t()

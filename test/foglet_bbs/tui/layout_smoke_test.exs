@@ -2350,4 +2350,252 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 29 1-N Jump consistency (D-26, D-27, SYSOP-07)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 29 1-N Jump consistency (D-26, D-27, SYSOP-07)" do
+    @phase_29_dimensions [{64, 22}, {80, 24}]
+
+    defp phase_29_collect_text(tree), do: do_collect_text(tree, []) |> Enum.reverse()
+
+    defp do_collect_text(nil, acc), do: acc
+
+    defp do_collect_text(list, acc) when is_list(list),
+      do: Enum.reduce(list, acc, &do_collect_text/2)
+
+    defp do_collect_text(%{children: children} = node, acc) do
+      acc = collect_node_content(node, acc)
+      do_collect_text(children, acc)
+    end
+
+    defp do_collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
+    defp do_collect_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
+    defp do_collect_text(_other, acc), do: acc
+
+    defp collect_node_content(%{content: content}, acc) when is_binary(content),
+      do: [content | acc]
+
+    defp collect_node_content(%{text: text}, acc) when is_binary(text), do: [text | acc]
+    defp collect_node_content(_node, acc), do: acc
+
+    test "Account command bar contains '1-3 Jump' at 64x22 and 80x24 (INVITES hidden)" do
+      for {width, height} <- @phase_29_dimensions do
+        # INVITES hidden: role :user with policy :sysop_only — InvitesSurface.visible?
+        # returns false. Account tabs become 3: PROFILE, PREFS, SSH KEYS.
+        user = %Foglet.Accounts.User{
+          id: "00000000-0000-0000-0000-000000000001",
+          handle: "alice",
+          role: :user,
+          status: :active,
+          location: "Mist Harbor",
+          tagline: "low clouds",
+          real_name: "Alice Example",
+          timezone: "Etc/UTC",
+          preferences: %{"time_format" => "12h"},
+          theme: "gray"
+        }
+
+        state = %App{
+          current_screen: :account,
+          current_user: user,
+          session_context: %{
+            theme: Foglet.TUI.Theme.resolve(:gray),
+            theme_id: "gray",
+            invite_code_generators: "sysop_only"
+          },
+          terminal_size: {width, height},
+          screen_state: %{}
+        }
+
+        flat = state |> Account.render() |> phase_29_collect_text()
+        joined = Enum.join(flat, " ")
+
+        assert String.contains?(joined, "Jump"),
+               "Account at #{width}x#{height}: expected 'Jump' substring; flat=#{inspect(flat)}"
+
+        assert String.contains?(joined, "1-3"),
+               "Account at #{width}x#{height} (INVITES hidden): expected '1-3' substring; flat=#{inspect(flat)}"
+      end
+    end
+
+    test "Account command bar contains '1-4 Jump' at 64x22 and 80x24 (INVITES visible)" do
+      for {width, height} <- @phase_29_dimensions do
+        # INVITES visible: role :sysop. Account tabs become 4 with INVITES.
+        user = %Foglet.Accounts.User{
+          id: "00000000-0000-0000-0000-000000000002",
+          handle: "alice",
+          role: :sysop,
+          status: :active,
+          location: "Mist Harbor",
+          tagline: "low clouds",
+          real_name: "Alice Example",
+          timezone: "Etc/UTC",
+          preferences: %{"time_format" => "12h"},
+          theme: "gray"
+        }
+
+        state = %App{
+          current_screen: :account,
+          current_user: user,
+          session_context: %{
+            theme: Foglet.TUI.Theme.resolve(:gray),
+            theme_id: "gray"
+          },
+          terminal_size: {width, height},
+          screen_state: %{}
+        }
+
+        flat = state |> Account.render() |> phase_29_collect_text()
+        joined = Enum.join(flat, " ")
+
+        assert String.contains?(joined, "1-4"),
+               "Account at #{width}x#{height} (INVITES visible): expected '1-4' substring; flat=#{inspect(flat)}"
+      end
+    end
+
+    test "Moderation command bar contains '1-5 Jump' at 64x22 and 80x24, INVITES hidden" do
+      for {width, height} <- @phase_29_dimensions do
+        # INVITES hidden: role :sysop on Moderation does NOT add INVITES (only
+        # role :mod with policy 'mods' adds it). Mod with sysop_only also hidden.
+        user = %Foglet.Accounts.User{id: "u1", handle: "mod", role: :mod, status: :active}
+
+        state = %App{
+          current_screen: :moderation,
+          current_user: user,
+          session_context: %{invite_code_generators: "sysop_only"},
+          terminal_size: {width, height},
+          screen_state: %{moderation: Moderation.init_screen_state()}
+        }
+
+        flat = state |> Moderation.render() |> phase_29_collect_text()
+        joined = Enum.join(flat, " ")
+
+        assert String.contains?(joined, "Jump"),
+               "Moderation at #{width}x#{height}: expected 'Jump' substring; flat=#{inspect(flat)}"
+
+        assert String.contains?(joined, "1-5"),
+               "Moderation at #{width}x#{height} (INVITES hidden): expected '1-5' substring; flat=#{inspect(flat)}"
+
+        refute String.contains?(joined, "1-6"),
+               "Moderation at #{width}x#{height} (INVITES hidden): should NOT contain '1-6'; flat=#{inspect(flat)}"
+      end
+    end
+
+    test "Moderation command bar contains '1-6 Jump' at 64x22 and 80x24, INVITES visible" do
+      for {width, height} <- @phase_29_dimensions do
+        # INVITES visible: role :mod with policy 'mods'.
+        user = %Foglet.Accounts.User{id: "u1", handle: "mod", role: :mod, status: :active}
+
+        state = %App{
+          current_screen: :moderation,
+          current_user: user,
+          session_context: %{invite_code_generators: "mods"},
+          terminal_size: {width, height},
+          screen_state: %{moderation: Moderation.init_screen_state(invites_visible?: true)}
+        }
+
+        flat = state |> Moderation.render() |> phase_29_collect_text()
+        joined = Enum.join(flat, " ")
+
+        assert String.contains?(joined, "1-6"),
+               "Moderation at #{width}x#{height} (INVITES visible): expected '1-6' substring; flat=#{inspect(flat)}"
+      end
+    end
+
+    test "Sysop command bar contains '1-5 Jump' at 64x22 and 80x24, INVITES hidden" do
+      for {width, height} <- @phase_29_dimensions do
+        # Sysop INVITES is gated by ShellVisibility — `sysop_only` policy makes
+        # INVITES hidden for non-sysops, but for sysop role it's always visible.
+        # Use role :sysop with default screen_state (no :invites_visible? flag).
+        user = %Foglet.Accounts.User{id: "u3", handle: "alice", role: :sysop, status: :active}
+
+        state = %App{
+          current_screen: :sysop,
+          current_user: user,
+          session_context: %{invite_code_generators: "sysop_only"},
+          terminal_size: {width, height},
+          screen_state: %{sysop: Sysop.init_screen_state()}
+        }
+
+        flat = state |> Sysop.render() |> phase_29_collect_text()
+        joined = Enum.join(flat, " ")
+
+        assert String.contains?(joined, "1-5") or String.contains?(joined, "1-6"),
+               "Sysop at #{width}x#{height}: expected '1-N' substring; flat=#{inspect(flat)}"
+      end
+    end
+
+    test "Sysop command bar contains '1-6 Jump' at 64x22 and 80x24, INVITES visible" do
+      for {width, height} <- @phase_29_dimensions do
+        # INVITES visible: explicitly seeded into screen state.
+        user = %Foglet.Accounts.User{id: "u3", handle: "alice", role: :sysop, status: :active}
+
+        state = %App{
+          current_screen: :sysop,
+          current_user: user,
+          session_context: %{invite_code_generators: "sysop_only"},
+          terminal_size: {width, height},
+          screen_state: %{sysop: Sysop.init_screen_state(invites_visible?: true)}
+        }
+
+        flat = state |> Sysop.render() |> phase_29_collect_text()
+        joined = Enum.join(flat, " ")
+
+        assert String.contains?(joined, "1-6"),
+               "Sysop at #{width}x#{height} (INVITES visible): expected '1-6' substring; flat=#{inspect(flat)}"
+      end
+    end
+
+    # ---------------------------------------------------------------------------
+    # Module-attribute removal grep guards (D-26)
+    # ---------------------------------------------------------------------------
+
+    test "no hardcoded {\"1-6\", \"Jump\"} literal in moderation.ex" do
+      contents = File.read!("lib/foglet_bbs/tui/screens/moderation.ex")
+
+      refute String.contains?(contents, ~s|{"1-6", "Jump"}|),
+             "moderation.ex must not contain a hardcoded {\"1-6\", \"Jump\"} literal (D-26)"
+    end
+
+    test "no hardcoded {\"1-6\", \"Jump\"} literal in account.ex" do
+      contents = File.read!("lib/foglet_bbs/tui/screens/account.ex")
+
+      refute String.contains?(contents, ~s|{"1-6", "Jump"}|),
+             "account.ex must not contain a hardcoded {\"1-6\", \"Jump\"} literal (D-26)"
+    end
+
+    test "Sysop jump_hint computes 1-N from tab count (no INVITES special-case)" do
+      contents = File.read!("lib/foglet_bbs/tui/screens/sysop.ex")
+
+      refute String.contains?(contents, ~s|if "INVITES" in State.tab_labels|),
+             "sysop.ex jump_hint must not gate on INVITES visibility (D-26)"
+
+      expected = ~S|"1-#{length(State.tab_labels(ss))}"|
+
+      assert String.contains?(contents, expected),
+             "sysop.ex must compute jump_hint as 1-N from State.tab_labels(ss) (D-26)"
+    end
+
+    test "Account.@key_bar module attribute removed (D-26)" do
+      contents = File.read!("lib/foglet_bbs/tui/screens/account.ex")
+
+      refute String.contains?(contents, "@key_bar ["),
+             "account.ex must not define a @key_bar module attribute (D-26)"
+
+      assert String.contains?(contents, "defp key_bar(ss)"),
+             "account.ex must define a render-time key_bar/1 function (D-26)"
+    end
+
+    test "Moderation.@key_list module attribute removed (D-26)" do
+      contents = File.read!("lib/foglet_bbs/tui/screens/moderation.ex")
+
+      refute String.contains?(contents, "@key_list ["),
+             "moderation.ex must not define a @key_list module attribute (D-26)"
+
+      assert String.contains?(contents, "defp key_list(ss)"),
+             "moderation.ex must define a render-time key_list/1 function (D-26)"
+    end
+  end
 end

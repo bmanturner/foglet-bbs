@@ -39,14 +39,6 @@ defmodule Foglet.TUI.Screens.Account do
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @key_bar [
-    {"←/→", "Tab"},
-    {"Tab", "Field"},
-    {"Enter", "Save"},
-    {"Esc", "Cancel"},
-    {"Ctrl+Q", "Back"}
-  ]
-
   @impl true
   @spec init_screen_state(keyword()) :: State.t()
   def init_screen_state(opts \\ []) do
@@ -70,8 +62,25 @@ defmodule Foglet.TUI.Screens.Account do
         ]
       end
 
-    ScreenFrame.render(preview_state(state, theme), account_chrome(), content, @key_bar)
+    ScreenFrame.render(preview_state(state, theme), account_chrome(), content, key_bar(ss))
   end
+
+  # Phase 29 D-26 (SYSOP-07): the key bar is rendered at request time so the
+  # `1-N Jump` hint reflects the actual tab count (3 without INVITES, 4 with).
+  # Inserted between `←/→ Tab` and `Tab Field` so the navigation cluster reads
+  # left-to-right: arrows / numbers / tab-cycle.
+  defp key_bar(ss) do
+    [
+      {"←/→", "Tab"},
+      {jump_hint(length(tab_labels(ss))), "Jump"},
+      {"Tab", "Field"},
+      {"Enter", "Save"},
+      {"Esc", "Cancel"},
+      {"Ctrl+Q", "Back"}
+    ]
+  end
+
+  defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
 
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match

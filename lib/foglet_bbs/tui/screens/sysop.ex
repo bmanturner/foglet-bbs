@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Shared.InvitesActions
+  alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Screens.Sysop.BoardsView
@@ -58,7 +59,10 @@ defmodule Foglet.TUI.Screens.Sysop do
     theme = Theme.from_state(state)
     width = inner_width(state)
     content = build_content(ss, theme, width)
-    jump_hint = if "INVITES" in State.tab_labels(ss), do: "1-6", else: "1-5"
+    # Phase 29 D-26 (SYSOP-07): jump hint reads `1-N` where N is the
+    # actual tab count. No INVITES special-case — generalises to any
+    # future tab visibility flag.
+    jump_hint = "1-#{length(State.tab_labels(ss))}"
 
     ScreenFrame.render(state, chrome_model(ss), content, sysop_commands(ss, jump_hint))
   end
@@ -95,7 +99,37 @@ defmodule Foglet.TUI.Screens.Sysop do
       }
     ]
 
-    maybe_add_retry(base, ss)
+    base
+    |> maybe_add_retry(ss)
+    |> maybe_add_revoke(ss)
+  end
+
+  # Phase 29 D-25 (SYSOP-06): [X] Revoke is advertised in the Sysop command
+  # bar only when (a) the active tab is INVITES, (b) `armed_revoke?` is true
+  # on the screen state (set by Enter on a focused non-revoked row), and
+  # (c) the focused invite is still non-revoked. Pressing X (handled below)
+  # routes through the existing `InvitesActions.revoke_selected/2` path —
+  # no new revoke logic introduced.
+  defp maybe_add_revoke(groups, ss) do
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    cond do
+      active_label != "INVITES" ->
+        groups
+
+      not Map.get(ss, :armed_revoke?, false) ->
+        groups
+
+      true ->
+        case InvitesState.selected_item(ss.invites) do
+          %{status: status} when status != :revoked ->
+            groups ++
+              [%{label: "Invite", commands: [%{key: "X", label: "Revoke", priority: 5}]}]
+
+          _ ->
+            groups
+        end
+    end
   end
 
   # Phase 29 D-13: [R] Retry is advertised in the Sysop command bar only when
@@ -228,6 +262,50 @@ defmodule Foglet.TUI.Screens.Sysop do
     {:update, %{state | current_screen: :main_menu}, []}
   end
 
+  # Phase 29 D-25 (SYSOP-06): Enter on focused non-revoked INVITES row arms
+  # the [X] Revoke advertisement. Enter on any other tab (or on a revoked
+  # row, or when the focused row is missing) hands off to do_handle_key/2 so
+  # SiteForm/LimitsForm/etc. continue to receive Enter for their submit flow.
+  def handle_key(%{key: :enter} = event, state) do
+    ss = get_screen_state(state)
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    case {active_label, InvitesState.selected_item(ss.invites)} do
+      {"INVITES", %{status: status}} when status != :revoked ->
+        new_ss = %{ss | armed_revoke?: true}
+        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
+        {:update, %{state | screen_state: new_screen_state}, []}
+
+      _ ->
+        do_handle_key(event, state)
+    end
+  end
+
+  # Phase 29 D-25 (SYSOP-06): When armed and active tab is INVITES, X
+  # dispatches the existing InvitesActions.revoke_selected/2 path. The
+  # `armed_revoke?` flag is cleared after the call regardless of the
+  # boundary's outcome (the boundary may surface an error via
+  # `InvitesState.error`; the gesture itself is one-shot). When NOT armed
+  # the keypress hands off to do_handle_key/2 so the broader screen logic
+  # (or fall-through to global handlers) still runs.
+  def handle_key(%{key: :char, char: c} = event, state) when c in ["x", "X"] do
+    ss = get_screen_state(state)
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    case {active_label, Map.get(ss, :armed_revoke?, false)} do
+      {"INVITES", true} ->
+        {:ok, new_invites} =
+          InvitesActions.revoke_selected(state.current_user, ss.invites)
+
+        new_ss = %{ss | invites: new_invites, armed_revoke?: false}
+        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
+        {:update, %{state | screen_state: new_screen_state}, []}
+
+      _ ->
+        do_handle_key(event, state)
+    end
+  end
+
   # Phase 29 D-13: [R] Retry. When the active tab is in {:error, reason} with
   # reason != :forbidden, R re-dispatches the matching {:load_sysop_*} tuple
   # and flips the slot back to :loading. On any other slot state (including
@@ -268,9 +346,13 @@ defmodule Foglet.TUI.Screens.Sysop do
           _ -> ss.active_tab
         end
 
+      # Phase 29 D-25 (A3 disambiguation): tab switch (or any tab-widget
+      # event that mutates state) clears the armed [X] Revoke flag — the
+      # gesture is local to the focused INVITES row and a tab change
+      # invalidates the focus context.
       new_ss =
         ss
-        |> Map.merge(%{tabs: new_tabs, active_tab: new_active})
+        |> Map.merge(%{tabs: new_tabs, active_tab: new_active, armed_revoke?: false})
         |> maybe_load_invites_on_entry(state)
 
       # D-05: tab-switch into a lifecycle tab whose slot is :not_loaded
@@ -301,7 +383,15 @@ defmodule Foglet.TUI.Screens.Sysop do
 
     case InvitesActions.handle_key(key, state.current_user, ss.invites) do
       {:ok, invites} ->
-        new_ss = %{ss | invites: invites}
+        # Phase 29 D-25 (A3 disambiguation): clear the armed [X] Revoke flag
+        # whenever the focused INVITES row changes. The gesture is bound to
+        # a specific row's identity; a focus move invalidates it.
+        armed_after =
+          if invites.selected_index != ss.invites.selected_index,
+            do: false,
+            else: ss.armed_revoke?
+
+        new_ss = %{ss | invites: invites, armed_revoke?: armed_after}
         new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
         {:update, %{state | screen_state: new_screen_state}, []}
 

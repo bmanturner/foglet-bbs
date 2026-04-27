@@ -36,7 +36,9 @@ defmodule Foglet.TUI.Widgets.Chrome.NormalizerTest do
                %{key: "Enter", label: "Open", priority: 0}
              ]
 
-      assert group(groups, "Tabs") == [%{key: "←/→", label: "Switch tab", priority: 10}]
+      # Phase 29 D-27: Tabs group lifted to navigation priority (0) so the
+      # `←/→ Tab` + `1-N Jump` cluster survives at 64x22.
+      assert group(groups, "Tabs") == [%{key: "←/→", label: "Switch tab", priority: 0}]
       assert group(groups, "Field") == [%{key: "Tab", label: "Next field", priority: 10}]
       assert group(groups, "Save") == [%{key: "S/Enter", label: "Save", priority: 10}]
       assert group(groups, "Refresh") == [%{key: "R", label: "Refresh", priority: 10}]

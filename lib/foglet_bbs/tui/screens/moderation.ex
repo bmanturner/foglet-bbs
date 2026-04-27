@@ -41,7 +41,6 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Widgets.Display.KvGrid
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @key_list [{"←/→", "Tab"}, {"1-6", "Jump"}, {"Q", "Back"}]
   @text_limit 48
 
   # ---------------------------------------------------------------------------
@@ -123,8 +122,22 @@ defmodule Foglet.TUI.Screens.Moderation do
     width = inner_width(state)
     height = body_height(state)
     content = render_content(ss, theme, width, height, state.current_user, user_timezone(state))
-    ScreenFrame.render(state, moderation_chrome(), content, @key_list)
+    ScreenFrame.render(state, moderation_chrome(), content, key_list(ss))
   end
+
+  # Phase 29 D-26 (SYSOP-07): the key bar is rendered at request time so the
+  # `1-N Jump` hint reflects the actual tab count (5 without INVITES, 6 with).
+  # The hardcoded literal pair (key=1-6, label=Jump) no longer appears in
+  # this module — verified by grep test in layout_smoke_test.exs.
+  defp key_list(ss) do
+    [
+      {"←/→", "Tab"},
+      {jump_hint(length(tab_labels_from_tabs(ss.tabs))), "Jump"},
+      {"Q", "Back"}
+    ]
+  end
+
+  defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
 
   defp moderation_chrome do
     %{title: "Moderation", mode: Presentation.mode_for!(:moderation)}
