@@ -318,8 +318,14 @@ defmodule Foglet.TUI.Screens.Sysop do
 
     case current do
       {:error, reason} when reason != :forbidden ->
-        new_ss = Map.put(ss, slot, :loading)
-        {:update, put_sysop_state(state, new_ss), [dispatch_for(active_label)]}
+        # WR-05: the App is the single writer for the :loading transition.
+        # The matching {:load_sysop_*} clause in app.ex calls
+        # `put_sysop_loading/2` synchronously before firing the off-process
+        # task. The screen merely emits the dispatch tuple. Leaving the slot
+        # in {:error, _} until the App processes the command is fine — the
+        # screen does not re-render between Sysop.handle_key returning and
+        # the App processing the command.
+        {:update, state, [dispatch_for(active_label)]}
 
       _ ->
         do_handle_key(event, state)
@@ -477,9 +483,16 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
+  # Single-writer lifecycle (Phase 29 D-05/D-06): the App is the single
+  # writer for the `:loading` slot transition. Each `{:load_sysop_*}` clause
+  # in `app.ex` calls `put_sysop_loading/2` synchronously before firing the
+  # off-process task. The screen merely emits the dispatch tuple when the
+  # slot is `:not_loaded`; the App owns the slot mutation. This avoids the
+  # double-write footgun where the screen flipped to `:loading` and then the
+  # App flipped to `:loading` again (idempotent today, but a refactor hazard).
   defp dispatch_if_not_loaded(ss, slot, dispatch_tuple) do
     case Map.get(ss, slot) do
-      :not_loaded -> {Map.put(ss, slot, :loading), [dispatch_tuple]}
+      :not_loaded -> {ss, [dispatch_tuple]}
       _ -> {ss, []}
     end
   end

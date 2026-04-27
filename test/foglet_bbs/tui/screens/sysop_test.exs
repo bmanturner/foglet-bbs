@@ -266,29 +266,34 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "5"}, state)
 
       assert new_state.screen_state.sysop.active_tab == 4
-      # Slot transitions to :loading synchronously with dispatch.
-      assert new_state.screen_state.sysop.users_view == :loading
+      # WR-05: the App is the single writer for the :loading transition.
+      # The screen merely emits the dispatch tuple; the slot stays
+      # :not_loaded until the App processes {:load_sysop_users}.
+      assert new_state.screen_state.sysop.users_view == :not_loaded
       assert Enum.member?(cmds, {:load_sysop_users})
     end
 
     test "switching to BOARDS emits {:load_sysop_boards}", %{state: state} do
       {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "2"}, state)
       assert new_state.screen_state.sysop.active_tab == 1
-      assert new_state.screen_state.sysop.boards_view == :loading
+      # WR-05: App owns the :loading transition (see USERS test above).
+      assert new_state.screen_state.sysop.boards_view == :not_loaded
       assert Enum.member?(cmds, {:load_sysop_boards})
     end
 
     test "switching to LIMITS emits {:load_sysop_limits}", %{state: state} do
       {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "3"}, state)
       assert new_state.screen_state.sysop.active_tab == 2
-      assert new_state.screen_state.sysop.limits_form == :loading
+      # WR-05: App owns the :loading transition (see USERS test above).
+      assert new_state.screen_state.sysop.limits_form == :not_loaded
       assert Enum.member?(cmds, {:load_sysop_limits})
     end
 
     test "switching to SYSTEM emits {:load_sysop_system}", %{state: state} do
       {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "4"}, state)
       assert new_state.screen_state.sysop.active_tab == 3
-      assert new_state.screen_state.sysop.system_snapshot == :loading
+      # WR-05: App owns the :loading transition (see USERS test above).
+      assert new_state.screen_state.sysop.system_snapshot == :not_loaded
       assert Enum.member?(cmds, {:load_sysop_system})
     end
 
@@ -379,12 +384,16 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: state}
     end
 
-    test "pressing R on USERS in {:error, :timeout} re-dispatches {:load_sysop_users} and flips slot to :loading",
+    test "pressing R on USERS in {:error, :timeout} re-dispatches {:load_sysop_users}",
          %{state: state} do
       state = put_sysop_slot(state, :users_view, {:error, :timeout})
 
       assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "R"}, state)
-      assert new_state.screen_state.sysop.users_view == :loading
+      # WR-05: App owns the :loading transition. The screen leaves the slot
+      # in {:error, _} and emits the dispatch tuple; the App's
+      # {:load_sysop_users} clause flips the slot to :loading via
+      # put_sysop_loading/2 before firing the off-process task.
+      assert new_state.screen_state.sysop.users_view == {:error, :timeout}
       assert {:load_sysop_users} in cmds
     end
 
@@ -394,7 +403,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = put_sysop_slot(state, :users_view, {:error, :timeout})
 
       assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "r"}, state)
-      assert new_state.screen_state.sysop.users_view == :loading
+      # WR-05: App owns the :loading transition (see uppercase R test above).
+      assert new_state.screen_state.sysop.users_view == {:error, :timeout}
       assert {:load_sysop_users} in cmds
     end
 
@@ -473,7 +483,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = put_sysop_slot(state, :boards_view, {:error, :timeout})
 
       assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "R"}, state)
-      assert new_state.screen_state.sysop.boards_view == :loading
+      # WR-05: App owns the :loading transition.
+      assert new_state.screen_state.sysop.boards_view == {:error, :timeout}
       assert {:load_sysop_boards} in cmds
       refute {:load_sysop_users} in cmds
     end
