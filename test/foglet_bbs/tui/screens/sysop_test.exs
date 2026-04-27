@@ -891,7 +891,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
       flat = UsersView.render(view, Foglet.TUI.Theme.default()) |> collect_text_values()
 
       assert Enum.any?(flat, &String.contains?(&1, "No administrable users."))
-      assert Enum.any?(flat, &String.contains?(&1, "[A] Approve"))
+      # Phase 29 D-15: footer is render-time. With no rows, the only key hint
+      # advertised is [j/k] Move (no transition keys are gated-in).
+      assert Enum.any?(flat, &String.contains?(&1, "[j/k] Move"))
     end
   end
 
@@ -950,16 +952,190 @@ defmodule Foglet.TUI.Screens.SysopTest do
                "Status changed: @reactivate_me suspended -> active."
     end
 
-    test "invalid row action surfaces message without mutating", %{state: state} do
+    test "invalid row action is a no-op (Phase 29 D-15: pressing R on :active is gated)",
+         %{state: state} do
       sysop = persist_user(%{handle: "invalid_sysop", role: :sysop})
       active = persist_user(%{handle: "reject_active", status: :active})
       state = activate_users_tab(state, sysop)
       state = select_user_row(state, active.handle)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      # D-15: [R] Reject is gated to :pending source rows. Pressing R on a
+      # focused :active row is a UI no-op — no boundary call, no message.
+      result = Sysop.handle_key(%{key: :char, char: "R"}, state)
+
+      # The keypress is a no-op at the UsersView level. handle_key may return
+      # :no_match (event ignored) or {:update, _, _} with state unchanged.
+      case result do
+        :no_match -> :ok
+        {:update, new_state, _} -> assert current_users_view(new_state).message == nil
+      end
 
       assert Accounts.get_user!(active.id).status == :active
-      assert current_users_view(state).message == "Invalid status transition."
+    end
+  end
+
+  describe "USERS keybind gating (Phase 29 D-15, A2)" do
+    @describetag :users_keybind_gating
+
+    alias Foglet.TUI.Theme
+
+    defp build_user(handle, status) do
+      %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: handle,
+        email: "#{handle}@example.test",
+        role: :user,
+        status: status
+      }
+    end
+
+    defp build_users_view_with(focused_status) do
+      user = build_user("focused_#{focused_status}", focused_status)
+
+      %UsersView{
+        current_user: %Foglet.Accounts.User{
+          id: Ecto.UUID.generate(),
+          handle: "sysop",
+          role: :sysop,
+          status: :active
+        },
+        rows: [{focused_status, user}],
+        selection_index: 0
+      }
+    end
+
+    test "focused :pending row advertises [A] Approve and [R] Reject; not [S] or [U]" do
+      view = build_users_view_with(:pending)
+      flat = view |> UsersView.render(Theme.default()) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "[A] Approve")
+      assert String.contains?(flat, "[R] Reject")
+      refute String.contains?(flat, "[S] Suspend")
+      refute String.contains?(flat, "[U] Reactivate")
+    end
+
+    test "focused :active row advertises [S] Suspend; not [A], [R], or [U]" do
+      view = build_users_view_with(:active)
+      flat = view |> UsersView.render(Theme.default()) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "[S] Suspend")
+      refute String.contains?(flat, "[A] Approve")
+      refute String.contains?(flat, "[R] Reject")
+      refute String.contains?(flat, "[U] Reactivate")
+    end
+
+    test "focused :suspended row advertises [U] Reactivate; not [A]" do
+      view = build_users_view_with(:suspended)
+      flat = view |> UsersView.render(Theme.default()) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "[U] Reactivate")
+      refute String.contains?(flat, "[A] Approve")
+      refute String.contains?(flat, "[R] Reject")
+      refute String.contains?(flat, "[S] Suspend")
+    end
+
+    test "focused :rejected row advertises none of [A], [R], [S], [U]" do
+      view = build_users_view_with(:rejected)
+      flat = view |> UsersView.render(Theme.default()) |> collect_text_values() |> Enum.join("\n")
+
+      refute String.contains?(flat, "[A] Approve")
+      refute String.contains?(flat, "[R] Reject")
+      refute String.contains?(flat, "[S] Suspend")
+      refute String.contains?(flat, "[U] Reactivate")
+    end
+
+    test "empty rows list still renders [j/k] Move and does not crash" do
+      view = %UsersView{
+        current_user: nil,
+        rows: [],
+        selection_index: 0
+      }
+
+      flat = view |> UsersView.render(Theme.default()) |> collect_text_values() |> Enum.join("\n")
+      assert String.contains?(flat, "[j/k] Move")
+    end
+
+    test "pressing A on focused :active row is a no-op (no boundary call, no message)" do
+      view = build_users_view_with(:active)
+
+      assert {new_view, []} = UsersView.handle_key(%{key: :char, char: "A"}, view)
+      assert new_view == view
+      assert new_view.message == nil
+    end
+
+    test "pressing U on focused :pending row is a no-op (A2: source must be :suspended)" do
+      view = build_users_view_with(:pending)
+
+      assert {new_view, []} = UsersView.handle_key(%{key: :char, char: "U"}, view)
+      assert new_view == view
+      assert new_view.message == nil
+    end
+
+    test "pressing S on focused :pending row is a no-op (target :suspended unreachable from :pending)" do
+      view = build_users_view_with(:pending)
+
+      assert {new_view, []} = UsersView.handle_key(%{key: :char, char: "S"}, view)
+      assert new_view == view
+      assert new_view.message == nil
+    end
+  end
+
+  describe "USERS from->to copy (Phase 29 D-16)" do
+    @describetag :users_from_to_copy
+
+    test "{:error, :invalid_transition} renders 'Cannot change @<handle> from <from> to <to>.'",
+         %{state: state} do
+      sysop = persist_user(%{handle: "fromto_sysop", role: :sysop})
+      # Persist user as :active so the boundary will reject :pending->:active
+      # for a stale row whose UsersView struct claims :pending.
+      stale_user = persist_user(%{handle: "stale_user", status: :active})
+
+      state = %{state | current_user: sysop}
+      ss = Sysop.init_screen_state(active: 4)
+
+      # Build a stale UsersView whose row says :pending even though the DB has
+      # the user at :active. UI gate sees :pending source, allows [A]; boundary
+      # checks user.status from DB and returns {:error, :invalid_transition}.
+      stale_view = %UsersView{
+        current_user: sysop,
+        rows: [{:pending, stale_user}],
+        selection_index: 0,
+        groups: %{pending: [stale_user], active: [], suspended: [], rejected: []}
+      }
+
+      ss = %{ss | users_view: {:loaded, stale_view}}
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      {:update, new_state, _} = Sysop.handle_key(%{key: :char, char: "A"}, state)
+
+      message = current_users_view(new_state).message
+
+      # D-16: from->to copy uses the focused row's *displayed* (stale) source
+      # status and the keypress's target. The handle is named explicitly.
+      assert message == "Cannot change @stale_user from pending to active."
+      refute message =~ "invalid_transition"
+    end
+
+    test "no rendered output of users_view.ex contains the literal 'invalid_transition'" do
+      contents = File.read!("lib/foglet_bbs/tui/screens/sysop/users_view.ex")
+
+      # The only allowed occurrence of the substring is in the {:error, :invalid_transition}
+      # pattern-match itself; no rendered string literal may use it.
+      offending =
+        contents
+        |> String.split("\n")
+        |> Enum.with_index(1)
+        |> Enum.filter(fn {line, _idx} ->
+          stripped = String.trim_leading(line)
+          # Strip comment-only lines and the legitimate pattern-match lines.
+          String.contains?(stripped, "invalid_transition") and
+            not String.starts_with?(stripped, "#") and
+            not String.contains?(stripped, "{:error, :invalid_transition}") and
+            not String.contains?(stripped, ":invalid_transition,")
+        end)
+
+      assert offending == [],
+             "users_view.ex contains 'invalid_transition' outside the pattern-match: #{inspect(offending)}"
     end
   end
 
