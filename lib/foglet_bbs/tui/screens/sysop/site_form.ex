@@ -58,8 +58,16 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
 
   @spec render(t(), Theme.t()) :: any()
   def render(%SState{} = state, %Theme{} = theme) do
+    # Phase 28 Plan 06 (BL-02): seed the per-render Modal.Form with the
+    # persisted SState.submit_state so the D-08/D-09 status row
+    # ("Saving…" / "Saved." / "Error: …") survives the rebuild.
+    # Direct Map.put bypasses set_submit_state/2's :submitting raise so we
+    # can faithfully replay any persisted lifecycle value, including
+    # :submitting on the next render after an internal :idle → :submitting
+    # transition.
     state
     |> SState.build_modal_form()
+    |> Map.put(:submit_state, state.submit_state)
     |> apply_errors(state.errors)
     |> ModalForm.render(theme: theme)
   end
@@ -76,9 +84,15 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   end
 
   def handle_key(event, %SState{} = state) do
+    # Phase 28 Plan 06 (BL-02): seed the freshly-built form with the
+    # persisted SState.submit_state BEFORE dispatch so the FORM-05 lock
+    # guard (form.ex:164-166) fires when state.submit_state == :submitting,
+    # and the auto-reset preamble (form.ex:178-184) collapses :saved /
+    # {:error, _} → :idle on the next non-locked event.
     form =
       state
       |> SState.build_modal_form()
+      |> Map.put(:submit_state, state.submit_state)
       |> apply_errors(state.errors)
       |> set_focus(state.focused)
 
@@ -97,9 +111,12 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     visible = SState.visible_keys(state)
     last_idx = max(0, length(visible) - 1)
 
+    # Phase 28 Plan 06 (BL-02): seed submit_state so a held Ctrl+S whose
+    # prior cascade hasn't transitioned out of :submitting is lock-swallowed.
     form =
       state
       |> SState.build_modal_form()
+      |> Map.put(:submit_state, state.submit_state)
       |> apply_errors(state.errors)
       |> set_focus(last_idx)
 
@@ -186,10 +203,16 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     end
   end
 
-  defp sync_back(%SState{} = state, %ModalForm{focus_index: idx} = form) do
+  defp sync_back(%SState{} = state, %ModalForm{focus_index: idx, submit_state: ss} = form) do
     visible = SState.visible_keys(state)
     drafts = collect_drafts(form, visible, state.drafts)
-    %{state | drafts: drafts, focused: clamp(idx, length(visible))}
+    # Phase 28 Plan 06 (BL-02): persist the form's submit_state back onto
+    # SState so the next render/keystroke rebuild seeds the new form with
+    # the same lifecycle value. This is the missing half of the FORM-05
+    # contract on this consumer — without it, persist_payload/finalize_submit
+    # write :saved / {:error, "validation"} into the form, but those values
+    # vanish here (BL-02 root cause).
+    %{state | drafts: drafts, focused: clamp(idx, length(visible)), submit_state: ss}
   end
 
   defp collect_drafts(%ModalForm{} = form, visible, existing_drafts) do

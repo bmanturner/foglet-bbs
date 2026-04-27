@@ -55,10 +55,20 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
           current_user: term() | nil,
           drafts: %{optional(String.t()) => term()},
           errors: %{optional(String.t()) => String.t()},
-          focused: non_neg_integer()
+          focused: non_neg_integer(),
+          submit_state: ModalForm.submit_state()
         }
 
-  defstruct current_user: nil, drafts: %{}, errors: %{}, focused: 0
+  # Phase 28 Plan 06 (BL-02): submit_state persists the FORM-05 lifecycle
+  # across the per-render Modal.Form rebuild. Without this, sync_back/2
+  # discards the form's submit_state every event, the FORM-05 lock guard
+  # has zero effect on this consumer, and the D-08/D-09 status row
+  # ("Saved." / "Error: validation") never reaches the operator.
+  defstruct current_user: nil,
+            drafts: %{},
+            errors: %{},
+            focused: 0,
+            submit_state: :idle
 
   @doc "The canonical Sysop SITE key list, in render order."
   @spec site_keys() :: [String.t()]
@@ -88,7 +98,10 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
   """
   @spec reseed_drafts(t()) :: t()
   def reseed_drafts(%__MODULE__{} = state) do
-    %{state | drafts: load_drafts(), errors: %{}, focused: 0}
+    # Phase 28 Plan 06 (BL-02): Esc reseed drops in-flight FORM-05 lifecycle
+    # along with drafts (D-12 honest-Esc semantics — no stale "Saved." or
+    # "Error: …" pinned across a discard).
+    %{state | drafts: load_drafts(), errors: %{}, focused: 0, submit_state: :idle}
   end
 
   @doc """
