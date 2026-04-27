@@ -739,6 +739,140 @@ defmodule Foglet.TUI.Screens.AccountTest do
     %{account_state | ssh_keys: %{account_state.ssh_keys | form: form}}
   end
 
+  defp build_user_with_profile(opts \\ []) do
+    %Foglet.Accounts.User{
+      id: "u-honest-esc",
+      handle: "alice",
+      role: :user,
+      location: Keyword.get(opts, :location, "Berlin"),
+      tagline: Keyword.get(opts, :tagline, "hi"),
+      real_name: Keyword.get(opts, :real_name, "Brendan"),
+      timezone: Keyword.get(opts, :timezone, "Etc/UTC"),
+      preferences: Keyword.get(opts, :preferences, %{"time_format" => "12h"}),
+      theme: Keyword.get(opts, :theme, "gray")
+    }
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 28 Plan 03 — FORM-06 honest Esc (D-10, D-11)
+  # ---------------------------------------------------------------------------
+
+  describe "FORM-06 honest Esc on Account Profile (Phase 28 D-10, D-11)" do
+    alias Foglet.TUI.Screens.Account.ProfileForm
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    test "Esc reseeds profile_draft to saved-user values, clears dirty + status_message" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Mutate the live form by typing a char into the focused field
+      # (focus starts at :location — first field).
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.profile_form)
+
+      # Sanity: the typing event mutated :location away from "Berlin" (we don't
+      # care about cursor position — only that the live form differs from the
+      # saved-user value, which is what Esc must reseed away).
+      assert ModalForm.field_value(form_after_type, :location) != "Berlin"
+      assert ModalForm.field_value(form_after_type, :location) =~ "X"
+
+      ss_dirty = %{ss | profile_form: form_after_type, profile_dirty?: true}
+
+      {:ok, after_esc, cmds} = ProfileForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      assert after_esc.profile_draft == %{
+               location: "Berlin",
+               tagline: "hi",
+               real_name: "Brendan"
+             }
+
+      assert after_esc.profile_dirty? == false
+      assert after_esc.status_message == nil
+      assert cmds == []
+
+      # And the rendered form's first-field value reverted on the next render.
+      assert ModalForm.field_value(after_esc.profile_form, :location) == "Berlin"
+    end
+
+    test "Esc on Account Profile does not produce any 'discarded' status copy" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.profile_form)
+
+      ss_dirty = %{ss | profile_form: form_after_type, profile_dirty?: true}
+
+      {:ok, after_esc, []} = ProfileForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      # No status_message, and no "discarded" text anywhere in the state map.
+      assert after_esc.status_message == nil
+
+      serialized = inspect(after_esc, limit: :infinity)
+      refute serialized =~ "Profile changes discarded"
+      refute serialized =~ "discarded"
+    end
+  end
+
+  describe "FORM-06 honest Esc on Account Preferences (Phase 28 D-10, D-11)" do
+    alias Foglet.TUI.Screens.Account.PrefsForm
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    test "Esc reseeds prefs_draft to saved-user values, clears dirty + status_message" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      # Mutate the live prefs form by typing a char into the focused field
+      # (focus starts at :timezone — first field).
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.prefs_form)
+
+      # Sanity: typing event mutated :timezone away from "Etc/UTC".
+      assert ModalForm.field_value(form_after_type, :timezone) != "Etc/UTC"
+      assert ModalForm.field_value(form_after_type, :timezone) =~ "X"
+
+      ss_dirty = %{
+        ss
+        | prefs_form: form_after_type,
+          prefs_dirty?: true,
+          candidate_theme_id: "amber"
+      }
+
+      {:ok, after_esc, cmds} = PrefsForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      assert after_esc.prefs_draft == %{
+               timezone: "Etc/UTC",
+               time_format: "12h",
+               theme: "gray"
+             }
+
+      assert after_esc.prefs_dirty? == false
+      assert after_esc.status_message == nil
+      assert after_esc.candidate_theme_id == nil
+      assert cmds == []
+
+      assert ModalForm.field_value(after_esc.prefs_form, :timezone) == "Etc/UTC"
+    end
+
+    test "Esc on Account Preferences does not produce any 'discarded' status copy" do
+      user = build_user_with_profile()
+      ss = Account.init_screen_state(current_user: user)
+
+      {form_after_type, nil} =
+        ModalForm.handle_event(%{key: :char, char: "X"}, ss.prefs_form)
+
+      ss_dirty = %{ss | prefs_form: form_after_type, prefs_dirty?: true}
+
+      {:ok, after_esc, []} = PrefsForm.handle_key(%{key: :escape}, ss_dirty, user)
+
+      assert after_esc.status_message == nil
+
+      serialized = inspect(after_esc, limit: :infinity)
+      refute serialized =~ "Preference changes discarded"
+      refute serialized =~ "discarded"
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Phase 25 Plan 02 — Primitive-presence tests (TDD RED)
   # ---------------------------------------------------------------------------
