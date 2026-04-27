@@ -17,7 +17,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
-| 28 | Modal.Form Substrate | 4/4 | Gaps Found | 2026-04-27 |
+| 28 | Modal.Form Substrate | 6/7 | In Progress|  |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
