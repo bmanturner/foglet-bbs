@@ -65,10 +65,12 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   `:submitting` lock state is preserved.
 
     * The internal `:idle → :submitting` transition is set by the
-      Enter-on-last-field clause (form.ex:233-244). After that point,
-      the form is locked and only the consumer can release it.
-    * The lock at `form.ex:164-166` swallows every subsequent event,
-      including `:escape`, until `submit_state` leaves `:submitting`.
+      Enter-on-last-field clause (search for "Clause 4: Enter" in this
+      file). After that point, the form is locked and only the consumer
+      can release it.
+    * The lock guard (search for "Clause 0: Lock") swallows every
+      subsequent event, including `:escape`, until `submit_state`
+      leaves `:submitting`.
       A wedged form has no keyboard escape — the user must close the
       SSH session.
     * Failing to drive `set_submit_state/2` on async failure (or
