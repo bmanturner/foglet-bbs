@@ -7,12 +7,17 @@ defmodule Foglet.SSH.Supervisor do
       daemon process, and exits on `:DOWN` so this supervisor restarts it.
 
   Daemon options:
-    * system_dir    → priv/ssh/ (host keys persisted across deploys)
+    * system_dir          → priv/ssh/ (host keys persisted across deploys)
     * no_auth_needed: true — TUI is the authentication boundary (Open Question 1)
-    * key_cb        → Foglet.SSH.KeyCB — loads host keys; stashes offered pubkeys
-                      in `Foglet.SSH.PubkeyStash` for CLIHandler to correlate
-    * ssh_cli       → Foglet.SSH.CLIHandler — Foglet-owned channel handler
-    * max_sessions  → 500
+    * key_cb              → Foglet.SSH.KeyCB — loads host keys; stashes offered
+                            pubkeys in `Foglet.SSH.PubkeyStash` for CLIHandler
+    * ssh_cli             → Foglet.SSH.CLIHandler — Foglet-owned channel handler
+    * max_sessions        → 500
+    * transport_opts      → backlog: 4096, reuseaddr: true (accept-queue tuning)
+    * preferred_algorithms → explicit allowlist: modern KEX (Curve25519 first),
+                            AEAD ciphers (AES-GCM / ChaCha20-Poly1305), Ed25519
+                            host keys, ETM MACs. Omitting an algorithm blocks it
+                            from negotiation — no separate rm: required.
 
   `pwdfun` has been removed entirely: with `no_auth_needed: true` it is dead
   code. Authentication is the responsibility of the TUI login screen.
@@ -73,7 +78,47 @@ defmodule Foglet.SSH.Supervisor do
       key_cb: {Foglet.SSH.KeyCB, [system_dir: String.to_charlist(system_dir)]},
       ssh_cli: {Foglet.SSH.CLIHandler, []},
       max_sessions: 500,
-      parallel_login: true
+      parallel_login: true,
+      # Larger accept backlog keeps the kernel queue from overflowing under
+      # connection surges before BEAM accepts the socket.
+      transport_opts: [backlog: 4096, reuseaddr: true],
+      # Explicit allowlist: OTP negotiates only what is listed here, in order.
+      # Omitting an algorithm is sufficient to block it — no separate rm: needed.
+      # KEX: Curve25519 first (cheapest); classic DHE last (expensive, but kept
+      # for compatibility with older clients). AEAD ciphers eliminate a separate
+      # MAC round-trip; AES-GCM is fastest on AES-NI hardware, ChaCha20-Poly1305
+      # wins on pure software. ETM MAC variants listed for non-AEAD fallback.
+      preferred_algorithms: [
+        kex: [
+          :"curve25519-sha256",
+          :"curve25519-sha256@libssh.org",
+          :"ecdh-sha2-nistp521",
+          :"ecdh-sha2-nistp384",
+          :"ecdh-sha2-nistp256",
+          :"diffie-hellman-group16-sha512"
+        ],
+        public_key: [
+          :"ssh-ed25519",
+          :"ecdsa-sha2-nistp521",
+          :"ecdsa-sha2-nistp256",
+          :"rsa-sha2-512",
+          :"rsa-sha2-256"
+        ],
+        cipher: [
+          :"aes256-gcm@openssh.com",
+          :"aes128-gcm@openssh.com",
+          :"chacha20-poly1305@openssh.com",
+          :"aes256-ctr",
+          :"aes192-ctr",
+          :"aes128-ctr"
+        ],
+        mac: [
+          :"hmac-sha2-256-etm@openssh.com",
+          :"hmac-sha2-512-etm@openssh.com",
+          :"hmac-sha2-256",
+          :"hmac-sha2-512"
+        ]
+      ]
     ]
   end
 
