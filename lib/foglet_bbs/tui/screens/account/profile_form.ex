@@ -30,7 +30,7 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
   def handle_key(%{key: key} = event, %State{} = state, current_user)
-      when key in [:char, :backspace, :enter, :escape, :tab, :shift_tab, :up, :down] do
+      when key in [:char, :backspace, :enter, :escape, :tab, :shift_tab, :backtab, :up, :down] do
     do_handle_key(event, state, current_user)
   end
 

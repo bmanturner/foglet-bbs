@@ -1024,7 +1024,15 @@ defmodule Foglet.TUI.App do
          %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state,
          errors
        ) do
-    form = ModalForm.set_errors(form, errors)
+    # BL-01 / FORM-05: drive submit_state out of :submitting so the lock guard
+    # releases and the next non-locked event (e.g. :escape) reaches the cancel
+    # clause. The auto-reset preamble collapses {:error, _} → :idle on that
+    # next event, so the form is editable again as well.
+    form =
+      form
+      |> ModalForm.set_errors(errors)
+      |> ModalForm.set_submit_state({:error, summarize_form_errors(errors)})
+
     %{state | modal: %{state.modal | message: form}}
   end
 
@@ -1037,7 +1045,13 @@ defmodule Foglet.TUI.App do
          %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state,
          errors
        ) do
-    form = ModalForm.set_errors(form, errors)
+    # BL-01 / FORM-05: see put_oneliner_form_errors/2 for the lock-release
+    # contract. Same shape applies to the hide-oneliner :form modal.
+    form =
+      form
+      |> ModalForm.set_errors(errors)
+      |> ModalForm.set_submit_state({:error, summarize_form_errors(errors)})
+
     %{state | modal: %{state.modal | message: form}}
   end
 
@@ -1049,6 +1063,16 @@ defmodule Foglet.TUI.App do
     else
       {state, []} = do_update({:open_hide_oneliner_modal, entry_id}, state)
       put_hide_oneliner_form_errors(state, errors)
+    end
+  end
+
+  # BL-01 helper: pick the shortest representative message for the FORM-05
+  # status row. Per-field errors continue to flow through ModalForm.set_errors/2;
+  # this string is consumed only by the {:error, msg} submit-state value.
+  defp summarize_form_errors(errors) when is_map(errors) do
+    case Map.values(errors) do
+      [first | _] when is_binary(first) -> first
+      _ -> "validation"
     end
   end
 

@@ -56,6 +56,28 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   This avoids adding a public `:on_field_change` callback option (D-19 spirit)
   and keeps the public API surface minimal. See `field_value/2` for the accessor.
+
+  ## Submit-state lifecycle (FORM-05 consumer obligation)
+
+  Consumers of `Modal.Form` MUST drive `set_submit_state/2` to a
+  terminal state (`{:error, msg}` or `:idle`) when an async submit
+  fails, OR persist the `Modal.Form` struct across renders so the
+  `:submitting` lock state is preserved.
+
+    * The internal `:idle → :submitting` transition is set by the
+      Enter-on-last-field clause (form.ex:233-244). After that point,
+      the form is locked and only the consumer can release it.
+    * The lock at `form.ex:164-166` swallows every subsequent event,
+      including `:escape`, until `submit_state` leaves `:submitting`.
+      A wedged form has no keyboard escape — the user must close the
+      SSH session.
+    * Failing to drive `set_submit_state/2` on async failure (or
+      rebuilding the form fresh per render and discarding the prior
+      `submit_state`) nullifies the FORM-05 lock and the FORM-05
+      status-row guarantees, and on `:form`-typed modals will
+      permanently wedge the user (BL-01).
+    * Reference: Phase 28 BL-01 (oneliner / hide-oneliner modals) and
+      BL-02 (Sysop SiteForm) for examples of both failure modes.
   """
 
   import Raxol.Core.Renderer.View
