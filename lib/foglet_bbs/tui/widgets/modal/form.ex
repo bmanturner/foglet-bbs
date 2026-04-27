@@ -75,6 +75,18 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   @type action :: :submitted | :cancelled | nil
 
+  @typedoc """
+  Submit-state machine (Phase 28 FORM-05 / D-01..D-05).
+
+  Transitions:
+    * `:idle` → `:submitting` — internal only, on Enter-on-last-field
+    * `:submitting` → `:saved` — caller-driven via `set_submit_state/2`
+    * `:submitting` → `{:error, term}` — caller-driven via `set_submit_state/2`
+    * `:saved` → `:idle` — auto-reset on the next non-locked event (D-04)
+    * `{:error, _}` → `:idle` — auto-reset on the next non-locked event (D-04)
+  """
+  @type submit_state :: :idle | :submitting | :saved | {:error, term()}
+
   defstruct [
     :title,
     :fields,
@@ -83,7 +95,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     :errors,
     :on_submit,
     :on_cancel,
-    show_footer: false
+    show_footer: false,
+    submit_state: :idle
   ]
 
   @type t :: %__MODULE__{
@@ -94,7 +107,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
           errors: %{atom() => String.t()},
           on_submit: (map() -> any()),
           on_cancel: (-> any()),
-          show_footer: boolean()
+          show_footer: boolean(),
+          submit_state: submit_state()
         }
 
   @doc """
@@ -128,11 +142,49 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     }
   end
 
-  @doc "Pure (event, state) -> {state, action | nil}."
+  @doc """
+  Pure (event, state) -> {state, action | nil}.
+
+  Public entry: applies the submit-state lock guard (Phase 28 D-02) and the
+  auto-reset preamble (D-04) before dispatching to `do_handle_event/2`.
+
+    * Lock (D-02): when `submit_state == :submitting`, EVERY event is swallowed
+      and `{state, nil}` is returned. Consuming screens drive the transition
+      out of `:submitting` via `set_submit_state/2` once async work completes.
+    * Auto-reset (D-04): when `submit_state` is `:saved` or `{:error, _}`, the
+      next non-locked event resets `submit_state` to `:idle` BEFORE the rest of
+      the dispatch runs, so the form is editable again. The auto-reset never
+      fires from the locked branch (the lock guard short-circuits first).
+  """
   @spec handle_event(map(), t()) :: {t(), action()}
 
+  # Clause 0: Lock — while :submitting, swallow all events (Phase 28 D-02).
+  # Reserved for the internal :idle → :submitting transition only; consuming
+  # screens transition out via set_submit_state/2 (D-03).
+  def handle_event(_event, %__MODULE__{submit_state: :submitting} = state) do
+    {state, nil}
+  end
+
+  # Public entry: auto-reset terminal states, then dispatch.
+  def handle_event(event, %__MODULE__{} = state) do
+    state
+    |> maybe_auto_reset_submit_state()
+    |> do_handle_event(event)
+  end
+
+  # Auto-reset preamble (Phase 28 D-04) — collapses :saved and {:error, _}
+  # back to :idle on the next non-locked event so the form is editable again.
+  # The :submitting branch is already short-circuited by the lock guard above.
+  defp maybe_auto_reset_submit_state(%__MODULE__{submit_state: :saved} = state),
+    do: %{state | submit_state: :idle}
+
+  defp maybe_auto_reset_submit_state(%__MODULE__{submit_state: {:error, _}} = state),
+    do: %{state | submit_state: :idle}
+
+  defp maybe_auto_reset_submit_state(%__MODULE__{} = state), do: state
+
   # Clause 1: Esc — cancel unconditionally (REQ-6)
-  def handle_event(%{key: :escape}, %__MODULE__{on_cancel: cb} = state) do
+  defp do_handle_event(%__MODULE__{on_cancel: cb} = state, %{key: :escape}) do
     _ = cb.()
     {state, :cancelled}
   end
@@ -140,7 +192,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   # Clause 2: Shift-Tab — retreat with wrap (REQ-4)
   # Shape %{key: :tab, shift: true} verified against
   # vendor/raxol/lib/raxol/ui/components/modal/events.ex:94
-  def handle_event(%{key: :tab, shift: true}, %__MODULE__{} = state) do
+  defp do_handle_event(%__MODULE__{} = state, %{key: :tab, shift: true}) do
     n = length(state.fields)
     new_idx = rem(state.focus_index - 1 + n, n)
     {%{state | focus_index: new_idx}, nil}
@@ -149,7 +201,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   # Clause 2b: Shift-Tab — Foglet/CLIHandler-translated shape (D-25 Pitfall 1)
   # CLIHandler emits %{key: :shift_tab} when the terminal sends back-tab (ESC[Z).
   # Keep this clause adjacent to Clause 2 so the pattern is visually obvious.
-  def handle_event(%{key: :shift_tab}, %__MODULE__{} = state) do
+  defp do_handle_event(%__MODULE__{} = state, %{key: :shift_tab}) do
     n = length(state.fields)
     new_idx = rem(state.focus_index - 1 + n, n)
     {%{state | focus_index: new_idx}, nil}
@@ -158,27 +210,33 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   # Clause 2c: Back-tab — terminal `ESC[Z` after CLIHandler translation (Phase 28 D-15).
   # Equivalent to %{key: :shift_tab} and %{key: :tab, shift: true}.
   # Body is intentionally byte-identical to Clause 2b's body.
-  def handle_event(%{key: :backtab}, %__MODULE__{} = state) do
+  defp do_handle_event(%__MODULE__{} = state, %{key: :backtab}) do
     n = length(state.fields)
     new_idx = rem(state.focus_index - 1 + n, n)
     {%{state | focus_index: new_idx}, nil}
   end
 
   # Clause 3: Tab — advance with wrap (REQ-4)
-  def handle_event(%{key: :tab}, %__MODULE__{} = state) do
+  defp do_handle_event(%__MODULE__{} = state, %{key: :tab}) do
     n = length(state.fields)
     new_idx = rem(state.focus_index + 1, n)
     {%{state | focus_index: new_idx}, nil}
   end
 
-  # Clause 4: Enter — submit if last field, otherwise advance (REQ-5)
-  def handle_event(%{key: :enter}, %__MODULE__{} = state) do
+  # Clause 4: Enter — submit if last field, otherwise advance (REQ-5).
+  # Phase 28 D-05: on submit, transitions :idle → :submitting and invokes
+  # on_submit exactly once; subsequent Enter events are swallowed by the
+  # lock guard (Clause 0) until the consuming screen calls set_submit_state/2.
+  # By the time this clause runs, the lock guard has short-circuited any
+  # :submitting state and the auto-reset preamble has collapsed :saved /
+  # {:error, _} back to :idle, so submit_state here is always :idle.
+  defp do_handle_event(%__MODULE__{} = state, %{key: :enter}) do
     last_idx = length(state.fields) - 1
 
     if state.focus_index == last_idx do
       payload = collect_values(state)
       _ = state.on_submit.(payload)
-      {state, :submitted}
+      {%{state | submit_state: :submitting}, :submitted}
     else
       n = length(state.fields)
       {%{state | focus_index: rem(state.focus_index + 1, n)}, nil}
@@ -190,7 +248,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   # wrap (last → 0); on :enum, fall through to dispatch_to_field/3 so the field
   # updates its internal index (existing enum cycling). On any other type
   # (e.g. :boolean) also fall through, preserving today's per-field semantics.
-  def handle_event(%{key: :down} = event, %__MODULE__{} = state) do
+  defp do_handle_event(%__MODULE__{} = state, %{key: :down} = event) do
     case Enum.at(state.fields, state.focus_index) do
       %{type: type} when type in [:text, :integer, :textarea] ->
         n = length(state.fields)
@@ -203,7 +261,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   # Clause 4c: Up — focus retreat on text-like fields, value cycle on :enum
   # (Phase 28 D-13, D-14). Backward wrap is 0 → last.
-  def handle_event(%{key: :up} = event, %__MODULE__{} = state) do
+  defp do_handle_event(%__MODULE__{} = state, %{key: :up} = event) do
     case Enum.at(state.fields, state.focus_index) do
       %{type: type} when type in [:text, :integer, :textarea] ->
         n = length(state.fields)
@@ -215,7 +273,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   end
 
   # Clause 5: dispatch to focused field
-  def handle_event(event, %__MODULE__{} = state) do
+  defp do_handle_event(%__MODULE__{} = state, event) do
     dispatch_event_to_field(event, state)
   end
 
@@ -253,6 +311,34 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   @spec set_errors(t(), %{atom() => String.t()}) :: t()
   def set_errors(%__MODULE__{} = state, errors) when is_map(errors) do
     %{state | errors: errors}
+  end
+
+  @doc """
+  Transition the form's `submit_state` to a caller-allowed terminal state
+  (Phase 28 FORM-05 / D-03).
+
+  Allowed values: `:idle`, `:saved`, `{:error, term()}`.
+
+  Raises `ArgumentError` if called with `:submitting` — that transition is
+  reserved for the internal Enter-on-last-field clause. Consuming screens
+  call this setter once async work completes (success → `:saved`; failure →
+  `{:error, msg}`); the very next non-locked user event auto-resets the form
+  back to `:idle` so it is editable again (D-04).
+  """
+  @spec set_submit_state(t(), :idle | :saved | {:error, term()}) :: t()
+  def set_submit_state(%__MODULE__{}, :submitting) do
+    raise ArgumentError,
+          "Modal.Form.set_submit_state/2 cannot be called with :submitting; " <>
+            "the :submitting transition is reserved for the internal " <>
+            "Enter-on-last-field clause (Phase 28 D-03)."
+  end
+
+  def set_submit_state(%__MODULE__{} = state, new) when new == :idle or new == :saved do
+    %{state | submit_state: new}
+  end
+
+  def set_submit_state(%__MODULE__{} = state, {:error, _term} = new) do
+    %{state | submit_state: new}
   end
 
   @doc """
