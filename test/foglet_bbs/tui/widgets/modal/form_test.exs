@@ -1180,4 +1180,17 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       refute String.contains?(flat, "description")
     end
   end
+
+  describe "init/1 input validation (Phase 28 BL-03)" do
+    test "raises ArgumentError when :fields is an empty list" do
+      assert_raise ArgumentError, ~r/at least one field/, fn ->
+        Foglet.TUI.Widgets.Modal.Form.init(
+          title: "Empty",
+          fields: [],
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+      end
+    end
+  end
 end
