@@ -78,7 +78,7 @@ Plans:
   2. Pressing Shift+Tab and `:backtab` from field 2 both retreat focus to field 1; pressing Tab/Shift+Tab from the boundary fields wraps deterministically (documented direction).
   3. The Modal.Form footer `[Enter] Submit / [Esc] Cancel` is suppressed by default on form-bearing screens that already advertise those keybinds in the global command bar (Account, Sysop); the footer is rendered for true modal overlays that opt in.
   4. Pressing Enter twice in rapid succession on a submittable form invokes the boundary call exactly once (`submit_state` enum gates re-entry); a `:submitting` state is visible during async work.
-  5. Pressing `:tab :tab :char "x"` lands the `"x"` in the second field's buffer, not the first or any default field; widget-internal focus state is asserted absent for form-bearing widgets.
+  5. Pressing `:tab :tab :char "x"` on a `[text, text, text]` form (initial `focus_index: 0`) lands the `"x"` in the third field's buffer, not the first, second, or any default field; widget-internal focus state is asserted absent for form-bearing widgets.
   6. Pressing Esc on a focused form on Account and Sysop Site visibly cancels the active edit context (or shows an honest "draft discarded" affordance) — the command bar's `[Esc] Cancel` hint is no longer a lie; verified at 64×22 and 80×24 SSH.
 **Plans**: TBD
 **UI hint**: yes
