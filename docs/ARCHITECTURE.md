@@ -60,7 +60,7 @@ Both interfaces terminate into the same domain core: boards, threads, posts, ses
 The OTP supervision tree is the real blueprint of a BEAM system. This is the target shape; it will be built up in stages as the roadmap progresses.
 
 ```
-Foglet.Application
+FogletBbs.Application
 ├── Foglet.Repo                        (Ecto repo)
 ├── Phoenix.PubSub (:foglet_pubsub)
 ├── Foglet.Presence                    (Phoenix Presence)
@@ -77,7 +77,7 @@ Foglet.Application
 │     ├── Foglet.Notifications.Dispatcher
 │     └── Foglet.Notifications.EmailDigest (scheduled)
 ├── Foglet.SSH.Supervisor              (wraps the :ssh daemon)
-├── FogletWeb.Endpoint                 (Phoenix — Channels + LiveDashboard)
+├── FogletBbsWeb.Endpoint              (Phoenix — Channels + LiveDashboard)
 ├── Foglet.Jobs                        (Oban or similar — background jobs)
 └── Foglet.Telemetry                   (metrics reporter)
 ```
@@ -96,7 +96,7 @@ Key choices:
 ### SSH connection
 
 1. Erlang `:ssh` daemon accepts the connection.
-2. Authentication: SSH pubkey (matched against the user's registered keys) or password (falls back to Argon2-checked password from the DB). New users can't yet SSH in — account creation happens via a separate flow (see §9).
+2. Authentication: SSH pubkey (matched against the user's registered keys) or password (falls back to Argon2-checked password from the DB). New users can't yet SSH in — account creation happens via a separate flow (see §11).
 3. On auth success, Foglet starts a `Foglet.Sessions.Session` process (or replaces an existing one) and hands the SSH channel to it.
 4. The Session process runs the login sequence: banner, news of the day, last callers, then the main menu.
 5. Input bytes from SSH flow into the Session; output bytes (ANSI-escaped TUI frames) flow back out.
@@ -207,7 +207,21 @@ CP437-to-Unicode translation is handled at the render layer; stored ANSI art is 
 
 ---
 
-## 8. Configuration philosophy
+## 8. TUI / Raxol layer
+
+The SSH transport (§7) terminates bytes; the TUI layer turns those bytes into a coherent product. The split is deliberate.
+
+`Foglet.SSH.CLIHandler` implements the `:ssh_server_channel` behaviour and owns the channel lifecycle directly — Foglet does not wrap a third-party SSH-channel handler. On `ssh_channel_up` it correlates a stashed pubkey (placed in `Foglet.SSH.PubkeyStash` by the auth key callback) with a registered `Foglet.Accounts.SSHKey` row, starts a `Foglet.Sessions.Session` for the matched user (or `nil` for guest signup flows), and stores the session pid in channel state. On `pty` it starts the Raxol Lifecycle, threading the session context and terminal size through the `options:` field that Lifecycle passes into `Foglet.TUI.App.init/1`. `data` callbacks turn raw bytes into Raxol events; `window_change` becomes a resize event and a notification to the Session; `eof`/`closed` tear down the Lifecycle and Session in order. The handler traps EXITs so an unexpected Lifecycle crash closes the SSH channel cleanly rather than hanging the client. A connection cap (currently 500) is enforced via a `:persistent_term` counter rather than a separate GenServer to avoid a global bottleneck.
+
+`Foglet.TUI.App` is the Raxol application — a `Raxol.Core.Runtime.Application` — and owns the top-level model: current screen, current user, session context, terminal size, modal routing, and per-screen state bags. The metaphor codified in the module: `app.ex` is the conductor, `screens/*` are the scores, `widgets/*` are the instruments. Domain state lives in Postgres (read through `Foglet.Boards`/`Threads`/`Posts`); session-scoped identity lives in `Foglet.Sessions.Session`; UI state lives in the App model. App owns global navigation, PubSub subscription wiring (via `Foglet.TUI.PubSubForwarder`), command/task dispatch, and routing of inbound messages and key events to the active screen.
+
+Screens (`lib/foglet_bbs/tui/screens/*`) own screen-local rendering and key handling. When screen state grows beyond a few fields, it moves into a sibling state module — e.g. `screens/post_reader/state.ex` — keeping the screen's render and handle functions thin. Render functions are pure over already-loaded state; data fetching and mutations stay in the domain contexts and reach the screen via App-dispatched commands.
+
+Widgets (`lib/foglet_bbs/tui/widgets/*`) are reusable display primitives. Stateless widgets expose render functions; stateful widgets expose `init/1`, `handle_event/2`, `render/2`. Colors route through `Foglet.TUI.Theme` and the theme is passed explicitly rather than read from process state.
+
+---
+
+## 9. Configuration philosophy
 
 Foglet is a platform. Sysops choose:
 
@@ -230,7 +244,19 @@ Secrets never go in the DB. Everything else is fair game.
 
 ---
 
-## 9. Account creation flow
+## 10. Runtime configuration cache
+
+The runtime layer (tier 3 above) is implemented by `Foglet.Config`: a read-through ETS cache (`:foglet_config`, `:set`, `:public`, `read_concurrency: true`) over the `configuration` Postgres table. The table is created by `init_cache/0` from `FogletBbs.Application.start/2` before the supervision tree starts, so any supervised process can read config immediately; `init_cache/0` is idempotent and is also called defensively at the head of every public read/write.
+
+Reads (`get!/1`, `get/2`, `fetch/1`) are permissive — rows on the `configuration` table may pre-date the current schema, so the read path does not validate. On a miss the value is loaded from `Foglet.Config.Entry`, unwrapped, and inserted into ETS.
+
+Writes are validated. `put!/3` is the trusted setup path used by seeds, tests, and Mix tasks; it writes to Postgres first and then invalidates the ETS key so the next read repopulates it. Unknown keys raise `Foglet.Config.UnknownKeyError`; type, enum, or range violations raise `Foglet.Config.InvalidValueError`. Schema lives in `Foglet.Config.Schema`. `put/3` is the actor-aware variant for interactive TUI writes (and any future API surface) and routes through the same validation.
+
+Typed accessors (`registration_mode/0`, `invite_code_generators/0`, `max_post_length/0`, `delivery_mode/0`, `require_email_verification?/0`, etc.) live alongside the API so callers don't scatter string keys across the codebase. New schematized keys add a spec in `Foglet.Config.Schema`, a default in seeds, and a typed accessor here.
+
+---
+
+## 11. Account creation flow
 
 Since there's no web UI, new-user signup can't happen through a browser form. Two supported paths:
 
@@ -241,18 +267,37 @@ Post-registration, users can add SSH keys from inside the TUI.
 
 ---
 
-## 10. Sysop interface
+## 12. Sysop interface
 
 Sysops and moderators are users with elevated roles. Admin affordances live in two places:
 
 - **Inside the SSH TUI** — moderation actions, user management, board/category editing, banner/news editing, oneliner moderation, report queue. This is the day-to-day workspace.
-- **Mix tasks on the server** — `mix foglet.user.create`, `mix foglet.user.promote`, `mix foglet.config.set`, `mix foglet.archive` (read-only mode). For install, bootstrap, and break-glass scenarios.
+- **Mix tasks on the server** — `mix foglet.user.create`, `mix foglet.user.promote`, `mix foglet.user.status`, `mix foglet.user.reset_password`, `mix foglet.user.verification_code`, `mix foglet.board_subscriptions`, `mix foglet.doctor`. For install, bootstrap, and break-glass scenarios. (Future: a `mix foglet.config.set` for runtime config edits and a `mix foglet.archive` read-only mode are tracked in the roadmap but not yet implemented.)
 
 Phoenix LiveDashboard is exposed on the Phoenix endpoint, guarded by an admin-only plug. It's for observing the running system (process counts, ETS table sizes, request telemetry), not for operating the BBS.
 
 ---
 
-## 11. Multi-node considerations
+## 13. Authorization
+
+`Foglet.Authorization` implements `Bodyguard.Policy` and is the single source of truth for whether an actor may perform an operator action. Callers use `Bodyguard.permit/4` (returning `:ok | {:error, :forbidden}`) before any side effect, or `Bodyguard.permit?/4` for advisory UI rendering — hidden or disabled UI is never authorization, the context still checks.
+
+Scopes are stable and intentionally coarse: `:site` and `{:board, board_id}`. The policy never invents a third scope shape; sysop operations that are global (e.g. `:edit_config`) take `:site`, board-local moderation actions take `{:board, board_id}`.
+
+Actions are an explicit allowlist of atoms (`:lock_thread`, `:unlock_thread`, `:sticky_thread`, `:unsticky_thread`, `:move_thread`, `:delete_thread`, `:delete_post`, `:edit_post_as_mod`, `:hide_oneliner`, `:create_board`, `:update_board`, `:archive_board`, `:create_category`, `:update_category`, `:archive_category`, `:edit_config`, `:manage_user_status`, `:generate_invite`, `:revoke_invite`). Unknown actions log a warning and deny — there is no implicit allow.
+
+Role behaviour:
+
+- **Sysop** is permitted for every valid action at any scope.
+- **Mod** is permitted for the moderation subset at `:site` and a stricter subset at `{:board, _}` (no board/category lifecycle ops, no `:edit_config`). The `:edit_config` deny is explicit and ordered before the mod-site allowlist so it cannot be reached by mistake.
+- **Regular users** pass the coarse gate only for `:generate_invite` at `:site`; the actual decision (whether `any_user` generation is on, per-user caps) lives in `Foglet.Accounts.Invites.create_invite/1` and reads runtime config.
+- **Guests, deleted users, and users with status `:suspended` / `:pending` / `:rejected`** are denied unconditionally before role dispatch.
+
+`Foglet.Authorization.scopes_for/2` is a separate, non-Bodyguard helper used by data-visibility filtering (the moderation list queries) — it returns the list of scopes an actor may operate over for a given action, and `[]` for guests, regular users, or non-active accounts. The contract is frozen: a future `board_moderators` join table must not change the call signature or return shape.
+
+---
+
+## 14. Multi-node considerations
 
 Foglet can run as a single node (typical deployment) or as a clustered set (Fly.io regions, redundancy). The BEAM makes this mostly free:
 
@@ -265,7 +310,7 @@ This is not a v1 concern. Single-node is the default and must be rock-solid befo
 
 ---
 
-## 12. Testing strategy (direction)
+## 15. Testing strategy (direction)
 
 - **Unit tests** for domain modules — boards, threads, posts, moderation logic. Ecto sandbox for isolation.
 - **Process tests** for the Board server, Session, chat rooms. These are where OTP bugs hide.
@@ -274,7 +319,7 @@ This is not a v1 concern. Single-node is the default and must be rock-solid befo
 
 ---
 
-## 13. Out of scope
+## 16. Out of scope
 
 Called out explicitly so these don't creep in:
 
