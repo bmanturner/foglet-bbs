@@ -69,6 +69,35 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
   end
 
+  describe "lifecycle tagged-enum" do
+    @moduletag :lifecycle
+
+    test ":not_loaded is the default for the four lifecycle slots" do
+      ss = Sysop.init_screen_state()
+      assert ss.boards_view == :not_loaded
+      assert ss.limits_form == :not_loaded
+      assert ss.system_snapshot == :not_loaded
+      assert ss.users_view == :not_loaded
+      # SITE stays nil (D-03 — synchronous)
+      assert ss.site_form == nil
+    end
+
+    test "lifecycle slots accept every tagged value without nil leakage" do
+      values = [
+        :not_loaded,
+        :loading,
+        {:loaded, %Foglet.TUI.Screens.Sysop.UsersView{}},
+        {:error, :forbidden},
+        {:error, :timeout}
+      ]
+
+      for value <- values do
+        ss = struct(SysopState, users_view: value)
+        assert ss.users_view == value
+      end
+    end
+  end
+
   describe "render/1" do
     setup %{state: state} do
       state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())

@@ -15,9 +15,31 @@ defmodule Foglet.TUI.Screens.Sysop.State do
 
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Sysop.BoardsView
+  alias Foglet.TUI.Screens.Sysop.LimitsForm
+  alias Foglet.TUI.Screens.Sysop.SystemSnapshot
+  alias Foglet.TUI.Screens.Sysop.UsersView
   alias Foglet.TUI.Widgets.Input.Tabs
 
   @base_tabs ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS"]
+
+  @typedoc """
+  Tagged lifecycle enum for Sysop tab body slots (Phase 29 D-07, D-10).
+
+  `:not_loaded` is the default — the tab has never been requested. The
+  Sysop screen / `Foglet.TUI.App` flips it to `:loading` synchronously
+  with the dispatch tuple so the very first render after entry shows
+  the Loading panel rather than a stale `:not_loaded`. `{:loaded, sub}`
+  carries the existing submodule struct verbatim. `{:error, reason}`
+  surfaces a tab-body error panel; `:forbidden` is rendered as the
+  "Insufficient role" copy and any other reason is rendered as
+  "Could not load <tab>. Press R to retry." (D-08, D-12).
+  """
+  @type lifecycle(struct_t) ::
+          :not_loaded
+          | :loading
+          | {:loaded, struct_t}
+          | {:error, atom()}
 
   @type t :: %__MODULE__{
           tabs: Tabs.t(),
@@ -25,10 +47,10 @@ defmodule Foglet.TUI.Screens.Sysop.State do
           tab_labels: [String.t()],
           invites: InvitesState.t(),
           site_form: term() | nil,
-          limits_form: term() | nil,
-          boards_view: term() | nil,
-          system_snapshot: term() | nil,
-          users_view: term() | nil
+          limits_form: lifecycle(LimitsForm.t()),
+          boards_view: lifecycle(BoardsView.t()),
+          system_snapshot: lifecycle(SystemSnapshot.t()),
+          users_view: lifecycle(UsersView.t())
         }
 
   defstruct [
@@ -37,10 +59,10 @@ defmodule Foglet.TUI.Screens.Sysop.State do
     tab_labels: @base_tabs,
     invites: InvitesState.new(),
     site_form: nil,
-    limits_form: nil,
-    boards_view: nil,
-    system_snapshot: nil,
-    users_view: nil
+    limits_form: :not_loaded,
+    boards_view: :not_loaded,
+    system_snapshot: :not_loaded,
+    users_view: :not_loaded
   ]
 
   @spec new(keyword()) :: t()
