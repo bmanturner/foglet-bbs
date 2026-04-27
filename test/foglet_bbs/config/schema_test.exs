@@ -395,45 +395,41 @@ defmodule Foglet.Config.SchemaTest do
   end
 
   # =========================================================================
-  # SYSOP-04 — operator-facing copy hygiene for the @site_keys descriptions
+  # SYSOP-04 — operator-facing copy hygiene for every Schema description
   # =========================================================================
   #
-  # Phase 29 D-22 / D-23: the five @site_keys descriptions render to operators
-  # in the Sysop SITE form. They MUST NOT contain planning-ID, phase, pitfall,
-  # or deliverable tokens. This regex test makes the invariant permanent.
+  # Phase 29 D-22 / D-23: the SITE form renders the @site_keys descriptions to
+  # operators, and the LIMITS form renders the @limits_keys descriptions in the
+  # same way (sysop_test.exs:845-854 asserts every LimitsForm.limits_keys() spec
+  # description appears in the rendered tab). Both surfaces share the same copy
+  # rule: descriptions MUST NOT contain planning-ID, phase, pitfall, or
+  # deliverable tokens, and MUST end with a period.
+  #
+  # We sweep every Schema entry rather than a hand-maintained subset so that
+  # any future renamed/added key is covered automatically.
 
-  describe "@site_keys descriptions are user-facing operator copy (SYSOP-04)" do
+  describe "every Schema description is user-facing operator copy (SYSOP-04)" do
     @forbidden_pattern ~r/(D-\d+|REQ-[A-Z]+-\d+|Phase \d+|Pitfall \d+|deliverable)/i
 
-    @site_keys [
-      "registration_mode",
-      "invite_code_generators",
-      "delivery_mode",
-      "require_email_verification",
-      "invite_generation_per_user_limit"
-    ]
-
     test "no description contains a planning-ID, phase, pitfall, or deliverable token" do
-      for key <- @site_keys do
-        {:ok, spec} = Schema.fetch_spec(key)
+      for spec <- Schema.entries() do
         description = spec.description
 
         refute Regex.match?(@forbidden_pattern, description),
-               "Description for #{inspect(key)} contains a forbidden token: " <>
+               "Description for #{inspect(spec.key)} contains a forbidden token: " <>
                  inspect(description)
       end
     end
 
-    test "every @site_keys description is non-empty and ends with a period" do
-      for key <- @site_keys do
-        {:ok, spec} = Schema.fetch_spec(key)
+    test "every description is non-empty and ends with a period" do
+      for spec <- Schema.entries() do
         description = spec.description
 
         assert is_binary(description) and byte_size(description) > 0,
-               "Description for #{inspect(key)} is empty"
+               "Description for #{inspect(spec.key)} is empty"
 
         assert String.ends_with?(description, "."),
-               "Description for #{inspect(key)} should end with a period: " <>
+               "Description for #{inspect(spec.key)} should end with a period: " <>
                  inspect(description)
       end
     end

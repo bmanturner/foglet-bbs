@@ -69,7 +69,7 @@ defmodule Foglet.Config.Schema do
       key: "max_post_length",
       type: :integer,
       default: 8192,
-      description: "Maximum post body length in characters (D-31)",
+      description: "Maximum post body length in characters.",
       enum: nil,
       min: 1,
       max: nil
@@ -78,7 +78,7 @@ defmodule Foglet.Config.Schema do
       key: "max_thread_title_length",
       type: :integer,
       default: 60,
-      description: "Maximum thread title length in characters (D-13, phase-03-polish Phase 4)",
+      description: "Maximum thread title length in characters.",
       enum: nil,
       min: 1,
       max: nil
@@ -105,8 +105,7 @@ defmodule Foglet.Config.Schema do
       key: "email_verify_resend_cooldown_seconds",
       type: :integer,
       default: 60,
-      description:
-        "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)",
+      description: "Minimum seconds between resend-code presses on the Verify screen.",
       enum: nil,
       min: 1,
       max: nil
