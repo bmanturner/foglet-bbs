@@ -1081,8 +1081,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
   # ---------------------------------------------------------------------------
 
   describe "FORM-02 :backtab on Account ProfileForm / PrefsForm (Phase 28 WR-01)" do
-    alias Foglet.TUI.Screens.Account.ProfileForm
     alias Foglet.TUI.Screens.Account.PrefsForm
+    alias Foglet.TUI.Screens.Account.ProfileForm
     alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
     test "FORM-02 :backtab on ProfileForm retreats focus by one" do

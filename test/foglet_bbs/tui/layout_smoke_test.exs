@@ -2552,14 +2552,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     # Module-attribute removal grep guards (D-26)
     # ---------------------------------------------------------------------------
 
-    test "no hardcoded {\"1-6\", \"Jump\"} literal in moderation.ex" do
+    test ~s|no hardcoded {"1-6", "Jump"} literal in moderation.ex| do
       contents = File.read!("lib/foglet_bbs/tui/screens/moderation.ex")
 
       refute String.contains?(contents, ~s|{"1-6", "Jump"}|),
              "moderation.ex must not contain a hardcoded {\"1-6\", \"Jump\"} literal (D-26)"
     end
 
-    test "no hardcoded {\"1-6\", \"Jump\"} literal in account.ex" do
+    test ~s|no hardcoded {"1-6", "Jump"} literal in account.ex| do
       contents = File.read!("lib/foglet_bbs/tui/screens/account.ex")
 
       refute String.contains?(contents, ~s|{"1-6", "Jump"}|),
