@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: milestone
 status: executing
 stopped_at: Phase 28 context gathered (assumptions mode)
-last_updated: "2026-04-27T17:29:01.087Z"
-last_activity: 2026-04-27 -- Phase 28 planning complete
+last_updated: "2026-04-27T17:31:25.002Z"
+last_activity: 2026-04-27 -- Phase 28 execution started
 progress:
   total_phases: 8
   completed_phases: 2
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 26 — layout-width-foundations
+**Current focus:** Phase 28 — modal-form-substrate
 
 ## Current Position
 
-Phase: 26 (layout-width-foundations) — EXECUTING
-Plan: 1 of 1
-Status: Ready to execute
-Last activity: 2026-04-27 -- Phase 28 planning complete
+Phase: 28 (modal-form-substrate) — EXECUTING
+Plan: 1 of 4
+Status: Executing Phase 28
+Last activity: 2026-04-27 -- Phase 28 execution started
 
 ## Performance Metrics
 
