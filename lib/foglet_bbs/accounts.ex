@@ -191,6 +191,35 @@ defmodule Foglet.Accounts do
   defp permit_status_transition(_from, _to), do: {:error, :invalid_transition}
 
   @doc """
+  Returns the list of valid target statuses for `from_status` (Phase 29 D-14).
+
+  Sourced from the same predicate `transition_user_status/3` enforces
+  server-side (`permit_status_transition/2`); using this function for
+  UI-side keybind gating guarantees no drift between the writer's allowed
+  transition graph and what the operator sees advertised.
+
+  ## Examples
+
+      iex> Foglet.Accounts.valid_status_transitions(:pending)
+      [:active, :rejected]
+
+      iex> Foglet.Accounts.valid_status_transitions(:active)
+      [:suspended]
+
+      iex> Foglet.Accounts.valid_status_transitions(:suspended)
+      [:active]
+
+      iex> Foglet.Accounts.valid_status_transitions(:rejected)
+      []
+  """
+  @spec valid_status_transitions(:pending | :active | :suspended | :rejected) ::
+          [:active | :suspended | :rejected]
+  def valid_status_transitions(:pending), do: [:active, :rejected]
+  def valid_status_transitions(:active), do: [:suspended]
+  def valid_status_transitions(:suspended), do: [:active]
+  def valid_status_transitions(:rejected), do: []
+
+  @doc """
   Create a new user account in `:pending` status (sysop-approved registration mode, D-05).
   Same validation as `register_user/1`; differs only in the persisted status value.
   Login is blocked for pending users in Phase 3's login flow.
