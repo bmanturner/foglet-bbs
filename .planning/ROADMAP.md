@@ -17,7 +17,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 |-------|------|-----------------|--------------|-----|
 | 26 | Layout & Width Foundations | 4/4 | Complete   | 2026-04-26 |
 | 27 | Cursor & Breadcrumb Polish | 3/3 | Complete   | 2026-04-26 |
-| 28 | Modal.Form Substrate | 1/4 | In Progress|  |
+| 28 | Modal.Form Substrate | 2/4 | In Progress|  |
 | 29 | Sysop Tab Lifecycle & Bodies | Sysop tabs auto-load on entry, render honest loading/error states, and respect status-transition rules | SYSOP-01..07 (7) | yes |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
@@ -83,7 +83,7 @@ Plans:
 **Plans**: 4 plans
 Plans:
 - [x] 28-01-PLAN.md — Modal.Form Up/Down focus, `:backtab`, configurable footer, single-source-of-truth tests (FORM-01..04)
-- [ ] 28-02-PLAN.md — Submit-state machine, input lock, `set_submit_state/2`, status row (FORM-05)
+- [x] 28-02-PLAN.md — Submit-state machine, input lock, `set_submit_state/2`, status row (FORM-05)
 - [ ] 28-03-PLAN.md — Honest Esc on Account Profile + Account Preferences (FORM-06)
 - [ ] 28-04-PLAN.md — Migrate Sysop SiteForm to Modal.Form wrapper, preserve Ctrl+S + validation + visibility (FORM-04, FORM-06)
 **UI hint**: yes
