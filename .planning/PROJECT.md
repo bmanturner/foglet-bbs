@@ -82,7 +82,7 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 
 - [ ] v1.4 — Repair TUI screens that extend above the terminal (Moderation LOG/USERS/BOARDS tabs, Boards interface) and remove trailing tab-row border-glyph artifacts.
 - [ ] v1.4 — Restore form interaction across Account and Sysop tabs: Esc/Enter handling, Tab/Shift+Tab navigation, focus routing, SSH-key paste support, and visible submit/persistence feedback.
-- [ ] v1.4 — Restore broken Sysop tab loads (Boards, Limits, System) and reconcile inconsistent Users-tab loading plus the "Invalid status transition" surfaced error.
+- [~] v1.4 — Restore broken Sysop tab loads (Boards, Limits, System) and reconcile inconsistent Users-tab loading plus the "Invalid status transition" surfaced error. Implementation complete in Phase 29 (sysop-tab-lifecycle-bodies); SSH UAT pending.
 - [ ] v1.4 — Close auth-flow gaps: cursor follows text input, breadcrumbs update on Register/Forgot Password, full forgot-password validation, reset-email rendering at small terminals, and an honest no-email reset path with a token-consume entry point.
 - [ ] v1.4 — Apply Main Menu chrome polish: Navigation/Oneliners titles on the box border, theme/accent application, indent corrections, and removal of the Oneliners top-border glyph artifact.
 - [ ] v1.4 — Fix composer editor word wrap on long lines and restore markdown newline rendering so paragraphs are not over-collapsed.
@@ -161,4 +161,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-26 — started v1.4 Post-Facelift Polish & Bug Fixes*
+*Last updated: 2026-04-27 — Phase 29 (sysop-tab-lifecycle-bodies) implementation complete; SSH UAT pending*
