@@ -105,6 +105,27 @@ Widgets are reusable primitives. Stateful widgets expose `init/1`,
 Route colors through `Foglet.TUI.Theme`, pass theme explicitly, and keep render
 functions pure over already-loaded state.
 
+### Inspecting The TUI
+
+`mix foglet.tui.render <screen>` renders any TUI screen as plain text so you
+can "see" the layout without an SSH client. The renderer drives the same
+`Raxol.UI.Layout.Engine` the live TUI uses, paints positioned `:text` and
+`:box` elements onto a 2D character grid, and prints the result. Output is
+ANSI-stripped (no color/bold) so it diffs cleanly across runs.
+
+```
+rtk mix foglet.tui.render main_menu
+rtk mix foglet.tui.render board_list --width 132 --height 50
+rtk mix foglet.tui.render --list             # list available screens
+rtk mix foglet.tui.render login --no-frame   # omit the alignment ruler
+```
+
+Defaults: `--width 80 --height 24`. Authenticated screens are populated with
+a synthetic in-memory user (`@alice`, sysop role) and stub board / thread /
+post fixtures from `Foglet.TUI.RenderFixtures` — no Repo, no SSH, no PubSub.
+This is for visual inspection, not behaviour assertions; for those, use
+`test/foglet_bbs/tui/layout_smoke_test.exs` patterns.
+
 ## Workflows
 
 For domain mutations: start at the owning context, add changeset fields only for
