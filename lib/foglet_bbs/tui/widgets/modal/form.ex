@@ -369,18 +369,46 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
         msg -> [text(msg, fg: theme.error.fg)]
       end
 
+    # Phase 28 FORM-05 / D-08: status row reflects the submit_state machine.
+    # Empty when :idle; one row of "Saving…", "Saved.", or "Error: <msg>"
+    # otherwise. The Unicode ellipsis (U+2026) is intentional per CONTEXT D-08.
+    status_rows = render_status_row(state.submit_state, theme)
+
     # Phase 28 FORM-03 / D-06: footer is opt-in via init(show_footer: true).
     # Default is `false` so tab-body consumers don't double-up against the
     # global command bar; overlay-style forms opt in explicitly.
+    # Phase 28 D-09: when a status row is present, it REPLACES the footer.
     footer_rows =
-      if state.show_footer do
-        [text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)]
-      else
-        []
+      cond do
+        status_rows != [] -> []
+        state.show_footer -> [text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)]
+        true -> []
       end
 
     column [] do
-      [title_row, divider] ++ field_rows ++ base_error_rows ++ footer_rows
+      [title_row, divider] ++ field_rows ++ base_error_rows ++ status_rows ++ footer_rows
+    end
+  end
+
+  # Status row clauses (Phase 28 FORM-05 / D-08, D-09).
+  defp render_status_row(:idle, _theme), do: []
+
+  defp render_status_row(:submitting, %Theme{} = theme),
+    do: [text("Saving…", fg: theme.dim.fg)]
+
+  defp render_status_row(:saved, %Theme{} = theme),
+    do: [text("Saved.", fg: status_saved_fg(theme))]
+
+  defp render_status_row({:error, msg}, %Theme{} = theme),
+    do: [text("Error: #{msg}", fg: theme.error.fg)]
+
+  # Theme.success.fg is the canonical "saved" color, but defensively fall back
+  # to theme.accent.fg if a future theme leaves :success blank — keeps Modal.Form
+  # theme-agnostic and avoids a hard dependency on Theme schema details.
+  defp status_saved_fg(%Theme{} = theme) do
+    case theme do
+      %Theme{success: %{fg: fg}} when not is_nil(fg) -> fg
+      _ -> theme.accent.fg
     end
   end
 
