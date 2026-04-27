@@ -320,6 +320,165 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
   end
 
+  describe "[R] Retry advertising (Phase 29 D-13)" do
+    @describetag :retry_advertising
+
+    setup %{state: state} do
+      ss = Sysop.init_screen_state(active: 4)
+      state = put_in(state, [:screen_state, :sysop], ss)
+      %{state: state}
+    end
+
+    defp put_sysop_slot(state, slot, value) do
+      ss = state.screen_state.sysop
+      put_in(state, [:screen_state, :sysop], %{ss | slot => value})
+    end
+
+    test "active tab USERS in {:error, :timeout} advertises Retry", %{state: state} do
+      flat =
+        state
+        |> put_sysop_slot(:users_view, {:error, :timeout})
+        |> Sysop.render()
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(flat, "Retry")
+    end
+
+    test "active tab USERS in {:error, :forbidden} does NOT advertise Retry", %{state: state} do
+      flat =
+        state
+        |> put_sysop_slot(:users_view, {:error, :forbidden})
+        |> Sysop.render()
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute String.contains?(flat, "Retry")
+    end
+
+    test "active tab USERS in {:loaded, _} does NOT advertise Retry", %{state: state} do
+      sub = %Foglet.TUI.Screens.Sysop.UsersView{}
+
+      flat =
+        state
+        |> put_sysop_slot(:users_view, {:loaded, sub})
+        |> Sysop.render()
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute String.contains?(flat, "Retry")
+    end
+  end
+
+  describe "[R] Retry dispatch (Phase 29 D-13)" do
+    @describetag :retry_dispatch
+
+    setup %{state: state} do
+      ss = Sysop.init_screen_state(active: 4)
+      state = put_in(state, [:screen_state, :sysop], ss)
+      %{state: state}
+    end
+
+    test "pressing R on USERS in {:error, :timeout} re-dispatches {:load_sysop_users} and flips slot to :loading",
+         %{state: state} do
+      state = put_sysop_slot(state, :users_view, {:error, :timeout})
+
+      assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      assert new_state.screen_state.sysop.users_view == :loading
+      assert {:load_sysop_users} in cmds
+    end
+
+    test "pressing r (lowercase) on USERS in {:error, :timeout} also re-dispatches", %{
+      state: state
+    } do
+      state = put_sysop_slot(state, :users_view, {:error, :timeout})
+
+      assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "r"}, state)
+      assert new_state.screen_state.sysop.users_view == :loading
+      assert {:load_sysop_users} in cmds
+    end
+
+    test "pressing R on USERS in {:error, :forbidden} is a no-op (forbidden suppresses R)",
+         %{state: state} do
+      state = put_sysop_slot(state, :users_view, {:error, :forbidden})
+
+      # R must NOT consume the event nor flip the slot to :loading. Returns
+      # :no_match (or {:update, state, []} with users_view unchanged) so the
+      # event continues falling through to the existing handlers.
+      result = Sysop.handle_key(%{key: :char, char: "R"}, state)
+
+      case result do
+        :no_match ->
+          :ok
+
+        {:update, new_state, cmds} ->
+          assert new_state.screen_state.sysop.users_view == {:error, :forbidden}
+          refute {:load_sysop_users} in cmds
+      end
+    end
+
+    test "pressing R on USERS in {:loaded, _} does not consume R at the Sysop level (falls through to UsersView [R] Reject)",
+         %{state: state} do
+      # Build a UsersView with a focused :pending row so [R] Reject would
+      # dispatch a transition. We assert that R on a {:loaded, _} tab is NOT
+      # consumed by the retry handler — the existing fallthrough preserves
+      # the [R] Reject keybind on USERS.
+      sysop = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "sysop",
+        role: :sysop,
+        status: :active
+      }
+
+      pending_user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "p1",
+        email: "p1@example.test",
+        role: :user,
+        status: :pending
+      }
+
+      sub = %Foglet.TUI.Screens.Sysop.UsersView{
+        current_user: sysop,
+        rows: [{:pending, pending_user}],
+        selection_index: 0
+      }
+
+      state = %{state | current_user: sysop} |> put_sysop_slot(:users_view, {:loaded, sub})
+
+      # The Sysop-level retry handler must NOT consume R on a loaded tab.
+      # The event must propagate to UsersView, where [R] Reject is gated for
+      # pending rows. We can't assert against the boundary side effect here
+      # without a Repo, but we can assert the slot stayed {:loaded, _} (not
+      # flipped to :loading) and no {:load_sysop_*} command was emitted.
+      result = Sysop.handle_key(%{key: :char, char: "R"}, state)
+
+      case result do
+        :no_match ->
+          :ok
+
+        {:update, new_state, cmds} ->
+          # Slot must NOT be flipped to :loading by the retry handler.
+          refute new_state.screen_state.sysop.users_view == :loading
+          refute {:load_sysop_users} in cmds
+      end
+    end
+
+    test "pressing R on BOARDS in {:error, :timeout} dispatches {:load_sysop_boards}, not USERS",
+         %{state: state} do
+      # Switch to BOARDS (active_tab = 1), set its slot to error.
+      ss = state.screen_state.sysop
+      ss = %{ss | active_tab: 1, tabs: ss.tabs}
+      state = put_in(state, [:screen_state, :sysop], ss)
+      state = put_sysop_slot(state, :boards_view, {:error, :timeout})
+
+      assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      assert new_state.screen_state.sysop.boards_view == :loading
+      assert {:load_sysop_boards} in cmds
+      refute {:load_sysop_users} in cmds
+    end
+  end
+
   describe "render/1" do
     setup %{state: state} do
       state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
