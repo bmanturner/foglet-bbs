@@ -60,7 +60,7 @@ defmodule Foglet.TUI.Screens.Sysop do
     content = build_content(ss, theme, width)
     jump_hint = if "INVITES" in State.tab_labels(ss), do: "1-6", else: "1-5"
 
-    ScreenFrame.render(state, chrome_model(ss), content, sysop_commands(jump_hint))
+    ScreenFrame.render(state, chrome_model(ss), content, sysop_commands(ss, jump_hint))
   end
 
   defp render_unauthorized(state) do
@@ -80,8 +80,8 @@ defmodule Foglet.TUI.Screens.Sysop do
     %{breadcrumb_parts: ["Foglet", "Sysop"]}
   end
 
-  defp sysop_commands(jump_hint) do
-    [
+  defp sysop_commands(ss, jump_hint) do
+    base = [
       %{
         label: "System",
         commands: [%{key: "Q", label: "Back", priority: 0}]
@@ -94,7 +94,37 @@ defmodule Foglet.TUI.Screens.Sysop do
         ]
       }
     ]
+
+    maybe_add_retry(base, ss)
   end
+
+  # Phase 29 D-13: [R] Retry is advertised in the Sysop command bar only when
+  # the *active* tab is in `{:error, reason}` with reason != :forbidden.
+  # Forbidden suppresses the hint (and the keypress, in handle_key/2).
+  defp maybe_add_retry(groups, ss) do
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+    slot = slot_for(active_label)
+
+    case slot && Map.get(ss, slot) do
+      {:error, reason} when reason != :forbidden ->
+        groups ++
+          [%{label: "Action", commands: [%{key: "R", label: "Retry", priority: 5}]}]
+
+      _ ->
+        groups
+    end
+  end
+
+  defp slot_for("BOARDS"), do: :boards_view
+  defp slot_for("LIMITS"), do: :limits_form
+  defp slot_for("SYSTEM"), do: :system_snapshot
+  defp slot_for("USERS"), do: :users_view
+  defp slot_for(_), do: nil
+
+  defp dispatch_for("BOARDS"), do: {:load_sysop_boards}
+  defp dispatch_for("LIMITS"), do: {:load_sysop_limits}
+  defp dispatch_for("SYSTEM"), do: {:load_sysop_system}
+  defp dispatch_for("USERS"), do: {:load_sysop_users}
 
   # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
   defp inner_width(state) do
@@ -198,7 +228,33 @@ defmodule Foglet.TUI.Screens.Sysop do
     {:update, %{state | current_screen: :main_menu}, []}
   end
 
-  def handle_key(event, state) do
+  # Phase 29 D-13: [R] Retry. When the active tab is in {:error, reason} with
+  # reason != :forbidden, R re-dispatches the matching {:load_sysop_*} tuple
+  # and flips the slot back to :loading. On any other slot state (including
+  # {:error, :forbidden} and {:loaded, _}) this clause hands the event off to
+  # the broader handle_key/2 logic so it can fall through to the active tab's
+  # submodule — preserving the [R] Reject keybind on a loaded USERS tab.
+  def handle_key(%{key: :char, char: c} = event, state) when c in ["r", "R"] do
+    ss = get_screen_state(state)
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+    slot = slot_for(active_label)
+    current = slot && Map.get(ss, slot)
+
+    case current do
+      {:error, reason} when reason != :forbidden ->
+        new_ss = Map.put(ss, slot, :loading)
+        new_screen_state = Map.put(state.screen_state, :sysop, new_ss)
+
+        {:update, %{state | screen_state: new_screen_state}, [dispatch_for(active_label)]}
+
+      _ ->
+        do_handle_key(event, state)
+    end
+  end
+
+  def handle_key(event, state), do: do_handle_key(event, state)
+
+  defp do_handle_key(event, state) do
     ss = get_screen_state(state)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
