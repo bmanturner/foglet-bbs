@@ -149,15 +149,27 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       should leave this default-off so the global command bar is the single
       advertiser of those keys; true overlay callers (centered modals) opt in.
 
-  Raises `ArgumentError` if `:fields` is an empty list (Phase 28 BL-03).
+  Raises `ArgumentError` if `:fields` is not a list, or is an empty list
+  (Phase 28 BL-03 / IN-03). Passing a non-list value (e.g. `nil`, a map,
+  or an atom) used to crash later in `Enum.map/2` with a confusing
+  `Protocol.UndefinedError`; the cond below produces a friendly message
+  describing the actual constraint.
   """
   @spec init(keyword()) :: t()
   def init(opts) when is_list(opts) do
     fields = Keyword.fetch!(opts, :fields)
 
-    if fields == [] do
-      raise ArgumentError,
-            "Modal.Form requires at least one field; received an empty :fields list"
+    cond do
+      not is_list(fields) ->
+        raise ArgumentError,
+              "Modal.Form requires :fields to be a list; got #{inspect(fields)}"
+
+      fields == [] ->
+        raise ArgumentError,
+              "Modal.Form requires at least one field; received an empty :fields list"
+
+      true ->
+        :ok
     end
 
     field_states = Enum.map(fields, &build_field_state/1)
