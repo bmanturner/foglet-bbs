@@ -13,7 +13,7 @@ defmodule Foglet.SSH.Supervisor do
                             pubkeys in `Foglet.SSH.PubkeyStash` for CLIHandler
     * ssh_cli             → Foglet.SSH.CLIHandler — Foglet-owned channel handler
     * max_sessions        → 500
-    * transport_opts      → backlog: 4096, reuseaddr: true (accept-queue tuning)
+    * socket_options      → backlog: 4096, reuseaddr: true (accept-queue tuning)
     * preferred_algorithms → explicit allowlist: modern KEX (Curve25519 first),
                             AEAD ciphers (AES-GCM / ChaCha20-Poly1305), Ed25519
                             host keys, ETM MACs. Omitting an algorithm blocks it
@@ -81,7 +81,7 @@ defmodule Foglet.SSH.Supervisor do
       parallel_login: true,
       # Larger accept backlog keeps the kernel queue from overflowing under
       # connection surges before BEAM accepts the socket.
-      transport_opts: [backlog: 4096, reuseaddr: true],
+      socket_options: [backlog: 4096, reuseaddr: true],
       # Explicit allowlist: OTP negotiates only what is listed here, in order.
       # Omitting an algorithm is sufficient to block it — no separate rm: needed.
       # KEX: Curve25519 first (cheapest); classic DHE last (expensive, but kept

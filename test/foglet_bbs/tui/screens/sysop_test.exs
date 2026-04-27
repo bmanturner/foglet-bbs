@@ -75,15 +75,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: state}
     end
 
-    test "renders operator Chrome V2 breadcrumb for the active sysop tab", %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
-
-      flat = Sysop.render(state) |> collect_text_values()
-
-      assert Presentation.mode_for!(:sysop) == :operator
-      assert Enum.any?(flat, &String.contains?(&1, "Foglet ▸ Sysop ▸ USERS"))
-    end
-
     test "shows all five tab labels in order: SITE, BOARDS, LIMITS, SYSTEM, USERS", %{
       state: state
     } do

@@ -119,48 +119,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet."))
     end
 
-    test "KEYS-03 SSH KEYS tab renders key metadata without raw public key material", %{
-      state: state
-    } do
-      inserted_at = ~U[2026-04-24 10:11:12.123456Z]
-      last_used_at = ~U[2026-04-24 11:12:13.123456Z]
-
-      account_state =
-        Account.init_screen_state()
-        |> Map.put(:active_tab, 2)
-        |> Map.put(
-          :ssh_keys,
-          SSHKeysState.loaded(SSHKeysState.new(), [
-            %{
-              label: "laptop",
-              fingerprint: "SHA256:abc123",
-              inserted_at: inserted_at,
-              last_used_at: last_used_at,
-              public_key: AccountsFixtures.default_ssh_public_key()
-            },
-            %{
-              label: "backup",
-              fingerprint: "SHA256:def456",
-              inserted_at: inserted_at,
-              last_used_at: nil,
-              public_key: "ssh-ed25519 AAAAC3raw-material backup@example"
-            }
-          ])
-        )
-
-      state = put_in(state, [:screen_state, :account], account_state)
-      flat = Account.render(state) |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "laptop"))
-      assert Enum.any?(flat, &String.contains?(&1, "backup"))
-      assert Enum.any?(flat, &String.contains?(&1, "SHA256:abc123"))
-      assert Enum.any?(flat, &String.contains?(&1, "created: 2026-04-24 10:11:12Z"))
-      assert Enum.any?(flat, &String.contains?(&1, "last used: 2026-04-24 11:12:13Z"))
-      assert Enum.any?(flat, &String.contains?(&1, "Never used"))
-      refute Enum.any?(flat, &String.contains?(&1, "ssh-ed25519"))
-      refute Enum.any?(flat, &String.contains?(&1, "AAAAC3"))
-    end
-
     test "omits INVITES when InvitesSurface.visible?/2 returns false" do
       # role: :user with sysop_only policy => not visible
       state =

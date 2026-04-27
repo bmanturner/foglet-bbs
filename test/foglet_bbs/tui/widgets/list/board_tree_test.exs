@@ -72,6 +72,15 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
     BoardTree.render(state, [theme: theme] ++ opts) |> flatten_text()
   end
 
+  # Returns one flattened-text string per rendered row. The BoardTree column
+  # has no in-band row separators (rows are separated by layout, not text), so
+  # tests that need per-row inspection walk the column's children directly.
+  defp render_rows(state, theme, opts \\ []) do
+    BoardTree.render(state, [theme: theme] ++ opts)
+    |> Map.get(:children, [])
+    |> Enum.map(&flatten_text/1)
+  end
+
   describe "init/1 - public contract" do
     test "accepts :directory and returns a struct ready for render", %{theme: theme} do
       dir = directory_with_one_board(%{})
@@ -145,14 +154,12 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
       dir = directory_with_one_board(%{})
       state = BoardTree.init(directory: dir, id: "bt-cat-clean")
 
-      tree = BoardTree.render(state, theme: theme)
-      flat = flatten_text(tree)
+      cat_line =
+        state
+        |> render_rows(theme)
+        |> Enum.find(&String.contains?(&1, @glyph_category_expanded))
 
-      [cat_line | _] =
-        flat
-        |> String.split("\n", trim: true)
-        |> Enum.filter(&String.contains?(&1, @glyph_category_expanded))
-
+      assert cat_line, "expected a category row in render output"
       refute cat_line =~ @glyph_required
       refute cat_line =~ @glyph_subscribed
       refute cat_line =~ @glyph_available
@@ -164,11 +171,10 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
       long = String.duplicate("a", 80)
       dir = directory_with_one_board(%{}, long)
       state = BoardTree.init(directory: dir, id: "bt-cat-trunc")
-      text = render_text(state, theme, width: 60)
 
       cat_line =
-        text
-        |> String.split("\n", trim: true)
+        state
+        |> render_rows(theme, width: 60)
         |> Enum.find(&String.contains?(&1, @glyph_category_expanded))
 
       assert cat_line, "expected a category line in render output"
@@ -479,8 +485,8 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
         })
 
       state = BoardTree.init(directory: dir, id: "bt-truncate")
-      tree = BoardTree.render(state, theme: theme, width: 60)
-      text = flatten_text(tree)
+      rows = render_rows(state, theme, width: 60)
+      text = Enum.join(rows, "\n")
 
       assert text =~ @glyph_required
       assert text =~ @glyph_unread
@@ -488,7 +494,7 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
       assert text =~ ~r/\d+m\b/
       assert text =~ "…"
 
-      for line <- String.split(text, "\n", trim: true) do
+      for line <- rows, line != "" do
         assert TextWidth.display_width(line) <= 60,
                "line exceeded 60 cells: #{inspect(line)} (width=#{TextWidth.display_width(line)})"
       end

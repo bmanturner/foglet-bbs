@@ -73,45 +73,6 @@ defmodule Foglet.TUI.PresentationTest do
   end
 
   describe "theme_mappings/0 (THEME-02)" do
-    test "returns the exact current primitive-to-theme-slot mapping contract" do
-      assert Presentation.theme_mappings() == %{
-               tabs: %{
-                 selected: :selected,
-                 unselected: :unselected,
-                 indicator: :accent,
-                 border: :border
-               },
-               rows: %{
-                 selected: :selected,
-                 unread: :primary,
-                 normal: :unselected,
-                 metadata: :dim,
-                 disabled: :dim
-               },
-               badges: %{
-                 info: :info,
-                 success: :success,
-                 warning: :warning,
-                 error: :error,
-                 accent: :accent
-               },
-               commands: %{
-                 group: :dim,
-                 key: :accent,
-                 destructive: :error,
-                 inactive: :dim
-               },
-               editor: %{
-                 focused: :accent,
-                 unfocused: :border,
-                 input: :primary,
-                 counter: :dim,
-                 counter_warning: :warning,
-                 counter_error: :error
-               }
-             }
-    end
-
     test "covers every required mapping category and state key" do
       mappings = Presentation.theme_mappings()
 

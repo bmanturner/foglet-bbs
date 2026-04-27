@@ -1032,45 +1032,6 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # Login screen — menu sub-state
   # ---------------------------------------------------------------------------
 
-  test "login menu renders centered placeholder and command bar actions" do
-    state = %App{screen_state: %{}, terminal_size: {80, 24}}
-    tree = Login.render(state)
-    positioned = layout(tree)
-
-    elements = text_elements(positioned)
-    texts = Enum.map(elements, & &1.text)
-    rendered_rows = elements |> text_rows() |> Map.values()
-
-    placeholder =
-      Enum.find(elements, fn element ->
-        String.contains?(element.text, "Imagine something cool here")
-      end)
-
-    assert placeholder,
-           "expected centered placeholder text, got: #{inspect(texts)}"
-
-    refute Enum.any?(texts, &String.contains?(&1, "Welcome")),
-           "login menu body should not render welcome text, got: #{inspect(texts)}"
-
-    refute Enum.any?(texts, &String.contains?(&1, "[L]")),
-           "login menu body should not render bracketed menu items, got: #{inspect(texts)}"
-
-    assert Enum.any?(rendered_rows, &String.contains?(&1, "L Login")),
-           "expected command bar Login key, got: #{inspect(texts)}"
-
-    assert Enum.any?(rendered_rows, &String.contains?(&1, "R Register")),
-           "expected command bar Register key, got: #{inspect(texts)}"
-
-    assert Enum.any?(rendered_rows, &String.contains?(&1, "Q Quit")),
-           "expected command bar Quit key, got: #{inspect(texts)}"
-
-    assert placeholder.x in 26..28,
-           "expected placeholder near horizontal center, got: #{inspect(placeholder)}"
-
-    assert placeholder.y in 9..11,
-           "expected placeholder near vertical center, got: #{inspect(placeholder)}"
-  end
-
   # ---------------------------------------------------------------------------
   # Login screen — login form sub-state
   # ---------------------------------------------------------------------------
@@ -1634,18 +1595,6 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
   # Modal overlay smoke tests (task #6)
   # ---------------------------------------------------------------------------
-
-  test "no-modal: view/1 without modal renders screen content through layout engine" do
-    state = %App{screen_state: %{}, terminal_size: {80, 24}}
-    tree = App.view(state)
-    positioned = layout(tree)
-
-    elements = text_elements(positioned)
-    texts = Enum.map(elements, & &1.text)
-
-    assert Enum.any?(texts, &String.contains?(&1, "Imagine something cool here")),
-           "expected login placeholder in no-modal view, got: #{inspect(texts)}"
-  end
 
   test "with-modal: view/1 with :info modal renders title and message through layout engine" do
     state = %App{

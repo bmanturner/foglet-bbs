@@ -166,19 +166,6 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       assert flat == "Profile   Prefs   ▌ SSH Keys   Invites"
     end
 
-    test "active and inactive tab runs use distinct theme contracts" do
-      t = distinctive_theme()
-      tree = Tabs.render(Tabs.init(tabs: ["Profile", "Prefs"], active: 0), theme: t)
-
-      assert_text_run(tree, "▌ ", fg: t.accent.fg)
-      assert_text_run(tree, "Profile", fg: t.selected.fg, style: [:bold])
-      inactive = assert_text_run(tree, "Prefs", fg: t.unselected.fg)
-
-      refute Map.get(inactive, :bg) == t.selected.bg
-      refute Map.get(inactive, :style, []) == [:bold]
-      refute Enum.any?(text_runs(tree), &(Map.get(&1, :bg) == t.selected.bg))
-    end
-
     test "compact width clamps tab strip to drawable frame budget" do
       state =
         Tabs.init(

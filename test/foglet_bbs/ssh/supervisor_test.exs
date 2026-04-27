@@ -39,11 +39,11 @@ defmodule Foglet.SSH.SupervisorTest do
       assert {:max_sessions, 500} = List.keyfind(opts, :max_sessions, 0)
     end
 
-    test "transport_opts sets backlog and reuseaddr for high-concurrency accept queues" do
+    test "socket_options sets backlog and reuseaddr for high-concurrency accept queues" do
       opts = SSHSup.daemon_opts("/tmp/sd")
-      assert {:transport_opts, t_opts} = List.keyfind(opts, :transport_opts, 0)
-      assert Keyword.get(t_opts, :backlog) >= 1024
-      assert Keyword.get(t_opts, :reuseaddr) == true
+      assert {:socket_options, sock_opts} = List.keyfind(opts, :socket_options, 0)
+      assert Keyword.get(sock_opts, :backlog) >= 1024
+      assert Keyword.get(sock_opts, :reuseaddr) == true
     end
 
     test "preferred_algorithms is an explicit allowlist — no modify_algorithms present" do
