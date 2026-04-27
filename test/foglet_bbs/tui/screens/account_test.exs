@@ -1075,4 +1075,116 @@ defmodule Foglet.TUI.Screens.AccountTest do
       end
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 28 Plan 05 — BL-01 :form modal lock release on async failure
+  # ---------------------------------------------------------------------------
+
+  describe "BL-01 :form modal lock release (Phase 28 FORM-05)" do
+    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+    setup do
+      Process.put(:fake_oneliners_owner, self())
+
+      user = %Foglet.Accounts.User{id: "u-bl01", handle: "alice", role: :user}
+
+      {:ok, state} =
+        App.init(%{
+          session_context: %{
+            user: user,
+            user_id: user.id,
+            domain: %{oneliners: Foglet.TUI.FakeOneliners}
+          }
+        })
+
+      %{state: state, user: user}
+    end
+
+    test "doomed oneliner submit leaves form in {:error, _} (not :submitting)",
+         %{state: state} do
+      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+
+      # Drive the form to :submitting via the natural Enter-on-last-field path.
+      {submitting, _cmds} =
+        App.update({:key, %{key: :enter}}, with_modal)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = locked_form} =
+               submitting.modal
+
+      assert locked_form.submit_state == :submitting,
+             "precondition: form should be locked in :submitting after Enter"
+
+      {after_error, []} =
+        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, submitting)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
+               after_error.modal
+
+      assert match?({:error, _}, form.submit_state),
+             "BL-01: error handler MUST drive submit_state out of :submitting; " <>
+               "got #{inspect(form.submit_state)}"
+    end
+
+    test "doomed hide-oneliner submit leaves form in {:error, _} (not :submitting)",
+         %{state: state} do
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol-bl01"}, state)
+
+      # Type a valid reason then Enter to drive :submitting.
+      {with_text, _} =
+        App.update({:key, %{key: :char, char: "x"}}, with_modal)
+
+      {submitting, _cmds} =
+        App.update({:key, %{key: :enter}}, with_text)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = locked_form} =
+               submitting.modal
+
+      assert locked_form.submit_state == :submitting,
+             "precondition: hide form should be locked in :submitting after Enter"
+
+      {after_error, []} =
+        App.update({:oneliner_hidden, {:error, :forbidden}}, submitting)
+
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
+               after_error.modal
+
+      assert match?({:error, _}, form.submit_state),
+             "BL-01: hide-error handler MUST drive submit_state out of :submitting; " <>
+               "got #{inspect(form.submit_state)}"
+    end
+
+    test "after doomed oneliner error, %{key: :escape} dismisses the modal", %{state: state} do
+      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+      {submitting, _cmds} = App.update({:key, %{key: :enter}}, with_modal)
+
+      {after_error, []} =
+        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, submitting)
+
+      # Today the form is still locked at :submitting and the lock-guard
+      # swallows :escape. After the BL-01 fix, set_submit_state has run, the
+      # auto-reset preamble collapses {:error, _} → :idle, and the Esc cancel
+      # clause fires → modal dismisses.
+      {after_esc, _cmds} = App.update({:key, %{key: :escape}}, after_error)
+
+      assert after_esc.modal == nil,
+             "BL-01: Esc must dismiss modal after a doomed submit; modal still open: " <>
+               inspect(after_esc.modal)
+    end
+
+    test "after doomed hide-oneliner error, %{key: :escape} dismisses the modal",
+         %{state: state} do
+      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol-bl01"}, state)
+      {with_text, _} = App.update({:key, %{key: :char, char: "x"}}, with_modal)
+      {submitting, _cmds} = App.update({:key, %{key: :enter}}, with_text)
+
+      {after_error, []} =
+        App.update({:oneliner_hidden, {:error, :forbidden}}, submitting)
+
+      {after_esc, _cmds} = App.update({:key, %{key: :escape}}, after_error)
+
+      assert after_esc.modal == nil,
+             "BL-01: Esc must dismiss hide-modal after a doomed submit; modal still open: " <>
+               inspect(after_esc.modal)
+    end
+  end
 end
