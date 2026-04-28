@@ -74,11 +74,11 @@ Likely effect values:
 
 ## Migration Order
 
-1. Add contract and adapter without breaking legacy screens.
+1. Add the new contract, context, effect model, and runtime helpers.
 2. Migrate low-risk but representative screens first: Login and BoardList.
 3. Migrate BBS navigation and composition as a connected flow.
 4. Migrate operator workbenches after the task/result model is proven.
-5. Delete compatibility and simplify App only after all screens use the new boundary.
+5. Simplify App only after all screens use the new boundary.
 
 ## Verification Strategy
 

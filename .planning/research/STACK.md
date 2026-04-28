@@ -21,7 +21,7 @@ The existing stack already has the primitives required:
 - `Foglet.TUI.Context` - immutable data passed into screens: user, session context, session pid, terminal size, route params, theme access, and domain overrides.
 - `Foglet.TUI.Effect` - explicit effect values for `App` to interpret.
 - Revised `Foglet.TUI.Screen` behavior - `init/1`, `update/3`, `render/2`.
-- Optional `Foglet.TUI.ScreenRuntime` helper - registry/adapter logic for route-to-module lookup, state initialization, and compatibility during migration.
+- Optional `Foglet.TUI.ScreenRuntime` helper - registry/runtime logic for route-to-module lookup and state initialization.
 
 ## What Not To Add
 

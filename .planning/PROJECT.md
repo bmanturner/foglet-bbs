@@ -91,7 +91,7 @@ Widgets already model the smaller local reducer style through `init/1`, `handle_
 - **Domain ownership**: Domain behavior stays in `Foglet.*` contexts - screens may request task effects but must not own persistence invariants.
 - **Authorization**: Mutations still use context-level policy checks - hidden UI is not authorization.
 - **State ownership**: Screen-local state belongs to screen modules - App owns process/session/runtime coordination only.
-- **Migration safety**: Full migration should proceed through compatibility layers and representative slices so each phase can be verified with focused tests.
+- **Migration safety**: Full migration should proceed through representative slices and focused verification, but no old-screen fallback path is required.
 - **Testing**: Preserve existing render smoke and behavior tests while adding reducer/effect tests; avoid tests that only assert text exists.
 
 ## Key Decisions

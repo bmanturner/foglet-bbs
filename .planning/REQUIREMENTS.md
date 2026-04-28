@@ -11,7 +11,6 @@
 - [ ] **RUNTIME-01**: A screen can define `init/1`, `update/3`, and `render/2` callbacks that operate on screen-local state and `Foglet.TUI.Context`.
 - [ ] **RUNTIME-02**: `Foglet.TUI.App` can route normalized input, subscription, and task-result messages to the active screen without requiring the screen to receive the full App struct.
 - [ ] **RUNTIME-03**: `Foglet.TUI.Context` exposes current user, session context, session pid, terminal size, route params, and domain overrides needed by screens without exposing App internals.
-- [ ] **RUNTIME-04**: A compatibility path lets legacy screens continue working while individual screens migrate to the new contract.
 
 ### Effects
 
@@ -79,7 +78,6 @@ Which phases cover which requirements. Updated during roadmap creation.
 | RUNTIME-01 | Phase 34 | Pending |
 | RUNTIME-02 | Phase 34 | Pending |
 | RUNTIME-03 | Phase 34 | Pending |
-| RUNTIME-04 | Phase 34 | Pending |
 | EFFECT-01 | Phase 34 | Pending |
 | EFFECT-02 | Phase 34 | Pending |
 | EFFECT-03 | Phase 34 | Pending |
@@ -105,8 +103,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | VERIFY-05 | Phase 40 | Pending |
 
 **Coverage:**
-- v2.0 requirements: 27 total
-- Mapped to phases: 27
+- v2.0 requirements: 26 total
+- Mapped to phases: 26
 - Unmapped: 0
 
 ---

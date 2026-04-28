@@ -7,7 +7,7 @@ No external stack additions are needed. Build this with internal modules:
 - `Foglet.TUI.Context`
 - `Foglet.TUI.Effect`
 - revised `Foglet.TUI.Screen`
-- optional `Foglet.TUI.ScreenRuntime` compatibility/registry helper
+- optional `Foglet.TUI.ScreenRuntime` registry/helper
 
 ## Feature Table Stakes
 
@@ -35,10 +35,10 @@ Move screen-local state and async-result handling into screen modules. The scree
 
 ## Recommended Build Order
 
-1. Contract, context, effect interpreter, and compatibility adapter.
+1. Contract, context, effect interpreter, and runtime helpers.
 2. Auth/home pilot migration.
 3. BBS flow migration.
 4. Account workbench migration.
 5. Moderation/Sysop workbench migration.
-6. App shell cleanup and compatibility removal.
+6. App shell cleanup.
 7. Verification, docs, and precommit.

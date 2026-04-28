@@ -10,7 +10,6 @@
 | Screen-local state structs | Replaces anonymous maps with module-owned state shapes and better compile-time friction. |
 | Async result ownership | The screen that requested `:load_boards` or `:load_posts` consumes the matching loaded/error message. |
 | Route context | Navigation can carry board/thread/origin data without growing top-level App fields forever. |
-| Compatibility adapter | Allows phased migration while legacy screens still use existing `handle_key/2` behavior. |
 | Full screen migration | The milestone is not done until every current screen uses the new pattern. |
 | Regression coverage | Existing SSH/TUI behavior must survive the refactor. |
 

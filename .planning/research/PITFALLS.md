@@ -4,7 +4,7 @@
 
 | Pitfall | Risk | Prevention |
 |---------|------|------------|
-| Big-bang App rewrite | Breaks multiple flows at once and makes regressions hard to localize. | Keep a compatibility adapter until all screens migrate; split phases by screen families. |
+| Big-bang App rewrite | Breaks multiple flows at once and makes regressions hard to localize. | Split phases by screen families and keep each slice verifiable without making an old-screen fallback path a deliverable. |
 | Synchronous domain work in screen reducers | Blocks the Raxol lifecycle process and violates context boundaries. | Screens return task effects; App runs tasks off-process. |
 | Stale async results | A load result may arrive after navigation and update the wrong screen state. | Include task ids and optional target route/screen metadata; screens ignore results that no longer match their state. |
 | Route params leaking back into App globals | The refactor may rename `current_board` to another global instead of fixing ownership. | Route context and screen state own board/thread/post data unless truly global. |
