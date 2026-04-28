@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: milestone
 status: complete
 stopped_at: Phase 33 complete
-last_updated: "2026-04-28T16:12:00.000Z"
-last_activity: 2026-04-28 -- Completed quick task 260428-fc5: The clock isn't defaulting to FOGLET_DEFAULT_TIMEZONE when unauthenticated.
+last_updated: "2026-04-28T16:15:00.000Z"
+last_activity: 2026-04-28 -- Completed quick task 260428-fdh: Move the login form into a centered Identify Yourself panel.
 progress:
   total_phases: 8
   completed_phases: 7
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 Phase: 33
 Plan: 3 of 3
 Status: Phase 33 complete; all v1.4 planned phases executed
-Last activity: 2026-04-28 -- Completed quick task 260428-fc5: The clock isn't defaulting to FOGLET_DEFAULT_TIMEZONE when unauthenticated.
+Last activity: 2026-04-28 -- Completed quick task 260428-fdh: Move the login form into a centered Identify Yourself panel.
 
 ## Performance Metrics
 
@@ -138,6 +138,7 @@ No active blockers. Phase planning should preserve delivery honesty, context-lev
 | 260428-eyd | Catalogue screen text assertions and identify load-bearing coverage | 2026-04-28 | n/a | Catalogue | [260428-eyd-investigate-removing-screen-text-presenc](./quick/260428-eyd-investigate-removing-screen-text-presenc/) |
 | 260428-ezr | On the login screen, remove Actions from the command bar | 2026-04-28 | b4a911b | Verified | [260428-ezr-on-the-login-screen-remove-actions-from-](./quick/260428-ezr-on-the-login-screen-remove-actions-from-/) |
 | 260428-fc5 | The clock isn't defaulting to FOGLET_DEFAULT_TIMEZONE when unauthenticated | 2026-04-28 | this commit | Verified | [260428-fc5-the-clock-isn-t-defaulting-to-foglet-def](./quick/260428-fc5-the-clock-isn-t-defaulting-to-foglet-def/) |
+| 260428-fdh | Move the login form into a centered Identify Yourself panel | 2026-04-28 | this commit | Verified | [260428-fdh-on-the-login-form-screen-move-the-form-t](./quick/260428-fdh-on-the-login-form-screen-move-the-form-t/) |
 
 ## Deferred Items
 

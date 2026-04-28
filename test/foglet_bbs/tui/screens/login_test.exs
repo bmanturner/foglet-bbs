@@ -95,6 +95,17 @@ defmodule Foglet.TUI.Screens.LoginTest do
   defp forbidden_http_prefix, do: "http://"
   defp forbidden_https_prefix, do: "https://"
 
+  defp collect_panels(tree), do: tree |> collect_panels([]) |> Enum.reverse()
+
+  defp collect_panels(nil, acc), do: acc
+  defp collect_panels(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_panels/2)
+
+  defp collect_panels(%{type: :panel, children: children} = node, acc),
+    do: collect_panels(children, [node | acc])
+
+  defp collect_panels(%{children: children}, acc), do: collect_panels(children, acc)
+  defp collect_panels(_other, acc), do: acc
+
   describe "init_screen_state/1 (AUDIT-19)" do
     test "returns minimal menu sub-state" do
       assert Login.init_screen_state([]) == %{sub: :menu}
@@ -121,6 +132,17 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "renders login form without crashing when in login_form sub" do
       assert _ = Login.render(form_state(handle: "alice", password: "secret"))
+    end
+
+    test "renders login form inside an Identify Yourself panel with comfortable width" do
+      [panel] =
+        form_state(handle: "alicealicealicealice", password: "secret")
+        |> Login.render()
+        |> collect_panels()
+
+      assert panel.attrs.title == "Identify Yourself"
+      assert panel.attrs.width >= 40
+      assert panel.attrs.height >= 8
     end
 
     test "renders forgot password in email delivery mode (D-01)" do

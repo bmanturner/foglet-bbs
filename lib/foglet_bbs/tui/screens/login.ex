@@ -41,6 +41,8 @@ defmodule Foglet.TUI.Screens.Login do
 
   @menu_keys [{"L", "Login"}, {"R", "Register"}]
   @menu_keys_no_register [{"L", "Login"}]
+  @login_panel_width 40
+  @login_panel_height 8
 
   # WR-001: email-shape validation is delegated to
   # `Foglet.Accounts.Verification.email_shape?/1` so the screen and the
@@ -308,6 +310,7 @@ defmodule Foglet.TUI.Screens.Login do
   defp render_login_form(state, theme) do
     login_ss = LoginState.get(state)
     focused = Map.get(login_ss, :focused_field, :handle)
+    {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
 
     handle_label_fg = if focused == :handle, do: theme.accent.fg, else: theme.primary.fg
     handle_label_style = if focused == :handle, do: [:bold], else: []
@@ -322,29 +325,51 @@ defmodule Foglet.TUI.Screens.Login do
         []
       end
 
-    column style: %{gap: 0} do
-      [
-        row style: %{gap: 0} do
-          [
-            text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
-            TextInput.render(login_ss.handle_input,
-              bordered: false,
-              focused: focused == :handle,
-              theme: theme
-            )
-          ]
-        end,
-        row style: %{gap: 0} do
-          [
-            text("Password: ", fg: password_label_fg, style: password_label_style),
-            TextInput.render(login_ss.password_input,
-              bordered: false,
-              focused: focused == :password,
-              theme: theme
-            )
-          ]
-        end
-      ] ++ error_items
+    panel =
+      %{
+        type: :panel,
+        attrs: %{
+          title: "Identify Yourself",
+          title_attrs: %{fg: theme.title.fg},
+          border: :single,
+          border_fg: theme.border.fg,
+          width: @login_panel_width,
+          height: @login_panel_height
+        },
+        children: [
+          column style: %{gap: 2, padding: 1} do
+            [
+              row style: %{gap: 0} do
+                [
+                  text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
+                  TextInput.render(login_ss.handle_input,
+                    bordered: false,
+                    focused: focused == :handle,
+                    theme: theme
+                  )
+                ]
+              end,
+              row style: %{gap: 0} do
+                [
+                  text("Password: ", fg: password_label_fg, style: password_label_style),
+                  TextInput.render(login_ss.password_input,
+                    bordered: false,
+                    focused: focused == :password,
+                    theme: theme
+                  )
+                ]
+              end
+            ] ++ error_items
+          end
+        ]
+      }
+
+    available = max(terminal_height - 8, 1)
+    top_padding = div(max(available - @login_panel_height, 0), 2)
+    pad = text(" ", fg: theme.primary.fg)
+
+    column style: %{gap: 0, align_items: :center} do
+      List.duplicate(pad, top_padding) ++ [panel]
     end
   end
 
