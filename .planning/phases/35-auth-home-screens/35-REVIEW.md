@@ -20,11 +20,15 @@ files_reviewed_list:
   - test/foglet_bbs/tui/screens/register_test.exs
   - test/foglet_bbs/tui/screens/verify_test.exs
 findings:
+  critical: 0
+  warning: 0
+  info: 0
+  total: 0
+status: clean
+remediated_findings:
   critical: 1
   warning: 1
-  info: 0
-  total: 2
-status: issues_found
+remediation_commit: ea48118
 ---
 
 # Phase 35: Code Review Report
@@ -32,13 +36,23 @@ status: issues_found
 **Reviewed:** 2026-04-28T20:39:33Z
 **Depth:** standard
 **Files Reviewed:** 15
-**Status:** issues_found
+**Status:** clean after remediation
 
 ## Summary
 
-Reviewed the listed App, auth/home screen reducers, render fixtures, state modules, and focused tests. The new screen-owned reducer model is mostly consistent, but two paths still bypass the App task/error boundary and can take down or stall the live SSH TUI during routine auth flows.
+Reviewed the listed App, auth/home screen reducers, render fixtures, state modules, and focused tests. The initial pass found one blocker and one warning. Both were remediated in `ea48118` by moving optional startup/reset domain work out of synchronous reducer/init paths and into the existing screen task-result boundary.
 
-## Critical Issues
+## Remediation
+
+- `ea48118` removes synchronous authenticated startup oneliner loading from `App.init/1`; initial MainMenu screen state is created without calling the domain boundary, and existing navigation/session paths still request bounded oneliner load tasks.
+- `ea48118` converts password reset delivery and reset-token consumption to `Effect.task/3` operations and handles their results through Login's `:reset_request` and `:reset_token` reducer clauses.
+- Verification after remediation:
+  - `rtk mix test test/foglet_bbs/tui/screens/login_test.exs test/foglet_bbs/tui/app_test.exs` - passed
+  - `rtk mix test test/foglet_bbs/tui/screens/login_test.exs test/foglet_bbs/tui/screens/register_test.exs test/foglet_bbs/tui/screens/verify_test.exs test/foglet_bbs/tui/screens/main_menu_test.exs test/foglet_bbs/tui/app_test.exs test/foglet_bbs/tui/layout_smoke_test.exs && rtk mix compile --warnings-as-errors` - passed
+  - `rtk rg -n "defp do_update\\(\\{:(register_wizard|verify_event|login_result|load_oneliners|oneliners_loaded|open_oneliner_composer|submit_oneliner|oneliner_created|open_hide_oneliner_modal|submit_hide_oneliner|oneliner_hidden)" lib/foglet_bbs/tui/app.ex` - no matches
+  - `rtk mix precommit` - blocked by unrelated `lib/foglet_bbs/tui/screens/thread_list.ex` alias-order Credo issue outside Phase 35.
+
+## Remediated Critical Issues
 
 ### CR-01: BLOCKER - Authenticated App Startup Can Crash On Optional Oneliner Load
 
@@ -62,7 +76,7 @@ end
 
 Then trigger the existing `:load_oneliners` task through the same `route_screen_update/3` path used by navigation/set-user, or add a one-shot startup message that dispatches `{:screen_task_result, :main_menu, :load_oneliners, ...}` via `Effect.task`. Keep the data load inside `Foglet.TUI.Command.task/2` so failures become screen-local errors instead of init crashes.
 
-## Warnings
+## Remediated Warnings
 
 ### WR-01: WARNING - Password Reset Domain Calls Still Run Inside The Key Reducer
 
