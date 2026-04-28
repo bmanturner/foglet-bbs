@@ -259,9 +259,26 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert {:load_threads, "b1"} in cmds
   end
 
-  test "enter on a category parent does not open a board", %{state: state} do
-    {s, _} = BoardList.load_boards(state)
-    assert BoardList.handle_key(%{key: :enter}, s) == :no_match
+  test "enter on a category parent toggles expanded state without commands", %{state: state} do
+    {s, _} = BoardList.load_boards(%{state | terminal_size: {64, 22}})
+
+    initial_text = BoardList.render(s) |> flatten_text()
+    assert initial_text =~ "▾"
+    assert initial_text =~ "Tech"
+
+    {:update, collapsed, []} = BoardList.handle_key(%{key: :enter}, s)
+
+    collapsed_text = BoardList.render(collapsed) |> flatten_text()
+    assert collapsed_text =~ "▸"
+    refute collapsed_text =~ "Tech"
+    assert collapsed.current_screen == :board_list
+    assert Map.get(collapsed, :current_board) == Map.get(state, :current_board)
+
+    {:update, expanded, []} = BoardList.handle_key(%{key: :enter}, collapsed)
+
+    expanded_text = BoardList.render(expanded) |> flatten_text()
+    assert expanded_text =~ "▾"
+    assert expanded_text =~ "Tech"
   end
 
   test "'s' on an unsubscribed board emits subscribe command", %{state: state} do
