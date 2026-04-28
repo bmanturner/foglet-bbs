@@ -2845,4 +2845,190 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 31 raw reset token non-leak (D-11, D-18, AUTH-04)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 31 raw reset token non-leak (D-11, D-18)" do
+    @reset_consume_sentinel "RAW-RESET-TOKEN-SHOULD-NOT-LEAK"
+    @reset_consume_sizes [{64, 22}, {80, 24}]
+
+    defp reset_consume_state_with_token(token, {width, height}) do
+      token_input = Foglet.TUI.Widgets.Input.TextInput.init(value: token)
+
+      {token_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, token_input)
+
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{
+          login: %{
+            sub: :reset_consume,
+            focused_field: :token,
+            token_input: token_input_end,
+            password_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "", mask_char: "*"),
+            password_confirmation_input:
+              Foglet.TUI.Widgets.Input.TextInput.init(value: "", mask_char: "*"),
+            error: nil
+          }
+        }
+      }
+    end
+
+    test "raw reset token is absent from chrome frame elements at 64x22 and 80x24" do
+      for {width, height} <- @reset_consume_sizes do
+        state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
+        positioned = state |> Login.render() |> apply_at_size({width, height})
+
+        chrome_elements =
+          positioned
+          |> List.flatten()
+          |> Enum.filter(fn el ->
+            el.type == :text and is_binary(Map.get(el, :text, "")) and
+              Map.get(el, :attrs, %{}) |> Map.get(:chrome_frame?, false)
+          end)
+
+        for el <- chrome_elements do
+          refute String.contains?(el.text, @reset_consume_sentinel),
+                 ":reset_consume sentinel leaked into chrome frame at #{width}x#{height}: " <>
+                   "y=#{el.y} text=#{inspect(el.text)}"
+        end
+      end
+    end
+
+    test "raw reset token appears only on the focused token input row at 64x22" do
+      state = reset_consume_state_with_token(@reset_consume_sentinel, {64, 22})
+      positioned = state |> Login.render() |> apply_at_size({64, 22})
+
+      sentinel_elements =
+        positioned
+        |> text_elements()
+        |> Enum.filter(&String.contains?(&1.text, @reset_consume_sentinel))
+
+      assert sentinel_elements != [],
+             "expected at least one rendered text element to contain the sentinel " <>
+               "(the focused token input field), got none"
+
+      sentinel_ys = sentinel_elements |> Enum.map(& &1.y) |> Enum.uniq()
+
+      assert length(sentinel_ys) == 1,
+             "expected sentinel on exactly one row (the token field), got rows: " <>
+               inspect(sentinel_ys)
+
+      [token_y] = sentinel_ys
+
+      # The token field row never co-occurs with chrome rows, by construction:
+      # chrome top is y=0 and chrome bottom is y=height-1.
+      refute token_y == 0,
+             "sentinel landed on chrome top row (y=0) at 64x22"
+
+      refute token_y == 22 - 1,
+             "sentinel landed on chrome bottom (command) row (y=21) at 64x22"
+    end
+
+    test "breadcrumb parts for :reset_consume are state-derived and never include the raw token" do
+      for {width, height} <- @reset_consume_sizes do
+        state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
+        parts = Foglet.TUI.Widgets.Chrome.BreadcrumbBar.parts_for(state)
+
+        assert "Foglet" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Foglet' in #{inspect(parts)}"
+
+        assert "Forgot Password" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Forgot Password' in #{inspect(parts)}"
+
+        assert "Enter Token" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Enter Token' in #{inspect(parts)}"
+
+        for part <- parts do
+          refute String.contains?(part, @reset_consume_sentinel),
+                 "raw reset token sentinel leaked into breadcrumb part at " <>
+                   "#{width}x#{height}: #{inspect(part)}"
+        end
+      end
+    end
+
+    test "command bar (key hints) row does not include the raw token at 64x22 and 80x24" do
+      for {width, height} <- @reset_consume_sizes do
+        state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
+        positioned = state |> Login.render() |> apply_at_size({width, height})
+
+        bottom_row_text =
+          positioned
+          |> text_elements()
+          |> Enum.filter(&(&1.y == height - 1))
+          |> Enum.sort_by(& &1.x)
+          |> Enum.map_join(& &1.text)
+
+        refute String.contains?(bottom_row_text, @reset_consume_sentinel),
+               "raw reset token leaked into command bar at #{width}x#{height}: " <>
+                 inspect(bottom_row_text)
+      end
+    end
+
+    test "error message row never includes the raw token even when the error is set" do
+      # Trigger a generic error path and ensure the sentinel does not appear in
+      # the inline error rows. Use the password mismatch error path because it
+      # is reachable from screen state without a DB round-trip.
+      token_input =
+        Foglet.TUI.Widgets.Input.TextInput.init(value: @reset_consume_sentinel)
+
+      {token_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, token_input)
+
+      password_input =
+        Foglet.TUI.Widgets.Input.TextInput.init(value: "alpha", mask_char: "*")
+
+      {password_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, password_input)
+
+      confirmation_input =
+        Foglet.TUI.Widgets.Input.TextInput.init(value: "beta", mask_char: "*")
+
+      {confirmation_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, confirmation_input)
+
+      state = %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {64, 22},
+        screen_state: %{
+          login: %{
+            sub: :reset_consume,
+            focused_field: :password_confirmation,
+            token_input: token_input_end,
+            password_input: password_input_end,
+            password_confirmation_input: confirmation_input_end,
+            error: nil
+          }
+        }
+      }
+
+      {:update, after_submit, []} = Login.handle_key(%{key: :enter}, state)
+
+      error = get_in(after_submit.screen_state, [:login, :error])
+      assert is_binary(error)
+
+      refute String.contains?(error, @reset_consume_sentinel),
+             "error copy must never include the raw token: #{inspect(error)}"
+
+      # And the rendered tree must not place the sentinel anywhere outside the
+      # focused token input row.
+      positioned = after_submit |> Login.render() |> apply_at_size({64, 22})
+
+      sentinel_elements =
+        positioned
+        |> text_elements()
+        |> Enum.filter(&String.contains?(&1.text, @reset_consume_sentinel))
+
+      sentinel_ys = sentinel_elements |> Enum.map(& &1.y) |> Enum.uniq()
+
+      assert length(sentinel_ys) == 1,
+             "post-error render expected sentinel on exactly one row " <>
+               "(the token field), got rows: #{inspect(sentinel_ys)}"
+    end
+  end
 end
