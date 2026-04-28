@@ -68,7 +68,8 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       session_pid: state.session_pid,
       terminal_size: state.terminal_size,
       route: state.current_screen,
-      route_params: Map.get(state, :route_params, %{})
+      route_params: Map.get(state, :route_params, %{}),
+      domain: Map.get(state.session_context || %{}, :domain, %{})
     )
   end
 
@@ -98,6 +99,11 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   defp assert_dispatch_effect(effects, message) do
     assert %Effect{type: :session, payload: {:dispatch, message}} in effects
+  end
+
+  defp only_task_fun(effects, op) do
+    assert [%Effect{type: :task, payload: %{op: ^op, screen_key: :main_menu, fun: fun}}] = effects
+    fun
   end
 
   setup do
@@ -278,6 +284,69 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       {local_state, effects} = handle_special_key_result(state, :enter)
       assert local_state == local_from_app(state)
       assert effects == []
+    end
+  end
+
+  describe "oneliner modal submit reducer messages" do
+    setup %{state: state} do
+      Process.put(:fake_oneliners_owner, self())
+
+      state =
+        put_in(state.session_context[:domain], %{oneliners: Foglet.TUI.FakeOneliners})
+
+      %{state: state}
+    end
+
+    test "composer submit emits a screen-tagged create task", %{state: state} do
+      {local_state, effects} =
+        MainMenu.update(
+          {:modal_submit, :oneliner_composer, %{body: "ship it"}},
+          local_from_app(state),
+          context_from_app(state)
+        )
+
+      assert local_state.oneliner_status == :submitting
+      task = only_task_fun(effects, :submit_oneliner)
+      assert {:ok, %{id: "ol-new", body: "ship it"}} = task.()
+      assert_received {:create_entry, _user, %{body: "ship it"}}
+    end
+
+    test "hide submit trims reason and emits a screen-tagged hide task", %{state: state} do
+      local =
+        state
+        |> with_oneliners([oneliner("alice", "hideable", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+        |> local_from_app()
+        |> MainMenuState.set_pending_hide("ol1")
+
+      {local_state, effects} =
+        MainMenu.update(
+          {:modal_submit, :hide_oneliner, %{reason: "  abuse  "}},
+          local,
+          context_from_app(state)
+        )
+
+      assert local_state.oneliner_status == :hiding
+      task = only_task_fun(effects, :submit_hide_oneliner)
+      assert {:ok, %{id: "ol1"}} = task.()
+      assert_received {:hide_entry, _user, "ol1", "abuse"}
+    end
+
+    test "hide submit validates blank reason before task creation", %{state: state} do
+      local = local_from_app(state) |> MainMenuState.set_pending_hide("ol1")
+
+      {local_state, effects} =
+        MainMenu.update(
+          {:modal_submit, :hide_oneliner, %{reason: "   "}},
+          local,
+          context_from_app(state)
+        )
+
+      assert local_state.oneliner_errors.reason == "Reason is required."
+      assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}}] =
+               effects
+
+      refute_received {:hide_entry, _user, _entry_id, _reason}
     end
   end
 

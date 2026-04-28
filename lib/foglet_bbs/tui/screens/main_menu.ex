@@ -232,6 +232,83 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {local_state, []}
   end
 
+  def update(
+        {:modal_submit, :oneliner_composer, %{body: body}},
+        local_state,
+        %Context{} = context
+      ) do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      user = context.current_user
+      oneliners_mod = domain_module(context, :oneliners)
+
+      effect =
+        Effect.task(:submit_oneliner, :main_menu, fn ->
+          oneliners_mod.create_entry(user, %{body: body})
+        end)
+
+      {%{State.clear_errors(local_state) | oneliner_status: :submitting}, [effect]}
+    else
+      {State.put_errors(local_state, %{base: "User session is not available."}),
+       [Effect.open_modal(oneliner_composer_modal(%{base: "User session is not available."}))]}
+    end
+  end
+
+  def update({:modal_submit, :oneliner_composer, _payload}, local_state, %Context{} = context) do
+    local_state =
+      local_state
+      |> normalize_state(context)
+      |> State.put_errors(%{body: "Enter 1-120 characters."})
+
+    {local_state, [Effect.open_modal(oneliner_composer_modal(local_state.oneliner_errors))]}
+  end
+
+  def update({:modal_submit, :hide_oneliner, %{reason: reason}}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+    reason = reason |> to_string() |> String.trim()
+
+    cond do
+      reason == "" ->
+        errors = %{reason: "Reason is required."}
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+
+      is_nil(context.current_user) ->
+        errors = %{base: "User session is not available."}
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+
+      is_nil(local_state.pending_hide_oneliner_id) ->
+        errors = %{base: "No oneliner is selected."}
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+
+      true ->
+        user = context.current_user
+        entry_id = local_state.pending_hide_oneliner_id
+        oneliners_mod = domain_module(context, :oneliners)
+
+        effect =
+          Effect.task(:submit_hide_oneliner, :main_menu, fn ->
+            oneliners_mod.hide_entry(user, entry_id, reason)
+          end)
+
+        {%{State.clear_errors(local_state) | oneliner_status: :hiding}, [effect]}
+    end
+  end
+
+  def update({:modal_submit, :hide_oneliner, _payload}, local_state, %Context{} = context) do
+    errors = %{reason: "Reason is required."}
+
+    local_state =
+      local_state
+      |> normalize_state(context)
+      |> State.put_errors(errors)
+
+    {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+  end
+
   def update(_message, local_state, %Context{} = context) do
     {normalize_state(local_state, context), []}
   end
@@ -379,6 +456,15 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp load_moderation_effect(_context) do
     Effect.session({:dispatch, {:load_moderation_workspace}})
   end
+
+  defp domain_module(%Context{domain: domain}, key) when is_map(domain) do
+    case Map.get(domain, key) do
+      module when is_atom(module) and not is_nil(module) -> module
+      _other -> default_domain_module(key)
+    end
+  end
+
+  defp default_domain_module(:oneliners), do: Foglet.Oneliners
 
   defp visible_destination_entries(user) do
     @main_menu_commands
