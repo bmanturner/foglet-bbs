@@ -1196,17 +1196,6 @@ defmodule Foglet.TUI.App do
     route_screen_update(state, key, {:task_result, op, result})
   end
 
-  defp do_update({:login_result, result}, state) do
-    Screens.Login.handle_login_result(state, result)
-  end
-
-  defp do_update({:task_error, :login, reason}, state) do
-    require Logger
-    Logger.error("[TUI.App] task :login failed: #{reason}")
-
-    Screens.Login.handle_login_result(state, {:error, :invalid_credentials})
-  end
-
   # After the user dismisses the pending-approval modal, quit the session so the
   # pending user cannot continue navigating the BBS. The modal is already set
   # by Register.submit/2; we patch its on_confirm/on_cancel callbacks here so
@@ -1315,7 +1304,8 @@ defmodule Foglet.TUI.App do
   defp new_contract_screen?(%__MODULE__{} = state, screen) do
     module = screen_module_for(state, screen_key(screen))
 
-    function_exported?(module, :update, 3) and not function_exported?(module, :handle_key, 2)
+    Code.ensure_loaded?(module) and function_exported?(module, :update, 3) and
+      not function_exported?(module, :handle_key, 2)
   end
 
   defp context_for_screen_key(%__MODULE__{} = state, key) do

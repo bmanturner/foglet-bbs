@@ -250,6 +250,31 @@ defmodule Foglet.TUI.AppTest do
       assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
     end
 
+    test "{:screen_task_result, :login, :login, result} routes through Login local state", %{
+      state: state
+    } do
+      login_ss = %{
+        sub: :login_form,
+        focused_field: :password,
+        handle_input: TextInput.init(value: "ghost"),
+        password_input: TextInput.init(value: "nope", mask_char: "*"),
+        error: nil,
+        submitting?: true
+      }
+
+      state = %{state | screen_state: %{login: login_ss}}
+
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :login, :login, {:ok, {:error, :invalid_credentials}}},
+          state
+        )
+
+      assert cmds == []
+      assert new_state.screen_state.login.error == "Invalid credentials."
+      assert new_state.screen_state.login.submitting? == false
+    end
+
     test ":heartbeat_tick calls Session.heartbeat when session_pid is set", %{state: state} do
       # Use self() as a fake session_pid — heartbeat is a cast so it just sends
       # a GenServer cast message. We verify the handler doesn't crash.

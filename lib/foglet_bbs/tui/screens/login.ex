@@ -171,33 +171,33 @@ defmodule Foglet.TUI.Screens.Login do
   # --- Private ---
 
   @spec handle_login_result(map(), tuple()) :: {map(), list()}
-  def handle_login_result(state, {:ok, user, :main_menu}) do
+  defp handle_login_result(state, {:ok, user, :main_menu}) do
     {LoginState.put(state, LoginState.default()), [Effect.session({:set_user, user})]}
   end
 
-  def handle_login_result(state, {:ok, user, :verify, :attempted}) do
+  defp handle_login_result(state, {:ok, user, :verify, :attempted}) do
     complete_verify_login(state, user)
   end
 
-  def handle_login_result(state, {:ok, _user, :verify, :unavailable}) do
+  defp handle_login_result(state, {:ok, _user, :verify, :unavailable}) do
     login_error_modal(
       state,
       "Email verification is unavailable because email delivery is disabled."
     )
   end
 
-  def handle_login_result(state, {:ok, _user, :verify, :delivery_failed}) do
+  defp handle_login_result(state, {:ok, _user, :verify, :delivery_failed}) do
     login_error_modal(
       state,
       "Verification instructions could not be sent. Please try again later."
     )
   end
 
-  def handle_login_result(state, {:ok, _user, :verify, :changeset_error}) do
+  defp handle_login_result(state, {:ok, _user, :verify, :changeset_error}) do
     login_error_modal(state, "Could not prepare verification instructions. Please try again.")
   end
 
-  def handle_login_result(state, {:error, :invalid_credentials}) do
+  defp handle_login_result(state, {:error, :invalid_credentials}) do
     login_ss = LoginState.get(state)
     new_password_input = TextInput.init(mask_char: "*")
 
@@ -211,15 +211,15 @@ defmodule Foglet.TUI.Screens.Login do
     {LoginState.put(state, new_login_ss), []}
   end
 
-  def handle_login_result(state, {:error, :pending}) do
+  defp handle_login_result(state, {:error, :pending}) do
     login_error_modal(state, "Your account is pending sysop approval.", clear?: true)
   end
 
-  def handle_login_result(state, {:error, :rejected}) do
+  defp handle_login_result(state, {:error, :rejected}) do
     login_error_modal(state, "Your registration was rejected. Contact the sysop.", clear?: true)
   end
 
-  def handle_login_result(state, {:error, :suspended}) do
+  defp handle_login_result(state, {:error, :suspended}) do
     login_error_modal(state, "Your account is suspended. Contact the sysop.", clear?: true)
   end
 
