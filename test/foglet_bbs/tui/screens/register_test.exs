@@ -1,6 +1,7 @@
 defmodule Foglet.TUI.Screens.RegisterTest do
   use FogletBbs.DataCase, async: false
 
+  alias Foglet.Accounts.User
   alias Foglet.Config
   alias Foglet.TUI.Screens.Register
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -33,7 +34,8 @@ defmodule Foglet.TUI.Screens.RegisterTest do
   #  invite_code: "CODE", error: nil, collected: %{invite_code: "CODE"}]
   defp combined_state(fields \\ [], focused \\ :handle, mode \\ "open") do
     handle_input =
-      TextInput.init(value: Keyword.get(fields, :handle, "")) |> text_input_at_end()
+      TextInput.init(value: Keyword.get(fields, :handle, ""), max_length: User.handle_max())
+      |> text_input_at_end()
 
     email_input =
       TextInput.init(value: Keyword.get(fields, :email, "")) |> text_input_at_end()
@@ -324,6 +326,24 @@ defmodule Foglet.TUI.Screens.RegisterTest do
                Access.key(:raxol_state),
                :value
              ]) == "a"
+    end
+
+    test "handle input stops at the account handle max length" do
+      chars = String.graphemes(String.duplicate("a", User.handle_max() + 1))
+
+      final_state =
+        Enum.reduce(chars, combined_state([], :handle), fn char, acc ->
+          {:update, next, []} = Register.handle_key(%{key: :char, char: char}, acc)
+          next
+        end)
+
+      assert get_in(final_state, [
+               :screen_state,
+               :register,
+               :handle_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == String.duplicate("a", User.handle_max())
     end
 
     test "typing a char on :email appends to email_input" do

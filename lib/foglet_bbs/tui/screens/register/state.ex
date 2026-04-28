@@ -12,6 +12,7 @@ defmodule Foglet.TUI.Screens.Register.State do
     `:handle` → `:email` → `:password` → `:confirm_password` → `:handle`
   """
 
+  alias Foglet.Accounts.User
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @focus_cycle [:handle, :email, :password, :confirm_password]
@@ -29,7 +30,7 @@ defmodule Foglet.TUI.Screens.Register.State do
       step: :combined,
       focused_field: :handle,
       invite_code_input: TextInput.init([]),
-      handle_input: TextInput.init([]),
+      handle_input: TextInput.init(max_length: User.handle_max()),
       email_input: TextInput.init([]),
       password_input: TextInput.init(mask_char: "*"),
       confirm_input: TextInput.init(mask_char: "*"),
@@ -54,7 +55,7 @@ defmodule Foglet.TUI.Screens.Register.State do
       step: step,
       focused_field: focused,
       invite_code_input: TextInput.init([]),
-      handle_input: TextInput.init([]),
+      handle_input: TextInput.init(max_length: User.handle_max()),
       email_input: TextInput.init([]),
       password_input: TextInput.init(mask_char: "*"),
       confirm_input: TextInput.init(mask_char: "*"),

@@ -31,6 +31,7 @@ defmodule Foglet.TUI.Screens.Login.State do
       error: nil | String.t()}
   """
 
+  alias Foglet.Accounts.User
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @doc "Returns the minimal menu sub-state (AUDIT-19 intentional)."
@@ -43,7 +44,7 @@ defmodule Foglet.TUI.Screens.Login.State do
     %{
       sub: :login_form,
       focused_field: :handle,
-      handle_input: TextInput.init([]),
+      handle_input: TextInput.init(max_length: User.handle_max()),
       password_input: TextInput.init(mask_char: "*"),
       error: nil
     }

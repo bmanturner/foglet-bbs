@@ -1,6 +1,7 @@
 defmodule Foglet.TUI.Screens.LoginTest do
   use FogletBbs.DataCase, async: false
 
+  alias Foglet.Accounts.User
   alias Foglet.Config
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Login
@@ -249,6 +250,26 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       assert get_in(s3, [:screen_state, :login, :handle_input, Access.key(:raxol_state), :value]) ==
                "alice"
+    end
+
+    test "handle input stops at the account handle max length" do
+      chars = String.graphemes(String.duplicate("a", User.handle_max() + 1))
+
+      {:update, form_state, []} = Login.handle_key(%{key: :char, char: "L"}, base_state())
+
+      final_state =
+        Enum.reduce(chars, form_state, fn char, acc ->
+          {:update, next, []} = Login.handle_key(%{key: :char, char: char}, acc)
+          next
+        end)
+
+      assert get_in(final_state, [
+               :screen_state,
+               :login,
+               :handle_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == String.duplicate("a", User.handle_max())
     end
 
     test "typing appends to password field when focused" do

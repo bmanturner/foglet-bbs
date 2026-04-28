@@ -158,6 +158,9 @@ defmodule Foglet.Accounts.User do
   @doc "Public accessor for the handle format regex (used in tests)."
   def handle_format, do: @handle_format
 
+  @doc "Public accessor for the maximum handle length."
+  def handle_max, do: @handle_max
+
   @doc "Public accessor for valid roles (used in Mix tasks and tests)."
   def valid_roles, do: @valid_roles
 
