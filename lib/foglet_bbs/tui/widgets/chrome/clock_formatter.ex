@@ -44,11 +44,11 @@ defmodule Foglet.TUI.Widgets.Chrome.ClockFormatter do
     if timezone != "" and Timex.Timezone.exists?(timezone) do
       timezone
     else
-      @default_timezone
+      default_timezone()
     end
   end
 
-  defp valid_timezone(_), do: @default_timezone
+  defp valid_timezone(_), do: default_timezone()
 
   defp valid_time_format(time_format) when time_format in @time_formats, do: time_format
   defp valid_time_format(_), do: @default_time_format
@@ -56,10 +56,20 @@ defmodule Foglet.TUI.Widgets.Chrome.ClockFormatter do
   defp convert(now_utc, timezone) do
     case Timex.Timezone.convert(now_utc, timezone) do
       %DateTime{} = localized -> localized
-      _ -> Timex.Timezone.convert(now_utc, @default_timezone)
+      _ -> Timex.Timezone.convert(now_utc, default_timezone())
     end
   rescue
-    _ -> Timex.Timezone.convert(now_utc, @default_timezone)
+    _ -> Timex.Timezone.convert(now_utc, default_timezone())
+  end
+
+  defp default_timezone do
+    configured = Application.get_env(:foglet_bbs, :default_timezone)
+
+    if is_binary(configured) and Timex.Timezone.exists?(configured) do
+      configured
+    else
+      @default_timezone
+    end
   end
 
   defp format_local(%DateTime{} = datetime, "24h") do
