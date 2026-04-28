@@ -47,6 +47,23 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 4. Screen state is stored by route/screen key and remains local to the owning screen struct.
 5. Existing App init/update/view behavior remains green for at least one migrated smoke path.
 
+**Planned execution:**
+
+**Wave 1**
+- `34-01` - Contract and data types: `Foglet.TUI.Screen`, `Foglet.TUI.Context`, `Foglet.TUI.Effect`, and focused contract tests.
+
+**Wave 2 *(blocked on Wave 1 completion)***
+- `34-02` - App runtime helpers and generic effect interpretation for navigation, task routing, route params, and screen-local state access.
+
+**Wave 3 *(blocked on Waves 1-2 completion)***
+- `34-03` - State convention documentation, preservation checks, and targeted runtime foundation verification.
+
+**Cross-cutting constraints:**
+- No runtime old-screen vs new-screen fallback detector or compatibility layer is added.
+- New screen callbacks use screen-local state plus `Foglet.TUI.Context`, not `%Foglet.TUI.App{}`.
+- Task effects execute through `Foglet.TUI.Command.task/2` and route success/failure back through the requesting screen update loop.
+- Existing App init/update/view behavior, modal precedence, SizeGate behavior, session hooks, command delivery, and at least one current smoke path remain green.
+
 ### Phase 35: Auth & Home Screens
 
 **Goal:** Prove the pattern on entry and home flows by migrating Login, Register, Verify, and MainMenu/oneliners.
