@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-28T19:25:56.319Z"
-last_activity: 2026-04-28 -- Phase 35 planning complete
+last_updated: "2026-04-28T19:41:36.822Z"
+last_activity: 2026-04-28
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 7
-  completed_plans: 3
-  percent: 43
+  completed_plans: 4
+  percent: 57
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 34 — runtime-contract-effects
+**Current focus:** Phase 35 — auth-home-screens
 
 ## Current Position
 
-Phase: 35
-Plan: Not started
+Phase: 35 (auth-home-screens) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-04-28 -- Phase 35 planning complete
+Last activity: 2026-04-28
 
 ## Accumulated Context
 
