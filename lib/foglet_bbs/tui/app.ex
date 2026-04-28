@@ -197,7 +197,7 @@ defmodule Foglet.TUI.App do
         type: :publish,
         payload: %{topic: topic, message: message}
       }) do
-    Phoenix.PubSub.broadcast(FogletBbs.PubSub, topic, message)
+    _ = Phoenix.PubSub.broadcast(FogletBbs.PubSub, topic, message)
 
     {state, []}
   end
@@ -1314,7 +1314,7 @@ defmodule Foglet.TUI.App do
   defp context_for_screen_key(%__MODULE__{} = state, key) do
     params =
       if screen_key(current_route(state)) == key do
-        state.route_params || %{}
+        state.route_params
       else
         %{}
       end
