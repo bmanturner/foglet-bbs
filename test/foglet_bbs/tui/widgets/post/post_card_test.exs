@@ -262,7 +262,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       assert serialized =~ "world"
     end
 
-    test "truncates long unbroken reader body text to the reduced body width" do
+    test "wraps long unbroken reader body text to the reduced body width" do
       width = 64
       gutter_width = TextWidth.display_width("│")
       body_width = width - gutter_width - 2
@@ -271,11 +271,31 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       tuples = Foglet.Markdown.render(long_body)
 
       parts = PostCard.reader_parts(post, tuples, width, theme(), index: 0, total: 1)
-      [body_line] = parts.body_lines
-      body_text = reader_body_text(body_line)
 
-      assert TextWidth.display_width(body_text) <= body_width
-      assert gutter_width + 1 + TextWidth.display_width(body_text) <= width
+      assert length(parts.body_lines) > 1
+
+      for body_line <- parts.body_lines do
+        body_text = reader_body_text(body_line)
+
+        assert TextWidth.display_width(body_text) <= body_width
+        assert gutter_width + 1 + TextWidth.display_width(body_text) <= width
+      end
+    end
+
+    test "wraps long reader paragraphs into multiple guttered viewport rows" do
+      width = 40
+      body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+      post = sample_post(%{message_number: 42})
+      tuples = Foglet.Markdown.render(body)
+
+      parts = PostCard.reader_parts(post, tuples, width, theme(), index: 0, total: 1)
+      flattened_lines = Enum.map(parts.body_lines, &flatten_text/1)
+
+      assert length(parts.body_lines) > 1
+      assert Enum.all?(flattened_lines, &String.starts_with?(&1, "│"))
+      refute Enum.any?(flattened_lines, &String.contains?(&1, body))
+      assert Enum.any?(flattened_lines, &String.contains?(&1, "alpha beta"))
+      assert Enum.any?(flattened_lines, &String.contains?(&1, "lambda mu"))
     end
 
     test "narrow widths still return body lines without raising" do

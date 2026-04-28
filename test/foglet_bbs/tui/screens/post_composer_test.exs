@@ -66,6 +66,10 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   defp composer_ss(state), do: state.screen_state.post_composer
   defp input_value(state), do: composer_ss(state).input_state.value
 
+  defp run_content(%{content: content}) when is_binary(content), do: content
+  defp run_content(%{text: text}) when is_binary(text), do: text
+  defp run_content(_run), do: ""
+
   defp reply_post do
     %{
       id: "p1",
@@ -199,6 +203,23 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert text =~ "Edit"
     assert text =~ "Preview"
     assert text =~ "MD[# hi]"
+  end
+
+  test "render/1 in compact preview mode wraps markdown preview without mutating value", %{
+    state: state
+  } do
+    long_body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+    state = %{with_reply(state, long_body) | terminal_size: {40, 22}}
+    {:update, state, _} = PostComposer.handle_key(%{key: :tab}, state)
+
+    rendered = PostComposer.render(state)
+    runs = rendered |> Foglet.TUI.WidgetHelpers.text_runs() |> Enum.map(&run_content/1)
+
+    assert input_value(state) == long_body
+    refute input_value(state) =~ "\n"
+    refute "MD[#{long_body}]" in runs
+    assert Enum.any?(runs, &String.starts_with?(&1, "MD[alpha beta"))
+    assert Enum.any?(runs, &String.ends_with?(&1, "lambda mu]"))
   end
 
   test "render/1 shows compact reply context with a quote gutter", %{state: state} do

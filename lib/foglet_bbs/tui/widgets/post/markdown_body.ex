@@ -40,16 +40,17 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
       opts:
         scroll_offset: non_neg_integer()  (default 0)
         max_lines:     pos_integer() | :all (default :all)
+        wrap:          boolean() (default false)
 
-  Returns a Raxol view element (a `column do ... end` block).
-  `width` is accepted for future grapheme-aware wrapping; this
-  implementation passes it through without hard-wrapping (see Plan
-  objective for rationale).
+  Returns a Raxol view element (a `column do ... end` block). When `wrap: true`
+  is passed, lines are wrapped to the supplied terminal display width before
+  view elements are emitted.
   """
 
   import Raxol.Core.Renderer.View
 
   alias Foglet.Markdown
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
 
   @type style_atom :: :plain | :bold | :italic | :dim | :underline
@@ -67,10 +68,12 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
       when is_binary(markdown_text) and is_integer(width) and width > 0 do
     scroll_offset = Keyword.get(opts, :scroll_offset, 0)
     max_lines = Keyword.get(opts, :max_lines, :all)
+    wrap? = Keyword.get(opts, :wrap, false)
 
     markdown_text
     |> Markdown.render()
     |> group_by_newline()
+    |> maybe_wrap_lines(width, wrap?)
     |> window_lines(scroll_offset, max_lines)
     |> lines_to_column(theme)
   end
@@ -85,9 +88,11 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
       when is_list(tuples) and is_integer(width) and width > 0 do
     scroll_offset = Keyword.get(opts, :scroll_offset, 0)
     max_lines = Keyword.get(opts, :max_lines, :all)
+    wrap? = Keyword.get(opts, :wrap, false)
 
     tuples
     |> group_by_newline()
+    |> maybe_wrap_lines(width, wrap?)
     |> window_lines(scroll_offset, max_lines)
     |> lines_to_column(theme)
   end
@@ -107,10 +112,13 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
   Empty input returns `[]`. The Viewport handles empty children gracefully.
   """
   @spec render_tuples_as_lines([tuple_entry()], pos_integer(), Theme.t(), keyword()) :: [any()]
-  def render_tuples_as_lines(tuples, width, %Theme{} = theme, _opts \\ [])
+  def render_tuples_as_lines(tuples, width, %Theme{} = theme, opts \\ [])
       when is_list(tuples) and is_integer(width) and width > 0 do
+    wrap? = Keyword.get(opts, :wrap, false)
+
     tuples
     |> group_by_newline()
+    |> maybe_wrap_lines(width, wrap?)
     |> Enum.map(fn group -> line_group_to_row(group, theme) end)
   end
 
@@ -184,6 +192,144 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBody do
     lines
     |> Enum.drop(scroll_offset)
     |> Enum.take(max_lines)
+  end
+
+  # ------------------------------------------------------------------
+  # Private — display-width wrapping
+  # ------------------------------------------------------------------
+
+  defp maybe_wrap_lines(line_groups, _width, false), do: line_groups
+  defp maybe_wrap_lines(line_groups, width, true), do: wrap_lines(line_groups, width)
+
+  defp wrap_lines(line_groups, width) do
+    Enum.flat_map(line_groups, &wrap_line_group(&1, width))
+  end
+
+  defp wrap_line_group([], _width), do: [[]]
+
+  defp wrap_line_group(line_group, width) when is_integer(width) and width > 0 do
+    {lines, current} =
+      line_group
+      |> tokenize_group()
+      |> Enum.reduce({[], []}, fn token, acc -> append_wrap_token(acc, token, width) end)
+
+    finish_wrapped_lines(lines, current)
+  end
+
+  defp tokenize_group(line_group) do
+    Enum.flat_map(line_group, fn {string, style} ->
+      string
+      |> String.split(~r/(\s+)/, include_captures: true, trim: true)
+      |> Enum.map(fn token -> {token, style} end)
+    end)
+  end
+
+  defp append_wrap_token({lines, current}, {token, style}, width) do
+    cond do
+      whitespace?(token) ->
+        append_whitespace_token({lines, current}, {token, style}, width)
+
+      current == [] ->
+        start_wrapped_line(lines, {String.trim_leading(token), style}, width)
+
+      TextWidth.display_width(line_text(current) <> token) <= width ->
+        {lines, current ++ [{token, style}]}
+
+      true ->
+        start_wrapped_line(
+          lines ++ [trim_line_trailing(current)],
+          {String.trim_leading(token), style},
+          width
+        )
+    end
+  end
+
+  defp append_whitespace_token({lines, current}, {token, style}, width) do
+    if current != [] and TextWidth.display_width(line_text(current) <> token) <= width do
+      {lines, current ++ [{token, style}]}
+    else
+      {lines, current}
+    end
+  end
+
+  defp start_wrapped_line(lines, {"", _style}, _width), do: {lines, []}
+
+  defp start_wrapped_line(lines, {token, style}, width) do
+    chunks = split_token(token, style, width, [])
+
+    case chunks do
+      [] ->
+        {lines, []}
+
+      [current] ->
+        {lines, current}
+
+      chunks ->
+        {complete, [current]} = Enum.split(chunks, -1)
+        {lines ++ complete, current}
+    end
+  end
+
+  defp split_token("", _style, _width, chunks), do: Enum.reverse(chunks)
+
+  defp split_token(token, style, width, chunks) do
+    if TextWidth.display_width(token) <= width do
+      Enum.reverse([[{token, style}] | chunks])
+    else
+      {left, right} = TextWidth.split_at(token, width)
+
+      if left == "" do
+        Enum.reverse(chunks)
+      else
+        split_token(right, style, width, [[{left, style}] | chunks])
+      end
+    end
+  end
+
+  defp finish_wrapped_lines([], []), do: [[]]
+  defp finish_wrapped_lines(lines, []), do: Enum.map(lines, &compact_line/1)
+
+  defp finish_wrapped_lines(lines, current),
+    do: Enum.map(lines ++ [trim_line_trailing(current)], &compact_line/1)
+
+  defp whitespace?(token), do: String.match?(token, ~r/^\s+$/)
+
+  defp line_text(line), do: Enum.map_join(line, fn {token, _style} -> token end)
+
+  defp trim_line_trailing(line) do
+    {rev, trimmed?} =
+      line
+      |> Enum.reverse()
+      |> Enum.reduce({[], false}, fn
+        {token, style}, {acc, false} ->
+          trimmed = String.trim_trailing(token)
+
+          cond do
+            trimmed == "" -> {acc, false}
+            trimmed == token -> {[{token, style} | acc], true}
+            true -> {[{trimmed, style} | acc], true}
+          end
+
+        tuple, {acc, true} ->
+          {[tuple | acc], true}
+      end)
+
+    case {rev, trimmed?} do
+      {[], _} -> []
+      {trimmed, _} -> trimmed
+    end
+  end
+
+  defp compact_line(line) do
+    line
+    |> Enum.reduce([], fn
+      {text, style}, [{previous, style} | rest] ->
+        [{previous <> text, style} | rest]
+
+      tuple, acc ->
+        [tuple | acc]
+    end)
+    |> Enum.reverse()
   end
 
   # ------------------------------------------------------------------

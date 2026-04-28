@@ -187,13 +187,13 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
     case Domain.get(sc, :markdown) do
       {:ok, Foglet.Markdown} ->
-        MarkdownBody.render(draft, body_width, theme)
+        MarkdownBody.render(draft, body_width, theme, wrap: true)
 
       {:ok, markdown_mod} ->
-        MarkdownBody.render_tuples(markdown_mod.render(draft), body_width, theme)
+        MarkdownBody.render_tuples(markdown_mod.render(draft), body_width, theme, wrap: true)
 
       {:error, :not_configured} ->
-        MarkdownBody.render(draft, body_width, theme)
+        MarkdownBody.render(draft, body_width, theme, wrap: true)
     end
   end
 

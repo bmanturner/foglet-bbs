@@ -238,7 +238,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     body_width = max(reader_text_width(width) - TextWidth.display_width(gutter) - gutter_gap, 1)
 
     tuples
-    |> MarkdownBody.render_tuples_as_lines(body_width, theme, body_opts([]))
+    |> MarkdownBody.render_tuples_as_lines(body_width, theme, wrap: true)
     |> Enum.map(&clip_body_line(&1, body_width))
     |> Enum.map(fn body_line ->
       row style: %{gap: gutter_gap} do

@@ -1,6 +1,7 @@
 defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
   use ExUnit.Case, async: true
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Post.MarkdownBody
 
@@ -20,6 +21,24 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
   defp collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
   defp collect_text(%{text: t}, acc) when is_binary(t), do: [t | acc]
   defp collect_text(_other, acc), do: acc
+
+  defp text_contents(tree), do: tree |> collect_text_contents([]) |> Enum.reverse()
+
+  defp collect_text_contents(nil, acc), do: acc
+
+  defp collect_text_contents(list, acc) when is_list(list),
+    do: Enum.reduce(list, acc, &collect_text_contents/2)
+
+  defp collect_text_contents(%{children: children} = node, acc) do
+    acc = maybe_add_content(node, acc)
+    collect_text_contents(children, acc)
+  end
+
+  defp collect_text_contents(%{content: content}, acc) when is_binary(content),
+    do: [content | acc]
+
+  defp collect_text_contents(%{text: t}, acc) when is_binary(t), do: [t | acc]
+  defp collect_text_contents(_other, acc), do: acc
 
   defp maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
   defp maybe_add_content(_node, acc), do: acc
@@ -94,6 +113,19 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
     test "single paragraph with inline bold produces exactly 1 line group" do
       result = MarkdownBody.render("hello **world**", 80, theme())
       assert top_level_line_count(result) == 1
+    end
+
+    test "long paragraph wraps into display-width bounded visual lines" do
+      input = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+      result = MarkdownBody.render(input, 24, theme(), wrap: true)
+
+      assert top_level_line_count(result) > 1
+
+      assert result
+             |> text_contents()
+             |> Enum.all?(&(TextWidth.display_width(&1) <= 24))
+
+      refute Enum.any?(text_contents(result), &(&1 == input))
     end
   end
 

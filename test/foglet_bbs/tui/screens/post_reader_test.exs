@@ -597,6 +597,20 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert s1.screen_state[:post_reader].viewport.scroll_top == 0
     end
 
+    test "j scrolls through wrapped visual rows from a long paragraph" do
+      body =
+        Enum.map_join(1..4, " ", fn _ ->
+          "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+        end)
+
+      s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {40, 12}})
+
+      {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+
+      assert s1.screen_state[:post_reader].viewport.scroll_top == 1
+      assert length(s1.screen_state[:post_reader].viewport.children) > 1
+    end
+
     test "N resets viewport.scroll_top to 0 (D-04)" do
       # Use small terminal so scroll works: height 12 → available = 5.
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
