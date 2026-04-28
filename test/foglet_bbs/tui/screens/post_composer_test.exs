@@ -14,8 +14,10 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     def create_reply(_thread_id, _board_id, _user_id, %{body: "locked"}),
       do: {:error, :thread_locked}
 
-    def create_reply(_thread_id, _board_id, _user_id, attrs),
-      do: {:ok, Map.merge(%{id: "new-post"}, attrs)}
+    def create_reply(_thread_id, _board_id, _user_id, attrs) do
+      Process.put(:post_composer_last_reply_body, Map.fetch!(attrs, :body))
+      {:ok, Map.merge(%{id: "new-post"}, attrs)}
+    end
   end
 
   defmodule FakeMarkdown do
@@ -132,6 +134,57 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "draft body"
+  end
+
+  test "render/1 in compact edit mode visually wraps reply body without mutating value", %{
+    state: state
+  } do
+    long_body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+    state = %{with_reply(state, long_body) | terminal_size: {64, 22}}
+
+    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "alpha beta"
+    assert text =~ "iota kappa"
+    assert input_value(state) == long_body
+    refute input_value(state) =~ "\n"
+  end
+
+  test "render/1 reflows reply body between 80x24 and 64x22 without changing logical value",
+       %{state: state} do
+    long_body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+    wide_state = %{with_reply(state, long_body) | terminal_size: {80, 24}}
+    compact_state = %{wide_state | terminal_size: {64, 22}}
+
+    wide_text = PostComposer.render(wide_state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+    compact_text = PostComposer.render(compact_state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert input_value(wide_state) == long_body
+    assert input_value(compact_state) == long_body
+    refute input_value(compact_state) =~ "\n"
+    assert wide_text =~ long_body
+    refute compact_text =~ long_body
+    assert compact_text =~ "alpha beta"
+    assert compact_text =~ "iota kappa"
+  end
+
+  test "Ctrl+S submits the one-line reply body exactly after compact render", %{state: state} do
+    long_body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+    state = %{with_reply(state, long_body) | terminal_size: {64, 22}}
+
+    _ = PostComposer.render(state)
+
+    {:update, final_state, cmds} =
+      PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+    assert final_state.current_screen == :post_reader
+    assert Process.get(:post_composer_last_reply_body) == long_body
+    refute Process.get(:post_composer_last_reply_body) =~ "\n"
+
+    assert Enum.any?(cmds, fn
+             {:load_posts, "t1", _opts} -> true
+             _ -> false
+           end)
   end
 
   test "render/1 in preview mode keeps markdown preview inside the composer shell", %{
