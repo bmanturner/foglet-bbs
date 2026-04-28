@@ -87,11 +87,22 @@ defmodule Foglet.TUI.Screens.Login.State do
     Map.get(login_ss, :sub) || :menu
   end
 
-  @doc "Reads the login screen-state map from the app state."
+  @doc """
+  Reads the login screen-state map from the app state.
+
+  IN-003: when `state.screen_state[:login]` is missing, returns an empty
+  map (`%{}`) rather than a login-form-flavored stub. The previous stub
+  silently masked the missing-state condition for reset-flow callers,
+  which would observe `nil` field values flowing into TextInput
+  rendering. In practice `handle_key/2` routes via
+  `LoginState.sub(state)` before any consumer calls `get/1`, so the
+  fallback is unreachable on the live path; an empty map fails fast at
+  the consumer's first `Map.fetch!/2` instead of corrupting render
+  output.
+  """
   @spec get(map()) :: map()
   def get(state) do
-    Map.get(state.screen_state || %{}, :login) ||
-      %{focused_field: nil, handle_input: nil, password_input: nil, error: nil}
+    Map.get(state.screen_state || %{}, :login) || %{}
   end
 
   @doc "Writes an updated login screen-state map back into the app state."
@@ -102,16 +113,42 @@ defmodule Foglet.TUI.Screens.Login.State do
   end
 
   @doc """
-  Advances focus to the next field.
+  Advances focus to the next field within the login form.
 
-  In the login form only two fields exist: `:handle` ↔ `:password`.
+  Only the login form has a binary `:handle` ↔ `:password` toggle. Other
+  sub-states have their own focus cycles (`next_reset_consume_focus/1` /
+  `prev_reset_consume_focus/1` for `:reset_consume`); calling
+  `toggle_focus/1` on any non-login-form state is a programmer error
+  and will raise `FunctionClauseError` rather than silently writing
+  `:handle` into a state that does not own that atom (WR-002).
   """
   @spec toggle_focus(map()) :: map()
-  def toggle_focus(%{focused_field: :handle} = ss), do: %{ss | focused_field: :password}
-  def toggle_focus(%{focused_field: _} = ss), do: %{ss | focused_field: :handle}
+  def toggle_focus(%{sub: :login_form, focused_field: :handle} = ss),
+    do: %{ss | focused_field: :password}
 
-  @doc "Returns the `input_key` atom for a given `focused_field`."
-  @spec input_key(atom()) :: atom()
+  def toggle_focus(%{sub: :login_form, focused_field: :password} = ss),
+    do: %{ss | focused_field: :handle}
+
+  @typedoc """
+  The exhaustive set of focused-field atoms the Login screen recognises.
+
+  IN-002: kept narrow on purpose. `input_key/1` raises `FunctionClauseError`
+  for any other atom; that is the *correct* behaviour because a state with an
+  unknown focused-field is a programmer error, not a recoverable runtime
+  condition. Adding a fallthrough would mask state-corruption bugs by
+  falling back to `:handle` silently.
+  """
+  @type focused_field ::
+          :handle | :password | :identifier | :token | :password_confirmation
+
+  @doc """
+  Returns the `input_key` atom for a given `focused_field`.
+
+  Exhaustive over the `t:focused_field/0` type. Raises
+  `FunctionClauseError` for any other atom — see the `t:focused_field/0`
+  doc for rationale.
+  """
+  @spec input_key(focused_field()) :: atom()
   def input_key(:handle), do: :handle_input
   def input_key(:password), do: :password_input
   def input_key(:identifier), do: :identifier_input
