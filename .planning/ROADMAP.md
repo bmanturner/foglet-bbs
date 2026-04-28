@@ -158,7 +158,12 @@ Plans:
   3. Every Main Menu navigation row's bracketed key glyph (`[B]`, `[A]`, etc.) renders in the theme accent slot while the label uses the primary slot; a grep test confirms no hardcoded color literals (`IO.ANSI.*`, raw escapes) appear in `main_menu.ex`.
   4. Navigation rows are indented one column from the box left border; the key column is shifted one column left so row alignment matches the design intent.
   5. Switching to the operator-console theme re-renders both panels with theme-routed colors throughout (no hardcoded atoms); verified by snapshot test against both themes.
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 32-01-render-shape-PLAN.md — :panel-typed Navigation/Oneliners with embedded titles, multi-node nav rows (primary label + accent [X] key), one-column inner indent, theme-only colors
+- [ ] 32-02-oneliners-artifact-PLAN.md — Verify Oneliners top-border at widths 64/65/66/80/81; investigate root cause and apply minimal fix if artifact persists
+- [ ] 32-03-test-updates-PLAN.md — Update layout_smoke_test.exs and main_menu_test.exs assertions to match the new render shape; precommit gate
+
 **UI hint**: yes
 
 ### Phase 33: Composer Wrap & Boards Interaction
