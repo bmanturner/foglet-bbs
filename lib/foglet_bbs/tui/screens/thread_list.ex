@@ -2,6 +2,9 @@ defmodule Foglet.TUI.Screens.ThreadList do
   @moduledoc """
   Thread list for a selected board (SSH-07, SSH-08).
 
+  ThreadList is a screen-owned reducer over `ThreadList.State` and route
+  params; App only routes keys, task results, and effects.
+
   Sticky threads rendered first; within each group, newest-activity-first.
   Each row shows title and unread count.
   """

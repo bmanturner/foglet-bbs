@@ -2,8 +2,9 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
   @moduledoc """
   Screen-local state for the selected board's thread directory.
 
-  ThreadList owns selected board route data, loaded rows, selection, and load
-  lifecycle through the Phase 34 `init/1`, `update/3`, and `render/2` contract.
+  ThreadList owns selected board identity, loaded rows, loading status, and
+  selected index through the Phase 34 `init/1`, `update/3`, and `render/2`
+  contract.
   """
 
   alias Foglet.Threads.ThreadEntry

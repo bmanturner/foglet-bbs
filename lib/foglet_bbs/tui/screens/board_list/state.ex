@@ -1,6 +1,9 @@
 defmodule Foglet.TUI.Screens.BoardList.State do
   @moduledoc """
   Screen-local state for the board directory tree.
+
+  Directory rows, `BoardTree` cursor/expansion state, loading status, and
+  subscription feedback are local to the BoardList screen reducer.
   """
 
   alias Foglet.TUI.Widgets.List.BoardTree

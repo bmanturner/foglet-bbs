@@ -19,6 +19,7 @@ defmodule Foglet.TUI.RenderFixtures do
   alias Foglet.TUI.App
   alias Foglet.TUI.SessionContext
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.List.BoardTree
 
   alias Foglet.TUI.Screens.{
     Account,
@@ -174,21 +175,40 @@ defmodule Foglet.TUI.RenderFixtures do
   end
 
   defp populate(:board_list, state, _size) do
+    directory = synthetic_directory()
+    board_tree = BoardTree.init(directory: directory, id: "board-directory")
+
     %{
       state
-      | board_list: synthetic_directory(),
-        screen_state: %{board_list: BoardList.init_screen_state([])}
+      | screen_state: %{
+          board_list:
+            BoardList.State.new(
+              directory: directory,
+              board_tree: board_tree,
+              status: :loaded,
+              feedback: nil
+            )
+        }
     }
   end
 
   defp populate(:thread_list, state, _size) do
     board = hd(synthetic_boards())
+    threads = synthetic_threads(board)
 
     %{
       state
-      | current_board: board,
-        current_thread_list: synthetic_threads(board),
-        screen_state: %{thread_list: ThreadList.init_screen_state([])}
+      | route_params: %{board: board, board_id: board.id},
+        screen_state: %{
+          thread_list:
+            ThreadList.State.new(
+              board: board,
+              board_id: board.id,
+              threads: threads,
+              selected_index: 0,
+              status: :loaded
+            )
+        }
     }
   end
 
@@ -200,7 +220,9 @@ defmodule Foglet.TUI.RenderFixtures do
 
     base = %{
       state
-      | current_board: board,
+      | # Phase 37 compatibility: PostReader still reads top-level board/thread
+        # fields until its own screen-state migration.
+        current_board: board,
         current_thread: thread,
         current_thread_list: threads,
         posts: posts,
@@ -220,7 +242,9 @@ defmodule Foglet.TUI.RenderFixtures do
 
     %{
       state
-      | current_board: board,
+      | # Phase 37 compatibility: PostComposer still reads top-level board/thread
+        # fields until its own screen-state migration.
+        current_board: board,
         current_thread: thread,
         screen_state: %{
           post_composer: PostComposer.init_screen_state(width: max(w - 4, 20), height: 10)

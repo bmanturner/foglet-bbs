@@ -1,5 +1,10 @@
 defmodule Foglet.TUI.Screens.BoardList do
-  @moduledoc "Category-tree board directory (SSH-07, SSH-08)."
+  @moduledoc """
+  Category-tree board directory (SSH-07, SSH-08).
+
+  BoardList is a screen-owned reducer over `BoardList.State` and
+  `Foglet.TUI.Context`; App only routes keys, task results, and effects.
+  """
 
   @behaviour Foglet.TUI.Screen
 

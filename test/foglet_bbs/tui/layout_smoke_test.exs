@@ -19,7 +19,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.Context
   alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Widgets.List.BoardTree
 
   alias Foglet.TUI.Screens.{
     Account,
@@ -92,6 +94,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   defp apply_at_size(tree, {width, height}) do
     Engine.apply_layout(tree, %{width: width, height: height})
+  end
+
+  defp screen_context(screen, user, size, route_params \\ %{}) do
+    Context.new(
+      current_user: user,
+      route: screen,
+      route_params: route_params,
+      terminal_size: size,
+      session_context: %{theme: Foglet.TUI.Theme.default()}
+    )
   end
 
   defp render_login(%App{} = state), do: App.view(%{state | current_screen: :login})
@@ -328,19 +340,24 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         height = @height
         locked_glyph = "⚿"
 
-        state =
-          %Foglet.TUI.App{
-            current_screen: :thread_list,
-            current_user: user,
-            current_board: %{id: "b1", name: "General", slug: "general"},
-            session_context: %{},
-            terminal_size: {width, height},
-            current_thread_list: threads,
-            screen_state: %{thread_list: %{selected_index: 0}}
-          }
-          |> Map.from_struct()
+        board = %{id: "b1", name: "General", slug: "general"}
+        size = {width, height}
 
-        tree = ThreadList.render(state)
+        state =
+          ThreadList.State.new(
+            board: board,
+            board_id: board.id,
+            threads: threads,
+            selected_index: 0,
+            status: :loaded
+          )
+
+        tree =
+          ThreadList.render(
+            state,
+            screen_context(:thread_list, user, size, %{board_id: board.id})
+          )
+
         positioned = apply_at_size(tree, {width, height})
 
         {_y_sticky, sticky_row} = thread_row_elements(positioned, "Sticky")
@@ -516,16 +533,17 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         size = {width, height}
 
         state =
-          %App{
-            current_screen: :board_list,
-            current_user: user,
-            board_list: directory,
-            screen_state: %{board_list: %{selected_index: 0}},
-            terminal_size: size
-          }
-          |> Map.from_struct()
+          BoardList.State.new(
+            directory: directory,
+            board_tree: BoardTree.init(directory: directory, id: "board-directory"),
+            status: :loaded
+          )
 
-        positioned = BoardList.render(state) |> apply_at_size(size)
+        positioned =
+          state
+          |> BoardList.render(screen_context(:board_list, user, size))
+          |> apply_at_size(size)
+
         elements = text_elements(positioned)
         flat = Enum.map_join(elements, "", & &1.text)
 
@@ -591,17 +609,20 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       height = 22
       size = {width, height}
 
-      state =
-        %App{
-          current_screen: :board_list,
-          current_user: user,
-          board_list: overlarge_board_directory(30),
-          screen_state: %{},
-          terminal_size: size
-        }
-        |> Map.from_struct()
+      directory = overlarge_board_directory(30)
 
-      positioned = BoardList.render(state) |> apply_at_size(size)
+      state =
+        BoardList.State.new(
+          directory: directory,
+          board_tree: BoardTree.init(directory: directory, id: "board-directory"),
+          status: :loaded
+        )
+
+      positioned =
+        state
+        |> BoardList.render(screen_context(:board_list, user, size))
+        |> apply_at_size(size)
+
       elements = text_elements(positioned)
       flat = Enum.map_join(elements, "", & &1.text)
 
@@ -633,17 +654,20 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       height = 22
       size = {width, height}
 
-      state =
-        %App{
-          current_screen: :board_list,
-          current_user: user,
-          board_list: overlarge_board_directory(30),
-          screen_state: %{},
-          terminal_size: size
-        }
-        |> Map.from_struct()
+      directory = overlarge_board_directory(30)
 
-      positioned = BoardList.render(state) |> apply_at_size(size)
+      state =
+        BoardList.State.new(
+          directory: directory,
+          board_tree: BoardTree.init(directory: directory, id: "board-directory"),
+          status: :loaded
+        )
+
+      positioned =
+        state
+        |> BoardList.render(screen_context(:board_list, user, size))
+        |> apply_at_size(size)
+
       elements = text_elements(positioned)
 
       detail_row =
@@ -1422,14 +1446,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     user = %{handle: "carol", id: "u2", status: :active, role: :member}
 
-    state = %App{
-      current_user: user,
-      board_list: board_list,
-      screen_state: %{board_list: %{selected_index: 0}},
-      terminal_size: {80, 24}
-    }
+    state =
+      BoardList.State.new(
+        directory: board_list,
+        board_tree: BoardTree.init(directory: board_list, id: "board-directory"),
+        status: :loaded
+      )
 
-    tree = BoardList.render(state)
+    tree = BoardList.render(state, screen_context(:board_list, user, {80, 24}))
     positioned = layout(tree)
 
     elements = text_elements(positioned)
