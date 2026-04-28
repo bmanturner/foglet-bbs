@@ -104,7 +104,7 @@ defmodule Foglet.TUI.AppTest do
         })
 
       assert state.current_screen == :main_menu
-      {state, cmds} = App.update({:load_oneliners}, state)
+      {state, cmds} = App.update({:navigate, :main_menu}, %{state | current_screen: :board_list})
       assert state.current_screen == :main_menu
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 

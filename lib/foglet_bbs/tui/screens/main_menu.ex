@@ -134,6 +134,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {normalize_state(local_state, context), []}
   end
 
+  def update(:load_oneliners, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+    {%{local_state | oneliner_status: :loading}, [load_oneliners_task_effect(context)]}
+  end
+
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
       when c in ["b", "B"] do
     {normalize_state(local_state, context), [Effect.navigate(:board_list), load_boards_effect()]}

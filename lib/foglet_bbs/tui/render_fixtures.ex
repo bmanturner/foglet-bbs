@@ -29,6 +29,7 @@ defmodule Foglet.TUI.RenderFixtures do
     PostComposer,
     PostReader,
     Register,
+    MainMenu,
     Sysop,
     ThreadList,
     Verify
@@ -93,8 +94,6 @@ defmodule Foglet.TUI.RenderFixtures do
       current_thread: nil,
       current_thread_list: nil,
       posts: nil,
-      recent_oneliners: synthetic_oneliners(),
-      selected_oneliner_index: 0,
       read_position: %{}
     }
   end
@@ -164,7 +163,15 @@ defmodule Foglet.TUI.RenderFixtures do
     %{state | screen_state: %{verify: Verify.init_screen_state([])}}
   end
 
-  defp populate(:main_menu, state, _size), do: state
+  defp populate(:main_menu, state, _size) do
+    local_state =
+      state
+      |> App.build_context()
+      |> MainMenu.init()
+      |> MainMenu.State.from_entries(synthetic_oneliners())
+
+    App.put_screen_state(state, :main_menu, local_state)
+  end
 
   defp populate(:board_list, state, _size) do
     %{
