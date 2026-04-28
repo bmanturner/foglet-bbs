@@ -12,7 +12,7 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 
 | Phase | Name | Goal | Requirements |
 |-------|------|------|--------------|
-| 34 | 1/3 | In Progress|  |
+| 34 | 2/3 | In Progress|  |
 | 35 | Auth & Home Screens | Migrate Login, Register, Verify, and MainMenu/oneliners to screen-owned update loops. | SCREEN-01, SCREEN-02 |
 | 36 | Board & Thread Directory Flow | Migrate BoardList and ThreadList, including directory loads, subscription feedback, and route params. | SCREEN-03 |
 | 37 | Post & Composer Flow | Migrate PostReader, PostComposer, and NewThread, including post loads, read-pointer flushes, drafts, and submit results. | SCREEN-04 |

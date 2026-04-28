@@ -9,15 +9,15 @@
 ### Runtime Contract
 
 - [x] **RUNTIME-01**: A screen can define `init/1`, `update/3`, and `render/2` callbacks that operate on screen-local state and `Foglet.TUI.Context`.
-- [ ] **RUNTIME-02**: `Foglet.TUI.App` can route normalized input, subscription, and task-result messages to the active screen without requiring the screen to receive the full App struct.
+- [x] **RUNTIME-02**: `Foglet.TUI.App` can route normalized input, subscription, and task-result messages to the active screen without requiring the screen to receive the full App struct.
 - [x] **RUNTIME-03**: `Foglet.TUI.Context` exposes current user, session context, session pid, terminal size, route params, and domain overrides needed by screens without exposing App internals.
 
 ### Effects
 
 - [x] **EFFECT-01**: Screens can request navigation, tasks, modal operations, publish/session operations, terminal-size/session updates, and quit through explicit `Foglet.TUI.Effect` values.
-- [ ] **EFFECT-02**: `Foglet.TUI.App` interprets effects generically and converts task effects into off-process `Foglet.TUI.Command.task/2` work.
-- [ ] **EFFECT-03**: Task success and failure messages are routed back through screen `update/3` so async result handling belongs to the screen that requested the work.
-- [ ] **EFFECT-04**: Navigation effects initialize target screen state and support route parameters such as selected board, thread, post, or origin.
+- [x] **EFFECT-02**: `Foglet.TUI.App` interprets effects generically and converts task effects into off-process `Foglet.TUI.Command.task/2` work.
+- [x] **EFFECT-03**: Task success and failure messages are routed back through screen `update/3` so async result handling belongs to the screen that requested the work.
+- [x] **EFFECT-04**: Navigation effects initialize target screen state and support route parameters such as selected board, thread, post, or origin.
 
 ### Screen State Ownership
 
@@ -76,12 +76,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | RUNTIME-01 | Phase 34 | Complete |
-| RUNTIME-02 | Phase 34 | Pending |
+| RUNTIME-02 | Phase 34 | Complete |
 | RUNTIME-03 | Phase 34 | Complete |
 | EFFECT-01 | Phase 34 | Complete |
-| EFFECT-02 | Phase 34 | Pending |
-| EFFECT-03 | Phase 34 | Pending |
-| EFFECT-04 | Phase 34 | Pending |
+| EFFECT-02 | Phase 34 | Complete |
+| EFFECT-03 | Phase 34 | Complete |
+| EFFECT-04 | Phase 34 | Complete |
 | STATE-01 | Phase 34 | Pending |
 | STATE-02 | Phase 39 | Pending |
 | STATE-03 | Phase 39 | Pending |

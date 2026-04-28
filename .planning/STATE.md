@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-28T18:18:48.079Z"
+last_updated: "2026-04-28T18:34:10.988Z"
 last_activity: 2026-04-28
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 34 (runtime-contract-effects) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-28
 
@@ -40,6 +40,9 @@ Last activity: 2026-04-28
 - [Phase 34]: New screen callbacks are optional during phases 34-38 so existing production screens keep compiling until migration.
 - [Phase 34]: Foglet.TUI.Effect constructors use precise variant return types for Dialyzer-friendly contracts.
 - [Phase 34]: Foglet.TUI.Context rejects unknown fields to enforce the screen-facing boundary.
+- [Phase 34]: App stores transition route params separately from current_screen so legacy atom routing remains compatible.
+- [Phase 34]: App runtime effect tests register sample screens through session_context.domain.screen_modules rather than production-screen-specific clauses.
+- [Phase 34]: Task effect success/failure routing uses {:screen_task_result, screen_key, op, result} through screen update/3.
 
 ### Pending Todos
 
