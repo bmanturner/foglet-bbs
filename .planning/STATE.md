@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-28T20:12:28.321Z"
-last_activity: 2026-04-28 -- Phase 36 planning complete
+last_updated: "2026-04-28T20:15:13.138Z"
+last_activity: 2026-04-28
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 10
-  completed_plans: 5
-  percent: 50
+  completed_plans: 6
+  percent: 60
 ---
 
 # Project State
@@ -25,9 +25,9 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 35 (auth-home-screens) — EXECUTING
-Plan: 3 of 4
+Plan: 4 of 4
 Status: Ready to execute
-Last activity: 2026-04-28 -- Phase 36 planning complete
+Last activity: 2026-04-28
 
 ## Accumulated Context
 
@@ -49,6 +49,9 @@ Last activity: 2026-04-28 -- Phase 36 planning complete
 - [Phase 35]: [Phase 35-02]: Register and Verify keep their map-shaped state modules while exposing the Phase 34 screen contract.
 - [Phase 35]: [Phase 35-02]: App no longer owns Register or Verify-specific production delegation clauses; onboarding task results route through generic screen_task_result.
 - [Phase 35]: [Phase 35-02]: Register uses session effects for Verify routing, main-menu promotion, and pending-approval termination while App remains the runtime interpreter.
+- [Phase 35-auth-home-screens]: MainMenu now uses a first-class State struct for recent oneliners, selection, pending hide target, status, and form errors.
+- [Phase 35-auth-home-screens]: MainMenu reducer tests assert local state and Effect values instead of legacy handle_key/2 or App top-level oneliner fields.
+- [Phase 35-auth-home-screens]: App still carries transitional oneliner compatibility clauses for Plan 35-04 cleanup, but load results now feed MainMenu screen_state.
 
 ### Pending Todos
 
