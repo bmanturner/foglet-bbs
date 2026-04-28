@@ -5,7 +5,7 @@ milestone_name: milestone
 status: complete
 stopped_at: Phase 33 complete
 last_updated: "2026-04-28T15:46:00.000Z"
-last_activity: 2026-04-28 -- Completed quick task 260428-eyd: Catalogue screen text assertions and identify load-bearing coverage.
+last_activity: 2026-04-28 -- Completed quick task 260428-ezr: On the login screen, remove Actions from the command bar.
 progress:
   total_phases: 8
   completed_phases: 7
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 Phase: 33
 Plan: 3 of 3
 Status: Phase 33 complete; all v1.4 planned phases executed
-Last activity: 2026-04-28 -- Completed quick task 260428-eyd: Catalogue screen text assertions and identify load-bearing coverage.
+Last activity: 2026-04-28 -- Completed quick task 260428-ezr: On the login screen, remove Actions from the command bar.
 
 ## Performance Metrics
 
@@ -135,6 +135,7 @@ No active blockers. Phase planning should preserve delivery honesty, context-lev
 | 260428-evn | Remove Q Quit from the Login command bar and use Ctrl+C as the Login exit key | 2026-04-28 | this commit | Verified | [260428-evn-remove-q-quit-from-the-login-command-bar](./quick/260428-evn-remove-q-quit-from-the-login-command-bar/) |
 | 260428-eug | Remove the guest handle from the chrome for unauthenticated users, leaving only the clock. Also remove the separator (\|) when unauthenticated. | 2026-04-28 | 43e2c9e | Verified | [260428-eug-remove-the-guest-handle-from-the-chrome-](./quick/260428-eug-remove-the-guest-handle-from-the-chrome-/) |
 | 260428-eyd | Catalogue screen text assertions and identify load-bearing coverage | 2026-04-28 | n/a | Catalogue | [260428-eyd-investigate-removing-screen-text-presenc](./quick/260428-eyd-investigate-removing-screen-text-presenc/) |
+| 260428-ezr | On the login screen, remove Actions from the command bar | 2026-04-28 | b4a911b | Verified | [260428-ezr-on-the-login-screen-remove-actions-from-](./quick/260428-ezr-on-the-login-screen-remove-actions-from-/) |
 
 ## Deferred Items
 
