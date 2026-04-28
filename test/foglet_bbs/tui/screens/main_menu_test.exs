@@ -3,7 +3,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   import Foglet.TUI.RenderHelpers
 
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.{MainMenu, ShellVisibility}
+  alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
 
   defp build_state(nil) do
     %Foglet.TUI.App{
@@ -58,10 +61,43 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     ]
   end
 
-  defp rendered_text(state), do: MainMenu.render(state) |> collect_text_values()
+  defp context_from_app(state) do
+    Context.new(
+      current_user: state.current_user,
+      session_context: state.session_context,
+      session_pid: state.session_pid,
+      terminal_size: state.terminal_size,
+      route: state.current_screen,
+      route_params: Map.get(state, :route_params, %{})
+    )
+  end
+
+  defp local_from_app(state) do
+    %MainMenuState{
+      recent_oneliners: Map.get(state, :recent_oneliners, []),
+      selected_oneliner_index: Map.get(state, :selected_oneliner_index, 0),
+      pending_hide_oneliner_id: Map.get(state, :pending_hide_oneliner_id)
+    }
+  end
+
+  defp rendered_text(state) do
+    MainMenu.render(local_from_app(state), context_from_app(state)) |> collect_text_values()
+  end
 
   defp handle_key_result(state, key) do
-    MainMenu.handle_key(%{key: :char, char: key}, state)
+    MainMenu.update({:key, %{key: :char, char: key}}, local_from_app(state), context_from_app(state))
+  end
+
+  defp handle_special_key_result(state, key) do
+    MainMenu.update({:key, %{key: key}}, local_from_app(state), context_from_app(state))
+  end
+
+  defp assert_navigate_effect(effects, screen) do
+    assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: ^screen}}, &1))
+  end
+
+  defp assert_dispatch_effect(effects, message) do
+    assert %Effect{type: :session, payload: {:dispatch, message}} in effects
   end
 
   setup do
@@ -141,7 +177,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       refute String.contains?(row, "body body body body body body body body body body")
     end
 
-    test "Up and Down change app-owned selected_oneliner_index without screen-local state", %{
+    test "Up and Down change MainMenu.State selected_oneliner_index", %{
       state: state
     } do
       state =
@@ -152,17 +188,19 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         ])
         |> with_selected_oneliner(0)
 
-      {:update, down_state, []} = MainMenu.handle_key(%{key: :down}, state)
+      {down_state, []} = handle_special_key_result(state, :down)
       assert down_state.selected_oneliner_index == 1
-      refute Map.has_key?(down_state.screen_state, :main_menu)
+      assert %MainMenuState{} = down_state
 
-      {:update, clamped_down_state, []} = MainMenu.handle_key(%{key: :down}, down_state)
+      {clamped_down_state, []} =
+        MainMenu.update({:key, %{key: :down}}, down_state, context_from_app(state))
+
       assert clamped_down_state.selected_oneliner_index == 1
 
-      {:update, up_state, []} = MainMenu.handle_key(%{key: :up}, clamped_down_state)
+      {up_state, []} = MainMenu.update({:key, %{key: :up}}, clamped_down_state, context_from_app(state))
       assert up_state.selected_oneliner_index == 0
 
-      {:update, clamped_up_state, []} = MainMenu.handle_key(%{key: :up}, up_state)
+      {clamped_up_state, []} = MainMenu.update({:key, %{key: :up}}, up_state, context_from_app(state))
       assert clamped_up_state.selected_oneliner_index == 0
     end
 
@@ -192,8 +230,11 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       texts = rendered_text(state)
 
       refute Enum.any?(texts, &String.contains?(&1, "Hide oneliner"))
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "H"}, state)
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "h"}, state)
+      {local_state, []} = handle_key_result(state, "H")
+      assert local_state == local_from_app(state)
+
+      {local_state, []} = handle_key_result(state, "h")
+      assert local_state == local_from_app(state)
     end
 
     test "mods and sysops see Hide oneliner only for authorized selected rows with ids" do
@@ -206,11 +247,13 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
         assert Enum.any?(rendered_text(hideable_state), &String.contains?(&1, "Hide oneliner"))
 
-        assert {:update, ^hideable_state, [{:open_hide_oneliner_modal, "ol1"}]} =
-                 MainMenu.handle_key(%{key: :char, char: "H"}, hideable_state)
+        {local_state, effects} = handle_key_result(hideable_state, "H")
+        assert local_state.pending_hide_oneliner_id == "ol1"
+        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}}] = effects
 
-        assert {:update, ^hideable_state, [{:open_hide_oneliner_modal, "ol1"}]} =
-                 MainMenu.handle_key(%{key: :char, char: "h"}, hideable_state)
+        {local_state, effects} = handle_key_result(hideable_state, "h")
+        assert local_state.pending_hide_oneliner_id == "ol1"
+        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}}] = effects
 
         missing_id_state =
           role
@@ -219,7 +262,8 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
           |> with_selected_oneliner(0)
 
         refute Enum.any?(rendered_text(missing_id_state), &String.contains?(&1, "Hide oneliner"))
-        assert :no_match = MainMenu.handle_key(%{key: :char, char: "H"}, missing_id_state)
+        {local_state, []} = handle_key_result(missing_id_state, "H")
+        assert local_state == local_from_app(missing_id_state)
       end
     end
 
@@ -231,15 +275,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         |> with_oneliners([oneliner("alice", "profile later", %{id: "ol1"})])
         |> with_selected_oneliner(0)
 
-      assert :no_match = MainMenu.handle_key(%{key: :enter}, state)
-
-      refute inspect(MainMenu.handle_key(%{key: :enter}, state)) =~ "Profile"
-      refute inspect(MainMenu.handle_key(%{key: :enter}, state)) =~ "profile"
+      {local_state, effects} = handle_special_key_result(state, :enter)
+      assert local_state == local_from_app(state)
+      assert effects == []
     end
   end
 
   test "render includes main menu owned text rows", %{state: state} do
-    texts = MainMenu.render(state) |> collect_text_values()
+    texts = rendered_text(state)
 
     # D-11: Welcome line removed.
     refute Enum.any?(texts, &String.starts_with?(&1, "Welcome back")),
@@ -277,55 +320,51 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   test "'B'/'b' navigates to :board_list with {:load_boards} command", %{state: state} do
-    {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "B"}, state)
-    assert s.current_screen == :board_list
-    assert {:load_boards} in cmds
+    {_local, effects} = handle_key_result(state, "B")
+    assert_navigate_effect(effects, :board_list)
+    assert_dispatch_effect(effects, {:load_boards})
 
-    {:update, s2, cmds2} = MainMenu.handle_key(%{key: :char, char: "b"}, state)
-    assert s2.current_screen == :board_list
-    assert {:load_boards} in cmds2
+    {_local, effects} = handle_key_result(state, "b")
+    assert_navigate_effect(effects, :board_list)
+    assert_dispatch_effect(effects, {:load_boards})
   end
 
   test "'C'/'c' navigates to :new_thread and seeds compose screen state", %{state: state} do
-    {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "C"}, state)
-    assert s.current_screen == :new_thread
-    assert {:load_boards_for_new_thread} in cmds
-    assert s.screen_state.new_thread.step == :board
-    assert s.screen_state.new_thread.origin == :main_menu
+    {_local, effects} = handle_key_result(state, "C")
+    assert_navigate_effect(effects, :new_thread)
+    assert_dispatch_effect(effects, {:load_boards_for_new_thread})
 
-    {:update, s2, cmds2} = MainMenu.handle_key(%{key: :char, char: "c"}, state)
-    assert s2.current_screen == :new_thread
-    assert {:load_boards_for_new_thread} in cmds2
-    assert s2.screen_state.new_thread.step == :board
-    assert s2.screen_state.new_thread.origin == :main_menu
+    {_local, effects} = handle_key_result(state, "c")
+    assert_navigate_effect(effects, :new_thread)
+    assert_dispatch_effect(effects, {:load_boards_for_new_thread})
   end
 
   test "'Q'/'q' emits {:terminate, :logout} command", %{state: state} do
-    {:update, _, cmds} = MainMenu.handle_key(%{key: :char, char: "Q"}, state)
-    assert {:terminate, :logout} in cmds
+    {_local, effects} = handle_key_result(state, "Q")
+    assert [%Effect{type: :quit}] = effects
 
-    {:update, _, cmds2} = MainMenu.handle_key(%{key: :char, char: "q"}, state)
-    assert {:terminate, :logout} in cmds2
+    {_local, effects} = handle_key_result(state, "q")
+    assert [%Effect{type: :quit}] = effects
   end
 
   test "'O'/'o' emits open oneliner composer command", %{state: state} do
-    {:update, s, cmds} = MainMenu.handle_key(%{key: :char, char: "O"}, state)
-    assert s == state
-    assert [{:open_oneliner_composer}] = cmds
+    {local, effects} = handle_key_result(state, "O")
+    assert local == local_from_app(state)
+    assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Post Oneliner"}}}] = effects
 
-    {:update, s2, cmds2} = MainMenu.handle_key(%{key: :char, char: "o"}, state)
-    assert s2 == state
-    assert [{:open_oneliner_composer}] = cmds2
+    {local, effects} = handle_key_result(state, "o")
+    assert local == local_from_app(state)
+    assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Post Oneliner"}}}] = effects
   end
 
   test "unknown key returns :no_match", %{state: state} do
-    assert :no_match = MainMenu.handle_key(%{key: :char, char: "z"}, state)
+    assert {local_from_app(state), []} == handle_key_result(state, "z")
   end
 
   describe "Phase 0 shell entry points" do
     test "authenticated user with role :user sees Account menu entry" do
       state = build_state(:user)
-      flat = MainMenu.render(state) |> collect_text_values()
+      flat = rendered_text(state)
       assert Enum.any?(flat, &String.contains?(&1, "Account"))
       # Phase 32 / MENU-03 + MENU-04: nav row is now two text nodes — leading
       # segment with one-column indent + glyph + label, and a separate
@@ -339,19 +378,19 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
     test "role :user does NOT see Moderation menu entry" do
       state = build_state(:user)
-      flat = MainMenu.render(state) |> collect_text_values()
+      flat = rendered_text(state)
       refute Enum.any?(flat, &String.contains?(&1, "Moderation"))
     end
 
     test "role :user does NOT see Sysop menu entry" do
       state = build_state(:user)
-      flat = MainMenu.render(state) |> collect_text_values()
+      flat = rendered_text(state)
       refute Enum.any?(flat, &String.contains?(&1, "Sysop"))
     end
 
     test "role :mod sees Account AND Moderation entries but NOT Sysop" do
       state = build_state(:mod)
-      flat = MainMenu.render(state) |> collect_text_values()
+      flat = rendered_text(state)
       assert Enum.any?(flat, &String.contains?(&1, "Account"))
       assert Enum.any?(flat, &String.contains?(&1, "Moderation"))
       refute Enum.any?(flat, &String.contains?(&1, "Sysop"))
@@ -359,7 +398,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
     test "role :sysop sees Account AND Moderation AND Sysop entries" do
       state = build_state(:sysop)
-      flat = MainMenu.render(state) |> collect_text_values()
+      flat = rendered_text(state)
       assert Enum.any?(flat, &String.contains?(&1, "Account"))
       assert Enum.any?(flat, &String.contains?(&1, "Moderation"))
       assert Enum.any?(flat, &String.contains?(&1, "Sysop"))
@@ -367,49 +406,47 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
     test "'A'/'a' navigates to :account and seeds screen_state" do
       state = build_state(:user)
-      {:update, s, _cmds} = MainMenu.handle_key(%{key: :char, char: "A"}, state)
-      assert s.current_screen == :account
-      assert s.screen_state[:account] != nil
+      {_local, effects} = handle_key_result(state, "A")
+      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :account}}, &1))
 
-      {:update, s2, _cmds2} = MainMenu.handle_key(%{key: :char, char: "a"}, state)
-      assert s2.current_screen == :account
-      assert s2.screen_state[:account] != nil
+      {_local, effects} = handle_key_result(state, "a")
+      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :account}}, &1))
     end
 
     test "'M'/'m' navigates to :moderation for role :mod" do
       state = build_state(:mod)
-      {:update, s, _cmds} = MainMenu.handle_key(%{key: :char, char: "M"}, state)
-      assert s.current_screen == :moderation
+      {_local, effects} = handle_key_result(state, "M")
+      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :moderation}}, &1))
 
-      {:update, s2, _cmds2} = MainMenu.handle_key(%{key: :char, char: "m"}, state)
-      assert s2.current_screen == :moderation
+      {_local, effects} = handle_key_result(state, "m")
+      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :moderation}}, &1))
     end
 
     test "'M'/'m' returns :no_match for role :user (key bound guarded per D-02)" do
       state = build_state(:user)
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "M"}, state)
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "m"}, state)
+      assert {local_from_app(state), []} == handle_key_result(state, "M")
+      assert {local_from_app(state), []} == handle_key_result(state, "m")
     end
 
     test "'S'/'s' navigates to :sysop for role :sysop" do
       state = build_state(:sysop)
-      {:update, s, _cmds} = MainMenu.handle_key(%{key: :char, char: "S"}, state)
-      assert s.current_screen == :sysop
+      {_local, effects} = handle_key_result(state, "S")
+      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :sysop}}, &1))
 
-      {:update, s2, _cmds2} = MainMenu.handle_key(%{key: :char, char: "s"}, state)
-      assert s2.current_screen == :sysop
+      {_local, effects} = handle_key_result(state, "s")
+      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :sysop}}, &1))
     end
 
     test "'S'/'s' returns :no_match for role :mod" do
       state = build_state(:mod)
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "S"}, state)
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "s"}, state)
+      assert {local_from_app(state), []} == handle_key_result(state, "S")
+      assert {local_from_app(state), []} == handle_key_result(state, "s")
     end
 
     test "'S'/'s' returns :no_match for role :user" do
       state = build_state(:user)
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "S"}, state)
-      assert :no_match = MainMenu.handle_key(%{key: :char, char: "s"}, state)
+      assert {local_from_app(state), []} == handle_key_result(state, "S")
+      assert {local_from_app(state), []} == handle_key_result(state, "s")
     end
 
     test "rendered shell rows follow ShellVisibility for every role" do
@@ -449,12 +486,12 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   defp assert_key_visibility(state, key, screen, true) do
-    assert {:update, new_state, _cmds} = handle_key_result(state, key)
-    assert new_state.current_screen == screen
+    {_local_state, effects} = handle_key_result(state, key)
+    assert_navigate_effect(effects, screen)
   end
 
   defp assert_key_visibility(state, key, _screen, false) do
-    assert :no_match = handle_key_result(state, key)
+    assert {local_from_app(state), []} == handle_key_result(state, key)
   end
 
   describe "Phase 19 body visual" do

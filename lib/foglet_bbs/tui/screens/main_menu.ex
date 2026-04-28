@@ -7,7 +7,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
   driven by `Foglet.TUI.Screens.ShellVisibility` predicates to prevent drift
   between MainMenu and the shells (Security Domain mitigation).
 
-  MainMenu remains stateless: no `screen_state[:main_menu]`.
+  MainMenu owns screen-local oneliner state in
+  `Foglet.TUI.Screens.MainMenu.State`: recent rows, selection, pending hide
+  targets, and local oneliner lifecycle errors. App remains the runtime/effect
+  interpreter.
 
   Menu visibility is NOT authorization (Pitfall 3) — real actor-aware authz
   arrives in Phase 1. Phase 0 shells are all read-only placeholders.
@@ -21,10 +24,13 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Authorization
-  alias Foglet.TUI.Screens.{Account, Moderation, ShellVisibility, Sysop}
+  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.Modal
+  alias Foglet.TUI.Screens.{ShellVisibility, MainMenu.State}
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
   import Raxol.Core.Renderer.View
 
@@ -73,8 +79,14 @@ defmodule Foglet.TUI.Screens.MainMenu do
   ]
 
   @impl true
-  @spec render(map()) :: any()
-  def render(state) do
+  @spec init(Context.t()) :: State.t()
+  def init(%Context{} = context), do: State.new(context)
+
+  @impl true
+  @spec render(State.t() | nil, Context.t()) :: any()
+  def render(local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+    state = app_state_from_local(local_state, context)
     user = state.current_user
     theme = Theme.from_state(state)
 
@@ -107,90 +119,122 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: :char, char: c}, state) when c in ["b", "B"] do
-    {:update, %{state | current_screen: :board_list}, [{:load_boards}]}
+  @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
+  def update({:key, %{key: :up}}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+    {State.select_delta(local_state, -1), []}
   end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
-    {w, _h} = state.terminal_size || @default_terminal_size
-
-    ss =
-      Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
-      |> then(&%{&1 | origin: :main_menu})
-
-    new_screen_state = Map.put(state.screen_state, :new_thread, ss)
-
-    {:update, %{state | current_screen: :new_thread, screen_state: new_screen_state},
-     [{:load_boards_for_new_thread}]}
+  def update({:key, %{key: :down}}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+    {State.select_delta(local_state, 1), []}
   end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["o", "O"] do
-    if state.current_user do
-      {:update, state, [{:open_oneliner_composer}]}
+  def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
+    {normalize_state(local_state, context), []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["b", "B"] do
+    {normalize_state(local_state, context), [Effect.navigate(:board_list), load_boards_effect()]}
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["c", "C"] do
+    {normalize_state(local_state, context),
+     [
+       Effect.navigate(:new_thread, %{origin: :main_menu}),
+       load_boards_for_new_thread_effect(context)
+     ]}
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["o", "O"] do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {State.clear_errors(local_state), [Effect.open_modal(oneliner_composer_modal())]}
     else
-      :no_match
+      {local_state, []}
     end
   end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["h", "H"] do
-    case selected_hideable_oneliner(state) do
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["h", "H"] do
+    local_state = normalize_state(local_state, context)
+    app_state = app_state_from_local(local_state, context)
+
+    case selected_hideable_oneliner(app_state) do
       %{id: id} when is_binary(id) and id != "" ->
-        {:update, state, [{:open_hide_oneliner_modal, id}]}
+        local_state = local_state |> State.set_pending_hide(id) |> State.clear_errors()
+        {local_state, [Effect.open_modal(hide_oneliner_modal())]}
 
       _other ->
-        :no_match
+        {local_state, []}
     end
   end
 
-  def handle_key(%{key: :up}, state) do
-    update_selected_oneliner(state, -1)
-  end
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["a", "A"] do
+    local_state = normalize_state(local_state, context)
 
-  def handle_key(%{key: :down}, state) do
-    update_selected_oneliner(state, 1)
-  end
-
-  def handle_key(%{key: :enter}, _state), do: :no_match
-
-  def handle_key(%{key: :char, char: c}, state) when c in ["a", "A"] do
-    if ShellVisibility.account_visible?(state.current_user) do
-      invites? = ShellVisibility.invites_visible?(state.current_user, state.session_context)
-      ss = Account.init_screen_state(invites_visible?: invites?)
-      new_screen_state = Map.put(state.screen_state, :account, ss)
-      {:update, %{state | current_screen: :account, screen_state: new_screen_state}, []}
+    if ShellVisibility.account_visible?(context.current_user) do
+      {local_state, [Effect.navigate(:account)]}
     else
-      :no_match
+      {local_state, []}
     end
   end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["m", "M"] do
-    if ShellVisibility.moderation_visible?(state.current_user) do
-      ss = Moderation.init_screen_state([])
-      new_screen_state = Map.put(state.screen_state, :moderation, ss)
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["m", "M"] do
+    local_state = normalize_state(local_state, context)
 
-      {:update, %{state | current_screen: :moderation, screen_state: new_screen_state},
-       [{:load_moderation_workspace}]}
+    if ShellVisibility.moderation_visible?(context.current_user) do
+      {local_state, [Effect.navigate(:moderation), load_moderation_effect(context)]}
     else
-      :no_match
+      {local_state, []}
     end
   end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["s", "S"] do
-    if ShellVisibility.sysop_visible?(state.current_user) do
-      ss = Sysop.init_screen_state([])
-      new_screen_state = Map.put(state.screen_state, :sysop, ss)
-      {:update, %{state | current_screen: :sysop, screen_state: new_screen_state}, []}
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["s", "S"] do
+    local_state = normalize_state(local_state, context)
+
+    if ShellVisibility.sysop_visible?(context.current_user) do
+      {local_state, [Effect.navigate(:sysop)]}
     else
-      :no_match
+      {local_state, []}
     end
   end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
-    {:update, state, [{:terminate, :logout}]}
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["q", "Q"] do
+    {normalize_state(local_state, context), [Effect.quit()]}
   end
 
-  def handle_key(_key, _state), do: :no_match
+  def update({:task_result, :load_oneliners, {:ok, entries}}, local_state, %Context{} = context)
+      when is_list(entries) do
+    local_state =
+      local_state
+      |> normalize_state(context)
+      |> State.from_entries(entries)
+      |> State.clear_errors()
+
+    {local_state, []}
+  end
+
+  def update({:task_result, :load_oneliners, {:error, reason}}, local_state, %Context{} = context) do
+    local_state =
+      local_state
+      |> normalize_state(context)
+      |> State.put_errors(%{base: "Unable to load oneliners: #{inspect(reason)}"})
+
+    {local_state, []}
+  end
+
+  def update(_message, local_state, %Context{} = context) do
+    {normalize_state(local_state, context), []}
+  end
 
   # --- public data layer (D-01 single-source-of-truth split) ---
 
@@ -247,6 +291,94 @@ defmodule Foglet.TUI.Screens.MainMenu do
   def __nav_panel_inner_width__(state), do: nav_panel_inner_width(state)
 
   # --- private ---
+
+  defp normalize_state(%State{} = state, _context), do: state
+  defp normalize_state(_state, %Context{} = context), do: State.new(context)
+
+  defp app_state_from_local(%State{} = local_state, %Context{} = context) do
+    %{
+      current_screen: :main_menu,
+      current_user: context.current_user,
+      session_context: context.session_context,
+      session_pid: context.session_pid,
+      terminal_size: context.terminal_size || @default_terminal_size,
+      route_params: context.route_params || %{},
+      screen_state: %{main_menu: local_state},
+      recent_oneliners: local_state.recent_oneliners,
+      selected_oneliner_index: local_state.selected_oneliner_index,
+      pending_hide_oneliner_id: local_state.pending_hide_oneliner_id
+    }
+  end
+
+  defp oneliner_composer_modal(errors \\ %{}) do
+    form =
+      ModalForm.init(
+        title: "Post Oneliner",
+        fields: [
+          %{
+            name: :body,
+            type: :text,
+            label: "Oneliner",
+            max_length: 120,
+            placeholder: "120 chars max"
+          }
+        ],
+        on_submit: fn payload -> {:screen_modal_submit, :main_menu, :oneliner_composer, payload} end,
+        on_cancel: fn -> :dismiss_modal end,
+        show_footer: true
+      )
+      |> maybe_set_form_errors(errors)
+
+    %Modal{type: :form, title: "Post Oneliner", message: form}
+  end
+
+  defp hide_oneliner_modal(errors \\ %{}) do
+    form =
+      ModalForm.init(
+        title: "Hide Oneliner",
+        fields: [
+          %{
+            name: :reason,
+            type: :text,
+            label: "Reason",
+            placeholder: "Required",
+            max_length: 240
+          }
+        ],
+        on_submit: fn payload -> {:screen_modal_submit, :main_menu, :hide_oneliner, payload} end,
+        on_cancel: fn -> :dismiss_modal end,
+        show_footer: true
+      )
+      |> maybe_set_form_errors(errors)
+
+    %Modal{type: :form, title: "Hide Oneliner", message: form}
+  end
+
+  defp maybe_set_form_errors(%ModalForm{} = form, errors) when map_size(errors) == 0, do: form
+
+  defp maybe_set_form_errors(%ModalForm{} = form, errors) do
+    form
+    |> ModalForm.set_errors(errors)
+    |> ModalForm.set_submit_state({:error, summarize_form_errors(errors)})
+  end
+
+  defp summarize_form_errors(errors) when is_map(errors) do
+    errors
+    |> Map.values()
+    |> Enum.find("Validation error.", &is_binary/1)
+  end
+
+  defp load_boards_effect do
+    Effect.session({:dispatch, {:load_boards}})
+  end
+
+  defp load_boards_for_new_thread_effect(_context) do
+    Effect.session({:dispatch, {:load_boards_for_new_thread}})
+  end
+
+  defp load_moderation_effect(_context) do
+    Effect.session({:dispatch, {:load_moderation_workspace}})
+  end
 
   defp visible_destination_entries(user) do
     @main_menu_commands
@@ -411,24 +543,6 @@ defmodule Foglet.TUI.Screens.MainMenu do
       |> clip(@oneliner_body_limit)
 
     "@#{handle}  #{body}"
-  end
-
-  defp update_selected_oneliner(state, delta) do
-    entries = visible_oneliners(state)
-
-    case entries do
-      [] ->
-        :no_match
-
-      entries ->
-        selected_index =
-          state
-          |> selected_oneliner_index(entries)
-          |> Kernel.+(delta)
-          |> clamp(0, length(entries) - 1)
-
-        {:update, Map.put(state, :selected_oneliner_index, selected_index), []}
-    end
   end
 
   defp selected_hideable_oneliner(state) do
