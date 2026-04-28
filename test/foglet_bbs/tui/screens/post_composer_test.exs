@@ -284,6 +284,16 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert text == "🐸"
   end
 
+  test "multi-codepoint grapheme keys keep combining marks and joiners", %{state: state} do
+    decomposed = "e\u0301"
+    zwj_sequence = "👩\u200D💻"
+
+    {:update, s1, _} = PostComposer.handle_key(%{key: :char, char: decomposed}, state)
+    {:update, s2, _} = PostComposer.handle_key(%{key: :char, char: zwj_sequence}, s1)
+
+    assert input_value(s2) == decomposed <> zwj_sequence
+  end
+
   # ---------------------------------------------------------------------------
   # Ctrl+S — submit (D-29)
   # ---------------------------------------------------------------------------

@@ -9,6 +9,8 @@ defmodule Foglet.TUI.Widgets.Compose do
   This module is intentionally narrow in scope:
 
     * `translate_key/1` — Raxol key event map → `MultiLineInput.update/2` message
+    * `apply_key/2`     — apply a key event to `%MultiLineInput{}` while
+                           preserving full typed graphemes
     * `render_input/3`   — `%MultiLineInput{}` state → `column` of themed `text/2`
                            rows with a `\u2588` cursor block injected at
                            `cursor_pos` when `focused?` is true
@@ -93,6 +95,46 @@ defmodule Foglet.TUI.Widgets.Compose do
   end
 
   def translate_key(_), do: nil
+
+  @doc """
+  Apply a composer key event to a `%MultiLineInput{}` state.
+
+  Printable typed graphemes can contain multiple codepoints, so character
+  events are expanded and applied in order instead of being truncated to a
+  single `{:input, codepoint}` message.
+  """
+  @spec apply_key(MultiLineInput.t(), key_event()) :: {:ok, MultiLineInput.t()} | :error
+  def apply_key(%MultiLineInput{} = input, %{key: :char, char: c}) when is_binary(c) do
+    c
+    |> String.to_charlist()
+    |> Enum.reject(&(&1 < 32))
+    |> Enum.map(&{:input, &1})
+    |> apply_messages(input)
+  end
+
+  def apply_key(%MultiLineInput{} = input, key_event) do
+    case translate_key(key_event) do
+      nil -> :error
+      msg -> apply_messages([msg], input)
+    end
+  end
+
+  defp apply_messages([], _input), do: :error
+
+  defp apply_messages(messages, input) do
+    Enum.reduce_while(messages, {:ok, input}, fn msg, {:ok, acc} ->
+      case MultiLineInput.update(msg, acc) do
+        {:noreply, next, _cmds} ->
+          {:cont, {:ok, next}}
+
+        next when is_struct(next, MultiLineInput) ->
+          {:cont, {:ok, next}}
+
+        _other ->
+          {:halt, :error}
+      end
+    end)
+  end
 
   # ---------------------------------------------------------------------------
   # Rendering

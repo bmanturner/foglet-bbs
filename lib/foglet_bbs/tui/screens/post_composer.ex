@@ -78,27 +78,16 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   # Forward all other keys to MultiLineInput
   def handle_key(key_event, state) do
-    case Compose.translate_key(key_event) do
-      nil ->
+    ss = composer_screen_state(state)
+    input_st = ss.input_state
+
+    case Compose.apply_key(input_st, key_event) do
+      {:ok, new_input_st} ->
+        new_input_st = enforce_max_len(new_input_st, state)
+        {:update, put_input_state(state, ss, new_input_st), []}
+
+      :error ->
         :no_match
-
-      msg ->
-        ss = composer_screen_state(state)
-        input_st = ss.input_state
-
-        case MultiLineInput.update(msg, input_st) do
-          {:noreply, new_input_st, _cmds} ->
-            new_input_st = enforce_max_len(new_input_st, state)
-            {:update, put_input_state(state, ss, new_input_st), []}
-
-          # update/2 occasionally returns a plain state struct (e.g., focus/blur)
-          new_input_st when is_struct(new_input_st, MultiLineInput) ->
-            new_input_st = enforce_max_len(new_input_st, state)
-            {:update, put_input_state(state, ss, new_input_st), []}
-
-          _other ->
-            :no_match
-        end
     end
   end
 

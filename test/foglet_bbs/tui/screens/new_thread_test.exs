@@ -648,6 +648,20 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert body_value == "hi"
   end
 
+  test "multi-codepoint grapheme keys append intact to body when focused on :body" do
+    state = compose_state()
+    decomposed = "e\u0301"
+    zwj_sequence = "👩\u200D💻"
+
+    {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
+    assert get_ss(s1).focused == :body
+
+    {:update, s2, _} = NewThread.handle_key(%{key: :char, char: decomposed}, s1)
+    {:update, s3, _} = NewThread.handle_key(%{key: :char, char: zwj_sequence}, s2)
+
+    assert get_ss(s3).body_input_state.value == decomposed <> zwj_sequence
+  end
+
   # ---------------------------------------------------------------------------
   # Submit — success path
   # ---------------------------------------------------------------------------

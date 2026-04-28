@@ -89,10 +89,7 @@ defmodule Foglet.TUI.Widgets.ComposeTest do
       assert Compose.translate_key(%{key: :char, char: "."}) == {:input, ?.}
     end
 
-    test "unicode grapheme -> {:input, first codepoint}" do
-      # The implementation takes only the first codepoint — emoji and
-      # multi-codepoint graphemes are truncated. This matches the
-      # original behavior of both composers before extraction.
+    test "unicode grapheme -> {:input, codepoint} for single-codepoint input" do
       assert {:input, cp} = Compose.translate_key(%{key: :char, char: "é"})
       assert is_integer(cp) and cp >= 32
     end
@@ -128,6 +125,40 @@ defmodule Foglet.TUI.Widgets.ComposeTest do
       # pattern matches on %{key: :char, char: _, ctrl: true} in their
       # own handle_key/2.
       assert Compose.translate_key(%{key: :char, char: "s", ctrl: true}) == {:input, ?s}
+    end
+  end
+
+  describe "apply_key/2" do
+    test "single character keys update the input" do
+      input = input_with("", {0, 0})
+
+      assert {:ok, input} = Compose.apply_key(input, %{key: :char, char: "a"})
+      assert input.value == "a"
+    end
+
+    test "typed multi-codepoint graphemes preserve every printable codepoint" do
+      input = input_with("", {0, 0})
+      decomposed = "e\u0301"
+      zwj_sequence = "👩\u200D💻"
+
+      assert {:ok, input} = Compose.apply_key(input, %{key: :char, char: decomposed})
+      assert {:ok, input} = Compose.apply_key(input, %{key: :char, char: zwj_sequence})
+
+      assert input.value == decomposed <> zwj_sequence
+    end
+
+    test "control-only character input is ignored" do
+      input = input_with("", {0, 0})
+
+      assert Compose.apply_key(input, %{key: :char, char: <<1>>}) == :error
+      assert input.value == ""
+    end
+
+    test "non-character keys still use translated editor messages" do
+      input = input_with("ab", {0, 2})
+
+      assert {:ok, input} = Compose.apply_key(input, %{key: :backspace})
+      assert input.value == "a"
     end
   end
 
