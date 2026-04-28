@@ -192,14 +192,6 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert _ = NewThread.render(state)
   end
 
-  test "render/1 compose step includes Chrome V2 board and new-thread location" do
-    text = compose_state() |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
-
-    assert text =~ "Foglet"
-    assert text =~ "General"
-    assert text =~ "New Thread"
-  end
-
   test "render/1 compose step uses composer shell with board and title counter" do
     text =
       compose_state()

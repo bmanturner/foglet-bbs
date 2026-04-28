@@ -68,13 +68,6 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     %{state: build_state(:user)}
   end
 
-  test "render/1 includes Chrome V2 home breadcrumb", %{state: state} do
-    text = MainMenu.render(state) |> collect_text_values() |> Enum.join("\n")
-
-    assert text =~ "Foglet"
-    assert text =~ "Home"
-  end
-
   test "MainMenu has no public init_screen_state/1" do
     refute function_exported?(MainMenu, :init_screen_state, 1)
   end

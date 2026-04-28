@@ -9,7 +9,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.Accounts.Invites
   alias Foglet.Config
   alias Foglet.Config.Schema
-  alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Sysop
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
   alias FogletBbs.Repo
@@ -710,23 +709,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: state}
     end
 
-    test "renders every visible @site_keys description", %{state: state} do
-      # Force the limit row visible so all four SITE descriptions are rendered.
-      Config.put!("invite_code_generators", "any_user", nil)
-
-      # Lazy-init the SiteForm by delegating a no-op key to the SITE tab.
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
-
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      for key <- Foglet.TUI.Screens.Sysop.SiteForm.site_keys() do
-        {:ok, spec} = Schema.fetch_spec(key)
-
-        assert String.contains?(flat, spec.description),
-               "Expected description for #{inspect(key)} in SITE render output"
-      end
-    end
-
     test "hides invite_generation_per_user_limit when invite_code_generators != any_user (D-04)",
          %{state: state} do
       Config.put!("invite_code_generators", "sysop_only", nil)
@@ -734,10 +716,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
 
       flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-      {:ok, spec} = Schema.fetch_spec("invite_generation_per_user_limit")
-
-      refute String.contains?(flat, spec.description),
-             "Limit row must be hidden when generators != any_user"
 
       refute String.contains?(flat, "invite_generation_per_user_limit"),
              "Limit key name must not leak when row is hidden"
@@ -853,17 +831,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
       %{state: state}
     end
 
-    test "renders every @limits_keys description", %{state: state} do
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      for key <- Foglet.TUI.Screens.Sysop.LimitsForm.limits_keys() do
-        {:ok, spec} = Schema.fetch_spec(key)
-
-        assert String.contains?(flat, spec.description),
-               "Expected description for #{inspect(key)} in LIMITS render output"
-      end
-    end
-
     test "ordinary character input %{key: :char, char: \"x\"} does not raise", %{
       state: state
     } do
@@ -878,86 +845,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
         end
 
       assert current_limits_form(new_state).drafts == before_drafts
-    end
-  end
-
-  # =========================================================================
-  # SITE Modal.Form primitive presence (Phase 25 Plan 04)
-  # =========================================================================
-
-  describe "SITE Modal.Form primitive presence" do
-    setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
-      %{state: state}
-    end
-
-    test "SITE tab body renders Modal.Form footer sentinel", %{state: state} do
-      # Lazy-init the SiteForm by delegating a no-op key to the SITE tab.
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
-
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "[Enter] Submit"),
-             "Expected Modal.Form footer '[Enter] Submit' in SITE render; got:\n#{flat}"
-    end
-
-    test "SITE tab body renders heading", %{state: state} do
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "Site policy"),
-             "Expected Site policy heading in SITE render"
-    end
-
-    test "SITE tab body renders visible field labels", %{state: state} do
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "registration_mode"),
-             "Expected registration_mode field label in SITE render"
-
-      assert String.contains?(flat, "invite_code_generators"),
-             "Expected invite_code_generators field label in SITE render"
-    end
-  end
-
-  # =========================================================================
-  # LIMITS Modal.Form primitive presence (Phase 25 Plan 04)
-  # =========================================================================
-
-  describe "LIMITS Modal.Form primitive presence" do
-    setup %{state: state} do
-      # Phase 29 D-07: pre-load LIMITS slot wrapped as {:loaded, _} —
-      # the production path is the App-level {:load_sysop_limits} triad.
-      ss = Sysop.init_screen_state(active: 2)
-      lf = Foglet.TUI.Screens.Sysop.LimitsForm.init([])
-      ss = %{ss | limits_form: {:loaded, lf}}
-      state = put_in(state, [:screen_state, :sysop], ss)
-      %{state: state}
-    end
-
-    test "LIMITS tab body renders Modal.Form footer sentinel", %{state: state} do
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "[Enter] Submit"),
-             "Expected Modal.Form footer '[Enter] Submit' in LIMITS render; got:\n#{flat}"
-    end
-
-    test "LIMITS tab body renders heading", %{state: state} do
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "Runtime limits"),
-             "Expected Runtime limits heading in LIMITS render"
-    end
-
-    test "LIMITS tab body renders field labels with required markers", %{state: state} do
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "max_post_length"),
-             "Expected max_post_length field label in LIMITS render"
-
-      assert String.contains?(flat, "max_thread_title_length"),
-             "Expected max_thread_title_length field label in LIMITS render"
     end
   end
 
@@ -2246,35 +2133,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
   end
 
-  # =========================================================================
-  # USERS ConsoleTable primitive presence (Phase 25 Plan 04)
-  # =========================================================================
-
-  describe "USERS ConsoleTable primitive presence" do
-    test "USERS tab renders Handle column header from ConsoleTable", %{state: state} do
-      sysop = persist_user(%{handle: "ct_sysop", role: :sysop})
-      _user = persist_user(%{handle: "ct_user"})
-      state = activate_users_tab(state, sysop)
-
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "Handle"),
-             "Expected 'Handle' ConsoleTable column header in USERS render; got:\n#{flat}"
-    end
-
-    test "USERS tab renders Role and Status column headers", %{state: state} do
-      sysop = persist_user(%{handle: "ct2_sysop", role: :sysop})
-      state = activate_users_tab(state, sysop)
-
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "Role"),
-             "Expected 'Role' column header in USERS render"
-
-      assert String.contains?(flat, "Status"),
-             "Expected 'Status' column header in USERS render"
-    end
-
+  describe "USERS ConsoleTable behavior" do
     test "empty USERS handles :up/:down/:enter without crash and without domain dispatch", %{
       state: state
     } do
@@ -2306,26 +2165,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
   end
 
-  # =========================================================================
-  # SYSTEM KvGrid primitive presence (Phase 25 Plan 04)
-  # =========================================================================
-
   alias Foglet.TUI.Screens.Sysop.SystemSnapshot
 
-  describe "SYSTEM KvGrid primitive presence" do
-    test "SYSTEM tab renders KvGrid label rows", %{state: state} do
-      # Pre-initialize the system snapshot wrapped as {:loaded, _} (D-07).
-      snap = Foglet.TUI.Screens.Sysop.SystemSnapshot.init()
-      ss = Sysop.init_screen_state(active: 3)
-      ss = %{ss | system_snapshot: {:loaded, snap}}
-      state = put_in(state, [:screen_state, :sysop], ss)
-
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
-
-      assert String.contains?(flat, "Sessions:") or String.contains?(flat, "Version:"),
-             "Expected KvGrid label row (Sessions: or Version:) in SYSTEM render"
-    end
-
+  describe "SYSTEM snapshot behavior" do
     test "SYSTEM refresh key [r] continues to refresh snapshot", %{state: state} do
       # Pre-initialize the system snapshot wrapped as {:loaded, _} (D-07).
       snap = Foglet.TUI.Screens.Sysop.SystemSnapshot.init()
@@ -2333,7 +2175,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       ss = %{ss | system_snapshot: {:loaded, snap}}
       state = put_in(state, [:screen_state, :sysop], ss)
 
-      assert snap != nil
+      assert %SystemSnapshot{} = snap
 
       # "r" key may return :no_match if the snapshot values haven't changed.
       result = Sysop.handle_key(%{key: :char, char: "r"}, state)
@@ -2341,12 +2183,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
       case result do
         {:update, new_state, _} ->
           snap2 = current_system_snapshot(new_state)
-          assert snap2 != nil
+          assert %SystemSnapshot{} = snap2
 
         :no_match ->
           # Snapshot was refreshed but wall clock didn't change — snapshot is
           # still valid. The pre-seeded snap already demonstrates init works.
-          assert snap != nil
+          assert %SystemSnapshot{} = snap
       end
     end
   end

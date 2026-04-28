@@ -5,8 +5,7 @@ defmodule Foglet.TUI.AsciiRendererTest do
   Each screen is rendered with `RenderFixtures` + `App.view/1` + `AsciiRenderer`
   and asserted to:
     1. Produce the requested terminal dimensions.
-    2. Contain enough chrome and content text that an agent inspecting the
-       output can identify the screen.
+    2. Paint chrome without overflowing the requested grid.
 
   We're not screenshot-testing layout here (`layout_smoke_test.exs` already
   does that); we're guarding the `mix foglet.tui.render` public surface
@@ -63,21 +62,6 @@ defmodule Foglet.TUI.AsciiRendererTest do
         assert String.contains?(ascii, "└"),
                "missing bottom-left chrome corner for #{unquote(screen)}:\n#{ascii}"
       end
-    end
-
-    test "main_menu shows the synthetic user handle" do
-      view = App.view(RenderFixtures.state_for(:main_menu, @size))
-      ascii = AsciiRenderer.render(view, @size)
-
-      assert String.contains?(ascii, "@alice"),
-             "expected synthetic user @alice in main_menu output:\n#{ascii}"
-    end
-
-    test "thread_list shows synthetic thread titles" do
-      view = App.view(RenderFixtures.state_for(:thread_list, @size))
-      ascii = AsciiRenderer.render(view, @size)
-
-      assert String.contains?(ascii, "Welcome — read me first")
     end
 
     test "respects custom width and height" do

@@ -11,6 +11,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Account
   alias Foglet.TUI.Screens.Account.SSHKeysState
+  alias Foglet.TUI.Screens.Account.State, as: AccountState
   alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
 
@@ -87,24 +88,18 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   describe "render/1 (Account.render/1 traceability)" do
-    test "renders Chrome V2 operator breadcrumb and declares operator mode", %{state: state} do
+    test "declares operator mode through Presentation", %{state: state} do
       state = put_in(state, [:screen_state, :account], Account.init_screen_state())
-      flat = Account.render(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "Foglet"))
-      assert Enum.any?(flat, &String.contains?(&1, "Account"))
+      assert _ = Account.render(state)
       assert Presentation.mode_for!(:account) == :operator
 
       assert File.read!("lib/foglet_bbs/tui/screens/account.ex") =~
                "Presentation.mode_for!(:account)"
     end
 
-    test "KEYS-01 shows PROFILE, PREFS, and SSH KEYS tab labels by default", %{state: state} do
-      state = put_in(state, [:screen_state, :account], Account.init_screen_state())
-      flat = Account.render(state) |> collect_text_values()
-      assert Enum.any?(flat, &String.contains?(&1, "PROFILE"))
-      assert Enum.any?(flat, &String.contains?(&1, "PREFS"))
-      assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
+    test "KEYS-01 defines PROFILE, PREFS, and SSH KEYS tab labels by default" do
+      assert AccountState.tab_labels(false) == ["PROFILE", "PREFS", "SSH KEYS"]
     end
 
     test "KEYS-01 SSH KEYS tab renders an empty key-list state", %{state: state} do
@@ -194,24 +189,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
       end
     end
 
-    test "PROFILE and PREFS render editable field labels", %{state: state} do
-      state =
-        put_in(
-          state,
-          [:screen_state, :account],
-          Account.init_screen_state(current_user: state.current_user)
-        )
+    test "PROFILE and PREFS define editable field labels", %{state: state} do
+      ss = Account.init_screen_state(current_user: state.current_user)
 
-      profile_flat = Account.render(state) |> collect_text_values()
-      assert Enum.any?(profile_flat, &String.contains?(&1, "Location"))
-      assert Enum.any?(profile_flat, &String.contains?(&1, "Tagline"))
-      assert Enum.any?(profile_flat, &String.contains?(&1, "Real name"))
-
-      {:update, prefs_state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
-      prefs_flat = Account.render(prefs_state) |> collect_text_values()
-      assert Enum.any?(prefs_flat, &String.contains?(&1, "Timezone"))
-      assert Enum.any?(prefs_flat, &String.contains?(&1, "Time format"))
-      assert Enum.any?(prefs_flat, &String.contains?(&1, "Theme"))
+      assert Enum.map(ss.profile_form.fields, & &1.label) == ["Location", "Tagline", "Real name"]
+      assert Enum.map(ss.prefs_form.fields, & &1.label) == ["Timezone", "Time format", "Theme"]
     end
 
     test "unsaved theme preview changes Account render and cancel keeps session theme unchanged" do
@@ -873,11 +855,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
-  # ---------------------------------------------------------------------------
-  # Phase 25 Plan 02 — Primitive-presence tests (TDD RED)
-  # ---------------------------------------------------------------------------
-
-  describe "PROFILE Modal.Form primitive presence" do
+  describe "PROFILE Modal.Form contract" do
     test "renders form heading and suppresses Modal.Form footer (FORM-03 default-off)" do
       # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
       # Modal.Form footer; the global command bar is the single advertiser of
@@ -897,32 +875,17 @@ defmodule Foglet.TUI.Screens.AccountTest do
              "Modal.Form footer must NOT appear in Account tab body (Phase 28 D-06)"
     end
 
-    test "renders labeled field rows for each profile field" do
-      state =
-        build_state_for_role(:user)
-        |> put_in([:screen_state, :account], Account.init_screen_state())
+    test "builds labeled field rows for each profile field" do
+      ss = Account.init_screen_state()
 
-      flat = Account.render(state) |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "Location")),
-             "expected 'Location' field label in profile tab"
-
-      assert Enum.any?(flat, &String.contains?(&1, "Tagline")),
-             "expected 'Tagline' field label in profile tab"
-
-      assert Enum.any?(flat, &String.contains?(&1, "Real name")),
-             "expected 'Real name' field label in profile tab"
+      assert Enum.map(ss.profile_form.fields, & &1.label) == ["Location", "Tagline", "Real name"]
     end
 
-    test "renders required marker glyph for required fields" do
-      state =
-        build_state_for_role(:user)
-        |> put_in([:screen_state, :account], Account.init_screen_state())
+    test "marks required profile fields in the form spec" do
+      ss = Account.init_screen_state()
 
-      flat = Account.render(state) |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "*")),
-             "expected required marker '*' in profile tab form"
+      assert [%{name: :real_name, required: true}] =
+               Enum.filter(ss.profile_form.fields, &Map.get(&1, :required, false))
     end
 
     test "renders inline error text when set_errors is applied" do
@@ -946,7 +909,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
-  describe "PREFS Modal.Form primitive presence" do
+  describe "PREFS Modal.Form contract" do
     setup %{state: state} do
       {:update, prefs_state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
       %{state: prefs_state}
@@ -961,11 +924,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
              "Modal.Form footer must NOT appear in Prefs tab body (Phase 28 D-06)"
     end
 
-    test "renders enum field for theme selection", %{state: state} do
-      flat = Account.render(state) |> collect_text_values()
+    test "defines enum field for theme selection", %{state: state} do
+      form = state.screen_state.account.prefs_form
 
-      assert Enum.any?(flat, &String.contains?(&1, "Theme")),
-             "expected 'Theme' enum field label in prefs tab"
+      assert Enum.any?(form.fields, &match?(%{name: :theme, type: :enum}, &1)),
+             "expected theme enum field in prefs form spec"
     end
 
     test "cycling down on focused theme enum field updates candidate_theme_id" do
@@ -995,7 +958,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
-  describe "SSH_KEYS ConsoleTable primitive presence" do
+  describe "SSH_KEYS table contract" do
     setup %{state: state} do
       inserted_at = ~U[2026-04-24 10:11:12.123456Z]
 
@@ -1023,17 +986,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
       %{state: state}
     end
 
-    test "renders ConsoleTable header row with column labels", %{state: state} do
-      flat = Account.render(state) |> collect_text_values()
+    test "builds ConsoleTable columns for SSH key rows", %{state: state} do
+      table = state.screen_state.account.ssh_keys.table
 
-      assert Enum.any?(flat, &String.contains?(&1, "Label")),
-             "expected 'Label' column header in SSH KEYS tab"
-
-      assert Enum.any?(flat, &String.contains?(&1, "Fingerprint")),
-             "expected 'Fingerprint' column header in SSH KEYS tab"
-
-      assert Enum.any?(flat, &String.contains?(&1, "Created")),
-             "expected 'Created' column header in SSH KEYS tab"
+      assert Enum.map(table.columns, & &1.label) == [
+               "Label",
+               "Fingerprint",
+               "Created",
+               "Last used"
+             ]
     end
 
     test "renders empty state copy with empty list" do

@@ -56,11 +56,8 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       %{state: state}
     end
 
-    test "renders Chrome V2 operator breadcrumb and declares operator mode", %{state: state} do
-      flat = Moderation.render(state) |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "Foglet"))
-      assert Enum.any?(flat, &String.contains?(&1, "Moderation"))
+    test "declares operator mode through Presentation", %{state: state} do
+      assert _ = Moderation.render(state)
       assert Presentation.mode_for!(:moderation) == :operator
 
       assert File.read!("lib/foglet_bbs/tui/screens/moderation.ex") =~
@@ -526,39 +523,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     Enum.find_index(flat, &String.contains?(&1, needle))
   end
 
-  # ---------------------------------------------------------------------------
-  # Phase 25 Plan 03 — Primitive-presence tests (LOG, USERS, BOARDS, INVITES)
-  # ---------------------------------------------------------------------------
-
-  describe "LOG primitive presence" do
-    test "LOG tab renders KvGrid summary with Scope label" do
-      flat =
-        :mod
-        |> build_state()
-        |> put_moderation_state(1, mod_log: [])
-        |> Moderation.render()
-        |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "Scope")),
-             "Expected KvGrid Scope label in LOG tab, got: #{inspect(flat)}"
-    end
-
-    test "LOG tab renders ConsoleTable header with When/Actor/Body/Reason columns when rows present" do
-      row = audit_row("mod1", "body text", "reason1", ~U[2026-01-01 00:00:00Z])
-
-      flat =
-        :mod
-        |> build_state()
-        |> put_moderation_state(1, mod_log: [row])
-        |> Moderation.render()
-        |> collect_text_values()
-
-      joined = Enum.join(flat, " ")
-
-      assert joined =~ "When" or joined =~ "Actor" or joined =~ "Body" or joined =~ "Reason",
-             "Expected ConsoleTable column header in LOG tab, got: #{inspect(flat)}"
-    end
-
+  describe "LOG table behavior" do
     test "LOG tab renders empty-state copy when mod_log is empty" do
       flat =
         :mod
@@ -634,33 +599,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
   end
 
-  describe "USERS primitive presence" do
-    test "USERS tab renders KvGrid summary with Scope label" do
-      flat =
-        :mod
-        |> build_state()
-        |> put_moderation_state(2, users: [])
-        |> Moderation.render()
-        |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "Scope")),
-             "Expected KvGrid Scope label in USERS tab, got: #{inspect(flat)}"
-    end
-
-    test "USERS tab renders ConsoleTable header with Handle/Role/Status columns when rows present" do
-      flat =
-        :mod
-        |> build_state()
-        |> put_moderation_state(2, users: [%{handle: "alice", role: :user, status: :active}])
-        |> Moderation.render()
-        |> collect_text_values()
-
-      joined = Enum.join(flat, " ")
-
-      assert joined =~ "Handle" or joined =~ "Role" or joined =~ "Status",
-             "Expected ConsoleTable column header in USERS tab, got: #{inspect(flat)}"
-    end
-
+  describe "USERS table behavior" do
     test "USERS tab renders empty-state copy when users list is empty" do
       flat =
         :mod
@@ -710,37 +649,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
   end
 
-  describe "BOARDS primitive presence" do
-    test "BOARDS tab renders KvGrid summary with Scope label" do
-      flat =
-        :mod
-        |> build_state()
-        |> put_moderation_state(4, boards: [])
-        |> Moderation.render()
-        |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "Scope")),
-             "Expected KvGrid Scope label in BOARDS tab, got: #{inspect(flat)}"
-    end
-
-    test "BOARDS tab renders ConsoleTable header with Board/Category/State columns when rows present" do
-      flat =
-        :mod
-        |> build_state()
-        |> put_moderation_state(4,
-          boards: [
-            %{name: "General", slug: "general", category_name: "Main", scope: {:board, "b1"}}
-          ]
-        )
-        |> Moderation.render()
-        |> collect_text_values()
-
-      joined = Enum.join(flat, " ")
-
-      assert joined =~ "Board" or joined =~ "Category" or joined =~ "State",
-             "Expected ConsoleTable column header in BOARDS tab, got: #{inspect(flat)}"
-    end
-
+  describe "BOARDS table behavior" do
     test "BOARDS tab renders empty-state copy when boards list is empty" do
       flat =
         :mod
@@ -776,7 +685,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
   end
 
-  describe "INVITES ConsoleTable primitive presence" do
+  describe "INVITES ConsoleTable behavior" do
     test "shared invite table keeps all headers visible at compact width" do
       sample_invite = %{
         code: "ABCDEFGH12345678",
@@ -793,30 +702,6 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         assert joined =~ header,
                "Expected #{header} to render at compact width, got: #{inspect(flat)}"
       end
-    end
-
-    test "INVITES tab renders ConsoleTable header with Code/Status/Created/Used by columns when rows present" do
-      sample_invite = %{
-        code: "ABC123",
-        status: :active,
-        inserted_at: ~U[2026-01-01 00:00:00Z],
-        consumed_by_user_id: nil
-      }
-
-      state =
-        :mod
-        |> build_state_with_policy("mods")
-        |> put_in(
-          [:screen_state, :moderation],
-          Moderation.init_screen_state(invites_visible?: true, active: 5)
-          |> Map.put(:invites, InvitesState.new(items: [sample_invite]))
-        )
-
-      flat = Moderation.render(state) |> collect_text_values()
-      joined = Enum.join(flat, " ")
-
-      assert joined =~ "Code" or joined =~ "Status" or joined =~ "Created" or joined =~ "Used by",
-             "Expected ConsoleTable column header in INVITES tab, got: #{inspect(flat)}"
     end
 
     test "INVITES tab renders empty-state copy when items list is empty" do

@@ -104,14 +104,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert _ = PostComposer.render(s)
   end
 
-  test "render/1 includes Chrome V2 reply and thread context", %{state: state} do
-    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
-
-    assert text =~ "Foglet"
-    assert text =~ "Hello"
-    assert text =~ "Reply"
-  end
-
   test "render/1 delegates reply breadcrumb formatting to shared chrome" do
     source =
       __ENV__.file

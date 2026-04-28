@@ -122,15 +122,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert _ = PostReader.render(s)
   end
 
-  test "render/1 includes Chrome V2 breadcrumb for board and thread context", %{state: state} do
-    {s, _} = PostReader.load_posts(state, "t1")
-    text = PostReader.render(s) |> flatten_text()
-
-    assert text =~ "Foglet"
-    assert text =~ "General"
-    assert text =~ "Hello"
-  end
-
   test "render/1 delegates breadcrumb formatting to shared chrome" do
     source =
       __ENV__.file

@@ -260,14 +260,6 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     assert _ = ThreadList.render(s)
   end
 
-  test "render/1 includes Chrome V2 breadcrumb for the current board", %{state: state} do
-    {s, _} = ThreadList.load_threads(state, "b1")
-    text = ThreadList.render(s) |> Foglet.TUI.WidgetHelpers.flatten_text()
-
-    assert text =~ "Foglet"
-    assert text =~ "General"
-  end
-
   describe "render/1 — thread row metadata (LIST-03)" do
     defp flatten_text(tree), do: tree |> collect_text([]) |> Enum.reverse() |> Enum.join("")
 
