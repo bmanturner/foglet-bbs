@@ -142,7 +142,8 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
       when c in ["b", "B"] do
-    {normalize_state(local_state, context), [Effect.navigate(:board_list), load_boards_effect()]}
+    {normalize_state(local_state, context),
+     [Effect.navigate(:board_list), load_boards_effect(context)]}
   end
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
@@ -513,8 +514,13 @@ defmodule Foglet.TUI.Screens.MainMenu do
     |> Enum.find("Validation error.", &is_binary/1)
   end
 
-  defp load_boards_effect do
-    Effect.session({:dispatch, {:load_boards}})
+  defp load_boards_effect(%Context{} = context) do
+    user = context.current_user
+    boards_mod = domain_module(context, :boards)
+
+    Effect.task(:load_boards, :board_list, fn ->
+      boards_mod.board_directory_for(user)
+    end)
   end
 
   defp load_boards_for_new_thread_effect(_context) do
@@ -541,6 +547,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
+  defp default_domain_module(:boards), do: Foglet.Boards
 
   defp stash_modal_submit(kind, payload) do
     Process.put({Foglet.TUI.App, :pending_screen_modal_submit}, {:main_menu, kind, payload})

@@ -105,6 +105,16 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert %Effect{type: :session, payload: {:dispatch, message}} in effects
   end
 
+  defp assert_board_list_load_task(effects) do
+    assert Enum.any?(
+             effects,
+             &match?(
+               %Effect{type: :task, payload: %{op: :load_boards, screen_key: :board_list}},
+               &1
+             )
+           )
+  end
+
   defp only_task_fun(effects, op) do
     assert [%Effect{type: :task, payload: %{op: ^op, screen_key: :main_menu, fun: fun}}] = effects
     fun
@@ -483,14 +493,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
            "expected '[Q]' bracketed-key segment; got: #{inspect(texts)}"
   end
 
-  test "'B'/'b' navigates to :board_list with {:load_boards} command", %{state: state} do
+  test "'B'/'b' navigates to :board_list with BoardList-owned load task", %{state: state} do
     {_local, effects} = handle_key_result(state, "B")
     assert_navigate_effect(effects, :board_list)
-    assert_dispatch_effect(effects, {:load_boards})
+    assert_board_list_load_task(effects)
 
     {_local, effects} = handle_key_result(state, "b")
     assert_navigate_effect(effects, :board_list)
-    assert_dispatch_effect(effects, {:load_boards})
+    assert_board_list_load_task(effects)
   end
 
   test "'C'/'c' navigates to :new_thread and seeds compose screen state", %{state: state} do

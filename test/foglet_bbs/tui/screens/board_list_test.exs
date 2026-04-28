@@ -156,7 +156,11 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
   test "empty load success sets empty status" do
     {state, []} =
-      BoardList.update({:task_result, :load_boards, {:ok, []}}, BoardList.init(context()), context())
+      BoardList.update(
+        {:task_result, :load_boards, {:ok, []}},
+        BoardList.init(context()),
+        context()
+      )
 
     assert state.directory == []
     assert state.status == :empty
@@ -217,10 +221,11 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
     assert %{board: %{id: "b1"}} = BoardTree.focused_board_entry(state.board_tree)
 
-    assert_navigate(effect, :thread_list, %{
-      board_id: "b1",
-      board: %{id: "b1", name: "General", slug: "general"}
-    })
+    assert effect ==
+             Effect.navigate(:thread_list, %{
+               board_id: "b1",
+               board: %{id: "b1", name: "General", slug: "general"}
+             })
   end
 
   test "'s' on an unsubscribed board emits subscribe task" do
@@ -319,7 +324,8 @@ defmodule Foglet.TUI.Screens.BoardListTest do
   end
 
   test "'Q' returns to main menu through navigation effect" do
-    {state, [effect]} = BoardList.update({:key, %{key: :char, char: "Q"}}, load_state(), context())
+    {state, [effect]} =
+      BoardList.update({:key, %{key: :char, char: "Q"}}, load_state(), context())
 
     assert %BoardList.State{} = state
     assert_navigate(effect, :main_menu, %{})

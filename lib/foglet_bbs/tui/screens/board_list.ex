@@ -71,8 +71,11 @@ defmodule Foglet.TUI.Screens.BoardList do
   def update({:key, %{key: :char, char: "k"}}, local_state, %Context{}),
     do: update_tree(%{key: :up}, local_state)
 
-  def update({:key, %{key: :up}}, local_state, %Context{}), do: update_tree(%{key: :up}, local_state)
-  def update({:key, %{key: :left}}, local_state, %Context{}), do: update_tree(%{key: :left}, local_state)
+  def update({:key, %{key: :up}}, local_state, %Context{}),
+    do: update_tree(%{key: :up}, local_state)
+
+  def update({:key, %{key: :left}}, local_state, %Context{}),
+    do: update_tree(%{key: :left}, local_state)
 
   def update({:key, %{key: :right}}, local_state, %Context{}),
     do: update_tree(%{key: :right}, local_state)
@@ -182,8 +185,12 @@ defmodule Foglet.TUI.Screens.BoardList do
          }, []}
 
       {:error, :board_archived} ->
-        {%{local_state | feedback: "That board is archived.", last_op: nil, last_error: :board_archived},
-         []}
+        {%{
+           local_state
+           | feedback: "That board is archived.",
+             last_op: nil,
+             last_error: :board_archived
+         }, []}
 
       {:error, reason} ->
         {%{
@@ -327,7 +334,10 @@ defmodule Foglet.TUI.Screens.BoardList do
   defp directory_status(_directory), do: :loaded
 
   defp tree_for_state(%State{board_tree: %BoardTree{} = tree}), do: tree
-  defp tree_for_state(%State{directory: directory}) when is_list(directory), do: build_tree(directory)
+
+  defp tree_for_state(%State{directory: directory}) when is_list(directory),
+    do: build_tree(directory)
+
   defp tree_for_state(_state), do: nil
 
   defp build_tree(directory) when is_list(directory) do
@@ -437,7 +447,8 @@ defmodule Foglet.TUI.Screens.BoardList do
     end
   end
 
-  defp domain_module(%Context{} = context, key), do: domain_module_from_session_context(context, key)
+  defp domain_module(%Context{} = context, key),
+    do: domain_module_from_session_context(context, key)
 
   defp domain_module_from_session_context(%Context{session_context: session_context}, :boards) do
     case Domain.get(session_context || %{}, :boards) do
