@@ -87,11 +87,22 @@ defmodule Foglet.TUI.Screens.Login.State do
     Map.get(login_ss, :sub) || :menu
   end
 
-  @doc "Reads the login screen-state map from the app state."
+  @doc """
+  Reads the login screen-state map from the app state.
+
+  IN-003: when `state.screen_state[:login]` is missing, returns an empty
+  map (`%{}`) rather than a login-form-flavored stub. The previous stub
+  silently masked the missing-state condition for reset-flow callers,
+  which would observe `nil` field values flowing into TextInput
+  rendering. In practice `handle_key/2` routes via
+  `LoginState.sub(state)` before any consumer calls `get/1`, so the
+  fallback is unreachable on the live path; an empty map fails fast at
+  the consumer's first `Map.fetch!/2` instead of corrupting render
+  output.
+  """
   @spec get(map()) :: map()
   def get(state) do
-    Map.get(state.screen_state || %{}, :login) ||
-      %{focused_field: nil, handle_input: nil, password_input: nil, error: nil}
+    Map.get(state.screen_state || %{}, :login) || %{}
   end
 
   @doc "Writes an updated login screen-state map back into the app state."
