@@ -146,6 +146,17 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert panel.attrs.height >= 8
     end
 
+    test "caps long masked password display inside the Identify Yourself panel" do
+      rendered_text =
+        form_state([handle: "alice", password: String.duplicate("s", 30)], :password)
+        |> Login.render()
+        |> collect_text_values()
+        |> Enum.join("")
+
+      assert rendered_text =~ String.duplicate("*", 25)
+      refute rendered_text =~ String.duplicate("*", 26)
+    end
+
     test "renders forgot password in email delivery mode (D-01)" do
       Config.put!("delivery_mode", "email")
       email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")

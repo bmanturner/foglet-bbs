@@ -43,6 +43,7 @@ defmodule Foglet.TUI.Screens.Login do
   @menu_keys_no_register [{"L", "Login"}]
   @login_panel_width 40
   @login_panel_height 8
+  @login_input_display_width 25
 
   # WR-001: email-shape validation is delegated to
   # `Foglet.Accounts.Verification.email_shape?/1` so the screen and the
@@ -344,6 +345,7 @@ defmodule Foglet.TUI.Screens.Login do
                   text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
                   TextInput.render(login_ss.handle_input,
                     bordered: false,
+                    cap_display_width: @login_input_display_width,
                     focused: focused == :handle,
                     theme: theme
                   )
@@ -354,6 +356,7 @@ defmodule Foglet.TUI.Screens.Login do
                   text("Password: ", fg: password_label_fg, style: password_label_style),
                   TextInput.render(login_ss.password_input,
                     bordered: false,
+                    cap_display_width: @login_input_display_width,
                     focused: focused == :password,
                     theme: theme
                   )

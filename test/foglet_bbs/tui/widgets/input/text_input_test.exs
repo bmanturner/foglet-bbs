@@ -11,17 +11,6 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
   defp theme, do: Theme.default()
   defp alt_theme, do: Theme.resolve(:danger)
 
-  # Walks the flattened text and returns the display width of the text
-  # before the first "▌" cursor marker.
-  defp width_before_cursor(rendered) do
-    flat = flatten_text(rendered)
-
-    case String.split(flat, "▌", parts: 2) do
-      [before, _after] -> TextWidth.display_width(before)
-      [_no_cursor] -> nil
-    end
-  end
-
   defp width_before_cursor!(rendered) do
     flat = flatten_text(rendered)
 
@@ -123,6 +112,50 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
 
       assert flatten_text(result) == "mytext"
     end
+
+    test "cap_display_width right-scrolls recently typed unmasked characters" do
+      expected = [
+        "a",
+        "ab",
+        "abc",
+        "abcd",
+        "abcde",
+        "bcdef",
+        "cdefg"
+      ]
+
+      {_state, rendered_values} =
+        Enum.reduce(
+          Enum.take(String.graphemes("abcdefghijklmnopqrstuvwxyz"), 7),
+          {TextInput.init([]), []},
+          fn
+            char, {state, acc} ->
+              {next_state, _action} = TextInput.handle_event(%{key: :char, char: char}, state)
+
+              rendered =
+                next_state
+                |> TextInput.render(theme: theme(), focused: false, cap_display_width: 5)
+                |> flatten_text()
+
+              {next_state, acc ++ [rendered]}
+          end
+        )
+
+      assert rendered_values == expected
+    end
+
+    test "cap_display_width does not truncate stored unmasked value" do
+      state =
+        Enum.reduce(String.graphemes("abcdef"), TextInput.init([]), fn char, state ->
+          {next_state, _action} = TextInput.handle_event(%{key: :char, char: char}, state)
+          next_state
+        end)
+
+      rendered = TextInput.render(state, theme: theme(), focused: false, cap_display_width: 5)
+
+      assert flatten_text(rendered) == "bcdef"
+      assert state.raxol_state.value == "abcdef"
+    end
   end
 
   describe "render/2 — insertion cursor (CURSOR-01)" do
@@ -180,6 +213,15 @@ defmodule Foglet.TUI.Widgets.Input.TextInputTest do
       refute serialized =~ "secret"
       assert flatten_text(result) =~ "▌"
       assert flatten_text(result) =~ "***"
+    end
+
+    test "cap_display_width right-scrolls focused masked input before the cursor" do
+      state = TextInput.init(value: "super-secret", mask_char: "*")
+      state = %{state | raxol_state: %{state.raxol_state | cursor_pos: 12}}
+
+      result = TextInput.render(state, theme: theme(), focused: true, cap_display_width: 5)
+
+      assert flatten_text(result) == "*****▌"
     end
   end
 
