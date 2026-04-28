@@ -170,21 +170,22 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp render_body_section(state, ss, theme) do
     body_focused = ss.focused == :body
+    {w, _h} = state.terminal_size || @default_terminal_size
+    body_width = max(w - 4, 20)
 
     case ss.mode do
       :edit ->
         # D-09: delegate to shared widget. NewThread preserves its legacy
         # single-space placeholder for empty lines (see Plan 04-01's opt).
-        Compose.render_input(ss.body_input_state, body_focused, theme,
-          empty_line_placeholder: " "
-        )
+        render_body_input(ss.body_input_state, body_focused, theme, body_width)
 
       :preview ->
-        {w, _h} = state.terminal_size || @default_terminal_size
-        body_width = max(w - 4, 20)
         MarkdownBody.render(ss.body_input_state.value, body_width, theme)
     end
   end
+
+  defp render_body_input(input, focused?, theme, width),
+    do: Compose.render_input(input, focused?, theme, width: width, empty_line_placeholder: " ")
 
   # Key handler
   # ---------------------------------------------------------------------------
