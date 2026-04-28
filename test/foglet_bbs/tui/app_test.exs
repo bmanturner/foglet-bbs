@@ -3,10 +3,10 @@ defmodule Foglet.TUI.AppTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
-  alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Widgets.Input.TextInput

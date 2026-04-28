@@ -24,12 +24,12 @@ defmodule Foglet.TUI.RenderFixtures do
     Account,
     BoardList,
     Login,
+    MainMenu,
     Moderation,
     NewThread,
     PostComposer,
     PostReader,
     Register,
-    MainMenu,
     Sysop,
     ThreadList,
     Verify

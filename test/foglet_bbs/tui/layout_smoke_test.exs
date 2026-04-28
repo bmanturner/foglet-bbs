@@ -24,16 +24,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   alias Foglet.TUI.Screens.{
     Account,
     BoardList,
-    Login,
     MainMenu,
     Moderation,
     NewThread,
     PostComposer,
     PostReader,
-    Register,
     Sysop,
-    ThreadList,
-    Verify
+    ThreadList
   }
 
   alias Foglet.TUI.Widgets.Chrome.KeyBar
@@ -95,6 +92,31 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   defp apply_at_size(tree, {width, height}) do
     Engine.apply_layout(tree, %{width: width, height: height})
+  end
+
+  defp render_login(%App{} = state), do: App.view(%{state | current_screen: :login})
+  defp render_register(%App{} = state), do: App.view(%{state | current_screen: :register})
+  defp render_verify(%App{} = state), do: App.view(%{state | current_screen: :verify})
+
+  defp render_main_menu(state) when is_map(state) do
+    app = app_from_map(state)
+
+    local_state =
+      %MainMenu.State{}
+      |> MainMenu.State.from_entries(Map.get(state, :recent_oneliners, []))
+      |> MainMenu.State.select_index(Map.get(state, :selected_oneliner_index, 0))
+      |> MainMenu.State.set_pending_hide(Map.get(state, :pending_hide_oneliner_id))
+
+    app
+    |> Map.put(:current_screen, :main_menu)
+    |> App.put_screen_state(:main_menu, local_state)
+    |> App.view()
+  end
+
+  defp app_from_map(%App{} = state), do: state
+
+  defp app_from_map(state) when is_map(state) do
+    struct!(App, Map.take(state, Map.keys(%App{})))
   end
 
   defp collect_text(tree), do: tree |> collect_text([]) |> Enum.reverse()
@@ -1052,7 +1074,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       terminal_size: {80, 24}
     }
 
-    tree = Login.render(state)
+    tree = render_login(state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -1083,7 +1105,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       |> Map.from_struct()
       |> Map.put(:recent_oneliners, [%{body: "hello", user: %{handle: "alice"}}])
 
-    tree = MainMenu.render(state)
+    tree = render_main_menu(state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -1151,7 +1173,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         }
       ])
 
-    tree = MainMenu.render(state)
+    tree = render_main_menu(state)
     positioned = layout(tree)
 
     row =
@@ -1193,7 +1215,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           ])
 
         positioned =
-          MainMenu.render(state) |> apply_at_size({width, height})
+          render_main_menu(state) |> apply_at_size({width, height})
 
         elements = text_elements(positioned)
 
@@ -1318,7 +1340,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           %{body: long_body, user: %{handle: long_handle}}
         ])
 
-      positioned = MainMenu.render(state) |> apply_at_size({64, 22})
+      positioned = render_main_menu(state) |> apply_at_size({64, 22})
       elements = text_elements(positioned)
 
       # Every element fits inside 64-col viewport — even with double-width
@@ -1512,7 +1534,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       terminal_size: {80, 24}
     }
 
-    tree = Login.render(state)
+    tree = render_login(state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -1553,7 +1575,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       }
     }
 
-    tree = Register.render(state)
+    tree = render_register(state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -1582,7 +1604,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       }
     }
 
-    tree = Verify.render(state)
+    tree = render_verify(state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -1712,7 +1734,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     screens = [
       {"login form",
-       Login.render(%App{
+       render_login(%App{
          screen_state: %{
            login: %{
              sub: :login_form,
@@ -1725,7 +1747,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
          terminal_size: {80, 24}
        })},
       {"register wizard",
-       Register.render(%App{
+       render_register(%App{
          current_screen: :register,
          terminal_size: {80, 24},
          screen_state: %{
@@ -1744,7 +1766,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
          }
        })},
       {"verify screen",
-       Verify.render(%App{
+       render_verify(%App{
          current_screen: :verify,
          current_user: %{id: "u1", handle: "alice"},
          terminal_size: {80, 24},
@@ -2139,7 +2161,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     test "Login form renders exactly one focused cursor marker at 64x22 and 80x24" do
       for {width, height} <- @cursor_sizes do
         state = %{login_form_fixture() | terminal_size: {width, height}}
-        positioned = state |> Login.render() |> apply_at_size({width, height})
+        positioned = state |> render_login() |> apply_at_size({width, height})
         cursors = collect_cursor_markers(positioned)
 
         assert length(cursors) == 1,
@@ -2151,7 +2173,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     test "Register combined form renders exactly one focused cursor marker at 64x22 and 80x24" do
       for {width, height} <- @cursor_sizes do
         state = %{register_fixture() | terminal_size: {width, height}}
-        positioned = state |> Register.render() |> apply_at_size({width, height})
+        positioned = state |> render_register() |> apply_at_size({width, height})
         cursors = collect_cursor_markers(positioned)
 
         assert length(cursors) == 1,
@@ -2163,7 +2185,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     test "Forgot Password form renders exactly one focused cursor marker at 64x22 and 80x24" do
       for {width, height} <- @cursor_sizes do
         state = %{forgot_password_fixture() | terminal_size: {width, height}}
-        positioned = state |> Login.render() |> apply_at_size({width, height})
+        positioned = state |> render_login() |> apply_at_size({width, height})
         cursors = collect_cursor_markers(positioned)
 
         assert length(cursors) == 1,
@@ -2219,7 +2241,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           }
         }
 
-        positioned = state |> Verify.render() |> apply_at_size({width, height})
+        positioned = state |> render_verify() |> apply_at_size({width, height})
         elements = text_elements(positioned)
         flat = Enum.map_join(elements, "", & &1.text)
 
@@ -2591,7 +2613,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
 
     defp message_text_rows(state, size) do
-      positioned = state |> Login.render() |> apply_at_size(size)
+      positioned = state |> render_login() |> apply_at_size(size)
 
       message_text = get_in(state.screen_state, [:login, :message])
 
@@ -2641,7 +2663,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     test "valid email submission produces multi-row reset confirmation copy at 64x22 (D-12, AUTH-02)" do
       Config.put!("delivery_mode", "email")
       state = reset_request_state_at("anybody@example.test", @reset_compact_size)
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {new_state, []} = App.update({:key, %{key: :enter}}, state)
 
       message = get_in(new_state.screen_state, [:login, :message])
       assert is_binary(message)
@@ -2721,9 +2743,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         end)
 
       state = reset_request_state_at("anybody@example.test", @reset_compact_size)
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {new_state, []} = App.update({:key, %{key: :enter}}, state)
 
-      positioned = new_state |> Login.render() |> apply_at_size(@reset_compact_size)
+      positioned = new_state |> render_login() |> apply_at_size(@reset_compact_size)
       content_rows = positioned |> content_text_elements() |> text_rows()
       joined = content_rows |> Map.values() |> Enum.join(" | ")
 
@@ -2763,9 +2785,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       Config.put!("delivery_mode", "no_email")
 
       state = reset_request_state_at("anybody@example.test", @reset_compact_size)
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {new_state, []} = App.update({:key, %{key: :enter}}, state)
 
-      positioned = new_state |> Login.render() |> apply_at_size(@reset_compact_size)
+      positioned = new_state |> render_login() |> apply_at_size(@reset_compact_size)
       content_rows = positioned |> content_text_elements() |> text_rows()
       joined = content_rows |> Map.values() |> Enum.join(" | ")
 
@@ -2833,7 +2855,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     test "raw reset token is absent from chrome frame elements at 64x22 and 80x24" do
       for {width, height} <- @reset_consume_sizes do
         state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
-        positioned = state |> Login.render() |> apply_at_size({width, height})
+        positioned = state |> render_login() |> apply_at_size({width, height})
 
         chrome_elements =
           positioned
@@ -2853,7 +2875,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     test "raw reset token appears only on the focused token input row at 64x22" do
       state = reset_consume_state_with_token(@reset_consume_sentinel, {64, 22})
-      positioned = state |> Login.render() |> apply_at_size({64, 22})
+      positioned = state |> render_login() |> apply_at_size({64, 22})
 
       sentinel_elements =
         positioned
@@ -2906,7 +2928,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     test "command bar (key hints) row does not include the raw token at 64x22 and 80x24" do
       for {width, height} <- @reset_consume_sizes do
         state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
-        positioned = state |> Login.render() |> apply_at_size({width, height})
+        positioned = state |> render_login() |> apply_at_size({width, height})
 
         bottom_row_text =
           positioned
@@ -2959,7 +2981,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         }
       }
 
-      {:update, after_submit, []} = Login.handle_key(%{key: :enter}, state)
+      {after_submit, []} = App.update({:key, %{key: :enter}}, state)
 
       error = get_in(after_submit.screen_state, [:login, :error])
       assert is_binary(error)
@@ -2969,7 +2991,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
       # And the rendered tree must not place the sentinel anywhere outside the
       # focused token input row.
-      positioned = after_submit |> Login.render() |> apply_at_size({64, 22})
+      positioned = after_submit |> render_login() |> apply_at_size({64, 22})
 
       sentinel_elements =
         positioned

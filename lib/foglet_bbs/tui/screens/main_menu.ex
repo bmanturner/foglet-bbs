@@ -27,7 +27,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   alias Foglet.Authorization
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Modal
-  alias Foglet.TUI.Screens.{ShellVisibility, MainMenu.State}
+  alias Foglet.TUI.Screens.{MainMenu.State, ShellVisibility}
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame

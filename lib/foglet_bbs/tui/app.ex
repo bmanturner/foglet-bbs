@@ -486,12 +486,16 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:set_user, user}, state) do
-    route_screen_update(%{
-      state
-      | current_user: user,
-        current_screen: :main_menu,
-        route_params: %{}
-    }, :main_menu, :load_oneliners)
+    route_screen_update(
+      %{
+        state
+        | current_user: user,
+          current_screen: :main_menu,
+          route_params: %{}
+      },
+      :main_menu,
+      :load_oneliners
+    )
   end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
@@ -555,7 +559,7 @@ defmodule Foglet.TUI.App do
       true ->
         screen_module = screen_module_for(state.current_screen)
 
-        case apply(screen_module, :handle_key, [key_event, state]) do
+        case :erlang.apply(screen_module, :handle_key, [key_event, state]) do
           {:update, new_state, commands} ->
             # process_screen_commands/2 converts I/O dispatch tuples returned by
             # screens (e.g. {:load_boards}, {:load_threads, id}) into real
@@ -993,12 +997,16 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
     end
 
-    route_screen_update(%{
-      state
-      | current_user: user,
-        current_screen: :main_menu,
-        route_params: %{}
-    }, :main_menu, :load_oneliners)
+    route_screen_update(
+      %{
+        state
+        | current_user: user,
+          current_screen: :main_menu,
+          route_params: %{}
+      },
+      :main_menu,
+      :load_oneliners
+    )
   end
 
   defp do_update({:account_save_profile, attrs}, state) when is_map(attrs) do
@@ -1164,7 +1172,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp maybe_init_initial_screen_state(%__MODULE__{} = state) do
-    init_route_screen_state(state, state.current_screen, state.route_params || %{})
+    init_route_screen_state(state, state.current_screen, state.route_params)
   end
 
   defp take_screen_modal_submit do
@@ -1522,7 +1530,7 @@ defmodule Foglet.TUI.App do
          not function_exported?(module, :render, 1) do
       module.render(screen_state_for(state, key), context_for_screen_key(state, key))
     else
-      apply(screen_module_for(state.current_screen), :render, [state])
+      :erlang.apply(screen_module_for(state.current_screen), :render, [state])
     end
   end
 
