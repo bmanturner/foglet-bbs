@@ -1093,19 +1093,39 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     refute Enum.any?(texts, &String.contains?(&1, "Welcome")),
            "Phase 19 D-11 removes the welcome line; got: #{inspect(texts)}"
 
-    # D-07: boxed Navigation + Oneliners panel headers.
-    assert Enum.any?(texts, &(&1 == "Navigation")),
-           "expected 'Navigation' panel header, got: #{inspect(texts)}"
+    # Phase 32 / MENU-01: panel titles are embedded in the box top border via
+    # Raxol's `:panel` element type. Panels.process emits the title as a
+    # positioned :text element with text " Navigation " / " Oneliners "
+    # (with surrounding spaces, see vendor/raxol panels.ex create_title_element).
+    assert Enum.any?(texts, &(&1 == " Navigation ")),
+           "expected embedded ' Navigation ' title (Panels.process overlay), got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 == "Oneliners")),
-           "expected 'Oneliners' panel header, got: #{inspect(texts)}"
+    assert Enum.any?(texts, &(&1 == " Oneliners ")),
+           "expected embedded ' Oneliners ' title (Panels.process overlay), got: #{inspect(texts)}"
 
-    # D-08: glyph-shaped Navigation rows (not [B] bracket rows).
-    assert Enum.any?(texts, &(&1 =~ ~r/●.*Boards.*B$/)),
-           "expected '● Boards    B' row, got: #{inspect(texts)}"
+    # Phase 32 / MENU-01: no bare 'Navigation'/'Oneliners' body-row title remains.
+    refute Enum.any?(texts, &(&1 == "Navigation")),
+           "Phase 32 MENU-01 removes the body-row 'Navigation' title; got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 =~ ~r/↯.*Logout.*Q$/)),
-           "expected '↯ Logout    Q' row, got: #{inspect(texts)}"
+    refute Enum.any?(texts, &(&1 == "Oneliners")),
+           "Phase 32 MENU-01 removes the body-row 'Oneliners' title; got: #{inspect(texts)}"
+
+    # Phase 32 / MENU-03: nav rows compose multiple text nodes — primary-color
+    # leading segment (glyph + label + right-align padding) and accent-color
+    # bracketed-key segment "[X]". Each text node is its own positioned :text
+    # element, so the leading segment and bracketed key appear as separate
+    # entries in `texts`.
+    assert Enum.any?(texts, &(&1 =~ ~r/●\s+Boards/)),
+           "expected '● Boards ...' leading segment, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 == "[B]")),
+           "expected '[B]' bracketed-key segment, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 =~ ~r/↯\s+Logout/)),
+           "expected '↯ Logout ...' leading segment, got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 == "[Q]")),
+           "expected '[Q]' bracketed-key segment, got: #{inspect(texts)}"
 
     # Existing oneliner row format unchanged.
     assert Enum.any?(texts, &String.contains?(&1, "@alice  hello")),
@@ -1195,17 +1215,21 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         end
 
         # ── Both panels present (split_pane has NOT collapsed/stacked). ─────
+        # Phase 32 / MENU-01: panel titles are embedded in the box top border
+        # via Raxol's `:panel` element type. Panels.process emits the title as
+        # a positioned :text element with text " Navigation " / " Oneliners "
+        # (with surrounding spaces, per panels.ex create_title_element).
         nav_header =
-          Enum.find(elements, fn element -> element.text == "Navigation" end)
+          Enum.find(elements, fn element -> element.text == " Navigation " end)
 
         oneliners_header =
-          Enum.find(elements, fn element -> element.text == "Oneliners" end)
+          Enum.find(elements, fn element -> element.text == " Oneliners " end)
 
         assert nav_header,
-               "expected 'Navigation' header at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
+               "expected ' Navigation ' embedded title at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
 
         assert oneliners_header,
-               "expected 'Oneliners' header at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
+               "expected ' Oneliners ' embedded title at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
 
         # ── Side-by-side: Navigation header LEFT of Oneliners header. ───────
         assert nav_header.x < oneliners_header.x,
@@ -1244,10 +1268,18 @@ defmodule Foglet.TUI.LayoutSmokeTest do
             String.starts_with?(element.text, "> @")
           end)
 
+        # Phase 32 / MENU-01: the embedded title " Oneliners " sits at
+        # x = panel_content_x + 1 (the title overlay is offset one column from
+        # the panel's content-area left edge, see vendor/raxol panels.ex
+        # create_title_element). Body-row content starts at panel_content_x,
+        # which is `oneliners_header.x - 1`. We use that as the containment
+        # lower bound.
+        right_panel_content_left = oneliners_header.x - 1
+
         for row <- oneliner_rows do
-          assert row.x >= oneliners_header.x,
+          assert row.x >= right_panel_content_left,
                  "oneliner row bled out of right panel at #{inspect({width, height})}: " <>
-                   "row.x=#{row.x} < oneliners_header.x=#{oneliners_header.x}; row=#{inspect(row)}"
+                   "row.x=#{row.x} < right_panel_content_left=#{right_panel_content_left}; row=#{inspect(row)}"
 
           row_right = row.x + TextWidth.display_width(row.text) - 1
           right_panel_right_inner = width - 2
@@ -1300,20 +1332,27 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end
 
       # Right-panel containment also holds for the CJK fixture.
+      # Phase 32 / MENU-01: title is embedded in the box top border as
+      # " Oneliners " (with surrounding spaces).
       oneliners_header =
-        Enum.find(elements, fn element -> element.text == "Oneliners" end)
+        Enum.find(elements, fn element -> element.text == " Oneliners " end)
 
       assert oneliners_header,
-             "expected 'Oneliners' header in CJK fixture render"
+             "expected ' Oneliners ' embedded title in CJK fixture render"
 
       oneliner_rows =
         Enum.filter(elements, fn element ->
           String.starts_with?(element.text, "> @")
         end)
 
+      # Phase 32 / MENU-01: title overlay is offset one column right of the
+      # content-area left edge (panels.ex create_title_element). Body-row
+      # content starts at `oneliners_header.x - 1`.
+      right_panel_content_left = oneliners_header.x - 1
+
       for row <- oneliner_rows do
-        assert row.x >= oneliners_header.x,
-               "CJK oneliner row bled out of right panel: row.x=#{row.x} < oneliners_header.x=#{oneliners_header.x}; row=#{inspect(row)}"
+        assert row.x >= right_panel_content_left,
+               "CJK oneliner row bled out of right panel: row.x=#{row.x} < right_panel_content_left=#{right_panel_content_left}; row=#{inspect(row)}"
 
         row_right = row.x + TextWidth.display_width(row.text) - 1
         right_panel_right_inner = 64 - 2
