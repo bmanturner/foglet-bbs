@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
-status: executing
-stopped_at: Completed 32-02-oneliners-artifact-PLAN.md
-last_updated: "2026-04-28T03:04:13.514Z"
+status: verifying
+stopped_at: Completed 32-03-test-updates-PLAN.md
+last_updated: "2026-04-28T03:14:47.030Z"
 last_activity: 2026-04-28
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 28
-  completed_plans: 27
-  percent: 96
+  completed_plans: 28
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 
 Phase: 32 (main-menu-chrome-polish) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-28
 
 ## Performance Metrics
@@ -65,6 +65,7 @@ Last activity: 2026-04-28
 | Phase 26 P04 | 6min | 3 tasks | 7 files |
 | Phase 32 P01 | 10min | 3 tasks | 1 files |
 | Phase 32 P02 | 7min | - tasks | - files |
+| Phase 32 P03 | 6m 25s | 3 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -108,6 +109,8 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 32 Plan 01]: Raxol View DSL row macro requires an explicit opts argument (row [], do: ...) — bare row do ... end matches the row/1 function and silently drops do-block contents.
 - [Phase ?]: [Phase 32 Plan 01]: Phase 32 Oneliners |||| artifact root cause is in vendor/raxol/.../split_pane.ex:235 — build_divider/4 paints String.duplicate('|', height) horizontally on a single row instead of as a vertical column. Plan 32-02 owns the fix.
 - [Phase 32]: Plan 32-02: SplitPane horizontal divider painting bug fixed in vendor/raxol — build_divider(:horizontal) now emits per-row :text elements instead of a single horizontally-painted text node. Added optional :divider_char attr (default pipe-character); main_menu passes space so its bordered children supply the visual gap. Repairs Oneliners pipe-artifact at all canonical widths. — split_pane has zero other consumers in the Foglet codebase; D-04 escape clause and threat model T-32-05 explicitly authorize a minimal vendor patch when the root cause is unambiguously in vendor/raxol. The painting orientation defect could not be repaired at the screen level.
+- [Phase 32]: Replace bare-title in-texts assertions in main_menu_test.exs with refute (collect_text_values doesn't expose panel attrs.title) — Phase 32 / MENU-01 deviation Rule 1 — plan instructed assert ' Navigation ' in texts but collect_text_values walks :text children only
+- [Phase 32]: Anchor right-panel containment on oneliners_header.x - 1 in layout_smoke_test.exs — Embedded title overlay sits one column right of the panel content-area left edge per Panels.process.create_title_element
 
 ### Pending Todos
 
@@ -154,6 +157,6 @@ Items acknowledged and deferred at v1.3 close on 2026-04-26:
 
 ## Session Continuity
 
-Last session: 2026-04-28T03:04:13.509Z
-Stopped at: Completed 32-02-oneliners-artifact-PLAN.md
+Last session: 2026-04-28T03:14:47.025Z
+Stopped at: Completed 32-03-test-updates-PLAN.md
 Resume file: None

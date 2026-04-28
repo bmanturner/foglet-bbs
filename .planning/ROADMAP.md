@@ -21,7 +21,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | 29 | Sysop Tab Lifecycle & Bodies | 4/4 | Complete    | 2026-04-27 |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | 4/4 | Complete    | 2026-04-28 |
-| 32 | Main Menu Chrome Polish | 2/3 | In Progress|  |
+| 32 | Main Menu Chrome Polish | 3/3 | Complete   | 2026-04-28 |
 | 33 | Composer Wrap & Boards Interaction | Composer soft-wraps long lines and Enter on a Boards category toggles its expansion | POST-02, BOARD-01 (2) | yes |
 
 ## Phases
@@ -35,7 +35,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [x] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency (completed 2026-04-27)
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
 - [x] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary) (completed 2026-04-28)
-- [ ] **Phase 32: Main Menu Chrome Polish** — Border-embedded titles, no Oneliners glyph artifact, accent-colored nav keys, indent corrections, theme-routed colors
+- [x] **Phase 32: Main Menu Chrome Polish** — Border-embedded titles, no Oneliners glyph artifact, accent-colored nav keys, indent corrections, theme-routed colors (completed 2026-04-28)
 - [ ] **Phase 33: Composer Wrap & Boards Interaction** — Composer soft-wrap via `TextWidth.wrap`, Boards Enter on category toggles expansion
 
 ## Phase Details
@@ -162,7 +162,7 @@ Plans:
 Plans:
 - [x] 32-01-render-shape-PLAN.md — :panel-typed Navigation/Oneliners with embedded titles, multi-node nav rows (primary label + accent [X] key), one-column inner indent, theme-only colors
 - [x] 32-02-oneliners-artifact-PLAN.md — Verify Oneliners top-border at widths 64/65/66/80/81; investigate root cause and apply minimal fix if artifact persists
-- [ ] 32-03-test-updates-PLAN.md — Update layout_smoke_test.exs and main_menu_test.exs assertions to match the new render shape; precommit gate
+- [x] 32-03-test-updates-PLAN.md — Update layout_smoke_test.exs and main_menu_test.exs assertions to match the new render shape; precommit gate
 
 **UI hint**: yes
 
