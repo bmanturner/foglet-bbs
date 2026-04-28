@@ -28,7 +28,7 @@ status: clean
 remediated_findings:
   critical: 1
   warning: 1
-remediation_commit: ea48118
+remediation_commit: 9795ce2
 ---
 
 # Phase 35: Code Review Report
@@ -40,12 +40,12 @@ remediation_commit: ea48118
 
 ## Summary
 
-Reviewed the listed App, auth/home screen reducers, render fixtures, state modules, and focused tests. The initial pass found one blocker and one warning. Both were remediated in `ea48118` by moving optional startup/reset domain work out of synchronous reducer/init paths and into the existing screen task-result boundary.
+Reviewed the listed App, auth/home screen reducers, render fixtures, state modules, and focused tests. The initial pass found one blocker and one warning. Both were remediated in `9795ce2` by moving optional startup/reset domain work out of synchronous reducer/init paths and into the existing screen task-result boundary.
 
 ## Remediation
 
-- `ea48118` removes synchronous authenticated startup oneliner loading from `App.init/1`; initial MainMenu screen state is created without calling the domain boundary, and existing navigation/session paths still request bounded oneliner load tasks.
-- `ea48118` converts password reset delivery and reset-token consumption to `Effect.task/3` operations and handles their results through Login's `:reset_request` and `:reset_token` reducer clauses.
+- `9795ce2` removes synchronous authenticated startup oneliner loading from `App.init/1`; initial MainMenu screen state is created without calling the domain boundary, and existing navigation/session paths still request bounded oneliner load tasks.
+- `9795ce2` converts password reset delivery and reset-token consumption to `Effect.task/3` operations and handles their results through Login's `:reset_request` and `:reset_token` reducer clauses.
 - Verification after remediation:
   - `rtk mix test test/foglet_bbs/tui/screens/login_test.exs test/foglet_bbs/tui/app_test.exs` - passed
   - `rtk mix test test/foglet_bbs/tui/screens/login_test.exs test/foglet_bbs/tui/screens/register_test.exs test/foglet_bbs/tui/screens/verify_test.exs test/foglet_bbs/tui/screens/main_menu_test.exs test/foglet_bbs/tui/app_test.exs test/foglet_bbs/tui/layout_smoke_test.exs && rtk mix compile --warnings-as-errors` - passed
