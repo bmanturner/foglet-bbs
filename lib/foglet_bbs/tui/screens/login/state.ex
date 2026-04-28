@@ -118,8 +118,26 @@ defmodule Foglet.TUI.Screens.Login.State do
   def toggle_focus(%{sub: :login_form, focused_field: :password} = ss),
     do: %{ss | focused_field: :handle}
 
-  @doc "Returns the `input_key` atom for a given `focused_field`."
-  @spec input_key(atom()) :: atom()
+  @typedoc """
+  The exhaustive set of focused-field atoms the Login screen recognises.
+
+  IN-002: kept narrow on purpose. `input_key/1` raises `FunctionClauseError`
+  for any other atom; that is the *correct* behaviour because a state with an
+  unknown focused-field is a programmer error, not a recoverable runtime
+  condition. Adding a fallthrough would mask state-corruption bugs by
+  falling back to `:handle` silently.
+  """
+  @type focused_field ::
+          :handle | :password | :identifier | :token | :password_confirmation
+
+  @doc """
+  Returns the `input_key` atom for a given `focused_field`.
+
+  Exhaustive over the `t:focused_field/0` type. Raises
+  `FunctionClauseError` for any other atom — see the `t:focused_field/0`
+  doc for rationale.
+  """
+  @spec input_key(focused_field()) :: atom()
   def input_key(:handle), do: :handle_input
   def input_key(:password), do: :password_input
   def input_key(:identifier), do: :identifier_input
