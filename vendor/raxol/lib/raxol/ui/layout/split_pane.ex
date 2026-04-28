@@ -22,6 +22,9 @@ defmodule Raxol.UI.Layout.SplitPane do
     * `:direction` - `:horizontal` (side-by-side) or `:vertical` (stacked). Default `:horizontal`.
     * `:ratio` - Tuple of integers for space distribution, e.g. `{1, 2}`. Default `{1, 1}`.
     * `:min_size` - Minimum pane dimension in characters. Default `5`.
+    * `:divider_char` - Character to draw the divider with. Default `"|"` for `:horizontal`,
+      `"-"` for `:vertical`. Pass `" "` (space) when both children render their own borders
+      and a visible divider would visually collide with them.
     * `:id` - Optional identifier for event targeting.
     * `:children` - Child elements (one per pane).
 
@@ -35,6 +38,7 @@ defmodule Raxol.UI.Layout.SplitPane do
     direction = Map.get(opts, :direction, :horizontal)
     ratio = Map.get(opts, :ratio, {1, 1})
     min_size = Map.get(opts, :min_size, @default_min_size)
+    divider_char = Map.get(opts, :divider_char)
     id = Map.get(opts, :id)
     children = Map.get(opts, :children, [])
 
@@ -44,6 +48,7 @@ defmodule Raxol.UI.Layout.SplitPane do
         direction: direction,
         ratio: ratio,
         min_size: min_size,
+        divider_char: divider_char,
         id: id
       },
       children: children
@@ -70,11 +75,12 @@ defmodule Raxol.UI.Layout.SplitPane do
       direction = Map.get(attrs, :direction, :horizontal)
       ratio = Map.get(attrs, :ratio, default_ratio(count))
       min_size = Map.get(attrs, :min_size, @default_min_size)
+      divider_char = Map.get(attrs, :divider_char) || default_divider_char(direction)
       id = Map.get(attrs, :id)
 
       ratio_list = ratio_to_list(ratio, count)
       sizes = distribute_space(direction, ratio_list, space, min_size)
-      divider_elements = render_dividers(direction, sizes, space, id)
+      divider_elements = render_dividers(direction, sizes, space, id, divider_char)
       child_elements = process_pane_children(children, sizes, direction, space)
 
       child_elements ++ divider_elements ++ acc
@@ -206,7 +212,7 @@ defmodule Raxol.UI.Layout.SplitPane do
     end
   end
 
-  defp render_dividers(direction, sizes, space, id) do
+  defp render_dividers(direction, sizes, space, id, divider_char) do
     count = length(sizes)
 
     if count <= 1 do
@@ -217,55 +223,74 @@ defmodule Raxol.UI.Layout.SplitPane do
       |> Enum.with_index()
       |> Enum.reduce({0, []}, fn {size, index}, {offset, dividers} ->
         pos = offset + size
-        divider = build_divider(direction, pos, index, space, id)
-        {pos + @divider_thickness, [divider | dividers]}
+        elements = build_divider(direction, pos, index, space, id, divider_char)
+        {pos + @divider_thickness, Enum.reverse(elements) ++ dividers}
       end)
       |> elem(1)
       |> Enum.reverse()
     end
   end
 
-  defp build_divider(:horizontal, offset, index, space, id) do
+  # A `:horizontal` split's divider is a VERTICAL line one column wide and
+  # `space.height` rows tall. Emit one `:text` element per row so the painter
+  # — which paints text horizontally — produces a column of `divider_char`.
+  # A previous implementation emitted a single `:text` with
+  # `String.duplicate(divider_char, space.height)` at `(x, space.y)`; that is
+  # painted as `space.height` characters across columns starting at `x`,
+  # overpainting whatever the orthogonal pane drew on row `space.y`.
+  defp build_divider(:horizontal, offset, index, space, id, divider_char) do
     x = space.x + offset
 
-    %{
-      type: :text,
-      x: x,
-      y: space.y,
-      text: String.duplicate("|", space.height),
-      attrs: %{
-        component_type: :split_divider,
-        pane_index: index,
-        split_id: id,
-        direction: :horizontal,
-        divider_x: x,
-        divider_y: space.y,
-        divider_width: @divider_thickness,
-        divider_height: space.height
-      }
+    base_attrs = %{
+      component_type: :split_divider,
+      pane_index: index,
+      split_id: id,
+      direction: :horizontal,
+      divider_x: x,
+      divider_y: space.y,
+      divider_width: @divider_thickness,
+      divider_height: space.height
     }
+
+    for row_offset <- 0..(space.height - 1)//1 do
+      %{
+        type: :text,
+        x: x,
+        y: space.y + row_offset,
+        text: divider_char,
+        attrs: base_attrs
+      }
+    end
   end
 
-  defp build_divider(:vertical, offset, index, space, id) do
+  # A `:vertical` split's divider is a HORIZONTAL line painted across the
+  # row at `space.y + offset`. The single-`:text`-with-duplicated-char form
+  # works correctly here because the painter is itself horizontal.
+  defp build_divider(:vertical, offset, index, space, id, divider_char) do
     y = space.y + offset
 
-    %{
-      type: :text,
-      x: space.x,
-      y: y,
-      text: String.duplicate("-", space.width),
-      attrs: %{
-        component_type: :split_divider,
-        pane_index: index,
-        split_id: id,
-        direction: :vertical,
-        divider_x: space.x,
-        divider_y: y,
-        divider_width: space.width,
-        divider_height: @divider_thickness
+    [
+      %{
+        type: :text,
+        x: space.x,
+        y: y,
+        text: String.duplicate(divider_char, space.width),
+        attrs: %{
+          component_type: :split_divider,
+          pane_index: index,
+          split_id: id,
+          direction: :vertical,
+          divider_x: space.x,
+          divider_y: y,
+          divider_width: space.width,
+          divider_height: @divider_thickness
+        }
       }
-    }
+    ]
   end
+
+  defp default_divider_char(:horizontal), do: "|"
+  defp default_divider_char(:vertical), do: "-"
 
   defp process_pane_children(children, sizes, direction, space) do
     children

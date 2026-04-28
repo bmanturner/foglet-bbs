@@ -85,11 +85,21 @@ defmodule Foglet.TUI.Screens.MainMenu do
     menu_panel = nav_panel(destinations, theme, inner_width)
     oneliners_panel_widget = oneliners_panel(state, theme)
 
+    # `divider_char: " "` (space) — both panels render their own `│` borders, so
+    # a visible split-pane divider would visually collide with them (`│ │ │`).
+    # Without this, the split_pane divider's character (default `"|"`) would
+    # appear at column `split_x` on every row and clobber the right panel's
+    # `┌─ Oneliners ─` top-border title segment (Phase 32 MENU-02). The fix
+    # for the painter orientation lives in
+    # `vendor/raxol/lib/raxol/ui/layout/split_pane.ex`'s `build_divider/6`;
+    # passing a space here is the screen-level half of the fix and makes the
+    # divider effectively transparent so panel borders supply the visual gap.
     content =
       split_pane(
         direction: :horizontal,
         ratio: {2, 3},
         min_size: 18,
+        divider_char: " ",
         children: [menu_panel, oneliners_panel_widget]
       )
 
