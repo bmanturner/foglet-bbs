@@ -22,6 +22,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.Sessions.Preferences
   alias Foglet.Sessions.Session
   alias Foglet.Threads.ThreadEntry
+  alias Foglet.TUI.Context
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
   alias Foglet.TUI.Screens.Account.State, as: AccountState
@@ -55,6 +56,7 @@ defmodule Foglet.TUI.App do
           session_context: Foglet.TUI.SessionContext.t() | map(),
           session_pid: pid() | nil,
           terminal_size: {pos_integer(), pos_integer()},
+          route_params: map(),
           modal: Foglet.TUI.Modal.t() | nil,
           screen_state: map(),
           board_list: list() | nil,
@@ -74,6 +76,7 @@ defmodule Foglet.TUI.App do
             session_context: %Foglet.TUI.SessionContext{},
             session_pid: nil,
             terminal_size: {80, 24},
+            route_params: %{},
             modal: nil,
             screen_state: %{},
             board_list: nil,
@@ -86,6 +89,64 @@ defmodule Foglet.TUI.App do
             pending_hide_oneliner_id: nil,
             read_position: %{},
             composer_draft: nil
+
+  @doc """
+  Returns the current route value.
+
+  During the Phase 34 transition App still stores the route screen in
+  `current_screen`; route params are stored separately so legacy screens can
+  continue to receive an atom route until their migration phase.
+  """
+  @spec current_route(t()) :: atom() | {atom(), map()}
+  def current_route(%__MODULE__{current_screen: screen, route_params: params})
+      when is_map(params) and map_size(params) > 0 do
+    {screen, params}
+  end
+
+  def current_route(%__MODULE__{current_screen: screen}), do: screen
+
+  @doc "Returns the storage key for a screen route."
+  @spec screen_key(atom() | {atom(), map()}) :: atom()
+  def screen_key({screen, _params}), do: screen
+  def screen_key(screen) when is_atom(screen), do: screen
+
+  @doc "Returns the local state for the current screen key."
+  @spec current_screen_state(t()) :: term()
+  def current_screen_state(%__MODULE__{} = state) do
+    screen_state_for(state, screen_key(current_route(state)))
+  end
+
+  @doc "Returns screen-local state stored under `key`."
+  @spec screen_state_for(t(), term()) :: term()
+  def screen_state_for(%__MODULE__{screen_state: screen_state}, key) do
+    Map.get(screen_state || %{}, key)
+  end
+
+  @doc "Stores screen-local state under `key` without changing legacy App fields."
+  @spec put_screen_state(t(), term(), term()) :: t()
+  def put_screen_state(%__MODULE__{} = state, key, local_state) do
+    %{state | screen_state: Map.put(state.screen_state || %{}, key, local_state)}
+  end
+
+  @doc "Builds the narrow runtime context passed to new screen reducers."
+  @spec build_context(t()) :: Context.t()
+  def build_context(%__MODULE__{} = state) do
+    build_context(state, state.route_params || %{})
+  end
+
+  @doc "Builds a screen context with explicit route params."
+  @spec build_context(t(), map()) :: Context.t()
+  def build_context(%__MODULE__{} = state, route_params) when is_map(route_params) do
+    Context.new(
+      current_user: state.current_user,
+      session_context: state.session_context,
+      session_pid: state.session_pid,
+      terminal_size: state.terminal_size,
+      route: state.current_screen,
+      route_params: route_params,
+      domain: domain_from_session_context(state.session_context)
+    )
+  end
 
   # --- Raxol callbacks ---
 
@@ -1101,6 +1162,15 @@ defmodule Foglet.TUI.App do
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
   defp default_domain_module(:moderation), do: Foglet.Moderation
   defp default_domain_module(:accounts), do: Foglet.Accounts
+
+  defp domain_from_session_context(session_context) when is_map(session_context) do
+    case Map.get(session_context, :domain) do
+      domain when is_map(domain) -> domain
+      _ -> %{}
+    end
+  end
+
+  defp domain_from_session_context(_session_context), do: %{}
 
   defp maybe_load_initial_oneliners(%{current_screen: :main_menu, current_user: user} = state)
        when not is_nil(user) do
