@@ -20,13 +20,13 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 36 — board-thread-directory-flow
+**Current focus:** Phase 37 — post-composer-flow
 
 ## Current Position
 
 Phase: 37
 Plan: Not started
-Status: Executing Phase 36
+Status: Ready to plan Phase 37
 Last activity: 2026-04-28
 
 ## Accumulated Context
