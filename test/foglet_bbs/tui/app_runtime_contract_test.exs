@@ -56,7 +56,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
   describe "route and screen-state helpers" do
     test "read and write screen-local state without mutating legacy fields" do
-      state = state()
+      state = state(session_pid: self())
 
       assert App.current_route(state) == :main_menu
       assert App.screen_key(:sample_runtime) == :sample_runtime
@@ -93,7 +93,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
   describe "generic non-task effect interpretation" do
     test "navigate initializes only the target state and carries route params" do
-      state = state()
+      state = state(session_pid: self())
 
       {new_state, cmds} =
         App.apply_effect(state, Effect.navigate(:sample_runtime, %{board_id: "b1"}))
@@ -117,7 +117,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
     test "modal, session, terminal, publish, and quit effects are generic" do
       user = %Foglet.Accounts.User{id: "u2", handle: "bob"}
       modal = %Modal{type: :info, message: "hello"}
-      state = state()
+      state = state(session_pid: self())
 
       {with_modal, []} = App.apply_effect(state, Effect.open_modal(modal))
       assert with_modal.modal == modal
@@ -133,10 +133,30 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       {resized, []} = App.apply_effect(with_user, Effect.terminal_size({120, 40}))
       assert resized.terminal_size == {120, 40}
 
-      assert {^resized, []} = App.apply_effect(resized, Effect.publish("topic", :message))
+      assert {^resized, []} = App.apply_effect(resized, Effect.session({:heartbeat, self()}))
+      assert_receive {:heartbeat, pid} when pid == self()
+
+      topic = "test:phase-34:#{System.unique_integer([:positive])}"
+      Phoenix.PubSub.subscribe(FogletBbs.PubSub, topic)
+
+      assert {^resized, []} = App.apply_effect(resized, Effect.publish(topic, :message))
+      assert_receive :message
 
       assert {_same_state, [%Raxol.Core.Runtime.Command{type: :quit}]} =
                App.apply_effect(resized, Effect.quit())
+    end
+
+    test "legacy navigation clears route params from effect navigation" do
+      {with_params, []} =
+        App.apply_effect(state(), Effect.navigate(:sample_runtime, %{thread_id: "t1"}))
+
+      assert App.current_route(with_params) == {:sample_runtime, %{thread_id: "t1"}}
+
+      {without_params, []} = App.update({:navigate, :main_menu}, with_params)
+
+      assert without_params.current_screen == :main_menu
+      assert without_params.route_params == %{}
+      assert App.current_route(without_params) == :main_menu
     end
   end
 

@@ -177,6 +177,15 @@ defmodule Foglet.TUI.App do
     update({:set_user, user}, state)
   end
 
+  def apply_effect(%__MODULE__{session_pid: session_pid} = state, %Effect{
+        type: :session,
+        payload: message
+      }) do
+    if is_pid(session_pid), do: send(session_pid, message)
+
+    {state, []}
+  end
+
   def apply_effect(%__MODULE__{} = state, %Effect{
         type: :terminal,
         payload: {:size, {cols, rows}}
@@ -184,7 +193,12 @@ defmodule Foglet.TUI.App do
     update({:window_change, cols, rows}, state)
   end
 
-  def apply_effect(%__MODULE__{} = state, %Effect{type: :publish}) do
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :publish,
+        payload: %{topic: topic, message: message}
+      }) do
+    Phoenix.PubSub.broadcast(FogletBbs.PubSub, topic, message)
+
     {state, []}
   end
 
@@ -448,7 +462,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:navigate, screen}, state) when is_atom(screen) do
-    new_state = %{state | current_screen: screen, modal: nil}
+    new_state = %{state | current_screen: screen, route_params: %{}, modal: nil}
 
     cond do
       screen == :main_menu and new_state.current_user ->
@@ -466,7 +480,12 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:set_user, user}, state) do
-    do_update({:load_oneliners}, %{state | current_user: user, current_screen: :main_menu})
+    do_update({:load_oneliners}, %{
+      state
+      | current_user: user,
+        current_screen: :main_menu,
+        route_params: %{}
+    })
   end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
@@ -1134,7 +1153,12 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
     end
 
-    do_update({:load_oneliners}, %{state | current_user: user, current_screen: :main_menu})
+    do_update({:load_oneliners}, %{
+      state
+      | current_user: user,
+        current_screen: :main_menu,
+        route_params: %{}
+    })
   end
 
   defp do_update({:account_save_profile, attrs}, state) when is_map(attrs) do
