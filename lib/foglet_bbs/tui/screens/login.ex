@@ -42,11 +42,11 @@ defmodule Foglet.TUI.Screens.Login do
   @menu_keys [{"L", "Login"}, {"R", "Register"}, {"Q", "Quit"}]
   @menu_keys_no_register [{"L", "Login"}, {"Q", "Quit"}]
 
-  # Email-shape regex mirrors Foglet.Accounts.Verification's @email_shape_regex
-  # so reset request input acceptance and Verification's email-shape gate stay
-  # aligned. Local validation happens before the boundary call so malformed
-  # inputs never invoke Verification.request_password_reset_delivery/1 (D-02).
-  @email_shape_regex ~r/^[^@\s]+@[^@\s]+\.[^@\s]+$/
+  # WR-001: email-shape validation is delegated to
+  # `Foglet.Accounts.Verification.email_shape?/1` so the screen and the
+  # boundary cannot drift. Local validation still happens before the
+  # boundary call so malformed inputs never invoke
+  # `Verification.request_password_reset_delivery/1` (D-02).
 
   @reset_email_dispatched_message "If an active account matches, reset instructions will be sent by email. To enter a reset token already in hand, return to the Login menu (Esc) and press [T] Enter reset token."
   @reset_invalid_email_message "Please enter an email address (for example: name@example.test)."
@@ -515,8 +515,7 @@ defmodule Foglet.TUI.Screens.Login do
     {:update, LoginState.put(state, new_login_ss), []}
   end
 
-  defp email_shape?(value) when is_binary(value),
-    do: Regex.match?(@email_shape_regex, value)
+  defp email_shape?(value), do: Verification.email_shape?(value)
 
   # Valid email shape — branch on delivery mode at the boundary level.
   # In email mode the same generic outward message_category is set whether or

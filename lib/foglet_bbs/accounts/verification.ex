@@ -12,7 +12,26 @@ defmodule Foglet.Accounts.Verification do
   # D-02: simple local email shape — non-empty local-part, single `@`,
   # non-empty domain with at least one dot and non-empty domain segments.
   # Intentionally not RFC-complete; mirrors `User`'s registration regex.
+  #
+  # WR-001: this is the single source of truth for the local email-shape
+  # gate. Callers (e.g. `Foglet.TUI.Screens.Login`) MUST use
+  # `email_shape?/1` rather than re-declaring the regex; loosening one copy
+  # without the other previously risked the screen and the boundary
+  # silently disagreeing on what counts as a valid email.
   @email_shape_regex ~r/^[^@\s]+@[^@\s]+\.[^@\s]+$/
+
+  @doc """
+  Predicate for the local email-shape gate (D-02).
+
+  Returns true when `value` is a binary that matches the shared
+  `@email_shape_regex`. Used by `request_password_reset_delivery/1`
+  internally and by the Login screen for inline pre-submit validation.
+  """
+  @spec email_shape?(term()) :: boolean()
+  def email_shape?(value) when is_binary(value),
+    do: Regex.match?(@email_shape_regex, value)
+
+  def email_shape?(_other), do: false
 
   @doc """
   Build and persist an email verification code for `user`. Returns the raw 6-char
@@ -235,7 +254,7 @@ defmodule Foglet.Accounts.Verification do
     # D-02/D-13/D-16: email-only lookup. Handle-shaped identifiers no longer
     # produce token side effects; only valid email-shaped input that matches
     # an active, non-deleted account creates a reset token.
-    if Regex.match?(@email_shape_regex, identifier) do
+    if email_shape?(identifier) do
       case Repo.get_by(User, email: identifier) do
         %User{status: :active, deleted_at: nil} = user -> user
         _other -> nil
