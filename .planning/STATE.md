@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-28T22:22:45.924Z"
-last_activity: 2026-04-28 -- Phase 37 planning complete
+last_updated: "2026-04-28T22:34:58.000Z"
+last_activity: 2026-04-28 -- Phase 37 plan 37-01 metadata complete
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 15
-  completed_plans: 10
-  percent: 67
+  completed_plans: 11
+  percent: 73
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 
 ## Current Position
 
-Phase: 37
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-04-28 -- Phase 37 planning complete
+Phase: 37 (post-composer-flow) — EXECUTING
+Plan: 2 of 5
+Status: Executing Phase 37
+Last activity: 2026-04-28 -- Phase 37 plan 37-01 metadata complete
 
 ## Accumulated Context
 
@@ -55,6 +55,7 @@ Last activity: 2026-04-28 -- Phase 37 planning complete
 - [Phase 35-auth-home-screens]: App no longer carries Phase 35 production local-flow do_update clauses for Login, Register, Verify, or MainMenu/oneliners. — Plan 35-04 cleanup completed auth/home screen-owned update loop migration.
 - [Phase 35-auth-home-screens]: MainMenu initial and navigation loads enter through MainMenu.update/3 using the generic screen reducer/effect path. — Keeps App as runtime interpreter while MainMenu owns oneliner loading.
 - [Phase 35-auth-home-screens]: Modal form submit routing remains App runtime plumbing but carries only a generic screen key, submit kind, and payload. — Preserves modal precedence without App owning target screen business state.
+- [Phase 37-post-composer-flow]: PostReader.State owns routed board/thread identity, loaded posts, status, viewport, render cache, and pending read-pointer flush state. — Plan 37-01 migrated the reader into the screen reducer contract.
 
 ### Pending Todos
 
