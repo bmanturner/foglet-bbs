@@ -24,6 +24,14 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
       {new_state, []}
     end
+
+    def update({:key, key}, %State{} = state, %Context{} = context) do
+      {%{state | messages: [{:key, key, context.route_params} | state.messages]}, []}
+    end
+
+    def render(%State{} = state, %Context{} = context) do
+      {:sample_render, state, context.route_params}
+    end
   end
 
   defp state(attrs \\ %{}) do
@@ -157,6 +165,18 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert without_params.current_screen == :main_menu
       assert without_params.route_params == %{}
       assert App.current_route(without_params) == :main_menu
+    end
+
+    test "new-contract screens handle keys and render without legacy callbacks" do
+      {state, []} =
+        App.apply_effect(state(), Effect.navigate(:sample_runtime, %{thread_id: "t1"}))
+
+      {after_key, []} = App.update({:key, %{key: "j"}}, state)
+
+      assert %SampleScreen.State{messages: [{:key, %{key: "j"}, %{thread_id: "t1"}}]} =
+               App.screen_state_for(after_key, :sample_runtime)
+
+      assert {:sample_render, %SampleScreen.State{}, %{thread_id: "t1"}} = App.view(after_key)
     end
   end
 

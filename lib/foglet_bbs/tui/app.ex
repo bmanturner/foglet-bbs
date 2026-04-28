@@ -543,6 +543,9 @@ defmodule Foglet.TUI.App do
         # state.modal and will consume the key silently.
         global_key_handler(key_event, state)
 
+      new_contract_screen?(state, state.current_screen) ->
+        route_screen_update(state, screen_key(current_route(state)), {:key, key_event})
+
       true ->
         screen_module = screen_module_for(state.current_screen)
 
@@ -1302,6 +1305,12 @@ defmodule Foglet.TUI.App do
     end
   end
 
+  defp new_contract_screen?(%__MODULE__{} = state, screen) do
+    module = screen_module_for(state, screen_key(screen))
+
+    function_exported?(module, :update, 3) and not function_exported?(module, :handle_key, 2)
+  end
+
   defp context_for_screen_key(%__MODULE__{} = state, key) do
     params =
       if screen_key(current_route(state)) == key do
@@ -1773,7 +1782,14 @@ defmodule Foglet.TUI.App do
   end
 
   defp render_screen(state) do
-    screen_module_for(state.current_screen).render(state)
+    key = screen_key(current_route(state))
+    module = screen_module_for(state, key)
+
+    if function_exported?(module, :render, 2) and not function_exported?(module, :render, 1) do
+      module.render(screen_state_for(state, key), context_for_screen_key(state, key))
+    else
+      screen_module_for(state.current_screen).render(state)
+    end
   end
 
   # Modal key dismissal — takes precedence over screen-level and global handlers.
