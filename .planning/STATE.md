@@ -4,8 +4,8 @@ milestone: v1.4
 milestone_name: milestone
 status: complete
 stopped_at: Phase 33 complete
-last_updated: "2026-04-28T14:45:00.000Z"
-last_activity: 2026-04-28 -- Phase 33 complete
+last_updated: "2026-04-28T15:46:00.000Z"
+last_activity: 2026-04-28 -- Completed quick task 260428-eug: Remove the guest handle from the chrome for unauthenticated users, leaving only the clock. Also remove the separator (|) when unauthenticated.
 progress:
   total_phases: 8
   completed_phases: 7
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 Phase: 33
 Plan: 3 of 3
 Status: Phase 33 complete; all v1.4 planned phases executed
-Last activity: 2026-04-28 -- Phase 33 complete
+Last activity: 2026-04-28 -- Completed quick task 260428-eug: Remove the guest handle from the chrome for unauthenticated users, leaving only the clock. Also remove the separator (|) when unauthenticated.
 
 ## Performance Metrics
 
@@ -132,6 +132,7 @@ No active blockers. Phase planning should preserve delivery honesty, context-lev
 | 260426-hbu | Add a cursor icon to active text inputs | 2026-04-26 | 9a9fedc | Verified | [260426-hbu-we-need-a-cursor-icon-to-appear-on-the-t](./quick/260426-hbu-we-need-a-cursor-icon-to-appear-on-the-t/) |
 | 260426-jdz | Fix board breadcrumb struct access view error | 2026-04-26 | c357fc6 | Verified | [260426-jdz-gsd-quick-full-id-56e39788-5cba-41d3-abb](./quick/260426-jdz-gsd-quick-full-id-56e39788-5cba-41d3-abb/) |
 | 260426-jbn | Fix one-connection-at-a-time bottleneck in SSH/Raxol stack (filed raxol#228, #229) | 2026-04-26 | ccbeef4 | Verified | [260426-jbn-the-application-only-allows-one-active-c](./quick/260426-jbn-the-application-only-allows-one-active-c/) |
+| 260428-eug | Remove the guest handle from the chrome for unauthenticated users, leaving only the clock. Also remove the separator (\|) when unauthenticated. | 2026-04-28 | 43e2c9e | Verified | [260428-eug-remove-the-guest-handle-from-the-chrome-](./quick/260428-eug-remove-the-guest-handle-from-the-chrome-/) |
 
 ## Deferred Items
 
