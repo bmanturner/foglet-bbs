@@ -96,6 +96,16 @@ defmodule Foglet.TUI.Screens.LoginTest do
   defp forbidden_http_prefix, do: "http://"
   defp forbidden_https_prefix, do: "https://"
 
+  defp submit_login_form(state) do
+    {:update, submitting_state, [%Raxol.Core.Runtime.Command{type: :task} = command]} =
+      Login.handle_key(%{key: :enter}, state)
+
+    assert get_in(submitting_state, [:screen_state, :login, :submitting?]) == true
+    {:login_result, result} = command.data.()
+    {final_state, final_commands} = Login.handle_login_result(submitting_state, result)
+    {submitting_state, final_state, final_commands}
+  end
+
   defp collect_panels(tree), do: tree |> collect_panels([]) |> Enum.reverse()
 
   defp collect_panels(nil, acc), do: acc
@@ -1103,7 +1113,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       # The screen clears screen_state on success and delegates to App via command
       assert new_state.screen_state == %{}
@@ -1139,7 +1149,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
         end)
 
       # Enter submits
-      {:update, final_state, cmds} = Login.handle_key(%{key: :enter}, s4)
+      {_submitting_state, final_state, cmds} = submit_login_form(s4)
 
       assert final_state.screen_state == %{}
       assert [{:promote_session, returned_user}] = cmds
@@ -1149,7 +1159,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "invalid credentials surface an inline error and clear password field" do
       state = form_state([handle: "ghost", password: "nope"], :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       assert cmds == []
       assert get_in(new_state, [:screen_state, :login, :error]) == "Invalid credentials."
@@ -1172,6 +1182,21 @@ defmodule Foglet.TUI.Screens.LoginTest do
              ]) == "ghost"
     end
 
+    test "submitting login form ignores duplicate submit and input keys" do
+      state = form_state([handle: "ghost", password: "nope"], :password)
+
+      {:update, submitting_state, [%Raxol.Core.Runtime.Command{type: :task}]} =
+        Login.handle_key(%{key: :enter}, state)
+
+      assert get_in(submitting_state, [:screen_state, :login, :submitting?]) == true
+
+      assert {:update, ^submitting_state, []} =
+               Login.handle_key(%{key: :enter}, submitting_state)
+
+      assert {:update, ^submitting_state, []} =
+               Login.handle_key(%{key: :char, char: "x"}, submitting_state)
+    end
+
     test "pending user shows 'pending sysop approval' modal (D-05)" do
       password = "correct horse battery"
       attrs = valid_user_attributes(%{password: password})
@@ -1180,7 +1205,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, _} = submit_login_form(state)
 
       assert %{type: :error, message: msg} = new_state.modal
       assert msg == "Your account is pending sysop approval."
@@ -1198,7 +1223,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       assert %{type: :error, message: "Your registration was rejected. Contact the sysop."} =
                new_state.modal
@@ -1221,7 +1246,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           :password
         )
 
-      {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, _} = submit_login_form(state)
 
       assert new_state.modal != nil, "Expected a modal to be set for pending user"
 
@@ -1244,7 +1269,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           :password
         )
 
-      {:update, new_state, _} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, _} = submit_login_form(state)
 
       assert new_state.modal != nil, "Expected a modal to be set for suspended user"
 
@@ -1290,7 +1315,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       assert new_state.current_screen == :verify
       assert new_state.current_user.id == user.id
@@ -1318,7 +1343,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       assert new_state.current_screen == :login
       assert is_nil(new_state.current_user)
@@ -1342,7 +1367,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       assert new_state.screen_state == %{}
       assert [{:promote_session, returned_user}] = cmds
@@ -1360,7 +1385,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
         state = form_state([handle: confirmed.handle, password: password], :password)
 
-        {:update, _new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+        {_submitting_state, _new_state, cmds} = submit_login_form(state)
 
         assert [{:promote_session, _}] = cmds,
                "Confirmed user must always promote regardless of toggle=#{toggle}"

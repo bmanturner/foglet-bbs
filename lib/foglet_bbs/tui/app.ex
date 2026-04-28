@@ -1022,6 +1022,17 @@ defmodule Foglet.TUI.App do
     do_update(inner, state)
   end
 
+  defp do_update({:login_result, result}, state) do
+    Screens.Login.handle_login_result(state, result)
+  end
+
+  defp do_update({:task_error, :login, reason}, state) do
+    require Logger
+    Logger.error("[TUI.App] task :login failed: #{reason}")
+
+    Screens.Login.handle_login_result(state, {:error, :invalid_credentials})
+  end
+
   # After the user dismisses the pending-approval modal, quit the session so the
   # pending user cannot continue navigating the BBS. The modal is already set
   # by Register.submit/2; we patch its on_confirm/on_cancel callbacks here so

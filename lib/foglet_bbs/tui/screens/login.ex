@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Screens.Login do
 
   alias Foglet.{Accounts, Config}
   alias Foglet.Accounts.{Auth, Verification}
+  alias Foglet.TUI.Command
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.TextWidth
@@ -126,18 +127,82 @@ defmodule Foglet.TUI.Screens.Login do
 
   # --- Private ---
 
+  @doc false
+  @spec handle_login_result(map(), tuple()) :: {map(), list()}
+  def handle_login_result(state, {:ok, user, :main_menu}) do
+    {%{state | screen_state: %{}}, [{:promote_session, user}]}
+  end
+
+  def handle_login_result(state, {:ok, user, :verify, :attempted}) do
+    complete_verify_login(state, user)
+  end
+
+  def handle_login_result(state, {:ok, _user, :verify, :unavailable}) do
+    login_error_modal(
+      state,
+      "Email verification is unavailable because email delivery is disabled."
+    )
+  end
+
+  def handle_login_result(state, {:ok, _user, :verify, :delivery_failed}) do
+    login_error_modal(
+      state,
+      "Verification instructions could not be sent. Please try again later."
+    )
+  end
+
+  def handle_login_result(state, {:ok, _user, :verify, :changeset_error}) do
+    login_error_modal(state, "Could not prepare verification instructions. Please try again.")
+  end
+
+  def handle_login_result(state, {:error, :invalid_credentials}) do
+    login_ss = LoginState.get(state)
+    new_password_input = TextInput.init(mask_char: "*")
+
+    new_login_ss =
+      Map.merge(login_ss, %{
+        error: "Invalid credentials.",
+        password_input: new_password_input,
+        submitting?: false
+      })
+
+    {LoginState.put(state, new_login_ss), []}
+  end
+
+  def handle_login_result(state, {:error, :pending}) do
+    login_error_modal(state, "Your account is pending sysop approval.", clear?: true)
+  end
+
+  def handle_login_result(state, {:error, :rejected}) do
+    login_error_modal(state, "Your registration was rejected. Contact the sysop.", clear?: true)
+  end
+
+  def handle_login_result(state, {:error, :suspended}) do
+    login_error_modal(state, "Your account is suspended. Contact the sysop.", clear?: true)
+  end
+
   # Key routing pattern (D-06): Screen intercepts Tab/Enter/Escape, delegates to TextInput.
   # This pattern is inherited by Phase 2 (Register) and Phase 7 (NewThread).
 
+  defp handle_form_key(key, state) do
+    login_ss = LoginState.get(state)
+
+    if Map.get(login_ss, :submitting?, false) do
+      {:update, state, []}
+    else
+      handle_unlocked_form_key(key, state)
+    end
+  end
+
   # Tab cycles focus between :handle and :password
-  defp handle_form_key(%{key: :tab}, state) do
+  defp handle_unlocked_form_key(%{key: :tab}, state) do
     login_ss = LoginState.get(state)
     new_login_ss = LoginState.toggle_focus(login_ss)
     {:update, LoginState.put(state, new_login_ss), []}
   end
 
   # Enter: submit if focused on password; advance focus if on handle
-  defp handle_form_key(%{key: :enter}, state) do
+  defp handle_unlocked_form_key(%{key: :enter}, state) do
     login_ss = LoginState.get(state)
 
     if login_ss.focused_field == :password do
@@ -149,12 +214,12 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   # Escape: return to menu sub, clear form state
-  defp handle_form_key(%{key: :escape}, state) do
+  defp handle_unlocked_form_key(%{key: :escape}, state) do
     {:update, LoginState.put(state, LoginState.default()), []}
   end
 
   # Everything else — delegate to focused TextInput
-  defp handle_form_key(event, state) do
+  defp handle_unlocked_form_key(event, state) do
     {new_input, _action} = TextInput.handle_event(event, focused_input(state))
     {:update, update_focused_input(state, new_input), []}
   end
@@ -312,6 +377,7 @@ defmodule Foglet.TUI.Screens.Login do
     login_ss = LoginState.get(state)
     focused = Map.get(login_ss, :focused_field, :handle)
     {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
+    submitting? = Map.get(login_ss, :submitting?, false)
 
     handle_label_fg = if focused == :handle, do: theme.accent.fg, else: theme.primary.fg
     handle_label_style = if focused == :handle, do: [:bold], else: []
@@ -346,6 +412,7 @@ defmodule Foglet.TUI.Screens.Login do
                   TextInput.render(login_ss.handle_input,
                     bordered: false,
                     cap_display_width: @login_input_display_width,
+                    disabled: submitting?,
                     focused: focused == :handle,
                     theme: theme
                   )
@@ -357,6 +424,7 @@ defmodule Foglet.TUI.Screens.Login do
                   TextInput.render(login_ss.password_input,
                     bordered: false,
                     cap_display_width: @login_input_display_width,
+                    disabled: submitting?,
                     focused: focused == :password,
                     theme: theme
                   )
@@ -645,7 +713,18 @@ defmodule Foglet.TUI.Screens.Login do
     login_ss = LoginState.get(state)
     handle_value = login_ss.handle_input.raxol_state.value
     password_value = login_ss.password_input.raxol_state.value
+    submitting_ss = Map.merge(login_ss, %{error: nil, submitting?: true})
+    submitting_state = LoginState.put(state, submitting_ss)
 
+    command =
+      Command.task(:login, fn ->
+        {:login_result, authenticate_login(handle_value, password_value)}
+      end)
+
+    {:update, submitting_state, [command]}
+  end
+
+  defp authenticate_login(handle_value, password_value) do
     # with chain (D-08): authenticate first, then dispatch on user status.
     # post_login_screen/1 returns :verify | :main_menu directly (no {:ok, _} wrapper).
     # Status check is inside the success branch — pending/suspended users authenticate
@@ -653,87 +732,56 @@ defmodule Foglet.TUI.Screens.Login do
     with {:ok, user} <- Auth.authenticate_by_password(handle_value, password_value),
          :active <- user.status do
       screen = Accounts.post_login_screen(user)
-      handle_auth_success(state, user, screen)
+      login_success_result(user, screen)
     else
       {:error, :invalid_credentials} ->
-        new_password_input = TextInput.init(mask_char: "*")
+        {:error, :invalid_credentials}
 
-        new_login_ss = %{
-          login_ss
-          | error: "Invalid credentials.",
-            password_input: new_password_input
-        }
-
-        {:update, LoginState.put(state, new_login_ss), []}
-
-      :pending ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Your account is pending sysop approval."
-        }
-
-        {:update, %{state | modal: modal, screen_state: %{}}, []}
-
-      :rejected ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Your registration was rejected. Contact the sysop."
-        }
-
-        {:update, %{state | modal: modal, screen_state: %{}}, []}
-
-      :suspended ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Your account is suspended. Contact the sysop."
-        }
-
-        {:update, %{state | modal: modal, screen_state: %{}}, []}
+      status when status in [:pending, :rejected, :suspended] ->
+        {:error, status}
     end
   end
 
-  defp handle_auth_success(state, user, :verify) do
-    start_verify_flow(state, user)
-  end
+  defp login_success_result(user, :main_menu), do: {:ok, user, :main_menu}
 
-  defp handle_auth_success(state, user, :main_menu) do
-    {:update, %{state | screen_state: %{}}, [{:promote_session, user}]}
-  end
-
-  defp start_verify_flow(state, user) do
+  defp login_success_result(user, :verify) do
     case Verification.deliver_verification_code(user) do
-      {:ok, :attempted} ->
-        {:update,
-         %{
-           state
-           | current_user: user,
-             current_screen: :verify,
-             screen_state: Map.delete(state.screen_state || %{}, :verify)
-         }, []}
+      {:ok, :attempted} -> {:ok, user, :verify, :attempted}
+      {:error, :unavailable} -> {:ok, user, :verify, :unavailable}
+      {:error, :delivery_failed} -> {:ok, user, :verify, :delivery_failed}
+      {:error, %Ecto.Changeset{}} -> {:ok, user, :verify, :changeset_error}
+    end
+  end
 
-      {:error, :unavailable} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Email verification is unavailable because email delivery is disabled."
-        }
+  defp complete_verify_login(state, user) do
+    {
+      %{
+        state
+        | current_user: user,
+          current_screen: :verify,
+          screen_state: Map.delete(state.screen_state || %{}, :verify)
+      },
+      []
+    }
+  end
 
-        {:update, %{state | modal: modal}, []}
+  defp login_error_modal(state, message, opts \\ []) do
+    modal = %Foglet.TUI.Modal{type: :error, message: message}
 
-      {:error, :delivery_failed} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Verification instructions could not be sent. Please try again later."
-        }
+    if Keyword.get(opts, :clear?, false) do
+      {%{state | modal: modal, screen_state: %{}}, []}
+    else
+      {state |> unlock_login_form() |> Map.put(:modal, modal), []}
+    end
+  end
 
-        {:update, %{state | modal: modal}, []}
+  defp unlock_login_form(state) do
+    login_ss = LoginState.get(state)
 
-      {:error, %Ecto.Changeset{}} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Could not prepare verification instructions. Please try again."
-        }
-
-        {:update, %{state | modal: modal}, []}
+    if Map.get(login_ss, :sub) == :login_form do
+      LoginState.put(state, Map.put(login_ss, :submitting?, false))
+    else
+      state
     end
   end
 end

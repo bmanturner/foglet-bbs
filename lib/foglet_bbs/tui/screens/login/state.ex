@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Screens.Login.State do
   Login form shape:
     %{sub: :login_form, focused_field: :handle | :password,
       handle_input: %TextInput{}, password_input: %TextInput{},
-      error: nil | String.t()}
+      error: nil | String.t(), submitting?: boolean()}
 
   Reset request shape:
     %{sub: :reset_request, focused_field: :identifier,
@@ -46,7 +46,8 @@ defmodule Foglet.TUI.Screens.Login.State do
       focused_field: :handle,
       handle_input: TextInput.init(max_length: User.handle_max()),
       password_input: TextInput.init(mask_char: "*"),
-      error: nil
+      error: nil,
+      submitting?: false
     }
   end
 
