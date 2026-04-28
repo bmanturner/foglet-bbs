@@ -82,6 +82,22 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 3. MainMenu owns recent oneliners and selected oneliner state.
 4. Existing auth/home tests and render fixtures pass after migration.
 
+**Planned execution:**
+
+**Wave 1**
+- `35-01` - Login reducer migration for menu/form/reset/auth task ownership.
+- `35-02` - Register and Verify reducer migration for onboarding and verification ownership.
+- `35-03` - MainMenu state module and oneliner load/create/hide ownership.
+
+**Wave 2 *(blocked on Wave 1 completion)***
+- `35-04` - App local-flow cleanup, target screen docs, and integrated auth/home verification.
+
+**Cross-cutting constraints:**
+- Target screens must export `init/1`, `update/3`, and `render/2` without retaining legacy local-flow `handle_key/2` or `render/1` exports.
+- Domain side effects remain in Accounts, Verification, Oneliners, and authorization contexts; screens request work through task effects.
+- App remains the generic runtime/modal/effect interpreter and routes async results through `{:screen_task_result, screen_key, op, result}`.
+- Modal precedence, SizeGate behavior, session routing, quit, pending approval termination, reset honesty, verification failures, and oneliner role gating remain covered.
+
 ### Phase 36: Board & Thread Directory Flow
 
 **Goal:** Migrate board and thread browsing so directory state and async loads belong to BoardList/ThreadList.
