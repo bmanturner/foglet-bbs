@@ -62,10 +62,9 @@ defmodule Foglet.TUI.AppTest do
       assert state.current_screen == :main_menu
       assert state.current_user == user
 
-      assert %MainMenuState{recent_oneliners: [%{id: "ol1", body: "hello"}]} =
-               App.screen_state_for(state, :main_menu)
+      assert %MainMenuState{recent_oneliners: []} = App.screen_state_for(state, :main_menu)
 
-      assert_received {:list_recent_visible, 5}
+      refute_received {:list_recent_visible, 5}
     end
 
     test "pubkey-authenticated unconfirmed users route to verification when required" do

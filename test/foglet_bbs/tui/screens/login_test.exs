@@ -55,6 +55,25 @@ defmodule Foglet.TUI.Screens.LoginTest do
     {:update, put_login_state(state, new_login_state), effects}
   end
 
+  defp run_login_task_result(state, %Effect{type: :task, payload: payload}) do
+    result = payload.fun.()
+    update_message({:task_result, payload.op, {:ok, result}}, state)
+  end
+
+  defp submit_reset_request(state) do
+    {:update, pending_state, [%Effect{type: :task, payload: %{op: :reset_request}} = effect]} =
+      update_login(%{key: :enter}, state)
+
+    run_login_task_result(pending_state, effect)
+  end
+
+  defp submit_reset_consume(state) do
+    {:update, pending_state, [%Effect{type: :task, payload: %{op: :reset_token}} = effect]} =
+      update_login(%{key: :enter}, state)
+
+    run_login_task_result(pending_state, effect)
+  end
+
   defp render_login(state), do: Login.render(login_state(state), login_context(state))
 
   defp modal_effect(effects) do
@@ -532,7 +551,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = reset_request_state("activelady@example.test")
 
-      {:update, new_state, []} = update_login(%{key: :enter}, state)
+      {:update, new_state, []} = submit_reset_request(state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
       assert get_in(new_state, [:screen_state, :login, :error]) == nil
@@ -563,11 +582,11 @@ defmodule Foglet.TUI.Screens.LoginTest do
       _ = user_fixture(%{handle: "anchor", email: "anchor@example.test"})
 
       active_state = reset_request_state("anchor@example.test")
-      {:update, active_new, []} = update_login(%{key: :enter}, active_state)
+      {:update, active_new, []} = submit_reset_request(active_state)
       active_category = get_in(active_new, [:screen_state, :login, :message_category])
 
       unknown_state = reset_request_state("ghost@example.test")
-      {:update, unknown_new, []} = update_login(%{key: :enter}, unknown_state)
+      {:update, unknown_new, []} = submit_reset_request(unknown_state)
       unknown_category = get_in(unknown_new, [:screen_state, :login, :message_category])
 
       assert is_atom(active_category)
@@ -588,7 +607,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
       state = reset_request_state("alice@example.test")
 
-      {:update, new_state, []} = update_login(%{key: :enter}, state)
+      {:update, new_state, []} = submit_reset_request(state)
 
       message = get_in(new_state, [:screen_state, :login, :message])
       assert is_binary(message)
@@ -626,7 +645,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:ok, _} = Foglet.Accounts.confirm_user(sysop_b)
 
       state = reset_request_state("alice@example.test")
-      {:update, new_state, []} = update_login(%{key: :enter}, state)
+      {:update, new_state, []} = submit_reset_request(state)
 
       rendered =
         render_login(new_state)
@@ -645,7 +664,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
 
       state = reset_request_state("alice@example.test")
-      {:update, new_state, []} = update_login(%{key: :enter}, state)
+      {:update, new_state, []} = submit_reset_request(state)
 
       rendered =
         render_login(new_state)
@@ -667,7 +686,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "email")
       state = reset_request_state("anybody@example.test", terminal_size: {64, 22})
 
-      {:update, new_state, []} = update_login(%{key: :enter}, state)
+      {:update, new_state, []} = submit_reset_request(state)
 
       rendered_lines =
         render_login(new_state)
@@ -1046,7 +1065,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_state, _cmds} = update_login(%{key: :enter}, state)
+      {:update, new_state, _cmds} = submit_reset_consume(state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       assert get_in(new_state, [:screen_state, :login, :token_input]) == nil
@@ -1073,7 +1092,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_state, []} = update_login(%{key: :enter}, state)
+      {:update, new_state, []} = submit_reset_consume(state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
 
@@ -1103,8 +1122,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_unknown, []} = update_login(%{key: :enter}, state_unknown)
-      {:update, new_malformed, []} = update_login(%{key: :enter}, state_malformed)
+      {:update, new_unknown, []} = submit_reset_consume(state_unknown)
+      {:update, new_malformed, []} = submit_reset_consume(state_malformed)
 
       err_unknown = get_in(new_unknown, [:screen_state, :login, :error])
       err_malformed = get_in(new_malformed, [:screen_state, :login, :error])
@@ -1124,7 +1143,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_state, []} = update_login(%{key: :enter}, state)
+      {:update, new_state, []} = submit_reset_consume(state)
 
       error = get_in(new_state, [:screen_state, :login, :error])
       refute is_binary(error) and error =~ raw_token

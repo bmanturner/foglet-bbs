@@ -1159,14 +1159,11 @@ defmodule Foglet.TUI.App do
 
   defp maybe_init_initial_screen_state(%{current_screen: :main_menu, current_user: user} = state)
        when not is_nil(user) do
-    oneliners_mod = domain_module(state, :oneliners)
-    entries = oneliners_mod.list_recent_visible(5)
-
     main_menu_state =
       state
       |> build_context()
       |> Screens.MainMenu.init()
-      |> Screens.MainMenu.State.from_entries(entries)
+      |> Map.put(:oneliner_status, :idle)
 
     put_screen_state(state, :main_menu, main_menu_state)
   end

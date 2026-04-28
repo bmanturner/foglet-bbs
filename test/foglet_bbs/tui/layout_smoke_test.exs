@@ -2612,6 +2612,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       }
     end
 
+    defp submit_reset_request_at(%App{} = state) do
+      {pending_state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+        App.update({:key, %{key: :enter}}, state)
+
+      App.update(task.(), pending_state)
+    end
+
     defp message_text_rows(state, size) do
       positioned = state |> render_login() |> apply_at_size(size)
 
@@ -2663,7 +2670,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     test "valid email submission produces multi-row reset confirmation copy at 64x22 (D-12, AUTH-02)" do
       Config.put!("delivery_mode", "email")
       state = reset_request_state_at("anybody@example.test", @reset_compact_size)
-      {new_state, []} = App.update({:key, %{key: :enter}}, state)
+      {new_state, []} = submit_reset_request_at(state)
 
       message = get_in(new_state.screen_state, [:login, :message])
       assert is_binary(message)
@@ -2743,7 +2750,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         end)
 
       state = reset_request_state_at("anybody@example.test", @reset_compact_size)
-      {new_state, []} = App.update({:key, %{key: :enter}}, state)
+      {new_state, []} = submit_reset_request_at(state)
 
       positioned = new_state |> render_login() |> apply_at_size(@reset_compact_size)
       content_rows = positioned |> content_text_elements() |> text_rows()
@@ -2785,7 +2792,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       Config.put!("delivery_mode", "no_email")
 
       state = reset_request_state_at("anybody@example.test", @reset_compact_size)
-      {new_state, []} = App.update({:key, %{key: :enter}}, state)
+      {new_state, []} = submit_reset_request_at(state)
 
       positioned = new_state |> render_login() |> apply_at_size(@reset_compact_size)
       content_rows = positioned |> content_text_elements() |> text_rows()

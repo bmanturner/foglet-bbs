@@ -133,12 +133,55 @@ defmodule Foglet.TUI.Screens.Login do
   def update({:task_result, :reset_request, {:ok, result}}, local_state, context),
     do: update({:task_result, :reset_request, result}, local_state, context)
 
+  def update({:task_result, :reset_request, :email_dispatched}, local_state, %Context{}) do
+    {Map.merge(
+       local_state,
+       %{
+         error: nil,
+         message: @reset_email_dispatched_message,
+         message_category: :email_dispatched
+       }
+     ), []}
+  end
+
+  def update(
+        {:task_result, :reset_request, {:no_email_operator_assisted, sysops}},
+        local_state,
+        %Context{}
+      ) do
+    {Map.merge(
+       local_state,
+       %{
+         error: nil,
+         message: no_email_operator_message(sysops),
+         message_category: :no_email_operator_assisted
+       }
+     ), []}
+  end
+
   def update({:task_result, :reset_request, {:error, _reason}}, local_state, %Context{}) do
     {Map.merge(local_state, %{error: @reset_invalid_email_message, message: nil}), []}
   end
 
-  def update({:task_result, :reset_token, {:ok, result}}, local_state, context),
-    do: update({:task_result, :reset_token, result}, local_state, context)
+  def update({:task_result, :reset_token, {:ok, {:ok, _user}}}, _local_state, %Context{}) do
+    {LoginState.default(), []}
+  end
+
+  def update(
+        {:task_result, :reset_token, {:ok, {:error, :invalid_or_expired}}},
+        local_state,
+        %Context{}
+      ) do
+    {Map.put(local_state, :error, @reset_consume_invalid_or_expired_message), []}
+  end
+
+  def update(
+        {:task_result, :reset_token, {:ok, {:error, %Ecto.Changeset{}}}},
+        local_state,
+        %Context{}
+      ) do
+    {Map.put(local_state, :error, @reset_consume_password_invalid_message), []}
+  end
 
   def update({:task_result, :reset_token, {:error, _reason}}, local_state, %Context{}) do
     {Map.put(local_state, :error, @reset_consume_invalid_or_expired_message), []}
@@ -654,20 +697,19 @@ defmodule Foglet.TUI.Screens.Login do
     identifier = login_ss.identifier_input.raxol_state.value
     trimmed = String.trim(identifier)
 
-    new_login_ss =
-      if email_shape?(trimmed) do
-        dispatch_reset_request(login_ss, trimmed)
-      else
-        # D-02: malformed local input never invokes Accounts reset delivery.
-        %{
-          login_ss
-          | error: @reset_invalid_email_message,
-            message: nil,
-            message_category: :invalid_email
-        }
-      end
+    if email_shape?(trimmed) do
+      dispatch_reset_request(state, login_ss, trimmed)
+    else
+      # D-02: malformed local input never invokes Accounts reset delivery.
+      new_login_ss = %{
+        login_ss
+        | error: @reset_invalid_email_message,
+          message: nil,
+          message_category: :invalid_email
+      }
 
-    {:update, LoginState.put(state, new_login_ss), []}
+      {:update, LoginState.put(state, new_login_ss), []}
+    end
   end
 
   defp email_shape?(value), do: Verification.email_shape?(value)
@@ -676,32 +718,27 @@ defmodule Foglet.TUI.Screens.Login do
   # In email mode the same generic outward message_category is set whether or
   # not the email belongs to an active user (D-03). In no-email mode we present
   # operator-assisted copy with active sysop emails (D-14, AUTH-03).
-  defp dispatch_reset_request(login_ss, email) do
-    case Foglet.Config.delivery_mode() do
-      "email" ->
-        # Discard return value: the boundary is generic by contract.
-        _ = Verification.request_password_reset_delivery(email)
+  defp dispatch_reset_request(state, login_ss, email) do
+    verification_mod = domain_module(state, :verification)
+    submitting_state = LoginState.put(state, %{login_ss | error: nil, message: nil})
 
-        %{
-          login_ss
-          | error: nil,
-            message: @reset_email_dispatched_message,
-            message_category: :email_dispatched
-        }
+    effect =
+      Effect.task(:reset_request, :login, fn ->
+        case Foglet.Config.delivery_mode() do
+          "email" ->
+            # Discard return value: the boundary is generic by contract.
+            _ = verification_mod.request_password_reset_delivery(email)
+            :email_dispatched
 
-      "no_email" ->
-        %{
-          login_ss
-          | error: nil,
-            message: no_email_operator_message(),
-            message_category: :no_email_operator_assisted
-        }
-    end
+          "no_email" ->
+            {:no_email_operator_assisted, verification_mod.active_sysop_contact_emails()}
+        end
+      end)
+
+    {:update, submitting_state, [effect]}
   end
 
-  defp no_email_operator_message do
-    sysops = Verification.active_sysop_contact_emails()
-
+  defp no_email_operator_message(sysops) do
     sysop_line =
       case sysops do
         [] -> @reset_no_email_no_sysops_fallback
@@ -736,23 +773,15 @@ defmodule Foglet.TUI.Screens.Login do
       new_login_ss = %{login_ss | error: @reset_consume_password_mismatch_message}
       {:update, LoginState.put(state, new_login_ss), []}
     else
-      case Verification.consume_reset_token(raw_token, %{password: new_password}) do
-        {:ok, _user} ->
-          # D-07: success returns to the logged-out Login menu and drops
-          # token/password field state. Subsequent renders see %{sub: :menu}.
-          {:update, LoginState.put(state, LoginState.default()), []}
+      verification_mod = domain_module(state, :verification)
+      submitting_state = LoginState.put(state, %{login_ss | error: nil})
 
-        {:error, :invalid_or_expired} ->
-          # D-10: identical generic copy for invalid/malformed/expired/used.
-          new_login_ss = %{login_ss | error: @reset_consume_invalid_or_expired_message}
-          {:update, LoginState.put(state, new_login_ss), []}
+      effect =
+        Effect.task(:reset_token, :login, fn ->
+          verification_mod.consume_reset_token(raw_token, %{password: new_password})
+        end)
 
-        {:error, %Ecto.Changeset{}} ->
-          # Password failed validation; token was rolled back inside the
-          # Accounts transaction so the user can retry without a new token.
-          new_login_ss = %{login_ss | error: @reset_consume_password_invalid_message}
-          {:update, LoginState.put(state, new_login_ss), []}
-      end
+      {:update, submitting_state, [effect]}
     end
   end
 
