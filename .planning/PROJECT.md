@@ -13,7 +13,7 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 **Shipped version:** v1.3 TUI Screen Facelift on 2026-04-26.
 **Current milestone:** v1.4 Post-Facelift Polish & Bug Fixes — closing out human SSH/TUI verification debt from v1.3 by repairing broken loads, form interactions, layout regressions, and stubbed auth flows surfaced during real-terminal use.
 
-Foglet now has terminal-native Account, Moderation, and Sysop workbenches; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; enforced board posting and locked-thread restrictions; Account SSH key management; board subscription management; pre-alpha operator notes; and a polished Unicode-capable SSH/TUI visual foundation aligned to `SCREENS.md`.
+Foglet now has terminal-native Account, Moderation, and Sysop workbenches; actor-aware authorization; persisted single-use invites; invite-only registration redemption; shared INVITES tabs; account profile/preferences with live session refresh; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; enforced board posting and locked-thread restrictions; Account SSH key management; board subscription management; pre-alpha operator notes; render-only composer soft wrapping for reply/new-thread body input, Boards category Enter expand/collapse interaction, and a polished Unicode-capable SSH/TUI visual foundation aligned to `SCREENS.md`.
 
 The chrome clock intentionally displays time only. It honors the user's timezone and 12h/24h preference; date display is not part of the accepted behavior.
 
@@ -77,6 +77,8 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - [x] Operator Console primitives exist before Account, Moderation, and Sysop adopt them for dense workbench layouts - v1.3 Phase 24
 - [x] Account, Moderation, and Sysop implement the Operator Console direction using shared display primitives and honest workflow copy - v1.3 Phase 25
 - [x] TUI facelift work has focused widget/screen tests for width, theme routing, mode behavior, and no-overlap layout regressions - v1.3 Phases 16-25
+- [x] Composer body editors in new-thread and reply flows soft-wrap long logical lines with `TextWidth.wrap/2` while preserving submitted buffers - v1.4 Phase 33
+- [x] Boards category rows toggle expanded/collapsed state on Enter without domain side effects, while board leaf Enter navigation is preserved - v1.4 Phase 33
 
 ### Active
 
@@ -85,8 +87,8 @@ The chrome clock intentionally displays time only. It honors the user's timezone
 - [~] v1.4 — Restore broken Sysop tab loads (Boards, Limits, System) and reconcile inconsistent Users-tab loading plus the "Invalid status transition" surfaced error. Implementation complete in Phase 29 (sysop-tab-lifecycle-bodies); SSH UAT pending.
 - [ ] v1.4 — Close auth-flow gaps: cursor follows text input, breadcrumbs update on Register/Forgot Password, full forgot-password validation, reset-email rendering at small terminals, and an honest no-email reset path with a token-consume entry point.
 - [ ] v1.4 — Apply Main Menu chrome polish: Navigation/Oneliners titles on the box border, theme/accent application, indent corrections, and removal of the Oneliners top-border glyph artifact.
-- [ ] v1.4 — Fix composer editor word wrap on long lines and restore markdown newline rendering so paragraphs are not over-collapsed.
-- [ ] v1.4 — Make Enter on a Boards-screen category expand/collapse it.
+- [x] v1.4 — Fix composer editor word wrap on long lines and restore markdown newline rendering so paragraphs are not over-collapsed. Composer wrap completed in Phase 33; markdown newline rendering completed in Phase 26.
+- [x] v1.4 — Make Enter on a Boards-screen category expand/collapse it. Completed in Phase 33.
 
 ### Out of Scope
 
