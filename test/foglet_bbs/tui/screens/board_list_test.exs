@@ -77,11 +77,15 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     %{state: state}
   end
 
-  test "init_screen_state/0 returns tree-ready defaults" do
-    ss = BoardList.init_screen_state()
-
-    assert ss.board_tree == nil
-    assert ss.feedback == nil
+  test "BoardList.State.new/0 returns directory-owner defaults" do
+    assert BoardList.State.new() == %BoardList.State{
+             directory: nil,
+             board_tree: nil,
+             status: :loading,
+             feedback: nil,
+             last_op: nil,
+             last_error: nil
+           }
   end
 
   test "load_boards/1 populates state.board_list with board directory from domain module", %{
