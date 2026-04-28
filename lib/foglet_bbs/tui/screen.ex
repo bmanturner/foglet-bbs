@@ -8,6 +8,13 @@ defmodule Foglet.TUI.Screen do
   - `update/3` consumes normalized runtime messages plus screen-local state.
   - `render/2` renders from screen-local state plus context.
 
+  ## State conventions
+
+  - Stateful screens own a first-class state struct with `new/1` or document an explicit local state type.
+  - Stateless screens explicitly return `:stateless` or `%{}` from `init/1` and do not store local state in App fields.
+  - Screens do not receive `%Foglet.TUI.App{}` through `init/1`, `update/3`, or `render/2`.
+  - Production screen family migrations are deferred to phases 35-38; Phase 39 removes central App screen-specific machinery.
+
   Production screens migrate to that contract in phases 35-38. Until then,
   the legacy `render/1`, `handle_key/2`, and `init_screen_state/1` callbacks
   remain transitional callbacks so existing screens continue compiling while

@@ -35,6 +35,57 @@ defmodule Foglet.TUI.ScreenTest do
     end
   end
 
+  defmodule StatefulSample do
+    @behaviour Foglet.TUI.Screen
+
+    defmodule State do
+      @type t :: %__MODULE__{
+              route_params: map()
+            }
+
+      defstruct route_params: %{}
+
+      def new(attrs \\ []) do
+        %__MODULE__{
+          route_params: Keyword.get(attrs, :route_params, %{})
+        }
+      end
+    end
+
+    @impl Foglet.TUI.Screen
+    def init(ctx) do
+      State.new(route_params: Map.fetch!(ctx, :route_params))
+    end
+
+    @impl Foglet.TUI.Screen
+    def update({:replace_route_params, route_params}, %State{} = state, _ctx) do
+      {%{state | route_params: route_params}, []}
+    end
+
+    @impl Foglet.TUI.Screen
+    def render(%State{} = state, ctx) do
+      %{
+        route_params: state.route_params,
+        terminal_size: Map.fetch!(ctx, :terminal_size)
+      }
+    end
+  end
+
+  defmodule StatelessSample do
+    @behaviour Foglet.TUI.Screen
+
+    @impl Foglet.TUI.Screen
+    def init(_ctx), do: :stateless
+
+    @impl Foglet.TUI.Screen
+    def update(_message, :stateless, _ctx), do: {:stateless, []}
+
+    @impl Foglet.TUI.Screen
+    def render(:stateless, ctx) do
+      %{current_user: Map.fetch!(ctx, :current_user)}
+    end
+  end
+
   describe "new screen contract" do
     test "runs init, update, and render over local state without App input" do
       ctx = %{
@@ -53,6 +104,32 @@ defmodule Foglet.TUI.ScreenTest do
                terminal_size: {100, 32},
                user_handle: "alice"
              }
+    end
+
+    test "stateful screens can initialize an explicit state struct with new/1" do
+      ctx = %{
+        route_params: %{board_id: 10},
+        terminal_size: {90, 28}
+      }
+
+      state = StatefulSample.init(ctx)
+      assert %StatefulSample.State{route_params: %{board_id: 10}} = state
+
+      assert {%StatefulSample.State{route_params: %{board_id: 11}} = updated, []} =
+               StatefulSample.update({:replace_route_params, %{board_id: 11}}, state, ctx)
+
+      assert StatefulSample.render(updated, ctx) == %{
+               route_params: %{board_id: 11},
+               terminal_size: {90, 28}
+             }
+    end
+
+    test "stateless screens explicitly keep no local state" do
+      ctx = %{current_user: nil}
+
+      assert StatelessSample.init(ctx) == :stateless
+      assert StatelessSample.update(:ignored, :stateless, ctx) == {:stateless, []}
+      assert StatelessSample.render(:stateless, ctx) == %{current_user: nil}
     end
   end
 end
