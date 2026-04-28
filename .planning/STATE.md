@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: milestone
 status: executing
 stopped_at: Phase 31 context gathered (assumptions mode)
-last_updated: "2026-04-27T23:39:12.732Z"
-last_activity: 2026-04-27 -- Phase 31 execution started
+last_updated: "2026-04-28T00:46:07.805Z"
+last_activity: 2026-04-28
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 25
-  completed_plans: 21
-  percent: 84
+  completed_plans: 25
+  percent: 100
 ---
 
 # Project State
@@ -21,20 +21,20 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 31 — auth-flow
+**Current focus:** Phase null
 
 ## Current Position
 
-Phase: 31 (auth-flow) — EXECUTING
-Plan: 1 of 4
-Status: Executing Phase 31
-Last activity: 2026-04-27 -- Phase 31 execution started
+Phase: 32
+Plan: Not started
+Status: Executing Phase null
+Last activity: 2026-04-28
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 88 from shipped v1.1; 26 in v1.2; 48 in v1.3
+- Total plans completed: 92 from shipped v1.1; 26 in v1.2; 48 in v1.3
 - Average duration: Not measured for v1.4 yet
 - Total execution time: Not measured for v1.4 yet
 
@@ -51,6 +51,7 @@ Last activity: 2026-04-27 -- Phase 31 execution started
 | 32. Main Menu Chrome Polish | TBD | - | - |
 | 33. Composer Wrap & Boards Interaction | TBD | - | - |
 | 29 | 4 | - | - |
+| 31 | 4 | - | - |
 
 **Recent Trend:**
 

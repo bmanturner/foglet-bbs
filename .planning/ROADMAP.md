@@ -20,7 +20,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | 28 | Modal.Form Substrate | 7/7 | Complete   | 2026-04-27 |
 | 29 | Sysop Tab Lifecycle & Bodies | 4/4 | Complete    | 2026-04-27 |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
-| 31 | Auth Flow | Forgot-password validates, reset message wraps at 64×22, and `:no_email` mode has an honest token-consume entry | AUTH-01..04 (4) | yes |
+| 31 | Auth Flow | 4/4 | Complete    | 2026-04-28 |
 | 32 | Main Menu Chrome Polish | Main Menu Navigation and Oneliners panels render with border titles, theme accents, correct indents, and no glyph artifacts | MENU-01..05 (5) | yes |
 | 33 | Composer Wrap & Boards Interaction | Composer soft-wraps long lines and Enter on a Boards category toggles its expansion | POST-02, BOARD-01 (2) | yes |
 
@@ -34,7 +34,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 - [~] **Phase 28: Modal.Form Substrate** — Up/Down inter-field movement, `:backtab`, optional footer, single-source focus, submit-state machine, honest Esc. Implementation + gap-closure (28-05/06/07) + code review fixes complete; **4 live-SSH UAT items pending — see 28-HUMAN-UAT.md** (impl complete 2026-04-27)
 - [x] **Phase 29: Sysop Tab Lifecycle & Bodies** — Auto-load on tab switch, tagged enum render, Site draft echo, Users status-gated keybinds, Invites row selection, command-bar consistency (completed 2026-04-27)
 - [ ] **Phase 30: Account Workflow** — Profile persistence + flash, no-duplicate tab title, Preferences widgets reachable, IANA timezone selector, SSH-key paste accepts multi-line
-- [ ] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary)
+- [x] **Phase 31: Auth Flow** — Forgot-password local validation (enum-safe), reset message wrap, no-email honest copy, atomic token-consume (Accounts boundary) (completed 2026-04-28)
 - [ ] **Phase 32: Main Menu Chrome Polish** — Border-embedded titles, no Oneliners glyph artifact, accent-colored nav keys, indent corrections, theme-routed colors
 - [ ] **Phase 33: Composer Wrap & Boards Interaction** — Composer soft-wrap via `TextWidth.wrap`, Boards Enter on category toggles expansion
 
@@ -136,16 +136,16 @@ Plans:
 **Plans**: 4 plans
 Plans:
 **Wave 1**
-- [ ] 31-01-PLAN.md — Accounts/Verification email reset side effects, sysop contacts, and atomic raw-token consume
+- [x] 31-01-PLAN.md — Accounts/Verification email reset side effects, sysop contacts, and atomic raw-token consume
 
 **Wave 2** *(blocked on Wave 1 completion)*
-- [ ] 31-02-PLAN.md — Login Forgot Password menu, email validation, wrapped reset/no-email copy
+- [x] 31-02-PLAN.md — Login Forgot Password menu, email validation, wrapped reset/no-email copy
 
 **Wave 3** *(blocked on Wave 2 completion)*
-- [ ] 31-03-PLAN.md — Login reset-consume form and Accounts consume submission
+- [x] 31-03-PLAN.md — Login reset-consume form and Accounts consume submission
 
 **Wave 4** *(blocked on Wave 3 completion)*
-- [ ] 31-04-PLAN.md — Compact reset rendering and raw-token non-leak validation
+- [x] 31-04-PLAN.md — Compact reset rendering and raw-token non-leak validation
 **UI hint**: yes
 
 ### Phase 32: Main Menu Chrome Polish
