@@ -282,9 +282,11 @@ defmodule Foglet.Accounts.Verification do
         # diagnosable. Without this log line, an operator investigating "I
         # never got my reset email" cannot tell a backend failure from an
         # enumeration-safe miss. The raw token is never logged (D-11).
-        Logger.error("password_reset token insert failed",
-          user_id: user.id,
-          errors: inspect(changeset.errors)
+        # Diagnostic detail is embedded in the message string rather than
+        # logger metadata so we do not depend on `user_id` / `errors` keys
+        # being registered in the global Logger metadata config.
+        Logger.error(
+          "password_reset token insert failed user_id=#{user.id} errors=#{inspect(changeset.errors)}"
         )
 
         :ok
