@@ -2598,4 +2598,251 @@ defmodule Foglet.TUI.LayoutSmokeTest do
              "moderation.ex must define a render-time key_list/1 function (D-26)"
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 31 reset copy compact rendering (D-12, D-14, D-18, AUTH-02, AUTH-03)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 31 reset copy compact rendering (D-12, D-14, D-18)" do
+    @reset_compact_size {64, 22}
+
+    setup do
+      original_delivery_mode = Config.get("delivery_mode", "no_email")
+
+      on_exit(fn ->
+        Config.put!("delivery_mode", original_delivery_mode)
+        Config.invalidate("delivery_mode")
+      end)
+
+      :ok
+    end
+
+    defp reset_request_state_at(identifier, {width, height}) do
+      input = Foglet.TUI.Widgets.Input.TextInput.init(value: identifier)
+      {input_end, _} = Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, input)
+
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{
+          login: %{
+            sub: :reset_request,
+            focused_field: :identifier,
+            identifier_input: input_end,
+            error: nil,
+            message: nil,
+            message_category: nil
+          }
+        }
+      }
+    end
+
+    defp message_text_rows(state, size) do
+      positioned = state |> Login.render() |> apply_at_size(size)
+
+      message_text = get_in(state.screen_state, [:login, :message])
+
+      message_first_line =
+        case message_text do
+          nil ->
+            ""
+
+          text ->
+            text
+            |> TextWidth.wrap(elem(size, 0) - 2)
+            |> List.first()
+            |> Kernel.||("")
+        end
+
+      content = content_text_elements(positioned)
+
+      first_y =
+        content
+        |> Enum.find(fn el ->
+          message_first_line != "" and String.contains?(el.text, message_first_line)
+        end)
+        |> case do
+          nil -> nil
+          el -> el.y
+        end
+
+      message_rows =
+        case first_y do
+          nil ->
+            []
+
+          y0 ->
+            content
+            |> Enum.filter(&(&1.y >= y0))
+            |> Enum.group_by(& &1.y)
+            |> Enum.sort_by(fn {y, _} -> y end)
+            |> Enum.map(fn {y, els} ->
+              row_text = els |> Enum.sort_by(& &1.x) |> Enum.map_join(& &1.text)
+              {y, row_text}
+            end)
+        end
+
+      message_rows
+    end
+
+    test "valid email submission produces multi-row reset confirmation copy at 64x22 (D-12, AUTH-02)" do
+      Config.put!("delivery_mode", "email")
+      state = reset_request_state_at("anybody@example.test", @reset_compact_size)
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      message = get_in(new_state.screen_state, [:login, :message])
+      assert is_binary(message)
+
+      rows = message_text_rows(new_state, @reset_compact_size)
+
+      # Multi-row property: reset confirmation copy must wrap into >=2 rows at
+      # 64x22 so a single overflowing text node never silently truncates.
+      distinct_ys = rows |> Enum.map(fn {y, _} -> y end) |> Enum.uniq()
+
+      assert length(distinct_ys) >= 2,
+             "expected reset confirmation copy to span >=2 rows at 64x22, got: #{inspect(rows)}"
+
+      # Width property: every content row at 64x22 fits the terminal width.
+      for {y, row_text} <- rows do
+        assert TextWidth.display_width(row_text) <= 64,
+               "row at y=#{y} exceeded 64 cols: #{inspect(row_text)} " <>
+                 "(display_width=#{TextWidth.display_width(row_text)})"
+      end
+    end
+
+    test "no_email reset confirmation lists active sysop emails comma-separated at 64x22 (D-14, AUTH-03)" do
+      Config.put!("delivery_mode", "no_email")
+
+      sysop_a =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysopa",
+          email: "sysopa@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+
+      sysop_b =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysopb",
+          email: "sysopb@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+
+      {:ok, _} = Foglet.Accounts.confirm_user(sysop_a)
+      {:ok, _} = Foglet.Accounts.confirm_user(sysop_b)
+
+      # Negative-presence fixtures: deleted sysop, non-active sysop, non-sysop user.
+      _deleted_sysop =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysopdel",
+          email: "deletedsysop@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+        |> then(fn u ->
+          {:ok, confirmed} = Foglet.Accounts.confirm_user(u)
+          confirmed
+        end)
+        |> Ecto.Changeset.change(deleted_at: DateTime.utc_now())
+        |> FogletBbs.Repo.update!()
+
+      _pending_sysop =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysoppen",
+          email: "pendingsysop@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+        |> Ecto.Changeset.change(status: :pending)
+        |> FogletBbs.Repo.update!()
+
+      _non_sysop =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "civilian",
+          email: "civilian@example.test"
+        })
+        |> then(fn u ->
+          {:ok, confirmed} = Foglet.Accounts.confirm_user(u)
+          confirmed
+        end)
+
+      state = reset_request_state_at("anybody@example.test", @reset_compact_size)
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      positioned = new_state |> Login.render() |> apply_at_size(@reset_compact_size)
+      content_rows = positioned |> content_text_elements() |> text_rows()
+      joined = content_rows |> Map.values() |> Enum.join(" | ")
+
+      # Active sysop emails are listed.
+      assert String.contains?(joined, "sysopa@example.test"),
+             "expected sysopa@example.test in rendered no-email copy at 64x22, " <>
+               "got rows: #{inspect(content_rows)}"
+
+      assert String.contains?(joined, "sysopb@example.test"),
+             "expected sysopb@example.test in rendered no-email copy at 64x22, " <>
+               "got rows: #{inspect(content_rows)}"
+
+      # Comma-separated rendering: at least one of the two emails appears
+      # adjacent to a comma.
+      assert joined =~ ~r/sysopa@example\.test\s*,|,\s*sysopa@example\.test/,
+             "expected sysopa@example.test next to a comma in no-email copy, got: #{inspect(joined)}"
+
+      # Negative-presence: deleted, pending (non-active), and non-sysop emails
+      # never appear.
+      refute String.contains?(joined, "deletedsysop@example.test"),
+             "deleted sysop email leaked into no-email copy: #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "pendingsysop@example.test"),
+             "non-active sysop email leaked into no-email copy: #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "civilian@example.test"),
+             "non-sysop email leaked into no-email copy: #{inspect(content_rows)}"
+
+      # Every content row stays within 64 cols.
+      for {y, row_text} <- content_rows do
+        assert TextWidth.display_width(row_text) <= 64,
+               "no-email row at y=#{y} exceeded 64 cols: #{inspect(row_text)}"
+      end
+    end
+
+    test "no_email reset confirmation falls back to sysop/operator copy without forbidden URLs at 64x22 (D-14, AUTH-03)" do
+      Config.put!("delivery_mode", "no_email")
+
+      state = reset_request_state_at("anybody@example.test", @reset_compact_size)
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      positioned = new_state |> Login.render() |> apply_at_size(@reset_compact_size)
+      content_rows = positioned |> content_text_elements() |> text_rows()
+      joined = content_rows |> Map.values() |> Enum.join(" | ")
+
+      assert joined =~ ~r/sysop|operator/i,
+             "no-sysop fallback at 64x22 must mention 'sysop' or 'operator', got: #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "unavailable"),
+             "no-email copy must not say 'unavailable': #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "http://"),
+             "no-email copy must not include 'http://': #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "https://"),
+             "no-email copy must not include 'https://': #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "/users/reset_password"),
+             "no-email copy must not include '/users/reset_password': #{inspect(content_rows)}"
+
+      # Wrap to multiple rows at 64x22 to prove width-aware rendering.
+      message_rows = message_text_rows(new_state, @reset_compact_size)
+      distinct_ys = message_rows |> Enum.map(fn {y, _} -> y end) |> Enum.uniq()
+
+      assert length(distinct_ys) >= 2,
+             "expected no-email copy to span >=2 rows at 64x22, got: #{inspect(message_rows)}"
+
+      for {y, row_text} <- message_rows do
+        assert TextWidth.display_width(row_text) <= 64,
+               "no-email message row at y=#{y} exceeded 64 cols: #{inspect(row_text)}"
+      end
+    end
+  end
 end
