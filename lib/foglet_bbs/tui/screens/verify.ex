@@ -1,9 +1,11 @@
 defmodule Foglet.TUI.Screens.Verify do
   @moduledoc """
-  Email-verification code entry screen (D-08..D-12, VERIFY-02 Phase 6).
+  Screen-owned email-verification code entry flow (D-08..D-12, VERIFY-02 Phase 6).
 
-  State (in state.screen_state[:verify]) is owned by
-  `Foglet.TUI.Screens.Verify.State`. See that module for field documentation.
+  State is local to this screen and owned by
+  `Foglet.TUI.Screens.Verify.State`. App stores it, routes messages, and
+  interprets effects; verification submit/resend work is requested through
+  task effects and completed through `update/3` task results.
 
   The 6-character `[ABC___]` buffer remains hand-rolled per inherited 07 D-02:
   the shared input widget cannot reproduce the slot visualization without a
@@ -13,6 +15,7 @@ defmodule Foglet.TUI.Screens.Verify do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Accounts.Verification
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -24,13 +27,14 @@ defmodule Foglet.TUI.Screens.Verify do
   @code_length 6
 
   @impl true
-  @spec init_screen_state(keyword()) :: map()
-  def init_screen_state(_opts \\ []), do: VerifyState.default()
+  @spec init(Context.t()) :: map()
+  def init(%Context{}), do: VerifyState.default()
 
   @impl true
-  @spec render(map()) :: any()
-  def render(state) do
-    vs = VerifyState.get(state)
+  @spec render(map() | nil, Context.t()) :: any()
+  def render(local_state, %Context{} = context) do
+    vs = local_state || init(context)
+    state = app_state_from_local(vs, context)
     theme = Theme.from_state(state)
 
     status_item =
@@ -60,124 +64,201 @@ defmodule Foglet.TUI.Screens.Verify do
   end
 
   @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: :escape}, state) do
-    {:update, VerifyState.clear(%{state | current_screen: :login}), []}
+  @spec update(term(), map() | nil, Context.t()) :: {map(), [Effect.t()]}
+  def update({:key, %{key: :escape}}, local_state, %Context{} = context) do
+    {local_state || init(context), [Effect.navigate(:login, %{})]}
   end
 
-  def handle_key(%{key: :backspace}, state) do
-    vs = VerifyState.get(state)
+  def update({:key, %{key: :backspace}}, local_state, %Context{} = context) do
+    vs = local_state || init(context)
     new_len = max(String.length(vs.buffer) - 1, 0)
     new_vs = %{vs | buffer: String.slice(vs.buffer, 0, new_len)}
-    {:update, VerifyState.put(state, new_vs), []}
+    {new_vs, []}
   end
 
-  def handle_key(%{key: :enter}, state) do
-    {new_state, cmds} = submit_raw(state)
-    {:update, new_state, cmds}
+  def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
+    submit(local_state || init(context), context)
   end
 
-  def handle_key(%{key: :char, char: c, ctrl: true}, state) when c in ["R", "r"],
-    do: resend_code(state)
+  def update({:key, %{key: :char, char: c, ctrl: true}}, local_state, %Context{} = context)
+      when c in ["R", "r"],
+      do: resend_code(local_state || init(context), context)
 
-  # Typed character from Raxol: %{key: :char, char: c}.
-  def handle_key(%{key: :char, char: c}, state) do
-    vs = VerifyState.get(state)
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context) do
+    vs = local_state || init(context)
     new_char = String.upcase(c)
 
     cond do
       VerifyState.cooldown?(vs) ->
-        {:update, %{state | modal: cooldown_modal(vs.cooldown_until, "Too many attempts.")}, []}
+        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many attempts."))]}
 
       String.match?(new_char, ~r/\A[A-Z0-9]\z/) and String.length(vs.buffer) < @code_length ->
-        new_vs = %{vs | buffer: vs.buffer <> new_char}
-        {:update, VerifyState.put(state, new_vs), []}
+        {%{vs | buffer: vs.buffer <> new_char}, []}
 
       true ->
-        :no_match
+        {vs, []}
     end
   end
 
-  def handle_key(_key, _state), do: :no_match
-
-  @doc """
-  Handle {:verify_event, _} messages (used by App.update/2 for dev-mode
-  code auto-fill and resend commands originating from the commands list).
-  """
-  @spec handle_verify_event({:set_buffer, String.t()} | {:submit} | {:resend}, map()) ::
-          {map(), list()}
-  def handle_verify_event({:set_buffer, code}, state) do
-    vs = VerifyState.get(state)
-    {VerifyState.put(state, %{vs | buffer: code}), []}
+  def update({:verify, {:set_buffer, code}}, local_state, %Context{} = context) do
+    {%{(local_state || init(context)) | buffer: code}, []}
   end
 
-  def handle_verify_event({:submit}, state), do: submit_raw(state)
-  def handle_verify_event({:resend}, state), do: resend_code_raw(state)
+  def update({:verify, :submit}, local_state, %Context{} = context) do
+    submit(local_state || init(context), context)
+  end
 
-  defp submit_raw(%{current_user: nil} = state) do
+  def update({:verify, :resend}, local_state, %Context{} = context) do
+    resend_code(local_state || init(context), context)
+  end
+
+  def update({:task_result, :verify_submit, {:ok, result}}, local_state, %Context{} = context) do
+    handle_verify_submit_result(result, local_state || init(context), context)
+  end
+
+  def update({:task_result, :verify_submit, {:error, _reason}}, local_state, %Context{} = context) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Verification failed. Please try again later."
+    }
+
+    {local_state || init(context), [Effect.open_modal(modal)]}
+  end
+
+  def update({:task_result, :verify_resend, {:ok, result}}, local_state, %Context{} = context) do
+    handle_verify_resend_result(result, local_state || init(context))
+  end
+
+  def update({:task_result, :verify_resend, {:error, _reason}}, local_state, %Context{} = context) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Verification instructions could not be sent. Please try again later."
+    }
+
+    {local_state || init(context), [Effect.open_modal(modal)]}
+  end
+
+  def update(_message, local_state, %Context{} = context), do: {local_state || init(context), []}
+
+  @impl true
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(_opts \\ []), do: VerifyState.default()
+
+  defp submit(_vs, %Context{current_user: nil}) do
     modal = %Foglet.TUI.Modal{type: :error, message: "No user context. Please register again."}
-    {VerifyState.clear(%{state | modal: modal, current_screen: :login}), []}
+    {VerifyState.default(), [Effect.open_modal(modal), Effect.navigate(:login, %{})]}
   end
 
-  defp submit_raw(state) do
-    vs = VerifyState.get(state)
-
+  defp submit(vs, %Context{} = context) do
     cond do
       VerifyState.cooldown?(vs) ->
-        {%{state | modal: cooldown_modal(vs.cooldown_until, "Too many attempts.")}, []}
+        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many attempts."))]}
 
       String.length(vs.buffer) != @code_length ->
         modal = %Foglet.TUI.Modal{type: :error, message: "Enter all 6 characters."}
-        {%{state | modal: modal}, []}
+        {vs, [Effect.open_modal(modal)]}
 
       true ->
-        verify_code(state, vs)
+        verify_code(vs, context)
     end
   end
 
-  defp resend_code(state) do
-    vs = VerifyState.get(state)
-
+  defp resend_code(vs, %Context{} = context) do
     if VerifyState.resend_cooldown?(vs) do
-      {:update,
-       %{state | modal: cooldown_modal(vs.resend_cooldown_until, "Please wait to resend.")}, []}
+      {vs,
+       [Effect.open_modal(cooldown_modal(vs.resend_cooldown_until, "Please wait to resend."))]}
     else
-      {new_state, cmds} = resend_code_raw(state)
-      {:update, new_state, cmds}
+      resend_code_raw(vs, context)
     end
   end
 
-  defp resend_code_raw(%{current_user: nil} = state), do: {state, []}
+  defp resend_code_raw(vs, %Context{current_user: nil}), do: {vs, []}
 
-  defp resend_code_raw(state) do
-    case Verification.deliver_verification_code(state.current_user) do
-      {:ok, :attempted} ->
-        modal = %Foglet.TUI.Modal{
-          type: :info,
-          message: "If email delivery is available, new verification instructions have been sent."
-        }
+  defp resend_code_raw(vs, %Context{} = context) do
+    user = context.current_user
+    verification_mod = domain_module(context, :verification)
 
-        vs = VerifyState.get(state)
-        new_vs = VerifyState.after_resend(vs, resend_cooldown_seconds())
+    effect =
+      Effect.task(:verify_resend, :verify, fn ->
+        verification_mod.deliver_verification_code(user)
+      end)
 
-        {VerifyState.put(%{state | modal: modal}, new_vs), []}
+    {vs, [effect]}
+  end
 
-      {:error, :unavailable} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Email verification is unavailable because email delivery is disabled."
-        }
+  defp verify_code(vs, %Context{} = context) do
+    user = context.current_user
+    code = vs.buffer
+    verification_mod = domain_module(context, :verification)
 
-        {%{state | modal: modal}, []}
+    effect =
+      Effect.task(:verify_submit, :verify, fn ->
+        verification_mod.verify_email_code(user, code)
+      end)
 
-      {:error, _reason} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Verification instructions could not be sent. Please try again later."
-        }
+    {vs, [effect]}
+  end
 
-        {%{state | modal: modal}, []}
-    end
+  defp handle_verify_submit_result({:ok, confirmed}, _vs, %Context{}) do
+    {VerifyState.default(), [Effect.session({:set_user, confirmed})]}
+  end
+
+  defp handle_verify_submit_result({:error, :expired}, vs, %Context{}) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Code expired. Press [R] to request a new one."
+    }
+
+    {%{vs | buffer: ""}, [Effect.open_modal(modal)]}
+  end
+
+  defp handle_verify_submit_result({:error, :invalid_code}, vs, %Context{}) do
+    new_vs = VerifyState.record_invalid_attempt(vs, @max_attempts, @cooldown_seconds)
+
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Invalid code (#{new_vs.attempts}/#{@max_attempts})."
+    }
+
+    {new_vs, [Effect.open_modal(modal)]}
+  end
+
+  defp handle_verify_submit_result({:error, _reason}, vs, %Context{}) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Verification failed. Please try again later."
+    }
+
+    {vs, [Effect.open_modal(modal)]}
+  end
+
+  defp handle_verify_resend_result({:ok, :attempted}, vs) do
+    modal = %Foglet.TUI.Modal{
+      type: :info,
+      message: "If email delivery is available, new verification instructions have been sent."
+    }
+
+    new_vs = VerifyState.after_resend(vs, resend_cooldown_seconds())
+
+    {new_vs, [Effect.open_modal(modal)]}
+  end
+
+  defp handle_verify_resend_result({:error, :unavailable}, vs) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Email verification is unavailable because email delivery is disabled."
+    }
+
+    {vs, [Effect.open_modal(modal)]}
+  end
+
+  defp handle_verify_resend_result({:error, _reason}, vs) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Verification instructions could not be sent. Please try again later."
+    }
+
+    {vs, [Effect.open_modal(modal)]}
   end
 
   # Render a 6-char slot with a block cursor at the current position.
@@ -198,36 +279,31 @@ defmodule Foglet.TUI.Screens.Verify do
     %Foglet.TUI.Modal{type: :error, message: "#{prefix} Wait #{max(remaining, 0)}s."}
   end
 
-  defp verify_code(state, vs) do
-    case Verification.verify_email_code(state.current_user, vs.buffer) do
-      {:ok, confirmed} ->
-        {VerifyState.clear(%{state | current_user: confirmed, current_screen: :main_menu}), []}
-
-      {:error, :expired} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Code expired. Press [R] to request a new one."
-        }
-
-        {VerifyState.put(%{state | modal: modal}, %{vs | buffer: ""}), []}
-
-      {:error, :invalid_code} ->
-        handle_invalid_code(state, vs)
-    end
-  end
-
-  defp handle_invalid_code(state, vs) do
-    new_vs = VerifyState.record_invalid_attempt(vs, @max_attempts, @cooldown_seconds)
-
-    modal = %Foglet.TUI.Modal{
-      type: :error,
-      message: "Invalid code (#{new_vs.attempts}/#{@max_attempts})."
-    }
-
-    {VerifyState.put(%{state | modal: modal}, new_vs), []}
-  end
-
   defp resend_cooldown_seconds do
     Foglet.Config.email_verify_resend_cooldown_seconds()
   end
+
+  defp app_state_from_local(local_state, %Context{} = context) do
+    %{
+      current_screen: :verify,
+      current_user: context.current_user,
+      session_context: context.session_context,
+      session_pid: context.session_pid,
+      terminal_size: context.terminal_size,
+      route_params: context.route_params,
+      domain: context.domain,
+      screen_state: %{verify: local_state || init(context)}
+    }
+  end
+
+  defp domain_module(%Context{} = context, key) do
+    domain = context.domain || %{}
+
+    case Map.get(domain, key) do
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _other -> default_domain_module(key)
+    end
+  end
+
+  defp default_domain_module(:verification), do: Verification
 end

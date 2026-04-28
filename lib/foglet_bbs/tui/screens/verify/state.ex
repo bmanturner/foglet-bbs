@@ -2,7 +2,10 @@ defmodule Foglet.TUI.Screens.Verify.State do
   @moduledoc """
   Screen-local state for `Foglet.TUI.Screens.Verify`.
 
-  The app stores this map at `state.screen_state[:verify]`.
+  `Foglet.TUI.Screens.Verify.init/1` builds this map and
+  `Verify.update/3` owns code entry, submit/resend events, cooldowns, and
+  verification task outcomes. App stores the returned value under
+  `state.screen_state[:verify]` and only interprets emitted effects.
 
   Fields:
     * `buffer`                — the 0..6 characters typed so far

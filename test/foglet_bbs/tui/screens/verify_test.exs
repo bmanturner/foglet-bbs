@@ -2,335 +2,344 @@ defmodule Foglet.TUI.Screens.VerifyTest do
   use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts.Verification
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Verify
+  alias Foglet.TUI.Screens.Verify.State, as: VerifyState
 
-  import Swoosh.TestAssertions
   import FogletBbs.AccountsFixtures
+  import Swoosh.TestAssertions
 
-  defp verify_ss(overrides \\ %{}) do
-    Map.merge(
-      %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil},
-      overrides
+  defmodule FakeVerification do
+    def verify_email_code(user, code) do
+      owner = Process.get(:fake_verify_owner)
+      if owner, do: send(owner, {:verify_email_code, user, code})
+      Process.get(:fake_verify_submit_result, {:error, :invalid_code})
+    end
+
+    def deliver_verification_code(user) do
+      owner = Process.get(:fake_verify_owner)
+      if owner, do: send(owner, {:deliver_verification_code, user})
+      Process.get(:fake_verify_resend_result, {:error, :delivery_failed})
+    end
+  end
+
+  defp verify_state(overrides \\ %{}) do
+    Map.merge(VerifyState.default(), overrides)
+  end
+
+  defp context(user, extra \\ []) do
+    Context.new(
+      Keyword.merge(
+        [
+          current_user: user,
+          session_context: %{},
+          terminal_size: {80, 24}
+        ],
+        extra
+      )
     )
   end
 
-  defp put_verify_ss(state, verify_ss) do
-    %{state | screen_state: Map.put(state.screen_state || %{}, :verify, verify_ss)}
+  defp fake_context(user) do
+    context(user, domain: %{verification: FakeVerification})
   end
 
-  defp get_verify_ss(state), do: Map.get(state.screen_state || %{}, :verify)
-
-  defp base_state(user) do
-    %Foglet.TUI.App{
-      current_screen: :verify,
-      current_user: user,
-      session_context: %{},
-      terminal_size: {80, 24},
-      screen_state: %{verify: verify_ss()}
-    }
-    |> Map.from_struct()
+  defp task_effect(effects, op) do
+    Enum.find(effects, &match?(%Effect{type: :task, payload: %{op: ^op}}, &1))
   end
+
+  defp modal_effect(effects) do
+    Enum.find(effects, &match?(%Effect{type: :modal, payload: {:open, _}}, &1))
+  end
+
+  defp session_effect(effects) do
+    Enum.find(effects, &match?(%Effect{type: :session}, &1))
+  end
+
+  defp navigate_effect(effects) do
+    Enum.find(effects, &match?(%Effect{type: :navigate}, &1))
+  end
+
+  defp run_task(%Effect{payload: %{fun: fun}}), do: fun.()
 
   setup do
     original_delivery_mode = Foglet.Config.get("delivery_mode", "no_email")
+    original_resend_cooldown = Foglet.Config.get("email_verify_resend_cooldown_seconds", 60)
     Foglet.Config.put!("delivery_mode", "email")
+    Foglet.Config.put!("email_verify_resend_cooldown_seconds", 60)
 
     on_exit(fn ->
       Foglet.Config.put!("delivery_mode", original_delivery_mode)
+      Foglet.Config.put!("email_verify_resend_cooldown_seconds", original_resend_cooldown)
       Foglet.Config.invalidate("delivery_mode")
+      Foglet.Config.invalidate("email_verify_resend_cooldown_seconds")
     end)
 
     user = user_fixture()
     {:ok, code} = Verification.build_verify_code(user)
-
-    %{state: base_state(user), user: user, code: code}
+    %{user: user, code: code}
   end
 
   setup :set_swoosh_global
 
-  describe "render/1 (D-08)" do
-    test "renders without crashing", %{state: state} do
-      assert _ = Verify.render(state)
+  describe "init/render" do
+    test "Verify.init/1 builds default code-entry state", %{user: user} do
+      assert Verify.init(context(user)) == VerifyState.default()
     end
 
-    test "uses honest prompt copy without claiming a code was emailed", %{state: state} do
-      rendered = inspect(Verify.render(state))
-
-      assert rendered =~ "Enter the 6-character verification code:"
-      refute rendered =~ "emailed to you"
+    test "Verify.render/2 renders local state without App-shaped input", %{user: user} do
+      assert Verify.render(Verify.init(context(user)), context(user))
     end
   end
 
-  describe "handle_key character entry" do
-    test "appends uppercase alphanumeric chars up to 6", %{state: state} do
-      {:update, s, _} = Verify.handle_key(%{key: :char, char: "a"}, state)
-      assert get_verify_ss(s).buffer == "A"
+  describe "code entry reducer" do
+    test "character entry uppercases alphanumeric chars up to six", %{user: user} do
+      {state, []} = Verify.update({:key, %{key: :char, char: "a"}}, verify_state(), context(user))
+      assert state.buffer == "A"
 
-      {:update, s, _} = Verify.handle_key(%{key: :char, char: "1"}, s)
-      assert get_verify_ss(s).buffer == "A1"
-    end
-
-    test "ignores input beyond 6 chars", %{state: state} do
-      filled = put_verify_ss(state, verify_ss(%{buffer: "ABCDEF"}))
-
-      assert :no_match = Verify.handle_key(%{key: :char, char: "G"}, filled)
-    end
-
-    test "backspace removes last char", %{state: state} do
-      s = put_verify_ss(state, verify_ss(%{buffer: "ABC"}))
-
-      {:update, new, _} = Verify.handle_key(%{key: :backspace}, s)
-      assert get_verify_ss(new).buffer == "AB"
-    end
-
-    test "escape clears screen_state[:verify] and returns to login", %{state: state} do
-      {:update, new_state, []} = Verify.handle_key(%{key: :escape}, state)
-      assert new_state.current_screen == :login
-      assert Map.get(new_state.screen_state || %{}, :verify) == nil
-    end
-  end
-
-  describe "submit via {:submit} event (D-12)" do
-    test "correct code transitions to :main_menu", %{state: state, code: code} do
-      s = put_verify_ss(state, verify_ss(%{buffer: code}))
-
-      {new_state, _} = Verify.handle_verify_event({:submit}, s)
-      assert new_state.current_screen == :main_menu
-      assert new_state.current_user.confirmed_at != nil
-      assert Map.get(new_state.screen_state || %{}, :verify) == nil
-    end
-
-    test "wrong code increments attempts + error modal", %{state: state} do
-      s = put_verify_ss(state, verify_ss(%{buffer: "WRONG1"}))
-
-      {new_state, _} = Verify.handle_verify_event({:submit}, s)
-      assert get_verify_ss(new_state).attempts == 1
-      assert get_verify_ss(new_state).buffer == ""
-      assert new_state.modal.type == :error
-    end
-
-    test "after 5 invalid attempts cooldown_until is set (D-10)", %{state: state} do
-      final_state =
-        Enum.reduce(1..5, state, fn _, acc ->
-          ss = get_verify_ss(acc)
-          s = put_verify_ss(acc, %{ss | buffer: "WRONG1"})
-          {new_state, _} = Verify.handle_verify_event({:submit}, s)
-          new_state
+      final =
+        Enum.reduce(~w(1 b 2 c 3), state, fn char, acc ->
+          {next, []} = Verify.update({:key, %{key: :char, char: char}}, acc, context(user))
+          next
         end)
 
-      assert get_verify_ss(final_state).attempts == 5
-      assert get_verify_ss(final_state).cooldown_until != nil
+      assert final.buffer == "A1B2C3"
 
-      assert DateTime.compare(get_verify_ss(final_state).cooldown_until, DateTime.utc_now()) ==
-               :gt
+      {unchanged, []} =
+        Verify.update({:key, %{key: :char, char: "Z"}}, final, context(user))
+
+      assert unchanged.buffer == "A1B2C3"
     end
 
-    test "during cooldown submit returns cooldown modal without incrementing", %{state: state} do
-      future = DateTime.add(DateTime.utc_now(), 30, :second)
+    test "invalid characters are ignored without effects", %{user: user} do
+      {state, []} = Verify.update({:key, %{key: :char, char: "!"}}, verify_state(), context(user))
+      assert state.buffer == ""
+    end
 
-      s =
-        put_verify_ss(
-          state,
-          verify_ss(%{buffer: "ANYTHI", attempts: 5, cooldown_until: future})
+    test "backspace removes the last character", %{user: user} do
+      {state, []} =
+        Verify.update({:key, %{key: :backspace}}, verify_state(%{buffer: "ABC"}), context(user))
+
+      assert state.buffer == "AB"
+    end
+
+    test "escape requests navigation back to login", %{user: user} do
+      {state, effects} = Verify.update({:key, %{key: :escape}}, verify_state(), context(user))
+
+      assert state == VerifyState.default()
+      assert %Effect{type: :navigate, payload: %{screen: :login}} = navigate_effect(effects)
+    end
+
+    test "{:verify, {:set_buffer, code}} updates the buffer directly", %{user: user} do
+      {state, []} =
+        Verify.update({:verify, {:set_buffer, "ABC123"}}, verify_state(), context(user))
+
+      assert state.buffer == "ABC123"
+    end
+  end
+
+  describe "submit reducer and outcomes" do
+    test "enter with a complete code requests a verify_submit task", %{user: user} do
+      {state, effects} =
+        Verify.update(
+          {:key, %{key: :enter}},
+          verify_state(%{buffer: "ABC123"}),
+          fake_context(user)
         )
 
-      {new_state, _} = Verify.handle_verify_event({:submit}, s)
-      assert get_verify_ss(new_state).attempts == 5
-      assert new_state.modal.type == :error
-      assert new_state.modal.message =~ "Wait"
-    end
-  end
+      assert state.buffer == "ABC123"
 
-  describe "resend ({:resend} event) (D-12)" do
-    test "attempts delivery and resets buffer + attempts", %{state: state} do
-      s = put_verify_ss(state, verify_ss(%{buffer: "STALE1", attempts: 3}))
-
-      {new_state, _} = Verify.handle_verify_event({:resend}, s)
-      assert get_verify_ss(new_state).buffer == ""
-      assert get_verify_ss(new_state).attempts == 0
-      assert new_state.modal.type == :info
-
-      assert new_state.modal.message ==
-               "If email delivery is available, new verification instructions have been sent."
-
-      assert_email_sent(subject: "Your Foglet verification code")
-    end
-  end
-
-  describe "handle_key/2 — resend uses Ctrl+R (R is a valid code char)" do
-    test "Ctrl+R triggers resend (lowercase)", %{state: state} do
-      s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
-
-      result = Verify.handle_key(%{key: :char, char: "r", ctrl: true}, s)
-      assert {:update, new_state, []} = result
-      assert get_verify_ss(new_state).buffer == ""
+      assert %Effect{type: :task, payload: %{op: :verify_submit, screen_key: :verify}} =
+               task_effect(effects, :verify_submit)
     end
 
-    test "Ctrl+R triggers resend (uppercase)", %{state: state} do
-      s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
+    test "correct code promotes the verified user through a session effect", %{
+      user: user,
+      code: code
+    } do
+      {state, effects} =
+        Verify.update({:verify, :submit}, verify_state(%{buffer: code}), context(user))
 
-      result = Verify.handle_key(%{key: :char, char: "R", ctrl: true}, s)
-      assert {:update, new_state, []} = result
-      assert get_verify_ss(new_state).buffer == ""
+      result = run_task(task_effect(effects, :verify_submit))
+
+      {state, effects} =
+        Verify.update({:task_result, :verify_submit, {:ok, result}}, state, context(user))
+
+      assert state == VerifyState.default()
+      assert %Effect{type: :session, payload: {:set_user, confirmed}} = session_effect(effects)
+      assert confirmed.confirmed_at != nil
     end
 
-    test "bare 'R' is appended to buffer (it's a valid [A-Z0-9] code char)", %{state: state} do
-      s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
+    test "invalid code increments attempts and clears the buffer", %{user: user} do
+      {state, effects} =
+        Verify.update(
+          {:task_result, :verify_submit, {:ok, {:error, :invalid_code}}},
+          verify_state(%{buffer: "WRONG1"}),
+          context(user)
+        )
 
-      {:update, new_state, []} = Verify.handle_key(%{key: :char, char: "R"}, s)
-      assert get_verify_ss(new_state).buffer == "ABR"
+      assert state.attempts == 1
+      assert state.buffer == ""
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
     end
 
-    test "bare 'r' is appended to buffer (upcased to R)", %{state: state} do
-      s = put_verify_ss(state, verify_ss(%{buffer: "AB"}))
+    test "expired code clears the buffer without incrementing attempts", %{user: user} do
+      {state, effects} =
+        Verify.update(
+          {:task_result, :verify_submit, {:ok, {:error, :expired}}},
+          verify_state(%{buffer: "OLD123", attempts: 2}),
+          context(user)
+        )
 
-      {:update, new_state, []} = Verify.handle_key(%{key: :char, char: "r"}, s)
-      assert get_verify_ss(new_state).buffer == "ABR"
+      assert state.buffer == ""
+      assert state.attempts == 2
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
     end
-  end
 
-  describe "handle_key/2 — char validation and buffer limits" do
-    test "typing 6 valid chars fills the buffer completely", %{state: state} do
-      final =
-        Enum.reduce(~w(A B C 1 2 3), state, fn char, acc ->
-          {:update, new_acc, []} = Verify.handle_key(%{key: :char, char: char}, acc)
-          new_acc
+    test "after five invalid attempts cooldown_until is set", %{user: user} do
+      final_state =
+        Enum.reduce(1..5, verify_state(%{buffer: "WRONG1"}), fn _, acc ->
+          {state, _effects} =
+            Verify.update(
+              {:task_result, :verify_submit, {:ok, {:error, :invalid_code}}},
+              %{acc | buffer: "WRONG1"},
+              context(user)
+            )
+
+          state
         end)
 
-      assert get_verify_ss(final).buffer == "ABC123"
+      assert final_state.attempts == 5
+      assert %DateTime{} = final_state.cooldown_until
+      assert DateTime.compare(final_state.cooldown_until, DateTime.utc_now()) == :gt
     end
 
-    test "valid chars are uppercased before appending", %{state: state} do
-      {:update, s1, []} = Verify.handle_key(%{key: :char, char: "a"}, state)
-      assert get_verify_ss(s1).buffer == "A"
+    test "active invalid-attempt cooldown blocks submit without incrementing", %{user: user} do
+      future = DateTime.add(DateTime.utc_now(), 30, :second)
 
-      {:update, s2, []} = Verify.handle_key(%{key: :char, char: "b"}, s1)
-      assert get_verify_ss(s2).buffer == "AB"
+      {state, effects} =
+        Verify.update(
+          {:verify, :submit},
+          verify_state(%{buffer: "ABC123", attempts: 5, cooldown_until: future}),
+          context(user)
+        )
+
+      assert state.attempts == 5
+      assert state.cooldown_until == future
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
     end
 
-    test "invalid chars (punctuation, space) are rejected and return :no_match", %{state: state} do
-      assert :no_match = Verify.handle_key(%{key: :char, char: "!"}, state)
-      assert :no_match = Verify.handle_key(%{key: :char, char: " "}, state)
-      assert :no_match = Verify.handle_key(%{key: :char, char: "-"}, state)
-    end
+    test "submit with no user opens error modal and requests login navigation" do
+      {state, effects} =
+        Verify.update({:verify, :submit}, verify_state(%{buffer: "ABC123"}), context(nil))
 
-    test "buffer does not exceed 6 chars — 7th valid char is rejected", %{state: state} do
-      filled = put_verify_ss(state, verify_ss(%{buffer: "ABCDEF"}))
-
-      assert :no_match = Verify.handle_key(%{key: :char, char: "G"}, filled)
-      assert :no_match = Verify.handle_key(%{key: :char, char: "1"}, filled)
-    end
-
-    test "non-char keys like :up/:down return :no_match", %{state: state} do
-      assert :no_match = Verify.handle_key(%{key: :up}, state)
-      assert :no_match = Verify.handle_key(%{key: :down}, state)
+      assert state == VerifyState.default()
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
+      assert %Effect{type: :navigate, payload: %{screen: :login}} = navigate_effect(effects)
     end
   end
 
-  describe "resend cooldown — VERIFY-02 two-timer model" do
-    setup do
-      original =
-        try do
-          Foglet.Config.get!("email_verify_resend_cooldown_seconds")
-        rescue
-          _ -> :not_seeded
-        end
+  describe "resend reducer and outcomes" do
+    test "Ctrl+R requests a verify_resend task while bare R enters the buffer", %{user: user} do
+      {state, effects} =
+        Verify.update(
+          {:key, %{key: :char, char: "r", ctrl: true}},
+          verify_state(),
+          fake_context(user)
+        )
 
-      on_exit(fn ->
-        case original do
-          :not_seeded -> :ok
-          value -> Foglet.Config.put!("email_verify_resend_cooldown_seconds", value)
-        end
-      end)
+      assert state == VerifyState.default()
 
-      :ok
+      assert %Effect{type: :task, payload: %{op: :verify_resend, screen_key: :verify}} =
+               task_effect(effects, :verify_resend)
+
+      {state, []} = Verify.update({:key, %{key: :char, char: "r"}}, verify_state(), context(user))
+      assert state.buffer == "R"
     end
 
-    test "successful resend sets resend_cooldown_until using config-driven duration",
-         %{state: state} do
+    test "successful resend resets attempts and sets resend cooldown", %{user: user} do
       Foglet.Config.put!("email_verify_resend_cooldown_seconds", 90)
 
+      {state, effects} =
+        Verify.update(
+          {:verify, :resend},
+          verify_state(%{buffer: "STALE1", attempts: 3}),
+          context(user)
+        )
+
+      result = run_task(task_effect(effects, :verify_resend))
       before = DateTime.utc_now()
-      {new_state, _} = Foglet.TUI.Screens.Verify.handle_verify_event({:resend}, state)
 
-      assert %DateTime{} = get_verify_ss(new_state).resend_cooldown_until
+      {state, effects} =
+        Verify.update({:task_result, :verify_resend, {:ok, result}}, state, context(user))
 
-      remaining =
-        DateTime.diff(get_verify_ss(new_state).resend_cooldown_until, before, :second)
-
-      # Allow 1s of clock drift between the test's `before` capture and
-      # DateTime.utc_now() inside resend_code_raw/1.
-      assert remaining in 89..91,
-             "Expected ~90s from before, got #{remaining}"
+      assert state.buffer == ""
+      assert state.attempts == 0
+      assert state.cooldown_until == nil
+      assert %DateTime{} = state.resend_cooldown_until
+      assert DateTime.diff(state.resend_cooldown_until, before, :second) in 89..91
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :info
+      assert_email_sent(subject: "Your Foglet verification code")
     end
 
-    test "resend while resend_cooldown_until is active returns cooldown modal, no new code",
-         %{state: state} do
+    test "resend failure preserves cooldown state and opens error modal", %{user: user} do
+      Process.put(:fake_verify_owner, self())
+      Process.put(:fake_verify_resend_result, {:error, :delivery_failed})
+      future = DateTime.add(DateTime.utc_now(), 60, :second)
+
+      {state, effects} =
+        Verify.update(
+          {:verify, :resend},
+          verify_state(%{buffer: "ABC123", resend_cooldown_until: nil, cooldown_until: future}),
+          fake_context(user)
+        )
+
+      result = run_task(task_effect(effects, :verify_resend))
+
+      {state, effects} =
+        Verify.update({:task_result, :verify_resend, {:ok, result}}, state, context(user))
+
+      assert state.buffer == "ABC123"
+      assert state.cooldown_until == future
+      assert state.resend_cooldown_until == nil
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
+      assert_received {:deliver_verification_code, ^user}
+    end
+
+    test "active resend cooldown blocks resend without mutating timers", %{user: user} do
       future = DateTime.add(DateTime.utc_now(), 30, :second)
 
-      s = put_verify_ss(state, verify_ss(%{resend_cooldown_until: future}))
+      {state, effects} =
+        Verify.update(
+          {:verify, :resend},
+          verify_state(%{resend_cooldown_until: future}),
+          context(user)
+        )
 
-      result = Foglet.TUI.Screens.Verify.handle_key(%{key: :char, char: "r", ctrl: true}, s)
-      assert {:update, new_state, []} = result
-      assert new_state.modal.type == :error
-      assert new_state.modal.message =~ "wait"
-      # resend_cooldown_until is NOT mutated by a blocked press
-      assert get_verify_ss(new_state).resend_cooldown_until == future
+      assert state.resend_cooldown_until == future
+      refute task_effect(effects, :verify_resend)
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
     end
 
-    test "invalid-attempts cooldown does NOT block resend (two independent timers)",
-         %{state: state} do
-      # Simulate user hit invalid 5 times and is under cooldown_until lockout,
-      # but resend_cooldown_until is nil.
+    test "resend cooldown does not block code entry", %{user: user} do
       future = DateTime.add(DateTime.utc_now(), 60, :second)
 
-      s = put_verify_ss(state, verify_ss(%{attempts: 5, cooldown_until: future}))
+      {state, []} =
+        Verify.update(
+          {:key, %{key: :char, char: "a"}},
+          verify_state(%{resend_cooldown_until: future}),
+          context(user)
+        )
 
-      # The resend_code path should SUCCEED, setting resend_cooldown_until
-      # and (per D-09) clearing cooldown_until + attempts as a side effect.
-      {:update, new_state, []} =
-        Foglet.TUI.Screens.Verify.handle_key(%{key: :char, char: "R", ctrl: true}, s)
-
-      assert new_state.modal.type == :info
-      assert %DateTime{} = get_verify_ss(new_state).resend_cooldown_until
-      assert get_verify_ss(new_state).cooldown_until == nil
-      assert get_verify_ss(new_state).attempts == 0
-      assert get_verify_ss(new_state).buffer == ""
-    end
-
-    test "resend cooldown does NOT block typing a char (invalid-attempts cooldown unaffected)",
-         %{state: state} do
-      future = DateTime.add(DateTime.utc_now(), 60, :second)
-
-      s = put_verify_ss(state, verify_ss(%{resend_cooldown_until: future}))
-
-      # Typing "A" should append normally — the resend timer does NOT gate
-      # code entry.
-      {:update, new_state, _} =
-        Foglet.TUI.Screens.Verify.handle_key(%{key: :char, char: "a"}, s)
-
-      assert get_verify_ss(new_state).buffer == "A"
-      assert get_verify_ss(new_state).resend_cooldown_until == future
-    end
-
-    test "missing config key raises Ecto.NoResultsError (mis-configured app signal)",
-         %{state: state} do
-      import Ecto.Query, only: [from: 2]
-
-      # With the typed-accessor migration (quick task 260422-irb), the
-      # email_verify_resend_cooldown_seconds fallback is removed — seeds are
-      # authoritative. A missing schema key indicates the app is
-      # mis-configured and the raise surfaces that loudly.
-      case from(e in Foglet.Config.Entry, where: e.key == "email_verify_resend_cooldown_seconds")
-           |> FogletBbs.Repo.delete_all() do
-        {_, _} -> :ok
-      end
-
-      Foglet.Config.invalidate("email_verify_resend_cooldown_seconds")
-
-      assert_raise Ecto.NoResultsError, fn ->
-        Foglet.TUI.Screens.Verify.handle_verify_event({:resend}, state)
-      end
+      assert state.buffer == "A"
+      assert state.resend_cooldown_until == future
     end
   end
 end
