@@ -553,11 +553,44 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert message_category != nil
     end
 
-    test "[T] enters reset_consume sub-state from reset_request (D-15)" do
-      Config.put!("delivery_mode", "no_email")
-      state = reset_request_state("alice@example.test")
+    # CR-001 regression: typing `t` or `T` while on the reset_request screen
+    # MUST append to the identifier input (free-text email). The earlier
+    # implementation hijacked bare `t`/`T` as a [T] Enter-reset-token shortcut,
+    # which made it impossible to type emails like `taylor@example.com` or
+    # `bfturner@foglet.io`. Token-consume entry remains reachable from the
+    # Login menu (Esc → [T]); see "[T] from menu enters reset_consume" below.
+    test "typing 't' or 'T' into the identifier field appends to the input, not the [T] shortcut (CR-001)" do
+      # Lower-case `t` mid-typing: simulate user partway through `test@host`.
+      state = reset_request_state("alice@example.")
+      {:update, after_t, []} = Login.handle_key(%{key: :char, char: "t"}, state)
+      assert get_in(after_t, [:screen_state, :login, :sub]) == :reset_request
 
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, state)
+      assert get_in(after_t, [
+               :screen_state,
+               :login,
+               :identifier_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "alice@example.t"
+
+      # Upper-case `T` likewise.
+      state2 = reset_request_state("alice@example.")
+      {:update, after_upper, []} = Login.handle_key(%{key: :char, char: "T"}, state2)
+      assert get_in(after_upper, [:screen_state, :login, :sub]) == :reset_request
+
+      assert get_in(after_upper, [
+               :screen_state,
+               :login,
+               :identifier_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "alice@example.T"
+    end
+
+    test "[T] from the Login menu enters reset_consume sub-state (D-15)" do
+      Config.put!("delivery_mode", "no_email")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, base_state())
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
@@ -630,23 +663,42 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert rendered =~ "Reset token"
     end
 
-    test "'T' from reset_request enters :reset_consume" do
+    # CR-001: bare `T`/`t` while on the reset_request screen MUST NOT navigate
+    # to :reset_consume — that screen has a free-text email field whose
+    # contents include `t`/`T`. Token-consume entry from the Forgot Password
+    # flow is reachable via Esc → menu → [T] (verified separately above).
+    test "'T' on reset_request types into the identifier input (CR-001)" do
       Config.put!("delivery_mode", "no_email")
       state = reset_request_state("alice@example.test")
 
       {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, state)
 
-      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
-      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
+
+      assert get_in(new_state, [
+               :screen_state,
+               :login,
+               :identifier_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "alice@example.testT"
     end
 
-    test "'t' lowercase from reset_request enters :reset_consume" do
+    test "'t' lowercase on reset_request types into the identifier input (CR-001)" do
       Config.put!("delivery_mode", "no_email")
       state = reset_request_state("alice@example.test")
 
       {:update, new_state, []} = Login.handle_key(%{key: :char, char: "t"}, state)
 
-      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
+
+      assert get_in(new_state, [
+               :screen_state,
+               :login,
+               :identifier_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "alice@example.testt"
     end
 
     test "fresh :reset_consume initializes three TextInput fields with masked password fields (D-05)" do
