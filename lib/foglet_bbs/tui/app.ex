@@ -152,9 +152,10 @@ defmodule Foglet.TUI.App do
       |> Map.put(:current_screen, screen)
       |> Map.put(:route_params, params || %{})
       |> Map.put(:modal, nil)
+      |> maybe_seed_legacy_route_context(screen, params || %{})
       |> init_route_screen_state(screen, params || %{})
 
-    {state, []}
+    maybe_dispatch_route_entry(state, screen, params || %{})
   end
 
   def apply_effect(%__MODULE__{} = state, %Effect{type: :modal, payload: {:open, modal}}) do
@@ -1031,6 +1032,36 @@ defmodule Foglet.TUI.App do
     else
       state
     end
+  end
+
+  defp maybe_seed_legacy_route_context(%__MODULE__{} = state, :post_reader, params) do
+    # Phase 37 compatibility: PostReader is not yet a new-contract screen, so
+    # keep its legacy App fields warm when ThreadList navigates into it.
+    %{
+      state
+      | current_board: route_param(params, :board),
+        current_thread: route_param(params, :thread),
+        posts: nil
+    }
+  end
+
+  defp maybe_seed_legacy_route_context(%__MODULE__{} = state, _screen, _params), do: state
+
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :thread_list, _params) do
+    route_screen_update(state, :thread_list, :load)
+  end
+
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :post_reader, params) do
+    case route_param(params, :thread_id) do
+      thread_id when is_binary(thread_id) -> do_update({:load_posts, thread_id}, state)
+      _other -> {state, []}
+    end
+  end
+
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, _screen, _params), do: {state, []}
+
+  defp route_param(params, key) when is_map(params) do
+    Map.get(params, key) || Map.get(params, Atom.to_string(key))
   end
 
   defp route_screen_update(%__MODULE__{} = state, key, message) do

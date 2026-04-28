@@ -3,6 +3,7 @@ defmodule Foglet.TUI.AppTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread
@@ -13,6 +14,28 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.Modal.Form
+
+  defmodule FakeThreads do
+    def list_threads("b1", _user_id) do
+      [
+        %{
+          id: "t1",
+          title: "Welcome",
+          sticky: false,
+          locked: false,
+          post_count: 1,
+          last_post_at: ~U[2026-04-28 18:00:00Z],
+          created_by: %{handle: "alice"}
+        }
+      ]
+    end
+  end
+
+  defmodule FakePosts do
+    def list_posts("t1") do
+      [%{id: "p1", body: "Hello", message_number: 1, inserted_at: ~U[2026-04-28 18:00:00Z]}]
+    end
+  end
 
   defp fake_oneliners_context(extra) do
     Map.merge(%{domain: %{oneliners: Foglet.TUI.FakeOneliners}}, extra)
@@ -404,6 +427,70 @@ defmodule Foglet.TUI.AppTest do
 
       assert %ThreadListState{threads: ^threads, status: :loaded, selected_index: 0} =
                App.screen_state_for(new_state, :thread_list)
+    end
+
+    test "navigating to thread_list initializes local state and queues its load task", %{
+      state: state
+    } do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      board = %{id: "b1", name: "General", slug: "general"}
+
+      state = %{
+        state
+        | current_user: user,
+          session_context: %{domain: %{threads: FakeThreads}}
+      }
+
+      {new_state, cmds} =
+        App.apply_effect(
+          state,
+          Effect.navigate(:thread_list, %{board: board, board_id: "b1"})
+        )
+
+      assert new_state.current_screen == :thread_list
+      assert new_state.route_params == %{board: board, board_id: "b1"}
+
+      assert %ThreadListState{board: ^board, board_id: "b1", status: :loading} =
+               App.screen_state_for(new_state, :thread_list)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :thread_list, :load_threads, {:ok, [%{id: "t1"}]}} =
+               task.()
+    end
+
+    test "navigating to post_reader seeds legacy context and queues post loading", %{
+      state: state
+    } do
+      board = %{id: "b1", name: "General", slug: "general"}
+      thread = %{id: "t1", title: "Welcome"}
+
+      state = %{
+        state
+        | current_board: nil,
+          current_thread: nil,
+          posts: [%{id: "stale"}],
+          session_context: %{domain: %{posts: FakePosts}}
+      }
+
+      {new_state, cmds} =
+        App.apply_effect(
+          state,
+          Effect.navigate(:post_reader, %{
+            board: board,
+            board_id: "b1",
+            thread: thread,
+            thread_id: "t1"
+          })
+        )
+
+      assert new_state.current_screen == :post_reader
+      assert new_state.current_board == board
+      assert new_state.current_thread == thread
+      assert new_state.posts == nil
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+      assert {:posts_loaded, [%{id: "p1"}], []} = task.()
     end
 
     test ":heartbeat_tick calls Session.heartbeat when session_pid is set", %{state: state} do
