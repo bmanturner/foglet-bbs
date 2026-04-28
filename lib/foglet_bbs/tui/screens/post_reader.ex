@@ -49,6 +49,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.Theme
@@ -60,6 +61,138 @@ defmodule Foglet.TUI.Screens.PostReader do
   import Raxol.Core.Renderer.View
 
   @default_terminal_size {80, 24}
+
+  @impl true
+  @spec init(Context.t()) :: State.t()
+  def init(%Context{} = context), do: State.from_context(context)
+
+  @impl true
+  @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
+  def update(:load, %State{thread_id: thread_id} = state, %Context{} = context)
+      when is_binary(thread_id) do
+    posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+
+    new_state = %{state | status: :loading, last_op: :load_posts, last_error: nil}
+    effect = Effect.task(:load_posts, :post_reader, fn -> posts_mod.list_posts(thread_id) end)
+
+    {new_state, [effect]}
+  end
+
+  def update(:load, %State{} = state, %Context{}) do
+    {%{state | status: {:error, :missing_thread}, last_op: nil, last_error: :missing_thread}, []}
+  end
+
+  def update({:task_result, :load_posts, {:ok, posts}}, %State{} = state, %Context{} = context)
+      when is_list(posts) do
+    selected_index = selected_index_after_load(state, posts)
+    status = if posts == [], do: :empty, else: :loaded
+
+    state =
+      %{state | posts: posts, status: status, selected_post_index: selected_index}
+      |> seed_pending_read_position()
+      |> warm_selected_post(context)
+
+    {%{state | last_op: nil, last_error: nil}, []}
+  end
+
+  def update({:task_result, :load_posts, {:error, reason}}, %State{} = state, %Context{}) do
+    {%{state | status: {:error, reason}, last_op: nil, last_error: reason}, []}
+  end
+
+  def update(
+        {:task_result, :flush_read_pointers, {:ok, {:read_pointers_flushed, thread_id}}},
+        %State{} = state,
+        %Context{}
+      ) do
+    {clear_pending_read_position(state, thread_id), []}
+  end
+
+  def update({:task_result, :flush_read_pointers, {:ok, thread_id}}, %State{} = state, %Context{}) do
+    {clear_pending_read_position(state, thread_id), []}
+  end
+
+  def update({:task_result, :flush_read_pointers, {:error, reason}}, %State{} = state, %Context{}) do
+    {%{state | last_error: reason}, []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["n", "N"] do
+    {advance_local_post(state, 1, context), []}
+  end
+
+  def update({:key, %{key: :char, char: " "}}, %State{} = state, %Context{} = context) do
+    {advance_local_post(state, 1, context), []}
+  end
+
+  def update({:key, %{key: :page_down}}, %State{} = state, %Context{} = context) do
+    {advance_local_post(state, 1, context), []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["p", "P"] do
+    {advance_local_post(state, -1, context), []}
+  end
+
+  def update({:key, %{key: :page_up}}, %State{} = state, %Context{} = context) do
+    {advance_local_post(state, -1, context), []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["j", "J"] do
+    {scroll_local_post(state, 1, context), []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["k", "K"] do
+    {scroll_local_post(state, -1, context), []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
+      when c in ["r", "R"] do
+    params = %{
+      origin: :post_reader,
+      board: state.board,
+      board_id: state.board_id,
+      thread: state.thread,
+      thread_id: state.thread_id,
+      reply_to: selected_post(state)
+    }
+
+    {state, [Effect.navigate(:post_composer, params)]}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["q", "Q"] do
+    effects = [Effect.navigate(:thread_list, %{board: state.board, board_id: state.board_id})]
+
+    effects =
+      case flush_effect(state, context) do
+        nil -> effects
+        effect -> effects ++ [effect]
+      end
+
+    {state, effects}
+  end
+
+  def update(_message, %State{} = state, %Context{}), do: {state, []}
+
+  @impl true
+  @spec render(State.t(), Context.t()) :: any()
+  def render(%State{} = state, %Context{} = context) do
+    frame_state = frame_state(state, context)
+    theme = Theme.from_state(frame_state)
+    {w, h} = context.terminal_size || @default_terminal_size
+    post_content = render_local_post_content(state, frame_state, theme, w, h)
+
+    ScreenFrame.render(frame_state, %{}, post_content, [
+      {"N", "Next"},
+      {"P", "Prev"},
+      {"J", "Scroll ↓"},
+      {"K", "Scroll ↑"},
+      {"R", "Reply"},
+      {"Q", "Back"}
+    ])
+  end
 
   @impl true
   @spec render(map()) :: any()
@@ -122,6 +255,25 @@ defmodule Foglet.TUI.Screens.PostReader do
         [parts.header, parts.progress, body_rendered]
       end
     end
+  end
+
+  defp render_local_post_content(%State{status: :loading}, _frame_state, theme, _w, _h),
+    do: render_loading(theme)
+
+  defp render_local_post_content(%State{status: :empty}, _frame_state, theme, _w, _h) do
+    column style: %{gap: 0} do
+      [text("No more posts.", fg: theme.warning.fg)]
+    end
+  end
+
+  defp render_local_post_content(%State{status: {:error, _}}, _frame_state, theme, _w, _h) do
+    column style: %{gap: 0} do
+      [text("Unable to load posts.", fg: theme.error.fg)]
+    end
+  end
+
+  defp render_local_post_content(%State{} = state, frame_state, theme, w, h) do
+    render_post_content(frame_state, state, theme, w, h)
   end
 
   # Spinner-based loading affordance used when posts is nil/[]
@@ -554,5 +706,186 @@ defmodule Foglet.TUI.Screens.PostReader do
       last_read_post_id: pos[:last_read_post_id],
       last_read_message_number: pos[:last_read_message_number]
     }
+  end
+
+  defp selected_index_after_load(%State{load_intent: intent}, posts)
+       when intent in [:jump_last, "jump_last"] do
+    max(length(posts) - 1, 0)
+  end
+
+  defp selected_index_after_load(_state, _posts), do: 0
+
+  defp seed_pending_read_position(%State{thread_id: thread_id, posts: posts} = state)
+       when is_binary(thread_id) and is_list(posts) do
+    case selected_post(state) do
+      nil ->
+        state
+
+      post ->
+        pending = %{
+          last_read_post_id: Map.get(post, :id),
+          last_read_message_number: Map.get(post, :message_number) || 0
+        }
+
+        %{
+          state
+          | pending_read_positions: Map.put(state.pending_read_positions, thread_id, pending)
+        }
+    end
+  end
+
+  defp seed_pending_read_position(%State{} = state), do: state
+
+  defp selected_post(%State{posts: posts, selected_post_index: idx}) when is_list(posts) do
+    Enum.at(posts, idx)
+  end
+
+  defp selected_post(%State{}), do: nil
+
+  defp advance_local_post(%State{posts: posts} = state, _delta, _context)
+       when posts in [nil, []] do
+    state
+  end
+
+  defp advance_local_post(%State{posts: posts} = state, delta, %Context{} = context) do
+    new_idx = (state.selected_post_index + delta) |> max(0) |> min(length(posts) - 1)
+
+    {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, state.viewport)
+
+    %{state | selected_post_index: new_idx, viewport: reset_vp}
+    |> seed_pending_read_position()
+    |> warm_selected_post(context)
+  end
+
+  defp scroll_local_post(%State{posts: posts} = state, _delta, _context)
+       when posts in [nil, []] do
+    state
+  end
+
+  defp scroll_local_post(%State{} = state, delta, %Context{} = context) do
+    case selected_post(state) do
+      nil ->
+        state
+
+      _post ->
+        {_w, h} = context.terminal_size || @default_terminal_size
+        available_height = max(h - 12, 5)
+
+        state = warm_selected_post(state, context)
+        {new_vp, _cmds} = Viewport.update({:set_visible_height, available_height}, state.viewport)
+        {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
+        %{state | viewport: new_vp}
+    end
+  end
+
+  defp warm_selected_post(%State{} = state, %Context{} = context) do
+    case selected_post(state) do
+      nil ->
+        state
+
+      post ->
+        {w, _h} = context.terminal_size || @default_terminal_size
+        frame_state = frame_state(state, context)
+        state = warm_cache(state, frame_state, post, w)
+        frame_state = frame_state(state, context)
+        warm_viewport(state, frame_state, post, w)
+    end
+  end
+
+  defp flush_effect(
+         %State{thread_id: thread_id, pending_read_positions: pending} = state,
+         %Context{} = context
+       )
+       when is_binary(thread_id) do
+    case Map.get(pending, thread_id) do
+      nil ->
+        nil
+
+      pos ->
+        boards_mod = resolve_domain_module(context, :boards, Foglet.Boards)
+        threads_mod = resolve_domain_module(context, :threads, Foglet.Threads)
+
+        flush_ctx = %{
+          user_id: context.current_user && context.current_user.id,
+          board_id: state.board_id,
+          thread_id: state.thread_id,
+          last_read_post_id: pos.last_read_post_id,
+          last_read_message_number: pos.last_read_message_number
+        }
+
+        Effect.task(:flush_read_pointers, :post_reader, fn ->
+          with :ok <- flush_local_board_pointer(boards_mod, flush_ctx),
+               :ok <- flush_local_thread_pointer(threads_mod, flush_ctx) do
+            {:read_pointers_flushed, thread_id}
+          end
+        end)
+    end
+  end
+
+  defp flush_effect(%State{}, %Context{}), do: nil
+
+  defp flush_local_board_pointer(_mod, %{user_id: nil}), do: :ok
+  defp flush_local_board_pointer(_mod, %{board_id: nil}), do: :ok
+
+  defp flush_local_board_pointer(boards_mod, ctx) do
+    normalize_flush_result(
+      boards_mod.advance_board_read_pointer(
+        ctx.user_id,
+        ctx.board_id,
+        ctx.last_read_message_number || 0
+      )
+    )
+  end
+
+  defp flush_local_thread_pointer(_mod, %{user_id: nil}), do: :ok
+  defp flush_local_thread_pointer(_mod, %{thread_id: nil}), do: :ok
+  defp flush_local_thread_pointer(_mod, %{last_read_post_id: nil}), do: :ok
+
+  defp flush_local_thread_pointer(threads_mod, ctx) do
+    normalize_flush_result(
+      threads_mod.advance_thread_read_pointer(ctx.user_id, ctx.thread_id, ctx.last_read_post_id)
+    )
+  end
+
+  defp normalize_flush_result(:ok), do: :ok
+  defp normalize_flush_result({:ok, _}), do: :ok
+  defp normalize_flush_result(other), do: {:error, other}
+
+  defp clear_pending_read_position(%State{} = state, thread_id) do
+    %{state | pending_read_positions: Map.delete(state.pending_read_positions, thread_id)}
+  end
+
+  defp frame_state(%State{} = state, %Context{} = context) do
+    %{
+      current_user: context.current_user,
+      current_screen: :post_reader,
+      current_board: state.board,
+      current_thread: state.thread,
+      posts: state.posts,
+      read_position: state.pending_read_positions,
+      session_context: context.session_context,
+      terminal_size: context.terminal_size,
+      route_params: context.route_params,
+      screen_state: %{post_reader: state}
+    }
+  end
+
+  defp resolve_domain_module(%Context{domain: domain} = context, key, fallback)
+       when is_map(domain) do
+    case Map.get(domain, key) do
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _ -> resolve_domain_module_from_session(context, key, fallback)
+    end
+  end
+
+  defp resolve_domain_module(%Context{} = context, key, fallback) do
+    resolve_domain_module_from_session(context, key, fallback)
+  end
+
+  defp resolve_domain_module_from_session(%Context{session_context: ctx}, key, fallback) do
+    case Domain.get(ctx || %{}, key) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> fallback
+    end
   end
 end

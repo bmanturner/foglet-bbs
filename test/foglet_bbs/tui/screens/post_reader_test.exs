@@ -3,6 +3,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
+  alias Foglet.TUI.{Context, Effect}
 
   # Test-only fake modules — standard ExUnit pattern, exempt from the CLAUDE.md
   # "no nested modules" convention (no cyclic-dependency risk in test files).
@@ -113,8 +114,198 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "init_screen_state/1 returns the PostReader.State struct" do
     assert %State{
              selected_post_index: 0,
-             render_cache: %{}
+             render_cache: %{},
+             board: nil,
+             board_id: nil,
+             thread: nil,
+             thread_id: nil,
+             posts: nil,
+             status: :loading,
+             pending_read_positions: %{},
+             last_op: nil,
+             last_error: nil,
+             load_intent: nil
            } = PostReader.init_screen_state([])
+  end
+
+  test "PostReader.State.from_context/1 extracts route identity" do
+    board = %{id: "b1", name: "General"}
+    thread = %{id: "t1", title: "Hello"}
+
+    context =
+      Context.new(
+        route: :post_reader,
+        route_params: %{board: board, thread: thread, load_intent: :jump_last}
+      )
+
+    assert %State{
+             board: ^board,
+             board_id: "b1",
+             thread: ^thread,
+             thread_id: "t1",
+             load_intent: :jump_last
+           } = PostReader.State.from_context(context)
+  end
+
+  test "PostReader.State.from_context/1 accepts explicit string route params" do
+    context =
+      Context.new(
+        route: :post_reader,
+        route_params: %{
+          "board_id" => "b-route",
+          "thread_id" => "t-route",
+          "load_intent" => "jump_last"
+        }
+      )
+
+    assert %State{
+             board_id: "b-route",
+             thread_id: "t-route",
+             load_intent: "jump_last"
+           } = PostReader.State.from_context(context)
+  end
+
+  test "PostReader.update(:load, state, context) emits load_posts task" do
+    context = post_reader_context()
+    state = PostReader.State.from_context(context)
+
+    assert {%State{status: :loading, last_op: :load_posts, last_error: nil},
+            [
+              %Effect{
+                type: :task,
+                payload: %{op: :load_posts, screen_key: :post_reader, fun: fun}
+              }
+            ]} = PostReader.update(:load, state, context)
+
+    assert [%{id: "p1"}, %{id: "p2"}] = fun.()
+  end
+
+  test "PostReader.update/3 stores loaded posts and seeds pending read data" do
+    context = post_reader_context()
+    state = %{PostReader.State.from_context(context) | load_intent: :jump_last}
+    posts = FakePosts.list_posts("t1")
+
+    assert {%State{} = loaded, []} =
+             PostReader.update({:task_result, :load_posts, {:ok, posts}}, state, context)
+
+    assert loaded.posts == posts
+    assert loaded.status == :loaded
+    assert loaded.selected_post_index == 1
+
+    assert loaded.pending_read_positions["t1"] == %{
+             last_read_post_id: "p2",
+             last_read_message_number: 2
+           }
+
+    assert Map.has_key?(loaded.render_cache, {"p2", 80})
+  end
+
+  test "PostReader.update/3 clears only flushed pending read entry on success" do
+    state =
+      State.new(
+        thread_id: "t1",
+        pending_read_positions: %{
+          "t1" => %{last_read_post_id: "p1", last_read_message_number: 1},
+          "t2" => %{last_read_post_id: "p9", last_read_message_number: 9}
+        }
+      )
+
+    assert {%State{} = flushed, []} =
+             PostReader.update(
+               {:task_result, :flush_read_pointers, {:ok, {:read_pointers_flushed, "t1"}}},
+               state,
+               post_reader_context()
+             )
+
+    refute Map.has_key?(flushed.pending_read_positions, "t1")
+    assert Map.has_key?(flushed.pending_read_positions, "t2")
+  end
+
+  test "PostReader.update/3 keeps pending read entry on flush failure" do
+    state =
+      State.new(
+        thread_id: "t1",
+        pending_read_positions: %{
+          "t1" => %{last_read_post_id: "p1", last_read_message_number: 1}
+        }
+      )
+
+    assert {%State{} = failed, []} =
+             PostReader.update(
+               {:task_result, :flush_read_pointers, {:error, :db_down}},
+               state,
+               post_reader_context()
+             )
+
+    assert Map.has_key?(failed.pending_read_positions, "t1")
+    assert failed.last_error == :db_down
+  end
+
+  test "PostReader.update/3 advances selection and pending read data from local posts" do
+    context = post_reader_context()
+
+    state =
+      State.new(
+        board_id: "b1",
+        thread_id: "t1",
+        posts: FakePosts.list_posts("t1"),
+        status: :loaded
+      )
+
+    assert {%State{} = moved, []} =
+             PostReader.update({:key, %{key: :char, char: "n"}}, state, context)
+
+    assert moved.selected_post_index == 1
+
+    assert moved.pending_read_positions["t1"] == %{
+             last_read_post_id: "p2",
+             last_read_message_number: 2
+           }
+  end
+
+  test "PostReader.update/3 emits reply navigation with selected post" do
+    context = post_reader_context()
+    posts = FakePosts.list_posts("t1")
+
+    state =
+      State.new(
+        board: %{id: "b1"},
+        board_id: "b1",
+        thread: %{id: "t1"},
+        thread_id: "t1",
+        posts: posts,
+        selected_post_index: 1,
+        status: :loaded
+      )
+
+    assert {%State{}, [%Effect{type: :navigate, payload: payload}]} =
+             PostReader.update({:key, %{key: :char, char: "r"}}, state, context)
+
+    assert payload.screen == :post_composer
+    assert payload.params.reply_to.id == "p2"
+    assert payload.params.thread_id == "t1"
+  end
+
+  test "PostReader.update/3 emits thread navigation and flush task from local identity" do
+    context = post_reader_context()
+
+    state =
+      State.new(
+        board: %{id: "b1"},
+        board_id: "b1",
+        thread_id: "t1",
+        pending_read_positions: %{
+          "t1" => %{last_read_post_id: "p2", last_read_message_number: 2}
+        }
+      )
+
+    assert {%State{},
+            [
+              %Effect{type: :navigate, payload: %{screen: :thread_list}},
+              %Effect{type: :task, payload: %{op: :flush_read_pointers, fun: fun}}
+            ]} = PostReader.update({:key, %{key: :char, char: "q"}}, state, context)
+
+    assert {:read_pointers_flushed, "t1"} = fun.()
   end
 
   test "render/1 with posts loaded does not crash", %{state: state} do
@@ -388,6 +579,26 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # --- Helper for Phase 2 integration tests (simpler state shape) ---
 
   defp theme, do: Foglet.TUI.Theme.default()
+
+  defp post_reader_context do
+    Context.new(
+      current_user: %{id: "u1", handle: "alice"},
+      terminal_size: {80, 24},
+      route: :post_reader,
+      route_params: %{
+        board: %{id: "b1", name: "General"},
+        thread: %{id: "t1", title: "Hello"}
+      },
+      session_context: %{
+        domain: %{
+          posts: FakePosts,
+          boards: FakeBoards,
+          threads: FakeThreads,
+          markdown: FakeMarkdown
+        }
+      }
+    )
+  end
 
   defp p2_post(opts) do
     %{
