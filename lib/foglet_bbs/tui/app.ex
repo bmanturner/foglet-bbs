@@ -571,15 +571,6 @@ defmodule Foglet.TUI.App do
     end
   end
 
-  defp do_update({:register_wizard, event}, state) do
-    # Delegated from register screen during wizard transitions.
-    Screens.Register.handle_wizard_event(event, state)
-  end
-
-  defp do_update({:verify_event, event}, state) do
-    Screens.Verify.handle_verify_event(event, state)
-  end
-
   # I/O commands — each spawns a real off-process task that performs the DB work
   # and returns a typed result message back to update/2 (Audit #11).
   # Previously these wrapped the tuple in a no-op Command.task that returned
@@ -1288,7 +1279,7 @@ defmodule Foglet.TUI.App do
   defp route_screen_update(%__MODULE__{} = state, key, message) do
     module = screen_module_for(state, key)
 
-    if function_exported?(module, :update, 3) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :update, 3) do
       local_state = screen_state_for(state, key)
       context = context_for_screen_key(state, key)
       {new_local_state, effects} = module.update(message, local_state, context)
@@ -1753,9 +1744,9 @@ defmodule Foglet.TUI.App do
   # Process the command list returned by a screen's handle_key/2.
   # Plain %Command{} structs pass through to Raxol unchanged. {:terminate, _}
   # becomes Command.quit(). Every other atom-keyed tuple is routed through
-  # do_update/2 so it gets the same state access as a top-level update call —
-  # this covers both I/O tuples ({:load_boards}, {:load_posts, id}, ...) and
-  # state-transition tuples ({:promote_session, user}, {:register_wizard, ev}).
+  # do_update/2 so it gets the same state access as a top-level update call.
+  # This covers legacy I/O tuples ({:load_boards}, {:load_posts, id}, ...)
+  # and state-transition tuples ({:promote_session, user}).
   # Unknown messages hit do_update/2's catch-all and become a no-op.
   defp process_screen_commands(state, commands) do
     Enum.reduce(commands, {state, []}, fn cmd, {acc_state, acc_cmds} ->
@@ -1782,7 +1773,8 @@ defmodule Foglet.TUI.App do
     key = screen_key(current_route(state))
     module = screen_module_for(state, key)
 
-    if function_exported?(module, :render, 2) and not function_exported?(module, :render, 1) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :render, 2) and
+         not function_exported?(module, :render, 1) do
       module.render(screen_state_for(state, key), context_for_screen_key(state, key))
     else
       apply(screen_module_for(state.current_screen), :render, [state])

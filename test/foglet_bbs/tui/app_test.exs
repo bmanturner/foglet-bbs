@@ -6,6 +6,8 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
+  alias Foglet.TUI.Screens.Register.State, as: RegisterState
+  alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.Modal.Form
 
@@ -273,6 +275,50 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
       assert new_state.screen_state.login.error == "Invalid credentials."
       assert new_state.screen_state.login.submitting? == false
+    end
+
+    test "{:screen_task_result, :register, :register, result} routes through Register local state",
+         %{state: state} do
+      state = %{
+        state
+        | current_screen: :register,
+          screen_state: %{register: RegisterState.default()}
+      }
+
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :register, :register, {:ok, {:error, :unavailable}}},
+          state
+        )
+
+      assert cmds == []
+      assert new_state.current_screen == :register
+      assert new_state.screen_state.register == RegisterState.default()
+      assert new_state.modal.type == :error
+    end
+
+    test "{:screen_task_result, :verify, :verify_submit, result} routes through Verify local state",
+         %{state: state} do
+      verify_ss = VerifyState.default() |> Map.merge(%{buffer: "WRONG1"})
+
+      state = %{
+        state
+        | current_screen: :verify,
+          current_user: %Foglet.Accounts.User{id: "u5", handle: "eve"},
+          screen_state: %{verify: verify_ss}
+      }
+
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :verify, :verify_submit, {:ok, {:error, :invalid_code}}},
+          state
+        )
+
+      assert cmds == []
+      assert new_state.current_screen == :verify
+      assert new_state.screen_state.verify.attempts == 1
+      assert new_state.screen_state.verify.buffer == ""
+      assert new_state.modal.type == :error
     end
 
     test ":heartbeat_tick calls Session.heartbeat when session_pid is set", %{state: state} do
