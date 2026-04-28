@@ -5,9 +5,10 @@ defmodule Foglet.TUI.Screens.Login.State do
   The app stores this map at `state.screen_state[:login]`.
 
   Sub-states (`:sub` key):
-    * `:menu`          — showing [L]/[R]/[F]/[Q] menu
+    * `:menu`          — showing [L]/[R]/[F]/[T]/[Q] menu
     * `:login_form`    — collecting handle + password
     * `:reset_request` — collecting handle/email for reset delivery
+    * `:reset_consume` — collecting raw reset token + new password
 
   Login form shape:
     %{sub: :login_form, focused_field: :handle | :password,
@@ -20,6 +21,14 @@ defmodule Foglet.TUI.Screens.Login.State do
       error: nil | String.t(),
       message: nil | String.t(),
       message_category: nil | atom()}
+
+  Reset consume shape (Plan 31-03 / D-04, D-05):
+    %{sub: :reset_consume,
+      focused_field: :token | :password | :password_confirmation,
+      token_input: %TextInput{},
+      password_input: %TextInput{} (masked),
+      password_confirmation_input: %TextInput{} (masked),
+      error: nil | String.t()}
   """
 
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -50,6 +59,24 @@ defmodule Foglet.TUI.Screens.Login.State do
       error: nil,
       message: nil,
       message_category: nil
+    }
+  end
+
+  @doc """
+  Builds a fresh reset-consume sub-state (Plan 31-03 / D-04, D-05).
+
+  Token field is plain text; password and confirmation fields are masked.
+  Initial focus is on `:token` so the user types the raw token first.
+  """
+  @spec reset_consume() :: map()
+  def reset_consume do
+    %{
+      sub: :reset_consume,
+      focused_field: :token,
+      token_input: TextInput.init([]),
+      password_input: TextInput.init(mask_char: "*"),
+      password_confirmation_input: TextInput.init(mask_char: "*"),
+      error: nil
     }
   end
 
@@ -88,4 +115,24 @@ defmodule Foglet.TUI.Screens.Login.State do
   def input_key(:handle), do: :handle_input
   def input_key(:password), do: :password_input
   def input_key(:identifier), do: :identifier_input
+  def input_key(:token), do: :token_input
+  def input_key(:password_confirmation), do: :password_confirmation_input
+
+  @doc """
+  Advance focus through the reset-consume cycle:
+  `:token -> :password -> :password_confirmation -> :token`.
+  """
+  @spec next_reset_consume_focus(atom()) :: atom()
+  def next_reset_consume_focus(:token), do: :password
+  def next_reset_consume_focus(:password), do: :password_confirmation
+  def next_reset_consume_focus(:password_confirmation), do: :token
+
+  @doc """
+  Reverse focus through the reset-consume cycle:
+  `:token -> :password_confirmation -> :password -> :token`.
+  """
+  @spec prev_reset_consume_focus(atom()) :: atom()
+  def prev_reset_consume_focus(:token), do: :password_confirmation
+  def prev_reset_consume_focus(:password_confirmation), do: :password
+  def prev_reset_consume_focus(:password), do: :token
 end

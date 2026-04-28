@@ -557,14 +557,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
       state = reset_request_state("alice@example.test")
 
-      result = Login.handle_key(%{key: :char, char: "T"}, state)
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, state)
 
-      # Either it transitions to :reset_consume or remains in :reset_request
-      # while typing into the field — for now the binding asserts the state
-      # has a path forward via T key. Plan 31-03 wires the full :reset_consume
-      # form. For Plan 31-02 we only require the visible "Enter reset token"
-      # affordance text in the no-email message, which is asserted above.
-      assert match?({:update, _, _}, result) or result == :no_match
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
     end
 
     test "escape returns to menu and clears reset request state" do
@@ -574,6 +570,407 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       assert get_in(new_state, [:screen_state, :login, :identifier_input]) == nil
+    end
+  end
+
+  # ---- Plan 31-03 :reset_consume sub-state (D-04..D-11, D-15, D-17) ----
+
+  defp reset_consume_state(opts \\ []) do
+    token = Keyword.get(opts, :token, "")
+    password = Keyword.get(opts, :password, "")
+    confirmation = Keyword.get(opts, :password_confirmation, "")
+    focused = Keyword.get(opts, :focused_field, :token)
+
+    token_input = TextInput.init(value: token) |> text_input_at_end()
+
+    password_input =
+      TextInput.init(value: password, mask_char: "*") |> text_input_at_end()
+
+    password_confirmation_input =
+      TextInput.init(value: confirmation, mask_char: "*") |> text_input_at_end()
+
+    %Foglet.TUI.App{
+      current_screen: :login,
+      session_context: %{registration_mode: "open"},
+      terminal_size: {80, 24},
+      screen_state: %{
+        login: %{
+          sub: :reset_consume,
+          focused_field: focused,
+          token_input: token_input,
+          password_input: password_input,
+          password_confirmation_input: password_confirmation_input,
+          error: nil
+        }
+      }
+    }
+    |> Map.from_struct()
+  end
+
+  describe "handle_key/2 - reset_consume entry (D-15)" do
+    test "'T' from menu enters :reset_consume sub-state with focus on :token" do
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, base_state())
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test "'t' lowercase from menu also enters :reset_consume" do
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "t"}, base_state())
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+    end
+
+    test "menu advertises Reset token in keys_for output" do
+      rendered =
+        Login.render(base_state("open"))
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert rendered =~ "Reset token"
+    end
+
+    test "'T' from reset_request enters :reset_consume" do
+      Config.put!("delivery_mode", "no_email")
+      state = reset_request_state("alice@example.test")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test "'t' lowercase from reset_request enters :reset_consume" do
+      Config.put!("delivery_mode", "no_email")
+      state = reset_request_state("alice@example.test")
+
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "t"}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+    end
+
+    test "fresh :reset_consume initializes three TextInput fields with masked password fields (D-05)" do
+      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, base_state())
+      ss = get_in(new_state, [:screen_state, :login])
+
+      assert match?(%TextInput{}, ss.token_input)
+      assert match?(%TextInput{}, ss.password_input)
+      assert match?(%TextInput{}, ss.password_confirmation_input)
+
+      refute get_in(ss.token_input, [Access.key(:raxol_state), :mask_char]) == "*"
+      assert get_in(ss.password_input, [Access.key(:raxol_state), :mask_char]) == "*"
+      assert get_in(ss.password_confirmation_input, [Access.key(:raxol_state), :mask_char]) == "*"
+
+      assert get_in(ss.token_input, [Access.key(:raxol_state), :value]) == ""
+      assert get_in(ss.password_input, [Access.key(:raxol_state), :value]) == ""
+      assert get_in(ss.password_confirmation_input, [Access.key(:raxol_state), :value]) == ""
+
+      assert ss.error == nil
+    end
+  end
+
+  describe "handle_key/2 - reset_consume focus (D-06)" do
+    test "Tab cycles :token to :password" do
+      state = reset_consume_state(focused_field: :token)
+      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
+    end
+
+    test "Tab cycles :password to :password_confirmation" do
+      state = reset_consume_state(focused_field: :password)
+      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password_confirmation
+    end
+
+    test "Tab cycles :password_confirmation to :token" do
+      state = reset_consume_state(focused_field: :password_confirmation)
+      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test ":backtab cycles :token to :password_confirmation" do
+      state = reset_consume_state(focused_field: :token)
+      {:update, new_state, []} = Login.handle_key(%{key: :backtab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password_confirmation
+    end
+
+    test ":backtab cycles :password_confirmation to :password" do
+      state = reset_consume_state(focused_field: :password_confirmation)
+      {:update, new_state, []} = Login.handle_key(%{key: :backtab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
+    end
+
+    test ":backtab cycles :password to :token" do
+      state = reset_consume_state(focused_field: :password)
+      {:update, new_state, []} = Login.handle_key(%{key: :backtab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test "typing characters land only in the focused input field" do
+      state = reset_consume_state(focused_field: :token)
+
+      {:update, s1, []} = Login.handle_key(%{key: :char, char: "a"}, state)
+
+      assert get_in(s1, [
+               :screen_state,
+               :login,
+               :token_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "a"
+
+      assert get_in(s1, [
+               :screen_state,
+               :login,
+               :password_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == ""
+
+      assert get_in(s1, [
+               :screen_state,
+               :login,
+               :password_confirmation_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == ""
+
+      {:update, s2, []} = Login.handle_key(%{key: :tab}, s1)
+      {:update, s3, []} = Login.handle_key(%{key: :char, char: "p"}, s2)
+
+      assert get_in(s3, [
+               :screen_state,
+               :login,
+               :token_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "a"
+
+      assert get_in(s3, [
+               :screen_state,
+               :login,
+               :password_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "p"
+
+      assert get_in(s3, [
+               :screen_state,
+               :login,
+               :password_confirmation_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == ""
+
+      {:update, s4, []} = Login.handle_key(%{key: :tab}, s3)
+      {:update, s5, []} = Login.handle_key(%{key: :char, char: "c"}, s4)
+
+      assert get_in(s5, [
+               :screen_state,
+               :login,
+               :token_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "a"
+
+      assert get_in(s5, [
+               :screen_state,
+               :login,
+               :password_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "p"
+
+      assert get_in(s5, [
+               :screen_state,
+               :login,
+               :password_confirmation_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "c"
+    end
+  end
+
+  describe "handle_key/2 - reset_consume submission (D-07, D-10, D-11)" do
+    test "mismatch in password confirmation sets generic error and does not consume token" do
+      user =
+        user_fixture(%{
+          handle: "mismatch",
+          email: "mismatch@example.test"
+        })
+
+      {raw_token, user_token} =
+        Foglet.Accounts.UserToken.build_email_token(user, "reset_password")
+
+      {:ok, _} = FogletBbs.Repo.insert(user_token)
+
+      state =
+        reset_consume_state(
+          token: raw_token,
+          password: "newvalidpass99",
+          password_confirmation: "different-pw99",
+          focused_field: :password_confirmation
+        )
+
+      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+
+      assert cmds == []
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+
+      error = get_in(new_state, [:screen_state, :login, :error])
+      assert is_binary(error)
+      assert error =~ ~r/match/i
+
+      assert FogletBbs.Repo.exists?(
+               from t in Foglet.Accounts.UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+    end
+
+    test "successful consume: matching passwords + valid token returns to menu and clears state (D-07)" do
+      user =
+        user_fixture(%{
+          handle: "consumer",
+          email: "consumer@example.test"
+        })
+
+      {raw_token, user_token} =
+        Foglet.Accounts.UserToken.build_email_token(user, "reset_password")
+
+      {:ok, _} = FogletBbs.Repo.insert(user_token)
+
+      new_password = "freshvalidpass99"
+
+      state =
+        reset_consume_state(
+          token: raw_token,
+          password: new_password,
+          password_confirmation: new_password,
+          focused_field: :password_confirmation
+        )
+
+      {:update, new_state, _cmds} = Login.handle_key(%{key: :enter}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
+      assert get_in(new_state, [:screen_state, :login, :token_input]) == nil
+      assert get_in(new_state, [:screen_state, :login, :password_input]) == nil
+      assert get_in(new_state, [:screen_state, :login, :password_confirmation_input]) == nil
+
+      refute FogletBbs.Repo.exists?(
+               from t in Foglet.Accounts.UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+
+      assert {:ok, returned} =
+               Foglet.Accounts.Auth.authenticate_by_password(user.handle, new_password)
+
+      assert returned.id == user.id
+    end
+
+    test "invalid token submission stays on form with generic error (D-10)" do
+      state =
+        reset_consume_state(
+          token: "obviously-not-a-real-token",
+          password: "freshvalidpass99",
+          password_confirmation: "freshvalidpass99",
+          focused_field: :password_confirmation
+        )
+
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+
+      error = get_in(new_state, [:screen_state, :login, :error])
+      assert is_binary(error)
+      assert String.length(error) > 0
+
+      refute error =~ ~r/expired/i
+      refute error =~ ~r/already.?used/i
+      refute error =~ ~r/malformed/i
+    end
+
+    test "invalid token error copy is identical for missing-token vs malformed-token (D-10)" do
+      state_unknown =
+        reset_consume_state(
+          token: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+          password: "freshvalidpass99",
+          password_confirmation: "freshvalidpass99",
+          focused_field: :password_confirmation
+        )
+
+      state_malformed =
+        reset_consume_state(
+          token: "!!!not-base64!!!",
+          password: "freshvalidpass99",
+          password_confirmation: "freshvalidpass99",
+          focused_field: :password_confirmation
+        )
+
+      {:update, new_unknown, []} = Login.handle_key(%{key: :enter}, state_unknown)
+      {:update, new_malformed, []} = Login.handle_key(%{key: :enter}, state_malformed)
+
+      err_unknown = get_in(new_unknown, [:screen_state, :login, :error])
+      err_malformed = get_in(new_malformed, [:screen_state, :login, :error])
+
+      assert is_binary(err_unknown) and is_binary(err_malformed)
+      assert err_unknown == err_malformed
+    end
+
+    test "raw token value never appears in chrome/breadcrumb/keys/error copy (D-11)" do
+      raw_token = "RAWTOKENSENTINELZZZZ-not-a-real-token-but-distinctive"
+
+      state =
+        reset_consume_state(
+          token: raw_token,
+          password: "freshvalidpass99",
+          password_confirmation: "freshvalidpass99",
+          focused_field: :password_confirmation
+        )
+
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      error = get_in(new_state, [:screen_state, :login, :error])
+      refute is_binary(error) and error =~ raw_token
+
+      pre_state = reset_consume_state(token: raw_token, focused_field: :token)
+      rendered = Login.render(pre_state) |> collect_text_values()
+
+      breadcrumb =
+        rendered
+        |> Enum.find(&(is_binary(&1) and &1 =~ "Foglet"))
+
+      if breadcrumb, do: refute(breadcrumb =~ raw_token)
+
+      key_hint_strings = ["Tab", "Shift+Tab", "Enter", "Esc"]
+
+      Enum.each(rendered, fn rendered_text ->
+        if is_binary(rendered_text) and Enum.any?(key_hint_strings, &(rendered_text =~ &1)) do
+          refute rendered_text =~ raw_token
+        end
+      end)
+    end
+
+    test "escape clears reset_consume state and returns to menu" do
+      state =
+        reset_consume_state(
+          token: "some-token",
+          password: "some-password",
+          password_confirmation: "some-password",
+          focused_field: :password
+        )
+
+      {:update, new_state, []} = Login.handle_key(%{key: :escape}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
+      assert get_in(new_state, [:screen_state, :login, :token_input]) == nil
+      assert get_in(new_state, [:screen_state, :login, :password_input]) == nil
+      assert get_in(new_state, [:screen_state, :login, :password_confirmation_input]) == nil
     end
   end
 

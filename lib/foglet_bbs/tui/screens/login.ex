@@ -7,9 +7,10 @@ defmodule Foglet.TUI.Screens.Login do
     * any other value → shows all three options
 
   Sub-states (stored in state.screen_state[:login]):
-    * :menu          — showing [L]/[R]/[F]/[Q] menu as allowed by config
+    * :menu          — showing [L]/[R]/[F]/[T]/[Q] menu as allowed by config
     * :login_form    — collecting handle+password
     * :reset_request — collecting handle/email for reset delivery
+    * :reset_consume — collecting raw reset token + new password (Plan 31-03)
 
   State shape is owned by `Foglet.TUI.Screens.Login.State`.
 
@@ -52,6 +53,16 @@ defmodule Foglet.TUI.Screens.Login do
   @reset_no_email_intro "Email delivery is disabled on this Foglet. Contact a sysop or operator over SSH to request a reset token, then press [T] Enter reset token to set a new password."
   @reset_no_email_no_sysops_fallback "No sysop contact email is published on this Foglet. Reach an operator through your invite or community channel."
 
+  # D-10: Generic, non-leaking copy for any token-validation failure.
+  # Identical for invalid, malformed, expired, and already-used tokens so the
+  # screen never reveals which failure mode occurred.
+  @reset_consume_invalid_or_expired_message "That reset token did not work. Ask the sysop for a new one."
+  @reset_consume_password_mismatch_message "Passwords do not match. Re-enter the new password."
+  # Generic copy for any password-changeset validation failure on the new
+  # password. Honest enough to be actionable, but does not echo specific
+  # validation reasons that could differ across users.
+  @reset_consume_password_invalid_message "Your new password is not acceptable. Choose a different password and try again."
+
   @impl true
   @spec init_screen_state(keyword()) :: map()
   def init_screen_state(_opts), do: LoginState.default()
@@ -69,6 +80,7 @@ defmodule Foglet.TUI.Screens.Login do
           case sub do
             :login_form -> render_login_form(state, theme)
             :reset_request -> render_reset_request(state, theme)
+            :reset_consume -> render_reset_consume(state, theme)
             _ -> render_menu(mode, theme, state)
           end
         ]
@@ -84,6 +96,7 @@ defmodule Foglet.TUI.Screens.Login do
     case LoginState.sub(state) do
       :login_form -> handle_form_key(key, state)
       :reset_request -> handle_reset_key(key, state)
+      :reset_consume -> handle_reset_consume_key(key, state)
       _ -> handle_menu_key(key, state)
     end
   end
@@ -99,6 +112,12 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp handle_menu_key(%{key: :char, char: c}, state) when c in ["f", "F"],
     do: maybe_enter_reset_request(state)
+
+  # D-15: [T] Enter reset token is reachable directly from the Login menu so
+  # users with an operator-issued raw reset token do not need to walk through
+  # the Forgot Password flow first.
+  defp handle_menu_key(%{key: :char, char: c}, state) when c in ["t", "T"],
+    do: enter_reset_consume(state)
 
   defp handle_menu_key(_key, _state), do: :no_match
 
@@ -143,10 +162,52 @@ defmodule Foglet.TUI.Screens.Login do
     {:update, LoginState.put(state, LoginState.default()), []}
   end
 
+  # D-15: [T] from the reset request flow advances directly to :reset_consume
+  # without a round-trip through the Login menu. Captured before the catch-all
+  # char passthrough so the discoverable affordance from Plan 31-02 actually
+  # routes here.
+  defp handle_reset_key(%{key: :char, char: c}, state) when c in ["t", "T"],
+    do: enter_reset_consume(state)
+
   defp handle_reset_key(event, state) do
     login_ss = LoginState.get(state)
     {new_input, _action} = TextInput.handle_event(event, login_ss.identifier_input)
     {:update, LoginState.put(state, %{login_ss | identifier_input: new_input}), []}
+  end
+
+  # Reset-consume key handling (Plan 31-03 / D-04, D-06, D-07).
+  #
+  # Tab and :backtab cycle focus through the three fields in fixed order.
+  # Enter submits the form. Escape returns to the menu and clears all
+  # field state. Everything else is forwarded to the focused TextInput.
+
+  defp handle_reset_consume_key(%{key: :tab}, state) do
+    login_ss = LoginState.get(state)
+    next_focus = LoginState.next_reset_consume_focus(login_ss.focused_field)
+    {:update, LoginState.put(state, %{login_ss | focused_field: next_focus}), []}
+  end
+
+  defp handle_reset_consume_key(%{key: :backtab}, state) do
+    login_ss = LoginState.get(state)
+    prev_focus = LoginState.prev_reset_consume_focus(login_ss.focused_field)
+    {:update, LoginState.put(state, %{login_ss | focused_field: prev_focus}), []}
+  end
+
+  # Some terminals send Shift+Tab as `:shift_tab` rather than `:backtab`;
+  # accept both for symmetry with other Foglet forms.
+  defp handle_reset_consume_key(%{key: :shift_tab}, state),
+    do: handle_reset_consume_key(%{key: :backtab}, state)
+
+  defp handle_reset_consume_key(%{key: :enter}, state), do: submit_reset_consume(state)
+
+  defp handle_reset_consume_key(%{key: :escape}, state) do
+    # D-07: Escape clears token/password fields and returns to the menu.
+    {:update, LoginState.put(state, LoginState.default()), []}
+  end
+
+  defp handle_reset_consume_key(event, state) do
+    {new_input, _action} = TextInput.handle_event(event, focused_input(state))
+    {:update, update_focused_input(state, new_input), []}
   end
 
   defp focused_input(state) do
@@ -167,6 +228,17 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp keys_for(:reset_request, _),
     do: [{"Enter", "Request reset"}, {"T", "Enter reset token"}, {"Esc", "Cancel"}]
+
+  # D-06, D-07: Reset-consume form advertises Tab/Shift+Tab focus cycle, Enter
+  # to submit, Esc to cancel. The raw token value is intentionally not echoed
+  # back through this hint set (D-11).
+  defp keys_for(:reset_consume, _),
+    do: [
+      {"Tab", "Next field"},
+      {"Shift+Tab", "Prev field"},
+      {"Enter", "Submit"},
+      {"Esc", "Cancel"}
+    ]
 
   defp keys_for(_, mode), do: menu_keys(mode)
 
@@ -200,6 +272,7 @@ defmodule Foglet.TUI.Screens.Login do
     mode
     |> base_menu_keys()
     |> add_reset_key()
+    |> add_reset_consume_key()
   end
 
   defp base_menu_keys("disabled"), do: @menu_keys_no_register
@@ -210,6 +283,13 @@ defmodule Foglet.TUI.Screens.Login do
   # no_email mode it presents operator-assisted copy plus token-consume entry.
   defp add_reset_key(keys) do
     List.insert_at(keys, max(length(keys) - 1, 0), {"F", "Forgot password"})
+  end
+
+  # D-15: [T] Enter reset token is advertised on the Login menu so users with
+  # an operator-issued raw token can consume it without first walking through
+  # the Forgot Password flow.
+  defp add_reset_consume_key(keys) do
+    List.insert_at(keys, max(length(keys) - 1, 0), {"T", "Reset token"})
   end
 
   defp render_login_form(state, theme) do
@@ -295,6 +375,78 @@ defmodule Foglet.TUI.Screens.Login do
     end
   end
 
+  # Reset-consume render (Plan 31-03 / D-04, D-05, D-06).
+  #
+  # Three rows: token, password, password confirmation. Password fields render
+  # with the masked TextInput (mask_char is set on the struct itself by
+  # `LoginState.reset_consume/0`). Each label highlights when its field is
+  # focused. Inline error text renders below the form as a single wrapped
+  # block; D-11 forbids the raw token value from appearing in any chrome,
+  # status, or hint text — and the error copy here is generic by design.
+  defp render_reset_consume(state, theme) do
+    login_ss = LoginState.get(state)
+    focused = Map.get(login_ss, :focused_field, :token)
+    wrap_width = reset_wrap_width(state)
+
+    token_label = field_label("Token:           ", focused == :token, theme)
+    password_label = field_label("New password:    ", focused == :password, theme)
+
+    confirmation_label =
+      field_label("Confirm password:", focused == :password_confirmation, theme)
+
+    error_items =
+      case Map.get(login_ss, :error) do
+        nil ->
+          []
+
+        error_text ->
+          [text("")] ++
+            wrapped_text_rows(error_text, wrap_width, fg: theme.error.fg, style: [:bold])
+      end
+
+    column style: %{gap: 0} do
+      [
+        text("Enter reset token", fg: theme.primary.fg, style: [:bold]),
+        row style: %{gap: 0} do
+          [
+            token_label,
+            TextInput.render(login_ss.token_input,
+              bordered: false,
+              focused: focused == :token,
+              theme: theme
+            )
+          ]
+        end,
+        row style: %{gap: 0} do
+          [
+            password_label,
+            TextInput.render(login_ss.password_input,
+              bordered: false,
+              focused: focused == :password,
+              theme: theme
+            )
+          ]
+        end,
+        row style: %{gap: 0} do
+          [
+            confirmation_label,
+            TextInput.render(login_ss.password_confirmation_input,
+              bordered: false,
+              focused: focused == :password_confirmation,
+              theme: theme
+            )
+          ]
+        end
+      ] ++ error_items
+    end
+  end
+
+  defp field_label(label, true, theme),
+    do: text(label <> " ", fg: theme.accent.fg, style: [:bold])
+
+  defp field_label(label, false, theme),
+    do: text(label <> " ", fg: theme.primary.fg)
+
   # Returns one wrapped text/2 node per line emitted by TextWidth.wrap/2 so
   # compact terminal widths render readable multi-row copy instead of a single
   # long node that the engine would silently truncate (D-12, AUTH-02).
@@ -333,6 +485,12 @@ defmodule Foglet.TUI.Screens.Login do
   # sub-state handles delivery-mode branching at submit time.
   defp maybe_enter_reset_request(state) do
     {:update, LoginState.put(state, LoginState.reset_request()), []}
+  end
+
+  # D-04, D-15: Enter the reset-consume sub-state from any prior sub-state.
+  # Always builds a fresh form so prior fields cannot leak across entries.
+  defp enter_reset_consume(state) do
+    {:update, LoginState.put(state, LoginState.reset_consume()), []}
   end
 
   defp submit_reset_request(state) do
@@ -396,6 +554,53 @@ defmodule Foglet.TUI.Screens.Login do
       end
 
     @reset_no_email_intro <> "\n\n" <> sysop_line
+  end
+
+  # Reset-consume submission (Plan 31-03 / D-07, D-08, D-09, D-10).
+  #
+  # 1. Compare new password to confirmation locally; on mismatch set inline
+  #    error and bail without calling Accounts. Token is *not* consumed.
+  # 2. Otherwise call Verification.consume_reset_token/2 which atomically
+  #    verifies, claims the token row, updates the password, and deletes
+  #    other outstanding reset tokens for the user.
+  # 3. On success return to the logged-out Login menu and clear all field
+  #    state (D-07). On any token failure render the generic invalid/expired
+  #    copy (D-10). On password-changeset failure render generic password
+  #    failure copy (still token-consumed-once because consume runs in a
+  #    transaction; if the password update fails the consume rolls back).
+  defp submit_reset_consume(state) do
+    login_ss = LoginState.get(state)
+    raw_token = login_ss.token_input.raxol_state.value
+    new_password = login_ss.password_input.raxol_state.value
+    confirmation = login_ss.password_confirmation_input.raxol_state.value
+
+    cond do
+      new_password != confirmation ->
+        # D-07/D-10 mismatch: keep state, surface a generic mismatch error,
+        # and do *not* call into Accounts. Token row is preserved so the user
+        # can correct their password and try again.
+        new_login_ss = %{login_ss | error: @reset_consume_password_mismatch_message}
+        {:update, LoginState.put(state, new_login_ss), []}
+
+      true ->
+        case Verification.consume_reset_token(raw_token, %{password: new_password}) do
+          {:ok, _user} ->
+            # D-07: success returns to the logged-out Login menu and drops
+            # token/password field state. Subsequent renders see %{sub: :menu}.
+            {:update, LoginState.put(state, LoginState.default()), []}
+
+          {:error, :invalid_or_expired} ->
+            # D-10: identical generic copy for invalid/malformed/expired/used.
+            new_login_ss = %{login_ss | error: @reset_consume_invalid_or_expired_message}
+            {:update, LoginState.put(state, new_login_ss), []}
+
+          {:error, %Ecto.Changeset{}} ->
+            # Password failed validation; token was rolled back inside the
+            # Accounts transaction so the user can retry without a new token.
+            new_login_ss = %{login_ss | error: @reset_consume_password_invalid_message}
+            {:update, LoginState.put(state, new_login_ss), []}
+        end
+    end
   end
 
   defp submit_login(state) do
