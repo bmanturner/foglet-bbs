@@ -4,14 +4,14 @@ milestone: v1.4
 milestone_name: milestone
 status: executing
 stopped_at: Phase 32 context gathered (assumptions mode)
-last_updated: "2026-04-28T02:11:50.417Z"
-last_activity: 2026-04-28 -- Phase 32 planning complete
+last_updated: "2026-04-28T02:50:46.432Z"
+last_activity: 2026-04-28
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 28
-  completed_plans: 25
-  percent: 89
+  completed_plans: 26
+  percent: 93
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-26)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase null
+**Current focus:** Phase 32 — main-menu-chrome-polish
 
 ## Current Position
 
-Phase: 32
-Plan: Not started
+Phase: 32 (main-menu-chrome-polish) — EXECUTING
+Plan: 2 of 3
 Status: Ready to execute
-Last activity: 2026-04-28 -- Phase 32 planning complete
+Last activity: 2026-04-28
 
 ## Performance Metrics
 
@@ -63,6 +63,7 @@ Last activity: 2026-04-28 -- Phase 32 planning complete
 | Phase 26 P02 | 6min | 3 tasks | 10 files |
 | Phase 26 P03 | 6min | 2 tasks | 5 files |
 | Phase 26 P04 | 6min | 3 tasks | 7 files |
+| Phase 32 P01 | 10min | 3 tasks | 1 files |
 
 ## Accumulated Context
 
@@ -102,6 +103,9 @@ Recent decisions affecting current work:
 - [Phase 26]: Preserve consecutive newline tuples in Foglet.Markdown.render/1; MarkdownBody owns clamping paragraph separators to one blank visible row. — Required so shared post rendering can distinguish soft line breaks from paragraph separators.
 - [Phase 26]: Keep list-item rendering to one logical line per item by stripping MDEx list container structural newlines. — Preserving paragraph newline tuples exposed MDEx list tag whitespace that would otherwise create blank rows between bullets.
 - [Phase 26]: Leave Phase 26 human SSH verification pending when real fixed-size terminal checks are not run in the execution session. — Human terminal-fit acceptance requires real SSH visual verification at exact terminal dimensions.
+- [Phase ?]: [Phase 32 Plan 01]: Raxol :panel requires explicit width/height attrs (set to sentinel 9999 to clamp to available_space) — without these the panel measures to children + double_border and shrinks below its allocated split-pane size.
+- [Phase ?]: [Phase 32 Plan 01]: Raxol View DSL row macro requires an explicit opts argument (row [], do: ...) — bare row do ... end matches the row/1 function and silently drops do-block contents.
+- [Phase ?]: [Phase 32 Plan 01]: Phase 32 Oneliners |||| artifact root cause is in vendor/raxol/.../split_pane.ex:235 — build_divider/4 paints String.duplicate('|', height) horizontally on a single row instead of as a vertical column. Plan 32-02 owns the fix.
 
 ### Pending Todos
 
@@ -148,6 +152,6 @@ Items acknowledged and deferred at v1.3 close on 2026-04-26:
 
 ## Session Continuity
 
-Last session: 2026-04-28T01:53:59.760Z
+Last session: 2026-04-28T02:50:46.427Z
 Stopped at: Phase 32 context gathered (assumptions mode)
-Resume file: .planning/phases/32-main-menu-chrome-polish/32-CONTEXT.md
+Resume file: None

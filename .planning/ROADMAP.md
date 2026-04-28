@@ -21,7 +21,7 @@ v1.4 milestone in planning. Phases 26-33 derived from 38 requirements in `.plann
 | 29 | Sysop Tab Lifecycle & Bodies | 4/4 | Complete    | 2026-04-27 |
 | 30 | Account Workflow | Account Profile/Preferences/SSH-keys edits actually persist and accept multi-line paste | ACCT-01..05 (5) | yes |
 | 31 | Auth Flow | 4/4 | Complete    | 2026-04-28 |
-| 32 | Main Menu Chrome Polish | Main Menu Navigation and Oneliners panels render with border titles, theme accents, correct indents, and no glyph artifacts | MENU-01..05 (5) | yes |
+| 32 | Main Menu Chrome Polish | 1/3 | In Progress|  |
 | 33 | Composer Wrap & Boards Interaction | Composer soft-wraps long lines and Enter on a Boards category toggles its expansion | POST-02, BOARD-01 (2) | yes |
 
 ## Phases
@@ -160,7 +160,7 @@ Plans:
   5. Switching to the operator-console theme re-renders both panels with theme-routed colors throughout (no hardcoded atoms); verified by snapshot test against both themes.
 **Plans**: 3 plans
 Plans:
-- [ ] 32-01-render-shape-PLAN.md — :panel-typed Navigation/Oneliners with embedded titles, multi-node nav rows (primary label + accent [X] key), one-column inner indent, theme-only colors
+- [x] 32-01-render-shape-PLAN.md — :panel-typed Navigation/Oneliners with embedded titles, multi-node nav rows (primary label + accent [X] key), one-column inner indent, theme-only colors
 - [ ] 32-02-oneliners-artifact-PLAN.md — Verify Oneliners top-border at widths 64/65/66/80/81; investigate root cause and apply minimal fix if artifact persists
 - [ ] 32-03-test-updates-PLAN.md — Update layout_smoke_test.exs and main_menu_test.exs assertions to match the new render shape; precommit gate
 
