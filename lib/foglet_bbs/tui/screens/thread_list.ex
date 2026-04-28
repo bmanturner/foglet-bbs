@@ -10,6 +10,8 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Screens.ThreadList.State
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Theme
@@ -20,8 +22,12 @@ defmodule Foglet.TUI.Screens.ThreadList do
   import Raxol.Core.Renderer.View
 
   @impl true
-  @spec init_screen_state(keyword()) :: map()
-  def init_screen_state(_opts \\ []), do: %{selected_index: 0}
+  @spec init(Context.t()) :: State.t()
+  def init(%Context{} = context), do: State.from_context(context)
+
+  @impl true
+  @spec init_screen_state(keyword()) :: State.t()
+  def init_screen_state(_opts \\ []), do: State.new(selected_index: 0)
 
   @impl true
   @spec render(map()) :: any()

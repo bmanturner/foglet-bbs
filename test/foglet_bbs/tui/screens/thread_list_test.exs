@@ -167,6 +167,7 @@ end
 defmodule Foglet.TUI.Screens.ThreadListTest do
   use ExUnit.Case, async: true
 
+  alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.ThreadList
 
@@ -194,8 +195,29 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     %{state: state}
   end
 
-  test "init_screen_state/0 returns the default selection state" do
-    assert ThreadList.init_screen_state() == %{selected_index: 0}
+  test "ThreadList.State.from_context/1 stores board route params and selected index" do
+    board = %{id: "b1", name: "General", slug: "general"}
+    context = Context.new(route: :thread_list, route_params: %{board: board, board_id: "b1"})
+
+    assert %ThreadList.State{
+             board: ^board,
+             board_id: "b1",
+             threads: nil,
+             selected_index: 0,
+             status: :loading
+           } = ThreadList.State.from_context(context)
+  end
+
+  test "init/1 delegates to ThreadList.State.from_context/1 and derives board_id from board" do
+    board = %{"id" => "b1", "name" => "General"}
+    context = Context.new(route: :thread_list, route_params: %{"board" => board})
+
+    assert %ThreadList.State{board: ^board, board_id: "b1", selected_index: 0} =
+             ThreadList.init(context)
+  end
+
+  test "init_screen_state/0 returns the transitional default selection state" do
+    assert %ThreadList.State{selected_index: 0} = ThreadList.init_screen_state()
   end
 
   test "load_threads/2 populates current_thread_list", %{state: state} do
