@@ -10,10 +10,9 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
-  alias Foglet.TUI.Context
-  alias Foglet.TUI.Screens.ThreadList.State
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Domain
-  alias Foglet.TUI.Screens.PostReader
+  alias Foglet.TUI.Screens.ThreadList.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.List.{RichRow, SelectionList}
@@ -30,13 +29,98 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def init_screen_state(_opts \\ []), do: State.new(selected_index: 0)
 
   @impl true
-  @spec render(map()) :: any()
-  def render(state) do
-    ss = get_in(state.screen_state, [:thread_list]) || init_screen_state()
-    theme = Theme.from_state(state)
-    thread_content = render_thread_content(state, ss, theme)
+  @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
+  def update(:load, %State{board_id: board_id} = state, %Context{} = context)
+      when is_binary(board_id) do
+    threads_mod = resolve_threads_module(context)
+    user_id = context.current_user && context.current_user.id
 
-    ScreenFrame.render(state, %{}, thread_content, [
+    new_state = %{state | status: :loading, last_op: :load_threads, last_error: nil}
+
+    effect =
+      Effect.task(:load_threads, :thread_list, fn ->
+        dispatch_thread_load(threads_mod, board_id, user_id)
+      end)
+
+    {new_state, [effect]}
+  end
+
+  def update(:load, %State{} = state, %Context{}) do
+    {%{state | status: {:error, :missing_board}, last_op: nil, last_error: :missing_board}, []}
+  end
+
+  def update({:task_result, :load_threads, {:ok, threads}}, %State{} = state, %Context{})
+      when is_list(threads) do
+    sorted = sort_threads(threads)
+    status = if sorted == [], do: :empty, else: :loaded
+
+    {%{state | threads: sorted, status: status, last_op: nil, last_error: nil}
+     |> clamp_selection(), []}
+  end
+
+  def update({:task_result, :load_threads, {:error, reason}}, %State{} = state, %Context{}) do
+    {%{state | status: {:error, reason}, last_op: nil, last_error: reason} |> clamp_selection(),
+     []}
+  end
+
+  def update({:key, %{key: key}}, %State{} = state, %Context{})
+      when key in [:down, :up] do
+    delta = if key == :down, do: 1, else: -1
+    {move_selection(state, delta), []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
+      when c in ["j", "k"] do
+    delta = if c == "j", do: 1, else: -1
+    {move_selection(state, delta), []}
+  end
+
+  def update({:key, %{key: :enter}}, %State{} = state, %Context{}) do
+    case selected_thread(state) do
+      nil ->
+        {state, []}
+
+      thread ->
+        params = %{
+          board: state.board,
+          board_id: state.board_id,
+          thread: thread,
+          thread_id: Map.get(thread, :id)
+        }
+
+        {state, [Effect.navigate(:post_reader, params)]}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
+      when c in ["c", "C"] do
+    params = %{origin: :thread_list, board: state.board, board_id: state.board_id}
+    {state, [Effect.navigate(:new_thread, params)]}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["q", "Q"] do
+    boards_mod = resolve_boards_module(context)
+    current_user = context.current_user
+
+    refresh =
+      Effect.task(:load_boards, :board_list, fn ->
+        boards_mod.board_directory_for(current_user)
+      end)
+
+    {state, [Effect.navigate(:board_list, %{}), refresh]}
+  end
+
+  def update(_message, %State{} = state, %Context{}), do: {state, []}
+
+  @impl true
+  @spec render(State.t(), Context.t()) :: any()
+  def render(%State{} = state, %Context{} = context) do
+    frame_state = frame_state(state, context)
+    theme = Theme.from_state(frame_state)
+    thread_content = render_thread_content(state, context, theme)
+
+    ScreenFrame.render(frame_state, %{}, thread_content, [
       {"j/k", "Select"},
       {"Enter", "Open"},
       {"C", "Compose"},
@@ -44,7 +128,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
     ])
   end
 
-  defp render_thread_content(state, _ss, theme) when state.current_thread_list == nil do
+  defp render_thread_content(%State{status: :loading}, _context, theme) do
     column style: %{gap: 0} do
       [
         row style: %{gap: 1} do
@@ -57,18 +141,24 @@ defmodule Foglet.TUI.Screens.ThreadList do
     end
   end
 
-  defp render_thread_content(state, _ss, theme) when state.current_thread_list == [] do
+  defp render_thread_content(%State{status: :empty}, _context, theme) do
     column style: %{gap: 0} do
       [text("No threads in this board yet. Press [C] to compose.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_thread_content(state, ss, theme) do
-    sorted = sort_threads(state.current_thread_list)
-    {width, _h} = state.terminal_size || {80, 24}
+  defp render_thread_content(%State{status: {:error, _reason}}, _context, theme) do
+    column style: %{gap: 0} do
+      [text("Unable to load threads.", fg: theme.error.fg)]
+    end
+  end
+
+  defp render_thread_content(%State{} = state, %Context{} = context, theme) do
+    sorted = sort_threads(state.threads || [])
+    {width, _h} = context.terminal_size || {80, 24}
     inner_width = max(width - 4, 40)
 
-    SelectionList.render(sorted, ss.selected_index, fn {thread, _idx, selected} ->
+    SelectionList.render(sorted, state.selected_index, fn {thread, _idx, selected} ->
       render_thread_row(thread, selected, inner_width, theme)
     end)
   end
@@ -123,75 +213,28 @@ defmodule Foglet.TUI.Screens.ThreadList do
   defp thread_time_segment(%{last_post_at: %DateTime{} = dt}), do: "#{TimeAgo.format(dt)} ago"
   defp thread_time_segment(_), do: "new"
 
-  @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: :char, char: "j"}, state), do: move_selection(state, +1)
-  def handle_key(%{key: :down}, state), do: move_selection(state, +1)
-  def handle_key(%{key: :char, char: "k"}, state), do: move_selection(state, -1)
-  def handle_key(%{key: :up}, state), do: move_selection(state, -1)
-
-  def handle_key(%{key: :enter}, state) do
-    threads = sort_threads(state.current_thread_list || [])
-    ss = get_in(state.screen_state, [:thread_list]) || init_screen_state()
-
-    case Enum.at(threads, ss.selected_index) do
-      nil ->
-        :no_match
-
-      thread ->
-        new_state = %{
-          state
-          | current_thread: thread,
-            current_screen: :post_reader,
-            screen_state:
-              Map.put(state.screen_state, :post_reader, PostReader.init_screen_state([]))
-        }
-
-        {:update, new_state, [{:load_posts, thread.id}]}
-    end
-  end
-
-  def handle_key(%{key: :char, char: c}, state) when c in ["c", "C"] do
-    {w, _h} = state.terminal_size || {80, 24}
-
-    # COMPOSE-01 / COMPOSE-03: skip the board picker since we're already
-    # inside a board. Pre-fill board, jump straight to :compose step, and
-    # stash origin so Cancel returns to this ThreadList.
-    ss =
-      Foglet.TUI.Screens.NewThread.init_screen_state(width: w)
-      |> then(
-        &%{&1 | step: :compose, board: state.current_board, boards: nil, origin: :thread_list}
-      )
-
-    new_screen_state = Map.put(state.screen_state, :new_thread, ss)
-
-    {:update, %{state | current_screen: :new_thread, screen_state: new_screen_state}, []}
-  end
-
-  def handle_key(%{key: :char, char: c}, state) when c in ["q", "Q"] do
-    {:update, %{state | current_screen: :board_list}, [{:load_boards}]}
-  end
-
-  def handle_key(_key, _state), do: :no_match
-
-  # Production load orchestration is owned by Foglet.TUI.App.do_update({:load_threads, board_id}, state).
-  @doc false
-  @spec load_threads(map(), String.t()) :: {map(), list()}
-  def load_threads(state, board_id) do
-    ctx = Map.get(state, :session_context) || %{}
-    threads_mod = resolve_threads_module(ctx)
-
-    user_id = state.current_user && state.current_user.id
-    threads = dispatch_thread_load(threads_mod, board_id, user_id)
-    {%{state | current_thread_list: threads}, []}
-  end
-
-  defp resolve_threads_module(ctx) do
-    case Domain.get(ctx, :threads) do
+  defp resolve_threads_module(%Context{} = context) do
+    case domain_module(context, :threads) do
       {:ok, mod} -> mod
       {:error, :not_configured} -> Foglet.Threads
     end
   end
+
+  defp resolve_boards_module(%Context{} = context) do
+    case domain_module(context, :boards) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Boards
+    end
+  end
+
+  defp domain_module(%Context{domain: domain}, key) when is_map(domain) do
+    case Map.get(domain, key) do
+      mod when is_atom(mod) and not is_nil(mod) -> {:ok, mod}
+      _ -> Domain.get(%{domain: domain}, key)
+    end
+  end
+
+  defp domain_module(%Context{session_context: ctx}, key), do: Domain.get(ctx || %{}, key)
 
   defp dispatch_thread_load(threads_mod, board_id, user_id) do
     loaded? = match?({:module, _}, Code.ensure_loaded(threads_mod))
@@ -251,19 +294,37 @@ defmodule Foglet.TUI.Screens.ThreadList do
     )
   end
 
-  defp move_selection(state, delta) do
-    threads = sort_threads(state.current_thread_list || [])
+  defp move_selection(%State{} = state, delta) do
+    threads = sort_threads(state.threads || [])
+    select_index(state, state.selected_index + delta, threads)
+  end
 
-    if threads == [] do
-      :no_match
-    else
-      ss = get_in(state.screen_state, [:thread_list]) || init_screen_state()
-      new_idx = (ss.selected_index + delta) |> max(0) |> min(length(threads) - 1)
+  defp clamp_selection(%State{} = state) do
+    select_index(state, state.selected_index, sort_threads(state.threads || []))
+  end
 
-      new_screen_state =
-        Map.put(state.screen_state, :thread_list, %{ss | selected_index: new_idx})
+  defp select_index(%State{} = state, _index, []), do: %{state | selected_index: 0}
 
-      {:update, %{state | screen_state: new_screen_state}, []}
-    end
+  defp select_index(%State{} = state, index, threads) do
+    %{state | selected_index: index |> max(0) |> min(length(threads) - 1)}
+  end
+
+  defp selected_thread(%State{} = state) do
+    state.threads
+    |> Kernel.||([])
+    |> sort_threads()
+    |> Enum.at(state.selected_index)
+  end
+
+  defp frame_state(%State{} = state, %Context{} = context) do
+    %{
+      current_screen: :thread_list,
+      current_user: context.current_user,
+      current_board: state.board,
+      session_context: context.session_context,
+      terminal_size: context.terminal_size,
+      route: context.route,
+      route_params: context.route_params
+    }
   end
 end
