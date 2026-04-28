@@ -21,7 +21,7 @@
 
 ### Screen State Ownership
 
-- [ ] **STATE-01**: Every stateful screen has a first-class state struct, and stateless screens are explicit about not storing local state.
+- [x] **STATE-01**: Every stateful screen has a first-class state struct, and stateless screens are explicit about not storing local state.
 - [ ] **STATE-02**: Board lists, thread lists, posts, composer drafts, oneliner rows, tab lifecycle slots, and form feedback live in the owning screen state rather than in screen-specific App fields.
 - [ ] **STATE-03**: Screen-local helper modules no longer read or write `state.screen_state[:screen]` through the App struct once their owning screen is migrated.
 - [ ] **STATE-04**: `Foglet.TUI.App` stores screen states by route/screen key and does not manipulate individual screen struct fields after migration.
@@ -82,7 +82,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EFFECT-02 | Phase 34 | Complete |
 | EFFECT-03 | Phase 34 | Complete |
 | EFFECT-04 | Phase 34 | Complete |
-| STATE-01 | Phase 34 | Pending |
+| STATE-01 | Phase 34 | Complete |
 | STATE-02 | Phase 39 | Pending |
 | STATE-03 | Phase 39 | Pending |
 | STATE-04 | Phase 39 | Pending |

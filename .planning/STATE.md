@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-04-28T18:34:10.988Z"
+status: verifying
+last_updated: "2026-04-28T18:43:12.830Z"
 last_activity: 2026-04-28
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
-  completed_plans: 2
-  percent: 67
+  completed_plans: 3
+  percent: 100
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 
 Phase: 34 (runtime-contract-effects) — EXECUTING
 Plan: 3 of 3
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-28
 
 ## Accumulated Context
@@ -43,6 +43,9 @@ Last activity: 2026-04-28
 - [Phase 34]: App stores transition route params separately from current_screen so legacy atom routing remains compatible.
 - [Phase 34]: App runtime effect tests register sample screens through session_context.domain.screen_modules rather than production-screen-specific clauses.
 - [Phase 34]: Task effect success/failure routing uses {:screen_task_result, screen_key, op, result} through screen update/3.
+- [Phase 34]: Stateful screens must own first-class state structs with new/1 or document a local state type.
+- [Phase 34]: Stateless screens must explicitly return :stateless or %{} from init/1 and avoid App-owned local storage.
+- [Phase 34]: Production screen migrations remain deferred to phases 35-38; Phase 39 removes central App screen-specific machinery.
 
 ### Pending Todos
 
