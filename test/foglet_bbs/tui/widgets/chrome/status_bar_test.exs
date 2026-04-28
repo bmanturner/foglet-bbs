@@ -111,6 +111,20 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
       assert rendered =~ "@alice | 13:05"
       refute rendered =~ "2026-04-24"
     end
+
+    test "guest state shows only the clock on the right" do
+      state = %{
+        current_screen: :login,
+        session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]}
+      }
+
+      texts = StatusBar.render(state, "Login") |> collect_text_values()
+      rendered = Enum.join(texts, " ")
+
+      assert rendered =~ "06:05 PM"
+      refute rendered =~ "guest"
+      refute rendered =~ "|"
+    end
   end
 
   describe "StatusBar.status_atoms/1" do
@@ -149,7 +163,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
       assert StatusBar.status_atoms(state) == ["@alice", "scope site", "mail degraded", "13:05"]
     end
 
-    test "guest state renders guest with clock and without fabricated optional atoms" do
+    test "guest state renders only the clock and without fabricated optional atoms" do
       state = %{
         current_screen: :account,
         unread_count: 9,
@@ -158,7 +172,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
         session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]}
       }
 
-      assert StatusBar.status_atoms(state) == ["guest", "06:05 PM"]
+      assert StatusBar.status_atoms(state) == ["06:05 PM"]
     end
 
     test "uses Presentation.mode_for! with current_screen" do

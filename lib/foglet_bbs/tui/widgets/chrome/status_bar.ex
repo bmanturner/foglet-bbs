@@ -3,7 +3,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   Themed top-of-screen status bar for Foglet BBS (FRAME-02).
 
   Renders a full-width row: "Foglet BBS — {title}" on the left,
-  "@{handle}" or "guest" on the right. Background and text colors
+  "@{handle}" or a clock-only guest state on the right. Background and text colors
   come from the theme's status_bar slot (reverse-video bar effect).
 
   Called by Chrome.ScreenFrame — screens do not call this directly.
@@ -11,7 +11,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   Copywriting contract (UI-SPEC):
     StatusBar left:  "Foglet BBS — {Screen Title}"
     StatusBar right (authed):  "@{handle}"
-    StatusBar right (guest):   "guest"
+    StatusBar right (guest):   clock only
   """
 
   import Raxol.Core.Renderer.View
@@ -73,7 +73,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
     mode = Presentation.mode_for!(Map.get(state, :current_screen))
 
     case authenticated_user(state) do
-      nil -> ["guest", ClockFormatter.format(clock_instant(state), nil)]
+      nil -> [ClockFormatter.format(clock_instant(state), nil)]
       user -> user_status_atoms(state, user, mode)
     end
   end
