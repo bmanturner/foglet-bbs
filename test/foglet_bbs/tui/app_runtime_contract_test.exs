@@ -139,4 +139,52 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
                App.apply_effect(resized, Effect.quit())
     end
   end
+
+  describe "task effect routing" do
+    test "task success routes through SampleScreen.update/3" do
+      {state, []} =
+        App.apply_effect(state(), Effect.navigate(:sample_runtime, %{thread_id: "t1"}))
+
+      {unchanged, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+        App.apply_effect(
+          state,
+          Effect.task(:sample_load, :sample_runtime, fn -> {:loaded, 1} end)
+        )
+
+      assert unchanged == state
+
+      assert {:screen_task_result, :sample_runtime, :sample_load, {:ok, {:loaded, 1}}} =
+               task.()
+
+      {new_state, []} = App.update({:command_result, task.()}, state)
+
+      assert function_exported?(SampleScreen, :update, 3)
+
+      assert %SampleScreen.State{results: [sample_load: {:ok, {:loaded, 1}}]} =
+               App.screen_state_for(new_state, :sample_runtime)
+
+      assert %SampleScreen.State{messages: [{:sample_load, %{thread_id: "t1"}}]} =
+               App.screen_state_for(new_state, :sample_runtime)
+    end
+
+    test "task failure wrapper routes an error through SampleScreen.update/3" do
+      {state, []} = App.apply_effect(state(), Effect.navigate(:sample_runtime, %{origin: :test}))
+
+      {_state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+        App.apply_effect(
+          state,
+          Effect.task(:sample_load, :sample_runtime, fn -> raise "boom" end)
+        )
+
+      assert {:screen_task_result, :sample_runtime, :sample_load, {:error, reason}} = task.()
+      assert reason =~ "boom"
+
+      {new_state, []} = App.update({:command_result, task.()}, state)
+
+      assert %SampleScreen.State{results: [{:sample_load, {:error, routed_reason}}]} =
+               App.screen_state_for(new_state, :sample_runtime)
+
+      assert routed_reason =~ "boom"
+    end
+  end
 end

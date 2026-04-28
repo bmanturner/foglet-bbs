@@ -192,6 +192,28 @@ defmodule Foglet.TUI.App do
     {state, [Command.quit()]}
   end
 
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :task,
+        payload: %{op: op, screen_key: screen_key, fun: fun}
+      }) do
+    task =
+      Foglet.TUI.Command.task(op, fn ->
+        try do
+          {:screen_task_result, screen_key, op, {:ok, fun.()}}
+        rescue
+          e ->
+            reason = Exception.format(:error, e, __STACKTRACE__)
+            {:screen_task_result, screen_key, op, {:error, reason}}
+        catch
+          kind, value ->
+            reason = Exception.format(kind, value, __STACKTRACE__)
+            {:screen_task_result, screen_key, op, {:error, reason}}
+        end
+      end)
+
+    {state, [task]}
+  end
+
   @doc "Interprets effects in order, appending produced runtime commands."
   @spec apply_effects(t(), [Effect.t()]) :: {t(), [Command.t()]}
   def apply_effects(%__MODULE__{} = state, effects) when is_list(effects) do
@@ -1136,6 +1158,10 @@ defmodule Foglet.TUI.App do
     do_update(inner, state)
   end
 
+  defp do_update({:screen_task_result, key, op, result}, state) do
+    route_screen_update(state, key, {:task_result, op, result})
+  end
+
   defp do_update({:login_result, result}, state) do
     Screens.Login.handle_login_result(state, result)
   end
@@ -1234,6 +1260,33 @@ defmodule Foglet.TUI.App do
     else
       state
     end
+  end
+
+  defp route_screen_update(%__MODULE__{} = state, key, message) do
+    module = screen_module_for(state, key)
+
+    if function_exported?(module, :update, 3) do
+      local_state = screen_state_for(state, key)
+      context = context_for_screen_key(state, key)
+      {new_local_state, effects} = module.update(message, local_state, context)
+
+      state
+      |> put_screen_state(key, new_local_state)
+      |> apply_effects(List.wrap(effects))
+    else
+      {state, []}
+    end
+  end
+
+  defp context_for_screen_key(%__MODULE__{} = state, key) do
+    params =
+      if screen_key(current_route(state)) == key do
+        state.route_params || %{}
+      else
+        %{}
+      end
+
+    build_context(state, params)
   end
 
   defp maybe_load_initial_oneliners(%{current_screen: :main_menu, current_user: user} = state)
