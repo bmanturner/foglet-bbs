@@ -3,6 +3,8 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
   alias Foglet.TUI.App
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
+  alias Foglet.TUI.Modal
 
   defmodule SampleScreen do
     defmodule State do
@@ -86,6 +88,55 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert context.route == :main_menu
       assert context.route_params == %{}
       assert context.domain == state.session_context.domain
+    end
+  end
+
+  describe "generic non-task effect interpretation" do
+    test "navigate initializes only the target state and carries route params" do
+      state = state()
+
+      {new_state, cmds} =
+        App.apply_effect(state, Effect.navigate(:sample_runtime, %{board_id: "b1"}))
+
+      assert cmds == []
+      assert new_state.current_screen == :sample_runtime
+      assert new_state.modal == nil
+      assert new_state.route_params == %{board_id: "b1"}
+      assert context = App.build_context(new_state)
+      assert context.route_params == %{board_id: "b1"}
+
+      assert %SampleScreen.State{route_params: %{board_id: "b1"}} =
+               App.screen_state_for(new_state, :sample_runtime)
+
+      assert new_state.board_list == state.board_list
+      assert new_state.posts == state.posts
+      assert new_state.recent_oneliners == state.recent_oneliners
+      assert new_state.screen_state.main_menu == state.screen_state.main_menu
+    end
+
+    test "modal, session, terminal, publish, and quit effects are generic" do
+      user = %Foglet.Accounts.User{id: "u2", handle: "bob"}
+      modal = %Modal{type: :info, message: "hello"}
+      state = state()
+
+      {with_modal, []} = App.apply_effect(state, Effect.open_modal(modal))
+      assert with_modal.modal == modal
+
+      {without_modal, []} = App.apply_effect(with_modal, Effect.dismiss_modal())
+      assert without_modal.modal == nil
+
+      {with_user, user_cmds} = App.apply_effect(without_modal, Effect.session({:set_user, user}))
+      assert with_user.current_user == user
+      assert with_user.current_screen == :main_menu
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = user_cmds
+
+      {resized, []} = App.apply_effect(with_user, Effect.terminal_size({120, 40}))
+      assert resized.terminal_size == {120, 40}
+
+      assert {^resized, []} = App.apply_effect(resized, Effect.publish("topic", :message))
+
+      assert {_same_state, [%Raxol.Core.Runtime.Command{type: :quit}]} =
+               App.apply_effect(resized, Effect.quit())
     end
   end
 end

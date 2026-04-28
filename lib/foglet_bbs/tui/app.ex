@@ -23,6 +23,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.Sessions.Session
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
   alias Foglet.TUI.Screens.Account.State, as: AccountState
@@ -146,6 +147,58 @@ defmodule Foglet.TUI.App do
       route_params: route_params,
       domain: domain_from_session_context(state.session_context)
     )
+  end
+
+  @doc "Interprets one Phase 34 runtime effect."
+  @spec apply_effect(t(), Effect.t()) :: {t(), [Command.t()]}
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :navigate,
+        payload: %{screen: screen, params: params}
+      }) do
+    state =
+      state
+      |> Map.put(:current_screen, screen)
+      |> Map.put(:route_params, params || %{})
+      |> Map.put(:modal, nil)
+      |> init_route_screen_state(screen, params || %{})
+
+    {state, []}
+  end
+
+  def apply_effect(%__MODULE__{} = state, %Effect{type: :modal, payload: {:open, modal}}) do
+    {%{state | modal: modal}, []}
+  end
+
+  def apply_effect(%__MODULE__{} = state, %Effect{type: :modal, payload: :dismiss}) do
+    {%{state | modal: nil}, []}
+  end
+
+  def apply_effect(%__MODULE__{} = state, %Effect{type: :session, payload: {:set_user, user}}) do
+    update({:set_user, user}, state)
+  end
+
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :terminal,
+        payload: {:size, {cols, rows}}
+      }) do
+    update({:window_change, cols, rows}, state)
+  end
+
+  def apply_effect(%__MODULE__{} = state, %Effect{type: :publish}) do
+    {state, []}
+  end
+
+  def apply_effect(%__MODULE__{} = state, %Effect{type: :quit}) do
+    {state, [Command.quit()]}
+  end
+
+  @doc "Interprets effects in order, appending produced runtime commands."
+  @spec apply_effects(t(), [Effect.t()]) :: {t(), [Command.t()]}
+  def apply_effects(%__MODULE__{} = state, effects) when is_list(effects) do
+    Enum.reduce(effects, {state, []}, fn effect, {acc_state, acc_cmds} ->
+      {next_state, cmds} = apply_effect(acc_state, effect)
+      {next_state, acc_cmds ++ cmds}
+    end)
   end
 
   # --- Raxol callbacks ---
@@ -1172,6 +1225,17 @@ defmodule Foglet.TUI.App do
 
   defp domain_from_session_context(_session_context), do: %{}
 
+  defp init_route_screen_state(%__MODULE__{} = state, screen, params) do
+    key = screen_key(screen)
+    module = screen_module_for(state, key)
+
+    if function_exported?(module, :init, 1) do
+      put_screen_state(state, key, module.init(build_context(state, params)))
+    else
+      state
+    end
+  end
+
   defp maybe_load_initial_oneliners(%{current_screen: :main_menu, current_user: user} = state)
        when not is_nil(user) do
     oneliners_mod = domain_module(state, :oneliners)
@@ -1715,6 +1779,37 @@ defmodule Foglet.TUI.App do
   defp wrap_command({:terminate, _reason}), do: Command.quit()
   defp wrap_command(%Command{} = cmd), do: cmd
   defp wrap_command(other), do: other
+
+  defp screen_module_for(%__MODULE__{} = state, screen) do
+    case get_in(domain_from_session_context(state.session_context), [:screen_modules, screen]) do
+      module when is_atom(module) and not is_nil(module) ->
+        module
+
+      _other ->
+        if screen in known_screens() do
+          screen_module_for(screen)
+        else
+          nil
+        end
+    end
+  end
+
+  defp known_screens do
+    [
+      :login,
+      :register,
+      :verify,
+      :main_menu,
+      :board_list,
+      :thread_list,
+      :post_reader,
+      :post_composer,
+      :new_thread,
+      :account,
+      :moderation,
+      :sysop
+    ]
+  end
 
   defp screen_module_for(:login), do: Screens.Login
   defp screen_module_for(:register), do: Screens.Register
