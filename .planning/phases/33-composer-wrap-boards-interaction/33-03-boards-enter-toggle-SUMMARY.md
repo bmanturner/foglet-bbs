@@ -20,7 +20,7 @@ tech-stack:
 
 key-files:
   created:
-    - .planning/phases/33-composer-wrap-boards-interaction/33-03-SUMMARY.md
+    - .planning/phases/33-composer-wrap-boards-interaction/33-03-boards-enter-toggle-SUMMARY.md
   modified:
     - lib/foglet_bbs/tui/screens/board_list.ex
     - test/foglet_bbs/tui/screens/board_list_test.exs
@@ -67,7 +67,7 @@ Each task was committed atomically:
 
 - `lib/foglet_bbs/tui/screens/board_list.ex` - Handles `:node_expanded` and `:node_collapsed` Enter actions by storing the returned `BoardTree` locally.
 - `test/foglet_bbs/tui/screens/board_list_test.exs` - Covers category Enter collapse/expand indicators, no commands, unchanged board-list screen, and existing board leaf navigation.
-- `.planning/phases/33-composer-wrap-boards-interaction/33-03-SUMMARY.md` - Execution summary and verification record.
+- `.planning/phases/33-composer-wrap-boards-interaction/33-03-boards-enter-toggle-SUMMARY.md` - Execution summary and verification record.
 
 ## Decisions Made
 
@@ -109,7 +109,7 @@ BOARD-01 is complete for the Boards interaction slice. No follow-up blocker rema
 
 ## Self-Check: PASSED
 
-- Summary file exists at `.planning/phases/33-composer-wrap-boards-interaction/33-03-SUMMARY.md`.
+- Summary file exists at `.planning/phases/33-composer-wrap-boards-interaction/33-03-boards-enter-toggle-SUMMARY.md`.
 - Task commits exist in git history: `4a0f9a3`, `0a5745a`.
 
 ---
