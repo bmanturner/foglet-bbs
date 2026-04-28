@@ -43,13 +43,12 @@ The next architecture problem is ownership: `Foglet.TUI.App` currently owns rout
 - [x] Reusable themed TUI widgets cover chrome, lists, inputs, display elements, modals, post rendering, composition, and progress states - existing code.
 - [x] Runtime configuration is persisted in the database and cached through a typed ETS-backed config layer - existing code.
 - [x] Main BBS, account, moderation, and sysop screens have local screen modules, many with state structs, but the runtime shell still centrally owns too many screen-specific update clauses - v2.0 input context.
+- [x] v2.0 Phase 34 established `Foglet.TUI.Context`, `Foglet.TUI.Effect`, and the `init/1`, `update/3`, `render/2` screen contract with App runtime helpers and focused tests.
+- [x] v2.0 Phase 34 proved generic navigation, task, modal, publish/session, terminal-size, and quit effects through App, including task result routing back into screen `update/3`.
+- [x] v2.0 Phase 34 documented stateful/stateless screen conventions and preserved existing App/render smoke behavior while deferring full screen-family migration.
 
 ### Active
 
-- [ ] v2.0 - Define a screen runtime contract where screens expose `init/1`, `update/3`, and `render/2` over screen-local state and `Foglet.TUI.Context`.
-- [ ] v2.0 - Add explicit effect values and a generic interpreter in `Foglet.TUI.App` for navigation, tasks, modal operations, PubSub/session operations, terminal resize, and quit.
-- [ ] v2.0 - Move async-result handling out of `App` and into the screen that requested the work.
-- [ ] v2.0 - Move stateful screens to first-class local state structs or explicit stateless modules.
 - [ ] v2.0 - Fully migrate all current screens to the mini update-loop model while preserving SSH/TUI behavior and render contracts.
 - [ ] v2.0 - Remove screen-specific domain/result clauses and generic `screen_state` manipulation from `App` after migration.
 
@@ -104,7 +103,7 @@ Widgets already model the smaller local reducer style through `init/1`, `handle_
 | Store domain truth in Postgres and ephemeral truth in ETS/processes | Durable BBS data needs database consistency; presence, caches, and live UI state can be rebuilt | Good |
 | Keep sysop administration inside the TUI for day-to-day operations | A sysop should be able to operate the BBS from the same terminal experience users inhabit | Good |
 | Split the TUI facelift into Classic Modern BBS and Operator Console modes | User-facing conversation screens should feel social and placeful, while account/operator work remains compact and administrative | Good |
-| Make v2.0 an architecture milestone for screen ownership | `Foglet.TUI.App` has accumulated screen-specific routing, async-result handling, and state mutation; moving those decisions into screens makes future TUI work safer | Pending |
+| Make v2.0 an architecture milestone for screen ownership | `Foglet.TUI.App` has accumulated screen-specific routing, async-result handling, and state mutation; moving those decisions into screens makes future TUI work safer | Phase 34 foundation validated |
 
 ## Evolution
 
@@ -124,4 +123,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 after starting v2.0 TUI Runtime Shell & Screen Update Loops*
+*Last updated: 2026-04-28 after Phase 34 Runtime Contract & Effects completion*
