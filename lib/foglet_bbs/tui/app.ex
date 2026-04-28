@@ -1099,7 +1099,6 @@ defmodule Foglet.TUI.App do
   defp default_domain_module(:boards), do: Foglet.Boards
   defp default_domain_module(:threads), do: Foglet.Threads
   defp default_domain_module(:posts), do: Foglet.Posts
-  defp default_domain_module(:oneliners), do: Foglet.Oneliners
   defp default_domain_module(:moderation), do: Foglet.Moderation
   defp default_domain_module(:accounts), do: Foglet.Accounts
 
