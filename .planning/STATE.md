@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-04-28T20:15:13.138Z"
+status: verifying
+last_updated: "2026-04-28T20:35:34.908Z"
 last_activity: 2026-04-28
 progress:
   total_phases: 7
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 10
-  completed_plans: 6
-  percent: 60
+  completed_plans: 7
+  percent: 70
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 
 Phase: 35 (auth-home-screens) — EXECUTING
 Plan: 4 of 4
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-28
 
 ## Accumulated Context
@@ -52,6 +52,9 @@ Last activity: 2026-04-28
 - [Phase 35-auth-home-screens]: MainMenu now uses a first-class State struct for recent oneliners, selection, pending hide target, status, and form errors.
 - [Phase 35-auth-home-screens]: MainMenu reducer tests assert local state and Effect values instead of legacy handle_key/2 or App top-level oneliner fields.
 - [Phase 35-auth-home-screens]: App still carries transitional oneliner compatibility clauses for Plan 35-04 cleanup, but load results now feed MainMenu screen_state.
+- [Phase 35-auth-home-screens]: App no longer carries Phase 35 production local-flow do_update clauses for Login, Register, Verify, or MainMenu/oneliners. — Plan 35-04 cleanup completed auth/home screen-owned update loop migration.
+- [Phase 35-auth-home-screens]: MainMenu initial and navigation loads enter through MainMenu.update/3 using the generic screen reducer/effect path. — Keeps App as runtime interpreter while MainMenu owns oneliner loading.
+- [Phase 35-auth-home-screens]: Modal form submit routing remains App runtime plumbing but carries only a generic screen key, submit kind, and payload. — Preserves modal precedence without App owning target screen business state.
 
 ### Pending Todos
 
