@@ -1,22 +1,11 @@
 defmodule Foglet.TUI.Widgets.ComposeTest do
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Compose
   alias Raxol.UI.Components.Input.MultiLineInput
-
-  defp flatten_text(tree), do: tree |> collect_text([]) |> Enum.reverse() |> Enum.join("\n")
-
-  defp collect_text(nil, acc), do: acc
-  defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
-
-  defp collect_text(%{children: children}, acc) do
-    collect_text(children, acc)
-  end
-
-  defp collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
-  defp collect_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
-  defp collect_text(_other, acc), do: acc
 
   defp input_with(value, cursor_pos) do
     {:ok, input_st} =
@@ -189,6 +178,40 @@ defmodule Foglet.TUI.Widgets.ComposeTest do
         })
 
       assert Compose.render_input(input_st, true, theme) != nil
+    end
+
+    test "width option visually wraps long logical lines without mutating input value", %{
+      theme: theme
+    } do
+      input = input_with("alpha beta gamma delta", {0, 0})
+
+      output = Compose.render_input(input, false, theme, width: 10)
+      flattened = flatten_text(output)
+
+      assert flattened =~ "alpha beta"
+      assert flattened =~ "gamma"
+      assert flattened =~ "delta"
+      assert input.value == "alpha beta gamma delta"
+      assert input.wrap == :none
+    end
+
+    test "empty value preserves placeholder behavior when wrapping is enabled", %{theme: theme} do
+      input = input_with("", {0, 0})
+
+      output = Compose.render_input(input, false, theme, empty_line_placeholder: " ", width: 10)
+
+      assert flatten_text(output) == " "
+    end
+
+    test "focused wrapped line renders cursor at the logical cursor position", %{theme: theme} do
+      input = input_with("alpha beta gamma delta", {0, 6})
+
+      output = Compose.render_input(input, true, theme, width: 10)
+      flattened = flatten_text(output)
+
+      assert flattened =~ "\u2588"
+      assert flattened =~ "alpha\u2588"
+      assert input.value == "alpha beta gamma delta"
     end
 
     test "cursor_pos fallback works with default {0, 0}", %{theme: theme} do
