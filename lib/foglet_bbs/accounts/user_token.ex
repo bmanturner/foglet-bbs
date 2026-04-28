@@ -26,6 +26,16 @@ defmodule Foglet.Accounts.UserToken do
   @cli_session_validity_in_days 60
 
   @email_verify_validity_in_minutes 15
+
+  # IN-001: two semantically distinct quantities. The byte-count controls how
+  # many random bytes are sampled (entropy source); the char-count controls
+  # how many base32 characters of the encoding are kept. Today both are 6 —
+  # but a future contributor bumping `@verify_code_length` thinking it
+  # increases entropy would not, because base32 of 6 random bytes is already
+  # ~10 chars and we keep only 6. Keep the constants separate so the
+  # entropy-byte count can be raised independently without changing the
+  # 6-character user-facing contract.
+  @verify_code_random_bytes 6
   @verify_code_length 6
 
   schema "user_tokens" do
@@ -185,7 +195,7 @@ defmodule Foglet.Accounts.UserToken do
   # ---------- Private ----------
 
   defp generate_verify_code do
-    :crypto.strong_rand_bytes(@verify_code_length)
+    :crypto.strong_rand_bytes(@verify_code_random_bytes)
     |> Base.encode32(padding: false)
     |> binary_part(0, @verify_code_length)
     |> String.upcase()
