@@ -621,13 +621,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
     end
 
-    test "menu advertises Enter reset token in keys_for output" do
+    test "menu advertises Reset token in keys_for output" do
       rendered =
         Login.render(base_state("open"))
         |> collect_text_values()
         |> Enum.join("\n")
 
-      assert rendered =~ "Enter reset token"
+      assert rendered =~ "Reset token"
     end
 
     test "'T' from reset_request enters :reset_consume" do
