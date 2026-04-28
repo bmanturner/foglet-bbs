@@ -316,13 +316,37 @@ defmodule Foglet.TUI.Screens.MainMenu do
     }
   end
 
+  # Multi-node row composition (D-06, MENU-03):
+  # - Leading text node carries `theme.primary.fg` and includes the one-column
+  #   inner indent (D-09, MENU-04), the destination glyph, the label, and the
+  #   right-align padding.
+  # - Trailing text node carries `theme.accent.fg` and renders the bracketed
+  #   key token `[X]` (D-08, D-10 — color only, no style).
+  # Width budget at 64x22 (inner_width = 20):
+  #   indent(1) + glyph(1) + space(1) + "Moderation"(10) + "[M]"(3) = 16,
+  #   leaving 4 cols of trailing padding.
   defp nav_row(%{key: key, label: label, glyph: glyph}, theme, inner_width) do
-    prefix = glyph <> " " <> label
-    prefix_width = TextWidth.display_width(prefix)
-    key_width = TextWidth.display_width(key)
-    padding_width = max(inner_width - prefix_width - key_width, 1)
+    indent = " "
+    bracketed_key = "[" <> key <> "]"
+
+    prefix_text = indent <> glyph <> " " <> label
+    prefix_width = TextWidth.display_width(prefix_text)
+    bracketed_key_width = TextWidth.display_width(bracketed_key)
+
+    padding_width = max(inner_width - prefix_width - bracketed_key_width, 1)
     padding = TextWidth.pad_trailing("", padding_width)
-    text(prefix <> padding <> key, fg: theme.primary.fg)
+
+    # NOTE: must pass an explicit opts arg (`[]`) so the `Raxol.Core.Renderer.View.row/2`
+    # MACRO is invoked. Calling `row do ... end` without an opts arg matches the
+    # `row/1` FUNCTION instead, which silently drops the do-block contents and
+    # returns a flex with `children: []` (vendor/raxol/lib/raxol/core/renderer/view.ex
+    # line 87 vs. line 92).
+    row [] do
+      [
+        text(prefix_text <> padding, fg: theme.primary.fg),
+        text(bracketed_key, fg: theme.accent.fg)
+      ]
+    end
   end
 
   defp oneliners_panel(state, theme) do
