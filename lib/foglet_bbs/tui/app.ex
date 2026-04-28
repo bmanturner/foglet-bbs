@@ -177,6 +177,13 @@ defmodule Foglet.TUI.App do
     update({:set_user, user}, state)
   end
 
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :session,
+        payload: {:set_current_user, user}
+      }) do
+    {%{state | current_user: user}, []}
+  end
+
   def apply_effect(%__MODULE__{session_pid: session_pid} = state, %Effect{
         type: :session,
         payload: message
@@ -549,7 +556,7 @@ defmodule Foglet.TUI.App do
       true ->
         screen_module = screen_module_for(state.current_screen)
 
-        case screen_module.handle_key(key_event, state) do
+        case apply(screen_module, :handle_key, [key_event, state]) do
           {:update, new_state, commands} ->
             # process_screen_commands/2 converts I/O dispatch tuples returned by
             # screens (e.g. {:load_boards}, {:load_threads, id}) into real
@@ -1788,7 +1795,7 @@ defmodule Foglet.TUI.App do
     if function_exported?(module, :render, 2) and not function_exported?(module, :render, 1) do
       module.render(screen_state_for(state, key), context_for_screen_key(state, key))
     else
-      screen_module_for(state.current_screen).render(state)
+      apply(screen_module_for(state.current_screen), :render, [state])
     end
   end
 

@@ -30,7 +30,7 @@ defmodule Foglet.TUI.Screens.Login do
 
   alias Foglet.{Accounts, Config}
   alias Foglet.Accounts.{Auth, Verification}
-  alias Foglet.TUI.Command
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.TextWidth
@@ -72,8 +72,13 @@ defmodule Foglet.TUI.Screens.Login do
   def init_screen_state(_opts), do: LoginState.default()
 
   @impl true
-  @spec render(map()) :: any()
-  def render(state) do
+  @spec init(Context.t()) :: map()
+  def init(%Context{}), do: LoginState.default()
+
+  @impl true
+  @spec render(map(), Context.t()) :: any()
+  def render(local_state, %Context{} = context) do
+    state = app_state_from_local(local_state, context)
     mode = registration_mode(state)
     sub = LoginState.sub(state)
     theme = Theme.from_state(state)
@@ -94,12 +99,50 @@ defmodule Foglet.TUI.Screens.Login do
   end
 
   @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  # Route all keys through sub-state so form input gets every character.
-  def handle_key(%{key: :char, char: c, ctrl: true}, state) when c in ["c", "C"],
-    do: {:update, state, [{:terminate, :user_quit}]}
+  @spec update(term(), map(), Context.t()) :: {map(), [Effect.t()]}
+  def update({:key, %{key: :char, char: c, ctrl: true}}, local_state, %Context{})
+      when c in ["c", "C"],
+      do: {local_state, [Effect.quit()]}
 
-  def handle_key(key, state) do
+  def update({:key, key}, local_state, %Context{} = context) do
+    local_state
+    |> app_state_from_local(context)
+    |> reduce_key(key)
+    |> local_result(local_state)
+  end
+
+  def update({:task_result, :login, {:ok, result}}, local_state, %Context{} = context) do
+    local_state
+    |> app_state_from_local(context)
+    |> handle_login_result(result)
+    |> local_result(local_state)
+  end
+
+  def update({:task_result, :login, {:error, _reason}}, local_state, %Context{} = context) do
+    local_state
+    |> app_state_from_local(context)
+    |> handle_login_result({:error, :invalid_credentials})
+    |> local_result(local_state)
+  end
+
+  def update({:task_result, :reset_request, {:ok, result}}, local_state, context),
+    do: update({:task_result, :reset_request, result}, local_state, context)
+
+  def update({:task_result, :reset_request, {:error, _reason}}, local_state, %Context{}) do
+    {Map.merge(local_state, %{error: @reset_invalid_email_message, message: nil}), []}
+  end
+
+  def update({:task_result, :reset_token, {:ok, result}}, local_state, context),
+    do: update({:task_result, :reset_token, result}, local_state, context)
+
+  def update({:task_result, :reset_token, {:error, _reason}}, local_state, %Context{}) do
+    {Map.put(local_state, :error, @reset_consume_invalid_or_expired_message), []}
+  end
+
+  def update(_message, local_state, %Context{}), do: {local_state, []}
+
+  # Route all keys through sub-state so form input gets every character.
+  defp reduce_key(state, key) do
     case LoginState.sub(state) do
       :login_form -> handle_form_key(key, state)
       :reset_request -> handle_reset_key(key, state)
@@ -127,10 +170,9 @@ defmodule Foglet.TUI.Screens.Login do
 
   # --- Private ---
 
-  @doc false
   @spec handle_login_result(map(), tuple()) :: {map(), list()}
   def handle_login_result(state, {:ok, user, :main_menu}) do
-    {%{state | screen_state: %{}}, [{:promote_session, user}]}
+    {LoginState.put(state, LoginState.default()), [Effect.session({:set_user, user})]}
   end
 
   def handle_login_result(state, {:ok, user, :verify, :attempted}) do
@@ -586,7 +628,7 @@ defmodule Foglet.TUI.Screens.Login do
         :no_match
 
       _mode ->
-        {:update, %{state | current_screen: :register}, []}
+        {:update, state, [Effect.navigate(:register, %{})]}
     end
   end
 
@@ -713,26 +755,35 @@ defmodule Foglet.TUI.Screens.Login do
     login_ss = LoginState.get(state)
     handle_value = login_ss.handle_input.raxol_state.value
     password_value = login_ss.password_input.raxol_state.value
+    accounts_mod = domain_module(state, :accounts)
+    auth_mod = domain_module(state, :auth)
+    verification_mod = domain_module(state, :verification)
     submitting_ss = Map.merge(login_ss, %{error: nil, submitting?: true})
     submitting_state = LoginState.put(state, submitting_ss)
 
-    command =
-      Command.task(:login, fn ->
-        {:login_result, authenticate_login(handle_value, password_value)}
+    effect =
+      Effect.task(:login, :login, fn ->
+        authenticate_login(
+          accounts_mod,
+          auth_mod,
+          verification_mod,
+          handle_value,
+          password_value
+        )
       end)
 
-    {:update, submitting_state, [command]}
+    {:update, submitting_state, [effect]}
   end
 
-  defp authenticate_login(handle_value, password_value) do
+  defp authenticate_login(accounts_mod, auth_mod, verification_mod, handle_value, password_value) do
     # with chain (D-08): authenticate first, then dispatch on user status.
     # post_login_screen/1 returns :verify | :main_menu directly (no {:ok, _} wrapper).
     # Status check is inside the success branch — pending/suspended users authenticate
     # successfully but must not reach the main flow.
-    with {:ok, user} <- Auth.authenticate_by_password(handle_value, password_value),
+    with {:ok, user} <- auth_mod.authenticate_by_password(handle_value, password_value),
          :active <- user.status do
-      screen = Accounts.post_login_screen(user)
-      login_success_result(user, screen)
+      screen = accounts_mod.post_login_screen(user)
+      login_success_result(verification_mod, user, screen)
     else
       {:error, :invalid_credentials} ->
         {:error, :invalid_credentials}
@@ -742,10 +793,10 @@ defmodule Foglet.TUI.Screens.Login do
     end
   end
 
-  defp login_success_result(user, :main_menu), do: {:ok, user, :main_menu}
+  defp login_success_result(_verification_mod, user, :main_menu), do: {:ok, user, :main_menu}
 
-  defp login_success_result(user, :verify) do
-    case Verification.deliver_verification_code(user) do
+  defp login_success_result(verification_mod, user, :verify) do
+    case verification_mod.deliver_verification_code(user) do
       {:ok, :attempted} -> {:ok, user, :verify, :attempted}
       {:error, :unavailable} -> {:ok, user, :verify, :unavailable}
       {:error, :delivery_failed} -> {:ok, user, :verify, :delivery_failed}
@@ -755,13 +806,8 @@ defmodule Foglet.TUI.Screens.Login do
 
   defp complete_verify_login(state, user) do
     {
-      %{
-        state
-        | current_user: user,
-          current_screen: :verify,
-          screen_state: Map.delete(state.screen_state || %{}, :verify)
-      },
-      []
+      LoginState.put(state, LoginState.default()),
+      [Effect.session({:set_current_user, user}), Effect.navigate(:verify, %{})]
     }
   end
 
@@ -769,9 +815,9 @@ defmodule Foglet.TUI.Screens.Login do
     modal = %Foglet.TUI.Modal{type: :error, message: message}
 
     if Keyword.get(opts, :clear?, false) do
-      {%{state | modal: modal, screen_state: %{}}, []}
+      {LoginState.put(state, LoginState.default()), [Effect.open_modal(modal)]}
     else
-      {state |> unlock_login_form() |> Map.put(:modal, modal), []}
+      {unlock_login_form(state), [Effect.open_modal(modal)]}
     end
   end
 
@@ -784,4 +830,40 @@ defmodule Foglet.TUI.Screens.Login do
       state
     end
   end
+
+  defp app_state_from_local(local_state, %Context{} = context) do
+    %{
+      current_screen: :login,
+      current_user: context.current_user,
+      session_context: context.session_context,
+      session_pid: context.session_pid,
+      terminal_size: context.terminal_size,
+      route_params: context.route_params,
+      domain: context.domain,
+      screen_state: %{login: local_state || LoginState.default()}
+    }
+  end
+
+  defp local_result(:no_match, local_state), do: {local_state, []}
+
+  defp local_result({:update, state, effects}, _local_state) do
+    {LoginState.get(state), effects}
+  end
+
+  defp local_result({state, effects}, _local_state) when is_list(effects) do
+    {LoginState.get(state), effects}
+  end
+
+  defp domain_module(state, key) do
+    domain = Map.get(state, :domain) || %{}
+
+    case Map.get(domain, key) do
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _other -> default_domain_module(key)
+    end
+  end
+
+  defp default_domain_module(:accounts), do: Accounts
+  defp default_domain_module(:auth), do: Auth
+  defp default_domain_module(:verification), do: Verification
 end

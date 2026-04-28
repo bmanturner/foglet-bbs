@@ -3,6 +3,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
   alias Foglet.Accounts.User
   alias Foglet.Config
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Login
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -21,6 +23,59 @@ defmodule Foglet.TUI.Screens.LoginTest do
       screen_state: %{}
     }
     |> Map.from_struct()
+  end
+
+  defp login_context(state) do
+    Context.new(
+      current_user: Map.get(state, :current_user),
+      session_context: Map.get(state, :session_context) || %{},
+      session_pid: Map.get(state, :session_pid),
+      terminal_size: Map.get(state, :terminal_size, {80, 24}),
+      route: :login,
+      route_params: Map.get(state, :route_params) || %{},
+      domain: Map.get(state, :domain) || get_in(state, [:session_context, :domain]) || %{}
+    )
+  end
+
+  defp login_state(state),
+    do: get_in(state, [:screen_state, :login]) || Login.init(login_context(state))
+
+  defp put_login_state(state, login_state) do
+    Map.put(
+      state,
+      :screen_state,
+      Map.put(Map.get(state, :screen_state) || %{}, :login, login_state)
+    )
+  end
+
+  defp update_login(key, state), do: update_message({:key, key}, state)
+
+  defp update_message(message, state) do
+    {new_login_state, effects} = Login.update(message, login_state(state), login_context(state))
+    {:update, put_login_state(state, new_login_state), effects}
+  end
+
+  defp render_login(state), do: Login.render(login_state(state), login_context(state))
+
+  defp modal_effect(effects) do
+    Enum.find_value(effects, fn
+      %Effect{type: :modal, payload: {:open, modal}} -> modal
+      _other -> nil
+    end)
+  end
+
+  defp session_effect(effects) do
+    Enum.find_value(effects, fn
+      %Effect{type: :session, payload: payload} -> payload
+      _other -> nil
+    end)
+  end
+
+  defp navigation_effect(effects) do
+    Enum.find_value(effects, fn
+      %Effect{type: :navigate, payload: payload} -> payload
+      _other -> nil
+    end)
   end
 
   # Moves the TextInput cursor to end-of-value, simulating the user having typed the
@@ -97,13 +152,18 @@ defmodule Foglet.TUI.Screens.LoginTest do
   defp forbidden_https_prefix, do: "https://"
 
   defp submit_login_form(state) do
-    {:update, submitting_state, [%Raxol.Core.Runtime.Command{type: :task} = command]} =
-      Login.handle_key(%{key: :enter}, state)
+    {:update, submitting_state, [%Effect{type: :task} = effect]} =
+      update_login(%{key: :enter}, state)
 
     assert get_in(submitting_state, [:screen_state, :login, :submitting?]) == true
-    {:login_result, result} = command.data.()
-    {final_state, final_commands} = Login.handle_login_result(submitting_state, result)
-    {submitting_state, final_state, final_commands}
+    assert effect.payload.op == :login
+    assert effect.payload.screen_key == :login
+    result = effect.payload.fun.()
+
+    {:update, final_state, final_effects} =
+      update_message({:task_result, :login, {:ok, result}}, submitting_state)
+
+    {submitting_state, final_state, final_effects}
   end
 
   defp collect_panels(tree), do: tree |> collect_panels([]) |> Enum.reverse()
@@ -130,25 +190,25 @@ defmodule Foglet.TUI.Screens.LoginTest do
   describe "render/1 (SSH-04, D-06)" do
     test "declares BBS presentation mode and renders" do
       assert Presentation.mode_for!(:login) == :bbs
-      assert _ = Login.render(base_state("open"))
+      assert _ = render_login(base_state("open"))
     end
 
     test "renders without crashing under open mode" do
-      assert _ = Login.render(base_state("open"))
+      assert _ = render_login(base_state("open"))
     end
 
     test "renders without crashing under disabled mode" do
-      assert _ = Login.render(base_state("disabled"))
+      assert _ = render_login(base_state("disabled"))
     end
 
     test "renders login form without crashing when in login_form sub" do
-      assert _ = Login.render(form_state(handle: "alice", password: "secret"))
+      assert _ = render_login(form_state(handle: "alice", password: "secret"))
     end
 
     test "renders login form inside an Identify Yourself panel with comfortable width" do
       [panel] =
         form_state(handle: "alicealicealicealice", password: "secret")
-        |> Login.render()
+        |> render_login()
         |> collect_panels()
 
       assert panel.attrs.title == "Identify Yourself"
@@ -159,7 +219,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "caps long masked password display inside the Identify Yourself panel" do
       rendered_text =
         form_state([handle: "alice", password: String.duplicate("s", 30)], :password)
-        |> Login.render()
+        |> render_login()
         |> collect_text_values()
         |> Enum.join("")
 
@@ -169,53 +229,54 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "renders forgot password in email delivery mode (D-01)" do
       Config.put!("delivery_mode", "email")
-      email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
+      email_text = render_login(base_state("open")) |> collect_text_values() |> Enum.join("\n")
       assert email_text =~ "Forgot password"
     end
 
     test "renders forgot password in no-email delivery mode (D-01)" do
       Config.put!("delivery_mode", "no_email")
-      no_email_text = Login.render(base_state("open")) |> collect_text_values() |> Enum.join("\n")
+      no_email_text = render_login(base_state("open")) |> collect_text_values() |> Enum.join("\n")
       assert no_email_text =~ "Forgot password"
     end
   end
 
-  describe "handle_key/2 — menu sub" do
+  describe "update/3 — menu sub" do
     test "Ctrl+C returns terminate command" do
-      assert {:update, _, [{:terminate, :user_quit}]} =
-               Login.handle_key(%{key: :char, char: "c", ctrl: true}, base_state())
+      assert {:update, _, [%Effect{type: :quit}]} =
+               update_login(%{key: :char, char: "c", ctrl: true}, base_state())
     end
 
     test "Ctrl+C returns terminate command from form sub-states" do
-      assert {:update, _, [{:terminate, :user_quit}]} =
-               Login.handle_key(
+      assert {:update, _, [%Effect{type: :quit}]} =
+               update_login(
                  %{key: :char, char: "c", ctrl: true},
                  form_state(handle: "alice", password: "secret")
                )
     end
 
     test "'Q' is not an exit key" do
-      assert :no_match = Login.handle_key(%{key: :char, char: "Q"}, base_state())
+      assert {:update, _state, []} = update_login(%{key: :char, char: "Q"}, base_state())
     end
 
     test "'q' lowercase is not an exit key" do
-      assert :no_match = Login.handle_key(%{key: :char, char: "q"}, base_state())
+      assert {:update, _state, []} = update_login(%{key: :char, char: "q"}, base_state())
     end
 
     test "'R' transitions to :register when registration enabled (D-22)" do
-      {:update, new_state, _} = Login.handle_key(%{key: :char, char: "R"}, base_state("open"))
-      assert new_state.current_screen == :register
+      {:update, _new_state, effects} = update_login(%{key: :char, char: "R"}, base_state("open"))
+      assert %{screen: :register, params: %{}} = navigation_effect(effects)
       # Post-Phase-2: login.ex:maybe_register/1 no longer initializes wizard state.
       # register.ex self-initializes screen_state[:register] on first access (D-06).
       # Only the screen transition is login.ex's responsibility.
     end
 
     test "'R' returns :no_match when registration disabled (D-06)" do
-      assert :no_match = Login.handle_key(%{key: :char, char: "R"}, base_state("disabled"))
+      assert {:update, _state, []} =
+               update_login(%{key: :char, char: "R"}, base_state("disabled"))
     end
 
     test "'L' enters login_form sub-state with focus on :handle" do
-      {:update, new_state, _} = Login.handle_key(%{key: :char, char: "L"}, base_state())
+      {:update, new_state, _} = update_login(%{key: :char, char: "L"}, base_state())
       assert get_in(new_state, [:screen_state, :login, :sub]) == :login_form
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
     end
@@ -223,7 +284,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "'F' enters reset_request sub-state in email delivery mode (D-01)" do
       Config.put!("delivery_mode", "email")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "F"}, base_state())
+      {:update, new_state, []} = update_login(%{key: :char, char: "F"}, base_state())
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :identifier
     end
@@ -231,20 +292,20 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "'F' enters reset_request sub-state in no_email delivery mode (D-01)" do
       Config.put!("delivery_mode", "no_email")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "F"}, base_state())
+      {:update, new_state, []} = update_login(%{key: :char, char: "F"}, base_state())
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :identifier
     end
 
     test "unknown key returns :no_match in menu sub" do
-      assert :no_match = Login.handle_key(%{key: :char, char: "x"}, base_state())
+      assert {:update, _state, []} = update_login(%{key: :char, char: "x"}, base_state())
     end
   end
 
-  describe "handle_key/2 — login form typing" do
+  describe "update/3 — login form typing" do
     test "typing a character appends to focused field (handle)" do
       state = form_state([], :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "a"}, state)
+      {:update, new_state, []} = update_login(%{key: :char, char: "a"}, state)
 
       assert get_in(new_state, [
                :screen_state,
@@ -265,9 +326,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "typing multiple characters builds up the handle" do
       state = form_state([handle: "al"], :handle)
-      {:update, s1, []} = Login.handle_key(%{key: :char, char: "i"}, state)
-      {:update, s2, []} = Login.handle_key(%{key: :char, char: "c"}, s1)
-      {:update, s3, []} = Login.handle_key(%{key: :char, char: "e"}, s2)
+      {:update, s1, []} = update_login(%{key: :char, char: "i"}, state)
+      {:update, s2, []} = update_login(%{key: :char, char: "c"}, s1)
+      {:update, s3, []} = update_login(%{key: :char, char: "e"}, s2)
 
       assert get_in(s3, [:screen_state, :login, :handle_input, Access.key(:raxol_state), :value]) ==
                "alice"
@@ -276,11 +337,11 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "handle input stops at the account handle max length" do
       chars = String.graphemes(String.duplicate("a", User.handle_max() + 1))
 
-      {:update, form_state, []} = Login.handle_key(%{key: :char, char: "L"}, base_state())
+      {:update, form_state, []} = update_login(%{key: :char, char: "L"}, base_state())
 
       final_state =
         Enum.reduce(chars, form_state, fn char, acc ->
-          {:update, next, []} = Login.handle_key(%{key: :char, char: char}, acc)
+          {:update, next, []} = update_login(%{key: :char, char: char}, acc)
           next
         end)
 
@@ -295,7 +356,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "typing appends to password field when focused" do
       state = form_state([], :password)
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "s"}, state)
+      {:update, new_state, []} = update_login(%{key: :char, char: "s"}, state)
 
       assert get_in(new_state, [
                :screen_state,
@@ -308,7 +369,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "spacebar appends a literal space to focused field" do
       state = form_state([handle: "hello"], :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: " "}, state)
+      {:update, new_state, []} = update_login(%{key: :char, char: " "}, state)
 
       assert get_in(new_state, [
                :screen_state,
@@ -321,7 +382,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "backspace removes last character from focused field" do
       state = form_state([handle: "alice"], :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: :backspace}, state)
+      {:update, new_state, []} = update_login(%{key: :backspace}, state)
 
       assert get_in(new_state, [
                :screen_state,
@@ -334,7 +395,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "backspace on empty field is a no-op" do
       state = form_state([handle: ""], :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: :backspace}, state)
+      {:update, new_state, []} = update_login(%{key: :backspace}, state)
 
       assert get_in(new_state, [
                :screen_state,
@@ -347,26 +408,26 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "tab cycles focus from :handle to :password" do
       state = form_state([], :handle)
-      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+      {:update, new_state, []} = update_login(%{key: :tab}, state)
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
     end
 
     test "tab cycles focus from :password back to :handle" do
       state = form_state([], :password)
-      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+      {:update, new_state, []} = update_login(%{key: :tab}, state)
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
     end
 
     test "enter on :handle field moves focus to :password without submitting" do
       state = form_state([handle: "alice"], :handle)
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, cmds} = update_login(%{key: :enter}, state)
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
       assert cmds == []
     end
 
     test "escape from login form returns to menu sub with cleared form" do
       state = form_state([handle: "alice", password: "secret"], :password)
-      {:update, new_state, []} = Login.handle_key(%{key: :escape}, state)
+      {:update, new_state, []} = update_login(%{key: :escape}, state)
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       # Form is cleared — handle_input and password_input are gone from the returned sub-state
       assert get_in(new_state, [:screen_state, :login, :handle_input]) == nil
@@ -374,13 +435,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
   end
 
-  describe "handle_key/2 — reset request subflow" do
+  describe "update/3 — reset request subflow" do
     test "renders email-only field label (D-02)" do
       Config.put!("delivery_mode", "email")
       state = reset_request_state("")
 
       rendered =
-        Login.render(state)
+        render_login(state)
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -393,7 +454,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "email")
       state = reset_request_state("ali")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "c"}, state)
+      {:update, new_state, []} = update_login(%{key: :char, char: "c"}, state)
 
       assert get_in(new_state, [
                :screen_state,
@@ -432,7 +493,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
         state = reset_request_state(unquote(identifier))
 
-        {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+        {:update, new_state, []} = update_login(%{key: :enter}, state)
 
         assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
 
@@ -471,7 +532,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = reset_request_state("activelady@example.test")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, []} = update_login(%{key: :enter}, state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
       assert get_in(new_state, [:screen_state, :login, :error]) == nil
@@ -486,7 +547,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
              )
 
       rendered =
-        Login.render(new_state)
+        render_login(new_state)
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -502,11 +563,11 @@ defmodule Foglet.TUI.Screens.LoginTest do
       _ = user_fixture(%{handle: "anchor", email: "anchor@example.test"})
 
       active_state = reset_request_state("anchor@example.test")
-      {:update, active_new, []} = Login.handle_key(%{key: :enter}, active_state)
+      {:update, active_new, []} = update_login(%{key: :enter}, active_state)
       active_category = get_in(active_new, [:screen_state, :login, :message_category])
 
       unknown_state = reset_request_state("ghost@example.test")
-      {:update, unknown_new, []} = Login.handle_key(%{key: :enter}, unknown_state)
+      {:update, unknown_new, []} = update_login(%{key: :enter}, unknown_state)
       unknown_category = get_in(unknown_new, [:screen_state, :login, :message_category])
 
       assert is_atom(active_category)
@@ -527,14 +588,14 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
       state = reset_request_state("alice@example.test")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, []} = update_login(%{key: :enter}, state)
 
       message = get_in(new_state, [:screen_state, :login, :message])
       assert is_binary(message)
       refute message =~ "unavailable"
 
       rendered =
-        Login.render(new_state)
+        render_login(new_state)
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -565,10 +626,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:ok, _} = Foglet.Accounts.confirm_user(sysop_b)
 
       state = reset_request_state("alice@example.test")
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, []} = update_login(%{key: :enter}, state)
 
       rendered =
-        Login.render(new_state)
+        render_login(new_state)
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -584,10 +645,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
 
       state = reset_request_state("alice@example.test")
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, []} = update_login(%{key: :enter}, state)
 
       rendered =
-        Login.render(new_state)
+        render_login(new_state)
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -606,10 +667,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "email")
       state = reset_request_state("anybody@example.test", terminal_size: {64, 22})
 
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, []} = update_login(%{key: :enter}, state)
 
       rendered_lines =
-        Login.render(new_state)
+        render_login(new_state)
         |> collect_text_values()
 
       # No single rendered text node should exceed terminal content width
@@ -640,7 +701,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "typing 't' or 'T' into the identifier field appends to the input, not the [T] shortcut (CR-001)" do
       # Lower-case `t` mid-typing: simulate user partway through `test@host`.
       state = reset_request_state("alice@example.")
-      {:update, after_t, []} = Login.handle_key(%{key: :char, char: "t"}, state)
+      {:update, after_t, []} = update_login(%{key: :char, char: "t"}, state)
       assert get_in(after_t, [:screen_state, :login, :sub]) == :reset_request
 
       assert get_in(after_t, [
@@ -653,7 +714,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       # Upper-case `T` likewise.
       state2 = reset_request_state("alice@example.")
-      {:update, after_upper, []} = Login.handle_key(%{key: :char, char: "T"}, state2)
+      {:update, after_upper, []} = update_login(%{key: :char, char: "T"}, state2)
       assert get_in(after_upper, [:screen_state, :login, :sub]) == :reset_request
 
       assert get_in(after_upper, [
@@ -668,7 +729,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "[T] from the Login menu enters reset_consume sub-state (D-15)" do
       Config.put!("delivery_mode", "no_email")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, base_state())
+      {:update, new_state, []} = update_login(%{key: :char, char: "T"}, base_state())
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
@@ -677,7 +738,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "escape returns to menu and clears reset request state" do
       state = reset_request_state("alice@example.test")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :escape}, state)
+      {:update, new_state, []} = update_login(%{key: :escape}, state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       assert get_in(new_state, [:screen_state, :login, :identifier_input]) == nil
@@ -686,7 +747,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
   # ---- Plan 31-03 :reset_consume sub-state (D-04..D-11, D-15, D-17) ----
 
-  defp reset_consume_state(opts \\ []) do
+  defp reset_consume_state(opts) do
     token = Keyword.get(opts, :token, "")
     password = Keyword.get(opts, :password, "")
     confirmation = Keyword.get(opts, :password_confirmation, "")
@@ -718,23 +779,23 @@ defmodule Foglet.TUI.Screens.LoginTest do
     |> Map.from_struct()
   end
 
-  describe "handle_key/2 - reset_consume entry (D-15)" do
+  describe "update/3 - reset_consume entry (D-15)" do
     test "'T' from menu enters :reset_consume sub-state with focus on :token" do
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, base_state())
+      {:update, new_state, []} = update_login(%{key: :char, char: "T"}, base_state())
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
     end
 
     test "'t' lowercase from menu also enters :reset_consume" do
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "t"}, base_state())
+      {:update, new_state, []} = update_login(%{key: :char, char: "t"}, base_state())
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
     end
 
     test "menu advertises Reset token in keys_for output" do
       rendered =
-        Login.render(base_state("open"))
+        render_login(base_state("open"))
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -749,7 +810,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
       state = reset_request_state("alice@example.test")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, state)
+      {:update, new_state, []} = update_login(%{key: :char, char: "T"}, state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
 
@@ -766,7 +827,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
       state = reset_request_state("alice@example.test")
 
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "t"}, state)
+      {:update, new_state, []} = update_login(%{key: :char, char: "t"}, state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
 
@@ -780,7 +841,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
 
     test "fresh :reset_consume initializes three TextInput fields with masked password fields (D-05)" do
-      {:update, new_state, []} = Login.handle_key(%{key: :char, char: "T"}, base_state())
+      {:update, new_state, []} = update_login(%{key: :char, char: "T"}, base_state())
       ss = get_in(new_state, [:screen_state, :login])
 
       assert match?(%TextInput{}, ss.token_input)
@@ -799,45 +860,45 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
   end
 
-  describe "handle_key/2 - reset_consume focus (D-06)" do
+  describe "update/3 - reset_consume focus (D-06)" do
     test "Tab cycles :token to :password" do
       state = reset_consume_state(focused_field: :token)
-      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+      {:update, new_state, []} = update_login(%{key: :tab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
     end
 
     test "Tab cycles :password to :password_confirmation" do
       state = reset_consume_state(focused_field: :password)
-      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+      {:update, new_state, []} = update_login(%{key: :tab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password_confirmation
     end
 
     test "Tab cycles :password_confirmation to :token" do
       state = reset_consume_state(focused_field: :password_confirmation)
-      {:update, new_state, []} = Login.handle_key(%{key: :tab}, state)
+      {:update, new_state, []} = update_login(%{key: :tab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
     end
 
     test ":backtab cycles :token to :password_confirmation" do
       state = reset_consume_state(focused_field: :token)
-      {:update, new_state, []} = Login.handle_key(%{key: :backtab}, state)
+      {:update, new_state, []} = update_login(%{key: :backtab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password_confirmation
     end
 
     test ":backtab cycles :password_confirmation to :password" do
       state = reset_consume_state(focused_field: :password_confirmation)
-      {:update, new_state, []} = Login.handle_key(%{key: :backtab}, state)
+      {:update, new_state, []} = update_login(%{key: :backtab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password
     end
 
     test ":backtab cycles :password to :token" do
       state = reset_consume_state(focused_field: :password)
-      {:update, new_state, []} = Login.handle_key(%{key: :backtab}, state)
+      {:update, new_state, []} = update_login(%{key: :backtab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
     end
@@ -845,7 +906,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "typing characters land only in the focused input field" do
       state = reset_consume_state(focused_field: :token)
 
-      {:update, s1, []} = Login.handle_key(%{key: :char, char: "a"}, state)
+      {:update, s1, []} = update_login(%{key: :char, char: "a"}, state)
 
       assert get_in(s1, [
                :screen_state,
@@ -871,8 +932,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
                :value
              ]) == ""
 
-      {:update, s2, []} = Login.handle_key(%{key: :tab}, s1)
-      {:update, s3, []} = Login.handle_key(%{key: :char, char: "p"}, s2)
+      {:update, s2, []} = update_login(%{key: :tab}, s1)
+      {:update, s3, []} = update_login(%{key: :char, char: "p"}, s2)
 
       assert get_in(s3, [
                :screen_state,
@@ -898,8 +959,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
                :value
              ]) == ""
 
-      {:update, s4, []} = Login.handle_key(%{key: :tab}, s3)
-      {:update, s5, []} = Login.handle_key(%{key: :char, char: "c"}, s4)
+      {:update, s4, []} = update_login(%{key: :tab}, s3)
+      {:update, s5, []} = update_login(%{key: :char, char: "c"}, s4)
 
       assert get_in(s5, [
                :screen_state,
@@ -927,7 +988,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
   end
 
-  describe "handle_key/2 - reset_consume submission (D-07, D-10, D-11)" do
+  describe "update/3 - reset_consume submission (D-07, D-10, D-11)" do
     test "mismatch in password confirmation sets generic error and does not consume token" do
       user =
         user_fixture(%{
@@ -948,7 +1009,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_state, cmds} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, cmds} = update_login(%{key: :enter}, state)
 
       assert cmds == []
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
@@ -985,7 +1046,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_state, _cmds} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, _cmds} = update_login(%{key: :enter}, state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       assert get_in(new_state, [:screen_state, :login, :token_input]) == nil
@@ -1012,7 +1073,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, []} = update_login(%{key: :enter}, state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
 
@@ -1042,8 +1103,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_unknown, []} = Login.handle_key(%{key: :enter}, state_unknown)
-      {:update, new_malformed, []} = Login.handle_key(%{key: :enter}, state_malformed)
+      {:update, new_unknown, []} = update_login(%{key: :enter}, state_unknown)
+      {:update, new_malformed, []} = update_login(%{key: :enter}, state_malformed)
 
       err_unknown = get_in(new_unknown, [:screen_state, :login, :error])
       err_malformed = get_in(new_malformed, [:screen_state, :login, :error])
@@ -1063,13 +1124,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password_confirmation
         )
 
-      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+      {:update, new_state, []} = update_login(%{key: :enter}, state)
 
       error = get_in(new_state, [:screen_state, :login, :error])
       refute is_binary(error) and error =~ raw_token
 
       pre_state = reset_consume_state(token: raw_token, focused_field: :token)
-      rendered = Login.render(pre_state) |> collect_text_values()
+      rendered = render_login(pre_state) |> collect_text_values()
 
       breadcrumb =
         rendered
@@ -1095,7 +1156,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
           focused_field: :password
         )
 
-      {:update, new_state, []} = Login.handle_key(%{key: :escape}, state)
+      {:update, new_state, []} = update_login(%{key: :escape}, state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       assert get_in(new_state, [:screen_state, :login, :token_input]) == nil
@@ -1115,9 +1176,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       {_submitting_state, new_state, cmds} = submit_login_form(state)
 
-      # The screen clears screen_state on success and delegates to App via command
-      assert new_state.screen_state == %{}
-      assert [{:promote_session, returned_user}] = cmds
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
+      assert {:set_user, returned_user} = session_effect(cmds)
       assert returned_user.id == user.id
     end
 
@@ -1128,31 +1188,31 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:ok, user} = Foglet.Accounts.confirm_user(user)
 
       # Start at menu, press L to enter form
-      {:update, s1, []} = Login.handle_key(%{key: :char, char: "L"}, base_state())
+      {:update, s1, []} = update_login(%{key: :char, char: "L"}, base_state())
 
       # Type the handle character by character
       s2 =
         Enum.reduce(String.graphemes(user.handle), s1, fn char, acc ->
-          {:update, next, []} = Login.handle_key(%{key: :char, char: char}, acc)
+          {:update, next, []} = update_login(%{key: :char, char: char}, acc)
           next
         end)
 
       # Tab to password field
-      {:update, s3, []} = Login.handle_key(%{key: :tab}, s2)
+      {:update, s3, []} = update_login(%{key: :tab}, s2)
       assert get_in(s3, [:screen_state, :login, :focused_field]) == :password
 
       # Type the password
       s4 =
         Enum.reduce(String.graphemes(password), s3, fn char, acc ->
-          {:update, next, []} = Login.handle_key(%{key: :char, char: char}, acc)
+          {:update, next, []} = update_login(%{key: :char, char: char}, acc)
           next
         end)
 
       # Enter submits
       {_submitting_state, final_state, cmds} = submit_login_form(s4)
 
-      assert final_state.screen_state == %{}
-      assert [{:promote_session, returned_user}] = cmds
+      assert get_in(final_state, [:screen_state, :login, :sub]) == :menu
+      assert {:set_user, returned_user} = session_effect(cmds)
       assert returned_user.id == user.id
     end
 
@@ -1185,16 +1245,16 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "submitting login form ignores duplicate submit and input keys" do
       state = form_state([handle: "ghost", password: "nope"], :password)
 
-      {:update, submitting_state, [%Raxol.Core.Runtime.Command{type: :task}]} =
-        Login.handle_key(%{key: :enter}, state)
+      {:update, submitting_state, [%Effect{type: :task}]} =
+        update_login(%{key: :enter}, state)
 
       assert get_in(submitting_state, [:screen_state, :login, :submitting?]) == true
 
       assert {:update, ^submitting_state, []} =
-               Login.handle_key(%{key: :enter}, submitting_state)
+               update_login(%{key: :enter}, submitting_state)
 
       assert {:update, ^submitting_state, []} =
-               Login.handle_key(%{key: :char, char: "x"}, submitting_state)
+               update_login(%{key: :char, char: "x"}, submitting_state)
     end
 
     test "pending user shows 'pending sysop approval' modal (D-05)" do
@@ -1205,9 +1265,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {_submitting_state, new_state, _} = submit_login_form(state)
+      {_submitting_state, _new_state, effects} = submit_login_form(state)
 
-      assert %{type: :error, message: msg} = new_state.modal
+      assert %{type: :error, message: msg} = modal_effect(effects)
       assert msg == "Your account is pending sysop approval."
       refute msg =~ "notification"
       refute msg =~ "email"
@@ -1223,13 +1283,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {_submitting_state, new_state, cmds} = submit_login_form(state)
+      {_submitting_state, new_state, effects} = submit_login_form(state)
 
       assert %{type: :error, message: "Your registration was rejected. Contact the sysop."} =
-               new_state.modal
+               modal_effect(effects)
 
-      assert new_state.screen_state == %{}
-      refute Enum.any?(cmds, &match?({:promote_session, _}, &1))
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
+      refute session_effect(effects)
     end
   end
 
@@ -1246,12 +1306,11 @@ defmodule Foglet.TUI.Screens.LoginTest do
           :password
         )
 
-      {_submitting_state, new_state, _} = submit_login_form(state)
+      {_submitting_state, new_state, effects} = submit_login_form(state)
 
-      assert new_state.modal != nil, "Expected a modal to be set for pending user"
+      assert modal_effect(effects) != nil, "Expected a modal effect for pending user"
 
-      assert new_state.screen_state == %{},
-             "Expected screen_state to be cleared when pending modal is shown, got: #{inspect(new_state.screen_state)}"
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
     end
 
     test "Test E: suspended user modal sets screen_state to %{}" do
@@ -1269,12 +1328,11 @@ defmodule Foglet.TUI.Screens.LoginTest do
           :password
         )
 
-      {_submitting_state, new_state, _} = submit_login_form(state)
+      {_submitting_state, new_state, effects} = submit_login_form(state)
 
-      assert new_state.modal != nil, "Expected a modal to be set for suspended user"
+      assert modal_effect(effects) != nil, "Expected a modal effect for suspended user"
 
-      assert new_state.screen_state == %{},
-             "Expected screen_state to be cleared when suspended modal is shown, got: #{inspect(new_state.screen_state)}"
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
     end
   end
 
@@ -1315,12 +1373,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {_submitting_state, new_state, cmds} = submit_login_form(state)
+      {_submitting_state, new_state, effects} = submit_login_form(state)
 
-      assert new_state.current_screen == :verify
-      assert new_state.current_user.id == user.id
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
+      assert {:set_current_user, returned_user} = session_effect(effects)
+      assert returned_user.id == user.id
+      assert %{screen: :verify, params: %{}} = navigation_effect(effects)
       refute Map.has_key?(new_state.screen_state || %{}, :verify)
-      assert cmds == []
 
       assert FogletBbs.Repo.exists?(
                from t in Foglet.Accounts.UserToken,
@@ -1343,13 +1402,12 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {_submitting_state, new_state, cmds} = submit_login_form(state)
+      {_submitting_state, _new_state, effects} = submit_login_form(state)
 
-      assert new_state.current_screen == :login
-      assert is_nil(new_state.current_user)
-      assert cmds == []
+      refute navigation_effect(effects)
+      refute session_effect(effects)
 
-      assert %{type: :error, message: msg} = new_state.modal
+      assert %{type: :error, message: msg} = modal_effect(effects)
       assert msg == "Email verification is unavailable because email delivery is disabled."
 
       refute FogletBbs.Repo.exists?(
@@ -1367,10 +1425,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       state = form_state([handle: user.handle, password: password], :password)
 
-      {_submitting_state, new_state, cmds} = submit_login_form(state)
+      {_submitting_state, new_state, effects} = submit_login_form(state)
 
-      assert new_state.screen_state == %{}
-      assert [{:promote_session, returned_user}] = cmds
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
+      assert {:set_user, returned_user} = session_effect(effects)
       assert returned_user.id == user.id
     end
 
@@ -1385,9 +1443,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
         state = form_state([handle: confirmed.handle, password: password], :password)
 
-        {_submitting_state, _new_state, cmds} = submit_login_form(state)
+        {_submitting_state, _new_state, effects} = submit_login_form(state)
 
-        assert [{:promote_session, _}] = cmds,
+        assert {:set_user, _} = session_effect(effects),
                "Confirmed user must always promote regardless of toggle=#{toggle}"
       end
     end
