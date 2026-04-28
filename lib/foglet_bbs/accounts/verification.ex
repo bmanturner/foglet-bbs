@@ -5,6 +5,8 @@ defmodule Foglet.Accounts.Verification do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
   alias Foglet.Accounts.{Email, User, UserToken}
   alias Foglet.QueryHelpers
   alias FogletBbs.Repo
@@ -269,9 +271,23 @@ defmodule Foglet.Accounts.Verification do
   defp maybe_deliver_password_reset(%User{} = user) do
     {raw_token, token_struct} = UserToken.build_email_token(user, "reset_password")
 
-    with {:ok, _token} <- Repo.insert(token_struct) do
-      _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
-      :ok
+    case Repo.insert(token_struct) do
+      {:ok, _token} ->
+        _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
+        :ok
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        # WR-004: keep the outward boundary generic (callers always observe
+        # `{:ok, :generic_response}`), but make the persistence failure
+        # diagnosable. Without this log line, an operator investigating "I
+        # never got my reset email" cannot tell a backend failure from an
+        # enumeration-safe miss. The raw token is never logged (D-11).
+        Logger.error("password_reset token insert failed",
+          user_id: user.id,
+          errors: inspect(changeset.errors)
+        )
+
+        :ok
     end
   end
 end
