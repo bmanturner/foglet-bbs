@@ -295,7 +295,7 @@ defmodule Foglet.TUI.Screens.Login do
   # In email mode it dispatches reset delivery for valid email submissions; in
   # no_email mode it presents operator-assisted copy plus token-consume entry.
   defp add_reset_key(keys) do
-    List.insert_at(keys, max(length(keys) - 1, 0), {"F", "Forgot password"})
+    keys ++ [{"F", "Forgot password"}]
   end
 
   # D-15: [T] Enter reset token is advertised on the Login menu so users with
