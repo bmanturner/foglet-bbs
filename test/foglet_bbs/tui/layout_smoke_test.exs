@@ -2598,4 +2598,437 @@ defmodule Foglet.TUI.LayoutSmokeTest do
              "moderation.ex must define a render-time key_list/1 function (D-26)"
     end
   end
+
+  # ---------------------------------------------------------------------------
+  # Phase 31 reset copy compact rendering (D-12, D-14, D-18, AUTH-02, AUTH-03)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 31 reset copy compact rendering (D-12, D-14, D-18)" do
+    @reset_compact_size {64, 22}
+
+    setup do
+      original_delivery_mode = Config.get("delivery_mode", "no_email")
+
+      on_exit(fn ->
+        Config.put!("delivery_mode", original_delivery_mode)
+        Config.invalidate("delivery_mode")
+      end)
+
+      :ok
+    end
+
+    defp reset_request_state_at(identifier, {width, height}) do
+      input = Foglet.TUI.Widgets.Input.TextInput.init(value: identifier)
+      {input_end, _} = Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, input)
+
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{
+          login: %{
+            sub: :reset_request,
+            focused_field: :identifier,
+            identifier_input: input_end,
+            error: nil,
+            message: nil,
+            message_category: nil
+          }
+        }
+      }
+    end
+
+    defp message_text_rows(state, size) do
+      positioned = state |> Login.render() |> apply_at_size(size)
+
+      message_text = get_in(state.screen_state, [:login, :message])
+
+      message_first_line =
+        case message_text do
+          nil ->
+            ""
+
+          text ->
+            text
+            |> TextWidth.wrap(elem(size, 0) - 2)
+            |> List.first()
+            |> Kernel.||("")
+        end
+
+      content = content_text_elements(positioned)
+
+      first_y =
+        content
+        |> Enum.find(fn el ->
+          message_first_line != "" and String.contains?(el.text, message_first_line)
+        end)
+        |> case do
+          nil -> nil
+          el -> el.y
+        end
+
+      message_rows =
+        case first_y do
+          nil ->
+            []
+
+          y0 ->
+            content
+            |> Enum.filter(&(&1.y >= y0))
+            |> Enum.group_by(& &1.y)
+            |> Enum.sort_by(fn {y, _} -> y end)
+            |> Enum.map(fn {y, els} ->
+              row_text = els |> Enum.sort_by(& &1.x) |> Enum.map_join(& &1.text)
+              {y, row_text}
+            end)
+        end
+
+      message_rows
+    end
+
+    test "valid email submission produces multi-row reset confirmation copy at 64x22 (D-12, AUTH-02)" do
+      Config.put!("delivery_mode", "email")
+      state = reset_request_state_at("anybody@example.test", @reset_compact_size)
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      message = get_in(new_state.screen_state, [:login, :message])
+      assert is_binary(message)
+
+      rows = message_text_rows(new_state, @reset_compact_size)
+
+      # Multi-row property: reset confirmation copy must wrap into >=2 rows at
+      # 64x22 so a single overflowing text node never silently truncates.
+      distinct_ys = rows |> Enum.map(fn {y, _} -> y end) |> Enum.uniq()
+
+      assert length(distinct_ys) >= 2,
+             "expected reset confirmation copy to span >=2 rows at 64x22, got: #{inspect(rows)}"
+
+      # Width property: every content row at 64x22 fits the terminal width.
+      for {y, row_text} <- rows do
+        assert TextWidth.display_width(row_text) <= 64,
+               "row at y=#{y} exceeded 64 cols: #{inspect(row_text)} " <>
+                 "(display_width=#{TextWidth.display_width(row_text)})"
+      end
+    end
+
+    test "no_email reset confirmation lists active sysop emails comma-separated at 64x22 (D-14, AUTH-03)" do
+      Config.put!("delivery_mode", "no_email")
+
+      sysop_a =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysopa",
+          email: "sysopa@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+
+      sysop_b =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysopb",
+          email: "sysopb@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+
+      {:ok, _} = Foglet.Accounts.confirm_user(sysop_a)
+      {:ok, _} = Foglet.Accounts.confirm_user(sysop_b)
+
+      # Negative-presence fixtures: deleted sysop, non-active sysop, non-sysop user.
+      _deleted_sysop =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysopdel",
+          email: "deletedsysop@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+        |> then(fn u ->
+          {:ok, confirmed} = Foglet.Accounts.confirm_user(u)
+          confirmed
+        end)
+        |> Ecto.Changeset.change(deleted_at: DateTime.utc_now())
+        |> FogletBbs.Repo.update!()
+
+      _pending_sysop =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "sysoppen",
+          email: "pendingsysop@example.test"
+        })
+        |> Foglet.Accounts.User.role_changeset(%{role: :sysop})
+        |> FogletBbs.Repo.update!()
+        |> Ecto.Changeset.change(status: :pending)
+        |> FogletBbs.Repo.update!()
+
+      _non_sysop =
+        FogletBbs.AccountsFixtures.user_fixture(%{
+          handle: "civilian",
+          email: "civilian@example.test"
+        })
+        |> then(fn u ->
+          {:ok, confirmed} = Foglet.Accounts.confirm_user(u)
+          confirmed
+        end)
+
+      state = reset_request_state_at("anybody@example.test", @reset_compact_size)
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      positioned = new_state |> Login.render() |> apply_at_size(@reset_compact_size)
+      content_rows = positioned |> content_text_elements() |> text_rows()
+      joined = content_rows |> Map.values() |> Enum.join(" | ")
+
+      # Active sysop emails are listed.
+      assert String.contains?(joined, "sysopa@example.test"),
+             "expected sysopa@example.test in rendered no-email copy at 64x22, " <>
+               "got rows: #{inspect(content_rows)}"
+
+      assert String.contains?(joined, "sysopb@example.test"),
+             "expected sysopb@example.test in rendered no-email copy at 64x22, " <>
+               "got rows: #{inspect(content_rows)}"
+
+      # Comma-separated rendering: at least one of the two emails appears
+      # adjacent to a comma.
+      assert joined =~ ~r/sysopa@example\.test\s*,|,\s*sysopa@example\.test/,
+             "expected sysopa@example.test next to a comma in no-email copy, got: #{inspect(joined)}"
+
+      # Negative-presence: deleted, pending (non-active), and non-sysop emails
+      # never appear.
+      refute String.contains?(joined, "deletedsysop@example.test"),
+             "deleted sysop email leaked into no-email copy: #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "pendingsysop@example.test"),
+             "non-active sysop email leaked into no-email copy: #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "civilian@example.test"),
+             "non-sysop email leaked into no-email copy: #{inspect(content_rows)}"
+
+      # Every content row stays within 64 cols.
+      for {y, row_text} <- content_rows do
+        assert TextWidth.display_width(row_text) <= 64,
+               "no-email row at y=#{y} exceeded 64 cols: #{inspect(row_text)}"
+      end
+    end
+
+    test "no_email reset confirmation falls back to sysop/operator copy without forbidden URLs at 64x22 (D-14, AUTH-03)" do
+      Config.put!("delivery_mode", "no_email")
+
+      state = reset_request_state_at("anybody@example.test", @reset_compact_size)
+      {:update, new_state, []} = Login.handle_key(%{key: :enter}, state)
+
+      positioned = new_state |> Login.render() |> apply_at_size(@reset_compact_size)
+      content_rows = positioned |> content_text_elements() |> text_rows()
+      joined = content_rows |> Map.values() |> Enum.join(" | ")
+
+      assert joined =~ ~r/sysop|operator/i,
+             "no-sysop fallback at 64x22 must mention 'sysop' or 'operator', got: #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "unavailable"),
+             "no-email copy must not say 'unavailable': #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "http://"),
+             "no-email copy must not include 'http://': #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "https://"),
+             "no-email copy must not include 'https://': #{inspect(content_rows)}"
+
+      refute String.contains?(joined, "/users/reset_password"),
+             "no-email copy must not include '/users/reset_password': #{inspect(content_rows)}"
+
+      # Wrap to multiple rows at 64x22 to prove width-aware rendering.
+      message_rows = message_text_rows(new_state, @reset_compact_size)
+      distinct_ys = message_rows |> Enum.map(fn {y, _} -> y end) |> Enum.uniq()
+
+      assert length(distinct_ys) >= 2,
+             "expected no-email copy to span >=2 rows at 64x22, got: #{inspect(message_rows)}"
+
+      for {y, row_text} <- message_rows do
+        assert TextWidth.display_width(row_text) <= 64,
+               "no-email message row at y=#{y} exceeded 64 cols: #{inspect(row_text)}"
+      end
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Phase 31 raw reset token non-leak (D-11, D-18, AUTH-04)
+  # ---------------------------------------------------------------------------
+
+  describe "Phase 31 raw reset token non-leak (D-11, D-18)" do
+    @reset_consume_sentinel "RAW-RESET-TOKEN-SHOULD-NOT-LEAK"
+    @reset_consume_sizes [{64, 22}, {80, 24}]
+
+    defp reset_consume_state_with_token(token, {width, height}) do
+      token_input = Foglet.TUI.Widgets.Input.TextInput.init(value: token)
+
+      {token_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, token_input)
+
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{
+          login: %{
+            sub: :reset_consume,
+            focused_field: :token,
+            token_input: token_input_end,
+            password_input: Foglet.TUI.Widgets.Input.TextInput.init(value: "", mask_char: "*"),
+            password_confirmation_input:
+              Foglet.TUI.Widgets.Input.TextInput.init(value: "", mask_char: "*"),
+            error: nil
+          }
+        }
+      }
+    end
+
+    test "raw reset token is absent from chrome frame elements at 64x22 and 80x24" do
+      for {width, height} <- @reset_consume_sizes do
+        state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
+        positioned = state |> Login.render() |> apply_at_size({width, height})
+
+        chrome_elements =
+          positioned
+          |> List.flatten()
+          |> Enum.filter(fn el ->
+            el.type == :text and is_binary(Map.get(el, :text, "")) and
+              Map.get(el, :attrs, %{}) |> Map.get(:chrome_frame?, false)
+          end)
+
+        for el <- chrome_elements do
+          refute String.contains?(el.text, @reset_consume_sentinel),
+                 ":reset_consume sentinel leaked into chrome frame at #{width}x#{height}: " <>
+                   "y=#{el.y} text=#{inspect(el.text)}"
+        end
+      end
+    end
+
+    test "raw reset token appears only on the focused token input row at 64x22" do
+      state = reset_consume_state_with_token(@reset_consume_sentinel, {64, 22})
+      positioned = state |> Login.render() |> apply_at_size({64, 22})
+
+      sentinel_elements =
+        positioned
+        |> text_elements()
+        |> Enum.filter(&String.contains?(&1.text, @reset_consume_sentinel))
+
+      assert sentinel_elements != [],
+             "expected at least one rendered text element to contain the sentinel " <>
+               "(the focused token input field), got none"
+
+      sentinel_ys = sentinel_elements |> Enum.map(& &1.y) |> Enum.uniq()
+
+      assert length(sentinel_ys) == 1,
+             "expected sentinel on exactly one row (the token field), got rows: " <>
+               inspect(sentinel_ys)
+
+      [token_y] = sentinel_ys
+
+      # The token field row never co-occurs with chrome rows, by construction:
+      # chrome top is y=0 and chrome bottom is y=height-1.
+      refute token_y == 0,
+             "sentinel landed on chrome top row (y=0) at 64x22"
+
+      refute token_y == 22 - 1,
+             "sentinel landed on chrome bottom (command) row (y=21) at 64x22"
+    end
+
+    test "breadcrumb parts for :reset_consume are state-derived and never include the raw token" do
+      for {width, height} <- @reset_consume_sizes do
+        state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
+        parts = Foglet.TUI.Widgets.Chrome.BreadcrumbBar.parts_for(state)
+
+        assert "Foglet" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Foglet' in #{inspect(parts)}"
+
+        assert "Forgot Password" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Forgot Password' in #{inspect(parts)}"
+
+        assert "Enter Token" in parts,
+               "reset_consume breadcrumb at #{width}x#{height}: expected 'Enter Token' in #{inspect(parts)}"
+
+        for part <- parts do
+          refute String.contains?(part, @reset_consume_sentinel),
+                 "raw reset token sentinel leaked into breadcrumb part at " <>
+                   "#{width}x#{height}: #{inspect(part)}"
+        end
+      end
+    end
+
+    test "command bar (key hints) row does not include the raw token at 64x22 and 80x24" do
+      for {width, height} <- @reset_consume_sizes do
+        state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
+        positioned = state |> Login.render() |> apply_at_size({width, height})
+
+        bottom_row_text =
+          positioned
+          |> text_elements()
+          |> Enum.filter(&(&1.y == height - 1))
+          |> Enum.sort_by(& &1.x)
+          |> Enum.map_join(& &1.text)
+
+        refute String.contains?(bottom_row_text, @reset_consume_sentinel),
+               "raw reset token leaked into command bar at #{width}x#{height}: " <>
+                 inspect(bottom_row_text)
+      end
+    end
+
+    test "error message row never includes the raw token even when the error is set" do
+      # Trigger a generic error path and ensure the sentinel does not appear in
+      # the inline error rows. Use the password mismatch error path because it
+      # is reachable from screen state without a DB round-trip.
+      token_input =
+        Foglet.TUI.Widgets.Input.TextInput.init(value: @reset_consume_sentinel)
+
+      {token_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, token_input)
+
+      password_input =
+        Foglet.TUI.Widgets.Input.TextInput.init(value: "alpha", mask_char: "*")
+
+      {password_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, password_input)
+
+      confirmation_input =
+        Foglet.TUI.Widgets.Input.TextInput.init(value: "beta", mask_char: "*")
+
+      {confirmation_input_end, _} =
+        Foglet.TUI.Widgets.Input.TextInput.handle_event(%{key: :end}, confirmation_input)
+
+      state = %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {64, 22},
+        screen_state: %{
+          login: %{
+            sub: :reset_consume,
+            focused_field: :password_confirmation,
+            token_input: token_input_end,
+            password_input: password_input_end,
+            password_confirmation_input: confirmation_input_end,
+            error: nil
+          }
+        }
+      }
+
+      {:update, after_submit, []} = Login.handle_key(%{key: :enter}, state)
+
+      error = get_in(after_submit.screen_state, [:login, :error])
+      assert is_binary(error)
+
+      refute String.contains?(error, @reset_consume_sentinel),
+             "error copy must never include the raw token: #{inspect(error)}"
+
+      # And the rendered tree must not place the sentinel anywhere outside the
+      # focused token input row.
+      positioned = after_submit |> Login.render() |> apply_at_size({64, 22})
+
+      sentinel_elements =
+        positioned
+        |> text_elements()
+        |> Enum.filter(&String.contains?(&1.text, @reset_consume_sentinel))
+
+      sentinel_ys = sentinel_elements |> Enum.map(& &1.y) |> Enum.uniq()
+
+      assert length(sentinel_ys) == 1,
+             "post-error render expected sentinel on exactly one row " <>
+               "(the token field), got rows: #{inspect(sentinel_ys)}"
+    end
+  end
 end
