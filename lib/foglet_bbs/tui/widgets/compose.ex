@@ -111,13 +111,14 @@ defmodule Foglet.TUI.Widgets.Compose do
       (this is NewThread's legacy behavior — the title form had layout
       quirks without the placeholder).
 
-  Width is not taken as an argument — hard wrapping is the caller's
-  responsibility (the callers pre-size MultiLineInput via its own
-  `width:` option at init time).
+    * `:width` — optional positive integer display width for render-only
+      visual wrapping. Wrapped rows are never written back to
+      `MultiLineInput.value`.
   """
   @spec render_input(MultiLineInput.t(), boolean(), Theme.t(), keyword()) :: any()
   def render_input(%MultiLineInput{} = input_st, focused?, %Theme{} = theme, opts \\ []) do
     placeholder = Keyword.get(opts, :empty_line_placeholder, "")
+    width = Keyword.get(opts, :width, Map.get(input_st, :width))
 
     lines =
       input_st.value
@@ -132,18 +133,35 @@ defmodule Foglet.TUI.Widgets.Compose do
     column style: %{gap: 0} do
       lines
       |> Enum.with_index()
-      |> Enum.map(fn {line, idx} ->
-        rendered =
-          if focused? and idx == cursor_row do
-            {before, after_} = TextWidth.split_at(line, cursor_col)
-            "#{before}\u2588#{after_}"
-          else
-            line
-          end
-
-        display = if rendered == "", do: placeholder, else: rendered
-        text(display, fg: theme.primary.fg)
+      |> Enum.flat_map(fn {line, idx} ->
+        line
+        |> render_logical_line(focused? and idx == cursor_row, cursor_col, width)
+        |> Enum.map(fn visual_row ->
+          display = if visual_row == "", do: placeholder, else: visual_row
+          text(display, fg: theme.primary.fg)
+        end)
       end)
     end
   end
+
+  defp render_logical_line(line, cursor?, cursor_col, width) do
+    rendered =
+      if cursor? do
+        {before, after_} = TextWidth.split_at(line, cursor_col)
+        "#{before}\u2588#{after_}"
+      else
+        line
+      end
+
+    wrap_visual_row(rendered, width)
+  end
+
+  defp wrap_visual_row(rendered, width) when is_integer(width) and width > 0 do
+    case TextWidth.wrap(rendered, width) do
+      [] -> [""]
+      rows -> rows
+    end
+  end
+
+  defp wrap_visual_row(rendered, _width), do: [rendered]
 end

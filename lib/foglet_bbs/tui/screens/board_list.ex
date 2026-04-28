@@ -100,6 +100,9 @@ defmodule Foglet.TUI.Screens.BoardList do
     tree = ss.board_tree || build_tree(state.board_list || [])
 
     case BoardTree.handle_event(%{key: :enter}, tree) do
+      {%BoardTree{} = new_tree, action} when action in [:node_expanded, :node_collapsed] ->
+        {:update, put_ss(state, %{ss | board_tree: new_tree}), []}
+
       {%BoardTree{} = new_tree, :node_activated} ->
         case BoardTree.focused_board_entry(new_tree) do
           nil ->
