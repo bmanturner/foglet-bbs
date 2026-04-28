@@ -83,14 +83,22 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "nil recent_oneliners renders panel title and empty state", %{state: state} do
       texts = state |> with_oneliners(nil) |> rendered_text()
 
-      assert "Oneliners" in texts
+      # Phase 32 / MENU-01: panel title is embedded in the box top border via
+      # Raxol's `:panel` element type — it lives in `attrs.title`, not in a
+      # `:text` child node, so collect_text_values/1 (which walks `:text`
+      # children only) never sees it. The body-row "Oneliners" title is gone;
+      # the layout_smoke test asserts the embedded " Oneliners " overlay at
+      # the positioned-render layer.
+      refute "Oneliners" in texts
       assert "No oneliners yet." in texts
     end
 
     test "empty recent_oneliners renders panel title and empty state", %{state: state} do
       texts = state |> with_oneliners([]) |> rendered_text()
 
-      assert "Oneliners" in texts
+      # Phase 32 / MENU-01: see note above — title is embedded in the box top
+      # border, not a `:text` child, so collect_text_values does not surface it.
+      refute "Oneliners" in texts
       assert "No oneliners yet." in texts
     end
 
@@ -244,18 +252,35 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     refute Enum.any?(texts, &String.starts_with?(&1, "Welcome back")),
            "Phase 19 D-11 removes the welcome line; got: #{inspect(texts)}"
 
-    # D-07: boxed Navigation panel header replaces it.
-    assert "Navigation" in texts
+    # Phase 32 / MENU-01: Navigation panel title is now embedded in the box
+    # top border via Raxol's `:panel` (lives in `attrs.title`, not a `:text`
+    # child), so collect_text_values does not surface it. Layout-smoke tests
+    # assert the embedded " Navigation " overlay at the positioned-render
+    # layer; here we just confirm the body-row title is gone.
+    refute "Navigation" in texts
 
-    # D-08: glyph + label + right-aligned key rows.
-    assert Enum.any?(texts, &(&1 =~ ~r/●\s+Boards\s+B$/)),
-           "expected '● Boards    B' shaped row; got: #{inspect(texts)}"
+    # Phase 32 / MENU-03: each nav row is now composed of TWO text nodes —
+    # a primary-color leading segment (glyph + label + right-align padding,
+    # with one-column inner indent per MENU-04) and an accent-color
+    # bracketed-key segment "[X]". collect_text_values flattens children, so
+    # both halves appear as separate entries in `texts`.
+    assert Enum.any?(texts, &(&1 =~ ~r/^\s+●\s+Boards/)),
+           "expected ' ● Boards ...' leading segment; got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 =~ ~r/✎\s+Compose\s+C$/)),
-           "expected '✎ Compose    C' shaped row; got: #{inspect(texts)}"
+    assert "[B]" in texts,
+           "expected '[B]' bracketed-key segment; got: #{inspect(texts)}"
 
-    assert Enum.any?(texts, &(&1 =~ ~r/↯\s+Logout\s+Q$/)),
-           "expected '↯ Logout    Q' shaped row; got: #{inspect(texts)}"
+    assert Enum.any?(texts, &(&1 =~ ~r/^\s+✎\s+Compose/)),
+           "expected ' ✎ Compose ...' leading segment; got: #{inspect(texts)}"
+
+    assert "[C]" in texts,
+           "expected '[C]' bracketed-key segment; got: #{inspect(texts)}"
+
+    assert Enum.any?(texts, &(&1 =~ ~r/^\s+↯\s+Logout/)),
+           "expected ' ↯ Logout ...' leading segment; got: #{inspect(texts)}"
+
+    assert "[Q]" in texts,
+           "expected '[Q]' bracketed-key segment; got: #{inspect(texts)}"
   end
 
   test "'B'/'b' navigates to :board_list with {:load_boards} command", %{state: state} do
@@ -309,8 +334,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       state = build_state(:user)
       flat = MainMenu.render(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Account"))
-      # Phase 19: glyph row shape replaces [A] bracket format
-      assert Enum.any?(flat, &(&1 =~ ~r/◇\s+Account\s+A$/))
+      # Phase 32 / MENU-03 + MENU-04: nav row is now two text nodes — leading
+      # segment with one-column indent + glyph + label, and a separate
+      # bracketed-key "[A]" segment in accent color.
+      assert Enum.any?(flat, &(&1 =~ ~r/^\s+◇\s+Account/)),
+             "expected ' ◇ Account ...' leading segment; got: #{inspect(flat)}"
+
+      assert "[A]" in flat,
+             "expected '[A]' bracketed-key segment; got: #{inspect(flat)}"
     end
 
     test "role :user does NOT see Moderation menu entry" do
@@ -444,20 +475,34 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
           texts = rendered_text(state)
 
-          nav_rows =
+          # Phase 32 / MENU-03: each nav row is now two text nodes — leading
+          # segment (glyph + label + right-align padding) and a separate
+          # bracketed-key "[X]" segment. collect_text_values surfaces both as
+          # standalone entries; only the leading segment carries the glyph.
+          nav_leading_rows =
             texts
             |> Enum.filter(fn row ->
               Enum.any?(["●", "✎", "◇", "⚑", "▣", "↯"], &String.contains?(row, &1))
             end)
 
-          assert nav_rows != [],
-                 "expected at least one nav row for role=#{role} at #{inspect({width, height})}; got: #{inspect(texts)}"
+          bracketed_keys = Enum.filter(texts, &(&1 =~ ~r/^\[[A-Z]\]$/))
+
+          assert nav_leading_rows != [],
+                 "expected at least one nav leading segment for role=#{role} at #{inspect({width, height})}; got: #{inspect(texts)}"
+
+          assert bracketed_keys != [],
+                 "expected at least one bracketed-key segment for role=#{role} at #{inspect({width, height})}; got: #{inspect(texts)}"
 
           inner_width = MainMenu.__nav_panel_inner_width__(state)
 
-          for row <- nav_rows do
-            assert Foglet.TUI.TextWidth.display_width(row) <= inner_width,
-                   "nav row '#{row}' exceeds computed inner_width=#{inner_width} for role=#{role} at #{inspect({width, height})}"
+          # Leading segment + a 3-cell "[X]" bracketed key must fit within
+          # inner_width when their display_widths are summed. The leading
+          # segment already includes its right-align padding sized to leave
+          # exactly room for "[X]" (and at least one extra padding cell), so
+          # `leading_width + 3 <= inner_width` is the load-bearing invariant.
+          for row <- nav_leading_rows do
+            assert Foglet.TUI.TextWidth.display_width(row) + 3 <= inner_width,
+                   "nav row '#{row}' + bracketed-key budget exceeds inner_width=#{inner_width} for role=#{role} at #{inspect({width, height})}"
           end
         end
       end
