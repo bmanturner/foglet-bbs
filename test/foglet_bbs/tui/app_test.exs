@@ -233,6 +233,18 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
+    test "modal precedence prevents screen key handling", %{state: state} do
+      modal = %Foglet.TUI.Modal{message: "pause", type: :info}
+      state = %{state | modal: modal, screen_state: %{}}
+
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "L"}}, state)
+
+      assert new_state.current_screen == :login
+      assert new_state.screen_state == %{}
+      assert new_state.modal == modal
+      assert cmds == []
+    end
+
     test "Ctrl+C on login exits through a quit command", %{state: state} do
       {_new_state, cmds} = App.update({:key, %{key: :char, char: "c", ctrl: true}}, state)
       assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
@@ -637,6 +649,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :board_list,
           screen_state: %{board_list: %{selected_index: 3}},
+          modal: %Foglet.TUI.Modal{type: :info, message: "preserve me"},
           composer_draft: "draft-in-progress"
       }
 
@@ -645,6 +658,7 @@ defmodule Foglet.TUI.AppTest do
       # view/1 is pure — state should be completely unchanged
       assert state_with_screen.current_screen == :board_list
       assert state_with_screen.screen_state.board_list.selected_index == 3
+      assert state_with_screen.modal.message == "preserve me"
       assert state_with_screen.composer_draft == "draft-in-progress"
     end
   end
