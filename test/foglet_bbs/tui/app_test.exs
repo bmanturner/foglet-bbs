@@ -1191,19 +1191,60 @@ defmodule Foglet.TUI.AppTest do
       assert "boards" in pubsub_sub.data.args.topics
     end
 
-    test "thread_list screen adds board:<id> topic when current_board is set" do
+    test "thread_list screen adds board:<id> topic from route params" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
-      board = %{id: "b-99", name: "General"}
 
       {:ok, state} =
         App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
 
-      state = %{state | current_screen: :thread_list, current_board: board}
+      state = %{state | current_screen: :thread_list, route_params: %{board_id: "b-99"}}
       subs = App.subscribe(state)
 
       pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
       assert pubsub_sub != nil
       assert "board:b-99" in pubsub_sub.data.args.topics
+    end
+
+    test "thread_list screen adds board:<id> topic from ThreadList local state" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
+      state = %{
+        state
+        | current_screen: :thread_list,
+          route_params: %{},
+          screen_state: %{thread_list: ThreadListState.new(board_id: "b-77")}
+      }
+
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      assert "board:b-77" in pubsub_sub.data.args.topics
+    end
+
+    test "thread_list screen ignores current_board when route and local state omit board_id" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      board = %{id: "b-ignored", name: "General"}
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
+      state = %{
+        state
+        | current_screen: :thread_list,
+          route_params: %{},
+          current_board: board,
+          screen_state: %{thread_list: ThreadListState.new()}
+      }
+
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      refute "board:b-ignored" in pubsub_sub.data.args.topics
     end
 
     test "post_reader screen adds thread:<id> topic when current_thread is set" do

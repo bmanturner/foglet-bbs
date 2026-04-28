@@ -27,6 +27,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.Screens
   alias Foglet.TUI.Screens.Account.State, as: AccountState
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.ThreadList
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
@@ -430,10 +431,9 @@ defmodule Foglet.TUI.App do
       end
 
     topics =
-      if state.current_screen in [:thread_list] and state.current_board do
-        [PubSub.board_topic(state.current_board.id) | topics]
-      else
-        topics
+      case thread_list_board_topic(state) do
+        nil -> topics
+        topic -> [topic | topics]
       end
 
     topics =
@@ -444,6 +444,31 @@ defmodule Foglet.TUI.App do
       end
 
     topics
+  end
+
+  defp thread_list_board_topic(%__MODULE__{current_screen: :thread_list} = state) do
+    state
+    |> thread_list_board_id()
+    |> case do
+      nil -> nil
+      board_id -> PubSub.board_topic(board_id)
+    end
+  end
+
+  defp thread_list_board_topic(_state), do: nil
+
+  defp thread_list_board_id(%__MODULE__{} = state) do
+    params = state.route_params || %{}
+
+    Map.get(params, :board_id) || Map.get(params, "board_id") ||
+      thread_list_state_board_id(state.screen_state)
+  end
+
+  defp thread_list_state_board_id(screen_state) do
+    case Map.get(screen_state || %{}, :thread_list) do
+      %ThreadList.State{board_id: board_id} when is_binary(board_id) -> board_id
+      _other -> nil
+    end
   end
 
   # --- Private: update/2 dispatch ---
