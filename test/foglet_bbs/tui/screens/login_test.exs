@@ -140,14 +140,25 @@ defmodule Foglet.TUI.Screens.LoginTest do
   end
 
   describe "handle_key/2 — menu sub" do
-    test "'Q' returns terminate command" do
+    test "Ctrl+C returns terminate command" do
       assert {:update, _, [{:terminate, :user_quit}]} =
-               Login.handle_key(%{key: :char, char: "Q"}, base_state())
+               Login.handle_key(%{key: :char, char: "c", ctrl: true}, base_state())
     end
 
-    test "'q' lowercase also terminates" do
+    test "Ctrl+C returns terminate command from form sub-states" do
       assert {:update, _, [{:terminate, :user_quit}]} =
-               Login.handle_key(%{key: :char, char: "q"}, base_state())
+               Login.handle_key(
+                 %{key: :char, char: "c", ctrl: true},
+                 form_state(handle: "alice", password: "secret")
+               )
+    end
+
+    test "'Q' is not an exit key" do
+      assert :no_match = Login.handle_key(%{key: :char, char: "Q"}, base_state())
+    end
+
+    test "'q' lowercase is not an exit key" do
+      assert :no_match = Login.handle_key(%{key: :char, char: "q"}, base_state())
     end
 
     test "'R' transitions to :register when registration enabled (D-22)" do

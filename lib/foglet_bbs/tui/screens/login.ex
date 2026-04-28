@@ -7,7 +7,7 @@ defmodule Foglet.TUI.Screens.Login do
     * any other value → shows all three options
 
   Sub-states (stored in state.screen_state[:login]):
-    * :menu          — showing [L]/[R]/[F]/[T]/[Q] menu as allowed by config
+    * :menu          — showing [L]/[R]/[F]/[T] menu as allowed by config
     * :login_form    — collecting handle+password
     * :reset_request — collecting handle/email for reset delivery
     * :reset_consume — collecting raw reset token + new password (Plan 31-03)
@@ -39,8 +39,8 @@ defmodule Foglet.TUI.Screens.Login do
 
   import Raxol.Core.Renderer.View
 
-  @menu_keys [{"L", "Login"}, {"R", "Register"}, {"Q", "Quit"}]
-  @menu_keys_no_register [{"L", "Login"}, {"Q", "Quit"}]
+  @menu_keys [{"L", "Login"}, {"R", "Register"}]
+  @menu_keys_no_register [{"L", "Login"}]
 
   # WR-001: email-shape validation is delegated to
   # `Foglet.Accounts.Verification.email_shape?/1` so the screen and the
@@ -92,6 +92,9 @@ defmodule Foglet.TUI.Screens.Login do
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
   # Route all keys through sub-state so form input gets every character.
+  def handle_key(%{key: :char, char: c, ctrl: true}, state) when c in ["c", "C"],
+    do: {:update, state, [{:terminate, :user_quit}]}
+
   def handle_key(key, state) do
     case LoginState.sub(state) do
       :login_form -> handle_form_key(key, state)
@@ -100,9 +103,6 @@ defmodule Foglet.TUI.Screens.Login do
       _ -> handle_menu_key(key, state)
     end
   end
-
-  defp handle_menu_key(%{key: :char, char: c}, state) when c in ["q", "Q"],
-    do: {:update, state, [{:terminate, :user_quit}]}
 
   defp handle_menu_key(%{key: :char, char: c}, state) when c in ["l", "L"],
     do: enter_login_form(state)
@@ -241,7 +241,7 @@ defmodule Foglet.TUI.Screens.Login do
       {"Esc", "Cancel"}
     ]
 
-  defp keys_for(_, mode), do: menu_keys(mode)
+  defp keys_for(_, mode), do: menu_commands(mode)
 
   defp registration_mode(state) do
     case Map.get(session_ctx(state), :registration_mode) do
@@ -274,6 +274,18 @@ defmodule Foglet.TUI.Screens.Login do
     |> base_menu_keys()
     |> add_reset_key()
     |> add_reset_consume_key()
+  end
+
+  defp menu_commands(mode) do
+    [
+      %{
+        label: "",
+        commands:
+          mode
+          |> menu_keys()
+          |> Enum.map(fn {key, label} -> %{key: key, label: label, priority: 30} end)
+      }
+    ]
   end
 
   defp base_menu_keys("disabled"), do: @menu_keys_no_register

@@ -229,8 +229,12 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "dispatches {:key, key_event} to current screen's handle_key/2", %{state: state} do
-      # 'Q' from :login screen should return a quit command
-      {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
+      {_new_state, cmds} = App.update({:key, %{key: :char, char: "L"}}, state)
+      assert cmds == []
+    end
+
+    test "Ctrl+C on login exits through a quit command", %{state: state} do
+      {_new_state, cmds} = App.update({:key, %{key: :char, char: "c", ctrl: true}}, state)
       assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
     end
 
@@ -710,17 +714,16 @@ defmodule Foglet.TUI.AppTest do
 
     test "does NOT dispatch to screen's handle_key when gated" do
       {:ok, state} = App.init(%{terminal_size: {40, 10}})
-      # On the login screen normally, 'Q' returns a quit command. When gated,
-      # it must be swallowed — no quit command.
+      # When gated, keys must be swallowed before they reach screen handlers.
       {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
       assert cmds == []
     end
 
     test "still dispatches {:key, _} normally above threshold" do
       {:ok, state} = App.init(%{terminal_size: {80, 24}})
-      # 'Q' on login returns a quit command (proves key reached handle_key)
-      {_new_state, cmds} = App.update({:key, %{key: :char, char: "Q"}}, state)
-      assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "L"}}, state)
+      assert get_in(new_state.screen_state, [:login, :sub]) == :login_form
+      assert cmds == []
     end
 
     test "{:window_change, _, _} reaches the normal handler even when gated" do

@@ -1562,11 +1562,6 @@ defmodule Foglet.TUI.App do
     handle_modal_key(modal_type, key, state)
   end
 
-  # "q" is a typed character in Raxol's native event shape: %{key: :char, char: "q"}
-  defp global_key_handler(%{key: :char, char: "q"}, state) when state.current_screen == :login do
-    {state, [Command.quit()]}
-  end
-
   defp global_key_handler(_key, state), do: {state, []}
 
   # :confirm modal — Y/y confirm, N/n/Escape cancel

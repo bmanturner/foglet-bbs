@@ -5,7 +5,7 @@ defmodule Foglet.TUI.Screens.Login.State do
   The app stores this map at `state.screen_state[:login]`.
 
   Sub-states (`:sub` key):
-    * `:menu`          — showing [L]/[R]/[F]/[T]/[Q] menu
+    * `:menu`          — showing [L]/[R]/[F]/[T] menu
     * `:login_form`    — collecting handle + password
     * `:reset_request` — collecting handle/email for reset delivery
     * `:reset_consume` — collecting raw reset token + new password
