@@ -13,6 +13,8 @@ end
 
 defmodule Foglet.TUI.Screens.NewThreadTest.FakeThreadsOk do
   def create_thread(_board_id, _user_id, attrs) do
+    Process.put(:new_thread_last_attrs, attrs)
+
     thread = %{
       id: "t-new",
       title: Map.get(attrs, :title, ""),
@@ -239,6 +241,59 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert text =~ "Hello body"
     assert text =~ "Body 10 /"
     assert text =~ "chars"
+  end
+
+  test "render/1 body-focused compact edit mode visually wraps body without mutating value" do
+    long_body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+
+    state =
+      compose_state()
+      |> put_title("Wrapped Thread")
+
+    ss = %{
+      get_ss(state)
+      | focused: :body,
+        mode: :edit,
+        body_input_state: fresh_input(long_body)
+    }
+
+    state = %{put_in(state.screen_state.new_thread, ss) | terminal_size: {64, 22}}
+    text = state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Wrapped Thread"
+    assert text =~ "alpha beta"
+    assert text =~ "iota kappa"
+    assert get_ss(state).body_input_state.value == long_body
+    refute get_ss(state).body_input_state.value =~ "\n"
+  end
+
+  test "render/1 reflows new-thread body between 80x24 and 64x22 without changing value" do
+    long_body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+
+    state =
+      compose_state()
+      |> put_title("Reflow Thread")
+
+    ss = %{
+      get_ss(state)
+      | focused: :body,
+        mode: :edit,
+        body_input_state: fresh_input(long_body)
+    }
+
+    wide_state = %{put_in(state.screen_state.new_thread, ss) | terminal_size: {80, 24}}
+    compact_state = %{wide_state | terminal_size: {64, 22}}
+
+    wide_text = wide_state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+    compact_text = compact_state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert get_ss(wide_state).body_input_state.value == long_body
+    assert get_ss(compact_state).body_input_state.value == long_body
+    refute get_ss(compact_state).body_input_state.value =~ "\n"
+    assert wide_text =~ long_body
+    refute compact_text =~ long_body
+    assert compact_text =~ "alpha beta"
+    assert compact_text =~ "iota kappa"
   end
 
   test "render/1 preview mode keeps markdown preview inside composer shell" do
@@ -628,6 +683,31 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert final.current_screen == :thread_list
     assert final.current_board.id == "b1"
     assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
+  end
+
+  test "Ctrl+S submits one-line new-thread body exactly after compact render" do
+    long_body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+
+    state =
+      compose_state()
+      |> put_title("Wrapped Submit")
+
+    ss = %{
+      get_ss(state)
+      | focused: :body,
+        mode: :edit,
+        body_input_state: fresh_input(long_body)
+    }
+
+    state = %{put_in(state.screen_state.new_thread, ss) | terminal_size: {64, 22}}
+
+    _ = NewThread.render(state)
+    {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+
+    assert final.current_screen == :thread_list
+    assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
+    assert Process.get(:new_thread_last_attrs).body == long_body
+    refute Process.get(:new_thread_last_attrs).body =~ "\n"
   end
 
   test "Ctrl+S with {:ok, %{thread: thread}} preserves current_board from wizard" do
