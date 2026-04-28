@@ -46,6 +46,7 @@ The next architecture problem is ownership: `Foglet.TUI.App` currently owns rout
 - [x] v2.0 Phase 34 established `Foglet.TUI.Context`, `Foglet.TUI.Effect`, and the `init/1`, `update/3`, `render/2` screen contract with App runtime helpers and focused tests.
 - [x] v2.0 Phase 34 proved generic navigation, task, modal, publish/session, terminal-size, and quit effects through App, including task result routing back into screen `update/3`.
 - [x] v2.0 Phase 34 documented stateful/stateless screen conventions and preserved existing App/render smoke behavior while deferring full screen-family migration.
+- [x] v2.0 Phase 36 migrated BoardList and ThreadList to screen-owned reducers for directory/thread loading, subscription feedback, route-param navigation, PubSub topic derivation, and render fixture ownership.
 
 ### Active
 
@@ -104,6 +105,7 @@ Widgets already model the smaller local reducer style through `init/1`, `handle_
 | Keep sysop administration inside the TUI for day-to-day operations | A sysop should be able to operate the BBS from the same terminal experience users inhabit | Good |
 | Split the TUI facelift into Classic Modern BBS and Operator Console modes | User-facing conversation screens should feel social and placeful, while account/operator work remains compact and administrative | Good |
 | Make v2.0 an architecture milestone for screen ownership | `Foglet.TUI.App` has accumulated screen-specific routing, async-result handling, and state mutation; moving those decisions into screens makes future TUI work safer | Phase 34 foundation validated |
+| Treat BoardList and ThreadList as screen-owned directory reducers | Board/thread browsing state, async loads, feedback, and route params now flow through local state and screen-tagged effects; App keeps only a documented Phase 37 bridge for PostReader | Phase 36 validated |
 
 ## Evolution
 
@@ -123,4 +125,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 after Phase 34 Runtime Contract & Effects completion*
+*Last updated: 2026-04-28 after Phase 36 Board & Thread Directory Flow completion*
