@@ -1,17 +1,15 @@
 defmodule Foglet.TUI.Screens.Register do
   @moduledoc """
-  Registration wizard (SSH-04, post-Phase-2 two-step form).
+  Screen-owned registration wizard (SSH-04, post-Phase-2 two-step form).
 
   Wizard structure by mode:
     * "open" / "sysop_approved"  →  :combined step (handle, email, password, confirm) → submit
     * "invite_only"              →  :invite_code step → :combined step → submit
 
-  State lives in `state.screen_state[:register]` (post-Phase-2 migration from the
-  top-level `state.register_wizard` field removed in AUDIT-13(b)). `register.ex`
-  self-initializes on first `get_register_ss/1` call (no `app.ex` bootstrap).
-
-  `handle_wizard_event/2` is the §6 public domain-hook dispatched from
-  `app.ex:do_update({:register_wizard, event}, state)`.
+  State is local to this screen and owned by
+  `Foglet.TUI.Screens.Register.State`. App stores it, routes messages, and
+  interprets effects; registration and verification delivery work is requested
+  through task effects and completed through `update/3` task results.
 
   Terminal outcomes:
     * "open" / "invite_only" success → transition to :verify with a built code
@@ -24,6 +22,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.{Accounts, Config}
   alias Foglet.Accounts.Verification
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.Theme
@@ -34,32 +33,17 @@ defmodule Foglet.TUI.Screens.Register do
 
   import Raxol.Core.Renderer.View
 
-  # §3 init_screen_state/1 (PUBLIC — AUDIT-19, D-05)
-
-  @doc """
-  Returns a minimal "open"-mode stub suitable for pre-populating
-  `screen_state[:register]` (e.g. during screen-transition bootstrapping).
-
-  **Important:** This function always returns `mode: "open"` and `step: :combined`
-  regardless of the opts or runtime configuration. Callers that need a
-  mode-aware initial state (e.g. `"invite_only"` → `:invite_code` step) should
-  rely on the lazy `get_register_ss/1` path — register.ex self-initializes
-  via `init_screen_state_for/1` (which reads `state.session_context`) on the
-  first `render/1` or `handle_key/2` call. This divergence is intentional and
-  is tracked for Phase 8 when invite-code logic is fully wired (D-04, D-05).
-  """
   @impl true
-  @spec init_screen_state(keyword()) :: map()
-  def init_screen_state(_opts \\ []) do
-    RegisterState.default()
+  @spec init(Context.t()) :: map()
+  def init(%Context{} = context) do
+    RegisterState.for_mode(registration_mode(context))
   end
 
-  # §4 render/1 (PUBLIC)
-
   @impl true
-  @spec render(map()) :: any()
-  def render(state) do
-    reg = get_register_ss(state)
+  @spec render(map() | nil, Context.t()) :: any()
+  def render(local_state, %Context{} = context) do
+    reg = local_state || init(context)
+    state = app_state_from_local(reg, context)
     theme = Theme.from_state(state)
 
     content =
@@ -75,41 +59,25 @@ defmodule Foglet.TUI.Screens.Register do
     ScreenFrame.render(state, "Register", content, keys_for(reg.step))
   end
 
-  # §5 handle_key/2 (PUBLIC)
-
   @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()}
-  def handle_key(%{key: :escape}, state) do
-    {:update, RegisterState.clear(%{state | current_screen: :login}), []}
+  @spec update(term(), map() | nil, Context.t()) :: {map(), [Effect.t()]}
+  def update({:key, %{key: :escape}}, local_state, %Context{} = context) do
+    {local_state || init(context), [Effect.navigate(:login, %{})]}
   end
 
-  def handle_key(key_event, state) do
-    reg = get_register_ss(state)
-
-    case reg.step do
-      :invite_code -> handle_invite_key(key_event, state)
-      :combined -> handle_combined_key(key_event, state)
-    end
+  def update({:key, key_event}, local_state, %Context{} = context) do
+    local_state
+    |> app_state_from_local(context)
+    |> reduce_key(key_event)
+    |> local_result(local_state || init(context))
   end
 
-  # §6 handle_wizard_event/2 (PUBLIC — §6 domain hook called from app.ex:352)
-
-  @doc """
-  Dispatched from `app.ex:do_update({:register_wizard, event}, state)`.
-
-  Returns bare `{state, commands}` (NOT `{:update, ...}`) because the dispatch in
-  app.ex passes the return directly to process_screen_commands/2.
-  """
-  @spec handle_wizard_event(
-          {:submit_step, atom(), String.t()} | {:cancel},
-          map()
-        ) :: {map(), list()}
-  def handle_wizard_event({:cancel}, state) do
-    {RegisterState.clear(%{state | current_screen: :login}), []}
+  def update({:wizard, {:cancel}}, local_state, %Context{} = context) do
+    {local_state || init(context), [Effect.navigate(:login, %{})]}
   end
 
-  def handle_wizard_event({:submit_step, :invite_code, value}, state) do
-    reg = get_register_ss(state)
+  def update({:wizard, {:submit_step, :invite_code, value}}, local_state, %Context{} = context) do
+    reg = local_state || init(context)
 
     if RegisterState.valid_invite_code?(value) do
       new_reg = %{
@@ -120,29 +88,66 @@ defmodule Foglet.TUI.Screens.Register do
           error: nil
       }
 
-      {RegisterState.put(state, new_reg), []}
+      {new_reg, []}
     else
-      new_reg = %{reg | error: "Invalid code."}
-      {RegisterState.put(state, new_reg), []}
+      {%{reg | error: "Invalid code."}, []}
     end
   end
 
-  def handle_wizard_event({:submit_step, :combined, _value}, state) do
-    # Combined-step submission happens inline in handle_combined_key/2 via
-    # validate_and_submit/2. This clause exists only so {:submit_step, :combined, _}
-    # round-trips cleanly if anything emits it.
-    {state, []}
+  def update({:wizard, {:submit_step, :combined, _value}}, local_state, %Context{} = context) do
+    state = app_state_from_local(local_state, context)
+
+    state
+    |> get_register_ss()
+    |> validate_and_submit(state)
+    |> local_result(local_state || init(context))
   end
 
-  # §7 Private key handlers
+  def update({:task_result, :register, {:ok, result}}, local_state, %Context{} = context) do
+    local_state
+    |> app_state_from_local(context)
+    |> handle_register_result(result)
+    |> local_result(local_state || init(context))
+  end
+
+  def update({:task_result, :register, {:error, _reason}}, local_state, %Context{} = context) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Registration could not be completed. Please try again later."
+    }
+
+    {local_state || init(context), [Effect.open_modal(modal)]}
+  end
+
+  def update({:task_result, :verification_delivery, result}, local_state, context),
+    do: update({:task_result, :register, result}, local_state, context)
+
+  def update(_message, local_state, %Context{} = context), do: {local_state || init(context), []}
+
+  # §3 init_screen_state/1 (transitional helper — AUDIT-19, D-05)
+
+  @doc "Returns a minimal open-mode local state stub."
+  @impl true
+  @spec init_screen_state(keyword()) :: map()
+  def init_screen_state(_opts \\ []), do: RegisterState.default()
+
+  # §4 Private key handlers
+
+  defp reduce_key(state, key_event) do
+    reg = get_register_ss(state)
+
+    case reg.step do
+      :invite_code -> handle_invite_key(key_event, state)
+      :combined -> handle_combined_key(key_event, state)
+    end
+  end
 
   # --- :invite_code step key handlers ---
 
   defp handle_invite_key(%{key: :enter}, state) do
     reg = get_register_ss(state)
     value = reg.invite_code_input.raxol_state.value
-    # Round-trip through App.update/2 per D-08 Watch List (i) and Pitfall 4.
-    {:update, state, [{:register_wizard, {:submit_step, :invite_code, value}}]}
+    handle_invite_submission(value, state)
   end
 
   defp handle_invite_key(event, state) do
@@ -202,7 +207,7 @@ defmodule Foglet.TUI.Screens.Register do
     RegisterState.put(state, new_reg)
   end
 
-  # §8 Private render helpers
+  # §5 Private render helpers
 
   defp render_invite_step(reg, theme) do
     focused = reg.focused_field == :invite_code
@@ -268,7 +273,7 @@ defmodule Foglet.TUI.Screens.Register do
   defp keys_for(:combined),
     do: [{"Tab", "Switch field"}, {"Enter", "Next/Submit"}, {"Esc", "Cancel"}]
 
-  # §9 Private state plumbing
+  # §6 Private state plumbing
 
   defp get_register_ss(state) do
     RegisterState.get(state) || init_screen_state_for(state)
@@ -278,7 +283,48 @@ defmodule Foglet.TUI.Screens.Register do
     RegisterState.for_mode(registration_mode(state))
   end
 
-  # §10 Private domain plumbing
+  defp app_state_from_local(local_state, %Context{} = context) do
+    %{
+      current_screen: :register,
+      current_user: context.current_user,
+      session_context: context.session_context,
+      session_pid: context.session_pid,
+      terminal_size: context.terminal_size,
+      route_params: context.route_params,
+      domain: context.domain,
+      screen_state: %{register: local_state || init(context)}
+    }
+  end
+
+  defp local_result({:update, state, effects}, _local_state) do
+    {RegisterState.get(state), effects}
+  end
+
+  defp local_result({state, effects}, _local_state) when is_list(effects) do
+    {RegisterState.get(state), effects}
+  end
+
+  defp handle_invite_submission(value, state) do
+    state
+    |> get_register_ss()
+    |> then(fn reg ->
+      if RegisterState.valid_invite_code?(value) do
+        new_reg = %{
+          reg
+          | step: :combined,
+            focused_field: :handle,
+            collected: Map.put(reg.collected, :invite_code, value),
+            error: nil
+        }
+
+        {:update, RegisterState.put(state, new_reg), []}
+      else
+        {:update, RegisterState.put(state, %{reg | error: "Invalid code."}), []}
+      end
+    end)
+  end
+
+  # §7 Private domain plumbing
 
   defp submit(%{mode: "sysop_approved"} = reg, state) do
     data = %{
@@ -287,26 +333,18 @@ defmodule Foglet.TUI.Screens.Register do
       password: reg.password_input.raxol_state.value
     }
 
-    case Accounts.register_pending_user(data) do
-      {:ok, _user} ->
-        modal = %Foglet.TUI.Modal{
-          type: :info,
-          title: "Account Pending",
-          message: "Your account has been created and is pending sysop approval."
-        }
+    accounts_mod = domain_module(state, :accounts)
+    submitting_state = RegisterState.put(state, %{reg | error: nil})
 
-        new_state = %{state | modal: modal}
-        {:update, RegisterState.clear(new_state), [{:terminate_after_modal, :pending_approval}]}
+    effect =
+      Effect.task(:register, :register, fn ->
+        case accounts_mod.register_pending_user(data) do
+          {:ok, user} -> {:ok, :pending_approval, user}
+          {:error, changeset} -> {:error, changeset}
+        end
+      end)
 
-      {:error, changeset} ->
-        new_reg = %{
-          reg
-          | error: RegisterState.changeset_error_text(changeset),
-            focused_field: :handle
-        }
-
-        {:update, RegisterState.put(state, new_reg), []}
-    end
+    {:update, submitting_state, [effect]}
   end
 
   defp submit(%{mode: mode} = reg, state) when mode in ["open", "invite_only"] do
@@ -317,58 +355,89 @@ defmodule Foglet.TUI.Screens.Register do
       invite_code: Map.get(reg.collected, :invite_code)
     }
 
-    with {:ok, user} <- Accounts.register_user(data),
-         screen <- Accounts.post_login_screen(user),
-         {:ok, delivery_or_nil} <- maybe_deliver_verification_code(screen, user) do
-      handle_register_success(state, user, screen, delivery_or_nil)
-    else
-      {:error, changeset} when is_struct(changeset, Ecto.Changeset) ->
-        new_reg = %{
-          reg
-          | error: RegisterState.changeset_error_text(changeset),
-            focused_field: :handle
-        }
+    accounts_mod = domain_module(state, :accounts)
+    verification_mod = domain_module(state, :verification)
+    submitting_state = RegisterState.put(state, %{reg | error: nil})
 
-        {:update, RegisterState.put(state, new_reg), []}
+    effect =
+      Effect.task(:register, :register, fn ->
+        register_user(accounts_mod, verification_mod, data)
+      end)
 
-      {:error, :unavailable} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Email verification is unavailable because email delivery is disabled."
-        }
-
-        {:update, %{state | modal: modal}, []}
-
-      {:error, _delivery_error} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Verification instructions could not be sent. Please try again later."
-        }
-
-        {:update, %{state | modal: modal}, []}
-    end
+    {:update, submitting_state, [effect]}
   end
 
   # Only attempt verification delivery when the post-login screen is :verify.
   # For :main_menu, skip delivery by short-circuiting to {:ok, nil}.
-  defp maybe_deliver_verification_code(:verify, user),
-    do: Verification.deliver_verification_code(user)
+  defp maybe_deliver_verification_code(verification_mod, :verify, user),
+    do: verification_mod.deliver_verification_code(user)
 
-  defp maybe_deliver_verification_code(:main_menu, _user), do: {:ok, nil}
+  defp maybe_deliver_verification_code(_verification_mod, :main_menu, _user), do: {:ok, nil}
 
-  defp handle_register_success(state, user, :verify, :attempted) do
-    new_state = %{
-      state
-      | current_user: user,
-        current_screen: :verify
-    }
-
-    {:update, RegisterState.clear(new_state), []}
+  defp register_user(accounts_mod, verification_mod, data) do
+    with {:ok, user} <- accounts_mod.register_user(data),
+         screen <- accounts_mod.post_login_screen(user),
+         {:ok, delivery_or_nil} <- maybe_deliver_verification_code(verification_mod, screen, user) do
+      {:ok, user, screen, delivery_or_nil}
+    end
   end
 
-  defp handle_register_success(state, user, :main_menu, _code) do
-    new_state = %{state | current_user: user}
-    {:update, RegisterState.clear(new_state), [{:promote_session, user}]}
+  defp handle_register_result(state, {:ok, :pending_approval, _user}) do
+    modal = %Foglet.TUI.Modal{
+      type: :info,
+      title: "Account Pending",
+      message: "Your account has been created and is pending sysop approval."
+    }
+
+    {RegisterState.put(state, RegisterState.default()),
+     [Effect.open_modal(modal), Effect.session({:terminate_after_modal, :pending_approval})]}
+  end
+
+  defp handle_register_result(state, {:ok, user, :verify, :attempted}) do
+    {RegisterState.put(state, RegisterState.default()),
+     [Effect.session({:set_current_user, user}), Effect.navigate(:verify, %{})]}
+  end
+
+  defp handle_register_result(state, {:ok, user, :main_menu, _delivery}) do
+    {RegisterState.put(state, RegisterState.default()), [Effect.session({:set_user, user})]}
+  end
+
+  defp handle_register_result(state, {:error, changeset})
+       when is_struct(changeset, Ecto.Changeset) do
+    reg = get_register_ss(state)
+
+    new_reg = %{
+      reg
+      | error: RegisterState.changeset_error_text(changeset),
+        focused_field: :handle
+    }
+
+    {:update, RegisterState.put(state, new_reg), []}
+  end
+
+  defp handle_register_result(state, {:error, :unavailable}) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Email verification is unavailable because email delivery is disabled."
+    }
+
+    {state, [Effect.open_modal(modal)]}
+  end
+
+  defp handle_register_result(state, {:error, _delivery_error}) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Verification instructions could not be sent. Please try again later."
+    }
+
+    {state, [Effect.open_modal(modal)]}
+  end
+
+  defp registration_mode(%Context{} = context) do
+    case Map.get(session_ctx(context), :registration_mode) do
+      nil -> Config.get("registration_mode", "open")
+      mode -> mode
+    end
   end
 
   defp registration_mode(state) do
@@ -379,4 +448,16 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp session_ctx(state), do: Map.get(state, :session_context) || %{}
+
+  defp domain_module(state, key) do
+    domain = Map.get(state, :domain) || %{}
+
+    case Map.get(domain, key) do
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _other -> default_domain_module(key)
+    end
+  end
+
+  defp default_domain_module(:accounts), do: Accounts
+  defp default_domain_module(:verification), do: Verification
 end

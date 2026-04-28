@@ -2,7 +2,10 @@ defmodule Foglet.TUI.Screens.Register.State do
   @moduledoc """
   Screen-local state for `Foglet.TUI.Screens.Register`.
 
-  The app stores this map at `state.screen_state[:register]`.
+  `Foglet.TUI.Screens.Register.init/1` builds this map and
+  `Register.update/3` owns all invite-code, combined-form, registration, and
+  pending-approval transitions. App stores the returned value under
+  `state.screen_state[:register]` and only interprets emitted effects.
 
   Steps:
     * `:invite_code` — first step for `"invite_only"` mode
