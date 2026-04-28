@@ -175,7 +175,18 @@ Plans:
   2. Resizing the terminal from 80×24 to 64×22 mid-compose re-flows the visual wrap without altering the underlying buffer; cursor navigation respects logical lines (verified at both sizes via SSH observation).
   3. On the Boards screen at 64×22 SSH, focusing a category and pressing Enter toggles its expanded state (collapsed → expanded → collapsed); the visible state indicator (`▸` collapsed, `▾` expanded, or equivalent) updates accordingly.
   4. Enter on a focused board leaf continues to navigate to the thread list (no regression of existing behavior); a sandbox query log confirms expand/collapse causes zero DB writes (UI-local state only).
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+**Wave 1**
+- [ ] 33-01-composer-shared-wrap-PLAN.md — Shared `Compose.render_input/4` visual wrapping via `TextWidth.wrap/2`, cursor preservation, and shared renderer tests
+- [ ] 33-03-boards-enter-toggle-PLAN.md — Boards category Enter toggles local `BoardTree` expansion state, updates `▸`/`▾`, and preserves board-leaf navigation
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- [ ] 33-02-composer-screen-coverage-PLAN.md — Reply and new-thread composers pass current render width, with compact/resize/submit preservation coverage
+
+Cross-cutting constraints:
+- Composer wrapping is render-only: `MultiLineInput.value` remains the logical submitted buffer, and `MultiLineInput` stays initialized with `wrap: :none`.
+- Boards category expansion is UI-local only: no domain context calls, DB writes, subscribe/unsubscribe commands, or thread-loading commands for category Enter.
 **UI hint**: yes
 
 ## Progress
