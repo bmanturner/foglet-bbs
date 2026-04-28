@@ -290,15 +290,30 @@ defmodule Foglet.TUI.Screens.MainMenu do
     max(left_alloc - box_border, @nav_panel_min_inner_width)
   end
 
+  # Note: Raxol's `:panel` measure_panel/2 shrinks the panel to
+  # `children_size + double_border` unless `:width`/`:height` are explicitly
+  # set (vendor/raxol/.../panels.ex:171-201). Without explicit size attrs the
+  # panel will not fill the split_pane allocation, leaving the title segment
+  # truncated and the right border drawn at the children-measured edge instead
+  # of the chrome-allocated edge. We pass sentinel large values; `apply_constraints/2`
+  # clamps to `available_space.width`/`height`, so the panel fills the pane.
   defp nav_panel(destinations, theme, inner_width) do
-    box style: %{border: :single, border_fg: theme.border.fg} do
-      column style: %{gap: 0} do
-        [
-          text("Navigation", fg: theme.title.fg)
-          | Enum.map(destinations, &nav_row(&1, theme, inner_width))
-        ]
-      end
-    end
+    %{
+      type: :panel,
+      attrs: %{
+        title: "Navigation",
+        title_attrs: %{fg: theme.title.fg},
+        border: :single,
+        border_fg: theme.border.fg,
+        width: 9999,
+        height: 9999
+      },
+      children: [
+        column style: %{gap: 0} do
+          Enum.map(destinations, &nav_row(&1, theme, inner_width))
+        end
+      ]
+    }
   end
 
   defp nav_row(%{key: key, label: label, glyph: glyph}, theme, inner_width) do
@@ -311,11 +326,22 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   defp oneliners_panel(state, theme) do
-    box style: %{border: :single, border_fg: theme.border.fg} do
-      column style: %{gap: 0} do
-        [text("Oneliners", fg: theme.title.fg) | oneliner_rows(state, theme)]
-      end
-    end
+    %{
+      type: :panel,
+      attrs: %{
+        title: "Oneliners",
+        title_attrs: %{fg: theme.title.fg},
+        border: :single,
+        border_fg: theme.border.fg,
+        width: 9999,
+        height: 9999
+      },
+      children: [
+        column style: %{gap: 0} do
+          oneliner_rows(state, theme)
+        end
+      ]
+    }
   end
 
   defp oneliner_rows(state, theme) do
