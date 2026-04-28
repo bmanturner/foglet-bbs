@@ -102,13 +102,21 @@ defmodule Foglet.TUI.Screens.Login.State do
   end
 
   @doc """
-  Advances focus to the next field.
+  Advances focus to the next field within the login form.
 
-  In the login form only two fields exist: `:handle` ↔ `:password`.
+  Only the login form has a binary `:handle` ↔ `:password` toggle. Other
+  sub-states have their own focus cycles (`next_reset_consume_focus/1` /
+  `prev_reset_consume_focus/1` for `:reset_consume`); calling
+  `toggle_focus/1` on any non-login-form state is a programmer error
+  and will raise `FunctionClauseError` rather than silently writing
+  `:handle` into a state that does not own that atom (WR-002).
   """
   @spec toggle_focus(map()) :: map()
-  def toggle_focus(%{focused_field: :handle} = ss), do: %{ss | focused_field: :password}
-  def toggle_focus(%{focused_field: _} = ss), do: %{ss | focused_field: :handle}
+  def toggle_focus(%{sub: :login_form, focused_field: :handle} = ss),
+    do: %{ss | focused_field: :password}
+
+  def toggle_focus(%{sub: :login_form, focused_field: :password} = ss),
+    do: %{ss | focused_field: :handle}
 
   @doc "Returns the `input_key` atom for a given `focused_field`."
   @spec input_key(atom()) :: atom()
