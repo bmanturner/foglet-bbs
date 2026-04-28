@@ -2,9 +2,9 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: verifying
-last_updated: "2026-04-28T20:37:19.899Z"
-last_activity: 2026-04-28
+status: executing
+last_updated: "2026-04-28T20:43:23.990Z"
+last_activity: 2026-04-28 -- Phase 36 execution started
 progress:
   total_phases: 7
   completed_phases: 2
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 35 — auth-home-screens
+**Current focus:** Phase 36 — board-thread-directory-flow
 
 ## Current Position
 
-Phase: 35 (auth-home-screens) — EXECUTING
-Plan: 4 of 4
-Status: Phase complete — ready for verification
-Last activity: 2026-04-28
+Phase: 36 (board-thread-directory-flow) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 36
+Last activity: 2026-04-28 -- Phase 36 execution started
 
 ## Accumulated Context
 
