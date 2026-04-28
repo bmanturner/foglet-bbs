@@ -178,22 +178,22 @@ defmodule Foglet.Accounts.Verification do
             # one concurrent transaction observes {1, _}; the rest see {0, _}
             # and short-circuit to a generic invalid_or_expired error.
             case Repo.delete_all(claim_query) do
-              {0, _} ->
-                {:error, :invalid_or_expired}
-
-              {_n, _} ->
-                with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
-                  # Defense in depth: drop any other outstanding reset tokens
-                  # for this user so nothing left over can be replayed.
-                  Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
-
-                  {:ok, updated}
-                end
+              {0, _} -> {:error, :invalid_or_expired}
+              {_n, _} -> update_password_and_purge_resets(user, attrs)
             end
         end
       end)
     else
       :error -> {:error, :invalid_or_expired}
+    end
+  end
+
+  defp update_password_and_purge_resets(user, attrs) do
+    with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
+      # Defense in depth: drop any other outstanding reset tokens for this
+      # user so nothing left over can be replayed.
+      Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
+      {:ok, updated}
     end
   end
 

@@ -574,32 +574,30 @@ defmodule Foglet.TUI.Screens.Login do
     new_password = login_ss.password_input.raxol_state.value
     confirmation = login_ss.password_confirmation_input.raxol_state.value
 
-    cond do
-      new_password != confirmation ->
-        # D-07/D-10 mismatch: keep state, surface a generic mismatch error,
-        # and do *not* call into Accounts. Token row is preserved so the user
-        # can correct their password and try again.
-        new_login_ss = %{login_ss | error: @reset_consume_password_mismatch_message}
-        {:update, LoginState.put(state, new_login_ss), []}
+    if new_password != confirmation do
+      # D-07/D-10 mismatch: keep state, surface a generic mismatch error,
+      # and do *not* call into Accounts. Token row is preserved so the user
+      # can correct their password and try again.
+      new_login_ss = %{login_ss | error: @reset_consume_password_mismatch_message}
+      {:update, LoginState.put(state, new_login_ss), []}
+    else
+      case Verification.consume_reset_token(raw_token, %{password: new_password}) do
+        {:ok, _user} ->
+          # D-07: success returns to the logged-out Login menu and drops
+          # token/password field state. Subsequent renders see %{sub: :menu}.
+          {:update, LoginState.put(state, LoginState.default()), []}
 
-      true ->
-        case Verification.consume_reset_token(raw_token, %{password: new_password}) do
-          {:ok, _user} ->
-            # D-07: success returns to the logged-out Login menu and drops
-            # token/password field state. Subsequent renders see %{sub: :menu}.
-            {:update, LoginState.put(state, LoginState.default()), []}
+        {:error, :invalid_or_expired} ->
+          # D-10: identical generic copy for invalid/malformed/expired/used.
+          new_login_ss = %{login_ss | error: @reset_consume_invalid_or_expired_message}
+          {:update, LoginState.put(state, new_login_ss), []}
 
-          {:error, :invalid_or_expired} ->
-            # D-10: identical generic copy for invalid/malformed/expired/used.
-            new_login_ss = %{login_ss | error: @reset_consume_invalid_or_expired_message}
-            {:update, LoginState.put(state, new_login_ss), []}
-
-          {:error, %Ecto.Changeset{}} ->
-            # Password failed validation; token was rolled back inside the
-            # Accounts transaction so the user can retry without a new token.
-            new_login_ss = %{login_ss | error: @reset_consume_password_invalid_message}
-            {:update, LoginState.put(state, new_login_ss), []}
-        end
+        {:error, %Ecto.Changeset{}} ->
+          # Password failed validation; token was rolled back inside the
+          # Accounts transaction so the user can retry without a new token.
+          new_login_ss = %{login_ss | error: @reset_consume_password_invalid_message}
+          {:update, LoginState.put(state, new_login_ss), []}
+      end
     end
   end
 
