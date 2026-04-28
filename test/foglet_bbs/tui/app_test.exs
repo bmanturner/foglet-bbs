@@ -3,11 +3,13 @@ defmodule Foglet.TUI.AppTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
+  alias Foglet.TUI.Screens.ThreadList.State, as: ThreadListState
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.Modal.Form
@@ -325,6 +327,83 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.screen_state.verify.attempts == 1
       assert new_state.screen_state.verify.buffer == ""
       assert new_state.modal.type == :error
+    end
+
+    test "{:command_result, {:screen_task_result, :board_list, :load_boards, result}} routes through BoardList local state only",
+         %{state: state} do
+      directory = [
+        %{
+          category: %{id: "c1", name: "General"},
+          boards: [
+            %{
+              board: %{id: "b1", name: "General", slug: "general"},
+              subscribed?: true,
+              required_subscription?: false,
+              unread_count: 0,
+              last_post_at: nil
+            }
+          ]
+        }
+      ]
+
+      state = %{
+        state
+        | current_screen: :board_list,
+          board_list: [%{id: "legacy"}],
+          screen_state: %{board_list: BoardListState.new(feedback: "keep")}
+      }
+
+      {new_state, cmds} =
+        App.update(
+          {:command_result, {:screen_task_result, :board_list, :load_boards, {:ok, directory}}},
+          state
+        )
+
+      assert cmds == []
+      assert new_state.board_list == state.board_list
+
+      assert %BoardListState{
+               directory: ^directory,
+               status: :loaded,
+               feedback: "keep",
+               board_tree: %Foglet.TUI.Widgets.List.BoardTree{}
+             } = App.screen_state_for(new_state, :board_list)
+    end
+
+    test "{:command_result, {:screen_task_result, :thread_list, :load_threads, result}} routes through ThreadList local state only",
+         %{state: state} do
+      threads = [
+        %{
+          id: "t1",
+          title: "Hello",
+          sticky: false,
+          locked: false,
+          post_count: 1,
+          last_post_at: ~U[2026-04-28 18:00:00Z],
+          created_by: %{handle: "alice"}
+        }
+      ]
+
+      local_state = ThreadListState.new(board: %{id: "b1"}, board_id: "b1")
+
+      state = %{
+        state
+        | current_screen: :thread_list,
+          current_thread_list: [%{id: "legacy"}],
+          screen_state: %{thread_list: local_state}
+      }
+
+      {new_state, cmds} =
+        App.update(
+          {:command_result, {:screen_task_result, :thread_list, :load_threads, {:ok, threads}}},
+          state
+        )
+
+      assert cmds == []
+      assert new_state.current_thread_list == state.current_thread_list
+
+      assert %ThreadListState{threads: ^threads, status: :loaded, selected_index: 0} =
+               App.screen_state_for(new_state, :thread_list)
     end
 
     test ":heartbeat_tick calls Session.heartbeat when session_pid is set", %{state: state} do
@@ -686,7 +765,27 @@ defmodule Foglet.TUI.AppTest do
             :post_composer,
             :new_thread
           ] do
-        s = %{state | current_screen: screen}
+        s =
+          case screen do
+            :thread_list ->
+              %{
+                state
+                | current_screen: :thread_list,
+                  screen_state: %{
+                    thread_list:
+                      ThreadListState.new(
+                        board: %{id: "b1", name: "General"},
+                        board_id: "b1",
+                        threads: [],
+                        status: :empty
+                      )
+                  }
+              }
+
+            other ->
+              %{state | current_screen: other}
+          end
+
         assert _ = App.view(s)
       end
     end
@@ -1135,23 +1234,14 @@ defmodule Foglet.TUI.AppTest do
       %{state: state}
     end
 
-    test "{:load_boards} returns a Command.task (not a no-op), {state, [%Command{}]}", %{
-      state: state
-    } do
-      {new_state, cmds} = App.update({:load_boards}, state)
-      # State unchanged — I/O happens in the task, not synchronously
-      assert new_state == state
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
-    end
-
-    test "{:boards_loaded, boards} assigns board_list to state", %{state: state} do
+    test "{:boards_loaded, boards} no longer assigns board_list to state", %{state: state} do
       fake_boards = [%{id: "b1", name: "General", unread_count: 0}]
       {new_state, cmds} = App.update({:boards_loaded, fake_boards}, state)
-      assert new_state.board_list == fake_boards
+      assert new_state.board_list == state.board_list
       assert cmds == []
     end
 
-    test "{:boards_loaded, boards} clears a cached board_list tree", %{state: state} do
+    test "{:boards_loaded, boards} does not mutate cached BoardList local state", %{state: state} do
       fake_boards = [%{id: "b1", name: "General", unread_count: 0}]
       board_tree = %{selected_id: {:board, "b1"}}
 
@@ -1167,21 +1257,16 @@ defmodule Foglet.TUI.AppTest do
 
       {new_state, cmds} = App.update({:boards_loaded, fake_boards}, state)
 
-      assert new_state.board_list == fake_boards
-      assert new_state.screen_state.board_list.board_tree == nil
+      assert new_state.board_list == state.board_list
+      assert new_state.screen_state.board_list.board_tree == board_tree
       assert new_state.screen_state.board_list.feedback == "Subscribed"
       assert cmds == []
     end
 
-    test "{:load_threads, board_id} returns a Command.task", %{state: state} do
-      {_new_state, cmds} = App.update({:load_threads, "b1"}, state)
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
-    end
-
-    test "{:threads_loaded, threads} assigns current_thread_list", %{state: state} do
+    test "{:threads_loaded, threads} no longer assigns current_thread_list", %{state: state} do
       threads = [%{id: "t1", title: "Hello", sticky: false, last_post_at: DateTime.utc_now()}]
       {new_state, []} = App.update({:threads_loaded, threads}, state)
-      assert new_state.current_thread_list == threads
+      assert new_state.current_thread_list == state.current_thread_list
     end
 
     test "{:load_posts, thread_id} returns a Command.task", %{state: state} do
@@ -1464,18 +1549,20 @@ defmodule Foglet.TUI.AppTest do
       %{state: state}
     end
 
-    test "{:command_result, {:boards_loaded, boards}} assigns board_list", %{state: state} do
+    test "{:command_result, {:boards_loaded, boards}} leaves board_list untouched", %{
+      state: state
+    } do
       boards = [%{id: "b1", name: "General", unread_count: 0}]
       {new_state, cmds} = App.update({:command_result, {:boards_loaded, boards}}, state)
-      assert new_state.board_list == boards
+      assert new_state.board_list == state.board_list
       assert cmds == []
     end
 
-    test "{:command_result, {:threads_loaded, threads}} assigns current_thread_list",
+    test "{:command_result, {:threads_loaded, threads}} leaves current_thread_list untouched",
          %{state: state} do
       threads = [%{id: "t1", title: "Hello", sticky: false, last_post_at: DateTime.utc_now()}]
       {new_state, cmds} = App.update({:command_result, {:threads_loaded, threads}}, state)
-      assert new_state.current_thread_list == threads
+      assert new_state.current_thread_list == state.current_thread_list
       assert cmds == []
     end
 

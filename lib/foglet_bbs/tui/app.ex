@@ -21,7 +21,6 @@ defmodule Foglet.TUI.App do
   alias Foglet.PubSub
   alias Foglet.Sessions.Preferences
   alias Foglet.Sessions.Session
-  alias Foglet.Threads.ThreadEntry
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.PubSubForwarder
@@ -574,89 +573,6 @@ defmodule Foglet.TUI.App do
     end
   end
 
-  # I/O commands — each spawns a real off-process task that performs the DB work
-  # and returns a typed result message back to update/2 (Audit #11).
-  # Previously these wrapped the tuple in a no-op Command.task that returned
-  # the tuple unchanged, causing the DB call to run synchronously on the
-  # Lifecycle process inside update/2 instead of off-process.
-
-  defp do_update({:load_boards}, state) do
-    # Snapshot the module atom before entering the closure so the task captures only
-    # the atom, not the full state map.
-    user = state.current_user
-    boards_mod = domain_module(state, :boards)
-
-    task =
-      Foglet.TUI.Command.task(:load_boards, fn ->
-        {:boards_loaded, boards_mod.board_directory_for(user)}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:boards_loaded, boards}, state) do
-    screen_state =
-      case Map.get(state.screen_state || %{}, :board_list) do
-        %Screens.BoardList.State{} = board_list_state ->
-          Map.put(state.screen_state || %{}, :board_list, %{board_list_state | board_tree: nil})
-
-        _other ->
-          state.screen_state || %{}
-      end
-
-    {%{state | board_list: boards, screen_state: screen_state}, []}
-  end
-
-  defp do_update({:subscribe_to_board, board_id}, state) do
-    user = state.current_user
-    boards_mod = domain_module(state, :boards)
-
-    task =
-      Foglet.TUI.Command.task(:subscribe_to_board, fn ->
-        {:board_subscription_changed, :subscribe,
-         boards_mod.subscribe_user_to_board(user, board_id)}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:unsubscribe_from_board, board_id}, state) do
-    user = state.current_user
-    boards_mod = domain_module(state, :boards)
-
-    task =
-      Foglet.TUI.Command.task(:unsubscribe_from_board, fn ->
-        {:board_subscription_changed, :unsubscribe,
-         boards_mod.unsubscribe_user_from_board(user, board_id)}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:board_subscription_changed, action, {:ok, _result}}, state) do
-    feedback =
-      case action do
-        :subscribe -> "Subscribed."
-        :unsubscribe -> "Unsubscribed."
-      end
-
-    state
-    |> put_board_list_feedback(feedback)
-    |> then(&do_update({:load_boards}, &1))
-  end
-
-  defp do_update({:board_subscription_changed, _action, {:error, :required_subscription}}, state) do
-    {put_board_list_feedback(state, "This board is a required subscription."), []}
-  end
-
-  defp do_update({:board_subscription_changed, _action, {:error, :board_archived}}, state) do
-    {put_board_list_feedback(state, "That board is archived."), []}
-  end
-
-  defp do_update({:board_subscription_changed, _action, {:error, reason}}, state) do
-    {put_board_list_feedback(state, "Subscription change failed: #{inspect(reason)}"), []}
-  end
-
   defp do_update({:load_moderation_workspace}, state) do
     user = state.current_user
     moderation_mod = domain_module(state, :moderation)
@@ -817,22 +733,6 @@ defmodule Foglet.TUI.App do
     {%{state | screen_state: new_screen_state}, []}
   end
 
-  defp do_update({:load_threads, board_id}, state) do
-    threads_mod = domain_module(state, :threads)
-    user_id = state.current_user && state.current_user.id
-
-    task =
-      Foglet.TUI.Command.task(:load_threads, fn ->
-        {:threads_loaded, load_threads_for_user(threads_mod, board_id, user_id)}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:threads_loaded, threads}, state) do
-    {%{state | current_thread_list: threads}, []}
-  end
-
   # --- Load posts (with optional `jump_last: true` for reply-submit jump) ---
 
   # 2-arity backward compat: existing callers dispatch {:load_posts, thread_id}.
@@ -920,7 +820,7 @@ defmodule Foglet.TUI.App do
     new_state = %{state | read_position: new_rp}
 
     if new_state.current_screen == :board_list do
-      do_update({:load_boards}, new_state)
+      route_screen_update(new_state, :board_list, :load)
     else
       {new_state, []}
     end
@@ -935,8 +835,7 @@ defmodule Foglet.TUI.App do
   # to update unread counts if the user is on the board_list screen.
   defp do_update({:board_activity, _board_id, _event}, state)
        when state.current_screen == :board_list do
-    # Delegate to {:load_boards} which will spawn its own real task.
-    do_update({:load_boards}, state)
+    route_screen_update(state, :board_list, :load)
   end
 
   defp do_update({:board_activity, _board_id, _event}, state), do: {state, []}
@@ -1081,19 +980,6 @@ defmodule Foglet.TUI.App do
       {:ok, mod} -> mod
       {:error, :not_configured} -> default_domain_module(key)
     end
-  end
-
-  defp put_board_list_feedback(state, feedback) do
-    ss =
-      case Map.get(state.screen_state || %{}, :board_list) do
-        %Screens.BoardList.State{} = ss -> ss
-        _other -> Screens.BoardList.init_screen_state()
-      end
-
-    %{
-      state
-      | screen_state: Map.put(state.screen_state || %{}, :board_list, %{ss | feedback: feedback})
-    }
   end
 
   defp default_domain_module(:boards), do: Foglet.Boards
@@ -1299,42 +1185,6 @@ defmodule Foglet.TUI.App do
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
-  end
-
-  defp load_threads_for_user(threads_mod, board_id, user_id) do
-    cond do
-      function_exported?(threads_mod, :list_threads, 2) ->
-        threads_mod.list_threads(board_id, user_id)
-
-      function_exported?(threads_mod, :list_threads, 1) ->
-        threads_mod.list_threads(board_id)
-        |> Enum.map(fn t ->
-          case t do
-            %Foglet.Threads.Thread{} ->
-              %ThreadEntry{
-                id: t.id,
-                title: t.title,
-                board_id: t.board_id,
-                sticky: t.sticky,
-                locked: t.locked,
-                post_count: t.post_count,
-                first_post_id: t.first_post_id,
-                last_post_at: t.last_post_at,
-                deleted_at: t.deleted_at,
-                inserted_at: t.inserted_at,
-                created_by_id: t.created_by_id,
-                has_unread: false,
-                created_by: t.created_by
-              }
-
-            %{} ->
-              Map.put_new(t, :has_unread, false)
-          end
-        end)
-
-      true ->
-        []
-    end
   end
 
   # Helpers for {:flush_read_pointers, ctx} task closure — extracted to keep

@@ -55,7 +55,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
           },
           board_list: [%{id: "b1"}],
           posts: [%{id: "p1"}],
-          recent_oneliners: [%{id: "ol1"}]
+          current_thread_list: [%{id: "t1"}]
         },
         attrs
       )
@@ -78,7 +78,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert App.screen_state_for(new_state, :sample_runtime) == new_local_state
       assert new_state.board_list == state.board_list
       assert new_state.posts == state.posts
-      assert new_state.recent_oneliners == state.recent_oneliners
+      assert new_state.current_thread_list == state.current_thread_list
       assert new_state.screen_state.main_menu == state.screen_state.main_menu
     end
 
@@ -118,7 +118,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
       assert new_state.board_list == state.board_list
       assert new_state.posts == state.posts
-      assert new_state.recent_oneliners == state.recent_oneliners
+      assert new_state.current_thread_list == state.current_thread_list
       assert new_state.screen_state.main_menu == state.screen_state.main_menu
     end
 
