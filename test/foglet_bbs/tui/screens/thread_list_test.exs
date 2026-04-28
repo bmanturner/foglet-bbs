@@ -61,6 +61,23 @@ defmodule Foglet.TUI.Screens.ThreadListTest.OneArityOnly do
   end
 end
 
+defmodule Foglet.TUI.Screens.ThreadListTest.HandlelessThreads do
+  def list_threads(_board_id, _user_id) do
+    [
+      %{
+        id: "handleless",
+        title: "Anonymous thread",
+        sticky: false,
+        locked: false,
+        last_post_at: nil,
+        post_count: 1,
+        created_by: nil,
+        has_unread: false
+      }
+    ]
+  end
+end
+
 defmodule Foglet.TUI.Screens.ThreadListTest.FakeBoards do
   def board_directory_for(user), do: [%{category: %{name: "General"}, user_id: user && user.id}]
 end
@@ -71,7 +88,14 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   alias Foglet.TUI.{Context, Effect, TextWidth}
   alias Foglet.TUI.Screens.ThreadList
   alias Foglet.TUI.Screens.ThreadList.State
-  alias Foglet.TUI.Screens.ThreadListTest.{EmptyThreads, FakeBoards, FakeThreads, OneArityOnly}
+
+  alias Foglet.TUI.Screens.ThreadListTest.{
+    EmptyThreads,
+    FakeBoards,
+    FakeThreads,
+    HandlelessThreads,
+    OneArityOnly
+  }
 
   @board %{id: "b1", name: "General", slug: "general"}
   @user %Foglet.Accounts.User{id: "u1", handle: "alice"}
@@ -167,6 +191,14 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
              ThreadList.update(:load, state, ctx)
 
     assert is_function(fun, 0)
+  end
+
+  test "ThreadList.update(:load, state, context) without board_id records missing board error" do
+    ctx = context(route_params: %{})
+    state = ThreadList.init(ctx)
+
+    assert {%State{status: {:error, :missing_board}, last_error: :missing_board}, []} =
+             ThreadList.update(:load, state, ctx)
   end
 
   test "load task execution with FakeThreads stores 3 sorted rows" do
@@ -273,6 +305,21 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     assert Effect.navigate(:new_thread, %{origin: :thread_list, board: @board, board_id: "b1"})
   end
 
+  test "lowercase c emits the same new_thread route params" do
+    state = load_state()
+
+    assert {^state,
+            [
+              %Effect{
+                type: :navigate,
+                payload: %{
+                  screen: :new_thread,
+                  params: %{origin: :thread_list, board: @board, board_id: "b1"}
+                }
+              }
+            ]} = ThreadList.update({:key, %{key: :char, char: "c"}}, state, context())
+  end
+
   test "Q emits board_list navigation plus BoardList-owned refresh task" do
     state = load_state()
 
@@ -287,6 +334,16 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
     assert Effect.navigate(:board_list, %{})
     assert [%{category: %{name: "General"}, user_id: "u1"}] = fun.()
+  end
+
+  test "lowercase q returns through the BoardList refresh path" do
+    state = load_state()
+
+    assert {^state,
+            [
+              %Effect{type: :navigate, payload: %{screen: :board_list, params: %{}}},
+              %Effect{type: :task, payload: %{op: :load_boards, screen_key: :board_list}}
+            ]} = ThreadList.update({:key, %{key: :char, char: "q"}}, state, context())
   end
 
   test "one-arity thread loaders are annotated with has_unread false" do
@@ -323,5 +380,14 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
     assert TextWidth.display_width(active_cluster) ==
              TextWidth.display_width(sticky_locked_cluster)
+  end
+
+  test "render/2 falls back to @unknown and new for handleless nil-time rows" do
+    ctx = context(threads: HandlelessThreads)
+    state = load_state(ctx)
+    flat = flatten_text(ThreadList.render(state, ctx))
+
+    assert flat =~ "@unknown"
+    assert flat =~ "new"
   end
 end
