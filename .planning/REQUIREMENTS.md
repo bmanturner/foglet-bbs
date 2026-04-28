@@ -28,7 +28,7 @@
 
 ### Screen Migration
 
-- [ ] **SCREEN-01**: Login, Register, and Verify own auth/onboarding key handling, local state, task requests, and auth/verification results through the new update loop.
+- [x] **SCREEN-01**: Login, Register, and Verify own auth/onboarding key handling, local state, task requests, and auth/verification results through the new update loop.
 - [ ] **SCREEN-02**: MainMenu owns oneliner state, composer/hide modal requests, oneliner task results, and menu navigation through the new update loop.
 - [ ] **SCREEN-03**: BoardList and ThreadList own board/thread directory state, subscription feedback, selection state, navigation effects, and async load results through the new update loop.
 - [ ] **SCREEN-04**: PostReader, PostComposer, and NewThread own post loading, read-pointer flush requests, composer drafts, board picker state, reply/new-thread submission results, and navigation through the new update loop.
@@ -86,7 +86,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | STATE-02 | Phase 39 | Pending |
 | STATE-03 | Phase 39 | Pending |
 | STATE-04 | Phase 39 | Pending |
-| SCREEN-01 | Phase 35 | Pending |
+| SCREEN-01 | Phase 35 | Complete |
 | SCREEN-02 | Phase 35 | Pending |
 | SCREEN-03 | Phase 36 | Pending |
 | SCREEN-04 | Phase 37 | Pending |
