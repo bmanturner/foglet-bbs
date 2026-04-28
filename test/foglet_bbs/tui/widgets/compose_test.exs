@@ -236,8 +236,22 @@ defmodule Foglet.TUI.Widgets.ComposeTest do
       assert Compose.render_input(input_st, true, theme) |> flatten_text() == "he█llo"
     end
 
-    test "focused CJK input inserts cursor between full-width glyphs", %{theme: theme} do
-      input_st = input_with("漢字", {0, 2})
+    test "focused CJK input inserts cursor using grapheme cursor positions", %{theme: theme} do
+      {:ok, input_st} =
+        MultiLineInput.init(%{
+          value: "",
+          placeholder: "",
+          width: 40,
+          height: 5,
+          wrap: :none,
+          focused: true
+        })
+
+      {:noreply, input_st, nil} = MultiLineInput.update({:input, ?漢}, input_st)
+      {:noreply, input_st, nil} = MultiLineInput.update({:input, ?字}, input_st)
+
+      assert input_st.cursor_pos == {0, 2}
+      input_st = %{input_st | cursor_pos: {0, 1}}
 
       assert Compose.render_input(input_st, true, theme) |> flatten_text() == "漢█字"
     end

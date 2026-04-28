@@ -147,7 +147,7 @@ defmodule Foglet.TUI.Widgets.Compose do
   defp render_logical_line(line, cursor?, cursor_col, width) do
     rendered =
       if cursor? do
-        {before, after_} = TextWidth.split_at(line, cursor_col)
+        {before, after_} = String.split_at(line, cursor_col)
         "#{before}\u2588#{after_}"
       else
         line
