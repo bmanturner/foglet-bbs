@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.4
 milestone_name: milestone
 status: executing
-stopped_at: Phase 32 context gathered (assumptions mode)
-last_updated: "2026-04-28T02:50:46.432Z"
+stopped_at: Completed 32-02-oneliners-artifact-PLAN.md
+last_updated: "2026-04-28T03:04:13.514Z"
 last_activity: 2026-04-28
 progress:
   total_phases: 8
   completed_phases: 5
   total_plans: 28
-  completed_plans: 26
-  percent: 93
+  completed_plans: 27
+  percent: 96
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-26)
 ## Current Position
 
 Phase: 32 (main-menu-chrome-polish) — EXECUTING
-Plan: 2 of 3
+Plan: 3 of 3
 Status: Ready to execute
 Last activity: 2026-04-28
 
@@ -64,6 +64,7 @@ Last activity: 2026-04-28
 | Phase 26 P03 | 6min | 2 tasks | 5 files |
 | Phase 26 P04 | 6min | 3 tasks | 7 files |
 | Phase 32 P01 | 10min | 3 tasks | 1 files |
+| Phase 32 P02 | 7min | - tasks | - files |
 
 ## Accumulated Context
 
@@ -106,6 +107,7 @@ Recent decisions affecting current work:
 - [Phase ?]: [Phase 32 Plan 01]: Raxol :panel requires explicit width/height attrs (set to sentinel 9999 to clamp to available_space) — without these the panel measures to children + double_border and shrinks below its allocated split-pane size.
 - [Phase ?]: [Phase 32 Plan 01]: Raxol View DSL row macro requires an explicit opts argument (row [], do: ...) — bare row do ... end matches the row/1 function and silently drops do-block contents.
 - [Phase ?]: [Phase 32 Plan 01]: Phase 32 Oneliners |||| artifact root cause is in vendor/raxol/.../split_pane.ex:235 — build_divider/4 paints String.duplicate('|', height) horizontally on a single row instead of as a vertical column. Plan 32-02 owns the fix.
+- [Phase 32]: Plan 32-02: SplitPane horizontal divider painting bug fixed in vendor/raxol — build_divider(:horizontal) now emits per-row :text elements instead of a single horizontally-painted text node. Added optional :divider_char attr (default pipe-character); main_menu passes space so its bordered children supply the visual gap. Repairs Oneliners pipe-artifact at all canonical widths. — split_pane has zero other consumers in the Foglet codebase; D-04 escape clause and threat model T-32-05 explicitly authorize a minimal vendor patch when the root cause is unambiguously in vendor/raxol. The painting orientation defect could not be repaired at the screen level.
 
 ### Pending Todos
 
@@ -152,6 +154,6 @@ Items acknowledged and deferred at v1.3 close on 2026-04-26:
 
 ## Session Continuity
 
-Last session: 2026-04-28T02:50:46.427Z
-Stopped at: Phase 32 context gathered (assumptions mode)
+Last session: 2026-04-28T03:04:13.509Z
+Stopped at: Completed 32-02-oneliners-artifact-PLAN.md
 Resume file: None

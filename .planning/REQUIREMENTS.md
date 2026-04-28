@@ -59,7 +59,7 @@ Requirements for the v1.4 stabilization milestone. Every requirement traces to o
 ### Main Menu Chrome Polish
 
 - [x] **MENU-01**: Main Menu Navigation and Oneliners panels render their titles embedded in the box top border (e.g. `┌─ Navigation ─┐`) rather than as the first row of body content (Main Menu #1).
-- [ ] **MENU-02**: The Oneliners panel renders no `||||` or repeated-glyph artifacts on its top border at any supported terminal width (Main Menu #2).
+- [x] **MENU-02**: The Oneliners panel renders no `||||` or repeated-glyph artifacts on its top border at any supported terminal width (Main Menu #2).
 - [x] **MENU-03**: Main Menu navigation rows render the bracketed key glyph (`[B]`, `[A]`, etc.) in the theme accent slot while the label remains in the primary slot, with no hardcoded colors (Main Menu #4).
 - [x] **MENU-04**: Main Menu navigation rows are indented one column from the box left border, with the key column shifted left by one column so the row alignment matches the design intent (Main Menu #5).
 - [x] **MENU-05**: Both Navigation and Oneliners panels route every color decision through `Foglet.TUI.Theme` slots — no hardcoded color atoms anywhere in `main_menu.ex` (Main Menu #6, Main Menu #7).
@@ -165,7 +165,7 @@ Which phases cover which requirements. Filled by the roadmapper.
 | AUTH-03 | Phase 31 | Pending |
 | AUTH-04 | Phase 31 | Pending |
 | MENU-01 | Phase 32 | Complete |
-| MENU-02 | Phase 32 | Pending |
+| MENU-02 | Phase 32 | Complete |
 | MENU-03 | Phase 32 | Complete |
 | MENU-04 | Phase 32 | Complete |
 | MENU-05 | Phase 32 | Complete |
