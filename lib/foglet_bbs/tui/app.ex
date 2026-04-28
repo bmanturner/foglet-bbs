@@ -184,6 +184,13 @@ defmodule Foglet.TUI.App do
     {%{state | current_user: user}, []}
   end
 
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :session,
+        payload: {:dispatch, message}
+      }) do
+    do_update(message, state)
+  end
+
   def apply_effect(%__MODULE__{session_pid: session_pid} = state, %Effect{
         type: :session,
         payload: message
@@ -273,7 +280,7 @@ defmodule Foglet.TUI.App do
         session_pid: session_pid,
         terminal_size: terminal_size
       }
-      |> maybe_load_initial_oneliners()
+      |> maybe_init_initial_screen_state()
 
     {:ok, state}
   end
@@ -659,14 +666,15 @@ defmodule Foglet.TUI.App do
 
     task =
       Foglet.TUI.Command.task(:load_oneliners, fn ->
-        {:oneliners_loaded, oneliners_mod.list_recent_visible(@oneliner_limit)}
+        {:screen_task_result, :main_menu, :load_oneliners,
+         {:ok, oneliners_mod.list_recent_visible(@oneliner_limit)}}
       end)
 
     {state, [task]}
   end
 
   defp do_update({:oneliners_loaded, entries}, state) when is_list(entries) do
-    {%{state | recent_oneliners: entries}, []}
+    route_screen_update(state, :main_menu, {:task_result, :load_oneliners, {:ok, entries}})
   end
 
   defp do_update({:load_moderation_workspace}, state) do
@@ -1313,10 +1321,27 @@ defmodule Foglet.TUI.App do
   defp maybe_load_initial_oneliners(%{current_screen: :main_menu, current_user: user} = state)
        when not is_nil(user) do
     oneliners_mod = domain_module(state, :oneliners)
-    %{state | recent_oneliners: oneliners_mod.list_recent_visible(@oneliner_limit)}
+    entries = oneliners_mod.list_recent_visible(@oneliner_limit)
+
+    main_menu_state =
+      state
+      |> build_context()
+      |> Screens.MainMenu.init()
+      |> Screens.MainMenu.State.from_entries(entries)
+
+    state
+    |> Map.put(:recent_oneliners, entries)
+    |> put_screen_state(:main_menu, main_menu_state)
   end
 
   defp maybe_load_initial_oneliners(state), do: state
+
+  defp maybe_init_initial_screen_state(%{current_screen: :main_menu} = state),
+    do: maybe_load_initial_oneliners(state)
+
+  defp maybe_init_initial_screen_state(%__MODULE__{} = state) do
+    init_route_screen_state(state, state.current_screen, state.route_params || %{})
+  end
 
   defp stash_oneliner_submit(payload) do
     Process.put({__MODULE__, :pending_oneliner_submit}, payload)
@@ -1337,6 +1362,12 @@ defmodule Foglet.TUI.App do
   defp take_hide_oneliner_submit do
     payload = Process.get({__MODULE__, :pending_hide_oneliner_submit})
     Process.delete({__MODULE__, :pending_hide_oneliner_submit})
+    payload
+  end
+
+  defp take_screen_modal_submit do
+    payload = Process.get({__MODULE__, :pending_screen_modal_submit})
+    Process.delete({__MODULE__, :pending_screen_modal_submit})
     payload
   end
 
@@ -1811,19 +1842,23 @@ defmodule Foglet.TUI.App do
        ) do
     Process.delete({__MODULE__, :pending_oneliner_submit})
     Process.delete({__MODULE__, :pending_hide_oneliner_submit})
+    Process.delete({__MODULE__, :pending_screen_modal_submit})
     {new_form, action} = ModalForm.handle_event(key, form)
     state = %{state | modal: %{state.modal | message: new_form}}
 
     case action do
       :submitted ->
-        case {take_hide_oneliner_submit(), take_oneliner_submit()} do
-          {payload, _oneliner_payload} when not is_nil(payload) ->
+        case {take_screen_modal_submit(), take_hide_oneliner_submit(), take_oneliner_submit()} do
+          {{screen_key, kind, payload}, _hide_payload, _oneliner_payload} ->
+            route_screen_update(state, screen_key, {:modal_submit, kind, payload})
+
+          {nil, payload, _oneliner_payload} when not is_nil(payload) ->
             do_update({:submit_hide_oneliner, payload}, state)
 
-          {nil, payload} when not is_nil(payload) ->
+          {nil, nil, payload} when not is_nil(payload) ->
             do_update({:submit_oneliner, payload}, state)
 
-          {nil, nil} ->
+          {nil, nil, nil} ->
             {state, []}
         end
 

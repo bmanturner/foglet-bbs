@@ -264,7 +264,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {local_state, [Effect.open_modal(oneliner_composer_modal(local_state.oneliner_errors))]}
   end
 
-  def update({:modal_submit, :hide_oneliner, %{reason: reason}}, local_state, %Context{} = context) do
+  def update(
+        {:modal_submit, :hide_oneliner, %{reason: reason}},
+        local_state,
+        %Context{} = context
+      ) do
     local_state = normalize_state(local_state, context)
     reason = reason |> to_string() |> String.trim()
 
@@ -307,6 +311,64 @@ defmodule Foglet.TUI.Screens.MainMenu do
       |> State.put_errors(errors)
 
     {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+  end
+
+  def update({:task_result, :submit_oneliner, result}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    case unwrap_task_result(result) do
+      {:ok, _entry} ->
+        {%{State.clear_errors(local_state) | oneliner_status: :loading},
+         [Effect.dismiss_modal(), load_oneliners_task_effect(context)]}
+
+      {:error, :same_user_latest_visible} ->
+        errors = %{base: "Let someone else post before posting again."}
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(oneliner_composer_modal(errors))]}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        errors = body_changeset_errors(changeset)
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(oneliner_composer_modal(errors))]}
+
+      {:error, reason} ->
+        errors = %{base: "Unable to post oneliner: #{inspect(reason)}"}
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(oneliner_composer_modal(errors))]}
+    end
+  end
+
+  def update({:task_result, :submit_hide_oneliner, result}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    case unwrap_task_result(result) do
+      {:ok, hidden} ->
+        hidden_id = entry_id(hidden) || local_state.pending_hide_oneliner_id
+
+        local_state =
+          local_state
+          |> remove_oneliner(hidden_id)
+          |> State.clear_pending_hide()
+          |> State.clear_errors()
+          |> Map.put(:oneliner_status, :idle)
+
+        {local_state, [Effect.dismiss_modal()]}
+
+      {:error, :forbidden} ->
+        errors = %{base: "You are not allowed to hide this oneliner."}
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        errors = changeset_errors(changeset)
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+
+      {:error, reason} ->
+        errors = %{base: "Unable to hide oneliner: #{inspect(reason)}"}
+        local_state = State.put_errors(local_state, errors)
+        {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
+    end
   end
 
   def update(_message, local_state, %Context{} = context) do
@@ -400,7 +462,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
             placeholder: "120 chars max"
           }
         ],
-        on_submit: fn payload -> {:screen_modal_submit, :main_menu, :oneliner_composer, payload} end,
+        on_submit: &stash_modal_submit(:oneliner_composer, &1),
         on_cancel: fn -> :dismiss_modal end,
         show_footer: true
       )
@@ -422,7 +484,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
             max_length: 240
           }
         ],
-        on_submit: fn payload -> {:screen_modal_submit, :main_menu, :hide_oneliner, payload} end,
+        on_submit: &stash_modal_submit(:hide_oneliner, &1),
         on_cancel: fn -> :dismiss_modal end,
         show_footer: true
       )
@@ -457,6 +519,14 @@ defmodule Foglet.TUI.Screens.MainMenu do
     Effect.session({:dispatch, {:load_moderation_workspace}})
   end
 
+  defp load_oneliners_task_effect(%Context{} = context) do
+    oneliners_mod = domain_module(context, :oneliners)
+
+    Effect.task(:load_oneliners, :main_menu, fn ->
+      oneliners_mod.list_recent_visible(@oneliner_display_limit)
+    end)
+  end
+
   defp domain_module(%Context{domain: domain}, key) when is_map(domain) do
     case Map.get(domain, key) do
       module when is_atom(module) and not is_nil(module) -> module
@@ -465,6 +535,50 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
+
+  defp stash_modal_submit(kind, payload) do
+    Process.put({Foglet.TUI.App, :pending_screen_modal_submit}, {:main_menu, kind, payload})
+    :ok
+  end
+
+  defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
+  defp unwrap_task_result({:ok, {:error, reason}}), do: {:error, reason}
+  defp unwrap_task_result({:ok, value}), do: {:ok, value}
+  defp unwrap_task_result({:error, reason}), do: {:error, reason}
+  defp unwrap_task_result(other), do: {:error, other}
+
+  defp remove_oneliner(%State{} = state, hidden_id) do
+    recent_oneliners =
+      Enum.reject(state.recent_oneliners || [], fn entry ->
+        entry_id(entry) == hidden_id
+      end)
+
+    state
+    |> State.from_entries(recent_oneliners)
+    |> State.clamp_selection()
+  end
+
+  defp entry_id(%{} = entry), do: Map.get(entry, :id) || Map.get(entry, "id")
+  defp entry_id(_other), do: nil
+
+  defp body_changeset_errors(%Ecto.Changeset{} = changeset) do
+    errors = changeset_errors(changeset)
+
+    if Map.has_key?(errors, :body) do
+      %{body: "Enter 1-120 characters."}
+    else
+      %{base: "Enter 1-120 characters."}
+    end
+  end
+
+  defp changeset_errors(%Ecto.Changeset{} = changeset) do
+    Ecto.Changeset.traverse_errors(changeset, fn {message, opts} ->
+      Enum.reduce(opts, message, fn {key, value}, acc ->
+        String.replace(acc, "%{#{key}}", to_string(value))
+      end)
+    end)
+    |> Enum.into(%{}, fn {field, messages} -> {field, Enum.join(messages, ", ")} end)
+  end
 
   defp visible_destination_entries(user) do
     @main_menu_commands

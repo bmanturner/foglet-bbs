@@ -86,7 +86,11 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   defp handle_key_result(state, key) do
-    MainMenu.update({:key, %{key: :char, char: key}}, local_from_app(state), context_from_app(state))
+    MainMenu.update(
+      {:key, %{key: :char, char: key}},
+      local_from_app(state),
+      context_from_app(state)
+    )
   end
 
   defp handle_special_key_result(state, key) do
@@ -203,10 +207,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
       assert clamped_down_state.selected_oneliner_index == 1
 
-      {up_state, []} = MainMenu.update({:key, %{key: :up}}, clamped_down_state, context_from_app(state))
+      {up_state, []} =
+        MainMenu.update({:key, %{key: :up}}, clamped_down_state, context_from_app(state))
+
       assert up_state.selected_oneliner_index == 0
 
-      {clamped_up_state, []} = MainMenu.update({:key, %{key: :up}}, up_state, context_from_app(state))
+      {clamped_up_state, []} =
+        MainMenu.update({:key, %{key: :up}}, up_state, context_from_app(state))
+
       assert clamped_up_state.selected_oneliner_index == 0
     end
 
@@ -255,11 +263,23 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
         {local_state, effects} = handle_key_result(hideable_state, "H")
         assert local_state.pending_hide_oneliner_id == "ol1"
-        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}}] = effects
+
+        assert [
+                 %Effect{
+                   type: :modal,
+                   payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}
+                 }
+               ] = effects
 
         {local_state, effects} = handle_key_result(hideable_state, "h")
         assert local_state.pending_hide_oneliner_id == "ol1"
-        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}}] = effects
+
+        assert [
+                 %Effect{
+                   type: :modal,
+                   payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}
+                 }
+               ] = effects
 
         missing_id_state =
           role
@@ -343,10 +363,85 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         )
 
       assert local_state.oneliner_errors.reason == "Reason is required."
+
       assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}}] =
                effects
 
       refute_received {:hide_entry, _user, _entry_id, _reason}
+    end
+
+    test "create success dismisses composer and requests oneliner refresh", %{state: state} do
+      local = local_from_app(state)
+
+      {local_state, effects} =
+        MainMenu.update(
+          {:task_result, :submit_oneliner, {:ok, {:ok, %{id: "ol2"}}}},
+          local,
+          context_from_app(state)
+        )
+
+      assert local_state.oneliner_status == :loading
+      assert %Effect{type: :modal, payload: :dismiss} in effects
+
+      assert Enum.any?(
+               effects,
+               &match?(%Effect{type: :task, payload: %{op: :load_oneliners}}, &1)
+             )
+    end
+
+    test "create duplicate user error stays in local form errors", %{state: state} do
+      {local_state, effects} =
+        MainMenu.update(
+          {:task_result, :submit_oneliner, {:ok, {:error, :same_user_latest_visible}}},
+          local_from_app(state),
+          context_from_app(state)
+        )
+
+      assert local_state.oneliner_errors.base == "Let someone else post before posting again."
+
+      assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Post Oneliner"}}}] =
+               effects
+    end
+
+    test "hide success removes hidden row and clears pending target", %{state: state} do
+      local =
+        state
+        |> with_oneliners([
+          oneliner("alice", "hideable", %{id: "ol1"}),
+          oneliner("bob", "keep", %{id: "ol2"})
+        ])
+        |> with_selected_oneliner(1)
+        |> local_from_app()
+        |> MainMenuState.set_pending_hide("ol1")
+
+      {local_state, effects} =
+        MainMenu.update(
+          {:task_result, :submit_hide_oneliner, {:ok, {:ok, %{id: "ol1"}}}},
+          local,
+          context_from_app(state)
+        )
+
+      assert [%{id: "ol2"}] = local_state.recent_oneliners
+      assert local_state.pending_hide_oneliner_id == nil
+      assert local_state.selected_oneliner_index == 0
+      assert [%Effect{type: :modal, payload: :dismiss}] = effects
+    end
+
+    test "hide forbidden stores local form error and keeps pending target", %{state: state} do
+      local = local_from_app(state) |> MainMenuState.set_pending_hide("ol1")
+
+      {local_state, effects} =
+        MainMenu.update(
+          {:task_result, :submit_hide_oneliner, {:ok, {:error, :forbidden}}},
+          local,
+          context_from_app(state)
+        )
+
+      assert local_state.pending_hide_oneliner_id == "ol1"
+      assert local_state.oneliner_errors.base == "You are not allowed to hide this oneliner."
+
+      assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Hide Oneliner"}}}] =
+               effects
     end
   end
 
@@ -419,11 +514,15 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   test "'O'/'o' emits open oneliner composer command", %{state: state} do
     {local, effects} = handle_key_result(state, "O")
     assert local == local_from_app(state)
-    assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Post Oneliner"}}}] = effects
+
+    assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Post Oneliner"}}}] =
+             effects
 
     {local, effects} = handle_key_result(state, "o")
     assert local == local_from_app(state)
-    assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Post Oneliner"}}}] = effects
+
+    assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{title: "Post Oneliner"}}}] =
+             effects
   end
 
   test "unknown key returns :no_match", %{state: state} do
@@ -476,19 +575,35 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "'A'/'a' navigates to :account and seeds screen_state" do
       state = build_state(:user)
       {_local, effects} = handle_key_result(state, "A")
-      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :account}}, &1))
+
+      assert Enum.any?(
+               effects,
+               &match?(%Effect{type: :navigate, payload: %{screen: :account}}, &1)
+             )
 
       {_local, effects} = handle_key_result(state, "a")
-      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :account}}, &1))
+
+      assert Enum.any?(
+               effects,
+               &match?(%Effect{type: :navigate, payload: %{screen: :account}}, &1)
+             )
     end
 
     test "'M'/'m' navigates to :moderation for role :mod" do
       state = build_state(:mod)
       {_local, effects} = handle_key_result(state, "M")
-      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :moderation}}, &1))
+
+      assert Enum.any?(
+               effects,
+               &match?(%Effect{type: :navigate, payload: %{screen: :moderation}}, &1)
+             )
 
       {_local, effects} = handle_key_result(state, "m")
-      assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: :moderation}}, &1))
+
+      assert Enum.any?(
+               effects,
+               &match?(%Effect{type: :navigate, payload: %{screen: :moderation}}, &1)
+             )
     end
 
     test "'M'/'m' returns :no_match for role :user (key bound guarded per D-02)" do

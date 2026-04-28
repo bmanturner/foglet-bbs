@@ -6,6 +6,7 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
+  alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -60,7 +61,10 @@ defmodule Foglet.TUI.AppTest do
 
       assert state.current_screen == :main_menu
       assert state.current_user == user
-      assert state.recent_oneliners == [%{id: "ol1", body: "hello"}]
+
+      assert %MainMenuState{recent_oneliners: [%{id: "ol1", body: "hello"}]} =
+               App.screen_state_for(state, :main_menu)
+
       assert_received {:list_recent_visible, 5}
     end
 
@@ -86,7 +90,7 @@ defmodule Foglet.TUI.AppTest do
 
       assert state.current_screen == :verify
       assert state.current_user == user
-      assert state.recent_oneliners == []
+      assert App.screen_state_for(state, :main_menu) == nil
     end
 
     test "authenticated user can trigger bounded oneliner load command" do
@@ -103,7 +107,10 @@ defmodule Foglet.TUI.AppTest do
       {state, cmds} = App.update({:load_oneliners}, state)
       assert state.current_screen == :main_menu
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-      assert {:oneliners_loaded, [%{id: "ol1"}]} = task.()
+
+      assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} =
+               task.()
+
       assert_received {:list_recent_visible, 5}
     end
 
@@ -405,17 +412,21 @@ defmodule Foglet.TUI.AppTest do
       %{state: state, user: user}
     end
 
-    test "{:oneliners_loaded, entries} stores recent_oneliners", %{state: state} do
+    test "{:screen_task_result, :main_menu, :load_oneliners, result} stores MainMenu local rows",
+         %{state: state} do
       entries = [%{id: "ol1", body: "first"}]
 
-      {new_state, cmds} = App.update({:oneliners_loaded, entries}, state)
+      {new_state, cmds} =
+        App.update({:screen_task_result, :main_menu, :load_oneliners, {:ok, entries}}, state)
 
-      assert new_state.recent_oneliners == entries
+      assert %MainMenuState{recent_oneliners: ^entries} =
+               App.screen_state_for(new_state, :main_menu)
+
       assert cmds == []
     end
 
-    test "{:open_oneliner_composer} opens focused Post Oneliner form", %{state: state} do
-      {new_state, cmds} = App.update({:open_oneliner_composer}, state)
+    test "pressing O opens focused Post Oneliner form through MainMenu effect", %{state: state} do
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "O"}}, state)
 
       assert cmds == []
       assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
@@ -426,7 +437,7 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "composer cancel clears modal and stays on main menu", %{state: state} do
-      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+      {with_modal, []} = App.update({:key, %{key: :char, char: "O"}}, state)
 
       {new_state, cmds} = App.update({:key, %{key: :escape}}, with_modal)
 
@@ -441,34 +452,41 @@ defmodule Foglet.TUI.AppTest do
       user: user
     } do
       Process.put(:fake_oneliners_create_result, {:ok, %{id: "ol2", body: "ship it", user: user}})
-      {with_modal, []} = App.update({:open_oneliner_composer}, state)
 
-      {submitting, submit_cmds} = App.update({:submit_oneliner, %{body: "ship it"}}, with_modal)
+      {submitting, submit_cmds} =
+        App.update(
+          {:screen_task_result, :main_menu, :submit_oneliner,
+           {:ok, {:ok, %{id: "ol2", body: "ship it"}}}},
+          state
+        )
 
-      assert submitting.modal == with_modal.modal
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: submit_task}] = submit_cmds
-      assert {:oneliner_created, {:ok, %{id: "ol2"}}} = submit_task.()
-      assert_received {:create_entry, ^user, %{body: "ship it"}}
+      assert submitting.current_screen == :main_menu
+      assert submitting.modal == nil
 
-      {new_state, refresh_cmds} =
-        App.update({:oneliner_created, {:ok, %{id: "ol2", body: "ship it"}}}, submitting)
+      assert %MainMenuState{oneliner_status: :loading} =
+               App.screen_state_for(submitting, :main_menu)
 
-      assert new_state.modal == nil
-      assert new_state.current_screen == :main_menu
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = refresh_cmds
-      refute inspect(App.view(new_state), limit: :infinity) =~ "Hide oneliner"
-      refute inspect(App.view(new_state), limit: :infinity) =~ "hidden_reason"
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: refresh_task}] = submit_cmds
+      assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, _entries}} = refresh_task.()
     end
 
     test "same_user_latest_visible keeps composer focused with visible base error", %{
       state: state
     } do
-      {with_modal, []} = App.update({:open_oneliner_composer}, state)
-
       {new_state, cmds} =
-        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, with_modal)
+        App.update(
+          {:screen_task_result, :main_menu, :submit_oneliner,
+           {:ok, {:error, :same_user_latest_visible}}},
+          state
+        )
 
       assert cmds == []
+
+      assert %MainMenuState{
+               oneliner_errors: %{base: "Let someone else post before posting again."}
+             } =
+               App.screen_state_for(new_state, :main_menu)
+
       assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
       assert form.errors.base == "Let someone else post before posting again."
 
@@ -493,13 +511,14 @@ defmodule Foglet.TUI.AppTest do
             })
         })
 
-      state = %{
-        state
-        | recent_oneliners: [
+      state =
+        App.put_screen_state(state, :main_menu, %MainMenuState{
+          recent_oneliners: [
             %{id: "ol1", body: "abuse", user: %{handle: "bad"}},
             %{id: "ol2", body: "hello", user: %{handle: "good"}}
-          ]
-      }
+          ],
+          selected_oneliner_index: 0
+        })
 
       %{state: state, user: user}
     end
@@ -549,10 +568,12 @@ defmodule Foglet.TUI.AppTest do
     test "{:open_hide_oneliner_modal, entry_id} opens focused required reason form", %{
       state: state
     } do
-      {new_state, cmds} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+      {new_state, cmds} = App.update({:key, %{key: :char, char: "H"}}, state)
 
       assert cmds == []
-      assert new_state.pending_hide_oneliner_id == "ol1"
+
+      assert %MainMenuState{pending_hide_oneliner_id: "ol1"} =
+               App.screen_state_for(new_state, :main_menu)
 
       assert %Foglet.TUI.Modal{type: :form, title: "Hide Oneliner", message: %Form{} = form} =
                new_state.modal
@@ -566,58 +587,85 @@ defmodule Foglet.TUI.AppTest do
       assert inspect(App.view(new_state), limit: :infinity) =~ "Hide Oneliner"
     end
 
-    test "submitting blank hide reason keeps modal focused and emits no hide task", %{
+    test "hide task validation error keeps modal focused in MainMenu local state", %{
       state: state
     } do
-      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
-      {new_state, cmds} = App.update({:submit_hide_oneliner, %{reason: "   "}}, with_modal)
+      {with_modal, []} = App.update({:key, %{key: :char, char: "H"}}, state)
+
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :main_menu, :submit_hide_oneliner,
+           {:ok, {:error, %Ecto.Changeset{}}}},
+          with_modal
+        )
 
       assert cmds == []
       assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
-      assert form.errors.reason == "Reason is required."
-      assert new_state.pending_hide_oneliner_id == "ol1"
+      assert form.errors == %{}
+
+      assert %MainMenuState{pending_hide_oneliner_id: "ol1"} =
+               App.screen_state_for(new_state, :main_menu)
+
       refute_received {:hide_entry, _actor, _target, _reason}
     end
 
-    test "valid hide submit calls actor-aware oneliner domain API", %{state: state, user: user} do
+    test "hide success routes through MainMenu local state", %{state: state, user: _user} do
       Process.put(:fake_oneliners_hide_result, {:ok, %{id: "ol1", hidden?: true}})
-      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+      {with_modal, []} = App.update({:key, %{key: :char, char: "H"}}, state)
 
       {submitting, cmds} =
-        App.update({:submit_hide_oneliner, %{reason: "  abusive line  "}}, with_modal)
+        App.update(
+          {:screen_task_result, :main_menu, :submit_hide_oneliner, {:ok, {:ok, %{id: "ol1"}}}},
+          with_modal
+        )
 
-      assert submitting.modal == with_modal.modal
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-      assert {:oneliner_hidden, {:ok, %{id: "ol1"}}} = task.()
-      assert_received {:hide_entry, ^user, "ol1", "abusive line"}
+      assert submitting.modal == nil
+      assert cmds == []
+
+      assert %MainMenuState{pending_hide_oneliner_id: nil} =
+               App.screen_state_for(submitting, :main_menu)
     end
 
     test "{:oneliner_hidden, {:ok, hidden}} clears modal and removes row immediately", %{
       state: state
     } do
-      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+      {with_modal, []} = App.update({:key, %{key: :char, char: "H"}}, state)
 
-      {new_state, cmds} = App.update({:oneliner_hidden, {:ok, %{id: "ol1"}}}, with_modal)
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :main_menu, :submit_hide_oneliner, {:ok, {:ok, %{id: "ol1"}}}},
+          with_modal
+        )
 
       assert cmds == []
       assert new_state.modal == nil
-      assert new_state.pending_hide_oneliner_id == nil
-      refute Enum.any?(new_state.recent_oneliners, &(&1.id == "ol1"))
-      assert Enum.any?(new_state.recent_oneliners, &(&1.id == "ol2"))
+
+      assert %MainMenuState{pending_hide_oneliner_id: nil, recent_oneliners: rows} =
+               App.screen_state_for(new_state, :main_menu)
+
+      refute Enum.any?(rows, &(&1.id == "ol1"))
+      assert Enum.any?(rows, &(&1.id == "ol2"))
     end
 
     test "{:oneliner_hidden, {:error, :forbidden}} keeps modal error and visible row", %{
       state: state
     } do
-      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol1"}, state)
+      {with_modal, []} = App.update({:key, %{key: :char, char: "H"}}, state)
 
-      {new_state, cmds} = App.update({:oneliner_hidden, {:error, :forbidden}}, with_modal)
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :main_menu, :submit_hide_oneliner, {:ok, {:error, :forbidden}}},
+          with_modal
+        )
 
       assert cmds == []
       assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
       assert form.errors.base =~ "not allowed"
-      assert new_state.pending_hide_oneliner_id == "ol1"
-      assert Enum.any?(new_state.recent_oneliners, &(&1.id == "ol1"))
+
+      assert %MainMenuState{pending_hide_oneliner_id: "ol1", recent_oneliners: rows} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert Enum.any?(rows, &(&1.id == "ol1"))
     end
   end
 

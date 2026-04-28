@@ -71,7 +71,10 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
   @doc "Clamps the selected row against the current oneliner list."
   @spec clamp_selection(t()) :: t()
   def clamp_selection(%__MODULE__{} = state) do
-    %{state | selected_oneliner_index: clamp(state.selected_oneliner_index, state.recent_oneliners)}
+    %{
+      state
+      | selected_oneliner_index: clamp(state.selected_oneliner_index, state.recent_oneliners)
+    }
   end
 
   defp clamp(_index, []), do: 0
