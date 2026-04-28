@@ -5,7 +5,11 @@ defmodule Foglet.TUI.Screens.Verify do
   State is local to this screen and owned by
   `Foglet.TUI.Screens.Verify.State`. App stores it, routes messages, and
   interprets effects; verification submit/resend work is requested through
-  task effects and completed through `update/3` task results.
+  task effects and completed through `update/3` task results
+  (Phase 35 D-11/D-13).
+
+  Verify owns the code buffer, attempt cooldown, submit/resend outcomes, and
+  verification routing decisions through `init/1`, `update/3`, and `render/2`.
 
   The 6-character `[ABC___]` buffer remains hand-rolled per inherited 07 D-02:
   the shared input widget cannot reproduce the slot visualization without a

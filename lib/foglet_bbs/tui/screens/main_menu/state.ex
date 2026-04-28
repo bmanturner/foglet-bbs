@@ -3,8 +3,16 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
   Screen-local state for the authenticated Main Menu.
 
   MainMenu owns oneliner rows, selection, pending hide targets, and local
-  create/hide/load lifecycle errors. `Foglet.TUI.App` remains the runtime
-  effect interpreter; it does not own MainMenu oneliner state.
+  create/hide/load lifecycle errors through `init/1`, `update/3`, and
+  `render/2` (Phase 35 D-11/D-13). `Foglet.TUI.App` remains only the
+  runtime/effect interpreter; it does not own MainMenu oneliner state.
+
+  Fields:
+    * `recent_oneliners` — loaded rows rendered in the home panel.
+    * `selected_oneliner_index` — row selected for keyboard navigation/hide.
+    * `pending_hide_oneliner_id` — target carried from hide request to submit.
+    * `oneliner_status` — load/create/hide lifecycle state.
+    * `oneliner_errors` — reducer-visible form and task errors.
   """
 
   alias Foglet.TUI.Context

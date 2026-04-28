@@ -9,8 +9,9 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   MainMenu owns screen-local oneliner state in
   `Foglet.TUI.Screens.MainMenu.State`: recent rows, selection, pending hide
-  targets, and local oneliner lifecycle errors. App remains the runtime/effect
-  interpreter.
+  targets, composer/hide requests, task results, and local oneliner lifecycle
+  errors through `init/1`, `update/3`, and `render/2` (Phase 35 D-11/D-13).
+  App remains the runtime/effect interpreter.
 
   Menu visibility is NOT authorization (Pitfall 3) — real actor-aware authz
   arrives in Phase 1. Phase 0 shells are all read-only placeholders.

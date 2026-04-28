@@ -6,7 +6,12 @@ defmodule Foglet.TUI.Screens.Login do
     * registration_mode == "disabled" → hides [R] Register (D-06)
     * any other value → shows all three options
 
-  Sub-states (stored in state.screen_state[:login]):
+  Login owns menu, form, reset request, reset-token consumption, and
+  login/reset task outcomes through `init/1`, `update/3`, and `render/2`
+  (Phase 35 D-11/D-13). App stores the reducer state and interprets emitted
+  runtime effects; it does not own Login local flow.
+
+  Sub-states:
     * :menu          — showing [L]/[R]/[F]/[T] menu as allowed by config
     * :login_form    — collecting handle+password
     * :reset_request — collecting handle/email for reset delivery

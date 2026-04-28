@@ -9,7 +9,8 @@ defmodule Foglet.TUI.Screens.Register do
   State is local to this screen and owned by
   `Foglet.TUI.Screens.Register.State`. App stores it, routes messages, and
   interprets effects; registration and verification delivery work is requested
-  through task effects and completed through `update/3` task results.
+  through task effects and completed through `update/3` task results
+  (Phase 35 D-11/D-13).
 
   Terminal outcomes:
     * "open" / "invite_only" success → transition to :verify with a built code
@@ -17,7 +18,9 @@ defmodule Foglet.TUI.Screens.Register do
 
   SSH keys are NEVER collected here (D-24).
 
-  State shape is owned by `Foglet.TUI.Screens.Register.State`.
+  Register owns invite and combined-form local state, registration outcomes,
+  verification-routing decisions, and pending-approval termination requests
+  through `init/1`, `update/3`, and `render/2`.
   """
 
   alias Foglet.{Accounts, Config}
