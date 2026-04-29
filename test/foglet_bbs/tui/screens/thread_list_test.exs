@@ -431,9 +431,33 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   end
 
   describe "subscriptions/2 export (Phase 39 R6, D-08)" do
-    @tag :phase39_target
     test "module exports subscriptions/2" do
       assert function_exported?(Foglet.TUI.Screens.ThreadList, :subscriptions, 2)
+    end
+
+    test "returns board topic from local state" do
+      state = %Foglet.TUI.Screens.ThreadList.State{board_id: "b-77"}
+      ctx = %Foglet.TUI.Context{route_params: %{}}
+
+      assert Foglet.TUI.Screens.ThreadList.subscriptions(state, ctx) == ["board:b-77"]
+    end
+
+    test "returns board topic from atom-key route params when local state is empty" do
+      ctx = %Foglet.TUI.Context{route_params: %{board_id: "b-route"}}
+
+      assert Foglet.TUI.Screens.ThreadList.subscriptions(nil, ctx) == ["board:b-route"]
+    end
+
+    test "returns board topic from string-key route params when local state is empty" do
+      ctx = %Foglet.TUI.Context{route_params: %{"board_id" => "b-string"}}
+
+      assert Foglet.TUI.Screens.ThreadList.subscriptions(nil, ctx) == ["board:b-string"]
+    end
+
+    test "returns [] when no board id is available" do
+      ctx = %Foglet.TUI.Context{route_params: %{}}
+
+      assert Foglet.TUI.Screens.ThreadList.subscriptions(nil, ctx) == []
     end
   end
 end
