@@ -478,7 +478,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
          %__MODULE__{modal_kind: kind} = state
        )
        when kind in [:create_category, :edit_category] do
-    form = ModalForm.set_errors(state.modal, %{display_order: "is invalid"})
+    form = set_modal_errors(state.modal, %{display_order: "is invalid"})
     {%{state | modal: form}, []}
   end
 
@@ -494,7 +494,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
       {:error, %Ecto.Changeset{} = cs} ->
         errors = changeset_errors(cs)
-        form = ModalForm.set_errors(state.modal, errors)
+        form = set_modal_errors(state.modal, errors)
         {%{state | modal: form}, []}
 
       {:error, :forbidden} ->
@@ -532,6 +532,12 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       state.edit_target,
       normalize_category_attrs(payload)
     )
+  end
+
+  defp set_modal_errors(%ModalForm{} = form, errors) do
+    form
+    |> ModalForm.set_errors(errors)
+    |> ModalForm.set_submit_state({:error, "validation"})
   end
 
   defp normalize_board_attrs(attrs) do

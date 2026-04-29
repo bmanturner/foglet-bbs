@@ -101,10 +101,6 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert Enum.any?(effects, &match?(%Effect{type: :navigate, payload: %{screen: ^screen}}, &1))
   end
 
-  defp assert_dispatch_effect(effects, message) do
-    assert %Effect{type: :session, payload: {:dispatch, message}} in effects
-  end
-
   defp assert_board_list_load_task(effects) do
     assert Enum.any?(
              effects,
@@ -499,14 +495,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert_board_list_load_task(effects)
   end
 
-  test "'C'/'c' navigates to :new_thread and seeds compose screen state", %{state: state} do
+  test "'C'/'c' navigates to :new_thread and lets route entry load boards", %{state: state} do
     {_local, effects} = handle_key_result(state, "C")
     assert_navigate_effect(effects, :new_thread)
-    assert_dispatch_effect(effects, {:load_boards_for_new_thread})
+    refute Enum.any?(effects, &match?(%Effect{type: :session, payload: {:dispatch, _}}, &1))
 
     {_local, effects} = handle_key_result(state, "c")
     assert_navigate_effect(effects, :new_thread)
-    assert_dispatch_effect(effects, {:load_boards_for_new_thread})
+    refute Enum.any?(effects, &match?(%Effect{type: :session, payload: {:dispatch, _}}, &1))
   end
 
   test "'Q'/'q' emits {:terminate, :logout} command", %{state: state} do

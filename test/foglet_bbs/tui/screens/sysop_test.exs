@@ -999,6 +999,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Map.has_key?(errors, "invite_generation_per_user_limit"),
              "Expected inline error for the bad integer; got errors: #{inspect(errors)}"
+
+      assert match?({:error, _}, new_state.screen_state.sysop.site_form.submit_state)
     end
 
     test ":forbidden from Config.put routes to error modal + :main_menu (D-08, D-24)",
@@ -1657,6 +1659,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       new_bv = current_boards_view(new_state)
       assert %ModalForm{} = new_bv.modal, "Modal must stay open on validation error"
+      assert match?({:error, _}, new_bv.modal.submit_state)
 
       assert Map.has_key?(new_bv.modal.errors, :name),
              "Errors must include :name — got #{inspect(new_bv.modal.errors)}"
@@ -1825,6 +1828,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       new_bv = current_boards_view(new_state)
       assert %ModalForm{} = new_bv.modal
+      assert match?({:error, _}, new_bv.modal.submit_state)
       assert Map.has_key?(new_bv.modal.errors, :display_order)
       refute Enum.any?(new_bv.categories, &(&1.name == "Bad Order"))
     end

@@ -462,12 +462,24 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp apply_form_errors(%{profile_form: form} = ss, :profile, errors) when not is_nil(form) do
     alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-    %{ss | profile_form: ModalForm.set_errors(form, prefix_errors(errors, @profile_labels))}
+
+    form =
+      form
+      |> ModalForm.set_errors(prefix_errors(errors, @profile_labels))
+      |> ModalForm.set_submit_state({:error, "validation"})
+
+    %{ss | profile_form: form}
   end
 
   defp apply_form_errors(%{prefs_form: form} = ss, :prefs, errors) when not is_nil(form) do
     alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-    %{ss | prefs_form: ModalForm.set_errors(form, prefix_errors(errors, @prefs_labels))}
+
+    form =
+      form
+      |> ModalForm.set_errors(prefix_errors(errors, @prefs_labels))
+      |> ModalForm.set_submit_state({:error, "validation"})
+
+    %{ss | prefs_form: form}
   end
 
   defp apply_form_errors(ss, _section, _errors), do: ss

@@ -212,6 +212,55 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert snapshot.theme_id == "amber"
     end
 
+    test "profile task failure moves Modal.Form out of submitting" do
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = build_user_with_profile()
+      context = Context.new(current_user: user, route: :account)
+
+      state =
+        Account.init(context)
+        |> Map.update!(:profile_form, &%{&1 | submit_state: :submitting})
+
+      changeset = Accounts.User.profile_changeset(user, %{location: String.duplicate("x", 200)})
+
+      {state, []} =
+        Account.update(
+          {:task_result, :account_save_profile, {:ok, {:error, changeset}}},
+          state,
+          context
+        )
+
+      assert %ModalForm{submit_state: {:error, _}} = state.profile_form
+      assert %{location: message} = state.profile_form.errors
+      assert String.contains?(message, "Location error:")
+    end
+
+    test "prefs task failure moves Modal.Form out of submitting" do
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = build_user_with_profile()
+      context = Context.new(current_user: user, route: :account)
+
+      state =
+        Account.init(context)
+        |> Map.put(:active_tab, 1)
+        |> Map.update!(:prefs_form, &%{&1 | submit_state: :submitting})
+
+      changeset = Accounts.User.profile_changeset(user, %{timezone: "Not/AZone"})
+
+      {state, []} =
+        Account.update(
+          {:task_result, :account_save_prefs, {:ok, {:error, changeset}}},
+          state,
+          context
+        )
+
+      assert %ModalForm{submit_state: {:error, _}} = state.prefs_form
+      assert %{timezone: message} = state.prefs_form.errors
+      assert String.contains?(message, "Timezone error:")
+    end
+
     test "SSH key and invite tabs request task-backed loads" do
       user = build_user_with_profile()
 
@@ -614,6 +663,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert %{timezone: message} = new_state.screen_state.account.prefs_errors
       assert String.contains?(message, "valid IANA timezone")
+      assert match?({:error, _}, new_state.screen_state.account.prefs_form.submit_state)
 
       flat = render_account(Map.from_struct(new_state)) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Timezone error:"))

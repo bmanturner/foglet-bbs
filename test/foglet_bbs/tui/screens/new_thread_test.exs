@@ -143,6 +143,22 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     Map.put(base_state(), :screen_state, %{new_thread: ss})
   end
 
+  test ":on_route_enter loads subscribed boards through a screen-owned task" do
+    context = context()
+    {state, effects} = NewThread.update(:on_route_enter, State.from_context(context), context)
+
+    assert state.load_status == :loading
+
+    assert [
+             %Foglet.TUI.Effect{
+               type: :task,
+               payload: %{op: :load_boards_for_new_thread, screen_key: :new_thread, fun: fun}
+             }
+           ] = effects
+
+    assert {[%{id: "b1"}, %{id: "b2"}], 3} = fun.()
+  end
+
   defp get_ss(state), do: get_in(state, [:screen_state, :new_thread])
   defp title_value(state), do: get_ss(state).title_input_state.raxol_state.value
 

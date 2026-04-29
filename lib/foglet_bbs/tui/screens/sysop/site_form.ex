@@ -206,12 +206,22 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
         end
       end)
 
-    if events == [] do
-      # All persisted: drive submit_state to :saved so the form shows "Saved." once.
-      final_form2 = ModalForm.set_submit_state(new_form, :saved)
-      {sync_back(final_state, final_form2), []}
-    else
-      {final_state, events}
+    cond do
+      events != [] ->
+        {final_state, events}
+
+      final_state.errors != %{} ->
+        final_form =
+          new_form
+          |> apply_errors(final_state.errors)
+          |> ModalForm.set_submit_state({:error, "validation"})
+
+        {sync_back(final_state, final_form), []}
+
+      true ->
+        # All persisted: drive submit_state to :saved so the form shows "Saved." once.
+        final_form = ModalForm.set_submit_state(new_form, :saved)
+        {sync_back(final_state, final_form), []}
     end
   end
 

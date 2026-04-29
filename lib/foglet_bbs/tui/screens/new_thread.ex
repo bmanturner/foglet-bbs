@@ -41,6 +41,10 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   @impl true
   @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
+  def update(:on_route_enter, %State{} = state, %Context{} = context) do
+    update(:load, state, context)
+  end
+
   def update(:load, %State{} = state, %Context{} = context) do
     boards_mod = boards_module(context)
     current_user = context.current_user

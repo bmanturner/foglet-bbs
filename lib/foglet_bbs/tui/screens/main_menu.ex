@@ -161,11 +161,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
       when c in ["c", "C"] do
-    {normalize_state(local_state, context),
-     [
-       Effect.navigate(:new_thread, %{origin: :main_menu}),
-       load_boards_for_new_thread_effect(context)
-     ]}
+    {normalize_state(local_state, context), [Effect.navigate(:new_thread, %{origin: :main_menu})]}
   end
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
@@ -534,10 +530,6 @@ defmodule Foglet.TUI.Screens.MainMenu do
     Effect.task(:load_boards, :board_list, fn ->
       boards_mod.board_directory_for(user)
     end)
-  end
-
-  defp load_boards_for_new_thread_effect(_context) do
-    Effect.session({:dispatch, {:load_boards_for_new_thread}})
   end
 
   defp load_oneliners_task_effect(%Context{} = context) do
