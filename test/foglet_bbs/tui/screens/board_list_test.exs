@@ -406,9 +406,14 @@ defmodule Foglet.TUI.Screens.BoardListTest do
   end
 
   describe "subscriptions/2 export (Phase 39 R7, D-22)" do
-    @tag :phase39_target
     test "module exports subscriptions/2" do
       assert function_exported?(Foglet.TUI.Screens.BoardList, :subscriptions, 2)
+    end
+
+    test "returns boards aggregate topic unconditionally" do
+      ctx = %Foglet.TUI.Context{route_params: %{}}
+
+      assert Foglet.TUI.Screens.BoardList.subscriptions(nil, ctx) == ["boards"]
     end
   end
 end
