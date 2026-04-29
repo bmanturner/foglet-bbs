@@ -31,7 +31,7 @@
 - [x] **SCREEN-01**: Login, Register, and Verify own auth/onboarding key handling, local state, task requests, and auth/verification results through the new update loop.
 - [x] **SCREEN-02**: MainMenu owns oneliner state, composer/hide modal requests, oneliner task results, and menu navigation through the new update loop.
 - [x] **SCREEN-03**: BoardList and ThreadList own board/thread directory state, subscription feedback, selection state, navigation effects, and async load results through the new update loop.
-- [x] **SCREEN-04**: PostReader, PostComposer, and NewThread own post loading, read-pointer flush requests, composer drafts, board picker state, reply/new-thread submission results, and navigation through the new update loop. (In progress: PostReader complete in Phase 37 Plan 01.)
+- [x] **SCREEN-04**: PostReader, PostComposer, and NewThread own post loading, read-pointer flush requests, composer drafts, board picker state, reply/new-thread submission results, and navigation through the new update loop. (Complete in Phase 37 Plan 05.)
 - [ ] **SCREEN-05**: Account owns profile, preferences, SSH keys, invite tab state, save results, local theme preview, and form errors through the new update loop.
 - [ ] **SCREEN-06**: Moderation and Sysop own tab lifecycle loading, retry behavior, nested form/subview state, invites behavior, and loaded/error results through the new update loop.
 
@@ -89,7 +89,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | SCREEN-01 | Phase 35 | Complete |
 | SCREEN-02 | Phase 35 | Complete |
 | SCREEN-03 | Phase 36 | Complete |
-| SCREEN-04 | Phase 37 | In Progress |
+| SCREEN-04 | Phase 37 | Complete |
 | SCREEN-05 | Phase 38 | Pending |
 | SCREEN-06 | Phase 38 | Pending |
 | APP-01 | Phase 39 | Pending |
