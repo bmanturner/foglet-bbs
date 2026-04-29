@@ -1,95 +1,131 @@
-# Roadmap: Foglet BBS
+# Roadmap: Foglet BBS v2.1 Stability & Maintenance Hardening
 
-## Milestones
+## Overview
 
-- [x] **v2.0 TUI Runtime Shell & Screen Update Loops** — Phases 34-40 shipped 2026-04-29 ([archive](milestones/v2.0-ROADMAP.md))
-- [ ] **v2.1 Stability & Maintenance Hardening** — Phases 41-46 planned from `.planning/codebase/CONCERNS.md`
+v2.1 turns the post-v2.0 concerns audit into a focused hardening milestone. The work starts by retiring the remaining TUI contract compatibility seams, then reduces App and screen maintenance risk, hardens PostReader/content-query behavior, stabilizes SSH/session lifecycle paths, and closes with domain cleanup, Dialyzer baseline reduction, and an explicit concern-by-concern verification artifact.
 
 ## Phases
 
-<details>
-<summary>v2.0 TUI Runtime Shell & Screen Update Loops (Phases 34-40) — SHIPPED 2026-04-29</summary>
+**Phase Numbering:**
+- Integer phases (41, 42, 43): Planned milestone work
+- Decimal phases (41.1, 41.2): Urgent insertions (marked with INSERTED)
 
-- [x] Phase 34: Runtime Contract & Effects (3/3 plans) — completed 2026-04-28
-- [x] Phase 35: Auth & Home Screens (4/4 plans) — completed 2026-04-28
-- [x] Phase 36: Board & Thread Directory Flow (3/3 plans) — completed 2026-04-28
-- [x] Phase 37: Post & Composer Flow (5/5 plans) — completed 2026-04-29
-- [x] Phase 38: Account & Operator Workbenches (4/4 plans) — completed 2026-04-29
-- [x] Phase 39: App Shell Simplification (8/8 plans) — completed 2026-04-29
-- [x] Phase 40: Verification & Documentation (5/5 plans) — completed 2026-04-29
+Decimal phases appear between their surrounding integers in numeric order.
 
-</details>
+- [ ] **Phase 41: TUI Contract And Modal Effects** - Retire legacy screen callbacks and route modal submits through explicit effects.
+- [ ] **Phase 42: App Runtime Helper Extraction** - Split routing, modal, subscription, and effect runtime helpers out of `Foglet.TUI.App`.
+- [ ] **Phase 43: Large Screen Decomposition** - Separate reducer, state, and render responsibilities in the largest screen modules named by the audit.
+- [ ] **Phase 44: PostReader And Content Query Hardening** - Add scalable PostReader loading/cache behavior and protect soft-delete/purity invariants.
+- [ ] **Phase 45: SSH And Session Runtime Hardening** - Bound key stashes, strengthen promotion auditability, and make termination/counter behavior trustworthy.
+- [ ] **Phase 46: Domain Cleanup And Final Quality Gate** - Resolve board/domain cleanup, Dialyzer baseline debt, and prove every audit concern has a disposition.
 
-- [ ] **Phase 41: Screen Contract Compatibility Retirement** — Remove the bounded legacy screen callback surface and migrate remaining tests/helpers to the v2.0 contract.
-  - **Requirements:** TUI-01, TUI-02
-  - **Success criteria:**
-    1. `Foglet.TUI.Screen` no longer declares legacy compatibility callbacks.
-    2. Production screen modules no longer expose legacy `render/1`, `handle_key/2`, or `init_screen_state/1` clauses unless an explicit non-production test helper owns the compatibility.
-    3. Smoke and reducer tests exercise `init/1`, `update/3`, and `render/2` seams rather than broad App-state callbacks.
-    4. TUI render smoke checks still pass for representative screens.
+## Phase Details
 
-- [ ] **Phase 42: Modal Submit Effects & App Runtime Helpers** — Replace process-dictionary modal submit plumbing and extract cohesive App shell helper modules.
-  - **Requirements:** TUI-03, TUI-04, QUAL-02
-  - **Success criteria:**
-    1. Modal form submit emits a first-class `Foglet.TUI.Effect` value instead of stashing payloads in the process dictionary.
-    2. `Foglet.TUI.App` interprets modal-submit effects and routes them to the target screen through `update/3`.
-    3. Direct tests cover modal-submit effect routing and the success round trip.
-    4. Routing, modal, subscriptions, or effect interpretation helpers are extracted where they reduce `App` concentration while preserving runtime ownership.
+### Phase 41: TUI Contract And Modal Effects
+**Goal**: Maintainers can rely on one canonical screen contract and one explicit modal-submit path.
+**Depends on**: Phase 40
+**Requirements**: TUI-01, TUI-02, TUI-03, QUAL-02
+**Success Criteria** (what must be TRUE):
+  1. Maintainer can remove `render/1`, `handle_key/2`, and `init_screen_state/1` compatibility callbacks from `Foglet.TUI.Screen` without breaking production screens.
+  2. Maintainer can run screen and smoke tests through `init/1`, `update/3`, and `render/2` only.
+  3. Maintainer can trace a modal submit from form event to target screen `update/3` through a first-class `Foglet.TUI.Effect`.
+  4. Maintainer has targeted tests proving the direct modal-submit round trip succeeds and failure paths remain visible.
+**Plans**: TBD
+**UI hint**: yes
 
-- [ ] **Phase 43: Screen Decomposition & PostReader Render Hygiene** — Split oversized screen responsibilities and harden PostReader cache/purity behavior.
-  - **Requirements:** TUI-05, POST-02, POST-03
-  - **Success criteria:**
-    1. The largest screen modules named by the concerns audit have clearer state/render/reducer boundaries or explicit documented residual scope.
-    2. PostReader drops stale-width render-cache entries on terminal resize or otherwise prevents old-width cache growth.
-    3. Automated protection catches render-path state mutation in PostReader render helpers.
-    4. Existing reader/composer/account/operator behavior remains covered by focused tests and render inspection.
+### Phase 42: App Runtime Helper Extraction
+**Goal**: Maintainers can change App shell behavior through narrow runtime helper modules instead of one concentrated file.
+**Depends on**: Phase 41
+**Requirements**: TUI-04
+**Success Criteria** (what must be TRUE):
+  1. Maintainer can find route encoding and screen-state plumbing in a routing helper with a narrow public API.
+  2. Maintainer can find modal overlay and dismissal behavior in a modal helper without screen-specific business logic.
+  3. Maintainer can find dynamic PubSub topic refresh and subscription diffing in a subscription helper.
+  4. Maintainer can find generic effect interpretation in an effect helper while domain mutations remain in `Foglet.*` contexts.
+**Plans**: TBD
+**UI hint**: yes
 
-- [ ] **Phase 44: Content Query Performance & Domain Cleanup** — Add large-thread/post query safeguards and clean up confusing domain/persistence seams.
-  - **Requirements:** POST-01, POST-04, DOM-01, DOM-02
-  - **Success criteria:**
-    1. PostReader can request posts in batches or through a cursor-based query path instead of relying only on full-thread eager loads.
-    2. Soft-delete filtering is centralized or comprehensively verified for post/thread list paths.
-    3. The misleading `Foglet.Boards.Supervisor.boot_board_servers/0` stub is removed or made impossible to mistake for production boot behavior.
-    4. `Foglet.Boards.Server` direct `Repo.transaction/1` usage is either documented with the `Ecto.Multi` error-shape rationale or converted without losing reply-path semantics.
+### Phase 43: Large Screen Decomposition
+**Goal**: Maintainers can work on oversized TUI screens through clear reducer, state, and render boundaries.
+**Depends on**: Phase 42
+**Requirements**: TUI-05
+**Success Criteria** (what must be TRUE):
+  1. Maintainer can modify PostReader, Sysop, Login, MainMenu, NewThread, and Account screen rendering without digging through unrelated reducer code.
+  2. Maintainer can test reducer behavior for decomposed screens without invoking render helpers.
+  3. Maintainer can identify each decomposed screen's local state owner and render entry point from module names and documentation.
+  4. Existing TUI behavior remains stable through reducer tests and render smoke verification after the splits.
+**Plans**: TBD
+**UI hint**: yes
 
-- [ ] **Phase 45: SSH And Session Runtime Hardening** — Bound SSH auth stash state, centralize channel termination, and cover session replacement edge paths.
-  - **Requirements:** SSH-01, SSH-02, SSH-03, SSH-04, SESS-01
-  - **Success criteria:**
-    1. `Foglet.SSH.PubkeyStash` orphan entries expire through TTL, sweep, or an equivalent bounded cleanup mechanism.
-    2. Guest-to-user SSH promotion produces structured audit visibility with peer context when available.
-    3. SSH channel termination has one helper that owns alt-screen leave, lifecycle/session cleanup, and connection counter decrement behavior.
-    4. Tests cover connection-counter balance across normal termination, over-limit rejection, and crash/error paths.
-    5. Tests directly exercise the `replace_then_promote/3` forced-termination fallback.
+### Phase 44: PostReader And Content Query Hardening
+**Goal**: Users can read large threads reliably while maintainers have automated protection for PostReader and list-query invariants.
+**Depends on**: Phase 43
+**Requirements**: POST-01, POST-02, POST-03, POST-04
+**Success Criteria** (what must be TRUE):
+  1. User can navigate a very large thread without PostReader eagerly loading every post into local state.
+  2. User can resize the terminal during a PostReader session without stale-width render-cache entries accumulating for the life of the screen.
+  3. Maintainer has automated protection that prevents `render_*` helpers in PostReader from mutating screen state.
+  4. Maintainer has query coverage or a shared helper proving soft-deleted posts stay out of list paths that should hide them.
+**Plans**: TBD
+**UI hint**: yes
 
-- [ ] **Phase 46: Dialyzer Baseline & Concerns Closure Verification** — Reduce warning debt and prove every concerns-audit item has a disposition.
-  - **Requirements:** QUAL-01, QUAL-03
-  - **Success criteria:**
-    1. Every `.dialyzer_ignore.exs` entry named by the concerns audit is fixed, narrowed, or explicitly retained with rationale.
-    2. A v2.1 verification artifact maps each `.planning/codebase/CONCERNS.md` item to fixed, tested, documented-retained, or intentionally deferred with user-approved rationale.
-    3. The full `rtk mix precommit` gate passes.
-    4. PROJECT, REQUIREMENTS, ROADMAP, and STATE traceability reflect completed v2.1 scope.
+### Phase 45: SSH And Session Runtime Hardening
+**Goal**: Operators can trust SSH authentication, promotion, termination, and connection accounting under normal and fragile lifecycle paths.
+**Depends on**: Phase 44
+**Requirements**: SSH-01, SSH-02, SSH-03, SSH-04, SESS-01
+**Success Criteria** (what must be TRUE):
+  1. Operator can see bounded SSH public-key stash behavior through TTL or sweep cleanup for orphaned key offers.
+  2. Operator can audit guest-to-user SSH session promotions with peer context when it is available.
+  3. Maintainer can change SSH channel termination behavior in one helper that owns alt-screen leave, lifecycle stop, session stop, and connection-count cleanup.
+  4. Operator can trust the global SSH connection counter after normal closes, EOF, lifecycle exits, over-limit rejects, and crash-during-init paths.
+  5. Maintainer has direct coverage for the forced-termination fallback in `replace_then_promote/3`.
+**Plans**: TBD
+
+### Phase 46: Domain Cleanup And Final Quality Gate
+**Goal**: Maintainers close the remaining audit concerns with domain cleanup, Dialyzer baseline reduction, and explicit verification evidence.
+**Depends on**: Phase 45
+**Requirements**: DOM-01, DOM-02, QUAL-01, QUAL-03
+**Success Criteria** (what must be TRUE):
+  1. Maintainer can no longer confuse `Foglet.Boards.Supervisor.boot_board_servers/0` with the board boot source of truth.
+  2. Maintainer can understand or rely on the chosen transaction shape in `Foglet.Boards.Server` without convention drift from `Repo.transact/1`.
+  3. Maintainer can run Dialyzer with fewer ignored warnings, with each audit-called warning fixed or explicitly reclassified.
+  4. Maintainer can review a final verification artifact mapping every item in `.planning/codebase/CONCERNS.md` to fixed, intentionally retained, or covered.
+  5. Maintainer can run the milestone close gate and see no unaddressed concern-audit items.
+**Plans**: TBD
+
+## Concern Coverage
+
+| Concern | Phase |
+|---------|-------|
+| Legacy `Foglet.TUI.Screen` compatibility callbacks | Phase 41 |
+| Process-dictionary modal-submit handoff | Phase 41 |
+| App-shell modal-submit direct coverage gap | Phase 41 |
+| `Foglet.TUI.App` routing/effects concentration | Phase 42 |
+| Large screen modules with mixed responsibilities | Phase 43 |
+| `Foglet.Posts.list_posts/1` eager PostReader loading | Phase 44 |
+| PostReader render cache keyed by stale terminal widths | Phase 44 |
+| PostReader render-path purity convention | Phase 44 |
+| Soft-delete-aware list path coverage gap | Phase 44 |
+| SSH public-key ETS stash TTL/sweep | Phase 45 |
+| Guest-to-user SSH promotion audit visibility | Phase 45 |
+| SSH channel termination paths and alt-screen cleanup | Phase 45 |
+| SSH global connection counter lifecycle balance | Phase 45 |
+| `replace_then_promote/3` forced-termination fallback coverage | Phase 45 |
+| `Boards.Supervisor.boot_board_servers/0` no-op stub | Phase 46 |
+| `Boards.Server` direct `Repo.transaction/1` convention drift | Phase 46 |
+| `.dialyzer_ignore.exs` baseline debt | Phase 46 |
+| Full concerns-audit disposition proof | Phase 46 |
 
 ## Progress
 
-| Phase | Milestone | Plans Complete | Status | Completed |
-|-------|-----------|----------------|--------|-----------|
-| 34. Runtime Contract & Effects | v2.0 | 3/3 | Complete | 2026-04-28 |
-| 35. Auth & Home Screens | v2.0 | 4/4 | Complete | 2026-04-28 |
-| 36. Board & Thread Directory Flow | v2.0 | 3/3 | Complete | 2026-04-28 |
-| 37. Post & Composer Flow | v2.0 | 5/5 | Complete | 2026-04-29 |
-| 38. Account & Operator Workbenches | v2.0 | 4/4 | Complete | 2026-04-29 |
-| 39. App Shell Simplification | v2.0 | 8/8 | Complete | 2026-04-29 |
-| 40. Verification & Documentation | v2.0 | 5/5 | Complete | 2026-04-29 |
-| 41. Screen Contract Compatibility Retirement | v2.1 | 0/TBD | Planned | — |
-| 42. Modal Submit Effects & App Runtime Helpers | v2.1 | 0/TBD | Planned | — |
-| 43. Screen Decomposition & PostReader Render Hygiene | v2.1 | 0/TBD | Planned | — |
-| 44. Content Query Performance & Domain Cleanup | v2.1 | 0/TBD | Planned | — |
-| 45. SSH And Session Runtime Hardening | v2.1 | 0/TBD | Planned | — |
-| 46. Dialyzer Baseline & Concerns Closure Verification | v2.1 | 0/TBD | Planned | — |
+**Execution Order:**
+Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 
-## Next
-
-Start Phase 41 with `$gsd-plan-phase 41`.
-
----
-*Roadmap updated: 2026-04-29 after v2.1 milestone initialization*
+| Phase | Plans Complete | Status | Completed |
+|-------|----------------|--------|-----------|
+| 41. TUI Contract And Modal Effects | 0/TBD | Not started | - |
+| 42. App Runtime Helper Extraction | 0/TBD | Not started | - |
+| 43. Large Screen Decomposition | 0/TBD | Not started | - |
+| 44. PostReader And Content Query Hardening | 0/TBD | Not started | - |
+| 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
+| 46. Domain Cleanup And Final Quality Gate | 0/TBD | Not started | - |

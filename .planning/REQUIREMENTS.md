@@ -72,22 +72,22 @@ Which phases cover which requirements. Updated during roadmap creation.
 |-------------|-------|--------|
 | TUI-01 | Phase 41 | Pending |
 | TUI-02 | Phase 41 | Pending |
-| TUI-03 | Phase 42 | Pending |
+| TUI-03 | Phase 41 | Pending |
 | TUI-04 | Phase 42 | Pending |
 | TUI-05 | Phase 43 | Pending |
 | POST-01 | Phase 44 | Pending |
-| POST-02 | Phase 43 | Pending |
-| POST-03 | Phase 43 | Pending |
+| POST-02 | Phase 44 | Pending |
+| POST-03 | Phase 44 | Pending |
 | POST-04 | Phase 44 | Pending |
 | SSH-01 | Phase 45 | Pending |
 | SSH-02 | Phase 45 | Pending |
 | SSH-03 | Phase 45 | Pending |
 | SSH-04 | Phase 45 | Pending |
 | SESS-01 | Phase 45 | Pending |
-| DOM-01 | Phase 44 | Pending |
-| DOM-02 | Phase 44 | Pending |
+| DOM-01 | Phase 46 | Pending |
+| DOM-02 | Phase 46 | Pending |
 | QUAL-01 | Phase 46 | Pending |
-| QUAL-02 | Phase 42 | Pending |
+| QUAL-02 | Phase 41 | Pending |
 | QUAL-03 | Phase 46 | Pending |
 
 **Coverage:**
@@ -97,4 +97,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-29*
-*Last updated: 2026-04-29 after v2.1 milestone initialization*
+*Last updated: 2026-04-29 after roadmap creation*
