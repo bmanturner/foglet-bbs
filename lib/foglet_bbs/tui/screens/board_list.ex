@@ -241,6 +241,12 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   def render(local_state, %Context{} = context), do: render(normalize_state(local_state), context)
 
+  @impl true
+  @spec subscriptions(State.t() | map() | nil, Context.t()) :: [String.t()]
+  def subscriptions(_local_state, _context) do
+    [Foglet.PubSub.boards_aggregate()]
+  end
+
   defp render_board_content(%State{status: :empty} = state, _context, theme) do
     column style: %{gap: 0} do
       maybe_feedback(state, theme) ++
