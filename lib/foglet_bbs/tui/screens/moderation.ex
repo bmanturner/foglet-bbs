@@ -129,8 +129,9 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{}) when c in ["Q", "q"] do
-    {normalize_state(local_state), [Effect.navigate(:main_menu, %{})]}
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["Q", "q"] do
+    {normalize_state(local_state, context), [Effect.navigate(:main_menu, %{})]}
   end
 
   def update({:key, event}, local_state, %Context{} = context) do
@@ -385,9 +386,6 @@ defmodule Foglet.TUI.Screens.Moderation do
       %{ss | tabs: Tabs.init(tabs: labels, active: active), active_tab: active}
     end
   end
-
-  defp normalize_state(%State{} = ss), do: ss
-  defp normalize_state(_other), do: State.new()
 
   defp render_model(%Context{} = context, %State{} = state) do
     %{

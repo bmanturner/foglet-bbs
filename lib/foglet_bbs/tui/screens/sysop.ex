@@ -112,9 +112,9 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{})
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
       when c in ["q", "Q"] do
-    {normalize_state(local_state), [Effect.navigate(:main_menu, %{})]}
+    {normalize_state(local_state, context), [Effect.navigate(:main_menu, %{})]}
   end
 
   def update({:key, %{key: :enter} = event}, local_state, %Context{} = context) do
@@ -695,9 +695,6 @@ defmodule Foglet.TUI.Screens.Sysop do
         ShellVisibility.invites_visible?(context.current_user, context.session_context)
     )
   end
-
-  defp normalize_state(%State{} = ss), do: ss
-  defp normalize_state(_other), do: State.new()
 
   defp render_model(%Context{} = context, %State{} = local_state) do
     %{
