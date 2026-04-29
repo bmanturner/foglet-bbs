@@ -5,7 +5,6 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.Effect
-  alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread.State, as: NewThreadState
@@ -16,6 +15,7 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
   alias Foglet.TUI.Screens.ThreadList.State, as: ThreadListState
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
+  alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.Modal.Form
 
