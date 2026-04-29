@@ -23,9 +23,6 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
-  alias Foglet.TUI.Screens.PostComposer
-  alias Foglet.TUI.Screens.PostReader
-  alias Foglet.TUI.Screens.ThreadList
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
@@ -154,7 +151,6 @@ defmodule Foglet.TUI.App do
       |> Map.put(:current_screen, screen)
       |> Map.put(:route_params, params || %{})
       |> Map.put(:modal, nil)
-      |> maybe_seed_legacy_route_context(screen, params || %{})
       |> init_route_screen_state(screen, params || %{})
 
     maybe_dispatch_route_entry(state, screen, params || %{})
@@ -428,100 +424,36 @@ defmodule Foglet.TUI.App do
 
   # Compute which PubSub topics to subscribe to based on current screen and user.
   # Topics follow the convention: "user:<id>", "boards", "board:<id>", "thread:<id>".
-  # Phase 2 may not yet broadcast to all of these; subscriptions are wired now so
-  # the TUI reacts automatically when Phase 2 starts emitting events.
-  defp build_pubsub_topics(state) do
-    topics =
+  #
+  # User-level topics ("user:<id>") are always App-owned (they don't depend on
+  # which screen is active). Screen-specific topics are sourced from the active
+  # screen's optional `subscriptions/2` callback (Phase 39 D-06, D-22, R7), which
+  # lets each screen own the binary topic strings it cares about. Screens that
+  # don't implement `subscriptions/2` contribute nothing — App produces only
+  # user-level topics for them.
+  defp build_pubsub_topics(%__MODULE__{} = state) do
+    user_topics =
       if state.current_user do
         [PubSub.user_topic(state.current_user.id)]
       else
         []
       end
 
-    topics =
-      if state.current_screen in [:board_list] do
-        [PubSub.boards_aggregate() | topics]
-      else
-        topics
-      end
-
-    topics =
-      case thread_list_board_topic(state) do
-        nil -> topics
-        topic -> [topic | topics]
-      end
-
-    topics =
-      case routed_thread_topic(state) do
-        nil -> topics
-        topic -> [topic | topics]
-      end
-
-    topics
+    user_topics ++ screen_declared_topics(state)
   end
 
-  defp routed_thread_topic(%__MODULE__{current_screen: screen} = state)
-       when screen in [:post_reader, :post_composer] do
-    state
-    |> routed_thread_id()
-    |> case do
-      thread_id when is_binary(thread_id) -> PubSub.thread_topic(thread_id)
-      _other -> nil
-    end
-  end
+  # Defers screen-specific topic interest to the active screen's
+  # `subscriptions/2` optional callback (Foglet.TUI.Screen). Mirrors the
+  # `Code.ensure_loaded?/1` + `function_exported?/3` paired guard idiom used at
+  # `route_screen_update/3` and `render_screen/1` for `update/3` and `render/2`.
+  defp screen_declared_topics(%__MODULE__{} = state) do
+    key = screen_key(current_route(state))
+    module = screen_module_for(state, key)
 
-  defp routed_thread_topic(_state), do: nil
-
-  defp routed_thread_id(%__MODULE__{} = state) do
-    params = state.route_params || %{}
-
-    Map.get(params, :thread_id) || Map.get(params, "thread_id") ||
-      post_reader_state_thread_id(state.screen_state) ||
-      post_composer_state_thread_id(state.screen_state)
-  end
-
-  defp post_reader_state_thread_id(screen_state) do
-    case Map.get(screen_state || %{}, :post_reader) do
-      %PostReader.State{thread_id: thread_id} when is_binary(thread_id) -> thread_id
-      _other -> nil
-    end
-  end
-
-  defp post_composer_state_thread_id(screen_state) do
-    case Map.get(screen_state || %{}, :post_composer) do
-      %PostComposer.State{} = state ->
-        case Map.get(state, :thread_id) do
-          thread_id when is_binary(thread_id) -> thread_id
-          _other -> nil
-        end
-
-      _other ->
-        nil
-    end
-  end
-
-  defp thread_list_board_topic(%__MODULE__{current_screen: :thread_list} = state) do
-    state
-    |> thread_list_board_id()
-    |> case do
-      nil -> nil
-      board_id -> PubSub.board_topic(board_id)
-    end
-  end
-
-  defp thread_list_board_topic(_state), do: nil
-
-  defp thread_list_board_id(%__MODULE__{} = state) do
-    params = state.route_params || %{}
-
-    Map.get(params, :board_id) || Map.get(params, "board_id") ||
-      thread_list_state_board_id(state.screen_state)
-  end
-
-  defp thread_list_state_board_id(screen_state) do
-    case Map.get(screen_state || %{}, :thread_list) do
-      %ThreadList.State{board_id: board_id} when is_binary(board_id) -> board_id
-      _other -> nil
+    if Code.ensure_loaded?(module) and function_exported?(module, :subscriptions, 2) do
+      module.subscriptions(screen_state_for(state, key), build_context(state))
+    else
+      []
     end
   end
 
@@ -804,8 +736,6 @@ defmodule Foglet.TUI.App do
       (route_owned_screen?(key) or
          (map_size(params || %{}) > 0 and function_exported?(module, :update, 3)))
   end
-
-  defp maybe_seed_legacy_route_context(%__MODULE__{} = state, _screen, _params), do: state
 
   defp maybe_dispatch_route_entry(%__MODULE__{} = state, :main_menu, _params) do
     if state.current_user do
