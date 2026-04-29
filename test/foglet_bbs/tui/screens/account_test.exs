@@ -8,6 +8,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.Config
   alias Foglet.Sessions.Session
   alias Foglet.TUI.App
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Account
   alias Foglet.TUI.Screens.Account.SSHKeysState
@@ -84,6 +86,97 @@ defmodule Foglet.TUI.Screens.AccountTest do
       refute ss.profile_dirty?
       refute ss.prefs_dirty?
       assert ss.candidate_theme_id == nil
+    end
+  end
+
+  describe "new screen contract" do
+    test "Account.init/1 seeds local state from Context" do
+      user = build_user_with_profile(location: "Mist Harbor")
+
+      state =
+        Account.init(
+          Context.new(
+            current_user: user,
+            session_context: %{invite_code_generators: "any_user"},
+            route: :account
+          )
+        )
+
+      assert %AccountState{} = state
+      assert state.profile_draft.location == "Mist Harbor"
+      assert "INVITES" in AccountState.tab_labels(true)
+    end
+
+    test "Account.render/2 renders from local state and Context without App-shaped input" do
+      user = build_user_with_profile()
+      context = Context.new(current_user: user, route: :account, terminal_size: {80, 24})
+      state = Account.init(context)
+
+      assert _node = Account.render(state, context)
+    end
+
+    test "profile task result reseeds Account local state" do
+      user = build_user_with_profile()
+      context = Context.new(current_user: user, route: :account)
+      state = Account.init(context)
+      updated = %{user | location: "New Cove"}
+
+      {state, effects} =
+        Account.update(
+          {:task_result, :account_save_profile, {:ok, {:ok, updated}}},
+          state,
+          context
+        )
+
+      assert %AccountState{} = state
+      assert state.profile_draft.location == "New Cove"
+      assert state.status_message == "Account changes saved."
+      assert effects == []
+    end
+
+    test "prefs task result reseeds state and emits session refresh effects" do
+      user = build_user_with_profile(theme: "amber")
+      context = Context.new(current_user: user, route: :account)
+
+      state =
+        Account.init(context)
+        |> Map.put(:candidate_theme_id, "gray")
+
+      {state, effects} =
+        Account.update({:task_result, :account_save_prefs, {:ok, {:ok, user}}}, state, context)
+
+      assert state.candidate_theme_id == nil
+      assert state.status_message == "Account changes saved."
+
+      assert [
+               %Effect{type: :session, payload: {:set_current_user, ^user}},
+               %Effect{type: :session, payload: {:update_preferences, snapshot}}
+             ] = effects
+
+      assert snapshot.theme_id == "amber"
+    end
+
+    test "SSH key and invite tabs request task-backed loads" do
+      user = build_user_with_profile()
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :account,
+          session_context: %{invite_code_generators: "any_user"}
+        )
+
+      {ssh_state, ssh_effects} =
+        Account.update({:key, %{key: :char, char: "3"}}, Account.init(context), context)
+
+      assert ssh_state.active_tab == 2
+      assert [%Effect{payload: %{op: :account_load_ssh_keys}}] = ssh_effects
+
+      {invite_state, invite_effects} =
+        Account.update({:key, %{key: :char, char: "4"}}, ssh_state, context)
+
+      assert invite_state.active_tab == 3
+      assert [%Effect{payload: %{op: :account_load_invites}}] = invite_effects
     end
   end
 
