@@ -30,7 +30,19 @@ Decimal phases appear between their surrounding integers in numeric order.
   2. Maintainer can run screen and smoke tests through `init/1`, `update/3`, and `render/2` only.
   3. Maintainer can trace a modal submit from form event to target screen `update/3` through a first-class `Foglet.TUI.Effect`.
   4. Maintainer has targeted tests proving the direct modal-submit round trip succeeds and failure paths remain visible.
-**Plans**: TBD
+**Plans**:
+
+**Wave 1**
+- `41-01` - Canonical screen contract cleanup.
+- `41-03` - First-class modal-submit effect and App routing.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- `41-02` - Canonical test, smoke-helper, and screen-contract documentation migration.
+- `41-04` - Modal consumer migration and `SubmitStash` removal.
+
+Cross-cutting constraints:
+- Preserve the target reducer boundary shape `{:modal_submit, kind, payload}` in every modal-submit plan.
+- Keep tests behavioral and avoid pure text-presence assertions.
 **UI hint**: yes
 
 ### Phase 42: App Runtime Helper Extraction
@@ -123,7 +135,7 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 41. TUI Contract And Modal Effects | 0/TBD | Not started | - |
+| 41. TUI Contract And Modal Effects | 0/4 | Ready to execute | - |
 | 42. App Runtime Helper Extraction | 0/TBD | Not started | - |
 | 43. Large Screen Decomposition | 0/TBD | Not started | - |
 | 44. PostReader And Content Query Hardening | 0/TBD | Not started | - |
