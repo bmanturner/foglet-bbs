@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Stability & Maintenance Hardening
 status: executing
-stopped_at: Phase 41 context gathered (assumptions mode)
-last_updated: "2026-04-29T17:47:48.558Z"
-last_activity: 2026-04-29 -- Phase 41 planning complete
+stopped_at: Phase 42 context gathered (assumptions mode)
+last_updated: "2026-04-29T20:04:45.871Z"
+last_activity: 2026-04-29
 progress:
   total_phases: 6
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 0
-  percent: 0
+  completed_plans: 4
+  percent: 100
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** v2.1 Stability & Maintenance Hardening
+**Current focus:** Phase 42 — App Runtime Helper Extraction
 
 ## Current Position
 
-Phase: 41 of 46 (TUI Contract And Modal Effects)
-Plan: 4 plans ready
-Status: Ready to execute
-Last activity: 2026-04-29 -- Phase 41 planning complete
+Phase: 42
+Plan: Not started
+Status: Ready to discuss or plan Phase 42
+Last activity: 2026-04-29
 
 Progress: [----------] 0%
 
@@ -36,7 +36,7 @@ Progress: [----------] 0%
 
 **Velocity:**
 
-- Total plans completed: 0
+- Total plans completed: 4
 - Average duration: N/A
 - Total execution time: 0.0 hours
 
@@ -45,6 +45,7 @@ Progress: [----------] 0%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 41-46 | TBD | TBD | N/A |
+| 41 | 4 | - | - |
 
 **Recent Trend:**
 
@@ -77,6 +78,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-29T17:23:19.665Z
-Stopped at: Phase 41 context gathered (assumptions mode)
-Resume file: .planning/phases/41-tui-contract-and-modal-effects/41-CONTEXT.md
+Last session: 2026-04-29T19:29:10.767Z
+Stopped at: Phase 42 context gathered (assumptions mode)
+Resume file: .planning/phases/42-app-runtime-helper-extraction/42-CONTEXT.md

@@ -10,9 +10,9 @@ Requirements for the v2.1 hardening milestone. Every item in the concerns audit 
 
 ### TUI Contract
 
-- [ ] **TUI-01**: Maintainer can remove legacy `Foglet.TUI.Screen` compatibility callbacks without breaking production screens or valid tests.
-- [ ] **TUI-02**: Maintainer can run screen tests and smoke helpers through the canonical `init/1`, `update/3`, and `render/2` contract only.
-- [ ] **TUI-03**: Maintainer can change modal submit behavior through a first-class `Foglet.TUI.Effect` path instead of a process-dictionary handoff.
+- [x] **TUI-01**: Maintainer can remove legacy `Foglet.TUI.Screen` compatibility callbacks without breaking production screens or valid tests. Validated in Phase 41.
+- [x] **TUI-02**: Maintainer can run screen tests and smoke helpers through the canonical `init/1`, `update/3`, and `render/2` contract only. Validated in Phase 41.
+- [x] **TUI-03**: Maintainer can change modal submit behavior through a first-class `Foglet.TUI.Effect` path instead of a process-dictionary handoff. Validated in Phase 41.
 - [ ] **TUI-04**: Maintainer can understand and modify `Foglet.TUI.App` through narrow runtime helper modules for routing, modal, subscription, and effect concerns.
 - [ ] **TUI-05**: Maintainer can work on the largest TUI screens through separated reducer/state/render modules where the concerns audit identified mixed responsibilities.
 
@@ -39,7 +39,7 @@ Requirements for the v2.1 hardening milestone. Every item in the concerns audit 
 ### Quality Baseline
 
 - [ ] **QUAL-01**: Maintainer can reduce the `.dialyzer_ignore.exs` baseline by fixing or explicitly reclassifying each warning called out by the concerns audit.
-- [ ] **QUAL-02**: Maintainer can verify the direct modal-submit round trip with targeted tests, not only through indirect screen reducer paths.
+- [x] **QUAL-02**: Maintainer can verify the direct modal-submit round trip with targeted tests, not only through indirect screen reducer paths. Validated in Phase 41.
 - [ ] **QUAL-03**: Maintainer can verify that every concern in `.planning/codebase/CONCERNS.md` was fixed, documented as intentionally retained, or covered by an explicit test/verification note.
 
 ## Future Requirements
@@ -70,9 +70,9 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| TUI-01 | Phase 41 | Pending |
-| TUI-02 | Phase 41 | Pending |
-| TUI-03 | Phase 41 | Pending |
+| TUI-01 | Phase 41 | Complete |
+| TUI-02 | Phase 41 | Complete |
+| TUI-03 | Phase 41 | Complete |
 | TUI-04 | Phase 42 | Pending |
 | TUI-05 | Phase 43 | Pending |
 | POST-01 | Phase 44 | Pending |
@@ -87,7 +87,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DOM-01 | Phase 46 | Pending |
 | DOM-02 | Phase 46 | Pending |
 | QUAL-01 | Phase 46 | Pending |
-| QUAL-02 | Phase 41 | Pending |
+| QUAL-02 | Phase 41 | Complete |
 | QUAL-03 | Phase 46 | Pending |
 
 **Coverage:**
@@ -97,4 +97,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-04-29*
-*Last updated: 2026-04-29 after roadmap creation*
+*Last updated: 2026-04-29 after Phase 41 verification*

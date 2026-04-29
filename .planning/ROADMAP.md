@@ -12,7 +12,7 @@ v2.1 turns the post-v2.0 concerns audit into a focused hardening milestone. The 
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 41: TUI Contract And Modal Effects** - Retire legacy screen callbacks and route modal submits through explicit effects.
+- [x] **Phase 41: TUI Contract And Modal Effects** - Retire legacy screen callbacks and route modal submits through explicit effects. (completed 2026-04-29)
 - [ ] **Phase 42: App Runtime Helper Extraction** - Split routing, modal, subscription, and effect runtime helpers out of `Foglet.TUI.App`.
 - [ ] **Phase 43: Large Screen Decomposition** - Separate reducer, state, and render responsibilities in the largest screen modules named by the audit.
 - [ ] **Phase 44: PostReader And Content Query Hardening** - Add scalable PostReader loading/cache behavior and protect soft-delete/purity invariants.
@@ -135,7 +135,7 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 41. TUI Contract And Modal Effects | 0/4 | Ready to execute | - |
+| 41. TUI Contract And Modal Effects | 4/4 | Complete    | 2026-04-29 |
 | 42. App Runtime Helper Extraction | 0/TBD | Not started | - |
 | 43. Large Screen Decomposition | 0/TBD | Not started | - |
 | 44. PostReader And Content Query Hardening | 0/TBD | Not started | - |
