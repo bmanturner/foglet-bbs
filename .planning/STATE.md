@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-04-29T15:45:26.925Z"
+status: verifying
+last_updated: "2026-04-29T15:54:47.683Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 7
   completed_phases: 6
   total_plans: 28
-  completed_plans: 33
+  completed_plans: 34
   percent: 100
 ---
 
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 
 Phase: 40 (verification-documentation) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-29
 
 ## Accumulated Context
@@ -77,6 +77,9 @@ Last activity: 2026-04-29
 - [Phase 40-verification-documentation]: [Phase 40-02]: App production dispatch now routes screen keys and renders through update/3 and render/2; legacy screen callbacks are bounded compatibility only. — Phase 40-02 removed App fallback dispatch and documented remaining broad callbacks as compatibility-only.
 - [Phase 40-verification-documentation]: Inventory found no missing screen-family reducer/effect gaps, so no duplicate screen tests were added. — Existing migrated screen tests already assert local state transitions and concrete Effect values across the required families.
 - [Phase 40-verification-documentation]: App-shell delegation gaps were filled with generic fixture-screen assertions instead of production-screen-specific App clauses. — This keeps App tests at runtime-shell boundaries and prevents screen-specific App state mutation from creeping back in.
+- [Phase 40]: Phase 40-05 screen contract guide is TUI-adjacent and linked from the widget documentation surface. — Satisfies D-10 and keeps future screen work near the TUI/widget docs.
+- [Phase 40]: Phase 40-05 final verification evidence records exact render, test, and precommit commands with exit codes. — Keeps the v2.0 close gate auditable from the Phase 40 evidence summary.
+- [Phase 40]: Phase 40-05 closes Phase 40 with all Phase 39 carry-forward items Fixed or Excluded and no Blocking dispositions. — The final evidence summary maps each carried-forward item to a disposition and passing close-gate evidence.
 
 ### Pending Todos
 
