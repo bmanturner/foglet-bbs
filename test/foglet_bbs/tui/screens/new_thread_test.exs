@@ -309,6 +309,21 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
              NewThread.State.from_context(ctx)
   end
 
+  test "NewThread render decomposition contract is explicit" do
+    assert Code.ensure_loaded?(NewThread.Render)
+    assert function_exported?(NewThread.Render, :render, 2)
+
+    source =
+      __ENV__.file
+      |> Path.dirname()
+      |> Path.join("../../../../lib/foglet_bbs/tui/screens/new_thread.ex")
+      |> Path.expand()
+      |> File.read!()
+
+    assert source =~
+             "def render(%State{} = state, %Context{} = context), do: Render.render(state, context)"
+  end
+
   test "init/1 derives local state from route context" do
     board = %{id: "b1", name: "General"}
     ctx = context(route_params: %{origin: :thread_list, board: board})

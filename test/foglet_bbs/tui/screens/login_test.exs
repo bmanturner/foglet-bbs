@@ -204,6 +204,21 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "ignores unrelated context values for the minimal menu state" do
       assert Login.init(Context.new(route: :login, route_params: %{foo: :bar})) == %{sub: :menu}
     end
+
+    test "Login render decomposition contract is explicit" do
+      assert Code.ensure_loaded?(Login.Render)
+      assert function_exported?(Login.Render, :render, 2)
+
+      source =
+        __ENV__.file
+        |> Path.dirname()
+        |> Path.join("../../../../lib/foglet_bbs/tui/screens/login.ex")
+        |> Path.expand()
+        |> File.read!()
+
+      assert source =~
+               "def render(local_state, %Context{} = context), do: Render.render(local_state, context)"
+    end
   end
 
   describe "render/1 (SSH-04, D-06)" do
