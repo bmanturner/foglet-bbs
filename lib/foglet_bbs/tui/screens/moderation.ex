@@ -527,5 +527,4 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp key_for_invites(%{key: :char, char: char}), do: char
   defp key_for_invites(%{key: key}), do: key
-
 end
