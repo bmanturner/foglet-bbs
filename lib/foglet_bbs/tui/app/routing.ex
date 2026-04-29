@@ -139,6 +139,8 @@ defmodule Foglet.TUI.App.Routing do
     override =
       get_in(domain_from_session_context(state.session_context), [:screen_modules, screen])
 
+    active_route? = screen_key(current_route(state)) == screen
+
     cond do
       is_atom(override) and not is_nil(override) and Code.ensure_loaded?(override) ->
         override
@@ -151,10 +153,10 @@ defmodule Foglet.TUI.App.Routing do
             "#{inspect(override)} is not loadable; falling back to built-in resolver"
         )
 
-        maybe_known_screen_module(screen)
+        maybe_known_screen_module(screen, active_route?)
 
       true ->
-        maybe_known_screen_module(screen)
+        maybe_known_screen_module(screen, active_route?)
     end
   end
 
@@ -224,8 +226,20 @@ defmodule Foglet.TUI.App.Routing do
 
   defp domain_from_session_context(_session_context), do: %{}
 
-  defp maybe_known_screen_module(screen) do
-    if screen in known_screens(), do: built_in_screen_module_for(screen), else: nil
+  defp maybe_known_screen_module(screen, active_route?) do
+    if screen in known_screens() do
+      built_in_screen_module_for(screen)
+    else
+      if active_route? do
+        require Logger
+
+        Logger.error(
+          "[TUI.App.Routing] no screen module for #{inspect(screen)}; falling back to :main_menu"
+        )
+
+        Screens.MainMenu
+      end
+    end
   end
 
   defp known_screens do

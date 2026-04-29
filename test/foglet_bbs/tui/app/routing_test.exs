@@ -207,6 +207,17 @@ defmodule Foglet.TUI.App.RoutingTest do
 
       assert String.contains?(log, "falling back to built-in resolver")
     end
+
+    test "unknown screen atoms fall back to main menu instead of an inert screen" do
+      state = state(current_screen: :future_screen, screen_state: %{})
+
+      log =
+        capture_log(fn ->
+          assert Routing.screen_module_for(state, :future_screen) == Foglet.TUI.Screens.MainMenu
+        end)
+
+      assert String.contains?(log, "falling back to :main_menu")
+    end
   end
 
   describe "rendering" do
