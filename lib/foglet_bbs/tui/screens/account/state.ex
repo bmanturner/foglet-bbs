@@ -16,10 +16,10 @@ defmodule Foglet.TUI.Screens.Account.State do
   is only a render preview and does not mutate session context.
   """
 
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
-  alias Foglet.TUI.Effect
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Tabs
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm

@@ -16,8 +16,8 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
   already advertise [Esc] Cancel in the global command bar.
   """
 
-  alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
