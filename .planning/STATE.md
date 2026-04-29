@@ -3,7 +3,8 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Stability & Maintenance Hardening
 status: ready_to_plan
-last_updated: "2026-04-29T17:25:00.000Z"
+stopped_at: Phase 41 context gathered (assumptions mode)
+last_updated: "2026-04-29T17:23:19.671Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 6
@@ -74,6 +75,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-29 12:25 America/Chicago
-Stopped at: Roadmap files created for v2.1 and ready for Phase 41 planning
-Resume file: None
+Last session: 2026-04-29T17:23:19.665Z
+Stopped at: Phase 41 context gathered (assumptions mode)
+Resume file: .planning/phases/41-tui-contract-and-modal-effects/41-CONTEXT.md
