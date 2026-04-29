@@ -737,45 +737,15 @@ defmodule Foglet.TUI.App do
          (map_size(params || %{}) > 0 and function_exported?(module, :update, 3)))
   end
 
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :main_menu, _params) do
-    if state.current_user do
-      route_screen_update(state, :main_menu, :load_oneliners)
-    else
-      {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :moderation, _params) do
-    if state.current_user do
-      route_screen_update(state, :moderation, :load)
-    else
-      {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :sysop, _params) do
-    if state.current_user do
-      route_screen_update(state, :sysop, :load)
-    else
-      {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :thread_list, _params) do
-    route_screen_update(state, :thread_list, :load)
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :post_reader, params) do
-    case route_param(params, :thread_id) do
-      thread_id when is_binary(thread_id) -> route_screen_update(state, :post_reader, :load)
-      _other -> {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, _screen, _params), do: {state, []}
-
-  defp route_param(params, key) when is_map(params) do
-    Map.get(params, key) || Map.get(params, Atom.to_string(key))
+  # Generic route-entry dispatch (Phase 39 D-01, D-04, R4): every route-entry
+  # delivers `:on_route_enter` to the active screen's update/3. Each screen
+  # owns its first-load semantics (current_user gates, thread_id checks, …)
+  # via its own :on_route_enter clause (Plan 39-04). Screens that don't
+  # implement :on_route_enter hit their update(_message, …) catch-all and
+  # become no-ops, courtesy of route_screen_update/3's function_exported?/3
+  # guard below.
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, screen, _params) do
+    route_screen_update(state, screen_key(screen), :on_route_enter)
   end
 
   defp route_screen_update(%__MODULE__{} = state, key, message) do
@@ -811,17 +781,12 @@ defmodule Foglet.TUI.App do
     build_context(state, params)
   end
 
-  defp maybe_init_initial_screen_state(%{current_screen: :main_menu, current_user: user} = state)
-       when not is_nil(user) do
-    main_menu_state =
-      state
-      |> build_context()
-      |> Screens.MainMenu.init()
-      |> Map.put(:oneliner_status, :idle)
-
-    put_screen_state(state, :main_menu, main_menu_state)
-  end
-
+  # Generic initial-screen-state seeding (Phase 39 D-15, R4):
+  # init_route_screen_state/3 already covers MainMenu via the
+  # function_exported?(module, :init, 1) branch. The MainMenu
+  # `oneliner_status: :idle` shim is no longer needed — MainMenu's
+  # :on_route_enter clause (Plan 39-04) sets :loading before the load task
+  # fires.
   defp maybe_init_initial_screen_state(%__MODULE__{} = state) do
     init_route_screen_state(state, state.current_screen, state.route_params)
   end
