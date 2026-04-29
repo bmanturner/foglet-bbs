@@ -585,8 +585,8 @@ defmodule Foglet.TUI.AppTest do
         )
 
       assert new_state.current_screen == :post_reader
-      assert new_state.current_board == board
-      assert new_state.current_thread == thread
+      assert new_state.current_board == nil
+      assert new_state.current_thread == nil
       assert new_state.posts == stale_posts
 
       assert %PostReader.State{thread_id: "t1", status: :loading} =
@@ -1543,24 +1543,22 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.current_thread_list == state.current_thread_list
     end
 
-    test "{:load_posts, thread_id} returns a Command.task", %{state: state} do
+    test "{:load_posts, thread_id} is ignored by App local-flow cleanup", %{state: state} do
       {_new_state, cmds} = App.update({:load_posts, "t1"}, state)
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+      assert cmds == []
     end
 
-    test "{:posts_loaded, posts} routes through PostReader local state", %{state: state} do
+    test "{:posts_loaded, posts} does not assign top-level posts or local state", %{state: state} do
       legacy_posts = [%{id: "legacy"}]
       posts = [%{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()}]
 
       {new_state, []} = App.update({:posts_loaded, posts}, %{state | posts: legacy_posts})
 
       assert new_state.posts == legacy_posts
-
-      assert %PostReader.State{posts: ^posts, selected_post_index: 0, status: :loaded} =
-               new_state.screen_state.post_reader
+      assert App.screen_state_for(new_state, :post_reader) == nil
     end
 
-    test "{:posts_loaded, posts, jump_last: true} updates PostReader.State to last post", %{
+    test "{:posts_loaded, posts, jump_last: true} leaves PostReader.State untouched", %{
       state: state
     } do
       legacy_posts = [%{id: "legacy"}]
@@ -1580,17 +1578,19 @@ defmodule Foglet.TUI.AppTest do
 
       assert new_state.posts == legacy_posts
 
-      assert %PostReader.State{posts: ^posts, selected_post_index: 1} =
-               new_state.screen_state.post_reader
+      assert App.screen_state_for(new_state, :post_reader) ==
+               App.screen_state_for(state_with_reader, :post_reader)
     end
 
-    test "{:flush_read_pointers, ctx} returns a Command.task", %{state: state} do
+    test "{:flush_read_pointers, ctx} is ignored by App local-flow cleanup", %{state: state} do
       ctx = %{user_id: "u1", board_id: "b1", thread_id: "t1"}
       {_new_state, cmds} = App.update({:flush_read_pointers, ctx}, state)
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+      assert cmds == []
     end
 
-    test "{:read_pointers_flushed, thread_id} clears PostReader pending entry", %{state: state} do
+    test "{:read_pointers_flushed, thread_id} does not clear PostReader pending entry", %{
+      state: state
+    } do
       legacy_read_position = %{"t1" => %{last_read_post_id: "p5"}}
 
       post_reader_state =
@@ -1610,7 +1610,7 @@ defmodule Foglet.TUI.AppTest do
       {new_state, []} = App.update({:read_pointers_flushed, "t1"}, state_with_rp)
 
       assert new_state.read_position == legacy_read_position
-      refute Map.has_key?(new_state.screen_state.post_reader.pending_read_positions, "t1")
+      assert Map.has_key?(new_state.screen_state.post_reader.pending_read_positions, "t1")
     end
   end
 
@@ -1890,7 +1890,7 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
-    test "{:command_result, {:posts_loaded, posts}} routes through PostReader local state", %{
+    test "{:command_result, {:posts_loaded, posts}} does not mutate Phase 37 state", %{
       state: state
     } do
       legacy_posts = [%{id: "legacy"}]
@@ -1900,7 +1900,7 @@ defmodule Foglet.TUI.AppTest do
         App.update({:command_result, {:posts_loaded, posts}}, %{state | posts: legacy_posts})
 
       assert new_state.posts == legacy_posts
-      assert %PostReader.State{posts: ^posts} = new_state.screen_state.post_reader
+      assert App.screen_state_for(new_state, :post_reader) == nil
       assert cmds == []
     end
 
@@ -1932,7 +1932,7 @@ defmodule Foglet.TUI.AppTest do
       %{state: state}
     end
 
-    test "clears PostReader pending entry without touching App read_position", %{state: state} do
+    test "legacy flush result leaves PostReader pending entry untouched", %{state: state} do
       read_position = %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
 
       state = %{
@@ -1952,7 +1952,7 @@ defmodule Foglet.TUI.AppTest do
 
       {new_state, _cmds} = App.update({:read_pointers_flushed, "t1"}, state)
       assert new_state.read_position == read_position
-      refute Map.has_key?(new_state.screen_state.post_reader.pending_read_positions, "t1")
+      assert Map.has_key?(new_state.screen_state.post_reader.pending_read_positions, "t1")
     end
 
     test "nil thread_id leaves PostReader pending entries unchanged", %{state: state} do
@@ -1975,17 +1975,13 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.screen_state.post_reader.pending_read_positions == pending
     end
 
-    test "on :board_list — dispatches a {:load_boards} task (D-06 second refresh)", %{
+    test "on :board_list — legacy flush result is ignored", %{
       state: state
     } do
       state = %{state | current_screen: :board_list, read_position: %{"t1" => %{}}}
       {_new_state, cmds} = App.update({:read_pointers_flushed, "t1"}, state)
 
-      assert Enum.any?(cmds, fn
-               %Raxol.Core.Runtime.Command{} -> true
-               _ -> false
-             end),
-             "Expected a Command.task for {:load_boards} refresh when current_screen == :board_list"
+      assert cmds == []
     end
 
     test "on :thread_list — does NOT dispatch {:load_boards}", %{state: state} do
