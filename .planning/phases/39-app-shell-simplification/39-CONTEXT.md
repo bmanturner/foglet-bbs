@@ -141,6 +141,34 @@ source of truth for what must be delivered and what remains out of scope.
   `screen_state: %{...}` correctly (clauses at `render_fixtures.ex:156, 174,
   188-192, 203-211, 233-236, 257-260, 269-276`); none need rewriting.
 
+### Post-Research Decisions (locked 2026-04-28)
+
+- **D-21:** Legacy callback bodies in `PostReader` (lines 251, 347, 359, 373,
+  410, 426, 504–513, 635, 651, 673–689, 723–724, 729) and `PostComposer`
+  (lines 400, 420, 544) that currently read `state.posts`,
+  `state.read_position`, `state.current_thread`, `state.current_board`,
+  `composer_draft` from the App struct are **rewritten to read from
+  `state.screen_state[:post_reader]` / `state.screen_state[:post_composer]`**
+  (or, where appropriate, from passed-in screen-local state via the
+  reducer-contract path). The transitional `render/1`, `handle_key/2`,
+  `init_screen_state/1` callback **declarations** in `Foglet.TUI.Screen`
+  remain in place — Phase 40 removes them. Phase 39 only fixes the field
+  references inside their bodies so `mix compile --warnings-as-errors`
+  stays green.
+- **D-22:** `Foglet.TUI.Screens.BoardList` implements `subscriptions/2` and
+  returns the `boards:` aggregate topic (matching today's
+  `boards_aggregate_topic/0` constant). This expands D-08's implementer
+  list to **{PostReader, ThreadList, BoardList}** so `Foglet.TUI.App`
+  contains *no* production-screen atom pattern match for PubSub topic
+  derivation, satisfying SPEC R7's acceptance criterion verbatim.
+- **D-23:** Test/fixture migration is owned by a **single dedicated plan**
+  (separate wave, depends on the struct-deletion plan). It covers the
+  ~20+ sites in `test/foglet_bbs/tui/screens/post_reader_test.exs` and
+  the 5 sites in `test/foglet_bbs/tui/app_test.exs` (lines 1666, 2011,
+  2092, 2099, 2110) that name the seven deleted fields, plus the new
+  pins from D-18 / D-19 and the topic-equivalence regression from
+  SPEC R7 acceptance.
+
 ### Claude's Discretion
 - Exact atom name for the route-entry message (currently `:on_route_enter`)
   is flexible if all migrated screens use one consistent name and App's
@@ -151,6 +179,11 @@ source of truth for what must be delivered and what remains out of scope.
 - Whether `MainMenu.update(:on_route_enter, …)` delegates to the existing
   `update(:load_oneliners, …)` clause, replaces it, or both — pick whichever
   produces the smaller diff while keeping the existing task contract.
+- Whether the post-research test migration plan (D-23) merges into the
+  same wave as the BoardList `subscriptions/2` addition (D-22) or runs in
+  its own wave is up to the planner, provided wave dependencies preserve
+  the property that `mix precommit` and `mix test` both stay green at
+  every commit boundary.
 </decisions>
 
 <canonical_refs>
