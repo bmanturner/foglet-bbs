@@ -6,7 +6,7 @@ status: planning
 last_updated: "2026-04-29T17:06:19.150Z"
 last_activity: 2026-04-29
 progress:
-  total_phases: 0
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Planning next milestone after v2.0 completion
+**Current focus:** v2.1 Stability & Maintenance Hardening
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 41 - Screen Contract Compatibility Retirement
 Plan: —
-Status: Defining requirements
-Last activity: 2026-04-29 — Milestone v2.1 started
+Status: Roadmap ready; phase planning not started
+Last activity: 2026-04-29 — Milestone v2.1 roadmap created
 
 ## Deferred Items
 
@@ -103,6 +103,7 @@ Items acknowledged and deferred at milestone close on 2026-04-29:
 - [Phase 40]: Phase 40-05 screen contract guide is TUI-adjacent and linked from the widget documentation surface. — Satisfies D-10 and keeps future screen work near the TUI/widget docs.
 - [Phase 40]: Phase 40-05 final verification evidence records exact render, test, and precommit commands with exit codes. — Keeps the v2.0 close gate auditable from the Phase 40 evidence summary.
 - [Phase 40]: Phase 40-05 closes Phase 40 with all Phase 39 carry-forward items Fixed or Excluded and no Blocking dispositions. — The final evidence summary maps each carried-forward item to a disposition and passing close-gate evidence.
+- v2.1 scope must address every item in `.planning/codebase/CONCERNS.md`; lower-priority concerns should receive explicit implementation, tests, documentation, or a verification disposition rather than being omitted.
 
 ### Pending Todos
 
