@@ -1,169 +1,105 @@
 # Technology Stack
 
-**Analysis Date:** 2026-04-22
+**Analysis Date:** 2026-04-29
 
 ## Languages
 
 **Primary:**
-- Elixir 1.19.5 - Primary application language
+- Elixir `~> 1.17` (pinned at `1.19.5-otp-28` via `.tool-versions`) — application code, contexts, schemas, TUI, mix tasks
+- Erlang/OTP `28.3.1` (pinned via `.tool-versions`; runtime asserts `>= 27.3.3` in `lib/foglet_bbs/ssh/supervisor.ex` to guard against CVE-2025-32433) — provides the `:ssh`, `:public_key`, and `:crypto` apps that Foglet builds the SSH daemon on top of
 
-**VM:**
-- Erlang OTP 28.3.1 - Underlying runtime for Elixir
+**Secondary:**
+- HEEx / EEx — Phoenix templates under `lib/foglet_bbs_web/controllers/page_html/`
+- SQL — Postgres-flavored migrations under `priv/repo/migrations/`
+- Shell — pre-commit hook at `.githooks/pre-commit`
 
 ## Runtime
 
 **Environment:**
-- Erlang/OTP 28.3.1
+- Erlang/OTP 28 BEAM VM, Elixir 1.19 release built via `mix release` (see `Dockerfile`, `rel/env.sh.eex`).
+- Production runs as a Mix release named `foglet_bbs` on Debian Trixie slim images.
+- Two listeners: SSH on TCP `2222` (front door) and Phoenix HTTP on `4000` (LiveDashboard, `/up` health, future structured clients).
 
 **Package Manager:**
-- Mix (Elixir's built-in package manager)
-- Lockfile: `mix.lock` (present)
+- Mix (built into Elixir).
+- Lockfile: `mix.lock` is committed and authoritative. `mix deps.unlock --unused` is enforced as part of the `precommit` alias in `mix.exs`.
 
 ## Frameworks
 
-**Core Web:**
-- Phoenix 1.8.5 - Web framework and HTTP server adapter
-
-**Real-time & Pub/Sub:**
-- Phoenix.LiveView 1.1.28 - Dynamic UI updates over WebSocket
-- Phoenix.PubSub 2.2.0 - Pub/Sub messaging layer
-
-**TUI/Terminal:**
-- Raxol (vendor/raxol, local path dependency) 2.4.0 - Terminal UI framework
-  - Raxol.Core 2.4.0 - Core TUI infrastructure
-  - Raxol.LiveView 2.4.0 - LiveView integration for TUI
-  - Raxol.Terminal 2.4.0 - Terminal driver
-  - Raxol.Sensor 2.4.0 - Terminal sensor/monitoring
-  - Raxol.MCP 2.4.0 - MCP protocol support
-  - Raxol.Plugin 2.4.0 - Plugin system
-
-**Database:**
-- Ecto 3.13.5 - Database abstraction layer
-- EctoSQL 3.13.5 - SQL support for Ecto
-- Postgrex 0.22.0 - PostgreSQL driver
-
-**Job Queue:**
-- Oban 2.21.1 - Job queue system (installed but not currently configured)
-
-**Markup/Rendering:**
-- Mdex 0.12.1 - Markdown parser and renderer with syntax highlighting (via Lumis/Rustler)
-- Phoenix.HTML 4.3.0 - HTML generation utilities
-
-**HTTP Client:**
-- Req 0.5 (optional, referenced in Raxol deps) - HTTP client library
-
-## Testing & Development
+**Core:**
+- `:phoenix` `1.8.5` — endpoint, router, PubSub, telemetry plumbing (`lib/foglet_bbs_web/`). Per `AGENTS.md` Phoenix is infrastructure only; SSH/TUI is the product surface.
+- `:phoenix_ecto` `4.7.0` — Ecto integration (CheckRepoStatus plug in `lib/foglet_bbs_web/endpoint.ex`).
+- `:phoenix_live_dashboard` `0.8.7` — `/dev/dashboard` route in `lib/foglet_bbs_web/router.ex` (dev-only behind `dev_routes`).
+- `:phoenix_live_view` `1.1.28` — pulled in transitively by LiveDashboard; not used for end-user UI.
+- `:bandit` `1.10.4` — HTTP server adapter (`Bandit.PhoenixAdapter` set in `config/config.exs`).
+- `:ecto` `3.13.5` / `:ecto_sql` `3.13.5` — schemas, changesets, migrations (`Foglet.Schema` is the shared base in `lib/foglet_bbs/schema.ex`).
+- `:postgrex` (resolved through `mix.lock`) — Postgres driver.
+- `:raxol` `2.4.0` (vendored at `vendor/raxol/`, pulled with `path:` in `mix.exs`) — terminal UI runtime that powers `Foglet.TUI.App`. Feature flags are configured in `config/config.exs` (database/web_interface/plugins/audit disabled; pubsub/terminal_driver/telemetry on).
 
 **Testing:**
-- ExUnit (Elixir stdlib) - Test framework (via `mix test`)
-- StreamData 1.3.0 - Property-based testing
+- ExUnit (built into Elixir) — see `test/test_helper.exs` and `test/support/`.
+- `:stream_data` `1.3.0` (`only: [:dev, :test]`) — property-based testing.
+- `Ecto.Adapters.SQL.Sandbox` — concurrent test isolation (`config/test.exs`).
+- Swoosh `Swoosh.Adapters.Test` for mail assertions in tests (`config/test.exs`).
+- Synthetic TUI fixtures: `lib/foglet_bbs/tui/render_fixtures.ex` (used by `mix foglet.tui.render`).
 
-**Code Quality:**
-- Credo 1.7.18 - Static analysis (linting)
-- Dialyxir 1.4.7 - Type checking via Dialyzer
-- Sobelow 0.14.1 - Security-focused static analysis
+**Build/Dev:**
+- `:dialyxir` `1.4.7` (`only: [:dev, :test]`) — Dialyzer wrapper. PLT cache is keyed in CI (`.github/workflows/ci.yml`). Ignore list: `.dialyzer_ignore.exs`. Flags: `[:error_handling, :underspecs, :unmatched_returns, :unknown]` (`mix.exs`).
+- `:credo` `1.7.18` (`only: [:dev, :test]`) — strict static analysis driven by `.credo.exs`.
+- `:sobelow` `0.13` — security-focused static analysis. Config: `.sobelow-conf`. Run with `--exit Low` in CI and precommit.
+- `mix hex.audit` — runs in CI for advisory checks.
+- `:dotenvy` `1.1.1` — loads `.env.local` at runtime in dev (see `config/runtime.exs`).
+- Git pre-commit hook (`.githooks/pre-commit`) chains to `mix precommit`. Wired up by `mix setup` via `cmd git config core.hooksPath .githooks` (`mix.exs`).
 
 ## Key Dependencies
 
 **Critical:**
-- postgrex 0.22.0 - PostgreSQL driver; required for Repo operations
-- argon2_elixir 4.1.3 - Password hashing via Argon2; handles user authentication in `FogletBbs.Accounts`
-- json 1.4.4 - JSON encoding/decoding; used by Phoenix for API responses
+- `:argon2_elixir` `4.1.3` — password hashing for `Foglet.Accounts.User`. Lowered cost in `config/test.exs` (`t_cost: 1, m_cost: 8`) for fast tests; production uses library defaults.
+- `:bodyguard` `2.4.3` — policy authorization. Single policy module: `Foglet.Authorization` (`lib/foglet_bbs/authorization.ex`). Stable scope shapes are `:site` and `{:board, board_id}`.
+- `:hammer` `7.3.0` — ETS-backed rate limiting. Used by `Foglet.SSH.RateLimiter` (`lib/foglet_bbs/ssh/rate_limiter.ex`) for per-IP SSH connection throttling (10 connections / 60s, fail-open on errors).
+- `:oban` `2.21.1` — background job processing dependency listed in `mix.exs`. (No active Oban workers found in `lib/`; included for future use, not currently scheduled in `FogletBbs.Application`.)
+- `:mdex` `0.12.1` — CommonMark parser used by `Foglet.Markdown` (`lib/foglet_bbs/markdown.ex`) to render post bodies into Raxol-friendly `{text, style}` tuples. Strips raw ANSI from user input.
+- `:swoosh` `1.25.0` — outbound transactional mail (`Foglet.Mailer` in `lib/foglet_bbs/mailer.ex`, builders in `lib/foglet_bbs/accounts/email.ex`).
+- `:gen_smtp` `1.3.0` — SMTP backend that pairs with `Swoosh.Adapters.SMTP` in production.
+- `:timex` `3.7` — IANA timezone validation (`Timex.Timezone.exists?/1` is called at boot in `lib/foglet_bbs/application.ex`).
+- `:bodyguard`, `:phoenix_ecto`, `:dns_cluster` `0.2.0` — DNS-based clustering wired into `FogletBbs.Application` via `DNS_CLUSTER_QUERY`.
 
 **Infrastructure:**
-- dns_cluster 0.2.0 - DNS-based clustering for distributed deployments
-- bandit 1.10.4 - HTTP server adapter (replaces Cowboy); Plug-compatible
-- telemetry 1.4.1 - Metrics and observability hooks
-- telemetry_metrics 1.1.0 - Metrics collection
-- telemetry_poller 1.3.0 - Periodic metrics sampling
-
-**Security & Auth:**
-- comeonin 5.5.1 - Dependency of argon2_elixir; password handling utilities
-- plug_crypto 2.1.1 - Encryption and signing utilities
-
-**Utilities:**
-- gettext 1.0.2 - Internationalization (i18n)
-- uuid 1.1.8 - UUID generation
-- toml 0.7.0 - TOML parsing
-- yaml_elixir 2.12.1 - YAML parsing (for Raxol config)
-- circular_buffer 1.0.0 - Circular buffer data structure (used by Raxol)
-- clipboard 0.2.1 - Clipboard integration (TUI feature)
-
-**Build & Compilation:**
-- elixir_make 0.9.0 - Build support for native extensions
-- rustler_precompiled 0.9.0 - Precompiled Rust bindings (mdex syntax highlighting)
+- `:telemetry_metrics` `~> 1.0`, `:telemetry_poller` `~> 1.0` — VM/Phoenix/Repo metrics defined in `lib/foglet_bbs_web/telemetry.ex`.
+- `:gettext` `1.0.2` — i18n backend at `lib/foglet_bbs_web/gettext.ex` (translations under `priv/gettext/`).
+- `:jason` `1.4.4` — JSON encoder/decoder; configured as `phoenix.json_library` in `config/config.exs`.
 
 ## Configuration
 
 **Environment:**
-- Configured via `config/*.exs` files with environment-specific overrides
-- Runtime config via `config/runtime.exs` for secrets and deployment parameters
-- ETS cache initialization for runtime config (see `FogletBbs.Config`)
+- Compile-time: `config/config.exs`, `config/dev.exs`, `config/prod.exs`, `config/test.exs`.
+- Runtime: `config/runtime.exs` is the single place env vars are read (`PORT`, `DATABASE_URL`, `SECRET_KEY_BASE`, `PHX_HOST`, `ECTO_IPV6`, `POOL_SIZE`, `DNS_CLUSTER_QUERY`, `FOGLET_SSH_PORT`, `SSH_HOST_KEY_DIR`, `FOGLET_DEFAULT_TIMEZONE`, `FOGLET_MAIL_FROM`, `FOGLET_SMTP_*`).
+- `.env.example` documents required/optional env vars. `.env.local` exists locally; loaded in dev via `Dotenvy.source/1` at runtime (real env wins). Never read in code paths outside `config/runtime.exs`.
+- Database-backed runtime config: the `configuration` table fronted by `Foglet.Config` (read-through ETS cache, `lib/foglet_bbs/config.ex`). Schemas live under `lib/foglet_bbs/config/`. Seeded from `priv/repo/seeds/config.exs`.
 
-**Key Configuration Files:**
-- `config/config.exs` - Base configuration; Ecto, Phoenix endpoint, Raxol features
-- `config/dev.exs` - Development database (PostgreSQL localhost), live reload settings
-- `config/prod.exs` - Force SSL, HSTS headers
-- `config/runtime.exs` - Production runtime secrets (DATABASE_URL, SECRET_KEY_BASE, PORT, SSH_PORT, SENTRY_DSN)
-- `config/test.exs` - Test-specific settings
-- `.env.example` - Environment variable template for development
-
-**Database Configuration:**
-- Development: `foglet_bbs_dev` database on localhost via Postgrex
-- Production: DATABASE_URL from environment (format: `ecto://USER:PASS@HOST/DATABASE`)
-- Connection pooling: 10 in dev, configurable in prod (POOL_SIZE env var)
-- IPv6 support via ECTO_IPV6 env var
+**Build:**
+- `mix.exs` — deps, aliases (`setup`, `ecto.setup`, `ecto.reset`, `test`, `precommit`).
+- `.formatter.exs` — `import_deps: [:ecto, :ecto_sql, :phoenix]`, formats `config/`, `lib/`, `test/`, `priv/*/seeds.exs`, and migrations.
+- `.credo.exs`, `.sobelow-conf`, `.dialyzer_ignore.exs`.
+- `Dockerfile` (multi-stage Hex Elixir builder + Debian Trixie runner) and `.dockerignore`.
+- `rel/env.sh.eex`, `rel/overlays/` — release tweaks.
+- `fly.toml` — Fly.io deployment manifest.
 
 ## Platform Requirements
 
 **Development:**
-- Elixir 1.19.5 with OTP 28.3.1 (enforced via `.tool-versions`)
-- PostgreSQL (development uses localhost)
-- Mix (comes with Elixir)
+- Erlang/OTP `28.3.1`, Elixir `1.19.5` (managed via `asdf` / `mise` reading `.tool-versions`).
+- Postgres 16 (provided by `docker-compose.yml`: `postgres:16` on `localhost:5432`, db `foglet_bbs_dev`).
+- `mix setup` bootstraps deps, ecto, and the git hooks path.
 
 **Production:**
-- Elixir 1.19.5 with OTP 28.3.1
-- PostgreSQL 9.5+ (typical Phoenix requirement)
-- Environment variables: DATABASE_URL, SECRET_KEY_BASE, PHX_HOST (required); PORT, POOL_SIZE, SSH_PORT, SENTRY_DSN (optional)
-- Deployment via `mix release` or direct `mix phx.server`
-- SSH daemon (optional, disabled by setting `start_ssh_daemon: false`)
-
-## Build & Deployment
-
-**Release:**
-- Standard Phoenix release via `mix release`
-- Bandit web server (built-in, no need for external Cowboy setup)
-
-**Aliases:**
-- `mix setup` - Install deps, create DB, migrate, configure git hooks
-- `mix ecto.setup` - Create, migrate, seed database
-- `mix ecto.reset` - Drop and recreate database
-- `mix test` - Run tests with automatic DB setup
-- `mix precommit` - Run full quality checks (compile --warnings-as-errors, format, credo --strict, sobelow, dialyzer)
-
-## Asset Pipeline
-
-**No JavaScript Build Pipeline:**
-- No assets/package.json or Node.js tooling
-- TUI delivered via Raxol terminal framework (server-rendered over SSH)
-- Web interface (if any) uses server-rendered HTML via Phoenix templates
-
-## Observability
-
-**Telemetry:**
-- Telemetry events emitted via telemetry library
-- Metrics collection via telemetry_metrics
-- Live Dashboard available at development routes (`/dashboard`)
-
-**Error Tracking (Future):**
-- SENTRY_DSN env var in runtime.exs but not yet integrated (milestone 10+)
-
-**Logging:**
-- Elixir Logger with default formatter
-- Development: `[$level] $message` format at `:info` level
-- Production: `:info` level, no metadata
-- Request IDs tracked in Phoenix request logging
+- Fly.io app `foglet-bbs`, region `iad`, single VM with attached `foglet_data` volume mounted at `/data` (host SSH keys live in `/data/ssh`). See `fly.toml`.
+- TLS terminated by Fly for HTTP (`force_https = true`); SSH exposed on Fly port `22` mapped to internal `2222`.
+- Postgres provided by `fly postgres` cluster `foglet-bbs-db`; `DATABASE_URL` injected by `fly postgres attach`.
+- Release migrations and config seeds run via `release_command` in `fly.toml` calling `Ecto.Migrator` and `priv/repo/seeds/config.exs`.
+- CI: GitHub Actions `.github/workflows/ci.yml` runs format, compile (warnings-as-errors), credo, hex.audit, sobelow, dialyzer, test against an ephemeral Postgres 16 service.
+- Deploy: `.github/workflows/fly-deploy.yml` triggers `flyctl deploy --remote-only` on push to the `prod` branch.
 
 ---
 
-*Stack analysis: 2026-04-22*
+*Stack analysis: 2026-04-29*
