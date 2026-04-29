@@ -1,9 +1,9 @@
 defmodule Foglet.TUI.Screens.PostReaderTest do
   use ExUnit.Case, async: true
 
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
-  alias Foglet.TUI.{Context, Effect}
 
   # Test-only fake modules — standard ExUnit pattern, exempt from the CLAUDE.md
   # "no nested modules" convention (no cyclic-dependency risk in test files).
@@ -1105,6 +1105,13 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert ctx[:last_read_post_id] == "p1"
       assert ctx[:thread_id] == "t1"
       assert ctx[:board_id] == "b1"
+    end
+  end
+
+  describe "subscriptions/2 export (Phase 39 R6, D-08)" do
+    @tag :phase39_target
+    test "module exports subscriptions/2" do
+      assert function_exported?(Foglet.TUI.Screens.PostReader, :subscriptions, 2)
     end
   end
 end

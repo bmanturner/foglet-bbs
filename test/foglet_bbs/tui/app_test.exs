@@ -1605,6 +1605,21 @@ defmodule Foglet.TUI.AppTest do
       assert pubsub_sub != nil
       refute "thread:t-ignored" in pubsub_sub.data.args.topics
     end
+
+    @tag :phase39_target
+    test "main_menu (stateless authenticated screen) produces only user topic (Phase 39 D-18)" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
+      state = %{state | current_screen: :main_menu, current_user: user}
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      assert pubsub_sub.data.args.topics == ["user:u1"]
+    end
   end
 
   describe "I/O command round-trip (Audit #11)" do

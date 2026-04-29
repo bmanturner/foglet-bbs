@@ -404,4 +404,11 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert length(String.split(moved_text, "\n", trim: true)) <= 22
     assert moved_text =~ "Overlarge Board 25"
   end
+
+  describe "subscriptions/2 export (Phase 39 R7, D-22)" do
+    @tag :phase39_target
+    test "module exports subscriptions/2" do
+      assert function_exported?(Foglet.TUI.Screens.BoardList, :subscriptions, 2)
+    end
+  end
 end

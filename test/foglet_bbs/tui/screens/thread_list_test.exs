@@ -429,4 +429,11 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     assert flat =~ "@unknown"
     assert flat =~ "new"
   end
+
+  describe "subscriptions/2 export (Phase 39 R6, D-08)" do
+    @tag :phase39_target
+    test "module exports subscriptions/2" do
+      assert function_exported?(Foglet.TUI.Screens.ThreadList, :subscriptions, 2)
+    end
+  end
 end

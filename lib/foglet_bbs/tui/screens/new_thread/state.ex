@@ -9,8 +9,8 @@ defmodule Foglet.TUI.Screens.NewThread.State do
   Nested stateful widget state is held as first-class struct fields.
   """
 
-  alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Widgets.Input.TextInput
   alias Raxol.UI.Components.Input.MultiLineInput
 
   @default_max_thread_title_length 60

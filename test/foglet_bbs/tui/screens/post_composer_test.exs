@@ -1,9 +1,9 @@
 defmodule Foglet.TUI.Screens.PostComposerTest do
   use ExUnit.Case, async: true
 
+  alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostComposer.State
-  alias Foglet.TUI.Context
   alias Raxol.UI.Components.Input.MultiLineInput
 
   defmodule FakePosts do
