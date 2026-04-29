@@ -32,6 +32,23 @@ recording final verification evidence.
 Evidence will be appended by the individual Phase 40 plans as each close-gate
 item is fixed or explicitly bounded.
 
+## Render Smoke Evidence
+
+Render smoke commands were run on 2026-04-29 as the final representative
+terminal-size evidence for VERIFY-01 and VERIFY-05. The first render/test
+invocations emitted existing dependency compile warnings from `raxol`
+(`Raxol.Adaptive.NxModel`, `Mogrify`, and `Benchee.Formatter` optional modules,
+plus one grouped-clause warning), but every render command exited 0 and produced
+the requested screen output.
+
+| Command | Screen | Size | Exit code | Result | Expected delta |
+|---------|--------|------|-----------|--------|----------------|
+| `rtk mix foglet.tui.render login --width 64 --height 22` | `login` | 64x22 | 0 | Rendered `Foglet > Login` with centered guest copy and login/register/reset keybar. | None. |
+| `rtk mix foglet.tui.render main_menu --width 80 --height 24` | `main_menu` | 80x24 | 0 | Rendered `Foglet > Home` with navigation and oneliners. | None. |
+| `rtk mix foglet.tui.render board_list --width 132 --height 50` | `board_list` | 132x50 | 0 | Rendered `Foglet > Boards` with synthetic board directory rows and subscribe actions. | None. |
+| `rtk mix foglet.tui.render post_reader --width 80 --height 24` | `post_reader` | 80x24 | 0 | Rendered `Foglet > general > Welcome - read me first` with post body and reader keybar. | None. |
+| `rtk mix test test/foglet_bbs/tui/layout_smoke_test.exs` | layout smoke | supported sizes in test | 0 | Passed: 84 tests, 0 failures. PostReader render-cache miss warnings are expected for cold synthetic layout paths. | None. |
+
 ## Screen Family Coverage Inventory
 
 | Family | Key handling | Task result handling | Route-entry behavior | Effect emission | Test files | Gaps filled in Phase 40 |
