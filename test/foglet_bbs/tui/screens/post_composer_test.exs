@@ -3,6 +3,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostComposer.State
+  alias Foglet.TUI.Context
   alias Raxol.UI.Components.Input.MultiLineInput
 
   defmodule FakePosts do
@@ -613,11 +614,91 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   test "init_screen_state/1 returns valid State struct with input_state" do
     ss = PostComposer.init_screen_state(reply_to: nil, width: 80, height: 12)
     assert %State{} = ss
+    assert ss.board == nil
+    assert ss.board_id == nil
+    assert ss.thread == nil
+    assert ss.thread_id == nil
     assert ss.mode == :edit
     assert ss.reply_to == nil
     assert ss.error == nil
     assert is_struct(ss.input_state, MultiLineInput)
     assert ss.input_state.value == ""
+    assert ss.submission_status == :idle
+    assert ss.submit_result == nil
+  end
+
+  test "PostComposer.State.new/1 accepts route and submit lifecycle overrides" do
+    board = %{id: "b1", name: "General"}
+    thread = %{id: "t1", title: "Hello"}
+    reply = %{id: "p1"}
+
+    ss =
+      State.new(
+        board: board,
+        board_id: "b1",
+        thread: thread,
+        thread_id: "t1",
+        reply_to: reply,
+        origin: :post_reader,
+        submission_status: :submitting,
+        submit_result: {:ok, %{id: "p2"}},
+        value: "draft"
+      )
+
+    assert %State{} = ss
+    assert ss.board == board
+    assert ss.board_id == "b1"
+    assert ss.thread == thread
+    assert ss.thread_id == "t1"
+    assert ss.reply_to == reply
+    assert ss.origin == :post_reader
+    assert ss.submission_status == :submitting
+    assert ss.submit_result == {:ok, %{id: "p2"}}
+    assert ss.input_state.value == "draft"
+  end
+
+  test "PostComposer.State.from_context/1 extracts route params" do
+    board = %{id: "b1", name: "General"}
+    thread = %{id: "t1", title: "Hello"}
+    reply = %{id: "p1"}
+
+    context =
+      Context.new(
+        route: :post_composer,
+        route_params: %{
+          board: board,
+          thread: thread,
+          reply_to: reply,
+          origin: :post_reader
+        }
+      )
+
+    ss = PostComposer.State.from_context(context)
+
+    assert %State{} = ss
+    assert ss.board == board
+    assert ss.board_id == "b1"
+    assert ss.thread == thread
+    assert ss.thread_id == "t1"
+    assert ss.reply_to == reply
+    assert ss.origin == :post_reader
+    assert ss.submission_status == :idle
+    assert ss.submit_result == nil
+    assert ss.input_state.value == ""
+  end
+
+  test "PostComposer.State.from_context/1 defaults origin to post_reader" do
+    context =
+      Context.new(
+        route: :post_composer,
+        route_params: %{"board_id" => "b1", "thread_id" => "t1"}
+      )
+
+    ss = PostComposer.State.from_context(context)
+
+    assert ss.board_id == "b1"
+    assert ss.thread_id == "t1"
+    assert ss.origin == :post_reader
   end
 
   test "composer_screen_state falls back gracefully when screen_state is missing",
