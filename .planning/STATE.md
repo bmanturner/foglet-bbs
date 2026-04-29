@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-29T03:46:01.954Z"
+last_updated: "2026-04-29T03:51:09.760Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 23
-  completed_plans: 20
-  percent: 87
+  completed_plans: 21
+  percent: 91
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 39 (app-shell-simplification) — EXECUTING
-Plan: 2 of 8
+Plan: 3 of 8
 Status: Ready to execute
 Last activity: 2026-04-29
 
@@ -69,6 +69,7 @@ Last activity: 2026-04-29
 - [Phase ?]: [Phase 39-01]: Wave 0 ships fail-loud pin tests tagged @tag :phase39_target excluded from default mix test via test_helper.exs; later waves drop tags as work lands.
 - [Phase ?]: [Phase 39-01]: Render baselines for five tracked screens (main_menu, board_list, thread_list, post_reader, account) captured at 80x24 with the same ANSI-strip pipeline Plan 39-08 will use, so byte-equivalence diff is apples-to-apples.
 - [Phase ?]: [Phase 39-01]: Pre-existing dialyzer warnings on main HEAD (app.ex:63 ThreadEntry.t/0; board_list.ex:161; sysop.ex:810) are deferred — not introduced by Phase 39 — and tracked in deferred-items.md. The app.ex one will be removed naturally by Plan 39-07 struct-field deletion.
+- [Phase ?]: [Phase 39-02]: Declared Foglet.TUI.Screen.subscriptions/2 as an optional callback in the new-contract block (after render/2) with arity ordering local_state-first, Context.t()-second per D-05 — unblocking Plans 39-03 and 39-04 implementers without disturbing the transitional callbacks region (Phase 40 owns that).
 
 ### Pending Todos
 
