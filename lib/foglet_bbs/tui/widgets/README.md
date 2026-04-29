@@ -90,5 +90,6 @@ New widgets should:
 ## Further reading
 
 - **Research:** [`.planning/workstreams/phase-03-polish/phases/08-build-local-widget-library-from-raxol-primitives/08-RESEARCH.md`](../../../../.planning/workstreams/phase-03-polish/phases/08-build-local-widget-library-from-raxol-primitives/08-RESEARCH.md) — Pattern 1 / Pattern 2 / Pattern 3 templates, pitfalls, architecture map.
+- **Screen Contract:** [`../SCREEN_CONTRACT.md`](../SCREEN_CONTRACT.md) — how screens own state, emit `Foglet.TUI.Effect` values, consume `Foglet.TUI.Context`, route task results, request modals, and render through the App shell.
 - **Raxol docs:** [`docs/raxol/getting-started/WIDGET_GALLERY.md`](../../../../docs/raxol/getting-started/WIDGET_GALLERY.md) — source gallery; every Phase 8 widget maps to a section here.
 - **Theming contract:** [`docs/raxol/cookbook/THEMING.md`](../../../../docs/raxol/cookbook/THEMING.md).
