@@ -10,24 +10,21 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 
 ## Current State
 
-**Shipped version:** v1.4 Post-Facelift Polish & Bug Fixes completed on 2026-04-28.
-**Current milestone:** v2.0 TUI Runtime Shell & Screen Update Loops completed on 2026-04-29.
+**Previous shipped version:** v1.4 Post-Facelift Polish & Bug Fixes completed on 2026-04-28.
+**Shipped version:** v2.0 TUI Runtime Shell & Screen Update Loops completed on 2026-04-29.
+**Current milestone:** Planning next milestone.
 
 Foglet now has terminal-native Account, Moderation, and Sysop workbenches; actor-aware authorization; invite-only registration redemption; account profile/preferences; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; board posting and locked-thread restrictions; Account SSH key management; board subscription management; and a polished Unicode-capable SSH/TUI visual foundation.
 
 The v2.0 architecture migration is complete. `Foglet.TUI.App` now acts as a runtime shell for route/session/modal coordination, generic effect interpretation, dynamic PubSub forwarding, task dispatch, and screen-local state storage. Current production screens own their local state transitions through the `init/1`, `update/3`, and `render/2` contract, with compatibility callbacks explicitly bounded for older helpers.
 
-## Current Milestone: v2.0 TUI Runtime Shell & Screen Update Loops
+## Next Milestone Goals
 
-**Goal:** Refactor the SSH/TUI runtime so `Foglet.TUI.App` becomes a small process shell, while each screen owns its local state, key handling, async-result handling, and render boundary through an explicit `init/update/render` interface.
+The next milestone should start from fresh requirements with `$gsd-new-milestone`. Good candidate goals:
 
-**Target features:**
-- Introduce first-class `Foglet.TUI.Context`, `Foglet.TUI.Effect`, and a screen behavior with `init/1`, `update/3`, and `render/2`.
-- Make `App` route normalized messages to the active screen and interpret generic effects only: navigation, tasks, modals, PubSub/session operations, terminal resize, and termination.
-- Replace anonymous `screen_state` bags and screen-owned top-level App fields with screen-local state structs.
-- Fully migrate existing screens so `App` no longer reaches into BoardList, ThreadList, PostReader, Login, Account, Moderation, Sysop, or composer internals for async loads or key behavior.
-- Preserve SSH-first behavior, domain-context boundaries, existing render contracts, and operator/account workflows while the architecture changes under them.
-- Add regression coverage that proves screen reducers own local transitions and `App` remains a generic runtime shell.
+- Choose the next product or infrastructure theme now that the TUI runtime ownership boundary is stable.
+- Revisit dormant notification/email seeds only if they become intentional product scope.
+- Keep future screen work on the v2.0 contract: screens own local reducer state; App stays the runtime shell.
 
 ## Requirements
 
@@ -52,7 +49,8 @@ The v2.0 architecture migration is complete. `Foglet.TUI.App` now acts as a runt
 
 ### Active
 
-- [ ] Resolve future traceability placeholders FUTURE-01 through FUTURE-03 if they become planned requirements.
+- [ ] Define fresh requirements for the next milestone.
+- [ ] Resolve future traceability placeholders FUTURE-01 through FUTURE-03 only if they become planned requirements.
 
 ### Out of Scope
 
@@ -127,4 +125,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-29 after Phase 40 Verification & Documentation completion*
+*Last updated: 2026-04-29 after v2.0 milestone completion*

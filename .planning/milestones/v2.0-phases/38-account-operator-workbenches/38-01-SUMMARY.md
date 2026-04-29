@@ -11,6 +11,7 @@ key-files:
   modified:
     - lib/foglet_bbs/tui/screens/account.ex
     - test/foglet_bbs/tui/screens/account_test.exs
+requirements-completed: [SCREEN-05]
 completed: 2026-04-29
 ---
 

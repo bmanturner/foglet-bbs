@@ -1,10 +1,11 @@
 ---
 phase: 39
 slug: app-shell-simplification
-status: draft
-nyquist_compliant: false
-wave_0_complete: false
+status: complete
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-28
+updated: 2026-04-29
 ---
 
 # Phase 39 — Validation Strategy
@@ -43,13 +44,13 @@ created: 2026-04-28
 
 | Requirement | Test Type | Automated Command | File Exists | Status |
 |-------------|-----------|-------------------|-------------|--------|
-| STATE-02 (struct fields removed; D-19 pin) | unit (struct shape pin) | `rtk mix test test/foglet_bbs/tui/app_struct_test.exs` | ❌ Wave 0 | ⬜ pending |
-| STATE-03 (BreadcrumbBar reads explicit input; D-10..D-12) | unit + render smoke | `rtk mix test test/foglet_bbs/tui/widgets/chrome/breadcrumb_bar_test.exs` + `rtk mix foglet.tui.render thread_list,post_reader,post_composer,new_thread` | ⚠ verify existing | ⬜ pending |
-| STATE-04 (decoder helpers gone) | grep absence | `! grep -nE 'post_reader_state_thread_id\|post_composer_state_thread_id\|thread_list_state_board_id' lib/foglet_bbs/tui/app.ex` | n/a (CI grep) | ⬜ pending |
-| APP-01 (App = runtime shell; SPEC R10) | qualitative review + struct-shape pin | covered by STATE-02; line-count delta reported in SUMMARY.md (non-gating) | n/a | ⬜ pending |
-| APP-02 (no screen-specific result handlers; D-13) | grep absence + reducer test | `! grep -nE 'current_screen ==\|current_screen in \[' lib/foglet_bbs/tui/app.ex`; existing BoardList / PostReader reducer tests prove `{:board_activity,…}` and `{:thread_activity,…}` reach `update/3` | ⚠ verify | ⬜ pending |
-| APP-03 (PubSub from screen-declared interests; D-05..D-09, D-22) | unit (subscription pin) | `rtk mix test test/foglet_bbs/tui/app_test.exs` (subscribe/1 describe block) + new MainMenu-only-`["user:<id>"]` pin (D-18) | ⚠ existing block survives + 1 new test | ⬜ pending |
-| APP-04 (Modal handling unchanged; SPEC R9) | unit (existing modal precedence + SizeGate tests) | `rtk mix test test/foglet_bbs/tui/app_test.exs --only describe:"modal key dismissal"` | ✅ existing | ⬜ pending |
+| STATE-02 (struct fields removed; D-19 pin) | unit (struct shape pin) | `rtk mix test test/foglet_bbs/tui/app_struct_test.exs` | ✅ verified by 39-SUMMARY / 39-VERIFICATION | ✅ complete |
+| STATE-03 (BreadcrumbBar reads explicit input; D-10..D-12) | unit + render smoke | `rtk mix test test/foglet_bbs/tui/widgets/chrome/breadcrumb_bar_test.exs` + `rtk mix foglet.tui.render thread_list,post_reader,post_composer,new_thread` | ✅ verified by 39-SUMMARY / Phase 40 breadcrumb coverage | ✅ complete |
+| STATE-04 (decoder helpers gone) | grep absence | `! grep -nE 'post_reader_state_thread_id\|post_composer_state_thread_id\|thread_list_state_board_id' lib/foglet_bbs/tui/app.ex` | ✅ verified by 39-SUMMARY / 39-VERIFICATION | ✅ complete |
+| APP-01 (App = runtime shell; SPEC R10) | qualitative review + struct-shape pin | covered by STATE-02; line-count delta reported in SUMMARY.md (non-gating) | ✅ verified by SPEC R10 table in 39-SUMMARY | ✅ complete |
+| APP-02 (no screen-specific result handlers; D-13) | grep absence + reducer test | `! grep -nE 'current_screen ==\|current_screen in \[' lib/foglet_bbs/tui/app.ex`; existing BoardList / PostReader reducer tests prove `{:board_activity,…}` and `{:thread_activity,…}` reach `update/3` | ✅ verified by 39-SUMMARY / 39-VERIFICATION | ✅ complete |
+| APP-03 (PubSub from screen-declared interests; D-05..D-09, D-22) | unit (subscription pin) | `rtk mix test test/foglet_bbs/tui/app_test.exs` (subscribe/1 describe block) + new MainMenu-only-`["user:<id>"]` pin (D-18) | ✅ verified by 39-SUMMARY and Phase 40 dynamic PubSub evidence | ✅ complete |
+| APP-04 (Modal handling unchanged; SPEC R9) | unit (existing modal precedence + SizeGate tests) | `rtk mix test test/foglet_bbs/tui/app_test.exs --only describe:"modal key dismissal"` | ✅ verified by 39-SUMMARY / 39-VERIFICATION | ✅ complete |
 
 **Additional pins required by SPEC R6, R7:**
 
@@ -68,12 +69,12 @@ created: 2026-04-28
 
 Wave 0 must run BEFORE any source change so tests fail-loud against the live struct shape and so render baselines reflect the pre-phase state.
 
-- [ ] `test/foglet_bbs/tui/app_struct_test.exs` — new file; struct-shape pin (D-19)
-- [ ] New unit block in `test/foglet_bbs/tui/screen_test.exs` — `@optional_callbacks` includes `{:subscriptions, 2}` (SPEC R6)
-- [ ] New `function_exported?/3` pins for `:subscriptions/2` in `post_reader_test.exs`, `thread_list_test.exs`, `board_list_test.exs` (SPEC R6, D-22)
-- [ ] New `app_test.exs` `subscribe/1` pin: authenticated MainMenu produces only `["user:<id>"]` (D-18)
-- [ ] **Baseline capture** for `rtk mix foglet.tui.render` golden snapshots — capture pre-phase output for `main_menu`, `board_list`, `thread_list`, `post_reader`, `account` and store under `test/foglet_bbs/tui/render_snapshots/` (or equivalent fixture directory) before any source change. SPEC §Acceptance requires byte-for-byte match versus pre-phase baseline (after ANSI strip), except for explicit breadcrumb-input changes.
-- [ ] Test-fixture migration plan body (per D-23) — enumerate the ~20 sites in `post_reader_test.exs` plus 5 sites in `app_test.exs` (lines 1666, 2011, 2092, 2099, 2110) before deletion lands
+- [x] `test/foglet_bbs/tui/app_struct_test.exs` — new file; struct-shape pin (D-19)
+- [x] New unit block in `test/foglet_bbs/tui/screen_test.exs` — `@optional_callbacks` includes `{:subscriptions, 2}` (SPEC R6)
+- [x] New `function_exported?/3` pins for `:subscriptions/2` in `post_reader_test.exs`, `thread_list_test.exs`, `board_list_test.exs` (SPEC R6, D-22)
+- [x] New `app_test.exs` `subscribe/1` pin: authenticated MainMenu produces only `["user:<id>"]` (D-18)
+- [x] **Baseline capture** for `rtk mix foglet.tui.render` golden snapshots — captured pre-phase output for `main_menu`, `board_list`, `thread_list`, `post_reader`, `account` under `test/foglet_bbs/tui/render_snapshots/`.
+- [x] Test-fixture migration plan body (per D-23) — enumerated and completed in `39-07-SUMMARY.md`.
 
 ---
 
@@ -87,11 +88,11 @@ Wave 0 must run BEFORE any source change so tests fail-loud against the live str
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (struct pin, callback pin, function_exported pins, MainMenu pin, render baselines, fixture site enumeration)
-- [ ] No watch-mode flags (`mix test --listen-on-stdin` etc. forbidden)
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (struct pin, callback pin, function_exported pins, MainMenu pin, render baselines, fixture site enumeration)
+- [x] No watch-mode flags (`mix test --listen-on-stdin` etc. forbidden)
+- [x] Feedback latency < 60s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+**Approval:** complete

@@ -16,6 +16,7 @@ key-files:
     - lib/foglet_bbs/tui/screens/main_menu.ex
     - test/foglet_bbs/tui/app_test.exs
     - test/foglet_bbs/tui/screens/account_test.exs
+requirements-completed: [SCREEN-05, SCREEN-06]
 completed: 2026-04-29
 ---
 

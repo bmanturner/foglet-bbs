@@ -1,5 +1,22 @@
 # Project Milestones: Foglet BBS
 
+## v2.0 TUI Runtime Shell & Screen Update Loops (Shipped: 2026-04-29)
+
+**Phases completed:** 7 phases, 28 plans, 78 tasks
+
+**Key accomplishments:**
+
+- Introduced the screen runtime contract with `Foglet.TUI.Context`, `Foglet.TUI.Effect`, and screen-owned `init/1`, `update/3`, and `render/2` callbacks.
+- Migrated auth, home, board/thread directory, post reader, composer, account, moderation, and sysop flows so local state and async results live in the owning screens.
+- Simplified `Foglet.TUI.App` into a runtime shell for route/session/modal coordination, generic effects, PubSub forwarding, task dispatch, and render delegation.
+- Replaced App-owned screen fields and screen-specific result handling with route-keyed screen state, screen-declared subscriptions, and reducer-owned task results.
+- Closed Phase 39 carry-forward blockers, added the TUI screen contract guide, and passed the full `rtk mix precommit` close gate.
+- Archived phase execution history, requirements, roadmap, and the passing v2.0 milestone audit.
+
+**Known deferred items at close:** 16 acknowledged open artifacts; see `.planning/STATE.md` Deferred Items.
+
+---
+
 ## v1.4 Post-Facelift Polish & Bug Fixes (Completed: 2026-04-28)
 
 **Phases completed:** 8 phases, ending at Phase 33.

@@ -11,6 +11,7 @@ key-files:
   modified:
     - lib/foglet_bbs/tui/screens/sysop.ex
     - test/foglet_bbs/tui/screens/sysop_test.exs
+requirements-completed: [SCREEN-06]
 completed: 2026-04-29
 ---
 

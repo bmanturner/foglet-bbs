@@ -1,15 +1,15 @@
 ---
 gsd_state_version: 1.0
 milestone: v2.0
-milestone_name: milestone
+milestone_name: TUI Runtime Shell & Screen Update Loops
 status: complete
-last_updated: "2026-04-29T16:29:38.521Z"
+last_updated: "2026-04-29T16:53:10.364Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 7
-  completed_phases: 6
+  completed_phases: 7
   total_plans: 28
-  completed_plans: 34
+  completed_plans: 28
   percent: 100
 ---
 
@@ -20,14 +20,37 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** v2.0 milestone complete — Phase 40 verification-documentation passed
+**Current focus:** Planning next milestone after v2.0 completion
 
 ## Current Position
 
-Phase: 40
+Phase: None
 Plan: Not started
-Status: Phase complete — verification passed
+Status: v2.0 milestone archived and tagged
 Last activity: 2026-04-29
+
+## Deferred Items
+
+Items acknowledged and deferred at milestone close on 2026-04-29:
+
+| Category | Item | Status |
+|----------|------|--------|
+| debug | account-profile-save-broken | diagnosed |
+| debug | press-enter-not-submitting | diagnosed |
+| debug | sysop-site-footer-mismatch | diagnosed |
+| quick_task | 260422-irb-build-a-typed-config-schema-with-accesso | missing |
+| quick_task | 260422-mpz-ssh-connection-rate-limiting-design-choi | missing |
+| quick_task | 260422-neu-convert-threads-list-threads-2-to-struct | missing |
+| quick_task | 260422-nsx-dual-domain-injection-patterns-in-the-tu | missing |
+| quick_task | 260422-oez-rewrite-posts-user-id-tombstone-user-id- | missing |
+| quick_task | 260422-omm-today-handle-ssh-msg-for-pty-data-window | missing |
+| quick_task | 260426-g0k-there-is-an-issue-with-text-input-if-i-t | missing |
+| quick_task | 260426-gnq-the-recent-milestone-was-supposed-to-cha | missing |
+| quick_task | 260426-jbn-the-application-only-allows-one-active-c | missing |
+| quick_task | 260426-jdz-gsd-quick-full-id-56e39788-5cba-41d3-abb | missing |
+| quick_task | 260428-eyd-investigate-removing-screen-text-presenc | missing |
+| seed | SEED-001-user-notifications-over-webhook | dormant |
+| seed | SEED-002-email-verification-ux | dormant |
 
 ## Accumulated Context
 
