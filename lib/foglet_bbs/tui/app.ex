@@ -24,15 +24,13 @@ defmodule Foglet.TUI.App do
 
   alias Foglet.Accounts
   alias Foglet.PubSub
+  alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.InitialRouteEnterForwarder
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.SizeGate
-  alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets
-  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
   alias Raxol.Core.Runtime.Command
   alias Raxol.Core.Runtime.Subscription
 
@@ -164,7 +162,7 @@ defmodule Foglet.TUI.App do
   end
 
   def apply_effect(%__MODULE__{} = state, %Effect{type: :modal, payload: :dismiss}) do
-    {%{state | modal: nil}, []}
+    AppModal.dismiss(state)
   end
 
   def apply_effect(%__MODULE__{} = state, %Effect{
@@ -175,7 +173,7 @@ defmodule Foglet.TUI.App do
     if modal_submit_target?(state, screen_key) do
       Routing.route_screen_update(state, screen_key, {:modal_submit, kind, payload})
     else
-      modal_submit_error(state)
+      AppModal.submit_error(state)
     end
   end
 
@@ -368,31 +366,10 @@ defmodule Foglet.TUI.App do
         SizeGate.render(state)
 
       state.modal ->
-        render_modal_overlay(state.modal, state)
+        AppModal.render_overlay(state.modal, state)
 
       true ->
         Routing.render_screen(state)
-    end
-  end
-
-  # Renders the modal as the sole visible content, centered in the terminal.
-  # Extracts theme from state.session_context and passes it through to the
-  # theme-aware Modal.render/2 (Phase 7 thin adapter, D-08).
-  #
-  # Modal.Form-backed :form modal callers (future) MUST pass `show_footer: true`
-  # to `Modal.Form.init/1` so the [Enter] Submit / [Esc] Cancel footer is
-  # advertised inside the centered overlay box (Phase 28 D-06). Inline tab-body
-  # consumers (Account Profile/Prefs, Sysop Site) MUST omit the option (default
-  # false) so the global command bar is the single advertiser of those keys.
-  defp render_modal_overlay(modal, state) do
-    theme = Theme.from_state(state)
-
-    column justify: :center, align: :center do
-      [
-        box style: %{border: :double, padding: 1, border_fg: theme.border.fg} do
-          Widgets.Modal.render(modal, theme)
-        end
-      ]
     end
   end
 
@@ -518,37 +495,11 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update(:dismiss_modal, state) do
-    {%{state | modal: nil}, []}
+    AppModal.dismiss(state)
   end
 
-  # Confirm modal — invoke on_confirm or on_cancel callback if present.
-  # Callbacks may return {:navigate, screen} or a full {state, commands} tuple.
-  # If absent, just dismiss.
   defp do_update({:confirm_modal, answer}, state) do
-    modal = state.modal
-    cleared = %{state | modal: nil}
-
-    callback_key = if answer == :yes, do: :on_confirm, else: :on_cancel
-    callback = modal && Map.get(modal, callback_key)
-
-    case callback do
-      nil ->
-        {cleared, []}
-
-      :dismiss_modal ->
-        {cleared, []}
-
-      fun when is_function(fun, 1) ->
-        result = fun.(cleared)
-
-        case result do
-          {%__MODULE__{} = new_state, cmds} when is_list(cmds) ->
-            {new_state, wrap_commands(cmds)}
-
-          msg ->
-            do_update(msg, cleared)
-        end
-    end
+    AppModal.confirm(state, answer)
   end
 
   defp do_update({:key, key_event}, state) do
@@ -562,11 +513,7 @@ defmodule Foglet.TUI.App do
         {state, []}
 
       state.modal != nil ->
-        # Modal is active: route key directly to global_key_handler, which
-        # contains all modal dismiss / confirm logic. Never delegate to the
-        # screen module while a modal is open — screen handlers don't check
-        # state.modal and will consume the key silently.
-        global_key_handler(key_event, state)
+        AppModal.handle_key(key_event, state)
 
       true ->
         Routing.route_screen_update(
@@ -728,16 +675,6 @@ defmodule Foglet.TUI.App do
     Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
   end
 
-  defp modal_submit_error(%__MODULE__{} = state) do
-    modal = %Foglet.TUI.Modal{
-      type: :error,
-      title: "Form Error",
-      message: "Unable to submit form."
-    }
-
-    {%{state | modal: modal}, []}
-  end
-
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
   end
@@ -764,78 +701,4 @@ defmodule Foglet.TUI.App do
   defp format_notification(:dm, %{body: body}), do: "New message: #{body}"
   defp format_notification(:mention, %{thread_title: t}), do: "You were mentioned in: #{t}"
   defp format_notification(kind, _payload), do: "Notification: #{kind}"
-
-  # Modal key dismissal — takes precedence over screen-level and global handlers.
-  # :confirm modals route Y/N to {:confirm_modal, :yes/:no}.
-  # :info/:error/:warning modals dismiss on Enter, Escape, or Space.
-  defp global_key_handler(key, %{modal: modal} = state) when not is_nil(modal) do
-    modal_type = Map.get(modal, :type, :info)
-    handle_modal_key(modal_type, key, state)
-  end
-
-  defp global_key_handler(_key, state), do: {state, []}
-
-  # :confirm modal — Y/y confirm, N/n/Escape cancel
-  defp handle_modal_key(:confirm, %{key: :char, char: c}, state) when c in ["y", "Y"] do
-    do_update({:confirm_modal, :yes}, state)
-  end
-
-  defp handle_modal_key(:confirm, %{key: :char, char: c}, state) when c in ["n", "N"] do
-    do_update({:confirm_modal, :no}, state)
-  end
-
-  defp handle_modal_key(:confirm, %{key: :escape}, state) do
-    do_update({:confirm_modal, :no}, state)
-  end
-
-  defp handle_modal_key(
-         :form,
-         key,
-         %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
-       ) do
-    {new_form, action} = ModalForm.handle_event(key, form)
-    state = %{state | modal: %{state.modal | message: new_form}}
-
-    case action do
-      {:submitted, %Effect{type: :modal_submit} = effect} ->
-        apply_effect(state, effect)
-
-      :submitted ->
-        modal_submit_error(state)
-
-      {:submitted, _other} ->
-        modal_submit_error(state)
-
-      :cancelled ->
-        do_update(:dismiss_modal, state)
-
-      _other ->
-        {state, []}
-    end
-  end
-
-  # :info/:error/:warning modals — dismiss on Enter, Escape, or Space (spacebar)
-  defp handle_modal_key(type, %{key: :enter}, state) when type in [:info, :error, :warning] do
-    do_update(:dismiss_modal, state)
-  end
-
-  defp handle_modal_key(type, %{key: :escape}, state) when type in [:info, :error, :warning] do
-    do_update(:dismiss_modal, state)
-  end
-
-  defp handle_modal_key(type, %{key: :char, char: " "}, state)
-       when type in [:info, :error, :warning] do
-    do_update(:dismiss_modal, state)
-  end
-
-  defp handle_modal_key(_type, _key, state), do: {state, []}
-
-  # wrap_commands/wrap_command are used only for modal callback results, which
-  # return full %Command{} structs or {:terminate, reason}. Screen reducers now
-  # return Effect structs; App interprets those through apply_effects/2.
-  defp wrap_commands(commands), do: Enum.map(commands, &wrap_command/1)
-
-  defp wrap_command({:terminate, _reason}), do: Command.quit()
-  defp wrap_command(%Command{} = cmd), do: cmd
-  defp wrap_command(other), do: other
 end
