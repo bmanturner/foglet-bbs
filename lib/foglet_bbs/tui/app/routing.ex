@@ -197,7 +197,7 @@ defmodule Foglet.TUI.App.Routing do
   defp reinitialize_route_state?(key, module, params) do
     Code.ensure_loaded?(module) and function_exported?(module, :init, 1) and
       (route_owned_screen?(key) or
-         (map_size(params || %{}) > 0 and function_exported?(module, :update, 3)))
+         (map_size(params) > 0 and function_exported?(module, :update, 3)))
   end
 
   defp domain_from_session_context(session_context) when is_map(session_context) do
