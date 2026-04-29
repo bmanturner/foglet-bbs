@@ -11,11 +11,11 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 ## Current State
 
 **Shipped version:** v1.4 Post-Facelift Polish & Bug Fixes completed on 2026-04-28.
-**Current milestone:** v2.0 TUI Runtime Shell & Screen Update Loops.
+**Current milestone:** v2.0 TUI Runtime Shell & Screen Update Loops completed on 2026-04-29.
 
 Foglet now has terminal-native Account, Moderation, and Sysop workbenches; actor-aware authorization; invite-only registration redemption; account profile/preferences; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; board posting and locked-thread restrictions; Account SSH key management; board subscription management; and a polished Unicode-capable SSH/TUI visual foundation.
 
-The next architecture problem is ownership: `Foglet.TUI.App` currently owns route state, session state, modal state, task dispatch, task results, screen-specific async result handling, and screen-local state updates. Screens already own many render/key decisions, and widgets already follow a local `init/handle_event/render` pattern. v2.0 makes that ownership explicit at the screen boundary so `App` becomes a small runtime shell.
+The v2.0 architecture migration is complete. `Foglet.TUI.App` now acts as a runtime shell for route/session/modal coordination, generic effect interpretation, dynamic PubSub forwarding, task dispatch, and screen-local state storage. Current production screens own their local state transitions through the `init/1`, `update/3`, and `render/2` contract, with compatibility callbacks explicitly bounded for older helpers.
 
 ## Current Milestone: v2.0 TUI Runtime Shell & Screen Update Loops
 
@@ -47,11 +47,12 @@ The next architecture problem is ownership: `Foglet.TUI.App` currently owns rout
 - [x] v2.0 Phase 34 proved generic navigation, task, modal, publish/session, terminal-size, and quit effects through App, including task result routing back into screen `update/3`.
 - [x] v2.0 Phase 34 documented stateful/stateless screen conventions and preserved existing App/render smoke behavior while deferring full screen-family migration.
 - [x] v2.0 Phase 36 migrated BoardList and ThreadList to screen-owned reducers for directory/thread loading, subscription feedback, route-param navigation, PubSub topic derivation, and render fixture ownership.
+- [x] v2.0 Phase 40 completed the current screen migration to the mini update-loop model while preserving SSH/TUI behavior, render smoke coverage, breadcrumbs, auth session promotion, dynamic PubSub subscriptions, and precommit gates.
+- [x] v2.0 Phase 40 removed production App fallback dispatch to legacy `handle_key/2` and `render/1`, bounded compatibility callbacks in `Foglet.TUI.Screen`, and documented the new screen contract in `lib/foglet_bbs/tui/SCREEN_CONTRACT.md`.
 
 ### Active
 
-- [ ] v2.0 - Fully migrate all current screens to the mini update-loop model while preserving SSH/TUI behavior and render contracts.
-- [ ] v2.0 - Remove screen-specific domain/result clauses and generic `screen_state` manipulation from `App` after migration.
+- [ ] Resolve future traceability placeholders FUTURE-01 through FUTURE-03 if they become planned requirements.
 
 ### Out of Scope
 
@@ -104,8 +105,9 @@ Widgets already model the smaller local reducer style through `init/1`, `handle_
 | Store domain truth in Postgres and ephemeral truth in ETS/processes | Durable BBS data needs database consistency; presence, caches, and live UI state can be rebuilt | Good |
 | Keep sysop administration inside the TUI for day-to-day operations | A sysop should be able to operate the BBS from the same terminal experience users inhabit | Good |
 | Split the TUI facelift into Classic Modern BBS and Operator Console modes | User-facing conversation screens should feel social and placeful, while account/operator work remains compact and administrative | Good |
-| Make v2.0 an architecture milestone for screen ownership | `Foglet.TUI.App` has accumulated screen-specific routing, async-result handling, and state mutation; moving those decisions into screens makes future TUI work safer | Phase 34 foundation validated |
-| Treat BoardList and ThreadList as screen-owned directory reducers | Board/thread browsing state, async loads, feedback, and route params now flow through local state and screen-tagged effects; App keeps only a documented Phase 37 bridge for PostReader | Phase 36 validated |
+| Make v2.0 an architecture milestone for screen ownership | `Foglet.TUI.App` had accumulated screen-specific routing, async-result handling, and state mutation; moving those decisions into screens makes future TUI work safer | Phase 40 validated |
+| Treat BoardList and ThreadList as screen-owned directory reducers | Board/thread browsing state, async loads, feedback, and route params now flow through local state and screen-tagged effects | Phase 40 validated |
+| Bound legacy screen callbacks instead of deleting every helper immediately | Some modules and tests still expose compatibility helpers, but production App dispatch no longer depends on broad App-state callbacks | Phase 40 validated |
 
 ## Evolution
 
@@ -125,4 +127,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-28 after Phase 36 Board & Thread Directory Flow completion*
+*Last updated: 2026-04-29 after Phase 40 Verification & Documentation completion*
