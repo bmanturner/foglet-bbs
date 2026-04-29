@@ -44,6 +44,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.App
+  alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.NewThread.State
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -142,12 +143,59 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert ss.focused == :title
     assert ss.error == nil
     assert ss.origin == :main_menu
+    assert ss.load_status == :idle
+    assert ss.submission_status == :idle
+    assert ss.submit_result == nil
   end
 
   test "init_screen_state/1 with boards pre-loaded stores them" do
     boards = [%{id: "b1", name: "General"}]
     ss = NewThread.init_screen_state(boards: boards)
     assert ss.boards == boards
+  end
+
+  test "NewThread.State.from_context/1 without routed board initializes board picker" do
+    ctx = Context.new(route: :new_thread, route_params: %{})
+
+    assert %State{
+             step: :board,
+             boards: nil,
+             board: nil,
+             selected_board_index: 0,
+             origin: :main_menu,
+             load_status: :idle,
+             submission_status: :idle,
+             submit_result: nil
+           } = NewThread.State.from_context(ctx)
+  end
+
+  test "NewThread.State.from_context/1 stores origin without routed board" do
+    ctx = Context.new(route: :new_thread, route_params: %{"origin" => :thread_list})
+
+    assert %State{step: :board, origin: :thread_list, load_status: :idle} =
+             NewThread.State.from_context(ctx)
+  end
+
+  test "NewThread.State.from_context/1 with routed board initializes compose step" do
+    board = %{id: "b1", name: "General"}
+    ctx = Context.new(route: :new_thread, route_params: %{origin: :thread_list, board: board})
+
+    assert %State{
+             step: :compose,
+             board: ^board,
+             boards: [^board],
+             selected_board_index: 0,
+             origin: :thread_list,
+             load_status: :loaded
+           } = NewThread.State.from_context(ctx)
+  end
+
+  test "NewThread.State.from_context/1 applies explicit board_id when board omits id" do
+    board = %{"name" => "General"}
+    ctx = Context.new(route: :new_thread, route_params: %{"board" => board, "board_id" => "b1"})
+
+    assert %State{step: :compose, board: %{id: "b1"}, boards: [%{id: "b1"}]} =
+             NewThread.State.from_context(ctx)
   end
 
   # ---------------------------------------------------------------------------

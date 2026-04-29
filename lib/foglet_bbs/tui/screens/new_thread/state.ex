@@ -7,9 +7,13 @@ defmodule Foglet.TUI.Screens.NewThread.State do
   """
 
   alias Foglet.TUI.Widgets.Input.TextInput
+  alias Foglet.TUI.Context
   alias Raxol.UI.Components.Input.MultiLineInput
 
   @default_max_thread_title_length 60
+
+  @type load_status :: :idle | :loading | :loaded | :empty | {:error, term()}
+  @type submission_status :: :idle | :submitting | {:error, term()} | :submitted
 
   @type t :: %__MODULE__{
           step: :board | :compose,
@@ -22,7 +26,10 @@ defmodule Foglet.TUI.Screens.NewThread.State do
           focused: :title | :body,
           mode: :edit | :preview,
           error: String.t() | nil,
-          origin: atom()
+          origin: atom(),
+          load_status: load_status(),
+          submission_status: submission_status(),
+          submit_result: term() | nil
         }
 
   defstruct step: :board,
@@ -35,7 +42,10 @@ defmodule Foglet.TUI.Screens.NewThread.State do
             focused: :title,
             mode: :edit,
             error: nil,
-            origin: :main_menu
+            origin: :main_menu,
+            load_status: :idle,
+            submission_status: :idle,
+            submit_result: nil
 
   @doc """
   Builds a fresh NewThread screen state struct.
@@ -72,7 +82,47 @@ defmodule Foglet.TUI.Screens.NewThread.State do
       focused: Keyword.get(opts, :focused, :title),
       mode: Keyword.get(opts, :mode, :edit),
       error: Keyword.get(opts, :error, nil),
-      origin: Keyword.get(opts, :origin, :main_menu)
+      origin: Keyword.get(opts, :origin, :main_menu),
+      load_status: Keyword.get(opts, :load_status, :idle),
+      submission_status: Keyword.get(opts, :submission_status, :idle),
+      submit_result: Keyword.get(opts, :submit_result, nil)
     }
   end
+
+  @spec from_context(Context.t()) :: t()
+  def from_context(%Context{} = context) do
+    params = context.route_params || %{}
+    origin = Map.get(params, :origin) || Map.get(params, "origin") || :main_menu
+    board = Map.get(params, :board) || Map.get(params, "board")
+
+    board_id =
+      Map.get(params, :board_id) || Map.get(params, "board_id") || board_id_from_board(board)
+
+    if board do
+      board = normalize_board_id(board, board_id)
+
+      new(
+        step: :compose,
+        board: board,
+        boards: [board],
+        selected_board_index: 0,
+        origin: origin,
+        load_status: :loaded
+      )
+    else
+      new(step: :board, boards: nil, origin: origin, load_status: :idle)
+    end
+  end
+
+  defp board_id_from_board(%{} = board), do: Map.get(board, :id) || Map.get(board, "id")
+  defp board_id_from_board(_board), do: nil
+
+  defp normalize_board_id(%{} = board, board_id) when not is_nil(board_id) do
+    case board_id_from_board(board) do
+      nil -> Map.put(board, :id, board_id)
+      _id -> board
+    end
+  end
+
+  defp normalize_board_id(board, _board_id), do: board
 end
