@@ -45,6 +45,76 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   @dimensions %{width: 80, height: 24}
   @phase_16_dimensions [{64, 22}, {80, 24}, {132, 50}]
+  @large_screen_contract [
+    %{
+      screen: :post_reader,
+      top_level_file: "lib/foglet_bbs/tui/screens/post_reader.ex",
+      state_file: "lib/foglet_bbs/tui/screens/post_reader/state.ex",
+      render_file: "lib/foglet_bbs/tui/screens/post_reader/render.ex",
+      top_level_module: PostReader,
+      state_module: PostReader.State,
+      render_module: PostReader.Render,
+      render_arity: 2
+    },
+    %{
+      screen: :sysop,
+      top_level_file: "lib/foglet_bbs/tui/screens/sysop.ex",
+      state_file: "lib/foglet_bbs/tui/screens/sysop/state.ex",
+      render_file: "lib/foglet_bbs/tui/screens/sysop/render.ex",
+      top_level_module: Sysop,
+      state_module: Sysop.State,
+      render_module: Sysop.Render,
+      render_arity: 1
+    },
+    %{
+      screen: :login,
+      top_level_file: "lib/foglet_bbs/tui/screens/login.ex",
+      state_file: "lib/foglet_bbs/tui/screens/login/state.ex",
+      render_file: "lib/foglet_bbs/tui/screens/login/render.ex",
+      top_level_module: Foglet.TUI.Screens.Login,
+      state_module: Foglet.TUI.Screens.Login.State,
+      render_module: Foglet.TUI.Screens.Login.Render,
+      render_arity: 2
+    },
+    %{
+      screen: :main_menu,
+      top_level_file: "lib/foglet_bbs/tui/screens/main_menu.ex",
+      state_file: "lib/foglet_bbs/tui/screens/main_menu/state.ex",
+      render_file: "lib/foglet_bbs/tui/screens/main_menu/render.ex",
+      top_level_module: MainMenu,
+      state_module: MainMenu.State,
+      render_module: MainMenu.Render,
+      render_arity: 2
+    },
+    %{
+      screen: :new_thread,
+      top_level_file: "lib/foglet_bbs/tui/screens/new_thread.ex",
+      state_file: "lib/foglet_bbs/tui/screens/new_thread/state.ex",
+      render_file: "lib/foglet_bbs/tui/screens/new_thread/render.ex",
+      top_level_module: NewThread,
+      state_module: NewThread.State,
+      render_module: NewThread.Render,
+      render_arity: 2
+    },
+    %{
+      screen: :account,
+      top_level_file: "lib/foglet_bbs/tui/screens/account.ex",
+      state_file: "lib/foglet_bbs/tui/screens/account/state.ex",
+      render_file: "lib/foglet_bbs/tui/screens/account/render.ex",
+      top_level_module: Account,
+      state_module: Account.State,
+      render_module: Account.Render,
+      render_arity: 1
+    }
+  ]
+  @render_forbidden_side_effect_strings [
+    "Effect.task",
+    "Effect.navigate",
+    "Repo.",
+    "PubSub",
+    "Config.put",
+    "start_supervised"
+  ]
 
   # Seed the ETS config cache so render paths that call Config.get/2
   # (Login, Register, Verify screens) do not hit the DB.
@@ -171,6 +241,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   defp flatten_text(tree), do: tree |> collect_text() |> Enum.join("")
 
+  defp repo_path(path) do
+    Path.expand(Path.join([__DIR__, "../../..", path]))
+  end
+
   defp assert_line_within_width!(label, line, width) do
     assert TextWidth.display_width(line) <= width,
            "#{label}: expected #{inspect(line)} to fit #{width} columns, got #{TextWidth.display_width(line)}"
@@ -193,6 +267,38 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
   # Chrome V2 size contracts
   # ---------------------------------------------------------------------------
+
+  describe "large screen decomposition source contract" do
+    test "all six target screens expose reducer, state, and render files" do
+      for contract <- @large_screen_contract do
+        for key <- [:top_level_file, :state_file, :render_file] do
+          path = repo_path(Map.fetch!(contract, key))
+
+          assert File.regular?(path),
+                 "#{contract.screen} expected #{key} at #{Map.fetch!(contract, key)}"
+        end
+
+        assert Code.ensure_loaded?(contract.top_level_module)
+        assert Code.ensure_loaded?(contract.state_module)
+        assert Code.ensure_loaded?(contract.render_module)
+        assert function_exported?(contract.top_level_module, :init, 1)
+        assert function_exported?(contract.top_level_module, :update, 3)
+        assert function_exported?(contract.top_level_module, :render, 2)
+        assert function_exported?(contract.render_module, :render, contract.render_arity)
+      end
+    end
+
+    test "render entry point files do not contain forbidden side-effect calls" do
+      for contract <- @large_screen_contract do
+        source = contract.render_file |> repo_path() |> File.read!()
+
+        for forbidden <- @render_forbidden_side_effect_strings do
+          refute source =~ forbidden,
+                 "#{contract.render_file} must not contain #{inspect(forbidden)}"
+        end
+      end
+    end
+  end
 
   describe "Chrome V2 size contracts" do
     test "screen frame text stays positioned within required terminal widths" do
@@ -2587,25 +2693,26 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
 
     test "Sysop jump_hint computes 1-N from tab count (no INVITES special-case)" do
-      contents = File.read!("lib/foglet_bbs/tui/screens/sysop.ex")
+      contents = File.read!("lib/foglet_bbs/tui/screens/sysop/render.ex")
 
       refute String.contains?(contents, ~s|if "INVITES" in State.tab_labels|),
-             "sysop.ex jump_hint must not gate on INVITES visibility (D-26)"
+             "sysop/render.ex jump_hint must not gate on INVITES visibility (D-26)"
 
       expected = ~S|"1-#{length(State.tab_labels(ss))}"|
 
       assert String.contains?(contents, expected),
-             "sysop.ex must compute jump_hint as 1-N from State.tab_labels(ss) (D-26)"
+             "sysop/render.ex must compute jump_hint as 1-N from State.tab_labels(ss) (D-26)"
     end
 
     test "Account.@key_bar module attribute removed (D-26)" do
-      contents = File.read!("lib/foglet_bbs/tui/screens/account.ex")
+      top_level_contents = File.read!("lib/foglet_bbs/tui/screens/account.ex")
+      render_contents = File.read!("lib/foglet_bbs/tui/screens/account/render.ex")
 
-      refute String.contains?(contents, "@key_bar ["),
+      refute String.contains?(top_level_contents, "@key_bar ["),
              "account.ex must not define a @key_bar module attribute (D-26)"
 
-      assert String.contains?(contents, "defp key_bar(ss)"),
-             "account.ex must define a render-time key_bar/1 function (D-26)"
+      assert String.contains?(render_contents, "defp key_bar(ss)"),
+             "account/render.ex must define a render-time key_bar/1 function (D-26)"
     end
 
     test "Moderation.@key_list module attribute removed (D-26)" do
