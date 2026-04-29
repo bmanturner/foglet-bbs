@@ -779,8 +779,7 @@ defmodule Foglet.TUI.App do
     module = screen_module_for(state, key)
 
     cond do
-      route_owned_screen?(key) and Code.ensure_loaded?(module) and
-          function_exported?(module, :init, 1) ->
+      reinitialize_route_state?(key, module, params) ->
         put_screen_state(state, key, module.init(build_context(state, params)))
 
       screen_state_for(state, key) != nil ->
@@ -799,6 +798,12 @@ defmodule Foglet.TUI.App do
        do: true
 
   defp route_owned_screen?(_key), do: false
+
+  defp reinitialize_route_state?(key, module, params) do
+    Code.ensure_loaded?(module) and function_exported?(module, :init, 1) and
+      (route_owned_screen?(key) or
+         (map_size(params || %{}) > 0 and function_exported?(module, :update, 3)))
+  end
 
   defp maybe_seed_legacy_route_context(%__MODULE__{} = state, _screen, _params), do: state
 
