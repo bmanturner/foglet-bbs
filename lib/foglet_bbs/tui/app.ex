@@ -164,6 +164,18 @@ defmodule Foglet.TUI.App do
     {%{state | modal: nil}, []}
   end
 
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :modal_submit,
+        payload: %{screen_key: screen_key, kind: kind, payload: payload}
+      })
+      when is_atom(kind) do
+    if modal_submit_target?(state, screen_key) do
+      route_screen_update(state, screen_key, {:modal_submit, kind, payload})
+    else
+      modal_submit_error(state)
+    end
+  end
+
   def apply_effect(%__MODULE__{} = state, %Effect{type: :session, payload: {:set_user, user}}) do
     update({:set_user, user}, state)
   end
@@ -792,10 +804,19 @@ defmodule Foglet.TUI.App do
     init_route_screen_state(state, state.current_screen, state.route_params)
   end
 
-  defp take_screen_modal_submit do
-    payload = Process.get({__MODULE__, :pending_screen_modal_submit})
-    Process.delete({__MODULE__, :pending_screen_modal_submit})
-    payload
+  defp modal_submit_target?(%__MODULE__{} = state, screen_key) do
+    module = screen_module_for(state, screen_key)
+    Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
+  end
+
+  defp modal_submit_error(%__MODULE__{} = state) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      title: "Form Error",
+      message: "Unable to submit form."
+    }
+
+    {%{state | modal: modal}, []}
   end
 
   defp humanize_op(op) when is_atom(op) do
@@ -882,19 +903,18 @@ defmodule Foglet.TUI.App do
          key,
          %{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
        ) do
-    Process.delete({__MODULE__, :pending_screen_modal_submit})
     {new_form, action} = ModalForm.handle_event(key, form)
     state = %{state | modal: %{state.modal | message: new_form}}
 
     case action do
-      :submitted ->
-        case take_screen_modal_submit() do
-          {screen_key, kind, payload} ->
-            route_screen_update(state, screen_key, {:modal_submit, kind, payload})
+      {:submitted, %Effect{type: :modal_submit} = effect} ->
+        apply_effect(state, effect)
 
-          nil ->
-            {state, []}
-        end
+      :submitted ->
+        modal_submit_error(state)
+
+      {:submitted, _other} ->
+        modal_submit_error(state)
 
       :cancelled ->
         do_update(:dismiss_modal, state)
