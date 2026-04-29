@@ -218,46 +218,62 @@ defmodule Foglet.TUI.RenderFixtures do
     thread = hd(threads)
     posts = synthetic_posts(thread)
 
-    base = %{
-      state
-      | # Phase 37 compatibility: PostReader still reads top-level board/thread
-        # fields until its own screen-state migration.
-        current_board: board,
-        current_thread: thread,
-        current_thread_list: threads,
+    post_reader_state =
+      PostReader.State.new(
+        board: board,
+        board_id: board.id,
+        thread: thread,
+        thread_id: thread.id,
         posts: posts,
-        screen_state: %{post_reader: PostReader.init_screen_state([])}
-    }
+        status: :loaded,
+        selected_post_index: 0
+      )
 
-    # `prepare_after_load/3` warms the per-post markdown cache and viewport
-    # the same way the live `:posts_loaded` flow does. Without this the cache
-    # holds the wrong shape and the renderer crashes on first paint.
-    warmed_ss = PostReader.prepare_after_load(base, posts, 0)
-    %{base | screen_state: Map.put(base.screen_state, :post_reader, warmed_ss)}
+    %{
+      state
+      | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id},
+        screen_state: %{post_reader: post_reader_state}
+    }
   end
 
   defp populate(:post_composer, state, {w, _h}) do
     board = hd(synthetic_boards())
     [thread | _] = synthetic_threads(board)
+    [reply_to | _] = synthetic_posts(thread)
+
+    post_composer_state =
+      PostComposer.State.new(
+        board: board,
+        board_id: board.id,
+        thread: thread,
+        thread_id: thread.id,
+        reply_to: reply_to,
+        origin: :post_reader,
+        width: max(w - 4, 20),
+        height: 10
+      )
 
     %{
       state
-      | # Phase 37 compatibility: PostComposer still reads top-level board/thread
-        # fields until its own screen-state migration.
-        current_board: board,
-        current_thread: thread,
-        screen_state: %{
-          post_composer: PostComposer.init_screen_state(width: max(w - 4, 20), height: 10)
-        }
+      | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id},
+        screen_state: %{post_composer: post_composer_state}
     }
   end
 
   defp populate(:new_thread, state, {w, _h}) do
-    ss =
-      NewThread.init_screen_state(width: w)
-      |> Map.put(:boards, synthetic_boards())
+    [board | _] = synthetic_boards()
 
-    %{state | screen_state: %{new_thread: ss}}
+    ss =
+      NewThread.State.new(
+        step: :compose,
+        board: board,
+        boards: [board],
+        load_status: :loaded,
+        origin: :thread_list,
+        width: w
+      )
+
+    %{state | route_params: %{board: board, board_id: board.id}, screen_state: %{new_thread: ss}}
   end
 
   defp populate(:account, state, _size) do

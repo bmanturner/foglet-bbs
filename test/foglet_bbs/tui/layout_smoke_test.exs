@@ -705,16 +705,22 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
 
     defp post_composer_state(width, height, mode) do
+      board = %{id: "b1", name: "General"}
+      thread = %{id: "t1", title: "Composer Contract", board_id: "b1"}
+
       %App{
         current_screen: :post_composer,
         current_user: composer_user(),
-        current_board: %{id: "b1", name: "General"},
-        current_thread: %{id: "t1", title: "Composer Contract", board_id: "b1"},
+        route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id},
         session_context: %{theme: Foglet.TUI.Theme.default(), max_post_length: 1_000},
         terminal_size: {width, height},
         screen_state: %{
           post_composer:
-            PostComposer.init_screen_state(
+            PostComposer.State.new(
+              board: board,
+              board_id: board.id,
+              thread: thread,
+              thread_id: thread.id,
               mode: mode,
               reply_to: reply_post(),
               value: "reply body smoke text",
@@ -727,18 +733,20 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
 
     defp new_thread_state(width, height, mode) do
+      board = %{id: "b1", name: "General"}
+
       %App{
         current_screen: :new_thread,
         current_user: composer_user(),
-        current_board: %{id: "b1", name: "General"},
+        route_params: %{board: board, board_id: board.id},
         session_context: %{theme: Foglet.TUI.Theme.default(), max_post_length: 1_000},
         terminal_size: {width, height},
         screen_state: %{
           new_thread:
-            NewThread.init_screen_state(
+            NewThread.State.new(
               step: :compose,
-              board: %{id: "b1", name: "General"},
-              boards: [%{id: "b1", name: "General"}],
+              board: board,
+              boards: [board],
               title_value: "Smoke Title",
               body_value: "opening body smoke text",
               focused: :body,
@@ -896,13 +904,25 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
 
     defp phase_22_state(width, height) do
+      board = %{id: "b1", name: "General"}
+      thread = %{id: "t1", title: "Reader Contract"}
+
       %Foglet.TUI.App{
         current_screen: :post_reader,
         current_user: %Foglet.Accounts.User{id: "u1", handle: "reader"},
-        current_board: %{id: "b1", name: "General"},
-        current_thread: %{id: "t1", title: "Reader Contract"},
-        posts: phase_22_posts(),
-        screen_state: %{post_reader: PostReader.init_screen_state(selected_post_index: 2)},
+        route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id},
+        screen_state: %{
+          post_reader:
+            PostReader.State.new(
+              board: board,
+              board_id: board.id,
+              thread: thread,
+              thread_id: thread.id,
+              posts: phase_22_posts(),
+              status: :loaded,
+              selected_post_index: 2
+            )
+        },
         session_context: %{theme: Foglet.TUI.Theme.default()},
         terminal_size: {width, height}
       }
@@ -936,10 +956,15 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
         size = {width, height}
 
+        app_state = phase_22_state(width, height)
+        local_state = app_state.screen_state.post_reader
+
+        context =
+          screen_context(:post_reader, app_state.current_user, size, app_state.route_params)
+
         positioned =
-          width
-          |> phase_22_state(height)
-          |> PostReader.render()
+          local_state
+          |> PostReader.render(context)
           |> apply_at_size(size)
 
         elements = text_elements(positioned)
@@ -1508,16 +1533,18 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     user = %{handle: "frank", id: "u3", status: :active, role: :member}
 
-    state = %App{
-      current_user: user,
-      current_thread: thread,
-      posts: posts,
-      read_position: %{},
-      screen_state: %{post_reader: PostReader.init_screen_state([])},
-      terminal_size: {80, 24}
-    }
+    context =
+      screen_context(:post_reader, user, {80, 24}, %{thread: thread, thread_id: thread.id})
 
-    tree = PostReader.render(state)
+    state =
+      PostReader.State.new(
+        thread: thread,
+        thread_id: thread.id,
+        posts: posts,
+        status: :loaded
+      )
+
+    tree = PostReader.render(state, context)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -1653,19 +1680,12 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         focused: true
       })
 
-    state = %App{
-      current_screen: :post_composer,
-      current_user: %{id: "u1", handle: "alice"},
-      current_thread: %{id: "t1", title: "Hello"},
-      session_context: %{},
-      terminal_size: {80, 24},
-      composer_draft: nil,
-      screen_state: %{
-        post_composer: PostComposer.init_screen_state(input_state: input_st)
-      }
-    }
+    user = %{id: "u1", handle: "alice"}
+    context = screen_context(:post_composer, user, {80, 24}, %{thread_id: "t1"})
 
-    tree = PostComposer.render(state)
+    state = PostComposer.State.new(thread_id: "t1", input_state: input_st)
+
+    tree = PostComposer.render(state, context)
 
     # apply_layout must not raise — this is the primary Bug B assertion
     positioned = layout(tree)
@@ -1841,7 +1861,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       %{id: "b2", name: "Announcements", unread_count: 2}
     ]
 
-    ss = NewThread.init_screen_state(boards: boards, width: 80)
+    ss = NewThread.State.new(boards: boards, width: 80, load_status: :loaded)
 
     state = %App{
       current_screen: :new_thread,
@@ -1851,7 +1871,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       screen_state: %{new_thread: ss}
     }
 
-    tree = NewThread.render(state)
+    tree = NewThread.render(ss, screen_context(:new_thread, state.current_user, {80, 24}))
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -2067,7 +2087,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     board = %{id: "b1", name: "General"}
 
     ss =
-      NewThread.init_screen_state(
+      NewThread.State.new(
         step: :compose,
         boards: [board],
         board: board,
@@ -2083,7 +2103,15 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       screen_state: %{new_thread: ss}
     }
 
-    tree = NewThread.render(state)
+    tree =
+      NewThread.render(
+        ss,
+        screen_context(:new_thread, state.current_user, {80, 24}, %{
+          board: board,
+          board_id: board.id
+        })
+      )
+
     positioned = layout(tree)
 
     elements = text_elements(positioned)
