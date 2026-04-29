@@ -17,12 +17,34 @@ LiveDashboard, mail delivery plumbing, and future structured clients.
 
 ## Quick Start
 
-Clone the repo, install dependencies, and create the database:
+Clone the repo:
 
 ```bash
 git clone <your-fork-or-remote-url> foglet_bbs
 cd foglet_bbs
+```
+
+Then choose the database you want Mix to use. If you already have a local
+Postgres that matches `config/dev.exs`, run:
+
+```bash
 mix setup
+```
+
+To use the included Docker-backed Postgres instead of an existing local
+database, start it first:
+
+```bash
+docker compose up -d postgres
+mix setup
+```
+
+If host port `5432` is already in use, set `POSTGRES_PORT` for Compose and
+`DATABASE_URL` for Mix, for example:
+
+```bash
+POSTGRES_PORT=55432 docker compose up -d postgres
+DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev mix setup
 ```
 
 `mix setup` runs `deps.get`, `ecto.create`, `ecto.migrate`, `run priv/repo/seeds.exs`,
