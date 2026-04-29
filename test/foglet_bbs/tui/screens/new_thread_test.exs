@@ -341,6 +341,125 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert state.body_input_state.value == "i"
   end
 
+  test "NewThread.update/3 emits create_thread task for valid submit" do
+    state =
+      State.new(
+        step: :compose,
+        board: %{id: "b1", name: "General"},
+        title_input_state: TextInput.init(value: "Task Title", max_length: 60),
+        body_input_state: fresh_input("Task body"),
+        focused: :body
+      )
+
+    assert {%State{submission_status: :submitting, error: nil},
+            [
+              %Foglet.TUI.Effect{
+                type: :task,
+                payload: %{op: :create_thread, screen_key: :new_thread, fun: fun}
+              }
+            ]} =
+             NewThread.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context())
+
+    assert {:ok, %{thread: %{id: "t-new"}}} = fun.()
+    assert Process.get(:new_thread_last_attrs) == %{title: "Task Title", body: "Task body"}
+  end
+
+  test "NewThread.update/3 keeps submit validation local without task effects" do
+    state =
+      State.new(
+        step: :compose,
+        board: %{id: "b1", name: "General"},
+        body_input_state: fresh_input("body"),
+        focused: :body
+      )
+
+    assert {%State{error: "Title cannot be empty."}, []} =
+             NewThread.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context())
+
+    state = %{state | title_input_state: TextInput.init(value: "Title", max_length: 60)}
+    state = %{state | body_input_state: fresh_input("")}
+
+    assert {%State{error: "Post body cannot be empty."}, []} =
+             NewThread.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context())
+
+    ctx = context(current_user: nil)
+    state = %{state | body_input_state: fresh_input("body")}
+
+    assert {%State{error: "You must be logged in to create a thread."}, []} =
+             NewThread.update({:key, %{key: :char, char: "s", ctrl: true}}, state, ctx)
+  end
+
+  test "NewThread.update/3 rejects too-long submit body without task effect" do
+    state =
+      State.new(
+        step: :compose,
+        board: %{id: "b1", name: "General"},
+        title_input_state: TextInput.init(value: "Title", max_length: 60),
+        body_input_state: fresh_input("123456"),
+        focused: :body
+      )
+
+    ctx = context()
+    ctx = %{ctx | session_context: Map.put(ctx.session_context, :max_post_length, 5)}
+
+    assert {%State{error: "Post body exceeds maximum length of 5 characters."}, []} =
+             NewThread.update({:key, %{key: :char, char: "s", ctrl: true}}, state, ctx)
+  end
+
+  test "NewThread.update/3 handles successful create_thread task result with ThreadList route params" do
+    board = %{id: "b1", name: "General"}
+    state = State.new(step: :compose, board: board, submission_status: :submitting)
+    thread = %{id: "t-new", title: "Created"}
+    result = %{thread: thread, post: %{id: "p-new"}}
+
+    assert {%State{submission_status: :submitted, submit_result: ^result},
+            [
+              %Foglet.TUI.Effect{
+                type: :navigate,
+                payload: %{
+                  screen: :thread_list,
+                  params: %{board: ^board, board_id: "b1", select_thread_id: "t-new"}
+                }
+              }
+            ]} =
+             NewThread.update(
+               {:task_result, :create_thread, {:ok, {:ok, result}}},
+               state,
+               context()
+             )
+  end
+
+  test "NewThread.update/3 handles direct successful create_thread task result shape" do
+    board = %{id: "b1", name: "General"}
+    state = State.new(step: :compose, board: board, submission_status: :submitting)
+    result = %{thread: %{id: "t-new"}}
+
+    assert {%State{submission_status: :submitted, submit_result: ^result},
+            [%Foglet.TUI.Effect{payload: %{params: %{select_thread_id: "t-new"}}}]} =
+             NewThread.update({:task_result, :create_thread, {:ok, result}}, state, context())
+  end
+
+  test "NewThread.update/3 handles create_thread errors locally" do
+    state = State.new(step: :compose, board: %{id: "b1"}, submission_status: :submitting)
+
+    assert {%State{
+              submission_status: {:error, :posting_not_allowed},
+              error: "You are not allowed to post on this board."
+            }, []} =
+             NewThread.update(
+               {:task_result, :create_thread, {:ok, {:error, :posting_not_allowed}}},
+               state,
+               context()
+             )
+
+    assert {%State{submission_status: {:error, "board is locked"}, error: "board is locked"}, []} =
+             NewThread.update(
+               {:task_result, :create_thread, {:error, "board is locked"}},
+               state,
+               context()
+             )
+  end
+
   test "render/2 renders board and compose states without App-shaped state" do
     ctx = context()
 

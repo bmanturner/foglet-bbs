@@ -94,6 +94,10 @@ defmodule Foglet.TUI.Screens.NewThread do
     {%{state | load_status: {:error, reason}, error: format_error(reason)}, []}
   end
 
+  def update({:task_result, :create_thread, result}, %State{} = state, %Context{} = context) do
+    handle_create_thread_result(result, state, context)
+  end
+
   def update({:key, key_event}, %State{step: :board} = state, %Context{}) do
     handle_board_key_event(key_event, state)
   end
@@ -467,9 +471,9 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp handle_compose_key_event(
          %{key: :char, char: "s", ctrl: true},
          %State{} = state,
-         %Context{}
+         %Context{} = context
        ) do
-    {state, []}
+    submit_from_state(state, context)
   end
 
   defp handle_compose_key_event(key_event, %State{focused: :title} = state, %Context{}) do
@@ -494,6 +498,71 @@ defmodule Foglet.TUI.Screens.NewThread do
       {:ok, new_input_st} -> {%{state | body_input_state: new_input_st}, []}
       :error -> {state, []}
     end
+  end
+
+  defp submit_from_state(%State{} = state, %Context{} = context) do
+    title = String.trim(state.title_input_state.raxol_state.value)
+    body = state.body_input_state.value
+    board = state.board
+    max = max_body_length(context)
+    user_id = context.current_user && context.current_user.id
+
+    cond do
+      title == "" ->
+        {%{state | error: "Title cannot be empty."}, []}
+
+      String.trim(body) == "" ->
+        {%{state | error: "Post body cannot be empty."}, []}
+
+      String.length(body) > max ->
+        {%{state | error: "Post body exceeds maximum length of #{max} characters."}, []}
+
+      is_nil(user_id) ->
+        {%{state | error: "You must be logged in to create a thread."}, []}
+
+      is_nil(board) ->
+        {%{state | error: "Select a board before creating a thread."}, []}
+
+      true ->
+        threads_mod = threads_module(context)
+        attrs = %{title: title, body: body}
+
+        effect =
+          Effect.task(:create_thread, :new_thread, fn ->
+            threads_mod.create_thread(board.id, user_id, attrs)
+          end)
+
+        {%{state | submission_status: :submitting, error: nil}, [effect]}
+    end
+  end
+
+  defp handle_create_thread_success(thread, result, %State{} = state, %Context{}) do
+    board = state.board
+
+    params = %{
+      board: board,
+      board_id: board && board.id,
+      select_thread_id: Map.get(thread, :id)
+    }
+
+    new_state = %{state | submission_status: :submitted, submit_result: result, error: nil}
+    {new_state, [Effect.navigate(:thread_list, params)]}
+  end
+
+  defp handle_create_thread_result({:ok, {:ok, %{thread: thread} = result}}, state, context) do
+    handle_create_thread_success(thread, result, state, context)
+  end
+
+  defp handle_create_thread_result({:ok, %{thread: thread} = result}, state, context) do
+    handle_create_thread_success(thread, result, state, context)
+  end
+
+  defp handle_create_thread_result({:ok, {:error, reason}}, state, _context) do
+    {%{state | submission_status: {:error, reason}, error: format_error(reason)}, []}
+  end
+
+  defp handle_create_thread_result({:error, reason}, state, _context) do
+    {%{state | submission_status: {:error, reason}, error: format_error(reason)}, []}
   end
 
   defp do_submit(state, ss) do
@@ -577,6 +646,13 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp put_ss(state, ss) do
     new_screen_state = Map.put(state.screen_state, :new_thread, ss)
     %{state | screen_state: new_screen_state}
+  end
+
+  defp threads_module(%Context{} = context) do
+    case domain_module(context, :threads) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Threads
+    end
   end
 
   defp threads_module(state) do

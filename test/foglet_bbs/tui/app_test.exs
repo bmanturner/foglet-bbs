@@ -7,6 +7,7 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread
+  alias Foglet.TUI.Screens.NewThread.State, as: NewThreadState
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostComposer.State, as: PostComposerState
   alias Foglet.TUI.Screens.PostReader
@@ -472,6 +473,57 @@ defmodule Foglet.TUI.AppTest do
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
       assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
+               task.()
+    end
+
+    test "{:screen_task_result, :new_thread, :create_thread, result} routes through NewThread local state",
+         %{state: state} do
+      board = %{id: "b1", name: "General", slug: "general"}
+      thread = %{id: "t-new", title: "Created"}
+
+      local_state =
+        NewThreadState.new(
+          step: :compose,
+          board: board,
+          submission_status: :submitting,
+          title_value: "Created",
+          body_value: "body"
+        )
+
+      state = %{
+        state
+        | current_screen: :new_thread,
+          current_board: nil,
+          route_params: %{origin: :thread_list, board: board, board_id: "b1"},
+          screen_state: %{new_thread: local_state},
+          session_context: %{domain: %{threads: FakeThreads}}
+      }
+
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :new_thread, :create_thread,
+           {:ok, {:ok, %{thread: thread, post: %{id: "p-new"}}}}},
+          state
+        )
+
+      assert new_state.current_board == nil
+      assert new_state.current_screen == :thread_list
+      assert new_state.route_params.board == board
+      assert new_state.route_params.board_id == "b1"
+      assert new_state.route_params.select_thread_id == "t-new"
+
+      assert %NewThreadState{submission_status: :submitted, submit_result: %{thread: ^thread}} =
+               App.screen_state_for(new_state, :new_thread)
+
+      assert %ThreadListState{
+               board: ^board,
+               board_id: "b1",
+               status: :loading
+             } = App.screen_state_for(new_state, :thread_list)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :thread_list, :load_threads, {:ok, [%{id: "t1"}]}} =
                task.()
     end
 
