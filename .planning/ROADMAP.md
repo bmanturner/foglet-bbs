@@ -15,7 +15,7 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 | 34 | 3/3 | Complete    | 2026-04-28 |
 | 35 | 4/4 | Complete   | 2026-04-28 |
 | 36 | 3/3 | Complete    | 2026-04-28 |
-| 37 | 3/5 | In Progress|  |
+| 37 | 4/5 | In Progress|  |
 | 38 | Account & Operator Workbenches | Migrate Account, Moderation, and Sysop with nested forms, tab lifecycle loads, invites, retries, and save results. | SCREEN-05, SCREEN-06 |
 | 39 | App Shell Simplification | Remove screen-specific App state/result manipulation and finalize route/context/subscription/modal shell ownership. | STATE-02, STATE-03, STATE-04, APP-01, APP-02, APP-03, APP-04 |
 | 40 | Verification & Documentation | Prove the full migration with reducer, App-shell, render, and precommit coverage; document the new screen pattern. | VERIFY-01, VERIFY-02, VERIFY-03, VERIFY-04, VERIFY-05 |
