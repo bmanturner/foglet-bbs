@@ -320,7 +320,7 @@ defmodule Foglet.TUI.App do
   @impl true
   def update(message, state) do
     {new_state, commands} = do_update(normalize_message(message), state)
-    refresh_dynamic_subscriptions(state, new_state)
+    _ = refresh_dynamic_subscriptions(state, new_state)
     {new_state, commands}
   end
 
