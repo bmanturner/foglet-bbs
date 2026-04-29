@@ -218,11 +218,20 @@ defmodule Foglet.TUI.RenderFixtures do
         selected_post_index: 0
       )
 
-    %{
-      state
-      | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id}
-    }
-    |> App.put_screen_state(:post_reader, post_reader_state)
+    populated =
+      %{
+        state
+        | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id}
+      }
+      |> App.put_screen_state(:post_reader, post_reader_state)
+
+    # Warm the render cache + viewport for the selected post so the snapshot
+    # exercises the cache-hit branch (mirrors the production :load task_result
+    # path). Without this, render_post_content/5 emits a Logger.warning on
+    # every fixture render and the timestamp leaks into the deterministic
+    # snapshot file. (WR-01.)
+    warmed_ss = PostReader.prepare_after_load(populated, posts, 0)
+    App.put_screen_state(populated, :post_reader, warmed_ss)
   end
 
   defp populate(:post_composer, state, {w, _h}) do
