@@ -29,6 +29,13 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       {%{state | messages: [{:key, key, context.route_params} | state.messages]}, []}
     end
 
+    # Catch-all per Foglet.TUI.Screen contract — Phase 39 D-04 dispatches
+    # :on_route_enter to every active screen via the generic route-entry path,
+    # so test-fixture screens must tolerate unknown messages without crashing.
+    def update(_message, %State{} = state, %Context{}) do
+      {state, []}
+    end
+
     def render(%State{} = state, %Context{} = context) do
       {:sample_render, state, context.route_params}
     end

@@ -23,9 +23,6 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
-  alias Foglet.TUI.Screens.PostComposer
-  alias Foglet.TUI.Screens.PostReader
-  alias Foglet.TUI.Screens.ThreadList
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
@@ -154,7 +151,6 @@ defmodule Foglet.TUI.App do
       |> Map.put(:current_screen, screen)
       |> Map.put(:route_params, params || %{})
       |> Map.put(:modal, nil)
-      |> maybe_seed_legacy_route_context(screen, params || %{})
       |> init_route_screen_state(screen, params || %{})
 
     maybe_dispatch_route_entry(state, screen, params || %{})
@@ -428,100 +424,36 @@ defmodule Foglet.TUI.App do
 
   # Compute which PubSub topics to subscribe to based on current screen and user.
   # Topics follow the convention: "user:<id>", "boards", "board:<id>", "thread:<id>".
-  # Phase 2 may not yet broadcast to all of these; subscriptions are wired now so
-  # the TUI reacts automatically when Phase 2 starts emitting events.
-  defp build_pubsub_topics(state) do
-    topics =
+  #
+  # User-level topics ("user:<id>") are always App-owned (they don't depend on
+  # which screen is active). Screen-specific topics are sourced from the active
+  # screen's optional `subscriptions/2` callback (Phase 39 D-06, D-22, R7), which
+  # lets each screen own the binary topic strings it cares about. Screens that
+  # don't implement `subscriptions/2` contribute nothing — App produces only
+  # user-level topics for them.
+  defp build_pubsub_topics(%__MODULE__{} = state) do
+    user_topics =
       if state.current_user do
         [PubSub.user_topic(state.current_user.id)]
       else
         []
       end
 
-    topics =
-      if state.current_screen in [:board_list] do
-        [PubSub.boards_aggregate() | topics]
-      else
-        topics
-      end
-
-    topics =
-      case thread_list_board_topic(state) do
-        nil -> topics
-        topic -> [topic | topics]
-      end
-
-    topics =
-      case routed_thread_topic(state) do
-        nil -> topics
-        topic -> [topic | topics]
-      end
-
-    topics
+    user_topics ++ screen_declared_topics(state)
   end
 
-  defp routed_thread_topic(%__MODULE__{current_screen: screen} = state)
-       when screen in [:post_reader, :post_composer] do
-    state
-    |> routed_thread_id()
-    |> case do
-      thread_id when is_binary(thread_id) -> PubSub.thread_topic(thread_id)
-      _other -> nil
-    end
-  end
+  # Defers screen-specific topic interest to the active screen's
+  # `subscriptions/2` optional callback (Foglet.TUI.Screen). Mirrors the
+  # `Code.ensure_loaded?/1` + `function_exported?/3` paired guard idiom used at
+  # `route_screen_update/3` and `render_screen/1` for `update/3` and `render/2`.
+  defp screen_declared_topics(%__MODULE__{} = state) do
+    key = screen_key(current_route(state))
+    module = screen_module_for(state, key)
 
-  defp routed_thread_topic(_state), do: nil
-
-  defp routed_thread_id(%__MODULE__{} = state) do
-    params = state.route_params || %{}
-
-    Map.get(params, :thread_id) || Map.get(params, "thread_id") ||
-      post_reader_state_thread_id(state.screen_state) ||
-      post_composer_state_thread_id(state.screen_state)
-  end
-
-  defp post_reader_state_thread_id(screen_state) do
-    case Map.get(screen_state || %{}, :post_reader) do
-      %PostReader.State{thread_id: thread_id} when is_binary(thread_id) -> thread_id
-      _other -> nil
-    end
-  end
-
-  defp post_composer_state_thread_id(screen_state) do
-    case Map.get(screen_state || %{}, :post_composer) do
-      %PostComposer.State{} = state ->
-        case Map.get(state, :thread_id) do
-          thread_id when is_binary(thread_id) -> thread_id
-          _other -> nil
-        end
-
-      _other ->
-        nil
-    end
-  end
-
-  defp thread_list_board_topic(%__MODULE__{current_screen: :thread_list} = state) do
-    state
-    |> thread_list_board_id()
-    |> case do
-      nil -> nil
-      board_id -> PubSub.board_topic(board_id)
-    end
-  end
-
-  defp thread_list_board_topic(_state), do: nil
-
-  defp thread_list_board_id(%__MODULE__{} = state) do
-    params = state.route_params || %{}
-
-    Map.get(params, :board_id) || Map.get(params, "board_id") ||
-      thread_list_state_board_id(state.screen_state)
-  end
-
-  defp thread_list_state_board_id(screen_state) do
-    case Map.get(screen_state || %{}, :thread_list) do
-      %ThreadList.State{board_id: board_id} when is_binary(board_id) -> board_id
-      _other -> nil
+    if Code.ensure_loaded?(module) and function_exported?(module, :subscriptions, 2) do
+      module.subscriptions(screen_state_for(state, key), build_context(state))
+    else
+      []
     end
   end
 
@@ -550,16 +482,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:set_user, user}, state) do
-    route_screen_update(
-      %{
-        state
-        | current_user: user,
-          current_screen: :main_menu,
-          route_params: %{}
-      },
-      :main_menu,
-      :load_oneliners
-    )
+    apply_effect(%{state | current_user: user}, Effect.navigate(:main_menu, %{}))
   end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
@@ -643,22 +566,18 @@ defmodule Foglet.TUI.App do
   # → update/2. Phase 2 may not yet emit all of these; the handlers are wired now
   # so real-time updates work as soon as Phase 2 starts broadcasting.
 
-  # Board-level activity (new post, read-pointer changes) — refresh board list
-  # to update unread counts if the user is on the board_list screen.
-  defp do_update({:board_activity, _board_id, _event}, state)
-       when state.current_screen == :board_list do
-    route_screen_update(state, :board_list, :load)
+  # PubSub broadcast routing (Phase 39 D-13, R8): forward {:board_activity, …}
+  # and {:thread_activity, …} to the active screen via the generic update path.
+  # Screens that care (BoardList for :board_activity, PostReader for
+  # :thread_activity) handle the message in their update/3; screens that don't
+  # hit their update(_message, …) catch-all and no-op.
+  defp do_update({:board_activity, _board_id, _event} = msg, state) do
+    route_screen_update(state, screen_key(current_route(state)), msg)
   end
 
-  defp do_update({:board_activity, _board_id, _event}, state), do: {state, []}
-
-  # Thread-level activity (new post) — refresh posts if the user is reading it.
-  defp do_update({:thread_activity, thread_id, event}, state)
-       when state.current_screen == :post_reader do
-    route_screen_update(state, :post_reader, {:thread_activity, thread_id, event})
+  defp do_update({:thread_activity, _thread_id, _event} = msg, state) do
+    route_screen_update(state, screen_key(current_route(state)), msg)
   end
-
-  defp do_update({:thread_activity, _thread_id, _event}, state), do: {state, []}
 
   # User-level notifications — show a modal badge.
   defp do_update({:notification, _user_id, kind, payload}, state) do
@@ -701,16 +620,7 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
     end
 
-    route_screen_update(
-      %{
-        state
-        | current_user: user,
-          current_screen: :main_menu,
-          route_params: %{}
-      },
-      :main_menu,
-      :load_oneliners
-    )
+    apply_effect(%{state | current_user: user}, Effect.navigate(:main_menu, %{}))
   end
 
   defp do_update({:command_result, inner}, state) do
@@ -805,47 +715,15 @@ defmodule Foglet.TUI.App do
          (map_size(params || %{}) > 0 and function_exported?(module, :update, 3)))
   end
 
-  defp maybe_seed_legacy_route_context(%__MODULE__{} = state, _screen, _params), do: state
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :main_menu, _params) do
-    if state.current_user do
-      route_screen_update(state, :main_menu, :load_oneliners)
-    else
-      {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :moderation, _params) do
-    if state.current_user do
-      route_screen_update(state, :moderation, :load)
-    else
-      {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :sysop, _params) do
-    if state.current_user do
-      route_screen_update(state, :sysop, :load)
-    else
-      {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :thread_list, _params) do
-    route_screen_update(state, :thread_list, :load)
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :post_reader, params) do
-    case route_param(params, :thread_id) do
-      thread_id when is_binary(thread_id) -> route_screen_update(state, :post_reader, :load)
-      _other -> {state, []}
-    end
-  end
-
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, _screen, _params), do: {state, []}
-
-  defp route_param(params, key) when is_map(params) do
-    Map.get(params, key) || Map.get(params, Atom.to_string(key))
+  # Generic route-entry dispatch (Phase 39 D-01, D-04, R4): every route-entry
+  # delivers `:on_route_enter` to the active screen's update/3. Each screen
+  # owns its first-load semantics (current_user gates, thread_id checks, …)
+  # via its own :on_route_enter clause (Plan 39-04). Screens that don't
+  # implement :on_route_enter hit their update(_message, …) catch-all and
+  # become no-ops, courtesy of route_screen_update/3's function_exported?/3
+  # guard below.
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, screen, _params) do
+    route_screen_update(state, screen_key(screen), :on_route_enter)
   end
 
   defp route_screen_update(%__MODULE__{} = state, key, message) do
@@ -881,17 +759,12 @@ defmodule Foglet.TUI.App do
     build_context(state, params)
   end
 
-  defp maybe_init_initial_screen_state(%{current_screen: :main_menu, current_user: user} = state)
-       when not is_nil(user) do
-    main_menu_state =
-      state
-      |> build_context()
-      |> Screens.MainMenu.init()
-      |> Map.put(:oneliner_status, :idle)
-
-    put_screen_state(state, :main_menu, main_menu_state)
-  end
-
+  # Generic initial-screen-state seeding (Phase 39 D-15, R4):
+  # init_route_screen_state/3 already covers MainMenu via the
+  # function_exported?(module, :init, 1) branch. The MainMenu
+  # `oneliner_status: :idle` shim is no longer needed — MainMenu's
+  # :on_route_enter clause (Plan 39-04) sets :loading before the load task
+  # fires.
   defp maybe_init_initial_screen_state(%__MODULE__{} = state) do
     init_route_screen_state(state, state.current_screen, state.route_params)
   end
