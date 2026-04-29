@@ -29,6 +29,11 @@ defmodule Foglet.TUI.Effect do
 
   @type modal :: modal_open() | modal_dismiss()
 
+  @type modal_submit :: %__MODULE__{
+          type: :modal_submit,
+          payload: %{screen_key: term(), kind: atom(), payload: term()}
+        }
+
   @type publish :: %__MODULE__{
           type: :publish,
           payload: %{topic: term(), message: term()}
@@ -49,7 +54,15 @@ defmodule Foglet.TUI.Effect do
           payload: nil
         }
 
-  @type t :: navigate() | task() | modal() | publish() | session() | terminal() | quit()
+  @type t ::
+          navigate()
+          | task()
+          | modal()
+          | modal_submit()
+          | publish()
+          | session()
+          | terminal()
+          | quit()
 
   defstruct [:type, :payload]
 
@@ -80,6 +93,15 @@ defmodule Foglet.TUI.Effect do
   @spec dismiss_modal() :: modal_dismiss()
   def dismiss_modal do
     %__MODULE__{type: :modal, payload: :dismiss}
+  end
+
+  @doc "Requests routing a modal submit payload to a target screen reducer."
+  @spec modal_submit(term(), atom(), term()) :: modal_submit()
+  def modal_submit(screen_key, kind, payload) when is_atom(kind) do
+    %__MODULE__{
+      type: :modal_submit,
+      payload: %{screen_key: screen_key, kind: kind, payload: payload}
+    }
   end
 
   @doc "Requests publishing a message to a topic."

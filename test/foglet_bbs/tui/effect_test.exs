@@ -47,6 +47,25 @@ defmodule Foglet.TUI.EffectTest do
       assert %Effect{type: :modal, payload: :dismiss} = Effect.dismiss_modal()
     end
 
+    test "modal_submit/3 carries target screen, submit kind, and payload" do
+      payload = %{field: "value"}
+
+      assert %Effect{
+               type: :modal_submit,
+               payload: %{
+                 screen_key: {:screen, :target},
+                 kind: :save,
+                 payload: ^payload
+               }
+             } = Effect.modal_submit({:screen, :target}, :save, payload)
+    end
+
+    test "modal_submit/3 requires an atom submit kind" do
+      assert_raise FunctionClauseError, fn ->
+        Effect.modal_submit(:screen, "save", %{})
+      end
+    end
+
     test "publish/2 carries topic and message" do
       assert %Effect{
                type: :publish,
