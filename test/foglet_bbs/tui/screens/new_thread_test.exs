@@ -97,7 +97,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     user = %{id: "u1", handle: "alice"}
 
     ss =
-      NewThread.init_screen_state(
+      State.new(
         boards: [
           %{id: "b1", name: "General", unread_count: 0},
           %{id: "b2", name: "Announcements", unread_count: 0}
@@ -132,7 +132,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     body_input = fresh_input()
 
     ss =
-      NewThread.init_screen_state(
+      State.new(
         step: :compose,
         boards: [board],
         board: board,
@@ -146,6 +146,71 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   defp get_ss(state), do: get_in(state, [:screen_state, :new_thread])
   defp title_value(state), do: get_ss(state).title_input_state.raxol_state.value
 
+  defp render_screen(state) do
+    render_screen(get_ss(state), context_from_state(state))
+  end
+
+  defp render_screen(%State{} = local_state, %Context{} = context) do
+    NewThread.render(local_state, context)
+  end
+
+  defp handle_key_screen(key_event, state) do
+    local_state = get_ss(state)
+    context = context_from_state(state)
+    {new_local_state, effects} = NewThread.update({:key, key_event}, local_state, context)
+
+    state
+    |> put_in([:screen_state, :new_thread], new_local_state)
+    |> apply_screen_effects(new_local_state, context, effects)
+  end
+
+  defp context_from_state(state) do
+    Context.new(
+      current_user: Map.get(state, :current_user),
+      route: :new_thread,
+      route_params: Map.get(state, :route_params) || %{},
+      terminal_size: Map.get(state, :terminal_size) || {80, 24},
+      session_context: Map.get(state, :session_context) || %{}
+    )
+  end
+
+  defp apply_screen_effects(state, local_state, context, effects) do
+    Enum.reduce(effects, {:update, state, []}, fn
+      %Foglet.TUI.Effect{type: :navigate, payload: %{screen: screen, params: params}},
+      {:update, acc, cmds} ->
+        board_id = params[:board_id] || params["board_id"]
+        cmd = if screen == :thread_list and is_binary(board_id), do: {:load_threads, board_id}
+
+        {:update,
+         %{
+           acc
+           | current_screen: screen,
+             route_params: params,
+             screen_state: Map.delete(acc.screen_state || %{}, :new_thread)
+         }, append_cmd(cmds, cmd)}
+
+      %Foglet.TUI.Effect{type: :task, payload: %{op: :create_thread, fun: fun}},
+      {:update, acc, cmds} ->
+        result = fun.()
+
+        {next_local_state, next_effects} =
+          NewThread.update({:task_result, :create_thread, result}, local_state, context)
+
+        acc = put_in(acc, [:screen_state, :new_thread], next_local_state)
+
+        case next_effects do
+          [] -> {:update, acc, cmds}
+          _ -> apply_screen_effects(acc, next_local_state, context, next_effects)
+        end
+
+      _effect, result ->
+        result
+    end)
+  end
+
+  defp append_cmd(cmds, nil), do: cmds
+  defp append_cmd(cmds, cmd), do: cmds ++ [cmd]
+
   defp put_title(state, title, max_length \\ 60) do
     title_input =
       Enum.reduce(String.graphemes(title), TextInput.init(max_length: max_length), fn ch, acc ->
@@ -157,11 +222,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   end
 
   # ---------------------------------------------------------------------------
-  # init_screen_state/1
+  # State.new/1
   # ---------------------------------------------------------------------------
 
-  test "init_screen_state/1 defaults to board step" do
-    ss = NewThread.init_screen_state()
+  test "State.new/1 defaults to board step" do
+    ss = State.new()
     assert %State{} = ss
     assert ss.step == :board
     assert ss.boards == nil
@@ -178,9 +243,9 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert ss.submit_result == nil
   end
 
-  test "init_screen_state/1 with boards pre-loaded stores them" do
+  test "State.new/1 with boards pre-loaded stores them" do
     boards = [%{id: "b1", name: "General"}]
-    ss = NewThread.init_screen_state(boards: boards)
+    ss = State.new(boards: boards)
     assert ss.boards == boards
   end
 
@@ -464,13 +529,13 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     ctx = context()
 
     assert _ =
-             NewThread.render(
+             render_screen(
                State.new(boards: [%{id: "b1", name: "General"}], load_status: :loaded),
                ctx
              )
 
     assert _ =
-             NewThread.render(
+             render_screen(
                State.new(step: :compose, board: %{id: "b1", name: "General"}),
                ctx
              )
@@ -482,28 +547,28 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "render/1 board step does not crash" do
     state = base_state()
-    assert _ = NewThread.render(state)
+    assert _ = render_screen(state)
   end
 
   test "render/1 board step with nil boards does not crash" do
-    ss = NewThread.init_screen_state(boards: nil)
+    ss = State.new(boards: nil)
     state = Map.put(base_state(), :screen_state, %{new_thread: ss})
-    assert _ = NewThread.render(state)
+    assert _ = render_screen(state)
   end
 
   test "render/1 board step with no subscriptions points to Boards when active boards exist" do
-    ss = NewThread.init_screen_state(boards: [], active_board_count: 2)
+    ss = State.new(boards: [], active_board_count: 2)
     state = Map.put(base_state(), :screen_state, %{new_thread: ss})
-    text = NewThread.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "Subscribe from Boards"
     refute text =~ "Ask your sysop"
   end
 
   test "render/1 board step with no active boards says none are available" do
-    ss = NewThread.init_screen_state(boards: [], active_board_count: 0)
+    ss = State.new(boards: [], active_board_count: 0)
     state = Map.put(base_state(), :screen_state, %{new_thread: ss})
-    text = NewThread.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "No active boards are available"
     refute text =~ "Ask your sysop"
@@ -515,13 +580,13 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "render/1 compose step does not crash" do
     state = compose_state()
-    assert _ = NewThread.render(state)
+    assert _ = render_screen(state)
   end
 
   test "render/1 compose step uses composer shell with board and title counter" do
     text =
       compose_state()
-      |> NewThread.render()
+      |> render_screen()
       |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "Composer"
@@ -536,7 +601,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     text =
       compose_state()
       |> put_title("A Thread")
-      |> NewThread.render()
+      |> render_screen()
       |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "Title"
@@ -551,7 +616,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     ss = %{get_ss(state) | focused: :body, body_input_state: fresh_input("Hello body")}
     state = put_in(state.screen_state.new_thread, ss)
 
-    text = state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+    text = state |> render_screen() |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "Composer"
     assert text =~ "Edit"
@@ -576,7 +641,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     }
 
     state = %{put_in(state.screen_state.new_thread, ss) | terminal_size: {64, 22}}
-    text = state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+    text = state |> render_screen() |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "Wrapped Thread"
     assert text =~ "alpha beta"
@@ -602,8 +667,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     wide_state = %{put_in(state.screen_state.new_thread, ss) | terminal_size: {80, 24}}
     compact_state = %{wide_state | terminal_size: {64, 22}}
 
-    wide_text = wide_state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
-    compact_text = compact_state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+    wide_text = wide_state |> render_screen() |> Foglet.TUI.WidgetHelpers.flatten_text()
+    compact_text = compact_state |> render_screen() |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert get_ss(wide_state).body_input_state.value == long_body
     assert get_ss(compact_state).body_input_state.value == long_body
@@ -628,7 +693,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     state = put_in(state.screen_state.new_thread, ss)
 
-    text = state |> NewThread.render() |> Foglet.TUI.WidgetHelpers.flatten_text()
+    text = state |> render_screen() |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "Composer"
     assert text =~ "Edit"
@@ -667,7 +732,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "Esc on board step navigates to :main_menu" do
     state = base_state()
-    {:update, new_state, _cmds} = NewThread.handle_key(%{key: :escape}, state)
+    {:update, new_state, _cmds} = handle_key_screen(%{key: :escape}, state)
     assert new_state.current_screen == :main_menu
   end
 
@@ -675,31 +740,31 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = base_state()
     assert get_ss(state).selected_board_index == 0
 
-    {:update, new_state, _} = NewThread.handle_key(%{key: :char, char: "j"}, state)
+    {:update, new_state, _} = handle_key_screen(%{key: :char, char: "j"}, state)
     assert get_ss(new_state).selected_board_index == 1
   end
 
   test "down arrow moves board selection down" do
     state = base_state()
-    {:update, new_state, _} = NewThread.handle_key(%{key: :down}, state)
+    {:update, new_state, _} = handle_key_screen(%{key: :down}, state)
     assert get_ss(new_state).selected_board_index == 1
   end
 
   test "j clamps at last board index" do
     state = base_state()
     # Move to last board (index 1 of 2)
-    {:update, s1, _} = NewThread.handle_key(%{key: :char, char: "j"}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, state)
     assert get_ss(s1).selected_board_index == 1
     # Pressing j again should stay at 1
-    {:update, s2, _} = NewThread.handle_key(%{key: :char, char: "j"}, s1)
+    {:update, s2, _} = handle_key_screen(%{key: :char, char: "j"}, s1)
     assert get_ss(s2).selected_board_index == 1
   end
 
   test "Enter on board step advances to compose step with selected board" do
     state = base_state()
     # Move to second board first
-    {:update, s1, _} = NewThread.handle_key(%{key: :char, char: "j"}, state)
-    {:update, s2, _} = NewThread.handle_key(%{key: :enter}, s1)
+    {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    {:update, s2, _} = handle_key_screen(%{key: :enter}, s1)
 
     ss = get_ss(s2)
     assert ss.step == :compose
@@ -707,11 +772,12 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert ss.board.name == "Announcements"
   end
 
-  test "Enter on board step with no boards returns :no_match" do
-    ss = NewThread.init_screen_state(boards: [])
+  test "Enter on board step with no boards is absorbed by the reducer" do
+    ss = State.new(boards: [])
     state = Map.put(base_state(), :screen_state, %{new_thread: ss})
-    result = NewThread.handle_key(%{key: :enter}, state)
-    assert result == :no_match
+    result = handle_key_screen(%{key: :enter}, state)
+    assert {:update, new_state, []} = result
+    assert get_ss(new_state) == ss
   end
 
   # ---------------------------------------------------------------------------
@@ -722,34 +788,34 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = compose_state()
     assert get_ss(state).focused == :title
 
-    {:update, new_state, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, new_state, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(new_state).focused == :body
   end
 
   test "Tab on :body toggles mode to :preview (Gap 4 — Test 8)" do
     state = compose_state()
     # Advance focus to :body first
-    {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(s1).focused == :body
     assert get_ss(s1).mode == :edit
 
     # Tab on body toggles mode, does NOT switch focus back to :title
-    {:update, s2, _} = NewThread.handle_key(%{key: :tab}, s1)
+    {:update, s2, _} = handle_key_screen(%{key: :tab}, s1)
     assert get_ss(s2).mode == :preview
     assert get_ss(s2).focused == :body
   end
 
   test "Tab on :body in :preview mode toggles back to :edit (Gap 4 — Test 9)" do
     state = compose_state()
-    {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(s1).focused == :body
 
     # First Tab: :edit -> :preview
-    {:update, s2, _} = NewThread.handle_key(%{key: :tab}, s1)
+    {:update, s2, _} = handle_key_screen(%{key: :tab}, s1)
     assert get_ss(s2).mode == :preview
 
     # Second Tab: :preview -> :edit
-    {:update, s3, _} = NewThread.handle_key(%{key: :tab}, s2)
+    {:update, s3, _} = handle_key_screen(%{key: :tab}, s2)
     assert get_ss(s3).mode == :edit
     assert get_ss(s3).focused == :body
   end
@@ -759,14 +825,14 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(state).focused == :title
     assert get_ss(state).mode == :edit
 
-    {:update, new_state, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, new_state, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(new_state).focused == :body
     assert get_ss(new_state).mode == :edit
   end
 
   test "Ctrl+C cancels from compose step to origin screen (default :main_menu)" do
     state = compose_state()
-    {:update, new_state, _} = NewThread.handle_key(%{key: :char, char: "c", ctrl: true}, state)
+    {:update, new_state, _} = handle_key_screen(%{key: :char, char: "c", ctrl: true}, state)
     assert new_state.current_screen == :main_menu
   end
 
@@ -789,19 +855,19 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
         )
 
       # Tab to body, type some content.
-      {:update, state, _} = NewThread.handle_key(%{key: :tab}, state)
+      {:update, state, _} = handle_key_screen(%{key: :tab}, state)
       assert get_ss(state).focused == :body
 
       state =
         Enum.reduce(~w[H i], state, fn ch, acc ->
-          {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+          {:update, next, _} = handle_key_screen(%{key: :char, char: ch}, acc)
           next
         end)
 
       assert get_ss(state).body_input_state.value == "Hi"
 
       {:update, after_save, cmds} =
-        NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+        handle_key_screen(%{key: :char, char: "s", ctrl: true}, state)
 
       # Submit fired and routed to :thread_list with a load_threads command.
       # The body did NOT grow an "s" — i.e., the explicit clause intercepted
@@ -812,19 +878,19 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     test "Ctrl+C on body-focused compose cancels (does not insert 'c' into body)" do
       state = compose_state()
-      {:update, state, _} = NewThread.handle_key(%{key: :tab}, state)
+      {:update, state, _} = handle_key_screen(%{key: :tab}, state)
       assert get_ss(state).focused == :body
 
       state =
         Enum.reduce(~w[H i], state, fn ch, acc ->
-          {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+          {:update, next, _} = handle_key_screen(%{key: :char, char: ch}, acc)
           next
         end)
 
       assert get_ss(state).body_input_state.value == "Hi"
 
       {:update, after_cancel, _} =
-        NewThread.handle_key(%{key: :char, char: "c", ctrl: true}, state)
+        handle_key_screen(%{key: :char, char: "c", ctrl: true}, state)
 
       # Cancel routed to origin (default :main_menu) and the body did NOT
       # gain a "c" before transition (would still be "Hi" if it hadn't fired).
@@ -836,13 +902,13 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = compose_state()
     s = put_in(state.screen_state.new_thread.origin, :thread_list)
 
-    {:update, new_state, _} = NewThread.handle_key(%{key: :char, char: "c", ctrl: true}, s)
+    {:update, new_state, _} = handle_key_screen(%{key: :char, char: "c", ctrl: true}, s)
     assert new_state.current_screen == :thread_list
   end
 
   test "Esc cancels from compose step to origin screen (default :main_menu)" do
     state = compose_state()
-    {:update, new_state, _} = NewThread.handle_key(%{key: :escape}, state)
+    {:update, new_state, _} = handle_key_screen(%{key: :escape}, state)
     assert new_state.current_screen == :main_menu
   end
 
@@ -850,7 +916,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = compose_state()
     s = put_in(state.screen_state.new_thread.origin, :thread_list)
 
-    {:update, new_state, _} = NewThread.handle_key(%{key: :escape}, s)
+    {:update, new_state, _} = handle_key_screen(%{key: :escape}, s)
     assert new_state.current_screen == :thread_list
   end
 
@@ -862,17 +928,17 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = compose_state()
     assert get_ss(state).focused == :title
 
-    {:update, s1, _} = NewThread.handle_key(%{key: :char, char: "H"}, state)
-    {:update, s2, _} = NewThread.handle_key(%{key: :char, char: "i"}, s1)
+    {:update, s1, _} = handle_key_screen(%{key: :char, char: "H"}, state)
+    {:update, s2, _} = handle_key_screen(%{key: :char, char: "i"}, s1)
 
     assert title_value(s2) == "Hi"
   end
 
   test "spacebar appends a space to title" do
     state = compose_state()
-    {:update, s1, _} = NewThread.handle_key(%{key: :char, char: "H"}, state)
-    {:update, s2, _} = NewThread.handle_key(%{key: :char, char: " "}, s1)
-    {:update, s3, _} = NewThread.handle_key(%{key: :char, char: "i"}, s2)
+    {:update, s1, _} = handle_key_screen(%{key: :char, char: "H"}, state)
+    {:update, s2, _} = handle_key_screen(%{key: :char, char: " "}, s1)
+    {:update, s3, _} = handle_key_screen(%{key: :char, char: "i"}, s2)
 
     assert title_value(s3) == "H i"
   end
@@ -882,28 +948,28 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     s =
       Enum.reduce(~w[H e l l o], state, fn ch, acc ->
-        {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+        {:update, next, _} = handle_key_screen(%{key: :char, char: ch}, acc)
         next
       end)
 
-    {:update, s, _} = NewThread.handle_key(%{key: :backspace}, s)
+    {:update, s, _} = handle_key_screen(%{key: :backspace}, s)
     assert title_value(s) == "Hell"
   end
 
   test "backspace on empty title stays empty" do
     state = compose_state()
-    {:update, new_state, _} = NewThread.handle_key(%{key: :backspace}, state)
+    {:update, new_state, _} = handle_key_screen(%{key: :backspace}, state)
     assert title_value(new_state) == ""
   end
 
   test "typing does NOT update title when focused on :body" do
     state = compose_state()
     # Switch to body
-    {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(s1).focused == :body
 
     # Typing 'H' should go to body input, not title
-    result = NewThread.handle_key(%{key: :char, char: "H"}, s1)
+    result = handle_key_screen(%{key: :char, char: "H"}, s1)
 
     case result do
       {:update, new_state, _} ->
@@ -922,7 +988,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     test "accepts characters below the cap" do
       s = compose_state() |> put_title("abc")
 
-      {:update, new_state, []} = NewThread.handle_key(%{key: :char, char: "d"}, s)
+      {:update, new_state, []} = handle_key_screen(%{key: :char, char: "d"}, s)
       assert title_value(new_state) == "abcd"
     end
 
@@ -931,21 +997,22 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       long_title = String.duplicate("x", 60)
       s = compose_state() |> put_title(long_title)
 
-      assert NewThread.handle_key(%{key: :char, char: "y"}, s) == :no_match
+      assert {:update, new_state, []} = handle_key_screen(%{key: :char, char: "y"}, s)
+      assert title_value(new_state) == long_title
     end
 
     test "accepts the final allowed character at cap - 1" do
       title = String.duplicate("x", 59)
       s = compose_state() |> put_title(title)
 
-      {:update, new_state, []} = NewThread.handle_key(%{key: :char, char: "y"}, s)
+      {:update, new_state, []} = handle_key_screen(%{key: :char, char: "y"}, s)
       assert String.length(title_value(new_state)) == 60
     end
 
     test "backspace still works at the cap" do
       s = compose_state() |> put_title(String.duplicate("x", 60))
 
-      {:update, new_state, []} = NewThread.handle_key(%{key: :backspace}, s)
+      {:update, new_state, []} = handle_key_screen(%{key: :backspace}, s)
       assert String.length(title_value(new_state)) == 59
     end
   end
@@ -956,11 +1023,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "typing appends to body when focused on :body" do
     state = compose_state()
-    {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(s1).focused == :body
 
-    {:update, s2, _} = NewThread.handle_key(%{key: :char, char: "h"}, s1)
-    {:update, s3, _} = NewThread.handle_key(%{key: :char, char: "i"}, s2)
+    {:update, s2, _} = handle_key_screen(%{key: :char, char: "h"}, s1)
+    {:update, s3, _} = handle_key_screen(%{key: :char, char: "i"}, s2)
 
     body_value = get_ss(s3).body_input_state.value
     assert body_value == "hi"
@@ -971,11 +1038,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     decomposed = "e\u0301"
     zwj_sequence = "👩\u200D💻"
 
-    {:update, s1, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(s1).focused == :body
 
-    {:update, s2, _} = NewThread.handle_key(%{key: :char, char: decomposed}, s1)
-    {:update, s3, _} = NewThread.handle_key(%{key: :char, char: zwj_sequence}, s2)
+    {:update, s2, _} = handle_key_screen(%{key: :char, char: decomposed}, s1)
+    {:update, s3, _} = handle_key_screen(%{key: :char, char: zwj_sequence}, s2)
 
     assert get_ss(s3).body_input_state.value == decomposed <> zwj_sequence
   end
@@ -997,20 +1064,20 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
             %{key: :char, char: ch}
           end
 
-        {:update, next, _} = NewThread.handle_key(key, acc)
+        {:update, next, _} = handle_key_screen(key, acc)
         next
       end)
 
     # Switch to body and type content
-    {:update, s, _} = NewThread.handle_key(%{key: :tab}, s)
+    {:update, s, _} = handle_key_screen(%{key: :tab}, s)
 
     s =
       Enum.reduce(~w[H e l l o], s, fn ch, acc ->
-        {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+        {:update, next, _} = handle_key_screen(%{key: :char, char: ch}, acc)
         next
       end)
 
-    {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+    {:update, final, cmds} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
 
     assert final.current_screen == :thread_list
     assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
@@ -1032,8 +1099,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     state = %{put_in(state.screen_state.new_thread, ss) | terminal_size: {64, 22}}
 
-    _ = NewThread.render(state)
-    {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+    _ = render_screen(state)
+    {:update, final, cmds} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, state)
 
     assert final.current_screen == :thread_list
     assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
@@ -1051,15 +1118,15 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       )
 
     # Type body
-    {:update, s, _} = NewThread.handle_key(%{key: :tab}, s)
+    {:update, s, _} = handle_key_screen(%{key: :tab}, s)
 
     s =
       Enum.reduce(~w[H i], s, fn ch, acc ->
-        {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+        {:update, next, _} = handle_key_screen(%{key: :char, char: ch}, acc)
         next
       end)
 
-    {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+    {:update, final, cmds} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
     assert final.current_screen == :thread_list
     assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
   end
@@ -1071,15 +1138,15 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   test "Ctrl+S with empty title shows error, stays on compose" do
     state = compose_state()
     # Switch to body, type content, but leave title empty
-    {:update, s, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, s, _} = handle_key_screen(%{key: :tab}, state)
 
     s =
       Enum.reduce(~w[H i], s, fn ch, acc ->
-        {:update, next, _} = NewThread.handle_key(%{key: :char, char: ch}, acc)
+        {:update, next, _} = handle_key_screen(%{key: :char, char: ch}, acc)
         next
       end)
 
-    {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+    {:update, final, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
     assert final.current_screen == :new_thread
     ss = get_ss(final)
     assert ss.error =~ "Title"
@@ -1094,7 +1161,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
         TextInput.init(value: "Has Title", max_length: 60)
       )
 
-    {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+    {:update, final, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
     assert final.current_screen == :new_thread
     assert get_ss(final).error =~ "body"
   end
@@ -1115,7 +1182,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     state = put_in(state.screen_state.new_thread, ss)
 
-    {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+    {:update, final, cmds} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, state)
 
     assert final.current_screen == :new_thread
     assert get_ss(final).error =~ "maximum length"
@@ -1131,7 +1198,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     board = %{id: "b1", name: "General"}
 
     ss =
-      NewThread.init_screen_state(
+      State.new(
         step: :compose,
         boards: [board],
         board: board,
@@ -1140,7 +1207,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       )
 
     s = Map.put(state, :screen_state, %{new_thread: ss})
-    {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+    {:update, final, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
 
     assert final.current_screen == :new_thread
     assert get_ss(final).error != nil
@@ -1155,7 +1222,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     board = %{id: "b1", name: "General"}
 
     ss =
-      NewThread.init_screen_state(
+      State.new(
         step: :compose,
         boards: [board],
         board: board,
@@ -1164,14 +1231,14 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       )
 
     s = Map.put(state, :screen_state, %{new_thread: ss})
-    {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+    {:update, final, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
 
     assert final.current_screen == :new_thread
     assert Map.has_key?(final.screen_state, :new_thread)
     assert get_ss(final).error == "You are not allowed to post on this board."
   end
 
-  test "Ctrl+S without current_user shows error modal" do
+  test "Ctrl+S without current_user stores reducer error" do
     state =
       base_state(%{
         current_user: nil,
@@ -1181,7 +1248,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     board = %{id: "b1", name: "General"}
 
     ss =
-      NewThread.init_screen_state(
+      State.new(
         step: :compose,
         boards: [board],
         board: board,
@@ -1190,11 +1257,9 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       )
 
     s = Map.put(state, :screen_state, %{new_thread: ss})
-    {:update, final, _} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
+    {:update, final, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
 
-    assert final.modal != nil
-    assert final.modal.type == :error
-    assert final.modal.message =~ "logged in"
+    assert get_ss(final).error =~ "logged in"
   end
 
   # ---------------------------------------------------------------------------
@@ -1204,12 +1269,12 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   test "Tab on body toggles to :preview mode" do
     state = compose_state()
     # Tab to body
-    {:update, s, _} = NewThread.handle_key(%{key: :tab}, state)
+    {:update, s, _} = handle_key_screen(%{key: :tab}, state)
     assert get_ss(s).focused == :body
     assert get_ss(s).mode == :edit
 
     # Tab on body toggles to preview
-    {:update, s, _} = NewThread.handle_key(%{key: :tab}, s)
+    {:update, s, _} = handle_key_screen(%{key: :tab}, s)
     assert get_ss(s).mode == :preview
     assert get_ss(s).focused == :body
   end
@@ -1228,7 +1293,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     board = %{id: "b1", name: "General"}
 
     ss =
-      NewThread.init_screen_state(
+      State.new(
         step: :compose,
         boards: [board],
         board: board,
@@ -1246,6 +1311,6 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       )
 
     # render/1 is pure — calling it should not raise.
-    assert NewThread.render(state) != nil
+    assert render_screen(state) != nil
   end
 end

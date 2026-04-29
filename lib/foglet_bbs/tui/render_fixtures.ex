@@ -147,15 +147,15 @@ defmodule Foglet.TUI.RenderFixtures do
   # --- per-screen population -----------------------------------------------
 
   defp populate(:login, state, _size) do
-    App.put_screen_state(state, :login, Login.init_screen_state([]))
+    App.put_screen_state(state, :login, init_screen(Login, state))
   end
 
   defp populate(:register, state, _size) do
-    App.put_screen_state(state, :register, Register.init_screen_state([]))
+    App.put_screen_state(state, :register, init_screen(Register, state))
   end
 
   defp populate(:verify, state, _size) do
-    App.put_screen_state(state, :verify, Verify.init_screen_state([]))
+    App.put_screen_state(state, :verify, init_screen(Verify, state))
   end
 
   defp populate(:main_menu, state, _size) do
@@ -276,15 +276,21 @@ defmodule Foglet.TUI.RenderFixtures do
   end
 
   defp populate(:account, state, _size) do
-    App.put_screen_state(state, :account, Account.init_screen_state([]))
+    App.put_screen_state(state, :account, init_screen(Account, state))
   end
 
   defp populate(:moderation, state, _size) do
-    App.put_screen_state(state, :moderation, Moderation.init_screen_state([]))
+    App.put_screen_state(state, :moderation, init_screen(Moderation, state))
   end
 
   defp populate(:sysop, state, _size) do
-    App.put_screen_state(state, :sysop, Sysop.init_screen_state([]))
+    App.put_screen_state(state, :sysop, init_screen(Sysop, state))
+  end
+
+  defp init_screen(screen_mod, %App{} = state) do
+    state
+    |> App.build_context()
+    |> screen_mod.init()
   end
 
   # --- synthetic data shapes -----------------------------------------------

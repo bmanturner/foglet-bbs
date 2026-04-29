@@ -85,7 +85,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         terminal_size: {80, 24},
         screen_state: %{
           post_reader:
-            PostReader.init_screen_state(
+            State.new(
               board: %{id: "b1", name: "General"},
               thread: %{id: "t1", title: "Hello"},
               posts: nil,
@@ -97,6 +97,123 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     %{state: state}
   end
+
+  defp reader_ss(state) do
+    case get_in(state, [:screen_state, :post_reader]) do
+      %State{} = local_state ->
+        local_state
+        |> ensure_reader_ids()
+        |> normalize_reader_state()
+
+      _ ->
+        State.new()
+    end
+  end
+
+  defp ensure_reader_ids(%State{} = local_state) do
+    %{
+      local_state
+      | board_id: local_state.board_id || id_from(local_state.board),
+        thread_id: local_state.thread_id || id_from(local_state.thread)
+    }
+  end
+
+  defp id_from(%{} = value), do: Map.get(value, :id) || Map.get(value, "id")
+  defp id_from(_value), do: nil
+
+  defp normalize_reader_state(%State{status: :loading, posts: posts} = local_state)
+       when is_list(posts) and posts != [] do
+    %{local_state | status: :loaded}
+  end
+
+  defp normalize_reader_state(%State{} = local_state), do: local_state
+
+  defp reader_context_from_state(state) do
+    local_state = reader_ss(state)
+
+    Context.new(
+      current_user: Map.get(state, :current_user),
+      terminal_size: Map.get(state, :terminal_size) || {80, 24},
+      route: :post_reader,
+      route_params:
+        Map.get(state, :route_params) ||
+          %{
+            board: local_state.board,
+            board_id: local_state.board_id,
+            thread: local_state.thread,
+            thread_id: local_state.thread_id
+          },
+      session_context: Map.get(state, :session_context) || %{}
+    )
+  end
+
+  defp render_screen(state) do
+    render_screen(reader_ss(state), reader_context_from_state(state))
+  end
+
+  defp render_screen(%State{} = local_state, %Context{} = context) do
+    PostReader.render(local_state, context)
+  end
+
+  defp handle_key_screen(key_event, state) do
+    context = reader_context_from_state(state)
+    local_state = reader_ss(state)
+    {new_local_state, effects} = PostReader.update({:key, key_event}, local_state, context)
+
+    state
+    |> put_in([:screen_state, :post_reader], new_local_state)
+    |> apply_reader_effects(new_local_state, effects)
+  end
+
+  defp apply_reader_effects(state, local_state, effects) do
+    Enum.reduce(effects, {:update, state, []}, fn
+      %Effect{type: :navigate, payload: %{screen: :post_composer, params: params}},
+      {:update, acc, cmds} ->
+        composer_state = Foglet.TUI.Screens.PostComposer.State.new(Keyword.new(params))
+
+        {:update,
+         Map.merge(acc, %{
+           current_screen: :post_composer,
+           route_params: params,
+           screen_state: Map.put(acc.screen_state || %{}, :post_composer, composer_state)
+         }), cmds}
+
+      %Effect{type: :navigate, payload: %{screen: screen, params: params}},
+      {:update, acc, cmds} ->
+        {:update,
+         Map.merge(acc, %{
+           current_screen: screen,
+           route_params: params,
+           screen_state: Map.delete(acc.screen_state || %{}, :post_reader)
+         }), cmds}
+
+      %Effect{type: :task, payload: %{op: :flush_read_pointers}}, {:update, acc, cmds} ->
+        ctx = build_flush_context(acc, local_state)
+        {:update, acc, cmds ++ [{:flush_read_pointers, ctx}]}
+
+      _effect, result ->
+        result
+    end)
+  end
+
+  defp build_flush_context(state, %State{} = local_state) do
+    pending =
+      local_state.pending_read_positions[local_state.thread_id] ||
+        local_state.pending_read_positions[to_string(local_state.thread_id || "")]
+
+    user = Map.get(state, :current_user)
+
+    %{
+      user_id: user_id(user),
+      board_id: local_state.board_id,
+      thread_id: local_state.thread_id,
+      last_read_post_id: pending && pending.last_read_post_id,
+      last_read_message_number: pending && pending.last_read_message_number
+    }
+  end
+
+  defp user_id(%{id: id}), do: id
+  defp user_id(_user), do: nil
 
   # ===========================================================================
   # READER-02 / D-03 / D-04: Public callback contract surface evidence
@@ -115,7 +232,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert length(ss.posts) == 2
   end
 
-  test "init_screen_state/1 returns the PostReader.State struct" do
+  test "State.new/1 returns the PostReader.State struct" do
     assert %State{
              selected_post_index: 0,
              render_cache: %{},
@@ -129,7 +246,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
              last_op: nil,
              last_error: nil,
              load_intent: nil
-           } = PostReader.init_screen_state([])
+           } = State.new([])
   end
 
   test "PostReader.State.from_context/1 extracts route identity" do
@@ -357,7 +474,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "render/1 with posts loaded does not crash", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    assert _ = PostReader.render(s)
+    assert _ = render_screen(s)
   end
 
   test "render/1 delegates breadcrumb formatting to shared chrome", %{state: state} do
@@ -366,7 +483,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     # into shared chrome modules; this is a behavioural guard that the
     # rendered tree no longer contains the legacy prefix.
     {s, _} = PostReader.load_posts(state, "t1")
-    text = PostReader.render(s) |> flatten_text()
+    text = render_screen(s) |> flatten_text()
 
     refute text =~ "Thread:"
   end
@@ -380,7 +497,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       state: state
     } do
       # state.posts == nil — loading not yet started
-      flat = flatten_text(PostReader.render(state))
+      flat = flatten_text(render_screen(state))
       assert flat =~ "Loading…", "Expected canonical Loading… text, got: #{inspect(flat)}"
       refute String.contains?(flat, "Loading posts..."), "Legacy loading text must not appear"
     end
@@ -388,7 +505,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     test "empty posts list renders canonical 'Loading…' text", %{state: state} do
       ss = %{state.screen_state.post_reader | posts: []}
       s = %{state | screen_state: Map.put(state.screen_state, :post_reader, ss)}
-      flat = flatten_text(PostReader.render(s))
+      flat = flatten_text(render_screen(s))
       assert flat =~ "Loading…", "Expected canonical Loading… text for empty posts"
       refute String.contains?(flat, "Loading posts...")
     end
@@ -406,7 +523,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         )
 
       s = p2_state(%{posts: [post]})
-      flat = flatten_text(PostReader.render(s))
+      flat = flatten_text(render_screen(s))
 
       assert flat =~ "Post 1 of 1"
       assert flat =~ "#42"
@@ -425,15 +542,15 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
           )
         end)
 
-      ss = PostReader.init_screen_state(selected_post_index: 2)
+      ss = State.new(selected_post_index: 2)
       s = p2_state(%{posts: posts, screen_state: %{post_reader: ss}})
 
-      assert PostReader.render(s) |> flatten_text() =~ "Posts 3/12"
+      assert render_screen(s) |> flatten_text() =~ "Posts 3/12"
     end
 
     test "renders guttered selected body text" do
       s = p2_state(%{posts: [p2_post(body: "Selected body text")]})
-      flat = flatten_text(PostReader.render(s))
+      flat = flatten_text(render_screen(s))
 
       assert flat =~ "│"
       assert flat =~ "Selected body text"
@@ -441,7 +558,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     test "keeps markdown rendering delegated and strips raw markdown syntax" do
       s = p2_state(%{posts: [p2_post(body: "Hello **world**")]})
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
       refute serialized =~ "**world**"
@@ -450,7 +567,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     test "keeps compact header and progress outside viewport children" do
       s = p2_state(%{posts: [p2_post(body: "Viewport-only body")]})
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       viewport = find_node(tree, &match?(%{id: "post_reader_vp"}, &1))
       viewport_text = flatten_text(viewport)
 
@@ -465,7 +582,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       # owns this format). The previous source-grep pinned the implementation
       # to a literal call shape.
       {s, _} = PostReader.load_posts(state, "t1")
-      text = PostReader.render(s) |> flatten_text()
+      text = render_screen(s) |> flatten_text()
 
       assert text =~ ~r/Post \d+ of \d+/
     end
@@ -473,7 +590,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "'n' advances to next post and updates pending_read_positions", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
+    {:update, s, _} = handle_key_screen(%{key: :char, char: "n"}, s)
     ss = s.screen_state.post_reader
     assert ss.selected_post_index == 1
     assert ss.pending_read_positions["t1"][:last_read_post_id] == "p2"
@@ -482,20 +599,20 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "'p' decrements bounded at 0", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "p"}, s)
+    {:update, s, _} = handle_key_screen(%{key: :char, char: "p"}, s)
     assert s.screen_state.post_reader.selected_post_index == 0
   end
 
   test "'R' opens :post_composer with reply_to set to current post", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "R"}, s)
+    {:update, s, _} = handle_key_screen(%{key: :char, char: "R"}, s)
     assert s.current_screen == :post_composer
     assert s.screen_state.post_composer.reply_to.id == "p1"
   end
 
   test "'R' stashes origin: :post_reader in the :post_composer screen_state", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "r"}, s)
+    {:update, s, _} = handle_key_screen(%{key: :char, char: "r"}, s)
     assert s.current_screen == :post_composer
     assert s.screen_state.post_composer.origin == :post_reader
   end
@@ -503,8 +620,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "'Q' returns to :thread_list and emits {:flush_read_pointers, _} (SSH-09)",
        %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
-    {:update, new_state, cmds} = PostReader.handle_key(%{key: :char, char: "Q"}, s)
+    {:update, s, _} = handle_key_screen(%{key: :char, char: "n"}, s)
+    {:update, new_state, cmds} = handle_key_screen(%{key: :char, char: "Q"}, s)
 
     assert new_state.current_screen == :thread_list
     refute Map.has_key?(new_state.screen_state, :post_reader)
@@ -514,7 +631,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "flush_read_pointers/2 calls domain modules and clears local pointer", %{state: state} do
     # flush_read_pointers/2 intentional callback surface (READER-02, D-03, D-04)
     {s, _} = PostReader.load_posts(state, "t1")
-    {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
+    {:update, s, _} = handle_key_screen(%{key: :char, char: "n"}, s)
 
     ctx = %{
       user_id: s.current_user.id,
@@ -538,31 +655,31 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       state: state
     } do
       # posts is nil — loading window not yet closed
-      assert {:update, s, []} = PostReader.handle_key(%{key: :char, char: "n"}, state)
+      assert {:update, s, []} = handle_key_screen(%{key: :char, char: "n"}, state)
       # State is returned unchanged (no navigation occurred)
       assert s.screen_state.post_reader.posts == state.screen_state.post_reader.posts
     end
 
     test "p key on loading state absorbs without extra commands", %{state: state} do
-      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "p"}, state)
+      assert {:update, _s, []} = handle_key_screen(%{key: :char, char: "p"}, state)
     end
 
     test "space key on loading state absorbs without extra commands", %{state: state} do
-      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: " "}, state)
+      assert {:update, _s, []} = handle_key_screen(%{key: :char, char: " "}, state)
     end
 
     test "j key on loading state absorbs without extra commands", %{state: state} do
-      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "j"}, state)
+      assert {:update, _s, []} = handle_key_screen(%{key: :char, char: "j"}, state)
     end
 
     test "k key on loading state absorbs without extra commands", %{state: state} do
-      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "k"}, state)
+      assert {:update, _s, []} = handle_key_screen(%{key: :char, char: "k"}, state)
     end
 
     test "n key on empty posts list absorbs without extra commands", %{state: state} do
       ss = %{state.screen_state.post_reader | posts: []}
       s = %{state | screen_state: Map.put(state.screen_state, :post_reader, ss)}
-      assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "n"}, s)
+      assert {:update, _s, []} = handle_key_screen(%{key: :char, char: "n"}, s)
     end
   end
 
@@ -667,22 +784,30 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   defp p2_state(overrides) do
     overrides = Enum.into(overrides, %{})
 
-    posts = Map.get(overrides, :posts, [p2_post(id: "p1", body: "Hello **world**.")])
-    pending = Map.get(overrides, :read_position, %{})
     thread = Map.get(overrides, :current_thread, %{id: "t1", title: "Test Thread"})
     board = Map.get(overrides, :current_board, %{id: "b1"})
+    posts = Map.get(overrides, :posts, [p2_post(id: "p1", body: "Hello **world**.")])
+
+    pending =
+      Map.get_lazy(overrides, :read_position, fn ->
+        seed_pending_for_posts(Map.get(thread || %{}, :id), posts)
+      end)
+
     existing_ss = Map.get(overrides, :screen_state, %{})
 
     base_ss =
-      Map.get(existing_ss, :post_reader, PostReader.init_screen_state([]))
-      |> Map.merge(%{
-        posts: posts,
-        pending_read_positions: pending,
-        thread: thread,
-        thread_id: Map.get(thread || %{}, :id),
-        board: board,
-        board_id: Map.get(board || %{}, :id)
-      })
+      Map.get(existing_ss, :post_reader, State.new([]))
+      |> then(fn ss ->
+        struct(ss, %{
+          posts: posts,
+          status: if(posts in [nil, []], do: ss.status, else: :loaded),
+          pending_read_positions: pending,
+          thread: thread,
+          thread_id: Map.get(thread || %{}, :id),
+          board: board,
+          board_id: Map.get(board || %{}, :id)
+        })
+      end)
 
     screen_state = Map.put(existing_ss, :post_reader, base_ss)
 
@@ -706,6 +831,17 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     Map.merge(base, overrides_for_app)
   end
+
+  defp seed_pending_for_posts(thread_id, [post | _]) when is_binary(thread_id) do
+    %{
+      thread_id => %{
+        last_read_post_id: Map.get(post, :id),
+        last_read_message_number: Map.get(post, :message_number) || 0
+      }
+    }
+  end
+
+  defp seed_pending_for_posts(_thread_id, _posts), do: %{}
 
   # Local flatten helpers (same pattern as MarkdownBodyTest)
 
@@ -757,7 +893,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
           posts: [p2_post(body: "First paragraph.\n\nSecond paragraph.")]
         })
 
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       flat = flatten_text(tree)
 
       assert flat =~ "First paragraph."
@@ -771,7 +907,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
           posts: [p2_post(body: "soft\nbreak\n\nFirst\n\nSecond\n\n\nThird")]
         })
 
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       viewport = find_node(tree, &match?(%{id: "post_reader_vp"}, &1))
       serialized = inspect(viewport, printable_limit: :infinity, limit: :infinity)
       flat = flatten_text(viewport)
@@ -788,7 +924,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     test "bold markdown renders formatted (not raw **asterisks**)" do
       s = p2_state(%{posts: [p2_post(body: "Hello **world**.")]})
 
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
       # The raw markdown syntax must not appear in the rendered tree.
@@ -799,7 +935,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     test "heading renders as uppercased underlined text" do
       s = p2_state(%{posts: [p2_post(body: "# Hello")]})
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       flat = flatten_text(tree)
       assert flat =~ "HELLO"
     end
@@ -814,8 +950,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       s80 = p2_state(%{posts: [p2_post(body: "Hello.")], terminal_size: {80, 24}})
       s40 = %{s80 | terminal_size: {40, 24}}
 
-      tree80 = PostReader.render(s80)
-      tree40 = PostReader.render(s40)
+      tree80 = render_screen(s80)
+      tree40 = render_screen(s40)
 
       # Both produce non-nil trees (sanity).
       refute is_nil(tree80)
@@ -831,9 +967,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
           ]
         })
 
-      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
-      {:update, s2, _} = PostReader.handle_key(%{key: :char, char: "k"}, s1)
-      {:update, s3, _} = PostReader.handle_key(%{key: :char, char: "n"}, s2)
+      {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s2, _} = handle_key_screen(%{key: :char, char: "k"}, s1)
+      {:update, s3, _} = handle_key_screen(%{key: :char, char: "n"}, s2)
 
       # After N, viewport.scroll_top must reset to 0 (D-04).
       assert s3.screen_state[:post_reader].viewport.scroll_top == 0
@@ -841,7 +977,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert s3.screen_state[:post_reader].selected_post_index == 1
 
       # render/1 still works on the final state.
-      tree = PostReader.render(s3)
+      tree = render_screen(s3)
       refute is_nil(tree)
     end
   end
@@ -857,14 +993,14 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
       s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {80, 12}})
 
-      assert {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
       assert s1.screen_state[:post_reader].viewport.scroll_top == 1
     end
 
     test "k decrements viewport.scroll_top but clamps at 0" do
       s = p2_state(%{posts: [p2_post(body: "A\n\nB\n\nC")]})
 
-      assert {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "k"}, s)
+      assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "k"}, s)
       assert s1.screen_state[:post_reader].viewport.scroll_top == 0
     end
 
@@ -873,7 +1009,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       # the max_scroll is 0 — j should not advance.
       s = p2_state(%{posts: [p2_post(body: "Just one line.")]})
 
-      result = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      result = handle_key_screen(%{key: :char, char: "j"}, s)
       assert {:update, s1, []} = result
       assert s1.screen_state[:post_reader].viewport.scroll_top == 0
     end
@@ -886,7 +1022,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {40, 12}})
 
-      {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
 
       assert s1.screen_state[:post_reader].viewport.scroll_top == 1
       assert length(s1.screen_state[:post_reader].viewport.children) > 1
@@ -906,12 +1042,12 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         })
 
       # Scroll down twice on post 1.
-      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
-      {:update, s2, _} = PostReader.handle_key(%{key: :char, char: "j"}, s1)
+      {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s2, _} = handle_key_screen(%{key: :char, char: "j"}, s1)
       assert s2.screen_state[:post_reader].viewport.scroll_top == 2
 
       # Press N to advance to post 2.
-      {:update, s3, _} = PostReader.handle_key(%{key: :char, char: "n"}, s2)
+      {:update, s3, _} = handle_key_screen(%{key: :char, char: "n"}, s2)
       assert s3.screen_state[:post_reader].viewport.scroll_top == 0
       assert s3.screen_state[:post_reader].selected_post_index == 1
     end
@@ -919,9 +1055,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     test "j/k accept uppercase letters too" do
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
       s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {80, 12}})
-      assert {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "J"}, s)
+      assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "J"}, s)
       assert s1.screen_state[:post_reader].viewport.scroll_top == 1
-      assert {:update, s2, []} = PostReader.handle_key(%{key: :char, char: "K"}, s1)
+      assert {:update, s2, []} = handle_key_screen(%{key: :char, char: "K"}, s1)
       assert s2.screen_state[:post_reader].viewport.scroll_top == 0
     end
 
@@ -929,7 +1065,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
       s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {80, 12}})
 
-      {:update, s1, []} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
       ss = s1.screen_state[:post_reader]
 
       assert is_map(ss.viewport)
@@ -948,7 +1084,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     test "cache is populated on first j (scroll warms cache)" do
       s = p2_state(%{posts: [p2_post(id: "p1", body: "A\n\nB\n\nC\n\nD")]})
 
-      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, s)
 
       cache = s1.screen_state[:post_reader].render_cache
 
@@ -960,12 +1096,12 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       s = p2_state(%{posts: [p2_post(id: "p1", body: "A\n\nB")]})
 
       # Warm cache at width 80.
-      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, s)
       assert Map.has_key?(s1.screen_state[:post_reader].render_cache, {"p1", 80})
 
       # Change width, scroll again.
       s2 = %{s1 | terminal_size: {40, 24}}
-      {:update, s3, _} = PostReader.handle_key(%{key: :char, char: "j"}, s2)
+      {:update, s3, _} = handle_key_screen(%{key: :char, char: "j"}, s2)
 
       cache = s3.screen_state[:post_reader].render_cache
       assert Map.has_key?(cache, {"p1", 80})
@@ -974,11 +1110,11 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     test "Q clears :post_reader screen_state (cache is discarded)" do
       s = p2_state(%{posts: [p2_post(id: "p1", body: "A\n\nB\n\nC")]})
-      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
+      {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, s)
       assert s1.screen_state[:post_reader].render_cache != %{}
 
       # Press Q.
-      {:update, s2, cmds} = PostReader.handle_key(%{key: :char, char: "q"}, s1)
+      {:update, s2, cmds} = handle_key_screen(%{key: :char, char: "q"}, s1)
       assert s2.current_screen == :thread_list
       refute Map.has_key?(s2.screen_state, :post_reader)
       # And the flush command is dispatched.
@@ -1000,9 +1136,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
           terminal_size: {80, 12}
         })
 
-      {:update, s1, _} = PostReader.handle_key(%{key: :char, char: "j"}, s)
-      {:update, s2, _} = PostReader.handle_key(%{key: :char, char: "n"}, s1)
-      {:update, s3, _} = PostReader.handle_key(%{key: :char, char: "j"}, s2)
+      {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s2, _} = handle_key_screen(%{key: :char, char: "n"}, s1)
+      {:update, s3, _} = handle_key_screen(%{key: :char, char: "j"}, s2)
 
       cache = s3.screen_state[:post_reader].render_cache
       assert Map.has_key?(cache, {"p1", 80})
@@ -1031,7 +1167,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       s = p2_state(%{posts: [p2_post(body: welcome_body)]})
       s = %{s | terminal_size: {80, 40}}
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       flat = flatten_text(tree)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
 
@@ -1050,7 +1186,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         "Agreed. Markdown preview in the composer is a nice touch — **bold** and *italic* both render correctly."
 
       s = p2_state(%{posts: [p2_post(body: body)]})
-      tree = PostReader.render(s)
+      tree = render_screen(s)
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       flat = flatten_text(tree)
 
@@ -1127,7 +1263,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         })
 
       {s_after_load, _} = PostReader.load_posts(s, "t1")
-      {:update, _s_after_q, cmds} = PostReader.handle_key(%{key: :char, char: "q"}, s_after_load)
+      {:update, _s_after_q, cmds} = handle_key_screen(%{key: :char, char: "q"}, s_after_load)
 
       flush =
         Enum.find(cmds, fn
