@@ -133,6 +133,8 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   @impl true
   @spec render(map()) :: any()
+  # Phase 39 cleanup: legacy render/1 remains for older smoke tests only.
+  # Phase 37 flow state is screen-owned by render/2 and %NewThread.State{}.
   def render(state) do
     ss = screen_state(state)
 
@@ -277,6 +279,8 @@ defmodule Foglet.TUI.Screens.NewThread do
   # ---------------------------------------------------------------------------
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
+  # Phase 39 cleanup: legacy handle_key/2 remains for compatibility tests.
+  # It must not be the source of truth for the Phase 37 App runtime path.
   def handle_key(key_event, state) do
     ss = screen_state(state)
 

@@ -212,6 +212,8 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @impl true
   @spec render(map()) :: any()
+  # Phase 39 cleanup: legacy render/1 remains for older smoke tests only.
+  # Phase 37 flow state is screen-owned by render/2 and %PostReader.State{}.
   def render(state) do
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
@@ -313,6 +315,8 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
+  # Phase 39 cleanup: legacy handle_key/2 remains for compatibility tests.
+  # It must not be the source of truth for the Phase 37 App runtime path.
   def handle_key(%{key: :char, char: c}, state) when c in ["n", "N"], do: advance_post(state, +1)
   def handle_key(%{key: :char, char: " "}, state), do: advance_post(state, +1)
   def handle_key(%{key: :page_down}, state), do: advance_post(state, +1)

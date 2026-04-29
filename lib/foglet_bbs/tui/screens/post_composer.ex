@@ -134,6 +134,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   @impl true
   @spec render(map()) :: any()
+  # Phase 39 cleanup: legacy render/1 remains for older smoke tests only.
+  # Phase 37 flow state is screen-owned by render/2 and %PostComposer.State{}.
   def render(state) do
     ss = composer_screen_state(state)
     input_st = ss.input_state
@@ -164,6 +166,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   @impl true
   @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
+  # Phase 39 cleanup: legacy handle_key/2 remains for compatibility tests.
+  # It must not be the source of truth for the Phase 37 App runtime path.
   # NOTE: PostComposer handle_key/2 clause order is load-bearing:
   # keep :tab/Ctrl+S/Ctrl+C above fallback forwarding.
   def handle_key(%{key: :tab}, state), do: toggle_mode(state)

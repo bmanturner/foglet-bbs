@@ -55,7 +55,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
           max_post_length: 1_000
         },
         terminal_size: {80, 24},
-        composer_draft: nil,
         screen_state: %{
           post_composer: PostComposer.init_screen_state(input_state: input_st)
         }
@@ -411,7 +410,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
     {:update, s, cmds} = PostComposer.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert s.current_screen == :post_reader
-    assert s.composer_draft == nil
     refute Map.has_key?(s.screen_state, :post_composer)
 
     assert Enum.any?(cmds, fn
@@ -475,7 +473,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
         current_thread: %{id: "t1", title: "Hello", board_id: "b1"},
         session_context: %{domain: %{posts: FakePosts}},
         terminal_size: {80, 24},
-        composer_draft: nil,
         screen_state: %{
           post_composer: PostComposer.init_screen_state(input_state: input_st)
         }
@@ -497,7 +494,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     {:update, s, _} = PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, s)
 
     assert s.current_screen == :main_menu
-    assert s.composer_draft == nil
     refute Map.has_key?(s.screen_state, :post_composer)
   end
 
@@ -515,7 +511,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       PostComposer.handle_key(%{key: :char, char: "c", ctrl: true}, state)
 
     assert cancel_state.current_screen == :main_menu
-    assert cancel_state.composer_draft == nil
   end
 
   # Regression: handle_key/2 clause order is load-bearing. Compose.translate_key/1
