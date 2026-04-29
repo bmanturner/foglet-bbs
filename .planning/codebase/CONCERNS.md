@@ -148,42 +148,6 @@ this section as new phases land.
      for `{:promote_to_user, user}`); consider a structured audit row tied to
      peer IP for forensics.
 
-### `no_auth_needed: true` SSH daemon posture
-
-- Risk: The SSH daemon accepts every connection by design — identity
-  resolution happens inside the TUI. A malicious peer can spin up a TUI
-  session as a guest at will, restricted only by per-IP rate limit (10 conns
-  per 60s) and the global 500-connection ceiling.
-- Files: `lib/foglet_bbs/ssh/key_cb.ex:32-40`,
-  `lib/foglet_bbs/ssh/cli_handler.ex:58,82-145`,
-  `lib/foglet_bbs/ssh/rate_limiter.ex:20-21`.
-- Current mitigation: Hammer-backed per-IP rate limit + ETS atomic counter for
-  global cap. Both fail-open on table errors (intentional availability
-  trade-off, documented in module docs).
-- Recommendations: Consider exposing the rate-limit thresholds as
-  `Foglet.Config` keys so an operator can tighten under attack without a
-  redeploy. Currently both `@max_connections` (500) and the rate-limit window
-  (10/60s) are module attributes.
-
-### Soft-deleted post bodies remain in database
-
-- Risk: `Foglet.Posts.delete_post/2` only sets `deleted_at` and
-  `deletion_reason`; the post `body` stays in the row. A naive query that
-  forgets `where: is_nil(p.deleted_at)` would render deleted content.
-- Files: `lib/foglet_bbs/posts.ex:148-161`,
-  `lib/foglet_bbs/posts/post.ex:18,64`,
-  `lib/foglet_bbs/query_helpers.ex:11-14`.
-- Current mitigation: `Foglet.QueryHelpers.not_deleted/1` provides a shared
-  filter; render code is expected to show a tombstone for `deleted_at != nil`.
-  Message numbers are intentionally preserved (no gap filling), as documented
-  in the Posts moduledoc.
-- Recommendations: Audit every list/get path that returns `Post.t()` to ensure
-  `not_deleted/1` is applied in the query (consumer responsibility, not
-  schema-level). Consider a "purge" Mix task that hard-deletes old soft-deleted
-  rows after a retention window for GDPR-style requests; currently
-  `Foglet.Accounts.delete_user/1` rewrites authorship to a tombstone user but
-  does not redact bodies.
-
 ### Plain `Repo.transaction` skips Repo.transact ergonomics in board server
 
 - Risk: `Foglet.Boards.Server` uses `|> Repo.transaction()` directly with
@@ -199,29 +163,6 @@ this section as new phases land.
   `{:error, _}` shape if the Multi step labels are not externally observed.
 
 ## Performance Bottlenecks
-
-### Per-board single-writer GenServer for message-number allocation
-
-- Problem: All post and thread inserts on a given board route through a
-  single `GenServer.call/3` to `Foglet.Boards.Server`. Each call holds the
-  process while running an `Ecto.Multi` (board counter bump + post insert +
-  thread counter bump + user post-count bump). Under burst write load this
-  serializes inside a single OS process.
-- Files: `lib/foglet_bbs/boards/server.ex` (entire file),
-  `lib/foglet_bbs/posts.ex:45-63`,
-  `lib/foglet_bbs/threads.ex` (`create_thread`).
-- Cause: This is a deliberate invariant (per-board contiguous, gap-free
-  message numbers — see `AGENTS.md` "Core Invariants"). Database-level
-  serialization (advisory locks or `SELECT ... FOR UPDATE`) was not chosen.
-- Improvement path: Acceptable for current scale (small BBS). If a board
-  ever sees write QPS that taps the GenServer, options are:
-  1. Move allocation to a Postgres sequence per board with a careful
-     compensating-write protocol on Multi failure.
-  2. Pipeline via `GenServer.cast` + ack message, so the caller doesn't block
-     the calling process while waiting for `Multi` to commit.
-  3. Pre-allocate ranges and hand out from in-memory pool, draining lazily.
-- Default call timeout: 5s. Long-running posts (e.g. heavy markdown) are not
-  currently a concern but worth re-checking if body validation grows.
 
 ### `Foglet.Posts.list_posts/1` loads every post in a thread, no pagination
 
@@ -300,19 +241,6 @@ this section as new phases land.
   helper that owns alt-screen leave + lifecycle stop + session stop +
   counter decrement. Currently each branch open-codes the sequence.
 
-### Phoenix surface area is minimal but easy to drift
-
-- Files: `lib/foglet_bbs_web/router.ex` (entire file),
-  `lib/foglet_bbs_web/endpoint.ex`.
-- Why fragile: The router serves only `/`, `/up` (health), and dev-only
-  LiveDashboard. There is no `/api` content. CSP is very tight (`default-src
-  'self'`, no inline scripts). Adding any user-facing browser feature would
-  require explicit architecture intent per `AGENTS.md` ("Phoenix is
-  infrastructure ... do not add end-user browser workflows unless the
-  architecture docs are updated").
-- Safe modification: Treat `lib/foglet_bbs_web/` as locked unless the
-  milestone explicitly opens it. New SSH-only features stay in `Foglet.*`.
-
 ### Render-path purity invariant on PostReader is enforced by convention only
 
 - Files: `lib/foglet_bbs/tui/screens/post_reader.ex:33-39,619-731`.
@@ -326,66 +254,6 @@ this section as new phases land.
   helper that scans `defp render_*` for forbidden calls (`put_in`, `Map.put`,
   `%{state | ...}`).
 
-## Scaling Limits
-
-### SSH connections: 500 hard cap, ETS counter
-
-- Current capacity: 500 concurrent SSH channels (module attribute
-  `@max_connections` in `lib/foglet_bbs/ssh/cli_handler.ex:58`).
-- Limit: Beyond 500, connections are rejected with a banner and channel close.
-- Scaling path: Bump `@max_connections`. Real ceilings are Erlang
-  `:ssh` daemon throughput, the BEAM scheduler under N TUI processes, and
-  Postgres connection-pool size — not the counter itself. Surface as
-  `Foglet.Config.max_ssh_connections` if dynamic tuning becomes useful.
-
-### Per-IP rate limit: 10 conns per 60s
-
-- Current capacity: 10 connection attempts per IP per 60s window
-  (`@rate_limit_max`, `@rate_limit_window_ms` in
-  `lib/foglet_bbs/ssh/rate_limiter.ex:20-21`).
-- Limit: Hammer ETS backend, fail-open on table errors.
-- Scaling path: Move thresholds into `Foglet.Config` typed accessors so
-  operators can tune under attack.
-
-### Per-board write throughput: single GenServer
-
-- Current capacity: One process serializes all post inserts per board.
-- Limit: ~Postgres commit latency × Multi step count per insert.
-- Scaling path: See "Performance Bottlenecks" above.
-
-## Dependencies at Risk
-
-### Raxol vendor copy
-
-- Risk: Raxol lives under `vendor/raxol/` (referenced via path or git pin in
-  `mix.exs`) and is the rendering engine for the entire SSH product surface.
-  CLIHandler reaches into private internals like `Raxol.Core.Runtime.Lifecycle`
-  state via `GenServer.call(lifecycle_pid, :get_full_state)` to fish out the
-  dispatcher pid (`lib/foglet_bbs/ssh/cli_handler.ex:433-438`), and the
-  app dispatches both `:resize` and `:window` events because the upstream
-  dispatcher does not propagate `:resize` to `App.update/2`
-  (`cli_handler.ex:218-235`).
-- Impact: Any Raxol upstream change to the lifecycle or dispatcher API would
-  silently break SSH input/resize forwarding. Compile-time warnings already
-  show pre-existing `raxol` dependency churn (`Raxol.Adaptive.NxModel`,
-  `Mogrify`, `Benchee.Formatter` in
-  `.planning/phases/40-verification-documentation/40-SUMMARY.md` Render Smoke
-  notes).
-- Migration plan: Replace the `:get_full_state` peek with a stable supported
-  API once Raxol publishes one. Until then, treat the dispatcher-pid lookup
-  as a known coupling and add a regression test that fails loudly if the
-  shape of `%{dispatcher_pid: pid}` changes.
-
-## Missing Critical Features
-
-No critical product gaps for v2.0 milestone close. The active requirement is
-purely placeholder cleanup:
-
-- `FUTURE-01..FUTURE-03` — Traceability placeholders left in `PROJECT.md`;
-  resolve or remove if/when they become real requirements.
-
-`SEED-001` (email notifications) and `SEED-002` (webhook notifications) are
-intentionally dormant per the v2.0 milestone scope; they are NOT bugs.
 
 ## Test Coverage Gaps
 
@@ -428,32 +296,6 @@ intentionally dormant per the v2.0 milestone scope; they are NOT bugs.
   list. Tombstone-rendering tests catch the most-trafficked paths but not
   every consumer.
 - Priority: Medium.
-
-### Phoenix endpoint surface
-
-- What's not tested: There are no controller tests beyond what
-  `FogletBbsWeb.HealthController` may carry. The endpoint is intentionally
-  minimal.
-- Files: `lib/foglet_bbs_web/controllers/health_controller.ex`,
-  `lib/foglet_bbs_web/controllers/page_controller.ex`,
-  `test/foglet_bbs_web/`.
-- Risk: Any drift toward end-user browser features should re-add coverage;
-  current CSP is restrictive, but a regression that loosens
-  `frame-ancestors 'none'` or `script-src 'self'` would not be caught by an
-  automated test today.
-- Priority: Low while SSH-first stance holds (see `AGENTS.md`).
-
-### Render-path purity for screens beyond PostReader
-
-- What's not tested: The "render helpers must not mutate state" invariant is
-  documented per-module (PostReader, others by analogy) but not enforced by
-  a static check or test.
-- Files: `lib/foglet_bbs/tui/screens/*.ex`,
-  `.credo.exs`.
-- Risk: A new contributor adds a `defp render_x` that calls `put_in/2` and
-  it ships. The next refactor that flips to a memoized render path would
-  produce subtle render artifacts.
-- Priority: Low; consider a Credo custom check.
 
 ---
 
