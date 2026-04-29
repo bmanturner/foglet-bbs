@@ -1210,7 +1210,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
     setup do
       Process.put(:fake_oneliners_owner, self())
 
-      user = %Foglet.Accounts.User{id: "u-bl01", handle: "alice", role: :mod}
+      user = %Foglet.Accounts.User{
+        id: "u-bl01",
+        handle: "alice",
+        role: :mod,
+        confirmed_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      }
 
       {:ok, state} =
         App.init(%{
