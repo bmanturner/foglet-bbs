@@ -201,6 +201,26 @@ render through `Screen.render(state, context)`.
 `Foglet.TUI.AsciiRenderer` and `rtk mix foglet.tui.render`. These fixtures are
 for visual inspection, not behavior assertions.
 
+## Large Screen Decomposition
+
+Large screens with substantial reducer and render helper code should use a
+top-level reducer-facing screen module, sibling `state.ex`, and sibling `render.ex`.
+The top-level module remains the `Foglet.TUI.Screen` implementation and keeps
+`init/1`, `update/3`, optional `subscriptions/2`, effect creation, task result
+handling, modal submit handling, and public non-render test seams.
+
+Sibling render modules own frame, content, and keybar assembly plus detailed
+body, tab, form, panel, or helper rendering. Render modules consume
+already-loaded screen state plus `Foglet.TUI.Context` or a derived render model.
+They should route styling through `Foglet.TUI.Theme` and existing widgets.
+
+Render modules must not query the database, mutate screen state, subscribe to
+topics, start tasks, or perform durable domain writes. Domain work remains in
+the owning `Foglet.*` context and is requested by the reducer-facing screen
+through effects.
+
+Current Phase 43 examples are PostReader, Sysop, Login, MainMenu, NewThread, and Account.
+
 ## Checklist
 
 - [ ] Define screen-local state or return an explicit stateless value.
