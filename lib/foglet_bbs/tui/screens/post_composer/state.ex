@@ -78,8 +78,10 @@ defmodule Foglet.TUI.Screens.PostComposer.State do
     params = context.route_params || %{}
     board = route_param(params, :board)
     thread = route_param(params, :thread)
+    {w, _h} = context.terminal_size || {80, 24}
 
     new(
+      width: max(w - 4, 20),
       board: board,
       board_id: route_param(params, :board_id) || id_from(board),
       thread: thread,

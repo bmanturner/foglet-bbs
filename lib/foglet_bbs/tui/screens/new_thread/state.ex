@@ -97,6 +97,7 @@ defmodule Foglet.TUI.Screens.NewThread.State do
     params = context.route_params || %{}
     origin = Map.get(params, :origin) || Map.get(params, "origin") || :main_menu
     board = Map.get(params, :board) || Map.get(params, "board")
+    {w, _h} = context.terminal_size || {80, 24}
 
     board_id =
       Map.get(params, :board_id) || Map.get(params, "board_id") || board_id_from_board(board)
@@ -105,6 +106,7 @@ defmodule Foglet.TUI.Screens.NewThread.State do
       board = normalize_board_id(board, board_id)
 
       new(
+        width: w,
         step: :compose,
         board: board,
         boards: [board],
@@ -113,7 +115,7 @@ defmodule Foglet.TUI.Screens.NewThread.State do
         load_status: :loaded
       )
     else
-      new(step: :board, boards: nil, origin: origin, load_status: :idle)
+      new(width: w, step: :board, boards: nil, origin: origin, load_status: :idle)
     end
   end
 
