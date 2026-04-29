@@ -17,7 +17,7 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 | 36 | 3/3 | Complete    | 2026-04-28 |
 | 37 | 5/5 | Complete| 2026-04-29 |
 | 38 | Account & Operator Workbenches | Migrate Account, Moderation, and Sysop with nested forms, tab lifecycle loads, invites, retries, and save results. | SCREEN-05, SCREEN-06 |
-| 39 | App Shell Simplification | Remove screen-specific App state/result manipulation and finalize route/context/subscription/modal shell ownership. | STATE-02, STATE-03, STATE-04, APP-01, APP-02, APP-03, APP-04 |
+| 39 | 1/8 | In Progress|  |
 | 40 | Verification & Documentation | Prove the full migration with reducer, App-shell, render, and precommit coverage; document the new screen pattern. | VERIFY-01, VERIFY-02, VERIFY-03, VERIFY-04, VERIFY-05 |
 
 **Coverage:**
@@ -173,10 +173,10 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 4. Modal and SizeGate precedence remain App-owned and tested.
 5. App module is materially smaller and reads as a shell over runtime concerns.
 
-**Plans:** 8 plans
+**Plans:** 1/8 plans executed
 
 Plans:
-- [ ] 39-01-PLAN.md — Wave 0: capture render baselines for the five tracked screens; add @tag :phase39_target pin tests for struct-shape, optional callbacks, function exports, and MainMenu-only-["user:<id>"] subscription set.
+- [x] 39-01-PLAN.md — Wave 0: capture render baselines for the five tracked screens; add @tag :phase39_target pin tests for struct-shape, optional callbacks, function exports, and MainMenu-only-["user:<id>"] subscription set.
 - [ ] 39-02-PLAN.md — Wave 1: declare Screen.subscriptions/2 as an optional callback on Foglet.TUI.Screen.
 - [ ] 39-03-PLAN.md — Wave 1: implement subscriptions/2 on PostReader (thread topic), ThreadList (board topic), and BoardList (boards aggregate).
 - [ ] 39-04-PLAN.md — Wave 1: add update(:on_route_enter, …) clauses to MainMenu, Moderation, Sysop, ThreadList, PostReader (preserves App-side conditional-load semantics inside the screens).

@@ -22,9 +22,9 @@
 ### Screen State Ownership
 
 - [x] **STATE-01**: Every stateful screen has a first-class state struct, and stateless screens are explicit about not storing local state.
-- [ ] **STATE-02**: Board lists, thread lists, posts, composer drafts, oneliner rows, tab lifecycle slots, and form feedback live in the owning screen state rather than in screen-specific App fields.
+- [x] **STATE-02**: Board lists, thread lists, posts, composer drafts, oneliner rows, tab lifecycle slots, and form feedback live in the owning screen state rather than in screen-specific App fields.
 - [ ] **STATE-03**: Screen-local helper modules no longer read or write `state.screen_state[:screen]` through the App struct once their owning screen is migrated.
-- [ ] **STATE-04**: `Foglet.TUI.App` stores screen states by route/screen key and does not manipulate individual screen struct fields after migration.
+- [x] **STATE-04**: `Foglet.TUI.App` stores screen states by route/screen key and does not manipulate individual screen struct fields after migration.
 
 ### Screen Migration
 
@@ -37,9 +37,9 @@
 
 ### App Shell Simplification
 
-- [ ] **APP-01**: `Foglet.TUI.App` owns only runtime shell responsibilities: Raxol callbacks, message normalization, SizeGate/modal precedence, current route, screen state storage, context construction, effect interpretation, subscriptions, session runtime hooks, and rendering dispatch.
+- [x] **APP-01**: `Foglet.TUI.App` owns only runtime shell responsibilities: Raxol callbacks, message normalization, SizeGate/modal precedence, current route, screen state storage, context construction, effect interpretation, subscriptions, session runtime hooks, and rendering dispatch.
 - [ ] **APP-02**: `Foglet.TUI.App` no longer has screen-specific loaded-result clauses such as board, thread, post, moderation, sysop, account, or oneliner result handlers after migration.
-- [ ] **APP-03**: PubSub subscriptions are derived from route/context or screen-declared interests without reintroducing screen-specific state mutation in App.
+- [x] **APP-03**: PubSub subscriptions are derived from route/context or screen-declared interests without reintroducing screen-specific state mutation in App.
 - [ ] **APP-04**: Modal handling remains App-level for overlay precedence, while screen-owned modal requests flow through generic modal effects.
 
 ### Verification
@@ -83,18 +83,18 @@ Which phases cover which requirements. Updated during roadmap creation.
 | EFFECT-03 | Phase 34 | Complete |
 | EFFECT-04 | Phase 34 | Complete |
 | STATE-01 | Phase 34 | Complete |
-| STATE-02 | Phase 39 | Pending |
+| STATE-02 | Phase 39 | Complete |
 | STATE-03 | Phase 39 | Pending |
-| STATE-04 | Phase 39 | Pending |
+| STATE-04 | Phase 39 | Complete |
 | SCREEN-01 | Phase 35 | Complete |
 | SCREEN-02 | Phase 35 | Complete |
 | SCREEN-03 | Phase 36 | Complete |
 | SCREEN-04 | Phase 37 | Complete |
 | SCREEN-05 | Phase 38 | Pending |
 | SCREEN-06 | Phase 38 | Pending |
-| APP-01 | Phase 39 | Pending |
+| APP-01 | Phase 39 | Complete |
 | APP-02 | Phase 39 | Pending |
-| APP-03 | Phase 39 | Pending |
+| APP-03 | Phase 39 | Complete |
 | APP-04 | Phase 39 | Pending |
 | VERIFY-01 | Phase 40 | Pending |
 | VERIFY-02 | Phase 40 | Pending |

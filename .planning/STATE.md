@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-29T03:31:02.414Z"
-last_activity: 2026-04-29 -- Phase 39 planning complete
+last_updated: "2026-04-29T03:46:01.954Z"
+last_activity: 2026-04-29
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 23
-  completed_plans: 19
-  percent: 83
+  completed_plans: 20
+  percent: 87
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 38 — account-operator-workbenches
+**Current focus:** Phase 39 — app-shell-simplification
 
 ## Current Position
 
-Phase: 38 (account-operator-workbenches) — COMPLETED
-Plan: 4 of 4
+Phase: 39 (app-shell-simplification) — EXECUTING
+Plan: 2 of 8
 Status: Ready to execute
-Last activity: 2026-04-29 -- Phase 39 planning complete
+Last activity: 2026-04-29
 
 ## Accumulated Context
 
@@ -66,6 +66,9 @@ Last activity: 2026-04-29 -- Phase 39 planning complete
 - [Phase 38-account-operator-workbenches]: Account, Moderation, and Sysop now expose production init/update/render reducer contracts over Foglet.TUI.Context. — Workbench screens own their local key handling, task results, and render inputs.
 - [Phase 38-account-operator-workbenches]: App route-entry dispatch now routes MainMenu, Moderation, and Sysop first-load behavior through generic screen updates. — Removes App-owned workbench task/result clauses while preserving App as runtime/effect interpreter.
 - [Phase 38-account-operator-workbenches]: Account preference saves refresh session snapshots through Effect.session({:update_preferences, snapshot}). — Keeps screen reducers effect-oriented while Session remains the live session authority.
+- [Phase ?]: [Phase 39-01]: Wave 0 ships fail-loud pin tests tagged @tag :phase39_target excluded from default mix test via test_helper.exs; later waves drop tags as work lands.
+- [Phase ?]: [Phase 39-01]: Render baselines for five tracked screens (main_menu, board_list, thread_list, post_reader, account) captured at 80x24 with the same ANSI-strip pipeline Plan 39-08 will use, so byte-equivalence diff is apples-to-apples.
+- [Phase ?]: [Phase 39-01]: Pre-existing dialyzer warnings on main HEAD (app.ex:63 ThreadEntry.t/0; board_list.ex:161; sysop.ex:810) are deferred — not introduced by Phase 39 — and tracked in deferred-items.md. The app.ex one will be removed naturally by Plan 39-07 struct-field deletion.
 
 ### Pending Todos
 
