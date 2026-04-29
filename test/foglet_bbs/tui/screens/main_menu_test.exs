@@ -124,10 +124,6 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     %{state: build_state(:user)}
   end
 
-  test "MainMenu has no public init_screen_state/1" do
-    refute function_exported?(MainMenu, :init_screen_state, 1)
-  end
-
   describe "oneliners strip" do
     test "nil recent_oneliners renders panel title and empty state", %{state: state} do
       texts = state |> with_oneliners(nil) |> rendered_text()

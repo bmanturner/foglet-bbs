@@ -54,6 +54,105 @@ defmodule Foglet.TUI.Screens.SysopTest do
     put_in(state, [:session_context, :invite_code_generators], policy)
   end
 
+  defp sysop_context(state) do
+    app = struct!(Foglet.TUI.App, Map.take(state, Map.keys(%Foglet.TUI.App{})))
+    Foglet.TUI.App.build_context(app)
+  end
+
+  defp render_sysop(state) do
+    context = sysop_context(state)
+    local_state = get_in(state, [:screen_state, :sysop]) || Sysop.init(context)
+
+    Sysop.render(local_state, context)
+  end
+
+  defp handle_sysop_key(event, state) do
+    context = sysop_context(state)
+    local_state = get_in(state, [:screen_state, :sysop]) || Sysop.init(context)
+    {new_local_state, effects} = Sysop.update({:key, event}, local_state, context)
+    new_local_state = preserve_app_owned_loading(local_state, new_local_state, effects)
+    state = put_in(state, [:screen_state, :sysop], new_local_state)
+
+    if sysop_no_match?(local_state, new_local_state, effects) do
+      :no_match
+    else
+      apply_sysop_effects(state, effects)
+    end
+  end
+
+  defp preserve_app_owned_loading(old_state, new_state, effects) do
+    Enum.reduce(effects, new_state, fn
+      %Effect{type: :task, payload: %{op: op}}, acc
+      when op in [:sysop_load_boards, :sysop_load_limits, :sysop_load_system, :sysop_load_users] ->
+        Map.put(acc, sysop_slot_for_op(op), Map.fetch!(old_state, sysop_slot_for_op(op)))
+
+      _effect, acc ->
+        acc
+    end)
+  end
+
+  defp sysop_slot_for_op(:sysop_load_boards), do: :boards_view
+  defp sysop_slot_for_op(:sysop_load_limits), do: :limits_form
+  defp sysop_slot_for_op(:sysop_load_system), do: :system_snapshot
+  defp sysop_slot_for_op(:sysop_load_users), do: :users_view
+
+  defp sysop_no_match?(old_state, new_state, []) do
+    fields = [
+      :active_tab,
+      :site_form,
+      :limits_form,
+      :boards_view,
+      :system_snapshot,
+      :users_view,
+      :invites,
+      :armed_revoke?
+    ]
+
+    Map.take(old_state, fields) == Map.take(new_state, fields)
+  end
+
+  defp sysop_no_match?(_old_state, _new_state, _effects), do: false
+
+  defp apply_sysop_effects(state, effects) do
+    Enum.reduce(effects, {:update, state, []}, fn
+      %Effect{type: :navigate, payload: %{screen: screen, params: params}},
+      {:update, state, cmds} ->
+        {:update, %{state | current_screen: screen, route_params: params || %{}}, cmds}
+
+      %Effect{type: :modal, payload: {:open, modal}}, {:update, state, cmds} ->
+        {:update, %{state | modal: modal}, cmds}
+
+      %Effect{type: :modal, payload: :dismiss}, {:update, state, cmds} ->
+        {:update, %{state | modal: nil}, cmds}
+
+      %Effect{type: :task, payload: %{op: op}} = effect, {:update, state, cmds}
+      when op in [:sysop_load_boards, :sysop_load_limits, :sysop_load_system, :sysop_load_users] ->
+        {:update, state, cmds ++ [legacy_sysop_load_command(effect.payload.op)]}
+
+      %Effect{type: :task, payload: %{op: op, fun: fun}}, {:update, state, cmds} ->
+        result = fun.()
+        local_state = get_in(state, [:screen_state, :sysop])
+
+        {new_local_state, followup} =
+          Sysop.update({:task_result, op, {:ok, result}}, local_state, sysop_context(state))
+
+        state
+        |> put_in([:screen_state, :sysop], new_local_state)
+        |> apply_sysop_effects(followup)
+        |> append_cmds(cmds)
+
+      _effect, acc ->
+        acc
+    end)
+  end
+
+  defp legacy_sysop_load_command(:sysop_load_boards), do: {:load_sysop_boards}
+  defp legacy_sysop_load_command(:sysop_load_limits), do: {:load_sysop_limits}
+  defp legacy_sysop_load_command(:sysop_load_system), do: {:load_sysop_system}
+  defp legacy_sysop_load_command(:sysop_load_users), do: {:load_sysop_users}
+
+  defp append_cmds({:update, state, new_cmds}, cmds), do: {:update, state, cmds ++ new_cmds}
+
   setup do
     Config.init_cache()
     for key <- @config_keys, do: Config.invalidate(key)
@@ -70,9 +169,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
     %{state: build_state(:sysop)}
   end
 
-  describe "init_screen_state/1" do
+  describe "Sysop.State.new/1" do
     test "returns struct with active_tab: 0 and Tabs wrapper" do
-      ss = Sysop.init_screen_state()
+      ss = SysopState.new()
       assert ss.active_tab == 0
       assert %Foglet.TUI.Widgets.Input.Tabs{} = ss.tabs
     end
@@ -188,7 +287,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     @moduletag :lifecycle
 
     test ":not_loaded is the default for the four lifecycle slots" do
-      ss = Sysop.init_screen_state()
+      ss = SysopState.new()
       assert ss.boards_view == :not_loaded
       assert ss.limits_form == :not_loaded
       assert ss.system_snapshot == :not_loaded
@@ -217,7 +316,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     @describetag :lifecycle_render
 
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
+      state = put_in(state, [:screen_state, :sysop], SysopState.new(active: 4))
       %{state: state}
     end
 
@@ -228,12 +327,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
 
     test "USERS :not_loaded renders the Loading… panel", %{state: state} do
-      flat = state |> put_users_slot(:not_loaded) |> Sysop.render() |> collect_text_values()
+      flat = state |> put_users_slot(:not_loaded) |> render_sysop() |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Loading…"))
     end
 
     test "USERS :loading renders the Loading… panel", %{state: state} do
-      flat = state |> put_users_slot(:loading) |> Sysop.render() |> collect_text_values()
+      flat = state |> put_users_slot(:loading) |> render_sysop() |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Loading…"))
     end
 
@@ -246,7 +345,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       }
 
       sub = Foglet.TUI.Screens.Sysop.UsersView.from_groups(%{}, sysop)
-      flat = state |> put_users_slot({:loaded, sub}) |> Sysop.render() |> collect_text_values()
+      flat = state |> put_users_slot({:loaded, sub}) |> render_sysop() |> collect_text_values()
       # UsersView render emits the heading.
       assert Enum.any?(flat, &String.contains?(&1, "User status administration"))
     end
@@ -256,7 +355,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       flat =
         state
         |> put_users_slot({:error, :forbidden})
-        |> Sysop.render()
+        |> render_sysop()
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -270,7 +369,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       flat =
         state
         |> put_users_slot({:error, :timeout})
-        |> Sysop.render()
+        |> render_sysop()
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -302,7 +401,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     @describetag :lifecycle_delegate
 
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
+      state = put_in(state, [:screen_state, :sysop], SysopState.new(active: 4))
       %{state: state}
     end
 
@@ -313,7 +412,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = put_in(state, [:screen_state, :sysop], ss)
 
       # Down is delegated; with :not_loaded the guard returns :no_match.
-      assert :no_match = Sysop.handle_key(%{key: :down}, state)
+      assert :no_match = handle_sysop_key(%{key: :down}, state)
     end
 
     test "events on :loading slot are no-ops", %{state: state} do
@@ -321,7 +420,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       ss = %{ss | users_view: :loading}
       state = put_in(state, [:screen_state, :sysop], ss)
 
-      assert :no_match = Sysop.handle_key(%{key: :down}, state)
+      assert :no_match = handle_sysop_key(%{key: :down}, state)
     end
 
     test "events on {:error, _} slot are no-ops", %{state: state} do
@@ -329,7 +428,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       ss = %{ss | users_view: {:error, :forbidden}}
       state = put_in(state, [:screen_state, :sysop], ss)
 
-      assert :no_match = Sysop.handle_key(%{key: :down}, state)
+      assert :no_match = handle_sysop_key(%{key: :down}, state)
     end
 
     test "events on {:loaded, sub} are delegated and the wrapper is preserved on writeback",
@@ -355,7 +454,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = put_in(state, [:screen_state, :sysop], ss)
 
       # Down event rotates UsersView selection — wrapper stays {:loaded, _}.
-      case Sysop.handle_key(%{key: :down}, state) do
+      case handle_sysop_key(%{key: :down}, state) do
         {:update, new_state, _cmds} ->
           assert match?({:loaded, _}, new_state.screen_state.sysop.users_view)
 
@@ -370,7 +469,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     @describetag :lifecycle_dispatch
 
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 0))
+      state = put_in(state, [:screen_state, :sysop], SysopState.new(active: 0))
       %{state: state}
     end
 
@@ -378,7 +477,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
          %{state: state} do
       assert state.screen_state.sysop.users_view == :not_loaded
 
-      {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "5"}, state)
+      {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "5"}, state)
 
       assert new_state.screen_state.sysop.active_tab == 4
       # WR-05: the App is the single writer for the :loading transition.
@@ -389,7 +488,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
 
     test "switching to BOARDS emits {:load_sysop_boards}", %{state: state} do
-      {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "2"}, state)
+      {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "2"}, state)
       assert new_state.screen_state.sysop.active_tab == 1
       # WR-05: App owns the :loading transition (see USERS test above).
       assert new_state.screen_state.sysop.boards_view == :not_loaded
@@ -397,7 +496,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
 
     test "switching to LIMITS emits {:load_sysop_limits}", %{state: state} do
-      {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "3"}, state)
+      {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "3"}, state)
       assert new_state.screen_state.sysop.active_tab == 2
       # WR-05: App owns the :loading transition (see USERS test above).
       assert new_state.screen_state.sysop.limits_form == :not_loaded
@@ -405,7 +504,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
 
     test "switching to SYSTEM emits {:load_sysop_system}", %{state: state} do
-      {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "4"}, state)
+      {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "4"}, state)
       assert new_state.screen_state.sysop.active_tab == 3
       # WR-05: App owns the :loading transition (see USERS test above).
       assert new_state.screen_state.sysop.system_snapshot == :not_loaded
@@ -419,7 +518,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       ss = %{ss | users_view: {:loaded, sub}}
       state = put_in(state, [:screen_state, :sysop], ss)
 
-      {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "5"}, state)
+      {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "5"}, state)
       assert new_state.screen_state.sysop.active_tab == 4
       assert new_state.screen_state.sysop.users_view == {:loaded, sub}
       refute Enum.member?(cmds, {:load_sysop_users})
@@ -427,10 +526,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "switching to SITE never emits a load command (D-03 sync)", %{state: state} do
       # Move to BOARDS first (which emits a load), then back to SITE.
-      {:update, mid_state, _} = Sysop.handle_key(%{key: :char, char: "2"}, state)
+      {:update, mid_state, _} = handle_sysop_key(%{key: :char, char: "2"}, state)
       assert mid_state.screen_state.sysop.active_tab == 1
 
-      {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "1"}, mid_state)
+      {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "1"}, mid_state)
       assert new_state.screen_state.sysop.active_tab == 0
       # No sysop-load command emitted on SITE entry.
       refute Enum.any?(cmds, &match?({:load_sysop_users}, &1))
@@ -444,7 +543,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     @describetag :retry_advertising
 
     setup %{state: state} do
-      ss = Sysop.init_screen_state(active: 4)
+      ss = SysopState.new(active: 4)
       state = put_in(state, [:screen_state, :sysop], ss)
       %{state: state}
     end
@@ -458,7 +557,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       flat =
         state
         |> put_sysop_slot(:users_view, {:error, :timeout})
-        |> Sysop.render()
+        |> render_sysop()
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -469,7 +568,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       flat =
         state
         |> put_sysop_slot(:users_view, {:error, :forbidden})
-        |> Sysop.render()
+        |> render_sysop()
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -482,7 +581,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       flat =
         state
         |> put_sysop_slot(:users_view, {:loaded, sub})
-        |> Sysop.render()
+        |> render_sysop()
         |> collect_text_values()
         |> Enum.join("\n")
 
@@ -494,7 +593,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     @describetag :retry_dispatch
 
     setup %{state: state} do
-      ss = Sysop.init_screen_state(active: 4)
+      ss = SysopState.new(active: 4)
       state = put_in(state, [:screen_state, :sysop], ss)
       %{state: state}
     end
@@ -503,7 +602,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
          %{state: state} do
       state = put_sysop_slot(state, :users_view, {:error, :timeout})
 
-      assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      assert {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "R"}, state)
       # WR-05: App owns the :loading transition. The screen leaves the slot
       # in {:error, _} and emits the dispatch tuple; the App's
       # {:load_sysop_users} clause flips the slot to :loading via
@@ -517,7 +616,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     } do
       state = put_sysop_slot(state, :users_view, {:error, :timeout})
 
-      assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "r"}, state)
+      assert {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "r"}, state)
       # WR-05: App owns the :loading transition (see uppercase R test above).
       assert new_state.screen_state.sysop.users_view == {:error, :timeout}
       assert {:load_sysop_users} in cmds
@@ -530,7 +629,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       # R must NOT consume the event nor flip the slot to :loading. Returns
       # :no_match (or {:update, state, []} with users_view unchanged) so the
       # event continues falling through to the existing handlers.
-      result = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      result = handle_sysop_key(%{key: :char, char: "R"}, state)
 
       case result do
         :no_match ->
@@ -576,7 +675,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       # pending rows. We can't assert against the boundary side effect here
       # without a Repo, but we can assert the slot stayed {:loaded, _} (not
       # flipped to :loading) and no {:load_sysop_*} command was emitted.
-      result = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      result = handle_sysop_key(%{key: :char, char: "R"}, state)
 
       case result do
         :no_match ->
@@ -597,7 +696,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = put_in(state, [:screen_state, :sysop], ss)
       state = put_sysop_slot(state, :boards_view, {:error, :timeout})
 
-      assert {:update, new_state, cmds} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      assert {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "R"}, state)
       # WR-05: App owns the :loading transition.
       assert new_state.screen_state.sysop.boards_view == {:error, :timeout}
       assert {:load_sysop_boards} in cmds
@@ -607,14 +706,14 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   describe "render/1" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      state = put_in(state, [:screen_state, :sysop], SysopState.new())
       %{state: state}
     end
 
     test "shows all five tab labels in order: SITE, BOARDS, LIMITS, SYSTEM, USERS", %{
       state: state
     } do
-      flat = Sysop.render(state) |> collect_text_values()
+      flat = render_sysop(state) |> collect_text_values()
       expected_tabs = ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS"]
 
       for tab <- expected_tabs do
@@ -644,7 +743,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         state = with_invite_policy(state, policy)
 
         ss =
-          Sysop.init_screen_state(
+          SysopState.new(
             current_user: state.current_user,
             session_context: state.session_context
           )
@@ -661,7 +760,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         flat =
           state
           |> put_in([:screen_state, :sysop], ss)
-          |> Sysop.render()
+          |> render_sysop()
           |> collect_text_values()
 
         assert Enum.any?(flat, &String.contains?(&1, "INVITES")),
@@ -674,7 +773,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         state = build_state(role) |> with_invite_policy("sysop_only")
 
         ss =
-          Sysop.init_screen_state(
+          SysopState.new(
             current_user: state.current_user,
             session_context: state.session_context
           )
@@ -684,7 +783,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         flat =
           state
           |> put_in([:screen_state, :sysop], ss)
-          |> Sysop.render()
+          |> render_sysop()
           |> collect_text_values()
 
         refute Enum.any?(flat, &String.contains?(&1, "INVITES")),
@@ -699,7 +798,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   describe "handle_key/2" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      state = put_in(state, [:screen_state, :sysop], SysopState.new())
       %{state: state}
     end
 
@@ -707,27 +806,27 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state: state
     } do
       {state1, tab1} =
-        case Sysop.handle_key(%{key: :right}, state) do
+        case handle_sysop_key(%{key: :right}, state) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
         end
 
       {state2, tab2} =
-        case Sysop.handle_key(%{key: :right}, state1) do
+        case handle_sysop_key(%{key: :right}, state1) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
         end
 
       {state3, tab3} =
-        case Sysop.handle_key(%{key: :right}, state2) do
+        case handle_sysop_key(%{key: :right}, state2) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
         end
 
       {state4, tab4} =
-        case Sysop.handle_key(%{key: :right}, state3) do
+        case handle_sysop_key(%{key: :right}, state3) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
         end
 
       {_state5, tab5} =
-        case Sysop.handle_key(%{key: :right}, state4) do
+        case handle_sysop_key(%{key: :right}, state4) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
           :no_match -> {state4, state4.screen_state.sysop.active_tab}
         end
@@ -740,7 +839,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
 
     test "digit '5' jumps to USERS tab (index 4)", %{state: state} do
-      {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "5"}, state)
+      {:update, new_state, _cmds} = handle_sysop_key(%{key: :char, char: "5"}, state)
       assert new_state.screen_state.sysop.active_tab == 4
     end
 
@@ -748,31 +847,31 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = with_invite_policy(state, "sysop_only")
 
       ss =
-        Sysop.init_screen_state(
+        SysopState.new(
           current_user: state.current_user,
           session_context: state.session_context
         )
 
       state = put_in(state, [:screen_state, :sysop], ss)
 
-      {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "6"}, state)
+      {:update, new_state, _cmds} = handle_sysop_key(%{key: :char, char: "6"}, state)
 
       assert new_state.screen_state.sysop.active_tab == 5
       assert SysopState.tab_labels(new_state.screen_state.sysop) |> Enum.at(5) == "INVITES"
     end
 
     test "'Q' returns to :main_menu", %{state: state} do
-      {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "Q"}, state)
+      {:update, new_state, _cmds} = handle_sysop_key(%{key: :char, char: "Q"}, state)
       assert new_state.current_screen == :main_menu
     end
 
     test "'q' returns to :main_menu", %{state: state} do
-      {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "q"}, state)
+      {:update, new_state, _cmds} = handle_sysop_key(%{key: :char, char: "q"}, state)
       assert new_state.current_screen == :main_menu
     end
 
     test "unknown key returns :no_match", %{state: state} do
-      assert :no_match = Sysop.handle_key(%{key: :char, char: "z"}, state)
+      assert :no_match = handle_sysop_key(%{key: :char, char: "z"}, state)
     end
 
     test "Sysop screen does NOT dispatch fake config-write commands", %{state: state} do
@@ -789,7 +888,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       ]
 
       for key <- keys do
-        case Sysop.handle_key(key, state) do
+        case handle_sysop_key(key, state) do
           {:update, _new_state, cmds} ->
             for cmd <- cmds do
               if is_tuple(cmd) do
@@ -821,7 +920,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   describe "SITE tab render (SYSO-02, INVT-06)" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      state = put_in(state, [:screen_state, :sysop], SysopState.new())
       %{state: state}
     end
 
@@ -829,9 +928,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
          %{state: state} do
       Config.put!("invite_code_generators", "sysop_only", nil)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
 
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
 
       refute String.contains?(flat, "invite_generation_per_user_limit"),
              "Limit key name must not leak when row is hidden"
@@ -841,9 +940,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
          %{state: state} do
       Config.put!("invite_code_generators", "any_user", nil)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
 
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
 
       assert String.contains?(flat, "invite_generation_per_user_limit"),
              "Limit row must be visible when generators == any_user"
@@ -852,7 +951,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   describe "SITE tab Ctrl+S (SYSO-02)" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state())
+      state = put_in(state, [:screen_state, :sysop], SysopState.new())
       %{state: state}
     end
 
@@ -872,7 +971,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = %{state | current_user: sysop}
 
       # Navigate to SITE tab (already index 0) — lazy-init by sending Tab.
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
 
       # SiteForm was lazy-initialized with the real sysop above.
       _ = state
@@ -890,7 +989,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       # Send Ctrl+S.
       {:update, new_state, _cmds} =
-        Sysop.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+        handle_sysop_key(%{key: :char, char: "s", ctrl: true}, state)
 
       # Inline error recorded; no modal; still on sysop screen.
       assert new_state.current_screen == :sysop
@@ -910,12 +1009,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
       # constraint after the authorization check passes — nil trips authz first.
       state =
         build_state(nil)
-        |> put_in([:screen_state, :sysop], Sysop.init_screen_state())
+        |> put_in([:screen_state, :sysop], SysopState.new())
 
       Config.put!("delivery_mode", "email", nil)
 
       # Lazy-init SiteForm and mutate a draft so submit hits Config.put.
-      {:update, state, _} = Sysop.handle_key(%{key: :tab}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
 
       ss = state.screen_state.sysop
 
@@ -927,7 +1026,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = put_in(state, [:screen_state, :sysop], %{ss | site_form: site_form})
 
       {:update, new_state, _cmds} =
-        Sysop.handle_key(%{key: :char, char: "s", ctrl: true}, state)
+        handle_sysop_key(%{key: :char, char: "s", ctrl: true}, state)
 
       assert %Foglet.TUI.Modal{type: :error} = new_state.modal
       assert new_state.current_screen == :main_menu
@@ -939,7 +1038,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       # Phase 29 D-07: lifecycle slot pre-loaded as {:loaded, _}; the
       # App-level {:load_sysop_limits} triad is the production load path,
       # but tests inject the fully-loaded form synchronously.
-      ss = Sysop.init_screen_state(active: 2)
+      ss = SysopState.new(active: 2)
       lf = Foglet.TUI.Screens.Sysop.LimitsForm.init([])
       ss = %{ss | limits_form: {:loaded, lf}}
       state = put_in(state, [:screen_state, :sysop], ss)
@@ -952,7 +1051,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     } do
       before_drafts = current_limits_form(state).drafts
 
-      result = Sysop.handle_key(%{key: :char, char: "x"}, state)
+      result = handle_sysop_key(%{key: :char, char: "x"}, state)
 
       new_state =
         case result do
@@ -997,7 +1096,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   defp activate_users_tab(state, sysop) do
     state = %{state | current_user: sysop}
-    ss = Sysop.init_screen_state(active: 4)
+    ss = SysopState.new(active: 4)
     uv = UsersView.init(current_user: sysop)
     ss = %{ss | users_view: {:loaded, %{uv | selection_index: 0}}}
     put_in(state, [:screen_state, :sysop], ss)
@@ -1040,7 +1139,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         })
 
       state = activate_users_tab(state, sysop)
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
 
       assert String.contains?(flat, "User status administration")
 
@@ -1074,7 +1173,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       pending = persist_user(%{handle: "approve_me", status: :pending})
       state = activate_users_tab(state, sysop)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "A"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "A"}, state)
 
       assert Accounts.get_user!(pending.id).status == :active
 
@@ -1087,7 +1186,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       pending = persist_user(%{handle: "reject_me", status: :pending})
       state = activate_users_tab(state, sysop)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "R"}, state)
 
       assert Accounts.get_user!(pending.id).status == :rejected
 
@@ -1101,7 +1200,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_users_tab(state, sysop)
       state = select_user_row(state, active.handle)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "S"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "S"}, state)
 
       assert Accounts.get_user!(active.id).status == :suspended
 
@@ -1115,7 +1214,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_users_tab(state, sysop)
       state = select_user_row(state, suspended.handle)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "U"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "U"}, state)
 
       assert Accounts.get_user!(suspended.id).status == :active
 
@@ -1132,7 +1231,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       # D-15: [R] Reject is gated to :pending source rows. Pressing R on a
       # focused :active row is a UI no-op — no boundary call, no message.
-      result = Sysop.handle_key(%{key: :char, char: "R"}, state)
+      result = handle_sysop_key(%{key: :char, char: "R"}, state)
 
       # The keypress is a no-op at the UsersView level. handle_key may return
       # :no_match (event ignored) or {:update, _, _} with state unchanged.
@@ -1262,7 +1361,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       stale_user = persist_user(%{handle: "stale_user", status: :active})
 
       state = %{state | current_user: sysop}
-      ss = Sysop.init_screen_state(active: 4)
+      ss = SysopState.new(active: 4)
 
       # Build a stale UsersView whose row says :pending even though the DB has
       # the user at :active. UI gate sees :pending source, allows [A]; boundary
@@ -1277,7 +1376,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       ss = %{ss | users_view: {:loaded, stale_view}}
       state = put_in(state, [:screen_state, :sysop], ss)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :char, char: "A"}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :char, char: "A"}, state)
 
       message = current_users_view(new_state).message
 
@@ -1362,7 +1461,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     # BOARDS is index 1. Synchronously init BoardsView and wrap as
     # {:loaded, _} so delegate_to_submodule/5 routes events through.
     state = %{state | current_user: sysop}
-    ss = Sysop.init_screen_state(active: 1)
+    ss = SysopState.new(active: 1)
     bv = BoardsView.init(current_user: sysop)
     bv = %{bv | selection_index: 0}
     ss = %{ss | boards_view: {:loaded, bv}}
@@ -1374,7 +1473,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "renders grouped category + board list", %{state: state, sysop: sysop} do
       state = activate_boards_tab(state, sysop)
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
       assert String.contains?(flat, "General")
       assert String.contains?(flat, "Chat")
       assert String.contains?(flat, "chat")
@@ -1389,7 +1488,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       sysop: sysop
     } do
       state = activate_boards_tab(state, sysop)
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "n"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
 
       bv = current_boards_view(state)
       assert %ModalForm{} = bv.modal
@@ -1424,8 +1523,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
         })
 
       state = activate_boards_tab(state, sysop)
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "j"}, state)
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "e"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "e"}, state)
 
       bv = current_boards_view(state)
       assert bv.edit_target.id == board.id
@@ -1499,7 +1598,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       bv = %{bv | modal: %{bv.modal | focus_index: n - 1}}
       state = put_boards_view(state, bv)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       new_bv = current_boards_view(new_state)
       assert new_bv.modal == nil, "Modal should close on successful submit"
@@ -1563,7 +1662,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       new_bv = current_boards_view(new_state)
       assert %ModalForm{} = new_bv.modal, "Modal must stay open on validation error"
@@ -1627,7 +1726,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       new_bv = current_boards_view(new_state)
       assert %ModalForm{} = new_bv.modal
@@ -1637,13 +1736,13 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "Pitfall 5 — j/k navigation no-op while modal open", %{state: state, sysop: sysop} do
       state = activate_boards_tab(state, sysop)
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "n"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
 
       bv_before = current_boards_view(state)
       idx_before = bv_before.selection_index
 
       # j while a Modal.Form is open must not advance the selection.
-      result = Sysop.handle_key(%{key: :char, char: "j"}, state)
+      result = handle_sysop_key(%{key: :char, char: "j"}, state)
 
       new_state =
         case result do
@@ -1667,15 +1766,15 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_boards_tab(state, sysop)
 
       # Selection index 0 is the category row; index 1 is the board row.
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "D"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "D"}, state)
 
       bv = current_boards_view(state)
       assert %Foglet.TUI.Modal{type: :confirm} = bv.modal
       assert bv.modal_kind == :archive_board
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :char, char: "Y"}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :char, char: "Y"}, state)
 
       new_bv = current_boards_view(new_state)
       assert new_bv.modal == nil
@@ -1693,7 +1792,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       sysop: sysop
     } do
       state = activate_boards_tab(state, sysop)
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "N"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "N"}, state)
 
       bv = current_boards_view(state)
       assert %ModalForm{} = bv.modal
@@ -1724,7 +1823,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}}
       state = put_boards_view(state, bv)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       new_bv = current_boards_view(new_state)
       assert new_bv.modal == nil
@@ -1758,7 +1857,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_category}
       state = put_boards_view(state, bv)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       new_bv = current_boards_view(new_state)
       assert %ModalForm{} = new_bv.modal
@@ -1774,7 +1873,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.TUI.Screens.Sysop.SystemSnapshot
 
   defp activate_system_tab(state) do
-    ss = Sysop.init_screen_state(active: 3)
+    ss = SysopState.new(active: 3)
     ss = %{ss | system_snapshot: {:loaded, SystemSnapshot.init([])}}
     put_in(state, [:screen_state, :sysop], ss)
   end
@@ -1786,7 +1885,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       |> with_invite_policy("sysop_only")
 
     ss =
-      Sysop.init_screen_state(
+      SysopState.new(
         active: 5,
         current_user: state.current_user,
         session_context: state.session_context
@@ -1798,7 +1897,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   describe "SYSTEM tab (SYSO-04)" do
     test "renders snapshot labels on tab enter", %{state: state} do
       state = activate_system_tab(state)
-      flat = Sysop.render(state) |> collect_text_values() |> Enum.join("\n")
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
 
       for label <- ["Version:", "Sessions:", "Active boards:", "OTP processes:"] do
         assert String.contains?(flat, label),
@@ -1811,7 +1910,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       old = current_system_snapshot(state)
 
       new_state =
-        case Sysop.handle_key(%{key: :char, char: "r"}, state) do
+        case handle_sysop_key(%{key: :char, char: "r"}, state) do
           {:update, state2, _} -> state2
           :no_match -> state
         end
@@ -1828,7 +1927,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       # `j` is not a tab-nav key; Tabs widget ignores it; delegated to
       # SystemSnapshot which is a no-op for non-`r` chars.
-      result = Sysop.handle_key(%{key: :char, char: "j"}, state)
+      result = handle_sysop_key(%{key: :char, char: "j"}, state)
 
       new_state =
         case result do
@@ -1854,7 +1953,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     } do
       assert {:ok, before_items} = Invites.list_invites(sysop)
 
-      {:update, new_state, _cmds} = Sysop.handle_key(%{key: :char, char: "g"}, state)
+      {:update, new_state, _cmds} = handle_sysop_key(%{key: :char, char: "g"}, state)
 
       assert {:ok, after_items} = Invites.list_invites(sysop)
       assert length(after_items) == length(before_items) + 1
@@ -1912,7 +2011,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         |> with_invite_policy("sysop_only")
 
       ss =
-        Sysop.init_screen_state(
+        SysopState.new(
           active: 5,
           current_user: state.current_user,
           session_context: state.session_context
@@ -1934,7 +2033,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     # bar adds 1 more ("Revoke" label in the [X] Revoke group), totalling 2.
     defp count_revoke_tokens(state) do
       state
-      |> Sysop.render()
+      |> render_sysop()
       |> collect_text_values()
       |> Enum.count(&String.contains?(&1, "Revoke"))
     end
@@ -1946,7 +2045,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       # Pre-condition — only the body key hints carry 'Revoke'.
       assert count_revoke_tokens(state) == 1
 
-      {:update, new_state, _events} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _events} = handle_sysop_key(%{key: :enter}, state)
 
       assert new_state.screen_state.sysop.armed_revoke? == true
 
@@ -1960,7 +2059,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       invites = build_invites([:revoked, :available], 0)
       state = activate_invites(state, sysop, invites)
 
-      result = Sysop.handle_key(%{key: :enter}, state)
+      result = handle_sysop_key(%{key: :enter}, state)
 
       new_state =
         case result do
@@ -1980,7 +2079,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       invites = build_invites([:revoked, :available], 0)
       state = activate_invites(state, sysop, invites)
 
-      assert {:update, new_state, _cmds} = Sysop.handle_key(%{key: :enter}, state)
+      assert {:update, new_state, _cmds} = handle_sysop_key(%{key: :enter}, state)
 
       # The revoked-row Enter handler surfaces feedback via InvitesState.error
       # so the operator gets an explanation rather than a silent no-op when
@@ -2011,12 +2110,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_invites(state, sysop, invites_state)
 
       # Arm the revoke
-      {:update, armed_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, armed_state, _} = handle_sysop_key(%{key: :enter}, state)
       assert armed_state.screen_state.sysop.armed_revoke? == true
 
       # Press X — dispatches the existing revoke path
       {:update, fired_state, _events} =
-        Sysop.handle_key(%{key: :char, char: "X"}, armed_state)
+        handle_sysop_key(%{key: :char, char: "X"}, armed_state)
 
       # armed_revoke? cleared after firing
       assert fired_state.screen_state.sysop.armed_revoke? == false
@@ -2036,7 +2135,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       # Pre-condition: not armed.
       assert state.screen_state.sysop.armed_revoke? == false
 
-      result = Sysop.handle_key(%{key: :char, char: "X"}, state)
+      result = handle_sysop_key(%{key: :char, char: "X"}, state)
 
       new_state =
         case result do
@@ -2054,11 +2153,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_invites(state, sysop, invites)
 
       # Arm via Enter
-      {:update, armed_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, armed_state, _} = handle_sysop_key(%{key: :enter}, state)
       assert armed_state.screen_state.sysop.armed_revoke? == true
 
       # Move focus down (j is not used here — InvitesActions uses :down arrow)
-      {:update, moved_state, _} = Sysop.handle_key(%{key: :down}, armed_state)
+      {:update, moved_state, _} = handle_sysop_key(%{key: :down}, armed_state)
 
       assert moved_state.screen_state.sysop.armed_revoke? == false
     end
@@ -2068,11 +2167,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_invites(state, sysop, invites)
 
       # Arm via Enter
-      {:update, armed_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, armed_state, _} = handle_sysop_key(%{key: :enter}, state)
       assert armed_state.screen_state.sysop.armed_revoke? == true
 
       # Move to a different tab via Left arrow (Tabs widget consumes it)
-      {:update, switched_state, _} = Sysop.handle_key(%{key: :left}, armed_state)
+      {:update, switched_state, _} = handle_sysop_key(%{key: :left}, armed_state)
 
       assert switched_state.screen_state.sysop.armed_revoke? == false
     end
@@ -2086,7 +2185,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         |> with_invite_policy("sysop_only")
 
       ss =
-        Sysop.init_screen_state(
+        SysopState.new(
           active: 0,
           current_user: state.current_user,
           session_context: state.session_context
@@ -2094,7 +2193,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       state = put_in(state, [:screen_state, :sysop], ss)
 
-      result = Sysop.handle_key(%{key: :enter}, state)
+      result = handle_sysop_key(%{key: :enter}, state)
 
       new_state =
         case result do
@@ -2127,7 +2226,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       # D-07 — pre-load BoardsView wrapped as {:loaded, _} since the
       # tagged-enum slot no longer lazy-inits via delegate_to_submodule.
       state = %{state | current_user: nil}
-      ss = Sysop.init_screen_state(active: 1)
+      ss = SysopState.new(active: 1)
       bv = BoardsView.init(current_user: nil)
       ss = %{ss | boards_view: {:loaded, bv}}
       state = put_in(state, [:screen_state, :sysop], ss)
@@ -2174,7 +2273,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       assert %Foglet.TUI.Modal{type: :error} = new_state.modal
       assert new_state.current_screen == :main_menu
@@ -2238,7 +2337,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
 
-      {:update, new_state, _} = Sysop.handle_key(%{key: :enter}, state)
+      {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       assert %Foglet.TUI.Modal{type: :error, message: message} = new_state.modal
       assert message == "Board server unavailable. Please retry."
@@ -2254,7 +2353,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       sysop = %Foglet.Accounts.User{id: Ecto.UUID.generate(), role: :sysop, status: :active}
       view = UsersView.init(current_user: sysop)
 
-      state = put_in(state, [:screen_state, :sysop], Sysop.init_screen_state(active: 4))
+      state = put_in(state, [:screen_state, :sysop], SysopState.new(active: 4))
       ss = state.screen_state.sysop
 
       state = %{
@@ -2263,7 +2362,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       }
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
-        result = Sysop.handle_key(key, state)
+        result = handle_sysop_key(key, state)
 
         case result do
           {:update, new_state, cmds} ->
@@ -2285,14 +2384,14 @@ defmodule Foglet.TUI.Screens.SysopTest do
     test "SYSTEM refresh key [r] continues to refresh snapshot", %{state: state} do
       # Pre-initialize the system snapshot wrapped as {:loaded, _} (D-07).
       snap = Foglet.TUI.Screens.Sysop.SystemSnapshot.init()
-      ss = Sysop.init_screen_state(active: 3)
+      ss = SysopState.new(active: 3)
       ss = %{ss | system_snapshot: {:loaded, snap}}
       state = put_in(state, [:screen_state, :sysop], ss)
 
       assert %SystemSnapshot{} = snap
 
       # "r" key may return :no_match if the snapshot values haven't changed.
-      result = Sysop.handle_key(%{key: :char, char: "r"}, state)
+      result = handle_sysop_key(%{key: :char, char: "r"}, state)
 
       case result do
         {:update, new_state, _} ->
@@ -2323,11 +2422,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
       @tab tab
       test "converted Sysop #{tab} tab leaks no color atoms", %{state: state} do
         ss =
-          Sysop.init_screen_state()
+          SysopState.new()
           |> set_active_tab(@tab)
 
         state = put_in(state, [:screen_state, :sysop], ss)
-        serialized = state |> Sysop.render() |> inspect(limit: :infinity)
+        serialized = state |> render_sysop() |> inspect(limit: :infinity)
 
         for color <- color_names() do
           refute color_atom_leaked?(serialized, color),
@@ -2345,7 +2444,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       }
 
       state = activate_users_tab(state, sysop)
-      serialized = state |> Sysop.render() |> inspect(limit: :infinity)
+      serialized = state |> render_sysop() |> inspect(limit: :infinity)
 
       for color <- color_names() do
         refute color_atom_leaked?(serialized, color),
@@ -2385,7 +2484,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = %{state | current_user: sysop}
       state = activate_boards_tab(state, sysop)
 
-      {:update, state, _} = Sysop.handle_key(%{key: :char, char: "D"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "D"}, state)
 
       bv = current_boards_view(state)
 

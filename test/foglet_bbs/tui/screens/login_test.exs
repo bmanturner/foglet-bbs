@@ -196,13 +196,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
   defp collect_panels(%{children: children}, acc), do: collect_panels(children, acc)
   defp collect_panels(_other, acc), do: acc
 
-  describe "init_screen_state/1 (AUDIT-19)" do
+  describe "Login.init/1 (AUDIT-19)" do
     test "returns minimal menu sub-state" do
-      assert Login.init_screen_state([]) == %{sub: :menu}
+      assert Login.init(Context.new(route: :login)) == %{sub: :menu}
     end
 
-    test "accepts opts but ignores them (intentionally minimal)" do
-      assert Login.init_screen_state(foo: :bar) == %{sub: :menu}
+    test "ignores unrelated context values for the minimal menu state" do
+      assert Login.init(Context.new(route: :login, route_params: %{foo: :bar})) == %{sub: :menu}
     end
   end
 

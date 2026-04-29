@@ -908,7 +908,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   # Screen-state bootstrap
   # ---------------------------------------------------------------------------
 
-  test "init_screen_state/1 returns valid State struct with input_state" do
+  test "State.new/1 returns valid State struct with input_state" do
     ss = State.new(reply_to: nil, width: 80, height: 12)
     assert %State{} = ss
     assert ss.board == nil

@@ -40,6 +40,60 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     |> put_in([:session_context, :invite_code_generators], policy)
   end
 
+  defp moderation_context(state) do
+    app = struct!(Foglet.TUI.App, Map.take(state, Map.keys(%Foglet.TUI.App{})))
+    Foglet.TUI.App.build_context(app)
+  end
+
+  defp render_moderation(state) do
+    context = moderation_context(state)
+    local_state = get_in(state, [:screen_state, :moderation]) || Moderation.init(context)
+
+    Moderation.render(local_state, context)
+  end
+
+  defp handle_moderation_key(event, state) do
+    context = moderation_context(state)
+    local_state = get_in(state, [:screen_state, :moderation]) || Moderation.init(context)
+    {new_local_state, effects} = Moderation.update({:key, event}, local_state, context)
+    state = put_in(state, [:screen_state, :moderation], new_local_state)
+
+    if new_local_state == local_state and effects == [] do
+      :no_match
+    else
+      apply_moderation_effects(state, effects)
+    end
+  end
+
+  defp apply_moderation_effects(state, effects) do
+    Enum.reduce(effects, {:update, state, []}, fn
+      %Effect{type: :navigate, payload: %{screen: screen, params: params}},
+      {:update, state, cmds} ->
+        {:update, %{state | current_screen: screen, route_params: params || %{}}, cmds}
+
+      %Effect{type: :task, payload: %{op: op, fun: fun}}, {:update, state, cmds} ->
+        result = fun.()
+        local_state = get_in(state, [:screen_state, :moderation])
+
+        {new_local_state, followup} =
+          Moderation.update(
+            {:task_result, op, {:ok, result}},
+            local_state,
+            moderation_context(state)
+          )
+
+        state
+        |> put_in([:screen_state, :moderation], new_local_state)
+        |> apply_moderation_effects(followup)
+        |> append_cmds(cmds)
+
+      _effect, acc ->
+        acc
+    end)
+  end
+
+  defp append_cmds({:update, state, new_cmds}, cmds), do: {:update, state, cmds ++ new_cmds}
+
   setup do
     %{state: build_state(:mod)}
   end
@@ -57,9 +111,9 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
   end
 
-  describe "init_screen_state/1" do
+  describe "Moderation.State.new/1" do
     test "returns struct with active_tab: 0 and Tabs wrapper" do
-      ss = Moderation.init_screen_state()
+      ss = ModerationState.new()
       assert ss.active_tab == 0
       assert %Foglet.TUI.Widgets.Input.Tabs{} = ss.tabs
     end
@@ -117,7 +171,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
     test "read-only table tabs update table state without effects" do
       context = Context.new(current_user: %User{id: "u1", role: :mod}, route: :moderation)
-      state = Moderation.init_screen_state(active: 1, mod_log: [])
+      state = ModerationState.new(active: 1, mod_log: [])
 
       {state, effects} = Moderation.update({:key, %{key: :down}}, state, context)
 
@@ -135,7 +189,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
           session_context: %{invite_code_generators: "mods"}
         )
 
-      state = Moderation.init_screen_state(invites_visible?: true, active: 5)
+      state = ModerationState.new(invites_visible?: true, active: 5)
 
       {state, effects} =
         Moderation.update({:key, %{key: :char, char: "g"}}, state, context)
@@ -149,7 +203,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
   describe "render/1" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :moderation], Moderation.init_screen_state())
+      state = put_in(state, [:screen_state, :moderation], ModerationState.new())
       %{state: state}
     end
 
@@ -159,7 +213,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       # The previous source-string grep was redundant with the runtime
       # assertion above and pinned the implementation to a literal call
       # shape, violating AGENTS.md's "no text-presence tests" rule.
-      assert _ = Moderation.render(state)
+      assert _ = render_moderation(state)
       assert Presentation.mode_for!(:moderation) == :operator
     end
 
@@ -169,10 +223,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> build_state_with_policy("mods")
         |> put_in(
           [:screen_state, :moderation],
-          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          ModerationState.new(invites_visible?: true, active: 5)
         )
 
-      flat = Moderation.render(state) |> collect_text_values()
+      flat = render_moderation(state) |> collect_text_values()
 
       assert Enum.any?(flat, &String.contains?(&1, "Loading"))
     end
@@ -180,7 +234,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     test "shows all five tab labels: QUEUE, LOG, USERS, SANCTIONS, BOARDS (in that order)", %{
       state: state
     } do
-      flat = Moderation.render(state) |> collect_text_values()
+      flat = render_moderation(state) |> collect_text_values()
       expected_tabs = ["QUEUE", "LOG", "USERS", "SANCTIONS", "BOARDS"]
 
       for tab <- expected_tabs do
@@ -207,7 +261,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
 
     test "shows INVITES for mod users only under mods runtime policy" do
-      flat = build_state_with_policy(:mod, "mods") |> Moderation.render() |> collect_text_values()
+      flat = build_state_with_policy(:mod, "mods") |> render_moderation() |> collect_text_values()
 
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
@@ -217,7 +271,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         flat =
           :mod
           |> build_state_with_policy(policy)
-          |> Moderation.render()
+          |> render_moderation()
           |> collect_text_values()
 
         refute Enum.any?(flat, &String.contains?(&1, "INVITES")),
@@ -229,14 +283,14 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       regular_flat =
         :user
         |> build_state_with_policy("mods")
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       nil_flat =
         :mod
         |> build_state_with_policy("mods")
         |> Map.put(:current_user, nil)
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       refute Enum.any?(regular_flat, &String.contains?(&1, "INVITES"))
@@ -248,7 +302,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         flat =
           :sysop
           |> build_state_with_policy(policy)
-          |> Moderation.render()
+          |> render_moderation()
           |> collect_text_values()
 
         refute Enum.any?(flat, &String.contains?(&1, "INVITES")),
@@ -257,7 +311,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
 
     test "renders scaffold-only placeholder copy (no fake moderation actions)", %{state: state} do
-      flat = Moderation.render(state) |> collect_text_values()
+      flat = render_moderation(state) |> collect_text_values()
       # Forbidden substrings that would indicate fake operator actions in key-bar or buttons
       forbidden = ["Ban", "Unban", "Sanction", "Approve", "Remove", "Delete"]
 
@@ -273,7 +327,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         flat =
           state
           |> put_moderation_state(active)
-          |> Moderation.render()
+          |> render_moderation()
           |> collect_text_values()
 
         refute Enum.any?(flat, &String.contains?(&1, "will arrive in Phase 8"))
@@ -290,7 +344,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       flat =
         state
         |> put_moderation_state(1, mod_log: [newer, older])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
@@ -316,7 +370,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       flat =
         %{state | current_user: user}
         |> put_moderation_state(1, mod_log: [row])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
@@ -331,7 +385,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       flat =
         state
         |> put_moderation_state(0, queue: [%{body: "fake report"}])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
@@ -346,7 +400,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> put_moderation_state(2,
           users: [%{handle: "alice", role: :user, status: :active, last_seen_at: nil}]
         )
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
@@ -362,7 +416,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       flat =
         state
         |> put_moderation_state(3)
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
@@ -382,7 +436,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
             %{name: "General", slug: "general", category_name: "Main", scope: {:board, "b1"}}
           ]
         )
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
@@ -397,33 +451,33 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
   describe "handle_key/2" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :moderation], Moderation.init_screen_state())
+      state = put_in(state, [:screen_state, :moderation], ModerationState.new())
       %{state: state}
     end
 
     test "Right arrow advances active_tab", %{state: state} do
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :right}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :right}, state)
       assert new_state.screen_state.moderation.active_tab == 1
     end
 
     test "digit '3' jumps to index 2 (USERS)", %{state: state} do
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "3"}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :char, char: "3"}, state)
       assert new_state.screen_state.moderation.active_tab == 2
     end
 
     test "Home returns to tab 0", %{state: state} do
       # First advance to tab 2
-      {:update, state2, _} = Moderation.handle_key(%{key: :right}, state)
-      {:update, state3, _} = Moderation.handle_key(%{key: :right}, state2)
+      {:update, state2, _} = handle_moderation_key(%{key: :right}, state)
+      {:update, state3, _} = handle_moderation_key(%{key: :right}, state2)
       assert state3.screen_state.moderation.active_tab == 2
 
       # Now Home should return to 0
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :home}, state3)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :home}, state3)
       assert new_state.screen_state.moderation.active_tab == 0
     end
 
     test "End jumps to last tab", %{state: state} do
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :end}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :end}, state)
       assert new_state.screen_state.moderation.active_tab == 4
     end
 
@@ -433,10 +487,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> build_state_with_policy("mods")
         |> put_in(
           [:screen_state, :moderation],
-          Moderation.init_screen_state(invites_visible?: true)
+          ModerationState.new(invites_visible?: true)
         )
 
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "6"}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :char, char: "6"}, state)
 
       assert new_state.screen_state.moderation.active_tab == 5
     end
@@ -447,10 +501,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> build_state_with_policy("any_user")
         |> put_in(
           [:screen_state, :moderation],
-          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          ModerationState.new(invites_visible?: true, active: 5)
         )
 
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :end}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :end}, state)
 
       assert new_state.screen_state.moderation.active_tab == 4
 
@@ -461,17 +515,17 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
 
     test "'Q' returns to :main_menu", %{state: state} do
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "Q"}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :char, char: "Q"}, state)
       assert new_state.current_screen == :main_menu
     end
 
     test "'q' returns to :main_menu", %{state: state} do
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "q"}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :char, char: "q"}, state)
       assert new_state.current_screen == :main_menu
     end
 
     test "unknown key returns :no_match", %{state: state} do
-      assert :no_match = Moderation.handle_key(%{key: :char, char: "z"}, state)
+      assert :no_match = handle_moderation_key(%{key: :char, char: "z"}, state)
     end
 
     test "Moderation screen does NOT dispatch fake moderation commands", %{state: state} do
@@ -488,7 +542,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       ]
 
       for key <- keys do
-        case Moderation.handle_key(key, state) do
+        case handle_moderation_key(key, state) do
           {:update, _new_state, cmds} ->
             for cmd <- cmds do
               if is_tuple(cmd) do
@@ -515,11 +569,11 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> build_state_with_policy("mods")
         |> put_in(
           [:screen_state, :moderation],
-          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          ModerationState.new(invites_visible?: true, active: 5)
           |> Map.put(:invites, InvitesState.new(items: before_items))
         )
 
-      {:update, new_state, _cmds} = Moderation.handle_key(%{key: :char, char: "g"}, state)
+      {:update, new_state, _cmds} = handle_moderation_key(%{key: :char, char: "g"}, state)
 
       assert {:ok, after_items} = Invites.list_invites(mod)
       assert length(after_items) == length(before_items) + 1
@@ -542,14 +596,14 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       @tab tab
       test "converted Moderation #{tab} tab leaks no color atoms" do
         ss =
-          Moderation.init_screen_state()
+          ModerationState.new()
           |> set_active_tab(@tab)
 
         state =
           build_state(:mod)
           |> put_in([:screen_state, :moderation], ss)
 
-        serialized = state |> Moderation.render() |> inspect(limit: :infinity)
+        serialized = state |> render_moderation() |> inspect(limit: :infinity)
 
         for color <- color_names() do
           refute color_atom_leaked?(serialized, color),
@@ -560,7 +614,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
     test "converted Moderation INVITES tab leaks no color atoms" do
       ss =
-        Moderation.init_screen_state(invites_visible?: true)
+        ModerationState.new(invites_visible?: true)
         |> set_active_tab("INVITES")
 
       state =
@@ -568,7 +622,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> build_state_with_policy("mods")
         |> put_in([:screen_state, :moderation], ss)
 
-      serialized = state |> Moderation.render() |> inspect(limit: :infinity)
+      serialized = state |> render_moderation() |> inspect(limit: :infinity)
 
       for color <- color_names() do
         refute color_atom_leaked?(serialized, color),
@@ -600,7 +654,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
   defp put_moderation_state(state, active, attrs \\ []) do
     ss =
-      Moderation.init_screen_state(active: active)
+      ModerationState.new(active: active)
       |> struct!(attrs)
 
     put_in(state, [:screen_state, :moderation], ss)
@@ -628,7 +682,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         :mod
         |> build_state()
         |> put_moderation_state(1, mod_log: [])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
@@ -642,7 +696,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         :mod
         |> build_state()
         |> put_moderation_state(1, mod_log: [])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
@@ -661,7 +715,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
           ]
         )
 
-      result = Moderation.handle_key(%{key: :enter}, state)
+      result = handle_moderation_key(%{key: :enter}, state)
 
       case result do
         {:update, _new_state, cmds} ->
@@ -684,7 +738,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> put_moderation_state(1, mod_log: [])
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
-        result = Moderation.handle_key(key, state)
+        result = handle_moderation_key(key, state)
 
         assert is_tuple(result) or result == :no_match,
                "Expected valid result for #{inspect(key)}"
@@ -704,7 +758,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         :mod
         |> build_state()
         |> put_moderation_state(2, users: [])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
@@ -720,7 +774,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> put_moderation_state(2, users: [])
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
-        result = Moderation.handle_key(key, state)
+        result = handle_moderation_key(key, state)
 
         assert is_tuple(result) or result == :no_match,
                "Expected valid result for #{inspect(key)}"
@@ -732,7 +786,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         :mod
         |> build_state()
         |> put_moderation_state(2, users: [%{handle: "alice", role: :user, status: :active}])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
@@ -754,7 +808,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         :mod
         |> build_state()
         |> put_moderation_state(4, boards: [])
-        |> Moderation.render()
+        |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, " ")
@@ -770,7 +824,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> put_moderation_state(4, boards: [])
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
-        result = Moderation.handle_key(key, state)
+        result = handle_moderation_key(key, state)
 
         assert is_tuple(result) or result == :no_match,
                "Expected valid result for #{inspect(key)}"
@@ -809,11 +863,11 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> build_state_with_policy("mods")
         |> put_in(
           [:screen_state, :moderation],
-          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          ModerationState.new(invites_visible?: true, active: 5)
           |> Map.put(:invites, %Foglet.TUI.Screens.Shared.InvitesState{items: []})
         )
 
-      flat = Moderation.render(state) |> collect_text_values()
+      flat = render_moderation(state) |> collect_text_values()
       joined = Enum.join(flat, " ")
 
       assert joined =~ "No invites",
@@ -826,12 +880,12 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> build_state_with_policy("mods")
         |> put_in(
           [:screen_state, :moderation],
-          Moderation.init_screen_state(invites_visible?: true, active: 5)
+          ModerationState.new(invites_visible?: true, active: 5)
           |> Map.put(:invites, %Foglet.TUI.Screens.Shared.InvitesState{items: []})
         )
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
-        result = Moderation.handle_key(key, state)
+        result = handle_moderation_key(key, state)
 
         assert is_tuple(result) or result == :no_match,
                "Expected valid result for #{inspect(key)}"

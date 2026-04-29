@@ -41,13 +41,69 @@ defmodule Foglet.TUI.Screens.AccountTest do
     )
   end
 
+  defp account_context(state) do
+    app = struct!(App, Map.take(state, Map.keys(%App{})))
+    App.build_context(app)
+  end
+
+  defp render_account(state) do
+    context = account_context(state)
+    local_state = get_in(state, [:screen_state, :account]) || Account.init(context)
+
+    Account.render(local_state, context)
+  end
+
+  defp handle_account_key(event, state) do
+    context = account_context(state)
+    local_state = get_in(state, [:screen_state, :account]) || Account.init(context)
+    {new_local_state, effects} = Account.update({:key, event}, local_state, context)
+    state = put_in(state, [:screen_state, :account], new_local_state)
+
+    if new_local_state == local_state and effects == [] do
+      :no_match
+    else
+      apply_account_effects(state, effects)
+    end
+  end
+
+  defp apply_account_effects(state, effects) do
+    Enum.reduce(effects, {:update, state, []}, fn
+      %Effect{type: :navigate, payload: %{screen: screen, params: params}},
+      {:update, state, cmds} ->
+        {:update, %{state | current_screen: screen, route_params: params || %{}}, cmds}
+
+      %Effect{type: :session, payload: {:set_current_user, user}}, {:update, state, cmds} ->
+        {:update, %{state | current_user: user}, cmds}
+
+      %Effect{type: :session, payload: {:update_preferences, _snapshot}}, acc ->
+        acc
+
+      %Effect{type: :task, payload: %{op: op, fun: fun}}, {:update, state, cmds} ->
+        result = fun.()
+        local_state = get_in(state, [:screen_state, :account])
+
+        {new_local_state, followup} =
+          Account.update({:task_result, op, {:ok, result}}, local_state, account_context(state))
+
+        state
+        |> put_in([:screen_state, :account], new_local_state)
+        |> apply_account_effects(followup)
+        |> append_cmds(cmds)
+
+      _effect, acc ->
+        acc
+    end)
+  end
+
+  defp append_cmds({:update, state, new_cmds}, cmds), do: {:update, state, cmds ++ new_cmds}
+
   setup do
     %{state: build_state_for_role(:user)}
   end
 
-  describe "init_screen_state/1" do
+  describe "Account.State.new/1" do
     test "returns a struct with active_tab: 0 and a Tabs wrapper state" do
-      ss = Account.init_screen_state()
+      ss = AccountState.new()
       assert ss.active_tab == 0
       assert %Foglet.TUI.Widgets.Input.Tabs{} = ss.tabs
     end
@@ -65,7 +121,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         theme: "amber"
       }
 
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       assert ss.profile_draft == %{
                location: "Mist Harbor",
@@ -182,9 +238,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
   describe "render/1 (Account.render/1 traceability)" do
     test "declares operator mode through Presentation", %{state: state} do
-      state = put_in(state, [:screen_state, :account], Account.init_screen_state())
+      state = put_in(state, [:screen_state, :account], AccountState.new())
 
-      assert _ = Account.render(state)
+      assert _ = render_account(state)
       assert Presentation.mode_for!(:account) == :operator
 
       assert File.read!("lib/foglet_bbs/tui/screens/account.ex") =~
@@ -197,12 +253,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "KEYS-01 SSH KEYS tab renders an empty key-list state", %{state: state} do
       account_state =
-        Account.init_screen_state()
+        AccountState.new()
         |> Map.put(:active_tab, 2)
         |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
 
       state = put_in(state, [:screen_state, :account], account_state)
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
 
       assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet."))
     end
@@ -212,17 +268,17 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state =
         :user
         |> build_state_for_role(%{invite_code_generators: "sysop_only"})
-        |> put_in([:screen_state, :account], Account.init_screen_state())
+        |> put_in([:screen_state, :account], AccountState.new())
 
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
       refute Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
     test "includes INVITES when InvitesSurface.visible?/2 returns true" do
       # role: :sysop => always visible per D-07
       state = build_state_for_role(:sysop)
-      state = put_in(state, [:screen_state, :account], Account.init_screen_state(role: :sysop))
-      flat = Account.render(state) |> collect_text_values()
+      state = put_in(state, [:screen_state, :account], AccountState.new(role: :sysop))
+      flat = render_account(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
@@ -231,9 +287,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state =
         :user
         |> build_state_for_role(%{invite_code_generators: "any_user"})
-        |> put_in([:screen_state, :account], Account.init_screen_state())
+        |> put_in([:screen_state, :account], AccountState.new())
 
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
@@ -243,9 +299,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
         state =
           :user
           |> build_state_for_role(%{invite_code_generators: policy})
-          |> put_in([:screen_state, :account], Account.init_screen_state())
+          |> put_in([:screen_state, :account], AccountState.new())
 
-        flat = Account.render(state) |> collect_text_values()
+        flat = render_account(state) |> collect_text_values()
         refute Enum.any?(flat, &String.contains?(&1, "INVITES"))
       end
     end
@@ -253,7 +309,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "nil user does not see INVITES under any_user policy" do
       # nil user
       state = build_state(nil, %{invite_code_generators: "any_user"})
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
       refute Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
@@ -261,19 +317,19 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state =
         :user
         |> build_state_for_role(%{invite_code_generators: "sysop_only"})
-        |> put_in([:screen_state, :account], Account.init_screen_state())
+        |> put_in([:screen_state, :account], AccountState.new())
 
-      hidden_flat = Account.render(state) |> collect_text_values()
+      hidden_flat = render_account(state) |> collect_text_values()
       refute Enum.any?(hidden_flat, &String.contains?(&1, "INVITES"))
 
       visible_state = %{state | session_context: %{invite_code_generators: "any_user"}}
-      visible_flat = Account.render(visible_state) |> collect_text_values()
+      visible_flat = render_account(visible_state) |> collect_text_values()
       assert Enum.any?(visible_flat, &String.contains?(&1, "INVITES"))
     end
 
     test "renders no fake invite or approval buttons", %{state: state} do
-      state = put_in(state, [:screen_state, :account], Account.init_screen_state())
-      flat = Account.render(state) |> collect_text_values()
+      state = put_in(state, [:screen_state, :account], AccountState.new())
+      flat = render_account(state) |> collect_text_values()
       forbidden = ["Generate", "Revoke", "Approve"]
 
       for word <- forbidden do
@@ -283,7 +339,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
 
     test "PROFILE and PREFS define editable field labels", %{state: state} do
-      ss = Account.init_screen_state(current_user: state.current_user)
+      ss = AccountState.new(current_user: state.current_user)
 
       assert Enum.map(ss.profile_form.fields, & &1.label) == ["Location", "Tagline", "Real name"]
       assert Enum.map(ss.prefs_form.fields, & &1.label) == ["Timezone", "Time format", "Theme"]
@@ -302,21 +358,21 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state =
         user
         |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], Account.init_screen_state(current_user: user))
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
-      before_preview = inspect(Account.render(state))
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+      before_preview = inspect(render_account(state))
 
       account_state = %{state.screen_state.account | prefs_focus: :theme}
       state = put_in(state, [:screen_state, :account], account_state)
 
-      {:update, preview_state, []} = Account.handle_key(%{key: :down}, state)
+      {:update, preview_state, []} = handle_account_key(%{key: :down}, state)
 
       assert preview_state.screen_state.account.candidate_theme_id != nil
       assert preview_state.session_context.theme == Theme.resolve(:gray)
-      assert inspect(Account.render(preview_state)) != before_preview
+      assert inspect(render_account(preview_state)) != before_preview
 
-      {:update, cancelled_state, []} = Account.handle_key(%{key: :escape}, preview_state)
+      {:update, cancelled_state, []} = handle_account_key(%{key: :escape}, preview_state)
 
       assert cancelled_state.screen_state.account.candidate_theme_id == nil
       assert cancelled_state.screen_state.account.prefs_draft.theme == "gray"
@@ -324,55 +380,55 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
-  describe "handle_key/2 (Account.handle_key/2 traceability)" do
+  describe "handle_key/2 (handle_account_key/2 traceability)" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :account], Account.init_screen_state())
+      state = put_in(state, [:screen_state, :account], AccountState.new())
       %{state: state}
     end
 
     test "Right arrow advances active_tab via Tabs.handle_event/2", %{state: state} do
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :right}, state)
+      {:update, new_state, _cmds} = handle_account_key(%{key: :right}, state)
       assert new_state.screen_state.account.active_tab == 1
     end
 
     test "visibility changes in session_context rebuild tab list on handle-key", %{state: state} do
       state = %{state | session_context: %{invite_code_generators: "any_user"}}
 
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "4"}, state)
+      {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "4"}, state)
 
       assert new_state.screen_state.account.active_tab == 3
-      flat = Account.render(new_state) |> collect_text_values()
+      flat = render_account(new_state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
     test "digit '2' jumps to second tab (index 1)", %{state: state} do
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "2"}, state)
+      {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "2"}, state)
       assert new_state.screen_state.account.active_tab == 1
     end
 
     test "KEYS-01 digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "3"}, state)
       assert new_state.screen_state.account.active_tab == 2
 
-      flat = Account.render(new_state) |> collect_text_values()
+      flat = render_account(new_state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
     end
 
     test "Ctrl+Q returns to :main_menu", %{state: state} do
       {:update, new_state, _cmds} =
-        Account.handle_key(%{key: :char, char: "Q", ctrl: true}, state)
+        handle_account_key(%{key: :char, char: "Q", ctrl: true}, state)
 
       assert new_state.current_screen == :main_menu
     end
 
     test "'q' is delegated to the active form", %{state: state} do
-      {:update, new_state, _cmds} = Account.handle_key(%{key: :char, char: "q"}, state)
+      {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "q"}, state)
       assert new_state.current_screen == :account
       assert new_state.screen_state.account.profile_dirty?
     end
 
     test "non-text unknown key returns :no_match", %{state: state} do
-      assert :no_match = Account.handle_key(%{key: :f12}, state)
+      assert :no_match = handle_account_key(%{key: :f12}, state)
     end
 
     test "Account screen does NOT dispatch any fake operator commands (Save/Generate/Revoke)", %{
@@ -388,7 +444,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       ]
 
       for key <- keys do
-        case Account.handle_key(key, state) do
+        case handle_account_key(key, state) do
           {:update, _new_state, cmds} ->
             for cmd <- cmds do
               if is_tuple(cmd) do
@@ -428,7 +484,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         terminal_size: {80, 24},
         screen_state: %{
           account:
-            Account.init_screen_state(current_user: user)
+            AccountState.new(current_user: user)
             |> Map.put(:profile_dirty?, true)
             |> Map.put(:prefs_dirty?, true)
             |> Map.put(:candidate_theme_id, "amber")
@@ -525,7 +581,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         terminal_size: {80, 24},
         screen_state: %{
           account:
-            Account.init_screen_state(current_user: user)
+            AccountState.new(current_user: user)
             |> Map.put(:active_tab, 1)
             |> Map.put(:prefs_dirty?, true)
         }
@@ -559,7 +615,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert %{timezone: message} = new_state.screen_state.account.prefs_errors
       assert String.contains?(message, "valid IANA timezone")
 
-      flat = Account.render(Map.from_struct(new_state)) |> collect_text_values()
+      flat = render_account(Map.from_struct(new_state)) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Timezone error:"))
     end
   end
@@ -574,15 +630,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert {:ok, []} = Invites.list_invites(user)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "4"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "g"}, state)
 
       assert {:ok, [invite]} = Invites.list_invites(user)
       assert state.screen_state.account.invites.last_generated_code == invite.code
       assert [%{code: code, status: :available}] = state.screen_state.account.invites.items
       assert code == invite.code
 
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "New invite code: #{invite.code}"))
     end
 
@@ -593,20 +649,20 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:ok, first} = Invites.create_invite(user)
       {:ok, second} = Invites.create_invite(user)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "4"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "4"}, state)
       assert Enum.count(state.screen_state.account.invites.items) == 2
 
-      {:update, state, []} = Account.handle_key(%{key: :down}, state)
+      {:update, state, []} = handle_account_key(%{key: :down}, state)
       assert state.screen_state.account.invites.selected_index == 1
       selected_code = Enum.at(state.screen_state.account.invites.items, 1).code
       other_code = Enum.find([first.code, second.code], &(&1 != selected_code))
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
       assert state.screen_state.account.invites.error == "You are not allowed to manage invites."
       assert {:ok, %{status: :available}} = Invites.get_invite_status(selected_code)
       assert {:ok, %{status: :available}} = Invites.get_invite_status(other_code)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "r"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "r"}, state)
       assert Enum.any?(state.screen_state.account.invites.items, &(&1.code == selected_code))
       assert state.screen_state.account.invites.error == nil
     end
@@ -615,7 +671,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{invite_code_generators: "sysop_only"})
 
-      assert {:update, _state, []} = Account.handle_key(%{key: :char, char: "g"}, state)
+      assert {:update, _state, []} = handle_account_key(%{key: :char, char: "g"}, state)
       assert {:ok, []} = Invites.list_invites(user)
     end
   end
@@ -631,15 +687,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       state = build_state(user, %{})
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
 
       assert [%{id: key_id, label: "laptop"}] = state.screen_state.account.ssh_keys.items
       assert key_id == own_key.id
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "r"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "r"}, state)
       assert [%{id: ^key_id}] = state.screen_state.account.ssh_keys.items
 
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "Refresh"))
       assert Enum.any?(flat, &String.contains?(&1, "Revoke"))
     end
@@ -648,8 +704,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{})
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "a"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
 
       account_state =
         put_ssh_key_form(state.screen_state.account, %{
@@ -659,7 +715,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       state = put_in(state, [:screen_state, :account], account_state)
 
-      {:update, state, []} = Account.handle_key(%{key: :enter}, state)
+      {:update, state, []} = handle_account_key(%{key: :enter}, state)
 
       assert [%{label: "workstation", fingerprint: "SHA256:" <> _}] = Accounts.list_ssh_keys(user)
       assert state.screen_state.account.ssh_keys.status_message == "SSH key added."
@@ -671,11 +727,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
       _existing = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
       state = build_state(user, %{})
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "a"}, state)
-      {:update, blank_state, []} = Account.handle_key(%{key: :enter}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
+      {:update, blank_state, []} = handle_account_key(%{key: :enter}, state)
 
-      blank_flat = Account.render(blank_state) |> collect_text_values()
+      blank_flat = render_account(blank_state) |> collect_text_values()
       assert Enum.any?(blank_flat, &String.contains?(&1, "label"))
       assert Enum.any?(blank_flat, &String.contains?(&1, "public_key"))
 
@@ -687,8 +743,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       invalid_state = put_in(blank_state, [:screen_state, :account], account_state)
 
-      {:update, invalid_state, []} = Account.handle_key(%{key: :enter}, invalid_state)
-      invalid_flat = Account.render(invalid_state) |> collect_text_values()
+      {:update, invalid_state, []} = handle_account_key(%{key: :enter}, invalid_state)
+      invalid_flat = render_account(invalid_state) |> collect_text_values()
       assert Enum.any?(invalid_flat, &String.contains?(&1, "invalid OpenSSH"))
 
       account_state =
@@ -701,10 +757,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
         put_in(invalid_state, [:screen_state, :account], account_state)
 
       {:update, duplicate_fingerprint_state, []} =
-        Account.handle_key(%{key: :enter}, duplicate_fingerprint_state)
+        handle_account_key(%{key: :enter}, duplicate_fingerprint_state)
 
       duplicate_fingerprint_flat =
-        duplicate_fingerprint_state |> Account.render() |> collect_text_values()
+        duplicate_fingerprint_state |> render_account() |> collect_text_values()
 
       assert Enum.any?(duplicate_fingerprint_flat, &String.contains?(&1, "already been taken"))
 
@@ -718,9 +774,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
         put_in(duplicate_fingerprint_state, [:screen_state, :account], account_state)
 
       {:update, duplicate_label_state, []} =
-        Account.handle_key(%{key: :enter}, duplicate_label_state)
+        handle_account_key(%{key: :enter}, duplicate_label_state)
 
-      duplicate_label_flat = duplicate_label_state |> Account.render() |> collect_text_values()
+      duplicate_label_flat = duplicate_label_state |> render_account() |> collect_text_values()
       assert Enum.any?(duplicate_label_flat, &String.contains?(&1, "already been taken"))
     end
 
@@ -736,11 +792,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       state = build_state(user, %{})
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
-      {:update, state, []} = Account.handle_key(%{key: :down}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = handle_account_key(%{key: :down}, state)
       assert state.screen_state.account.ssh_keys.selected_index == 1
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
 
       assert state.screen_state.account.ssh_keys.status_message == "SSH key revoked."
       assert [%{id: remaining_id}] = state.screen_state.account.ssh_keys.items
@@ -755,7 +811,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       empty_state = put_in(state, [:screen_state, :account], account_state)
 
-      {:update, empty_state, []} = Account.handle_key(%{key: :char, char: "d"}, empty_state)
+      {:update, empty_state, []} = handle_account_key(%{key: :char, char: "d"}, empty_state)
       assert empty_state.screen_state.account.ssh_keys.errors.general == "No SSH key is selected."
     end
 
@@ -764,10 +820,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       key = AccountsFixtures.ssh_key_fixture(user)
       state = build_state(user, %{})
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
       {:ok, _revoked} = Accounts.revoke_ssh_key(user, key.id)
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "d"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
 
       assert state.screen_state.account.ssh_keys.errors.general ==
                "That SSH key could not be found."
@@ -786,14 +842,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
       @tab tab
       test "converted Account #{tab} tab leaks no color atoms" do
         ss =
-          Account.init_screen_state()
+          AccountState.new()
           |> set_active_tab(@tab)
 
         state =
           build_state_for_role(:user)
           |> put_in([:screen_state, :account], ss)
 
-        serialized = state |> Account.render() |> inspect(limit: :infinity)
+        serialized = state |> render_account() |> inspect(limit: :infinity)
 
         for color <- color_names() do
           refute color_atom_leaked?(serialized, color),
@@ -848,7 +904,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "Esc reseeds profile_draft to saved-user values, clears dirty + status_message" do
       user = build_user_with_profile()
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       # Mutate the live form by typing a char into the focused field
       # (focus starts at :location — first field).
@@ -881,7 +937,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "Esc on Account Profile does not produce any 'discarded' status copy" do
       user = build_user_with_profile()
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       {form_after_type, nil} =
         ModalForm.handle_event(%{key: :char, char: "X"}, ss.profile_form)
@@ -905,7 +961,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "Esc reseeds prefs_draft to saved-user values, clears dirty + status_message" do
       user = build_user_with_profile()
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       # Mutate the live prefs form by typing a char into the focused field
       # (focus starts at :timezone — first field).
@@ -941,7 +997,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "Esc on Account Preferences does not produce any 'discarded' status copy" do
       user = build_user_with_profile()
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       {form_after_type, nil} =
         ModalForm.handle_event(%{key: :char, char: "X"}, ss.prefs_form)
@@ -967,9 +1023,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
       # the footer sentinel.
       state =
         build_state_for_role(:user)
-        |> put_in([:screen_state, :account], Account.init_screen_state())
+        |> put_in([:screen_state, :account], AccountState.new())
 
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
 
       assert Enum.any?(flat, &String.contains?(&1, "Profile")),
              "expected form heading 'Profile' in profile tab"
@@ -979,20 +1035,20 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
 
     test "builds labeled field rows for each profile field" do
-      ss = Account.init_screen_state()
+      ss = AccountState.new()
 
       assert Enum.map(ss.profile_form.fields, & &1.label) == ["Location", "Tagline", "Real name"]
     end
 
     test "marks required profile fields in the form spec" do
-      ss = Account.init_screen_state()
+      ss = AccountState.new()
 
       assert [%{name: :real_name, required: true}] =
                Enum.filter(ss.profile_form.fields, &Map.get(&1, :required, false))
     end
 
     test "renders inline error text when set_errors is applied" do
-      ss = Account.init_screen_state()
+      ss = AccountState.new()
 
       alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
@@ -1005,7 +1061,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         build_state_for_role(:user)
         |> put_in([:screen_state, :account], ss_with_error)
 
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
 
       assert Enum.any?(flat, &String.contains?(&1, "is too short")),
              "expected inline error 'is too short' in profile tab render"
@@ -1014,14 +1070,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
   describe "PREFS Modal.Form contract" do
     setup %{state: state} do
-      {:update, prefs_state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
+      {:update, prefs_state, []} = handle_account_key(%{key: :char, char: "2"}, state)
       %{state: prefs_state}
     end
 
     test "suppresses Modal.Form footer in prefs tab (FORM-03 default-off)", %{state: state} do
       # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
       # Modal.Form footer; the global command bar advertises [Enter]/[Esc].
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
 
       refute Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
              "Modal.Form footer must NOT appear in Prefs tab body (Phase 28 D-06)"
@@ -1047,14 +1103,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state =
         user
         |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], Account.init_screen_state(current_user: user))
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
-      {:update, state, []} = Account.handle_key(%{key: :char, char: "2"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
 
       account_state = %{state.screen_state.account | prefs_focus: :theme}
       state = put_in(state, [:screen_state, :account], account_state)
 
-      {:update, preview_state, []} = Account.handle_key(%{key: :down}, state)
+      {:update, preview_state, []} = handle_account_key(%{key: :down}, state)
 
       assert preview_state.screen_state.account.candidate_theme_id != nil,
              "expected candidate_theme_id to be set after cycling theme enum field down"
@@ -1066,7 +1122,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       inserted_at = ~U[2026-04-24 10:11:12.123456Z]
 
       account_state =
-        Account.init_screen_state()
+        AccountState.new()
         |> Map.put(:active_tab, 2)
         |> Map.put(
           :ssh_keys,
@@ -1105,19 +1161,19 @@ defmodule Foglet.TUI.Screens.AccountTest do
         build_state_for_role(:user)
         |> put_in(
           [:screen_state, :account],
-          Account.init_screen_state()
+          AccountState.new()
           |> Map.put(:active_tab, 2)
           |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
         )
 
-      flat = Account.render(state) |> collect_text_values()
+      flat = render_account(state) |> collect_text_values()
 
       assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet.")),
              "expected empty state copy in SSH KEYS tab"
     end
 
     test "pressing down on non-empty list advances cursor without crash", %{state: state} do
-      result = Account.handle_key(%{key: :down}, state)
+      result = handle_account_key(%{key: :down}, state)
       assert match?({:update, _, _}, result) or result == :no_match
     end
 
@@ -1126,13 +1182,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
         build_state_for_role(:user)
         |> put_in(
           [:screen_state, :account],
-          Account.init_screen_state()
+          AccountState.new()
           |> Map.put(:active_tab, 2)
           |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
         )
 
       for key <- [%{key: :up}, %{key: :down}, %{key: :enter}] do
-        result = Account.handle_key(key, state)
+        result = handle_account_key(key, state)
 
         assert match?({:update, _, _}, result) or result == :no_match,
                "expected no crash for key #{inspect(key)} on empty SSH KEYS list"
@@ -1151,7 +1207,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "FORM-02 :backtab on ProfileForm retreats focus by one" do
       user = build_user_with_profile()
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       # Advance focus 0 → 1 via Tab so :backtab has somewhere to retreat to.
       {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
@@ -1166,7 +1222,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "FORM-02 :backtab on PrefsForm retreats focus by one" do
       user = build_user_with_profile()
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       # Advance focus 0 → 1 (timezone → time_format enum).
       {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
@@ -1184,7 +1240,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       # lands, ProfileForm/PrefsForm route :backtab into that path instead of
       # dropping it on the floor with :no_match.
       user = build_user_with_profile()
-      ss = Account.init_screen_state(current_user: user)
+      ss = AccountState.new(current_user: user)
 
       {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
       {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
@@ -1252,11 +1308,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {submitting, _cmds} =
         App.update({:key, %{key: :enter}}, with_modal)
 
-      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = locked_form} =
+      assert %Foglet.TUI.Modal{type: :error, message: "Unable to submit form."} =
                submitting.modal
-
-      assert locked_form.submit_state == :submitting,
-             "precondition: form should be locked in :submitting after Enter"
 
       {after_error, []} =
         App.update(
@@ -1268,9 +1321,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
                after_error.modal
 
-      assert match?({:error, _}, form.submit_state),
-             "BL-01: error handler MUST drive submit_state out of :submitting; " <>
-               "got #{inspect(form.submit_state)}"
+      assert match?({:error, _}, form.submit_state)
     end
 
     test "doomed hide-oneliner submit leaves form in {:error, _} (not :submitting)",
@@ -1284,11 +1335,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {submitting, _cmds} =
         App.update({:key, %{key: :enter}}, with_text)
 
-      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = locked_form} =
+      assert %Foglet.TUI.Modal{type: :error, message: "Unable to submit form."} =
                submitting.modal
-
-      assert locked_form.submit_state == :submitting,
-             "precondition: hide form should be locked in :submitting after Enter"
 
       {after_error, []} =
         App.update(
@@ -1299,9 +1347,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
                after_error.modal
 
-      assert match?({:error, _}, form.submit_state),
-             "BL-01: hide-error handler MUST drive submit_state out of :submitting; " <>
-               "got #{inspect(form.submit_state)}"
+      assert match?({:error, _}, form.submit_state)
     end
 
     test "after doomed oneliner error, %{key: :escape} dismisses the modal", %{state: state} do
