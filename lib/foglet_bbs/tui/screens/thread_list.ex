@@ -131,14 +131,18 @@ defmodule Foglet.TUI.Screens.ThreadList do
     frame_state = frame_state(state, context)
     theme = Theme.from_state(frame_state)
     thread_content = render_thread_content(state, context, theme)
+    chrome = %{breadcrumb_parts: ["Foglet", board_label(state)]}
 
-    ScreenFrame.render(frame_state, %{}, thread_content, [
+    ScreenFrame.render(frame_state, chrome, thread_content, [
       {"j/k", "Select"},
       {"Enter", "Open"},
       {"C", "Compose"},
       {"Q", "Back"}
     ])
   end
+
+  defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name
+  defp board_label(%State{}), do: "Boards"
 
   @impl true
   @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
@@ -358,11 +362,10 @@ defmodule Foglet.TUI.Screens.ThreadList do
     |> Enum.at(state.selected_index)
   end
 
-  defp frame_state(%State{} = state, %Context{} = context) do
+  defp frame_state(%State{} = _state, %Context{} = context) do
     %{
       current_screen: :thread_list,
       current_user: context.current_user,
-      current_board: state.board,
       session_context: context.session_context,
       terminal_size: context.terminal_size,
       route: context.route,

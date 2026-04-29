@@ -184,13 +184,13 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrame do
 
   defp normalize_chrome(%{} = chrome, state) do
     chrome
-    |> Map.put_new(:breadcrumb_parts, BreadcrumbBar.parts_for(state))
+    |> Map.put_new(:breadcrumb_parts, ["Foglet"])
     |> Map.put_new(:status_atoms, StatusBar.status_atoms(state))
   end
 
   defp normalize_chrome(_legacy_title, state) do
     %{
-      breadcrumb_parts: BreadcrumbBar.parts_for(state),
+      breadcrumb_parts: ["Foglet"],
       status_atoms: StatusBar.status_atoms(state)
     }
   end
