@@ -3,14 +3,19 @@ defmodule Foglet.TUI.App do
   Raxol application entry point for the Foglet BBS TUI.
 
   Metaphor (D-15): `app.ex` is the conductor; `screens/*` are the scores;
-  `widgets/*` are the instruments. This module holds the top-level model
-  and the view-routing table; each screen is a pure render/1 + handle_key/2
-  pair.
+  `widgets/*` are the instruments. This module holds the canonical UI
+  shell — an 8-field struct (`current_screen`, `current_user`,
+  `session_context`, `session_pid`, `terminal_size`, `route_params`,
+  `modal`, `screen_state`) — and the view-routing table. Per-screen state
+  lives in screen-owned `%State{}` structs stored under `screen_state`,
+  keyed by screen atom; each screen is a reducer that exposes
+  `update/3` + `render/2` and an optional `subscriptions/2` callback.
 
   State flow (D-16):
     * Domain state → Postgres (accessed via Foglet.Boards/Threads/Posts)
     * Session-scoped identity → Foglet.Sessions.Session
-    * UI state → this model (%__MODULE__{})
+    * UI shell → this model (%__MODULE__{})
+    * Per-screen UI state → screen-owned %State{} under screen_state[key]
 
   See docs/ARCHITECTURE.md §4 and CONTEXT 03 D-13..D-21.
   """
@@ -68,9 +73,10 @@ defmodule Foglet.TUI.App do
   @doc """
   Returns the current route value.
 
-  During the Phase 34 transition App still stores the route screen in
-  `current_screen`; route params are stored separately so legacy screens can
-  continue to receive an atom route until their migration phase.
+  Routes are encoded as the screen atom alone (when `route_params` is empty)
+  or as `{screen, params}` (when `route_params` is non-empty). Screens
+  receive the atom-or-tuple shape via `Context` so reducers don't have to
+  reach into App fields to read route info.
   """
   @spec current_route(t()) :: atom() | {atom(), map()}
   def current_route(%__MODULE__{current_screen: screen, route_params: params})
@@ -126,7 +132,15 @@ defmodule Foglet.TUI.App do
     )
   end
 
-  @doc "Interprets one Phase 34 runtime effect."
+  @doc """
+  Interprets one runtime effect against the App shell.
+
+  Effects (`%Foglet.TUI.Effect{}`) are emitted by screen reducers from
+  `update/3`; this function applies them to the shell — `:navigate` updates
+  `current_screen`/`route_params` and dispatches `:on_route_enter`,
+  `:modal` opens/dismisses a modal, etc. Returns the updated state and any
+  Raxol commands to execute.
+  """
   @spec apply_effect(t(), Effect.t()) :: {t(), [Command.t()]}
   def apply_effect(%__MODULE__{} = state, %Effect{
         type: :navigate,
