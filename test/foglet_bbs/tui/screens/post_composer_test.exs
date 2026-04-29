@@ -315,18 +315,15 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
            end)
   end
 
-  test "render/1 in preview mode keeps markdown preview inside the composer shell", %{
+  test "Tab switches a reply composer to preview mode without changing draft", %{
     state: state
   } do
     state = with_reply(state, "# hi")
     {:update, state, _} = handle_key_screen(%{key: :tab}, state)
 
-    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
-
-    assert text =~ "Composer"
-    assert text =~ "Edit"
-    assert text =~ "Preview"
-    assert text =~ "MD[# hi]"
+    assert composer_ss(state).mode == :preview
+    assert input_value(state) == "# hi"
+    assert composer_ss(state).reply_to.id == "p1"
   end
 
   test "render/1 in compact preview mode wraps markdown preview without mutating value", %{

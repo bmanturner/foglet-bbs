@@ -31,3 +31,20 @@ recording final verification evidence.
 
 Evidence will be appended by the individual Phase 40 plans as each close-gate
 item is fixed or explicitly bounded.
+
+## Plan 40-03 IN-03 Targeted Test Hygiene
+
+- Replaced one weak assertion in
+  `test/foglet_bbs/tui/screens/post_composer_test.exs`: the reply preview-mode
+  test now asserts reducer-owned local state (`mode`, draft value, and
+  `reply_to`) instead of proving the mode switch by arbitrary rendered text.
+- Kept breadcrumb/chrome assertions in
+  `test/foglet_bbs/tui/widgets/chrome/screen_frame_test.exs` and
+  `test/foglet_bbs/tui/widgets/chrome/breadcrumb_migration_test.exs` as visual
+  contract coverage because the rendered chrome string is the behavior under
+  test.
+- Kept PostReader compact metadata/gutter and Sysop command/tab text checks as
+  visual contract coverage where they prove terminal layout and command-surface
+  behavior, not domain reducer state.
+- Deferred broad IN-03 cleanup beyond the named files; Phase 40-03 intentionally
+  avoids a whole-suite weak assertion rewrite.
