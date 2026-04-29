@@ -11,7 +11,6 @@ defmodule Foglet.TUI.Screens.NewThread do
                        Ctrl+S to submit, Ctrl+C to cancel.
 
   State lives in `state.screen_state[:new_thread]` as a `%NewThread.State{}`.
-  See init_screen_state/1.
 
   On submit: calls Foglet.Threads.create_thread/3 (board_id, user_id, %{title:, body:}).
   On success: navigates to :thread_list with the new thread pre-loaded.
@@ -31,8 +30,6 @@ defmodule Foglet.TUI.Screens.NewThread do
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Foglet.TUI.Widgets.Post.MarkdownBody
-  alias Raxol.UI.Components.Input.MultiLineInput
-
   import Raxol.Core.Renderer.View
 
   @default_max_post_length 8192
@@ -120,31 +117,6 @@ defmodule Foglet.TUI.Screens.NewThread do
     case state.step do
       :board -> render_board_step(frame_state, state)
       :compose -> render_compose_step(frame_state, state)
-    end
-  end
-
-  @doc """
-  Build the initial screen_state map for the new-thread wizard.
-  Boards are passed in immediately (already loaded) or left nil to show "Loading…".
-  """
-  @impl true
-  @spec init_screen_state(keyword()) :: State.t()
-  def init_screen_state(opts \\ []) do
-    opts
-    |> Keyword.put_new(:max_title_length, max_thread_title_length())
-    |> State.new()
-  end
-
-  @impl true
-  @spec render(map()) :: any()
-  # Phase 39 cleanup: legacy render/1 remains for older smoke tests only.
-  # Phase 37 flow state is screen-owned by render/2 and %NewThread.State{}.
-  def render(state) do
-    ss = screen_state(state)
-
-    case ss.step do
-      :board -> render_board_step(state, ss)
-      :compose -> render_compose_step(state, ss)
     end
   end
 
@@ -289,58 +261,6 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Key handler
   # ---------------------------------------------------------------------------
-  @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  # Phase 39 cleanup: legacy handle_key/2 remains for compatibility tests.
-  # It must not be the source of truth for the Phase 37 App runtime path.
-  def handle_key(key_event, state) do
-    ss = screen_state(state)
-
-    case ss.step do
-      :board -> handle_board_key(key_event, state, ss)
-      :compose -> handle_compose_key(key_event, state, ss)
-    end
-  end
-
-  # --- Board step ---
-
-  defp handle_board_key(%{key: :escape}, state, _ss) do
-    {:update, %{state | current_screen: :main_menu}, []}
-  end
-
-  defp handle_board_key(%{key: :char, char: "j"}, state, ss), do: board_move(state, ss, +1)
-  defp handle_board_key(%{key: :down}, state, ss), do: board_move(state, ss, +1)
-  defp handle_board_key(%{key: :char, char: "k"}, state, ss), do: board_move(state, ss, -1)
-  defp handle_board_key(%{key: :up}, state, ss), do: board_move(state, ss, -1)
-
-  defp handle_board_key(%{key: :enter}, state, ss) do
-    boards = ss.boards || []
-
-    case Enum.at(boards, ss.selected_board_index) do
-      nil ->
-        :no_match
-
-      board ->
-        {w, _h} = state.terminal_size || @default_terminal_size
-
-        {:ok, body_input_state} =
-          MultiLineInput.init(%{
-            value: "",
-            placeholder: "Write your opening post…",
-            width: max(w - 4, 20),
-            height: 10,
-            wrap: :none,
-            focused: false
-          })
-
-        new_ss = %{ss | step: :compose, board: board, body_input_state: body_input_state}
-
-        {:update, put_ss(state, new_ss), []}
-    end
-  end
-
-  defp handle_board_key(_key, _state, _ss), do: :no_match
-
   defp handle_board_key_event(%{key: :escape}, %State{} = state) do
     {state, [Effect.navigate(origin_for(state), %{})]}
   end
@@ -366,21 +286,6 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp handle_board_key_event(_key, %State{} = state), do: {state, []}
 
-  defp board_move(state, ss, delta) do
-    boards = ss.boards || []
-
-    if boards == [] do
-      :no_match
-    else
-      new_idx =
-        (ss.selected_board_index + delta)
-        |> max(0)
-        |> min(length(boards) - 1)
-
-      {:update, put_ss(state, %{ss | selected_board_index: new_idx}), []}
-    end
-  end
-
   defp board_move_state(%State{} = state, delta) do
     boards = state.boards || []
 
@@ -393,73 +298,6 @@ defmodule Foglet.TUI.Screens.NewThread do
         |> min(length(boards) - 1)
 
       {%{state | selected_board_index: new_idx}, []}
-    end
-  end
-
-  # --- Compose step ---
-
-  # D-07: origin-aware cancel on the :compose step.
-  # The board step still routes Esc to :main_menu (handle_board_key at
-  # line ~237) because the board step is only reachable from MainMenu.
-  defp handle_compose_key(%{key: :char, char: "c", ctrl: true}, state, ss) do
-    {:update, %{state | current_screen: Map.get(ss, :origin, :main_menu)}, []}
-  end
-
-  defp handle_compose_key(%{key: :escape}, state, ss) do
-    {:update, %{state | current_screen: Map.get(ss, :origin, :main_menu)}, []}
-  end
-
-  defp handle_compose_key(%{key: :tab}, state, ss) do
-    if ss.focused == :body do
-      # Tab on body toggles edit/preview mode (Gap 4 — matches PostComposer D-28).
-      new_mode = if ss.mode == :edit, do: :preview, else: :edit
-      {:update, put_ss(state, %{ss | mode: new_mode}), []}
-    else
-      # Tab on title advances focus to body (existing behaviour).
-      new_focus = if ss.focused == :title, do: :body, else: :title
-      {:update, put_ss(state, %{ss | focused: new_focus}), []}
-    end
-  end
-
-  defp handle_compose_key(%{key: :char, char: "s", ctrl: true}, state, ss) do
-    do_submit(state, ss)
-  end
-
-  # Title field: delegate to TextInput while preserving cap behavior contract.
-  # D-14: the soft title cap is still enforced from Config.
-  defp handle_compose_key(key_event, state, %{focused: :title} = ss) do
-    before = ss.title_input_state.raxol_state.value
-    {new_input, _action} = TextInput.handle_event(key_event, ss.title_input_state)
-    after_value = new_input.raxol_state.value
-
-    cond do
-      after_value != before ->
-        {:update, put_ss(state, %{ss | title_input_state: new_input}), []}
-
-      match?(%{key: :backspace}, key_event) ->
-        {:update, put_ss(state, %{ss | title_input_state: new_input}), []}
-
-      true ->
-        :no_match
-    end
-  end
-
-  # Body field: forward to MultiLineInput.
-  # NOTE: source order matters for handle_key/2 clauses — do not reorder.
-  # NOTE: The Ctrl+C (cancel) and Ctrl+S (submit) clauses at lines 250 and 270
-  # MUST remain above this clause in source order. Compose.apply_key/2
-  # intentionally passes ctrl+char combos through as typed input for
-  # terminal-native workflows; the screen-level pattern-matches above intercept
-  # Ctrl+S and Ctrl+C before they can reach this fallthrough. Moving those
-  # clauses below this one would cause Ctrl+S on body focus to insert "s" into
-  # the body text instead of submitting.
-  defp handle_compose_key(key_event, state, %{focused: :body} = ss) do
-    case Compose.apply_key(ss.body_input_state, key_event) do
-      {:ok, new_input_st} ->
-        {:update, put_ss(state, %{ss | body_input_state: new_input_st}), []}
-
-      :error ->
-        :no_match
     end
   end
 
@@ -581,104 +419,12 @@ defmodule Foglet.TUI.Screens.NewThread do
     {%{state | submission_status: {:error, reason}, error: format_error(reason)}, []}
   end
 
-  defp do_submit(state, ss) do
-    title = String.trim(ss.title_input_state.raxol_state.value)
-    body = ss.body_input_state.value
-    board = ss.board
-    max = max_body_length(state)
-
-    cond do
-      title == "" ->
-        {:update, put_ss(state, %{ss | error: "Title cannot be empty."}), []}
-
-      String.trim(body) == "" ->
-        {:update, put_ss(state, %{ss | error: "Post body cannot be empty."}), []}
-
-      String.length(body) > max ->
-        {:update,
-         put_ss(state, %{ss | error: "Post body exceeds maximum length of #{max} characters."}),
-         []}
-
-      true ->
-        do_create_thread(state, ss, title, body, board)
-    end
-  end
-
-  defp do_create_thread(state, ss, title, body, board) do
-    threads_mod = threads_module(state)
-    user_id = state.current_user && state.current_user.id
-
-    if user_id do
-      case threads_mod.create_thread(board.id, user_id, %{title: title, body: body}) do
-        {:ok, %{thread: _thread}} ->
-          # D-04: success navigates back to :thread_list with the new
-          # thread pre-selected. Threads sort by last_post_at desc, so
-          # a freshly created thread is always at index 0.
-          thread_list_ss = %{selected_index: 0}
-
-          new_screen_state =
-            state.screen_state
-            |> Map.delete(:new_thread)
-            |> Map.put(:thread_list, thread_list_ss)
-
-          # Phase 39 Plan 39-07: legacy `state | current_board: board` write
-          # removed alongside the App-field deletion. The board identity now
-          # lives on the destination screen's local state — wired below by the
-          # ThreadList init shim (selected_index: 0) plus the {:load_threads,
-          # board_id} command that follows.
-          new_state = %{
-            state
-            | current_screen: :thread_list,
-              screen_state: new_screen_state
-          }
-
-          {:update, new_state, [{:load_threads, board.id}]}
-
-        {:error, cs} ->
-          msg = format_error(cs)
-          {:update, put_ss(state, %{ss | error: msg}), []}
-      end
-    else
-      # Guard against a missing current_user (unauthenticated state).
-      # Should never happen in the wired flow, but crash-free is better.
-      {:update,
-       %{
-         state
-         | modal: %Foglet.TUI.Modal{
-             type: :error,
-             message: "You must be logged in to create a thread."
-           }
-       }, []}
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  defp screen_state(state) do
-    case Map.get(state.screen_state, :new_thread) do
-      %State{} = ss -> ss
-      _ -> init_screen_state()
-    end
-  end
-
-  defp put_ss(state, ss) do
-    new_screen_state = Map.put(state.screen_state, :new_thread, ss)
-    %{state | screen_state: new_screen_state}
-  end
-
   defp threads_module(%Context{} = context) do
     case domain_module(context, :threads) do
-      {:ok, mod} -> mod
-      {:error, :not_configured} -> Foglet.Threads
-    end
-  end
-
-  defp threads_module(state) do
-    ctx = Map.get(state, :session_context) || %{}
-
-    case Domain.get(ctx, :threads) do
       {:ok, mod} -> mod
       {:error, :not_configured} -> Foglet.Threads
     end

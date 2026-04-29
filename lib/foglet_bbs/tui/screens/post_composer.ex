@@ -151,104 +151,9 @@ defmodule Foglet.TUI.Screens.PostComposer do
   defp thread_title_label(%State{thread: %{title: title}}) when is_binary(title), do: title
   defp thread_title_label(%State{}), do: "Thread"
 
-  @impl true
-  @spec render(map()) :: any()
-  # Phase 39 cleanup: legacy render/1 remains for older smoke tests only.
-  # Phase 37 flow state is screen-owned by render/2 and %PostComposer.State{}.
-  def render(state) do
-    ss = composer_screen_state(state)
-    input_st = ss.input_state
-    draft = input_st.value
-    theme = Theme.from_state(state)
-    {width, height} = state.terminal_size || @default_terminal_size
-    max = max_len(state)
-
-    content =
-      EditorFrame.render(
-        mode: ss.mode,
-        focused?: ss.mode == :edit,
-        context: reply_context(ss.reply_to, width, theme),
-        body: composer_body(ss.mode, input_st, draft, state, theme, width),
-        budgets: [%{label: "Body", count: String.length(draft), limit: max}],
-        error: ss.error,
-        width: max(width - 4, 20),
-        height: max(height - 6, 10),
-        theme: theme
-      )
-
-    ScreenFrame.render(state, %{}, content, [
-      {"Tab", if(ss.mode == :edit, do: "Preview", else: "Edit")},
-      {"Ctrl+S", "Send"},
-      {"Ctrl+C", "Cancel"}
-    ])
-  end
-
-  @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  # Phase 39 cleanup: legacy handle_key/2 remains for compatibility tests.
-  # It must not be the source of truth for the Phase 37 App runtime path.
-  # NOTE: PostComposer handle_key/2 clause order is load-bearing:
-  # keep :tab/Ctrl+S/Ctrl+C above fallback forwarding.
-  def handle_key(%{key: :tab}, state), do: toggle_mode(state)
-  def handle_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
-  def handle_key(%{key: :char, char: "c", ctrl: true}, state), do: cancel(state)
-
-  # Forward all other keys to MultiLineInput
-  def handle_key(key_event, state) do
-    ss = composer_screen_state(state)
-    input_st = ss.input_state
-
-    case Compose.apply_key(input_st, key_event) do
-      {:ok, new_input_st} ->
-        new_input_st = enforce_max_len(new_input_st, state)
-        {:update, put_input_state(state, ss, new_input_st), []}
-
-      :error ->
-        :no_match
-    end
-  end
-
-  # ---------------------------------------------------------------------------
-  # Initialization helper (called by callers that navigate to :post_composer)
-  # ---------------------------------------------------------------------------
-
-  @doc """
-  Builds the initial screen_state map for the composer.
-  Call this when navigating to :post_composer so the MultiLineInput state
-  exists before the first render/handle_key call.
-
-  Options:
-    - `reply_to` — post struct or nil
-    - `width`    — terminal width for word-wrap (default 80)
-    - `height`   — visible rows for the text area (default 10)
-  """
-  @impl true
-  @spec init_screen_state(keyword()) :: State.t()
-  def init_screen_state(opts \\ []) do
-    State.new(opts)
-  end
-
   # ---------------------------------------------------------------------------
   # Private — helpers
   # ---------------------------------------------------------------------------
-
-  # Returns a guaranteed screen_state with input_state initialised.
-  defp composer_screen_state(state) do
-    case Map.get(state.screen_state, :post_composer) do
-      %State{} = ss ->
-        ss
-
-      _ ->
-        {w, _h} = state.terminal_size || @default_terminal_size
-        init_screen_state(width: max(w - 4, 20), height: 10)
-    end
-  end
-
-  defp put_input_state(state, ss, new_input_st) do
-    new_ss = %{ss | input_state: new_input_st}
-    new_screen_state = Map.put(state.screen_state, :post_composer, new_ss)
-    %{state | screen_state: new_screen_state}
-  end
 
   # ---------------------------------------------------------------------------
   # Max-length enforcement (D-31)
@@ -260,10 +165,6 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   defp enforce_max_len(input_st, max) when is_integer(max) do
     do_enforce_max_len(input_st, max)
-  end
-
-  defp enforce_max_len(input_st, state) do
-    enforce_max_len(input_st, max_len(state))
   end
 
   defp do_enforce_max_len(input_st, max) do
@@ -294,8 +195,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # ---------------------------------------------------------------------------
 
   defp render_input(input_st, state, theme, width) do
-    ss = composer_screen_state(state)
-    focused? = ss.mode == :edit
+    focused? = state.mode == :edit
     Compose.render_input(input_st, focused?, theme, width: width)
   end
 
@@ -349,129 +249,11 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # an empty-string handle never renders as "@".
   defp get_handle(post), do: PostCard.get_handle(post) || "unknown"
 
-  # ---------------------------------------------------------------------------
-  # Mode toggle
-  # ---------------------------------------------------------------------------
-
-  defp toggle_mode(state) do
-    ss = composer_screen_state(state)
-    new_mode = if ss.mode == :edit, do: :preview, else: :edit
-    new_ss = %{ss | mode: new_mode}
-    new_screen_state = Map.put(state.screen_state, :post_composer, new_ss)
-    {:update, %{state | screen_state: new_screen_state}, []}
-  end
-
-  # ---------------------------------------------------------------------------
-  # Submit
-  # ---------------------------------------------------------------------------
-
-  defp submit(state) do
-    ss = composer_screen_state(state)
-    draft = ss.input_state.value
-    max = max_len(state)
-
-    cond do
-      String.trim(draft) == "" ->
-        {:update,
-         %{state | modal: %Foglet.TUI.Modal{type: :error, message: "Post body cannot be empty."}},
-         []}
-
-      String.length(draft) > max ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Post body exceeds maximum length of #{max} characters (D-31)."
-        }
-
-        {:update, %{state | modal: modal}, []}
-
-      true ->
-        do_submit(state, ss, draft)
-    end
-  end
-
-  defp do_submit(state, ss, draft) do
-    user_id = state.current_user && state.current_user.id
-
-    if is_nil(user_id) do
-      {:update,
-       %{
-         state
-         | modal: %Foglet.TUI.Modal{type: :error, message: "You must be logged in to post."}
-       }, []}
-    else
-      submit_reply(state, ss, draft, user_id)
-    end
-  end
-
-  defp submit_reply(state, ss, draft, user_id) do
-    sc = Map.get(state, :session_context) || %{}
-
-    posts_mod =
-      case Domain.get(sc, :posts) do
-        {:ok, mod} -> mod
-        {:error, :not_configured} -> Foglet.Posts
-      end
-
-    thread = legacy_thread_for_submit(state, ss)
-    attrs = build_reply_attrs(draft, ss)
-
-    with {:ok, _post} <- posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs),
-         {:ok, new_state} <- success_state_after_submit(state) do
-      # D-05: after the post reload finishes, the app handler sets
-      # selected_post_index to the last post (the user's new reply).
-      {:update, new_state, [{:load_posts, thread.id, jump_last: true}]}
-    else
-      {:error, reason} ->
-        {:update,
-         %{state | modal: %Foglet.TUI.Modal{type: :error, message: format_error(reason)}}, []}
-    end
-  end
-
-  defp success_state_after_submit(state) do
-    {:ok,
-     %{
-       state
-       | current_screen: :post_reader,
-         screen_state: Map.delete(state.screen_state, :post_composer)
-     }}
-  end
-
   defp build_reply_attrs(draft, ss) do
     case Map.get(ss, :reply_to) do
       nil -> %{body: draft}
       post -> %{body: draft, reply_to_id: post.id}
     end
-  end
-
-  # Phase 39 Plan 39-07: legacy submit_reply/4 sources the thread from the
-  # screen-owned State struct under state.screen_state[:post_composer] (set
-  # when the composer was opened via Effect.navigate(:post_composer, …)), with
-  # a fallback to PostReader's screen-state thread (which set the composer up
-  # via the [R] handler), then route_params. The pre-39-07 transitional
-  # `legacy_app_thread/1` clause that read `state.current_thread` directly was
-  # removed alongside the App-field deletion.
-  defp legacy_thread_for_submit(state, ss) do
-    composer_thread =
-      case ss do
-        %{thread: %{} = thread} -> thread
-        _ -> nil
-      end
-
-    composer_thread ||
-      legacy_reader_thread(state) ||
-      legacy_route_thread(state)
-  end
-
-  defp legacy_reader_thread(state) do
-    case Map.get(state.screen_state || %{}, :post_reader) do
-      %Foglet.TUI.Screens.PostReader.State{thread: %{} = thread} -> thread
-      _ -> nil
-    end
-  end
-
-  defp legacy_route_thread(state) do
-    params = Map.get(state, :route_params) || %{}
-    Map.get(params, :thread) || Map.get(params, "thread")
   end
 
   defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."
@@ -571,37 +353,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   defp board_id_from_thread(_thread), do: nil
 
-  # ---------------------------------------------------------------------------
-  # Cancel (D-30)
-  # ---------------------------------------------------------------------------
-
-  defp cancel(state) do
-    # D-07: origin-aware cancel. ss.origin is set by the navigating screen
-    # (PostReader's [R] handler in Phase 4). Default :main_menu preserves
-    # the "classic BBS" behavior — if origin is somehow missing, bail
-    # to a known-safe screen rather than crashing or looping.
-    ss = composer_screen_state(state)
-    origin = Map.get(ss, :origin, :main_menu)
-
-    new_state = %{
-      state
-      | current_screen: origin,
-        screen_state: Map.delete(state.screen_state, :post_composer)
-    }
-
-    {:update, new_state, []}
-  end
-
-  # ---------------------------------------------------------------------------
-  # Max length
-  # ---------------------------------------------------------------------------
-
   defp max_len(%Context{} = context) do
     max_len_from_session_context(context.session_context || %{})
-  end
-
-  defp max_len(state) do
-    max_len_from_session_context(Map.get(state, :session_context) || %{})
   end
 
   defp max_len_from_session_context(sc) do

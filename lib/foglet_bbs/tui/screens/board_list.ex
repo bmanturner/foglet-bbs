@@ -28,10 +28,6 @@ defmodule Foglet.TUI.Screens.BoardList do
   def init(%Context{}), do: State.new(status: :loading)
 
   @impl true
-  @spec init_screen_state(keyword()) :: State.t()
-  def init_screen_state(opts \\ []), do: State.new(opts)
-
-  @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
   def update(:load, local_state, %Context{} = context) do
     local_state =

@@ -28,10 +28,6 @@ defmodule Foglet.TUI.Screens.ThreadList do
   def init(%Context{} = context), do: State.from_context(context)
 
   @impl true
-  @spec init_screen_state(keyword()) :: State.t()
-  def init_screen_state(_opts \\ []), do: State.new(selected_index: 0)
-
-  @impl true
   @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
   # Phase 39 D-01/D-03/D-14: screen owns its route-entry signal.
   # Today (app.ex:834-836) ThreadList's per-screen App clause unconditionally
