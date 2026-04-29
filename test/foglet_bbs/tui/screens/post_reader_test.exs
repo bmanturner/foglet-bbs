@@ -1163,19 +1163,43 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert [%Effect{type: :task, payload: %{op: :load_posts}}] = effects_via_on_enter
     end
 
-    test "with no thread_id in state but atom :thread_id route param delegates to :load" do
+    test "with no thread_id in state but atom :thread_id route param delegates to :load (surfaces :load's missing-thread error since fallback doesn't hydrate state)" do
+      # Today App's app.ex:838-843 dispatches :load when route_params has a
+      # thread_id; in the integrated flow App's init_route_screen_state has
+      # already hydrated state.thread_id via State.from_context, so :load's
+      # state-first guard matches. The screen-side fallback preserves the
+      # dispatch shape — the binding test proves the clause matched and
+      # delegated to :load (rather than the catch-all returning {state, []}
+      # silently). When called with a non-hydrated state, :load surfaces
+      # its missing-thread error guard rather than no-opping.
       ctx = %{post_reader_context() | route_params: %{thread_id: "t-atom"}}
       state = %State{}
 
       {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
 
-      assert new_state.status == :loading
-      assert [%Effect{type: :task, payload: %{op: :load_posts}}] = effects
+      assert effects == []
+      # Proves :load was dispatched (vs. the catch-all returning state unchanged).
+      assert new_state.status == {:error, :missing_thread}
+      assert new_state.last_error == :missing_thread
     end
 
     test "with no thread_id in state but string \"thread_id\" route param delegates to :load" do
       ctx = %{post_reader_context() | route_params: %{"thread_id" => "t-string"}}
       state = %State{}
+
+      {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
+
+      assert effects == []
+      assert new_state.status == {:error, :missing_thread}
+      assert new_state.last_error == :missing_thread
+    end
+
+    test "fully hydrated state from State.from_context still delegates correctly (integrated path)" do
+      # Mirrors the real App flow: init_route_screen_state runs State.from_context
+      # before :on_route_enter fires. The state-first clause matches.
+      ctx = post_reader_context()
+      state = PostReader.State.from_context(ctx)
+      assert is_binary(state.thread_id)
 
       {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
 

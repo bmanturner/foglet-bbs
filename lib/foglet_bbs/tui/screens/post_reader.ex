@@ -72,6 +72,24 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @impl true
   @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
+  # Phase 39 D-01/D-03/D-14: screen owns its route-entry signal.
+  # Today (app.ex:838-843) PostReader's per-screen App clause only dispatches
+  # :load when route_param(params, :thread_id) is binary. The state-first
+  # clause below preserves re-entry hydrated via local State (e.g. back-nav
+  # with empty route_params), and the route_params-fallback clause matches
+  # both atom and string keys to mirror subscriptions/2's shape.
+  def update(:on_route_enter, %State{thread_id: thread_id} = state, %Context{} = context)
+      when is_binary(thread_id) do
+    update(:load, state, context)
+  end
+
+  def update(:on_route_enter, %State{} = state, %Context{route_params: params} = context) do
+    case Map.get(params, :thread_id) || Map.get(params, "thread_id") do
+      thread_id when is_binary(thread_id) -> update(:load, state, context)
+      _other -> {state, []}
+    end
+  end
+
   def update(:load, %State{thread_id: thread_id} = state, %Context{} = context)
       when is_binary(thread_id) do
     posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)

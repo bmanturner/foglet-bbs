@@ -33,6 +33,15 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   @impl true
   @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
+  # Phase 39 D-01/D-03/D-14: screen owns its route-entry signal.
+  # Today (app.ex:834-836) ThreadList's per-screen App clause unconditionally
+  # dispatches :load — there is no current_user gate. The :load clause itself
+  # carries the missing-board guard (the second :load clause below), so
+  # unconditional delegation is safe.
+  def update(:on_route_enter, %State{} = state, %Context{} = context) do
+    update(:load, state, context)
+  end
+
   def update(:load, %State{board_id: board_id} = state, %Context{} = context)
       when is_binary(board_id) do
     threads_mod = resolve_threads_module(context)
