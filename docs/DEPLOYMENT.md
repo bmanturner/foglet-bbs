@@ -264,6 +264,8 @@ application rollback so the running release expects the older schema.
 
 ## See Also
 
+- `docs/OPS_BASELINE.md` — FOG-8/FOG-14 ops baseline revision grounded in
+  Docker, Fly, release, runtime, and CI artifacts.
 - `docs/CONFIGURATION.md` — canonical environment variable and runtime
   config reference.
 - `docs/ARCHITECTURE.md` — listener layout, LiveDashboard auth, and
