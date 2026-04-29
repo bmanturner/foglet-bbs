@@ -29,6 +29,10 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       {%{state | messages: [{:key, key, context.route_params} | state.messages]}, []}
     end
 
+    def update(:on_route_enter, %State{} = state, %Context{} = context) do
+      {%{state | messages: [{:on_route_enter, context.route_params} | state.messages]}, []}
+    end
+
     # Catch-all per Foglet.TUI.Screen contract — Phase 39 D-04 dispatches
     # :on_route_enter to every active screen via the generic route-entry path,
     # so test-fixture screens must tolerate unknown messages without crashing.
@@ -38,6 +42,16 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
     def render(%State{} = state, %Context{} = context) do
       {:sample_render, state, context.route_params}
+    end
+
+    def subscriptions(%State{} = state, %Context{} = context) do
+      state_topic = state.route_params[:topic]
+      route_topic = context.route_params[:topic]
+
+      [state_topic, route_topic]
+      |> Enum.reject(&is_nil/1)
+      |> Enum.map(&"sample:#{&1}")
+      |> Enum.uniq()
     end
   end
 
@@ -122,7 +136,10 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert context = App.build_context(new_state)
       assert context.route_params == %{board_id: "b1"}
 
-      assert %SampleScreen.State{route_params: %{board_id: "b1"}} =
+      assert %SampleScreen.State{
+               route_params: %{board_id: "b1"},
+               messages: [{:on_route_enter, %{board_id: "b1"}}]
+             } =
                App.screen_state_for(new_state, :sample_runtime)
 
       assert new_state.screen_state.main_menu == state.screen_state.main_menu
@@ -179,7 +196,12 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
       {after_key, []} = App.update({:key, %{key: "j"}}, state)
 
-      assert %SampleScreen.State{messages: [{:key, %{key: "j"}, %{thread_id: "t1"}}]} =
+      assert %SampleScreen.State{
+               messages: [
+                 {:key, %{key: "j"}, %{thread_id: "t1"}},
+                 {:on_route_enter, %{thread_id: "t1"}}
+               ]
+             } =
                App.screen_state_for(after_key, :sample_runtime)
 
       assert {:sample_render, %SampleScreen.State{}, %{thread_id: "t1"}} = App.view(after_key)
@@ -221,7 +243,12 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert %SampleScreen.State{results: [sample_load: {:ok, {:loaded, 1}}]} =
                App.screen_state_for(new_state, :sample_runtime)
 
-      assert %SampleScreen.State{messages: [{:sample_load, %{thread_id: "t1"}}]} =
+      assert %SampleScreen.State{
+               messages: [
+                 {:sample_load, %{thread_id: "t1"}},
+                 {:on_route_enter, %{thread_id: "t1"}}
+               ]
+             } =
                App.screen_state_for(new_state, :sample_runtime)
     end
 
@@ -243,6 +270,68 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
                App.screen_state_for(new_state, :sample_runtime)
 
       assert routed_reason =~ "boom"
+    end
+  end
+
+  describe "App shell close-gate delegation" do
+    test "initial route-enter hydration uses the active screen reducer" do
+      state =
+        state(
+          current_screen: :sample_runtime,
+          route_params: %{topic: "initial"},
+          screen_state: %{sample_runtime: %SampleScreen.State{route_params: %{topic: "initial"}}}
+        )
+
+      {new_state, cmds} = App.update(:initial_route_enter, state)
+
+      assert cmds == []
+
+      assert %SampleScreen.State{messages: [{:on_route_enter, %{topic: "initial"}}]} =
+               App.screen_state_for(new_state, :sample_runtime)
+    end
+
+    test "subscriptions/1 delegates screen-specific topics to subscriptions/2" do
+      user = %Foglet.Accounts.User{id: "u-sub", handle: "alice"}
+
+      state =
+        state(
+          current_screen: :sample_runtime,
+          current_user: user,
+          route_params: %{topic: "route"},
+          screen_state: %{
+            sample_runtime: %SampleScreen.State{route_params: %{topic: "state"}}
+          }
+        )
+
+      subscriptions = App.subscribe(state)
+
+      assert Enum.any?(subscriptions, fn
+               %Raxol.Core.Runtime.Subscription{
+                 type: :custom,
+                 data: %{module: Foglet.TUI.InitialRouteEnterForwarder}
+               } ->
+                 true
+
+               _ ->
+                 false
+             end)
+
+      assert %Raxol.Core.Runtime.Subscription{
+               type: :custom,
+               data: %{module: Foglet.TUI.PubSubForwarder, args: %{topics: topics}}
+             } =
+               Enum.find(subscriptions, fn
+                 %Raxol.Core.Runtime.Subscription{
+                   type: :custom,
+                   data: %{module: Foglet.TUI.PubSubForwarder}
+                 } ->
+                   true
+
+                 _ ->
+                   false
+               end)
+
+      assert topics == ["user:u-sub", "sample:state", "sample:route"]
     end
   end
 end
