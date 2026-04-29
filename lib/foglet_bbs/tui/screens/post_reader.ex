@@ -54,14 +54,11 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.PostReader.Render
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
-  alias Foglet.TUI.Widgets.Progress.Spinner
   alias Raxol.UI.Components.Display.Viewport
-
-  import Raxol.Core.Renderer.View
 
   @default_terminal_size {80, 24}
 
@@ -223,31 +220,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @impl true
   @spec render(State.t(), Context.t()) :: any()
-  def render(%State{} = state, %Context{} = context) do
-    frame_state = frame_state(state, context)
-    theme = Theme.from_state(frame_state)
-    {w, h} = context.terminal_size || @default_terminal_size
-    post_content = render_local_post_content(state, frame_state, theme, w, h)
-
-    chrome = %{
-      breadcrumb_parts: ["Foglet", board_label(state), thread_title_label(state)]
-    }
-
-    ScreenFrame.render(frame_state, chrome, post_content, [
-      {"N", "Next"},
-      {"P", "Prev"},
-      {"J", "Scroll ↓"},
-      {"K", "Scroll ↑"},
-      {"R", "Reply"},
-      {"Q", "Back"}
-    ])
-  end
-
-  defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name
-  defp board_label(%State{}), do: "Boards"
-
-  defp thread_title_label(%State{thread: %{title: title}}) when is_binary(title), do: title
-  defp thread_title_label(%State{}), do: "Thread"
+  def render(%State{} = state, %Context{} = context), do: Render.render(state, context)
 
   @impl true
   @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
@@ -259,89 +232,6 @@ defmodule Foglet.TUI.Screens.PostReader do
     case Map.get(params, :thread_id) || Map.get(params, "thread_id") do
       thread_id when is_binary(thread_id) -> [Foglet.PubSub.thread_topic(thread_id)]
       _other -> []
-    end
-  end
-
-  defp render_post_content(%{posts: posts}, _ss, theme, _w, _h)
-       when posts in [[], nil] do
-    render_loading(theme)
-  end
-
-  defp render_post_content(frame_view, ss, theme, w, h) do
-    posts = frame_view.posts
-    total = length(posts)
-    idx = ss.selected_post_index
-
-    if idx >= total do
-      column style: %{gap: 0} do
-        [text("No more posts.", fg: theme.warning.fg)]
-      end
-    else
-      post = Enum.at(posts, idx)
-      available_height = max(h - 12, 5)
-
-      tuples =
-        case ss.render_cache[{post.id, w}] do
-          nil ->
-            require Logger
-            Logger.warning("[PostReader] render cache miss for post=#{post.id} width=#{w}")
-            parse_body(frame_view, post)
-
-          cached ->
-            cached
-        end
-
-      parts = reader_parts(post, tuples, w, theme, idx, total)
-
-      # Wire visible_height and children for this frame. render_post_content
-      # is a read-only function — the Viewport state built here is transient,
-      # not written back into screen_state. State-writing happens in
-      # scroll_post / advance_post / load_posts via warm_viewport.
-      {vp, _cmds} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
-      {vp, _cmds} = Viewport.update({:set_children, parts.body_lines}, vp)
-      body_rendered = Viewport.render(vp, %{})
-
-      column style: %{gap: 0} do
-        [parts.header, parts.progress, body_rendered]
-      end
-    end
-  end
-
-  defp render_local_post_content(%State{status: :loading}, _frame_state, theme, _w, _h),
-    do: render_loading(theme)
-
-  defp render_local_post_content(%State{status: :empty}, _frame_state, theme, _w, _h) do
-    column style: %{gap: 0} do
-      [text("No more posts.", fg: theme.warning.fg)]
-    end
-  end
-
-  defp render_local_post_content(%State{status: {:error, _}}, _frame_state, theme, _w, _h) do
-    column style: %{gap: 0} do
-      [text("Unable to load posts.", fg: theme.error.fg)]
-    end
-  end
-
-  defp render_local_post_content(%State{} = state, frame_state, theme, w, h) do
-    render_post_content(frame_state, state, theme, w, h)
-  end
-
-  # Spinner-based loading affordance used when posts is nil/[]
-  # (post_reader was opened but {:posts_loaded, posts} hasn't landed yet).
-  # One-row composition: gap-1 row with spinner glyph + label text.
-  # Row count is identical to the old plain-text path — no visible row growth (D-05, D-06).
-  defp render_loading(theme) do
-    frame = System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
-
-    column style: %{gap: 0} do
-      [
-        row style: %{gap: 1} do
-          [
-            Spinner.render(frame, style: :line, theme: theme),
-            text("Loading…", fg: theme.dim.fg)
-          ]
-        end
-      ]
     end
   end
 
@@ -575,6 +465,12 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
+  @doc false
+  @spec body_tuples_for(map(), map()) :: list()
+  def body_tuples_for(frame_state, post) when is_map(frame_state) and is_map(post) do
+    parse_body(frame_state, post)
+  end
+
   # Populates the render_cache for the currently-selected post if it's
   # not yet cached. Returns the updated screen_state map.
   defp warm_cache(ss, state, post, w) do
@@ -694,9 +590,9 @@ defmodule Foglet.TUI.Screens.PostReader do
 
       post ->
         {w, _h} = context.terminal_size || @default_terminal_size
-        frame_state = frame_state(state, context)
+        frame_state = Render.frame_state(state, context)
         state = warm_cache(state, frame_state, post, w)
-        frame_state = frame_state(state, context)
+        frame_state = Render.frame_state(state, context)
         warm_viewport(state, frame_state, post, w)
     end
   end
@@ -762,24 +658,6 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp clear_pending_read_position(%State{} = state, thread_id) do
     %{state | pending_read_positions: Map.delete(state.pending_read_positions, thread_id)}
-  end
-
-  defp frame_state(%State{} = state, %Context{} = context) do
-    # `posts:` is a plain-map key consumed by the shared render_post_content/5
-    # helper; its value is read from `%State{}.posts` (the new-contract
-    # screen-owned field, which survives the 39-07 struct cleanup). It is
-    # NOT the deleted `%App{}.posts` field — see 39-RESEARCH Pitfall 5. The
-    # `Map.get/2` access form keeps the post-39-07 grep audit
-    # (`grep` for legacy app-shape dot-access) clean.
-    %{
-      current_user: context.current_user,
-      current_screen: :post_reader,
-      posts: Map.get(state, :posts),
-      session_context: context.session_context,
-      terminal_size: context.terminal_size,
-      route_params: context.route_params,
-      screen_state: %{post_reader: state}
-    }
   end
 
   defp resolve_domain_module(%Context{domain: domain} = context, key, fallback)
