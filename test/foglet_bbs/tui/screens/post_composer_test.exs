@@ -80,6 +80,30 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     }
   end
 
+  defp composer_context(attrs \\ []) do
+    board = Keyword.get(attrs, :board, %{id: "b1", name: "General"})
+    thread = Keyword.get(attrs, :thread, %{id: "t1", title: "Hello", board_id: "b1"})
+
+    Context.new(
+      current_user: Keyword.get(attrs, :current_user, %Foglet.Accounts.User{id: "u1"}),
+      session_context:
+        Keyword.get(attrs, :session_context, %{
+          domain: %{posts: FakePosts, markdown: FakeMarkdown},
+          max_post_length: 1_000
+        }),
+      terminal_size: Keyword.get(attrs, :terminal_size, {80, 24}),
+      route: :post_composer,
+      route_params:
+        Keyword.get(attrs, :route_params, %{
+          board: board,
+          board_id: board.id,
+          thread: thread,
+          thread_id: thread.id,
+          origin: :post_reader
+        })
+    )
+  end
+
   defp with_reply(state, body \\ "") do
     input_st = fresh_input(body)
 
@@ -542,6 +566,96 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       # Cancel fired and the body did NOT grow a "c".
       assert after_cancel.current_screen == :main_menu
       refute Map.has_key?(after_cancel.screen_state, :post_composer)
+    end
+  end
+
+  describe "new screen contract" do
+    test "PostComposer.init/1 extracts local route state" do
+      context = composer_context(route_params: %{board_id: "b1", thread_id: "t1"})
+
+      assert %State{} = state = PostComposer.init(context)
+      assert state.board_id == "b1"
+      assert state.thread_id == "t1"
+      assert state.origin == :post_reader
+      assert state.input_state.value == ""
+    end
+
+    test "PostComposer.update({:key, tab}, ...) toggles local mode" do
+      context = composer_context()
+      state = State.from_context(context)
+
+      {state, []} = PostComposer.update({:key, %{key: :tab}}, state, context)
+      assert state.mode == :preview
+
+      {state, []} = PostComposer.update({:key, %{key: :tab}}, state, context)
+      assert state.mode == :edit
+    end
+
+    test "PostComposer.update({:key, char}, ...) updates local input state" do
+      context = composer_context()
+      state = State.from_context(context)
+
+      {state, []} = PostComposer.update({:key, %{key: :char, char: "h"}}, state, context)
+      {state, []} = PostComposer.update({:key, %{key: :char, char: "i"}}, state, context)
+
+      assert state.input_state.value == "hi"
+    end
+
+    test "PostComposer.update validates empty body without effects" do
+      context = composer_context()
+      state = State.from_context(context)
+
+      {state, []} =
+        PostComposer.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
+
+      assert state.error == "Post body cannot be empty."
+      assert state.submission_status == :idle
+    end
+
+    test "PostComposer.update validates body length without effects" do
+      context = composer_context(session_context: %{max_post_length: 3})
+      state = State.new(thread_id: "t1", board_id: "b1", value: "four")
+
+      {state, []} =
+        PostComposer.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
+
+      assert state.error == "Post body exceeds maximum length of 3 characters (D-31)."
+      assert state.submission_status == :idle
+    end
+
+    test "PostComposer.update submits valid body through an Effect.task" do
+      context = composer_context()
+      reply = %{id: "p1"}
+      state = State.new(thread_id: "t1", board_id: "b1", reply_to: reply, value: "hi")
+
+      {state, [effect]} =
+        PostComposer.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
+
+      assert state.error == nil
+      assert state.submission_status == :submitting
+      assert %Foglet.TUI.Effect{type: :task} = effect
+      assert effect.payload.op == :submit_reply
+      assert effect.payload.screen_key == :post_composer
+    end
+
+    test "PostComposer.update Ctrl+C navigates to post_reader route identity" do
+      context = composer_context()
+      state = State.from_context(context)
+
+      {^state, [effect]} =
+        PostComposer.update({:key, %{key: :char, char: "c", ctrl: true}}, state, context)
+
+      assert %Foglet.TUI.Effect{type: :navigate} = effect
+      assert effect.payload.screen == :post_reader
+      assert effect.payload.params.board_id == "b1"
+      assert effect.payload.params.thread_id == "t1"
+    end
+
+    test "PostComposer.render/2 renders from local state and context" do
+      context = composer_context()
+      state = State.new(thread_id: "t1", board_id: "b1", value: "# hi", mode: :preview)
+
+      assert _rendered = PostComposer.render(state, context)
     end
   end
 
