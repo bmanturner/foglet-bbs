@@ -1,0 +1,29 @@
+==> raxol
+
+22:36:16.301 [warning] [PostReader] render cache miss for post=p-1 width=80
+── post_reader 80×24 ───────────────────────────────────────────────────────────
+┌ Foglet ▸ general ▸ Welcome — read me first ────────────────── @alice | 22:36 ┐
+│Post 1 of 2 • #1 • @sysop • 3w ago                                            │
+│Posts 1/2                                                                     │
+││ Welcome — please read the rules in /general.                                │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└ Q Back   Actions  N Next  P Prev  J Scroll ↓  K Scroll ↑  R Reply ───────────┘
+────────────────────────────────────────────────────────────────────────────────

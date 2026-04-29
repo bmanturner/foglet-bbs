@@ -1,0 +1,27 @@
+==> raxol
+── thread_list 80×24 ───────────────────────────────────────────────────────────
+┌ Foglet ▸ general ──────────────────────────────────────────── @alice | 22:36 ┐
+│▌ ●   Welcome — read me first                      @sysop · 3 posts · 1d ago  │
+│  ◆   Thread renderer ASCII tool                   @alice · 2 posts · 1d ago  │
+│  ◆   What is everyone working on?                 @alice · 8 posts · 1d ago  │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+│                                                                              │
+└ Navigate  j/k Select  Enter Open   Q Back   Actions  C Compose ──────────────┘
+────────────────────────────────────────────────────────────────────────────────
