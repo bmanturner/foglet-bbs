@@ -14,12 +14,10 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   ## Modal.Form on_submit adaptation (D-17 / plan narrative)
 
-  `Modal.Form.init/1` requires an `on_submit` closure whose return value is
-  discarded by the primitive (`form.ex:114` — `_ = state.on_submit.(payload)`).
-  To capture the typed payload back in the BoardsView handler, we stash it in
-  the process dictionary under `{__MODULE__, :pending_submit}` and pick it up
-  immediately after `Modal.Form.handle_event/2` returns `:submitted`. Single
-  process during TUI rendering / tests — no cross-process concerns.
+  Board/category submit callbacks return explicit
+  `Foglet.TUI.Effect.modal_submit/3` values. `handle_form_event/2` consumes
+  those submit effects directly and preserves the existing create/edit command
+  and validation behavior without process-local payload handoff.
 
   Archive-confirm flow uses the simpler pattern: BoardsView stores the target
   struct directly on state (`:archive_target`) and the Y/N handler reads it.
@@ -29,6 +27,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   """
 
   alias Foglet.Boards
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
@@ -243,7 +242,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       ModalForm.init(
         title: "New board",
         fields: board_fields(state, default_cat.id, %{}),
-        on_submit: &stash_submit/1,
+        on_submit: modal_submitter(:create_board),
         on_cancel: &noop/0
       )
 
@@ -257,7 +256,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
           ModalForm.init(
             title: "Edit board — #{board.slug}",
             fields: board_fields(state, board.category_id, board_values(board)),
-            on_submit: &stash_submit/1,
+            on_submit: modal_submitter(:edit_board),
             on_cancel: &noop/0
           )
 
@@ -273,7 +272,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       ModalForm.init(
         title: "New category",
         fields: category_fields(%{}),
-        on_submit: &stash_submit/1,
+        on_submit: modal_submitter(:create_category),
         on_cancel: &noop/0
       )
 
@@ -287,7 +286,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
           ModalForm.init(
             title: "Edit category — #{cat.name}",
             fields: category_fields(category_values(cat)),
-            on_submit: &stash_submit/1,
+            on_submit: modal_submitter(:edit_category),
             on_cancel: &noop/0
           )
 
@@ -439,22 +438,18 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   # ---- Modal.Form event handling --------------------------------------------
 
-  defp stash_submit(payload) do
-    Process.put({__MODULE__, :pending_submit}, payload)
-    :ok
+  defp modal_submitter(kind) do
+    fn payload -> Effect.modal_submit(:sysop, kind, payload) end
   end
 
   defp noop, do: :ok
 
   defp handle_form_event(event, %__MODULE__{modal: form} = state) do
-    Process.delete({__MODULE__, :pending_submit})
     {new_form, action} = ModalForm.handle_event(event, form)
 
     case action do
-      :submitted ->
-        payload = Process.get({__MODULE__, :pending_submit})
-        Process.delete({__MODULE__, :pending_submit})
-        handle_submit_payload(payload, %{state | modal: new_form})
+      {:submitted, submit_result} ->
+        handle_submit_result(submit_result, %{state | modal: new_form})
 
       :cancelled ->
         {%{state | modal: nil, modal_kind: nil, edit_target: nil}, []}
@@ -463,6 +458,18 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         {%{state | modal: new_form}, []}
     end
   end
+
+  defp handle_submit_result(
+         %Effect{
+           type: :modal_submit,
+           payload: %{screen_key: :sysop, kind: kind, payload: payload}
+         },
+         %__MODULE__{modal_kind: kind} = state
+       ) do
+    handle_submit_payload(payload, state)
+  end
+
+  defp handle_submit_result(_submit_result, state), do: {state, []}
 
   defp handle_submit_payload(nil, state), do: {state, []}
 

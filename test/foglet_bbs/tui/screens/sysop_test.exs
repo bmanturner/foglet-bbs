@@ -1468,6 +1468,15 @@ defmodule Foglet.TUI.Screens.SysopTest do
     put_in(state, [:screen_state, :sysop], ss)
   end
 
+  defp boards_submit_form(title, fields, modal_kind) do
+    ModalForm.init(
+      title: title,
+      fields: fields,
+      on_submit: fn payload -> Effect.modal_submit(:sysop, modal_kind, payload) end,
+      on_cancel: fn -> :ok end
+    )
+  end
+
   describe "BOARDS tab render (SYSO-03)" do
     setup [:seed_category_and_board]
 
@@ -1578,16 +1587,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         }
       ]
 
-      form =
-        ModalForm.init(
-          title: "New board",
-          fields: fields,
-          on_submit: fn payload ->
-            Process.put({BoardsView, :pending_submit}, payload)
-            :ok
-          end,
-          on_cancel: fn -> :ok end
-        )
+      form = boards_submit_form("New board", fields, :create_board)
 
       bv = %{bv | modal: form, modal_kind: :create_board}
       state = put_boards_view(state, bv)
@@ -1648,16 +1648,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         }
       ]
 
-      form =
-        ModalForm.init(
-          title: "New board",
-          fields: fields,
-          on_submit: fn payload ->
-            Process.put({BoardsView, :pending_submit}, payload)
-            :ok
-          end,
-          on_cancel: fn -> :ok end
-        )
+      form = boards_submit_form("New board", fields, :create_board)
 
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
@@ -1712,16 +1703,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         }
       ]
 
-      form =
-        ModalForm.init(
-          title: "New board",
-          fields: fields,
-          on_submit: fn payload ->
-            Process.put({BoardsView, :pending_submit}, payload)
-            :ok
-          end,
-          on_cancel: fn -> :ok end
-        )
+      form = boards_submit_form("New board", fields, :create_board)
 
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
@@ -1809,16 +1791,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         %{name: :display_order, type: :integer, label: "Display order", value: "5"}
       ]
 
-      form =
-        ModalForm.init(
-          title: "New category",
-          fields: fields,
-          on_submit: fn payload ->
-            Process.put({BoardsView, :pending_submit}, payload)
-            :ok
-          end,
-          on_cancel: fn -> :ok end
-        )
+      form = boards_submit_form("New category", fields, :create_category)
 
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}}
       state = put_boards_view(state, bv)
@@ -1843,16 +1816,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         %{name: :display_order, type: :integer, label: "Display order", value: "not-a-number"}
       ]
 
-      form =
-        ModalForm.init(
-          title: "New category",
-          fields: fields,
-          on_submit: fn payload ->
-            Process.put({BoardsView, :pending_submit}, payload)
-            :ok
-          end,
-          on_cancel: fn -> :ok end
-        )
+      form = boards_submit_form("New category", fields, :create_category)
 
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_category}
       state = put_boards_view(state, bv)
@@ -2259,16 +2223,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         }
       ]
 
-      form =
-        ModalForm.init(
-          title: "New board",
-          fields: fields,
-          on_submit: fn payload ->
-            Process.put({BoardsView, :pending_submit}, payload)
-            :ok
-          end,
-          on_cancel: fn -> :ok end
-        )
+      form = boards_submit_form("New board", fields, :create_board)
 
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
@@ -2323,16 +2278,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
         }
       ]
 
-      form =
-        ModalForm.init(
-          title: "New board",
-          fields: fields,
-          on_submit: fn payload ->
-            Process.put({BoardsView, :pending_submit}, payload)
-            :ok
-          end,
-          on_cancel: fn -> :ok end
-        )
+      form = boards_submit_form("New board", fields, :create_board)
 
       bv = %{bv | modal: %{form | focus_index: length(fields) - 1}, modal_kind: :create_board}
       state = put_boards_view(state, bv)
