@@ -38,11 +38,12 @@ files_reviewed_list:
   - test/foglet_bbs/tui/screens/thread_list_test.exs
   - test/foglet_bbs/tui/widgets/chrome/breadcrumb_migration_test.exs
   - test/foglet_bbs/tui/widgets/chrome/screen_frame_test.exs
+  - test/test_helper.exs
 findings:
-  blocker: 1
-  warning: 8
-  info: 5
-  total: 14
+  critical: 0
+  warning: 5
+  info: 4
+  total: 9
 status: issues_found
 ---
 
@@ -55,463 +56,242 @@ status: issues_found
 
 ## Summary
 
-Phase 39 collapses the App from a god-state aggregator into a thin shell that
-owns lifecycle, routing, broadcast fan-out, and `user:<id>` PubSub only.
-Per-screen state has migrated cleanly into `state.screen_state[<screen>]`
-slots, the `%TUI.App{}` struct now has the 8 declared fields and none of the
-seven legacy ones, and the polymorphic `subscriptions/2` and
-`:on_route_enter` mechanisms are wired through `function_exported?/3` guards
-in a way that degrades cleanly for screens that don't implement them.
+The Phase 39 simplification holds up structurally: `%Foglet.TUI.App{}` is now an
+8-field runtime shell (verified by `app_struct_test.exs`), the screen-owned
+`%State{}` types are consistently applied, and the optional
+`Foglet.TUI.Screen.subscriptions/2` callback is honored by the App shell
+(`app.ex:444-453`) and only implemented by screens that actually need it
+(BoardList, ThreadList, PostReader). I could not find a single direct
+dot-access of any of the seven deleted App fields (`current_board`,
+`current_thread`, `current_thread_list`, `posts`, `read_position`,
+`composer_draft`, `board_list`) outside of comments — that guarantee is the
+load-bearing post-condition for this phase, and it holds.
 
-Findings cluster around two themes:
+That said, the cleanup is incomplete in places. PostReader, NewThread, and
+PostComposer each retain a fully-populated legacy `handle_key/2` + `render/1`
+codepath sitting alongside the new `update/3` + `render/2` reducer, with both
+paths duplicating non-trivial business logic (board picker, body-input
+forwarding, submit, flush). Two of these legacy paths still write
+`current_screen` directly on the App struct, then are expected to coexist with
+the new effect-dispatch flow. This duplication is the biggest single risk
+surface the phase introduces — drift between the two implementations of the
+same flow is exactly the kind of bug a future maintainer is most likely to
+introduce.
 
-1. **A real first-paint regression for SSH-key pre-authenticated users**
-   landing on `:main_menu` directly via `init/1` — `:on_route_enter` is only
-   dispatched from `apply_effect(navigate)`, not from `init/1`, so the
-   oneliner panel renders empty until the user navigates away and back.
-   `app_test.exs:113`'s `refute_received {:list_recent_visible, 5}` proves
-   this is the current observable behaviour. (CR-01).
-2. **Five tests still violate the "no text-presence" rule** (and worse, one
-   pattern reads source files and greps the source string for substrings
-   instead of asserting behaviour). These don't break the build but degrade
-   the value of the test suite per `AGENTS.md`'s explicit guidance.
+The render-cache miss warning (`post_reader.ex:339`) leaks a real
+`Logger.warning` line into the deterministic render snapshot
+(`render_snapshots/post_reader.txt:3`) every time the fixture renderer runs —
+indicating the fixture-render path takes the cache-miss branch on every
+invocation, not just in tests.
 
-A handful of smaller defects (post_composer width hard-coded at 80 because
-`State.from_context/1` doesn't propagate `terminal_size`, single-arg
-`screen_module_for/1` will FunctionClauseError on an unknown screen,
-`Moderation.update/3` Q-handler drops context, `legacy_state` shim still
-present in `post_reader` though Plan 39-07 was supposed to remove it) are
-called out as warnings.
-
-The legacy `handle_key/2` paths in PostComposer / NewThread / PostReader /
-Moderation / Sysop still write to App-shape fields that no longer exist on
-`%App{}` (`current_screen`, `modal`). These won't crash because the legacy
-test paths build plain maps, not `%App{}` structs, but the dual code paths
-should be deleted in a follow-up phase — they make the screen modules
-much harder to read than they need to be.
-
-## Critical Issues
-
-### CR-01: Initial mount via `App.init/1` skips `:on_route_enter`, leaving authenticated screens un-hydrated
-
-**Files:**
-- `lib/foglet_bbs/tui/app.ex:242-271`
-- `lib/foglet_bbs/tui/app.ex:744-752`
-- `lib/foglet_bbs/tui/screens/main_menu.ex:143-149`
-
-**Issue:** `init/1` calls `maybe_init_initial_screen_state/1` which only routes
-through `init_route_screen_state/3` (calling `module.init/1`). It does NOT
-call `maybe_dispatch_route_entry/3`, so the `:on_route_enter` reducer message
-never reaches the screen on initial mount. `apply_effect(navigate, ...)` is
-the only call site that dispatches `:on_route_enter` (`app.ex:138`).
-
-Concrete impact: an SSH-pubkey-authenticated user whose context arrives in
-`init/1` with `current_user` already populated lands on `:main_menu`. The
-`MainMenuState` is constructed with `oneliner_status: :idle`, no
-`load_oneliners` task fires, and the Oneliners panel renders the "No
-oneliners yet." empty state until the user navigates somewhere and back.
-The block comment at `app.ex:744-749` claims this is fine because
-"`:on_route_enter` clause sets `:loading` before the load task fires" — but
-that clause never runs. `app_test.exs:113`'s `refute_received
-{:list_recent_visible, 5}` *codifies* the broken behaviour as expected.
-
-The same hole exists for `:moderation`, `:sysop`, and (in principle)
-`:post_reader` / `:thread_list` if any future flow lands a user on those
-screens via `init/1` without going through `apply_effect(navigate)`. Each
-screen's `:on_route_enter` clause is the canonical first-load entry — Phase
-39 SPEC R4/D-04 explicitly lists "every route-entry delivers
-`:on_route_enter`" as a runtime contract guarantee.
-
-**Fix:** Dispatch `:on_route_enter` from `init/1`'s tail, after the
-screen-state seeding step:
-
-```elixir
-def init(context) do
-  # ... existing extraction ...
-  state =
-    %__MODULE__{...}
-    |> maybe_init_initial_screen_state()
-
-  # NEW: fan out :on_route_enter for parity with apply_effect(navigate).
-  # Initial-mount commands are dropped — Raxol's init/1 contract returns
-  # {:ok, state}, not {:ok, state, commands}. If a screen needs to fire a
-  # task on initial mount, it must lift it through subscribe/1 or accept that
-  # production already routes through {:set_user, user} for fresh logins.
-  {state, _initial_cmds} = maybe_dispatch_route_entry(state, state.current_screen, state.route_params)
-
-  {:ok, state}
-end
-```
-
-If `init/1` cannot return commands (Raxol contract limitation), then this
-needs to be solved a different way — for example, a synthetic
-`{:on_route_enter}` message dispatched on first `update/2` tick, or a
-post-init callback. Either way, `app_test.exs:113`'s `refute_received` is
-asserting the broken behaviour and should be flipped to `assert_received`
-once the underlying fix lands.
+Findings below are split into BLOCKER (none here) and WARNING / Info per the
+review contract.
 
 ## Warnings
 
-### WR-01: `PostComposer.State.from_context/1` ignores terminal width, locks editor at 80×10
+### WR-01: Logger.warning leaks into deterministic render snapshot for every fixture-driven post_reader render
 
-**File:** `lib/foglet_bbs/tui/screens/post_composer/state.ex:76-90`
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:336-344` and `test/foglet_bbs/tui/render_snapshots/post_reader.txt:3`
 
-**Issue:** `State.new/1` accepts `:width` and `:height` opts and uses them
-for `MultiLineInput.init/1`, but `from_context/1` (the canonical entry point
-from the `Effect.navigate(:post_composer, ...)` path through
-`init_route_screen_state/3`) constructs the state without passing them:
+**Issue:** `render_post_content/5` calls `Logger.warning("[PostReader] render cache miss for post=#{post.id} width=#{w}")` whenever `ss.render_cache[{post.id, w}]` is missing for the selected post. The new-contract path (`render_local_post_content/5` at line 377) routes through this same helper, so the warning fires on every render where the cache hasn't been pre-warmed by `warm_selected_post/2` (called from `:on_route_enter` → `:load` → `task_result :load_posts`).
+
+`Foglet.TUI.RenderFixtures.populate(:post_reader, …)` (lines 204-226 of `render_fixtures.ex`) constructs the `%PostReader.State{}` with `posts: posts, status: :loaded` but never calls `warm_selected_post/2` or `warm_cache_for_index/4` on the selected post. The result is captured in the committed snapshot at `render_snapshots/post_reader.txt:3`:
+
+```
+22:36:16.301 [warning] [PostReader] render cache miss for post=p-1 width=80
+```
+
+This is a real runtime warning — every developer running `mix foglet.tui.render post_reader` and every test that touches the fixture will emit it. It also means the deterministic snapshot file embeds a timestamp (`22:36:16.301`) that will diff on every regeneration, defeating the "diffs cleanly across runs" guarantee documented in `AGENTS.md`.
+
+**Fix:** Either (a) warm the cache + viewport in the fixture before returning state, mirroring the production `:load` task_result path:
 
 ```elixir
-def from_context(%Context{} = context) do
-  params = context.route_params || %{}
-  # ...
-  new(
-    board: ..., thread: ..., reply_to: ..., origin: ...
-    # MISSING: width: terminal_width, height: editor_height
-  )
+defp populate(:post_reader, state, _size) do
+  board = hd(synthetic_boards())
+  threads = synthetic_threads(board)
+  thread = hd(threads)
+  posts = synthetic_posts(thread)
+
+  post_reader_state =
+    PostReader.State.new(
+      board: board,
+      board_id: board.id,
+      thread: thread,
+      thread_id: thread.id,
+      posts: posts,
+      status: :loaded,
+      selected_post_index: 0
+    )
+    |> PostReader.warm_for_fixture(state, posts, 0)   # new public seam, or
+                                                      # call prepare_after_load/3
+
+  ...
 end
 ```
 
-Result: regardless of terminal size, the composer's MultiLineInput is
-hard-wired to `width: 80, height: 10` (the `State.new/1` defaults). On a
-132-column terminal the user sees a wrap at column 80 with the right third
-of the editor area unused; on anything narrower than 80 columns the
-editor's word-wrap will not align with the visible viewport and lines will
-visually clip.
+…or (b) drop the warning to `Logger.debug/1` since it is a render-cache miss, not an error condition. Option (a) is preferable because it exercises more of the production code path in the snapshot and produces deterministic output.
 
-`NewThread.State.from_context/1` has the same shape (`new_thread/state.ex:96-118`)
-and inherits the same bug — `width` is never threaded through from the
-context's `terminal_size`.
+### WR-02: Three screens carry a full duplicate `handle_key/2`+`render/1` legacy implementation that diverges from the new `update/3`+`render/2` reducer
 
-**Fix:**
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:400-450, 442-650`; `lib/foglet_bbs/tui/screens/new_thread.ex:296-465, 584-653`; `lib/foglet_bbs/tui/screens/post_composer.ex:158-209, 368-428`
+
+**Issue:** Each of PostReader, NewThread, and PostComposer keeps both:
+
+- the new contract: `update/3` + `render/2` + screen-owned `%State{}` flowing through `Effect`s
+- the legacy contract: `handle_key/2` + `render/1` + direct `state.screen_state` writes + `{:terminate, …}` / `{:load_posts, …}` / `{:load_threads, …}` command tuples handled by App's `process_screen_commands/2`
+
+The two paths duplicate non-trivial business logic. Specific drift observations:
+
+1. **NewThread** — `do_create_thread/5` (legacy, `new_thread.ex:607-653`) deletes `:new_thread` from `screen_state`, sets `current_screen: :thread_list`, and emits a `{:load_threads, board.id}` command tuple. The new path (`update({:task_result, :create_thread, …}, …)` → `handle_create_thread_success/4`, lines 555-566) emits `Effect.navigate(:thread_list, %{select_thread_id: thread.id, …})` and lets ThreadList's screen-owned `:on_route_enter` re-load. The two flows initialize ThreadList's local state differently (the legacy path sets `selected_index: 0` via a plain map; the new path passes `select_thread_id` so ThreadList resolves the index).
+
+2. **PostComposer** — `submit_reply/4` legacy (`post_composer.ex:406-428`) does an *inline synchronous* `posts_mod.create_reply(...)` call inside the screen, while `submit_local/2` (lines 501-529) wraps the same call in an `Effect.task` for off-process execution. The legacy path will block the dispatcher on a slow DB call; the new path will not. Both ship.
+
+3. **PostComposer** — legacy `handle_key/2` opens a modal directly via `state | modal: %Foglet.TUI.Modal{...}`; new path emits `Effect.open_modal/1` (which goes through `apply_effect/2`). If a future maintainer adds modal-state instrumentation only at the Effect boundary, the legacy path silently bypasses it.
+
+4. **PostReader** — legacy `advance_post/2` (lines 742-784) and `scroll_post/2` (786-818) write the screen state directly back through `state.screen_state`; new `advance_local_post/3` and `scroll_local_post/3` (lines 876-910) thread through `%State{}` cleanly. Both implement subtly different read-pointer seeding semantics (legacy uses `legacy_thread`, new uses `seed_pending_read_position/1`).
+
+The legacy sections are commented "remains for compatibility tests / older smoke tests only" but I could not find a roadmap entry committing to their removal, and Phase 39 does not delete them.
+
+**Fix:** File a follow-up phase to delete the legacy `handle_key/2` and `render/1` implementations once the production runtime path through `App.update/2` no longer exercises them (the `new_contract_screen?/2` guard in `app.ex:538` already short-circuits to `route_screen_update/3` for any screen that defines `update/3`, so the legacy paths are dead at runtime — only their tests keep them alive). At minimum, for the next phase: pick one screen and delete it as a proof point. The longer this duplication ships, the higher the chance a future fix lands in only one of the two paths.
+
+### WR-03: `update_screen_state/2` and `put_sysop_state/2` defensively wrap `state.screen_state || %{}`, but `%App{}` never sets `screen_state` to nil — defensive code masks a contract violation
+
+**File:** `lib/foglet_bbs/tui/screens/moderation.ex:617`, `lib/foglet_bbs/tui/screens/sysop.ex:686`
+
+**Issue:** Both call sites read:
 
 ```elixir
-def from_context(%Context{} = context) do
-  params = context.route_params || %{}
-  {w, _h} = context.terminal_size || {80, 24}
-
-  new(
-    width: max(w - 4, 20),
-    height: 10,
-    board: ...,
-    # ... rest unchanged
-  )
-end
+new_screen_state = Map.put(Map.get(state, :screen_state) || %{}, :moderation, ss)
 ```
 
-Apply the same in `NewThread.State.from_context/1`.
-
-### WR-02: `Foglet.TUI.App.screen_module_for/1` raises FunctionClauseError on unknown screen
-
-**File:** `lib/foglet_bbs/tui/app.ex:945-956`
-
-**Issue:** The 2-arg form gracefully returns `nil` when `screen` is not in
-`known_screens/0` and no override is provided (`app.ex:919-924`). The 1-arg
-form has no fallback clause — it has 12 specific clauses and nothing else.
-`render_screen/1`'s fallback path at `app.ex:823` calls
-`screen_module_for(state.current_screen)` (single-arg) inside an
-`:erlang.apply/3`. If `state.current_screen` is ever set to an unknown atom
-(corrupted state, future enum drift, or a new screen wired through
-`screen_modules` overrides but not added to `known_screens/0`), the runtime
-crashes.
-
-**Fix:** Add a fallback clause and surface the error explicitly:
+and
 
 ```elixir
-defp screen_module_for(:sysop), do: Screens.Sysop
-
-defp screen_module_for(other) do
-  require Logger
-  Logger.error("[TUI.App] no screen module for #{inspect(other)}; falling back to :main_menu")
-  Screens.MainMenu
-end
+new_screen_state = Map.put(state.screen_state || %{}, :sysop, sysop_ss)
 ```
 
-### WR-03: `Moderation.update/3` Q-key clause drops `context` argument
+`%App{}` defaults `screen_state: %{}` (`app.ex:66`), and there is no clause anywhere in App that writes `screen_state: nil`. The `|| %{}` fallback is therefore dead defense — it cannot fire under any in-tree code path. The Sysop comment on line 681-684 explicitly acknowledges this ("The App default keeps `state.screen_state` as `%{}`, but…") and justifies the guard as a hedge against a "future App-shape construction (e.g. a typed-struct refactor)."
 
-**File:** `lib/foglet_bbs/tui/screens/moderation.ex:132-134`
+The hedge is well-intentioned but counterproductive: `%App{screen_state: nil}` would already crash earlier in the screen pipeline (e.g. `app.ex:97` `Map.get(screen_state || %{}, key)` does the same hedge, but `route_screen_update/3` and `screen_state_for/2` both pattern-match on `%__MODULE__{screen_state: screen_state}` which would fail-fast on a non-map). Spreading the hedge across a handful of call sites just buys partial coverage, and any future refactor that does set `screen_state: nil` will have to be hunted across N defensive sites instead of caught by the type system.
 
-**Issue:**
+**Fix:** Drop the `|| %{}` fallback in `moderation.ex:617`, `sysop.ex:686`, and `app.ex:103` (`Map.put(state.screen_state || %{}, key, local_state)`). Rely on the App struct's default and let any legitimate violation crash loudly. If a hedge is genuinely needed, move it to a single helper (`Foglet.TUI.App.screen_state_map/1`) and use it everywhere.
 
-```elixir
-def update({:key, %{key: :char, char: c}}, local_state, %Context{}) when c in ["Q", "q"] do
-  {normalize_state(local_state), [Effect.navigate(:main_menu, %{})]}
-end
-```
+### WR-04: `take_screen_modal_submit/0` uses Process dictionary as cross-screen mailbox — silent message loss when modals stack or interleave
 
-`normalize_state/1` (single-arg) hits the `defp normalize_state(_other),
-do: State.new()` clause if `local_state` is not a `%State{}` — meaning a
-fresh, empty state is constructed instead of preserving the existing one.
-The 2-arg form `normalize_state(local_state, context)` is the one that
-correctly refreshes tab labels via `ShellVisibility.invites_visible?/2`
-and preserves `%State{}` instances.
+**File:** `lib/foglet_bbs/tui/app.ex:799-803, 916-922` and `lib/foglet_bbs/tui/screens/main_menu.ex:561-564`
 
-In practice the Q handler runs immediately after `screen_state` was already
-hydrated by `init/1`, so `local_state` IS a `%State{}` and both forms return
-the same value. But the inconsistency bites if Q is pressed before `init/1`
-has run (vanishingly rare in production, but possible in tests). The
-identical bug exists in `sysop.ex:115-118`.
+**Issue:** Modal-form submission flows through `Process.put({Foglet.TUI.App, :pending_screen_modal_submit}, {screen_key, kind, payload})` in the screen, then `Process.get/Process.delete` in App's `handle_modal_key(:form, …)` clause. This is a one-slot mailbox keyed only on the well-known atom — there is no FIFO, no per-screen lane, and no protection against two screens stashing in quick succession.
 
-**Fix:** Use the 2-arg form everywhere:
+Concrete failure scenario: if a `:form` modal's `on_submit` callback is invoked and stashes a payload, then before App's `handle_modal_key(:form, …)` processes it the user manages to re-trigger another submit (e.g. a programmatic re-open + submit, or a Modal.Form bug that fires `on_submit` twice), the **first** payload is overwritten silently and silently discarded. Worse, if a screen mistakenly stashes for the wrong `screen_key` atom, App's `route_screen_update/3` will route the payload to the named-but-not-current screen, where it lands in the catch-all `update(_message, …) → {state, []}` clause and is dropped without a log line.
+
+The pattern is already isolated to one well-known atom, so the blast radius is small in practice — the MainMenu oneliner composer is the only producer. But the mechanism is unsound by construction; it does not scale to a second concurrent modal flow without bug.
+
+**Fix:** Pass the submit destination through the Modal.Form struct itself rather than the Process dictionary. `Modal.Form.init/1` already accepts `:on_submit` — change the convention so callers pass the destination tuple as part of the `on_submit` callback's return value (e.g. `on_submit: fn payload -> {:screen_modal_submit, :main_menu, :oneliner_composer, payload} end`), which App then routes via the standard `do_update/2` dispatch. That removes the side-channel entirely.
+
+### WR-05: `screen_module_for/2` with a stale `domain.screen_modules` override silently substitutes a screen module not in `known_screens/0`, bypassing route validation
+
+**File:** `lib/foglet_bbs/tui/app.ex:959-988`
+
+**Issue:** The screen-module resolver looks like:
 
 ```elixir
-def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context) when c in ["Q", "q"] do
-  {normalize_state(local_state, context), [Effect.navigate(:main_menu, %{})]}
-end
-```
-
-### WR-04: `PostReader.legacy_state/1` shim still present despite Plan 39-07 claim
-
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:662-667`
-
-**Issue:** Plan 39-07's stated goal was to remove the `legacy_state/1`
-backwards-compat shim alongside the deletion of the seven App-struct fields.
-The shim is still here, and it's still being called from at least nine
-private helpers (`render/1`, `legacy_board_label/1`,
-`legacy_thread_title_label/1`, `load_posts/2`, `apply_flush_result/3`,
-`build_flush_context/1`, `advance_post/2`, `scroll_post/2`, `warm_viewport/4`).
-
-```elixir
-defp legacy_state(state) do
-  case Map.get(state.screen_state || %{}, :post_reader) do
-    %State{} = struct -> struct
-    _ -> %State{}
+defp screen_module_for(%__MODULE__{} = state, screen) do
+  case get_in(domain_from_session_context(state.session_context), [:screen_modules, screen]) do
+    module when is_atom(module) and not is_nil(module) -> module
+    _other ->
+      if screen in known_screens() do
+        screen_module_for(screen)
+      else
+        nil
+      end
   end
 end
 ```
 
-The shim is now structurally redundant — it just unwraps the screen-state
-slot, identical to what `get_screen_state/1` does at line 653-654. The two
-helpers are doing the same job under different names. Either the legacy
-helper paths (`render/1`, `handle_key/2`, `load_posts/2`,
-`flush_read_pointers/2`) are being kept on purpose for test compatibility,
-in which case `legacy_state/1` and `get_screen_state/1` should be
-consolidated into one function with one name; or those paths should be
-deleted, which is what Plan 39-07's plan said. Either way the code is
-strictly worse than the plan claimed it would be.
+The override branch (`module when is_atom(module) and not is_nil(module)`) accepts **any atom** without checking that:
 
-**Fix:** Delete `legacy_state/1` and route every caller through
-`get_screen_state/1`. Then either delete the entire legacy `handle_key/2`
-path (and the smoke tests that depend on it) or keep it but be honest about
-the dual code path in the moduledoc.
+1. `Code.ensure_loaded?(module)` succeeds, or
+2. The module implements the `Foglet.TUI.Screen` behaviour, or
+3. `screen` is in `known_screens/0` at all.
 
-### WR-05: `app.ex:531-543` legacy `handle_key/2` dispatch path still resolves screen modules and applies them
+Consequence: a test fixture or a stale session_context that sets
+`domain.screen_modules: %{login: :SomeNonexistentModule}` (or worse, a typo-ed
+`Some.Real.Module` that doesn't have `update/3`) will be returned to callers
+that downstream do `Code.ensure_loaded?/1 + function_exported?/3` checks. The
+checks short-circuit cleanly to `{state, []}`, but **silently** — no log, no
+crash, no test signal. The user just sees an unresponsive screen.
 
-**File:** `lib/foglet_bbs/tui/app.ex:508-544`
+By contrast, the no-override path (line 964-969) does enforce `screen in known_screens()` and returns `nil` (not the typo'd module). The asymmetry is a footgun: legitimate test overrides bypass the gate that production routes hit.
 
-**Issue:** The `do_update({:key, ...})` clause has a four-way `cond`/branch:
-SizeGate → modal active → new-contract screen → fallback to `screen_module_for(state.current_screen)`
-+ `:erlang.apply(..., :handle_key, ...)`. The fallback branch is reachable
-**only** for screens that don't implement `update/3` — but every screen in
-the post-39 codebase is a `@behaviour Foglet.TUI.Screen` implementer with a
-real `update/3`. So this branch is dead in production today.
-
-It's not dead in test harnesses though — at least one test fixture or smoke
-test routes through it (the legacy `handle_key/2` callbacks across several
-screens are explicitly kept alive for those tests, per their moduledoc).
-The result is a dual code path that must be kept in sync forever or
-silently diverge. The `process_screen_commands/2` machinery (lines 794-813)
-exists exclusively to translate I/O dispatch tuples emitted by these legacy
-handlers — none of which the new contract uses.
-
-**Fix:** Delete the `true ->` branch in `do_update({:key, ...})` once you've
-confirmed all production screens are on the new contract (which the
-`new_contract_screen?/2` predicate already guarantees they are). That lets
-you delete `process_screen_commands/2`, `wrap_commands/1`,
-`wrap_command/1`, the legacy `handle_key/2` callbacks across screen
-modules, and a measurable chunk of the legacy `render/1` paths. Keep this
-narrow review's scope, but the cleanup is begging to be done.
-
-### WR-06: `PostComposer.legacy_thread_for_submit/2` reads `PostReader`'s screen-state slot
-
-**File:** `lib/foglet_bbs/tui/screens/post_composer.ex:446-475`
-
-**Issue:** When `submit_reply/4` (the LEGACY path) tries to find the thread
-to reply to, it falls back through:
-1. `ss.thread` (composer's own state)
-2. `state.screen_state[:post_reader].thread` (PostReader's state)
-3. `state.route_params[:thread]`
-
-Step 2 is a cross-screen state read — PostComposer's submit logic depends on
-PostReader's screen-state slot. This violates the screen-ownership boundary
-that Phase 39 was supposed to establish. The new `update/3` contract
-correctly uses `state.thread_id || id_from(state.thread)` from the
-composer's own State (line 518) — so the cross-screen read exists only in
-the legacy submit path. Per WR-05, deleting the legacy path also deletes
-this hazard.
-
-**Fix:** Once the legacy `handle_key/2` path is removed, also remove
-`legacy_thread_for_submit/2`, `legacy_reader_thread/1`, and
-`legacy_route_thread/1`. Until then, document loudly that this is a hack
-and not a pattern to copy.
-
-### WR-07: Five tests assert presence of substrings in source files (`File.read!` + `=~`)
-
-**Files:**
-- `test/foglet_bbs/tui/screens/moderation_test.exs:160-161`
-- `test/foglet_bbs/tui/screens/post_composer_test.exs:148-152, 266-272`
-- `test/foglet_bbs/tui/screens/post_reader_test.exs:367-373, 466-472, 585-590`
-- `test/foglet_bbs/tui/screens/sysop_test.exs:283-293, 1289-1295, 1868-1875, 2109-2115, 2362-2368`
-
-**Issue:** These tests literally read the screen module's source code via
-`File.read!/1` and assert that substrings (e.g.,
-`"Presentation.mode_for!(:moderation)"`, `"PostCard.reader_parts"`,
-`"Workspace.Inspector"`) appear in it.
+**Fix:** Validate the override the same way as the built-in path:
 
 ```elixir
-assert File.read!("lib/foglet_bbs/tui/screens/moderation.ex") =~
-         "Presentation.mode_for!(:moderation)"
+defp screen_module_for(%__MODULE__{} = state, screen) do
+  override = get_in(domain_from_session_context(state.session_context), [:screen_modules, screen])
+
+  cond do
+    is_atom(override) and not is_nil(override) and Code.ensure_loaded?(override) ->
+      override
+
+    is_atom(override) and not is_nil(override) ->
+      require Logger
+      Logger.warning("[TUI.App] domain.screen_modules[#{inspect(screen)}] = #{inspect(override)} is not loadable; falling back")
+      maybe_known_screen_module(screen)
+
+    true ->
+      maybe_known_screen_module(screen)
+  end
+end
+
+defp maybe_known_screen_module(screen) do
+  if screen in known_screens(), do: screen_module_for(screen), else: nil
+end
 ```
 
-This is exactly the "test for the presence or absence of text" pattern the
-project explicitly forbids in `AGENTS.md`:
-
-> DO NOT WRITE BULLSHIT TESTS THAT TEST FOR THE PRESENCE OR ABSENCE OF TEXT.
-
-And worse, these tests pin the implementation to a specific call shape, so
-any internal refactor (e.g., extracting `Presentation.mode_for!(:moderation)`
-to a helper module, changing its location in the file) breaks the test
-without changing observable behaviour.
-
-**Fix:** Replace each with a behaviour assertion against the rendered tree.
-For example, instead of "the source file mentions `PostCard.reader_parts`",
-assert: "rendering a thread with one post produces a header `Post 1 of 1`"
-— that's actually the contract under test.
-
-### WR-08: 332 `=~` text-presence assertions across the test suite
-
-**Files:** All 16 test files in scope.
-
-**Issue:** Even putting aside the source-file reads (WR-07), the test suite
-contains 332 `=~` substring assertions and a meaningful fraction of them
-test surface details rather than behaviour. Examples:
-
-- `assert text =~ "Composer"` (post_composer_test.exs:159) — tests that the
-  word "Composer" appears somewhere in the rendered text. Doesn't tell you
-  what's actually being rendered.
-- `assert text =~ "Title"` (new_thread_test.exs:531) — same critique.
-- `assert text =~ "0 / 60 chars"` (new_thread_test.exs:532) — this is a
-  legitimate budget-formatting assertion, but its co-occurrence with the
-  surface-detail ones means a future refactor can't tell which =~ calls
-  protect a real contract and which are just confidence-padding.
-
-Per `AGENTS.md`, "DO NOT WRITE BULLSHIT TESTS THAT TEST FOR THE PRESENCE OR
-ABSENCE OF TEXT." Some `=~` checks are legitimate (asserting on glyph
-choices, budget format strings, key-bar contents) and should be kept; the
-rest are noise that locks layout decisions in place.
-
-**Fix:** Audit each `=~` assertion against the question "does this test fail
-if a layout-only refactor changes the rendered text but preserves the
-component's contract?" If yes, replace with a structural assertion against
-the rendered tree (e.g., "the rendered tree contains a node of type :text
-with content matching `r/^\d+ \/ \d+ chars$/` inside the budgets row").
-Triage scope: WR-07's source-file reads first; the layout-pinning ones
-second (the highest-density culprits are `layout_smoke_test.exs` with 70
-matches and `new_thread_test.exs` with 41).
+That logs the bad override but still falls back gracefully — no silent failure.
 
 ## Info
 
-### IN-01: `app.ex:482-506` `do_update({:confirm_modal, ...})` callback shape is undocumented
+### IN-01: `current_route/1` doc string says "Phase 34 transition"; comment in `apply_effect/2 :navigate` clause says "the storage key for a screen route"; both are stale
 
-**File:** `lib/foglet_bbs/tui/app.ex:481-506`
+**File:** `lib/foglet_bbs/tui/app.ex:68-79`
 
-**Issue:** Modal callbacks may be `nil`, `:dismiss_modal`, or
-`fun :: (state -> {state, [cmd]} | message)`. The function-form return
-shape is checked with `case ... do {%__MODULE__{} = ..., cmds} -> ...`
-which means a callback returning anything else (e.g., `:no_match`, an Effect
-struct, an unwrapped command) silently falls through to
-`do_update(msg, cleared)` — which will hit `do_update(_other, state)` and
-no-op. Bug-prone.
+**Issue:** The `current_route/1` docstring still describes Phase 34 transitional state ("During the Phase 34 transition App still stores…"), and the body comment style is mid-migration. With Phase 39 complete, App is now the canonical structure, not a transitional one.
 
-**Fix:** Document the contract on the `Foglet.TUI.Modal` struct's `:on_confirm`
-/ `:on_cancel` fields. Or wrap the callback's return value in a more
-defensive way (raise on unknown shape rather than silently no-op).
+**Fix:** Refresh docstrings and module-level comments to describe the post-Phase-39 invariants (8-field shell, screen-owned state, optional subscriptions/2 callback). The phase number references should be removed — they age poorly and confuse future readers.
 
-### IN-02: `RenderFixtures.populate(:board_list, ...)` writes a raw map into `screen_state`
+### IN-02: `legacy_view`/`legacy_board_label`/`legacy_thread_title_label`/`get_screen_state` chain in `PostReader.render/1` is dead at runtime
 
-**File:** `lib/foglet_bbs/tui/render_fixtures.ex:171-187`
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:274-315`
 
-**Issue:** Most `populate/3` clauses use `App.put_screen_state/3` (e.g.,
-`:main_menu` at line 168). The `:board_list`, `:thread_list`,
-`:post_reader`, `:post_composer`, `:new_thread`, `:account`, `:moderation`,
-`:sysop`, `:login`, `:register`, `:verify` clauses all use `%{state |
-screen_state: %{board_list: ...}}` with a literal map and overwrite the
-whole `screen_state`. This is consistent within RenderFixtures, but
-inconsistent with the API contract — `put_screen_state/3` is the public
-boundary helper.
+**Issue:** The legacy `render/1` (line 274) and its helpers are documented as "for older smoke tests only" but are dead at the production runtime entry point — `app.ex:864` checks `function_exported?(module, :render, 2)` first and routes through that branch for every screen with the new contract. The legacy `render/1` is reachable only via (a) the legacy fallback at `app.ex:868`, which only fires when `render/2` is NOT exported, and (b) direct test calls.
 
-**Fix:** Route every populate clause through `App.put_screen_state/3` for
-consistency. Trivial change, makes the file's API surface uniform.
+This is the same broad concern as WR-02; calling it out separately because PostReader's `render/1` carries a particularly large legacy helper graph (`legacy_view`, `legacy.posts`, `legacy_board_label`, `legacy_thread_title_label`, `legacy_reader_thread`, `legacy_route_thread`, `legacy_thread_for_submit`) that was prefixed `legacy_` precisely because it is on its way out.
 
-### IN-03: `app.ex:585-594` `:session_replaced` modal+quit pattern doesn't wait for user dismiss
+**Fix:** Same as WR-02 — pick a phase to delete the legacy renderers. Test files that exercise `render/1` should either be updated to call `render/2` with a `Context` shim, or marked for deletion alongside the legacy path.
 
-**File:** `lib/foglet_bbs/tui/app.ex:587-594`
+### IN-03: Test files contain extensive text-presence assertions, contrary to AGENTS.md's "DO NOT WRITE BULLSHIT TESTS THAT TEST FOR THE PRESENCE OR ABSENCE OF TEXT"
 
-**Issue:** The handler sets a warning modal AND immediately returns
-`Command.quit()` in the same tuple. Raxol will tear the runtime down on the
-next tick — the user will see at most one frame of the modal before the
-session ends. Compare with `:terminate_after_modal` (line 624-641) which
-correctly defers the quit until the user dismisses.
+**File:** `test/foglet_bbs/tui/screens/post_composer_test.exs:160-163, 232-235, 259-260, 275-277`; `test/foglet_bbs/tui/screens/post_reader_test.exs:411-413, 763-765, 779-784, 1039-1040`; `test/foglet_bbs/tui/screens/sysop_test.exs:251, 263, 277, 1045-1067, 1182`; `test/foglet_bbs/tui/widgets/chrome/screen_frame_test.exs:51-58`
 
-**Fix:** Reuse the `:terminate_after_modal` pattern for `:session_replaced`
-to give the user a chance to read the modal:
+**Issue:** A non-trivial number of tests assert by `flat =~ "Composer"`, `assert text =~ "Edit"`, `assert text =~ "Preview"`, `assert flat =~ "Replying to @alice"`, `assert flat =~ "Insufficient role to view this tab."`, etc. AGENTS.md's repo-level rule is unambiguous: text-presence/absence is not a behaviour assertion. Behavioural intent ("composer is in edit mode") should be asserted on the underlying state (`composer_ss(s).mode == :edit`, which the same files do correctly elsewhere) or on a structured renderer attribute, not the rendered string.
 
-```elixir
-defp do_update({:session_replaced, _user_id}, state) do
-  modal = %Foglet.TUI.Modal{
-    type: :warning,
-    message: "Your session was replaced by a new connection. Goodbye.",
-    on_confirm: fn s -> {s, [Command.quit()]} end,
-    on_cancel: fn s -> {s, [Command.quit()]} end
-  }
-  {%{state | modal: modal}, []}
-end
-```
+This is not new to Phase 39 — most of these tests pre-date the phase, and the WR-07 fix in the prior review pass replaced source-string greps with behavioural assertions per the commit log, demonstrating the team is aware of the rule. The phase did not introduce the violations; it inherited them. The smoke-test glyph assertions in `layout_smoke_test.exs` (lines 366-583) are arguably visual-contract tests of widget rendering and a closer call — those test the layout engine's positioning of glyphs, not arbitrary UI text. Those could stay; the screen-test labels should not.
 
-### IN-04: `MainMenu.app_state_from_local/2` reconstructs an App-shape map for legacy renderer consumption
+**Fix:** A pass through these tests to replace `text =~ "Edit"` with `assert composer_ss(s).mode == :edit` (and similar) would tighten ~50 assertions across the screen tests. Track as a tech-debt item; not gating for Phase 39.
 
-**File:** `lib/foglet_bbs/tui/screens/main_menu.ex:457-470`
+### IN-04: `frame_state/2` in PostComposer/NewThread/PostReader/ThreadList/etc. constructs ad-hoc App-shape maps for `Theme.from_state/1` and `ScreenFrame.render/4` consumption — duplicated across 8 screens
 
-**Issue:** The new `render/2` signature (line 88) builds a `state` map by
-calling `app_state_from_local(local_state, context)`, which returns a 9-key
-map shaped like the pre-Phase-39 `%App{}` (with extra `recent_oneliners`,
-`selected_oneliner_index`, `pending_hide_oneliner_id` flat fields). The
-ScreenFrame and other helpers expect an App-shape because they were
-written before Phase 39. This works, but it's a code smell — the screen
-shouldn't be reconstructing a shape it now (correctly) rejects elsewhere.
+**File:** `lib/foglet_bbs/tui/screens/post_composer.ex:542-551`, `lib/foglet_bbs/tui/screens/post_reader.ex:989-1005`, `lib/foglet_bbs/tui/screens/thread_list.ex:365-374`, `lib/foglet_bbs/tui/screens/new_thread.ex:717-726`, `lib/foglet_bbs/tui/screens/main_menu.ex:457-470`, `lib/foglet_bbs/tui/screens/board_list.ex:432-441`, `lib/foglet_bbs/tui/screens/moderation.ex:390-399`, `lib/foglet_bbs/tui/screens/sysop.ex:699-708`
 
-**Fix:** Phase 39 is "App-shell simplification" — a follow-up phase should
-push App-shape map construction OUT of screens, replacing it with explicit
-calls passing `Theme.from_state(theme_input)` where `theme_input` is the
-`session_context` directly. Same pattern in PostReader's `frame_state/2`,
-PostComposer's `frame_state/2`, NewThread's `frame_state/2`, and
-ThreadList's `frame_state/2` — five separate construction sites of
-basically the same map shape.
+**Issue:** Eight screens build a near-identical "App-shape" map from a `%Context{}` and their local `%State{}` to satisfy `Theme.from_state/1` and `ScreenFrame.render/4` (which still expect a map with `current_screen`, `current_user`, `session_context`, `terminal_size`, `route_params`, `screen_state`). Each screen does this slightly differently — some include `route`, some `route_params`, some `session_pid`, some `screen_state: %{<key>: state}`, some not.
 
-### IN-05: `app.ex:660-665` `domain_from_session_context` discards non-map domain silently
+This is a smell: the chrome contract leaks the App shape into every screen. Either:
 
-**File:** `lib/foglet_bbs/tui/app.ex:660-667`
+1. `Theme.from_state/1` and `ScreenFrame.render/4` should accept a `%Context{}` directly (preferred — eliminates 8 helpers), or
+2. A single `Foglet.TUI.Context.to_render_state/2` helper should own the construction and be called everywhere.
 
-**Issue:**
-
-```elixir
-defp domain_from_session_context(session_context) when is_map(session_context) do
-  case Map.get(session_context, :domain) do
-    domain when is_map(domain) -> domain
-    _ -> %{}
-  end
-end
-defp domain_from_session_context(_session_context), do: %{}
-```
-
-A non-map `:domain` value (e.g., a stale `nil` or a list from a misshaped
-test fixture) is silently coerced to `%{}` — no warning, no telemetry. If a
-test misshapes the session context it will fail on a later
-`get_in(domain, [:screen_modules, screen])` lookup but with no breadcrumb
-back to the original misconfiguration.
-
-**Fix:** Optional. Either add a `Logger.warning` when `:domain` is non-nil
-and non-map, or assert in dev/test mode and silently coerce in prod.
+**Fix:** Track as cleanup. Adding `Theme.from_context/1` and a `ScreenFrame.render/4` clause that accepts `%Context{}` would reduce 8 helpers to 0 and fix the structural drift between them.
 
 ---
 
