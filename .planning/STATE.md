@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 42 context gathered (assumptions mode)
-last_updated: "2026-04-29T20:16:08.187Z"
-last_activity: 2026-04-29 -- Phase 42 planning complete
+stopped_at: Completed 42-01-PLAN.md
+last_updated: "2026-04-29T21:47:29.545Z"
+last_activity: 2026-04-29
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 9
-  completed_plans: 4
-  percent: 44
+  completed_plans: 5
+  percent: 56
 ---
 
 # Project State
@@ -21,16 +21,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 42 — App Runtime Helper Extraction
+**Current focus:** Phase 42 — app-runtime-helper-extraction
 
 ## Current Position
 
-Phase: 42
-Plan: Not started
+Phase: 42 (app-runtime-helper-extraction) — EXECUTING
+Plan: 2 of 5
 Status: Ready to execute
-Last activity: 2026-04-29 -- Phase 42 planning complete
+Last activity: 2026-04-29
 
-Progress: [----------] 0%
+Progress: [██████░░░░] 56%
 
 ## Performance Metrics
 
@@ -52,6 +52,8 @@ Progress: [----------] 0%
 - Last 5 plans: none
 - Trend: N/A
 
+| Phase 42 P01 | 9min | 3 tasks | 4 files |
+
 ## Accumulated Context
 
 ### Decisions
@@ -62,6 +64,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Phase numbering continues from v2.0, starting at Phase 41.
 - Research is intentionally skipped for v2.1 because this is internal hardening and cleanup rather than new feature discovery.
 - Roadmap phases are derived only from v2.1 requirements in `.planning/REQUIREMENTS.md`.
+- [Phase 42]: Routing owns route encoding, screen-key derivation, context construction, screen module resolution, reducer dispatch, and render dispatch.
+- [Phase 42]: Foglet.TUI.App keeps public route helper delegators only for render fixtures and screen-focused test boundaries; implementation lives in Routing.
 
 ### Pending Todos
 
@@ -78,6 +82,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-29T19:29:10.767Z
-Stopped at: Phase 42 context gathered (assumptions mode)
-Resume file: .planning/phases/42-app-runtime-helper-extraction/42-CONTEXT.md
+Last session: 2026-04-29T21:47:21.214Z
+Stopped at: Completed 42-01-PLAN.md
+Resume file: None

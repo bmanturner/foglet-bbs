@@ -13,7 +13,7 @@ Requirements for the v2.1 hardening milestone. Every item in the concerns audit 
 - [x] **TUI-01**: Maintainer can remove legacy `Foglet.TUI.Screen` compatibility callbacks without breaking production screens or valid tests. Validated in Phase 41.
 - [x] **TUI-02**: Maintainer can run screen tests and smoke helpers through the canonical `init/1`, `update/3`, and `render/2` contract only. Validated in Phase 41.
 - [x] **TUI-03**: Maintainer can change modal submit behavior through a first-class `Foglet.TUI.Effect` path instead of a process-dictionary handoff. Validated in Phase 41.
-- [ ] **TUI-04**: Maintainer can understand and modify `Foglet.TUI.App` through narrow runtime helper modules for routing, modal, subscription, and effect concerns.
+- [x] **TUI-04**: Maintainer can understand and modify `Foglet.TUI.App` through narrow runtime helper modules for routing, modal, subscription, and effect concerns.
 - [ ] **TUI-05**: Maintainer can work on the largest TUI screens through separated reducer/state/render modules where the concerns audit identified mixed responsibilities.
 
 ### Post Reader And Content Queries
@@ -73,7 +73,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TUI-01 | Phase 41 | Complete |
 | TUI-02 | Phase 41 | Complete |
 | TUI-03 | Phase 41 | Complete |
-| TUI-04 | Phase 42 | Pending |
+| TUI-04 | Phase 42 | Complete |
 | TUI-05 | Phase 43 | Pending |
 | POST-01 | Phase 44 | Pending |
 | POST-02 | Phase 44 | Pending |
