@@ -36,6 +36,17 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
   end
 
   @doc false
+  def render_account_smoke_state(state) do
+    app = struct!(Foglet.TUI.App, Map.take(state, Map.keys(%Foglet.TUI.App{})))
+    context = Foglet.TUI.App.build_context(app)
+
+    local_state =
+      Foglet.TUI.App.screen_state_for(app, :account) || Foglet.TUI.Screens.Account.init(context)
+
+    Foglet.TUI.Screens.Account.render(local_state, context)
+  end
+
+  @doc false
   def collect_render_text(tree), do: tree |> do_collect([], []) |> Enum.reverse()
 
   defp do_collect(nil, _path, acc), do: acc
@@ -86,11 +97,11 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
             }
 
             ss =
-              Account.init_screen_state(current_user: user)
+              Account.State.new(current_user: user)
               |> set_active_tab("PROFILE")
 
             state = AccountHelper.account_smoke_state(width, height, ss)
-            tree = Account.render(state)
+            tree = AccountHelper.render_account_smoke_state(state)
             positioned = apply_at_size(tree, {width, height})
             elements = text_elements(positioned)
 
@@ -139,11 +150,15 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
             }
 
             ss =
-              Account.init_screen_state(current_user: user)
+              Account.State.new(current_user: user)
               |> set_active_tab("PREFS")
 
             state = AccountHelper.account_smoke_state(width, height, ss)
-            texts = Account.render(state) |> AccountHelper.collect_render_text()
+
+            texts =
+              state
+              |> AccountHelper.render_account_smoke_state()
+              |> AccountHelper.collect_render_text()
 
             # Phase 28 FORM-03 / D-06: Account tab-body forms render WITHOUT
             # Modal.Form's footer. Assert the enum field renders and the
@@ -181,13 +196,17 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
               ])
 
             ss =
-              Account.init_screen_state()
+              Account.State.new()
               |> Map.put(:active_tab, 2)
               |> Map.put(:ssh_keys, ssh_keys)
               |> set_active_tab("SSH KEYS")
 
             state = AccountHelper.account_smoke_state(width, height, ss)
-            texts = Account.render(state) |> AccountHelper.collect_render_text()
+
+            texts =
+              state
+              |> AccountHelper.render_account_smoke_state()
+              |> AccountHelper.collect_render_text()
 
             assert Enum.any?(texts, &String.contains?(&1, "Label")),
                    "expected 'Label' column header sentinel at #{width}x#{height}, got: #{inspect(texts)}"

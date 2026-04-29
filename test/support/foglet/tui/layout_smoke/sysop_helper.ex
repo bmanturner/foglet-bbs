@@ -37,6 +37,17 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
   defp node_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
   defp node_text(_node, acc), do: acc
 
+  @doc false
+  def render_sysop_smoke_state(state) do
+    app = struct!(Foglet.TUI.App, Map.take(state, Map.keys(%Foglet.TUI.App{})))
+    context = Foglet.TUI.App.build_context(app)
+
+    local_state =
+      Foglet.TUI.App.screen_state_for(app, :sysop) || Foglet.TUI.Screens.Sysop.init(context)
+
+    Foglet.TUI.Screens.Sysop.render(local_state, context)
+  end
+
   defmacro register_sysop_size_contracts do
     quote do
       import Foglet.TUI.LayoutSmokeHelpers, only: [set_active_tab: 2]
@@ -64,7 +75,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
             height = @height
 
             ss =
-              Sysop.init_screen_state()
+              Sysop.State.new()
               |> Map.put(:site_form, SiteForm.init([]))
               |> set_active_tab("SITE")
 
@@ -83,7 +94,10 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            texts = Sysop.render(state) |> SysopHelper.collect_text()
+            texts =
+              state
+              |> SysopHelper.render_sysop_smoke_state()
+              |> SysopHelper.collect_text()
 
             assert Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
                    "expected '[Enter] Submit' at #{width}x#{height}"
@@ -105,7 +119,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
 
             # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
-              Sysop.init_screen_state()
+              Sysop.State.new()
               |> Map.put(:limits_form, {:loaded, LimitsForm.init([])})
               |> set_active_tab("LIMITS")
 
@@ -124,7 +138,10 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            texts = Sysop.render(state) |> SysopHelper.collect_text()
+            texts =
+              state
+              |> SysopHelper.render_sysop_smoke_state()
+              |> SysopHelper.collect_text()
 
             assert Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
                    "expected '[Enter] Submit' at #{width}x#{height}"
@@ -142,7 +159,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
             height = @height
 
             ss =
-              Sysop.init_screen_state()
+              Sysop.State.new()
               |> set_active_tab("BOARDS")
 
             state =
@@ -160,7 +177,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            tree = Sysop.render(state)
+            tree = SysopHelper.render_sysop_smoke_state(state)
             positioned = apply_at_size(tree, {width, height})
 
             for el <- text_elements(positioned) do
@@ -203,7 +220,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
 
             # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
-              Sysop.init_screen_state()
+              Sysop.State.new()
               |> Map.put(:users_view, {:loaded, users_view})
               |> set_active_tab("USERS")
 
@@ -222,7 +239,10 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            texts = Sysop.render(state) |> SysopHelper.collect_text()
+            texts =
+              state
+              |> SysopHelper.render_sysop_smoke_state()
+              |> SysopHelper.collect_text()
 
             assert Enum.any?(texts, &String.contains?(&1, "Handle")),
                    "expected 'Handle' at #{width}x#{height}"
@@ -244,7 +264,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
 
             # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
-              Sysop.init_screen_state()
+              Sysop.State.new()
               |> Map.put(:system_snapshot, {:loaded, SystemSnapshot.init()})
               |> set_active_tab("SYSTEM")
 
@@ -263,7 +283,10 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            texts = Sysop.render(state) |> SysopHelper.collect_text()
+            texts =
+              state
+              |> SysopHelper.render_sysop_smoke_state()
+              |> SysopHelper.collect_text()
 
             assert Enum.any?(texts, &String.contains?(&1, "Sessions:")),
                    "expected 'Sessions:' at #{width}x#{height}"

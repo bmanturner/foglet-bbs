@@ -139,6 +139,18 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     struct!(App, Map.take(state, Map.keys(%App{})))
   end
 
+  defp render_app_screen(screen_mod, key, state) when is_atom(screen_mod) and is_atom(key) do
+    app = app_from_map(state)
+    context = App.build_context(app)
+    local_state = App.screen_state_for(app, key) || screen_mod.init(context)
+
+    screen_mod.render(local_state, context)
+  end
+
+  defp render_app_screen(state, screen_mod, key) when is_map(state) and is_atom(screen_mod) do
+    render_app_screen(screen_mod, key, state)
+  end
+
   defp collect_text(tree), do: tree |> collect_text([]) |> Enum.reverse()
 
   defp collect_text(nil, acc), do: acc
@@ -828,9 +840,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         size = {width, height}
 
         elements =
-          width
-          |> post_composer_state(height, mode)
-          |> PostComposer.render()
+          PostComposer.render(
+            width
+            |> post_composer_state(height, mode)
+            |> Map.fetch!(:screen_state)
+            |> Map.fetch!(:post_composer),
+            screen_context(:post_composer, composer_user(), size)
+          )
           |> apply_at_size(size)
           |> positioned_text()
 
@@ -855,9 +871,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         size = {width, height}
 
         elements =
-          width
-          |> new_thread_state(height, mode)
-          |> NewThread.render()
+          NewThread.render(
+            width
+            |> new_thread_state(height, mode)
+            |> Map.fetch!(:screen_state)
+            |> Map.fetch!(:new_thread),
+            screen_context(:new_thread, composer_user(), size)
+          )
           |> apply_at_size(size)
           |> positioned_text()
 
@@ -1832,19 +1852,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
          }
        })},
       {"composer",
-       PostComposer.render(%App{
-         current_screen: :post_composer,
-         current_user: %{id: "u1", handle: "alice"},
-         session_context: %{},
-         terminal_size: {80, 24},
-         screen_state: %{
-           post_composer:
-             PostComposer.init_screen_state(
-               input_state: input_st,
-               thread: %{id: "t1", title: "Hello"}
-             )
-         }
-       })}
+       PostComposer.render(
+         PostComposer.State.new(
+           input_state: input_st,
+           thread: %{id: "t1", title: "Hello"}
+         ),
+         screen_context(:post_composer, %{id: "u1", handle: "alice"}, {80, 24})
+       )}
     ]
 
     for {name, tree} <- screens do
@@ -1923,11 +1937,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       current_screen: :account,
       current_user: user,
-      screen_state: %{account: Account.init_screen_state()},
+      screen_state: %{account: Account.State.new(current_user: user)},
       terminal_size: {80, 24}
     }
 
-    tree = Account.render(state)
+    tree = render_app_screen(Account, :account, state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -1962,11 +1976,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       current_screen: :account,
       current_user: user,
       session_context: %{invite_code_generators: "users"},
-      screen_state: %{account: Account.init_screen_state(role: :sysop)},
+      screen_state: %{account: Account.State.new(current_user: user, invites_visible?: true)},
       terminal_size: {64, 22}
     }
 
-    positioned = state |> Account.render() |> apply_at_size({64, 22})
+    positioned = state |> render_app_screen(Account, :account) |> apply_at_size({64, 22})
 
     tab_row =
       positioned
@@ -1999,11 +2013,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       current_screen: :sysop,
       current_user: user,
-      screen_state: %{sysop: Sysop.init_screen_state(invites_visible?: true)},
+      screen_state: %{sysop: Sysop.State.new(current_user: user, invites_visible?: true)},
       terminal_size: {64, 22}
     }
 
-    positioned = state |> Sysop.render() |> apply_at_size({64, 22})
+    positioned = state |> render_app_screen(Sysop, :sysop) |> apply_at_size({64, 22})
 
     tab_row =
       positioned
@@ -2029,11 +2043,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       current_screen: :moderation,
       current_user: user,
-      screen_state: %{moderation: Moderation.init_screen_state()},
+      screen_state: %{moderation: Moderation.State.new()},
       terminal_size: {80, 24}
     }
 
-    tree = Moderation.render(state)
+    tree = render_app_screen(Moderation, :moderation, state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -2059,11 +2073,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     state = %App{
       current_screen: :sysop,
       current_user: user,
-      screen_state: %{sysop: Sysop.init_screen_state()},
+      screen_state: %{sysop: Sysop.State.new(current_user: user)},
       terminal_size: {80, 24}
     }
 
-    tree = Sysop.render(state)
+    tree = render_app_screen(Sysop, :sysop, state)
     positioned = layout(tree)
 
     elements = text_elements(positioned)
@@ -2415,7 +2429,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           screen_state: %{}
         }
 
-        flat = state |> Account.render() |> phase_29_collect_text()
+        flat = state |> render_app_screen(Account, :account) |> phase_29_collect_text()
         joined = Enum.join(flat, " ")
 
         assert String.contains?(joined, "Jump"),
@@ -2453,7 +2467,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           screen_state: %{}
         }
 
-        flat = state |> Account.render() |> phase_29_collect_text()
+        flat = state |> render_app_screen(Account, :account) |> phase_29_collect_text()
         joined = Enum.join(flat, " ")
 
         assert String.contains?(joined, "1-4"),
@@ -2472,10 +2486,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           current_user: user,
           session_context: %{invite_code_generators: "sysop_only"},
           terminal_size: {width, height},
-          screen_state: %{moderation: Moderation.init_screen_state()}
+          screen_state: %{moderation: Moderation.State.new()}
         }
 
-        flat = state |> Moderation.render() |> phase_29_collect_text()
+        flat = state |> render_app_screen(Moderation, :moderation) |> phase_29_collect_text()
         joined = Enum.join(flat, " ")
 
         assert String.contains?(joined, "Jump"),
@@ -2499,10 +2513,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           current_user: user,
           session_context: %{invite_code_generators: "mods"},
           terminal_size: {width, height},
-          screen_state: %{moderation: Moderation.init_screen_state(invites_visible?: true)}
+          screen_state: %{moderation: Moderation.State.new(invites_visible?: true)}
         }
 
-        flat = state |> Moderation.render() |> phase_29_collect_text()
+        flat = state |> render_app_screen(Moderation, :moderation) |> phase_29_collect_text()
         joined = Enum.join(flat, " ")
 
         assert String.contains?(joined, "1-6"),
@@ -2522,10 +2536,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           current_user: user,
           session_context: %{invite_code_generators: "sysop_only"},
           terminal_size: {width, height},
-          screen_state: %{sysop: Sysop.init_screen_state()}
+          screen_state: %{sysop: Sysop.State.new(current_user: user)}
         }
 
-        flat = state |> Sysop.render() |> phase_29_collect_text()
+        flat = state |> render_app_screen(Sysop, :sysop) |> phase_29_collect_text()
         joined = Enum.join(flat, " ")
 
         assert String.contains?(joined, "1-5") or String.contains?(joined, "1-6"),
@@ -2543,10 +2557,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           current_user: user,
           session_context: %{invite_code_generators: "sysop_only"},
           terminal_size: {width, height},
-          screen_state: %{sysop: Sysop.init_screen_state(invites_visible?: true)}
+          screen_state: %{sysop: Sysop.State.new(current_user: user, invites_visible?: true)}
         }
 
-        flat = state |> Sysop.render() |> phase_29_collect_text()
+        flat = state |> render_app_screen(Sysop, :sysop) |> phase_29_collect_text()
         joined = Enum.join(flat, " ")
 
         assert String.contains?(joined, "1-6"),

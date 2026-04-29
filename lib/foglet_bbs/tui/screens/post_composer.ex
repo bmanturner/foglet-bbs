@@ -194,14 +194,13 @@ defmodule Foglet.TUI.Screens.PostComposer do
   # Rendering helpers
   # ---------------------------------------------------------------------------
 
-  defp render_input(input_st, state, theme, width) do
-    focused? = state.mode == :edit
+  defp render_input(input_st, focused?, theme, width) do
     Compose.render_input(input_st, focused?, theme, width: width)
   end
 
-  defp composer_body(:edit, input_st, _draft, state, theme, width) do
+  defp composer_body(:edit, input_st, _draft, _state, theme, width) do
     body_width = max(width - 4, 20)
-    render_input(input_st, state, theme, body_width)
+    render_input(input_st, true, theme, body_width)
   end
 
   defp composer_body(:preview, _input_st, draft, state, theme, width) do

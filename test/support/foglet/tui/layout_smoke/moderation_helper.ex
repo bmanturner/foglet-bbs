@@ -20,6 +20,18 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
     |> Map.from_struct()
   end
 
+  @doc false
+  def render_moderation_smoke_state(state) do
+    app = struct!(Foglet.TUI.App, Map.take(state, Map.keys(%Foglet.TUI.App{})))
+    context = Foglet.TUI.App.build_context(app)
+
+    local_state =
+      Foglet.TUI.App.screen_state_for(app, :moderation) ||
+        Foglet.TUI.Screens.Moderation.init(context)
+
+    Foglet.TUI.Screens.Moderation.render(local_state, context)
+  end
+
   defmacro register_moderation_size_contracts do
     quote do
       import Foglet.TUI.LayoutSmokeHelpers, only: [set_active_tab: 2]
@@ -55,14 +67,16 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             }
 
             ss =
-              Foglet.TUI.Screens.Moderation.init_screen_state(mod_log: [log_row])
+              Foglet.TUI.Screens.Moderation.State.new(mod_log: [log_row])
               |> set_active_tab("LOG")
 
             state =
               Foglet.TUI.LayoutSmoke.ModerationHelper.moderation_smoke_state(width, height, ss)
 
             positioned =
-              state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
+              state
+              |> Foglet.TUI.LayoutSmoke.ModerationHelper.render_moderation_smoke_state()
+              |> apply_at_size({width, height})
 
             elements = content_text_elements(positioned)
 
@@ -116,7 +130,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             height = @height
 
             ss =
-              Foglet.TUI.Screens.Moderation.init_screen_state(
+              Foglet.TUI.Screens.Moderation.State.new(
                 users: [%{handle: "alice", role: :user, status: :active}]
               )
               |> set_active_tab("USERS")
@@ -125,7 +139,9 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
               Foglet.TUI.LayoutSmoke.ModerationHelper.moderation_smoke_state(width, height, ss)
 
             positioned =
-              state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
+              state
+              |> Foglet.TUI.LayoutSmoke.ModerationHelper.render_moderation_smoke_state()
+              |> apply_at_size({width, height})
 
             elements = content_text_elements(positioned)
 
@@ -186,7 +202,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             }
 
             ss =
-              Foglet.TUI.Screens.Moderation.init_screen_state(
+              Foglet.TUI.Screens.Moderation.State.new(
                 scopes: [:site],
                 boards: [board_row]
               )
@@ -196,7 +212,9 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
               Foglet.TUI.LayoutSmoke.ModerationHelper.moderation_smoke_state(width, height, ss)
 
             positioned =
-              state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
+              state
+              |> Foglet.TUI.LayoutSmoke.ModerationHelper.render_moderation_smoke_state()
+              |> apply_at_size({width, height})
 
             elements = content_text_elements(positioned)
 
@@ -257,7 +275,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
             }
 
             ss =
-              Foglet.TUI.Screens.Moderation.init_screen_state(invites_visible?: true)
+              Foglet.TUI.Screens.Moderation.State.new(invites_visible?: true)
               |> set_active_tab("INVITES")
               |> Map.put(
                 :invites,
@@ -273,7 +291,9 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
               )
 
             positioned =
-              state |> Foglet.TUI.Screens.Moderation.render() |> apply_at_size({width, height})
+              state
+              |> Foglet.TUI.LayoutSmoke.ModerationHelper.render_moderation_smoke_state()
+              |> apply_at_size({width, height})
 
             elements = content_text_elements(positioned)
 
