@@ -166,7 +166,10 @@ defmodule Foglet.TUI.Screens.VerifyTest do
         Verify.update({:task_result, :verify_submit, {:ok, result}}, state, context(user))
 
       assert state == VerifyState.default()
-      assert %Effect{type: :session, payload: {:set_user, confirmed}} = session_effect(effects)
+
+      assert %Effect{type: :session, payload: {:promote_session, confirmed}} =
+               session_effect(effects)
+
       assert confirmed.confirmed_at != nil
     end
 

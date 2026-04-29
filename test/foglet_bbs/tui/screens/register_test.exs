@@ -282,7 +282,9 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       {_local_state, effects} =
         Register.update({:task_result, :register, {:ok, result}}, state, context())
 
-      assert %Effect{type: :session, payload: {:set_user, user}} = session_effect(effects)
+      assert %Effect{type: :session, payload: {:promote_session, user}} =
+               session_effect(effects)
+
       assert user.handle == "openmain"
     end
 

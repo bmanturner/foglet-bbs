@@ -1196,7 +1196,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
-      assert {:set_user, returned_user} = session_effect(cmds)
+      assert {:promote_session, returned_user} = session_effect(cmds)
       assert returned_user.id == user.id
     end
 
@@ -1231,7 +1231,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {_submitting_state, final_state, cmds} = submit_login_form(s4)
 
       assert get_in(final_state, [:screen_state, :login, :sub]) == :menu
-      assert {:set_user, returned_user} = session_effect(cmds)
+      assert {:promote_session, returned_user} = session_effect(cmds)
       assert returned_user.id == user.id
     end
 
@@ -1447,7 +1447,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {_submitting_state, new_state, effects} = submit_login_form(state)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
-      assert {:set_user, returned_user} = session_effect(effects)
+      assert {:promote_session, returned_user} = session_effect(effects)
       assert returned_user.id == user.id
     end
 
@@ -1464,7 +1464,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
         {_submitting_state, _new_state, effects} = submit_login_form(state)
 
-        assert {:set_user, _} = session_effect(effects),
+        assert {:promote_session, _} = session_effect(effects),
                "Confirmed user must always promote regardless of toggle=#{toggle}"
       end
     end
