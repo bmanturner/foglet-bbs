@@ -1210,7 +1210,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     setup do
       Process.put(:fake_oneliners_owner, self())
 
-      user = %Foglet.Accounts.User{id: "u-bl01", handle: "alice", role: :user}
+      user = %Foglet.Accounts.User{id: "u-bl01", handle: "alice", role: :mod}
 
       {:ok, state} =
         App.init(%{
@@ -1224,9 +1224,24 @@ defmodule Foglet.TUI.Screens.AccountTest do
       %{state: state, user: user}
     end
 
+    defp open_oneliner_composer(state) do
+      App.update({:key, %{key: :char, char: "O"}}, state)
+    end
+
+    defp open_hide_oneliner_modal(state) do
+      {with_oneliner, []} =
+        App.update(
+          {:screen_task_result, :main_menu, :load_oneliners,
+           {:ok, [%{id: "ol-bl01", body: "hello", user: %{handle: "bob"}}]}},
+          state
+        )
+
+      App.update({:key, %{key: :char, char: "H"}}, with_oneliner)
+    end
+
     test "doomed oneliner submit leaves form in {:error, _} (not :submitting)",
          %{state: state} do
-      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+      {with_modal, []} = open_oneliner_composer(state)
 
       # Drive the form to :submitting via the natural Enter-on-last-field path.
       {submitting, _cmds} =
@@ -1239,7 +1254,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
              "precondition: form should be locked in :submitting after Enter"
 
       {after_error, []} =
-        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, submitting)
+        App.update(
+          {:screen_task_result, :main_menu, :submit_oneliner,
+           {:ok, {:error, :same_user_latest_visible}}},
+          submitting
+        )
 
       assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
                after_error.modal
@@ -1251,7 +1270,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "doomed hide-oneliner submit leaves form in {:error, _} (not :submitting)",
          %{state: state} do
-      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol-bl01"}, state)
+      {with_modal, []} = open_hide_oneliner_modal(state)
 
       # Type a valid reason then Enter to drive :submitting.
       {with_text, _} =
@@ -1267,7 +1286,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
              "precondition: hide form should be locked in :submitting after Enter"
 
       {after_error, []} =
-        App.update({:oneliner_hidden, {:error, :forbidden}}, submitting)
+        App.update(
+          {:screen_task_result, :main_menu, :submit_hide_oneliner, {:ok, {:error, :forbidden}}},
+          submitting
+        )
 
       assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} =
                after_error.modal
@@ -1278,11 +1300,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
 
     test "after doomed oneliner error, %{key: :escape} dismisses the modal", %{state: state} do
-      {with_modal, []} = App.update({:open_oneliner_composer}, state)
+      {with_modal, []} = open_oneliner_composer(state)
       {submitting, _cmds} = App.update({:key, %{key: :enter}}, with_modal)
 
       {after_error, []} =
-        App.update({:oneliner_created, {:error, :same_user_latest_visible}}, submitting)
+        App.update(
+          {:screen_task_result, :main_menu, :submit_oneliner,
+           {:ok, {:error, :same_user_latest_visible}}},
+          submitting
+        )
 
       # Today the form is still locked at :submitting and the lock-guard
       # swallows :escape. After the BL-01 fix, set_submit_state has run, the
@@ -1297,12 +1323,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "after doomed hide-oneliner error, %{key: :escape} dismisses the modal",
          %{state: state} do
-      {with_modal, []} = App.update({:open_hide_oneliner_modal, "ol-bl01"}, state)
+      {with_modal, []} = open_hide_oneliner_modal(state)
       {with_text, _} = App.update({:key, %{key: :char, char: "x"}}, with_modal)
       {submitting, _cmds} = App.update({:key, %{key: :enter}}, with_text)
 
       {after_error, []} =
-        App.update({:oneliner_hidden, {:error, :forbidden}}, submitting)
+        App.update(
+          {:screen_task_result, :main_menu, :submit_hide_oneliner, {:ok, {:error, :forbidden}}},
+          submitting
+        )
 
       {after_esc, _cmds} = App.update({:key, %{key: :escape}}, after_error)
 
