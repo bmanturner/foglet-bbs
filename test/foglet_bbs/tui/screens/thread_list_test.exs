@@ -460,4 +460,53 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
       assert Foglet.TUI.Screens.ThreadList.subscriptions(nil, ctx) == []
     end
   end
+
+  describe "update(:on_route_enter, …) — Phase 39 Plan 04" do
+    # ThreadList's route-entry semantics today (app.ex:834-836) is unconditional:
+    # always dispatch :load. The screen's :load clause has the missing-board
+    # guard built in, so unconditional delegation is safe.
+
+    test "delegates unconditionally to :load (parity with direct :load call)" do
+      ctx = context()
+      state = ThreadList.init(ctx)
+
+      {state_via_on_enter, effects_via_on_enter} =
+        ThreadList.update(:on_route_enter, state, ctx)
+
+      {state_via_load, effects_via_load} =
+        ThreadList.update(:load, state, ctx)
+
+      assert state_via_on_enter == state_via_load
+      assert effects_via_on_enter == effects_via_load
+
+      assert state_via_on_enter.status == :loading
+
+      assert [%Effect{type: :task, payload: %{op: :load_threads}}] = effects_via_on_enter
+    end
+
+    test "delegates to :load even with no current_user (parity with App's app.ex:834-836)" do
+      # App's per-screen ThreadList clause has no user check today.
+      ctx = context(current_user: nil)
+      state = ThreadList.init(ctx)
+
+      {state_via_on_enter, effects} = ThreadList.update(:on_route_enter, state, ctx)
+
+      assert state_via_on_enter.status == :loading
+
+      assert [%Effect{type: :task, payload: %{op: :load_threads}}] = effects
+    end
+
+    test "missing board_id falls through to :load's error guard (no crash)" do
+      # ThreadList.update(:load, %State{}, ctx) (with no board_id) routes to
+      # the second :load clause that returns {:error, :missing_board}. The
+      # :on_route_enter clause must surface that same outcome rather than crash.
+      ctx = context(route_params: %{})
+      state = %State{}
+
+      {new_state, effects} = ThreadList.update(:on_route_enter, state, ctx)
+
+      assert new_state.status == {:error, :missing_board}
+      assert effects == []
+    end
+  end
 end

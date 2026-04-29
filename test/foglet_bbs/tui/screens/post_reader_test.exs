@@ -1138,4 +1138,71 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert Foglet.TUI.Screens.PostReader.subscriptions(nil, ctx) == []
     end
   end
+
+  describe "update(:on_route_enter, …) — Phase 39 Plan 04" do
+    # PostReader's route-entry semantics today (app.ex:838-843) only loads
+    # when route_params carries a binary thread_id. This plan adds the
+    # equivalent screen-side clauses with state-first / route_params-fallback
+    # gating that mirrors subscriptions/2's shape.
+
+    test "with binary thread_id in local state delegates to :load (state-first match)" do
+      ctx = post_reader_context()
+      # Local state already carries thread_id (e.g. re-entry via back-nav with
+      # empty route_params).
+      state = %State{thread_id: "t-from-state"}
+
+      {state_via_on_enter, effects_via_on_enter} =
+        PostReader.update(:on_route_enter, state, ctx)
+
+      {state_via_load, effects_via_load} =
+        PostReader.update(:load, state, ctx)
+
+      assert state_via_on_enter == state_via_load
+      assert effects_via_on_enter == effects_via_load
+      assert state_via_on_enter.status == :loading
+      assert [%Effect{type: :task, payload: %{op: :load_posts}}] = effects_via_on_enter
+    end
+
+    test "with no thread_id in state but atom :thread_id route param delegates to :load" do
+      ctx = %{post_reader_context() | route_params: %{thread_id: "t-atom"}}
+      state = %State{}
+
+      {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
+
+      assert new_state.status == :loading
+      assert [%Effect{type: :task, payload: %{op: :load_posts}}] = effects
+    end
+
+    test "with no thread_id in state but string \"thread_id\" route param delegates to :load" do
+      ctx = %{post_reader_context() | route_params: %{"thread_id" => "t-string"}}
+      state = %State{}
+
+      {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
+
+      assert new_state.status == :loading
+      assert [%Effect{type: :task, payload: %{op: :load_posts}}] = effects
+    end
+
+    test "with no thread_id in state and no thread_id route param no-ops" do
+      ctx = %{post_reader_context() | route_params: %{}}
+      state = %State{}
+
+      {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
+
+      assert effects == []
+      assert new_state == state
+    end
+
+    test "non-binary thread_id (e.g. nil) in state falls through to route_params fallback" do
+      # State.thread_id == nil should NOT match the state-first clause; falls
+      # to the route_params fallback which finds nothing → no-op.
+      ctx = %{post_reader_context() | route_params: %{}}
+      state = %State{thread_id: nil}
+
+      {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
+
+      assert effects == []
+      assert new_state == state
+    end
+  end
 end
