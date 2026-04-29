@@ -24,10 +24,10 @@ defmodule Foglet.TUI.App do
 
   alias Foglet.Accounts
   alias Foglet.PubSub
+  alias Foglet.TUI.App.Effects
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
   alias Foglet.TUI.Context
-  alias Foglet.TUI.Effect
   alias Foglet.TUI.InitialRouteEnterForwarder
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.SizeGate
@@ -132,140 +132,6 @@ defmodule Foglet.TUI.App do
   @spec build_context(t(), map()) :: Context.t()
   def build_context(%__MODULE__{} = state, route_params),
     do: Routing.build_context(state, route_params)
-
-  @doc """
-  Interprets one runtime effect against the App shell.
-
-  Effects (`%Foglet.TUI.Effect{}`) are emitted by screen reducers from
-  `update/3`; this function applies them to the shell — `:navigate` updates
-  `current_screen`/`route_params` and dispatches `:on_route_enter`,
-  `:modal` opens/dismisses a modal, etc. Returns the updated state and any
-  Raxol commands to execute.
-  """
-  @spec apply_effect(t(), Effect.t()) :: {t(), [Command.t()]}
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :navigate,
-        payload: %{screen: screen, params: params}
-      }) do
-    state =
-      state
-      |> Map.put(:current_screen, screen)
-      |> Map.put(:route_params, params || %{})
-      |> Map.put(:modal, nil)
-      |> Routing.init_route_screen_state(screen, params || %{})
-
-    Routing.dispatch_route_entry(state, screen, params || %{})
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{type: :modal, payload: {:open, modal}}) do
-    {%{state | modal: modal}, []}
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{type: :modal, payload: :dismiss}) do
-    AppModal.dismiss(state)
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :modal_submit,
-        payload: %{screen_key: screen_key, kind: kind, payload: payload}
-      })
-      when is_atom(kind) do
-    if modal_submit_target?(state, screen_key) do
-      Routing.route_screen_update(state, screen_key, {:modal_submit, kind, payload})
-    else
-      AppModal.submit_error(state)
-    end
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{type: :session, payload: {:set_user, user}}) do
-    update({:set_user, user}, state)
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :session,
-        payload: {:set_current_user, user}
-      }) do
-    {%{state | current_user: user}, []}
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :session,
-        payload: {:update_preferences, snapshot}
-      }) do
-    state =
-      state
-      |> merge_session_preferences(snapshot)
-      |> refresh_session_preferences(snapshot)
-
-    {state, []}
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :session,
-        payload: {:dispatch, message}
-      }) do
-    do_update(message, state)
-  end
-
-  def apply_effect(%__MODULE__{session_pid: session_pid} = state, %Effect{
-        type: :session,
-        payload: message
-      }) do
-    if is_pid(session_pid), do: send(session_pid, message)
-
-    {state, []}
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :terminal,
-        payload: {:size, {cols, rows}}
-      }) do
-    update({:window_change, cols, rows}, state)
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :publish,
-        payload: %{topic: topic, message: message}
-      }) do
-    _ = Phoenix.PubSub.broadcast(FogletBbs.PubSub, topic, message)
-
-    {state, []}
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{type: :quit}) do
-    {state, [Command.quit()]}
-  end
-
-  def apply_effect(%__MODULE__{} = state, %Effect{
-        type: :task,
-        payload: %{op: op, screen_key: screen_key, fun: fun}
-      }) do
-    task =
-      Foglet.TUI.Command.task(op, fn ->
-        try do
-          {:screen_task_result, screen_key, op, {:ok, fun.()}}
-        rescue
-          e ->
-            reason = Exception.format(:error, e, __STACKTRACE__)
-            {:screen_task_result, screen_key, op, {:error, reason}}
-        catch
-          kind, value ->
-            reason = Exception.format(kind, value, __STACKTRACE__)
-            {:screen_task_result, screen_key, op, {:error, reason}}
-        end
-      end)
-
-    {state, [task]}
-  end
-
-  @doc "Interprets effects in order, appending produced runtime commands."
-  @spec apply_effects(t(), [Effect.t()]) :: {t(), [Command.t()]}
-  def apply_effects(%__MODULE__{} = state, effects) when is_list(effects) do
-    Enum.reduce(effects, {state, []}, fn effect, {acc_state, acc_cmds} ->
-      {next_state, cmds} = apply_effect(acc_state, effect)
-      {next_state, acc_cmds ++ cmds}
-    end)
-  end
 
   # --- Raxol callbacks ---
 
@@ -483,7 +349,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:navigate, screen}, state) when is_atom(screen) do
-    apply_effect(state, Effect.navigate(screen, %{}))
+    Effects.apply_effect(state, Foglet.TUI.Effect.navigate(screen, %{}))
   end
 
   defp do_update({:set_user, user}, state) do
@@ -605,7 +471,10 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
     end
 
-    apply_effect(%{state | current_user: user}, Effect.navigate(:main_menu, %{}))
+    Effects.apply_effect(
+      %{state | current_user: user},
+      Foglet.TUI.Effect.navigate(:main_menu, %{})
+    )
   end
 
   defp do_update({:command_result, inner}, state) do
@@ -670,33 +539,9 @@ defmodule Foglet.TUI.App do
     Routing.init_route_screen_state(state, state.current_screen, state.route_params)
   end
 
-  defp modal_submit_target?(%__MODULE__{} = state, screen_key) do
-    module = Routing.screen_module_for(state, screen_key)
-    Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
-  end
-
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
   end
-
-  defp merge_session_preferences(state, snapshot) do
-    session_context =
-      state.session_context
-      |> Map.put(:timezone, snapshot.timezone)
-      |> Map.put(:time_format, snapshot.time_format)
-      |> Map.put(:theme_id, snapshot.theme_id)
-      |> Map.put(:theme, snapshot.theme)
-
-    %{state | session_context: session_context}
-  end
-
-  defp refresh_session_preferences(%{session_pid: session_pid} = state, snapshot)
-       when is_pid(session_pid) do
-    Foglet.Sessions.Session.update_preferences(session_pid, snapshot)
-    state
-  end
-
-  defp refresh_session_preferences(state, _snapshot), do: state
 
   defp format_notification(:dm, %{body: body}), do: "New message: #{body}"
   defp format_notification(:mention, %{thread_title: t}), do: "You were mentioned in: #{t}"

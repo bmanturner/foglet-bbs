@@ -10,6 +10,7 @@ defmodule Foglet.TUI.App.Routing do
   import Raxol.Core.Renderer.View
 
   alias Foglet.TUI.App
+  alias Foglet.TUI.App.Effects
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens
 
@@ -113,7 +114,7 @@ defmodule Foglet.TUI.App.Routing do
 
       state
       |> put_screen_state(key, new_local_state)
-      |> App.apply_effects(List.wrap(effects))
+      |> Effects.apply_effects(List.wrap(effects))
     else
       {state, []}
     end
