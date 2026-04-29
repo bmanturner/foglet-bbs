@@ -729,17 +729,25 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   end
 
   test "source preserves NewThread composer widget boundaries" do
-    source =
+    screen_source =
       __ENV__.file
       |> Path.dirname()
       |> Path.join("../../../../lib/foglet_bbs/tui/screens/new_thread.ex")
       |> Path.expand()
       |> File.read!()
 
-    assert source =~ "EditorFrame.render"
-    assert source =~ "TextInput.render"
-    assert source =~ "TextInput.handle_event"
-    refute source =~ "PostCard.render"
+    render_source =
+      __ENV__.file
+      |> Path.dirname()
+      |> Path.join("../../../../lib/foglet_bbs/tui/screens/new_thread/render.ex")
+      |> Path.expand()
+      |> File.read!()
+
+    assert render_source =~ "EditorFrame.render"
+    assert render_source =~ "TextInput.render"
+    assert screen_source =~ "TextInput.handle_event"
+    refute screen_source =~ "PostCard.render"
+    refute render_source =~ "PostCard.render"
   end
 
   # ---------------------------------------------------------------------------
