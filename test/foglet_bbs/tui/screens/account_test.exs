@@ -146,6 +146,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   describe "new screen contract" do
+    test "Account.Render is the sibling render entry point" do
+      assert Code.ensure_loaded?(Account.Render)
+      assert function_exported?(Account.Render, :render, 1)
+
+      source = File.read!("lib/foglet_bbs/tui/screens/account.ex")
+
+      assert String.contains?(source, "Render.render()")
+    end
+
     test "Account.init/1 seeds local state from Context" do
       user = build_user_with_profile(location: "Mist Harbor")
 

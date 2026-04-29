@@ -178,6 +178,15 @@ defmodule Foglet.TUI.Screens.SysopTest do
   end
 
   describe "new screen contract" do
+    test "Sysop.Render is the sibling render entry point" do
+      assert Code.ensure_loaded?(Sysop.Render)
+      assert function_exported?(Sysop.Render, :render, 1)
+
+      source = File.read!("lib/foglet_bbs/tui/screens/sysop.ex")
+
+      assert String.contains?(source, "Render.render()")
+    end
+
     test "init/1 builds local sysop state from Context visibility" do
       user = %Foglet.Accounts.User{
         id: Ecto.UUID.generate(),
