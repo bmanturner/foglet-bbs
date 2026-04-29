@@ -16,6 +16,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Config
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.NewThread.State
   alias Foglet.TUI.TextWidth
@@ -32,6 +33,87 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   @default_max_post_length 8192
   @default_terminal_size {80, 24}
+
+  @impl true
+  @spec init(Context.t()) :: State.t()
+  def init(%Context{} = context), do: State.from_context(context)
+
+  @impl true
+  @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
+  def update(:load, %State{} = state, %Context{} = context) do
+    boards_mod = boards_module(context)
+    current_user = context.current_user
+
+    new_state = %{state | load_status: :loading, error: nil}
+
+    effect =
+      Effect.task(:load_boards_for_new_thread, :new_thread, fn ->
+        directory = boards_mod.board_directory_for(current_user)
+        {subscribed_boards(directory), active_board_count(directory)}
+      end)
+
+    {new_state, [effect]}
+  end
+
+  def update(
+        {:task_result, :load_boards_for_new_thread, {:ok, {boards, active_board_count}}},
+        %State{} = state,
+        %Context{}
+      )
+      when is_list(boards) do
+    status = if boards == [], do: :empty, else: :loaded
+
+    {%{
+       state
+       | boards: boards,
+         active_board_count: active_board_count,
+         selected_board_index: 0,
+         load_status: status,
+         error: nil
+     }, []}
+  end
+
+  def update(
+        {:task_result, :load_boards_for_new_thread, {:ok, boards}},
+        %State{} = state,
+        %Context{} = context
+      )
+      when is_list(boards) do
+    update(
+      {:task_result, :load_boards_for_new_thread, {:ok, {boards, nil}}},
+      state,
+      context
+    )
+  end
+
+  def update(
+        {:task_result, :load_boards_for_new_thread, {:error, reason}},
+        %State{} = state,
+        %Context{}
+      ) do
+    {%{state | load_status: {:error, reason}, error: format_error(reason)}, []}
+  end
+
+  def update({:key, key_event}, %State{step: :board} = state, %Context{}) do
+    handle_board_key_event(key_event, state)
+  end
+
+  def update({:key, key_event}, %State{step: :compose} = state, %Context{} = context) do
+    handle_compose_key_event(key_event, state, context)
+  end
+
+  def update(_message, %State{} = state, %Context{}), do: {state, []}
+
+  @impl true
+  @spec render(State.t(), Context.t()) :: any()
+  def render(%State{} = state, %Context{} = context) do
+    frame_state = frame_state(state, context)
+
+    case state.step do
+      :board -> render_board_step(frame_state, state)
+      :compose -> render_compose_step(frame_state, state)
+    end
+  end
 
   @doc """
   Build the initial screen_state map for the new-thread wizard.
@@ -239,6 +321,31 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp handle_board_key(_key, _state, _ss), do: :no_match
 
+  defp handle_board_key_event(%{key: :escape}, %State{} = state) do
+    {state, [Effect.navigate(origin_for(state), %{})]}
+  end
+
+  defp handle_board_key_event(%{key: :char, char: "j"}, %State{} = state),
+    do: board_move_state(state, +1)
+
+  defp handle_board_key_event(%{key: :down}, %State{} = state), do: board_move_state(state, +1)
+
+  defp handle_board_key_event(%{key: :char, char: "k"}, %State{} = state),
+    do: board_move_state(state, -1)
+
+  defp handle_board_key_event(%{key: :up}, %State{} = state), do: board_move_state(state, -1)
+
+  defp handle_board_key_event(%{key: :enter}, %State{} = state) do
+    boards = state.boards || []
+
+    case Enum.at(boards, state.selected_board_index) do
+      nil -> {state, []}
+      board -> {%{state | step: :compose, board: board}, []}
+    end
+  end
+
+  defp handle_board_key_event(_key, %State{} = state), do: {state, []}
+
   defp board_move(state, ss, delta) do
     boards = ss.boards || []
 
@@ -251,6 +358,21 @@ defmodule Foglet.TUI.Screens.NewThread do
         |> min(length(boards) - 1)
 
       {:update, put_ss(state, %{ss | selected_board_index: new_idx}), []}
+    end
+  end
+
+  defp board_move_state(%State{} = state, delta) do
+    boards = state.boards || []
+
+    if boards == [] do
+      {state, []}
+    else
+      new_idx =
+        (state.selected_board_index + delta)
+        |> max(0)
+        |> min(length(boards) - 1)
+
+      {%{state | selected_board_index: new_idx}, []}
     end
   end
 
@@ -318,6 +440,59 @@ defmodule Foglet.TUI.Screens.NewThread do
 
       :error ->
         :no_match
+    end
+  end
+
+  defp handle_compose_key_event(
+         %{key: :char, char: "c", ctrl: true},
+         %State{} = state,
+         %Context{}
+       ) do
+    {state, [Effect.navigate(origin_for(state), %{})]}
+  end
+
+  defp handle_compose_key_event(%{key: :escape}, %State{} = state, %Context{}) do
+    {state, [Effect.navigate(origin_for(state), %{})]}
+  end
+
+  defp handle_compose_key_event(%{key: :tab}, %State{} = state, %Context{}) do
+    if state.focused == :body do
+      new_mode = if state.mode == :edit, do: :preview, else: :edit
+      {%{state | mode: new_mode}, []}
+    else
+      {%{state | focused: :body}, []}
+    end
+  end
+
+  defp handle_compose_key_event(
+         %{key: :char, char: "s", ctrl: true},
+         %State{} = state,
+         %Context{}
+       ) do
+    {state, []}
+  end
+
+  defp handle_compose_key_event(key_event, %State{focused: :title} = state, %Context{}) do
+    before = state.title_input_state.raxol_state.value
+    {new_input, _action} = TextInput.handle_event(key_event, state.title_input_state)
+    after_value = new_input.raxol_state.value
+
+    cond do
+      after_value != before ->
+        {%{state | title_input_state: new_input}, []}
+
+      match?(%{key: :backspace}, key_event) ->
+        {%{state | title_input_state: new_input}, []}
+
+      true ->
+        {state, []}
+    end
+  end
+
+  defp handle_compose_key_event(key_event, %State{focused: :body} = state, %Context{}) do
+    case Compose.apply_key(state.body_input_state, key_event) do
+      {:ok, new_input_st} -> {%{state | body_input_state: new_input_st}, []}
+      :error -> {state, []}
     end
   end
 
@@ -411,6 +586,48 @@ defmodule Foglet.TUI.Screens.NewThread do
       {:ok, mod} -> mod
       {:error, :not_configured} -> Foglet.Threads
     end
+  end
+
+  defp boards_module(%Context{} = context) do
+    case domain_module(context, :boards) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Boards
+    end
+  end
+
+  defp domain_module(%Context{domain: domain}, key) when is_map(domain) do
+    case Map.get(domain, key) do
+      mod when is_atom(mod) and not is_nil(mod) -> {:ok, mod}
+      _ -> Domain.get(%{domain: domain}, key)
+    end
+  end
+
+  defp domain_module(%Context{session_context: ctx}, key), do: Domain.get(ctx || %{}, key)
+
+  defp subscribed_boards(directory) do
+    directory
+    |> Enum.flat_map(& &1.boards)
+    |> Enum.filter(& &1.subscribed?)
+    |> Enum.map(& &1.board)
+  end
+
+  defp active_board_count(directory) do
+    Enum.reduce(directory, 0, fn category, acc -> acc + length(category.boards) end)
+  end
+
+  defp origin_for(%State{origin: origin}) when is_atom(origin), do: origin
+  defp origin_for(_state), do: :main_menu
+
+  defp frame_state(%State{} = state, %Context{} = context) do
+    %{
+      current_screen: :new_thread,
+      current_user: context.current_user,
+      current_board: state.board,
+      session_context: context.session_context,
+      terminal_size: context.terminal_size,
+      route: context.route,
+      route_params: context.route_params
+    }
   end
 
   defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."

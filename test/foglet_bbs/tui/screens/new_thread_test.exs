@@ -3,6 +3,26 @@
 # ---------------------------------------------------------------------------
 
 defmodule Foglet.TUI.Screens.NewThreadTest.FakeBoards do
+  def board_directory_for(user) do
+    Process.put(:new_thread_board_loader_user, user)
+
+    [
+      %{
+        category: %{name: "Public"},
+        boards: [
+          %{subscribed?: true, board: %{id: "b1", name: "General", unread_count: 0}},
+          %{subscribed?: false, board: %{id: "b-hidden", name: "Hidden", unread_count: 0}}
+        ]
+      },
+      %{
+        category: %{name: "Ops"},
+        boards: [
+          %{subscribed?: true, board: %{id: "b2", name: "Announcements", unread_count: 0}}
+        ]
+      }
+    ]
+  end
+
   def list_subscribed_boards(_user) do
     [
       %{id: "b1", name: "General", unread_count: 0},
@@ -96,6 +116,16 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       |> Map.from_struct()
 
     Map.merge(state, overrides)
+  end
+
+  defp context(overrides \\ []) do
+    Context.new(
+      current_user: Keyword.get(overrides, :current_user, %{id: "u1", handle: "alice"}),
+      route: :new_thread,
+      route_params: Keyword.get(overrides, :route_params, %{}),
+      terminal_size: Keyword.get(overrides, :terminal_size, {80, 24}),
+      session_context: %{domain: %{boards: FakeBoards, threads: FakeThreadsOk}}
+    )
   end
 
   defp compose_state(board \\ %{id: "b1", name: "General"}) do
@@ -196,6 +226,135 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     assert %State{step: :compose, board: %{id: "b1"}, boards: [%{id: "b1"}]} =
              NewThread.State.from_context(ctx)
+  end
+
+  test "init/1 derives local state from route context" do
+    board = %{id: "b1", name: "General"}
+    ctx = context(route_params: %{origin: :thread_list, board: board})
+
+    assert %State{step: :compose, board: ^board, origin: :thread_list} = NewThread.init(ctx)
+  end
+
+  test "NewThread.update(:load, state, context) emits board load task effect" do
+    ctx = context()
+    state = State.new(error: "stale")
+
+    assert {%State{load_status: :loading, error: nil},
+            [
+              %Foglet.TUI.Effect{
+                type: :task,
+                payload: %{op: :load_boards_for_new_thread, screen_key: :new_thread, fun: fun}
+              }
+            ]} = NewThread.update(:load, state, ctx)
+
+    assert is_function(fun, 0)
+    assert {boards, 3} = fun.()
+    assert Enum.map(boards, & &1.id) == ["b1", "b2"]
+    assert Process.get(:new_thread_board_loader_user).id == "u1"
+  end
+
+  test "NewThread.update/3 stores loaded boards and active count" do
+    state = State.new(load_status: :loading, selected_board_index: 4)
+    boards = [%{id: "b1", name: "General"}]
+
+    assert {%State{
+              boards: ^boards,
+              active_board_count: 2,
+              selected_board_index: 0,
+              load_status: :loaded,
+              error: nil
+            }, []} =
+             NewThread.update(
+               {:task_result, :load_boards_for_new_thread, {:ok, {boards, 2}}},
+               state,
+               context()
+             )
+  end
+
+  test "NewThread.update/3 accepts legacy board list task result shape" do
+    boards = [%{id: "b1", name: "General"}]
+
+    assert {%State{boards: ^boards, active_board_count: nil, load_status: :loaded}, []} =
+             NewThread.update(
+               {:task_result, :load_boards_for_new_thread, {:ok, boards}},
+               State.new(),
+               context()
+             )
+  end
+
+  test "NewThread.update/3 stores empty and error board load states" do
+    assert {%State{boards: [], active_board_count: 0, load_status: :empty}, []} =
+             NewThread.update(
+               {:task_result, :load_boards_for_new_thread, {:ok, {[], 0}}},
+               State.new(),
+               context()
+             )
+
+    assert {%State{load_status: {:error, :boom}, error: ":boom"}, []} =
+             NewThread.update(
+               {:task_result, :load_boards_for_new_thread, {:error, :boom}},
+               State.new(),
+               context()
+             )
+  end
+
+  test "NewThread.update/3 handles board picker navigation and selection" do
+    boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
+    state = State.new(boards: boards, load_status: :loaded)
+
+    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+    assert state.selected_board_index == 1
+
+    {state, []} = NewThread.update({:key, %{key: :enter}}, state, context())
+    assert state.step == :compose
+    assert state.board.id == "b2"
+  end
+
+  test "NewThread.update/3 handles compose field focus, body preview, and cancel effects" do
+    state = State.new(step: :compose, board: %{id: "b1"}, origin: :thread_list)
+
+    {state, []} = NewThread.update({:key, %{key: :tab}}, state, context())
+    assert state.focused == :body
+    assert state.mode == :edit
+
+    {state, []} = NewThread.update({:key, %{key: :tab}}, state, context())
+    assert state.focused == :body
+    assert state.mode == :preview
+
+    assert {^state,
+            [
+              %Foglet.TUI.Effect{
+                type: :navigate,
+                payload: %{screen: :thread_list, params: %{}}
+              }
+            ]} = NewThread.update({:key, %{key: :escape}}, state, context())
+  end
+
+  test "NewThread.update/3 edits title and body local state" do
+    state = State.new(step: :compose, board: %{id: "b1"})
+
+    {state, []} = NewThread.update({:key, %{key: :char, char: "H"}}, state, context())
+    assert state.title_input_state.raxol_state.value == "H"
+
+    {state, []} = NewThread.update({:key, %{key: :tab}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "i"}}, state, context())
+    assert state.body_input_state.value == "i"
+  end
+
+  test "render/2 renders board and compose states without App-shaped state" do
+    ctx = context()
+
+    assert _ =
+             NewThread.render(
+               State.new(boards: [%{id: "b1", name: "General"}], load_status: :loaded),
+               ctx
+             )
+
+    assert _ =
+             NewThread.render(
+               State.new(step: :compose, board: %{id: "b1", name: "General"}),
+               ctx
+             )
   end
 
   # ---------------------------------------------------------------------------
