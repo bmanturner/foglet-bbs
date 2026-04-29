@@ -56,10 +56,6 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   @impl true
-  @spec init_screen_state(keyword()) :: State.t()
-  def init_screen_state(opts \\ []), do: State.new(opts)
-
-  @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
   # Phase 39 D-01/D-03/D-14: screen owns its route-entry conditional load.
   # Preserves the user-conditional semantics today encoded in App's
@@ -159,15 +155,13 @@ defmodule Foglet.TUI.Screens.Moderation do
   @impl true
   @spec render(State.t(), Context.t()) :: any()
   def render(%State{} = state, %Context{} = context) do
-    render(render_model(context, state))
+    render_app_state(render_model(context, state))
   end
 
   def render(local_state, %Context{} = context),
     do: render(normalize_state(local_state, context), context)
 
-  @impl true
-  @spec render(map()) :: any()
-  def render(state) do
+  defp render_app_state(state) do
     if ShellVisibility.moderation_visible?(state.current_user) do
       render_authorized(state)
     else
@@ -182,52 +176,13 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  def handle_key(%{key: :char, char: c}, state) when c in ["Q", "q"],
-    do: {:update, %{state | current_screen: :main_menu}, []}
-
-  def handle_key(event, state) do
-    old_ss = get_screen_state(state)
-    ss = synced_screen_state(state)
-    {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-
-    new_active =
-      case action do
-        {:tab_changed, idx} -> idx
-        _ -> ss.active_tab
-      end
-
-    if action == nil and new_tabs == ss.tabs do
-      case delegate_to_active_tab(event, state, ss) do
-        :no_match when ss == old_ss ->
-          # Tabs widget neither recognized the key nor persisted any internal
-          # state mutation — treat as unhandled so global_key_handler can run.
-          :no_match
-
-        :no_match ->
-          update_screen_state(state, ss)
-
-        {:ok, %Foglet.TUI.Screens.Moderation.State{} = new_ss} ->
-          # Table-tab delegates return the full updated screen state
-          update_screen_state(state, new_ss)
-
-        {:ok, new_invites} ->
-          update_screen_state(state, %{ss | invites: new_invites})
-      end
-    else
-      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-      update_screen_state(state, maybe_load_invites(new_ss, state))
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Private helpers
   # ---------------------------------------------------------------------------
 
   defp get_screen_state(state) do
     ss = Map.get(state, :screen_state) || %{}
-    Map.get(ss, :moderation) || init_screen_state()
+    Map.get(ss, :moderation) || State.new()
   end
 
   defp render_authorized(state) do
@@ -428,39 +383,6 @@ defmodule Foglet.TUI.Screens.Moderation do
     end)
   end
 
-  defp delegate_to_active_tab(event, state, ss) do
-    case Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab) do
-      "INVITES" ->
-        event
-        |> key_for_invites()
-        |> InvitesActions.handle_key(state.current_user, ss.invites)
-
-      "LOG" ->
-        log_table = ss.log_table || State.build_log_table(ss.mod_log)
-        {new_table, _action} = ConsoleTable.handle_event(event, log_table)
-        new_ss = %{ss | log_table: new_table}
-        # LOG is read-only; no domain dispatch (Pitfall 7)
-        {:ok, new_ss}
-
-      "USERS" ->
-        users_table = ss.users_table || State.build_users_table(ss.users)
-        {new_table, _action} = ConsoleTable.handle_event(event, users_table)
-        new_ss = %{ss | users_table: new_table}
-        # USERS is read-only; no domain dispatch
-        {:ok, new_ss}
-
-      "BOARDS" ->
-        boards_table = ss.boards_table || State.build_boards_table(ss.boards)
-        {new_table, _action} = ConsoleTable.handle_event(event, boards_table)
-        new_ss = %{ss | boards_table: new_table}
-        # BOARDS is read-only; no domain dispatch
-        {:ok, new_ss}
-
-      _other ->
-        :no_match
-    end
-  end
-
   defp handle_active_key(event, %State{} = ss, %Context{} = context) do
     case Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab) do
       "INVITES" ->
@@ -547,17 +469,6 @@ defmodule Foglet.TUI.Screens.Moderation do
       default
   end
 
-  defp maybe_load_invites(ss, state) do
-    case {Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab), ss.invites.items} do
-      {"INVITES", items} when not is_list(items) ->
-        {:ok, invites} = InvitesActions.load(state.current_user, ss.invites)
-        %{ss | invites: invites}
-
-      _other ->
-        ss
-    end
-  end
-
   # Wraps KvGrid output in a column container. KvGrid.render/2 can return a list
   # containing [text, badge] pairs (when entries have badge metadata). Raxol's
   # flexbox cannot process nested lists as children; List.flatten/1 normalises
@@ -617,11 +528,4 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp key_for_invites(%{key: :char, char: char}), do: char
   defp key_for_invites(%{key: key}), do: key
 
-  defp update_screen_state(state, ss) do
-    # %App{} defaults screen_state to %{} and no in-tree path rewrites it to
-    # nil — see App.put_screen_state/3. A nil here would already crash earlier
-    # in the screen pipeline, so we no longer hedge with `|| %{}` (WR-03).
-    new_screen_state = Map.put(state.screen_state, :moderation, ss)
-    {:update, %{state | screen_state: new_screen_state}, []}
-  end
 end

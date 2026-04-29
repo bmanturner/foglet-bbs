@@ -132,14 +132,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   def update(_message, local_state, %Context{} = context), do: {local_state || init(context), []}
 
-  # §3 init_screen_state/1 (transitional helper — AUDIT-19, D-05)
-
-  @doc "Returns a minimal open-mode local state stub."
-  @impl true
-  @spec init_screen_state(keyword()) :: map()
-  def init_screen_state(_opts \\ []), do: RegisterState.default()
-
-  # §4 Private key handlers
+  # §3 Private key handlers
 
   defp reduce_key(state, key_event) do
     reg = get_register_ss(state)
@@ -284,10 +277,10 @@ defmodule Foglet.TUI.Screens.Register do
   # §6 Private state plumbing
 
   defp get_register_ss(state) do
-    RegisterState.get(state) || init_screen_state_for(state)
+    RegisterState.get(state) || state_for_mode(state)
   end
 
-  defp init_screen_state_for(state) do
+  defp state_for_mode(state) do
     RegisterState.for_mode(registration_mode(state))
   end
 

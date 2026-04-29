@@ -144,10 +144,6 @@ defmodule Foglet.TUI.Screens.Verify do
 
   def update(_message, local_state, %Context{} = context), do: {local_state || init(context), []}
 
-  @impl true
-  @spec init_screen_state(keyword()) :: map()
-  def init_screen_state(_opts \\ []), do: VerifyState.default()
-
   defp submit(_vs, %Context{current_user: nil}) do
     modal = %Foglet.TUI.Modal{type: :error, message: "No user context. Please register again."}
     {VerifyState.default(), [Effect.open_modal(modal), Effect.navigate(:login, %{})]}

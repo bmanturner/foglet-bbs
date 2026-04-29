@@ -54,12 +54,6 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   @impl true
-  @spec init_screen_state(keyword()) :: State.t()
-  def init_screen_state(opts \\ []) do
-    State.new(translate_opts(opts))
-  end
-
-  @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
   def update({:key, %{key: :char, char: c, ctrl: true}}, local_state, %Context{})
       when c in ["q", "Q"] do
@@ -171,15 +165,13 @@ defmodule Foglet.TUI.Screens.Account do
   @impl true
   @spec render(State.t(), Context.t()) :: any()
   def render(%State{} = local_state, %Context{} = context) do
-    render(render_model(context, local_state))
+    render_app_state(render_model(context, local_state))
   end
 
   def render(local_state, %Context{} = context),
     do: render(normalize_state(local_state, context), context)
 
-  @impl true
-  @spec render(map()) :: any()
-  def render(state) do
+  defp render_app_state(state) do
     ss = synced_screen_state(state)
     theme = account_theme(state, ss)
     active_label = active_label(ss) || "PROFILE"
@@ -213,54 +205,6 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
-
-  @impl true
-  @spec handle_key(map(), map()) :: {:update, map(), list()} | :no_match
-  # Ctrl+Q leaves the screen. Bare q/Q would eat input on form fields, and Esc
-  # is reserved for in-form cancel (e.g., dropping a theme preview).
-  def handle_key(%{key: :char, char: c, ctrl: true}, state) when c in ["q", "Q"] do
-    {:update, %{state | current_screen: :main_menu}, []}
-  end
-
-  def handle_key(event, state) do
-    ss = synced_screen_state(state)
-    {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-
-    new_active =
-      case action do
-        {:tab_changed, idx} -> idx
-        _ -> ss.active_tab
-      end
-
-    new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-
-    cond do
-      action != nil ->
-        actor = Map.get(state, :current_user)
-
-        new_ss =
-          new_ss
-          |> maybe_load_ssh_keys(actor)
-          |> maybe_load_invites(actor)
-
-        {:update, put_screen_state(state, new_ss), []}
-
-      active_label(ss) == "SSH KEYS" ->
-        delegate_ssh_keys_key(event, state, ss)
-
-      active_label(ss) == "INVITES" ->
-        delegate_invites_key(event, state, ss)
-
-      active_label(ss) == "PROFILE" ->
-        delegate_profile_key(event, state, ss)
-
-      active_label(ss) == "PREFS" ->
-        delegate_prefs_key(event, state, ss)
-
-      true ->
-        :no_match
-    end
-  end
 
   # --- private helpers ---
 
@@ -310,7 +254,7 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp get_screen_state(state) do
     case get_in(state.screen_state, [:account]) do
-      nil -> init_screen_state(init_opts_from_state(state))
+      nil -> State.new(init_opts_from_state(state))
       ss -> ss
     end
   end
@@ -326,19 +270,6 @@ defmodule Foglet.TUI.Screens.Account do
     ]
   end
 
-  # Translate :role option to :invites_visible? so that
-  # init_screen_state(role: :sysop) works from tests and direct callers.
-  defp translate_opts(opts) do
-    case Keyword.pop(opts, :role) do
-      {nil, opts} ->
-        opts
-
-      {role, opts} ->
-        visible? = InvitesSurface.visible?(%{role: role}, nil)
-        Keyword.put_new(opts, :invites_visible?, visible?)
-    end
-  end
-
   defp tab_labels(%State{tabs: %Tabs{raxol_state: raxol_state}}) do
     raxol_state
     |> Map.get(:tabs, [])
@@ -346,15 +277,6 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp active_label(%State{} = ss), do: Enum.at(tab_labels(ss), ss.active_tab)
-
-  defp maybe_load_invites(%State{} = ss, actor) do
-    if active_label(ss) == "INVITES" and not is_list(ss.invites.items) do
-      {:ok, invites} = InvitesActions.load(actor, ss.invites)
-      %{ss | invites: invites}
-    else
-      ss
-    end
-  end
 
   defp maybe_request_tab_load(%State{} = ss, %Context{} = context) do
     case active_label(ss) do
@@ -569,61 +491,6 @@ defmodule Foglet.TUI.Screens.Account do
     |> Enum.into(%{}, fn {field, messages} -> {field, Enum.join(messages, ", ")} end)
   end
 
-  defp maybe_load_ssh_keys(%State{} = ss, actor) do
-    if active_label(ss) == "SSH KEYS" and not is_list(ss.ssh_keys.items) do
-      {:ok, ssh_keys} = SSHKeysActions.load(actor, ss.ssh_keys)
-      %{ss | ssh_keys: ssh_keys}
-    else
-      ss
-    end
-  end
-
-  defp delegate_ssh_keys_key(%{key: :char, char: char}, state, %State{} = ss) do
-    case SSHKeysActions.handle_key(char, Map.get(state, :current_user), ss.ssh_keys) do
-      {:ok, ssh_keys} -> {:update, put_screen_state(state, %{ss | ssh_keys: ssh_keys}), []}
-      :no_match -> :no_match
-    end
-  end
-
-  defp delegate_ssh_keys_key(%{key: key}, state, %State{} = ss) do
-    case SSHKeysActions.handle_key(key, Map.get(state, :current_user), ss.ssh_keys) do
-      {:ok, ssh_keys} -> {:update, put_screen_state(state, %{ss | ssh_keys: ssh_keys}), []}
-      :no_match -> :no_match
-    end
-  end
-
-  defp delegate_invites_key(%{key: :char, char: char}, state, %State{} = ss) do
-    case InvitesActions.handle_key(char, Map.get(state, :current_user), ss.invites) do
-      {:ok, invites} -> {:update, put_screen_state(state, %{ss | invites: invites}), []}
-      :no_match -> :no_match
-    end
-  end
-
-  defp delegate_invites_key(%{key: key}, state, %State{} = ss) do
-    case InvitesActions.handle_key(key, Map.get(state, :current_user), ss.invites) do
-      {:ok, invites} -> {:update, put_screen_state(state, %{ss | invites: invites}), []}
-      :no_match -> :no_match
-    end
-  end
-
-  defp delegate_profile_key(event, state, %State{} = ss) do
-    case ProfileForm.handle_key(event, ss, Map.get(state, :current_user)) do
-      {:ok, new_ss, cmds} -> {:update, put_screen_state(state, new_ss), cmds}
-      :no_match -> :no_match
-    end
-  end
-
-  defp delegate_prefs_key(event, state, %State{} = ss) do
-    # Sync form focus_index from prefs_focus so tests that set prefs_focus
-    # directly (D-19 compatibility) also update the form's active field.
-    ss = sync_prefs_focus(ss)
-
-    case PrefsForm.handle_key(event, ss, Map.get(state, :current_user)) do
-      {:ok, new_ss, cmds} -> {:update, put_screen_state(state, new_ss), cmds}
-      :no_match -> :no_match
-    end
-  end
-
   @prefs_focus_index %{timezone: 0, time_format: 1, theme: 2}
 
   defp sync_prefs_focus(%State{prefs_focus: pf, prefs_form: form} = ss)
@@ -638,10 +505,6 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp sync_prefs_focus(ss), do: ss
-
-  defp put_screen_state(state, %State{} = ss) do
-    %{state | screen_state: Map.put(state.screen_state, :account, ss)}
-  end
 
   defp account_theme(state, %State{candidate_theme_id: nil}), do: Theme.from_state(state)
 

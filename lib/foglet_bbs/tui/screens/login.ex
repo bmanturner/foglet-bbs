@@ -24,11 +24,8 @@ defmodule Foglet.TUI.Screens.Login do
   Foglet.Config.get/1 calls in registration_mode/1 are safe for render paths —
   Foglet.Config is ETS read-through cached. No render-path change required.
 
-  ## init_screen_state/1 (AUDIT-19)
-
-  Returns minimal menu sub-state: %{sub: :menu}. TextInput structs are created
-  lazily in enter_login_form/1 each time the user presses L — this keeps
-  per-session memory footprint small.
+  TextInput structs are created lazily in enter_login_form/1 each time the
+  user presses L — this keeps per-session memory footprint small.
   """
 
   @behaviour Foglet.TUI.Screen
@@ -71,10 +68,6 @@ defmodule Foglet.TUI.Screens.Login do
   # password. Honest enough to be actionable, but does not echo specific
   # validation reasons that could differ across users.
   @reset_consume_password_invalid_message "Your new password is not acceptable. Choose a different password and try again."
-
-  @impl true
-  @spec init_screen_state(keyword()) :: map()
-  def init_screen_state(_opts), do: LoginState.default()
 
   @impl true
   @spec init(Context.t()) :: map()
