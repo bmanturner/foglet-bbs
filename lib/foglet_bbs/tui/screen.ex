@@ -39,6 +39,18 @@ defmodule Foglet.TUI.Screen do
   @callback render(local_state(), Foglet.TUI.Context.t()) :: any()
 
   @doc """
+  Optional PubSub topic-interest declaration. Screens that wish to receive
+  PubSub updates while focused declare the topics they want subscribed by
+  returning a list of topic strings. Stateless screens and screens with no
+  PubSub interest may omit this callback entirely.
+
+  Per D-05 / SPEC R6, this is the App-shell-decoupled replacement for
+  central App pattern-matching on the current screen — the App calls into
+  this callback rather than encoding screen-specific topic logic itself.
+  """
+  @callback subscriptions(local_state(), Foglet.TUI.Context.t()) :: [String.t()]
+
+  @doc """
   Transitional legacy render callback that receives broad App state.
   """
   @callback render(state :: app_state()) :: any()
@@ -59,5 +71,6 @@ defmodule Foglet.TUI.Screen do
                       render: 2,
                       render: 1,
                       handle_key: 2,
-                      init_screen_state: 1
+                      init_screen_state: 1,
+                      subscriptions: 2
 end

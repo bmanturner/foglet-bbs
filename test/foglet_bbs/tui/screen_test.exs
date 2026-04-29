@@ -134,7 +134,6 @@ defmodule Foglet.TUI.ScreenTest do
   end
 
   describe "Screen behaviour (Phase 39 R6, D-05)" do
-    @tag :phase39_target
     test "lists subscriptions/2 in @optional_callbacks" do
       optional = Foglet.TUI.Screen.behaviour_info(:optional_callbacks)
       assert {:subscriptions, 2} in optional
