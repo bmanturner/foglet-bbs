@@ -148,6 +148,8 @@ migration, schema, changeset, context, fixtures, and tests aligned.
 
 ## Testing And Finish Line
 
+DO NOT WRITE BULLSHIT TESTS THAT TEST FOR THE PRESENCE OR ABSENCE OF TEXT.
+
 Use `start_supervised!/1` for processes in tests. Avoid `Process.sleep/1` and
 `Process.alive?/1`; synchronize with monitors, explicit messages, or
 `:sys.get_state/1`.
