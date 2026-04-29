@@ -90,7 +90,12 @@ defmodule Mix.Tasks.Foglet.Doctor do
   end
 
   defp repo_config do
-    Application.get_env(:foglet_bbs, FogletBbs.Repo, [])
+    cfg = Application.get_env(:foglet_bbs, FogletBbs.Repo, [])
+
+    cfg
+    |> Keyword.get(:url, "")
+    |> Ecto.Repo.Supervisor.parse_url()
+    |> Keyword.merge(cfg)
   end
 
   defp connect_postgres(database) do
@@ -140,11 +145,18 @@ defmodule Mix.Tasks.Foglet.Doctor do
   end
 
   defp check_ssh_key do
-    path = "priv/ssh/host_key"
+    dir =
+      :foglet_bbs
+      |> Application.get_env(:ssh, [])
+      |> Keyword.get(:host_key_dir, Application.app_dir(:foglet_bbs, "priv/ssh"))
 
-    if File.exists?(path),
-      do: :ok,
-      else: {:error, "#{path} missing. Generate: ssh-keygen -t ed25519 -f #{path} -N \"\""}
+    try do
+      Foglet.SSH.HostKey.ensure!(dir)
+      :ok
+    rescue
+      error ->
+        {:error, "could not ensure host key in #{dir}: #{Exception.message(error)}"}
+    end
   end
 
   defp check_env_vars do
