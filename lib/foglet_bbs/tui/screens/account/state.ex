@@ -19,10 +19,10 @@ defmodule Foglet.TUI.Screens.Account.State do
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.Tabs
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   @base_tabs ["PROFILE", "PREFS", "SSH KEYS"]
   @invites_tab "INVITES"
@@ -199,7 +199,7 @@ defmodule Foglet.TUI.Screens.Account.State do
           value: draft.real_name || ""
         }
       ],
-      on_submit: fn payload -> SubmitStash.stash(__MODULE__, {:profile, payload}) end,
+      on_submit: fn payload -> Effect.modal_submit(:account, :profile, payload) end,
       on_cancel: fn -> :ok end
     )
   end
@@ -232,7 +232,7 @@ defmodule Foglet.TUI.Screens.Account.State do
           value: draft.theme || "gray"
         }
       ],
-      on_submit: fn payload -> SubmitStash.stash(__MODULE__, {:prefs, payload}) end,
+      on_submit: fn payload -> Effect.modal_submit(:account, :prefs, payload) end,
       on_cancel: fn -> :ok end
     )
   end

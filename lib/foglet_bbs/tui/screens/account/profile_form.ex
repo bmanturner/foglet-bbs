@@ -8,8 +8,7 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
   Per RESEARCH Pitfall 4: this module renders Modal.Form body-only — no
   outer box/border. The screen chrome (ScreenFrame) provides the border.
 
-  Per RESEARCH Pitfall 2 / Codex Concern 4: submit payloads are captured
-  via `Modal.Form.SubmitStash` rather than raw `Process.put/get`.
+  Submit payloads are carried explicitly by `Foglet.TUI.Effect.modal_submit/3`.
 
   Honest Esc (Phase 28 FORM-06 / D-10, D-11): pressing Esc reseeds drafts
   via `State.seed_from_user/2`; the visible signal is the field values
@@ -18,9 +17,9 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
   """
 
   alias Foglet.TUI.Screens.Account.State
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   @spec render(State.t(), Theme.t()) :: any()
   def render(%State{profile_form: form}, %Theme{} = theme) do
@@ -41,9 +40,7 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
     state = %{state | profile_form: new_form}
 
     case action do
-      :submitted ->
-        {:profile, payload} = SubmitStash.pop(__MODULE__)
-
+      {:submitted, %Effect{type: :modal_submit, payload: %{kind: :profile, payload: payload}}} ->
         attrs = %{
           location: payload.location,
           tagline: payload.tagline,

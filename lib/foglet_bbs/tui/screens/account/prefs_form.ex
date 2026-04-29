@@ -10,7 +10,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   theme preview in Account's render path (account.ex account_theme/2).
 
   Per RESEARCH Pitfall 4: body-only render — no outer box/border.
-  Per RESEARCH Pitfall 2 / Codex Concern 4: SubmitStash for submit payloads.
+  Submit payloads are carried explicitly by `Foglet.TUI.Effect.modal_submit/3`.
 
   Honest Esc (Phase 28 FORM-06 / D-10, D-11): pressing Esc reseeds drafts
   via `State.seed_from_user/2` (which clears `candidate_theme_id`); the
@@ -20,9 +20,9 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   """
 
   alias Foglet.TUI.Screens.Account.State
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   @spec render(State.t(), Theme.t()) :: any()
   def render(%State{prefs_form: form}, %Theme{} = theme) do
@@ -53,9 +53,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
       |> maybe_update_candidate_theme(old_theme, new_theme)
 
     case action do
-      :submitted ->
-        {:prefs, payload} = SubmitStash.pop(__MODULE__)
-
+      {:submitted, %Effect{type: :modal_submit, payload: %{kind: :prefs, payload: payload}}} ->
         attrs = %{
           timezone: payload.timezone,
           preferences: %{"time_format" => payload.time_format},
