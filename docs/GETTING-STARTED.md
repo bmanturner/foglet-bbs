@@ -25,16 +25,22 @@ If you use `asdf` (or another `.tool-versions`-aware version manager), running
 `asdf install` from the repo root will install the pinned Elixir and Erlang
 versions.
 
-## 1. Clone and install dependencies
+## 1. Clone and choose a database
 
 ```bash
 git clone <your-fork-or-origin-url> foglet_bbs
 cd foglet_bbs
-mix setup
 ```
 
-If you want the repository-managed Postgres instance, start it before running
-the setup alias:
+If you already have a local Postgres that matches `config/dev.exs`, run the
+setup alias now:
+
+```bash
+rtk mix setup
+```
+
+If you want the repository-managed Postgres instance instead, start it before
+running setup:
 
 ```bash
 rtk docker compose up -d postgres
