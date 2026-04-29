@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
-status: executing
-stopped_at: Completed 42-04-PLAN.md
-last_updated: "2026-04-29T22:18:04.466Z"
+status: verifying
+stopped_at: Completed 42-05-PLAN.md
+last_updated: "2026-04-29T22:29:43.322Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 6
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 9
-  completed_plans: 8
-  percent: 89
+  completed_plans: 9
+  percent: 100
 ---
 
 # Project State
@@ -27,7 +27,7 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 Phase: 42 (app-runtime-helper-extraction) — EXECUTING
 Plan: 5 of 5
-Status: Ready to execute
+Status: Phase complete — ready for verification
 Last activity: 2026-04-29
 
 Progress: [█████████░] 89%
@@ -56,6 +56,7 @@ Progress: [█████████░] 89%
 | Phase 42 P42-02 | 7min | 3 tasks | 4 files |
 | Phase 42 P42-03 | 8min | 3 tasks | 5 files |
 | Phase 42 P42-04 | 8min | 3 tasks | 4 files |
+| Phase 42 P42-05 | 7min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -75,6 +76,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 42]: Effects owns interpretation of current Foglet.TUI.Effect values while App owns when shell messages enter effect interpretation.
 - [Phase 42]: Subscriptions owns heartbeat gating, chrome clock interval wiring, PubSubForwarder wiring, InitialRouteEnterForwarder wiring, user topics, screen-declared topics, and dynamic refresh diffing.
 - [Phase 42]: Foglet.TUI.App retains only the Raxol callback integration points for subscribe/1 and post-update refresh timing.
+- [Phase 42]: Foglet.TUI.App remains a public fixture boundary for route state helpers, but effect interpretation tests now target Foglet.TUI.App.Effects directly. — Phase 42 finalization kept App as the Raxol shell while preserving helper-owned effect behavior coverage.
+- [Phase 42]: App runtime tests use structural state, command, modal, and SizeGate element assertions instead of pure rendered-text presence checks. — This preserves behavior coverage while following AGENTS.md testing guidance.
 
 ### Pending Todos
 
@@ -91,6 +94,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-29T22:18:04.462Z
-Stopped at: Completed 42-04-PLAN.md
+Last session: 2026-04-29T22:29:43.318Z
+Stopped at: Completed 42-05-PLAN.md
 Resume file: None
