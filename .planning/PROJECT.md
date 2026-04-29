@@ -12,19 +12,22 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 
 **Previous shipped version:** v1.4 Post-Facelift Polish & Bug Fixes completed on 2026-04-28.
 **Shipped version:** v2.0 TUI Runtime Shell & Screen Update Loops completed on 2026-04-29.
-**Current milestone:** Planning next milestone.
+**Current milestone:** v2.1 Stability & Maintenance Hardening.
 
 Foglet now has terminal-native Account, Moderation, and Sysop workbenches; actor-aware authorization; invite-only registration redemption; account profile/preferences; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; board posting and locked-thread restrictions; Account SSH key management; board subscription management; and a polished Unicode-capable SSH/TUI visual foundation.
 
 The v2.0 architecture migration is complete. `Foglet.TUI.App` now acts as a runtime shell for route/session/modal coordination, generic effect interpretation, dynamic PubSub forwarding, task dispatch, and screen-local state storage. Current production screens own their local state transitions through the `init/1`, `update/3`, and `render/2` contract, with compatibility callbacks explicitly bounded for older helpers.
 
-## Next Milestone Goals
+## Current Milestone: v2.1 Stability & Maintenance Hardening
 
-The next milestone should start from fresh requirements with `$gsd-new-milestone`. Good candidate goals:
+**Goal:** Turn the post-v2.0 codebase concerns audit into complete, focused cleanup and hardening work without expanding the product surface.
 
-- Choose the next product or infrastructure theme now that the TUI runtime ownership boundary is stable.
-- Revisit dormant notification/email seeds only if they become intentional product scope.
-- Keep future screen work on the v2.0 contract: screens own local reducer state; App stays the runtime shell.
+**Target features:**
+- Retire the bounded legacy TUI screen compatibility callback surface and migrate remaining helpers/tests to the v2.0 screen contract.
+- Replace the process-dictionary modal submit handoff with a first-class effect path routed by the App shell.
+- Reduce `Foglet.TUI.App` concentration by extracting narrow routing, modal, subscription, and effect helper modules where they lower maintenance risk.
+- Split oversized screen modules along established state/render/reducer boundaries, prioritizing the modules named in the concerns audit.
+- Resolve every smaller concern from `.planning/codebase/CONCERNS.md`, including board supervisor confusion, Dialyzer baseline debt, SSH/session fragility, PostReader cache/pagination/purity concerns, and targeted coverage gaps.
 
 ## Requirements
 
@@ -49,13 +52,16 @@ The next milestone should start from fresh requirements with `$gsd-new-milestone
 
 ### Active
 
-- [ ] Define fresh requirements for the next milestone.
-- [ ] Resolve future traceability placeholders FUTURE-01 through FUTURE-03 only if they become planned requirements.
+- [ ] v2.1 removes legacy TUI screen compatibility callbacks and keeps production screens on `init/1`, `update/3`, and `render/2`.
+- [ ] v2.1 replaces the modal submit process-dictionary handoff with an explicit effect-driven path.
+- [ ] v2.1 extracts cohesive App runtime helpers without moving domain behavior into the TUI shell.
+- [ ] v2.1 decomposes the largest screen modules enough that reducer, state, and render responsibilities are easier to test and change.
+- [ ] v2.1 addresses every item in `.planning/codebase/CONCERNS.md` through implementation, documentation, or an explicit verification artifact.
 
 ### Out of Scope
 
 - New end-user browser workflows - Foglet remains SSH-first and terminal-native.
-- New product features during the runtime refactor - this milestone changes ownership and architecture, not the BBS feature set.
+- New product features during the hardening milestone - this milestone changes reliability, maintainability, and architecture, not the BBS feature set.
 - Replacing Raxol - the new screen contract adapts to the existing Raxol runtime rather than swapping the renderer.
 - Rewriting domain contexts - domain mutations remain in `Foglet.*` contexts and are invoked through task effects.
 - Email/webhook notification expansion - SEED-001 and SEED-002 remain dormant because this milestone does not add notification or email delivery channels.
@@ -83,6 +89,8 @@ app
 
 Widgets already model the smaller local reducer style through `init/1`, `handle_event/2`, and `render/2`. v2.0 lifts that proven pattern to screen modules while keeping process ownership, subscriptions, modal overlay behavior, and command execution in the App shell.
 
+The v2.1 source of truth is `.planning/codebase/CONCERNS.md`, generated after Phase 40. The audit found no active failures after `rtk mix precommit`, but it did identify bounded tech debt, security/runtime hardening opportunities, performance risks, fragile lifecycle paths, and targeted test coverage gaps. This milestone should address all of them rather than selecting only the highest-priority items.
+
 ## Constraints
 
 - **Interface**: SSH terminal UI first - do not add browser-facing product flows.
@@ -106,6 +114,7 @@ Widgets already model the smaller local reducer style through `init/1`, `handle_
 | Make v2.0 an architecture milestone for screen ownership | `Foglet.TUI.App` had accumulated screen-specific routing, async-result handling, and state mutation; moving those decisions into screens makes future TUI work safer | Phase 40 validated |
 | Treat BoardList and ThreadList as screen-owned directory reducers | Board/thread browsing state, async loads, feedback, and route params now flow through local state and screen-tagged effects | Phase 40 validated |
 | Bound legacy screen callbacks instead of deleting every helper immediately | Some modules and tests still expose compatibility helpers, but production App dispatch no longer depends on broad App-state callbacks | Phase 40 validated |
+| Make v2.1 a complete concerns-audit hardening milestone | The post-v2.0 audit is a finite inventory of maintainability and reliability risks, and the user explicitly wants every concern addressed before moving on | Pending |
 
 ## Evolution
 
@@ -125,4 +134,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-29 after v2.0 milestone completion*
+*Last updated: 2026-04-29 after v2.1 milestone initialization*

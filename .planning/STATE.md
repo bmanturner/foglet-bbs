@@ -1,16 +1,16 @@
 ---
 gsd_state_version: 1.0
-milestone: v2.0
-milestone_name: TUI Runtime Shell & Screen Update Loops
-status: complete
-last_updated: "2026-04-29T16:53:10.364Z"
+milestone: v2.1
+milestone_name: Stability & Maintenance Hardening
+status: planning
+last_updated: "2026-04-29T17:06:19.150Z"
 last_activity: 2026-04-29
 progress:
-  total_phases: 7
-  completed_phases: 7
-  total_plans: 28
-  completed_plans: 28
-  percent: 100
+  total_phases: 0
+  completed_phases: 0
+  total_plans: 0
+  completed_plans: 0
+  percent: 0
 ---
 
 # Project State
@@ -24,10 +24,10 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 
 ## Current Position
 
-Phase: None
-Plan: Not started
-Status: v2.0 milestone archived and tagged
-Last activity: 2026-04-29
+Phase: Not started (defining requirements)
+Plan: —
+Status: Defining requirements
+Last activity: 2026-04-29 — Milestone v2.1 started
 
 ## Deferred Items
 
