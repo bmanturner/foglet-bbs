@@ -43,6 +43,11 @@ item is fixed or explicitly bounded.
 | moderation | Moderation tab and read-only table keys exercise local state. | Workspace load task result stores queue/log/users/boards rows locally. | Moderation route-entry hydration delegates to `:load` when a user is present and no-ops anonymously. | Moderation asserts workspace and invite-generation task effects. | `test/foglet_bbs/tui/screens/moderation_test.exs` | Inventory only; existing reducer/effect coverage satisfies VERIFY-02. |
 | sysop | Sysop tab switching, retry, submodule delegation, modal-producing events, and lifecycle slots exercise local state. | Sysop task results store users/boards/limits/system/invite submodule state and preserve lifecycle wrappers. | Sysop has `:on_route_enter` parity coverage for authenticated load and anonymous no-op. | Sysop asserts task, modal, and navigation effects from reducer boundaries. | `test/foglet_bbs/tui/screens/sysop_test.exs` | Inventory only; existing reducer/effect coverage satisfies VERIFY-02. |
 
+## Plan 40-04 Reducer/Effect Gap Fill
+
+- The screen-family inventory did not expose uncovered reducer/effect, task-result, or route-entry gaps requiring new tests. Existing migrated screen tests already assert local state transitions and concrete `%Foglet.TUI.Effect{}` values across the required families.
+- Verification: `rtk mix test test/foglet_bbs/tui/screens` passed with 734 tests and 0 failures.
+
 ## Plan 40-03 IN-03 Targeted Test Hygiene
 
 - Replaced one weak assertion in
