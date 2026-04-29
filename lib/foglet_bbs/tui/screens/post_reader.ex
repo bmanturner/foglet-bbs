@@ -269,14 +269,14 @@ defmodule Foglet.TUI.Screens.PostReader do
   # Phase 39 cleanup: legacy render/1 remains for older smoke tests only.
   # Phase 37 flow state is screen-owned by render/2 and %PostReader.State{}.
   # Phase 39 Plan 39-06: source posts/thread from the screen-owned State
-  # struct under state.screen_state[:post_reader] (legacy_state/1) so that
+  # struct under state.screen_state[:post_reader] (get_screen_state/1) so that
   # this body is independent of the App fields deleted in Plan 39-07.
   def render(state) do
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
     {w, h} = state.terminal_size || @default_terminal_size
 
-    legacy = legacy_state(state)
+    legacy = get_screen_state(state)
 
     legacy_view = %{
       posts: legacy.posts,
@@ -301,14 +301,14 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp legacy_board_label(state) do
-    case legacy_state(state).board do
+    case get_screen_state(state).board do
       %{name: name} when is_binary(name) -> name
       _ -> "Boards"
     end
   end
 
   defp legacy_thread_title_label(state) do
-    case legacy_state(state).thread do
+    case get_screen_state(state).thread do
       %{title: title} when is_binary(title) -> title
       _ -> "Thread"
     end
@@ -416,7 +416,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def handle_key(%{key: :char, char: c}, state) when c in ["r", "R"] do
-    posts = legacy_state(state).posts || []
+    posts = get_screen_state(state).posts || []
     ss = get_screen_state(state)
     reply_to = Enum.at(posts, ss.selected_post_index)
     {w, _h} = state.terminal_size || @default_terminal_size
@@ -480,7 +480,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     new_pending_read_positions =
       seed_read_position_on_entry(
-        legacy_state(state).pending_read_positions,
+        get_screen_state(state).pending_read_positions,
         thread_id,
         posts
       )
@@ -591,7 +591,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   # App-shape `:read_position` field has been deleted).
   defp apply_flush_result(state, flush_ctx, board_result, thread_result) do
     if flush_result_ok?(board_result) and flush_result_ok?(thread_result) do
-      ss = legacy_state(state)
+      ss = get_screen_state(state)
       new_pending = clear_read_position(ss.pending_read_positions, flush_ctx[:thread_id])
       new_ss = %{ss | pending_read_positions: new_pending}
       new_screen_state = Map.put(state.screen_state || %{}, :post_reader, new_ss)
@@ -650,21 +650,14 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
-  defp get_screen_state(%{screen_state: %{post_reader: %State{} = ss}}), do: ss
-  defp get_screen_state(_state), do: init_screen_state([])
-
   # Phase 39 Plan 39-07: legacy callback bodies (render/1, handle_key/2,
   # advance_post/2, scroll_post/2, build_flush_context/1, load_posts/2,
   # apply_flush_result/4) source what they need from the screen-owned State
   # struct under state.screen_state[:post_reader]. The pre-39-07 backfill from
   # the deleted App-shape top-level keys (`:posts`, `:read_position`,
   # `:current_thread`, `:current_board`) is gone alongside those fields.
-  defp legacy_state(state) do
-    case Map.get(state.screen_state || %{}, :post_reader) do
-      %State{} = struct -> struct
-      _ -> %State{}
-    end
-  end
+  defp get_screen_state(%{screen_state: %{post_reader: %State{} = ss}}), do: ss
+  defp get_screen_state(_state), do: init_screen_state([])
 
   # Parses the post body via Foglet.Markdown.render/1. Returns the
   # rendered tuple list but does NOT write to render_cache — it is a
@@ -731,7 +724,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   # Width-aware: re-runs whenever width changes (via scroll_post caller).
   defp warm_viewport(ss, state, post, w) do
     theme = Theme.from_state(state)
-    posts = ss.posts || legacy_state(state).posts || []
+    posts = ss.posts || get_screen_state(state).posts || []
     idx = ss.selected_post_index
     total = length(posts)
 
@@ -747,7 +740,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp advance_post(state, delta) do
-    legacy = legacy_state(state)
+    legacy = get_screen_state(state)
     posts = legacy.posts || []
 
     if posts == [] do
@@ -791,7 +784,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp scroll_post(state, delta) do
-    posts = legacy_state(state).posts || []
+    posts = get_screen_state(state).posts || []
 
     if posts == [] do
       # WR-02: absorb scroll keys during loading so they don't escape to the
@@ -825,7 +818,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp build_flush_context(state) do
-    legacy = legacy_state(state)
+    legacy = get_screen_state(state)
     thread = legacy.thread
     board = legacy.board
     thread_id = thread && thread.id
