@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-29T00:19:33.273Z"
+last_updated: "2026-04-29T00:30:12.690Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 7
   completed_phases: 3
   total_plans: 15
-  completed_plans: 12
-  percent: 80
+  completed_plans: 13
+  percent: 87
 ---
 
 # Project State
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 37 (post-composer-flow) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-04-29
 
@@ -57,6 +57,9 @@ Last activity: 2026-04-29
 - [Phase 35-auth-home-screens]: Modal form submit routing remains App runtime plumbing but carries only a generic screen key, submit kind, and payload. — Preserves modal precedence without App owning target screen business state.
 - [Phase 37-post-composer-flow]: PostReader.State owns routed board/thread identity, loaded posts, status, viewport, render cache, and pending read-pointer flush state. — Plan 37-01 migrated the reader into the screen reducer contract.
 - [Phase 37-post-composer-flow]: PostReader App wiring now routes entry loads, task results, active-thread refresh, and thread subscriptions through route/local PostReader state instead of App post/read fields. — Plan 37-02 keeps App as runtime interpreter while PostReader owns reader flow state.
+- [Phase 37-post-composer-flow]: Successful submit results navigate to PostReader with load_intent: :jump_last so PostReader owns the reload/jump behavior.
+- [Phase 37-post-composer-flow]: PostComposer.State is the canonical owner for reply route identity, draft input, preview mode, validation errors, submission status, and submit results.
+- [Phase 37-post-composer-flow]: PostComposer requests reply creation through Effect.task/3 while Foglet.Posts remains authoritative for authorization and durable writes.
 
 ### Pending Todos
 
