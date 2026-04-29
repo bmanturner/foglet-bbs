@@ -1933,15 +1933,18 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert invites.error == nil
     end
 
-    test "sysop.ex delegates invite lifecycle through shared modules only" do
+    test "sysop shell and render delegate invite lifecycle through shared modules only" do
       source = File.read!("lib/foglet_bbs/tui/screens/sysop.ex")
+      render_source = File.read!("lib/foglet_bbs/tui/screens/sysop/render.ex")
 
-      assert String.contains?(source, "InvitesSurface.render")
+      assert String.contains?(render_source, "InvitesSurface.render")
       assert String.contains?(source, "InvitesActions.handle_key")
       assert String.contains?(source, "InvitesActions.load")
 
       refute source =~ ~r/Accounts\.(create_invite|revoke_invite|list_invites)/
       refute String.contains?(source, "FogletBbs.Repo")
+      refute render_source =~ ~r/Accounts\.(create_invite|revoke_invite|list_invites)/
+      refute String.contains?(render_source, "FogletBbs.Repo")
     end
   end
 
