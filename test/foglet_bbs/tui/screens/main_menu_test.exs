@@ -120,6 +120,32 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     %{state: build_state(:user)}
   end
 
+  describe "decomposition contract" do
+    test "MainMenu.Render is the sibling render entry point" do
+      assert Code.ensure_loaded?(MainMenu.Render)
+      assert function_exported?(MainMenu.Render, :render, 2)
+    end
+
+    test "render-facing destination descriptors preserve visible_destinations/1 ordering" do
+      for role <- [:user, :mod, :sysop] do
+        user = %{role: role}
+
+        destination_keys =
+          user
+          |> MainMenu.visible_destinations()
+          |> Enum.map(&elem(&1, 0))
+
+        render_descriptor_keys =
+          user
+          |> MainMenu.visible_destination_entries()
+          |> Enum.map(& &1.key)
+
+        assert render_descriptor_keys == destination_keys
+        assert Enum.all?(MainMenu.visible_destination_entries(user), &is_binary(&1.glyph))
+      end
+    end
+  end
+
   describe "oneliners strip" do
     test "nil recent_oneliners renders panel title and empty state", %{state: state} do
       texts = state |> with_oneliners(nil) |> rendered_text()
