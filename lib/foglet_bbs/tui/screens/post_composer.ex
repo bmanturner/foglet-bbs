@@ -13,10 +13,10 @@ defmodule Foglet.TUI.Screens.PostComposer do
   Uses `Raxol.UI.Components.Input.MultiLineInput` component module (D-26) for
   the full-featured editor: cursor, word wrap, undo/redo, shift-select.
   Component state is stored in `%PostComposer.State{}.input_state` at
-  `state.screen_state[:post_composer]`.
-  The legacy App-level `composer_draft` slot is NOT used for reading text — we always read from
-  `input_state.value`. The struct field remains on App but is set to nil by
-  cancel/submit to signal no active draft (unchanged contract).
+  `state.screen_state[:post_composer]`. The pre-39-07 App-level
+  `composer_draft` slot has been deleted; draft text always reads from
+  `input_state.value`, and submit/cancel discard the per-screen state via
+  `Map.delete(state.screen_state, :post_composer)`.
   """
 
   @behaviour Foglet.TUI.Screen
@@ -38,12 +38,6 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   @default_max_post_length 8192
   @default_terminal_size {80, 24}
-
-  # Phase 39 Plan 39-06 transitional: indirected legacy App-shape thread key
-  # so the post-39-07 grep audit finds no direct dot- or Map.get-access of
-  # the soon-to-be-deleted field. Plan 39-07 removes both the field and
-  # this constant.
-  @legacy_thread_key :current_thread
 
   # ---------------------------------------------------------------------------
   # Public API
@@ -438,7 +432,6 @@ defmodule Foglet.TUI.Screens.PostComposer do
      %{
        state
        | current_screen: :post_reader,
-         composer_draft: nil,
          screen_state: Map.delete(state.screen_state, :post_composer)
      }}
   end
@@ -450,16 +443,13 @@ defmodule Foglet.TUI.Screens.PostComposer do
     end
   end
 
-  # Phase 39 Plan 39-06: legacy submit_reply/4 used to read the legacy
-  # App-shape `:current_thread` key directly from the App struct. After
-  # Plan 39-07 deletes that field, the same value is sourced from the
-  # screen-owned State struct under state.screen_state[:post_composer]
-  # (set when the composer was opened via Effect.navigate(:post_composer, …)),
-  # with a fallback to PostReader's screen-state thread (which set the
-  # composer up via the [R] handler), then route_params, and finally —
-  # transitionally — the legacy App-shape `:current_thread` key for fixtures
-  # that haven't yet been migrated. The legacy fallback is removed by
-  # Plan 39-07 alongside the App field deletion.
+  # Phase 39 Plan 39-07: legacy submit_reply/4 sources the thread from the
+  # screen-owned State struct under state.screen_state[:post_composer] (set
+  # when the composer was opened via Effect.navigate(:post_composer, …)), with
+  # a fallback to PostReader's screen-state thread (which set the composer up
+  # via the [R] handler), then route_params. The pre-39-07 transitional
+  # `legacy_app_thread/1` clause that read `state.current_thread` directly was
+  # removed alongside the App-field deletion.
   defp legacy_thread_for_submit(state, ss) do
     composer_thread =
       case ss do
@@ -469,15 +459,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
     composer_thread ||
       legacy_reader_thread(state) ||
-      legacy_route_thread(state) ||
-      legacy_app_thread(state)
-  end
-
-  # Transitional fallback: pre-39-07 App struct still carries a top-level
-  # `:current_thread` field; reducer-test fixtures populate it directly.
-  # 39-07 deletes the field and removes this clause.
-  defp legacy_app_thread(state) do
-    Map.get(state, @legacy_thread_key)
+      legacy_route_thread(state)
   end
 
   defp legacy_reader_thread(state) do
@@ -604,7 +586,6 @@ defmodule Foglet.TUI.Screens.PostComposer do
     new_state = %{
       state
       | current_screen: origin,
-        composer_draft: nil,
         screen_state: Map.delete(state.screen_state, :post_composer)
     }
 

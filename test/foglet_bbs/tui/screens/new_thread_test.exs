@@ -1013,7 +1013,6 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
 
     assert final.current_screen == :thread_list
-    assert final.current_board.id == "b1"
     assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
   end
 
@@ -1042,7 +1041,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     refute Process.get(:new_thread_last_attrs).body =~ "\n"
   end
 
-  test "Ctrl+S with {:ok, %{thread: thread}} preserves current_board from wizard" do
+  test "Ctrl+S with {:ok, %{thread: thread}} dispatches {:load_threads, board_id} from wizard" do
     state = compose_state(%{id: "b1", name: "General"})
 
     s =
@@ -1060,9 +1059,9 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
         next
       end)
 
-    {:update, final, _cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
-    assert final.current_board.id == "b1"
+    {:update, final, cmds} = NewThread.handle_key(%{key: :char, char: "s", ctrl: true}, s)
     assert final.current_screen == :thread_list
+    assert Enum.any?(cmds, &match?({:load_threads, "b1"}, &1))
   end
 
   # ---------------------------------------------------------------------------

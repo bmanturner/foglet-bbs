@@ -52,16 +52,7 @@ defmodule Foglet.TUI.App do
           terminal_size: {pos_integer(), pos_integer()},
           route_params: map(),
           modal: Foglet.TUI.Modal.t() | nil,
-          screen_state: map(),
-          board_list: list() | nil,
-          # Phase 39 cleanup: these legacy App fields remain for unmigrated
-          # flows/tests but are not sources of truth for Phase 37 screens.
-          current_board: map() | nil,
-          current_thread: ThreadEntry.t() | nil,
-          current_thread_list: list() | nil,
-          posts: list() | nil,
-          read_position: map(),
-          composer_draft: String.t() | nil
+          screen_state: map()
         }
 
   defstruct current_screen: :login,
@@ -71,16 +62,7 @@ defmodule Foglet.TUI.App do
             terminal_size: {80, 24},
             route_params: %{},
             modal: nil,
-            screen_state: %{},
-            board_list: nil,
-            # Phase 39 cleanup: legacy shell fields kept for screens that have
-            # not completed the reducer migration; Phase 37 screens own this data.
-            current_board: nil,
-            current_thread: nil,
-            current_thread_list: nil,
-            posts: nil,
-            read_position: %{},
-            composer_draft: nil
+            screen_state: %{}
 
   @doc """
   Returns the current route value.

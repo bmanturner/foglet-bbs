@@ -59,10 +59,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
           screen_state: %{
             main_menu: %{legacy: true},
             sample_runtime: %SampleScreen.State{route_params: %{existing: true}}
-          },
-          board_list: [%{id: "b1"}],
-          posts: [%{id: "p1"}],
-          current_thread_list: [%{id: "t1"}]
+          }
         },
         attrs
       )
@@ -83,9 +80,6 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       new_state = App.put_screen_state(state, :sample_runtime, new_local_state)
 
       assert App.screen_state_for(new_state, :sample_runtime) == new_local_state
-      assert new_state.board_list == state.board_list
-      assert new_state.posts == state.posts
-      assert new_state.current_thread_list == state.current_thread_list
       assert new_state.screen_state.main_menu == state.screen_state.main_menu
     end
 
@@ -123,9 +117,6 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert %SampleScreen.State{route_params: %{board_id: "b1"}} =
                App.screen_state_for(new_state, :sample_runtime)
 
-      assert new_state.board_list == state.board_list
-      assert new_state.posts == state.posts
-      assert new_state.current_thread_list == state.current_thread_list
       assert new_state.screen_state.main_menu == state.screen_state.main_menu
     end
 

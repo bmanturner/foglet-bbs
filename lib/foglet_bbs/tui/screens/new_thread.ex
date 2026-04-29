@@ -621,10 +621,14 @@ defmodule Foglet.TUI.Screens.NewThread do
             |> Map.delete(:new_thread)
             |> Map.put(:thread_list, thread_list_ss)
 
+          # Phase 39 Plan 39-07: legacy `state | current_board: board` write
+          # removed alongside the App-field deletion. The board identity now
+          # lives on the destination screen's local state — wired below by the
+          # ThreadList init shim (selected_index: 0) plus the {:load_threads,
+          # board_id} command that follows.
           new_state = %{
             state
             | current_screen: :thread_list,
-              current_board: board,
               screen_state: new_screen_state
           }
 

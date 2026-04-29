@@ -1827,12 +1827,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
        PostComposer.render(%App{
          current_screen: :post_composer,
          current_user: %{id: "u1", handle: "alice"},
-         current_thread: %{id: "t1", title: "Hello"},
          session_context: %{},
          terminal_size: {80, 24},
-         composer_draft: nil,
          screen_state: %{
-           post_composer: PostComposer.init_screen_state(input_state: input_st)
+           post_composer:
+             PostComposer.init_screen_state(
+               input_state: input_st,
+               thread: %{id: "t1", title: "Hello"}
+             )
          }
        })}
     ]

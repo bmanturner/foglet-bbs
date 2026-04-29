@@ -44,19 +44,26 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
   setup do
     input_st = fresh_input()
+    thread = %{id: "t1", title: "Hello", board_id: "b1"}
 
     state =
       %Foglet.TUI.App{
         current_screen: :post_composer,
         current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-        current_thread: %{id: "t1", title: "Hello", board_id: "b1"},
         session_context: %{
           domain: %{posts: FakePosts, markdown: FakeMarkdown},
           max_post_length: 1_000
         },
         terminal_size: {80, 24},
         screen_state: %{
-          post_composer: PostComposer.init_screen_state(input_state: input_st)
+          post_composer:
+            PostComposer.init_screen_state(
+              input_state: input_st,
+              thread: thread,
+              thread_id: thread.id,
+              board: %{id: thread.board_id},
+              board_id: thread.board_id
+            )
         }
       }
       |> Map.from_struct()
@@ -106,11 +113,16 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
   defp with_reply(state, body \\ "") do
     input_st = fresh_input(body)
+    thread = %{id: "t1", title: "Hello", board_id: "b1"}
 
     ss =
       PostComposer.init_screen_state(
         reply_to: reply_post(),
-        input_state: input_st
+        input_state: input_st,
+        thread: thread,
+        thread_id: thread.id,
+        board: %{id: thread.board_id},
+        board_id: thread.board_id
       )
 
     put_in(state.screen_state.post_composer, ss)
@@ -470,7 +482,6 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       %Foglet.TUI.App{
         current_screen: :post_composer,
         current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-        current_thread: %{id: "t1", title: "Hello", board_id: "b1"},
         session_context: %{domain: %{posts: FakePosts}},
         terminal_size: {80, 24},
         screen_state: %{

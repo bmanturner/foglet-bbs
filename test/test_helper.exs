@@ -1,2 +1,2 @@
-ExUnit.start(exclude: [:pending, :phase39_target])
+ExUnit.start(exclude: [:pending])
 Ecto.Adapters.SQL.Sandbox.mode(FogletBbs.Repo, :manual)

@@ -67,16 +67,6 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @default_terminal_size {80, 24}
 
-  # Phase 39 Plan 39-06 transitional: indirected legacy App-shape keys so the
-  # post-39-07 grep audit (`grep -nE 'state\.(current_board|current_thread|posts|read_position)'`)
-  # finds no direct dot-access references in the file. Plan 39-07 deletes
-  # both the App fields and these constants alongside the backfill block in
-  # legacy_state/1.
-  @legacy_posts_key :posts
-  @legacy_read_position_key :read_position
-  @legacy_thread_key :current_thread
-  @legacy_board_key :current_board
-
   @impl true
   @spec init(Context.t()) :: State.t()
   def init(%Context{} = context), do: State.from_context(context)
@@ -438,7 +428,6 @@ defmodule Foglet.TUI.Screens.PostReader do
     new_state = %{
       state
       | current_screen: :post_composer,
-        composer_draft: "",
         screen_state: Map.put(state.screen_state, :post_composer, composer_ss)
     }
 
@@ -452,7 +441,6 @@ defmodule Foglet.TUI.Screens.PostReader do
     new_state = %{
       state
       | current_screen: :thread_list,
-        posts: nil,
         screen_state: Map.delete(state.screen_state, :post_reader)
     }
 
@@ -490,7 +478,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     posts = posts_mod.list_posts(thread_id)
 
-    new_read_position =
+    new_pending_read_positions =
       seed_read_position_on_entry(
         legacy_state(state).pending_read_positions,
         thread_id,
@@ -501,19 +489,21 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     # WR-01: warm the render cache for the first post on load so that the
     # initial render (before any keypress) does not re-parse on every frame.
+    # Phase 39 Plan 39-07: posts now live on the screen-owned %State{}; pass
+    # `posts` directly so warm_cache_for_index/warm_viewport don't have to
+    # read them back through the deleted `state.posts` field.
     ss = get_screen_state(state)
-    state_with_posts = %{state | posts: posts}
-    ss = warm_cache_for_index(ss, state_with_posts, posts, 0, w)
+    ss = %{ss | posts: posts, pending_read_positions: new_pending_read_positions}
+    ss = warm_cache_for_index(ss, state, posts, 0, w)
 
     # Pre-populate the viewport children for post 0 so j/k have correct
     # content_height for clamping on first keypress.
     first_post = Enum.at(posts, 0)
-    ss = if first_post, do: warm_viewport(ss, state_with_posts, first_post, w), else: ss
+    ss = if first_post, do: warm_viewport(ss, state, first_post, w), else: ss
 
     new_screen_state = Map.put(state.screen_state, :post_reader, ss)
 
-    {%{state | posts: posts, read_position: new_read_position, screen_state: new_screen_state},
-     []}
+    {%{state | screen_state: new_screen_state}, []}
   end
 
   defp seed_read_position_on_entry(read_position, _thread_id, []), do: read_position
@@ -596,12 +586,17 @@ defmodule Foglet.TUI.Screens.PostReader do
   # Clears the local read-pointer only when both DB flushes succeeded (or were
   # skipped because there was nothing to flush). On failure, logs a warning and
   # returns state unchanged so the pointer is retried on the next transition.
+  # Phase 39 Plan 39-07: writes the cleared pending_read_positions onto the
+  # screen-owned %State{} under state.screen_state[:post_reader] (the legacy
+  # App-shape `:read_position` field has been deleted).
   defp apply_flush_result(state, flush_ctx, board_result, thread_result) do
     if flush_result_ok?(board_result) and flush_result_ok?(thread_result) do
-      new_rp =
-        clear_read_position(legacy_state(state).pending_read_positions, flush_ctx[:thread_id])
+      ss = legacy_state(state)
+      new_pending = clear_read_position(ss.pending_read_positions, flush_ctx[:thread_id])
+      new_ss = %{ss | pending_read_positions: new_pending}
+      new_screen_state = Map.put(state.screen_state || %{}, :post_reader, new_ss)
 
-      {%{state | read_position: new_rp}, []}
+      {%{state | screen_state: new_screen_state}, []}
     else
       require Logger
 
@@ -658,42 +653,18 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp get_screen_state(%{screen_state: %{post_reader: %State{} = ss}}), do: ss
   defp get_screen_state(_state), do: init_screen_state([])
 
-  # Phase 39 Plan 39-06 / D-21: legacy callback bodies (render/1, handle_key/2,
+  # Phase 39 Plan 39-07: legacy callback bodies (render/1, handle_key/2,
   # advance_post/2, scroll_post/2, build_flush_context/1, load_posts/2,
   # apply_flush_result/4) source what they need from the screen-owned State
-  # struct under state.screen_state[:post_reader] instead of the soon-to-be-
-  # deleted App fields (`:posts`, `:read_position`, `:current_thread`,
-  # `:current_board`). After Plan 39-07 deletes those fields, the only
-  # remaining readers are the new-contract update/3 + render/2 paths, which
-  # already operate over %State{} directly.
-  #
-  # Until Plan 39-07 lands, legacy callers (and reducer-test fixtures) still
-  # populate the App-shape top-level keys (`:posts`, `:read_position`,
-  # `:current_thread`, `:current_board`); we transparently backfill from those
-  # when the screen-owned State struct is empty so existing tests keep
-  # passing. The backfill block is removed by Plan 39-07 alongside the
-  # struct-field deletion.
+  # struct under state.screen_state[:post_reader]. The pre-39-07 backfill from
+  # the deleted App-shape top-level keys (`:posts`, `:read_position`,
+  # `:current_thread`, `:current_board`) is gone alongside those fields.
   defp legacy_state(state) do
-    %State{} =
-      ss =
-      case Map.get(state.screen_state || %{}, :post_reader) do
-        %State{} = struct -> struct
-        _ -> %State{}
-      end
-
-    %State{
-      ss
-      | posts: ss.posts || Map.get(state, @legacy_posts_key),
-        pending_read_positions:
-          pick_pending(ss.pending_read_positions, Map.get(state, @legacy_read_position_key)),
-        thread: ss.thread || Map.get(state, @legacy_thread_key),
-        board: ss.board || Map.get(state, @legacy_board_key)
-    }
+    case Map.get(state.screen_state || %{}, :post_reader) do
+      %State{} = struct -> struct
+      _ -> %State{}
+    end
   end
-
-  defp pick_pending(%{} = ss_map, _) when map_size(ss_map) > 0, do: ss_map
-  defp pick_pending(_ss_map, %{} = legacy_map), do: legacy_map
-  defp pick_pending(ss_map, _legacy), do: ss_map || %{}
 
   # Parses the post body via Foglet.Markdown.render/1. Returns the
   # rendered tuple list but does NOT write to render_cache — it is a
@@ -760,7 +731,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   # Width-aware: re-runs whenever width changes (via scroll_post caller).
   defp warm_viewport(ss, state, post, w) do
     theme = Theme.from_state(state)
-    posts = legacy_state(state).posts || []
+    posts = ss.posts || legacy_state(state).posts || []
     idx = ss.selected_post_index
     total = length(posts)
 
@@ -798,9 +769,11 @@ defmodule Foglet.TUI.Screens.PostReader do
       ss = if post, do: warm_viewport(ss, state, post, w), else: ss
 
       # Local read-pointer advance — flushed on screen transition.
+      # Phase 39 Plan 39-07: pending_read_positions live on the screen-owned
+      # %State{} now (the legacy App-shape `:read_position` field is gone).
       legacy_thread = legacy.thread
 
-      new_rp =
+      new_pending =
         if post && legacy_thread do
           Map.put(legacy.pending_read_positions, legacy_thread.id, %{
             last_read_post_id: post.id,
@@ -810,9 +783,10 @@ defmodule Foglet.TUI.Screens.PostReader do
           legacy.pending_read_positions
         end
 
+      ss = %{ss | pending_read_positions: new_pending}
       new_screen_state = Map.put(state.screen_state, :post_reader, ss)
 
-      {:update, %{state | screen_state: new_screen_state, read_position: new_rp}, []}
+      {:update, %{state | screen_state: new_screen_state}, []}
     end
   end
 

@@ -74,8 +74,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       %Foglet.TUI.App{
         current_screen: :post_reader,
         current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-        current_board: %{id: "b1", name: "General"},
-        current_thread: %{id: "t1", title: "Hello"},
         session_context: %{
           domain: %{
             posts: FakePosts,
@@ -85,9 +83,15 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
           }
         },
         terminal_size: {80, 24},
-        posts: nil,
-        read_position: %{},
-        screen_state: %{post_reader: PostReader.init_screen_state([])}
+        screen_state: %{
+          post_reader:
+            PostReader.init_screen_state(
+              board: %{id: "b1", name: "General"},
+              thread: %{id: "t1", title: "Hello"},
+              posts: nil,
+              pending_read_positions: %{}
+            )
+        }
       }
       |> Map.from_struct()
 
@@ -104,11 +108,11 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # are called and tested, not dead code.
   # ===========================================================================
 
-  test "load_posts/2 populates state.posts", %{state: state} do
+  test "load_posts/2 populates state.screen_state[:post_reader].posts", %{state: state} do
     # load_posts/2 intentional callback surface (READER-02, D-03, D-04)
     {s, _} = PostReader.load_posts(state, "t1")
-    assert length(s.posts) == 2
-    assert %State{} = s.screen_state.post_reader
+    assert %State{} = ss = s.screen_state.post_reader
+    assert length(ss.posts) == 2
   end
 
   test "init_screen_state/1 returns the PostReader.State struct" do
@@ -382,7 +386,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
 
     test "empty posts list renders canonical 'Loading…' text", %{state: state} do
-      s = %{state | posts: []}
+      ss = %{state.screen_state.post_reader | posts: []}
+      s = %{state | screen_state: Map.put(state.screen_state, :post_reader, ss)}
       flat = flatten_text(PostReader.render(s))
       assert flat =~ "Loading…", "Expected canonical Loading… text for empty posts"
       refute String.contains?(flat, "Loading posts...")
@@ -468,12 +473,13 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
-  test "'n' advances to next post and updates read_position", %{state: state} do
+  test "'n' advances to next post and updates pending_read_positions", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
     {:update, s, _} = PostReader.handle_key(%{key: :char, char: "n"}, s)
-    assert s.screen_state.post_reader.selected_post_index == 1
-    assert s.read_position["t1"][:last_read_post_id] == "p2"
-    assert s.read_position["t1"][:last_read_message_number] == 2
+    ss = s.screen_state.post_reader
+    assert ss.selected_post_index == 1
+    assert ss.pending_read_positions["t1"][:last_read_post_id] == "p2"
+    assert ss.pending_read_positions["t1"][:last_read_message_number] == 2
   end
 
   test "'p' decrements bounded at 0", %{state: state} do
@@ -503,7 +509,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     {:update, new_state, cmds} = PostReader.handle_key(%{key: :char, char: "Q"}, s)
 
     assert new_state.current_screen == :thread_list
-    assert new_state.posts == nil
+    refute Map.has_key?(new_state.screen_state, :post_reader)
     assert Enum.any?(cmds, &match?({:flush_read_pointers, %{thread_id: "t1"}}, &1))
   end
 
@@ -521,7 +527,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     }
 
     {new_state, _} = PostReader.flush_read_pointers(s, ctx)
-    refute Map.has_key?(new_state.read_position, "t1")
+    refute Map.has_key?(new_state.screen_state.post_reader.pending_read_positions, "t1")
   end
 
   # ===========================================================================
@@ -536,7 +542,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       # posts is nil — loading window not yet closed
       assert {:update, s, []} = PostReader.handle_key(%{key: :char, char: "n"}, state)
       # State is returned unchanged (no navigation occurred)
-      assert s.posts == state.posts
+      assert s.screen_state.post_reader.posts == state.screen_state.post_reader.posts
     end
 
     test "p key on loading state absorbs without extra commands", %{state: state} do
@@ -556,7 +562,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
 
     test "n key on empty posts list absorbs without extra commands", %{state: state} do
-      s = %{state | posts: []}
+      ss = %{state.screen_state.post_reader | posts: []}
+      s = %{state | screen_state: Map.put(state.screen_state, :post_reader, ss)}
       assert {:update, _s, []} = PostReader.handle_key(%{key: :char, char: "n"}, s)
     end
   end
@@ -653,22 +660,53 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     }
   end
 
+  # Builds the App-shape state map for legacy callback tests. Phase 39 Plan 39-07
+  # migrated `posts`, `pending_read_positions`, `thread`, and `board` from
+  # top-level App fields onto the screen-owned `%PostReader.State{}` slot at
+  # `screen_state[:post_reader]`. Overrides are routed there transparently — pass
+  # `posts:`, `read_position:`, `current_thread:`, `current_board:` exactly as
+  # callers have for years and the helper places them on the screen struct.
   defp p2_state(overrides) do
+    overrides = Enum.into(overrides, %{})
+
+    posts = Map.get(overrides, :posts, [p2_post(id: "p1", body: "Hello **world**.")])
+    pending = Map.get(overrides, :read_position, %{})
+    thread = Map.get(overrides, :current_thread, %{id: "t1", title: "Test Thread"})
+    board = Map.get(overrides, :current_board, %{id: "b1"})
+    existing_ss = Map.get(overrides, :screen_state, %{})
+
+    base_ss =
+      Map.get(existing_ss, :post_reader, PostReader.init_screen_state([]))
+      |> Map.merge(%{
+        posts: posts,
+        pending_read_positions: pending,
+        thread: thread,
+        thread_id: Map.get(thread || %{}, :id),
+        board: board,
+        board_id: Map.get(board || %{}, :id)
+      })
+
+    screen_state = Map.put(existing_ss, :post_reader, base_ss)
+
     base = %{
       current_screen: :post_reader,
-      current_thread: %{id: "t1", title: "Test Thread"},
-      current_board: %{id: "b1"},
       current_user: %{id: "u1", handle: "sysop"},
-      posts: [p2_post(id: "p1", body: "Hello **world**.")],
-      read_position: %{},
-      screen_state: %{post_reader: PostReader.init_screen_state([])},
+      screen_state: screen_state,
       session_context: %{theme: theme()},
       terminal_size: {80, 24},
-      modal: nil,
-      composer_draft: ""
+      modal: nil
     }
 
-    Map.merge(base, overrides)
+    overrides_for_app =
+      Map.drop(overrides, [
+        :posts,
+        :read_position,
+        :current_thread,
+        :current_board,
+        :screen_state
+      ])
+
+    Map.merge(base, overrides_for_app)
   end
 
   # Local flatten helpers (same pattern as MarkdownBodyTest)
@@ -1030,7 +1068,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   describe "load_posts/2 — read-on-entry seeding (LIST-01 D-05)" do
-    test "seeds read_position[thread_id] with post 0's id and message_number on load" do
+    test "seeds pending_read_positions[thread_id] with post 0's id and message_number on load" do
       s =
         p2_state(%{
           current_thread: %{id: "t1", title: "test"},
@@ -1041,13 +1079,13 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       {s_after, _} = PostReader.load_posts(s, "t1")
 
-      rp = s_after.read_position["t1"]
-      assert rp, "Expected read_position[\"t1\"] to be seeded"
+      rp = s_after.screen_state.post_reader.pending_read_positions["t1"]
+      assert rp, "Expected pending_read_positions[\"t1\"] to be seeded"
       assert rp.last_read_post_id == "p1"
       assert rp.last_read_message_number == 5
     end
 
-    test "does NOT touch other threads' read_position entries" do
+    test "does NOT touch other threads' pending_read_positions entries" do
       s =
         p2_state(%{
           current_thread: %{id: "t1", title: "test"},
@@ -1060,11 +1098,12 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       {s_after, _} = PostReader.load_posts(s, "t1")
 
-      assert s_after.read_position["tOther"].last_read_post_id == "pX"
-      assert s_after.read_position["tOther"].last_read_message_number == 99
+      pending = s_after.screen_state.post_reader.pending_read_positions
+      assert pending["tOther"].last_read_post_id == "pX"
+      assert pending["tOther"].last_read_message_number == 99
     end
 
-    test "empty posts list leaves read_position unchanged (no crash)" do
+    test "empty posts list leaves pending_read_positions unchanged (no crash)" do
       s =
         p2_state(%{
           current_thread: %{id: "t1", title: "test"},
@@ -1075,7 +1114,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       {s_after, _} = PostReader.load_posts(s, "t1")
 
-      assert s_after.read_position == %{}
+      assert s_after.screen_state.post_reader.pending_read_positions == %{}
     end
 
     test "Q immediately after load produces a flush command with post 0's message_number (integration)" do

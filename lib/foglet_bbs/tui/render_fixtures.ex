@@ -89,13 +89,7 @@ defmodule Foglet.TUI.RenderFixtures do
       current_user: user,
       session_context: synthetic_session_context(user),
       terminal_size: terminal_size,
-      screen_state: %{},
-      board_list: nil,
-      current_board: nil,
-      current_thread: nil,
-      current_thread_list: nil,
-      posts: nil,
-      read_position: %{}
+      screen_state: %{}
     }
   end
 

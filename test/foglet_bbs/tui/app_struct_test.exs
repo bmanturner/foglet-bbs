@@ -4,7 +4,6 @@ defmodule Foglet.TUI.AppStructTest do
   alias Foglet.TUI.App
 
   describe "struct shape (Phase 39 R1, D-19)" do
-    @tag :phase39_target
     test "%App{} contains exactly the eight runtime-shell fields" do
       keys = App.__struct__() |> Map.keys() |> Enum.sort()
 
@@ -21,7 +20,6 @@ defmodule Foglet.TUI.AppStructTest do
              ]
     end
 
-    @tag :phase39_target
     test "%App{} contains none of the seven legacy fields" do
       keys = App.__struct__() |> Map.keys() |> MapSet.new()
 
