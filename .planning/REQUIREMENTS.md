@@ -45,8 +45,8 @@
 ### Verification
 
 - [ ] **VERIFY-01**: Existing TUI behavior tests and canonical render smoke tests pass for migrated screens at supported terminal sizes.
-- [ ] **VERIFY-02**: Screen reducer tests prove key handling, task result handling, and effect emission for each migrated screen family.
-- [ ] **VERIFY-03**: App-shell tests prove effects are interpreted generically and screen-specific state fields are not mutated by App.
+- [x] **VERIFY-02**: Screen reducer tests prove key handling, task result handling, and effect emission for each migrated screen family.
+- [x] **VERIFY-03**: App-shell tests prove effects are interpreted generically and screen-specific state fields are not mutated by App.
 - [ ] **VERIFY-04**: Documentation explains how to add or migrate a screen using `Context`, `Effect`, and the new screen callbacks.
 - [ ] **VERIFY-05**: `mix precommit` runs after the full migration and any pre-existing blockers are explicitly documented if they remain.
 
@@ -97,8 +97,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | APP-03 | Phase 39 | Complete |
 | APP-04 | Phase 39 | Pending |
 | VERIFY-01 | Phase 40 | Pending |
-| VERIFY-02 | Phase 40 | Pending |
-| VERIFY-03 | Phase 40 | Pending |
+| VERIFY-02 | Phase 40 | Complete |
+| VERIFY-03 | Phase 40 | Complete |
 | VERIFY-04 | Phase 40 | Pending |
 | VERIFY-05 | Phase 40 | Pending |
 

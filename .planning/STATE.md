@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-29T14:41:22.787Z"
-last_activity: 2026-04-29 -- Phase 40 planning complete
+last_updated: "2026-04-29T15:25:26.919Z"
+last_activity: 2026-04-29
 progress:
   total_phases: 7
   completed_phases: 5
   total_plans: 28
-  completed_plans: 28
+  completed_plans: 31
   percent: 100
 ---
 
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 39 — app-shell-simplification
+**Current focus:** Phase 40 — verification-documentation
 
 ## Current Position
 
-Phase: 39 (app-shell-simplification) — EXECUTING
-Plan: 8 of 8
+Phase: 40 (verification-documentation) — EXECUTING
+Plan: 3 of 5
 Status: Ready to execute
-Last activity: 2026-04-29 -- Phase 40 planning complete
+Last activity: 2026-04-29
 
 ## Accumulated Context
 
@@ -74,6 +74,7 @@ Last activity: 2026-04-29 -- Phase 40 planning complete
 - [Phase ?]: [Phase 39-04]: Each :on_route_enter clause delegates to the existing :load clause rather than reimplementing load logic — preserves test seams and minimizes diff size for Plan 39-08 byte-equivalence.
 - [Phase ?]: [Phase 39-04]: PostReader gets two :on_route_enter clauses (state-first + route_params fallback) mirroring subscriptions/2; ThreadList gets a single unconditional clause matching app.ex:834-836's no-user gate.
 - [Phase ?]: Plan 39-07: Deleted seven legacy fields from %TUI.App{} struct atomically with reducer-test fixture migration (~50 sites). The eight runtime-shell fields are final; Wave 0 struct pins green in default suite.
+- [Phase 40-verification-documentation]: [Phase 40-02]: App production dispatch now routes screen keys and renders through update/3 and render/2; legacy screen callbacks are bounded compatibility only. — Phase 40-02 removed App fallback dispatch and documented remaining broad callbacks as compatibility-only.
 
 ### Pending Todos
 
