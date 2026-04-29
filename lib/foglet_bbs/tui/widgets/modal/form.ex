@@ -97,7 +97,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
           optional(any()) => any()
         }
 
-  @type action :: :submitted | :cancelled | nil
+  @type action :: :submitted | {:submitted, term()} | :cancelled | nil
 
   @typedoc """
   Submit-state machine (Phase 28 FORM-05 / D-01..D-05).
@@ -279,8 +279,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
     if state.focus_index == last_idx do
       payload = collect_values(state)
-      _ = state.on_submit.(payload)
-      {%{state | submit_state: :submitting}, :submitted}
+      submit_result = state.on_submit.(payload)
+      {%{state | submit_state: :submitting}, submitted_action(submit_result)}
     else
       n = length(state.fields)
       {%{state | focus_index: rem(state.focus_index + 1, n)}, nil}
@@ -330,6 +330,9 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     new_states = List.replace_at(state.field_states, state.focus_index, new_field_state)
     {%{state | field_states: new_states}, nil}
   end
+
+  defp submitted_action(result) when result in [:ok, nil], do: :submitted
+  defp submitted_action(result), do: {:submitted, result}
 
   @doc """
   Return the current typed value of a named field without submitting.

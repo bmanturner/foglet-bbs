@@ -242,20 +242,33 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
 
   # --- REQ-5: Enter behavior ---
 
-  test "REQ-5 Enter on last field submits and returns :submitted action" do
+  test "REQ-5 Enter on last field submits once and returns submit result action" do
+    pid = self()
+
     fields = [
       %{name: :a, type: :text, label: "A"},
       %{name: :b, type: :text, label: "B"}
     ]
 
-    state = test_form(fields)
+    state =
+      Form.init(
+        title: "Test Form",
+        fields: fields,
+        on_submit: fn payload ->
+          send(pid, {:submitted, payload})
+          {:submit_result, payload}
+        end,
+        on_cancel: fn -> send(pid, :cancelled) end
+      )
+
     # Move to last field (index 1)
     {state_at_last, _} = Form.handle_event(%{key: :tab}, state)
     assert state_at_last.focus_index == 1
 
     {_final, action} = Form.handle_event(%{key: :enter}, state_at_last)
-    assert action == :submitted
-    assert_receive {:submitted, _payload}
+    assert action == {:submitted, {:submit_result, %{a: "", b: ""}}}
+    assert_receive {:submitted, %{a: "", b: ""}}
+    refute_receive {:submitted, _payload}
   end
 
   test "REQ-5 Enter on non-last field advances focus, does not submit" do
@@ -874,7 +887,7 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       form = single_field_form()
 
       {form1, action1} = Form.handle_event(%{key: :enter}, form)
-      assert action1 == :submitted
+      assert action1 == {:submitted, :submit_called}
       assert form1.submit_state == :submitting
 
       {form2, action2} = Form.handle_event(%{key: :enter}, form1)
@@ -887,7 +900,7 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
 
     test "FORM-05 lock — :char event does not mutate field_states or focus" do
       form = single_field_form()
-      {locked, :submitted} = Form.handle_event(%{key: :enter}, form)
+      {locked, {:submitted, :submit_called}} = Form.handle_event(%{key: :enter}, form)
       assert locked.submit_state == :submitting
 
       original_field_states = locked.field_states
