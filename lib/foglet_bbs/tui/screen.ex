@@ -16,21 +16,6 @@ defmodule Foglet.TUI.Screen do
   - Stateless screens explicitly return `:stateless` or `%{}` from `init/1` and do not store local state in App fields.
   - Screens do not receive `%Foglet.TUI.App{}` through `init/1`, `update/3`, or `render/2`.
 
-  ## Bounded compatibility surface
-
-  Production `Foglet.TUI.App` dispatch no longer calls the broad App-state
-  callbacks below. They remain declared only so modules that still expose
-  compatibility helpers can keep their `@impl` annotations while cleanup lands
-  in the screen modules themselves:
-
-  - `render/1` — bounded to compatibility helpers and older direct smoke tests;
-    App rendering uses `render/2`.
-  - `handle_key/2` — bounded to compatibility helpers and older direct tests;
-    App key routing uses `update({:key, event}, local_state, context)`.
-  - `init_screen_state/1` — bounded to compatibility constructors; render
-    fixtures and migrated tests should prefer `init/1` or first-class
-    `State.new/1`.
-
   New screens should implement only the canonical callbacks plus optional
   `subscriptions/2`.
   """
@@ -39,11 +24,6 @@ defmodule Foglet.TUI.Screen do
   @type local_state :: term()
   @type effects :: [Foglet.TUI.Effect.t()]
   @type update_result :: {local_state(), effects()}
-
-  @type key_event :: map()
-  @type app_state :: map()
-  @type command :: tuple() | Raxol.Core.Runtime.Command.t()
-  @type handle_key_result :: {:update, app_state(), [command()]} | :no_match
 
   @callback init(Foglet.TUI.Context.t()) :: local_state()
   @callback update(message(), local_state(), Foglet.TUI.Context.t()) :: update_result()
@@ -61,29 +41,8 @@ defmodule Foglet.TUI.Screen do
   """
   @callback subscriptions(local_state(), Foglet.TUI.Context.t()) :: [String.t()]
 
-  @doc """
-  Bounded compatibility render callback that receives broad App state.
-  Production App rendering uses `render/2`.
-  """
-  @callback render(state :: app_state()) :: any()
-
-  @doc """
-  Bounded compatibility key handler that receives broad App state.
-  Production App key routing uses `update/3`.
-  """
-  @callback handle_key(key :: key_event(), state :: app_state()) :: handle_key_result()
-
-  @doc """
-  Bounded compatibility screen-state initializer. Prefer `init/1` or a
-  first-class `State.new/1` constructor for new tests and fixtures.
-  """
-  @callback init_screen_state(opts :: keyword()) :: map()
-
   @optional_callbacks init: 1,
                       update: 3,
                       render: 2,
-                      render: 1,
-                      handle_key: 2,
-                      init_screen_state: 1,
                       subscriptions: 2
 end
