@@ -7,6 +7,8 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Accounts.{Invites, User}
   alias Foglet.Config
   alias Foglet.Moderation.Action
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Moderation
   alias Foglet.TUI.Screens.Moderation.State, as: ModerationState
@@ -42,11 +44,106 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     %{state: build_state(:mod)}
   end
 
+  defmodule FakeModeration do
+    def workspace_snapshot(_user) do
+      {:ok,
+       %{
+         scopes: [:site],
+         queue: [],
+         log: [],
+         users: [%{handle: "alice", role: :user, status: :active}],
+         boards: [%{name: "General", category_name: "Main", state: :active}]
+       }}
+    end
+  end
+
   describe "init_screen_state/1" do
     test "returns struct with active_tab: 0 and Tabs wrapper" do
       ss = Moderation.init_screen_state()
       assert ss.active_tab == 0
       assert %Foglet.TUI.Widgets.Input.Tabs{} = ss.tabs
+    end
+  end
+
+  describe "new screen contract" do
+    test "Moderation.update(:load) emits a workspace task effect" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      {state, effects} = Moderation.update(:load, Moderation.init(context), context)
+
+      assert state.loading?
+
+      assert [
+               %Effect{
+                 type: :task,
+                 payload: %{op: :load_moderation_workspace, screen_key: :moderation}
+               }
+             ] =
+               effects
+    end
+
+    test "Moderation task result stores workspace rows locally" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+      context = Context.new(current_user: user, route: :moderation)
+      state = Moderation.init(context)
+
+      snapshot = %{
+        scopes: [:site],
+        queue: [],
+        log: [],
+        users: [%{handle: "alice", role: :user, status: :active}],
+        boards: [%{name: "General", category_name: "Main", state: :active}]
+      }
+
+      {state, effects} =
+        Moderation.update(
+          {:task_result, :load_moderation_workspace, {:ok, {:ok, snapshot}}},
+          state,
+          context
+        )
+
+      refute state.loading?
+      assert state.error == nil
+      assert [%{handle: "alice"}] = state.users
+      assert effects == []
+    end
+
+    test "read-only table tabs update table state without effects" do
+      context = Context.new(current_user: %User{id: "u1", role: :mod}, route: :moderation)
+      state = Moderation.init_screen_state(active: 1, mod_log: [])
+
+      {state, effects} = Moderation.update({:key, %{key: :down}}, state, context)
+
+      assert %ModerationState{} = state
+      assert effects == []
+    end
+
+    test "moderator INVITES tab requests task-backed generate" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          session_context: %{invite_code_generators: "mods"}
+        )
+
+      state = Moderation.init_screen_state(invites_visible?: true, active: 5)
+
+      {state, effects} =
+        Moderation.update({:key, %{key: :char, char: "g"}}, state, context)
+
+      assert state.active_tab == 5
+
+      assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: :moderation}}] =
+               effects
     end
   end
 

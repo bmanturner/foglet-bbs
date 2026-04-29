@@ -30,6 +30,8 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Moderation.State
   alias Foglet.TUI.Screens.Shared.InvitesActions
@@ -48,8 +50,106 @@ defmodule Foglet.TUI.Screens.Moderation do
   # ---------------------------------------------------------------------------
 
   @impl true
+  @spec init(Context.t()) :: State.t()
+  def init(%Context{} = context) do
+    State.new(invites_visible?: moderation_invites_visible?(context))
+  end
+
+  @impl true
   @spec init_screen_state(keyword()) :: State.t()
   def init_screen_state(opts \\ []), do: State.new(opts)
+
+  @impl true
+  @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
+  def update(:load, local_state, %Context{} = context) do
+    ss =
+      local_state
+      |> normalize_state(context)
+      |> Map.merge(%{loading?: true, error: nil})
+
+    {ss, [load_workspace_effect(context)]}
+  end
+
+  def update(
+        {:task_result, :load_moderation_workspace, result},
+        local_state,
+        %Context{} = context
+      ) do
+    ss = normalize_state(local_state, context)
+
+    case unwrap_task_result(result) do
+      {:ok, snapshot} when is_map(snapshot) ->
+        {%{
+           ss
+           | scopes: Map.get(snapshot, :scopes, []),
+             queue: Map.get(snapshot, :queue, []),
+             mod_log: Map.get(snapshot, :log, []),
+             users: Map.get(snapshot, :users, []),
+             boards: Map.get(snapshot, :boards, []),
+             loading?: false,
+             error: nil
+         }, []}
+
+      {:error, reason} ->
+        {%{ss | loading?: false, error: reason}, []}
+    end
+  end
+
+  def update({:task_result, op, result}, local_state, %Context{} = context)
+      when op in [
+             :moderation_load_invites,
+             :moderation_generate_invite,
+             :moderation_revoke_invite
+           ] do
+    ss = normalize_state(local_state, context)
+
+    case unwrap_task_result(result) do
+      {:ok, %Foglet.TUI.Screens.Shared.InvitesState{} = invites} ->
+        {%{ss | invites: invites}, []}
+
+      {:error, reason} ->
+        {%{
+           ss
+           | invites:
+               Foglet.TUI.Screens.Shared.InvitesState.with_error(ss.invites, to_string(reason))
+         }, []}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{}) when c in ["Q", "q"] do
+    {normalize_state(local_state), [Effect.navigate(:main_menu, %{})]}
+  end
+
+  def update({:key, event}, local_state, %Context{} = context) do
+    ss = normalize_state(local_state, context)
+    {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
+
+    if action == nil and new_tabs == ss.tabs do
+      handle_active_key(event, ss, context)
+    else
+      new_active =
+        case action do
+          {:tab_changed, idx} -> idx
+          _ -> ss.active_tab
+        end
+
+      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
+      {loaded_ss, effects} = maybe_request_invites(new_ss, context)
+      {loaded_ss, effects}
+    end
+  end
+
+  def update(_message, local_state, %Context{} = context),
+    do: {normalize_state(local_state, context), []}
+
+  @impl true
+  @spec render(State.t(), Context.t()) :: any()
+  def render(%State{} = state, %Context{} = context) do
+    render(render_model(context, state))
+  end
+
+  def render(local_state, %Context{} = context),
+    do: render(normalize_state(local_state, context), context)
 
   @impl true
   @spec render(map()) :: any()
@@ -260,6 +360,43 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
+  defp normalize_state(nil, %Context{} = context), do: init(context)
+
+  defp normalize_state(%State{} = ss, %Context{} = context) do
+    labels = State.tab_labels(moderation_invites_visible?(context))
+    active = min(ss.active_tab, length(labels) - 1)
+
+    if tab_labels_from_tabs(ss.tabs) == labels and active == ss.active_tab do
+      ss
+    else
+      %{ss | tabs: Tabs.init(tabs: labels, active: active), active_tab: active}
+    end
+  end
+
+  defp normalize_state(%State{} = ss), do: ss
+  defp normalize_state(_other), do: State.new()
+
+  defp render_model(%Context{} = context, %State{} = state) do
+    %{
+      current_user: context.current_user,
+      session_context: context.session_context,
+      terminal_size: context.terminal_size,
+      current_screen: :moderation,
+      route_params: context.route_params,
+      screen_state: %{moderation: state}
+    }
+  end
+
+  defp moderation_invites_visible?(%Context{} = context) do
+    case context.current_user do
+      %{role: :mod} ->
+        ShellVisibility.invites_visible?(context.current_user, context.session_context)
+
+      _ ->
+        false
+    end
+  end
+
   defp moderation_invites_visible?(%{current_user: %{role: :mod}} = state) do
     ShellVisibility.invites_visible?(
       Map.get(state, :current_user),
@@ -307,6 +444,92 @@ defmodule Foglet.TUI.Screens.Moderation do
       _other ->
         :no_match
     end
+  end
+
+  defp handle_active_key(event, %State{} = ss, %Context{} = context) do
+    case Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab) do
+      "INVITES" ->
+        handle_invites_update(event, ss, context)
+
+      "LOG" ->
+        table = ss.log_table || State.build_log_table(ss.mod_log)
+        {new_table, _action} = ConsoleTable.handle_event(event, table)
+        {%{ss | log_table: new_table}, []}
+
+      "USERS" ->
+        table = ss.users_table || State.build_users_table(ss.users)
+        {new_table, _action} = ConsoleTable.handle_event(event, table)
+        {%{ss | users_table: new_table}, []}
+
+      "BOARDS" ->
+        table = ss.boards_table || State.build_boards_table(ss.boards)
+        {new_table, _action} = ConsoleTable.handle_event(event, table)
+        {%{ss | boards_table: new_table}, []}
+
+      _other ->
+        {ss, []}
+    end
+  end
+
+  defp handle_invites_update(event, %State{} = ss, %Context{} = context) do
+    key = key_for_invites(event)
+
+    case key do
+      key when key in ["r", "R"] ->
+        {ss, [invites_effect(:moderation_load_invites, context, ss.invites)]}
+
+      key when key in ["g", "G"] ->
+        {ss, [invites_effect(:moderation_generate_invite, context, ss.invites)]}
+
+      key when key in ["d", "D"] ->
+        {ss, [invites_effect(:moderation_revoke_invite, context, ss.invites)]}
+
+      _ ->
+        case InvitesActions.handle_key(key, context.current_user, ss.invites) do
+          {:ok, invites} -> {%{ss | invites: invites}, []}
+          :no_match -> {ss, []}
+        end
+    end
+  end
+
+  defp maybe_request_invites(%State{} = ss, %Context{} = context) do
+    case {Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab), ss.invites.items} do
+      {"INVITES", items} when not is_list(items) ->
+        {ss, [invites_effect(:moderation_load_invites, context, ss.invites)]}
+
+      _ ->
+        {ss, []}
+    end
+  end
+
+  defp load_workspace_effect(%Context{} = context) do
+    moderation_mod = domain_module(context, :moderation, Foglet.Moderation)
+
+    Effect.task(:load_moderation_workspace, :moderation, fn ->
+      moderation_mod.workspace_snapshot(context.current_user)
+    end)
+  end
+
+  defp invites_effect(op, %Context{} = context, invites) do
+    Effect.task(op, :moderation, fn ->
+      case op do
+        :moderation_load_invites -> InvitesActions.load(context.current_user, invites)
+        :moderation_generate_invite -> InvitesActions.generate(context.current_user, invites)
+        :moderation_revoke_invite -> InvitesActions.revoke_selected(context.current_user, invites)
+      end
+    end)
+  end
+
+  defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
+  defp unwrap_task_result({:ok, {:error, reason}}), do: {:error, reason}
+  defp unwrap_task_result({:ok, value}), do: {:ok, value}
+  defp unwrap_task_result({:error, reason}), do: {:error, reason}
+
+  defp domain_module(%Context{} = context, key, default) do
+    Map.get(context.domain || %{}, key) ||
+      (is_map(context.session_context) &&
+         get_in(context.session_context, [:domain, key])) ||
+      default
   end
 
   defp maybe_load_invites(ss, state) do
