@@ -160,10 +160,68 @@ defmodule Foglet.Boards do
     end
   end
 
+  @doc """
+  Create an active board and persist an owner membership in the same command.
+
+  This is the contract-aligned board creation boundary: active boards must have
+  at least one owner before the command returns. The existing `create_board/3`
+  remains for legacy sysop/internal callers while TUI flows migrate to this
+  owner-aware command.
+  """
+  @spec create_board_with_owner(User.t() | nil, String.t(), map()) ::
+          {:ok, Board.t()}
+          | {:error, :board_owner_required}
+          | {:error, :board_owner_inactive}
+          | {:error, :forbidden}
+          | {:error, Ecto.Changeset.t()}
+          | {:error, :board_server_unavailable}
+  def create_board_with_owner(%User{id: owner_id} = actor, category_id, attrs)
+      when is_binary(owner_id) do
+    with :ok <- Bodyguard.permit(Foglet.Authorization, :create_board, actor, :site),
+         :ok <- ensure_active_owner(owner_id) do
+      result =
+        Repo.transact(fn ->
+          with {:ok, board} <-
+                 %Board{category_id: category_id}
+                 |> Board.changeset(attrs)
+                 |> Repo.insert(),
+               {:ok, _membership} <- upsert_board_membership(owner_id, board.id, :owner) do
+            {:ok, board}
+          end
+        end)
+
+      case result do
+        {:ok, board} -> start_board_server_or_rollback(board)
+        error -> error
+      end
+    end
+  end
+
+  def create_board_with_owner(_actor, _category_id, _attrs), do: {:error, :board_owner_required}
+
   defp start_board_server(board_id) do
     BoardSupervisor.start_board(board_id)
   catch
     :exit, reason -> {:error, reason}
+  end
+
+  defp start_board_server_or_rollback(%Board{} = board) do
+    case start_board_server(board.id) do
+      {:ok, _pid} ->
+        {:ok, board}
+
+      {:error, {:already_started, _pid}} ->
+        {:ok, board}
+
+      {:error, reason} ->
+        Logger.error(
+          "Failed to start Board Server for #{board.slug} (#{board.id}): #{inspect(reason)}. " <>
+            "Rolling back the board insert so the caller can retry."
+        )
+
+        _ = Repo.delete(board)
+        {:error, :board_server_unavailable}
+    end
   end
 
   @doc """
@@ -323,6 +381,42 @@ defmodule Foglet.Boards do
   end
 
   @doc """
+  Assign or change a board membership role.
+
+  Active boards must retain at least one owner. Attempts to demote the final
+  owner return `{:error, :last_board_owner}` before writing.
+  """
+  @spec set_board_member_role(String.t(), String.t(), atom()) ::
+          {:ok, Subscription.t()}
+          | {:error, :invalid_role | :last_board_owner | :not_found | Ecto.Changeset.t()}
+  def set_board_member_role(user_id, board_id, role)
+      when role in [:reader, :poster, :moderator, :owner] do
+    with {:ok, board} <- fetch_board(board_id),
+         :ok <- ensure_can_change_owner_role(board, user_id, role) do
+      upsert_board_membership(user_id, board_id, role)
+    end
+  end
+
+  def set_board_member_role(_user_id, _board_id, _role), do: {:error, :invalid_role}
+
+  @doc """
+  Remove a board membership unless it is the final owner on an active board.
+  """
+  @spec remove_board_membership(String.t(), String.t()) ::
+          {:ok, :removed} | {:error, :last_board_owner | :not_found}
+  def remove_board_membership(user_id, board_id) do
+    with {:ok, board} <- fetch_board(board_id),
+         :ok <- ensure_can_remove_membership(board, user_id) do
+      Repo.delete_all(
+        from s in Subscription,
+          where: s.user_id == ^user_id and s.board_id == ^board_id
+      )
+
+      {:ok, :removed}
+    end
+  end
+
+  @doc """
   Subscribe a user to an active board through the context rule boundary.
 
   Accepts a user struct or user id string. Archived boards and boards in
@@ -369,7 +463,8 @@ defmodule Foglet.Boards do
           | {:error, :required_subscription}
   def unsubscribe_user_from_board(actor, board_id) do
     with {:ok, board} <- fetch_active_board(board_id),
-         :ok <- reject_required_subscription(board) do
+         :ok <- reject_required_subscription(board),
+         :ok <- ensure_can_remove_membership(board, user_id(actor)) do
       Repo.delete_all(
         from s in Subscription,
           where: s.user_id == ^user_id(actor) and s.board_id == ^board_id
@@ -377,6 +472,56 @@ defmodule Foglet.Boards do
 
       {:ok, :unsubscribed}
     end
+  end
+
+  defp upsert_board_membership(user_id, board_id, role) do
+    %Subscription{user_id: user_id, board_id: board_id}
+    |> Subscription.changeset(%{subscribed_at: DateTime.utc_now(), role: role})
+    |> Repo.insert(
+      on_conflict: [set: [role: role]],
+      conflict_target: [:user_id, :board_id]
+    )
+  end
+
+  defp ensure_active_owner(user_id) do
+    case Repo.get(User, user_id) do
+      %User{status: :active, deleted_at: nil} -> :ok
+      %User{} -> {:error, :board_owner_inactive}
+      nil -> {:error, :board_owner_required}
+    end
+  end
+
+  defp ensure_can_change_owner_role(%Board{} = board, user_id, new_role) do
+    if active_board?(board) and new_role != :owner and final_owner?(board.id, user_id) do
+      {:error, :last_board_owner}
+    else
+      :ok
+    end
+  end
+
+  defp ensure_can_remove_membership(%Board{} = board, user_id) do
+    if active_board?(board) and final_owner?(board.id, user_id) do
+      {:error, :last_board_owner}
+    else
+      :ok
+    end
+  end
+
+  defp final_owner?(board_id, user_id) do
+    owner_count =
+      Repo.aggregate(
+        from(s in Subscription, where: s.board_id == ^board_id and s.role == :owner),
+        :count,
+        :id
+      )
+
+    owner? =
+      Repo.exists?(
+        from s in Subscription,
+          where: s.board_id == ^board_id and s.user_id == ^user_id and s.role == :owner
+      )
+
+    owner? and owner_count <= 1
   end
 
   @doc "List all subscriptions for a user. Preloads :board."
@@ -427,6 +572,17 @@ defmodule Foglet.Boards do
       %Board{} = board -> {:ok, board}
     end
   end
+
+  defp fetch_board(board_id) do
+    case Repo.get(Board, board_id) |> Repo.preload(:category) do
+      nil -> {:error, :not_found}
+      %Board{} = board -> {:ok, board}
+    end
+  end
+
+  defp active_board?(%Board{archived: false, category: %Category{archived: false}}), do: true
+  defp active_board?(%Board{archived: false, category: nil}), do: true
+  defp active_board?(%Board{}), do: false
 
   defp reject_required_subscription(%Board{required_subscription: true}) do
     {:error, :required_subscription}

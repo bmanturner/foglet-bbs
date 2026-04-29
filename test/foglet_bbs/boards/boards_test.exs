@@ -39,6 +39,12 @@ defmodule Foglet.BoardsTest do
   defp sysop_actor, do: %User{role: :sysop, status: :active, deleted_at: nil}
   defp mod_actor, do: %User{role: :mod, status: :active, deleted_at: nil}
 
+  defp persisted_sysop do
+    user_fixture()
+    |> User.role_changeset(%{role: :sysop})
+    |> Repo.update!()
+  end
+
   describe "create_category/1 (BOARD-01)" do
     test "creates a category with valid attrs" do
       assert {:ok, category} = Foglet.Boards.create_category(%{name: "Tech", display_order: 1})
@@ -191,6 +197,59 @@ defmodule Foglet.BoardsTest do
                })
 
       assert errors_on(changeset).slug != []
+    end
+  end
+
+  describe "create_board_with_owner/3 domain contract" do
+    test "creates an active board with an owner membership" do
+      category = category_fixture()
+      owner = persisted_sysop()
+
+      assert {:ok, board} =
+               Foglet.Boards.create_board_with_owner(owner, category.id, %{
+                 slug: "owner-board",
+                 name: "Owner Board"
+               })
+
+      assert board.slug == "owner-board"
+      assert board.slug_canonical == "owner-board"
+
+      assert %Subscription{role: :owner} =
+               Repo.get_by(Subscription, user_id: owner.id, board_id: board.id)
+    end
+
+    test "requires a persisted active owner" do
+      category = category_fixture()
+
+      assert {:error, :board_owner_required} =
+               Foglet.Boards.create_board_with_owner(sysop_actor(), category.id, %{
+                 slug: "missing-owner",
+                 name: "Missing Owner"
+               })
+    end
+
+    test "blocks demoting or removing the final owner on an active board" do
+      category = category_fixture()
+      owner = persisted_sysop()
+      second_owner = user_fixture()
+
+      {:ok, board} =
+        Foglet.Boards.create_board_with_owner(owner, category.id, %{
+          slug: "owned-board",
+          name: "Owned Board"
+        })
+
+      assert {:error, :last_board_owner} =
+               Foglet.Boards.set_board_member_role(owner.id, board.id, :poster)
+
+      assert {:error, :last_board_owner} =
+               Foglet.Boards.remove_board_membership(owner.id, board.id)
+
+      assert {:ok, %Subscription{role: :owner}} =
+               Foglet.Boards.set_board_member_role(second_owner.id, board.id, :owner)
+
+      assert {:ok, %Subscription{role: :poster}} =
+               Foglet.Boards.set_board_member_role(owner.id, board.id, :poster)
     end
   end
 

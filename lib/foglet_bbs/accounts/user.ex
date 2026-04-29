@@ -26,6 +26,7 @@ defmodule Foglet.Accounts.User do
 
   schema "users" do
     field :handle, :string
+    field :handle_canonical, :string
     field :email, :string
     field :password, :string, virtual: true, redact: true
     field :password_hash, :string, redact: true
@@ -68,11 +69,13 @@ defmodule Foglet.Accounts.User do
     |> validate_handle()
     |> validate_email()
     |> validate_password()
+    |> put_handle_canonical()
     |> put_account_defaults()
     |> put_password_hash()
     |> unsafe_validate_unique(:handle, FogletBbs.Repo)
     |> unsafe_validate_unique(:email, FogletBbs.Repo)
     |> unique_constraint(:handle)
+    |> unique_constraint(:handle_canonical)
     |> unique_constraint(:email)
   end
 
@@ -173,6 +176,17 @@ defmodule Foglet.Accounts.User do
       message: "must be alphanumeric, underscore, or hyphen"
     )
   end
+
+  defp put_handle_canonical(changeset) do
+    update_change(changeset, :handle, &String.trim/1)
+    |> put_change(:handle_canonical, canonical_handle(get_field(changeset, :handle)))
+  end
+
+  defp canonical_handle(value) when is_binary(value) do
+    value |> String.trim() |> String.downcase()
+  end
+
+  defp canonical_handle(_value), do: nil
 
   defp validate_email(changeset) do
     changeset

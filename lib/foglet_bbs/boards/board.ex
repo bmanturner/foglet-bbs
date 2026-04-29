@@ -6,6 +6,7 @@ defmodule Foglet.Boards.Board do
 
   schema "boards" do
     field :slug, :string
+    field :slug_canonical, :string
     field :name, :string
     field :description, :string
     field :display_order, :integer, default: 0
@@ -43,6 +44,7 @@ defmodule Foglet.Boards.Board do
       :category_id
     ])
     |> validate_required([:slug, :name, :category_id])
+    |> put_slug_canonical()
     |> validate_required_subscription_policy()
     |> validate_length(:slug, min: 1, max: 50)
     |> validate_format(:slug, ~r/^[a-z0-9_-]+$/,
@@ -50,12 +52,24 @@ defmodule Foglet.Boards.Board do
     )
     |> validate_length(:name, min: 1, max: 100)
     |> unique_constraint(:slug)
+    |> unique_constraint(:slug_canonical)
     |> foreign_key_constraint(:category_id)
     |> check_constraint(:required_subscription,
       name: :boards_required_subscription_requires_default_subscription,
       message: "requires default_subscription to be true"
     )
   end
+
+  defp put_slug_canonical(changeset) do
+    update_change(changeset, :slug, &String.trim/1)
+    |> put_change(:slug_canonical, canonical_slug(get_field(changeset, :slug)))
+  end
+
+  defp canonical_slug(value) when is_binary(value) do
+    value |> String.trim() |> String.downcase()
+  end
+
+  defp canonical_slug(_value), do: nil
 
   defp validate_required_subscription_policy(changeset) do
     default_subscription = get_field(changeset, :default_subscription)

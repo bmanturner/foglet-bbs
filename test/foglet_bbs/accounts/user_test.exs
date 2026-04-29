@@ -95,6 +95,16 @@ defmodule Foglet.Accounts.UserTest do
       {:ok, user} = %User{} |> User.registration_changeset(attrs) |> Repo.insert()
       reloaded = Repo.get!(User, user.id)
       assert reloaded.handle == "CamelCase"
+      assert reloaded.handle_canonical == "camelcase"
+    end
+
+    test "stores canonical handle for uniqueness and lookup contracts" do
+      attrs = AccountsFixtures.valid_user_attributes(%{handle: "MiXeD_123"})
+
+      {:ok, user} = %User{} |> User.registration_changeset(attrs) |> Repo.insert()
+
+      assert user.handle == "MiXeD_123"
+      assert user.handle_canonical == "mixed_123"
     end
   end
 
