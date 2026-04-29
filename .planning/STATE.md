@@ -2,7 +2,7 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: verifying
+status: complete
 last_updated: "2026-04-29T16:29:38.521Z"
 last_activity: 2026-04-29
 progress:
@@ -17,16 +17,16 @@ progress:
 
 ## Project Reference
 
-See: .planning/PROJECT.md (updated 2026-04-28)
+See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 40 — verification-documentation
+**Current focus:** v2.0 milestone complete — Phase 40 verification-documentation passed
 
 ## Current Position
 
 Phase: 40
 Plan: Not started
-Status: Phase complete — ready for verification
+Status: Phase complete — verification passed
 Last activity: 2026-04-29
 
 ## Accumulated Context
