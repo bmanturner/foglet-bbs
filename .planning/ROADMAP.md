@@ -173,6 +173,18 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 4. Modal and SizeGate precedence remain App-owned and tested.
 5. App module is materially smaller and reads as a shell over runtime concerns.
 
+**Plans:** 8 plans
+
+Plans:
+- [ ] 39-01-PLAN.md — Wave 0: capture render baselines for the five tracked screens; add @tag :phase39_target pin tests for struct-shape, optional callbacks, function exports, and MainMenu-only-["user:<id>"] subscription set.
+- [ ] 39-02-PLAN.md — Wave 1: declare Screen.subscriptions/2 as an optional callback on Foglet.TUI.Screen.
+- [ ] 39-03-PLAN.md — Wave 1: implement subscriptions/2 on PostReader (thread topic), ThreadList (board topic), and BoardList (boards aggregate).
+- [ ] 39-04-PLAN.md — Wave 1: add update(:on_route_enter, …) clauses to MainMenu, Moderation, Sysop, ThreadList, PostReader (preserves App-side conditional-load semantics inside the screens).
+- [ ] 39-05-PLAN.md — Wave 2: rewrite App build_pubsub_topics/1 via subscriptions/2; collapse maybe_dispatch_route_entry/3 to one screen-agnostic clause; remove :main_menu special init; switch set_user/promote_session to Effect.navigate(:main_menu, %{}); generic broadcast routing for {:board_activity,_,_}/{:thread_activity,_,_}; add BoardList.update({:board_activity,…}, …); delete six topic-decoder helpers and maybe_seed_legacy_route_context/3.
+- [ ] 39-06-PLAN.md — Wave 2: migrate breadcrumb chrome — ThreadList, PostReader, PostComposer, NewThread emit chrome.breadcrumb_parts; gut BreadcrumbBar.parts_for/1 and per-screen branches; update ScreenFrame fallback. Rewrite legacy callback bodies in PostReader / PostComposer to read from state.screen_state[:post_reader] / [:post_composer].
+- [ ] 39-07-PLAN.md — Wave 3: delete the seven legacy fields from %Foglet.TUI.App{}; clean render_fixtures.ex base_state/2; migrate or delete the ~25 legacy-construction sites in app_test.exs and post_reader_test.exs; remove all @tag :phase39_target annotations and the :phase39_target exclusion in test_helper.exs.
+- [ ] 39-08-PLAN.md — Wave 4: run all 12 SPEC §Acceptance Criteria checks, render byte-equivalence diff against Wave 0 baselines, line-count delta, and the SPEC R10 qualitative app.ex review (human-verify checkpoint).
+
 ### Phase 40: Verification & Documentation
 
 **Goal:** Prove the full migration and leave a clear path for future screen work.
