@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-29T04:47:42.198Z"
+last_updated: "2026-04-29T05:12:54.488Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 23
-  completed_plans: 25
+  completed_plans: 26
   percent: 100
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 39 (app-shell-simplification) — EXECUTING
-Plan: 7 of 8
+Plan: 8 of 8
 Status: Ready to execute
 Last activity: 2026-04-29
 
@@ -73,6 +73,7 @@ Last activity: 2026-04-29
 - [Phase ?]: [Phase 39-03]: Implemented subscriptions/2 on PostReader (thread topic from State.thread_id or atom/string route_params, [] fallback), ThreadList (board topic with same precedence), and BoardList (unconditional boards aggregate). Stateless screens (Login, Register, Verify, MainMenu, Account, Moderation, Sysop, NewThread, PostComposer) intentionally do not implement the optional callback — proves the @optional_callbacks contract from 39-02 in both directions. Unblocks Plan 39-05's App build_pubsub_topics rewrite by making function_exported?/3 return true for all three target screens.
 - [Phase ?]: [Phase 39-04]: Each :on_route_enter clause delegates to the existing :load clause rather than reimplementing load logic — preserves test seams and minimizes diff size for Plan 39-08 byte-equivalence.
 - [Phase ?]: [Phase 39-04]: PostReader gets two :on_route_enter clauses (state-first + route_params fallback) mirroring subscriptions/2; ThreadList gets a single unconditional clause matching app.ex:834-836's no-user gate.
+- [Phase ?]: Plan 39-07: Deleted seven legacy fields from %TUI.App{} struct atomically with reducer-test fixture migration (~50 sites). The eight runtime-shell fields are final; Wave 0 struct pins green in default suite.
 
 ### Pending Todos
 

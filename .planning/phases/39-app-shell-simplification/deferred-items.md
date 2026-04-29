@@ -26,23 +26,27 @@ If a later Phase 39 plan touches the same code paths, fix as Rule 1 in that
 plan's deviation log. Otherwise leave for Phase 40 cleanup or open as an
 independent bug.
 
-## Pre-existing Dialyzer warnings (discovered during 39-01)
+## Pre-existing Dialyzer warnings (discovered during 39-01; partial resolution in 39-07)
 
 `rtk mix precommit` does not exit 0 on `main` HEAD prior to Phase 39 because
-Dialyzer emits three `done (warnings were emitted) → Halting VM with exit
-status 2` items. Verified by stashing 39-01 changes and running
-`rtk mix dialyzer` cleanly.
+Dialyzer emits warnings (`done (warnings were emitted) → Halting VM with exit
+status 2`).
+
+Plan 39-07 RESOLVED `lib/foglet_bbs/tui/app.ex:63:38` by deleting the legacy
+`current_thread: ThreadEntry.t() | nil` field from `@type t`. The remaining two
+warnings predate Phase 39 and persist:
 
 | Location | Warning | Disposition |
 |----------|---------|-------------|
-| `lib/foglet_bbs/tui/app.ex:63:38` | `unknown_type: ThreadEntry.t/0` (stale `@type t` reference) | Will be deleted by Plan 39-07 (legacy struct field removal redefines `@type t`). |
-| `lib/foglet_bbs/tui/screens/board_list.ex:161:9` | `pattern_match_cov` — unreachable `_other` clause | Out of scope for 39-01; defer. May be incidentally fixed during BoardList subscription work in Plan 39-04 / 39-05. |
-| `lib/foglet_bbs/tui/screens/sysop.ex:810:8` | `pattern_match` — `{_ss, _effects}` pattern can't match Sysop reducer return type | Out of scope; not touched by Phase 39. Suggest Phase 40 cleanup. |
+| ~~`lib/foglet_bbs/tui/app.ex:63:38`~~ | ~~`unknown_type: ThreadEntry.t/0`~~ | RESOLVED by Plan 39-07 (legacy `@type t` field deleted). |
+| `lib/foglet_bbs/tui/screens/board_list.ex:161:9` | `pattern_match_cov` — unreachable `_other` clause | Out of scope for Phase 39; defer to Phase 40. |
+| `lib/foglet_bbs/tui/screens/sysop.ex:823:8` | `pattern_match` — `{_ss, _effects}` pattern can't match Sysop reducer return type | Out of scope; not touched by Phase 39. Suggest Phase 40 cleanup. |
 
 Implication for the plan's success criterion "rtk mix precommit exits 0":
 this criterion was authored against an assumed-clean baseline; on actual
-`main` HEAD, dialyzer fails before any Phase 39 work begins. 39-01 does NOT
-introduce additional dialyzer warnings — the failure delta is zero.
+`main` HEAD, dialyzer fails before any Phase 39 work begins. Plans 39-01..39-07
+introduced ZERO new dialyzer warnings; Plan 39-07 reduced the count from 3 to
+2 by eliminating app.ex:63.
 
 ## Pre-existing Credo readability issues (fixed inline as Rule 3)
 
