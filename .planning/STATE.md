@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 42-02-PLAN.md
-last_updated: "2026-04-29T21:57:25.023Z"
+stopped_at: Completed 42-03-PLAN.md
+last_updated: "2026-04-29T22:07:51.857Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 9
-  completed_plans: 6
-  percent: 67
+  completed_plans: 7
+  percent: 78
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 ## Current Position
 
 Phase: 42 (app-runtime-helper-extraction) — EXECUTING
-Plan: 3 of 5
+Plan: 4 of 5
 Status: Ready to execute
 Last activity: 2026-04-29
 
@@ -54,6 +54,7 @@ Progress: [██████░░░░] 56%
 
 | Phase 42 P01 | 9min | 3 tasks | 4 files |
 | Phase 42 P42-02 | 7min | 3 tasks | 4 files |
+| Phase 42 P42-03 | 8min | 3 tasks | 5 files |
 
 ## Accumulated Context
 
@@ -69,6 +70,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 42]: Foglet.TUI.App keeps public route helper delegators only for render fixtures and screen-focused test boundaries; implementation lives in Routing.
 - [Phase 42]: Modal owns overlay rendering, modal key precedence, confirm callbacks, dismissal, form event routing, and generic form-submit failure visibility.
 - [Phase 42]: Foglet.TUI.App delegates modal-owned behavior while keeping high-level App update messages and Raxol callbacks.
+- [Phase 42]: Routing interprets reducer-returned effects through App.Effects so App no longer exposes public effect helper functions.
+- [Phase 42]: Effects owns interpretation of current Foglet.TUI.Effect values while App owns when shell messages enter effect interpretation.
 
 ### Pending Todos
 
@@ -85,6 +88,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-29T21:57:24.856Z
-Stopped at: Completed 42-02-PLAN.md
+Last session: 2026-04-29T22:07:51.661Z
+Stopped at: Completed 42-03-PLAN.md
 Resume file: None

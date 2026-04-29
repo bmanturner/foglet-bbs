@@ -136,7 +136,7 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 41. TUI Contract And Modal Effects | 4/4 | Complete    | 2026-04-29 |
-| 42. App Runtime Helper Extraction | 2/5 | In Progress|  |
+| 42. App Runtime Helper Extraction | 3/5 | In Progress|  |
 | 43. Large Screen Decomposition | 0/TBD | Not started | - |
 | 44. PostReader And Content Query Hardening | 0/TBD | Not started | - |
 | 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
