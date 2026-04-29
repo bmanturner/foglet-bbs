@@ -286,6 +286,30 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
            } = PostReader.State.from_context(context)
   end
 
+  describe "decomposition contract" do
+    test "PostReader.Render is the sibling render entry point" do
+      assert Code.ensure_loaded?(PostReader.Render)
+      assert function_exported?(PostReader.Render, :render, 2)
+
+      source =
+        __ENV__.file
+        |> Path.dirname()
+        |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_reader.ex")
+        |> Path.expand()
+        |> File.read!()
+
+      assert source =~
+               "def render(%State{} = state, %Context{} = context), do: Render.render(state, context)"
+    end
+
+    test "PostReader keeps reducer-facing public seams" do
+      assert function_exported?(PostReader, :load_posts, 2)
+      assert function_exported?(PostReader, :flush_read_pointers, 2)
+      assert function_exported?(PostReader, :subscriptions, 2)
+      assert function_exported?(PostReader, :update, 3)
+    end
+  end
+
   test "PostReader.update(:load, state, context) emits load_posts task" do
     context = post_reader_context()
     state = PostReader.State.from_context(context)
