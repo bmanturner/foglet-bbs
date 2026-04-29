@@ -1,8 +1,9 @@
 ---
 phase: 40-verification-documentation
-status: in-progress
+status: complete
 started: 2026-04-29T14:51:06Z
-requirements: [VERIFY-01, VERIFY-05]
+completed: 2026-04-29T15:51:00Z
+requirements: [VERIFY-01, VERIFY-04, VERIFY-05]
 ---
 
 # Phase 40: Verification & Documentation Evidence
@@ -15,22 +16,41 @@ recording final verification evidence.
 
 | Source | Item | Disposition | Evidence | Plan |
 |--------|------|-------------|----------|------|
-| `deferred-items.md` | BL-01 doomed oneliner submit leaves form in `{:error, _}` | In scope - fix modal submit failure recovery. | Pending `rtk mix test test/foglet_bbs/tui/screens/account_test.exs`. | 40-01 |
-| `deferred-items.md` | BL-01 doomed hide-oneliner submit leaves form in `{:error, _}` | In scope - fix modal submit failure recovery. | Pending `rtk mix test test/foglet_bbs/tui/screens/account_test.exs`. | 40-01 |
+| `deferred-items.md` | BL-01 doomed oneliner submit leaves form in `{:error, _}` | Fixed - modal submit failure recovery preserves/reopens recoverable form error state. | Plan 40-01: `rtk mix test test/foglet_bbs/tui/screens/account_test.exs` passed. Final gate: `rtk mix test` passed. | 40-01 |
+| `deferred-items.md` | BL-01 doomed hide-oneliner submit leaves form in `{:error, _}` | Fixed - hide-oneliner failure recovery preserves/reopens recoverable form error state. | Plan 40-01: `rtk mix test test/foglet_bbs/tui/screens/account_test.exs` passed. Final gate: `rtk mix test` passed. | 40-01 |
 | `deferred-items.md` | `board_list.ex:161` Dialyzer `pattern_match_cov` | Fixed - removed the unreachable `_other` branch from the unsubscribe case after the typed `BoardTree.focused_board_entry/1` patterns cover the possible subscription states. | `rtk mix dialyzer` passed with no emitted warnings for this path. | 40-01 |
 | `deferred-items.md` | `sysop.ex:823` Dialyzer `pattern_match` | Fixed - removed the impossible tuple-shaped `maybe_request_invites_load/2` overload; the actual reducer flow passes `%Sysop.State{}` first, then appends active-load effects through `maybe_request_active_load/2`. | `rtk mix dialyzer` passed with no emitted warnings for this path. | 40-01 |
-| `39-SUMMARY.md` | Transitional callbacks `render/1`, `handle_key/2`, `init_screen_state/1` | In scope for production runtime cleanup after blockers are closed. | Pending static inspection and focused tests. | 40-02 |
-| `39-SUMMARY.md` | Remaining breadcrumb migration for Login, MainMenu, BoardList, Account, Moderation, and Sysop | In scope for explicit breadcrumb behavior or documented exact fallback intent. | Pending active breadcrumb/layout evidence. | 40-03 |
-| `39-REVIEW-FIX.md` | WR-02 duplicate legacy `handle_key/2` and `render/1` implementations | In scope with transitional callback cleanup where production/test seams permit. | Pending callback cleanup evidence. | 40-02 |
-| `39-REVIEW-FIX.md` | WR-04 `App.take_screen_modal_submit/0` Process dictionary submit handoff | Bounded in Phase 40 unless it blocks BL-01 recovery; full protocol redesign remains out of scope. | Pending BL-01 behavior tests; retained seam to be documented if unchanged. | 40-01 / 40-02 |
-| `39-REVIEW-FIX.md` | IN-02 PostReader legacy render helper chain | In scope with WR-02 legacy renderer cleanup. | Pending callback cleanup evidence. | 40-02 |
-| `39-REVIEW-FIX.md` | IN-03 migrated TUI text-presence assertions | In scope only for known migrated-surface weak tests and new Phase 40 tests. | Pending targeted test hygiene evidence. | 40-03 / 40-04 |
-| `39-REVIEW-FIX.md` | IN-04 App-shaped `frame_state/2` maps across screens | Intentionally excluded unless callback cleanup naturally removes a local case; broad `Theme.from_context/1` refactor is out of scope. | Research marks this as optional cleanup, not a close-gate blocker. | Excluded |
+| `39-SUMMARY.md` | Transitional callbacks `render/1`, `handle_key/2`, `init_screen_state/1` | Fixed - production App dispatch now routes through `update/3` and `render/2`; remaining broad callbacks are documented compatibility-only. | Plan 40-02 summary and focused App runtime tests; final `rtk mix precommit` passed. | 40-02 |
+| `39-SUMMARY.md` | Remaining breadcrumb migration for Login, MainMenu, BoardList, Account, Moderation, and Sysop | Fixed - remaining production screens now provide explicit breadcrumb behavior or active layout coverage. | Plan 40-03 breadcrumb/layout evidence; final render smoke and `rtk mix test` passed. | 40-03 |
+| `39-REVIEW-FIX.md` | WR-02 duplicate legacy `handle_key/2` and `render/1` implementations | Fixed - production fallback dependence removed/bounded and tests moved to reducer/render seams where Phase 40 targeted them. | Plan 40-02 callback cleanup evidence; `rtk mix precommit` passed. | 40-02 |
+| `39-REVIEW-FIX.md` | WR-04 `App.take_screen_modal_submit/0` Process dictionary submit handoff | Excluded - retained as a bounded App-owned modal runtime seam; full modal protocol redesign remains out of scope because BL-01 recovery is fixed. | Plan 40-01 BL-01 tests passed; final `rtk mix test` passed. | 40-01 / 40-02 |
+| `39-REVIEW-FIX.md` | IN-02 PostReader legacy render helper chain | Fixed - legacy production render fallback is no longer required by App; remaining compatibility is bounded outside the runtime dispatch path. | Plan 40-02 cleanup evidence; final render smoke for `post_reader` passed. | 40-02 / 40-05 |
+| `39-REVIEW-FIX.md` | IN-03 migrated TUI text-presence assertions | Fixed - targeted migrated-surface weak assertion was replaced; broad unrelated text-test cleanup is explicitly excluded from this close gate. | Plan 40-03 targeted hygiene evidence; final `rtk mix test` passed. | 40-03 / 40-04 |
+| `39-REVIEW-FIX.md` | IN-04 App-shaped `frame_state/2` maps across screens | Excluded - broad `Theme.from_context/1` / `ScreenFrame` API refactor is outside Phase 40 close-gate scope. | Research marks this as optional cleanup, not a close-gate blocker; final gates passed without it. | Excluded |
 
 ## Verification Evidence
 
 Evidence will be appended by the individual Phase 40 plans as each close-gate
 item is fixed or explicitly bounded.
+
+## Screen Contract Documentation Evidence
+
+Plan 40-05 added `lib/foglet_bbs/tui/SCREEN_CONTRACT.md` and linked it from
+`lib/foglet_bbs/tui/widgets/README.md`.
+
+Static acceptance checks:
+
+- `rtk rg -n "Foglet\\.TUI\\.Context|Foglet\\.TUI\\.Effect|init/1|update/3|render/2|subscriptions/2|modal|route params|task_result|rtk mix foglet\\.tui\\.render|## Checklist" lib/foglet_bbs/tui/SCREEN_CONTRACT.md` exited 0.
+- `rtk rg -n "SCREEN_CONTRACT|Screen Contract|screen contract" lib/foglet_bbs/tui/widgets/README.md` exited 0.
+
+## Final Gate Evidence
+
+Final close-gate commands were run on 2026-04-29.
+
+| Command | Exit code | Result |
+|---------|-----------|--------|
+| `rtk mix test` | 0 | Passed: 1 property, 2160 tests, 0 failures. Existing test-run warnings were limited to render-cache/SSH test-path logs and one expected offline board-server rollback log. |
+| `rtk mix precommit` | 0 | Passed successfully. Credo found no issues across 279 files; Sobelow scan completed; Dialyzer completed with configured ignores (`Total errors: 93, Skipped: 93, Unnecessary Skips: 6`) and the precommit task exited 0. |
 
 ## Render Smoke Evidence
 
