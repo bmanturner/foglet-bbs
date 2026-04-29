@@ -9,11 +9,21 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.Accounts.Invites
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
+  alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Sysop
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
+  alias Foglet.TUI.Screens.Sysop.UsersView
   alias FogletBbs.Repo
 
   @config_keys Map.keys(Schema.defaults())
+
+  defmodule FakeAccounts do
+    def list_user_status_admin_targets(_actor) do
+      {:ok, %{pending: [], active: [], suspended: [], rejected: []}}
+    end
+  end
 
   defp build_state(role) do
     user =
@@ -65,6 +75,112 @@ defmodule Foglet.TUI.Screens.SysopTest do
       ss = Sysop.init_screen_state()
       assert ss.active_tab == 0
       assert %Foglet.TUI.Widgets.Input.Tabs{} = ss.tabs
+    end
+  end
+
+  describe "new screen contract" do
+    test "init/1 builds local sysop state from Context visibility" do
+      user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "alice",
+        role: :sysop,
+        status: :active
+      }
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :sysop,
+          session_context: %{invite_code_generators: "sysop_only"}
+        )
+
+      assert %SysopState{} = state = Sysop.init(context)
+      assert "INVITES" in SysopState.tab_labels(state)
+    end
+
+    test "render/2 renders from local state and Context without App-shaped input" do
+      user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "alice",
+        role: :sysop,
+        status: :active
+      }
+
+      context = Context.new(current_user: user, route: :sysop, terminal_size: {80, 24})
+      state = Sysop.init(context)
+
+      assert _node = Sysop.render(state, context)
+    end
+
+    test "tab entry sets lifecycle slot to loading and emits a task effect" do
+      user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "alice",
+        role: :sysop,
+        status: :active
+      }
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :sysop,
+          domain: %{accounts: FakeAccounts}
+        )
+
+      {state, effects} =
+        Sysop.update({:key, %{key: :char, char: "5"}}, Sysop.init(context), context)
+
+      assert state.active_tab == 4
+      assert state.users_view == :loading
+
+      assert [%Effect{type: :task, payload: %{op: :sysop_load_users, screen_key: :sysop}}] =
+               effects
+    end
+
+    test "task result stores loaded sysop submodule state" do
+      context = Context.new(route: :sysop)
+      state = %{Sysop.init(context) | active_tab: 4}
+      view = UsersView.from_groups(%{}, nil)
+
+      {state, effects} =
+        Sysop.update({:task_result, :sysop_load_users, {:ok, {:ok, view}}}, state, context)
+
+      assert state.users_view == {:loaded, view}
+      assert effects == []
+    end
+
+    test "retry on non-forbidden errors flips to loading and forbidden remains local" do
+      context = Context.new(route: :sysop, domain: %{accounts: FakeAccounts})
+      state = %{Sysop.init(context) | active_tab: 4, users_view: {:error, :timeout}}
+
+      {retry_state, retry_effects} =
+        Sysop.update({:key, %{key: :char, char: "R"}}, state, context)
+
+      assert retry_state.users_view == :loading
+      assert [%Effect{payload: %{op: :sysop_load_users}}] = retry_effects
+
+      forbidden_state = %{state | users_view: {:error, :forbidden}}
+
+      {unchanged_state, forbidden_effects} =
+        Sysop.update({:key, %{key: :char, char: "R"}}, forbidden_state, context)
+
+      assert unchanged_state.users_view == {:error, :forbidden}
+      assert forbidden_effects == []
+    end
+
+    test "submodule error_modal events become modal and navigation effects" do
+      context = Context.new(current_user: nil, route: :sysop)
+      state = Sysop.init(context)
+
+      {state, effects} =
+        Sysop.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
+
+      assert %SysopState{} = state
+
+      assert [
+               %Effect{type: :modal, payload: {:open, %Modal{type: :error}}},
+               %Effect{type: :navigate, payload: %{screen: :main_menu}}
+             ] = effects
     end
   end
 
@@ -851,8 +967,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
   # =========================================================================
   # USERS tab tests (Plan 10-02, USER-01 through USER-03)
   # =========================================================================
-
-  alias Foglet.TUI.Screens.Sysop.UsersView
 
   # Phase 29 D-07: lifecycle slots store {:loaded, sub} wrapped values.
   # Test helpers wrap on write and unwrap on read so existing call sites
