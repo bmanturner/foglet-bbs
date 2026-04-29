@@ -6,12 +6,12 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
-  alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.NewThread.State, as: NewThreadState
-  alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostComposer.State, as: PostComposerState
   alias Foglet.TUI.Screens.PostReader
+  alias Foglet.TUI.Screens.PostReader.State, as: PostReaderState
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
+  alias Foglet.TUI.Screens.Sysop.State, as: SysopState
   alias Foglet.TUI.Screens.ThreadList.State, as: ThreadListState
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -1235,8 +1235,7 @@ defmodule Foglet.TUI.AppTest do
         | current_screen: :board_list,
           screen_state: %{
             board_list: %{selected_index: 3},
-            post_composer:
-              Foglet.TUI.Screens.PostComposer.init_screen_state(value: "draft-in-progress")
+            post_composer: PostComposerState.new(value: "draft-in-progress")
           },
           modal: %Foglet.TUI.Modal{type: :info, message: "preserve me"}
       }
@@ -1370,7 +1369,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :post_composer,
           screen_state: %{
-            post_composer: PostComposer.init_screen_state(value: "draft-in-progress")
+            post_composer: PostComposerState.new(value: "draft-in-progress")
           }
       }
 
@@ -1405,7 +1404,7 @@ defmodule Foglet.TUI.AppTest do
         | current_screen: :new_thread,
           screen_state: %{
             new_thread:
-              NewThread.init_screen_state(
+              NewThreadState.new(
                 step: :compose,
                 title_input_state: TextInput.init(value: "My new thread"),
                 body_value: "line1\nline2\nline3",
@@ -1435,7 +1434,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :post_composer,
           screen_state: %{
-            post_composer: PostComposer.init_screen_state(value: "important-draft")
+            post_composer: PostComposerState.new(value: "important-draft")
           }
       }
 
@@ -1465,7 +1464,7 @@ defmodule Foglet.TUI.AppTest do
         | current_screen: :post_reader,
           screen_state: %{
             post_reader:
-              PostReader.init_screen_state(
+              PostReaderState.new(
                 selected_post_index: 5,
                 thread: %{id: "thread-1"},
                 pending_read_positions: pending
@@ -1658,7 +1657,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :post_reader,
           route_params: %{},
-          screen_state: %{post_reader: PostReader.init_screen_state(thread_id: "t-state")}
+          screen_state: %{post_reader: PostReaderState.new(thread_id: "t-state")}
       }
 
       subs = App.subscribe(state)
@@ -1739,7 +1738,7 @@ defmodule Foglet.TUI.AppTest do
 
       state_with_reader = %{
         state
-        | screen_state: %{post_reader: PostReader.init_screen_state(selected_post_index: 0)}
+        | screen_state: %{post_reader: PostReaderState.new(selected_post_index: 0)}
       }
 
       {new_state, []} = App.update({:posts_loaded, posts, jump_last: true}, state_with_reader)
@@ -1758,7 +1757,7 @@ defmodule Foglet.TUI.AppTest do
       state: state
     } do
       post_reader_state =
-        PostReader.init_screen_state(
+        PostReaderState.new(
           thread_id: "t1",
           pending_read_positions: %{
             "t1" => %{last_read_post_id: "p5", last_read_message_number: 5}
@@ -1806,7 +1805,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :post_reader,
           route_params: %{thread_id: "t1"},
-          screen_state: %{post_reader: PostReader.init_screen_state(thread_id: "t1")},
+          screen_state: %{post_reader: PostReaderState.new(thread_id: "t1")},
           session_context: %{domain: %{posts: FakePosts}}
       }
 
@@ -1822,7 +1821,7 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "{:thread_activity} for a different thread is a no-op", %{state: state} do
-      local_state = PostReader.init_screen_state(thread_id: "t-other")
+      local_state = PostReaderState.new(thread_id: "t-other")
 
       state = %{
         state
@@ -2090,7 +2089,7 @@ defmodule Foglet.TUI.AppTest do
         | current_screen: :thread_list,
           screen_state: %{
             post_reader:
-              PostReader.init_screen_state(
+              PostReaderState.new(
                 thread_id: "t1",
                 pending_read_positions: %{
                   "t1" => %{last_read_post_id: "p1", last_read_message_number: 5}
@@ -2110,8 +2109,7 @@ defmodule Foglet.TUI.AppTest do
         state
         | current_screen: :thread_list,
           screen_state: %{
-            post_reader:
-              PostReader.init_screen_state(thread_id: "t1", pending_read_positions: pending)
+            post_reader: PostReaderState.new(thread_id: "t1", pending_read_positions: pending)
           }
       }
 
@@ -2193,7 +2191,7 @@ defmodule Foglet.TUI.AppTest do
       user: user
     } do
       ss =
-        Foglet.TUI.Screens.Sysop.init_screen_state(
+        SysopState.new(
           current_user: user,
           session_context: state.session_context,
           active: 4
@@ -2252,7 +2250,7 @@ defmodule Foglet.TUI.AppTest do
       user: user
     } do
       ss =
-        Foglet.TUI.Screens.Sysop.init_screen_state(
+        SysopState.new(
           current_user: user,
           session_context: state.session_context,
           active: 0
@@ -2271,7 +2269,7 @@ defmodule Foglet.TUI.AppTest do
     test "{:navigate, :sysop} is idempotent — re-entering a {:loaded, _} tab emits no command",
          %{state: state, user: user} do
       ss =
-        Foglet.TUI.Screens.Sysop.init_screen_state(
+        SysopState.new(
           current_user: user,
           session_context: state.session_context,
           active: 4
