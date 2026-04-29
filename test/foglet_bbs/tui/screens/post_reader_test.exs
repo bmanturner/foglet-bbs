@@ -1109,9 +1109,33 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   describe "subscriptions/2 export (Phase 39 R6, D-08)" do
-    @tag :phase39_target
     test "module exports subscriptions/2" do
       assert function_exported?(Foglet.TUI.Screens.PostReader, :subscriptions, 2)
+    end
+
+    test "returns thread topic from local state" do
+      state = %Foglet.TUI.Screens.PostReader.State{thread_id: "t-99"}
+      ctx = %Foglet.TUI.Context{route_params: %{}}
+
+      assert Foglet.TUI.Screens.PostReader.subscriptions(state, ctx) == ["thread:t-99"]
+    end
+
+    test "returns thread topic from atom-key route params when local state is empty" do
+      ctx = %Foglet.TUI.Context{route_params: %{thread_id: "t-route"}}
+
+      assert Foglet.TUI.Screens.PostReader.subscriptions(nil, ctx) == ["thread:t-route"]
+    end
+
+    test "returns thread topic from string-key route params when local state is empty" do
+      ctx = %Foglet.TUI.Context{route_params: %{"thread_id" => "t-string"}}
+
+      assert Foglet.TUI.Screens.PostReader.subscriptions(nil, ctx) == ["thread:t-string"]
+    end
+
+    test "returns [] when no thread id is available" do
+      ctx = %Foglet.TUI.Context{route_params: %{}}
+
+      assert Foglet.TUI.Screens.PostReader.subscriptions(nil, ctx) == []
     end
   end
 end
