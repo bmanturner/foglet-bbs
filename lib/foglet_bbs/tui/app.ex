@@ -26,9 +26,9 @@ defmodule Foglet.TUI.App do
   alias Foglet.PubSub
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.App.Routing
   alias Foglet.TUI.InitialRouteEnterForwarder
   alias Foglet.TUI.PubSubForwarder
-  alias Foglet.TUI.Screens
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
@@ -71,66 +71,69 @@ defmodule Foglet.TUI.App do
             screen_state: %{}
 
   @doc """
-  Returns the current route value.
+  Returns the current route value through the routing helper.
 
-  Routes are encoded as the screen atom alone (when `route_params` is empty)
-  or as `{screen, params}` (when `route_params` is non-empty). Screens
-  receive the atom-or-tuple shape via `Context` so reducers don't have to
-  reach into App fields to read route info.
+  This remains a public App boundary for render fixtures, smoke helpers, and
+  screen tests that construct App state directly outside the live Raxol shell.
   """
   @spec current_route(t()) :: atom() | {atom(), map()}
-  def current_route(%__MODULE__{current_screen: screen, route_params: params})
-      when is_map(params) and map_size(params) > 0 do
-    {screen, params}
-  end
+  def current_route(%__MODULE__{} = state), do: Routing.current_route(state)
 
-  def current_route(%__MODULE__{current_screen: screen}), do: screen
+  @doc """
+  Returns the storage key for a screen route through the routing helper.
 
-  @doc "Returns the storage key for a screen route."
+  This public seam is used by non-live render/test fixtures that need the same
+  route-key semantics as the App runtime.
+  """
   @spec screen_key(atom() | {atom(), map()}) :: atom()
-  def screen_key({screen, _params}), do: screen
-  def screen_key(screen) when is_atom(screen), do: screen
+  def screen_key(route), do: Routing.screen_key(route)
 
-  @doc "Returns the local state for the current screen key."
+  @doc """
+  Returns local state for the current screen key through the routing helper.
+
+  This stays public for fixture code that inspects App-local screen state
+  without starting a dispatcher process.
+  """
   @spec current_screen_state(t()) :: term()
-  def current_screen_state(%__MODULE__{} = state) do
-    screen_state_for(state, screen_key(current_route(state)))
-  end
+  def current_screen_state(%__MODULE__{} = state), do: Routing.current_screen_state(state)
 
-  @doc "Returns screen-local state stored under `key`."
+  @doc """
+  Returns screen-local state stored under `key` through the routing helper.
+
+  This remains public for render fixtures and screen-level tests that assemble
+  App state directly.
+  """
   @spec screen_state_for(t(), term()) :: term()
-  def screen_state_for(%__MODULE__{screen_state: screen_state}, key) do
-    Map.get(screen_state || %{}, key)
-  end
+  def screen_state_for(%__MODULE__{} = state, key), do: Routing.screen_state_for(state, key)
 
-  @doc "Stores screen-local state under `key`."
+  @doc """
+  Stores screen-local state under `key` through the routing helper.
+
+  Render fixtures use this public boundary to seed screen-owned local state
+  before invoking the same render paths used by the live TUI.
+  """
   @spec put_screen_state(t(), term(), term()) :: t()
-  def put_screen_state(%__MODULE__{} = state, key, local_state) do
-    # %App{} defaults screen_state to %{}; no in-tree path writes it to nil.
-    # If a future refactor breaks that invariant the crash should be loud and
-    # local, not papered over with `|| %{}` (WR-03).
-    %{state | screen_state: Map.put(state.screen_state, key, local_state)}
-  end
+  def put_screen_state(%__MODULE__{} = state, key, local_state),
+    do: Routing.put_screen_state(state, key, local_state)
 
-  @doc "Builds the narrow runtime context passed to new screen reducers."
+  @doc """
+  Builds the narrow runtime context passed to screen reducers.
+
+  This public boundary supports render fixtures and screen-focused tests while
+  Routing owns the implementation.
+  """
   @spec build_context(t()) :: Context.t()
-  def build_context(%__MODULE__{} = state) do
-    build_context(state, state.route_params || %{})
-  end
+  def build_context(%__MODULE__{} = state), do: Routing.build_context(state)
 
-  @doc "Builds a screen context with explicit route params."
+  @doc """
+  Builds a screen context with explicit route params through the routing helper.
+
+  This public boundary supports render fixtures and screen-focused tests while
+  Routing owns the implementation.
+  """
   @spec build_context(t(), map()) :: Context.t()
-  def build_context(%__MODULE__{} = state, route_params) when is_map(route_params) do
-    Context.new(
-      current_user: state.current_user,
-      session_context: state.session_context,
-      session_pid: state.session_pid,
-      terminal_size: state.terminal_size,
-      route: state.current_screen,
-      route_params: route_params,
-      domain: domain_from_session_context(state.session_context)
-    )
-  end
+  def build_context(%__MODULE__{} = state, route_params),
+    do: Routing.build_context(state, route_params)
 
   @doc """
   Interprets one runtime effect against the App shell.
@@ -151,9 +154,9 @@ defmodule Foglet.TUI.App do
       |> Map.put(:current_screen, screen)
       |> Map.put(:route_params, params || %{})
       |> Map.put(:modal, nil)
-      |> init_route_screen_state(screen, params || %{})
+      |> Routing.init_route_screen_state(screen, params || %{})
 
-    maybe_dispatch_route_entry(state, screen, params || %{})
+    Routing.dispatch_route_entry(state, screen, params || %{})
   end
 
   def apply_effect(%__MODULE__{} = state, %Effect{type: :modal, payload: {:open, modal}}) do
@@ -170,7 +173,7 @@ defmodule Foglet.TUI.App do
       })
       when is_atom(kind) do
     if modal_submit_target?(state, screen_key) do
-      route_screen_update(state, screen_key, {:modal_submit, kind, payload})
+      Routing.route_screen_update(state, screen_key, {:modal_submit, kind, payload})
     else
       modal_submit_error(state)
     end
@@ -368,7 +371,7 @@ defmodule Foglet.TUI.App do
         render_modal_overlay(state.modal, state)
 
       true ->
-        render_screen(state)
+        Routing.render_screen(state)
     end
   end
 
@@ -472,11 +475,11 @@ defmodule Foglet.TUI.App do
   # `Code.ensure_loaded?/1` + `function_exported?/3` paired guard idiom used at
   # `route_screen_update/3` and `render_screen/1` for `update/3` and `render/2`.
   defp screen_declared_topics(%__MODULE__{} = state) do
-    key = screen_key(current_route(state))
-    module = screen_module_for(state, key)
+    key = Routing.screen_key(Routing.current_route(state))
+    module = Routing.screen_module_for(state, key)
 
     if Code.ensure_loaded?(module) and function_exported?(module, :subscriptions, 2) do
-      module.subscriptions(screen_state_for(state, key), build_context(state))
+      module.subscriptions(Routing.screen_state_for(state, key), Routing.build_context(state))
     else
       []
     end
@@ -566,7 +569,11 @@ defmodule Foglet.TUI.App do
         global_key_handler(key_event, state)
 
       true ->
-        route_screen_update(state, screen_key(current_route(state)), {:key, key_event})
+        Routing.route_screen_update(
+          state,
+          Routing.screen_key(Routing.current_route(state)),
+          {:key, key_event}
+        )
     end
   end
 
@@ -581,11 +588,11 @@ defmodule Foglet.TUI.App do
   # :thread_activity) handle the message in their update/3; screens that don't
   # hit their update(_message, …) catch-all and no-op.
   defp do_update({:board_activity, _board_id, _event} = msg, state) do
-    route_screen_update(state, screen_key(current_route(state)), msg)
+    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
 
   defp do_update({:thread_activity, _thread_id, _event} = msg, state) do
-    route_screen_update(state, screen_key(current_route(state)), msg)
+    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
 
   # User-level notifications — show a modal badge.
@@ -620,7 +627,11 @@ defmodule Foglet.TUI.App do
   # dispatch :on_route_enter via `maybe_dispatch_route_entry/3` (app.ex:138),
   # so this path only fires for the very first screen of the session.
   defp do_update(:initial_route_enter, state) do
-    route_screen_update(state, screen_key(current_route(state)), :on_route_enter)
+    Routing.route_screen_update(
+      state,
+      Routing.screen_key(Routing.current_route(state)),
+      :on_route_enter
+    )
   end
 
   # A new SSH connection for the same user replaced this session.
@@ -659,7 +670,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:screen_task_result, key, op, result}, state) do
-    route_screen_update(state, key, {:task_result, op, result})
+    Routing.route_screen_update(state, key, {:task_result, op, result})
   end
 
   # After the user dismisses the pending-approval modal, quit the session so the
@@ -702,98 +713,6 @@ defmodule Foglet.TUI.App do
     {state, []}
   end
 
-  defp domain_from_session_context(session_context) when is_map(session_context) do
-    case Map.get(session_context, :domain) do
-      domain when is_map(domain) ->
-        domain
-
-      nil ->
-        %{}
-
-      other ->
-        require Logger
-
-        Logger.warning(
-          "[TUI.App] session_context.:domain is non-map (#{inspect(other)}); " <>
-            "coercing to %{}. This usually indicates a misshapen test fixture " <>
-            "or stale session_context."
-        )
-
-        %{}
-    end
-  end
-
-  defp domain_from_session_context(_session_context), do: %{}
-
-  defp init_route_screen_state(%__MODULE__{} = state, screen, params) do
-    key = screen_key(screen)
-    module = screen_module_for(state, key)
-
-    cond do
-      reinitialize_route_state?(key, module, params) ->
-        put_screen_state(state, key, module.init(build_context(state, params)))
-
-      screen_state_for(state, key) != nil ->
-        state
-
-      Code.ensure_loaded?(module) and function_exported?(module, :init, 1) ->
-        put_screen_state(state, key, module.init(build_context(state, params)))
-
-      true ->
-        state
-    end
-  end
-
-  defp route_owned_screen?(key)
-       when key in [:thread_list, :post_reader, :post_composer, :new_thread],
-       do: true
-
-  defp route_owned_screen?(_key), do: false
-
-  defp reinitialize_route_state?(key, module, params) do
-    Code.ensure_loaded?(module) and function_exported?(module, :init, 1) and
-      (route_owned_screen?(key) or
-         (map_size(params || %{}) > 0 and function_exported?(module, :update, 3)))
-  end
-
-  # Generic route-entry dispatch (Phase 39 D-01, D-04, R4): every route-entry
-  # delivers `:on_route_enter` to the active screen's update/3. Each screen
-  # owns its first-load semantics (current_user gates, thread_id checks, …)
-  # via its own :on_route_enter clause (Plan 39-04). Screens that don't
-  # implement :on_route_enter hit their update(_message, …) catch-all and
-  # become no-ops, courtesy of route_screen_update/3's function_exported?/3
-  # guard below.
-  defp maybe_dispatch_route_entry(%__MODULE__{} = state, screen, _params) do
-    route_screen_update(state, screen_key(screen), :on_route_enter)
-  end
-
-  defp route_screen_update(%__MODULE__{} = state, key, message) do
-    module = screen_module_for(state, key)
-
-    if Code.ensure_loaded?(module) and function_exported?(module, :update, 3) do
-      local_state = screen_state_for(state, key)
-      context = context_for_screen_key(state, key)
-      {new_local_state, effects} = module.update(message, local_state, context)
-
-      state
-      |> put_screen_state(key, new_local_state)
-      |> apply_effects(List.wrap(effects))
-    else
-      {state, []}
-    end
-  end
-
-  defp context_for_screen_key(%__MODULE__{} = state, key) do
-    params =
-      if screen_key(current_route(state)) == key do
-        state.route_params
-      else
-        %{}
-      end
-
-    build_context(state, params)
-  end
-
   # Generic initial-screen-state seeding (Phase 39 D-15, R4):
   # init_route_screen_state/3 already covers MainMenu via the
   # function_exported?(module, :init, 1) branch. The MainMenu
@@ -801,11 +720,11 @@ defmodule Foglet.TUI.App do
   # :on_route_enter clause (Plan 39-04) sets :loading before the load task
   # fires.
   defp maybe_init_initial_screen_state(%__MODULE__{} = state) do
-    init_route_screen_state(state, state.current_screen, state.route_params)
+    Routing.init_route_screen_state(state, state.current_screen, state.route_params)
   end
 
   defp modal_submit_target?(%__MODULE__{} = state, screen_key) do
-    module = screen_module_for(state, screen_key)
+    module = Routing.screen_module_for(state, screen_key)
     Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
   end
 
@@ -845,35 +764,6 @@ defmodule Foglet.TUI.App do
   defp format_notification(:dm, %{body: body}), do: "New message: #{body}"
   defp format_notification(:mention, %{thread_title: t}), do: "You were mentioned in: #{t}"
   defp format_notification(kind, _payload), do: "Notification: #{kind}"
-
-  defp render_screen(state) do
-    key = screen_key(current_route(state))
-    module = screen_module_for(state, key)
-
-    if Code.ensure_loaded?(module) and function_exported?(module, :render, 2) do
-      context = context_for_screen_key(state, key)
-      module.render(render_local_state(state, key, module, context), context)
-    else
-      require Logger
-
-      Logger.warning(
-        "[TUI.App] screen #{inspect(key)} does not export render/2; " <>
-          "returning bounded empty view"
-      )
-
-      text("")
-    end
-  end
-
-  defp render_local_state(state, key, module, context) do
-    case screen_state_for(state, key) do
-      nil ->
-        if function_exported?(module, :init, 1), do: module.init(context), else: nil
-
-      local_state ->
-        local_state
-    end
-  end
 
   # Modal key dismissal — takes precedence over screen-level and global handlers.
   # :confirm modals route Y/N to {:confirm_modal, :yes/:no}.
@@ -948,79 +838,4 @@ defmodule Foglet.TUI.App do
   defp wrap_command({:terminate, _reason}), do: Command.quit()
   defp wrap_command(%Command{} = cmd), do: cmd
   defp wrap_command(other), do: other
-
-  defp screen_module_for(%__MODULE__{} = state, screen) do
-    override =
-      get_in(domain_from_session_context(state.session_context), [:screen_modules, screen])
-
-    cond do
-      is_atom(override) and not is_nil(override) and Code.ensure_loaded?(override) ->
-        override
-
-      is_atom(override) and not is_nil(override) ->
-        # Override is a real atom but not loadable (typo, deleted module, or
-        # stale fixture). Log and fall back to the built-in resolver instead
-        # of silently routing to a non-existent module — downstream callers
-        # do `function_exported?/3` checks that would otherwise short-circuit
-        # to {state, []} with no signal to the developer (WR-05).
-        require Logger
-
-        Logger.warning(
-          "[TUI.App] domain.screen_modules[#{inspect(screen)}] = " <>
-            "#{inspect(override)} is not loadable; falling back to built-in resolver"
-        )
-
-        maybe_known_screen_module(screen)
-
-      true ->
-        maybe_known_screen_module(screen)
-    end
-  end
-
-  defp maybe_known_screen_module(screen) do
-    if screen in known_screens(), do: screen_module_for(screen), else: nil
-  end
-
-  defp known_screens do
-    [
-      :login,
-      :register,
-      :verify,
-      :main_menu,
-      :board_list,
-      :thread_list,
-      :post_reader,
-      :post_composer,
-      :new_thread,
-      :account,
-      :moderation,
-      :sysop
-    ]
-  end
-
-  defp screen_module_for(:login), do: Screens.Login
-  defp screen_module_for(:register), do: Screens.Register
-  defp screen_module_for(:verify), do: Screens.Verify
-  defp screen_module_for(:main_menu), do: Screens.MainMenu
-  defp screen_module_for(:board_list), do: Screens.BoardList
-  defp screen_module_for(:thread_list), do: Screens.ThreadList
-  defp screen_module_for(:post_reader), do: Screens.PostReader
-  defp screen_module_for(:post_composer), do: Screens.PostComposer
-  defp screen_module_for(:new_thread), do: Screens.NewThread
-  defp screen_module_for(:account), do: Screens.Account
-  defp screen_module_for(:moderation), do: Screens.Moderation
-  defp screen_module_for(:sysop), do: Screens.Sysop
-
-  # Fallback for unknown screen atoms. Hitting this branch means
-  # `state.current_screen` was set to a value not in `known_screens/0` —
-  # either via corrupted state, future enum drift, or a screen wired through
-  # `domain.screen_modules` overrides without being added here. Log loudly
-  # and degrade gracefully to MainMenu instead of crashing the runtime.
-  defp screen_module_for(other) do
-    require Logger
-
-    Logger.error("[TUI.App] no screen module for #{inspect(other)}; falling back to :main_menu")
-
-    Screens.MainMenu
-  end
 end
