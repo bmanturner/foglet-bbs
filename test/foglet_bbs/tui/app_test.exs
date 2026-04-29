@@ -323,6 +323,7 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:key, %{key: :enter}}, state)
 
       assert cmds == []
+
       assert App.screen_state_for(new_state, :target_key).received == [
                {:test_submit, %{topic: ""}}
              ]
@@ -342,6 +343,7 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:key, %{key: :enter}}, state)
 
       assert cmds == []
+
       assert %Foglet.TUI.Modal{type: :error, message: "Unable to submit form."} =
                new_state.modal
     end
