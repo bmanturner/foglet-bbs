@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 42-01-PLAN.md
-last_updated: "2026-04-29T21:47:29.545Z"
+stopped_at: Completed 42-02-PLAN.md
+last_updated: "2026-04-29T21:57:25.023Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 9
-  completed_plans: 5
-  percent: 56
+  completed_plans: 6
+  percent: 67
 ---
 
 # Project State
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 ## Current Position
 
 Phase: 42 (app-runtime-helper-extraction) — EXECUTING
-Plan: 2 of 5
+Plan: 3 of 5
 Status: Ready to execute
 Last activity: 2026-04-29
 
@@ -53,6 +53,7 @@ Progress: [██████░░░░] 56%
 - Trend: N/A
 
 | Phase 42 P01 | 9min | 3 tasks | 4 files |
+| Phase 42 P42-02 | 7min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -66,6 +67,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - Roadmap phases are derived only from v2.1 requirements in `.planning/REQUIREMENTS.md`.
 - [Phase 42]: Routing owns route encoding, screen-key derivation, context construction, screen module resolution, reducer dispatch, and render dispatch.
 - [Phase 42]: Foglet.TUI.App keeps public route helper delegators only for render fixtures and screen-focused test boundaries; implementation lives in Routing.
+- [Phase 42]: Modal owns overlay rendering, modal key precedence, confirm callbacks, dismissal, form event routing, and generic form-submit failure visibility.
+- [Phase 42]: Foglet.TUI.App delegates modal-owned behavior while keeping high-level App update messages and Raxol callbacks.
 
 ### Pending Todos
 
@@ -82,6 +85,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-29T21:47:21.214Z
-Stopped at: Completed 42-01-PLAN.md
+Last session: 2026-04-29T21:57:24.856Z
+Stopped at: Completed 42-02-PLAN.md
 Resume file: None
