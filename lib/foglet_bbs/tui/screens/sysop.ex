@@ -676,14 +676,12 @@ defmodule Foglet.TUI.Screens.Sysop do
     )
   end
 
-  # Defensive write helper. The App default keeps `state.screen_state` as
-  # `%{}`, but the sibling Moderation/Account screens nil-coalesce here too
-  # (see `app.ex` and `moderation.ex`). Routing every Sysop write through
-  # this helper keeps the slot mutation symmetric across screens and prevents
-  # a future App-shape construction (e.g. a typed-struct refactor) from
-  # crashing inside `Map.put/3` with `BadMapError`.
+  # Slot writer for the :sysop screen state. %App{} defaults screen_state to
+  # %{}; Phase 39 removed the legacy paths that could leave it nil, so we no
+  # longer hedge with `|| %{}` here. A non-map screen_state would crash
+  # earlier in the screen pipeline anyway (WR-03).
   defp put_sysop_state(state, sysop_ss) do
-    new_screen_state = Map.put(state.screen_state || %{}, :sysop, sysop_ss)
+    new_screen_state = Map.put(state.screen_state, :sysop, sysop_ss)
     %{state | screen_state: new_screen_state}
   end
 

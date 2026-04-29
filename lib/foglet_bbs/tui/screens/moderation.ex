@@ -614,7 +614,10 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp key_for_invites(%{key: key}), do: key
 
   defp update_screen_state(state, ss) do
-    new_screen_state = Map.put(Map.get(state, :screen_state) || %{}, :moderation, ss)
+    # %App{} defaults screen_state to %{} and no in-tree path rewrites it to
+    # nil — see App.put_screen_state/3. A nil here would already crash earlier
+    # in the screen pipeline, so we no longer hedge with `|| %{}` (WR-03).
+    new_screen_state = Map.put(state.screen_state, :moderation, ss)
     {:update, %{state | screen_state: new_screen_state}, []}
   end
 end

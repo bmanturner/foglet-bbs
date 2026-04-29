@@ -97,10 +97,13 @@ defmodule Foglet.TUI.App do
     Map.get(screen_state || %{}, key)
   end
 
-  @doc "Stores screen-local state under `key` without changing legacy App fields."
+  @doc "Stores screen-local state under `key`."
   @spec put_screen_state(t(), term(), term()) :: t()
   def put_screen_state(%__MODULE__{} = state, key, local_state) do
-    %{state | screen_state: Map.put(state.screen_state || %{}, key, local_state)}
+    # %App{} defaults screen_state to %{}; no in-tree path writes it to nil.
+    # If a future refactor breaks that invariant the crash should be loud and
+    # local, not papered over with `|| %{}` (WR-03).
+    %{state | screen_state: Map.put(state.screen_state, key, local_state)}
   end
 
   @doc "Builds the narrow runtime context passed to new screen reducers."
