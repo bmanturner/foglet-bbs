@@ -663,8 +663,22 @@ defmodule Foglet.TUI.App do
 
   defp domain_from_session_context(session_context) when is_map(session_context) do
     case Map.get(session_context, :domain) do
-      domain when is_map(domain) -> domain
-      _ -> %{}
+      domain when is_map(domain) ->
+        domain
+
+      nil ->
+        %{}
+
+      other ->
+        require Logger
+
+        Logger.warning(
+          "[TUI.App] session_context.:domain is non-map (#{inspect(other)}); " <>
+            "coercing to %{}. This usually indicates a misshapen test fixture " <>
+            "or stale session_context."
+        )
+
+        %{}
     end
   end
 
