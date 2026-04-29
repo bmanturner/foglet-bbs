@@ -292,7 +292,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert _ = render_account(state)
       assert Presentation.mode_for!(:account) == :operator
 
-      assert File.read!("lib/foglet_bbs/tui/screens/account.ex") =~
+      assert File.read!("lib/foglet_bbs/tui/screens/account/render.ex") =~
                "Presentation.mode_for!(:account)"
     end
 
