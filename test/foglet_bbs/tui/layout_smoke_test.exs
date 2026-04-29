@@ -86,6 +86,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end)
   end
 
+  defp positioned_row_text(positioned, y) do
+    positioned
+    |> text_elements()
+    |> Enum.filter(&(&1.y == y))
+    |> Enum.sort_by(& &1.x)
+    |> Enum.map_join(& &1.text)
+  end
+
   defp chrome_frame_element?(element) do
     element |> Map.get(:attrs, %{}) |> Map.get(:chrome_frame?, false)
   end
@@ -2319,25 +2327,32 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   describe "Phase 27 auth breadcrumbs (BREAD-01)" do
     @breadcrumb_sizes [{64, 22}, {80, 24}]
 
-    # Phase 39 Plan 39-06 deleted BreadcrumbBar.parts_for/1; Login screen has
-    # not yet been migrated to the explicit breadcrumb_parts contract, so its
-    # breadcrumb temporarily falls back to ["Foglet"]. These tests are
-    # disabled pending a follow-up Login migration; Plan 39-08's
-    # byte-equivalence verification owns the regression check.
-    @tag :pending
-    @tag :phase39_login_breadcrumb_pending
-    test "reset_consume Login state produces breadcrumb with Foglet, Forgot Password, Enter Token" do
-      for {width, _height} <- @breadcrumb_sizes do
-        # No-op while pending; original parts_for/1 contract was removed in 39-06.
-        _ = width
+    test "reset_consume Login state uses explicit Login breadcrumb without leaking token" do
+      for {width, height} <- @breadcrumb_sizes do
+        state = reset_consume_state_with_token("RESET-TOKEN-SENTINEL", {width, height})
+        positioned = state |> render_login() |> apply_at_size({width, height})
+        top_row = positioned_row_text(positioned, 0)
+
+        assert String.contains?(top_row, "Foglet ▸ Login")
+        refute String.contains?(top_row, "RESET-TOKEN-SENTINEL")
       end
     end
 
-    @tag :pending
-    @tag :phase39_login_breadcrumb_pending
-    test "Login menu state breadcrumb parts are only Foglet (no sub-path)" do
-      for {width, _height} <- @breadcrumb_sizes do
-        _ = width
+    test "Login menu state uses explicit Login breadcrumb without reset sub-paths" do
+      for {width, height} <- @breadcrumb_sizes do
+        state = %App{
+          current_screen: :login,
+          session_context: %{registration_mode: "open"},
+          terminal_size: {width, height},
+          screen_state: %{login: %{sub: :menu}}
+        }
+
+        positioned = state |> render_login() |> apply_at_size({width, height})
+        top_row = positioned_row_text(positioned, 0)
+
+        assert String.contains?(top_row, "Foglet ▸ Login")
+        refute String.contains?(top_row, "Forgot Password")
+        refute String.contains?(top_row, "Enter Token")
       end
     end
   end
@@ -2927,16 +2942,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
              "sentinel landed on chrome bottom (command) row (y=21) at 64x22"
     end
 
-    # Phase 39 Plan 39-06 deleted BreadcrumbBar.parts_for/1; Login screen has
-    # not yet been migrated to the explicit breadcrumb_parts contract.
-    # Token-leakage protection is still validated end-to-end by the rendered
-    # output tests below (the raw token never appears in any positioned text
-    # outside the input slot).
-    @tag :pending
-    @tag :phase39_login_breadcrumb_pending
-    test "breadcrumb parts for :reset_consume are state-derived and never include the raw token" do
-      for {width, _height} <- @reset_consume_sizes do
-        _ = width
+    test "breadcrumb parts for :reset_consume stay explicit and never include the raw token" do
+      for {width, height} <- @reset_consume_sizes do
+        state = reset_consume_state_with_token(@reset_consume_sentinel, {width, height})
+        positioned = state |> render_login() |> apply_at_size({width, height})
+        top_row = positioned_row_text(positioned, 0)
+
+        assert String.contains?(top_row, "Foglet ▸ Login")
+        refute String.contains?(top_row, @reset_consume_sentinel)
       end
     end
 

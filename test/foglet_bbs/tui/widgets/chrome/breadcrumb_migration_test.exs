@@ -14,11 +14,32 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbMigrationTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.Context
-  alias Foglet.TUI.Screens.{NewThread, PostComposer, PostReader, ThreadList}
+
+  alias Foglet.TUI.Screens.{
+    Account,
+    BoardList,
+    Login,
+    MainMenu,
+    Moderation,
+    NewThread,
+    PostComposer,
+    PostReader,
+    Register,
+    ThreadList,
+    Verify
+  }
+
+  alias Foglet.TUI.Screens.Account.State, as: AccountState
+  alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
+  alias Foglet.TUI.Screens.Login.State, as: LoginState
+  alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
+  alias Foglet.TUI.Screens.Moderation.State, as: ModerationState
   alias Foglet.TUI.Screens.NewThread.State, as: NewThreadState
   alias Foglet.TUI.Screens.PostComposer.State, as: PostComposerState
   alias Foglet.TUI.Screens.PostReader.State, as: PostReaderState
+  alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.ThreadList.State, as: ThreadListState
+  alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Widgets.Chrome.BreadcrumbBar
 
   describe "BreadcrumbBar surface" do
@@ -67,9 +88,9 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbMigrationTest do
   describe "screen render emits :breadcrumb_parts" do
     setup do
       context = %Context{
-        current_user: %{id: "u1", handle: "alice"},
+        current_user: %{id: "u1", handle: "alice", role: :sysop},
         terminal_size: {120, 40},
-        session_context: %{},
+        session_context: %{registration_mode: "open", invite_code_generators: "sysops"},
         route_params: %{}
       }
 
@@ -133,6 +154,52 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbMigrationTest do
       parts = capture_breadcrumb_parts(fn -> NewThread.render(state, context) end)
       assert Enum.member?(parts, "Foglet")
       assert Enum.member?(parts, "New Thread")
+    end
+
+    test "Login passes its explicit breadcrumb_parts list", %{context: context} do
+      parts = capture_breadcrumb_parts(fn -> Login.render(LoginState.default(), context) end)
+      assert parts == ["Foglet", "Login"]
+    end
+
+    test "Register passes its explicit breadcrumb_parts list", %{context: context} do
+      parts =
+        capture_breadcrumb_parts(fn ->
+          Register.render(RegisterState.default(), context)
+        end)
+
+      assert parts == ["Foglet", "Register"]
+    end
+
+    test "Verify passes its explicit breadcrumb_parts list", %{context: context} do
+      parts = capture_breadcrumb_parts(fn -> Verify.render(VerifyState.default(), context) end)
+      assert parts == ["Foglet", "Verify"]
+    end
+
+    test "MainMenu passes its explicit breadcrumb_parts list", %{context: context} do
+      parts =
+        capture_breadcrumb_parts(fn -> MainMenu.render(MainMenuState.new(context), context) end)
+
+      assert parts == ["Foglet", "Home"]
+    end
+
+    test "BoardList passes its explicit breadcrumb_parts list", %{context: context} do
+      state = BoardListState.new(status: :empty)
+      parts = capture_breadcrumb_parts(fn -> BoardList.render(state, context) end)
+      assert parts == ["Foglet", "Boards"]
+    end
+
+    test "Account passes its explicit breadcrumb_parts list", %{context: context} do
+      parts = capture_breadcrumb_parts(fn -> Account.render(AccountState.new(), context) end)
+      assert parts == ["Foglet", "Account"]
+    end
+
+    test "Moderation passes its explicit breadcrumb_parts list", %{context: context} do
+      parts =
+        capture_breadcrumb_parts(fn ->
+          Moderation.render(ModerationState.new(), context)
+        end)
+
+      assert parts == ["Foglet", "Moderation"]
     end
   end
 
