@@ -583,14 +583,18 @@ defmodule Foglet.TUI.App do
   defp do_update(:main_menu_clock_tick, state), do: {state, []}
 
   # A new SSH connection for the same user replaced this session.
-  # Show a notice modal and quit cleanly.
+  # Show a notice modal and defer the quit until the user dismisses it
+  # (mirrors `:terminate_after_modal` so the user actually sees the message
+  # rather than getting torn down on the next tick).
   defp do_update({:session_replaced, _user_id}, state) do
     modal = %Foglet.TUI.Modal{
       type: :warning,
-      message: "Your session was replaced by a new connection. Goodbye."
+      message: "Your session was replaced by a new connection. Goodbye.",
+      on_confirm: fn s -> {s, [Command.quit()]} end,
+      on_cancel: fn s -> {s, [Command.quit()]} end
     }
 
-    {%{state | modal: modal}, [Command.quit()]}
+    {%{state | modal: modal}, []}
   end
 
   # TUI login screen authenticated a user — promote the guest session.
