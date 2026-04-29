@@ -24,9 +24,9 @@ defmodule Foglet.TUI.App do
 
   alias Foglet.Accounts
   alias Foglet.PubSub
+  alias Foglet.TUI.App.Routing
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
-  alias Foglet.TUI.App.Routing
   alias Foglet.TUI.InitialRouteEnterForwarder
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.SizeGate
