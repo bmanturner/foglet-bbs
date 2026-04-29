@@ -6,9 +6,11 @@ defmodule Foglet.TUI.App do
   `widgets/*` are the instruments. This module holds the canonical UI
   shell — an 8-field struct (`current_screen`, `current_user`,
   `session_context`, `session_pid`, `terminal_size`, `route_params`,
-  `modal`, `screen_state`) — and the view-routing table. Per-screen state
-  lives in screen-owned `%State{}` structs stored under `screen_state`,
-  keyed by screen atom; each screen is a reducer that exposes
+  `modal`, `screen_state`) — while `Foglet.TUI.App.Routing`,
+  `Foglet.TUI.App.Modal`, `Foglet.TUI.App.Effects`, and
+  `Foglet.TUI.App.Subscriptions` own the extracted runtime details.
+  Per-screen state lives in screen-owned `%State{}` structs stored under
+  `screen_state`, keyed by screen atom; each screen is a reducer that exposes
   `update/3` + `render/2` and an optional `subscriptions/2` callback.
 
   State flow (D-16):
@@ -349,9 +351,9 @@ defmodule Foglet.TUI.App do
   # (started by setup_subscriptions/1 right after init) sends us this message
   # exactly once; we route it through to the screen as :on_route_enter.
   #
-  # Direct production navigations (`apply_effect(navigate, ...)`) still
-  # dispatch :on_route_enter via `maybe_dispatch_route_entry/3` (app.ex:138),
-  # so this path only fires for the very first screen of the session.
+  # Direct production navigations still dispatch :on_route_enter through
+  # Foglet.TUI.App.Effects and Foglet.TUI.App.Routing, so this path only fires
+  # for the very first screen of the session.
   defp do_update(:initial_route_enter, state) do
     Routing.route_screen_update(
       state,
