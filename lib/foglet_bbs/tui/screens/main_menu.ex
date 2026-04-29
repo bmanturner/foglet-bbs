@@ -482,7 +482,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
             placeholder: "120 chars max"
           }
         ],
-        on_submit: &stash_modal_submit(:oneliner_composer, &1),
+        on_submit: &modal_submit_effect(:oneliner_composer, &1),
         on_cancel: fn -> :dismiss_modal end,
         show_footer: true
       )
@@ -504,7 +504,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
             max_length: 240
           }
         ],
-        on_submit: &stash_modal_submit(:hide_oneliner, &1),
+        on_submit: &modal_submit_effect(:hide_oneliner, &1),
         on_cancel: fn -> :dismiss_modal end,
         show_footer: true
       )
@@ -558,10 +558,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
   defp default_domain_module(:boards), do: Foglet.Boards
 
-  defp stash_modal_submit(kind, payload) do
-    Process.put({Foglet.TUI.App, :pending_screen_modal_submit}, {:main_menu, kind, payload})
-    :ok
-  end
+  defp modal_submit_effect(kind, payload), do: Effect.modal_submit(:main_menu, kind, payload)
 
   defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
   defp unwrap_task_result({:ok, {:error, reason}}), do: {:error, reason}

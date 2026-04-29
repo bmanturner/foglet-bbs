@@ -1305,11 +1305,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {with_modal, []} = open_oneliner_composer(state)
 
       # Drive the form to :submitting via the natural Enter-on-last-field path.
-      {submitting, _cmds} =
+      {submitting, cmds} =
         App.update({:key, %{key: :enter}}, with_modal)
 
-      assert %Foglet.TUI.Modal{type: :error, message: "Unable to submit form."} =
-               submitting.modal
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} = submitting.modal
+      assert form.submit_state == :submitting
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
 
       {after_error, []} =
         App.update(
@@ -1332,11 +1333,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {with_text, _} =
         App.update({:key, %{key: :char, char: "x"}}, with_modal)
 
-      {submitting, _cmds} =
+      {submitting, cmds} =
         App.update({:key, %{key: :enter}}, with_text)
 
-      assert %Foglet.TUI.Modal{type: :error, message: "Unable to submit form."} =
-               submitting.modal
+      assert %Foglet.TUI.Modal{type: :form, message: %ModalForm{} = form} = submitting.modal
+      assert form.submit_state == :submitting
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
 
       {after_error, []} =
         App.update(

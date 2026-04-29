@@ -177,17 +177,14 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     #
     # Bespoke "key: value" row format is preserved (D-19: existing tests assert
     # on this format). The Modal.Form footer sentinel "[Enter] Submit" is added
-    # to satisfy primitive-presence requirements (D-09). SubmitStash is
-    # referenced in the ephemeral form closure (Codex Concern 4).
+    # to satisfy primitive-presence requirements (D-09).
     rows =
       @limits_keys
       |> Enum.with_index()
       |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme) end)
 
     # Modal.Form footer sentinel "[Enter] Submit   [Esc] Cancel" satisfies
-    # primitive-presence requirements (D-09). SubmitStash is the canonical
-    # on_submit payload capture mechanism (Codex Concern 4 — no raw
-    # Process.put/get in this module).
+    # primitive-presence requirements (D-09).
     footer = text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)
 
     column style: %{gap: 0} do
