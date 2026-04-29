@@ -2,6 +2,9 @@ defmodule Foglet.TUI.Screens.NewThread.State do
   @moduledoc """
   Screen-local state for `Foglet.TUI.Screens.NewThread`.
 
+  This is the screen-owned boundary for board picker state, board-load
+  results, compose drafts, validation, submit status/result, and cancel origin.
+
   The app stores this struct at `state.screen_state[:new_thread]`.
   Nested stateful widget state is held as first-class struct fields.
   """

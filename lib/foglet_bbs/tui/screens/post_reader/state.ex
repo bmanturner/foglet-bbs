@@ -2,6 +2,10 @@ defmodule Foglet.TUI.Screens.PostReader.State do
   @moduledoc """
   Screen-local state for `Foglet.TUI.Screens.PostReader`.
 
+  This is the screen-owned boundary for routed board/thread identity, loaded
+  posts, selected index, viewport/cache state, pending read data, load status,
+  and read-pointer flush results.
+
   The app stores this struct at `state.screen_state[:post_reader]`.
   """
 

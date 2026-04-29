@@ -2,6 +2,9 @@ defmodule Foglet.TUI.Screens.PostComposer.State do
   @moduledoc """
   Screen-local state for `Foglet.TUI.Screens.PostComposer`.
 
+  This is the screen-owned boundary for draft input, preview mode,
+  route/reply identity, validation, submit status/result, and cancel origin.
+
   The app stores this struct at `state.screen_state[:post_composer]`.
   Nested stateful widget state is held as a first-class struct field.
   """

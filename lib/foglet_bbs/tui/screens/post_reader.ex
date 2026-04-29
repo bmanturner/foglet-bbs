@@ -2,6 +2,10 @@ defmodule Foglet.TUI.Screens.PostReader do
   @moduledoc """
   Post reader for a single thread (SSH-07, SSH-08, SSH-09).
 
+  Phase 37 makes PostReader screen-owned: loaded posts, selected index,
+  viewport/cache state, route identity, pending read data, load status, and
+  flush results live in `%PostReader.State{}` and flow through `update/3`.
+
   Renders posts via Post.PostCard + Post.MarkdownBody (RENDER-01, RENDER-02).
   Paginates with n/p keys; scrolls within a post with j/k keys.
   Local read-pointer state (state.read_position) updates on each advance;

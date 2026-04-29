@@ -2,6 +2,10 @@ defmodule Foglet.TUI.Screens.NewThread do
   @moduledoc """
   New-thread compose wizard (Audit #9 fix).
 
+  Phase 37 makes NewThread screen-owned: board picker state, board-load
+  results, compose drafts, validation, submit status/result, and cancel origin
+  live in `%NewThread.State{}` and flow through `update/3`.
+
   Step 1 — :board   : pick a subscribed board (j/k / ↑↓ to navigate, Enter to select, Esc to cancel).
   Step 2 — :compose : enter title (Tab-switch focus) and body (MultiLineInput state, rendered as plain text/2).
                        Ctrl+S to submit, Ctrl+C to cancel.

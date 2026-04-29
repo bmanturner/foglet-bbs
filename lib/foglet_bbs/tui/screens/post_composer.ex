@@ -2,6 +2,10 @@ defmodule Foglet.TUI.Screens.PostComposer do
   @moduledoc """
   Post composer (SSH-07, D-26..D-31).
 
+  Phase 37 makes PostComposer screen-owned: draft input, preview mode,
+  route/reply identity, validation, submit status/result, and cancel origin
+  live in `%PostComposer.State{}` and flow through `update/3`.
+
   Layout (D-27): header, quote context (when replying), text area, key bar.
   Tab toggles edit/preview (D-28). Ctrl+S submits (D-29). Ctrl+C cancels (D-30).
   Max body length enforced via Foglet.Config.get!("max_post_length") (D-31).
