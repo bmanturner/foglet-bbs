@@ -32,10 +32,10 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   """
 
   alias Foglet.Config
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   @type t :: SState.t()
 
@@ -100,7 +100,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     {new_form, action} = ModalForm.handle_event(event, form)
 
     case action do
-      :submitted -> finalize_submit(state, new_form)
+      {:submitted, submit_result} -> finalize_submit(state, new_form, submit_result)
       :cancelled -> {SState.reseed_drafts(state), []}
       _ -> {sync_back(state, new_form), []}
     end
@@ -125,19 +125,24 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
 
     {new_form, action} = ModalForm.handle_event(%{key: :enter}, form)
 
-    if action == :submitted do
-      finalize_submit(state, new_form)
-    else
-      {sync_back(state, new_form), []}
+    case action do
+      {:submitted, submit_result} -> finalize_submit(state, new_form, submit_result)
+      _ -> {sync_back(state, new_form), []}
     end
   end
 
-  defp finalize_submit(%SState{} = state, %ModalForm{} = new_form) do
-    case SubmitStash.pop(SState) do
-      {:site, {:ok, payload}} ->
+  defp finalize_submit(%SState{} = state, %ModalForm{} = new_form, submit_result) do
+    case submit_result do
+      %Effect{
+        type: :modal_submit,
+        payload: %{screen_key: :sysop, kind: :site_settings, payload: {:ok, payload}}
+      } ->
         persist_payload(state, payload, new_form)
 
-      {:site, {:error, errors_map}} ->
+      %Effect{
+        type: :modal_submit,
+        payload: %{screen_key: :sysop, kind: :site_settings, payload: {:error, errors_map}}
+      } ->
         # D-20: validation errors flow through Modal.Form.set_errors/2 AND
         # the wrapper's string-keyed errors map (preserved API).
         new_form2 = ModalForm.set_errors(new_form, errors_map)

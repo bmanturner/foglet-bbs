@@ -16,18 +16,19 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
   Submit path (D-20):
 
     1. Run `validate_delivery_verification_pair/1`.
-    2. If invalid: stash `{:site, {:error, errors_map}}` for the wrapper.
-    3. If valid:   stash `{:site, {:ok, payload}}` for the wrapper to call
-                   `Foglet.Config.put/3`.
+    2. If invalid: return an explicit modal-submit effect with
+                   `{:error, errors_map}` for the wrapper.
+    3. If valid:   return an explicit modal-submit effect with
+                   `{:ok, payload}` for the wrapper to call `Foglet.Config.put/3`.
 
-  Cancel path: stash `{:site, :cancelled}` so the wrapper can drive
+  Cancel path: Modal.Form returns `:cancelled` so the wrapper can drive
   `reseed_drafts/1` on the next render.
   """
 
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-  alias Foglet.TUI.Widgets.Modal.Form.SubmitStash
 
   @site_keys [
     "registration_mode",
@@ -143,11 +144,11 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
       fields: fields,
       on_submit: fn payload ->
         case validate_delivery_verification_pair(payload) do
-          :ok -> SubmitStash.stash(__MODULE__, {:site, {:ok, payload}})
-          {:error, errors} -> SubmitStash.stash(__MODULE__, {:site, {:error, errors}})
+          :ok -> Effect.modal_submit(:sysop, :site_settings, {:ok, payload})
+          {:error, errors} -> Effect.modal_submit(:sysop, :site_settings, {:error, errors})
         end
       end,
-      on_cancel: fn -> SubmitStash.stash(__MODULE__, {:site, :cancelled}) end
+      on_cancel: fn -> :ok end
     )
   end
 
