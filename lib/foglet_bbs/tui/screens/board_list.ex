@@ -157,9 +157,6 @@ defmodule Foglet.TUI.Screens.BoardList do
 
         %{subscribed?: false} ->
           {%{local_state | board_tree: tree, feedback: "Not subscribed."}, []}
-
-        _other ->
-          {local_state, []}
       end
     else
       _other -> {local_state, []}

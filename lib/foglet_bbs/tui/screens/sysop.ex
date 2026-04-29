@@ -815,11 +815,6 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
-  defp maybe_request_invites_load({%State{} = ss, effects}, %Context{} = context) do
-    {new_ss, invite_effects} = maybe_request_invites_load(ss, context)
-    {new_ss, effects ++ invite_effects}
-  end
-
   defp maybe_request_invites_load(%State{} = ss, %Context{} = context) do
     case {Enum.at(State.tab_labels(ss), ss.active_tab), ss.invites.items} do
       {"INVITES", items} when not is_list(items) ->
