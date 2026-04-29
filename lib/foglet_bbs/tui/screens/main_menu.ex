@@ -27,21 +27,12 @@ defmodule Foglet.TUI.Screens.MainMenu do
   alias Foglet.Authorization
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Modal
+  alias Foglet.TUI.Screens.MainMenu.Render
   alias Foglet.TUI.Screens.{MainMenu.State, ShellVisibility}
-  alias Foglet.TUI.TextWidth
-  alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-  import Raxol.Core.Renderer.View
 
   @default_terminal_size {80, 24}
   @oneliner_display_limit 5
-  @oneliner_handle_limit 12
-  # Body limit keeps a selected row within the right panel inner width at the
-  # narrowest canonical terminal size: marker + "@" + handle + separator + body
-  # = 2+1+12+2+17 = 34 columns at 64-wide.
-  @oneliner_body_limit 17
 
   # Minimum Navigation panel inner width budget — the FLOOR for the
   # terminal-size-aware computation in nav_panel_inner_width/1. At 64×22 with
@@ -85,39 +76,8 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   @impl true
   @spec render(State.t() | nil, Context.t()) :: any()
-  def render(local_state, %Context{} = context) do
-    local_state = normalize_state(local_state, context)
-    state = app_state_from_local(local_state, context)
-    user = state.current_user
-    theme = Theme.from_state(state)
-
-    destinations = visible_destination_entries(user)
-    actions = visible_actions(state)
-
-    inner_width = nav_panel_inner_width(state)
-    menu_panel = nav_panel(destinations, theme, inner_width)
-    oneliners_panel_widget = oneliners_panel(state, theme)
-
-    # `divider_char: " "` (space) — both panels render their own `│` borders, so
-    # a visible split-pane divider would visually collide with them (`│ │ │`).
-    # Without this, the split_pane divider's character (default `"|"`) would
-    # appear at column `split_x` on every row and clobber the right panel's
-    # `┌─ Oneliners ─` top-border title segment (Phase 32 MENU-02). The fix
-    # for the painter orientation lives in
-    # `vendor/raxol/lib/raxol/ui/layout/split_pane.ex`'s `build_divider/6`;
-    # passing a space here is the screen-level half of the fix and makes the
-    # divider effectively transparent so panel borders supply the visual gap.
-    content =
-      split_pane(
-        direction: :horizontal,
-        ratio: {2, 3},
-        min_size: 18,
-        divider_char: " ",
-        children: [menu_panel, oneliners_panel_widget]
-      )
-
-    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Home"]}, content, actions)
-  end
+  def render(local_state, %Context{} = context),
+    do: Render.render(normalize_state(local_state, context), context)
 
   @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
@@ -591,7 +551,9 @@ defmodule Foglet.TUI.Screens.MainMenu do
     |> Enum.into(%{}, fn {field, messages} -> {field, Enum.join(messages, ", ")} end)
   end
 
-  defp visible_destination_entries(user) do
+  @doc false
+  @spec visible_destination_entries(map() | nil) :: [map()]
+  def visible_destination_entries(user) do
     @main_menu_commands
     |> Enum.filter(&(&1.kind == :destination and destination_visible?(&1.visibility, user)))
   end
@@ -643,119 +605,6 @@ defmodule Foglet.TUI.Screens.MainMenu do
     max(left_alloc - box_border, @nav_panel_min_inner_width)
   end
 
-  # Note: Raxol's `:panel` measure_panel/2 shrinks the panel to
-  # `children_size + double_border` unless `:width`/`:height` are explicitly
-  # set (vendor/raxol/.../panels.ex:171-201). Without explicit size attrs the
-  # panel will not fill the split_pane allocation, leaving the title segment
-  # truncated and the right border drawn at the children-measured edge instead
-  # of the chrome-allocated edge. We pass sentinel large values; `apply_constraints/2`
-  # clamps to `available_space.width`/`height`, so the panel fills the pane.
-  defp nav_panel(destinations, theme, inner_width) do
-    %{
-      type: :panel,
-      attrs: %{
-        title: "Navigation",
-        title_attrs: %{fg: theme.title.fg},
-        border: :single,
-        border_fg: theme.border.fg,
-        width: 9999,
-        height: 9999
-      },
-      children: [
-        column style: %{gap: 0} do
-          Enum.map(destinations, &nav_row(&1, theme, inner_width))
-        end
-      ]
-    }
-  end
-
-  # Multi-node row composition (D-06, MENU-03):
-  # - Leading text node carries `theme.primary.fg` and includes the one-column
-  #   inner indent (D-09, MENU-04), the destination glyph, the label, and the
-  #   right-align padding.
-  # - Trailing text node carries `theme.accent.fg` and renders the bracketed
-  #   key token `[X]` (D-08, D-10 — color only, no style).
-  # Width budget at 64x22 (inner_width = 20):
-  #   indent(1) + glyph(1) + space(1) + "Moderation"(10) + "[M]"(3) = 16,
-  #   leaving 4 cols of trailing padding.
-  defp nav_row(%{key: key, label: label, glyph: glyph}, theme, inner_width) do
-    indent = " "
-    bracketed_key = "[" <> key <> "]"
-
-    prefix_text = indent <> glyph <> " " <> label
-    prefix_width = TextWidth.display_width(prefix_text)
-    bracketed_key_width = TextWidth.display_width(bracketed_key)
-
-    padding_width = max(inner_width - prefix_width - bracketed_key_width, 1)
-    padding = TextWidth.pad_trailing("", padding_width)
-
-    # NOTE: must pass an explicit opts arg (`[]`) so the `Raxol.Core.Renderer.View.row/2`
-    # MACRO is invoked. Calling `row do ... end` without an opts arg matches the
-    # `row/1` FUNCTION instead, which silently drops the do-block contents and
-    # returns a flex with `children: []` (vendor/raxol/lib/raxol/core/renderer/view.ex
-    # line 87 vs. line 92).
-    row [] do
-      [
-        text(prefix_text <> padding, fg: theme.primary.fg),
-        text(bracketed_key, fg: theme.accent.fg)
-      ]
-    end
-  end
-
-  defp oneliners_panel(state, theme) do
-    %{
-      type: :panel,
-      attrs: %{
-        title: "Oneliners",
-        title_attrs: %{fg: theme.title.fg},
-        border: :single,
-        border_fg: theme.border.fg,
-        width: 9999,
-        height: 9999
-      },
-      children: [
-        column style: %{gap: 0} do
-          oneliner_rows(state, theme)
-        end
-      ]
-    }
-  end
-
-  defp oneliner_rows(state, theme) do
-    entries = visible_oneliners(state)
-    selected_index = selected_oneliner_index(state, entries)
-
-    case entries do
-      [] ->
-        [text("No oneliners yet.", fg: theme.primary.fg)]
-
-      entries ->
-        entries
-        |> Enum.with_index()
-        |> Enum.map(fn {entry, index} ->
-          marker = if index == selected_index, do: "> ", else: "  "
-          text(marker <> oneliner_row(entry), fg: theme.primary.fg)
-        end)
-    end
-  end
-
-  defp oneliner_row(entry) do
-    handle =
-      entry
-      |> Map.get(:user)
-      |> user_handle()
-      |> clip(@oneliner_handle_limit)
-
-    body =
-      entry
-      |> Map.get(:body, "")
-      |> to_string()
-      |> single_line()
-      |> clip(@oneliner_body_limit)
-
-    "@#{handle}  #{body}"
-  end
-
   defp selected_hideable_oneliner(state) do
     entries = visible_oneliners(state)
     selected_index = selected_oneliner_index(state, entries)
@@ -793,26 +642,5 @@ defmodule Foglet.TUI.Screens.MainMenu do
     value
     |> Kernel.max(lower)
     |> Kernel.min(upper)
-  end
-
-  defp user_handle(nil), do: "unknown"
-
-  defp user_handle(user) do
-    user
-    |> Map.get(:handle, "unknown")
-    |> case do
-      handle when is_binary(handle) and handle != "" -> handle
-      _other -> "unknown"
-    end
-  end
-
-  defp single_line(value) do
-    value
-    |> String.replace(~r/\s+/, " ")
-    |> String.trim()
-  end
-
-  defp clip(value, limit) do
-    TextWidth.slice_to_width(value, limit)
   end
 end
