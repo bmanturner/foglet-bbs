@@ -254,7 +254,11 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
 
   defp moderation_chrome do
-    %{title: "Moderation", mode: Presentation.mode_for!(:moderation)}
+    %{
+      title: "Moderation",
+      mode: Presentation.mode_for!(:moderation),
+      breadcrumb_parts: ["Foglet", "Moderation"]
+    }
   end
 
   # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.

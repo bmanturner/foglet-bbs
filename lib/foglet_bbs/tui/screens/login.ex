@@ -100,7 +100,12 @@ defmodule Foglet.TUI.Screens.Login do
         ]
       end
 
-    ScreenFrame.render(state, "Login", content, keys_for(sub, mode))
+    ScreenFrame.render(
+      state,
+      %{breadcrumb_parts: ["Foglet", "Login"]},
+      content,
+      keys_for(sub, mode)
+    )
   end
 
   @impl true

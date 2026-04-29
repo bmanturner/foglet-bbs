@@ -658,7 +658,11 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp account_chrome do
-    %{title: "Account", mode: Presentation.mode_for!(:account)}
+    %{
+      title: "Account",
+      mode: Presentation.mode_for!(:account),
+      breadcrumb_parts: ["Foglet", "Account"]
+    }
   end
 
   defp resolve_theme_id(theme_id) when is_binary(theme_id) do

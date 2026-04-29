@@ -59,7 +59,7 @@ defmodule Foglet.TUI.Screens.Verify do
         ]
       end
 
-    ScreenFrame.render(state, "Verify Email", content, [
+    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Verify"]}, content, [
       {"Enter", "Submit"},
       {"Backspace", "Delete"},
       {"Ctrl+R", "Resend code"},

@@ -224,7 +224,7 @@ defmodule Foglet.TUI.Screens.BoardList do
 
     ScreenFrame.render(
       render_model,
-      "Boards",
+      %{breadcrumb_parts: ["Foglet", "Boards"]},
       render_board_content(local_state, context, theme),
       [
         {"j/k", "Select"},

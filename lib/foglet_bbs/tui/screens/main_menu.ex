@@ -116,7 +116,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
         children: [menu_panel, oneliners_panel_widget]
       )
 
-    ScreenFrame.render(state, "Main Menu", content, actions)
+    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Home"]}, content, actions)
   end
 
   @impl true
