@@ -19,14 +19,10 @@ defmodule Foglet.TUI.App do
 
   alias Foglet.Accounts
   alias Foglet.PubSub
-  alias Foglet.Sessions.Preferences
-  alias Foglet.Sessions.Session
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
-  alias Foglet.TUI.Screens.Account.State, as: AccountState
-  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostComposer
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.ThreadList
@@ -181,6 +177,18 @@ defmodule Foglet.TUI.App do
         payload: {:set_current_user, user}
       }) do
     {%{state | current_user: user}, []}
+  end
+
+  def apply_effect(%__MODULE__{} = state, %Effect{
+        type: :session,
+        payload: {:update_preferences, snapshot}
+      }) do
+    state =
+      state
+      |> merge_session_preferences(snapshot)
+      |> refresh_session_preferences(snapshot)
+
+    {state, []}
   end
 
   def apply_effect(%__MODULE__{} = state, %Effect{
@@ -538,21 +546,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:navigate, screen}, state) when is_atom(screen) do
-    new_state = %{state | current_screen: screen, route_params: %{}, modal: nil}
-
-    cond do
-      screen == :main_menu and new_state.current_user ->
-        route_screen_update(new_state, :main_menu, :load_oneliners)
-
-      screen == :moderation and new_state.current_user ->
-        do_update({:load_moderation_workspace}, new_state)
-
-      screen == :sysop and new_state.current_user ->
-        maybe_dispatch_initial_sysop_load(new_state)
-
-      true ->
-        {new_state, []}
-    end
+    apply_effect(state, Effect.navigate(screen, %{}))
   end
 
   defp do_update({:set_user, user}, state) do
@@ -644,125 +638,6 @@ defmodule Foglet.TUI.App do
     end
   end
 
-  defp do_update({:load_moderation_workspace}, state) do
-    user = state.current_user
-    moderation_mod = domain_module(state, :moderation)
-
-    state = put_moderation_loading(state)
-
-    task =
-      Foglet.TUI.Command.task(:load_moderation_workspace, fn ->
-        {:moderation_workspace_loaded, moderation_mod.workspace_snapshot(user)}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:moderation_workspace_loaded, {:ok, snapshot}}, state) when is_map(snapshot) do
-    {%{state | screen_state: put_moderation_snapshot(state, snapshot)}, []}
-  end
-
-  defp do_update({:moderation_workspace_loaded, {:error, reason}}, state) do
-    {%{state | screen_state: put_moderation_error(state, reason)}, []}
-  end
-
-  # -------------------------------------------------------------------------
-  # Sysop load triad (Phase 29 — D-01, D-02, D-04, D-06).
-  #
-  # Each lifecycle tab (BOARDS, LIMITS, SYSTEM, USERS) has a dispatch clause
-  # that flips the matching slot to `:loading` and returns a single
-  # `Foglet.TUI.Command.task/2` to run the boundary call off-process.
-  # The result clauses pair with `put_sysop_loaded/3` (success) and
-  # `put_sysop_error/3` (any failure including `:forbidden`).
-  #
-  # Closure capture (Pitfall 8): `user` and `accounts_mod` are bound BEFORE
-  # the task closure so the test override `domain_module/2` swap evaluates
-  # at dispatch time, not at task-execution time.
-  # -------------------------------------------------------------------------
-
-  defp do_update({:load_sysop_users}, state) do
-    user = state.current_user
-    accounts_mod = domain_module(state, :accounts)
-    state = put_sysop_loading(state, :users_view)
-
-    task =
-      Foglet.TUI.Command.task(:load_sysop_users, fn ->
-        result =
-          case accounts_mod.list_user_status_admin_targets(user) do
-            {:ok, groups} ->
-              {:ok, Foglet.TUI.Screens.Sysop.UsersView.from_groups(groups, user)}
-
-            {:error, reason} ->
-              {:error, reason}
-          end
-
-        {:sysop_users_loaded, result}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:load_sysop_boards}, state) do
-    user = state.current_user
-    state = put_sysop_loading(state, :boards_view)
-
-    task =
-      Foglet.TUI.Command.task(:load_sysop_boards, fn ->
-        {:sysop_boards_loaded,
-         {:ok, Foglet.TUI.Screens.Sysop.BoardsView.init(current_user: user)}}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:load_sysop_limits}, state) do
-    user = state.current_user
-    state = put_sysop_loading(state, :limits_form)
-
-    task =
-      Foglet.TUI.Command.task(:load_sysop_limits, fn ->
-        {:sysop_limits_loaded,
-         {:ok, Foglet.TUI.Screens.Sysop.LimitsForm.init(current_user: user)}}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:load_sysop_system}, state) do
-    state = put_sysop_loading(state, :system_snapshot)
-
-    task =
-      Foglet.TUI.Command.task(:load_sysop_system, fn ->
-        {:sysop_system_loaded, {:ok, Foglet.TUI.Screens.Sysop.SystemSnapshot.init([])}}
-      end)
-
-    {state, [task]}
-  end
-
-  defp do_update({:sysop_users_loaded, {:ok, sub}}, state),
-    do: {put_sysop_loaded(state, :users_view, sub), []}
-
-  defp do_update({:sysop_users_loaded, {:error, reason}}, state),
-    do: {put_sysop_error(state, :users_view, reason), []}
-
-  defp do_update({:sysop_boards_loaded, {:ok, sub}}, state),
-    do: {put_sysop_loaded(state, :boards_view, sub), []}
-
-  defp do_update({:sysop_boards_loaded, {:error, reason}}, state),
-    do: {put_sysop_error(state, :boards_view, reason), []}
-
-  defp do_update({:sysop_limits_loaded, {:ok, sub}}, state),
-    do: {put_sysop_loaded(state, :limits_form, sub), []}
-
-  defp do_update({:sysop_limits_loaded, {:error, reason}}, state),
-    do: {put_sysop_error(state, :limits_form, reason), []}
-
-  defp do_update({:sysop_system_loaded, {:ok, sub}}, state),
-    do: {put_sysop_loaded(state, :system_snapshot, sub), []}
-
-  defp do_update({:sysop_system_loaded, {:error, reason}}, state),
-    do: {put_sysop_error(state, :system_snapshot, reason), []}
-
   # PubSub message handlers (Audit #12).
   # These messages arrive via PubSubForwarder → {:subscription, msg} → Dispatcher
   # → update/2. Phase 2 may not yet emit all of these; the handlers are wired now
@@ -838,19 +713,6 @@ defmodule Foglet.TUI.App do
     )
   end
 
-  defp do_update({:account_save_profile, attrs}, state) when is_map(attrs) do
-    save_account(state, :profile, Map.take(attrs, [:location, :tagline, :real_name]))
-  end
-
-  defp do_update({:account_save_prefs, attrs}, state) when is_map(attrs) do
-    allowed_attrs =
-      attrs
-      |> Map.take([:timezone, :preferences, :theme])
-      |> normalize_account_preferences()
-
-    save_account(state, :prefs, allowed_attrs)
-  end
-
   defp do_update({:command_result, inner}, state) do
     # Raxol's Command.task runtime wraps every task return value in
     # {:command_result, inner} before delivering to update/2 (Audit #11 follow-up).
@@ -903,21 +765,6 @@ defmodule Foglet.TUI.App do
     {state, []}
   end
 
-  defp domain_module(state, key) do
-    ctx = Map.get(state, :session_context) || %{}
-
-    case Domain.get(ctx, key) do
-      {:ok, mod} -> mod
-      {:error, :not_configured} -> default_domain_module(key)
-    end
-  end
-
-  defp default_domain_module(:boards), do: Foglet.Boards
-  defp default_domain_module(:threads), do: Foglet.Threads
-  defp default_domain_module(:posts), do: Foglet.Posts
-  defp default_domain_module(:moderation), do: Foglet.Moderation
-  defp default_domain_module(:accounts), do: Foglet.Accounts
-
   defp domain_from_session_context(session_context) when is_map(session_context) do
     case Map.get(session_context, :domain) do
       domain when is_map(domain) -> domain
@@ -931,14 +778,43 @@ defmodule Foglet.TUI.App do
     key = screen_key(screen)
     module = screen_module_for(state, key)
 
-    if Code.ensure_loaded?(module) and function_exported?(module, :init, 1) do
-      put_screen_state(state, key, module.init(build_context(state, params)))
-    else
-      state
+    cond do
+      screen_state_for(state, key) != nil ->
+        state
+
+      Code.ensure_loaded?(module) and function_exported?(module, :init, 1) ->
+        put_screen_state(state, key, module.init(build_context(state, params)))
+
+      true ->
+        state
     end
   end
 
   defp maybe_seed_legacy_route_context(%__MODULE__{} = state, _screen, _params), do: state
+
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :main_menu, _params) do
+    if state.current_user do
+      route_screen_update(state, :main_menu, :load_oneliners)
+    else
+      {state, []}
+    end
+  end
+
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :moderation, _params) do
+    if state.current_user do
+      route_screen_update(state, :moderation, :load)
+    else
+      {state, []}
+    end
+  end
+
+  defp maybe_dispatch_route_entry(%__MODULE__{} = state, :sysop, _params) do
+    if state.current_user do
+      route_screen_update(state, :sysop, :load)
+    else
+      {state, []}
+    end
+  end
 
   defp maybe_dispatch_route_entry(%__MODULE__{} = state, :thread_list, _params) do
     route_screen_update(state, :thread_list, :load)
@@ -1011,160 +887,9 @@ defmodule Foglet.TUI.App do
     payload
   end
 
-  defp put_moderation_loading(state) do
-    ss =
-      state
-      |> moderation_screen_state()
-      |> Map.put(:loading?, true)
-      |> Map.put(:error, nil)
-
-    %{state | screen_state: Map.put(state.screen_state || %{}, :moderation, ss)}
-  end
-
-  defp put_moderation_snapshot(state, snapshot) do
-    ss =
-      state
-      |> moderation_screen_state()
-      |> Map.merge(%{
-        scopes: Map.get(snapshot, :scopes, []),
-        queue: Map.get(snapshot, :queue, []),
-        mod_log: Map.get(snapshot, :log, []),
-        users: Map.get(snapshot, :users, []),
-        boards: Map.get(snapshot, :boards, []),
-        loading?: false,
-        error: nil
-      })
-
-    Map.put(state.screen_state || %{}, :moderation, ss)
-  end
-
-  defp put_moderation_error(state, reason) do
-    ss =
-      state
-      |> moderation_screen_state()
-      |> Map.put(:loading?, false)
-      |> Map.put(:error, reason)
-
-    Map.put(state.screen_state || %{}, :moderation, ss)
-  end
-
-  defp moderation_screen_state(state) do
-    case Map.get(state.screen_state || %{}, :moderation) do
-      %Foglet.TUI.Screens.Moderation.State{} = ss -> ss
-      _other -> Screens.Moderation.init_screen_state()
-    end
-  end
-
-  # -------------------------------------------------------------------------
-  # Sysop slot helpers (Phase 29 — D-02).
-  #
-  # Each helper writes a tagged-enum value into one of the four lifecycle
-  # slots on `state.screen_state[:sysop]`, mirroring the
-  # `put_moderation_loading|snapshot|error` pattern above. The slot atom is
-  # restricted to the four lifecycle tabs; SITE (`:site_form`) stays sync
-  # (D-03) and is never routed through these helpers.
-  # -------------------------------------------------------------------------
-
-  defp put_sysop_loading(state, slot),
-    do: update_sysop_slot(state, slot, :loading)
-
-  defp put_sysop_loaded(state, slot, sub),
-    do: update_sysop_slot(state, slot, {:loaded, sub})
-
-  defp put_sysop_error(state, slot, reason),
-    do: update_sysop_slot(state, slot, {:error, reason})
-
-  defp update_sysop_slot(state, slot, value)
-       when slot in [:boards_view, :limits_form, :system_snapshot, :users_view] do
-    ss =
-      state
-      |> sysop_screen_state()
-      |> Map.put(slot, value)
-
-    %{state | screen_state: Map.put(state.screen_state || %{}, :sysop, ss)}
-  end
-
-  defp sysop_screen_state(state) do
-    case Map.get(state.screen_state || %{}, :sysop) do
-      %Foglet.TUI.Screens.Sysop.State{} = ss ->
-        ss
-
-      _other ->
-        Foglet.TUI.Screens.Sysop.init_screen_state(
-          current_user: state.current_user,
-          session_context: state.session_context
-        )
-    end
-  end
-
-  # First-entry guard for `{:navigate, :sysop}` (D-06 — secondary defense).
-  # Inspects the active tab on screen entry and re-enters `do_update/2` with
-  # the matching `{:load_sysop_*}` tuple when the slot is `:not_loaded`.
-  # SITE / INVITES / unknown labels short-circuit to `{state, []}`.
-  defp maybe_dispatch_initial_sysop_load(state) do
-    ss = sysop_screen_state(state)
-    labels = Foglet.TUI.Screens.Sysop.State.tab_labels(ss)
-    active_label = Enum.at(labels, ss.active_tab)
-
-    case active_label do
-      "BOARDS" ->
-        dispatch_if_not_loaded_initial(state, ss, :boards_view, {:load_sysop_boards})
-
-      "LIMITS" ->
-        dispatch_if_not_loaded_initial(state, ss, :limits_form, {:load_sysop_limits})
-
-      "SYSTEM" ->
-        dispatch_if_not_loaded_initial(state, ss, :system_snapshot, {:load_sysop_system})
-
-      "USERS" ->
-        dispatch_if_not_loaded_initial(state, ss, :users_view, {:load_sysop_users})
-
-      _ ->
-        {state, []}
-    end
-  end
-
-  defp dispatch_if_not_loaded_initial(state, ss, slot, dispatch_tuple) do
-    case Map.get(ss, slot) do
-      :not_loaded -> do_update(dispatch_tuple, state)
-      _ -> {state, []}
-    end
-  end
-
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
   end
-
-  defp save_account(%{current_user: nil} = state, section, _attrs) do
-    {put_account_errors(state, section, %{base: "User session is not available."}), []}
-  end
-
-  defp save_account(state, section, attrs) do
-    case Accounts.update_profile(state.current_user, attrs) do
-      {:ok, updated_user} ->
-        snapshot = Preferences.from_user(updated_user)
-
-        state =
-          state
-          |> Map.put(:current_user, updated_user)
-          |> merge_session_preferences(snapshot)
-          |> refresh_session_preferences(snapshot)
-          |> clear_account_save_state(updated_user)
-
-        {state, []}
-
-      {:error, %Ecto.Changeset{} = changeset} ->
-        {put_account_errors(state, section, changeset_errors(changeset)), []}
-    end
-  end
-
-  defp normalize_account_preferences(%{preferences: preferences} = attrs)
-       when is_map(preferences) do
-    time_format = Map.get(preferences, "time_format") || Map.get(preferences, :time_format)
-    %{attrs | preferences: %{"time_format" => time_format}}
-  end
-
-  defp normalize_account_preferences(attrs), do: attrs
 
   defp merge_session_preferences(state, snapshot) do
     session_context =
@@ -1179,86 +904,11 @@ defmodule Foglet.TUI.App do
 
   defp refresh_session_preferences(%{session_pid: session_pid} = state, snapshot)
        when is_pid(session_pid) do
-    Session.update_preferences(session_pid, snapshot)
+    Foglet.Sessions.Session.update_preferences(session_pid, snapshot)
     state
   end
 
   defp refresh_session_preferences(state, _snapshot), do: state
-
-  defp clear_account_save_state(state, updated_user) do
-    account_state =
-      state
-      |> account_screen_state(updated_user)
-      |> AccountState.seed_from_user(updated_user)
-      |> Map.put(:status_message, "Account changes saved.")
-
-    put_account_screen_state(state, account_state)
-  end
-
-  defp put_account_errors(state, section, errors) do
-    account_state =
-      state
-      |> account_screen_state(state.current_user)
-      |> Map.put(error_field(section), errors)
-      |> Map.put(:status_message, "Account save failed.")
-      |> apply_form_errors(section, errors)
-
-    put_account_screen_state(state, account_state)
-  end
-
-  @profile_labels %{location: "Location", tagline: "Tagline", real_name: "Real name"}
-  @prefs_labels %{timezone: "Timezone", time_format: "Time format", theme: "Theme"}
-
-  defp apply_form_errors(%{profile_form: form} = account_state, :profile, errors)
-       when not is_nil(form) do
-    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-    prefixed = prefix_errors(errors, @profile_labels)
-    %{account_state | profile_form: ModalForm.set_errors(form, prefixed)}
-  end
-
-  defp apply_form_errors(%{prefs_form: form} = account_state, :prefs, errors)
-       when not is_nil(form) do
-    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-    prefixed = prefix_errors(errors, @prefs_labels)
-    %{account_state | prefs_form: ModalForm.set_errors(form, prefixed)}
-  end
-
-  defp apply_form_errors(account_state, _section, _errors), do: account_state
-
-  # Prefix each error value with "FieldLabel error: " so Modal.Form inline
-  # error display matches the pre-Phase-25 test expectations (D-19).
-  defp prefix_errors(errors, labels) do
-    Map.new(errors, fn {field, message} ->
-      label = Map.get(labels, field, to_string(field))
-      {field, "#{label} error: #{message}"}
-    end)
-  end
-
-  defp account_screen_state(state, user) do
-    case Map.get(state.screen_state || %{}, :account) do
-      %AccountState{} = account_state ->
-        account_state
-
-      _other ->
-        Screens.Account.init_screen_state(current_user: user)
-    end
-  end
-
-  defp put_account_screen_state(state, %AccountState{} = account_state) do
-    %{state | screen_state: Map.put(state.screen_state || %{}, :account, account_state)}
-  end
-
-  defp error_field(:profile), do: :profile_errors
-  defp error_field(:prefs), do: :prefs_errors
-
-  defp changeset_errors(%Ecto.Changeset{} = changeset) do
-    Ecto.Changeset.traverse_errors(changeset, fn {message, opts} ->
-      Enum.reduce(opts, message, fn {key, value}, acc ->
-        String.replace(acc, "%{#{key}}", to_string(value))
-      end)
-    end)
-    |> Enum.into(%{}, fn {field, messages} -> {field, Enum.join(messages, ", ")} end)
-  end
 
   defp format_notification(:dm, %{body: body}), do: "New message: #{body}"
   defp format_notification(:mention, %{thread_title: t}), do: "You were mentioned in: #{t}"

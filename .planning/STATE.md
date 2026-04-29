@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-04-29T00:30:12.690Z"
-last_activity: 2026-04-29
+status: ready
+last_updated: "2026-04-29T01:06:00.000Z"
+last_activity: 2026-04-29 -- Phase 38 execution completed
 progress:
   total_phases: 7
-  completed_phases: 3
-  total_plans: 15
-  completed_plans: 13
-  percent: 87
+  completed_phases: 4
+  total_plans: 19
+  completed_plans: 18
+  percent: 95
 ---
 
 # Project State
@@ -20,14 +20,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-28)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 37 — post-composer-flow
+**Current focus:** Phase 38 — account-operator-workbenches
 
 ## Current Position
 
-Phase: 37 (post-composer-flow) — EXECUTING
-Plan: 4 of 5
-Status: Ready to execute
-Last activity: 2026-04-29
+Phase: 38 (account-operator-workbenches) — COMPLETED
+Plan: 4 of 4
+Status: Ready for next phase
+Last activity: 2026-04-29 -- Phase 38 execution completed
 
 ## Accumulated Context
 
@@ -60,6 +60,12 @@ Last activity: 2026-04-29
 - [Phase 37-post-composer-flow]: Successful submit results navigate to PostReader with load_intent: :jump_last so PostReader owns the reload/jump behavior.
 - [Phase 37-post-composer-flow]: PostComposer.State is the canonical owner for reply route identity, draft input, preview mode, validation errors, submission status, and submit results.
 - [Phase 37-post-composer-flow]: PostComposer requests reply creation through Effect.task/3 while Foglet.Posts remains authoritative for authorization and durable writes.
+- [Phase 37-post-composer-flow]: NewThread.State owns route origin, routed board identity, board-load status, submit status, and submit result data. — Plan 37-04 migrated NewThread to the Phase 34 screen reducer contract.
+- [Phase 37-post-composer-flow]: NewThread requests board loads and create-thread writes through Effect.task/3 while Foglet.Boards and Foglet.Threads remain authoritative for durable behavior. — Keeps App as runtime interpreter and contexts as domain authority.
+- [Phase 37-post-composer-flow]: Successful new-thread creation navigates to ThreadList with board route params and select_thread_id; ThreadList applies and clears that intent after its own reload. — Preserves new-thread selection without NewThread or App pre-writing ThreadList rows.
+- [Phase 38-account-operator-workbenches]: Account, Moderation, and Sysop now expose production init/update/render reducer contracts over Foglet.TUI.Context. — Workbench screens own their local key handling, task results, and render inputs.
+- [Phase 38-account-operator-workbenches]: App route-entry dispatch now routes MainMenu, Moderation, and Sysop first-load behavior through generic screen updates. — Removes App-owned workbench task/result clauses while preserving App as runtime/effect interpreter.
+- [Phase 38-account-operator-workbenches]: Account preference saves refresh session snapshots through Effect.session({:update_preferences, snapshot}). — Keeps screen reducers effect-oriented while Session remains the live session authority.
 
 ### Pending Todos
 

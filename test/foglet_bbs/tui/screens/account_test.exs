@@ -115,7 +115,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert _node = Account.render(state, context)
     end
 
-    test "profile task result reseeds Account local state" do
+    test "profile task result reseeds Account local state and refreshes App user" do
       user = build_user_with_profile()
       context = Context.new(current_user: user, route: :account)
       state = Account.init(context)
@@ -131,7 +131,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert %AccountState{} = state
       assert state.profile_draft.location == "New Cove"
       assert state.status_message == "Account changes saved."
-      assert effects == []
+      assert [%Effect{type: :session, payload: {:set_current_user, ^updated}}] = effects
     end
 
     test "prefs task result reseeds state and emits session refresh effects" do
@@ -404,8 +404,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
-  describe "App Account save command handling" do
-    test "successful save persists profile and preferences and refreshes active session snapshots" do
+  describe "App Account reducer result handling" do
+    test "successful save results refresh local state, current user, and active session snapshots" do
       user = AccountsFixtures.user_fixture()
 
       {:ok, session_pid} =
@@ -435,21 +435,29 @@ defmodule Foglet.TUI.Screens.AccountTest do
         }
       }
 
-      {state, []} =
-        App.update(
-          {:account_save_profile,
-           %{location: "Mist Harbor", tagline: "low clouds", real_name: "Alice Example"}},
-          state
-        )
+      {:ok, updated_profile} =
+        Accounts.update_profile(user, %{
+          location: "Mist Harbor",
+          tagline: "low clouds",
+          real_name: "Alice Example"
+        })
 
       {state, []} =
         App.update(
-          {:account_save_prefs,
-           %{
-             timezone: "America/Chicago",
-             preferences: %{"time_format" => "24h"},
-             theme: "amber"
-           }},
+          {:screen_task_result, :account, :account_save_profile, {:ok, {:ok, updated_profile}}},
+          state
+        )
+
+      {:ok, updated_prefs} =
+        Accounts.update_profile(updated_profile, %{
+          timezone: "America/Chicago",
+          preferences: %{"time_format" => "24h"},
+          theme: "amber"
+        })
+
+      {state, []} =
+        App.update(
+          {:screen_task_result, :account, :account_save_prefs, {:ok, {:ok, updated_prefs}}},
           state
         )
 
@@ -488,7 +496,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert session_state.theme == Theme.resolve(:amber)
     end
 
-    test "failed save renders errors and leaves active snapshots unchanged" do
+    test "failed save result renders errors and leaves active snapshots unchanged" do
       user =
         AccountsFixtures.user_fixture(%{
           location: "Original Cove",
@@ -527,14 +535,16 @@ defmodule Foglet.TUI.Screens.AccountTest do
       original_context = state.session_context
       original_session = Session.get_state(session_pid)
 
+      {:error, changeset} =
+        Accounts.update_profile(user, %{
+          timezone: "Not/AZone",
+          preferences: %{"time_format" => "24h"},
+          theme: "amber"
+        })
+
       {new_state, []} =
         App.update(
-          {:account_save_prefs,
-           %{
-             timezone: "Not/AZone",
-             preferences: %{"time_format" => "24h"},
-             theme: "amber"
-           }},
+          {:screen_task_result, :account, :account_save_prefs, {:ok, {:error, changeset}}},
           state
         )
 

@@ -793,26 +793,34 @@ defmodule Foglet.TUI.AppTest do
       %{state: state, user: user}
     end
 
-    test "pressing M as a moderator queues load_moderation_workspace", %{state: state, user: user} do
+    test "pressing M as a moderator queues moderation screen task", %{state: state, user: user} do
       {new_state, cmds} = App.update({:key, %{key: :char, char: "M"}}, state)
 
       assert new_state.current_screen == :moderation
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-      assert {:moderation_workspace_loaded, {:ok, snapshot}} = task.()
+
+      assert {:screen_task_result, :moderation, :load_moderation_workspace,
+              {:ok, {:ok, snapshot}}} =
+               task.()
+
       assert snapshot.scopes == [:site]
       assert_received {:workspace_snapshot, ^user}
     end
 
-    test "{:navigate, :moderation} queues load_moderation_workspace", %{state: state, user: user} do
+    test "{:navigate, :moderation} queues moderation screen task", %{state: state, user: user} do
       {new_state, cmds} = App.update({:navigate, :moderation}, state)
 
       assert new_state.current_screen == :moderation
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-      assert {:moderation_workspace_loaded, {:ok, _snapshot}} = task.()
+
+      assert {:screen_task_result, :moderation, :load_moderation_workspace,
+              {:ok, {:ok, _snapshot}}} =
+               task.()
+
       assert_received {:workspace_snapshot, ^user}
     end
 
-    test "{:moderation_workspace_loaded, {:ok, snapshot}} stores scoped screen state", %{
+    test "moderation screen task result stores scoped screen state", %{
       state: state
     } do
       snapshot = %{
@@ -823,7 +831,11 @@ defmodule Foglet.TUI.AppTest do
         boards: [%{name: "General", slug: "general", category_name: "Main", scope: :site}]
       }
 
-      {new_state, cmds} = App.update({:moderation_workspace_loaded, {:ok, snapshot}}, state)
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :moderation, :load_moderation_workspace, {:ok, {:ok, snapshot}}},
+          state
+        )
 
       assert cmds == []
       assert new_state.screen_state.moderation.scopes == [:site]
@@ -2006,7 +2018,7 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
-  describe "App-level sysop load triad (Phase 29 — D-01, D-02, D-06)" do
+  describe "App-routed sysop screen tasks (Phase 38)" do
     @describetag :sysop_load_triad
 
     defp fake_sysop_context(extra) do
@@ -2046,46 +2058,7 @@ defmodule Foglet.TUI.AppTest do
       %{state: state, user: sysop}
     end
 
-    test "{:load_sysop_users} flips slot to :loading and emits one task", %{
-      state: state,
-      user: user
-    } do
-      {new_state, cmds} = App.update({:load_sysop_users}, state)
-
-      assert new_state.screen_state.sysop.users_view == :loading
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-
-      # Closure capture (Pitfall 8): user is bound at dispatch time.
-      assert {:sysop_users_loaded, {:ok, %Foglet.TUI.Screens.Sysop.UsersView{}}} = task.()
-      assert_received {:list_user_status_admin_targets, ^user}
-    end
-
-    test "{:sysop_users_loaded, {:ok, sub}} sets slot to {:loaded, sub}", %{state: state} do
-      sub = %Foglet.TUI.Screens.Sysop.UsersView{current_user: state.current_user}
-
-      {new_state, cmds} = App.update({:sysop_users_loaded, {:ok, sub}}, state)
-
-      assert cmds == []
-      assert new_state.screen_state.sysop.users_view == {:loaded, sub}
-    end
-
-    test "{:sysop_users_loaded, {:error, :forbidden}} sets slot to {:error, :forbidden}",
-         %{state: state} do
-      {new_state, cmds} = App.update({:sysop_users_loaded, {:error, :forbidden}}, state)
-
-      assert cmds == []
-      assert new_state.screen_state.sysop.users_view == {:error, :forbidden}
-    end
-
-    test "{:sysop_users_loaded, {:error, :timeout}} sets slot to {:error, :timeout}",
-         %{state: state} do
-      {new_state, cmds} = App.update({:sysop_users_loaded, {:error, :timeout}}, state)
-
-      assert cmds == []
-      assert new_state.screen_state.sysop.users_view == {:error, :timeout}
-    end
-
-    test "{:navigate, :sysop} on USERS-active state chains into {:load_sysop_users}", %{
+    test "{:navigate, :sysop} on USERS-active state queues sysop screen task", %{
       state: state,
       user: user
     } do
@@ -2100,11 +2073,48 @@ defmodule Foglet.TUI.AppTest do
 
       {new_state, cmds} = App.update({:navigate, :sysop}, state)
 
-      assert new_state.current_screen == :sysop
       assert new_state.screen_state.sysop.users_view == :loading
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-      assert {:sysop_users_loaded, {:ok, _}} = task.()
+
+      # Closure capture (Pitfall 8): user is bound at dispatch time.
+      assert {:screen_task_result, :sysop, :sysop_load_users,
+              {:ok, {:ok, %Foglet.TUI.Screens.Sysop.UsersView{}}}} = task.()
+
       assert_received {:list_user_status_admin_targets, ^user}
+    end
+
+    test "sysop task success sets slot to {:loaded, sub}", %{state: state} do
+      sub = %Foglet.TUI.Screens.Sysop.UsersView{current_user: state.current_user}
+
+      {new_state, cmds} =
+        App.update({:screen_task_result, :sysop, :sysop_load_users, {:ok, {:ok, sub}}}, state)
+
+      assert cmds == []
+      assert new_state.screen_state.sysop.users_view == {:loaded, sub}
+    end
+
+    test "sysop task forbidden result sets slot to {:error, :forbidden}",
+         %{state: state} do
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :sysop, :sysop_load_users, {:ok, {:error, :forbidden}}},
+          state
+        )
+
+      assert cmds == []
+      assert new_state.screen_state.sysop.users_view == {:error, :forbidden}
+    end
+
+    test "sysop task timeout result sets slot to {:error, :timeout}",
+         %{state: state} do
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :sysop, :sysop_load_users, {:ok, {:error, :timeout}}},
+          state
+        )
+
+      assert cmds == []
+      assert new_state.screen_state.sysop.users_view == {:error, :timeout}
     end
 
     test "{:navigate, :sysop} on SITE-active state emits no command (D-03 sync)", %{
@@ -2150,43 +2160,27 @@ defmodule Foglet.TUI.AppTest do
       refute_received {:list_user_status_admin_targets, _}
     end
 
-    test "all four lifecycle slots round-trip through put_sysop_loading|loaded|error", %{
+    test "all four lifecycle slots round-trip through screen task results", %{
       state: state
     } do
       slots = [
-        {:boards_view, %Foglet.TUI.Screens.Sysop.BoardsView{}, {:load_sysop_boards}},
-        {:limits_form, %Foglet.TUI.Screens.Sysop.LimitsForm{}, {:load_sysop_limits}},
-        {:system_snapshot, %Foglet.TUI.Screens.Sysop.SystemSnapshot{}, {:load_sysop_system}},
-        {:users_view, %Foglet.TUI.Screens.Sysop.UsersView{}, {:load_sysop_users}}
+        {:boards_view, %Foglet.TUI.Screens.Sysop.BoardsView{}, :sysop_load_boards},
+        {:limits_form, %Foglet.TUI.Screens.Sysop.LimitsForm{}, :sysop_load_limits},
+        {:system_snapshot, %Foglet.TUI.Screens.Sysop.SystemSnapshot{}, :sysop_load_system},
+        {:users_view, %Foglet.TUI.Screens.Sysop.UsersView{}, :sysop_load_users}
       ]
 
-      for {slot, sub, dispatch_tuple} <- slots do
-        # Dispatch flips slot to :loading.
-        {after_dispatch, [_task]} = App.update(dispatch_tuple, state)
-        assert Map.get(after_dispatch.screen_state.sysop, slot) == :loading
+      for {slot, sub, op} <- slots do
+        {after_loaded, []} =
+          App.update({:screen_task_result, :sysop, op, {:ok, {:ok, sub}}}, state)
 
-        # Result :ok flips to {:loaded, sub}.
-        loaded_tuple =
-          case dispatch_tuple do
-            {:load_sysop_users} -> {:sysop_users_loaded, {:ok, sub}}
-            {:load_sysop_boards} -> {:sysop_boards_loaded, {:ok, sub}}
-            {:load_sysop_limits} -> {:sysop_limits_loaded, {:ok, sub}}
-            {:load_sysop_system} -> {:sysop_system_loaded, {:ok, sub}}
-          end
-
-        {after_loaded, []} = App.update(loaded_tuple, after_dispatch)
         assert Map.get(after_loaded.screen_state.sysop, slot) == {:loaded, sub}
 
-        # Result {:error, reason} flips to {:error, reason}.
-        error_tuple =
-          case dispatch_tuple do
-            {:load_sysop_users} -> {:sysop_users_loaded, {:error, :forbidden}}
-            {:load_sysop_boards} -> {:sysop_boards_loaded, {:error, :timeout}}
-            {:load_sysop_limits} -> {:sysop_limits_loaded, {:error, :forbidden}}
-            {:load_sysop_system} -> {:sysop_system_loaded, {:error, :timeout}}
-          end
+        reason = if slot in [:users_view, :limits_form], do: :forbidden, else: :timeout
 
-        {after_error, []} = App.update(error_tuple, after_loaded)
+        {after_error, []} =
+          App.update({:screen_task_result, :sysop, op, {:ok, {:error, reason}}}, after_loaded)
+
         slot_value = Map.get(after_error.screen_state.sysop, slot)
         assert match?({:error, _}, slot_value), "Expected {:error, _} got #{inspect(slot_value)}"
       end

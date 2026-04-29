@@ -197,7 +197,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     local_state = normalize_state(local_state, context)
 
     if ShellVisibility.moderation_visible?(context.current_user) do
-      {local_state, [Effect.navigate(:moderation), load_moderation_effect(context)]}
+      {local_state, [Effect.navigate(:moderation)]}
     else
       {local_state, []}
     end
@@ -525,10 +525,6 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   defp load_boards_for_new_thread_effect(_context) do
     Effect.session({:dispatch, {:load_boards_for_new_thread}})
-  end
-
-  defp load_moderation_effect(_context) do
-    Effect.session({:dispatch, {:load_moderation_workspace}})
   end
 
   defp load_oneliners_task_effect(%Context{} = context) do

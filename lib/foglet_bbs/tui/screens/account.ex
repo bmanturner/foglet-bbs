@@ -94,7 +94,10 @@ defmodule Foglet.TUI.Screens.Account do
 
     case unwrap_task_result(result) do
       {:ok, user} ->
-        {State.seed_from_user(ss, user) |> Map.put(:status_message, "Account changes saved."), []}
+        new_ss =
+          State.seed_from_user(ss, user) |> Map.put(:status_message, "Account changes saved.")
+
+        {new_ss, [Effect.session({:set_current_user, user})]}
 
       {:error, %Ecto.Changeset{} = changeset} ->
         {put_account_errors(ss, :profile, changeset_errors(changeset)), []}
