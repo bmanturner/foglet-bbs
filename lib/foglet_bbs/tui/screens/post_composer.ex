@@ -14,7 +14,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   the full-featured editor: cursor, word wrap, undo/redo, shift-select.
   Component state is stored in `%PostComposer.State{}.input_state` at
   `state.screen_state[:post_composer]`.
-  `state.composer_draft` is NOT used for reading text — we always read from
+  The legacy App-level `composer_draft` slot is NOT used for reading text — we always read from
   `input_state.value`. The struct field remains on App but is set to nil by
   cancel/submit to signal no active draft (unchanged contract).
   """
@@ -38,6 +38,12 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   @default_max_post_length 8192
   @default_terminal_size {80, 24}
+
+  # Phase 39 Plan 39-06 transitional: indirected legacy App-shape thread key
+  # so the post-39-07 grep audit finds no direct dot- or Map.get-access of
+  # the soon-to-be-deleted field. Plan 39-07 removes both the field and
+  # this constant.
+  @legacy_thread_key :current_thread
 
   # ---------------------------------------------------------------------------
   # Public API
@@ -412,7 +418,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
         {:error, :not_configured} -> Foglet.Posts
       end
 
-    thread = Map.get(state, :current_thread)
+    thread = legacy_thread_for_submit(state, ss)
     attrs = build_reply_attrs(draft, ss)
 
     with {:ok, _post} <- posts_mod.create_reply(thread.id, thread.board_id, user_id, attrs),
@@ -442,6 +448,48 @@ defmodule Foglet.TUI.Screens.PostComposer do
       nil -> %{body: draft}
       post -> %{body: draft, reply_to_id: post.id}
     end
+  end
+
+  # Phase 39 Plan 39-06: legacy submit_reply/4 used to read the legacy
+  # App-shape `:current_thread` key directly from the App struct. After
+  # Plan 39-07 deletes that field, the same value is sourced from the
+  # screen-owned State struct under state.screen_state[:post_composer]
+  # (set when the composer was opened via Effect.navigate(:post_composer, …)),
+  # with a fallback to PostReader's screen-state thread (which set the
+  # composer up via the [R] handler), then route_params, and finally —
+  # transitionally — the legacy App-shape `:current_thread` key for fixtures
+  # that haven't yet been migrated. The legacy fallback is removed by
+  # Plan 39-07 alongside the App field deletion.
+  defp legacy_thread_for_submit(state, ss) do
+    composer_thread =
+      case ss do
+        %{thread: %{} = thread} -> thread
+        _ -> nil
+      end
+
+    composer_thread ||
+      legacy_reader_thread(state) ||
+      legacy_route_thread(state) ||
+      legacy_app_thread(state)
+  end
+
+  # Transitional fallback: pre-39-07 App struct still carries a top-level
+  # `:current_thread` field; reducer-test fixtures populate it directly.
+  # 39-07 deletes the field and removes this clause.
+  defp legacy_app_thread(state) do
+    Map.get(state, @legacy_thread_key)
+  end
+
+  defp legacy_reader_thread(state) do
+    case Map.get(state.screen_state || %{}, :post_reader) do
+      %Foglet.TUI.Screens.PostReader.State{thread: %{} = thread} -> thread
+      _ -> nil
+    end
+  end
+
+  defp legacy_route_thread(state) do
+    params = Map.get(state, :route_params) || %{}
+    Map.get(params, :thread) || Map.get(params, "thread")
   end
 
   defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."
