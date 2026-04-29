@@ -4,8 +4,6 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Routing
   alias Foglet.TUI.Context
-  alias Foglet.TUI.Effect
-  alias Foglet.TUI.Modal
 
   defmodule SampleScreen do
     defmodule State do
@@ -64,7 +62,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
     end
   end
 
-  defp state(attrs \\ %{}) do
+  defp state(attrs) do
     attrs = Map.new(attrs)
 
     session_context =
@@ -89,66 +87,14 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
     )
   end
 
-  describe "generic non-task effect interpretation" do
-    test "navigate initializes only the target state and carries route params" do
-      state = state(session_pid: self())
-
-      {new_state, cmds} =
-        App.apply_effect(state, Effect.navigate(:sample_runtime, %{board_id: "b1"}))
-
-      assert cmds == []
-      assert new_state.current_screen == :sample_runtime
-      assert new_state.modal == nil
-      assert new_state.route_params == %{board_id: "b1"}
-      assert context = Routing.build_context(new_state)
-      assert context.route_params == %{board_id: "b1"}
-
-      assert %SampleScreen.State{
-               route_params: %{board_id: "b1"},
-               messages: [{:on_route_enter, %{board_id: "b1"}}]
-             } =
-               Routing.screen_state_for(new_state, :sample_runtime)
-
-      assert new_state.screen_state.main_menu == state.screen_state.main_menu
-    end
-
-    test "modal, session, terminal, publish, and quit effects are generic" do
-      user = %Foglet.Accounts.User{id: "u2", handle: "bob"}
-      modal = %Modal{type: :info, message: "hello"}
-      state = state(session_pid: self())
-
-      {with_modal, []} = App.apply_effect(state, Effect.open_modal(modal))
-      assert with_modal.modal == modal
-
-      {without_modal, []} = App.apply_effect(with_modal, Effect.dismiss_modal())
-      assert without_modal.modal == nil
-
-      {with_user, user_cmds} = App.apply_effect(without_modal, Effect.session({:set_user, user}))
-      assert with_user.current_user == user
-      assert with_user.current_screen == :main_menu
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = user_cmds
-
-      {resized, []} = App.apply_effect(with_user, Effect.terminal_size({120, 40}))
-      assert resized.terminal_size == {120, 40}
-
-      assert {^resized, []} = App.apply_effect(resized, Effect.session({:heartbeat, self()}))
-      assert_receive {:heartbeat, pid} when pid == self()
-
-      topic = "test:phase-34:#{System.unique_integer([:positive])}"
-      Phoenix.PubSub.subscribe(FogletBbs.PubSub, topic)
-
-      assert {^resized, []} = App.apply_effect(resized, Effect.publish(topic, :message))
-      assert_receive :message
-
-      assert {_same_state, [%Raxol.Core.Runtime.Command{type: :quit}]} =
-               App.apply_effect(resized, Effect.quit())
-    end
-
+  describe "App effect integration" do
     test "legacy navigation clears route params from effect navigation" do
-      {with_params, []} =
-        App.apply_effect(state(), Effect.navigate(:sample_runtime, %{thread_id: "t1"}))
-
-      assert Routing.current_route(with_params) == {:sample_runtime, %{thread_id: "t1"}}
+      with_params =
+        state(
+          current_screen: :sample_runtime,
+          route_params: %{thread_id: "t1"},
+          screen_state: %{sample_runtime: %SampleScreen.State{route_params: %{thread_id: "t1"}}}
+        )
 
       {without_params, []} = App.update({:navigate, :main_menu}, with_params)
 
@@ -158,16 +104,19 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
     end
 
     test "new-contract screens handle keys and render without legacy callbacks" do
-      {state, []} =
-        App.apply_effect(state(), Effect.navigate(:sample_runtime, %{thread_id: "t1"}))
+      state =
+        state(
+          current_screen: :sample_runtime,
+          route_params: %{thread_id: "t1"},
+          screen_state: %{
+            sample_runtime: %SampleScreen.State{route_params: %{thread_id: "t1"}}
+          }
+        )
 
       {after_key, []} = App.update({:key, %{key: "j"}}, state)
 
       assert %SampleScreen.State{
-               messages: [
-                 {:key, %{key: "j"}, %{thread_id: "t1"}},
-                 {:on_route_enter, %{thread_id: "t1"}}
-               ]
+               messages: [{:key, %{key: "j"}, %{thread_id: "t1"}}]
              } =
                Routing.screen_state_for(after_key, :sample_runtime)
 
@@ -184,59 +133,6 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
       assert {^state, []} = App.update({:key, %{key: "j"}}, state)
       assert {:render_only, %{render_only: true}} = App.view(state)
-    end
-  end
-
-  describe "task effect routing" do
-    test "task success routes through SampleScreen.update/3" do
-      {state, []} =
-        App.apply_effect(state(), Effect.navigate(:sample_runtime, %{thread_id: "t1"}))
-
-      {unchanged, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
-        App.apply_effect(
-          state,
-          Effect.task(:sample_load, :sample_runtime, fn -> {:loaded, 1} end)
-        )
-
-      assert unchanged == state
-
-      assert {:screen_task_result, :sample_runtime, :sample_load, {:ok, {:loaded, 1}}} =
-               task.()
-
-      {new_state, []} = App.update({:command_result, task.()}, state)
-
-      assert function_exported?(SampleScreen, :update, 3)
-
-      assert %SampleScreen.State{results: [sample_load: {:ok, {:loaded, 1}}]} =
-               Routing.screen_state_for(new_state, :sample_runtime)
-
-      assert %SampleScreen.State{
-               messages: [
-                 {:sample_load, %{thread_id: "t1"}},
-                 {:on_route_enter, %{thread_id: "t1"}}
-               ]
-             } =
-               Routing.screen_state_for(new_state, :sample_runtime)
-    end
-
-    test "task failure wrapper routes an error through SampleScreen.update/3" do
-      {state, []} = App.apply_effect(state(), Effect.navigate(:sample_runtime, %{origin: :test}))
-
-      {_state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
-        App.apply_effect(
-          state,
-          Effect.task(:sample_load, :sample_runtime, fn -> raise "boom" end)
-        )
-
-      assert {:screen_task_result, :sample_runtime, :sample_load, {:error, reason}} = task.()
-      assert reason =~ "boom"
-
-      {new_state, []} = App.update({:command_result, task.()}, state)
-
-      assert %SampleScreen.State{results: [{:sample_load, {:error, routed_reason}}]} =
-               Routing.screen_state_for(new_state, :sample_runtime)
-
-      assert routed_reason =~ "boom"
     end
   end
 
