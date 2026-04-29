@@ -482,16 +482,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:set_user, user}, state) do
-    route_screen_update(
-      %{
-        state
-        | current_user: user,
-          current_screen: :main_menu,
-          route_params: %{}
-      },
-      :main_menu,
-      :load_oneliners
-    )
+    apply_effect(%{state | current_user: user}, Effect.navigate(:main_menu, %{}))
   end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
@@ -575,22 +566,18 @@ defmodule Foglet.TUI.App do
   # → update/2. Phase 2 may not yet emit all of these; the handlers are wired now
   # so real-time updates work as soon as Phase 2 starts broadcasting.
 
-  # Board-level activity (new post, read-pointer changes) — refresh board list
-  # to update unread counts if the user is on the board_list screen.
-  defp do_update({:board_activity, _board_id, _event}, state)
-       when state.current_screen == :board_list do
-    route_screen_update(state, :board_list, :load)
+  # PubSub broadcast routing (Phase 39 D-13, R8): forward {:board_activity, …}
+  # and {:thread_activity, …} to the active screen via the generic update path.
+  # Screens that care (BoardList for :board_activity, PostReader for
+  # :thread_activity) handle the message in their update/3; screens that don't
+  # hit their update(_message, …) catch-all and no-op.
+  defp do_update({:board_activity, _board_id, _event} = msg, state) do
+    route_screen_update(state, screen_key(current_route(state)), msg)
   end
 
-  defp do_update({:board_activity, _board_id, _event}, state), do: {state, []}
-
-  # Thread-level activity (new post) — refresh posts if the user is reading it.
-  defp do_update({:thread_activity, thread_id, event}, state)
-       when state.current_screen == :post_reader do
-    route_screen_update(state, :post_reader, {:thread_activity, thread_id, event})
+  defp do_update({:thread_activity, _thread_id, _event} = msg, state) do
+    route_screen_update(state, screen_key(current_route(state)), msg)
   end
-
-  defp do_update({:thread_activity, _thread_id, _event}, state), do: {state, []}
 
   # User-level notifications — show a modal badge.
   defp do_update({:notification, _user_id, kind, payload}, state) do
@@ -633,16 +620,7 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
     end
 
-    route_screen_update(
-      %{
-        state
-        | current_user: user,
-          current_screen: :main_menu,
-          route_params: %{}
-      },
-      :main_menu,
-      :load_oneliners
-    )
+    apply_effect(%{state | current_user: user}, Effect.navigate(:main_menu, %{}))
   end
 
   defp do_update({:command_result, inner}, state) do
