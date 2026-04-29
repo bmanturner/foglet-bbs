@@ -41,6 +41,14 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
     end
   end
 
+  defmodule RenderOnlyScreen do
+    def init(%Context{}), do: %{render_only: true}
+
+    def render(local_state, %Context{}) do
+      {:render_only, local_state}
+    end
+  end
+
   defp state(attrs \\ %{}) do
     attrs = Map.new(attrs)
 
@@ -175,6 +183,18 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
                App.screen_state_for(after_key, :sample_runtime)
 
       assert {:sample_render, %SampleScreen.State{}, %{thread_id: "t1"}} = App.view(after_key)
+    end
+
+    test "non-production override screens without update/3 no-op on keys" do
+      state =
+        state(
+          current_screen: :render_only,
+          session_context: %{domain: %{screen_modules: %{render_only: RenderOnlyScreen}}},
+          screen_state: %{render_only: %{render_only: true}}
+        )
+
+      assert {^state, []} = App.update({:key, %{key: "j"}}, state)
+      assert {:render_only, %{render_only: true}} = App.view(state)
     end
   end
 

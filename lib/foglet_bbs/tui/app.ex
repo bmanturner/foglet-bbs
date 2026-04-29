@@ -539,8 +539,8 @@ defmodule Foglet.TUI.App do
     cond do
       SizeGate.too_small?(state) ->
         # D-11: swallow keys entirely while gated. Screens behind the gate
-        # are hidden — we must not let their handle_key/2 silently mutate
-        # state (e.g., scroll a list, advance a cursor, consume a char).
+        # are hidden — we must not let their reducers silently mutate state
+        # (e.g., scroll a list, advance a cursor, consume a char).
         # D-12: Ctrl+C / EOF reach CLIHandler at the SSH channel layer
         # independently of update/2, so disconnect still works.
         {state, []}
@@ -552,24 +552,8 @@ defmodule Foglet.TUI.App do
         # state.modal and will consume the key silently.
         global_key_handler(key_event, state)
 
-      new_contract_screen?(state, state.current_screen) ->
-        route_screen_update(state, screen_key(current_route(state)), {:key, key_event})
-
       true ->
-        screen_module = screen_module_for(state.current_screen)
-
-        case :erlang.apply(screen_module, :handle_key, [key_event, state]) do
-          {:update, new_state, commands} ->
-            # process_screen_commands/2 converts I/O dispatch tuples returned by
-            # screens (e.g. {:load_boards}, {:load_threads, id}) into real
-            # Command.task structs by routing them through their do_update/2 clauses,
-            # which have access to the current state (user, session_context, domain
-            # overrides). Plain %Command{} structs pass through unchanged.
-            process_screen_commands(new_state, commands)
-
-          :no_match ->
-            global_key_handler(key_event, state)
-        end
+        route_screen_update(state, screen_key(current_route(state)), {:key, key_event})
     end
   end
 
@@ -786,12 +770,6 @@ defmodule Foglet.TUI.App do
     end
   end
 
-  defp new_contract_screen?(%__MODULE__{} = state, screen) do
-    module = screen_module_for(state, screen_key(screen))
-
-    Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
-  end
-
   defp context_for_screen_key(%__MODULE__{} = state, key) do
     params =
       if screen_key(current_route(state)) == key do
@@ -846,34 +824,6 @@ defmodule Foglet.TUI.App do
   defp format_notification(:mention, %{thread_title: t}), do: "You were mentioned in: #{t}"
   defp format_notification(kind, _payload), do: "Notification: #{kind}"
 
-  # Process the command list returned by a screen's handle_key/2.
-  # Plain %Command{} structs pass through to Raxol unchanged. {:terminate, _}
-  # becomes Command.quit(). Every other atom-keyed tuple is routed through
-  # do_update/2 so it gets the same state access as a top-level update call.
-  # This covers legacy I/O tuples ({:load_boards}, ...)
-  # and state-transition tuples ({:promote_session, user}).
-  # Unknown messages hit do_update/2's catch-all and become a no-op.
-  defp process_screen_commands(state, commands) do
-    Enum.reduce(commands, {state, []}, fn cmd, {acc_state, acc_cmds} ->
-      case cmd do
-        %Command{} ->
-          {acc_state, acc_cmds ++ [cmd]}
-
-        {:terminate, _} ->
-          {acc_state, acc_cmds ++ [Command.quit()]}
-
-        tuple when is_tuple(tuple) and tuple_size(tuple) >= 1 and is_atom(elem(tuple, 0)) ->
-          {next_state, new_cmds} = do_update(tuple, acc_state)
-          {next_state, acc_cmds ++ new_cmds}
-
-        other ->
-          require Logger
-          Logger.warning("[TUI.App] unexpected command from screen: #{inspect(other)}")
-          {acc_state, acc_cmds}
-      end
-    end)
-  end
-
   defp render_screen(state) do
     key = screen_key(current_route(state))
     module = screen_module_for(state, key)
@@ -882,7 +832,14 @@ defmodule Foglet.TUI.App do
       context = context_for_screen_key(state, key)
       module.render(render_local_state(state, key, module, context), context)
     else
-      :erlang.apply(screen_module_for(state.current_screen), :render, [state])
+      require Logger
+
+      Logger.warning(
+        "[TUI.App] screen #{inspect(key)} does not export render/2; " <>
+          "returning bounded empty view"
+      )
+
+      text("")
     end
   end
 
@@ -963,10 +920,8 @@ defmodule Foglet.TUI.App do
   defp handle_modal_key(_type, _key, state), do: {state, []}
 
   # wrap_commands/wrap_command are used only for modal callback results, which
-  # return full %Command{} structs or {:terminate, reason}. Screen handle_key/2
-  # I/O dispatch tuples are handled by process_screen_commands/2 above, which
-  # routes them through do_update/2 to get real Command.task closures with
-  # proper state access (user, session_context, domain overrides).
+  # return full %Command{} structs or {:terminate, reason}. Screen reducers now
+  # return Effect structs; App interprets those through apply_effects/2.
   defp wrap_commands(commands), do: Enum.map(commands, &wrap_command/1)
 
   defp wrap_command({:terminate, _reason}), do: Command.quit()
