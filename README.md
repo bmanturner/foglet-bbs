@@ -28,23 +28,23 @@ Then choose the database you want Mix to use. If you already have a local
 Postgres that matches `config/dev.exs`, run:
 
 ```bash
-rtk mix setup
+mix setup
 ```
 
 To use the included Docker-backed Postgres instead of an existing local
 database, start it first:
 
 ```bash
-rtk docker compose up -d postgres
-rtk mix setup
+docker compose up -d postgres
+mix setup
 ```
 
 If host port `5432` is already in use, set `POSTGRES_PORT` for Compose and
 `DATABASE_URL` for Mix, for example:
 
 ```bash
-POSTGRES_PORT=55432 rtk docker compose up -d postgres
-DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev rtk mix setup
+POSTGRES_PORT=55432 docker compose up -d postgres
+DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev mix setup
 ```
 
 `mix setup` runs `deps.get`, `ecto.create`, `ecto.migrate`, `run priv/repo/seeds.exs`,
@@ -53,7 +53,7 @@ and configures the project's git hooks path.
 Start the application:
 
 ```bash
-rtk mix phx.server
+mix phx.server
 ```
 
 Phoenix and the SSH daemon both come up under the OTP supervision tree. The

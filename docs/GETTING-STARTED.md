@@ -36,15 +36,15 @@ If you already have a local Postgres that matches `config/dev.exs`, run the
 setup alias now:
 
 ```bash
-rtk mix setup
+mix setup
 ```
 
 If you want the repository-managed Postgres instance instead, start it before
 running setup:
 
 ```bash
-rtk docker compose up -d postgres
-rtk mix setup
+docker compose up -d postgres
+mix setup
 ```
 
 By default Compose publishes Postgres on `localhost:5432`, matching
@@ -52,8 +52,8 @@ By default Compose publishes Postgres on `localhost:5432`, matching
 and point Ecto at it:
 
 ```bash
-POSTGRES_PORT=55432 rtk docker compose up -d postgres
-DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev rtk mix setup
+POSTGRES_PORT=55432 docker compose up -d postgres
+DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev mix setup
 ```
 
 The `setup` alias defined in `mix.exs` runs:
@@ -211,8 +211,8 @@ key handling. Global navigation lives in `Foglet.TUI.App`.
 
 | Symptom | Likely cause and fix |
 |---------|----------------------|
-| `mix setup` fails on `ecto.create` with a connection error | Postgres is not running or credentials in `config/dev.exs` (`postgres`/`postgres` on `localhost`) do not match your local Postgres. Start Postgres with `rtk docker compose up -d postgres`, or set `DATABASE_URL` to your running database. |
-| `rtk docker compose up -d postgres` fails because port `5432` is allocated | Another local database is already using the default port. Start this project's database on another host port, for example `POSTGRES_PORT=55432 rtk docker compose up -d postgres`, then run Mix commands with `DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev`. |
+| `mix setup` fails on `ecto.create` with a connection error | Postgres is not running or credentials in `config/dev.exs` (`postgres`/`postgres` on `localhost`) do not match your local Postgres. Start Postgres with `docker compose up -d postgres`, or set `DATABASE_URL` to your running database. |
+| `docker compose up -d postgres` fails because port `5432` is allocated | Another local database is already using the default port. Start this project's database on another host port, for example `POSTGRES_PORT=55432 docker compose up -d postgres`, then run Mix commands with `DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev`. |
 | `citext extension` check fails in `mix foglet.doctor` | Connect to your Postgres as a superuser and run `CREATE EXTENSION IF NOT EXISTS citext;` against the `foglet_bbs_dev` database. |
 | `ssh -p 2222 ...` hangs or refuses the connection | The SSH daemon did not start. Confirm `mix phx.server` is running, that `config :foglet_bbs, :start_ssh_daemon, true` has not been overridden, and that nothing else is bound to port `2222` (override with `FOGLET_SSH_PORT=2200`). |
 | Compiler complains about Elixir/Erlang versions | Your runtime does not match `.tool-versions` (Elixir `1.19.5-otp-28`, Erlang `28.3.1`). Install the pinned versions via `asdf install` or your version manager of choice. |
