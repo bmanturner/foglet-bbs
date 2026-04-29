@@ -954,4 +954,17 @@ defmodule Foglet.TUI.App do
   defp screen_module_for(:account), do: Screens.Account
   defp screen_module_for(:moderation), do: Screens.Moderation
   defp screen_module_for(:sysop), do: Screens.Sysop
+
+  # Fallback for unknown screen atoms. Hitting this branch means
+  # `state.current_screen` was set to a value not in `known_screens/0` —
+  # either via corrupted state, future enum drift, or a screen wired through
+  # `domain.screen_modules` overrides without being added here. Log loudly
+  # and degrade gracefully to MainMenu instead of crashing the runtime.
+  defp screen_module_for(other) do
+    require Logger
+
+    Logger.error("[TUI.App] no screen module for #{inspect(other)}; falling back to :main_menu")
+
+    Screens.MainMenu
+  end
 end
