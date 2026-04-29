@@ -960,17 +960,35 @@ defmodule Foglet.TUI.App do
   defp wrap_command(other), do: other
 
   defp screen_module_for(%__MODULE__{} = state, screen) do
-    case get_in(domain_from_session_context(state.session_context), [:screen_modules, screen]) do
-      module when is_atom(module) and not is_nil(module) ->
-        module
+    override =
+      get_in(domain_from_session_context(state.session_context), [:screen_modules, screen])
 
-      _other ->
-        if screen in known_screens() do
-          screen_module_for(screen)
-        else
-          nil
-        end
+    cond do
+      is_atom(override) and not is_nil(override) and Code.ensure_loaded?(override) ->
+        override
+
+      is_atom(override) and not is_nil(override) ->
+        # Override is a real atom but not loadable (typo, deleted module, or
+        # stale fixture). Log and fall back to the built-in resolver instead
+        # of silently routing to a non-existent module — downstream callers
+        # do `function_exported?/3` checks that would otherwise short-circuit
+        # to {state, []} with no signal to the developer (WR-05).
+        require Logger
+
+        Logger.warning(
+          "[TUI.App] domain.screen_modules[#{inspect(screen)}] = " <>
+            "#{inspect(override)} is not loadable; falling back to built-in resolver"
+        )
+
+        maybe_known_screen_module(screen)
+
+      true ->
+        maybe_known_screen_module(screen)
     end
+  end
+
+  defp maybe_known_screen_module(screen) do
+    if screen in known_screens(), do: screen_module_for(screen), else: nil
   end
 
   defp known_screens do
