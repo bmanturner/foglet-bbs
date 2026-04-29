@@ -518,6 +518,7 @@ defmodule Foglet.TUI.AppTest do
       assert %ThreadListState{
                board: ^board,
                board_id: "b1",
+               select_thread_id: "t-new",
                status: :loading
              } = App.screen_state_for(new_state, :thread_list)
 

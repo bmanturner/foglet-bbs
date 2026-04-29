@@ -159,15 +159,22 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   end
 
   test "ThreadList.State.from_context/1 stores board route params and selected index" do
-    ctx = context(route_params: %{board: @board, board_id: "b1"})
+    ctx = context(route_params: %{board: @board, board_id: "b1", select_thread_id: "t2"})
 
     assert %State{
              board: @board,
              board_id: "b1",
              threads: nil,
              selected_index: 0,
+             select_thread_id: "t2",
              status: :loading
            } = ThreadList.State.from_context(ctx)
+  end
+
+  test "ThreadList.State.from_context/1 stores string select_thread_id route param" do
+    ctx = context(route_params: %{"board" => @board, "select_thread_id" => "t2"})
+
+    assert %State{select_thread_id: "t2"} = ThreadList.State.from_context(ctx)
   end
 
   test "init/1 derives board_id from board when the route omits board_id" do
@@ -216,6 +223,38 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     assert newest.id == "t2"
     assert nil_time.id == "t3"
     assert nil_time.last_post_at == nil
+  end
+
+  test "load success selects matching select_thread_id after sorting and clears intent" do
+    ctx = context()
+    %State{} = state = ThreadList.init(ctx)
+    state = %{state | select_thread_id: "t2"}
+
+    {loading_state, [%Effect{payload: payload}]} = ThreadList.update(:load, state, ctx)
+
+    assert {%State{selected_index: 1, select_thread_id: nil, threads: threads}, []} =
+             ThreadList.update(
+               {:task_result, :load_threads, {:ok, payload.fun.()}},
+               loading_state,
+               ctx
+             )
+
+    assert Enum.map(threads, & &1.id) == ["t1", "t2", "t3"]
+  end
+
+  test "load success without matching select_thread_id falls back to clamped existing selection" do
+    ctx = context()
+    %State{} = state = ThreadList.init(ctx)
+    state = %{state | selected_index: 99, select_thread_id: "missing"}
+
+    {loading_state, [%Effect{payload: payload}]} = ThreadList.update(:load, state, ctx)
+
+    assert {%State{selected_index: 2, select_thread_id: nil}, []} =
+             ThreadList.update(
+               {:task_result, :load_threads, {:ok, payload.fun.()}},
+               loading_state,
+               ctx
+             )
   end
 
   test "empty load success sets empty status and selected_index 0" do

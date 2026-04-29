@@ -58,7 +58,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
     status = if sorted == [], do: :empty, else: :loaded
 
     {%{state | threads: sorted, status: status, last_op: nil, last_error: nil}
-     |> clamp_selection(), []}
+     |> apply_selection_intent(sorted), []}
   end
 
   def update({:task_result, :load_threads, {:error, reason}}, %State{} = state, %Context{}) do
@@ -306,11 +306,28 @@ defmodule Foglet.TUI.Screens.ThreadList do
     select_index(state, state.selected_index, sort_threads(state.threads || []))
   end
 
+  defp apply_selection_intent(%State{select_thread_id: nil} = state, threads) do
+    state
+    |> select_index(state.selected_index, threads)
+    |> Map.put(:select_thread_id, nil)
+  end
+
+  defp apply_selection_intent(%State{select_thread_id: select_thread_id} = state, threads) do
+    selected_index =
+      Enum.find_index(threads, &(Map.get(&1, :id) == select_thread_id)) ||
+        clamped_index(state.selected_index, threads)
+
+    %{state | selected_index: selected_index, select_thread_id: nil}
+  end
+
   defp select_index(%State{} = state, _index, []), do: %{state | selected_index: 0}
 
   defp select_index(%State{} = state, index, threads) do
-    %{state | selected_index: index |> max(0) |> min(length(threads) - 1)}
+    %{state | selected_index: clamped_index(index, threads)}
   end
+
+  defp clamped_index(_index, []), do: 0
+  defp clamped_index(index, threads), do: index |> max(0) |> min(length(threads) - 1)
 
   defp selected_thread(%State{} = state) do
     state.threads

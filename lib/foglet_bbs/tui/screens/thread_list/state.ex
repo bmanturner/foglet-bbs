@@ -17,6 +17,7 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
           board_id: String.t() | nil,
           threads: [ThreadEntry.t() | map()] | nil,
           selected_index: non_neg_integer(),
+          select_thread_id: String.t() | nil,
           status: status(),
           last_op: atom() | nil,
           last_error: term() | nil
@@ -26,6 +27,7 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
             board_id: nil,
             threads: nil,
             selected_index: 0,
+            select_thread_id: nil,
             status: :loading,
             last_op: nil,
             last_error: nil
@@ -37,6 +39,7 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
       board_id: Keyword.get(opts, :board_id),
       threads: Keyword.get(opts, :threads),
       selected_index: Keyword.get(opts, :selected_index, 0),
+      select_thread_id: Keyword.get(opts, :select_thread_id),
       status: Keyword.get(opts, :status, :loading),
       last_op: Keyword.get(opts, :last_op),
       last_error: Keyword.get(opts, :last_error)
@@ -49,10 +52,12 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
     board = Map.get(params, :board) || Map.get(params, "board")
 
     explicit_board_id = Map.get(params, :board_id) || Map.get(params, "board_id")
+    select_thread_id = Map.get(params, :select_thread_id) || Map.get(params, "select_thread_id")
 
     new(
       board: board,
-      board_id: explicit_board_id || board_id_from_board(board)
+      board_id: explicit_board_id || board_id_from_board(board),
+      select_thread_id: select_thread_id
     )
   end
 
