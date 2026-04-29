@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-04-29T15:35:57.253Z"
+last_updated: "2026-04-29T15:45:26.925Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 7
-  completed_phases: 5
+  completed_phases: 6
   total_plans: 28
-  completed_plans: 32
+  completed_plans: 33
   percent: 100
 ---
 
@@ -25,7 +25,7 @@ See: .planning/PROJECT.md (updated 2026-04-28)
 ## Current Position
 
 Phase: 40 (verification-documentation) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-04-29
 
@@ -75,6 +75,8 @@ Last activity: 2026-04-29
 - [Phase ?]: [Phase 39-04]: PostReader gets two :on_route_enter clauses (state-first + route_params fallback) mirroring subscriptions/2; ThreadList gets a single unconditional clause matching app.ex:834-836's no-user gate.
 - [Phase ?]: Plan 39-07: Deleted seven legacy fields from %TUI.App{} struct atomically with reducer-test fixture migration (~50 sites). The eight runtime-shell fields are final; Wave 0 struct pins green in default suite.
 - [Phase 40-verification-documentation]: [Phase 40-02]: App production dispatch now routes screen keys and renders through update/3 and render/2; legacy screen callbacks are bounded compatibility only. — Phase 40-02 removed App fallback dispatch and documented remaining broad callbacks as compatibility-only.
+- [Phase 40-verification-documentation]: Inventory found no missing screen-family reducer/effect gaps, so no duplicate screen tests were added. — Existing migrated screen tests already assert local state transitions and concrete Effect values across the required families.
+- [Phase 40-verification-documentation]: App-shell delegation gaps were filled with generic fixture-screen assertions instead of production-screen-specific App clauses. — This keeps App tests at runtime-shell boundaries and prevents screen-specific App state mutation from creeping back in.
 
 ### Pending Todos
 
