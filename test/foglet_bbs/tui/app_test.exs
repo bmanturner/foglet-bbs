@@ -57,6 +57,15 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  defmodule ModalSubmitTarget do
+    def update({:modal_submit, kind, payload}, state, _context) do
+      received = [{kind, payload} | Map.get(state || %{}, :received, [])]
+      {Map.put(state || %{}, :received, received), []}
+    end
+
+    def update(_message, state, _context), do: {state || %{}, []}
+  end
+
   defp fake_oneliners_context(extra) do
     Map.merge(%{domain: %{oneliners: Foglet.TUI.FakeOneliners}}, extra)
   end
@@ -290,6 +299,51 @@ defmodule Foglet.TUI.AppTest do
 
       {cleared, _} = App.update(:dismiss_modal, with_modal)
       assert cleared.modal == nil
+    end
+
+    test "form modal submit effect routes through App to target screen update", %{state: state} do
+      form =
+        Form.init(
+          title: "Test Submit",
+          fields: [%{name: :topic, type: :text, label: "Topic"}],
+          on_submit: fn payload -> Effect.modal_submit(:target_key, :test_submit, payload) end,
+          on_cancel: fn -> :ok end
+        )
+
+      state =
+        %{
+          state
+          | session_context: %{
+              domain: %{screen_modules: %{target_key: ModalSubmitTarget}}
+            },
+            screen_state: %{target_key: %{received: []}},
+            modal: %Foglet.TUI.Modal{type: :form, message: form}
+        }
+
+      {new_state, cmds} = App.update({:key, %{key: :enter}}, state)
+
+      assert cmds == []
+      assert App.screen_state_for(new_state, :target_key).received == [
+               {:test_submit, %{topic: ""}}
+             ]
+    end
+
+    test "form modal submit effect with missing target becomes visible error", %{state: state} do
+      form =
+        Form.init(
+          title: "Test Submit",
+          fields: [%{name: :topic, type: :text, label: "Topic"}],
+          on_submit: fn payload -> Effect.modal_submit(:missing_target, :test_submit, payload) end,
+          on_cancel: fn -> :ok end
+        )
+
+      state = %{state | modal: %Foglet.TUI.Modal{type: :form, message: form}}
+
+      {new_state, cmds} = App.update({:key, %{key: :enter}}, state)
+
+      assert cmds == []
+      assert %Foglet.TUI.Modal{type: :error, message: "Unable to submit form."} =
+               new_state.modal
     end
 
     test "returns {state, []} for unknown message", %{state: state} do
