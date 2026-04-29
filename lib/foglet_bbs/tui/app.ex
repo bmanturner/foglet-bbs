@@ -494,7 +494,7 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:set_user, user}, state) do
-    apply_effect(%{state | current_user: user}, Effect.navigate(:main_menu, %{}))
+    do_update({:promote_session, user}, state)
   end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do

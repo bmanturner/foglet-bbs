@@ -204,7 +204,7 @@ defmodule Foglet.TUI.Screens.Verify do
   end
 
   defp handle_verify_submit_result({:ok, confirmed}, _vs, %Context{}) do
-    {VerifyState.default(), [Effect.session({:set_user, confirmed})]}
+    {VerifyState.default(), [Effect.session({:promote_session, confirmed})]}
   end
 
   defp handle_verify_submit_result({:error, :expired}, vs, %Context{}) do

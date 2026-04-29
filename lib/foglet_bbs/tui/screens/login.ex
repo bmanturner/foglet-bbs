@@ -225,7 +225,7 @@ defmodule Foglet.TUI.Screens.Login do
 
   @spec handle_login_result(map(), tuple()) :: {map(), list()}
   defp handle_login_result(state, {:ok, user, :main_menu}) do
-    {LoginState.put(state, LoginState.default()), [Effect.session({:set_user, user})]}
+    {LoginState.put(state, LoginState.default()), [Effect.session({:promote_session, user})]}
   end
 
   defp handle_login_result(state, {:ok, user, :verify, :attempted}) do

@@ -407,7 +407,8 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp handle_register_result(state, {:ok, user, :main_menu, _delivery}) do
-    {RegisterState.put(state, RegisterState.default()), [Effect.session({:set_user, user})]}
+    {RegisterState.put(state, RegisterState.default()),
+     [Effect.session({:promote_session, user})]}
   end
 
   defp handle_register_result(state, {:error, changeset})
