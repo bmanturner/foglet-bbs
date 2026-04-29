@@ -21,6 +21,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.PubSub
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.InitialRouteEnterForwarder
   alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.Screens
   alias Foglet.TUI.SizeGate
@@ -401,7 +402,19 @@ defmodule Foglet.TUI.App do
         []
       end
 
-    heartbeat ++ clock ++ pubsub_subs
+    # Phase 39 SPEC R4 / D-04: every route-entry must dispatch :on_route_enter.
+    # Raxol's `init/1` contract returns {:ok, model} — it can't return commands
+    # — so screens that get mounted directly via `App.init/1` (e.g. an SSH-
+    # pubkey-authenticated user landing on :main_menu) would otherwise miss
+    # their first-paint :on_route_enter dispatch and render un-hydrated until
+    # the user navigated somewhere and back. The InitialRouteEnterForwarder is
+    # a one-shot subscription that delivers `:initial_route_enter` to update/2
+    # exactly once, immediately after the Dispatcher starts; the corresponding
+    # do_update clause routes it through to the active screen as
+    # `:on_route_enter`. See `do_update(:initial_route_enter, state)` below.
+    initial_route_subs = [Subscription.custom(InitialRouteEnterForwarder, %{})]
+
+    heartbeat ++ clock ++ pubsub_subs ++ initial_route_subs
   end
 
   # Compute which PubSub topics to subscribe to based on current screen and user.
@@ -581,6 +594,20 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update(:main_menu_clock_tick, state), do: {state, []}
+
+  # Phase 39 CR-01 / SPEC R4 / D-04: deliver :on_route_enter to the active
+  # screen after `App.init/1` has run. Raxol's init/1 contract returns
+  # `{:ok, model}` (no commands), so `init/1` itself can't fan out the
+  # route-entry reducer message. The InitialRouteEnterForwarder subscription
+  # (started by setup_subscriptions/1 right after init) sends us this message
+  # exactly once; we route it through to the screen as :on_route_enter.
+  #
+  # Direct production navigations (`apply_effect(navigate, ...)`) still
+  # dispatch :on_route_enter via `maybe_dispatch_route_entry/3` (app.ex:138),
+  # so this path only fires for the very first screen of the session.
+  defp do_update(:initial_route_enter, state) do
+    route_screen_update(state, screen_key(current_route(state)), :on_route_enter)
+  end
 
   # A new SSH connection for the same user replaced this session.
   # Show a notice modal and defer the quit until the user dismisses it

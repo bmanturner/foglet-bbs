@@ -110,7 +110,26 @@ defmodule Foglet.TUI.AppTest do
 
       assert %MainMenuState{recent_oneliners: []} = App.screen_state_for(state, :main_menu)
 
+      # Phase 39 CR-01: init/1 itself doesn't fire :on_route_enter (Raxol's
+      # init/1 contract returns {:ok, model} only — no commands). The actual
+      # first-load dispatch happens via the InitialRouteEnterForwarder
+      # subscription, which delivers :initial_route_enter to update/2 once
+      # the Dispatcher starts. Simulate that here.
       refute_received {:list_recent_visible, 5}
+
+      {state, cmds} = App.update(:initial_route_enter, state)
+
+      # MainMenu's :on_route_enter clause ran, set oneliner_status to :loading,
+      # and emitted the load task command.
+      assert %MainMenuState{oneliner_status: :loading} =
+               App.screen_state_for(state, :main_menu)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} =
+               task.()
+
+      assert_received {:list_recent_visible, 5}
     end
 
     test "pubkey-authenticated unconfirmed users route to verification when required" do
@@ -1403,9 +1422,19 @@ defmodule Foglet.TUI.AppTest do
   end
 
   describe "subscribe/1" do
-    test "returns empty list when session_pid is nil and no user" do
+    test "returns only the initial-route-enter forwarder when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})
-      assert App.subscribe(state) == []
+      subs = App.subscribe(state)
+
+      # Even an unauthenticated session needs the one-shot
+      # :initial_route_enter forwarder so the :login screen's
+      # :on_route_enter clause runs (Phase 39 CR-01).
+      assert [
+               %Raxol.Core.Runtime.Subscription{
+                 type: :custom,
+                 data: %{module: Foglet.TUI.InitialRouteEnterForwarder}
+               }
+             ] = subs
     end
 
     test "returns heartbeat subscription when session_pid is set" do
@@ -1463,8 +1492,14 @@ defmodule Foglet.TUI.AppTest do
       subs = App.subscribe(state)
 
       assert Enum.any?(subs, fn
-               %Raxol.Core.Runtime.Subscription{type: :custom} -> true
-               _ -> false
+               %Raxol.Core.Runtime.Subscription{
+                 type: :custom,
+                 data: %{module: Foglet.TUI.PubSubForwarder}
+               } ->
+                 true
+
+               _ ->
+                 false
              end),
              "expected at least one :custom subscription for PubSub"
     end
@@ -1472,7 +1507,20 @@ defmodule Foglet.TUI.AppTest do
     test "no PubSub subscription when not logged in" do
       {:ok, state} = App.init(%{})
       subs = App.subscribe(state)
-      refute Enum.any?(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+
+      # The InitialRouteEnterForwarder custom subscription is always present
+      # (Phase 39 CR-01), so we filter it out before asserting absence of
+      # PubSub-specific custom subscriptions.
+      refute Enum.any?(subs, fn
+               %Raxol.Core.Runtime.Subscription{
+                 type: :custom,
+                 data: %{module: Foglet.TUI.PubSubForwarder}
+               } ->
+                 true
+
+               _ ->
+                 false
+             end)
     end
 
     test "board_list screen adds 'boards' topic" do
