@@ -20,7 +20,7 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
   end
 
   defmodule NoSubscriptionsScreen do
-    def render(local_state, %Context{}), do: {:rendered, local_state}
+    def render(local_state, %Context{}), do: {:no_subscription_render, local_state}
   end
 
   defp state(attrs \\ %{}) do

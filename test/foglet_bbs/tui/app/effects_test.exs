@@ -149,6 +149,6 @@ defmodule Foglet.TUI.App.EffectsTest do
       Effects.apply_effect(state(), Effect.task(:load, :sample, fn -> raise "boom" end))
 
     assert {:screen_task_result, :sample, :load, {:error, reason}} = failure_task.()
-    assert reason =~ "boom"
+    assert String.contains?(reason, "boom")
   end
 end

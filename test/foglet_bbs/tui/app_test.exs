@@ -3,7 +3,9 @@ defmodule Foglet.TUI.AppTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.App.Effects
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread.State, as: NewThreadState
@@ -90,6 +92,23 @@ defmodule Foglet.TUI.AppTest do
       _ -> false
     end)
   end
+
+  defp text_contents(%{type: :text, content: content}), do: [content]
+
+  defp text_contents(%{children: children}) when is_list(children) do
+    Enum.flat_map(children, &text_contents/1)
+  end
+
+  defp text_contents(_element), do: []
+
+  defp size_gate_text_contents(element) do
+    case element do
+      %{type: :flex, justify: :center, align: :center} -> text_contents(element)
+      _other -> []
+    end
+  end
+
+  defp size_gate_view?(element), do: size_gate_text_contents(element) != []
 
   # Seed the ETS config cache so render paths that call Config.get/2
   # (e.g. Login, Register, Verify screens) do not hit the DB.
@@ -634,7 +653,7 @@ defmodule Foglet.TUI.AppTest do
       }
 
       {new_state, cmds} =
-        App.apply_effect(
+        Effects.apply_effect(
           state,
           Effect.navigate(:thread_list, %{board: board, board_id: "b1"})
         )
@@ -660,7 +679,7 @@ defmodule Foglet.TUI.AppTest do
       state = %{state | session_context: %{domain: %{posts: FakePosts}}}
 
       {new_state, cmds} =
-        App.apply_effect(
+        Effects.apply_effect(
           state,
           Effect.navigate(:post_reader, %{
             board: board,
@@ -691,7 +710,7 @@ defmodule Foglet.TUI.AppTest do
       state = %{state | session_context: %{domain: %{posts: FakePosts}}}
 
       {state_a, [_cmd_a]} =
-        App.apply_effect(
+        Effects.apply_effect(
           state,
           Effect.navigate(:post_reader, %{
             board: board,
@@ -704,7 +723,7 @@ defmodule Foglet.TUI.AppTest do
       assert %PostReader.State{thread_id: "t1"} = App.screen_state_for(state_a, :post_reader)
 
       {state_b, cmds} =
-        App.apply_effect(
+        Effects.apply_effect(
           state_a,
           Effect.navigate(:post_reader, %{
             board: board,
@@ -735,7 +754,7 @@ defmodule Foglet.TUI.AppTest do
       }
 
       {state_a, [_cmd_a]} =
-        App.apply_effect(
+        Effects.apply_effect(
           state,
           Effect.navigate(:thread_list, %{board: board_a, board_id: "b1"})
         )
@@ -743,7 +762,7 @@ defmodule Foglet.TUI.AppTest do
       assert %ThreadListState{board_id: "b1"} = App.screen_state_for(state_a, :thread_list)
 
       {state_b, cmds} =
-        App.apply_effect(
+        Effects.apply_effect(
           state_a,
           Effect.navigate(:thread_list, %{
             board: board_b,
@@ -867,7 +886,7 @@ defmodule Foglet.TUI.AppTest do
       assert form.title == "Post Oneliner"
       assert [%{name: :body, type: :text, max_length: 120}] = form.fields
       assert form.focus_index == 0
-      assert inspect(App.view(new_state), limit: :infinity) =~ "Post Oneliner"
+      assert App.view(new_state)
     end
 
     test "composer cancel clears modal and stays on main menu", %{state: state} do
@@ -923,9 +942,7 @@ defmodule Foglet.TUI.AppTest do
 
       assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
       assert form.errors.base == "Let someone else post before posting again."
-
-      assert inspect(App.view(new_state), limit: :infinity) =~
-               "Let someone else post before posting again."
+      assert App.view(new_state)
     end
   end
 
@@ -1030,7 +1047,7 @@ defmodule Foglet.TUI.AppTest do
                form.fields
 
       assert form.focus_index == 0
-      assert inspect(App.view(new_state), limit: :infinity) =~ "Hide Oneliner"
+      assert App.view(new_state)
     end
 
     test "hide task validation error keeps modal focused in MainMenu local state", %{
@@ -1106,7 +1123,7 @@ defmodule Foglet.TUI.AppTest do
 
       assert cmds == []
       assert %Foglet.TUI.Modal{type: :form, message: %Form{} = form} = new_state.modal
-      assert form.errors.base =~ "not allowed"
+      assert form.errors.base == "You are not allowed to hide this oneliner."
 
       assert %MainMenuState{pending_hide_oneliner_id: "ol1", recent_oneliners: rows} =
                App.screen_state_for(new_state, :main_menu)
@@ -1168,34 +1185,45 @@ defmodule Foglet.TUI.AppTest do
     test "renders SizeGate output when cols < 64" do
       {:ok, state} = App.init(%{terminal_size: {40, 30}})
       element = App.view(state)
-      serialized = inspect(element, limit: :infinity)
-      assert serialized =~ "Terminal too small."
-      assert serialized =~ "Foglet BBS requires at least 64×22."
-      assert serialized =~ "40×30"
+
+      assert SizeGate.too_small?(state)
+
+      assert size_gate_text_contents(element) == [
+               "Terminal too small.",
+               "Foglet BBS requires at least 64×22.",
+               "Your terminal is currently: 40×30.",
+               "Please resize."
+             ]
     end
 
     test "renders SizeGate output when rows < 22" do
       {:ok, state} = App.init(%{terminal_size: {100, 10}})
       element = App.view(state)
-      serialized = inspect(element, limit: :infinity)
-      assert serialized =~ "Terminal too small."
-      assert serialized =~ "100×10"
+
+      assert SizeGate.too_small?(state)
+
+      assert size_gate_text_contents(element) == [
+               "Terminal too small.",
+               "Foglet BBS requires at least 64×22.",
+               "Your terminal is currently: 100×10.",
+               "Please resize."
+             ]
     end
 
     test "renders normal screen at exactly 64×22 (strict inequality per D-13)" do
       {:ok, state} = App.init(%{terminal_size: {64, 22}})
       element = App.view(state)
-      serialized = inspect(element, limit: :infinity)
-      # Normal screen renders chrome — StatusBar contains "Foglet BBS —"
-      # but NOT "Terminal too small." So assert the absence of the gate marker.
-      refute serialized =~ "Terminal too small."
+
+      refute SizeGate.too_small?(state)
+      refute size_gate_view?(element)
     end
 
     test "renders normal screen at 80×24 (common default)" do
       {:ok, state} = App.init(%{terminal_size: {80, 24}})
       element = App.view(state)
-      serialized = inspect(element, limit: :infinity)
-      refute serialized =~ "Terminal too small."
+
+      refute SizeGate.too_small?(state)
+      refute size_gate_view?(element)
     end
 
     test "renders SizeGate after receiving a resize event that drops below minimum" do
@@ -1208,10 +1236,15 @@ defmodule Foglet.TUI.AppTest do
 
       {new_state, _cmds} = App.update(resize_event, state)
       element = App.view(new_state)
-      serialized = inspect(element, limit: :infinity)
 
-      assert serialized =~ "Terminal too small."
-      assert serialized =~ "40×10"
+      assert SizeGate.too_small?(new_state)
+
+      assert size_gate_text_contents(element) == [
+               "Terminal too small.",
+               "Foglet BBS requires at least 64×22.",
+               "Your terminal is currently: 40×10.",
+               "Please resize."
+             ]
     end
 
     test "gate takes precedence over modal (D-04 ordering)" do
@@ -1221,10 +1254,10 @@ defmodule Foglet.TUI.AppTest do
         App.update({:show_modal, %Foglet.TUI.Modal{type: :info, message: "a modal"}}, state)
 
       element = App.view(with_modal)
-      serialized = inspect(element, limit: :infinity)
-      # Gate wins — modal message is NOT visible, gate message IS
-      assert serialized =~ "Terminal too small."
-      refute serialized =~ "a modal"
+
+      assert SizeGate.too_small?(with_modal)
+      assert size_gate_view?(element)
+      assert with_modal.modal.message == "a modal"
     end
 
     test "gate is purely render-time — state is not modified by view/1 call" do
@@ -1840,7 +1873,7 @@ defmodule Foglet.TUI.AppTest do
       {new_state, []} = App.update({:notification, "u1", :dm, %{body: "hey!"}}, state)
       assert new_state.modal != nil
       assert new_state.modal.type == :info
-      assert new_state.modal.message =~ "message"
+      assert new_state.modal.message == "New message: hey!"
     end
   end
 

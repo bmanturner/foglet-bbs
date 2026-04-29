@@ -205,7 +205,7 @@ defmodule Foglet.TUI.App.RoutingTest do
           assert Routing.screen_module_for(state, :main_menu) == Foglet.TUI.Screens.MainMenu
         end)
 
-      assert log =~ "falling back to built-in resolver"
+      assert String.contains?(log, "falling back to built-in resolver")
     end
   end
 
