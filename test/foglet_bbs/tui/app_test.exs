@@ -8,6 +8,7 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.PostComposer
+  alias Foglet.TUI.Screens.PostComposer.State, as: PostComposerState
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.ThreadList.State, as: ThreadListState
@@ -427,6 +428,51 @@ defmodule Foglet.TUI.AppTest do
 
       assert %ThreadListState{threads: ^threads, status: :loaded, selected_index: 0} =
                App.screen_state_for(new_state, :thread_list)
+    end
+
+    test "{:screen_task_result, :post_composer, :submit_reply, result} routes through PostComposer local state",
+         %{state: state} do
+      local_state =
+        PostComposerState.new(
+          board: %{id: "b1"},
+          board_id: "b1",
+          thread: %{id: "t1"},
+          thread_id: "t1",
+          submission_status: :submitting,
+          value: "hi"
+        )
+
+      state = %{
+        state
+        | current_screen: :post_composer,
+          route_params: %{board_id: "b1", thread_id: "t1"},
+          composer_draft: "legacy-draft",
+          screen_state: %{post_composer: local_state},
+          session_context: %{domain: %{posts: FakePosts}}
+      }
+
+      {new_state, cmds} =
+        App.update(
+          {:screen_task_result, :post_composer, :submit_reply, {:ok, {:ok, %{id: "p2"}}}},
+          state
+        )
+
+      assert new_state.composer_draft == "legacy-draft"
+      assert new_state.current_screen == :post_reader
+      assert new_state.route_params.board_id == "b1"
+      assert new_state.route_params.thread_id == "t1"
+      assert new_state.route_params.load_intent == :jump_last
+
+      assert %PostComposerState{submission_status: :submitted} =
+               App.screen_state_for(new_state, :post_composer)
+
+      assert %PostReader.State{thread_id: "t1", load_intent: :jump_last} =
+               App.screen_state_for(new_state, :post_reader)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
+               task.()
     end
 
     test "navigating to thread_list initializes local state and queues its load task", %{

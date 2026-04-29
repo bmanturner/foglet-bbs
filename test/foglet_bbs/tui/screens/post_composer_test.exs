@@ -15,7 +15,8 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     def create_reply(_thread_id, _board_id, _user_id, %{body: "locked"}),
       do: {:error, :thread_locked}
 
-    def create_reply(_thread_id, _board_id, _user_id, attrs) do
+    def create_reply(thread_id, board_id, user_id, attrs) do
+      Process.put(:post_composer_last_reply_args, {thread_id, board_id, user_id, attrs})
       Process.put(:post_composer_last_reply_body, Map.fetch!(attrs, :body))
       {:ok, Map.merge(%{id: "new-post"}, attrs)}
     end
@@ -636,6 +637,82 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       assert %Foglet.TUI.Effect{type: :task} = effect
       assert effect.payload.op == :submit_reply
       assert effect.payload.screen_key == :post_composer
+
+      assert {:ok, %{id: "new-post", body: "hi", reply_to_id: "p1"}} = effect.payload.fun.()
+
+      assert Process.get(:post_composer_last_reply_args) == {
+               "t1",
+               "b1",
+               "u1",
+               %{body: "hi", reply_to_id: "p1"}
+             }
+    end
+
+    test "PostComposer.update with missing user records local error and emits no task" do
+      context = composer_context(current_user: nil)
+      state = State.new(thread_id: "t1", board_id: "b1", value: "hi")
+
+      {state, []} =
+        PostComposer.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
+
+      assert state.error == "You must be logged in to post."
+      assert state.submission_status == :idle
+    end
+
+    test "PostComposer.update submit success navigates to PostReader jump-last" do
+      context = composer_context()
+
+      state =
+        State.new(
+          board: %{id: "b1"},
+          board_id: "b1",
+          thread: %{id: "t1"},
+          thread_id: "t1",
+          submission_status: :submitting,
+          value: "hi"
+        )
+
+      {state, [effect]} =
+        PostComposer.update(
+          {:task_result, :submit_reply, {:ok, {:ok, %{id: "p2"}}}},
+          state,
+          context
+        )
+
+      assert state.submission_status == :submitted
+      assert state.submit_result == {:ok, %{id: "p2"}}
+      assert %Foglet.TUI.Effect{type: :navigate} = effect
+      assert effect.payload.screen == :post_reader
+      assert effect.payload.params.thread_id == "t1"
+      assert effect.payload.params.board_id == "b1"
+      assert effect.payload.params.load_intent == :jump_last
+    end
+
+    test "PostComposer.update posting denied and thread locked stay local" do
+      context = composer_context()
+      state = State.new(thread_id: "t1", board_id: "b1", submission_status: :submitting)
+
+      {denied_state, denied_effects} =
+        PostComposer.update(
+          {:task_result, :submit_reply, {:ok, {:error, :posting_not_allowed}}},
+          state,
+          context
+        )
+
+      assert denied_effects == []
+      assert denied_state.submission_status == {:error, :posting_not_allowed}
+      assert denied_state.error == "You are not allowed to post on this board."
+
+      {locked_state, locked_effects} =
+        PostComposer.update(
+          {:task_result, :submit_reply, {:error, :thread_locked}},
+          state,
+          context
+        )
+
+      assert locked_effects == []
+      assert locked_state.submission_status == {:error, :thread_locked}
+      assert locked_state.error == "This thread is locked"
     end
 
     test "PostComposer.update Ctrl+C navigates to post_reader route identity" do

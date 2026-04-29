@@ -77,6 +77,18 @@ defmodule Foglet.TUI.Screens.PostComposer do
      }, []}
   end
 
+  def update(
+        {:task_result, :submit_reply, {:ok, {:ok, post_or_result}}},
+        %State{} = state,
+        %Context{}
+      ) do
+    submit_success(state, {:ok, post_or_result})
+  end
+
+  def update({:task_result, :submit_reply, {:ok, post_or_result}}, %State{} = state, %Context{}) do
+    submit_success(state, {:ok, post_or_result})
+  end
+
   def update({:task_result, :submit_reply, {:error, reason}}, %State{} = state, %Context{}) do
     {%{
        state
@@ -418,6 +430,20 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
+
+  defp submit_success(%State{} = state, result) do
+    new_state = %{state | submission_status: :submitted, submit_result: result, error: nil}
+
+    params = %{
+      board: state.board,
+      board_id: state.board_id,
+      thread: state.thread,
+      thread_id: state.thread_id,
+      load_intent: :jump_last
+    }
+
+    {new_state, [Effect.navigate(:post_reader, params)]}
+  end
 
   defp submit_local(%State{} = state, %Context{} = context) do
     draft = state.input_state.value
