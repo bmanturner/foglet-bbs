@@ -154,11 +154,13 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
 
     test "declares operator mode through Presentation", %{state: state} do
+      # Behavioural assertion: rendering succeeds AND the canonical
+      # Presentation lookup returns :operator for the :moderation screen.
+      # The previous source-string grep was redundant with the runtime
+      # assertion above and pinned the implementation to a literal call
+      # shape, violating AGENTS.md's "no text-presence tests" rule.
       assert _ = Moderation.render(state)
       assert Presentation.mode_for!(:moderation) == :operator
-
-      assert File.read!("lib/foglet_bbs/tui/screens/moderation.ex") =~
-               "Presentation.mode_for!(:moderation)"
     end
 
     test "renders shared INVITES body when active tab is INVITES" do

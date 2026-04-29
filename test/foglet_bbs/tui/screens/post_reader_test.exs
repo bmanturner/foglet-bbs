@@ -360,15 +360,15 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert _ = PostReader.render(s)
   end
 
-  test "render/1 delegates breadcrumb formatting to shared chrome" do
-    source =
-      __ENV__.file
-      |> Path.dirname()
-      |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_reader.ex")
-      |> Path.expand()
-      |> File.read!()
+  test "render/1 delegates breadcrumb formatting to shared chrome", %{state: state} do
+    # The legacy reader rendered "Thread:" as a hard-coded prefix in its
+    # breadcrumb header. The chrome migration moved breadcrumb assembly
+    # into shared chrome modules; this is a behavioural guard that the
+    # rendered tree no longer contains the legacy prefix.
+    {s, _} = PostReader.load_posts(state, "t1")
+    text = PostReader.render(s) |> flatten_text()
 
-    refute source =~ "Thread:"
+    refute text =~ "Thread:"
   end
 
   # ===========================================================================
@@ -459,17 +459,15 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       refute viewport_text =~ "Posts 1/1"
     end
 
-    test "PostReader delegates reader assembly to PostCard reader helper" do
-      source =
-        __ENV__.file
-        |> Path.dirname()
-        |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_reader.ex")
-        |> Path.expand()
-        |> File.read!()
+    test "PostReader delegates reader assembly to PostCard reader helper", %{state: state} do
+      # Behavioural check: rendering a thread with at least one post produces
+      # the reader-card contract — a "Post N of M" header (PostCard.reader_parts
+      # owns this format). The previous source-grep pinned the implementation
+      # to a literal call shape.
+      {s, _} = PostReader.load_posts(state, "t1")
+      text = PostReader.render(s) |> flatten_text()
 
-      assert source =~ "PostCard.reader_parts"
-      refute source =~ "PostCard.author_line(post)"
-      refute source =~ ~s(text("Post \#{idx + 1} of \#{total}")
+      assert text =~ ~r/Post \d+ of \d+/
     end
   end
 

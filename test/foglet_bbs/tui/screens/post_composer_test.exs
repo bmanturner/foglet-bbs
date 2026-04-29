@@ -141,15 +141,16 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert _ = PostComposer.render(s)
   end
 
-  test "render/1 delegates reply breadcrumb formatting to shared chrome" do
-    source =
-      __ENV__.file
-      |> Path.dirname()
-      |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_composer.ex")
-      |> Path.expand()
-      |> File.read!()
+  test "render/1 delegates reply breadcrumb formatting to shared chrome", %{state: state} do
+    # The previous "Reply to:" literal was emitted directly by the composer
+    # render helpers; the chrome migration moved breadcrumb assembly into
+    # shared chrome modules so the composer no longer renders that string.
+    # Behavioural check: rendering a reply composer produces a flat text
+    # that does NOT contain the legacy "Reply to:" prefix.
+    state = with_reply(state)
+    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
-    refute source =~ "Reply to:"
+    refute text =~ "Reply to:"
   end
 
   test "render/1 in edit mode uses the composer shell with body counter", %{state: state} do
@@ -259,16 +260,24 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert text =~ ">" or text =~ "┃"
   end
 
-  test "PostComposer render source delegates to EditorFrame and keeps preview off PostCard" do
-    source =
-      __ENV__.file
-      |> Path.dirname()
-      |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_composer.ex")
-      |> Path.expand()
-      |> File.read!()
+  test "PostComposer render delegates to EditorFrame and keeps preview off PostCard", %{
+    state: state
+  } do
+    # Behavioural check: the rendered tree must contain the EditorFrame
+    # contract (mode tabs "Edit"/"Preview" and the body counter) — that's
+    # what EditorFrame.render produces. PostCard's reader-style header
+    # ("Post N of M") must NOT appear because the composer must not delegate
+    # to the reader-side card renderer.
+    state = with_reply(state)
+    text = PostComposer.render(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
-    assert source =~ "EditorFrame.render"
-    refute source =~ "PostCard.render"
+    # EditorFrame chrome contract
+    assert text =~ "Edit"
+    assert text =~ "Preview"
+    assert text =~ ~r/\d+ \/ \d+ chars/
+
+    # PostCard.reader-style header must not appear in the composer
+    refute text =~ ~r/Post \d+ of \d+/
   end
 
   # ---------------------------------------------------------------------------
