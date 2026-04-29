@@ -135,6 +135,19 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {normalize_state(local_state, context), []}
   end
 
+  # Phase 39 D-01/D-03/D-14: screen owns its route-entry conditional load.
+  # Preserves the user-conditional semantics today encoded in App's
+  # `maybe_dispatch_route_entry/3` for `:main_menu` (`app.ex:810-816`); Plan
+  # 39-05 will collapse the App-side per-screen clauses into a single generic
+  # dispatch, relying on this screen-side clause to decide what to load.
+  def update(:on_route_enter, local_state, %Context{} = context) do
+    if context.current_user do
+      update(:load_oneliners, local_state, context)
+    else
+      {normalize_state(local_state, context), []}
+    end
+  end
+
   def update(:load_oneliners, local_state, %Context{} = context) do
     local_state = normalize_state(local_state, context)
     {%{local_state | oneliner_status: :loading}, [load_oneliners_task_effect(context)]}

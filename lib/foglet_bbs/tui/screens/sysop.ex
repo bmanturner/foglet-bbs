@@ -57,6 +57,19 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
+  # Phase 39 D-01/D-03/D-14: screen owns its route-entry conditional load.
+  # Preserves the user-conditional semantics today encoded in App's
+  # `maybe_dispatch_route_entry/3` for `:sysop` (`app.ex:826-832`); Plan 39-05
+  # will collapse the App-side per-screen clauses into a single generic
+  # dispatch.
+  def update(:on_route_enter, local_state, %Context{} = context) do
+    if context.current_user do
+      update(:load, local_state, context)
+    else
+      {normalize_state(local_state, context), []}
+    end
+  end
+
   def update(:load, local_state, %Context{} = context) do
     local_state
     |> normalize_state(context)
