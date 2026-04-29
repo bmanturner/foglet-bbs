@@ -85,6 +85,7 @@ defmodule Foglet.TUI.AppTest do
     :ets.insert(:foglet_config, {"delivery_mode", "no_email"})
     :ets.insert(:foglet_config, {"require_email_verification", false})
     :ets.insert(:foglet_config, {"email_verify_resend_cooldown_seconds", 60})
+    :ets.insert(:foglet_config, {"invite_code_generators", "sysop_only"})
     :ok
   end
 
