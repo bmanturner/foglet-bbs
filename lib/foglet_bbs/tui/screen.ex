@@ -2,26 +2,37 @@ defmodule Foglet.TUI.Screen do
   @moduledoc """
   Behaviour for Foglet TUI screens.
 
-  Phase 34 defines the target screen runtime contract:
+  The canonical screen runtime contract is:
 
   - `init/1` builds screen-local state from `Foglet.TUI.Context`.
-  - `update/3` consumes normalized runtime messages plus screen-local state.
+  - `update/3` consumes normalized runtime messages, screen-local state, and
+    context, then returns `{new_local_state, effects}`.
   - `render/2` renders from screen-local state plus context.
+  - `subscriptions/2` is optional for focused-screen PubSub topics.
 
   ## State conventions
 
   - Stateful screens own a first-class state struct with `new/1` or document an explicit local state type.
   - Stateless screens explicitly return `:stateless` or `%{}` from `init/1` and do not store local state in App fields.
   - Screens do not receive `%Foglet.TUI.App{}` through `init/1`, `update/3`, or `render/2`.
-  - Production screen family migrations are deferred to phases 35-38; Phase 39 removes central App screen-specific machinery.
 
-  Production screens migrate to that contract in phases 35-38. Until then,
-  the legacy `render/1`, `handle_key/2`, and `init_screen_state/1` callbacks
-  remain transitional callbacks so existing screens continue compiling while
-  the new reducer boundary lands.
+  ## Bounded compatibility surface
 
-  See `docs/ARCHITECTURE.md` section 4 and `app.ex` for the legacy dispatch
-  path still in use during the migration.
+  Production `Foglet.TUI.App` dispatch no longer calls the broad App-state
+  callbacks below. They remain declared only so modules that still expose
+  compatibility helpers can keep their `@impl` annotations while cleanup lands
+  in the screen modules themselves:
+
+  - `render/1` — bounded to compatibility helpers and older direct smoke tests;
+    App rendering uses `render/2`.
+  - `handle_key/2` — bounded to compatibility helpers and older direct tests;
+    App key routing uses `update({:key, event}, local_state, context)`.
+  - `init_screen_state/1` — bounded to compatibility constructors; render
+    fixtures and migrated tests should prefer `init/1` or first-class
+    `State.new/1`.
+
+  New screens should implement only the canonical callbacks plus optional
+  `subscriptions/2`.
   """
 
   @type message :: term()
@@ -51,18 +62,20 @@ defmodule Foglet.TUI.Screen do
   @callback subscriptions(local_state(), Foglet.TUI.Context.t()) :: [String.t()]
 
   @doc """
-  Transitional legacy render callback that receives broad App state.
+  Bounded compatibility render callback that receives broad App state.
+  Production App rendering uses `render/2`.
   """
   @callback render(state :: app_state()) :: any()
 
   @doc """
-  Transitional legacy key handler that receives broad App state.
+  Bounded compatibility key handler that receives broad App state.
+  Production App key routing uses `update/3`.
   """
   @callback handle_key(key :: key_event(), state :: app_state()) :: handle_key_result()
 
   @doc """
-  Transitional legacy screen-state initializer. Optional — stateless screens
-  (e.g. MainMenu) may omit this callback.
+  Bounded compatibility screen-state initializer. Prefer `init/1` or a
+  first-class `State.new/1` constructor for new tests and fixtures.
   """
   @callback init_screen_state(opts :: keyword()) :: map()
 
