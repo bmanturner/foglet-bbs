@@ -16,7 +16,7 @@ A user can SSH into a living, reliable BBS and participate in conversations thro
 
 Foglet now has terminal-native Account, Moderation, and Sysop workbenches; actor-aware authorization; invite-only registration redemption; account profile/preferences; sysop config and board/category operations; preference-aware chrome time rendering; persistent oneliners; moderation hide/audit workflows; honest SMTP/no-email onboarding and reset behavior; sysop user-status administration; board posting and locked-thread restrictions; Account SSH key management; board subscription management; and a polished Unicode-capable SSH/TUI visual foundation.
 
-The v2.0 architecture migration is complete, and Phase 41 of v2.1 has now removed the bounded legacy screen compatibility surface. `Foglet.TUI.App` acts as a runtime shell for route/session/modal coordination, generic effect interpretation, dynamic PubSub forwarding, task dispatch, and screen-local state storage. Production screens own their local state transitions through the canonical `init/1`, `update/3`, and `render/2` contract, and modal form submits now flow through explicit `Foglet.TUI.Effect.modal_submit/3` values instead of process-dictionary handoffs.
+The v2.0 architecture migration is complete, and Phase 42 of v2.1 has now removed the bounded legacy screen compatibility surface and extracted cohesive App runtime helpers. `Foglet.TUI.App` remains the Raxol callback shell while `Foglet.TUI.App.Routing`, `Modal`, `Effects`, and `Subscriptions` own route/session/modal coordination, generic effect interpretation, dynamic PubSub forwarding, task dispatch, and screen-local state plumbing. Production screens own their local state transitions through the canonical `init/1`, `update/3`, and `render/2` contract, and modal form submits now flow through explicit `Foglet.TUI.Effect.modal_submit/3` values instead of process-dictionary handoffs.
 
 ## Current Milestone: v2.1 Stability & Maintenance Hardening
 
@@ -50,10 +50,10 @@ The v2.0 architecture migration is complete, and Phase 41 of v2.1 has now remove
 - [x] v2.0 Phase 40 completed the current screen migration to the mini update-loop model while preserving SSH/TUI behavior, render smoke coverage, breadcrumbs, auth session promotion, dynamic PubSub subscriptions, and precommit gates.
 - [x] v2.0 Phase 40 removed production App fallback dispatch to legacy `handle_key/2` and `render/1`, bounded compatibility callbacks in `Foglet.TUI.Screen`, and documented the new screen contract in `lib/foglet_bbs/tui/SCREEN_CONTRACT.md`.
 - [x] v2.1 Phase 41 removed the legacy screen compatibility callbacks, migrated tests/smoke helpers to canonical screen setup, introduced explicit modal-submit effects, deleted modal-submit process-dictionary handoffs, and verified direct App-shell modal-submit success/failure coverage.
+- [x] v2.1 Phase 42 extracted cohesive App runtime helpers for routing, modal, effects, and subscriptions without moving domain behavior into the TUI shell.
 
 ### Active
 
-- [ ] v2.1 extracts cohesive App runtime helpers without moving domain behavior into the TUI shell.
 - [ ] v2.1 decomposes the largest screen modules enough that reducer, state, and render responsibilities are easier to test and change.
 - [ ] v2.1 addresses every item in `.planning/codebase/CONCERNS.md` through implementation, documentation, or an explicit verification artifact.
 
@@ -133,4 +133,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-29 after Phase 41 verification*
+*Last updated: 2026-04-29 after Phase 42 verification*
