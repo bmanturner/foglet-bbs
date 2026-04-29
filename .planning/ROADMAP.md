@@ -18,7 +18,7 @@ v2.0 turns `Foglet.TUI.App` into a small Raxol/process shell and moves screen-lo
 | 37 | 5/5 | Complete| 2026-04-29 |
 | 38 | Account & Operator Workbenches | Migrate Account, Moderation, and Sysop with nested forms, tab lifecycle loads, invites, retries, and save results. | SCREEN-05, SCREEN-06 |
 | 39 | 7/8 | In Progress|  |
-| 40 | 3/5 | In Progress|  |
+| 40 | 4/5 | In Progress|  |
 
 **Coverage:**
 - v2.0 requirements: 26 total
