@@ -131,6 +131,19 @@ defmodule Foglet.TUI.Screens.ThreadList do
     ])
   end
 
+  @impl true
+  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  def subscriptions(%State{board_id: board_id}, _context) when is_binary(board_id) do
+    [Foglet.PubSub.board_topic(board_id)]
+  end
+
+  def subscriptions(_local_state, %Context{route_params: params}) do
+    case Map.get(params, :board_id) || Map.get(params, "board_id") do
+      board_id when is_binary(board_id) -> [Foglet.PubSub.board_topic(board_id)]
+      _other -> []
+    end
+  end
+
   defp render_thread_content(%State{status: :loading}, _context, theme) do
     column style: %{gap: 0} do
       [
