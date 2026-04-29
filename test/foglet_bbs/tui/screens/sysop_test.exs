@@ -2395,4 +2395,59 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert bv.modal != nil
     end
   end
+
+  describe "update(:on_route_enter, …) — Phase 39 Plan 04" do
+    # These reducer pins preserve the user-conditional semantics of App's
+    # `maybe_dispatch_route_entry/3` clause for `:sysop` (`app.ex:826-832`):
+    # when current_user is set, dispatch :load; otherwise no-op. Plan 39-05
+    # will collapse the App-side clause into a generic dispatch.
+
+    test "with current_user set delegates to :load (parity with direct :load call, BOARDS tab emits task)" do
+      user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "alice",
+        role: :sysop,
+        status: :active
+      }
+
+      context = Context.new(current_user: user, route: :sysop, terminal_size: {80, 24})
+      # Active BOARDS tab so :load actually triggers a task effect (SITE tab
+      # has no slot and produces no effects, which would let the catch-all
+      # falsely "pass" parity even before the new clause exists).
+      local = %{Sysop.init(context) | active_tab: 1}
+
+      {state_via_on_enter, effects_via_on_enter} =
+        Sysop.update(:on_route_enter, local, context)
+
+      {state_via_load, effects_via_load} =
+        Sysop.update(:load, local, context)
+
+      assert state_via_on_enter == state_via_load
+      assert effects_via_on_enter == effects_via_load
+
+      assert Enum.any?(
+               effects_via_on_enter,
+               &match?(%Effect{type: :task, payload: %{op: :sysop_load_boards}}, &1)
+             )
+    end
+
+    test "with no current_user no-ops (no effects, normalized state)" do
+      context = Context.new(current_user: nil, route: :sysop, terminal_size: {80, 24})
+      local = Sysop.init(context)
+
+      {new_local, effects} = Sysop.update(:on_route_enter, local, context)
+
+      assert effects == []
+      assert %SysopState{} = new_local
+    end
+
+    test "with nil local_state and no user normalizes without crashing" do
+      context = Context.new(current_user: nil, route: :sysop, terminal_size: {80, 24})
+
+      {new_local, effects} = Sysop.update(:on_route_enter, nil, context)
+
+      assert effects == []
+      assert %SysopState{} = new_local
+    end
+  end
 end

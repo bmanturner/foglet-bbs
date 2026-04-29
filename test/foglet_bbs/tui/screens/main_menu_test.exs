@@ -906,4 +906,61 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       end
     end
   end
+
+  describe "update(:on_route_enter, …) — Phase 39 Plan 04" do
+    # These reducer pins document the screen-side ownership of the route-entry
+    # signal. They preserve the user-conditional load semantics of the App's
+    # `maybe_dispatch_route_entry/3` clause for `:main_menu` (`app.ex:810-816`):
+    # when a current_user is present, dispatch :load_oneliners; otherwise
+    # no-op. Plan 39-05 will collapse the App-side per-screen clauses into a
+    # single generic dispatch, relying on these screen-side clauses.
+
+    test "with current_user set delegates to :load_oneliners (loads + emits task effect)" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :main_menu,
+          terminal_size: {80, 24}
+        )
+
+      local = MainMenu.init(context)
+
+      {state_via_on_enter, effects_via_on_enter} =
+        MainMenu.update(:on_route_enter, local, context)
+
+      {state_via_load, effects_via_load} =
+        MainMenu.update(:load_oneliners, local, context)
+
+      assert state_via_on_enter == state_via_load
+      assert state_via_on_enter.oneliner_status == :loading
+
+      assert Enum.any?(
+               effects_via_on_enter,
+               &match?(%Effect{type: :task, payload: %{op: :load_oneliners}}, &1)
+             )
+
+      assert effects_via_on_enter == effects_via_load
+    end
+
+    test "with no current_user no-ops (no effects, normalized state)" do
+      context = Context.new(current_user: nil, route: :main_menu, terminal_size: {80, 24})
+      local = MainMenu.init(context)
+
+      {new_local, effects} = MainMenu.update(:on_route_enter, local, context)
+
+      assert effects == []
+      assert %MainMenuState{} = new_local
+    end
+
+    test "with nil local_state and no user normalizes without crashing" do
+      context = Context.new(current_user: nil, route: :main_menu, terminal_size: {80, 24})
+
+      {new_local, effects} = MainMenu.update(:on_route_enter, nil, context)
+
+      assert effects == []
+      assert %MainMenuState{} = new_local
+    end
+  end
 end

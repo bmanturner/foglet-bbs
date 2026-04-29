@@ -836,4 +836,61 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       end
     end
   end
+
+  describe "update(:on_route_enter, …) — Phase 39 Plan 04" do
+    # These reducer pins preserve the user-conditional semantics of App's
+    # `maybe_dispatch_route_entry/3` clause for `:moderation` (`app.ex:818-824`):
+    # when current_user is set, dispatch :load; otherwise no-op. Plan 39-05
+    # will collapse the App-side clause into a generic dispatch.
+
+    test "with current_user set delegates to :load (sets loading? and emits workspace task)" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      local = Moderation.init(context)
+
+      {state_via_on_enter, effects_via_on_enter} =
+        Moderation.update(:on_route_enter, local, context)
+
+      {state_via_load, effects_via_load} =
+        Moderation.update(:load, local, context)
+
+      assert state_via_on_enter == state_via_load
+      assert state_via_on_enter.loading?
+
+      assert [
+               %Effect{
+                 type: :task,
+                 payload: %{op: :load_moderation_workspace, screen_key: :moderation}
+               }
+             ] = effects_via_on_enter
+
+      assert effects_via_on_enter == effects_via_load
+    end
+
+    test "with no current_user no-ops (no effects, normalized state)" do
+      context = Context.new(current_user: nil, route: :moderation)
+      local = Moderation.init(context)
+
+      {new_local, effects} = Moderation.update(:on_route_enter, local, context)
+
+      assert effects == []
+      assert %ModerationState{} = new_local
+    end
+
+    test "with nil local_state and no user normalizes without crashing" do
+      context = Context.new(current_user: nil, route: :moderation)
+
+      {new_local, effects} = Moderation.update(:on_route_enter, nil, context)
+
+      assert effects == []
+      assert %ModerationState{} = new_local
+    end
+  end
 end
