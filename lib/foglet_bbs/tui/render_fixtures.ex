@@ -147,15 +147,15 @@ defmodule Foglet.TUI.RenderFixtures do
   # --- per-screen population -----------------------------------------------
 
   defp populate(:login, state, _size) do
-    %{state | screen_state: %{login: Login.init_screen_state([])}}
+    App.put_screen_state(state, :login, Login.init_screen_state([]))
   end
 
   defp populate(:register, state, _size) do
-    %{state | screen_state: %{register: Register.init_screen_state([])}}
+    App.put_screen_state(state, :register, Register.init_screen_state([]))
   end
 
   defp populate(:verify, state, _size) do
-    %{state | screen_state: %{verify: Verify.init_screen_state([])}}
+    App.put_screen_state(state, :verify, Verify.init_screen_state([]))
   end
 
   defp populate(:main_menu, state, _size) do
@@ -172,38 +172,33 @@ defmodule Foglet.TUI.RenderFixtures do
     directory = synthetic_directory()
     board_tree = BoardTree.init(directory: directory, id: "board-directory")
 
-    %{
-      state
-      | screen_state: %{
-          board_list:
-            BoardList.State.new(
-              directory: directory,
-              board_tree: board_tree,
-              status: :loaded,
-              feedback: nil
-            )
-        }
-    }
+    App.put_screen_state(
+      state,
+      :board_list,
+      BoardList.State.new(
+        directory: directory,
+        board_tree: board_tree,
+        status: :loaded,
+        feedback: nil
+      )
+    )
   end
 
   defp populate(:thread_list, state, _size) do
     board = hd(synthetic_boards())
     threads = synthetic_threads(board)
 
-    %{
-      state
-      | route_params: %{board: board, board_id: board.id},
-        screen_state: %{
-          thread_list:
-            ThreadList.State.new(
-              board: board,
-              board_id: board.id,
-              threads: threads,
-              selected_index: 0,
-              status: :loaded
-            )
-        }
-    }
+    %{state | route_params: %{board: board, board_id: board.id}}
+    |> App.put_screen_state(
+      :thread_list,
+      ThreadList.State.new(
+        board: board,
+        board_id: board.id,
+        threads: threads,
+        selected_index: 0,
+        status: :loaded
+      )
+    )
   end
 
   defp populate(:post_reader, state, _size) do
@@ -225,9 +220,9 @@ defmodule Foglet.TUI.RenderFixtures do
 
     %{
       state
-      | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id},
-        screen_state: %{post_reader: post_reader_state}
+      | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id}
     }
+    |> App.put_screen_state(:post_reader, post_reader_state)
   end
 
   defp populate(:post_composer, state, {w, _h}) do
@@ -249,9 +244,9 @@ defmodule Foglet.TUI.RenderFixtures do
 
     %{
       state
-      | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id},
-        screen_state: %{post_composer: post_composer_state}
+      | route_params: %{board: board, board_id: board.id, thread: thread, thread_id: thread.id}
     }
+    |> App.put_screen_state(:post_composer, post_composer_state)
   end
 
   defp populate(:new_thread, state, {w, _h}) do
@@ -267,19 +262,20 @@ defmodule Foglet.TUI.RenderFixtures do
         width: w
       )
 
-    %{state | route_params: %{board: board, board_id: board.id}, screen_state: %{new_thread: ss}}
+    %{state | route_params: %{board: board, board_id: board.id}}
+    |> App.put_screen_state(:new_thread, ss)
   end
 
   defp populate(:account, state, _size) do
-    %{state | screen_state: %{account: Account.init_screen_state([])}}
+    App.put_screen_state(state, :account, Account.init_screen_state([]))
   end
 
   defp populate(:moderation, state, _size) do
-    %{state | screen_state: %{moderation: Moderation.init_screen_state([])}}
+    App.put_screen_state(state, :moderation, Moderation.init_screen_state([]))
   end
 
   defp populate(:sysop, state, _size) do
-    %{state | screen_state: %{sysop: Sysop.init_screen_state([])}}
+    App.put_screen_state(state, :sysop, Sysop.init_screen_state([]))
   end
 
   # --- synthetic data shapes -----------------------------------------------
