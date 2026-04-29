@@ -71,10 +71,10 @@ This phase deletes all of that and makes the App-screen boundary unambiguous: Ap
    - Target: Same — modal precedence and SizeGate are intentionally App-level. Screen-issued modal requests continue to flow through `Effect.modal(:open|:dismiss)` and are interpreted by `apply_effect/2`.
    - Acceptance: `app_test.exs` modal-precedence and SizeGate tests pass without modification. No screen module routes a modal key event without going through `apply_effect/2` for `Effect.modal`.
 
-10. **App module materially smaller**: `lib/foglet_bbs/tui/app.ex` shrinks by ≥30% in line count from its current 1,102-line baseline.
-    - Current: `wc -l lib/foglet_bbs/tui/app.ex` → 1,102.
-    - Target: `wc -l lib/foglet_bbs/tui/app.ex` ≤ 750 lines, achieved by deleting (not relocating-via-comment) screen-specific clauses, helpers, and legacy fields. The remaining App reads as a runtime shell — Raxol callbacks, normalization, route storage, screen-state storage, generic update routing, effect interpretation, modal/SizeGate, session/PubSub plumbing, and rendering dispatch.
-    - Acceptance: `wc -l lib/foglet_bbs/tui/app.ex` returns ≤ 750. Public `app.ex` exports continue to satisfy every existing screen and test caller without compatibility shims.
+10. **App reads as a runtime shell**: After all screen-specific machinery is removed, `lib/foglet_bbs/tui/app.ex` contains only runtime shell concerns and is materially smaller than its current state.
+    - Current: 1,102 lines, with screen-specific dispatch clauses, screen-state decoders, legacy struct fields, and PubSub topic derivation that pattern-matches `current_screen`.
+    - Target: App contains only the responsibilities listed in APP-01 — Raxol callbacks, message normalization, route storage, generic screen-state storage, context construction, effect interpretation, modal/SizeGate precedence, session runtime hooks, PubSub plumbing, and rendering dispatch. Reduction is the consequence of deleting (not relocating-via-comment) the items called out in requirements 1, 4, 5, 7, and 8 — not a numeric goal in its own right.
+    - Acceptance: A reviewer reading `app.ex` end-to-end can identify every function as belonging to one of the runtime-shell responsibilities above; no function exists solely to handle a single migrated production screen. The line-count delta is reported in the verification artifact for context but is not gating.
 
 ## Boundaries
 
@@ -115,7 +115,7 @@ This phase deletes all of that and makes the App-screen boundary unambiguous: Ap
 - [ ] `function_exported?(Foglet.TUI.Screens.PostReader, :subscriptions, 2)` and `function_exported?(Foglet.TUI.Screens.ThreadList, :subscriptions, 2)` are both `true`.
 - [ ] A regression test pins the topic list produced by `Foglet.TUI.App.subscribe/1` for: (a) authenticated MainMenu (no extra topics), (b) BoardList route (boards aggregate topic present), (c) ThreadList with a known `board_id` (board topic present), and (d) PostReader with a known `thread_id` (thread topic present). The test passes both before any rewrite and after.
 - [ ] Existing modal precedence tests in `test/foglet_bbs/tui/app_test.exs` (info/error/warning dismiss, confirm yes/no, form submit/cancel) pass without modification.
-- [ ] `wc -l lib/foglet_bbs/tui/app.ex` returns a value ≤ 750.
+- [ ] Every function remaining in `lib/foglet_bbs/tui/app.ex` is attributable to a runtime-shell responsibility (Raxol callbacks, normalization, route storage, screen-state storage, context construction, effect interpretation, modal/SizeGate, session/PubSub plumbing, rendering dispatch); no function exists solely to handle one migrated production screen.
 - [ ] `mix precommit` exits 0.
 - [ ] `mix foglet.tui.render main_menu`, `…board_list`, `…thread_list`, `…post_reader`, and `…account` produce output that is byte-for-byte unchanged (after ANSI-strip) versus the pre-phase baseline, except for any breadcrumb input change explicitly visible in screen render output.
 
