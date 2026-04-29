@@ -459,17 +459,18 @@ defmodule Foglet.TUI.AppTest do
                task.()
     end
 
-    test "navigating to post_reader seeds legacy context and queues post loading", %{
+    test "navigating to post_reader initializes local state and queues generic post loading", %{
       state: state
     } do
       board = %{id: "b1", name: "General", slug: "general"}
       thread = %{id: "t1", title: "Welcome"}
+      stale_posts = [%{id: "stale"}]
 
       state = %{
         state
         | current_board: nil,
           current_thread: nil,
-          posts: [%{id: "stale"}],
+          posts: stale_posts,
           session_context: %{domain: %{posts: FakePosts}}
       }
 
@@ -487,10 +488,15 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.current_screen == :post_reader
       assert new_state.current_board == board
       assert new_state.current_thread == thread
-      assert new_state.posts == nil
+      assert new_state.posts == stale_posts
+
+      assert %PostReader.State{thread_id: "t1", status: :loading} =
+               App.screen_state_for(new_state, :post_reader)
 
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-      assert {:posts_loaded, [%{id: "p1"}], []} = task.()
+
+      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
+               task.()
     end
 
     test ":heartbeat_tick calls Session.heartbeat when session_pid is set", %{state: state} do
@@ -1334,19 +1340,60 @@ defmodule Foglet.TUI.AppTest do
       refute "board:b-ignored" in pubsub_sub.data.args.topics
     end
 
-    test "post_reader screen adds thread:<id> topic when current_thread is set" do
+    test "post_reader screen adds thread:<id> topic from route params" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
-      thread = %{id: "t-42", title: "Hello World"}
 
       {:ok, state} =
         App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
 
-      state = %{state | current_screen: :post_reader, current_thread: thread}
+      state = %{state | current_screen: :post_reader, route_params: %{thread_id: "t-route"}}
       subs = App.subscribe(state)
 
       pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
       assert pubsub_sub != nil
-      assert "thread:t-42" in pubsub_sub.data.args.topics
+      assert "thread:t-route" in pubsub_sub.data.args.topics
+    end
+
+    test "post_reader screen adds thread:<id> topic from local state" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
+      state = %{
+        state
+        | current_screen: :post_reader,
+          route_params: %{},
+          screen_state: %{post_reader: PostReader.init_screen_state(thread_id: "t-state")}
+      }
+
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      assert "thread:t-state" in pubsub_sub.data.args.topics
+    end
+
+    test "post_reader screen ignores current_thread without route or local thread id" do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      thread = %{id: "t-ignored", title: "Hello World"}
+
+      {:ok, state} =
+        App.init(%{session_context: fake_oneliners_context(%{user: user, user_id: "u1"})})
+
+      state = %{
+        state
+        | current_screen: :post_reader,
+          route_params: %{},
+          current_thread: thread,
+          screen_state: %{post_reader: PostReader.init_screen_state()}
+      }
+
+      subs = App.subscribe(state)
+
+      pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
+      assert pubsub_sub != nil
+      refute "thread:t-ignored" in pubsub_sub.data.args.topics
     end
   end
 
@@ -1402,16 +1449,23 @@ defmodule Foglet.TUI.AppTest do
       assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
     end
 
-    test "{:posts_loaded, posts} assigns posts", %{state: state} do
+    test "{:posts_loaded, posts} routes through PostReader local state", %{state: state} do
+      legacy_posts = [%{id: "legacy"}]
       posts = [%{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()}]
-      {new_state, []} = App.update({:posts_loaded, posts}, state)
-      assert new_state.posts == posts
-      assert %PostReader.State{selected_post_index: 0} = new_state.screen_state.post_reader
+
+      {new_state, []} = App.update({:posts_loaded, posts}, %{state | posts: legacy_posts})
+
+      assert new_state.posts == legacy_posts
+
+      assert %PostReader.State{posts: ^posts, selected_post_index: 0, status: :loaded} =
+               new_state.screen_state.post_reader
     end
 
     test "{:posts_loaded, posts, jump_last: true} updates PostReader.State to last post", %{
       state: state
     } do
+      legacy_posts = [%{id: "legacy"}]
+
       posts = [
         %{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()},
         %{id: "p2", body: "Second", inserted_at: DateTime.utc_now()}
@@ -1419,14 +1473,16 @@ defmodule Foglet.TUI.AppTest do
 
       state_with_reader = %{
         state
-        | screen_state: %{post_reader: PostReader.init_screen_state(selected_post_index: 0)}
+        | posts: legacy_posts,
+          screen_state: %{post_reader: PostReader.init_screen_state(selected_post_index: 0)}
       }
 
       {new_state, []} = App.update({:posts_loaded, posts, jump_last: true}, state_with_reader)
 
-      assert new_state.posts == posts
-      assert %PostReader.State{} = new_state.screen_state.post_reader
-      assert new_state.screen_state.post_reader.selected_post_index == 1
+      assert new_state.posts == legacy_posts
+
+      assert %PostReader.State{posts: ^posts, selected_post_index: 1} =
+               new_state.screen_state.post_reader
     end
 
     test "{:flush_read_pointers, ctx} returns a Command.task", %{state: state} do
@@ -1435,10 +1491,27 @@ defmodule Foglet.TUI.AppTest do
       assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
     end
 
-    test "{:read_pointers_flushed, thread_id} clears read_position entry", %{state: state} do
-      state_with_rp = %{state | read_position: %{"t1" => %{last_read_post_id: "p5"}}}
+    test "{:read_pointers_flushed, thread_id} clears PostReader pending entry", %{state: state} do
+      legacy_read_position = %{"t1" => %{last_read_post_id: "p5"}}
+
+      post_reader_state =
+        PostReader.init_screen_state(
+          thread_id: "t1",
+          pending_read_positions: %{
+            "t1" => %{last_read_post_id: "p5", last_read_message_number: 5}
+          }
+        )
+
+      state_with_rp = %{
+        state
+        | read_position: legacy_read_position,
+          screen_state: %{post_reader: post_reader_state}
+      }
+
       {new_state, []} = App.update({:read_pointers_flushed, "t1"}, state_with_rp)
-      assert Map.get(new_state.read_position, "t1") == nil
+
+      assert new_state.read_position == legacy_read_position
+      refute Map.has_key?(new_state.screen_state.post_reader.pending_read_positions, "t1")
     end
   end
 
@@ -1469,18 +1542,42 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
-    test "{:thread_activity, thread_id, event} on :post_reader for current thread triggers load",
+    test "{:thread_activity, thread_id, event} on active :post_reader routes through local state",
          %{state: state} do
-      thread = %{id: "t-match", title: "T"}
-      state = %{state | current_screen: :post_reader, current_thread: thread}
-      {_new_state, cmds} = App.update({:thread_activity, "t-match", :new_post}, state)
-      assert Enum.any?(cmds, &match?(%Raxol.Core.Runtime.Command{type: :task}, &1))
+      state = %{
+        state
+        | current_screen: :post_reader,
+          current_thread: nil,
+          route_params: %{thread_id: "t1"},
+          screen_state: %{post_reader: PostReader.init_screen_state(thread_id: "t1")},
+          session_context: %{domain: %{posts: FakePosts}}
+      }
+
+      {new_state, cmds} = App.update({:thread_activity, "t1", :new_post}, state)
+
+      assert %PostReader.State{last_op: :load_posts} =
+               App.screen_state_for(new_state, :post_reader)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
+               task.()
     end
 
     test "{:thread_activity} for a different thread is a no-op", %{state: state} do
-      thread = %{id: "t-other", title: "T"}
-      state = %{state | current_screen: :post_reader, current_thread: thread}
-      {_new_state, cmds} = App.update({:thread_activity, "t-match", :new_post}, state)
+      local_state = PostReader.init_screen_state(thread_id: "t-other")
+
+      state = %{
+        state
+        | current_screen: :post_reader,
+          current_thread: nil,
+          route_params: %{thread_id: "t-other"},
+          screen_state: %{post_reader: local_state}
+      }
+
+      {new_state, cmds} = App.update({:thread_activity, "t-match", :new_post}, state)
+
+      assert App.screen_state_for(new_state, :post_reader) == local_state
       assert cmds == []
     end
 
@@ -1694,11 +1791,17 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
-    test "{:command_result, {:posts_loaded, posts}} assigns posts", %{state: state} do
+    test "{:command_result, {:posts_loaded, posts}} routes through PostReader local state", %{
+      state: state
+    } do
+      legacy_posts = [%{id: "legacy"}]
       posts = [%{id: "p1", body: "Hello", inserted_at: DateTime.utc_now()}]
-      {new_state, cmds} = App.update({:command_result, {:posts_loaded, posts}}, state)
-      assert new_state.posts == posts
-      assert %PostReader.State{} = new_state.screen_state.post_reader
+
+      {new_state, cmds} =
+        App.update({:command_result, {:posts_loaded, posts}}, %{state | posts: legacy_posts})
+
+      assert new_state.posts == legacy_posts
+      assert %PostReader.State{posts: ^posts} = new_state.screen_state.post_reader
       assert cmds == []
     end
 
@@ -1730,22 +1833,47 @@ defmodule Foglet.TUI.AppTest do
       %{state: state}
     end
 
-    test "clears read_position[thread_id] regardless of current screen", %{state: state} do
+    test "clears PostReader pending entry without touching App read_position", %{state: state} do
+      read_position = %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
+
       state = %{
         state
         | current_screen: :thread_list,
-          read_position: %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
+          read_position: read_position,
+          screen_state: %{
+            post_reader:
+              PostReader.init_screen_state(
+                thread_id: "t1",
+                pending_read_positions: %{
+                  "t1" => %{last_read_post_id: "p1", last_read_message_number: 5}
+                }
+              )
+          }
       }
 
       {new_state, _cmds} = App.update({:read_pointers_flushed, "t1"}, state)
-      refute Map.has_key?(new_state.read_position, "t1")
+      assert new_state.read_position == read_position
+      refute Map.has_key?(new_state.screen_state.post_reader.pending_read_positions, "t1")
     end
 
-    test "nil thread_id leaves read_position unchanged", %{state: state} do
+    test "nil thread_id leaves PostReader pending entries unchanged", %{state: state} do
       rp = %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
-      state = %{state | current_screen: :thread_list, read_position: rp}
+
+      pending = %{"t1" => %{last_read_post_id: "p1", last_read_message_number: 5}}
+
+      state = %{
+        state
+        | current_screen: :thread_list,
+          read_position: rp,
+          screen_state: %{
+            post_reader:
+              PostReader.init_screen_state(thread_id: "t1", pending_read_positions: pending)
+          }
+      }
+
       {new_state, _cmds} = App.update({:read_pointers_flushed, nil}, state)
       assert new_state.read_position == rp
+      assert new_state.screen_state.post_reader.pending_read_positions == pending
     end
 
     test "on :board_list — dispatches a {:load_boards} task (D-06 second refresh)", %{

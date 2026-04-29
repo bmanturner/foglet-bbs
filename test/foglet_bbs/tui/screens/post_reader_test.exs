@@ -200,6 +200,29 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert Map.has_key?(loaded.render_cache, {"p2", 80})
   end
 
+  test "PostReader.update/3 reloads matching active thread activity" do
+    context = post_reader_context()
+    state = PostReader.State.from_context(context)
+
+    assert {%State{last_op: :load_posts},
+            [
+              %Effect{
+                type: :task,
+                payload: %{op: :load_posts, screen_key: :post_reader, fun: fun}
+              }
+            ]} = PostReader.update({:thread_activity, "t1", :new_post}, state, context)
+
+    assert [%{id: "p1"}, %{id: "p2"}] = fun.()
+  end
+
+  test "PostReader.update/3 ignores unrelated thread activity" do
+    context = post_reader_context()
+    state = PostReader.State.from_context(context)
+
+    assert {^state, []} =
+             PostReader.update({:thread_activity, "t-other", :new_post}, state, context)
+  end
+
   test "PostReader.update/3 clears only flushed pending read entry on success" do
     state =
       State.new(

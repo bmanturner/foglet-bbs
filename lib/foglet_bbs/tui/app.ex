@@ -27,6 +27,8 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.Screens
   alias Foglet.TUI.Screens.Account.State, as: AccountState
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Screens.PostComposer
+  alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.ThreadList
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Theme
@@ -438,14 +440,67 @@ defmodule Foglet.TUI.App do
       end
 
     topics =
-      if state.current_screen in [:post_reader, :post_composer] and state.current_thread do
-        [PubSub.thread_topic(state.current_thread.id) | topics]
-      else
-        topics
+      case routed_thread_topic(state) do
+        nil -> topics
+        topic -> [topic | topics]
       end
 
     topics
   end
+
+  defp routed_thread_topic(%__MODULE__{current_screen: screen} = state)
+       when screen in [:post_reader, :post_composer] do
+    state
+    |> routed_thread_id()
+    |> case do
+      thread_id when is_binary(thread_id) -> PubSub.thread_topic(thread_id)
+      _other -> nil
+    end
+  end
+
+  defp routed_thread_topic(_state), do: nil
+
+  defp routed_thread_id(%__MODULE__{} = state) do
+    params = state.route_params || %{}
+
+    Map.get(params, :thread_id) || Map.get(params, "thread_id") ||
+      post_reader_state_thread_id(state.screen_state) ||
+      post_composer_state_thread_id(state.screen_state) ||
+      legacy_post_composer_thread_id(state)
+  end
+
+  defp post_reader_state_thread_id(screen_state) do
+    case Map.get(screen_state || %{}, :post_reader) do
+      %PostReader.State{thread_id: thread_id} when is_binary(thread_id) -> thread_id
+      _other -> nil
+    end
+  end
+
+  defp post_composer_state_thread_id(screen_state) do
+    case Map.get(screen_state || %{}, :post_composer) do
+      %PostComposer.State{} = state ->
+        case Map.get(state, :thread_id) do
+          thread_id when is_binary(thread_id) -> thread_id
+          _other -> nil
+        end
+
+      _other ->
+        nil
+    end
+  end
+
+  defp legacy_post_composer_thread_id(%__MODULE__{
+         current_screen: :post_composer,
+         current_thread: thread
+       })
+       when not is_nil(thread) do
+    # Phase 37 compatibility: PostComposer gets first-class thread identity in
+    # 37-03. Until then, keep composer topic coverage without making PostReader
+    # depend on App.current_thread.
+    Map.get(thread, :id)
+  end
+
+  defp legacy_post_composer_thread_id(_state), do: nil
 
   defp thread_list_board_topic(%__MODULE__{current_screen: :thread_list} = state) do
     state
@@ -762,22 +817,36 @@ defmodule Foglet.TUI.App do
   # --- Load posts (with optional `jump_last: true` for reply-submit jump) ---
 
   # 2-arity backward compat: existing callers dispatch {:load_posts, thread_id}.
+  # Phase 37 compatibility: this forwards into the PostReader reducer path and
+  # does not write App.posts/read_position.
   defp do_update({:load_posts, thread_id}, state),
     do: do_update({:load_posts, thread_id, []}, state)
 
   # 3-arity with opts — Plan 04-03 D-05 reply-jump path.
+  # Phase 37 compatibility: keep old tuple command shape alive by emitting a
+  # screen task result instead of {:posts_loaded, ...}.
   defp do_update({:load_posts, thread_id, opts}, state) when is_list(opts) do
-    posts_mod = domain_module(state, :posts)
+    state = put_post_reader_load_intent(state, opts)
 
-    task =
-      Foglet.TUI.Command.task(:load_posts, fn ->
-        {:posts_loaded, posts_mod.list_posts(thread_id), opts}
-      end)
+    case route_screen_update(ensure_post_reader_state(state), :post_reader, :load) do
+      {new_state, [_ | _] = commands} ->
+        {new_state, commands}
 
-    {state, [task]}
+      {_new_state, []} ->
+        posts_mod = domain_module(state, :posts)
+
+        task =
+          Foglet.TUI.Command.task(:load_posts, fn ->
+            {:screen_task_result, :post_reader, :load_posts,
+             {:ok, posts_mod.list_posts(thread_id)}}
+          end)
+
+        {state, [task]}
+    end
   end
 
   # 2-arity backward compat for the sink (other paths still emit the 2-tuple).
+  # Phase 37 compatibility: old task results are consumed by PostReader.update/3.
   defp do_update({:posts_loaded, posts}, state),
     do: do_update({:posts_loaded, posts, []}, state)
 
@@ -785,47 +854,18 @@ defmodule Foglet.TUI.App do
   # the last post in the freshly-loaded list. Also calls prepare_after_load/3
   # to warm the render cache and guarantee a fully-shaped screen_state
   # (render_cache, viewport, etc. are always present after this handler).
+  # Phase 37 compatibility: preserve old message routing without App-owned
+  # mutation of posts/read_position/screen fields.
   defp do_update({:posts_loaded, posts, opts}, state) when is_list(opts) do
-    jump_last? = Keyword.get(opts, :jump_last, false)
-    screen_state = state.screen_state || %{}
-
-    # Compute the target index using existing PostReader.State as the base.
-    existing_ss =
-      case Map.get(screen_state, :post_reader) do
-        %Foglet.TUI.Screens.PostReader.State{} = ss ->
-          ss
-
-        nil ->
-          Foglet.TUI.Screens.PostReader.init_screen_state([])
-      end
-
-    existing_idx = existing_ss.selected_post_index
-
-    new_idx =
-      if jump_last? and posts != [] do
-        length(posts) - 1
-      else
-        existing_idx
-      end
-
-    # Seed posts and idx into state so prepare_after_load/3 can read
-    # terminal_size and session_context while warming the cache.
-    state_with_posts = %{
-      state
-      | posts: posts,
-        screen_state:
-          Map.put(screen_state, :post_reader, %{existing_ss | selected_post_index: new_idx})
-    }
-
-    warmed_ss =
-      Foglet.TUI.Screens.PostReader.prepare_after_load(state_with_posts, posts, new_idx)
-
-    new_screen_state = Map.put(screen_state, :post_reader, warmed_ss)
-
-    {%{state | posts: posts, screen_state: new_screen_state}, []}
+    state
+    |> put_post_reader_load_intent(opts)
+    |> ensure_post_reader_state()
+    |> route_screen_update(:post_reader, {:task_result, :load_posts, {:ok, posts}})
   end
 
   defp do_update({:flush_read_pointers, ctx}, state) do
+    # Phase 37 compatibility: legacy PostReader.handle_key/2 still emits this
+    # tuple until final cleanup. Result routing goes through screen_task_result.
     # Flush runs off-process so it doesn't block the UI on the way out of a thread.
     boards_mod = domain_module(state, :boards)
     threads_mod = domain_module(state, :threads)
@@ -833,22 +873,28 @@ defmodule Foglet.TUI.App do
 
     task =
       Foglet.TUI.Command.task(:flush_read_pointers, fn ->
-        flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod)
+        {:screen_task_result, :post_reader, :flush_read_pointers,
+         {:ok, flush_read_pointers_task(ctx, user_id, boards_mod, threads_mod)}}
       end)
 
     {state, [task]}
   end
 
   defp do_update({:read_pointers_flushed, thread_id}, state) do
-    new_rp =
-      if thread_id, do: Map.delete(state.read_position, thread_id), else: state.read_position
-
-    new_state = %{state | read_position: new_rp}
+    # Phase 37 compatibility: old flush completion messages update local
+    # PostReader state only; App.read_position is no longer canonical here.
+    {new_state, commands} =
+      route_screen_update(
+        ensure_post_reader_state(state),
+        :post_reader,
+        {:task_result, :flush_read_pointers, {:ok, {:read_pointers_flushed, thread_id}}}
+      )
 
     if new_state.current_screen == :board_list do
-      route_screen_update(new_state, :board_list, :load)
+      {board_state, board_commands} = route_screen_update(new_state, :board_list, :load)
+      {board_state, commands ++ board_commands}
     else
-      {new_state, []}
+      {new_state, commands}
     end
   end
 
@@ -867,16 +913,9 @@ defmodule Foglet.TUI.App do
   defp do_update({:board_activity, _board_id, _event}, state), do: {state, []}
 
   # Thread-level activity (new post) — refresh posts if the user is reading it.
-  defp do_update({:thread_activity, thread_id, _event}, state)
+  defp do_update({:thread_activity, thread_id, event}, state)
        when state.current_screen == :post_reader do
-    current_thread_id = state.current_thread && state.current_thread.id
-
-    if current_thread_id == thread_id do
-      # Delegate to {:load_posts, thread_id} which spawns a real task.
-      do_update({:load_posts, thread_id}, state)
-    else
-      {state, []}
-    end
+    route_screen_update(state, :post_reader, {:thread_activity, thread_id, event})
   end
 
   defp do_update({:thread_activity, _thread_id, _event}, state), do: {state, []}
@@ -1027,7 +1066,7 @@ defmodule Foglet.TUI.App do
     key = screen_key(screen)
     module = screen_module_for(state, key)
 
-    if function_exported?(module, :init, 1) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :init, 1) do
       put_screen_state(state, key, module.init(build_context(state, params)))
     else
       state
@@ -1035,13 +1074,12 @@ defmodule Foglet.TUI.App do
   end
 
   defp maybe_seed_legacy_route_context(%__MODULE__{} = state, :post_reader, params) do
-    # Phase 37 compatibility: PostReader is not yet a new-contract screen, so
-    # keep its legacy App fields warm when ThreadList navigates into it.
+    # Phase 37 compatibility: legacy render/1 and handle_key/2 still exist
+    # during migration. Canonical route identity lives in PostReader.State.
     %{
       state
       | current_board: route_param(params, :board),
-        current_thread: route_param(params, :thread),
-        posts: nil
+        current_thread: route_param(params, :thread)
     }
   end
 
@@ -1053,7 +1091,7 @@ defmodule Foglet.TUI.App do
 
   defp maybe_dispatch_route_entry(%__MODULE__{} = state, :post_reader, params) do
     case route_param(params, :thread_id) do
-      thread_id when is_binary(thread_id) -> do_update({:load_posts, thread_id}, state)
+      thread_id when is_binary(thread_id) -> route_screen_update(state, :post_reader, :load)
       _other -> {state, []}
     end
   end
@@ -1236,6 +1274,31 @@ defmodule Foglet.TUI.App do
     case Map.get(ss, slot) do
       :not_loaded -> do_update(dispatch_tuple, state)
       _ -> {state, []}
+    end
+  end
+
+  defp put_post_reader_load_intent(%__MODULE__{} = state, opts) when is_list(opts) do
+    intent = if Keyword.get(opts, :jump_last, false), do: :jump_last, else: nil
+
+    if is_nil(intent) do
+      state
+    else
+      screen_state = state.screen_state || %{}
+
+      local_state =
+        case Map.get(screen_state, :post_reader) do
+          %PostReader.State{} = post_reader_state -> post_reader_state
+          _other -> PostReader.init(build_context(state))
+        end
+
+      put_screen_state(state, :post_reader, %{local_state | load_intent: intent})
+    end
+  end
+
+  defp ensure_post_reader_state(%__MODULE__{} = state) do
+    case screen_state_for(state, :post_reader) do
+      %PostReader.State{} -> state
+      _other -> put_screen_state(state, :post_reader, PostReader.init(build_context(state)))
     end
   end
 

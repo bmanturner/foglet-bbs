@@ -100,6 +100,22 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update(
+        {:thread_activity, thread_id, _event},
+        %State{thread_id: thread_id} = state,
+        %Context{} = context
+      )
+      when is_binary(thread_id) do
+    posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+
+    effect = Effect.task(:load_posts, :post_reader, fn -> posts_mod.list_posts(thread_id) end)
+    {%{state | last_op: :load_posts, last_error: nil}, [effect]}
+  end
+
+  def update({:thread_activity, _thread_id, _event}, %State{} = state, %Context{}) do
+    {state, []}
+  end
+
+  def update(
         {:task_result, :flush_read_pointers, {:ok, {:read_pointers_flushed, thread_id}}},
         %State{} = state,
         %Context{}
