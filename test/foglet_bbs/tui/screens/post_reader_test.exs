@@ -264,6 +264,26 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert failed.last_error == :db_down
   end
 
+  test "PostReader.update/3 keeps pending read entry on wrapped flush failure" do
+    state =
+      State.new(
+        thread_id: "t1",
+        pending_read_positions: %{
+          "t1" => %{last_read_post_id: "p1", last_read_message_number: 1}
+        }
+      )
+
+    assert {%State{} = failed, []} =
+             PostReader.update(
+               {:task_result, :flush_read_pointers, {:ok, {:error, :db_down}}},
+               state,
+               post_reader_context()
+             )
+
+    assert Map.has_key?(failed.pending_read_positions, "t1")
+    assert failed.last_error == :db_down
+  end
+
   test "PostReader.update/3 advances selection and pending read data from local posts" do
     context = post_reader_context()
 

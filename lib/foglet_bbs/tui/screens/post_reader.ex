@@ -127,6 +127,14 @@ defmodule Foglet.TUI.Screens.PostReader do
     {clear_pending_read_position(state, thread_id), []}
   end
 
+  def update(
+        {:task_result, :flush_read_pointers, {:ok, {:error, reason}}},
+        %State{} = state,
+        %Context{}
+      ) do
+    {%{state | last_error: reason}, []}
+  end
+
   def update({:task_result, :flush_read_pointers, {:ok, thread_id}}, %State{} = state, %Context{}) do
     {clear_pending_read_position(state, thread_id), []}
   end

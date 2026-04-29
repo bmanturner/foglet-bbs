@@ -779,6 +779,10 @@ defmodule Foglet.TUI.App do
     module = screen_module_for(state, key)
 
     cond do
+      route_owned_screen?(key) and Code.ensure_loaded?(module) and
+          function_exported?(module, :init, 1) ->
+        put_screen_state(state, key, module.init(build_context(state, params)))
+
       screen_state_for(state, key) != nil ->
         state
 
@@ -789,6 +793,12 @@ defmodule Foglet.TUI.App do
         state
     end
   end
+
+  defp route_owned_screen?(key)
+       when key in [:thread_list, :post_reader, :post_composer, :new_thread],
+       do: true
+
+  defp route_owned_screen?(_key), do: false
 
   defp maybe_seed_legacy_route_context(%__MODULE__{} = state, _screen, _params), do: state
 

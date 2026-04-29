@@ -31,11 +31,29 @@ defmodule Foglet.TUI.AppTest do
         }
       ]
     end
+
+    def list_threads("b2", _user_id) do
+      [
+        %{
+          id: "t2",
+          title: "Second",
+          sticky: false,
+          locked: false,
+          post_count: 1,
+          last_post_at: ~U[2026-04-28 19:00:00Z],
+          created_by: %{handle: "bob"}
+        }
+      ]
+    end
   end
 
   defmodule FakePosts do
     def list_posts("t1") do
       [%{id: "p1", body: "Hello", message_number: 1, inserted_at: ~U[2026-04-28 18:00:00Z]}]
+    end
+
+    def list_posts("t2") do
+      [%{id: "p2", body: "Second", message_number: 2, inserted_at: ~U[2026-04-28 19:00:00Z]}]
     end
   end
 
@@ -595,6 +613,86 @@ defmodule Foglet.TUI.AppTest do
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
       assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
+               task.()
+    end
+
+    test "navigating post_reader from one thread to another refreshes route-owned local state", %{
+      state: state
+    } do
+      board = %{id: "b1", name: "General", slug: "general"}
+      thread_a = %{id: "t1", title: "Welcome"}
+      thread_b = %{id: "t2", title: "Second"}
+
+      state = %{state | session_context: %{domain: %{posts: FakePosts}}}
+
+      {state_a, [_cmd_a]} =
+        App.apply_effect(
+          state,
+          Effect.navigate(:post_reader, %{
+            board: board,
+            board_id: "b1",
+            thread: thread_a,
+            thread_id: "t1"
+          })
+        )
+
+      assert %PostReader.State{thread_id: "t1"} = App.screen_state_for(state_a, :post_reader)
+
+      {state_b, cmds} =
+        App.apply_effect(
+          state_a,
+          Effect.navigate(:post_reader, %{
+            board: board,
+            board_id: "b1",
+            thread: thread_b,
+            thread_id: "t2"
+          })
+        )
+
+      assert %PostReader.State{thread_id: "t2"} = App.screen_state_for(state_b, :post_reader)
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p2"}]}} =
+               task.()
+    end
+
+    test "navigating thread_list to another board refreshes route-owned local state", %{
+      state: state
+    } do
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
+      board_a = %{id: "b1", name: "General", slug: "general"}
+      board_b = %{id: "b2", name: "Second", slug: "second"}
+
+      state = %{
+        state
+        | current_user: user,
+          session_context: %{domain: %{threads: FakeThreads}}
+      }
+
+      {state_a, [_cmd_a]} =
+        App.apply_effect(
+          state,
+          Effect.navigate(:thread_list, %{board: board_a, board_id: "b1"})
+        )
+
+      assert %ThreadListState{board_id: "b1"} = App.screen_state_for(state_a, :thread_list)
+
+      {state_b, cmds} =
+        App.apply_effect(
+          state_a,
+          Effect.navigate(:thread_list, %{
+            board: board_b,
+            board_id: "b2",
+            select_thread_id: "t2"
+          })
+        )
+
+      assert %ThreadListState{board_id: "b2", select_thread_id: "t2"} =
+               App.screen_state_for(state_b, :thread_list)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :thread_list, :load_threads, {:ok, [%{id: "t2"}]}} =
                task.()
     end
 
