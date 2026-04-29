@@ -2,6 +2,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.App
+  alias Foglet.TUI.App.Routing
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
@@ -88,40 +89,6 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
     )
   end
 
-  describe "route and screen-state helpers" do
-    test "read and write screen-local state without mutating legacy fields" do
-      state = state(session_pid: self())
-
-      assert App.current_route(state) == :main_menu
-      assert App.screen_key(:sample_runtime) == :sample_runtime
-      assert App.screen_key({:sample_runtime, %{board_id: "b1"}}) == :sample_runtime
-      assert App.current_screen_state(state) == %{legacy: true}
-      assert %SampleScreen.State{} = App.screen_state_for(state, :sample_runtime)
-
-      new_local_state = %SampleScreen.State{route_params: %{board_id: "b2"}}
-      new_state = App.put_screen_state(state, :sample_runtime, new_local_state)
-
-      assert App.screen_state_for(new_state, :sample_runtime) == new_local_state
-      assert new_state.screen_state.main_menu == state.screen_state.main_menu
-    end
-
-    test "build_context/1 exposes runtime fields and defaults route params" do
-      user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
-      state = state(current_user: user, session_pid: self())
-
-      context = App.build_context(state)
-
-      assert %Context{} = context
-      assert context.current_user == user
-      assert context.session_context == state.session_context
-      assert context.session_pid == self()
-      assert context.terminal_size == {100, 30}
-      assert context.route == :main_menu
-      assert context.route_params == %{}
-      assert context.domain == state.session_context.domain
-    end
-  end
-
   describe "generic non-task effect interpretation" do
     test "navigate initializes only the target state and carries route params" do
       state = state(session_pid: self())
@@ -133,14 +100,14 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert new_state.current_screen == :sample_runtime
       assert new_state.modal == nil
       assert new_state.route_params == %{board_id: "b1"}
-      assert context = App.build_context(new_state)
+      assert context = Routing.build_context(new_state)
       assert context.route_params == %{board_id: "b1"}
 
       assert %SampleScreen.State{
                route_params: %{board_id: "b1"},
                messages: [{:on_route_enter, %{board_id: "b1"}}]
              } =
-               App.screen_state_for(new_state, :sample_runtime)
+               Routing.screen_state_for(new_state, :sample_runtime)
 
       assert new_state.screen_state.main_menu == state.screen_state.main_menu
     end
@@ -181,13 +148,13 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       {with_params, []} =
         App.apply_effect(state(), Effect.navigate(:sample_runtime, %{thread_id: "t1"}))
 
-      assert App.current_route(with_params) == {:sample_runtime, %{thread_id: "t1"}}
+      assert Routing.current_route(with_params) == {:sample_runtime, %{thread_id: "t1"}}
 
       {without_params, []} = App.update({:navigate, :main_menu}, with_params)
 
       assert without_params.current_screen == :main_menu
       assert without_params.route_params == %{}
-      assert App.current_route(without_params) == :main_menu
+      assert Routing.current_route(without_params) == :main_menu
     end
 
     test "new-contract screens handle keys and render without legacy callbacks" do
@@ -202,7 +169,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
                  {:on_route_enter, %{thread_id: "t1"}}
                ]
              } =
-               App.screen_state_for(after_key, :sample_runtime)
+               Routing.screen_state_for(after_key, :sample_runtime)
 
       assert {:sample_render, %SampleScreen.State{}, %{thread_id: "t1"}} = App.view(after_key)
     end
@@ -241,7 +208,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert function_exported?(SampleScreen, :update, 3)
 
       assert %SampleScreen.State{results: [sample_load: {:ok, {:loaded, 1}}]} =
-               App.screen_state_for(new_state, :sample_runtime)
+               Routing.screen_state_for(new_state, :sample_runtime)
 
       assert %SampleScreen.State{
                messages: [
@@ -249,7 +216,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
                  {:on_route_enter, %{thread_id: "t1"}}
                ]
              } =
-               App.screen_state_for(new_state, :sample_runtime)
+               Routing.screen_state_for(new_state, :sample_runtime)
     end
 
     test "task failure wrapper routes an error through SampleScreen.update/3" do
@@ -267,7 +234,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       {new_state, []} = App.update({:command_result, task.()}, state)
 
       assert %SampleScreen.State{results: [{:sample_load, {:error, routed_reason}}]} =
-               App.screen_state_for(new_state, :sample_runtime)
+               Routing.screen_state_for(new_state, :sample_runtime)
 
       assert routed_reason =~ "boom"
     end
@@ -287,7 +254,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
       assert cmds == []
 
       assert %SampleScreen.State{messages: [{:on_route_enter, %{topic: "initial"}}]} =
-               App.screen_state_for(new_state, :sample_runtime)
+               Routing.screen_state_for(new_state, :sample_runtime)
     end
 
     test "subscriptions/1 delegates screen-specific topics to subscriptions/2" do
