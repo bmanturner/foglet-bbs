@@ -451,7 +451,7 @@ defmodule Foglet.TUI.App do
     new_topics = build_pubsub_topics(new_state)
 
     if old_topics != new_topics do
-      PubSubForwarder.refresh(new_topics)
+      _ = PubSubForwarder.refresh(new_topics)
     end
   end
 
