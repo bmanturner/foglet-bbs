@@ -154,8 +154,7 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbMigrationTest do
   defp extract_breadcrumb_parts(%{top_segments: segments}) do
     segments
     |> List.flatten()
-    |> Enum.map(&Map.get(&1, :content, Map.get(&1, :text, "")))
-    |> Enum.join("")
+    |> Enum.map_join("", &Map.get(&1, :content, Map.get(&1, :text, "")))
     |> String.split("▸")
     |> Enum.map(&String.trim/1)
     |> Enum.map(&drop_border_chrome/1)

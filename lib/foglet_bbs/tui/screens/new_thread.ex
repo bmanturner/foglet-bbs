@@ -169,7 +169,7 @@ defmodule Foglet.TUI.Screens.NewThread do
           end)
       end
 
-    ScreenFrame.render(state, %{}, board_content, [
+    ScreenFrame.render(state, new_thread_chrome(ss), board_content, [
       {"j/k", "Select"},
       {"Enter", "Choose"},
       {"Esc", "Cancel"}
@@ -200,12 +200,20 @@ defmodule Foglet.TUI.Screens.NewThread do
         theme: theme
       )
 
-    ScreenFrame.render(state, %{}, content, [
+    ScreenFrame.render(state, new_thread_chrome(ss), content, [
       {"Tab", compose_tab_hint(ss)},
       {"Ctrl+S", "Submit"},
       {"Ctrl+C", "Cancel"}
     ])
   end
+
+  defp new_thread_chrome(ss) do
+    %{breadcrumb_parts: ["Foglet", board_label(ss), "New Thread"]}
+  end
+
+  defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name
+  defp board_label(%{board: %{name: name}}) when is_binary(name), do: name
+  defp board_label(_), do: "Boards"
 
   defp empty_board_message(%State{active_board_count: 0}) do
     "No active boards are available."
@@ -702,11 +710,10 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp origin_for(%State{origin: origin}) when is_atom(origin), do: origin
   defp origin_for(_state), do: :main_menu
 
-  defp frame_state(%State{} = state, %Context{} = context) do
+  defp frame_state(%State{} = _state, %Context{} = context) do
     %{
       current_screen: :new_thread,
       current_user: context.current_user,
-      current_board: state.board,
       session_context: context.session_context,
       terminal_size: context.terminal_size,
       route: context.route,

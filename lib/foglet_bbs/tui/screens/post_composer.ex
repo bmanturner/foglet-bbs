@@ -129,12 +129,27 @@ defmodule Foglet.TUI.Screens.PostComposer do
         theme: theme
       )
 
-    ScreenFrame.render(frame_state, %{}, content, [
+    chrome = %{
+      breadcrumb_parts: [
+        "Foglet",
+        board_label(state),
+        thread_title_label(state),
+        "Reply"
+      ]
+    }
+
+    ScreenFrame.render(frame_state, chrome, content, [
       {"Tab", if(state.mode == :edit, do: "Preview", else: "Edit")},
       {"Ctrl+S", "Send"},
       {"Ctrl+C", "Cancel"}
     ])
   end
+
+  defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name
+  defp board_label(%State{}), do: "Boards"
+
+  defp thread_title_label(%State{thread: %{title: title}}) when is_binary(title), do: title
+  defp thread_title_label(%State{}), do: "Thread"
 
   @impl true
   @spec render(map()) :: any()

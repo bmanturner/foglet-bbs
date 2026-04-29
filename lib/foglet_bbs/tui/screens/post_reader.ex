@@ -230,7 +230,11 @@ defmodule Foglet.TUI.Screens.PostReader do
     {w, h} = context.terminal_size || @default_terminal_size
     post_content = render_local_post_content(state, frame_state, theme, w, h)
 
-    ScreenFrame.render(frame_state, %{}, post_content, [
+    chrome = %{
+      breadcrumb_parts: ["Foglet", board_label(state), thread_title_label(state)]
+    }
+
+    ScreenFrame.render(frame_state, chrome, post_content, [
       {"N", "Next"},
       {"P", "Prev"},
       {"J", "Scroll ↓"},
@@ -239,6 +243,12 @@ defmodule Foglet.TUI.Screens.PostReader do
       {"Q", "Back"}
     ])
   end
+
+  defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name
+  defp board_label(%State{}), do: "Boards"
+
+  defp thread_title_label(%State{thread: %{title: title}}) when is_binary(title), do: title
+  defp thread_title_label(%State{}), do: "Thread"
 
   @impl true
   @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]

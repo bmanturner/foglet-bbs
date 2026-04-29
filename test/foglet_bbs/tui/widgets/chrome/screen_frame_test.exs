@@ -28,9 +28,14 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
 
   describe "render/4" do
     test "renders Chrome V2 breadcrumb, status atoms, and command groups" do
+      # Phase 39 R3 / D-12: callers supply breadcrumb_parts explicitly via
+      # the chrome map. Legacy title strings no longer derive breadcrumb
+      # segments — they fall back to ["Foglet"].
+      chrome = %{breadcrumb_parts: ["Foglet", "Boards"]}
+
       texts =
         state()
-        |> ScreenFrame.render("Boards", content(), [{"Q", "Back"}])
+        |> ScreenFrame.render(chrome, content(), [{"Q", "Back"}])
         |> apply_layout()
         |> collect_positioned_text_elements()
 
@@ -65,7 +70,11 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
     test "keeps caller content between top border chrome and bottom border commands" do
       texts =
         state()
-        |> ScreenFrame.render("Boards", content(), [{"Q", "Back"}])
+        |> ScreenFrame.render(
+          %{breadcrumb_parts: ["Foglet", "Boards"]},
+          content(),
+          [{"Q", "Back"}]
+        )
         |> apply_layout()
         |> collect_positioned_text_elements()
 
