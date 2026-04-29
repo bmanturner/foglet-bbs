@@ -3,6 +3,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
 
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Routing
+  alias Foglet.TUI.App.Subscriptions
   alias Foglet.TUI.Context
 
   defmodule SampleScreen do
@@ -153,7 +154,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
                Routing.screen_state_for(new_state, :sample_runtime)
     end
 
-    test "subscriptions/1 delegates screen-specific topics to subscriptions/2" do
+    test "subscribe/1 delegates stable subscription construction" do
       user = %Foglet.Accounts.User{id: "u-sub", handle: "alice"}
 
       state =
@@ -166,35 +167,7 @@ defmodule Foglet.TUI.AppRuntimeContractTest do
           }
         )
 
-      subscriptions = App.subscribe(state)
-
-      assert Enum.any?(subscriptions, fn
-               %Raxol.Core.Runtime.Subscription{
-                 type: :custom,
-                 data: %{module: Foglet.TUI.InitialRouteEnterForwarder}
-               } ->
-                 true
-
-               _ ->
-                 false
-             end)
-
-      assert %Raxol.Core.Runtime.Subscription{
-               type: :custom,
-               data: %{module: Foglet.TUI.PubSubForwarder, args: %{topics: topics}}
-             } =
-               Enum.find(subscriptions, fn
-                 %Raxol.Core.Runtime.Subscription{
-                   type: :custom,
-                   data: %{module: Foglet.TUI.PubSubForwarder}
-                 } ->
-                   true
-
-                 _ ->
-                   false
-               end)
-
-      assert topics == ["user:u-sub", "sample:state", "sample:route"]
+      assert App.subscribe(state) == Subscriptions.subscribe(state)
     end
   end
 end
