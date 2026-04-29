@@ -223,6 +223,19 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   @impl true
+  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  def subscriptions(%State{thread_id: thread_id}, _context) when is_binary(thread_id) do
+    [Foglet.PubSub.thread_topic(thread_id)]
+  end
+
+  def subscriptions(_local_state, %Context{route_params: params}) do
+    case Map.get(params, :thread_id) || Map.get(params, "thread_id") do
+      thread_id when is_binary(thread_id) -> [Foglet.PubSub.thread_topic(thread_id)]
+      _other -> []
+    end
+  end
+
+  @impl true
   @spec render(map()) :: any()
   # Phase 39 cleanup: legacy render/1 remains for older smoke tests only.
   # Phase 37 flow state is screen-owned by render/2 and %PostReader.State{}.
