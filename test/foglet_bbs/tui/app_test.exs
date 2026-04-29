@@ -75,6 +75,13 @@ defmodule Foglet.TUI.AppTest do
     end)
   end
 
+  defp custom_subscription(subscriptions, module) do
+    Enum.find(subscriptions, fn
+      %Raxol.Core.Runtime.Subscription{type: :custom, data: %{module: ^module}} -> true
+      _ -> false
+    end)
+  end
+
   # Seed the ETS config cache so render paths that call Config.get/2
   # (e.g. Login, Register, Verify screens) do not hit the DB.
   # Config.get/2 now only rescues Ecto.NoResultsError — other DB errors
@@ -1422,19 +1429,25 @@ defmodule Foglet.TUI.AppTest do
   end
 
   describe "subscribe/1" do
-    test "returns only the initial-route-enter forwarder when session_pid is nil and no user" do
+    test "starts stable runtime subscriptions when session_pid is nil and no user" do
       {:ok, state} = App.init(%{})
       subs = App.subscribe(state)
 
       # Even an unauthenticated session needs the one-shot
       # :initial_route_enter forwarder so the :login screen's
       # :on_route_enter clause runs (Phase 39 CR-01).
-      assert [
-               %Raxol.Core.Runtime.Subscription{
-                 type: :custom,
-                 data: %{module: Foglet.TUI.InitialRouteEnterForwarder}
-               }
-             ] = subs
+      assert %Raxol.Core.Runtime.Subscription{
+               type: :custom,
+               data: %{module: Foglet.TUI.InitialRouteEnterForwarder}
+             } = custom_subscription(subs, Foglet.TUI.InitialRouteEnterForwarder)
+
+      assert %Raxol.Core.Runtime.Subscription{
+               type: :custom,
+               data: %{module: Foglet.TUI.PubSubForwarder, args: %{topics: []}}
+             } = custom_subscription(subs, Foglet.TUI.PubSubForwarder)
+
+      assert %Raxol.Core.Runtime.Subscription{type: :interval} =
+               interval_subscription(subs, :main_menu_clock_tick)
     end
 
     test "returns heartbeat subscription when session_pid is set" do
@@ -1491,36 +1504,30 @@ defmodule Foglet.TUI.AppTest do
 
       subs = App.subscribe(state)
 
-      assert Enum.any?(subs, fn
-               %Raxol.Core.Runtime.Subscription{
-                 type: :custom,
-                 data: %{module: Foglet.TUI.PubSubForwarder}
-               } ->
-                 true
-
-               _ ->
-                 false
-             end),
-             "expected at least one :custom subscription for PubSub"
+      assert custom_subscription(subs, Foglet.TUI.PubSubForwarder),
+             "expected a stable :custom subscription for PubSub"
     end
 
-    test "no PubSub subscription when not logged in" do
+    test "PubSub forwarder starts with no topics when not logged in" do
       {:ok, state} = App.init(%{})
       subs = App.subscribe(state)
 
-      # The InitialRouteEnterForwarder custom subscription is always present
-      # (Phase 39 CR-01), so we filter it out before asserting absence of
-      # PubSub-specific custom subscriptions.
-      refute Enum.any?(subs, fn
-               %Raxol.Core.Runtime.Subscription{
-                 type: :custom,
-                 data: %{module: Foglet.TUI.PubSubForwarder}
-               } ->
-                 true
+      assert %Raxol.Core.Runtime.Subscription{
+               type: :custom,
+               data: %{module: Foglet.TUI.PubSubForwarder, args: %{topics: []}}
+             } = custom_subscription(subs, Foglet.TUI.PubSubForwarder)
+    end
 
-               _ ->
-                 false
-             end)
+    test "login refreshes the stable PubSub forwarder with user topics" do
+      {:ok, state} = App.init(%{})
+      user = %Foglet.Accounts.User{id: "u-dynamic", handle: "alice"}
+      control_topic = Foglet.TUI.PubSubForwarder.control_topic(self())
+
+      Phoenix.PubSub.subscribe(FogletBbs.PubSub, control_topic)
+
+      {_new_state, _cmds} = App.update({:set_user, user}, state)
+
+      assert_receive {:pubsub_forwarder, {:refresh_topics, ["user:u-dynamic"]}}
     end
 
     test "board_list screen adds 'boards' topic" do

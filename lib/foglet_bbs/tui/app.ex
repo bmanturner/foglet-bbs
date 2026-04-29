@@ -319,7 +319,9 @@ defmodule Foglet.TUI.App do
 
   @impl true
   def update(message, state) do
-    do_update(normalize_message(message), state)
+    {new_state, commands} = do_update(normalize_message(message), state)
+    refresh_dynamic_subscriptions(state, new_state)
+    {new_state, commands}
   end
 
   # Pass Raxol %Event{} key structs through as {:key, event_data_map} so that
@@ -390,12 +392,7 @@ defmodule Foglet.TUI.App do
         []
       end
 
-    clock =
-      if state.current_user do
-        [subscribe_interval(60_000, :main_menu_clock_tick)]
-      else
-        []
-      end
+    clock = [subscribe_interval(60_000, :main_menu_clock_tick)]
 
     # PubSub subscriptions (Audit #12).
     #
@@ -412,12 +409,7 @@ defmodule Foglet.TUI.App do
     # API (Subscription.custom/2 → module.start_link(args, context)).
     pubsub_topics = build_pubsub_topics(state)
 
-    pubsub_subs =
-      if pubsub_topics != [] do
-        [Subscription.custom(PubSubForwarder, %{topics: pubsub_topics})]
-      else
-        []
-      end
+    pubsub_subs = [Subscription.custom(PubSubForwarder, %{topics: pubsub_topics})]
 
     # Phase 39 SPEC R4 / D-04: every route-entry must dispatch :on_route_enter.
     # Raxol's `init/1` contract returns {:ok, model} — it can't return commands
@@ -452,6 +444,15 @@ defmodule Foglet.TUI.App do
       end
 
     user_topics ++ screen_declared_topics(state)
+  end
+
+  defp refresh_dynamic_subscriptions(%__MODULE__{} = old_state, %__MODULE__{} = new_state) do
+    old_topics = build_pubsub_topics(old_state)
+    new_topics = build_pubsub_topics(new_state)
+
+    if old_topics != new_topics do
+      PubSubForwarder.refresh(new_topics)
+    end
   end
 
   # Defers screen-specific topic interest to the active screen's

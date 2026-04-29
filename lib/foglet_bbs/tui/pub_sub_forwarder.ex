@@ -40,6 +40,22 @@ defmodule Foglet.TUI.PubSubForwarder do
 
   use GenServer
 
+  @control_topic_prefix "tui:pubsub_forwarder:"
+
+  @doc "Broadcasts a topic refresh to the forwarder owned by `dispatcher_pid`."
+  def refresh(dispatcher_pid \\ self(), topics) when is_pid(dispatcher_pid) and is_list(topics) do
+    Phoenix.PubSub.broadcast(
+      FogletBbs.PubSub,
+      control_topic(dispatcher_pid),
+      {:pubsub_forwarder, {:refresh_topics, normalize_topics(topics)}}
+    )
+  end
+
+  @doc "Returns the private control topic for a dispatcher-owned forwarder."
+  def control_topic(dispatcher_pid) when is_pid(dispatcher_pid) do
+    @control_topic_prefix <> List.to_string(:erlang.pid_to_list(dispatcher_pid))
+  end
+
   @doc """
   Called by `Raxol.Core.Runtime.Subscription.start/2` for `:custom` subscriptions.
 
@@ -53,12 +69,34 @@ defmodule Foglet.TUI.PubSubForwarder do
   @impl GenServer
   def init({%{topics: topics}, %{pid: dispatcher_pid}}) do
     pubsub = FogletBbs.PubSub
+    topics = normalize_topics(topics)
+    control_topic = control_topic(dispatcher_pid)
 
-    Enum.each(topics, fn topic ->
-      Phoenix.PubSub.subscribe(pubsub, topic)
-    end)
+    :ok = Phoenix.PubSub.subscribe(pubsub, control_topic)
+    subscribe_topics(pubsub, topics)
 
-    {:ok, %{dispatcher_pid: dispatcher_pid, topics: topics, pubsub: pubsub}}
+    {:ok,
+     %{
+       dispatcher_pid: dispatcher_pid,
+       control_topic: control_topic,
+       topics: topics,
+       pubsub: pubsub
+     }}
+  end
+
+  @impl GenServer
+  def handle_info({:pubsub_forwarder, {:refresh_topics, topics}}, state) do
+    topics = normalize_topics(topics)
+    current = MapSet.new(state.topics)
+    next = MapSet.new(topics)
+
+    state.pubsub
+    |> unsubscribe_topics(MapSet.difference(current, next))
+
+    state.pubsub
+    |> subscribe_topics(MapSet.difference(next, current))
+
+    {:noreply, %{state | topics: topics}}
   end
 
   @impl GenServer
@@ -67,5 +105,19 @@ defmodule Foglet.TUI.PubSubForwarder do
     # so that Raxol routes it through the app's update/2.
     send(state.dispatcher_pid, {:subscription, msg})
     {:noreply, state}
+  end
+
+  defp normalize_topics(topics) do
+    topics
+    |> Enum.filter(&is_binary/1)
+    |> Enum.uniq()
+  end
+
+  defp subscribe_topics(pubsub, topics) do
+    Enum.each(topics, &Phoenix.PubSub.subscribe(pubsub, &1))
+  end
+
+  defp unsubscribe_topics(pubsub, topics) do
+    Enum.each(topics, &Phoenix.PubSub.unsubscribe(pubsub, &1))
   end
 end
