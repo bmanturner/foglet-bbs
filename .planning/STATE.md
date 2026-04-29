@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 42-03-PLAN.md
-last_updated: "2026-04-29T22:07:51.857Z"
+stopped_at: Completed 42-04-PLAN.md
+last_updated: "2026-04-29T22:18:04.466Z"
 last_activity: 2026-04-29
 progress:
   total_phases: 6
   completed_phases: 1
   total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -26,17 +26,17 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 ## Current Position
 
 Phase: 42 (app-runtime-helper-extraction) — EXECUTING
-Plan: 4 of 5
+Plan: 5 of 5
 Status: Ready to execute
 Last activity: 2026-04-29
 
-Progress: [██████░░░░] 56%
+Progress: [█████████░] 89%
 
 ## Performance Metrics
 
 **Velocity:**
 
-- Total plans completed: 4
+- Total plans completed: 8
 - Average duration: N/A
 - Total execution time: 0.0 hours
 
@@ -55,6 +55,7 @@ Progress: [██████░░░░] 56%
 | Phase 42 P01 | 9min | 3 tasks | 4 files |
 | Phase 42 P42-02 | 7min | 3 tasks | 4 files |
 | Phase 42 P42-03 | 8min | 3 tasks | 5 files |
+| Phase 42 P42-04 | 8min | 3 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -72,6 +73,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 42]: Foglet.TUI.App delegates modal-owned behavior while keeping high-level App update messages and Raxol callbacks.
 - [Phase 42]: Routing interprets reducer-returned effects through App.Effects so App no longer exposes public effect helper functions.
 - [Phase 42]: Effects owns interpretation of current Foglet.TUI.Effect values while App owns when shell messages enter effect interpretation.
+- [Phase 42]: Subscriptions owns heartbeat gating, chrome clock interval wiring, PubSubForwarder wiring, InitialRouteEnterForwarder wiring, user topics, screen-declared topics, and dynamic refresh diffing.
+- [Phase 42]: Foglet.TUI.App retains only the Raxol callback integration points for subscribe/1 and post-update refresh timing.
 
 ### Pending Todos
 
@@ -88,6 +91,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-29T22:07:51.661Z
-Stopped at: Completed 42-03-PLAN.md
+Last session: 2026-04-29T22:18:04.462Z
+Stopped at: Completed 42-04-PLAN.md
 Resume file: None
