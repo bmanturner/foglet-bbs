@@ -23,16 +23,13 @@ defmodule Foglet.TUI.App do
   use Raxol.Core.Runtime.Application
 
   alias Foglet.Accounts
-  alias Foglet.PubSub
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
+  alias Foglet.TUI.App.Subscriptions
   alias Foglet.TUI.Context
-  alias Foglet.TUI.InitialRouteEnterForwarder
-  alias Foglet.TUI.PubSubForwarder
   alias Foglet.TUI.SizeGate
   alias Raxol.Core.Runtime.Command
-  alias Raxol.Core.Runtime.Subscription
 
   @type screen ::
           :login
@@ -199,7 +196,7 @@ defmodule Foglet.TUI.App do
   @impl true
   def update(message, state) do
     {new_state, commands} = do_update(normalize_message(message), state)
-    _ = refresh_dynamic_subscriptions(state, new_state)
+    _ = Subscriptions.refresh_dynamic(state, new_state)
     {new_state, commands}
   end
 
@@ -241,91 +238,7 @@ defmodule Foglet.TUI.App do
 
   @impl true
   def subscribe(state) do
-    # Heartbeat tick — keeps last_seen_at fresh in the Session GenServer.
-    # Only subscribed when a session_pid is wired (i.e., CLIHandler started us).
-    heartbeat =
-      if is_pid(state.session_pid) do
-        [subscribe_interval(10_000, :heartbeat_tick)]
-      else
-        []
-      end
-
-    clock = [subscribe_interval(60_000, :main_menu_clock_tick)]
-
-    # PubSub subscriptions (Audit #12).
-    #
-    # Raxol's Lifecycle and Dispatcher do NOT route arbitrary Erlang messages
-    # to update/2. Only messages wrapped as {:subscription, msg} by Raxol's own
-    # timer infrastructure reach update/2.
-    #
-    # Solution: use Subscription.custom/2 with PubSubForwarder — a lightweight
-    # GenServer that subscribes to the requested Phoenix.PubSub topics and
-    # forwards each arriving message as {:subscription, msg} to the Dispatcher
-    # process (context.pid, which is self() here in subscribe/1).
-    #
-    # This uses Raxol's documented "External data streams" custom subscription
-    # API (Subscription.custom/2 → module.start_link(args, context)).
-    pubsub_topics = build_pubsub_topics(state)
-
-    pubsub_subs = [Subscription.custom(PubSubForwarder, %{topics: pubsub_topics})]
-
-    # Phase 39 SPEC R4 / D-04: every route-entry must dispatch :on_route_enter.
-    # Raxol's `init/1` contract returns {:ok, model} — it can't return commands
-    # — so screens that get mounted directly via `App.init/1` (e.g. an SSH-
-    # pubkey-authenticated user landing on :main_menu) would otherwise miss
-    # their first-paint :on_route_enter dispatch and render un-hydrated until
-    # the user navigated somewhere and back. The InitialRouteEnterForwarder is
-    # a one-shot subscription that delivers `:initial_route_enter` to update/2
-    # exactly once, immediately after the Dispatcher starts; the corresponding
-    # do_update clause routes it through to the active screen as
-    # `:on_route_enter`. See `do_update(:initial_route_enter, state)` below.
-    initial_route_subs = [Subscription.custom(InitialRouteEnterForwarder, %{})]
-
-    heartbeat ++ clock ++ pubsub_subs ++ initial_route_subs
-  end
-
-  # Compute which PubSub topics to subscribe to based on current screen and user.
-  # Topics follow the convention: "user:<id>", "boards", "board:<id>", "thread:<id>".
-  #
-  # User-level topics ("user:<id>") are always App-owned (they don't depend on
-  # which screen is active). Screen-specific topics are sourced from the active
-  # screen's optional `subscriptions/2` callback (Phase 39 D-06, D-22, R7), which
-  # lets each screen own the binary topic strings it cares about. Screens that
-  # don't implement `subscriptions/2` contribute nothing — App produces only
-  # user-level topics for them.
-  defp build_pubsub_topics(%__MODULE__{} = state) do
-    user_topics =
-      if state.current_user do
-        [PubSub.user_topic(state.current_user.id)]
-      else
-        []
-      end
-
-    user_topics ++ screen_declared_topics(state)
-  end
-
-  defp refresh_dynamic_subscriptions(%__MODULE__{} = old_state, %__MODULE__{} = new_state) do
-    old_topics = build_pubsub_topics(old_state)
-    new_topics = build_pubsub_topics(new_state)
-
-    if old_topics != new_topics do
-      _ = PubSubForwarder.refresh(new_topics)
-    end
-  end
-
-  # Defers screen-specific topic interest to the active screen's
-  # `subscriptions/2` optional callback (Foglet.TUI.Screen). Mirrors the
-  # `Code.ensure_loaded?/1` + `function_exported?/3` paired guard idiom used at
-  # `route_screen_update/3` and `render_screen/1` for `update/3` and `render/2`.
-  defp screen_declared_topics(%__MODULE__{} = state) do
-    key = Routing.screen_key(Routing.current_route(state))
-    module = Routing.screen_module_for(state, key)
-
-    if Code.ensure_loaded?(module) and function_exported?(module, :subscriptions, 2) do
-      module.subscriptions(Routing.screen_state_for(state, key), Routing.build_context(state))
-    else
-      []
-    end
+    Subscriptions.subscribe(state)
   end
 
   # --- Private: update/2 dispatch ---
