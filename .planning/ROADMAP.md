@@ -205,6 +205,27 @@ Plans:
 4. `lib/foglet_bbs/tui/widgets/README.md` or an adjacent TUI doc links to the screen contract guidance.
 5. `mix precommit` passes or a concrete pre-existing blocker is documented with evidence.
 
+**Planned execution:**
+
+**Wave 1**
+- `40-01` - Initialize the Phase 40 carry-forward register; fix the known BL-01 modal-submit failures and deferred Dialyzer warnings.
+
+**Wave 2 *(blocked on Wave 1 completion)***
+- `40-02` - Remove or explicitly bound production legacy callback dispatch and migrate fixtures/tests to `init/1`, `update/3`, and `render/2`.
+- `40-03` - Complete explicit breadcrumb behavior for remaining screens and clean targeted migrated-TUI weak assertions.
+
+**Wave 3 *(blocked on Waves 1-2 completion)***
+- `40-04` - Inventory and fill reducer/effect plus App-shell verification gaps across migrated screen families.
+
+**Wave 4 *(blocked on Waves 1-3 completion)***
+- `40-05` - Write and link the screen contract guide; run render smoke, full test, and precommit gates; complete the Phase 40 evidence summary.
+
+**Cross-cutting constraints:**
+- Phase 40 is a close gate and must not add new BBS product capabilities, browser workflows, routing architecture, per-screen processes, or broad visual redesign.
+- Existing Phase 39 carry-forward items must end as fixed, intentionally excluded, or still blocking with evidence in `40-SUMMARY.md`.
+- New and updated tests must prefer state/effect assertions over arbitrary rendered-text presence checks.
+- Render verification stays lightweight and uses existing layout smoke patterns plus targeted `rtk mix foglet.tui.render` commands.
+
 ## Dependency Notes
 
 - Phase 34 must land before any screen migration.
