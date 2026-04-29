@@ -303,6 +303,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
 
     test "PostReader keeps reducer-facing public seams" do
+      assert Code.ensure_loaded?(PostReader)
       assert function_exported?(PostReader, :load_posts, 2)
       assert function_exported?(PostReader, :flush_read_pointers, 2)
       assert function_exported?(PostReader, :subscriptions, 2)

@@ -16,7 +16,6 @@ defmodule Foglet.TUI.Screens.Account.Render do
 
   import Raxol.Core.Renderer.View
 
-  @spec render(map()) :: any()
   def render(state) when is_map(state), do: render_app_state(state)
 
   defp render_app_state(state) do
