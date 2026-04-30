@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 44-01-PLAN.md
-last_updated: "2026-04-30T00:22:27.752Z"
-last_activity: 2026-04-30 -- Phase 45 planning complete
+stopped_at: Completed 44-02-PLAN.md
+last_updated: "2026-04-30T00:33:30.052Z"
+last_activity: 2026-04-30
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 21
-  completed_plans: 15
-  percent: 71
+  completed_plans: 16
+  percent: 76
 ---
 
 # Project State
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 ## Current Position
 
 Phase: 44 (postreader-and-content-query-hardening) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 Status: Ready to execute
-Last activity: 2026-04-30 -- Phase 45 planning complete
+Last activity: 2026-04-30
 
 Progress: [█████████░] 89%
 
@@ -59,6 +59,7 @@ Progress: [█████████░] 89%
 | Phase 42 P42-04 | 8min | 3 tasks | 4 files |
 | Phase 42 P42-05 | 7min | 3 tasks | 5 files |
 | Phase 44 P44-01 | 5min | 2 tasks | 4 files |
+| Phase 44 P44-02 | 10min | 4 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 42]: App runtime tests use structural state, command, modal, and SizeGate element assertions instead of pure rendered-text presence checks. — This preserves behavior coverage while following AGENTS.md testing guidance.
 - [Phase 44]: Plan 44-01 reader windows use message_number cursors scoped by thread_id rather than offsets or inserted timestamps. — message_number is the stable reader sequence and preserves continuity across tombstones.
 - [Phase 44]: Plan 44-01 reader/history query paths remain tombstone-capable; no QueryHelpers.not_deleted/1 filtering was added. — Soft-deleted posts keep historical message numbers and must remain visible to reader/history consumers.
+- [Phase 44]: PostReader keeps State.posts as the active bounded window while storing reader-window cursor metadata beside it. — Preserves existing render/read-pointer compatibility while satisfying bounded-state POST-01.
+- [Phase 44]: Adjacent-window navigation uses pending_window_direction for boundary landing. — The reducer can deterministically select index 0 for next windows and the final post for previous windows after async task results.
+- [Phase 44]: Thread activity reloads use reader windows anchored around the selected post message number. — This preserves the current reader position when the refreshed bounded window still contains the selected post.
 
 ### Pending Todos
 
@@ -98,6 +102,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-30T00:19:08.515Z
-Stopped at: Completed 44-01-PLAN.md
+Last session: 2026-04-30T00:33:29.811Z
+Stopped at: Completed 44-02-PLAN.md
 Resume file: None
