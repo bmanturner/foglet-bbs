@@ -65,7 +65,9 @@ defmodule Foglet.SSH.CLIHandler do
     :lifecycle_pid,
     :width,
     :height,
-    over_limit: false
+    over_limit: false,
+    cleanup_done?: false,
+    counter_counted?: false
   ]
 
   # --- :ssh_server_channel callbacks ---
@@ -91,17 +93,24 @@ defmodule Foglet.SSH.CLIHandler do
 
         _ = :ssh_connection.close(connection_ref, channel_id)
 
+        # Over-limit reject is a fully-rejected state. check_connection_limit/0
+        # already compensated its own increment, so no later cleanup is owed:
+        # cleanup_done? is true and counter_counted? is false. Future cleanup
+        # delegations are no-ops.
         new_state = %__MODULE__{
           over_limit: true,
           channel_id: channel_id,
-          connection_ref: connection_ref
+          connection_ref: connection_ref,
+          cleanup_done?: true,
+          counter_counted?: false
         }
 
         {:ok, new_state}
 
       :ok ->
         if Foglet.SSH.RateLimiter.allow?(peer) do
-          increment_connection_count()
+          # check_connection_limit/0 already incremented the counter; the
+          # accepted path now owns one decrement, tracked via counter_counted?.
           pubkey_user = resolve_pubkey_user(peer)
           session_pid = start_session(pubkey_user)
 
@@ -116,13 +125,17 @@ defmodule Foglet.SSH.CLIHandler do
             | channel_id: channel_id,
               connection_ref: connection_ref,
               peer: peer,
-              session_pid: session_pid
+              session_pid: session_pid,
+              counter_counted?: true,
+              cleanup_done?: false
           }
 
           {:ok, new_state}
         else
           # check_connection_limit/0 incremented the counter before we got here;
           # undo it so rate-limited connections don't drift the count upward.
+          # After this immediate compensation the counter is balanced, so the
+          # rejected state owes no further decrement.
           _ = decrement_connection_count()
 
           _ =
@@ -137,7 +150,9 @@ defmodule Foglet.SSH.CLIHandler do
           new_state = %__MODULE__{
             over_limit: true,
             channel_id: channel_id,
-            connection_ref: connection_ref
+            connection_ref: connection_ref,
+            cleanup_done?: true,
+            counter_counted?: false
           }
 
           {:ok, new_state}
@@ -152,20 +167,12 @@ defmodule Foglet.SSH.CLIHandler do
       "[SSH.CLIHandler] Lifecycle #{inspect(pid)} exited (#{inspect(reason)}); closing channel"
     )
 
-    # Restore the client's primary screen buffer before we close the channel.
-    # This is the graceful-quit path (TUI Command.quit → Lifecycle :shutdown →
-    # {:EXIT, lifecycle_pid}). At this point the SSH channel is still open, so
-    # the escape reaches iTerm2 before teardown. Without this, the TUI's final
-    # frame lingers on the alt buffer after disconnect.
-    send_alt_screen_leave(state)
-    maybe_close_channel(state)
-
-    _ =
-      unless state.over_limit do
-        decrement_connection_count()
-      end
-
-    {:stop, state.channel_id || 0, state}
+    # Delegate to the shared cleanup helper. cleanup/2 sends the alt-screen
+    # leave first (so iTerm2 restores the primary buffer before teardown),
+    # then stops session, optionally closes the channel, and decrements the
+    # counter exactly once for accepted connections.
+    new_state = cleanup(state, close_channel: true)
+    {:stop, new_state.channel_id || 0, new_state}
   end
 
   @impl true
@@ -254,18 +261,10 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:closed, _ch}}, state) do
     # Belt-and-suspenders: if the client dropped without sending EOF
-    # (e.g. window closed abruptly), try the LEAVE escape anyway. The
-    # channel may already be fully closed, in which case the send no-ops.
-    send_alt_screen_leave(state)
-    stop_lifecycle(state.lifecycle_pid)
-    _ = stop_session(state.session_pid)
-
-    _ =
-      unless state.over_limit do
-        decrement_connection_count()
-      end
-
-    {:stop, state.channel_id || 0, state}
+    # (e.g. window closed abruptly), the cleanup helper sends LEAVE anyway.
+    # The channel may already be fully closed, in which case the send no-ops.
+    new_state = cleanup(state, close_channel: false)
+    {:stop, new_state.channel_id || 0, new_state}
   end
 
   @impl true
@@ -273,8 +272,7 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def terminate(_reason, state) do
-    stop_lifecycle(state.lifecycle_pid)
-    _ = stop_session(state.session_pid)
+    _ = cleanup(state, close_channel: false)
     :ok
   end
 
@@ -465,6 +463,39 @@ defmodule Foglet.SSH.CLIHandler do
 
   defp maybe_close_channel(_state), do: :ok
 
+  # Single cleanup helper invoked by every termination-sensitive callback.
+  # Order is intentional:
+  #   1. Send the alt-screen LEAVE escape while the channel is still open so
+  #      the client's primary screen buffer is restored before teardown.
+  #   2. Stop the Raxol Lifecycle (idempotent, tolerates already-stopped pid).
+  #   3. Stop the Sessions.Session (idempotent, tolerates already-stopped pid).
+  #   4. Optionally close the SSH channel — only the lifecycle-EXIT path needs
+  #      to actively close; `:closed` and `terminate` are already triggered by
+  #      a closed channel.
+  #   5. Decrement the global connection counter exactly once, gated by
+  #      counter_counted?, so EOF→closed→terminate ordering does not
+  #      double-decrement.
+  # The helper is idempotent: if cleanup_done? is true it returns the state
+  # unchanged. The returned state has cleanup_done?: true and
+  # counter_counted?: false so subsequent invocations no-op.
+  defp cleanup(%__MODULE__{cleanup_done?: true} = state, _opts), do: state
+
+  defp cleanup(%__MODULE__{} = state, opts) do
+    send_alt_screen_leave(state)
+    stop_lifecycle(state.lifecycle_pid)
+    _ = stop_session(state.session_pid)
+
+    if Keyword.get(opts, :close_channel, false) do
+      maybe_close_channel(state)
+    end
+
+    if state.counter_counted? do
+      _ = decrement_connection_count()
+    end
+
+    %__MODULE__{state | cleanup_done?: true, counter_counted?: false}
+  end
+
   # --- Connection limit via ETS atomic counter ---
 
   @counter_table __MODULE__.Counter
@@ -490,11 +521,6 @@ defmodule Foglet.SSH.CLIHandler do
     else
       :ok
     end
-  end
-
-  defp increment_connection_count do
-    # Already incremented atomically inside check_connection_limit/0; this is a no-op.
-    :ok
   end
 
   defp decrement_connection_count do

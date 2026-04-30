@@ -101,8 +101,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
       state = %CLIHandler{channel_id: 7, connection_ref: nil, session_pid: session_pid}
 
-      assert {:stop, 7, ^state} =
+      assert {:stop, 7, returned_state} =
                CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 7}}, state)
+
+      assert returned_state.channel_id == 7
+      assert returned_state.cleanup_done?
+      refute returned_state.counter_counted?
 
       assert_receive {:DOWN, ^ref, :process, ^session_pid, _reason}
     end
@@ -112,11 +116,19 @@ defmodule Foglet.SSH.CLIHandlerTest do
       :ets.update_counter(Foglet.SSH.CLIHandler.Counter, :count, {2, 1})
 
       lifecycle_pid = self()
-      state = %CLIHandler{channel_id: nil, connection_ref: nil, lifecycle_pid: lifecycle_pid}
 
-      assert {:stop, 0, ^state} =
+      state = %CLIHandler{
+        channel_id: nil,
+        connection_ref: nil,
+        lifecycle_pid: lifecycle_pid,
+        counter_counted?: true
+      }
+
+      assert {:stop, 0, returned_state} =
                CLIHandler.handle_msg({:EXIT, lifecycle_pid, :boom}, state)
 
+      assert returned_state.cleanup_done?
+      refute returned_state.counter_counted?
       assert [{:count, 0}] = :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
     end
 
