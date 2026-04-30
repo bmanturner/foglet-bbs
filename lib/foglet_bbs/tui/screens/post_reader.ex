@@ -371,14 +371,12 @@ defmodule Foglet.TUI.Screens.PostReader do
   # rather than silently dropping the user at index 0.
   defp place_selection_after_load(%State{} = ss, window, posts, read_pointer_msg_no) do
     selected_index =
-      cond do
-        is_integer(read_pointer_msg_no) ->
-          index_of_message_number(posts, read_pointer_msg_no) ||
-            index_of_first_message_number_at_or_after(posts, read_pointer_msg_no) ||
-            selected_index_after_window_load(ss, window, posts)
-
-        true ->
+      if is_integer(read_pointer_msg_no) do
+        index_of_message_number(posts, read_pointer_msg_no) ||
+          index_of_first_message_number_at_or_after(posts, read_pointer_msg_no) ||
           selected_index_after_window_load(ss, window, posts)
+      else
+        selected_index_after_window_load(ss, window, posts)
       end
 
     %{ss | selected_post_index: selected_index}
