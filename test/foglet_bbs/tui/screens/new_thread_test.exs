@@ -438,7 +438,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   end
 
   test "NewThread.update/3 handles compose field focus, body preview, and cancel effects" do
-    state = State.new(step: :compose, board: %{id: "b1"}, origin: :thread_list)
+    board = %{id: "b1", name: "General"}
+    state = State.new(step: :compose, board: board, origin: :thread_list)
 
     {state, []} = NewThread.update({:key, %{key: :tab}}, state, context())
     assert state.focused == :body
@@ -452,7 +453,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
             [
               %Foglet.TUI.Effect{
                 type: :navigate,
-                payload: %{screen: :thread_list, params: %{}}
+                payload: %{screen: :thread_list, params: %{board: ^board, board_id: "b1"}}
               }
             ]} = NewThread.update({:key, %{key: :escape}}, state, context())
   end

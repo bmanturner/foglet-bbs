@@ -114,7 +114,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   # Key handler
   # ---------------------------------------------------------------------------
   defp handle_board_key_event(%{key: :escape}, %State{} = state) do
-    {state, [Effect.navigate(origin_for(state), %{})]}
+    {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
   end
 
   defp handle_board_key_event(%{key: :char, char: "j"}, %State{} = state),
@@ -158,11 +158,11 @@ defmodule Foglet.TUI.Screens.NewThread do
          %State{} = state,
          %Context{}
        ) do
-    {state, [Effect.navigate(origin_for(state), %{})]}
+    {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
   end
 
   defp handle_compose_key_event(%{key: :escape}, %State{} = state, %Context{}) do
-    {state, [Effect.navigate(origin_for(state), %{})]}
+    {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
   end
 
   defp handle_compose_key_event(%{key: :tab}, %State{} = state, %Context{}) do
@@ -311,6 +311,15 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp origin_for(%State{origin: origin}) when is_atom(origin), do: origin
   defp origin_for(_state), do: :main_menu
+
+  # When canceling back to a board-scoped origin (e.g. :thread_list), forward
+  # the board context so the destination can re-mount with its breadcrumb and
+  # thread query intact instead of falling into the missing-board error path.
+  defp cancel_params(%State{origin: :thread_list, board: %{} = board}) do
+    %{board: board, board_id: Map.get(board, :id) || Map.get(board, "id")}
+  end
+
+  defp cancel_params(%State{}), do: %{}
 
   defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."
   defp format_error(:thread_locked), do: "This thread is locked"
