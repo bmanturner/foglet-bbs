@@ -1,173 +1,117 @@
 ---
 phase: 47-bound-unbounded-list-queries-drop-chrome-v1-shims-and-reduce
-fixed_at: 2026-04-30T09:50:00Z
+fixed_at: 2026-04-30T15:31:47Z
 review_path: .planning/phases/47-bound-unbounded-list-queries-drop-chrome-v1-shims-and-reduce/47-REVIEW.md
-iteration: 4
-findings_in_scope: 9
-fixed: 8
+iteration: 6
+findings_in_scope: 6
+fixed: 5
 skipped: 1
 status: partial
 ---
 
-# Phase 47: Code Review Fix Report
+# Phase 47: Code Review Fix Report (Iteration 6)
 
-**Fixed at:** 2026-04-30T09:50:00Z
+**Fixed at:** 2026-04-30T15:31:47Z
 **Source review:** `.planning/phases/47-bound-unbounded-list-queries-drop-chrome-v1-shims-and-reduce/47-REVIEW.md`
-**Iteration:** 4
+**Iteration:** 6
 
 **Summary:**
-- Findings in scope: 9 (4 warnings + 5 info; user passed `--all`)
-- Fixed: 8
-- Skipped: 1 (IN-01, no-action by reviewer's own recommendation)
+- Findings in scope: 6 (0 critical, 3 warning, 3 info — `--all` scope)
+- Fixed: 5
+- Skipped: 1 (IN-03, explicitly no-action per reviewer)
 
-After all fixes the suite is green: `rtk mix test` reports `1 property,
-2241 tests, 0 failures`. `rtk mix precommit` (compile
-`--warnings-as-errors`, format, credo `--strict`, sobelow, dialyzer)
-also passes.
+`rtk mix precommit` (compile --warnings-as-errors, deps.unlock --unused,
+format, credo --strict, sobelow --exit Low, dialyzer) passed clean after
+the full fix set landed. `rtk mix test test/foglet_bbs/tui/screens`
+reports 761 tests, 0 failures.
 
 ## Fixed Issues
 
-### WR-01: `LoginForm.handle_task_result/3` masks all task errors as `:invalid_credentials`
+### WR-01: `LoginForm.login_success_result/3` non-exhaustive case on `deliver_verification_code/1`
 
 **Files modified:** `lib/foglet_bbs/tui/screens/login/login_form.ex`
-**Commit:** `418ae208`
-**Applied fix:** Reserved `{:error, :invalid_credentials}` for the
-explicit auth-failure shape returned by `authenticate_login/5`.
-Task-pipeline errors (network failures, GenServer crashes, timeouts,
-the `WithClauseError` from WR-02) now `Logger.error` and surface an
-"unavailable" modal instead of being silently re-categorized as bad
-credentials. Combined with WR-02 in a single commit because both fixes
-live in the same file and are causally linked: WR-02's crash is what
-WR-01's mask was hiding.
+**Commit:** 8e246862
+**Applied fix:** Added a logged catch-all clause (`other ->`) to the
+`case verification_mod.deliver_verification_code(user) do` block in
+`login_success_result/3`. Mirrors the existing `authenticate_login/5`
+defensive `else` branch a few lines above and the iteration-5 Register
+WR-01 fix. Unanticipated success/error shapes now log a `Logger.warning`
+breadcrumb and degrade to `:delivery_failed` (closest existing
+semantic) instead of raising `CaseClauseError` and getting silently
+re-categorized as a transient "temporarily unavailable" fault.
 
-### WR-02: `authenticate_login/5` `with` chain has unhandled fall-through cases
+### WR-02: `Verify.handle_verify_resend_result/2` and `handle_verify_submit_result/3` non-exhaustive on success shapes
 
-**Files modified:** `lib/foglet_bbs/tui/screens/login/login_form.ex`
-**Commit:** `418ae208`
-**Applied fix:** Added two catch-all clauses to the `with` `else`:
-`{:error, other}` for unanticipated auth-error tuples and bare-atom
-`other` for unanticipated user statuses. Both `Logger.error` the
-unexpected shape and degrade to `{:error, :invalid_credentials}` so
-the user-facing copy stays sensible while operators see the
-breadcrumb.
+**Files modified:** `lib/foglet_bbs/tui/screens/verify.ex`
+**Commit:** acb00082
+**Applied fix:** Two catch-all clauses added:
 
-### WR-03: `PostReader.load_posts/2` writes to `state.screen_state` without nil-guard
+1. `handle_verify_resend_result({:ok, _other}, vs)` — degrades to the
+   optimistic `:attempted` modal so a future
+   `{:ok, :queued}` (or any non-`:attempted` ok shape) does not raise
+   `FunctionClauseError` out of the screen reducer (which has no
+   `{:task_error, …}` fallback wired for `:verify_resend`).
+2. `handle_verify_submit_result(other, vs, %Context{})` — degrades to
+   the generic verification-failed modal so a future contract change
+   to `verify_email_code/2` (e.g. `{:ok, user, meta}`) does not crash
+   the reducer.
 
-**Files modified:** `lib/foglet_bbs/tui/screens/post_reader.ex`
-**Commit:** `d5139a3a`
-**Applied fix:** Added the `state.screen_state || %{}` fallback to the
-`Map.put` call in `load_posts/2`, mirroring the safer treatment already
-present in `apply_flush_result/4`. `load_posts/2` is documented as a
-public test seam / direct-invocation entry point and partial fixtures
-with `nil` screen_state would otherwise raise `BadMapError`. Audited
-the rest of the module — no other unguarded `state.screen_state` writes.
+Both paths log a `Logger.warning` breadcrumb so the contract drift is
+visible in logs.
 
-### WR-04: `app_state_from_local/2` duplicated across four sibling screen modules
+### WR-03: `ResetRequest.dispatch_reset_request/3` non-exhaustive on `Foglet.Config.delivery_mode/0`
 
-**Files modified:**
-- `lib/foglet_bbs/tui/screens/shared/app_state_bridge.ex` (new)
-- `lib/foglet_bbs/tui/screens/login.ex`
-- `lib/foglet_bbs/tui/screens/login/login_form.ex`
-- `lib/foglet_bbs/tui/screens/login/render.ex`
-- `lib/foglet_bbs/tui/screens/register.ex`
-- `lib/foglet_bbs/tui/screens/verify.ex`
+**Files modified:** `lib/foglet_bbs/tui/screens/login/reset_request.ex`
+**Commit:** d1330db0
+**Applied fix:** Added a logged catch-all (`other ->`) to the
+`case Foglet.Config.delivery_mode() do` block. Falls back to the
+no-email operator-assisted path so an unknown mode (typo'd config
+value, future variant, schema migration) no longer raises
+`CaseClauseError` and gets surfaced via the misleading
+`@reset_invalid_email_message` modal that tells the user their email
+is malformed when the actual fault is server delivery-mode
+misconfiguration.
 
-**Commit:** `dd56f456`
-**Applied fix:** Extracted
-`Foglet.TUI.Screens.Shared.AppStateBridge.from_context/4` parameterized
-by `screen_atom` and a default-state thunk. Replaced all five
-near-verbatim copies with one-line delegating helpers. Removed the four
-`TODO(WR-01)` markers; deleted the prose acknowledging session_pid
-drift (the bridge guarantees uniform shape now).
+### IN-01: `Moderation.jump_hint/1` has no fallback clause for `n <= 0`
 
-The reviewer also flagged duplicated `domain_module/2` helpers in the
-same screens. That consolidation is broader (the helpers have different
-default-mapping per screen and use `state.domain` rather than
-`session_context`) and is left for a follow-up commit. The user's
-guidance was to use judgement; the AppStateBridge extraction was small
-and safe, the domain_module merge is not, so I scoped this fix to the
-former.
+**Files modified:** `lib/foglet_bbs/tui/screens/moderation.ex`
+**Commit:** 196f19dd
+**Applied fix:** Added `defp jump_hint(_), do: "1"` as a fallback
+clause. Restores the contract assumed by the iteration-3 IN-03 defense
+in `tab_labels_from_tabs/1` (which returns `[]` on a malformed
+`%Tabs{}` struct). Without this fallback, `length([]) = 0` would crash
+`jump_hint(0)` with `FunctionClauseError`, defeating the upstream
+defense.
 
-### IN-02: `Posts.create_reply/4` returns `:posting_not_allowed` for "thread does not exist"
+### IN-02: `Account.Render.jump_hint/1` has the same `n <= 0` gap
 
-**Files modified:** `lib/foglet_bbs/posts.ex`
-**Commit:** `b38d1388`
-**Applied fix:** Added an inline comment explaining that the
-`not match?(%Thread{board_id: ^board_id}, thread)` clause intentionally
-folds three failure modes (thread not found, thread in another board,
-value is not a Thread struct) into a single error to avoid leaking
-thread existence to callers without post-creation permission. Did NOT
-split into separate error atoms — the obscuring is deliberate
-security-information-hiding.
-
-### IN-03: `PostReader` `:on_route_enter` `:load` path does not honor read-pointer position
-
-**Files modified:** `lib/foglet_bbs/tui/screens/post_reader.ex`
-**Commit:** `dd484644`
-**Applied fix:** Made the reducer-path `update(:load, …)` consult
-`state.pending_read_positions[thread_id]` exactly like the test-seam
-`load_posts/2` does. Both paths now route through the same
-`load_window_opts/2` helper, which emits `direction: :around` with
-`around_message_number: pointer` when a pointer exists, and falls back
-to the prior `:jump_last → :last` / default `:initial` mapping
-otherwise. Dropped the now-unused `load_direction/1`.
-
-**Status note:** `fixed: requires human verification`. This is a
-behavioral logic change to a load path. Tier 1 + Tier 2 verification
-(read-back, compile, full test suite green) confirm syntax and that
-no existing test broke, but they cannot confirm the runtime "if you
-saw it, you read it" promise actually holds across all re-entry shapes.
-The 88-test `post_reader_test.exs` suite passed unchanged.
-
-### IN-04: `Posts.list_reader_window` `:previous` direction with nil cursor returns ambiguous `has_next?`
-
-**Files modified:** `lib/foglet_bbs/posts.ex`
-**Commit:** `01eb597d`
-**Applied fix:** Mirrored the BL-01 fix from the `:next` branch — only
-consider `has_next?` true when the cursor is a positive integer:
-
-```elixir
-has_next? =
-  posts != [] and is_integer(cursor) and cursor > 0 and
-    reader_has_next?(thread_id, posts, cursor)
-```
-
-Production callers (`PostReader.load_adjacent_window/3`) already pass
-valid cursors so this is not a live bug, but the public API contract
-permits the nil case and the previous result was misleading.
-
-### IN-05: `SessionAlias.promote_session/2` proceeds with current_user update even when session_pid is missing
-
-**Files modified:** `lib/foglet_bbs/tui/app/session_alias.ex`
-**Commit:** `dde0453f`
-**Applied fix:** Per the reviewer's guidance ("Decide whether the
-no-pid case should be a no-op or proceed; either way, document it
-explicitly"), kept the proceed-anyway behavior (production wires the
-pid before `set_user` fires, so the no-pid path is reachable only in
-tests, and refusing to promote would force every test to fabricate a
-pid). Added a comment block documenting the decision and listing the
-three consequences (session telemetry lost, SSH-05 cannot be enforced,
-heartbeat calls become no-ops). Expanded the existing `Logger.warning`
-text to mention SSH-05 alongside the prior telemetry note.
+**Files modified:** `lib/foglet_bbs/tui/screens/account/render.ex`
+**Commit:** 332802e5
+**Applied fix:** Same shape as IN-01. Added `defp jump_hint(_), do: "1"`
+fallback so a transient `[]` from `tab_labels(ss)` (e.g., during tab
+re-init) does not crash the account screen render. The optional
+`Map.get(&1, :label, "?")` hardening of `tab_labels/1` was not applied
+— the immediate `FunctionClauseError` defect is resolved without it,
+and changing `Map.fetch!` semantics warrants a separate review.
 
 ## Skipped Issues
 
-### IN-01: `Threads.move_thread/2` hard-pattern-matches `Repo.update_all` return shape
+### IN-03: `PostReader.apply_flush_result/4` clears no pointer state on partial failure
 
-**File:** `lib/foglet_bbs/threads.ex:336-340`
-**Reason:** No-action: the reviewer's own recommendation in the **Fix:**
-section is "No change required." The strict
-`{_count, nil} = Repo.update_all(...)` match is intentional defensive
-code — the in-line comment at lines 333–335 explicitly states the
-intent ("fail loudly rather than silently swallow it"). The reviewer
-flagged it as Info to surface the contract coupling, not to request a
-change.
-**Original issue:** `{_count, nil} = Repo.update_all(...)` will raise
-`MatchError` if Ecto ever returns a different shape. Documented as
-intentional defensive behavior; logged as Info.
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:522-539`
+**Reason:** Reviewer explicitly classified this as "No change required
+for Phase 47" — it is tracked so the partial-success cleanup is a
+deliberate decision rather than an oversight. The current "retry both"
+behavior is safe given the monotonic-merge contract on
+`Boards.advance_board_read_pointer/3`, and the reviewer flagged any
+per-side atomic split as a Phase 48+ optimization.
+**Original issue:** When `board_result` succeeds and `thread_result`
+fails, the next retry re-attempts the (already-successful) board
+flush. Idempotent and safe, but wasteful until the thread flush
+eventually succeeds.
 
 ---
 
-_Fixed: 2026-04-30T09:50:00Z_
+_Fixed: 2026-04-30T15:31:47Z_
 _Fixer: Claude (gsd-code-fixer)_
-_Iteration: 4_
+_Iteration: 6_
