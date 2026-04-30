@@ -364,13 +364,40 @@ defmodule Foglet.TUI.Screens.PostReader do
   # the post matching that message_number (this is what makes the
   # "200 posts + pointer at 150" acceptance assertion pass). Otherwise,
   # defer to the Phase 44 helper, which handles :jump_last and :initial.
+  #
+  # WR-04: when the pointer is set but the exact message_number is not in
+  # the window (post was soft-deleted, moved, or the pointer is otherwise
+  # stale), fall back to the closest post with `message_number >= pointer`
+  # rather than silently dropping the user at index 0.
   defp place_selection_after_load(%State{} = ss, window, posts, read_pointer_msg_no) do
     selected_index =
-      (is_integer(read_pointer_msg_no) && index_of_message_number(posts, read_pointer_msg_no)) ||
-        selected_index_after_window_load(ss, window, posts)
+      cond do
+        is_integer(read_pointer_msg_no) ->
+          index_of_message_number(posts, read_pointer_msg_no) ||
+            index_of_first_message_number_at_or_after(posts, read_pointer_msg_no) ||
+            selected_index_after_window_load(ss, window, posts)
+
+        true ->
+          selected_index_after_window_load(ss, window, posts)
+      end
 
     %{ss | selected_post_index: selected_index}
   end
+
+  # WR-04: locate the index of the first post whose `message_number` is
+  # `>= target` — used as a fallback when the read-pointer's exact
+  # message_number is missing from the loaded window.
+  defp index_of_first_message_number_at_or_after(posts, target)
+       when is_list(posts) and is_integer(target) do
+    Enum.find_index(posts, fn post ->
+      case Map.get(post, :message_number) do
+        mn when is_integer(mn) -> mn >= target
+        _ -> false
+      end
+    end)
+  end
+
+  defp index_of_first_message_number_at_or_after(_posts, _target), do: nil
 
   # WR-01: warm the render cache and viewport for the SELECTED post so the
   # initial render (before any keypress) does not re-parse on every frame and
