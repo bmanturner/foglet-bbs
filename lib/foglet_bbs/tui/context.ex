@@ -26,7 +26,7 @@ defmodule Foglet.TUI.Context do
           current_user: Foglet.Accounts.User.t() | nil,
           session_context: SessionContext.t() | map(),
           session_pid: pid() | nil,
-          terminal_size: {pos_integer(), pos_integer()} | nil,
+          terminal_size: {pos_integer(), pos_integer()},
           route: route(),
           route_params: route_params(),
           domain: map()

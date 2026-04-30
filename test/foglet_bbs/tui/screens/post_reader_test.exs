@@ -9,6 +9,23 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # "no nested modules" convention (no cyclic-dependency risk in test files).
   defmodule FakePosts do
     def list_posts(_thread_id) do
+      posts()
+    end
+
+    def list_reader_window(_thread_id, opts) do
+      direction = Keyword.get(opts, :direction, :initial)
+
+      %Foglet.Posts.ReaderWindow{
+        posts: posts(),
+        first_message_number: 1,
+        last_message_number: 2,
+        has_previous?: direction in [:previous, :around],
+        has_next?: direction in [:initial, :next, :around],
+        direction: direction
+      }
+    end
+
+    defp posts do
       [
         %{
           id: "p1",
@@ -43,6 +60,15 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   defmodule EmptyPosts do
     def list_posts(_tid), do: []
+
+    def list_reader_window(_tid, opts) do
+      %Foglet.Posts.ReaderWindow{
+        posts: [],
+        has_previous?: false,
+        has_next?: false,
+        direction: Keyword.get(opts, :direction, :initial)
+      }
+    end
   end
 
   # Separate from FakePosts: uses message_number 5/6 (vs 1/2) to test
@@ -50,6 +76,21 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # data. The distinct message_numbers are load-post seeding assertions.
   defmodule FakePostsForLoad do
     def list_posts(_thread_id) do
+      posts()
+    end
+
+    def list_reader_window(_thread_id, opts) do
+      %Foglet.Posts.ReaderWindow{
+        posts: posts(),
+        first_message_number: 5,
+        last_message_number: 6,
+        has_previous?: false,
+        has_next?: false,
+        direction: Keyword.get(opts, :direction, :initial)
+      }
+    end
+
+    defp posts do
       [
         %{
           id: "p1",
@@ -311,19 +352,19 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
-  test "PostReader.update(:load, state, context) emits load_posts task" do
+  test "PostReader.update(:load, state, context) emits bounded load_posts_window task" do
     context = post_reader_context()
     state = PostReader.State.from_context(context)
 
-    assert {%State{status: :loading, last_op: :load_posts, last_error: nil},
+    assert {%State{status: :loading, last_op: :load_posts_window, last_error: nil},
             [
               %Effect{
                 type: :task,
-                payload: %{op: :load_posts, screen_key: :post_reader, fun: fun}
+                payload: %{op: :load_posts_window, screen_key: :post_reader, fun: fun}
               }
             ]} = PostReader.update(:load, state, context)
 
-    assert [%{id: "p1"}, %{id: "p2"}] = fun.()
+    assert %Foglet.Posts.ReaderWindow{posts: [%{id: "p1"}, %{id: "p2"}]} = fun.()
   end
 
   test "PostReader.update/3 stores loaded posts and seeds pending read data" do
@@ -346,19 +387,19 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert Map.has_key?(loaded.render_cache, {"p2", 80})
   end
 
-  test "PostReader.update/3 reloads matching active thread activity" do
+  test "PostReader.update/3 reloads matching active thread activity through reader window" do
     context = post_reader_context()
     state = PostReader.State.from_context(context)
 
-    assert {%State{last_op: :load_posts},
+    assert {%State{last_op: :load_posts_window},
             [
               %Effect{
                 type: :task,
-                payload: %{op: :load_posts, screen_key: :post_reader, fun: fun}
+                payload: %{op: :load_posts_window, screen_key: :post_reader, fun: fun}
               }
             ]} = PostReader.update({:thread_activity, "t1", :new_post}, state, context)
 
-    assert [%{id: "p1"}, %{id: "p2"}] = fun.()
+    assert %Foglet.Posts.ReaderWindow{posts: [%{id: "p1"}, %{id: "p2"}]} = fun.()
   end
 
   test "PostReader.update/3 ignores unrelated thread activity" do
@@ -1322,6 +1363,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   describe "subscriptions/2 export (Phase 39 R6, D-08)" do
     test "module exports subscriptions/2" do
+      assert Code.ensure_loaded?(Foglet.TUI.Screens.PostReader)
       assert function_exported?(Foglet.TUI.Screens.PostReader, :subscriptions, 2)
     end
 
@@ -1372,7 +1414,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert state_via_on_enter == state_via_load
       assert effects_via_on_enter == effects_via_load
       assert state_via_on_enter.status == :loading
-      assert [%Effect{type: :task, payload: %{op: :load_posts}}] = effects_via_on_enter
+      assert [%Effect{type: :task, payload: %{op: :load_posts_window}}] = effects_via_on_enter
     end
 
     test "with no thread_id in state but atom :thread_id route param delegates to :load (surfaces :load's missing-thread error since fallback doesn't hydrate state)" do
@@ -1416,7 +1458,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       {new_state, effects} = PostReader.update(:on_route_enter, state, ctx)
 
       assert new_state.status == :loading
-      assert [%Effect{type: :task, payload: %{op: :load_posts}}] = effects
+      assert [%Effect{type: :task, payload: %{op: :load_posts_window}}] = effects
     end
 
     test "with no thread_id in state and no thread_id route param no-ops" do

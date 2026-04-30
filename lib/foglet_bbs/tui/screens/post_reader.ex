@@ -61,6 +61,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   alias Raxol.UI.Components.Display.Viewport
 
   @default_terminal_size {80, 24}
+  @reader_window_size 50
 
   @impl true
   @spec init(Context.t()) :: State.t()
@@ -89,15 +90,51 @@ defmodule Foglet.TUI.Screens.PostReader do
   def update(:load, %State{thread_id: thread_id} = state, %Context{} = context)
       when is_binary(thread_id) do
     posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+    direction = load_direction(state)
+    limit = reader_window_limit(state)
 
-    new_state = %{state | status: :loading, last_op: :load_posts, last_error: nil}
-    effect = Effect.task(:load_posts, :post_reader, fn -> posts_mod.list_posts(thread_id) end)
+    new_state = %{state | status: :loading, last_op: :load_posts_window, last_error: nil}
+
+    effect =
+      Effect.task(:load_posts_window, :post_reader, fn ->
+        posts_mod.list_reader_window(thread_id, direction: direction, limit: limit)
+      end)
 
     {new_state, [effect]}
   end
 
   def update(:load, %State{} = state, %Context{}) do
     {%{state | status: {:error, :missing_thread}, last_op: nil, last_error: :missing_thread}, []}
+  end
+
+  def update(
+        {:task_result, :load_posts_window, {:ok, window}},
+        %State{} = state,
+        %Context{} = context
+      ) do
+    posts = Map.get(window, :posts) || []
+    selected_index = selected_index_after_window_load(state, window, posts)
+    status = if posts == [], do: :empty, else: :loaded
+
+    state =
+      %{
+        state
+        | posts: posts,
+          status: status,
+          selected_post_index: selected_index,
+          window_first_message_number: Map.get(window, :first_message_number),
+          window_last_message_number: Map.get(window, :last_message_number),
+          window_has_previous?: Map.get(window, :has_previous?, false),
+          window_has_next?: Map.get(window, :has_next?, false)
+      }
+      |> seed_pending_read_position()
+      |> warm_selected_post(context)
+
+    {%{state | last_op: nil, last_error: nil}, []}
+  end
+
+  def update({:task_result, :load_posts_window, {:error, reason}}, %State{} = state, %Context{}) do
+    {%{state | status: {:error, reason}, last_op: nil, last_error: reason}, []}
   end
 
   def update({:task_result, :load_posts, {:ok, posts}}, %State{} = state, %Context{} = context)
@@ -124,9 +161,14 @@ defmodule Foglet.TUI.Screens.PostReader do
       )
       when is_binary(thread_id) do
     posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+    opts = thread_activity_window_opts(state)
 
-    effect = Effect.task(:load_posts, :post_reader, fn -> posts_mod.list_posts(thread_id) end)
-    {%{state | last_op: :load_posts, last_error: nil}, [effect]}
+    effect =
+      Effect.task(:load_posts_window, :post_reader, fn ->
+        posts_mod.list_reader_window(thread_id, opts)
+      end)
+
+    {%{state | last_op: :load_posts_window, last_error: nil}, [effect]}
   end
 
   def update({:thread_activity, _thread_id, _event}, %State{} = state, %Context{}) do
@@ -262,7 +304,8 @@ defmodule Foglet.TUI.Screens.PostReader do
         {:error, :not_configured} -> Foglet.Posts
       end
 
-    posts = posts_mod.list_posts(thread_id)
+    load_thread_id = thread_id
+    posts = posts_mod.list_posts(load_thread_id)
 
     new_pending_read_positions =
       seed_read_position_on_entry(
@@ -513,12 +556,80 @@ defmodule Foglet.TUI.Screens.PostReader do
     PostCard.reader_parts(post, tuples, w, theme, index: idx, total: total)
   end
 
+  defp load_direction(%State{load_intent: intent}) when intent in [:jump_last, "jump_last"],
+    do: :last
+
+  defp load_direction(%State{}), do: :initial
+
+  defp reader_window_limit(%State{reader_window_limit: limit})
+       when is_integer(limit) and limit > 0,
+       do: limit
+
+  defp reader_window_limit(%State{}), do: @reader_window_size
+
   defp selected_index_after_load(%State{load_intent: intent}, posts)
        when intent in [:jump_last, "jump_last"] do
     max(length(posts) - 1, 0)
   end
 
   defp selected_index_after_load(_state, _posts), do: 0
+
+  defp selected_index_after_window_load(%State{load_intent: intent}, _window, posts)
+       when intent in [:jump_last, "jump_last"] do
+    max(length(posts) - 1, 0)
+  end
+
+  defp selected_index_after_window_load(%State{} = state, window, posts) do
+    case window_direction(window) do
+      :last ->
+        max(length(posts) - 1, 0)
+
+      _other ->
+        selected_index_matching_current_post(state, posts)
+    end
+  end
+
+  defp window_direction(window), do: Map.get(window, :direction)
+
+  defp selected_index_matching_current_post(%State{} = state, posts) do
+    current = selected_post(state)
+
+    posts
+    |> Enum.find_index(fn post -> same_post?(post, current) end)
+    |> case do
+      nil -> 0
+      idx -> idx
+    end
+  end
+
+  defp same_post?(_post, nil), do: false
+
+  defp same_post?(post, current) do
+    (Map.get(post, :id) && Map.get(post, :id) == Map.get(current, :id)) ||
+      (Map.get(post, :message_number) &&
+         Map.get(post, :message_number) == Map.get(current, :message_number))
+  end
+
+  defp thread_activity_window_opts(%State{} = state) do
+    selected_message_number =
+      state
+      |> selected_post()
+      |> message_number()
+
+    around_message_number =
+      selected_message_number ||
+        state.window_first_message_number ||
+        state.window_last_message_number
+
+    [
+      direction: :around,
+      around_message_number: around_message_number,
+      limit: reader_window_limit(state)
+    ]
+  end
+
+  defp message_number(nil), do: nil
+  defp message_number(post), do: Map.get(post, :message_number)
 
   defp seed_pending_read_position(%State{thread_id: thread_id, posts: posts} = state)
        when is_binary(thread_id) and is_list(posts) do
