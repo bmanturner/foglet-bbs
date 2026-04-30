@@ -220,6 +220,13 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
+  # IN-01 (iteration 6): the iteration-3 IN-03 defense in
+  # `tab_labels_from_tabs/1` returns `[]` when `ss.tabs` is malformed.
+  # `length([]) = 0`, which previously crashed `jump_hint(0)` with
+  # `FunctionClauseError` -- defeating the upstream defense. Fall back
+  # to "1" so a corrupted tab struct degrades gracefully instead of
+  # crashing the moderation screen render.
+  defp jump_hint(_), do: "1"
 
   defp moderation_chrome do
     %{
