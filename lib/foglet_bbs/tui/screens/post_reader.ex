@@ -125,7 +125,8 @@ defmodule Foglet.TUI.Screens.PostReader do
           window_first_message_number: Map.get(window, :first_message_number),
           window_last_message_number: Map.get(window, :last_message_number),
           window_has_previous?: Map.get(window, :has_previous?, false),
-          window_has_next?: Map.get(window, :has_next?, false)
+          window_has_next?: Map.get(window, :has_next?, false),
+          pending_window_direction: nil
       }
       |> seed_pending_read_position()
       |> warm_selected_post(context)
@@ -201,24 +202,24 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["n", "N"] do
-    {advance_local_post(state, 1, context), []}
+    advance_local_post(state, 1, context)
   end
 
   def update({:key, %{key: :char, char: " "}}, %State{} = state, %Context{} = context) do
-    {advance_local_post(state, 1, context), []}
+    advance_local_post(state, 1, context)
   end
 
   def update({:key, %{key: :page_down}}, %State{} = state, %Context{} = context) do
-    {advance_local_post(state, 1, context), []}
+    advance_local_post(state, 1, context)
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["p", "P"] do
-    {advance_local_post(state, -1, context), []}
+    advance_local_post(state, -1, context)
   end
 
   def update({:key, %{key: :page_up}}, %State{} = state, %Context{} = context) do
-    {advance_local_post(state, -1, context), []}
+    advance_local_post(state, -1, context)
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -574,6 +575,17 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp selected_index_after_load(_state, _posts), do: 0
 
+  defp selected_index_after_window_load(%State{pending_window_direction: :next}, _window, _posts),
+    do: 0
+
+  defp selected_index_after_window_load(
+         %State{pending_window_direction: :previous},
+         _window,
+         posts
+       ) do
+    max(length(posts) - 1, 0)
+  end
+
   defp selected_index_after_window_load(%State{load_intent: intent}, _window, posts)
        when intent in [:jump_last, "jump_last"] do
     max(length(posts) - 1, 0)
@@ -660,17 +672,66 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp advance_local_post(%State{posts: posts} = state, _delta, _context)
        when posts in [nil, []] do
-    state
+    {state, []}
   end
 
   defp advance_local_post(%State{posts: posts} = state, delta, %Context{} = context) do
-    new_idx = (state.selected_post_index + delta) |> max(0) |> min(length(posts) - 1)
+    current_idx = state.selected_post_index
+    new_idx = (current_idx + delta) |> max(0) |> min(length(posts) - 1)
 
-    {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, state.viewport)
+    cond do
+      delta > 0 and current_idx == length(posts) - 1 and state.window_has_next? ->
+        load_adjacent_window(state, :next, context)
 
-    %{state | selected_post_index: new_idx, viewport: reset_vp}
-    |> seed_pending_read_position()
-    |> warm_selected_post(context)
+      delta < 0 and current_idx == 0 and state.window_has_previous? ->
+        load_adjacent_window(state, :previous, context)
+
+      true ->
+        {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, state.viewport)
+
+        state =
+          %{state | selected_post_index: new_idx, viewport: reset_vp}
+          |> seed_pending_read_position()
+          |> warm_selected_post(context)
+
+        {state, []}
+    end
+  end
+
+  defp load_adjacent_window(%State{thread_id: thread_id} = state, direction, %Context{} = context)
+       when is_binary(thread_id) do
+    posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+    opts = adjacent_window_opts(state, direction)
+
+    effect =
+      Effect.task(:load_posts_window, :post_reader, fn ->
+        posts_mod.list_reader_window(thread_id, opts)
+      end)
+
+    {%{
+       state
+       | status: :loading,
+         last_op: :load_posts_window,
+         pending_window_direction: direction
+     }, [effect]}
+  end
+
+  defp load_adjacent_window(%State{} = state, _direction, %Context{}), do: {state, []}
+
+  defp adjacent_window_opts(%State{} = state, :next) do
+    [
+      direction: :next,
+      after_message_number: state.window_last_message_number,
+      limit: reader_window_limit(state)
+    ]
+  end
+
+  defp adjacent_window_opts(%State{} = state, :previous) do
+    [
+      direction: :previous,
+      before_message_number: state.window_first_message_number,
+      limit: reader_window_limit(state)
+    ]
   end
 
   defp scroll_local_post(%State{posts: posts} = state, _delta, _context)
