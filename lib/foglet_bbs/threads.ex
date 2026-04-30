@@ -329,7 +329,10 @@ defmodule Foglet.Threads do
              thread
              |> Ecto.Changeset.change(%{board_id: new_board_id})
              |> Repo.update() do
-        # Pattern-match the return tuple to surface any unexpected shape (WR-04).
+        # Pattern-match the return tuple to surface any unexpected return
+        # shape from update_all (a non-`{integer, nil}` shape would mean Ecto
+        # changed its contract, and we want to fail loudly rather than
+        # silently swallow it).
         {_count, nil} =
           Repo.update_all(
             from(p in Post, where: p.thread_id == ^thread.id),
