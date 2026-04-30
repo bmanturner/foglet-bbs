@@ -108,47 +108,49 @@ defmodule Foglet.TUI.Screens.NewThread.State do
   def from_context(%Context{} = context) do
     params = context.route_params || %{}
     origin = Map.get(params, :origin) || Map.get(params, "origin") || :main_menu
-    board = Map.get(params, :board) || Map.get(params, "board")
+    opts = context_options(context, origin)
+
+    case routed_board(params) do
+      nil ->
+        new(Keyword.merge(opts, step: :board, boards: nil, load_status: :idle))
+
+      board ->
+        new(
+          Keyword.merge(opts,
+            step: :compose,
+            board: board,
+            boards: [board],
+            selected_board_index: 0,
+            load_status: :loaded
+          )
+        )
+    end
+  end
+
+  defp context_options(%Context{} = context, origin) do
     {w, _h} = context.terminal_size || {80, 24}
     session_context = context.session_context || %{}
 
-    max_post_length =
-      positive_integer(Map.get(session_context, :max_post_length), @default_max_post_length)
+    [
+      width: w,
+      max_post_length:
+        positive_integer(Map.get(session_context, :max_post_length), @default_max_post_length),
+      max_title_length:
+        positive_integer(
+          Map.get(session_context, :max_thread_title_length),
+          @default_max_thread_title_length
+        ),
+      origin: origin
+    ]
+  end
 
-    max_title_length =
-      positive_integer(
-        Map.get(session_context, :max_thread_title_length),
-        @default_max_thread_title_length
-      )
+  defp routed_board(params) do
+    board = Map.get(params, :board) || Map.get(params, "board")
 
     board_id =
       Map.get(params, :board_id) || Map.get(params, "board_id") || board_id_from_board(board)
 
-    if board do
-      board = normalize_board_id(board, board_id)
-
-      new(
-        width: w,
-        step: :compose,
-        board: board,
-        boards: [board],
-        selected_board_index: 0,
-        max_post_length: max_post_length,
-        max_title_length: max_title_length,
-        origin: origin,
-        load_status: :loaded
-      )
-    else
-      new(
-        width: w,
-        step: :board,
-        boards: nil,
-        max_post_length: max_post_length,
-        max_title_length: max_title_length,
-        origin: origin,
-        load_status: :idle
-      )
-    end
+    if board, do: normalize_board_id(board, board_id)
   end
 
   defp positive_integer(value, _default) when is_integer(value) and value > 0, do: value
