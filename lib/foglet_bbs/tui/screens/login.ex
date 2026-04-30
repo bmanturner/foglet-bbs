@@ -339,6 +339,14 @@ defmodule Foglet.TUI.Screens.Login do
     {:update, update_focused_input(state, new_input), []}
   end
 
+  # The third arg (`:handle`) is the default focused field used when
+  # `:focused_field` is missing from the screen state — e.g. the empty-map
+  # fallback returned by `LoginState.get/1`. `FocusInput.get_focused/3` then
+  # invokes `LoginState.input_key/1` with this default, so `:handle` must
+  # remain a member of `LoginState.focused_field()`. If the login-form
+  # focus atoms are ever split into a sibling state module, update this
+  # default (and the matching one in `update_focused_input/2` below) at the
+  # same time, or `input_key(:handle)` will raise `FunctionClauseError`.
   defp focused_input(state) do
     FocusInput.get_focused(LoginState.get(state), &LoginState.input_key/1, :handle)
   end
