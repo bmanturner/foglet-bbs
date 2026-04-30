@@ -415,7 +415,8 @@ defmodule Foglet.SSH.CLIHandler do
         timezone: preferences.timezone,
         time_format: preferences.time_format,
         theme_id: preferences.theme_id,
-        theme: preferences.theme
+        theme: preferences.theme,
+        ssh_peer: state.peer
       },
       terminal_size: {width, height}
     }

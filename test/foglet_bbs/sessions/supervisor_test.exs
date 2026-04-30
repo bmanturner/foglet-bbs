@@ -179,6 +179,31 @@ defmodule Foglet.Sessions.SupervisorTest do
       assert state.role == :user
     end
 
+    test "promote_guest_session/3 accepts audit metadata and promotes the guest", %{
+      user_id: user_id
+    } do
+      {:ok, guest_pid} = Sup.start_guest_session()
+
+      on_exit(fn ->
+        if Process.alive?(guest_pid), do: DynamicSupervisor.terminate_child(Sup, guest_pid)
+      end)
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "alice", role: :user}
+
+      assert :ok =
+               Sup.promote_guest_session(guest_pid, user,
+                 audit: %{ssh_peer: {{127, 0, 0, 1}, 2222}}
+               )
+
+      _ = :sys.get_state(guest_pid)
+
+      assert [{^guest_pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+      state = Session.get_state(guest_pid)
+      assert state.user_id == user_id
+      assert state.handle == "alice"
+      assert state.role == :user
+    end
+
     test "promote_guest_session/2 force-terminates a session that does not stop gracefully",
          %{user_id: user_id} do
       # Simulate a session that holds the Registry slot but never exits on

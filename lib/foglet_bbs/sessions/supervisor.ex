@@ -84,10 +84,35 @@ defmodule Foglet.Sessions.Supervisor do
   """
   @spec promote_guest_session(pid(), Foglet.Accounts.User.t()) :: :ok
   def promote_guest_session(guest_pid, user) when is_pid(guest_pid) do
+    promote_guest_session(guest_pid, user, [])
+  end
+
+  @doc """
+  Promote a guest session, attaching structured `opts[:audit]` metadata for the
+  promotion log line (SSH-02 / D-05).
+
+  Replacement context is determined here, at the existing Registry lookup
+  boundary, and merged into the audit map before the Session cast:
+    * no existing session → `replacement: :none`
+    * same `guest_pid` already registered → `replacement: :same_session`
+      (idempotent no-op; nothing is logged on the session because we never
+      cast)
+    * different old pid in the slot → `replacement: {:replaced, old_pid}`
+
+  Always returns `:ok`.
+  """
+  @spec promote_guest_session(pid(), Foglet.Accounts.User.t(), keyword()) :: :ok
+  def promote_guest_session(guest_pid, user, opts) when is_pid(guest_pid) and is_list(opts) do
+    audit = Keyword.get(opts, :audit, %{})
+
     case Registry.lookup(@registry, user.id) do
       [] ->
         # No existing session — simple promote.
-        Foglet.Sessions.Session.promote_to_user(guest_pid, user)
+        Foglet.Sessions.Session.promote_to_user(
+          guest_pid,
+          user,
+          Map.put(audit, :replacement, :none)
+        )
 
       [{^guest_pid, _}] ->
         # Already registered as this user — idempotent no-op.
@@ -95,7 +120,12 @@ defmodule Foglet.Sessions.Supervisor do
 
       [{old_pid, _}] ->
         # Different session holds the slot — replace it, then promote.
-        replace_then_promote(old_pid, guest_pid, user)
+        replace_then_promote(
+          old_pid,
+          guest_pid,
+          user,
+          Map.put(audit, :replacement, {:replaced, old_pid})
+        )
     end
   end
 
@@ -121,13 +151,13 @@ defmodule Foglet.Sessions.Supervisor do
 
   # --- Private ---
 
-  defp replace_then_promote(old_pid, guest_pid, user) do
+  defp replace_then_promote(old_pid, guest_pid, user, audit) do
     ref = Process.monitor(old_pid)
     send(old_pid, :replaced_by_new_session)
 
     receive do
       {:DOWN, ^ref, :process, ^old_pid, _reason} ->
-        Foglet.Sessions.Session.promote_to_user(guest_pid, user)
+        Foglet.Sessions.Session.promote_to_user(guest_pid, user, audit)
     after
       @replacement_timeout_ms ->
         Process.demonitor(ref, [:flush])
@@ -148,7 +178,7 @@ defmodule Foglet.Sessions.Supervisor do
             Process.exit(old_pid, :kill)
         end
 
-        Foglet.Sessions.Session.promote_to_user(guest_pid, user)
+        Foglet.Sessions.Session.promote_to_user(guest_pid, user, audit)
     end
   end
 

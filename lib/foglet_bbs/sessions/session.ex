@@ -110,7 +110,25 @@ defmodule Foglet.Sessions.Session do
   """
   @spec promote_to_user(pid(), Foglet.Accounts.User.t()) :: :ok
   def promote_to_user(pid, user) when is_pid(pid) do
-    GenServer.cast(pid, {:promote_to_user, user})
+    promote_to_user(pid, user, %{})
+  end
+
+  @doc """
+  Promote a guest session and pass structured `audit` metadata for
+  promotion logging (SSH-02 / D-05).
+
+  `audit` is a map. Recognised keys:
+    * `:ssh_peer` — peer descriptor captured at channel-up, or `nil` for
+      non-SSH callers.
+    * `:replacement` — replacement context determined by the supervisor:
+      `:none`, `:same_session`, or `{:replaced, old_pid}` (the supervisor
+      may also pass a `%{status: :replaced, old_pid: pid}` map equivalent).
+
+  Unknown keys are ignored. Always returns `:ok` (cast).
+  """
+  @spec promote_to_user(pid(), Foglet.Accounts.User.t(), map()) :: :ok
+  def promote_to_user(pid, user, audit) when is_pid(pid) and is_map(audit) do
+    GenServer.cast(pid, {:promote_to_user, user, audit})
   end
 
   defp resolve(pid) when is_pid(pid), do: pid
@@ -162,7 +180,18 @@ defmodule Foglet.Sessions.Session do
   end
 
   def handle_cast({:promote_to_user, user}, state) do
-    Logger.info("Session guest promoted to user_id=#{user.id} handle=#{user.handle}")
+    handle_cast({:promote_to_user, user, %{}}, state)
+  end
+
+  def handle_cast({:promote_to_user, user, audit}, state) when is_map(audit) do
+    Logger.info("Session guest promoted",
+      event: :guest_promoted,
+      session_pid: self(),
+      user_id: user.id,
+      handle: user.handle,
+      ssh_peer: Map.get(audit, :ssh_peer),
+      replacement: Map.get(audit, :replacement)
+    )
 
     # Register in the Registry so one-session enforcement applies.
     # The Supervisor's promote_guest_session/2 guarantees the slot is free before
