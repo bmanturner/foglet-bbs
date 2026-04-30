@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Completed 44-02-PLAN.md
-last_updated: "2026-04-30T00:48:17.118Z"
-last_activity: 2026-04-30 -- Phase 43 execution started
+stopped_at: Completed 44-04-PLAN.md
+last_updated: "2026-04-30T00:52:35.010Z"
+last_activity: 2026-04-30 -- Phase 44 Plan 44-04 completed
 progress:
   total_phases: 6
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 22
-  completed_plans: 17
-  percent: 77
+  completed_plans: 19
+  percent: 86
 ---
 
 # Project State
@@ -26,11 +26,11 @@ See: .planning/PROJECT.md (updated 2026-04-29)
 ## Current Position
 
 Phase: 43 (large-screen-decomposition) — EXECUTING
-Plan: 1 of 6
-Status: Executing Phase 43
-Last activity: 2026-04-30 -- Phase 43 execution started
+Plan: 2 of 6
+Status: Ready to execute
+Last activity: 2026-04-30 -- Phase 44 Plan 44-04 completed
 
-Progress: [█████████░] 89%
+Progress: [█████████░] 86%
 
 ## Performance Metrics
 
@@ -60,6 +60,7 @@ Progress: [█████████░] 89%
 | Phase 42 P42-05 | 7min | 3 tasks | 5 files |
 | Phase 44 P44-01 | 5min | 2 tasks | 4 files |
 | Phase 44 P44-02 | 10min | 4 tasks | 4 files |
+| Phase 44 P44-04 | 4min | 3 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -86,6 +87,9 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 44]: PostReader keeps State.posts as the active bounded window while storing reader-window cursor metadata beside it. — Preserves existing render/read-pointer compatibility while satisfying bounded-state POST-01.
 - [Phase 44]: Adjacent-window navigation uses pending_window_direction for boundary landing. — The reducer can deterministically select index 0 for next windows and the final post for previous windows after async task results.
 - [Phase 44]: Thread activity reloads use reader windows anchored around the selected post message number. — This preserves the current reader position when the refreshed bounded window still contains the selected post.
+- [Phase 44]: Reader/history tests assert soft-deleted post rows and original message numbers without checking rendered tombstone text.
+- [Phase 44]: Thread list tests cover list_threads/1, list_threads/2, and nil-user delegation through the shared not-deleted filter.
+- [Phase 44]: Board summary tests cover single and batch unread count APIs plus directory last-post summaries at the context boundary.
 
 ### Pending Todos
 
@@ -102,6 +106,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-30T00:33:29.811Z
-Stopped at: Completed 44-02-PLAN.md
+Last session: 2026-04-30T00:52:35.006Z
+Stopped at: Completed 44-04-PLAN.md
 Resume file: None
