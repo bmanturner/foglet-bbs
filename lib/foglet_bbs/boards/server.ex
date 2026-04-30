@@ -168,6 +168,7 @@ defmodule Foglet.Boards.Server do
 
       {:ok, :bumped}
     end)
+    # Multi step labels :post / :thread_update are load-bearing — see @moduledoc
     |> Repo.transaction()
   end
 
@@ -210,6 +211,7 @@ defmodule Foglet.Boards.Server do
 
       {:ok, :bumped}
     end)
+    # Multi step labels :post / :thread_update are load-bearing — see @moduledoc
     |> Repo.transaction()
   end
 end
