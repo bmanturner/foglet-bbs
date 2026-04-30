@@ -181,11 +181,18 @@ The handle is positional; the role is a flag:
 mix foglet.user.promote bman --role sysop
 ```
 
-A few related helpers also live in `lib/mix/tasks/`:
+A few related helpers also live in `lib/mix/tasks/` for operator and QA
+break-glass workflows:
 
-- `mix foglet.user.status` — inspect a user's current state.
-- `mix foglet.user.reset_password` — set a new password for a user.
-- `mix foglet.user.verification_code` — issue a verification code.
+- `mix foglet.user.status` — change a user's account status.
+- `mix foglet.users.approve` / `mix foglet.users.reject` — approve or reject a pending user.
+- `mix foglet.user.reset_password` — issue an operator-assisted reset token.
+- `mix foglet.reset_token.inspect` — issue a fresh no-email reset token for QA inspection.
+- `mix foglet.reset_token.expire` — force the latest reset token outside its validity window.
+- `mix foglet.user.verification_code` — issue a no-email verification code.
+- `mix foglet.verification.inspect` — inspect the latest unexpired no-email verification code.
+- `mix foglet.invites.create` / `list` / `inspect` / `revoke` — manage invite codes.
+- `mix foglet.qa.mode` — set registration, verification, and delivery-mode config for QA matrix runs.
 - `mix foglet.board_subscriptions` — operator-side subscription management.
 
 Run any task with no arguments for its usage banner.

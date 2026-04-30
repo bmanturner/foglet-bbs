@@ -274,7 +274,7 @@ Post-registration, users can add SSH keys from inside the TUI.
 Sysops and moderators are users with elevated roles. Admin affordances live in two places:
 
 - **Inside the SSH TUI** — moderation actions, user management, board/category editing, banner/news editing, oneliner moderation, report queue. This is the day-to-day workspace.
-- **Mix tasks on the server** — `mix foglet.user.create`, `mix foglet.user.promote`, `mix foglet.user.status`, `mix foglet.user.reset_password`, `mix foglet.user.verification_code`, `mix foglet.board_subscriptions`, `mix foglet.doctor`. For install, bootstrap, and break-glass scenarios. (Future: a `mix foglet.config.set` for runtime config edits and a `mix foglet.archive` read-only mode are tracked in the roadmap but not yet implemented.)
+- **Mix tasks on the server** — `mix foglet.user.create`, `mix foglet.user.promote`, `mix foglet.user.status`, `mix foglet.users.approve`, `mix foglet.users.reject`, `mix foglet.user.reset_password`, `mix foglet.reset_token.inspect`, `mix foglet.reset_token.expire`, `mix foglet.user.verification_code`, `mix foglet.verification.inspect`, `mix foglet.invites.create`, `mix foglet.invites.list`, `mix foglet.invites.inspect`, `mix foglet.invites.revoke`, `mix foglet.qa.mode`, `mix foglet.board_subscriptions`, `mix foglet.doctor`. For install, bootstrap, QA, and break-glass scenarios. (Future: a `mix foglet.config.set` for runtime config edits and a `mix foglet.archive` read-only mode are tracked in the roadmap but not yet implemented.)
 
 Phoenix LiveDashboard is exposed on the Phoenix endpoint, guarded by an admin-only plug. It's for observing the running system (process counts, ETS table sizes, request telemetry), not for operating the BBS.
 
