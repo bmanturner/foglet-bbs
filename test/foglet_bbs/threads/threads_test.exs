@@ -620,6 +620,142 @@ defmodule Foglet.ThreadsTest do
     end
   end
 
+  describe "default_page_size/0 (R4 — Phase 47)" do
+    test "returns 50" do
+      assert Foglet.Threads.default_page_size() == 50
+    end
+  end
+
+  describe "list_threads/{1,2,3} bounded (R3 — Phase 47)" do
+    # Build a fixture of 75 threads with mixed sticky and varying last_post_at.
+    # We seed inside the test so each test starts from a clean Sandbox state.
+    defp seed_75_threads(board, poster) do
+      # Insert 75 threads, then back-date their last_post_at to be strictly
+      # decreasing in insertion order so ordering is observable. Mark every
+      # 7th thread as sticky to exercise the [desc: sticky, desc: last_post_at]
+      # ordering across two tiers.
+      now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+      thread_ids =
+        for i <- 1..75 do
+          {:ok, %{thread: t}} =
+            Foglet.Threads.create_thread(board.id, poster.id, %{
+              title: "T-#{i}",
+              body: "b-#{i}"
+            })
+
+          # Back-date last_post_at by `i` seconds so older indexes appear later.
+          back = DateTime.add(now, -i, :second)
+          sticky = rem(i, 7) == 0
+
+          from(th in Foglet.Threads.Thread, where: th.id == ^t.id)
+          |> Repo.update_all(set: [last_post_at: back, sticky: sticky])
+
+          t.id
+        end
+
+      thread_ids
+    end
+
+    test "list_threads/2 returns at most @page_size (50) entries from a 75-thread board" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+      _ids = seed_75_threads(board, poster)
+
+      results = Foglet.Threads.list_threads(board.id, reader.id)
+      assert length(results) == 50
+    end
+
+    test "preserves [desc: sticky, desc: last_post_at] ordering under bound" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+      _ids = seed_75_threads(board, poster)
+
+      results = Foglet.Threads.list_threads(board.id, reader.id)
+
+      # Stickies must come before non-stickies.
+      sticky_flags = Enum.map(results, & &1.sticky)
+      sticky_count = Enum.count(sticky_flags, & &1)
+      assert Enum.take(sticky_flags, sticky_count) == List.duplicate(true, sticky_count)
+
+      # Within each sticky tier, last_post_at is monotonically non-increasing.
+      {sticky_rows, plain_rows} = Enum.split_with(results, & &1.sticky)
+
+      for rows <- [sticky_rows, plain_rows] do
+        timestamps = Enum.map(rows, & &1.last_post_at)
+
+        assert timestamps == Enum.sort(timestamps, {:desc, DateTime}),
+               "expected last_post_at to be desc-sorted within tier, got #{inspect(timestamps)}"
+      end
+    end
+
+    test "generated SQL contains LIMIT with 50 in the parameter list (binary user_id branch)" do
+      {board, _pid} = setup_board_with_server()
+      user = user_fixture()
+
+      query = Foglet.Threads.list_threads_query(board.id, user.id, [])
+      {sql, params} = Ecto.Adapters.SQL.to_sql(:all, FogletBbs.Repo, query)
+
+      assert sql =~ "LIMIT",
+             "expected generated SQL to contain LIMIT, got: #{sql}"
+
+      assert 50 in params,
+             "expected 50 in SQL params, got: #{inspect(params)}"
+    end
+
+    test "generated SQL contains LIMIT with 50 in the parameter list (nil user_id branch)" do
+      {board, _pid} = setup_board_with_server()
+
+      query = Foglet.Threads.list_threads_query(board.id, nil, [])
+      {sql, params} = Ecto.Adapters.SQL.to_sql(:all, FogletBbs.Repo, query)
+
+      assert sql =~ "LIMIT",
+             "expected generated SQL to contain LIMIT, got: #{sql}"
+
+      assert 50 in params,
+             "expected 50 in SQL params, got: #{inspect(params)}"
+    end
+
+    test "list_threads/1 (no user) is also bounded to @page_size" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      _ids = seed_75_threads(board, poster)
+
+      assert length(Foglet.Threads.list_threads(board.id)) == 50
+    end
+
+    test "list_threads/2 with nil user_id is bounded to @page_size" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      _ids = seed_75_threads(board, poster)
+
+      assert length(Foglet.Threads.list_threads(board.id, nil)) == 50
+    end
+
+    test "explicit :limit opt overrides @page_size default" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+      _ids = seed_75_threads(board, poster)
+
+      assert length(Foglet.Threads.list_threads(board.id, reader.id, limit: 10)) == 10
+      assert length(Foglet.Threads.list_threads(board.id, nil, limit: 10)) == 10
+    end
+
+    test "non-positive or invalid :limit falls back to @page_size default" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+      _ids = seed_75_threads(board, poster)
+
+      assert length(Foglet.Threads.list_threads(board.id, reader.id, limit: 0)) == 50
+      assert length(Foglet.Threads.list_threads(board.id, reader.id, limit: -5)) == 50
+      assert length(Foglet.Threads.list_threads(board.id, reader.id, limit: "garbage")) == 50
+    end
+  end
+
   describe "scope_for/1 (D-08)" do
     test "returns {:board, board_id} for a Thread struct" do
       thread = %Foglet.Threads.Thread{
