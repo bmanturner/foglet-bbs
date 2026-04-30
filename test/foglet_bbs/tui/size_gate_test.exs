@@ -102,10 +102,10 @@ defmodule Foglet.TUI.SizeGateTest do
       refute is_nil(element)
     end
 
-    test "handles missing terminal_size defensively (renders with 0×0)" do
+    test "handles missing terminal_size defensively (renders sentinel)" do
       element = SizeGate.render(%{session_context: %{}})
       serialized = inspect(element, limit: :infinity)
-      assert serialized =~ "0×0"
+      assert serialized =~ "unknown"
     end
   end
 end
