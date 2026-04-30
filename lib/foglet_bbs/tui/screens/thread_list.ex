@@ -272,6 +272,14 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp domain_module(%Context{session_context: ctx}, key), do: Domain.get(ctx || %{}, key)
 
+  # Dispatches the bounded thread-list query against whichever arity the
+  # configured `threads_mod` exports. Both real arities are bounded since
+  # Phase 47 (R3/R4): `list_threads/1` and `list_threads/2` delegate to
+  # `list_threads/3` and clamp at `@page_size` (50 by default, hard-ceiling
+  # `@max_page_size` of 500 — see WR-07/WR-02). The `/1` fallback exists
+  # for minimal test adapter modules (e.g. FakeThreads) that only export
+  # the no-user shape; result-size semantics no longer differ between the
+  # two paths (IN-01 iteration 2).
   defp dispatch_thread_load(threads_mod, board_id, user_id) do
     loaded? = match?({:module, _}, Code.ensure_loaded(threads_mod))
 
