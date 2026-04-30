@@ -84,6 +84,25 @@ paths that haven't yet hit their pagination ceiling.
   - `lib/foglet_bbs/tui/screens/login.ex` — 606 lines (now ~106)
   - `lib/foglet_bbs/ssh/cli_handler.ex` — 590 lines
 
+### `:task_result` unwrap helper migration is incomplete (Phase 47 IN-02)
+
+- Issue: Phase 47 IN-04 lifted `unwrap_task_result/1` into
+  `Foglet.TUI.Effect` and migrated `BoardList` and `Moderation` to use
+  it. `PostReader` and `PostComposer` still pattern-match the
+  double-`:ok` Raxol task wrapping inline, leaving the project with two
+  conventions for unwrapping the same shape.
+- Files:
+  - `lib/foglet_bbs/tui/screens/post_reader.ex` (multiple `update/3`
+    clauses on `:task_result`).
+  - `lib/foglet_bbs/tui/screens/post_composer.ex:75-105`.
+- Impact: Cosmetic / consistency. No correctness issue — both
+  conventions handle the same shapes. Drift risk: a future change to
+  Raxol's task-result wrapping would need to be applied in two places.
+- Fix approach: Replace the inline pattern matches with calls to
+  `Foglet.TUI.Effect.unwrap_task_result/1`. Defer to a dedicated cleanup
+  phase to keep the change reviewable; mirroring `BoardList` /
+  `Moderation` keeps the diff straightforward.
+
 ## Known Bugs
 
 No outstanding production bugs are tracked. `mix precommit` and the full
