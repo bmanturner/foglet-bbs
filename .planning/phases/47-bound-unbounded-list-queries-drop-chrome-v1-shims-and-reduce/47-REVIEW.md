@@ -2,10 +2,8 @@
 phase: 47-bound-unbounded-list-queries-drop-chrome-v1-shims-and-reduce
 reviewed: 2026-04-30T00:00:00Z
 depth: standard
-iteration: 2
-files_reviewed: 37
+files_reviewed: 36
 files_reviewed_list:
-  - .dialyzer_ignore.exs
   - lib/foglet_bbs/posts.ex
   - lib/foglet_bbs/threads.ex
   - lib/foglet_bbs/tui/app.ex
@@ -30,7 +28,7 @@ files_reviewed_list:
   - lib/foglet_bbs/tui/screens/verify.ex
   - lib/foglet_bbs/tui/widgets/chrome/screen_frame.ex
   - lib/foglet_bbs/tui/widgets/chrome/status_bar.ex
-  - lib/foglet_bbs/tui/widgets/README.md
+  - .dialyzer_ignore.exs
   - test/foglet_bbs/posts/posts_test.exs
   - test/foglet_bbs/threads/threads_test.exs
   - test/foglet_bbs/tui/app/screen_states_test.exs
@@ -42,290 +40,218 @@ files_reviewed_list:
   - test/foglet_bbs/tui/widgets/chrome/screen_frame_test.exs
   - test/foglet_bbs/tui/widgets/chrome/status_bar_test.exs
 findings:
-  blocker: 0
+  critical: 0
   warning: 4
-  info: 4
-  total: 8
+  info: 5
+  total: 9
 status: issues_found
 ---
 
-# Phase 47: Code Review Report (Iteration 2)
+# Phase 47: Code Review Report
 
 **Reviewed:** 2026-04-30
 **Depth:** standard
-**Files Reviewed:** 37
+**Files Reviewed:** 36
 **Status:** issues_found
 
 ## Summary
 
-This is a re-review after the Phase 47 fix pass (47-REVIEW-FIX.md) closed 13 of
-14 prior findings. The structural work is in good shape:
+Phase 47 lands three goals cleanly: (R3/R4) `Foglet.Threads.list_threads/{1,2,3}` is now bounded by `@page_size = 50` with a `@max_page_size = 500` ceiling and a defensive non-positive fallback; (R1) Chrome v1 widget shims are gone and `ScreenFrame` is the single chrome surface; (R5) `login.ex` is split into `Login.{Menu, LoginForm, ResetRequest, ResetConsume, Render}` per-mode reducers. Diff-resident defects are mostly minor — no security or data-loss blockers were found.
 
-- `Foglet.Posts.list_posts/1` is gone (`grep` confirms zero callers).
-- `Foglet.Threads.list_threads/{1,2,3}` is bounded by `@page_size 50` with
-  `@max_page_size 500` ceiling and a `default_page_size/0` accessor.
-- Chrome V1 paths are deleted: `Normalizer` and `KeyBar` modules no longer
-  exist (`find lib/.../widgets/chrome` shows only V2 files).
-- `App.ScreenStates` (34 LOC) and `App.SessionAlias` (75 LOC) are extracted.
-- `login.ex` collapsed from 606 → 102 LOC with per-mode sub-reducers and a
-  `state.ex` tagged-union owner.
-- BL-01 (`reader_has_next?/3`), WR-04 (selection fallback), WR-08
-  (`Moderation.domain_module/3`), and the IN-series fixes all landed cleanly
-  in code form.
+The most concerning items are around error handling in `LoginForm.handle_task_result` (network/system errors are silently mapped to "Invalid credentials"), an unhandled fall-through in `authenticate_login`'s `with` chain, and an unguarded `state.screen_state` write in `PostReader.load_posts/2`. None are introduced exclusively by this phase, but they live in the diff and the post-fix iteration of REVIEW.md is the appropriate place to record them.
 
-However, the re-review surfaces:
-
-- **Four WARNINGS** of regression / drift / latent defects: a duplicate of
-  the WR-03 unreachable-`render/2`-fallback pattern in `Moderation`
-  (BoardList was fixed; Moderation has the same shape and was missed); the
-  WR-07 `@max_page_size` ceiling is enforced in code but lacks the test the
-  reviewer asked for (the fix doc admits this is deferred); the WR-04
-  fallback is logic-bearing and the fix doc itself flags "the reader test
-  suite does not yet exercise the soft-deleted-pointer scenario" — confirmed
-  by grep, no test covers the new fallback path; and `Posts.list_reader_window/2`
-  silently coerces unknown `:direction` values to `:initial` with no log
-  line (analogous to WR-06 but never flagged in iteration 1).
-- **Four INFO** items: the `ThreadList.dispatch_thread_load/3`
-  `list_threads/1` fallback path now silently truncates to 50 rows (the
-  comment still implies "unbounded fallback"); IN-04's "PostReader and
-  PostComposer still pattern-match inline" carry-over remains (admitted in
-  the fix doc as out-of-scope); `Moderation` carries an unused private
-  `kv_grid_column/3` dead-code candidate; and `Threads.move_thread/2` has a
-  stale "WR-04" reference comment that points at a different phase's
-  finding.
-
-`mix precommit` is reportedly green per the fix doc.
+A handful of WR/IN findings from the prior REVIEW iteration have been fixed (BL-01, WR-01, WR-03, WR-04, WR-05, WR-06, WR-07, WR-08, IN-01..IN-05) — those are not re-reported here. The `TODO(WR-01)` markers for the duplicated `app_state_from_local/2` bridge across four sibling screens remain unresolved and are flagged below.
 
 ## Warnings
 
-### WR-01: `Moderation.render/2` has the same unreachable fallback that BoardList's WR-03 fix removed
+### WR-01: `LoginForm.handle_task_result/3` masks all task errors as `:invalid_credentials`
 
-**File:** `lib/foglet_bbs/tui/screens/moderation.ex:157,161`
-**Issue:** The fix for prior WR-03 deleted `BoardList`'s unreachable
-`def render(local_state, %Context{})` fallback. `Moderation` has an
-identical pattern that was missed by the original review and survived the
-fix pass:
+**File:** `lib/foglet_bbs/tui/screens/login/login_form.ex:52-57`
 
+**Issue:** Any `{:error, _reason}` returned by Raxol's task pipeline — including network failures, GenServer crashes, timeouts, or unhandled exceptions inside `authenticate_login/5` — is reduced to `{:error, :invalid_credentials}` and rendered to the user as "Invalid credentials." This conflates two distinct conditions:
+
+1. The user typed the wrong password (legitimate auth failure).
+2. The Foglet backend has a bug (e.g., the `WithClauseError` from the unhandled fall-through flagged in WR-02 below; an `Auth.authenticate_by_password/2` raise; an Ecto pool timeout).
+
+Effects: (a) users see misleading copy that suggests credential entry error when the system is broken; (b) operators lose a fault signal because no `Logger.error` fires here — the only Logger call in the App-side pipeline (`app.ex:373-383`, `:task_error`) does not reach this clause because `LoginForm.handle_task_result` is invoked via `:task_result` dispatch, not `:task_error`.
+
+**Fix:**
 ```elixir
-def render(%State{} = state, %Context{} = context) do
-  render_app_state(render_model(context, state))
-end
+def handle_task_result({:error, reason}, local_state, %Context{} = _ctx) do
+  require Logger
+  Logger.error("[Login] login task crashed: #{inspect(reason)}")
 
-def render(local_state, %Context{} = context),
-  do: render(normalize_state(local_state, context), context)
-```
+  modal = %Foglet.TUI.Modal{
+    type: :error,
+    message: "Login is temporarily unavailable. Please try again."
+  }
 
-`Routing.render_local_state/4` (in `app/routing.ex:182-190`) always either
-returns the stored `%State{}` or invokes `Moderation.init/1` (which returns
-`State.new(...)` — a `%State{}`). The fallback `render/2` head can never
-fire in production. Same WR-03 logic, same `@spec` exposure (the spec is
-narrowed to `render(State.t(), Context.t())` while the fallback accepts
-`local_state` of any shape — Dialyzer will eventually flag this if the
-spec is tightened).
-
-**Fix:** Delete the fallback head. Mirror the BoardList comment so future
-grep audits don't rediscover the same conclusion:
-
-```elixir
-@impl true
-@spec render(State.t(), Context.t()) :: any()
-def render(%State{} = state, %Context{} = context) do
-  render_app_state(render_model(context, state))
-end
-
-# Previously had a `def render(local_state, %Context{})` fallback that
-# called `normalize_state/2`. Routing.render_local_state/4 always either
-# returns a stored `%State{}` or calls `init/1` (which returns `%State{}`),
-# so the fallback was unreachable and Dialyzer would flag the @spec.
-```
-
-### WR-02: `@max_page_size` ceiling has no test coverage
-
-**File:** `lib/foglet_bbs/threads.ex:34,214-217`,
-`test/foglet_bbs/threads/threads_test.exs:737-756`
-**Issue:** The fix pass added `@max_page_size 500` and clamping logic
-(`min(limit, @max_page_size)`), but **the threads_test asserts only**:
-
-- `limit: 10` → 10 rows
-- `limit: 0` / `limit: -5` / `limit: "garbage"` → 50 rows (default)
-
-There is no assertion that `limit: 1_000_000` (or any value > 500) clamps
-to 500. The original review explicitly requested *"exercise
-`list_threads(board_id, nil, limit: 1_000_000)` in `threads_test.exs` to
-assert the SQL `LIMIT` is at most `@max_page_size`."* The fix doc (47-REVIEW-FIX.md
-WR-07) acknowledges this: *"the reviewer also requested a test exercising
-this — that test should be added in a follow-up alongside the broader
-bounded-query test suite, but the production code is already enforced."*
-
-The production code IS enforced — the bug surface is just that a future
-refactor of `normalize_limit/1` could silently weaken the clamp without any
-test catching it.
-
-**Fix:** Add a regression test, ideally inspecting the generated SQL via
-`Ecto.Adapters.SQL.to_sql/3` so the clamp is verified at the SQL boundary
-rather than relying on row counts (which require seeding 500+ threads):
-
-```elixir
-test "limit > @max_page_size clamps to ceiling" do
-  {board, _pid} = setup_board_with_server()
-  reader = user_fixture()
-  query = Foglet.Threads.list_threads_query(board.id, reader.id, limit: 1_000_000)
-  {sql, _params} = Ecto.Adapters.SQL.to_sql(:all, Repo, query)
-  assert sql =~ "LIMIT 500"
-
-  query2 = Foglet.Threads.list_threads_query(board.id, nil, limit: 999_999)
-  {sql2, _params} = Ecto.Adapters.SQL.to_sql(:all, Repo, query2)
-  assert sql2 =~ "LIMIT 500"
+  {local_state, [Effect.open_modal(modal)]}
 end
 ```
 
-### WR-03: WR-04 fallback has no test coverage; the fix doc itself flags this
+Reserve `{:error, :invalid_credentials}` for the explicit `{:ok, {:error, :invalid_credentials}}` shape returned by `authenticate_login/5` itself.
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:372-398`,
-`test/foglet_bbs/tui/screens/post_reader_test.exs`
-**Issue:** The WR-04 fix added `index_of_first_message_number_at_or_after/2`
-and a multi-step fallback chain in `place_selection_after_load/4`:
+---
 
-```elixir
-selected_index =
-  if is_integer(read_pointer_msg_no) do
-    index_of_message_number(posts, read_pointer_msg_no) ||
-      index_of_first_message_number_at_or_after(posts, read_pointer_msg_no) ||
-      selected_index_after_window_load(ss, window, posts)
-  else
-    selected_index_after_window_load(ss, window, posts)
-  end
-```
+### WR-02: `authenticate_login/5` `with` chain has unhandled fall-through cases
 
-`grep` of `post_reader_test.exs` for terms like `soft_delet`, `stale`,
-`index_of_first_message_number_at_or_after`, "missing window", or "deleted"
-turns up zero results in the WR-04-relevant scenarios (only a "stale styling"
-test on line 1342 and a "stale entries" cache test on 1476, both unrelated).
-The fix doc itself notes: *"this is logic-bearing — recommend manual
-confirmation that the 'closest >= pointer' semantics matches your intended
-UX (the review suggested this exact policy, but the reader test suite does
-not yet exercise the soft-deleted-pointer scenario)."*
+**File:** `lib/foglet_bbs/tui/screens/login/login_form.ex:130-146`
 
-So the fix shipped a new code path with no test coverage. This is the
-classic regression risk the spec's "compatibility with existing tests"
-constraint was meant to prevent — but the fallback is a *new* path, not
-covered by existing tests.
+**Issue:** The `with` chain matches `{:ok, user}` and `:active`. The `else` clause covers only:
 
-**Fix:** Add a unit test that seeds a 200-post thread, soft-deletes the
-post at `message_number = 150`, sets the read pointer there, and asserts
-`load_posts/2` lands at `message_number 151` (the closest `>= pointer`
-post). A second test should verify a stale-pointer scenario where the
-pointer's exact post no longer exists in the loaded window. These tests
-should use the existing fixture-mod indirection (`FakePosts`) so they
-don't require Repo.
+- `{:error, :invalid_credentials}`
+- `status when status in [:pending, :rejected, :suspended]`
 
-### WR-04: `Posts.list_reader_window/2` silently coerces unknown `:direction` values
+But `Foglet.Accounts.User.status` is an atom that can in principle take other values (e.g., `:unverified`, `:locked`, future additions, or a misshapen test fixture). Any value that is not `:active`, `:pending`, `:rejected`, or `:suspended` will raise `WithClauseError`. The crash is then swallowed by the `{:error, _reason}` clause flagged in WR-01 above and rendered as "Invalid credentials" — silently misclassifying the bug.
 
-**File:** `lib/foglet_bbs/posts.ex:149-153`
-**Issue:**
-```elixir
-defp normalize_reader_direction(direction)
-     when direction in [:initial, :next, :previous, :last, :around],
-     do: direction
+Additionally, if `Auth.authenticate_by_password/2` ever returns an error tuple other than `{:error, :invalid_credentials}` (e.g., `{:error, :rate_limited}`, `{:error, :unavailable}`), the same `WithClauseError` fires.
 
-defp normalize_reader_direction(_direction), do: :initial
-```
-
-This is the same defensive-coercion pattern as WR-06 from iteration 1
-(which got a `Logger.warning` in the fix pass). When a buggy caller passes
-e.g. `:before` (typo for `:previous`) or `"next"` (string instead of atom),
-`list_reader_window/2` silently runs the `:initial` branch with no log
-line. The PostReader is the primary caller and currently passes only the
-five legal atoms, but `direction` is an external-API-shaped option (it's
-documented in the `@spec` keyword list shape) and a future caller could
-easily get this wrong. Iteration 1 fixed exactly this pattern in
-`reader_rows_around/3` per WR-06; the same fix should apply here.
-
-**Fix:** Either drop the catch-all clause and let it `FunctionClauseError`
-on bad input, or add a `Logger.warning`:
+**Fix:** Add a generic else clause for unanticipated status atoms and unanticipated auth errors so the bug is surfaced instead of masked:
 
 ```elixir
-defp normalize_reader_direction(direction) do
-  Logger.warning(
-    "Foglet.Posts.list_reader_window/2 received unknown direction; " <>
-      "coercing to :initial. direction=#{inspect(direction)}"
-  )
-  :initial
+else
+  {:error, :invalid_credentials} ->
+    {:error, :invalid_credentials}
+
+  status when status in [:pending, :rejected, :suspended] ->
+    {:error, status}
+
+  {:error, other} ->
+    require Logger
+    Logger.error("[Login] unexpected auth error: #{inspect(other)}")
+    {:error, :invalid_credentials}
+
+  other ->
+    require Logger
+    Logger.error("[Login] unexpected user status: #{inspect(other)}")
+    {:error, :invalid_credentials}
 end
 ```
+
+---
+
+### WR-03: `PostReader.load_posts/2` writes to `state.screen_state` without nil-guard
+
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:316`
+
+**Issue:** `load_posts/2` ends with:
+
+```elixir
+{%{state | screen_state: Map.put(state.screen_state, :post_reader, ss)}, []}
+```
+
+`Map.put/3` raises `BadMapError` when the first argument is `nil`. `apply_flush_result/4` (line 501) uses the safer `Map.put(state.screen_state || %{}, :post_reader, new_ss)` and `get_screen_state/1` (line 545-546) accepts the no-`screen_state` case — but the write at line 316 does not.
+
+`load_posts/2` is documented (READER-02) as a "stable callable entry point" for tests and direct invocation; that contract gets exercised with partial fixtures whose `screen_state` is `nil`. The defensive treatment from line 501 was not propagated here.
+
+**Fix:**
+```elixir
+{%{state | screen_state: Map.put(state.screen_state || %{}, :post_reader, ss)}, []}
+```
+
+Audit the rest of the module for any other `state.screen_state`-as-map writes that lack the `|| %{}` guard.
+
+---
+
+### WR-04: `app_state_from_local/2` duplicated across four sibling screen modules; drift already started
+
+**Files:**
+- `lib/foglet_bbs/tui/screens/login.ex:84-95`
+- `lib/foglet_bbs/tui/screens/login/login_form.ex:247-258`
+- `lib/foglet_bbs/tui/screens/login/render.ex:51-62`
+- `lib/foglet_bbs/tui/screens/register.ex:313-324`
+- `lib/foglet_bbs/tui/screens/verify.ex:294-305`
+
+**Issue:** Five near-identical copies of the App-state bridge helper sit in this diff. `TODO(WR-01)` markers exist in four of them acknowledging the duplication and noting drift has already begun (the comment at `login_form.ex:240-246` calls out that `:session_pid` is missing from `login/reset_consume`'s call site, which is why `reset_consume.ex` does not have the helper at all — it accesses the wrapped state passed by `Login.update/3`).
+
+Adding any new App-state field — e.g., `:modal`, `:flash`, `:flags` — requires touching all five sites in lockstep. Equally, the duplicated `domain_module/2` helpers in the same screens (`login_form.ex:266-277`, `reset_consume.ex:144-153`, `reset_request.ex:152-161`, `register.ex:476-486`, `verify.ex:307-316`) all share the same shape and default mapping.
+
+This is not a correctness bug today but is a maintenance hazard explicitly acknowledged in-source.
+
+**Fix:** Extract to `Foglet.TUI.Screens.Shared.AppStateBridge` (or similar) with a `from_context/3` function taking `(local_state, context, screen_atom)` that returns the canonical App-state map. Co-locate `domain_module/2` (or move it to `Foglet.TUI.Screens.Domain`, where it belongs anyway). Update all five sites in one PR.
+
+This fix can be deferred (the TODO markers indicate that consciously) but should be tracked as a real backlog item — Linear ticket or similar — rather than left as inline TODO comments.
 
 ## Info
 
-### IN-01: `ThreadList.dispatch_thread_load/3` `list_threads/1` fallback comment is now stale
+### IN-01: `Threads.move_thread/2` hard-pattern-matches `Repo.update_all` return shape
 
-**File:** `lib/foglet_bbs/tui/screens/thread_list.ex:275-288`
-**Issue:** The `dispatch_thread_load/3` helper has a fallback chain that
-calls `threads_mod.list_threads/1` if `/2` is not exported:
+**File:** `lib/foglet_bbs/threads.ex:336-340`
+
+**Issue:** `{_count, nil} = Repo.update_all(...)` will raise `MatchError` if Ecto ever returns a different shape (e.g., a future Ecto version, or a wrapped adapter). The comment at lines 333-335 explicitly states this is intentional — "fail loudly rather than silently swallow it." The match is correct against today's Postgres adapter contract (`{integer, nil}` when no `:returning` is passed).
+
+This is intentional defensive code, not a defect. However, the pattern `_ = Repo.update_all(...)` would be equally safe and would not couple the code to a specific Ecto contract. Keeping the strict match is reasonable; the comment is clear about why. Logging this as Info rather than asking for a change.
+
+**Fix:** No change required. If the codebase prefers loose contracts elsewhere, consider replacing with `_ = Repo.update_all(...)` for consistency.
+
+---
+
+### IN-02: `Posts.create_reply/4` returns `:posting_not_allowed` for "thread does not exist"
+
+**File:** `lib/foglet_bbs/posts.ex:56-57`
+
+**Issue:** The `cond` clause `not match?(%Thread{board_id: ^board_id}, thread)` returns `:posting_not_allowed` for three distinct conditions: (a) thread not found (`nil` from `safe_get`), (b) thread belongs to a different board, (c) thread is not a `%Thread{}` struct. Conflating "not found" with "not allowed" can be deliberate security-information-hiding, but today the reader has to deduce the intent from `safe_get/2`'s nil-on-miss behavior.
+
+**Fix:** Add a one-line comment near line 56 stating that this clause intentionally folds three failure modes into a single error to avoid leaking thread existence to callers that lack post-creation permission. Or, if the obscuring is not intentional, split into `:thread_not_found | :thread_in_other_board | :posting_not_allowed`.
+
+---
+
+### IN-03: `PostReader` `:on_route_enter` `:load` path does not honor read-pointer position
+
+**File:** `lib/foglet_bbs/tui/screens/post_reader.ex:78-104, 324-332, 641-644`
+
+**Issue:** Two distinct load paths exist:
+
+1. `load_posts/2` (line 299) — the test-seam / direct-invocation path — uses `load_window_opts/2` which selects `:around` when a read pointer is available.
+2. `update(:load, %State{thread_id: …}, ctx)` (line 90) — the reducer path used by `:on_route_enter` — uses `load_direction/1`, which only checks `load_intent` and never inspects `pending_read_positions`. It always emits `:initial` or `:last`.
+
+The two paths give different selection behavior on the same state. A user re-entering a thread via the reducer path will land at index 0 (`:initial` window) even when their read pointer is at message 150 in a 200-post thread. The test-seam path correctly anchors on the pointer.
+
+This may be intentional (the reducer path is fresh-load semantics; the App-callback path is pointer-aware). But the inconsistency is undocumented and partially breaks the "if you saw it, you read it" promise in the moduledoc when the reducer path is exercised.
+
+**Fix:** Either:
+- Make `update(:load, …)` consult `state.pending_read_positions[thread_id]` and emit `direction: :around, around_message_number: …` like `load_posts/2` does, **or**
+- Document explicitly in the moduledoc that route-entry loads are always anchor-free and that pointer-driven load is only available through the `load_posts/2` callback path.
+
+---
+
+### IN-04: `Posts.list_reader_window` `:previous` direction with nil cursor returns ambiguous `has_next?`
+
+**File:** `lib/foglet_bbs/posts.ex:115-128`
+
+**Issue:** When called with `direction: :previous` and no `:before_message_number`, `cursor = nil`, and the desc query returns the last `limit + 1` posts unfiltered. `has_next?` is then computed as `posts != [] and reader_has_next?(thread_id, posts, nil)`. `reader_has_next?(_, [_|_], _)` returns `true`, so the function reports `has_next?: true` for the tail of the thread when there is no actual "next" window. Callers that rely on `has_next?` to enable pagination affordances will draw a "Next" hint that goes nowhere.
+
+This is unlikely to be hit in production because `PostReader.load_adjacent_window/3` always passes a valid `before_message_number` for `:previous`. But the public API contract permits the nil case (per `Keyword.get(opts, :before_message_number, nil)`), and the result is misleading.
+
+**Fix:** Mirror the BL-01 fix from `:next` — only consider `has_next?` true when there's a positive cursor:
 
 ```elixir
-loaded? and function_exported?(threads_mod, :list_threads, 1) ->
-  threads_mod.list_threads(board_id) |> Enum.map(&annotate_fallback/1)
+:previous ->
+  cursor = Keyword.get(opts, :before_message_number, nil)
+  rows = reader_rows(thread_id, before_message_number: cursor, order: :desc, limit: limit + 1)
+  {window_rows, extra} = Enum.split(rows, limit)
+  posts = Enum.reverse(window_rows)
+  has_next? =
+    posts != [] and is_integer(cursor) and cursor > 0 and
+      reader_has_next?(thread_id, posts, cursor)
+  reader_window(posts, direction, extra != [], has_next?)
 ```
 
-Pre-Phase-47, `list_threads/1` returned every non-deleted thread in the
-board (unbounded). Post-Phase-47, `list_threads/1` delegates to
-`list_threads/3` and is bounded to `@page_size`. The behavior is correct
-(no defect — the fallback now returns at most 50 threads, which is fine
-for any FakeThreads test adapter that only exports `/1`). But the
-surrounding code suggests this fallback is for "minimal adapter modules",
-and any reader of this code would not realize the fallback is now
-implicitly bounded.
+---
 
-**Fix:** Update the comment block above `dispatch_thread_load/3` to note
-that both `list_threads/1` and `list_threads/2` are bounded by `@page_size`
-since Phase 47, so the fallback path no longer differs in result-size
-semantics from the primary path.
+### IN-05: `SessionAlias.promote_session/2` proceeds with current_user update even when session_pid is missing
 
-### IN-02: PostReader and PostComposer still inline-pattern-match `:task_result` shapes
+**File:** `lib/foglet_bbs/tui/app/session_alias.ex:23-51`
 
-**File:** `lib/foglet_bbs/tui/screens/post_reader.ex` (multiple `update`
-clauses), `lib/foglet_bbs/tui/screens/post_composer.ex:75+`
-**Issue:** The IN-04 fix moved `unwrap_task_result/1` into
-`Foglet.TUI.Effect` and migrated `BoardList` and `Moderation` to use it via
-thin shims. The fix doc explicitly notes: *"PostReader and PostComposer
-still pattern-match inline; migrating them is a separate cleanup not
-required by IN-04."* That's a defensible scope decision but the project now
-has three different conventions for unwrapping the same double-`:ok`
-Raxol task wrapping (shared helper, inline pattern match, ad-hoc).
-**Fix:** Migrate PostReader and PostComposer to `Effect.unwrap_task_result/1`
-in a follow-up phase. Track explicitly so it doesn't get lost — either a
-TODO with `(IN-02)` tag or an entry in `.planning/codebase/CONCERNS.md`.
+**Issue:** When `state.session_pid` is not a pid, the function logs a warning and skips the call to `Foglet.Sessions.Supervisor.promote_guest_session/3` — but it still updates `state.current_user`, mutates `session_context.user`/`user_id`, and emits a `navigate(:main_menu)` effect. This leaves the session in a half-promoted state: the TUI thinks it's authenticated (so subsequent `permit?` checks may pass), but no row in the Session GenServer reflects this user. SSH-05 (one-session-per-user) cannot be enforced, and presence/heartbeat telemetry is silently lost.
 
-### IN-03: `Threads.move_thread/2` carries a stale "WR-04" comment from a different phase
+This is reachable in tests (which often build `%App{}` without a session_pid) and theoretically reachable in production if `init/1` ran before the SSH layer attached the pid. Today no test asserts the half-state behavior, and production wires the pid before `set_user` fires, so this is more of an "isolation hazard" than a live bug.
 
-**File:** `lib/foglet_bbs/threads.ex:332`
-**Issue:**
-```elixir
-# Pattern-match the return tuple to surface any unexpected shape (WR-04).
-{_count, nil} = Repo.update_all(...)
-```
-
-The "WR-04" tag here predates Phase 47 (Phase 47's WR-04 was the PostReader
-selection fallback in `post_reader.ex`, not a `move_thread` issue). A
-reader greppin' for "WR-04" inside Phase 47 will get false positives.
-**Fix:** Either update the comment to cite the originating phase
-(`# Pattern-match the return tuple to surface any unexpected shape (Phase NN
-WR-04).`) or just drop the tag and keep the rationale: `# Pattern-match
-the return tuple to surface any unexpected return shape from update_all.`
-
-### IN-04: `Moderation.kv_grid_column/3` is reachable but only via one site; consider inlining
-
-**File:** `lib/foglet_bbs/tui/screens/moderation.ex:504-512`
-**Issue:** `kv_grid_column/3` has a single caller (`compact_table_children/5`
-on line 520), and the helper itself is six lines including a `column do
-... end` block. The function is correct but the indirection adds no clarity
-and the docstring is longer than the body. Minor code-smell — fine to defer.
-**Fix:** Either inline the helper at its single caller, or leave it; this
-is a stylistic call.
+**Fix:** Decide whether the no-pid case should be a no-op (refuse to promote) or proceed (current behavior). Either way, document it explicitly. If proceeding is correct, expand the `Logger.warning` text to explain the consequence (telemetry will be missing, one-session-per-user cannot be enforced), not just that it happened.
 
 ---
 
 _Reviewed: 2026-04-30_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
-_Iteration: 2 (re-review after 47-REVIEW-FIX.md)_
