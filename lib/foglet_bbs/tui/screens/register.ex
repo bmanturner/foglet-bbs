@@ -461,13 +461,9 @@ defmodule Foglet.TUI.Screens.Register do
     {state, [Effect.open_modal(modal)]}
   end
 
-  defp registration_mode(%Context{} = context) do
-    case Map.get(session_ctx(context), :registration_mode) do
-      nil -> Config.get("registration_mode", "open")
-      mode -> mode
-    end
-  end
-
+  # IN-05: previously had two heads (`%Context{}` and any-term) with
+  # identical bodies — the catch-all already accepts a `%Context{}` and
+  # `session_ctx/1` resolves both shapes via `Map.get(:session_context)`.
   defp registration_mode(state) do
     case Map.get(session_ctx(state), :registration_mode) do
       nil -> Config.get("registration_mode", "open")
