@@ -235,6 +235,15 @@ defmodule Foglet.TUI.App do
     Effects.apply_effect(state, Foglet.TUI.Effect.navigate(screen, %{}))
   end
 
+  # WR-02: `:set_user`, `:promote_session`, navigation effects, and
+  # PubSub-driven messages flow through unconditionally — they are NOT
+  # gated behind `SizeGate.too_small?`. Rationale: these messages are
+  # exogenous (auth state changes, server-side promotions, broadcast
+  # activity) and must not be silently dropped because the user happens
+  # to be on a too-small frame. The gate only governs the rendered
+  # surface (`view/1`) and the reducer for keypresses (D-11) so user
+  # input cannot mutate hidden screens. State-changing effects from
+  # outside the keyboard pipeline are intentionally exempt.
   defp do_update({:set_user, user}, state), do: SessionAlias.set_user(state, user)
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
