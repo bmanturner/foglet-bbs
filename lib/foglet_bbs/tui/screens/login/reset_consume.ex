@@ -24,11 +24,11 @@ defmodule Foglet.TUI.Screens.Login.ResetConsume do
   # Identical for invalid, malformed, expired, and already-used tokens so the
   # screen never reveals which failure mode occurred.
   @reset_consume_invalid_or_expired_message "That reset token did not work. Ask the sysop for a new one."
-  @reset_consume_password_mismatch_message "Passwords do not match. Re-enter the new password."
+  @reset_consume_password_mismatch_message "Those two passwords don't match. Re-type the new one."
   # Generic copy for any password-changeset validation failure on the new
   # password. Honest enough to be actionable, but does not echo specific
   # validation reasons that could differ across users.
-  @reset_consume_password_invalid_message "Your new password is not acceptable. Choose a different password and try again."
+  @reset_consume_password_invalid_message "That password isn't allowed. Pick a different one."
 
   @spec handle_key(map(), map()) ::
           :no_match | {:update, map(), [Effect.t()]} | {map(), [Effect.t()]}

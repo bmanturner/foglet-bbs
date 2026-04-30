@@ -310,8 +310,11 @@ Screen tests live in `test/foglet_bbs/tui/screens/` and the App-level test in
 
 ## Mix task tests
 
-Break-glass Mix tasks (`mix foglet.user.*`, `mix foglet.board_subscriptions`) are
-tested under `test/mix/tasks/`. The pattern (from
+Break-glass Mix tasks (`mix foglet.user.*`, `mix foglet.users.*`,
+`mix foglet.invites.*`, `mix foglet.verification.inspect`,
+`mix foglet.reset_token.inspect`, `mix foglet.reset_token.expire`,
+`mix foglet.qa.mode`, `mix foglet.board_subscriptions`) are tested
+under `test/mix/tasks/`. The pattern (from
 `test/mix/tasks/foglet_user_create_test.exs`):
 
 ```elixir

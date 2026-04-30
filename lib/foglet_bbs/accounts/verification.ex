@@ -51,6 +51,95 @@ defmodule Foglet.Accounts.Verification do
   end
 
   @doc """
+  Return the latest unexpired no-email verification code for operator/QA use.
+
+  Verification codes are intentionally stored raw because they are short-lived.
+  This helper is disabled outside `delivery_mode = "no_email"` so email-mode
+  operators use the normal resend/delivery path instead of DB inspection.
+  """
+  @spec latest_no_email_verify_code(User.t()) ::
+          {:ok, %{code: String.t(), inserted_at: DateTime.t(), expires_at: DateTime.t()}}
+          | {:error, :unavailable | :not_found}
+  def latest_no_email_verify_code(%User{} = user) do
+    case Foglet.Config.delivery_mode() do
+      "no_email" ->
+        validity = UserToken.email_verify_validity_minutes()
+
+        query =
+          from t in UserToken,
+            where:
+              t.user_id == ^user.id and t.context == "email_verify" and
+                t.sent_to == ^user.email and t.inserted_at > ago(^validity, "minute"),
+            order_by: [desc: t.inserted_at],
+            limit: 1
+
+        case Repo.one(query) do
+          %UserToken{token: code, inserted_at: inserted_at} ->
+            {:ok,
+             %{
+               code: code,
+               inserted_at: inserted_at,
+               expires_at: DateTime.add(inserted_at, validity * 60, :second)
+             }}
+
+          nil ->
+            {:error, :not_found}
+        end
+
+      _delivery_mode ->
+        {:error, :unavailable}
+    end
+  end
+
+  @doc """
+  Generate a fresh no-email reset token for operator/QA inspection.
+
+  Reset tokens are stored only as SHA256 hashes and cannot be reconstructed from
+  the latest database row. This preserves that invariant while providing the
+  operator-held raw token QA needs to exercise the SSH reset-token flow.
+  """
+  @spec generate_no_email_reset_token_for_operator(User.t()) ::
+          {:ok, String.t()} | {:error, :unavailable | Ecto.Changeset.t()}
+  def generate_no_email_reset_token_for_operator(%User{} = user) do
+    case Foglet.Config.delivery_mode() do
+      "no_email" -> generate_reset_token_for_operator(user)
+      _delivery_mode -> {:error, :unavailable}
+    end
+  end
+
+  @doc """
+  Force the latest reset token for a user outside its validity window.
+
+  This is an operator/QA affordance for exercising expired-token flows without
+  sleeping for the full reset-token validity period. It preserves hashed-token
+  storage and only rewrites the row timestamp.
+  """
+  @spec expire_latest_reset_token_for_operator(User.t()) ::
+          {:ok, UserToken.t()} | {:error, :not_found | Ecto.Changeset.t()}
+  def expire_latest_reset_token_for_operator(%User{} = user) do
+    query =
+      from t in UserToken,
+        where: t.user_id == ^user.id and t.context == "reset_password",
+        order_by: [desc: t.inserted_at],
+        limit: 1
+
+    case Repo.one(query) do
+      %UserToken{} = token ->
+        expired_at =
+          DateTime.utc_now()
+          |> DateTime.add(-(UserToken.validity_days("reset_password") + 1), :day)
+          |> DateTime.truncate(:microsecond)
+
+        token
+        |> Ecto.Changeset.change(inserted_at: expired_at)
+        |> Repo.update()
+
+      nil ->
+        {:error, :not_found}
+    end
+  end
+
+  @doc """
   Persist and attempt delivery of an email verification code.
 
   Delivery is available only when `Foglet.Config.delivery_mode/0` is `"email"`.

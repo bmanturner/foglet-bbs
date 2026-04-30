@@ -27,7 +27,7 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
   @reset_email_dispatched_message "If an active account matches, reset instructions will be sent by email. To enter a reset token already in hand, return to the Login menu (Esc) and press [T] Enter reset token."
   @reset_invalid_email_message "Please enter an email address (for example: name@example.test)."
   @reset_no_email_intro "Email delivery is disabled on this Foglet. Contact a sysop or operator over SSH to request a reset token, then return to the Login menu (Esc) and press [T] Enter reset token to set a new password."
-  @reset_no_email_no_sysops_fallback "No sysop contact email is published on this Foglet. Reach an operator through your invite or community channel."
+  @reset_no_email_no_sysops_fallback "No sysop contact is listed on this Foglet. Reach them through whoever sent your invite."
 
   @spec handle_key(map(), map()) ::
           :no_match | {:update, map(), [Effect.t()]} | {map(), [Effect.t()]}
