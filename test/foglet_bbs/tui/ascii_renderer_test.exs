@@ -80,4 +80,58 @@ defmodule Foglet.TUI.AsciiRendererTest do
       end
     end
   end
+
+  describe "RenderFixtures.state_for/3" do
+    test "seeds login sub-states" do
+      state = RenderFixtures.state_for(:login, @size, substate: "reset_consume")
+
+      assert state.current_screen == :login
+      assert %{sub: :reset_consume, token_input: token_input} = state.screen_state.login
+      assert token_input.raxol_state.value == "RESET-TOKEN"
+    end
+
+    test "seeds invite-only register gating" do
+      state = RenderFixtures.state_for(:register, @size, substate: "invite_only")
+
+      assert state.session_context.registration_mode == "invite_only"
+      assert %{mode: "invite_only", step: :invite_code} = state.screen_state.register
+    end
+
+    test "seeds verify resend cooldown copy through a modal" do
+      state = RenderFixtures.state_for(:verify, @size, substate: "resend_cooldown")
+
+      assert state.current_screen == :verify
+      assert %{resend_cooldown_until: %DateTime{}} = state.screen_state.verify
+      assert state.modal.message =~ "Please wait to resend"
+    end
+
+    test "seeds account-state gates as renderable login modals" do
+      state = RenderFixtures.state_for(:login, @size, substate: "suspended")
+
+      assert state.current_user.status == :suspended
+      assert state.current_screen == :login
+      assert state.modal.message == "Your account is suspended. Contact the sysop."
+    end
+
+    test "hydrates a JSON-decoded app state overlay" do
+      state =
+        RenderFixtures.state_for(:login, @size,
+          seed_state: %{
+            "session_context" => %{"registration_mode" => "disabled"},
+            "screen_state" => %{
+              "login" => %{"sub" => "login_form"}
+            }
+          }
+        )
+
+      assert state.session_context.registration_mode == "disabled"
+      assert state.screen_state.login.sub == :login_form
+    end
+
+    test "raises ArgumentError for unknown sub-states" do
+      assert_raise ArgumentError, ~r/unknown substate/, fn ->
+        RenderFixtures.state_for(:login, @size, substate: "nope")
+      end
+    end
+  end
 end
