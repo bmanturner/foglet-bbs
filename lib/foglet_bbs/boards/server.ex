@@ -131,6 +131,17 @@ defmodule Foglet.Boards.Server do
     {:via, Registry, {Foglet.BoardRegistry, board_id}}
   end
 
+  # Suppress :call_without_opaque on the two Multi composition helpers below.
+  # The warning is a known dialyzer interaction: Multi.new/0 returns a
+  # fully-concrete empty struct that dialyzer's success typing then refuses to
+  # treat as the opaque Ecto.Multi.t/0 expected by Multi.update_all/3,
+  # Multi.run/3, etc. The composition is correct at runtime — Ecto's public
+  # API supports exactly this pattern — and there is no spec-level workaround
+  # that survives dialyzer's struct-shape inference. Scoping the directive to
+  # these two functions keeps any future :call_without_opaque elsewhere in the
+  # module observable.
+  @dialyzer {:no_opaque, [run_post_insert_multi: 5, run_thread_create_multi: 4]}
+
   defp run_post_insert_multi(board_id, thread_id, user_id, attrs, message_number) do
     Multi.new()
     |> Multi.run(:bump_board_counter, fn repo, _ ->
