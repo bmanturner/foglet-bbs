@@ -184,36 +184,41 @@ defmodule Foglet.Sessions.Session do
   end
 
   def handle_cast({:promote_to_user, user, audit}, state) when is_map(audit) do
-    Logger.info("Session guest promoted",
-      event: :guest_promoted,
-      session_pid: self(),
-      user_id: user.id,
-      handle: user.handle,
-      ssh_peer: Map.get(audit, :ssh_peer),
-      replacement: Map.get(audit, :replacement)
-    )
-
-    # Register in the Registry so one-session enforcement applies.
-    # The Supervisor's promote_guest_session/2 guarantees the slot is free before
-    # casting this message. If registration fails here it is a protocol bug — log
-    # it loudly so it surfaces rather than staying silent.
+    # Register in the Registry FIRST so the one-session-per-user invariant is
+    # enforced before we mutate any identity state. If registration fails the
+    # slot is already held by another pid (typically a stale entry that the
+    # registry has not yet cleared), and we must NOT merge user identity into
+    # this session — doing so would leave a process holding an authenticated
+    # identity in memory that is unreachable through the Registry, silently
+    # bypassing replacement enforcement (SSH-05 / D-25).
     case Registry.register(Foglet.Sessions.Registry, user.id, nil) do
       {:ok, _} ->
-        :ok
+        Logger.info("Session guest promoted",
+          event: :guest_promoted,
+          session_pid: self(),
+          user_id: user.id,
+          handle: user.handle,
+          ssh_peer: Map.get(audit, :ssh_peer),
+          replacement: Map.get(audit, :replacement)
+        )
+
+        state =
+          state
+          |> Map.merge(%{user_id: user.id, handle: user.handle, role: user.role})
+          |> merge_preferences(Preferences.from_user(user))
+
+        {:noreply, state}
 
       {:error, {:already_registered, other_pid}} ->
         Logger.error(
-          "Session promote_to_user: Registry slot for user_id=#{user.id} still held by " <>
-            "pid=#{inspect(other_pid)} — protocol violation (promote_guest_session not used?)"
+          "Session promote_to_user: Registry slot for user_id=#{user.id} held by " <>
+            "pid=#{inspect(other_pid)}; refusing promotion to keep one-session invariant"
         )
+
+        # Stop loudly so the SSH channel tears down the orphan rather than
+        # leaving a half-promoted session in memory.
+        {:stop, {:registry_collision, user.id}, state}
     end
-
-    state =
-      state
-      |> Map.merge(%{user_id: user.id, handle: user.handle, role: user.role})
-      |> merge_preferences(Preferences.from_user(user))
-
-    {:noreply, state}
   end
 
   @impl true
