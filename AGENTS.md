@@ -9,6 +9,23 @@ make that product surface intentional.
 Use `rtk` as the shell command prefix in this repo, for example
 `rtk mix test` or `rtk git status`.
 
+## Checkout Convention
+
+Keep the canonical source checkout at `/home/needz/Dev/personal/foglet-bbs`
+on `main` when no task is actively using it. Use per-issue git worktrees for
+implementation by default, created outside the canonical checkout under
+`/home/needz/Dev/personal/foglet-bbs-worktrees/`.
+
+Name branches and worktree directories after the issue identifier plus a short
+slug, for example `fog-57-qa-sandbox-ops`. This prevents one agent's in-flight
+branch from changing another agent's runtime or QA baseline. A short-lived
+direct branch in the canonical checkout is acceptable only when the execution
+harness has already claimed that checkout for the task.
+
+Before handoff, record any non-default worktree path or database URL in the
+issue comment. Remove stale worktrees after their branches are merged or
+abandoned.
+
 ## Read First
 
 Consult the narrowest relevant docs before non-trivial changes:
