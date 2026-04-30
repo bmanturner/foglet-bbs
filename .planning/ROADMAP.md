@@ -17,7 +17,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 43: Large Screen Decomposition** - Separate reducer, state, and render responsibilities in the largest screen modules named by the audit. (completed 2026-04-30)
 - [x] **Phase 44: PostReader And Content Query Hardening** - Add scalable PostReader loading/cache behavior and protect soft-delete/purity invariants. (completed 2026-04-30)
 - [ ] **Phase 45: SSH And Session Runtime Hardening** - Bound key stashes, strengthen promotion auditability, and make termination/counter behavior trustworthy.
-- [ ] **Phase 46: Domain Cleanup And Final Quality Gate** - Resolve board/domain cleanup, Dialyzer baseline debt, and prove every audit concern has a disposition.
+- [x] **Phase 46: Domain Cleanup And Final Quality Gate** - Resolve board/domain cleanup, Dialyzer baseline debt, and prove every audit concern has a disposition. (completed 2026-04-30)
 
 ## Phase Details
 
@@ -58,7 +58,7 @@ Cross-cutting constraints:
 - [x] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
 - [x] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
 - [x] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
-- [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
+- [x] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
 **UI hint**: yes
 
 ### Phase 43: Large Screen Decomposition
@@ -73,7 +73,7 @@ Cross-cutting constraints:
 **Plans**: 4 plans
 - [x] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
 - [x] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
-- [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
+- [x] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
 - [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
 **UI hint**: yes
 
@@ -142,7 +142,7 @@ Cross-cutting constraints:
   5. Maintainer can run the milestone close gate and see no unaddressed concern-audit items.
 **Plans**: 4 plans
 - [x] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
-- [ ] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
+- [x] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
 - [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
 - [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
 
@@ -181,4 +181,4 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 | 43. Large Screen Decomposition | 6/6 | Complete   | 2026-04-30 |
 | 44. PostReader And Content Query Hardening | 4/4 | Complete   | 2026-04-30 |
 | 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
-| 46. Domain Cleanup And Final Quality Gate | 3/4 | In Progress|  |
+| 46. Domain Cleanup And Final Quality Gate | 4/4 | Complete   | 2026-04-30 |
