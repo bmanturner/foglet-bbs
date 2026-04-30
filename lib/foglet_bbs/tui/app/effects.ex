@@ -58,6 +58,13 @@ defmodule Foglet.TUI.App.Effects do
 
   def apply_effect(%App{} = state, %Effect{
         type: :session,
+        payload: {:promote_session, user}
+      }) do
+    App.update({:promote_session, user}, state)
+  end
+
+  def apply_effect(%App{} = state, %Effect{
+        type: :session,
         payload: {:set_current_user, user}
       }) do
     {%{state | current_user: user}, []}

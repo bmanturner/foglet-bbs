@@ -117,6 +117,30 @@ defmodule Foglet.TUI.App.EffectsTest do
     assert_receive {:heartbeat, pid} when pid == self()
   end
 
+  test "session promote_session navigates to main_menu and sets current_user" do
+    user = %Foglet.Accounts.User{id: "u-promote", handle: "alice", role: :user}
+
+    session_context = %{
+      domain: %{screen_modules: %{main_menu: SampleScreen, sample: SampleScreen}}
+    }
+
+    original =
+      state(
+        session_pid: self(),
+        current_screen: :sample,
+        session_context: session_context,
+        screen_state: %{sample: %SampleScreen.State{}}
+      )
+
+    {promoted, _cmds} =
+      Effects.apply_effect(original, Effect.session({:promote_session, user}))
+
+    assert promoted.current_user == user
+    assert promoted.current_screen == :main_menu
+    assert promoted.session_context.user == user
+    assert promoted.session_context.user_id == user.id
+  end
+
   test "terminal size effect updates terminal_size through window-change handling" do
     {resized, []} = Effects.apply_effect(state(), Effect.terminal_size({120, 40}))
 
