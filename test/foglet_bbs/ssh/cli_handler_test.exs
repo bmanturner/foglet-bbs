@@ -206,7 +206,8 @@ defmodule Foglet.SSH.CLIHandlerTest do
           session_pid: nil,
           pubkey_authenticated: false,
           registration_mode: "open",
-          max_post_length: 8192
+          max_post_length: 8192,
+          ssh_peer: nil
         },
         terminal_size: {80, 24}
       }
@@ -232,7 +233,8 @@ defmodule Foglet.SSH.CLIHandlerTest do
           session_pid: nil,
           pubkey_authenticated: true,
           registration_mode: "open",
-          max_post_length: 8192
+          max_post_length: 8192,
+          ssh_peer: {{127, 0, 0, 1}, 2222}
         },
         terminal_size: {132, 50}
       }

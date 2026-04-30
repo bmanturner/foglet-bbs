@@ -30,6 +30,11 @@ defmodule Foglet.TUI.SessionContext do
   - `theme` — flat `%Foglet.TUI.Theme{}` snapshot resolved from `theme_id` at
     session start. Screens and widgets read colour slots directly from this
     struct to avoid per-render lookups.
+  - `ssh_peer` — the SSH peer descriptor captured by `Foglet.SSH.CLIHandler`
+    at channel-up time (typically `{ip_tuple, port}` or `:unknown`), or `nil`
+    for non-SSH callers (tests, render fixtures). Carried into the
+    guest-to-user promotion path so promotion audit logs can include peer
+    context (SSH-02 / D-04).
   """
 
   @type t :: %__MODULE__{
@@ -42,7 +47,8 @@ defmodule Foglet.TUI.SessionContext do
           timezone: String.t(),
           time_format: String.t(),
           theme_id: String.t(),
-          theme: Foglet.TUI.Theme.t()
+          theme: Foglet.TUI.Theme.t(),
+          ssh_peer: term() | nil
         }
 
   defstruct [
@@ -55,6 +61,7 @@ defmodule Foglet.TUI.SessionContext do
     :timezone,
     :time_format,
     :theme_id,
-    :theme
+    :theme,
+    :ssh_peer
   ]
 end
