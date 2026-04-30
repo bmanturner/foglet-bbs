@@ -8,6 +8,13 @@ post-Phase-40 codebase passes `rtk mix precommit` and the full `rtk mix test`
 suite (1 property + 2161 tests, 0 failures), so most concerns below are latent
 risks, bounded compatibility shims, or ergonomic debt — not active failures.
 
+**v2.1 close pass (2026-04-29):** Phase 46 added an inline `**Disposition:**`
+line to every `### ` heading in this file, classifying each concern as `Fixed
+in Phase NN` (with a SUMMARY anchor or file pointer), `Intentionally retained`
+(with rationale and, where applicable, a `ROADMAP.md` backlog pointer), or
+`Covered by ...` (with the test or doc artifact named). The original v2.0
+concern text is preserved verbatim; this pass adds annotations only.
+
 ## Tech Debt
 
 ### TUI: Bounded compatibility callback surface still attached to `Foglet.TUI.Screen`
@@ -29,6 +36,7 @@ risks, bounded compatibility shims, or ergonomic debt — not active failures.
   callbacks from `Foglet.TUI.Screen`, (b) deletes the legacy `render/1` /
   `handle_key/2` clauses from each production screen, and (c) migrates the
   remaining smoke/compat tests onto `update/3` + `render/2` seams.
+- **Disposition:** Fixed in Phase 41 — canonical `update/3` + `render/2` screen contract finalized and compat callbacks retired across production screens; see `41-01-SUMMARY.md` and `41-02-SUMMARY.md`.
 
 ### TUI: Process-dictionary modal-submit handoff (`take_screen_modal_submit`)
 
@@ -51,6 +59,7 @@ risks, bounded compatibility shims, or ergonomic debt — not active failures.
   `Effect.modal_submit(screen_key, kind, payload)`) emitted by the form
   reducer, interpreted by App, and routed through the target screen's
   `update/3`. Tracked under Phase 39 carry-forward `WR-04` (Excluded for v2.0).
+- **Disposition:** Fixed in Phase 41 — first-class modal-submit effect introduced and `SubmitStash` removed; see `41-03-SUMMARY.md` and `41-04-SUMMARY.md`.
 
 ### TUI: `Foglet.TUI.App` is still 1006 lines and concentrates routing/effects
 
@@ -66,6 +75,7 @@ risks, bounded compatibility shims, or ergonomic debt — not active failures.
 - Fix approach: Extract dedicated modules — e.g. `App.Routing`, `App.Modal`,
   `App.Subscriptions`, `App.Effects` — each with a narrow API the App calls
   into. Keep the App struct and runtime callbacks in `app.ex`.
+- **Disposition:** Fixed in Phase 42 — `App.Routing`, `App.Modal`, `App.Effects`, `App.Subscriptions`, and helper extractions landed across plans 42-01 through 42-05; see `42-01-SUMMARY.md` through `42-05-SUMMARY.md`.
 
 ### Domain: Screen modules are large and concentrate complexity
 
@@ -85,6 +95,7 @@ risks, bounded compatibility shims, or ergonomic debt — not active failures.
   `screens/<name>/state.ex` + `screens/<name>/render.ex` + the reducer module
   itself; PostReader and several others already use a sibling state module
   but still keep render helpers inline.
+- **Disposition:** Fixed in Phase 43 — PostReader, MainMenu, Sysop, Login, NewThread, and Account screens decomposed into sibling `state.ex` / `render.ex` modules; see `43-01-SUMMARY.md` through `43-06-SUMMARY.md`.
 
 ### Boards.Supervisor.boot_board_servers/0 stub still present
 
@@ -99,6 +110,7 @@ risks, bounded compatibility shims, or ergonomic debt — not active failures.
   module.
 - Fix approach: Delete the stub from the supervisor module; the application
   already calls the context function directly.
+- **Disposition:** Fixed in Phase 46 — `lib/foglet_bbs/boards/supervisor.ex` stub removed (DOM-01); see `46-01-SUMMARY.md`.
 
 ### Pre-existing Dialyzer warnings ignored, not fixed
 
@@ -114,6 +126,7 @@ risks, bounded compatibility shims, or ergonomic debt — not active failures.
 - Fix approach: Iteratively narrow specs to match success-typing, then drop
   the ignore entry. The Phase 40 `Carry-Forward Disposition Register`
   established the pattern for `board_list.ex:161` and `sysop.ex:823`.
+- **Disposition:** Fixed in Phase 46 — `.dialyzer_ignore.exs` baseline reduced from 54 lines / 28 entries to 46 lines / 22 entries, `:call_without_opaque` eliminated, every kept entry annotated under bucket headers (QUAL-01); see `46-03-SUMMARY.md`.
 
 ## Known Bugs
 
@@ -147,6 +160,7 @@ this section as new phases land.
      Session side via `Logger.info` in `Foglet.Sessions.Session.handle_cast/2`
      for `{:promote_to_user, user}`); consider a structured audit row tied to
      peer IP for forensics.
+- **Disposition:** Fixed in Phase 45 — `Foglet.SSH.PubkeyStash` gained a TTL + periodic sweep (`lib/foglet_bbs/ssh/pubkey_stash.ex`) and structured promotion-audit metadata (`ssh_peer` carried into the session context) was added; see `45-01-SUMMARY.md` and `45-02-SUMMARY.md`.
 
 ### Plain `Repo.transaction` skips Repo.transact ergonomics in board server
 
@@ -161,6 +175,7 @@ this section as new phases land.
   `{:error, _op, reason, _changes}` shape that the GenServer reply path
   expects) and leave it, OR convert to `Repo.transact/1` returning a single
   `{:error, _}` shape if the Multi step labels are not externally observed.
+- **Disposition:** Fixed in Phase 46 — documented as intentional, locked deviation from `Repo.transact/1` (DOM-02); see `lib/foglet_bbs/boards/server.ex` `## Transaction strategy` moduledoc and `46-02-SUMMARY.md`.
 
 ## Performance Bottlenecks
 
@@ -175,6 +190,7 @@ this section as new phases land.
   thread loads 1000 rows and 1000 unique-user preload rows.
 - Improvement path: Add a paginated variant (`list_posts_after/3` cursor by
   message_number) and let PostReader request batches as the user navigates.
+- **Disposition:** Intentionally retained — partially addressed by Phase 44 PostReader bounded reader-window/render-cache hardening (`44-01-SUMMARY.md`, `44-02-SUMMARY.md`); full cursor-pagination of `list_posts/1` deferred at v2.1 kickoff. See `ROADMAP.md` backlog.
 
 ### PostReader render cache keyed by `{post_id, terminal_width}`
 
@@ -190,6 +206,7 @@ this section as new phases land.
   the cache solely on `post_id` and re-flow on width change inside the render
   function. Likely not needed at current scale; revisit if memory growth
   during long PostReader sessions becomes observable.
+- **Disposition:** Fixed in Phase 44 — reducer-side resize cache eviction landed (stale widths drop on `:resize`); see `44-03-SUMMARY.md`. Width-LRU eviction during steady-state intentionally retained as out-of-scope at current scale; see `ROADMAP.md` backlog.
 
 ## Fragile Areas
 
@@ -212,6 +229,7 @@ this section as new phases land.
 - Test coverage: Direct tests of replacement timing are present but the
   forced-termination (2s timeout) branch is rarely exercised under realistic
   load.
+- **Disposition:** Covered by `45-03-SUMMARY.md` — unified SSH cleanup helper plus connection-counter lifecycle proof tests exercise the termination paths that the replacement-race protocol relies on for clean Registry-slot release.
 
 ### `Foglet.SSH.CLIHandler` global connection counter
 
@@ -228,6 +246,7 @@ this section as new phases land.
   in tests (the increment happens before the handler returns success). A
   defensive improvement would be to clamp the counter at 0 on every
   decrement (already done via the `{2, -1, 0, 0}` atomic op).
+- **Disposition:** Fixed in Phase 45 — idempotent cleanup via `cleanup_done?` + `counter_counted?` state flags ensures exactly-once decrement across normal close, EOF-to-close, lifecycle EXIT, over-limit reject, rate-limit reject, and crash-during-init paths; see `45-03-SUMMARY.md`.
 
 ### Alt-screen escape sequences scattered across CLIHandler termination paths
 
@@ -240,6 +259,7 @@ this section as new phases land.
 - Safe modification: Extract a single `terminate_channel(state, reason)`
   helper that owns alt-screen leave + lifecycle stop + session stop +
   counter decrement. Currently each branch open-codes the sequence.
+- **Disposition:** Fixed in Phase 45 — single `cleanup/2` helper now owns alt-screen leave, lifecycle stop, session stop, optional channel close, and counter decrement; every termination-sensitive callback delegates to it; see `45-03-SUMMARY.md`.
 
 ### Render-path purity invariant on PostReader is enforced by convention only
 
@@ -253,6 +273,7 @@ this section as new phases land.
 - Safe modification: Consider a Credo custom check or a static-analysis
   helper that scans `defp render_*` for forbidden calls (`put_in`, `Map.put`,
   `%{state | ...}`).
+- **Disposition:** Covered by `44-03-SUMMARY.md` (render-purity guard hardening — render module scanned for forbidden state writes during tests) and `43-04-SUMMARY.md` (PostReader decomposition into render/state modules).
 
 
 ## Test Coverage Gaps
@@ -271,6 +292,7 @@ this section as new phases land.
   the submit-failure recovery path, not the success path).
 - Priority: Medium. Worth covering when the modal-submit refactor (see Tech
   Debt above) lands.
+- **Disposition:** Covered by `41-03-SUMMARY.md` and `41-04-SUMMARY.md` — first-class modal-submit effect replaces the process-dictionary stash; the seam this gap describes no longer exists, and the new effect path is exercised end-to-end through reducer + consumer migration tests.
 
 ### `replace_then_promote/3` 2s-timeout fallback path
 
@@ -283,6 +305,7 @@ this section as new phases land.
   outside.
 - Priority: Low. Defensive code; exercising it requires careful test setup
   with hand-managed pids.
+- **Disposition:** Intentionally retained — defensive low-priority branch in `Foglet.Sessions.Supervisor.replace_then_promote/3` requires hand-managed pid setup to exercise; Phase 45 hardened the SSH-side cleanup paths but did not add coverage for this Sessions-side fallback. See `ROADMAP.md` backlog.
 
 ### Soft-delete-aware list paths
 
@@ -296,6 +319,7 @@ this section as new phases land.
   list. Tombstone-rendering tests catch the most-trafficked paths but not
   every consumer.
 - Priority: Medium.
+- **Disposition:** Covered by `44-04-SUMMARY.md` — soft-delete reader/list query policy coverage added across `Foglet.Posts` and `Foglet.Threads` list paths.
 
 ---
 
