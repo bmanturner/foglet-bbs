@@ -145,7 +145,7 @@ defmodule Foglet.TUI.Screens.Verify do
       message: "Verification instructions could not be sent. Please try again later."
     }
 
-    {local_state || init(context), [Effect.open_modal(modal)]}
+    {clear_optimistic_resend_cooldown(local_state || init(context)), [Effect.open_modal(modal)]}
   end
 
   def update(_message, local_state, %Context{} = context), do: {local_state || init(context), []}
@@ -189,7 +189,12 @@ defmodule Foglet.TUI.Screens.Verify do
         verification_mod.deliver_verification_code(user)
       end)
 
-    {vs, [effect]}
+    # Start the client-side cooldown immediately on dispatch so a fast
+    # second Ctrl+R lands on the cooldown branch in `resend_code/2`
+    # rather than firing a duplicate task and surfacing the same generic
+    # success modal twice (FOG-64 row 11).
+    new_vs = VerifyState.after_resend(vs, resend_cooldown_seconds())
+    {new_vs, [effect]}
   end
 
   defp verify_code(vs, %Context{} = context) do
@@ -265,12 +270,10 @@ defmodule Foglet.TUI.Screens.Verify do
   defp handle_verify_resend_result({:ok, :attempted}, vs) do
     modal = %Foglet.TUI.Modal{
       type: :info,
-      message: "If email delivery is available, new verification instructions have been sent."
+      message: resend_sent_message(vs)
     }
 
-    new_vs = VerifyState.after_resend(vs, resend_cooldown_seconds())
-
-    {new_vs, [Effect.open_modal(modal)]}
+    {vs, [Effect.open_modal(modal)]}
   end
 
   defp handle_verify_resend_result({:error, :unavailable}, vs) do
@@ -279,7 +282,7 @@ defmodule Foglet.TUI.Screens.Verify do
       message: "Email verification is unavailable because email delivery is disabled."
     }
 
-    {vs, [Effect.open_modal(modal)]}
+    {clear_optimistic_resend_cooldown(vs), [Effect.open_modal(modal)]}
   end
 
   defp handle_verify_resend_result({:error, _reason}, vs) do
@@ -288,7 +291,7 @@ defmodule Foglet.TUI.Screens.Verify do
       message: "Verification instructions could not be sent. Please try again later."
     }
 
-    {vs, [Effect.open_modal(modal)]}
+    {clear_optimistic_resend_cooldown(vs), [Effect.open_modal(modal)]}
   end
 
   # WR-02 (iteration 6): catch-all for unanticipated success shapes from
@@ -307,12 +310,10 @@ defmodule Foglet.TUI.Screens.Verify do
 
     modal = %Foglet.TUI.Modal{
       type: :info,
-      message: "If email delivery is available, new verification instructions have been sent."
+      message: resend_sent_message(vs)
     }
 
-    new_vs = VerifyState.after_resend(vs, resend_cooldown_seconds())
-
-    {new_vs, [Effect.open_modal(modal)]}
+    {vs, [Effect.open_modal(modal)]}
   end
 
   # Render a 6-char slot with a block cursor at the current position.
@@ -336,6 +337,25 @@ defmodule Foglet.TUI.Screens.Verify do
   defp resend_cooldown_seconds do
     Foglet.Config.email_verify_resend_cooldown_seconds()
   end
+
+  # Generic-but-rate-limit-aware success copy: avoids leaking whether the
+  # email is on file (kept generic when a cooldown isn't visible) but tells
+  # the user when they can request another so they don't mash Ctrl+R.
+  defp resend_sent_message(%{resend_cooldown_until: %DateTime{} = until}) do
+    remaining = max(DateTime.diff(until, DateTime.utc_now(), :second), 0)
+
+    "If email delivery is available, new verification instructions have been sent." <>
+      " You can request another in #{remaining}s."
+  end
+
+  defp resend_sent_message(_vs) do
+    "If email delivery is available, new verification instructions have been sent."
+  end
+
+  # Drop the optimistic dispatch-time cooldown when delivery fails so the
+  # user can retry without waiting through a cooldown for a request that
+  # never landed.
+  defp clear_optimistic_resend_cooldown(vs), do: %{vs | resend_cooldown_until: nil}
 
   defp app_state_from_local(local_state, %Context{} = context) do
     AppStateBridge.from_context(local_state, context, :verify, fn -> init(context) end)

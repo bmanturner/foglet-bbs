@@ -255,7 +255,11 @@ defmodule Foglet.TUI.Screens.VerifyTest do
           fake_context(user)
         )
 
-      assert state == VerifyState.default()
+      # Optimistic dispatch-time cooldown so a fast second Ctrl+R lands on
+      # the cooldown branch instead of firing a duplicate task (FOG-64 row 11).
+      assert state.buffer == ""
+      assert state.attempts == 0
+      assert %DateTime{} = state.resend_cooldown_until
 
       assert %Effect{type: :task, payload: %{op: :verify_resend, screen_key: :verify}} =
                task_effect(effects, :verify_resend)
@@ -267,6 +271,8 @@ defmodule Foglet.TUI.Screens.VerifyTest do
     test "successful resend resets attempts and sets resend cooldown", %{user: user} do
       Foglet.Config.put!("email_verify_resend_cooldown_seconds", 90)
 
+      before = DateTime.utc_now()
+
       {state, effects} =
         Verify.update(
           {:verify, :resend},
@@ -274,8 +280,15 @@ defmodule Foglet.TUI.Screens.VerifyTest do
           context(user)
         )
 
+      # Cooldown is set optimistically at dispatch time (FOG-64 row 11),
+      # so it is already populated before the task result lands.
+      assert state.buffer == ""
+      assert state.attempts == 0
+      assert state.cooldown_until == nil
+      assert %DateTime{} = state.resend_cooldown_until
+      assert DateTime.diff(state.resend_cooldown_until, before, :second) in 89..91
+
       result = run_task(task_effect(effects, :verify_resend))
-      before = DateTime.utc_now()
 
       {state, effects} =
         Verify.update({:task_result, :verify_resend, {:ok, result}}, state, context(user))
@@ -284,13 +297,13 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       assert state.attempts == 0
       assert state.cooldown_until == nil
       assert %DateTime{} = state.resend_cooldown_until
-      assert DateTime.diff(state.resend_cooldown_until, before, :second) in 89..91
       assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
       assert modal.type == :info
+      assert modal.message =~ "You can request another in"
       assert_email_sent(subject: "Your Foglet verification code")
     end
 
-    test "resend failure preserves cooldown state and opens error modal", %{user: user} do
+    test "resend failure clears optimistic cooldown so the user can retry", %{user: user} do
       Process.put(:fake_verify_owner, self())
       Process.put(:fake_verify_resend_result, {:error, :delivery_failed})
       future = DateTime.add(DateTime.utc_now(), 60, :second)
@@ -298,16 +311,22 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       {state, effects} =
         Verify.update(
           {:verify, :resend},
-          verify_state(%{buffer: "ABC123", resend_cooldown_until: nil, cooldown_until: future}),
+          verify_state(%{resend_cooldown_until: nil, cooldown_until: future}),
           fake_context(user)
         )
+
+      # Optimistic cooldown applied at dispatch (FOG-64 row 11) — buffer is
+      # cleared by `after_resend/2` regardless of eventual delivery outcome.
+      assert state.buffer == ""
+      assert %DateTime{} = state.resend_cooldown_until
 
       result = run_task(task_effect(effects, :verify_resend))
 
       {state, effects} =
         Verify.update({:task_result, :verify_resend, {:ok, result}}, state, context(user))
 
-      assert state.buffer == "ABC123"
+      # On failure, drop the optimistic cooldown so the user is not locked
+      # out waiting for a request that never landed.
       assert state.cooldown_until == future
       assert state.resend_cooldown_until == nil
       assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)

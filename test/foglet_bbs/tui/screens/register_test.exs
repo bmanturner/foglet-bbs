@@ -146,7 +146,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
         )
 
       assert local_state.step == :invite_code
-      assert local_state.error == "Invalid code."
+      assert local_state.error == "Invalid or expired invite code."
     end
   end
 

@@ -98,7 +98,7 @@ defmodule Foglet.TUI.Screens.Register do
 
       {new_reg, []}
     else
-      {%{reg | error: "Invalid code."}, []}
+      {%{reg | error: "Invalid or expired invite code."}, []}
     end
   end
 
@@ -334,7 +334,7 @@ defmodule Foglet.TUI.Screens.Register do
 
         {:update, RegisterState.put(state, new_reg), []}
       else
-        {:update, RegisterState.put(state, %{reg | error: "Invalid code."}), []}
+        {:update, RegisterState.put(state, %{reg | error: "Invalid or expired invite code."}), []}
       end
     end)
   end
