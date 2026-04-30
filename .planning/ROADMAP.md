@@ -78,7 +78,24 @@ Cross-cutting constraints:
   2. User can resize the terminal during a PostReader session without stale-width render-cache entries accumulating for the life of the screen.
   3. Maintainer has automated protection that prevents `render_*` helpers in PostReader from mutating screen state.
   4. Maintainer has query coverage or a shared helper proving soft-deleted posts stay out of list paths that should hide them.
-**Plans**: TBD
+**Plans**:
+
+**Wave 1**
+- `44-01` - Context-owned bounded reader-window query.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- `44-02` - PostReader bounded-window reducer integration and navigation.
+
+**Wave 3** *(blocked on Wave 2 completion)*
+- `44-03` - Resize-cache eviction and render-purity guard hardening.
+
+**Wave 4** *(blocked on Wave 1 completion)*
+- `44-04` - Soft-delete reader/list query policy coverage.
+
+Cross-cutting constraints:
+- Keep reader/history queries tombstone-capable while list and summary surfaces hide deleted content.
+- Keep all PostReader state mutation in reducer/state plumbing; render modules remain read-only.
+- Preserve `%PostReader.State{}.posts` as the active bounded window rather than replacing it with an unrelated abstraction.
 **UI hint**: yes
 
 ### Phase 45: SSH And Session Runtime Hardening
