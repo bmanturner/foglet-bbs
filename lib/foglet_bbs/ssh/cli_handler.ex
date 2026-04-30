@@ -235,13 +235,16 @@ defmodule Foglet.SSH.CLIHandler do
         # Over-limit reject is a fully-rejected state. check_connection_limit/0
         # already compensated its own increment, so no later cleanup is owed:
         # cleanup_done? is true and counter_counted? is false. Future cleanup
-        # delegations are no-ops.
+        # delegations are no-ops. Use update-syntax (not a fresh struct) so any
+        # field init/1 sets in the future is preserved on the rejection path
+        # symmetrically with the accepted branch.
         new_state = %__MODULE__{
-          over_limit: true,
-          channel_id: channel_id,
-          connection_ref: connection_ref,
-          cleanup_done?: true,
-          counter_counted?: false
+          state
+          | over_limit: true,
+            channel_id: channel_id,
+            connection_ref: connection_ref,
+            cleanup_done?: true,
+            counter_counted?: false
         }
 
         {:ok, new_state}
@@ -287,11 +290,12 @@ defmodule Foglet.SSH.CLIHandler do
           _ = safe_ssh_close(connection_ref, channel_id)
 
           new_state = %__MODULE__{
-            over_limit: true,
-            channel_id: channel_id,
-            connection_ref: connection_ref,
-            cleanup_done?: true,
-            counter_counted?: false
+            state
+            | over_limit: true,
+              channel_id: channel_id,
+              connection_ref: connection_ref,
+              cleanup_done?: true,
+              counter_counted?: false
           }
 
           {:ok, new_state}
