@@ -30,16 +30,16 @@ defmodule Foglet.Threads.Thread do
   end
 
   @doc "Used by Board Server to update thread counters after a post is inserted."
-  def bump_counters(thread) do
+  def bump_counters(thread, %Foglet.Posts.Post{inserted_at: inserted_at}) do
     change(thread, %{
       post_count: thread.post_count + 1,
-      last_post_at: DateTime.utc_now()
+      last_post_at: inserted_at
     })
   end
 
   @doc "Set first_post_id and last_post_at after root post creation."
-  def set_first_post(thread, post_id) do
-    change(thread, %{first_post_id: post_id, last_post_at: DateTime.utc_now()})
+  def set_first_post(thread, %Foglet.Posts.Post{id: post_id, inserted_at: inserted_at}) do
+    change(thread, %{first_post_id: post_id, last_post_at: inserted_at})
   end
 
   @doc "Mod/sysop: lock or unlock a thread."

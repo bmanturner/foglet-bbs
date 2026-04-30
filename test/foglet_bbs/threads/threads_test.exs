@@ -489,19 +489,18 @@ defmodule Foglet.ThreadsTest do
       poster = user_fixture()
       reader = user_fixture()
 
-      {:ok, %{thread: thread, post: p1}} =
+      {:ok, %{thread: thread}} =
         Foglet.Threads.create_thread(board.id, poster.id, %{title: "T", body: "root"})
 
-      future = DateTime.add(DateTime.utc_now(), 3600, :second)
+      {:ok, latest_post} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "latest"})
 
-      {:ok, _} = Foglet.Threads.advance_thread_read_pointer(reader.id, thread.id, p1.id)
-
-      from(rp in Foglet.Threads.ReadPointer,
-        where: rp.user_id == ^reader.id and rp.thread_id == ^thread.id
-      )
-      |> Repo.update_all(set: [last_read_at: future])
+      {:ok, pointer} =
+        Foglet.Threads.advance_thread_read_pointer(reader.id, thread.id, latest_post.id)
 
       [%{has_unread: has_unread}] = Foglet.Threads.list_threads(board.id, reader.id)
+
+      assert pointer.last_read_at == latest_post.inserted_at
       assert has_unread == false
     end
 

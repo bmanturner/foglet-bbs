@@ -134,10 +134,10 @@ defmodule Foglet.Boards.Server do
       }
       |> Post.creation_changeset(attrs)
     end)
-    |> Multi.run(:bump_thread_counters, fn repo, %{post: _post} ->
+    |> Multi.run(:bump_thread_counters, fn repo, %{post: post} ->
       thread = repo.get!(Thread, thread_id)
 
-      case thread |> Thread.bump_counters() |> repo.update() do
+      case thread |> Thread.bump_counters(post) |> repo.update() do
         {:ok, updated} -> {:ok, updated}
         error -> error
       end
@@ -182,7 +182,7 @@ defmodule Foglet.Boards.Server do
       |> Post.creation_changeset(%{body: body})
     end)
     |> Multi.update(:thread_update, fn %{thread: thread, post: post} ->
-      Thread.set_first_post(thread, post.id)
+      Thread.set_first_post(thread, post)
     end)
     |> Multi.run(:bump_user_post_count, fn repo, _ ->
       {1, _} =
