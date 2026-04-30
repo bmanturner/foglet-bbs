@@ -127,4 +127,23 @@ defmodule Foglet.TUI.Effect do
   def quit do
     %__MODULE__{type: :quit, payload: nil}
   end
+
+  @doc """
+  Unwraps the double-`:ok` shape Raxol task results arrive in.
+
+  Raxol wraps task return values in an outer `{:ok, …}` (the task
+  succeeded) regardless of the inner contract. Domain functions
+  typically return their own `{:ok, value}` / `{:error, reason}` tuple,
+  yielding `{:ok, {:ok, v}}` or `{:ok, {:error, r}}` at the screen
+  reducer. This helper collapses those to a single-level tuple.
+
+  Previously duplicated in BoardList, Moderation, and inline pattern
+  matches in PostReader / PostComposer (IN-04).
+  """
+  @spec unwrap_task_result(term()) :: {:ok, term()} | {:error, term()}
+  def unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
+  def unwrap_task_result({:ok, {:error, reason}}), do: {:error, reason}
+  def unwrap_task_result({:ok, value}), do: {:ok, value}
+  def unwrap_task_result({:error, reason}), do: {:error, reason}
+  def unwrap_task_result(other), do: {:error, other}
 end

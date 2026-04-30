@@ -475,9 +475,6 @@ defmodule Foglet.TUI.Screens.BoardList do
     end
   end
 
-  defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
-  defp unwrap_task_result({:ok, {:error, reason}}), do: {:error, reason}
-  defp unwrap_task_result({:ok, value}), do: {:ok, value}
-  defp unwrap_task_result({:error, reason}), do: {:error, reason}
-  defp unwrap_task_result(other), do: {:error, other}
+  # IN-04: thin shim around the shared `Foglet.TUI.Effect.unwrap_task_result/1`.
+  defp unwrap_task_result(result), do: Effect.unwrap_task_result(result)
 end
