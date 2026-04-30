@@ -147,13 +147,9 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  # SITE remains synchronous (D-03): SiteForm seeds drafts from
-  # `Foglet.Config.get!/1` inside its own `init/1`; no lifecycle tagging.
-  # On first entry `ss.site_form` is `nil` — lazy-init the form here so
-  # the very first render shows the form rather than a placeholder.
   defp render_tab_body("SITE", ss, theme) do
     case ss.site_form do
-      nil -> SiteForm.render(SiteForm.init([]), theme)
+      nil -> loading_panel(theme)
       form -> SiteForm.render(form, theme)
     end
   end
@@ -229,7 +225,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
           ss
 
         _ ->
-          State.new(
+          State.render_fallback(
             current_user: state.current_user,
             session_context: state.session_context
           )

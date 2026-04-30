@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.Screens.SysopTest do
-  # async: false because SITE/LIMITS tabs lazy-init their submodules which
+  # async: false because SITE/LIMITS tabs initialize submodules which
   # call Foglet.Config.get!/1 — the :foglet_config ETS table is process-global.
   use FogletBbs.DataCase, async: false
 
@@ -13,6 +13,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Sysop
+  alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SiteFormState
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
   alias Foglet.TUI.Screens.Sysop.UsersView
   alias FogletBbs.Repo
@@ -301,8 +302,21 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert ss.limits_form == :not_loaded
       assert ss.system_snapshot == :not_loaded
       assert ss.users_view == :not_loaded
-      # SITE stays nil (D-03 — synchronous)
-      assert ss.site_form == nil
+      # SITE stays synchronous but is initialized before render.
+      assert %SiteFormState{} = ss.site_form
+    end
+
+    test "SITE form initializes with the current actor" do
+      sysop = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "sysop",
+        role: :sysop,
+        status: :active
+      }
+
+      ss = SysopState.new(current_user: sysop)
+
+      assert %SiteFormState{current_user: ^sysop} = ss.site_form
     end
 
     test "lifecycle slots accept every tagged value without nil leakage" do
@@ -928,14 +942,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
   end
 
   describe "SITE tab render (SYSO-02, INVT-06)" do
-    setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], SysopState.new())
-      %{state: state}
-    end
-
     test "hides invite_generation_per_user_limit when invite_code_generators != any_user (D-04)",
          %{state: state} do
       Config.put!("invite_code_generators", "sysop_only", nil)
+      state = put_in(state, [:screen_state, :sysop], SysopState.new())
 
       {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
 
@@ -948,6 +958,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     test "shows invite_generation_per_user_limit when invite_code_generators == any_user",
          %{state: state} do
       Config.put!("invite_code_generators", "any_user", nil)
+      state = put_in(state, [:screen_state, :sysop], SysopState.new())
 
       {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
 
@@ -977,13 +988,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
         |> Ecto.Changeset.change(%{role: :sysop})
         |> FogletBbs.Repo.update!()
 
-      state = %{state | current_user: sysop}
+      state =
+        %{state | current_user: sysop}
+        |> put_in([:screen_state, :sysop], SysopState.new(current_user: sysop))
 
-      # Navigate to SITE tab (already index 0) — lazy-init by sending Tab.
+      # Navigate within SITE so the reducer uses the initialized form actor.
       {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
-
-      # SiteForm was lazy-initialized with the real sysop above.
-      _ = state
 
       # Manually install a draft with a negative value for the limit field
       # (simulating the sysop typing a value that fails the min: 0 schema check).
@@ -1024,7 +1034,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       Config.put!("delivery_mode", "email", nil)
 
-      # Lazy-init SiteForm and mutate a draft so submit hits Config.put.
+      # Mutate the initialized SiteForm draft so submit hits Config.put.
       {:update, state, _} = handle_sysop_key(%{key: :tab}, state)
 
       ss = state.screen_state.sysop

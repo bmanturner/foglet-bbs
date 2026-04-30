@@ -17,6 +17,7 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
+  alias Foglet.TUI.Screens.Sysop.SiteForm
   alias Foglet.TUI.Screens.Sysop.SystemSnapshot
   alias Foglet.TUI.Screens.Sysop.UsersView
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -84,7 +85,30 @@ defmodule Foglet.TUI.Screens.Sysop.State do
       tabs: Tabs.init(tabs: labels, active: active),
       active_tab: active,
       tab_labels: labels,
-      invites: Keyword.get(opts, :invites, InvitesState.new())
+      invites: Keyword.get(opts, :invites, InvitesState.new()),
+      site_form:
+        Keyword.get_lazy(opts, :site_form, fn ->
+          SiteForm.init(current_user: Keyword.get(opts, :current_user))
+        end)
+    }
+  end
+
+  @doc """
+  Builds a defensive render-only fallback without initializing config-backed
+  SITE form state.
+  """
+  @spec render_fallback(keyword()) :: t()
+  def render_fallback(opts \\ []) do
+    active = Keyword.get(opts, :active, 0)
+    labels = tab_labels(opts)
+    active = clamp_active(active, labels)
+
+    %__MODULE__{
+      tabs: Tabs.init(tabs: labels, active: active),
+      active_tab: active,
+      tab_labels: labels,
+      invites: Keyword.get(opts, :invites, InvitesState.new()),
+      site_form: nil
     }
   end
 
