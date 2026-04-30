@@ -54,7 +54,19 @@ Cross-cutting constraints:
   2. Maintainer can find modal overlay and dismissal behavior in a modal helper without screen-specific business logic.
   3. Maintainer can find dynamic PubSub topic refresh and subscription diffing in a subscription helper.
   4. Maintainer can find generic effect interpretation in an effect helper while domain mutations remain in `Foglet.*` contexts.
-**Plans**: TBD
+**Plans**:
+
+**Wave 1**
+- `45-01` - SSH public-key stash TTL and sweep cleanup.
+- `45-02` - Guest promotion audit metadata and replacement proof preservation.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- `45-03` - Unified SSH cleanup helper and connection-counter lifecycle proof.
+
+Cross-cutting constraints:
+- Keep SSH handoff and connection accounting in ephemeral ETS/process state.
+- Preserve no-auth guest fallback and one-session-per-user replacement semantics.
+- Prove lifecycle behavior with focused callback/process tests rather than brittle full-network simulations.
 **UI hint**: yes
 
 ### Phase 43: Large Screen Decomposition
