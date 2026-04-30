@@ -28,6 +28,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
+  alias Foglet.TUI.App.ScreenStates
   alias Foglet.TUI.App.Subscriptions
   alias Foglet.TUI.Context
   alias Foglet.TUI.SizeGate
@@ -101,7 +102,7 @@ defmodule Foglet.TUI.App do
   App state directly.
   """
   @spec screen_state_for(t(), term()) :: term()
-  def screen_state_for(%__MODULE__{} = state, key), do: Routing.screen_state_for(state, key)
+  def screen_state_for(%__MODULE__{} = state, key), do: ScreenStates.get(state, key)
 
   @doc """
   Stores screen-local state under `key` through the routing helper.
@@ -111,7 +112,7 @@ defmodule Foglet.TUI.App do
   """
   @spec put_screen_state(t(), term(), term()) :: t()
   def put_screen_state(%__MODULE__{} = state, key, local_state),
-    do: Routing.put_screen_state(state, key, local_state)
+    do: ScreenStates.put(state, key, local_state)
 
   @doc """
   Builds the narrow runtime context passed to screen reducers.

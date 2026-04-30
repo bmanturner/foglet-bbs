@@ -11,6 +11,7 @@ defmodule Foglet.TUI.App.Routing do
 
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
+  alias Foglet.TUI.App.ScreenStates
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens
 
@@ -43,15 +44,12 @@ defmodule Foglet.TUI.App.Routing do
 
   @doc "Returns screen-local state stored under `key`."
   @spec screen_state_for(App.t(), term()) :: term()
-  def screen_state_for(%App{screen_state: screen_state}, key) do
-    Map.get(screen_state || %{}, key)
-  end
+  def screen_state_for(%App{} = state, key), do: ScreenStates.get(state, key)
 
   @doc "Stores screen-local state under `key`."
   @spec put_screen_state(App.t(), term(), term()) :: App.t()
-  def put_screen_state(%App{} = state, key, local_state) do
-    %{state | screen_state: Map.put(state.screen_state, key, local_state)}
-  end
+  def put_screen_state(%App{} = state, key, local_state),
+    do: ScreenStates.put(state, key, local_state)
 
   @doc "Builds the narrow runtime context passed to screen reducers."
   @spec build_context(App.t()) :: Context.t()
