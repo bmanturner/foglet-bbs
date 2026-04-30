@@ -24,8 +24,10 @@ defmodule Foglet.Boards.Supervisor do
 
   @doc """
   Start a Board Server for the given board_id.
-  Called from Foglet.Boards context when a board is created, and from
-  Application.start/2 (via Foglet.Boards.boot_board_servers/0) at boot.
+
+  Called from `Foglet.Boards` context when a board is created, and at boot
+  from `FogletBbs.Application.start/2` via `Foglet.Boards.boot_board_servers/0`
+  (the canonical implementation lives in `lib/foglet_bbs/boards.ex`).
   """
   def start_board(board_id) do
     spec = {Foglet.Boards.Server, board_id: board_id}
