@@ -158,8 +158,11 @@ defmodule Foglet.TUI.Screens.Moderation do
     render_app_state(render_model(context, state))
   end
 
-  def render(local_state, %Context{} = context),
-    do: render(normalize_state(local_state, context), context)
+  # Previously had a `def render(local_state, %Context{})` fallback that
+  # called `normalize_state/2`. Routing.render_local_state/4 always either
+  # returns a stored `%State{}` or calls `init/1` (which returns `%State{}`),
+  # so the fallback was unreachable and Dialyzer would flag the @spec.
+  # See WR-01 in 47-REVIEW.md (and the matching WR-03 fix in BoardList).
 
   defp render_app_state(state) do
     if ShellVisibility.moderation_visible?(state.current_user) do
