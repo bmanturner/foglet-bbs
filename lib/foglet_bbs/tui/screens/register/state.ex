@@ -68,20 +68,20 @@ defmodule Foglet.TUI.Screens.Register.State do
   end
 
   @doc "Reads the register screen-state map from the app state."
-  @spec get(Foglet.TUI.App.t()) :: map() | nil
+  @spec get(map()) :: map() | nil
   def get(state) do
     Map.get(state.screen_state || %{}, :register)
   end
 
   @doc "Writes an updated register screen-state map into the app state."
-  @spec put(Foglet.TUI.App.t(), map()) :: Foglet.TUI.App.t()
+  @spec put(map(), map()) :: map()
   def put(state, reg) do
     new_screen_state = Map.put(state.screen_state || %{}, :register, reg)
     %{state | screen_state: new_screen_state}
   end
 
   @doc "Removes the register screen state from the app state."
-  @spec clear(Foglet.TUI.App.t()) :: Foglet.TUI.App.t()
+  @spec clear(map()) :: map()
   def clear(state) do
     new_screen_state = Map.delete(state.screen_state || %{}, :register)
     %{state | screen_state: new_screen_state}

@@ -47,3 +47,42 @@ Out-of-scope discoveries logged during plan execution. These are NOT introduced 
 **Effect:** `mix credo --strict` exits 16, which causes `mix precommit` to exit 16. `mix compile --warnings-as-errors`, `mix format --check-formatted`, and `mix sobelow --exit Low` all pass.
 
 **Disposition:** Defer to plan 46-04 (QUAL-03). The fix is to register the missing Logger metadata keys in runtime config (or the Sessions Logger setup) — out of scope for DOM-02 documentation-only work.
+
+## Pre-existing dialyzer warnings unrelated to phase 46 scope
+
+**Discovered during:** Plan 46-03 Task 1 (initial dialyzer baseline run).
+
+**Verified pre-existing:** Yes. Reproduced against base commit `a66ef4a7` before any phase 46 work; identical four warnings. Files were last modified during phase 45.
+
+**Active warnings (not silenced by `.dialyzer_ignore.exs`):**
+
+```
+lib/foglet_bbs/ssh/cli_handler.ex:554:unmatched_return
+  The expression produces a value of type:
+    nil | [integer()] | integer()
+  but this value is unmatched.
+
+lib/foglet_bbs/ssh/cli_handler.ex:467:8:pattern_match
+  The pattern can never match the type.
+  Pattern: nil
+  Type:    pid()
+
+lib/foglet_bbs/tui/screens/post_reader/render.ex:26:guard_fail
+  The guard clause:
+    when _ :: {pos_integer(), pos_integer()} === nil
+  can never succeed.
+```
+
+`lib/foglet_bbs/posts/reader_window.ex:14:23:unknown_type` (`Foglet.Posts.Post.t/0`) was the fourth pre-existing warning; plan 46-03 Task 3 added it to Bucket A of the cleaned `.dialyzer_ignore.exs` since it is the same Ecto schema `t/0` false positive class as the other Bucket A entries.
+
+**Effect:** `rtk mix dialyzer` exits 2 with these three warnings, which propagates through `mix precommit`. Plan 46-03's QUAL-01 work (boards/server `:call_without_opaque` fix; C1 narrow pass; ignore-file restructure) is unaffected — the in-scope work introduced no new warnings, and the ignore-list line count is now 46 (down from 54 baseline) with every kept entry annotated.
+
+**Disposition:** Defer to plan 46-04 (QUAL-03). These are real dialyzer hints in `cli_handler.ex` (unmatched `decrement_connection_count/0` return, `nil` pattern-match against `pid()`-typed `lifecycle_pid`) and `post_reader/render.ex` (guard against `nil` on a `terminal_size`-typed parameter that is always a tuple). All three are confined to files modified in phase 45 and can be triaged alongside the other QUAL-03 baseline work.
+
+## Two unnecessary skips on the cleaned `.dialyzer_ignore.exs`
+
+**Discovered during:** Plan 46-03 Task 3 (post-cleanup verification).
+
+**Verified pre-existing:** Yes. The two `:no_match` string-pattern entries on `lib/foglet_bbs/tui/screens/account/prefs_form.ex` and `account/profile_form.ex` are reported by dialyxir as "Unnecessary Skips" — meaning dialyzer no longer emits the `"The pattern can never match the type true."` warning at those locations.
+
+**Disposition:** Per CONTEXT D-06, these entries are **kept verbatim** even though they no longer match an active warning. The locked decision is to preserve the existing inline rationale documenting the Phase 25 defensive-fallback intent; removing them would erase the design comment. The "Unnecessary Skips: 2" line in dialyxir output is informational only (does not affect exit status).

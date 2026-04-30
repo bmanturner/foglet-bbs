@@ -34,17 +34,17 @@ defmodule Foglet.TUI.Screens.Verify.State do
   end
 
   @doc "Reads the verify screen-state map from the app state."
-  @spec get(Foglet.TUI.App.t()) :: t()
+  @spec get(map()) :: t()
   def get(state), do: Map.get(state.screen_state || %{}, :verify) || default()
 
   @doc "Writes an updated verify screen-state map into the app state."
-  @spec put(Foglet.TUI.App.t(), t()) :: Foglet.TUI.App.t()
+  @spec put(map(), t()) :: map()
   def put(state, vs) do
     %{state | screen_state: Map.put(state.screen_state || %{}, :verify, vs)}
   end
 
   @doc "Removes the verify screen state from the app state."
-  @spec clear(Foglet.TUI.App.t()) :: Foglet.TUI.App.t()
+  @spec clear(map()) :: map()
   def clear(state) do
     %{state | screen_state: Map.delete(state.screen_state || %{}, :verify)}
   end
