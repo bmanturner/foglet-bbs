@@ -17,6 +17,10 @@
   {"lib/foglet_bbs/tui/screens/new_thread.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/post_reader.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/size_gate.ex", :contract_supertype},
+  # Phase 47-03 R5: ScreenFrame.render/4 returns a Raxol element struct;
+  # narrowing the @spec emits a fresh :contract_supertype on the same line
+  # (same C2 pattern as the widget/screen render functions in this bucket).
+  {"lib/foglet_bbs/tui/widgets/chrome/screen_frame.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/widgets/display/progress.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/widgets/display/tree.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/widgets/input/button.ex", :contract_supertype},

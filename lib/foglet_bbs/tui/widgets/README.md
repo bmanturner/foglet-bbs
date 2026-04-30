@@ -22,7 +22,7 @@ New widgets should:
 |---|---|---|
 | `Chrome.ScreenFrame` | [`chrome/screen_frame.ex`](chrome/screen_frame.ex) | Outer frame wrapping every screen (FRAME-01) |
 | `Chrome.StatusBar`   | [`chrome/status_bar.ex`](chrome/status_bar.ex)   | Top-of-screen title + handle bar (FRAME-02) |
-| `Chrome.KeyBar`      | [`chrome/key_bar.ex`](chrome/key_bar.ex)         | Bottom-of-screen key hints |
+| `Chrome.CommandBar`  | [`chrome/command_bar.ex`](chrome/command_bar.ex) | Bottom-of-screen V2 grouped command bar |
 
 ## Compose / Modal (Phase 4 / 7, flat — unchanged per D-11)
 

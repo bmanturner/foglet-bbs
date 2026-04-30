@@ -35,7 +35,6 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     ThreadList
   }
 
-  alias Foglet.TUI.Widgets.Chrome.KeyBar
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.List.ListRow
@@ -326,11 +325,23 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
         positioned =
           state
-          |> ScreenFrame.render("Threads", text("BODY SENTINEL"), [
-            {"J/K", "Navigate"},
-            {"Enter", "Open"},
-            {"Q", "Back"}
-          ])
+          |> ScreenFrame.render(
+            %{breadcrumb_parts: ["Foglet", "Threads"]},
+            text("BODY SENTINEL"),
+            [
+              %{
+                label: "Navigate",
+                commands: [
+                  %{key: "J/K", label: "Navigate", priority: 10},
+                  %{key: "Enter", label: "Open", priority: 10}
+                ]
+              },
+              %{
+                label: "System",
+                commands: [%{key: "Q", label: "Back", priority: 0}]
+              }
+            ]
+          )
           |> apply_at_size({width, height})
 
         elements = text_elements(positioned)
@@ -1177,14 +1188,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # Phase 16 size contracts
   # ---------------------------------------------------------------------------
 
-  test "phase 16 representative row, keybar, modal, and compose paths fit terminal widths" do
+  test "phase 16 representative row, modal, and compose paths fit terminal widths" do
     theme = Foglet.TUI.Theme.default()
-
-    keys = [
-      {"J/K", "Navigate"},
-      {"Enter", "Open 漢字"},
-      {"● ◆", "▸ ▾ ✓ ×"}
-    ]
 
     for {width, _height} <- @phase_16_dimensions do
       row =
@@ -1201,12 +1206,6 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       assert row =~ "●"
       assert row =~ "@alice"
       assert_line_within_width!("ListRow #{width}", row, width)
-
-      keybar = KeyBar.render(theme, keys, width: width) |> flatten_text()
-      assert keybar =~ "J/K"
-      assert keybar =~ "Navigate"
-      assert keybar =~ "●"
-      assert_line_within_width!("KeyBar #{width}", keybar, width)
 
       modal_lines =
         %Foglet.TUI.Modal{

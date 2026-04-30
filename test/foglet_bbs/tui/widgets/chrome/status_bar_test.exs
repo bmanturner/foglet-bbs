@@ -4,7 +4,6 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
   import Foglet.TUI.RenderHelpers
 
   alias Foglet.Accounts.User
-  alias Foglet.TUI.App
   alias Foglet.TUI.Widgets.Chrome.{ClockFormatter, StatusBar}
 
   defp user(attrs) do
@@ -64,66 +63,6 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
         )
 
       assert text == "12:05 AM"
-    end
-  end
-
-  describe "StatusBar.render/2" do
-    test "main menu shows handle before time-only clock" do
-      state = %{
-        current_screen: :main_menu,
-        session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
-        current_user: user(timezone: "America/Chicago", preferences: %{"time_format" => "24h"})
-      }
-
-      texts = StatusBar.render(state, "Main Menu") |> collect_text_values()
-      rendered = Enum.join(texts, " ")
-
-      assert rendered =~ "@alice | 13:05"
-      assert rendered =~ "13:05"
-      refute rendered =~ "2026-04-24"
-    end
-
-    test "main menu accepts real App struct state for fixed clock text" do
-      state = %App{
-        current_screen: :main_menu,
-        session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
-        current_user: user(timezone: "America/Chicago", preferences: %{"time_format" => "24h"})
-      }
-
-      texts = StatusBar.render(state, "Main Menu") |> collect_text_values()
-      rendered = Enum.join(texts, " ")
-
-      assert rendered =~ "@alice | 13:05"
-      assert rendered =~ "13:05"
-      refute rendered =~ "2026-04-24"
-    end
-
-    test "non-main-menu screens also show handle before time-only clock" do
-      state = %{
-        current_screen: :board_list,
-        session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
-        current_user: user(timezone: "America/Chicago", preferences: %{"time_format" => "24h"})
-      }
-
-      texts = StatusBar.render(state, "Boards") |> collect_text_values()
-      rendered = Enum.join(texts, " ")
-
-      assert rendered =~ "@alice | 13:05"
-      refute rendered =~ "2026-04-24"
-    end
-
-    test "guest state shows only the clock on the right" do
-      state = %{
-        current_screen: :login,
-        session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]}
-      }
-
-      texts = StatusBar.render(state, "Login") |> collect_text_values()
-      rendered = Enum.join(texts, " ")
-
-      assert rendered =~ "06:05 PM"
-      refute rendered =~ "guest"
-      refute rendered =~ "|"
     end
   end
 

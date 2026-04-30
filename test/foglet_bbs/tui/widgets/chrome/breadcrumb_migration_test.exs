@@ -76,7 +76,7 @@ defmodule Foglet.TUI.Widgets.Chrome.BreadcrumbMigrationTest do
           state,
           %{},
           %{type: :text, content: "BODY", attrs: %{}, children: []},
-          [{"Q", "Back"}]
+          [%{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]}]
         )
 
       # The chrome was built and rendered without raising; that's the contract.

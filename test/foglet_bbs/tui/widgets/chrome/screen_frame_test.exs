@@ -35,7 +35,9 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
 
       texts =
         state()
-        |> ScreenFrame.render(chrome, content(), [{"Q", "Back"}])
+        |> ScreenFrame.render(chrome, content(), [
+          %{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]}
+        ])
         |> apply_layout()
         |> collect_positioned_text_elements()
 
@@ -73,7 +75,7 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
         |> ScreenFrame.render(
           %{breadcrumb_parts: ["Foglet", "Boards"]},
           content(),
-          [{"Q", "Back"}]
+          [%{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]}]
         )
         |> apply_layout()
         |> collect_positioned_text_elements()

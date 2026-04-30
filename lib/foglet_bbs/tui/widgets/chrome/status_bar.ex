@@ -21,11 +21,14 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   alias Foglet.TUI.Widgets.Chrome.{BreadcrumbBar, ClockFormatter}
 
   @doc """
-  Renders the status bar.
+  Renders the status bar with Chrome V2 breadcrumb data.
 
   `state` — the full app state. Reads `state.current_user.handle` and
              `state.session_context.theme` (falls back to Theme.default()).
-  `title` — the page/screen title string (e.g., "Boards", "Login").
+  `title` — a list of breadcrumb parts (e.g., `["Foglet", "Home"]`) or a
+             chrome model map containing `:breadcrumb_parts` or `:parts`.
+  `opts`  — keyword list forwarded to `BreadcrumbBar.format/2`
+             (e.g., `width: 80`).
 
   Shape: a `row` with `justify_content: :space_between`. Parent columns
   in ScreenFrame must set `align_items: :stretch` so this row receives
@@ -33,14 +36,6 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
   the right edge. `bg` on each `text` (when the theme sets one) paints
   behind the visible characters only — the gap between stays the
   terminal default.
-  """
-  def render(state, title), do: render(state, title, [])
-
-  @doc """
-  Renders the status bar with optional Chrome V2 title data.
-
-  `title` may be the legacy screen title, breadcrumb parts, or a small chrome
-  model containing `:breadcrumb_parts`, `:parts`, or `:title`.
   """
   def render(state, title, opts) do
     theme = (Map.get(state, :session_context) || %{}) |> Map.get(:theme) || Theme.default()
@@ -88,17 +83,10 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
       is_list(Map.get(model, :parts)) ->
         BreadcrumbBar.format(Map.get(model, :parts), opts)
 
-      is_binary(Map.get(model, :title)) ->
-        legacy_title(Map.get(model, :title))
-
       true ->
-        legacy_title("")
+        BreadcrumbBar.format([], opts)
     end
   end
-
-  defp left_text(title, _opts), do: legacy_title(title)
-
-  defp legacy_title(title), do: "Foglet BBS — #{title}"
 
   defp user_status_atoms(state, user, :bbs) do
     [
