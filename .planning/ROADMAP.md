@@ -168,11 +168,16 @@ Cross-cutting constraints:
 | `Boards.Server` direct `Repo.transaction/1` convention drift | Phase 46 |
 | `.dialyzer_ignore.exs` baseline debt | Phase 46 |
 | Full concerns-audit disposition proof | Phase 46 |
+| `Foglet.Posts.list_posts/1` unbounded query (Phase 44 residual) | Phase 47 |
+| `Foglet.Threads.list_threads/2` unbounded query | Phase 47 |
+| Chrome V1 compatibility shims (KeyBar, ScreenFrame, StatusBar, Normalizer) | Phase 47 |
+| `Foglet.TUI.App` residual size + screen_state plumbing + session aliasing | Phase 47 |
+| `Foglet.TUI.Screens.Login` mixed-mode reducer (TUI-05 residual) | Phase 47 |
 
 ## Progress
 
 **Execution Order:**
-Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
+Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46 -> 47
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
@@ -182,13 +187,18 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 | 44. PostReader And Content Query Hardening | 4/4 | Complete   | 2026-04-30 |
 | 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
 | 46. Domain Cleanup And Final Quality Gate | 4/4 | Complete   | 2026-04-30 |
+| 47. Bound unbounded list queries, drop Chrome V1 shims, and reduce App + large screen modules | 0/5 | Not started | - |
 
 ### Phase 47: Bound unbounded list queries, drop Chrome V1 shims, and reduce App + large screen modules
 
-**Goal:** [To be planned]
-**Requirements**: TBD
+**Goal:** Eliminate the three residual debt items in `.planning/codebase/CONCERNS.md` after Phase 46: (1) the unbounded list queries `Foglet.Posts.list_posts/1` and `Foglet.Threads.list_threads/2`, (2) the Chrome V1 compatibility shims in the chrome widget set, and (3) the mixed-mode `Foglet.TUI.Screens.Login` reducer plus continued reduction of `Foglet.TUI.App`.
+**Requirements**: R1, R2, R3, R4, R5, R6, R7
 **Depends on:** Phase 46
-**Plans:** 0 plans
+**Plans:** 5 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 47 to break down)
+- [ ] 47-01-PLAN.md — R1+R2: Migrate PostReader.load_posts/2 to list_reader_window/2 and delete Posts.list_posts/1
+- [ ] 47-02-PLAN.md — R3+R4: Bound Threads.list_threads/{1,2,3} with @page_size 50 and default_page_size/0
+- [ ] 47-03-PLAN.md — R5: Drop Chrome V1 shims (5 screen call sites + KeyBar/Normalizer deletion + V1 branch removal)
+- [ ] 47-04-PLAN.md — R6: Extract App.ScreenStates and App.SessionAlias; drop app.ex below 400 lines
+- [ ] 47-05-PLAN.md — R7: Decompose Login into per-mode reducer modules; drop login.ex below 300 lines
