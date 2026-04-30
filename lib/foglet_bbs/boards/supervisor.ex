@@ -31,17 +31,4 @@ defmodule Foglet.Boards.Supervisor do
     spec = {Foglet.Boards.Server, board_id: board_id}
     DynamicSupervisor.start_child(__MODULE__, spec)
   end
-
-  @doc """
-  Boot all non-archived boards at application startup.
-  Called from FogletBbs.Application.start/2 after the supervision tree is up.
-  Full implementation is in Foglet.Boards context (Plan 03).
-  This stub is replaced when Plan 03 creates Foglet.Boards.
-  """
-  def boot_board_servers do
-    # Stub: no boards exist yet. Plan 03 implements the real query.
-    # When Foglet.Boards context is implemented, Application.start/2
-    # calls Foglet.Boards.boot_board_servers/0 (not this stub).
-    :ok
-  end
 end
