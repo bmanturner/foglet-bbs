@@ -19,6 +19,23 @@ defmodule Foglet.TUI.App.SessionAlias do
   # Routes through the Supervisor so one-session-per-user (SSH-05 / D-25) is
   # enforced: any pre-existing session for this user is replaced before this
   # guest pid registers under the user_id key.
+  #
+  # IN-05: missing-session_pid policy. When `state.session_pid` is not a pid
+  # we still update `current_user`/`session_context` and emit
+  # navigate(:main_menu). This is intentional: production wires the pid
+  # before set_user fires (SSH-04), so the no-pid case is reachable only in
+  # tests that build %App{} without an SSH layer. Refusing to promote in
+  # that case would force every test to fabricate a pid; today no test
+  # exercises the half-state behaviour and the consequences below are
+  # tolerable for test fixtures.
+  #
+  # Consequences when session_pid is missing:
+  #   * Sessions GenServer has no row for this user → presence/heartbeat
+  #     telemetry is silently lost.
+  #   * SSH-05 (one-session-per-user) cannot be enforced — a parallel SSH
+  #     login for the same user will not see this "session" and will not
+  #     replace it.
+  #   * `Sessions.Session.heartbeat/1` calls below also no-op.
   @spec promote_session(App.t(), Foglet.Accounts.User.t()) :: {App.t(), [Command.t()]}
   def promote_session(%App{} = state, user) do
     if is_pid(state.session_pid) do
@@ -30,7 +47,8 @@ defmodule Foglet.TUI.App.SessionAlias do
 
       Logger.warning(
         "[TUI.App] promote_session without session_pid; user=#{inspect(user.handle)} — " <>
-          "Session telemetry will be missing"
+          "session telemetry will be missing and SSH-05 (one-session-per-user) " <>
+          "cannot be enforced for this connection"
       )
     end
 
