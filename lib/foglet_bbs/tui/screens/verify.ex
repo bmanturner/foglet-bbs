@@ -238,6 +238,30 @@ defmodule Foglet.TUI.Screens.Verify do
     {vs, [Effect.open_modal(modal)]}
   end
 
+  # WR-02 (iteration 6): catch-all for unanticipated success shapes from
+  # `verify_email_code/2`. The four error clauses above (including the
+  # `{:error, _reason}` catch-all) cover the failure side, but the
+  # success side previously only matched `{:ok, confirmed}`. A future
+  # contract change (e.g. `{:ok, user, meta}`) would raise
+  # `FunctionClauseError` and crash the screen reducer rather than
+  # surfacing as a graceful error. Log a breadcrumb and degrade to the
+  # generic verification-failed modal.
+  defp handle_verify_submit_result(other, vs, %Context{}) do
+    require Logger
+
+    Logger.warning(
+      "[Verify] unexpected verify_email_code shape #{inspect(other)}; " <>
+        "treating as generic verification failure"
+    )
+
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Verification failed. Please try again later."
+    }
+
+    {vs, [Effect.open_modal(modal)]}
+  end
+
   defp handle_verify_resend_result({:ok, :attempted}, vs) do
     modal = %Foglet.TUI.Modal{
       type: :info,
@@ -265,6 +289,30 @@ defmodule Foglet.TUI.Screens.Verify do
     }
 
     {vs, [Effect.open_modal(modal)]}
+  end
+
+  # WR-02 (iteration 6): catch-all for unanticipated success shapes from
+  # `deliver_verification_code/1`. The two error clauses above absorb
+  # error-shape drift via `{:error, _reason}`, but the success side
+  # previously only matched `{:ok, :attempted}`. A future
+  # `{:ok, :queued}` (or any other ok shape) would raise
+  # `FunctionClauseError` out of the screen reducer with no
+  # `{:task_error, …}` fallback wired for `:verify_resend`. Log a
+  # breadcrumb and treat as `:attempted` -- the optimistic user-facing
+  # outcome.
+  defp handle_verify_resend_result({:ok, _other}, vs) do
+    require Logger
+
+    Logger.warning("[Verify] unexpected resend delivery shape; treating as :attempted")
+
+    modal = %Foglet.TUI.Modal{
+      type: :info,
+      message: "If email delivery is available, new verification instructions have been sent."
+    }
+
+    new_vs = VerifyState.after_resend(vs, resend_cooldown_seconds())
+
+    {new_vs, [Effect.open_modal(modal)]}
   end
 
   # Render a 6-char slot with a block cursor at the current position.
