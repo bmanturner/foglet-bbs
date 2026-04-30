@@ -21,6 +21,18 @@ defmodule Foglet.Threads do
   alias Foglet.Threads.{ReadPointer, Thread, ThreadEntry}
   alias FogletBbs.Repo
 
+  # ---------- Bounded list defaults (Phase 47 — R3/R4) ----------
+
+  # Default page size for `list_threads/{1,2,3}`. Centralised so the
+  # SQL `LIMIT` and the public `default_page_size/0` accessor cannot
+  # drift. Query bodies reference `@page_size` only — never the literal.
+  @page_size 50
+
+  @doc "Default page size for `list_threads/{1,2,3}` (Phase 47 — R4)."
+  # No @spec: the success typing is the literal `50`; widening to
+  # `pos_integer()` triggers Dialyzer :contract_supertype.
+  def default_page_size, do: @page_size
+
   # ---------- Authorization scope helper (D-08) ----------
 
   @doc """
@@ -72,51 +84,106 @@ defmodule Foglet.Threads do
     |> Repo.preload([:board, :created_by, :first_post])
   end
 
-  @doc "List all non-deleted threads in a board, stickies first then by last_post_at desc."
+  @doc """
+  List all non-deleted threads in a board, stickies first then by
+  `last_post_at` desc.
+
+  Bounded by `@page_size` (Phase 47 — R3). Delegates to `list_threads/3`
+  with `opts: []`.
+  """
   @spec list_threads(String.t()) :: [Thread.t()]
-  def list_threads(board_id) do
-    from(t in Thread,
-      where: t.board_id == ^board_id,
-      order_by: [desc: t.sticky, desc: t.last_post_at],
-      preload: [:created_by]
-    )
-    |> QueryHelpers.not_deleted()
-    |> Repo.all()
-  end
+  def list_threads(board_id), do: list_threads(board_id, nil, [])
 
   @doc """
   List all non-deleted threads in a board, annotated with `:has_unread` for
   the given user (LIST-03).
 
-  Returns `[ThreadEntry.t()]` — each entry merges the thread's fields with a
-  boolean `:has_unread` virtual field computed from `thread_read_pointers`. A
-  thread is `has_unread: true` when its `last_post_at` is later than the
-  user's `last_read_at` for that thread (NULL last_read_at is treated as the
-  Unix epoch, so never-opened threads with activity are unread). Empty threads
-  (`last_post_at IS NULL`) are always `has_unread: false`.
-
-  Order matches `list_threads/1`: stickies first, then newest activity.
-  Preloads `:created_by` so callers can render the creator handle
-  without a follow-up N+1 query.
-
-  When `user_id` is `nil`, delegates to `list_threads/1` and annotates
-  every row with `has_unread: false` — the "no user context" case used
-  by admin paths and tests that don't care about read-state.
+  Bounded by `@page_size` (Phase 47 — R3). Delegates to `list_threads/3`
+  with `opts: []`.
   """
   @spec list_threads(String.t(), String.t() | nil) :: [ThreadEntry.t()]
-  def list_threads(board_id, nil) do
-    board_id
-    |> list_threads()
+  def list_threads(board_id, user_id_or_nil), do: list_threads(board_id, user_id_or_nil, [])
+
+  @doc """
+  List non-deleted threads in a board, bounded to at most `@page_size` rows
+  (Phase 47 — R3, R4). For binary `user_id` arguments each row is annotated
+  with `:has_unread` against `thread_read_pointers`; for `nil` callers each
+  row is annotated with `has_unread: false`.
+
+  Order: `[desc: sticky, desc: last_post_at]` — stickies first, then newest
+  activity within each tier.
+
+  ## Options
+
+    * `:limit` — positive integer overriding the default `@page_size` of
+      `#{@page_size}`. Non-positive or non-integer values fall back to
+      `@page_size` (defensive default — D-06).
+
+  ### Reserved keys (not yet implemented — D-06)
+
+    * `:after`  — cursor for next page (future cursor-based pagination)
+    * `:before` — cursor for prev page (future cursor-based pagination)
+
+  Phase 47 only consumes `:limit`. Reserved keys are accepted by the
+  function signature (because `opts` is a free-form keyword list) but are
+  intentionally NOT validated, parsed, or rejected. Adding stub validators
+  would introduce untested code paths and conflict with SPEC R3's "Phase 47
+  only uses default options at call sites."
+  """
+  @spec list_threads(String.t(), String.t() | nil, keyword()) :: [ThreadEntry.t()]
+  def list_threads(board_id, nil, opts) do
+    limit = normalize_limit(Keyword.get(opts, :limit, @page_size))
+
+    from(t in Thread,
+      where: t.board_id == ^board_id,
+      order_by: [desc: t.sticky, desc: t.last_post_at],
+      limit: ^limit,
+      preload: [:created_by]
+    )
+    |> QueryHelpers.not_deleted()
+    |> Repo.all()
     |> Enum.map(&annotate_no_user/1)
   end
 
-  def list_threads(board_id, user_id) when is_binary(user_id) do
+  def list_threads(board_id, user_id, opts) when is_binary(user_id) do
+    board_id
+    |> list_threads_query(user_id, opts)
+    |> Repo.all()
+    |> Enum.map(&struct(ThreadEntry, &1))
+    |> preload_created_by()
+  end
+
+  @doc """
+  Build the bounded `list_threads` Ecto query without executing it.
+
+  Exposed so tests can inspect the generated SQL via
+  `Ecto.Adapters.SQL.to_sql/3` to verify a `LIMIT` clause is applied at
+  the SQL layer (R3 acceptance). Not intended for general callers —
+  use `list_threads/3` instead.
+  """
+  @doc since: "Phase 47"
+  @spec list_threads_query(String.t(), String.t() | nil, keyword()) :: Ecto.Query.t()
+  def list_threads_query(board_id, nil, opts) do
+    limit = normalize_limit(Keyword.get(opts, :limit, @page_size))
+
+    from(t in Thread,
+      where: t.board_id == ^board_id,
+      order_by: [desc: t.sticky, desc: t.last_post_at],
+      limit: ^limit
+    )
+    |> QueryHelpers.not_deleted()
+  end
+
+  def list_threads_query(board_id, user_id, opts) when is_binary(user_id) do
+    limit = normalize_limit(Keyword.get(opts, :limit, @page_size))
+
     query =
       from t in Thread,
         left_join: trp in ReadPointer,
         on: trp.thread_id == t.id and trp.user_id == ^user_id,
         where: t.board_id == ^board_id,
         order_by: [desc: t.sticky, desc: t.last_post_at],
+        limit: ^limit,
         select: %{
           id: t.id,
           title: t.title,
@@ -134,12 +201,11 @@ defmodule Foglet.Threads do
               t.last_post_at > coalesce(trp.last_read_at, fragment("to_timestamp(0)"))
         }
 
-    query
-    |> QueryHelpers.not_deleted()
-    |> Repo.all()
-    |> Enum.map(&struct(ThreadEntry, &1))
-    |> preload_created_by()
+    QueryHelpers.not_deleted(query)
   end
+
+  defp normalize_limit(limit) when is_integer(limit) and limit > 0, do: limit
+  defp normalize_limit(_limit), do: @page_size
 
   defp preload_created_by(rows) do
     # Batch preload created_by for all threads in one query
