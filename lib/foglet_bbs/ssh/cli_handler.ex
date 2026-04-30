@@ -81,83 +81,7 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_msg({:ssh_channel_up, channel_id, connection_ref}, %__MODULE__{} = state) do
     peer = read_peer(connection_ref)
-
-    case check_connection_limit() do
-      :over_limit ->
-        _ =
-          :ssh_connection.send(
-            connection_ref,
-            channel_id,
-            "Connection limit reached. Try again later.\r\n"
-          )
-
-        _ = :ssh_connection.close(connection_ref, channel_id)
-
-        # Over-limit reject is a fully-rejected state. check_connection_limit/0
-        # already compensated its own increment, so no later cleanup is owed:
-        # cleanup_done? is true and counter_counted? is false. Future cleanup
-        # delegations are no-ops.
-        new_state = %__MODULE__{
-          over_limit: true,
-          channel_id: channel_id,
-          connection_ref: connection_ref,
-          cleanup_done?: true,
-          counter_counted?: false
-        }
-
-        {:ok, new_state}
-
-      :ok ->
-        if Foglet.SSH.RateLimiter.allow?(peer) do
-          # check_connection_limit/0 already incremented the counter; the
-          # accepted path now owns one decrement, tracked via counter_counted?.
-          pubkey_user = resolve_pubkey_user(peer)
-          session_pid = start_session(pubkey_user)
-
-          Logger.info(
-            "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
-              "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
-              "session_pid=#{inspect(session_pid)}"
-          )
-
-          new_state = %__MODULE__{
-            state
-            | channel_id: channel_id,
-              connection_ref: connection_ref,
-              peer: peer,
-              session_pid: session_pid,
-              counter_counted?: true,
-              cleanup_done?: false
-          }
-
-          {:ok, new_state}
-        else
-          # check_connection_limit/0 incremented the counter before we got here;
-          # undo it so rate-limited connections don't drift the count upward.
-          # After this immediate compensation the counter is balanced, so the
-          # rejected state owes no further decrement.
-          _ = decrement_connection_count()
-
-          _ =
-            :ssh_connection.send(
-              connection_ref,
-              channel_id,
-              "Rate limit exceeded. Try again later.\r\n"
-            )
-
-          _ = :ssh_connection.close(connection_ref, channel_id)
-
-          new_state = %__MODULE__{
-            over_limit: true,
-            channel_id: channel_id,
-            connection_ref: connection_ref,
-            cleanup_done?: true,
-            counter_counted?: false
-          }
-
-          {:ok, new_state}
-        end
-    end
+    do_channel_up(state, channel_id, connection_ref, peer)
   end
 
   # Lifecycle exited — close the channel so the client terminal disconnects.
@@ -274,6 +198,96 @@ defmodule Foglet.SSH.CLIHandler do
   def terminate(_reason, state) do
     _ = cleanup(state, close_channel: false)
     :ok
+  end
+
+  # Internal channel-up implementation. Exposed via channel_up_for_test/4 so
+  # focused unit tests can drive the over-limit and rate-limit branches with a
+  # specified peer rather than depending on a real SSH connection_info lookup.
+  defp do_channel_up(%__MODULE__{} = state, channel_id, connection_ref, peer) do
+    case check_connection_limit() do
+      :over_limit ->
+        _ =
+          safe_ssh_send(
+            connection_ref,
+            channel_id,
+            "Connection limit reached. Try again later.\r\n"
+          )
+
+        _ = safe_ssh_close(connection_ref, channel_id)
+
+        # Over-limit reject is a fully-rejected state. check_connection_limit/0
+        # already compensated its own increment, so no later cleanup is owed:
+        # cleanup_done? is true and counter_counted? is false. Future cleanup
+        # delegations are no-ops.
+        new_state = %__MODULE__{
+          over_limit: true,
+          channel_id: channel_id,
+          connection_ref: connection_ref,
+          cleanup_done?: true,
+          counter_counted?: false
+        }
+
+        {:ok, new_state}
+
+      :ok ->
+        if Foglet.SSH.RateLimiter.allow?(peer) do
+          # check_connection_limit/0 already incremented the counter; the
+          # accepted path now owns one decrement, tracked via counter_counted?.
+          pubkey_user = resolve_pubkey_user(peer)
+          session_pid = start_session(pubkey_user)
+
+          Logger.info(
+            "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
+              "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
+              "session_pid=#{inspect(session_pid)}"
+          )
+
+          new_state = %__MODULE__{
+            state
+            | channel_id: channel_id,
+              connection_ref: connection_ref,
+              peer: peer,
+              session_pid: session_pid,
+              counter_counted?: true,
+              cleanup_done?: false
+          }
+
+          {:ok, new_state}
+        else
+          # check_connection_limit/0 incremented the counter before we got here;
+          # undo it so rate-limited connections don't drift the count upward.
+          # After this immediate compensation the counter is balanced, so the
+          # rejected state owes no further decrement.
+          _ = decrement_connection_count()
+
+          _ =
+            safe_ssh_send(
+              connection_ref,
+              channel_id,
+              "Rate limit exceeded. Try again later.\r\n"
+            )
+
+          _ = safe_ssh_close(connection_ref, channel_id)
+
+          new_state = %__MODULE__{
+            over_limit: true,
+            channel_id: channel_id,
+            connection_ref: connection_ref,
+            cleanup_done?: true,
+            counter_counted?: false
+          }
+
+          {:ok, new_state}
+        end
+    end
+  end
+
+  @doc false
+  # Test-only entry point for driving channel-up logic with an explicit peer.
+  # Avoids needing a real SSH connection_ref to exercise the rate-limit and
+  # over-limit branches of the handler.
+  def channel_up_for_test(%__MODULE__{} = state, channel_id, connection_ref, peer) do
+    do_channel_up(state, channel_id, connection_ref, peer)
   end
 
   # Clear the primary screen + scrollback, enter alt-screen, then clear the alt
@@ -462,6 +476,31 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   defp maybe_close_channel(_state), do: :ok
+
+  # Wrappers that tolerate a nil or test-only connection ref/channel without
+  # raising. The rejection paths drive these directly with the values stashed
+  # on state during channel-up.
+  defp safe_ssh_send(nil, _ch, _data), do: :ok
+  defp safe_ssh_send(_ref, nil, _data), do: :ok
+
+  defp safe_ssh_send(ref, ch, data) do
+    :ssh_connection.send(ref, ch, data)
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
+
+  defp safe_ssh_close(nil, _ch), do: :ok
+  defp safe_ssh_close(_ref, nil), do: :ok
+
+  defp safe_ssh_close(ref, ch) do
+    :ssh_connection.close(ref, ch)
+  rescue
+    _ -> :ok
+  catch
+    _, _ -> :ok
+  end
 
   # Single cleanup helper invoked by every termination-sensitive callback.
   # Order is intentional:
