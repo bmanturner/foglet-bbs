@@ -413,6 +413,18 @@ defmodule Foglet.TUI.Screens.Register do
      [Effect.session({:set_current_user, user}), Effect.navigate(:verify, %{})]}
   end
 
+  defp handle_register_result(state, {:ok, user, :verify, delivery}) do
+    require Logger
+
+    Logger.warning(
+      "[Register] unexpected verify delivery shape #{inspect(delivery)}; " <>
+        "treating as :attempted and routing to verify screen"
+    )
+
+    {RegisterState.put(state, RegisterState.default()),
+     [Effect.session({:set_current_user, user}), Effect.navigate(:verify, %{})]}
+  end
+
   defp handle_register_result(state, {:ok, user, :main_menu, _delivery}) do
     {RegisterState.put(state, RegisterState.default()),
      [Effect.session({:promote_session, user})]}
