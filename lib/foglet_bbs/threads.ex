@@ -282,8 +282,8 @@ defmodule Foglet.Threads do
   @spec advance_thread_read_pointer(String.t(), String.t(), String.t()) ::
           {:ok, ReadPointer.t()} | {:error, Ecto.Changeset.t()}
   def advance_thread_read_pointer(user_id, thread_id, last_read_post_id) do
-    now = DateTime.utc_now()
     new_post = Repo.get_by!(Post, id: last_read_post_id, thread_id: thread_id)
+    new_read_at = new_post.inserted_at
 
     on_conflict_query =
       from(rp in ReadPointer,
@@ -293,7 +293,7 @@ defmodule Foglet.Threads do
               fragment(
                 """
                 CASE
-                WHEN ? >= COALESCE((SELECT message_number FROM posts WHERE id = ?), 0)
+                WHEN ? > COALESCE((SELECT message_number FROM posts WHERE id = ?), 0)
                 THEN ?
                 ELSE ?
                 END
@@ -303,13 +303,26 @@ defmodule Foglet.Threads do
                 type(^last_read_post_id, :binary_id),
                 rp.last_read_post_id
               ),
-            last_read_at: ^now
+            last_read_at:
+              fragment(
+                """
+                CASE
+                WHEN ? > COALESCE((SELECT message_number FROM posts WHERE id = ?), 0)
+                THEN ?
+                ELSE ?
+                END
+                """,
+                ^new_post.message_number,
+                rp.last_read_post_id,
+                type(^new_read_at, :utc_datetime_usec),
+                rp.last_read_at
+              )
           ]
         ]
       )
 
     %ReadPointer{user_id: user_id, thread_id: thread_id}
-    |> ReadPointer.changeset(%{last_read_post_id: last_read_post_id, last_read_at: now})
+    |> ReadPointer.changeset(%{last_read_post_id: last_read_post_id, last_read_at: new_read_at})
     |> Repo.insert(
       on_conflict: on_conflict_query,
       conflict_target: [:user_id, :thread_id],

@@ -459,6 +459,31 @@ defmodule Foglet.ThreadsTest do
       assert has_unread == true
     end
 
+    test "stale read-pointer flush after newer post remains unread" do
+      {board, _pid} = setup_board_with_server()
+      poster = user_fixture()
+      reader = user_fixture()
+
+      {:ok, %{thread: thread, post: p1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T", body: "root"})
+
+      {:ok, p2} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "second"})
+
+      {:ok, _} = Foglet.Threads.advance_thread_read_pointer(reader.id, thread.id, p2.id)
+
+      {:ok, p3} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "third"})
+
+      {:ok, unchanged} = Foglet.Threads.advance_thread_read_pointer(reader.id, thread.id, p1.id)
+
+      assert unchanged.last_read_post_id == p2.id
+      assert DateTime.compare(unchanged.last_read_at, p3.inserted_at) == :lt
+
+      [%{has_unread: has_unread}] = Foglet.Threads.list_threads(board.id, reader.id)
+      assert has_unread == true
+    end
+
     test "thread read up-to-date is has_unread: false" do
       {board, _pid} = setup_board_with_server()
       poster = user_fixture()

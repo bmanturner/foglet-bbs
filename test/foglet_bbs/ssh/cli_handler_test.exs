@@ -101,8 +101,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
       state = %CLIHandler{channel_id: 7, connection_ref: nil, session_pid: session_pid}
 
-      assert {:stop, 7, ^state} =
+      assert {:stop, 7, returned_state} =
                CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 7}}, state)
+
+      assert returned_state.channel_id == 7
+      assert returned_state.cleanup_done?
+      refute returned_state.counter_counted?
 
       assert_receive {:DOWN, ^ref, :process, ^session_pid, _reason}
     end
@@ -112,11 +116,19 @@ defmodule Foglet.SSH.CLIHandlerTest do
       :ets.update_counter(Foglet.SSH.CLIHandler.Counter, :count, {2, 1})
 
       lifecycle_pid = self()
-      state = %CLIHandler{channel_id: nil, connection_ref: nil, lifecycle_pid: lifecycle_pid}
 
-      assert {:stop, 0, ^state} =
+      state = %CLIHandler{
+        channel_id: nil,
+        connection_ref: nil,
+        lifecycle_pid: lifecycle_pid,
+        counter_counted?: true
+      }
+
+      assert {:stop, 0, returned_state} =
                CLIHandler.handle_msg({:EXIT, lifecycle_pid, :boom}, state)
 
+      assert returned_state.cleanup_done?
+      refute returned_state.counter_counted?
       assert [{:count, 0}] = :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
     end
 
@@ -125,6 +137,195 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
       assert {:ok, ^state} =
                CLIHandler.handle_msg({:EXIT, spawn(fn -> :ok end), :boom}, state)
+    end
+  end
+
+  describe "connection counter balance (SSH-04)" do
+    @max_connections 500
+
+    setup do
+      reset_cli_counter!()
+      start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
+      :ok
+    end
+
+    test "normal close: :closed on counted state restores counter to 0" do
+      {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()
+      ref = Process.monitor(session_pid)
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 1})
+      assert_counter!(1)
+
+      state = %CLIHandler{
+        channel_id: 7,
+        connection_ref: nil,
+        session_pid: session_pid,
+        counter_counted?: true
+      }
+
+      assert {:stop, 7, returned_state} =
+               CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 7}}, state)
+
+      assert_counter!(0)
+      assert returned_state.cleanup_done?
+      refute returned_state.counter_counted?
+
+      assert_receive {:DOWN, ^ref, :process, ^session_pid, _reason}
+    end
+
+    test "EOF-to-close: EOF leaves counter alone, subsequent :closed decrements once" do
+      {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()
+      ref = Process.monitor(session_pid)
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 1})
+
+      state = %CLIHandler{
+        channel_id: 9,
+        connection_ref: nil,
+        session_pid: session_pid,
+        counter_counted?: true
+      }
+
+      assert {:ok, after_eof} =
+               CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:eof, 9}}, state)
+
+      assert_counter!(1)
+      assert after_eof.counter_counted?
+      refute after_eof.cleanup_done?
+
+      assert {:stop, 9, after_close} =
+               CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 9}}, after_eof)
+
+      assert_counter!(0)
+      assert after_close.cleanup_done?
+      refute after_close.counter_counted?
+
+      assert_receive {:DOWN, ^ref, :process, ^session_pid, _reason}
+    end
+
+    test "lifecycle EXIT on counted state decrements counter exactly once" do
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 1})
+
+      lifecycle_pid = self()
+
+      state = %CLIHandler{
+        channel_id: nil,
+        connection_ref: nil,
+        lifecycle_pid: lifecycle_pid,
+        counter_counted?: true
+      }
+
+      assert {:stop, 0, returned_state} =
+               CLIHandler.handle_msg({:EXIT, lifecycle_pid, :boom}, state)
+
+      assert_counter!(0)
+      assert returned_state.cleanup_done?
+      refute returned_state.counter_counted?
+    end
+
+    test "over-limit reject: counter returns to threshold, returned state is uncounted" do
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, @max_connections})
+
+      assert_counter!(@max_connections)
+
+      peer = {{10, 0, 0, 99}, 65_001}
+
+      assert {:ok, returned_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      assert returned_state.over_limit
+      refute returned_state.counter_counted?
+      assert returned_state.cleanup_done?
+      # Counter must not drift upward past the threshold; check_connection_limit/0
+      # compensated its own increment on rejection.
+      assert_counter!(@max_connections)
+
+      # Subsequent cleanup delivery (e.g. terminate) is a no-op for rejected state.
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+      assert_counter!(@max_connections)
+    end
+
+    test "rate-limit reject: counter unchanged, returned state is uncounted" do
+      peer = {{10, 0, 0, 100}, 65_002}
+
+      # Saturate the per-IP rate limit window by exhausting the bucket.
+      Enum.each(1..10, fn _ -> Foglet.SSH.RateLimiter.allow?(peer) end)
+      refute Foglet.SSH.RateLimiter.allow?(peer)
+
+      starting_count = 3
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, starting_count})
+
+      assert {:ok, returned_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      assert returned_state.over_limit
+      refute returned_state.counter_counted?
+      assert returned_state.cleanup_done?
+      # check_connection_limit/0 incremented; the rate-limit branch must
+      # decrement immediately so the counter returns to the starting value.
+      assert_counter!(starting_count)
+
+      # Idempotent: cleanup delivery on a rejected state must not double-decrement.
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+      assert_counter!(starting_count)
+    end
+
+    test "crash-during-init: terminate on counted state with no lifecycle/session decrements once" do
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 1})
+
+      state = %CLIHandler{
+        channel_id: nil,
+        connection_ref: nil,
+        session_pid: nil,
+        lifecycle_pid: nil,
+        counter_counted?: true
+      }
+
+      assert :ok = CLIHandler.terminate(:boom, state)
+      assert_counter!(0)
+    end
+
+    test "idempotent cleanup: EXIT followed by terminate decrements only once" do
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 1})
+
+      lifecycle_pid = self()
+
+      state = %CLIHandler{
+        channel_id: nil,
+        connection_ref: nil,
+        lifecycle_pid: lifecycle_pid,
+        counter_counted?: true
+      }
+
+      assert {:stop, 0, after_exit} =
+               CLIHandler.handle_msg({:EXIT, lifecycle_pid, :boom}, state)
+
+      assert_counter!(0)
+      assert after_exit.cleanup_done?
+
+      # Subsequent terminate must not double-decrement; cleanup helper short-circuits
+      # on cleanup_done? state.
+      assert :ok = CLIHandler.terminate(:normal, after_exit)
+      assert_counter!(0)
+    end
+
+    test "rejected state never asks for later decrement (closed -> terminate stays at start)" do
+      starting_count = 7
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, starting_count})
+
+      # Simulate a rejected state shape (matches what over_limit/rate-limit
+      # branches return).
+      rejected = %CLIHandler{
+        channel_id: 1,
+        connection_ref: nil,
+        over_limit: true,
+        cleanup_done?: true,
+        counter_counted?: false
+      }
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, rejected)
+      assert_counter!(starting_count)
+
+      _ = CLIHandler.terminate(:normal, rejected)
+      assert_counter!(starting_count)
     end
   end
 
@@ -318,6 +519,11 @@ defmodule Foglet.SSH.CLIHandlerTest do
     end
 
     CLIHandler.init_counter()
+  end
+
+  defp assert_counter!(expected) do
+    assert [{:count, ^expected}] =
+             :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
   end
 
   defp daemon_port!(daemon_ref) do
