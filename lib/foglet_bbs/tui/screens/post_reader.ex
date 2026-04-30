@@ -90,14 +90,23 @@ defmodule Foglet.TUI.Screens.PostReader do
   def update(:load, %State{thread_id: thread_id} = state, %Context{} = context)
       when is_binary(thread_id) do
     posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
-    direction = load_direction(state)
     limit = reader_window_limit(state)
+
+    # IN-03: route-entry loads now honor the screen-local read pointer just
+    # like the test-seam path (`load_posts/2`). Previously `update(:load, …)`
+    # always emitted `:initial` or `:last`, ignoring `pending_read_positions`,
+    # so a user re-entering a 200-post thread with their pointer at message
+    # 150 landed at index 0 — a partial break of the moduledoc's
+    # "if you saw it, you read it" promise. When a pointer exists we now
+    # emit `:around` with `around_message_number: pointer`.
+    read_pointer_msg_no = read_pointer_message_number(state, thread_id)
+    opts = load_window_opts(read_pointer_msg_no, state.load_intent) ++ [limit: limit]
 
     new_state = %{state | status: :loading, last_op: :load_posts_window, last_error: nil}
 
     effect =
       Effect.task(:load_posts_window, :post_reader, fn ->
-        posts_mod.list_reader_window(thread_id, direction: direction, limit: limit)
+        posts_mod.list_reader_window(thread_id, opts)
       end)
 
     {new_state, [effect]}
@@ -642,10 +651,9 @@ defmodule Foglet.TUI.Screens.PostReader do
     PostCard.reader_parts(post, tuples, w, theme, index: idx, total: total)
   end
 
-  defp load_direction(%State{load_intent: intent}) when intent in [:jump_last, "jump_last"],
-    do: :last
-
-  defp load_direction(%State{}), do: :initial
+  # IN-03: `load_direction/1` removed — `update(:load, …)` now uses
+  # `load_window_opts/2`, which already encodes the same `:jump_last → :last`,
+  # `else → :initial` mapping plus the new pointer-aware `:around` branch.
 
   defp reader_window_limit(%State{reader_window_limit: limit})
        when is_integer(limit) and limit > 0,
