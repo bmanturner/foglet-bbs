@@ -1477,6 +1477,35 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       refute Enum.any?(Map.keys(cache), &(elem(&1, 1) == 80))
     end
 
+    test "reducer warming after resize retains only current-width cache keys" do
+      context_80 = post_reader_context()
+      context_40 = %{context_80 | terminal_size: {40, 24}}
+
+      state =
+        State.new(
+          board_id: "b1",
+          thread_id: "t1",
+          posts: [p2_post(id: "p1", body: "A\n\nB\n\nC", message_number: 1)],
+          status: :loaded
+        )
+
+      assert {%State{} = warmed_80, []} =
+               PostReader.update({:key, %{key: :char, char: "j"}}, state, context_80)
+
+      assert Enum.any?(Map.keys(warmed_80.render_cache), &(elem(&1, 1) == 80))
+
+      assert {%State{} = warmed_40, []} =
+               PostReader.update({:key, %{key: :char, char: "j"}}, warmed_80, context_40)
+
+      assert Enum.any?(Map.keys(warmed_40.render_cache), &(elem(&1, 1) == 40))
+      refute Enum.any?(Map.keys(warmed_40.render_cache), &(elem(&1, 1) == 80))
+
+      assert Enum.all?(Map.keys(warmed_40.render_cache), fn
+               {_post_id, width} when is_integer(width) -> true
+               _other -> false
+             end)
+    end
+
     test "Q clears :post_reader screen_state (cache is discarded)" do
       s = p2_state(%{posts: [p2_post(id: "p1", body: "A\n\nB\n\nC")]})
       {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, s)
