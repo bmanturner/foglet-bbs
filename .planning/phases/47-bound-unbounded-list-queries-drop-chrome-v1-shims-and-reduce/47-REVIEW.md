@@ -42,10 +42,10 @@ files_reviewed_list:
   - test/foglet_bbs/tui/widgets/chrome/screen_frame_test.exs
   - test/foglet_bbs/tui/widgets/chrome/status_bar_test.exs
 findings:
-  blocker: 1
+  blocker: 0
   warning: 4
   info: 4
-  total: 9
+  total: 8
 status: issues_found
 ---
 
@@ -75,12 +75,6 @@ This is a re-review after the Phase 47 fix pass (47-REVIEW-FIX.md) closed 13 of
 
 However, the re-review surfaces:
 
-- **One BLOCKER** that the fix pass introduced or missed: the Phase 47 R6
-  acceptance criterion **"`wc -l lib/foglet_bbs/tui/app.ex` reports under
-  400"** is **not met** — `app.ex` is currently **407 lines**. The WR-02
-  documentation comment expansion pushed it back over the line. Either trim
-  the comment or extract another responsibility; right now the spec gate
-  fails verifiably.
 - **Four WARNINGS** of regression / drift / latent defects: a duplicate of
   the WR-03 unreachable-`render/2`-fallback pattern in `Moderation`
   (BoardList was fixed; Moderation has the same shape and was missed); the
@@ -100,46 +94,7 @@ However, the re-review surfaces:
   stale "WR-04" reference comment that points at a different phase's
   finding.
 
-`mix precommit` is reportedly green per the fix doc, but the spec
-acceptance criterion for `app.ex` line count is a hard verifiable gate that
-currently fails.
-
-## Blockers
-
-### BL-01: `app.ex` is 407 lines — fails Phase 47 SPEC R6 acceptance gate
-
-**File:** `lib/foglet_bbs/tui/app.ex`
-**Issue:** SPEC R6 acceptance: *"`wc -l lib/foglet_bbs/tui/app.ex` reports
-under 400."* Current line count: **407**. The fix-pass commit for WR-02
-(`6910fbc2`) added a paragraph-length explanation comment in `do_update/2`
-(lines 238–246) covering why exogenous messages are exempt from the SizeGate
-swallow path. The explanation is correct and worth keeping, but it pushed
-the file from ~400 lines back to 407, breaking the SPEC's hard line target.
-
-This is not a behavioral defect, but it is a **verifiable acceptance-criterion
-failure** for Phase 47 — the spec text is explicit that the line count must be
-under 400, and a `wc -l` invocation today returns 407. Either:
-
-1. Compress the WR-02 comment back to 1–2 lines (the rationale is also
-   captured in `47-REVIEW-FIX.md`, so the long form has a permanent home),
-   or
-2. Extract another responsibility (e.g., the `format_notification/2` +
-   `humanize_op/1` helpers near the bottom — five lines plus a test could
-   live in `App.Notifications`), or
-3. Update the spec/fix doc to acknowledge the 7-line overage and re-derive
-   acceptance with the new ceiling.
-
-**Fix:** Pick option (1) — re-collapse the WR-02 comment. The shipped
-explanation is worth ~3 lines, not 9. Sample:
-
-```elixir
-# WR-02: exogenous messages (auth, :promote_session, navigation,
-# PubSub) flow through unconditionally. SizeGate gates `view/1`
-# and key input only — see 47-REVIEW-FIX.md WR-02 for the full rationale.
-defp do_update({:set_user, user}, state), do: SessionAlias.set_user(state, user)
-```
-
-That trims ~6 lines and brings `wc -l` back under 400.
+`mix precommit` is reportedly green per the fix doc.
 
 ## Warnings
 
