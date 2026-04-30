@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.Register.State do
     `:handle` → `:email` → `:password` → `:confirm_password` → `:handle`
   """
 
-  alias Foglet.Accounts.User
+  alias Foglet.Accounts.{Invites, User}
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @focus_cycle [:handle, :email, :password, :confirm_password]
@@ -125,6 +125,34 @@ defmodule Foglet.TUI.Screens.Register.State do
   end
 
   def valid_invite_code?(_), do: false
+
+  @doc """
+  Verifies that an invite code is well-formed and currently consumable.
+
+  Returns `:ok` if the code passes the format check and the invite exists with
+  status `:available`. Returns `{:error, :format}` for format failures and
+  `{:error, :unavailable}` when the invite is missing, revoked, or already
+  consumed. Performs no consumption — that remains the responsibility of the
+  final registration step (see `Foglet.Accounts.register_user/1` for the
+  `invite_only` path).
+  """
+  @spec verify_invite_code(String.t() | any(), module()) ::
+          :ok | {:error, :format | :unavailable}
+  def verify_invite_code(code, invites_mod \\ Invites)
+
+  def verify_invite_code(code, invites_mod) when is_binary(code) do
+    if valid_invite_code?(code) do
+      case invites_mod.get_invite_status(code) do
+        {:ok, %{status: :available}} -> :ok
+        {:ok, _other} -> {:error, :unavailable}
+        {:error, :not_found} -> {:error, :unavailable}
+      end
+    else
+      {:error, :format}
+    end
+  end
+
+  def verify_invite_code(_code, _invites_mod), do: {:error, :format}
 
   @doc "Formats an Ecto.Changeset error map into a single display string."
   @spec changeset_error_text(Ecto.Changeset.t()) :: String.t()

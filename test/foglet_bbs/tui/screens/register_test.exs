@@ -77,6 +77,12 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
   defp run_register_task(%Effect{payload: %{fun: fun}}), do: fun.()
 
+  defp sysop_user_fixture do
+    user = user_fixture()
+    {:ok, promoted} = user |> Ecto.Changeset.change(role: :sysop) |> FogletBbs.Repo.update()
+    promoted
+  end
+
   setup do
     Config.init_cache()
     original_mode = Config.get("registration_mode", "open")
@@ -124,16 +130,18 @@ defmodule Foglet.TUI.Screens.RegisterTest do
     end
 
     test "valid invite code advances to combined form without App delegation" do
+      invite = invite_fixture()
+
       {local_state, []} =
         Register.update(
-          {:wizard, {:submit_step, :invite_code, "VALIDINVITECODE1"}},
+          {:wizard, {:submit_step, :invite_code, invite.code}},
           invite_state(),
           context("invite_only")
         )
 
       assert local_state.step == :combined
       assert local_state.focused_field == :handle
-      assert local_state.collected.invite_code == "VALIDINVITECODE1"
+      assert local_state.collected.invite_code == invite.code
       assert local_state.error == nil
     end
 
@@ -142,6 +150,34 @@ defmodule Foglet.TUI.Screens.RegisterTest do
         Register.update(
           {:wizard, {:submit_step, :invite_code, "short"}},
           invite_state(),
+          context("invite_only")
+        )
+
+      assert local_state.step == :invite_code
+      assert local_state.error == "Invalid or expired invite code."
+    end
+
+    test "well-formed but unknown invite code stays on invite step" do
+      {local_state, []} =
+        Register.update(
+          {:wizard, {:submit_step, :invite_code, "ZZZZZZZZZZZZZZZZ"}},
+          invite_state(),
+          context("invite_only")
+        )
+
+      assert local_state.step == :invite_code
+      assert local_state.error == "Invalid or expired invite code."
+    end
+
+    test "revoked invite code stays on invite step instead of advancing" do
+      issuer = sysop_user_fixture()
+      invite = invite_fixture(issuer)
+      {:ok, _} = Foglet.Accounts.Invites.revoke_invite(issuer, invite.code)
+
+      {local_state, []} =
+        Register.update(
+          {:wizard, {:submit_step, :invite_code, invite.code}},
+          invite_state(invite.code),
           context("invite_only")
         )
 
@@ -286,6 +322,48 @@ defmodule Foglet.TUI.Screens.RegisterTest do
                session_effect(effects)
 
       assert user.handle == "openmain"
+    end
+
+    test "invite revoked between wizard steps surfaces friendly modal" do
+      Config.put!("delivery_mode", "no_email")
+      Config.put!("require_email_verification", false)
+      Config.put!("registration_mode", "open")
+
+      issuer = sysop_user_fixture()
+      invite = invite_fixture(issuer)
+      Config.put!("registration_mode", "invite_only")
+
+      state =
+        combined_state(
+          [
+            handle: "racer",
+            email: "racer@example.test",
+            password: "sekret01",
+            confirm: "sekret01",
+            collected: %{invite_code: invite.code}
+          ],
+          :confirm_password,
+          "invite_only"
+        )
+
+      {_submitting, effects} =
+        Register.update({:key, %{key: :enter}}, state, context("invite_only"))
+
+      {:ok, _} = Foglet.Accounts.Invites.revoke_invite(issuer, invite.code)
+      result = run_register_task(task_effect(effects, :register))
+
+      {local_state, effects} =
+        Register.update({:task_result, :register, {:ok, result}}, state, context("invite_only"))
+
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
+
+      assert modal.message ==
+               "Invite is no longer valid. Please request a new code from the sysop."
+
+      assert local_state.step == :invite_code
+      assert local_state.focused_field == :invite_code
+      refute local_state.error
     end
 
     test "invite-only registration submits the collected invite code" do

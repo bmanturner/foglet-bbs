@@ -24,7 +24,7 @@ defmodule Foglet.TUI.Screens.Register do
   """
 
   alias Foglet.{Accounts, Config}
-  alias Foglet.Accounts.Verification
+  alias Foglet.Accounts.{Invites, Verification}
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
@@ -86,19 +86,22 @@ defmodule Foglet.TUI.Screens.Register do
 
   def update({:wizard, {:submit_step, :invite_code, value}}, local_state, %Context{} = context) do
     reg = local_state || init(context)
+    state = app_state_from_local(reg, context)
 
-    if RegisterState.valid_invite_code?(value) do
-      new_reg = %{
-        reg
-        | step: :combined,
-          focused_field: :handle,
-          collected: Map.put(reg.collected, :invite_code, value),
-          error: nil
-      }
+    case verify_invite_code(state, value) do
+      :ok ->
+        new_reg = %{
+          reg
+          | step: :combined,
+            focused_field: :handle,
+            collected: Map.put(reg.collected, :invite_code, value),
+            error: nil
+        }
 
-      {new_reg, []}
-    else
-      {%{reg | error: "Invalid or expired invite code."}, []}
+        {new_reg, []}
+
+      {:error, reason} ->
+        {%{reg | error: invite_step_error(reason)}, []}
     end
   end
 
@@ -320,10 +323,10 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp handle_invite_submission(value, state) do
-    state
-    |> get_register_ss()
-    |> then(fn reg ->
-      if RegisterState.valid_invite_code?(value) do
+    reg = get_register_ss(state)
+
+    case verify_invite_code(state, value) do
+      :ok ->
         new_reg = %{
           reg
           | step: :combined,
@@ -333,11 +336,19 @@ defmodule Foglet.TUI.Screens.Register do
         }
 
         {:update, RegisterState.put(state, new_reg), []}
-      else
-        {:update, RegisterState.put(state, %{reg | error: "Invalid or expired invite code."}), []}
-      end
-    end)
+
+      {:error, reason} ->
+        {:update, RegisterState.put(state, %{reg | error: invite_step_error(reason)}), []}
+    end
   end
+
+  defp verify_invite_code(state, value) do
+    invites_mod = domain_module(state, :invites)
+    RegisterState.verify_invite_code(value, invites_mod)
+  end
+
+  defp invite_step_error(:format), do: "Invalid or expired invite code."
+  defp invite_step_error(:unavailable), do: "Invalid or expired invite code."
 
   # §7 Private domain plumbing
 
@@ -432,15 +443,26 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp handle_register_result(state, {:error, changeset})
        when is_struct(changeset, Ecto.Changeset) do
-    reg = get_register_ss(state)
+    if Keyword.has_key?(changeset.errors, :invite_code) do
+      modal = %Foglet.TUI.Modal{
+        type: :error,
+        message: "Invite is no longer valid. Please request a new code from the sysop."
+      }
 
-    new_reg = %{
-      reg
-      | error: RegisterState.changeset_error_text(changeset),
-        focused_field: :handle
-    }
+      reg = get_register_ss(state)
+      reset_reg = %{reg | step: :invite_code, focused_field: :invite_code, error: nil}
+      {:update, RegisterState.put(state, reset_reg), [Effect.open_modal(modal)]}
+    else
+      reg = get_register_ss(state)
 
-    {:update, RegisterState.put(state, new_reg), []}
+      new_reg = %{
+        reg
+        | error: RegisterState.changeset_error_text(changeset),
+          focused_field: :handle
+      }
+
+      {:update, RegisterState.put(state, new_reg), []}
+    end
   end
 
   defp handle_register_result(state, {:error, :unavailable}) do
@@ -484,4 +506,5 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp default_domain_module(:accounts), do: Accounts
   defp default_domain_module(:verification), do: Verification
+  defp default_domain_module(:invites), do: Invites
 end
