@@ -375,6 +375,6 @@ defmodule Foglet.TUI.Screens.NewThread do
       _ -> default
     end
   rescue
-    _ -> default
+    Ecto.NoResultsError -> default
   end
 end
