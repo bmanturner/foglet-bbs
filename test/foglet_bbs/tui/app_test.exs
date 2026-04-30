@@ -52,20 +52,12 @@ defmodule Foglet.TUI.AppTest do
   defmodule FakePosts do
     alias Foglet.Posts.ReaderWindow
 
-    def list_posts("t1") do
-      [%{id: "p1", body: "Hello", message_number: 1, inserted_at: ~U[2026-04-28 18:00:00Z]}]
-    end
-
-    def list_posts("t2") do
-      [%{id: "p2", body: "Second", message_number: 2, inserted_at: ~U[2026-04-28 19:00:00Z]}]
-    end
-
-    # PostReader switched from `list_posts/1` to `list_reader_window/2`
-    # (Foglet.Posts.list_reader_window/2). The mock returns a degenerate
-    # single-post window since the AppTest fixtures only carry one post per
-    # thread.
+    # Phase 47 R1/R2: PostReader uses `list_reader_window/2` exclusively;
+    # `list_posts/1` no longer exists in `Foglet.Posts`. The mock returns a
+    # degenerate single-post window since the AppTest fixtures only carry one
+    # post per thread.
     def list_reader_window("t1", _opts) do
-      [post] = list_posts("t1")
+      post = %{id: "p1", body: "Hello", message_number: 1, inserted_at: ~U[2026-04-28 18:00:00Z]}
 
       %ReaderWindow{
         posts: [post],
@@ -78,7 +70,7 @@ defmodule Foglet.TUI.AppTest do
     end
 
     def list_reader_window("t2", _opts) do
-      [post] = list_posts("t2")
+      post = %{id: "p2", body: "Second", message_number: 2, inserted_at: ~U[2026-04-28 19:00:00Z]}
 
       %ReaderWindow{
         posts: [post],

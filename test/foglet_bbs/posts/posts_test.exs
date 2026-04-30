@@ -407,62 +407,10 @@ defmodule Foglet.PostsTest do
       assert deleted.message_number == original_message_number
     end
 
-    test "soft-deleted posts remain visible to list_posts/1 queries" do
-      board = setup_board_with_server()
-      user = user_fixture()
-      {thread, root} = setup_thread(board, user)
-
-      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Visible"})
-
-      {:ok, deleted_post} =
-        Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Gone"})
-
-      {:ok, _} = Foglet.Posts.delete_post(deleted_post)
-
-      visible = Foglet.Posts.list_posts(thread.id)
-      ids = Enum.map(visible, & &1.id)
-
-      assert root.id in ids
-      assert post.id in ids
-      assert deleted_post.id in ids
-
-      listed_deleted_post = Enum.find(visible, &(&1.id == deleted_post.id))
-      assert listed_deleted_post.deleted_at != nil
-      assert listed_deleted_post.user.id == user.id
-    end
-
-    test "soft-deleted posts remain visible to list_posts/1 and list_reader_window/2 with message numbers intact" do
-      board = setup_board_with_server()
-      user = user_fixture()
-      {thread, _root} = setup_thread(board, user)
-
-      {:ok, kept_post} =
-        Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Still here"})
-
-      {:ok, post_to_delete} =
-        Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Historical"})
-
-      deleted_message_number = post_to_delete.message_number
-      {:ok, _deleted_post} = Foglet.Posts.delete_post(post_to_delete)
-
-      list_deleted_post =
-        thread.id
-        |> Foglet.Posts.list_posts()
-        |> Enum.find(&(&1.id == post_to_delete.id))
-
-      window_deleted_post =
-        thread.id
-        |> Foglet.Posts.list_reader_window(limit: 10)
-        |> then(&Enum.find(&1.posts, fn post -> post.id == post_to_delete.id end))
-
-      assert kept_post.message_number < deleted_message_number
-      assert list_deleted_post.deleted_at != nil
-      assert list_deleted_post.message_number == deleted_message_number
-      assert list_deleted_post.user.id == user.id
-      assert window_deleted_post.deleted_at != nil
-      assert window_deleted_post.message_number == deleted_message_number
-      assert window_deleted_post.user.id == user.id
-    end
+    # Phase 47 R1 (D-23): the legacy unbounded list-posts tombstone-semantics
+    # tests were deleted along with the unbounded reader API itself. Phase 44
+    # D-13/D-14 already locks tombstone behavior coverage through
+    # `list_reader_window/2` — see the reader window posts test.
   end
 
   describe "delete_post/3 actor-aware gate" do

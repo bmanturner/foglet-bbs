@@ -8,10 +8,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # Test-only fake modules — standard ExUnit pattern, exempt from the CLAUDE.md
   # "no nested modules" convention (no cyclic-dependency risk in test files).
   defmodule FakePosts do
-    def list_posts(_thread_id) do
-      posts()
-    end
-
     def list_reader_window(_thread_id, opts) do
       direction = Keyword.get(opts, :direction, :initial)
 
@@ -59,8 +55,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   defmodule EmptyPosts do
-    def list_posts(_tid), do: []
-
     def list_reader_window(_tid, opts) do
       %Foglet.Posts.ReaderWindow{
         posts: [],
@@ -75,10 +69,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # load-specific read-position keying and distinguish from default-fixture
   # data. The distinct message_numbers are load-post seeding assertions.
   defmodule FakePostsForLoad do
-    def list_posts(_thread_id) do
-      posts()
-    end
-
     def list_reader_window(_thread_id, opts) do
       %Foglet.Posts.ReaderWindow{
         posts: posts(),
@@ -111,8 +101,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   defmodule BoundedFakePosts do
-    def list_posts(_thread_id), do: raise("unbounded list_posts/1 is forbidden")
-
     def list_reader_window(thread_id, opts) do
       if pid = Process.get(:reader_window_test_pid) do
         send(pid, {:reader_window_requested, thread_id, opts})
@@ -430,7 +418,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "PostReader.update/3 stores loaded posts and seeds pending read data" do
     context = post_reader_context()
     state = %{PostReader.State.from_context(context) | load_intent: :jump_last}
-    posts = FakePosts.list_posts("t1")
+    posts = FakePosts.list_reader_window("t1", []).posts
 
     assert {%State{} = loaded, []} =
              PostReader.update({:task_result, :load_posts, {:ok, posts}}, state, context)
@@ -538,7 +526,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       State.new(
         board_id: "b1",
         thread_id: "t1",
-        posts: FakePosts.list_posts("t1"),
+        posts: FakePosts.list_reader_window("t1", []).posts,
         status: :loaded
       )
 
@@ -555,7 +543,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "PostReader.update/3 emits reply navigation with selected post" do
     context = post_reader_context()
-    posts = FakePosts.list_posts("t1")
+    posts = FakePosts.list_reader_window("t1", []).posts
 
     state =
       State.new(
@@ -1700,6 +1688,108 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert ctx[:last_read_post_id] == "p1"
       assert ctx[:thread_id] == "t1"
       assert ctx[:board_id] == "b1"
+    end
+  end
+
+  describe "load_posts/2 — windowed migration (Phase 47 R2)" do
+    # SPEC R2 acceptance: load_posts/2 must route through list_reader_window/2
+    # with anchor mapping per CONTEXT D-02:
+    #   1. Read pointer present → :around at last_read_message_number
+    #   2. load_intent: :jump_last → :last
+    #   3. No read pointer → :initial
+
+    test "with read pointer at message_number 150 in a 200-post thread requests :around and lands selection on the read pointer" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{
+            "t-1000" => %{last_read_post_id: "p150", last_read_message_number: 150}
+          },
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :around
+      assert Keyword.get(opts, :around_message_number) == 150
+
+      ss = s_after.screen_state.post_reader
+      selected = Enum.at(ss.posts, ss.selected_post_index)
+
+      assert selected,
+             "Expected a selected post from the windowed load (got nil — selected_post_index=#{ss.selected_post_index}, posts length=#{length(ss.posts || [])})"
+
+      assert selected.message_number == 150,
+             "Expected selected message_number to land on read pointer 150, got #{selected.message_number}"
+    end
+
+    test "with a 5-post thread (smaller than reader window) the load still succeeds via list_reader_window/2" do
+      # FakePostsForLoad returns 2 posts. We use it here as the "small thread"
+      # case — its list_reader_window/2 returns the 2-post window unconditionally.
+      s =
+        p2_state(%{
+          current_thread: %{id: "t1", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: FakePostsForLoad, markdown: FakeMarkdown}
+          }
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t1")
+
+      ss = s_after.screen_state.post_reader
+      assert length(ss.posts) == 2
+      assert Enum.at(ss.posts, 0).message_number == 5
+    end
+
+    test "with load_intent: :jump_last requests direction: :last (NOT :around)" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      # Set load_intent on the screen state.
+      ss = s.screen_state.post_reader
+      ss = %{ss | load_intent: :jump_last}
+      s = put_in(s.screen_state.post_reader, ss)
+
+      {_s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :last
+      refute Keyword.has_key?(opts, :around_message_number)
+    end
+
+    test "with no read pointer and no jump_last requests direction: :initial" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      {_s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :initial
+      refute Keyword.has_key?(opts, :around_message_number)
     end
   end
 

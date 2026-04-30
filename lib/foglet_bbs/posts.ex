@@ -81,22 +81,6 @@ defmodule Foglet.Posts do
   end
 
   @doc """
-  List all posts in a thread, in insertion order. Preloads :user.
-
-  This is a tombstone-capable reader/history API: soft-deleted posts remain
-  visible so historical message numbers and reader continuity are preserved.
-  """
-  @spec list_posts(String.t()) :: [Post.t()]
-  def list_posts(thread_id) do
-    Repo.all(
-      from p in Post,
-        where: p.thread_id == ^thread_id,
-        order_by: [asc: :inserted_at],
-        preload: [:user]
-    )
-  end
-
-  @doc """
   Returns a bounded, tombstone-capable reader window for a thread.
 
   Cursor semantics are based on per-board `message_number` scoped by
