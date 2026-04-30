@@ -18,25 +18,6 @@ paths that haven't yet hit their pagination ceiling.
 
 ## Tech Debt
 
-### `.dialyzer_ignore.exs` Bucket A header rationale is not fully accurate
-
-- Issue: Bucket A's header reads "Mostly Ecto schemas where dialyzer cannot
-  resolve `t/0` from `use Ecto.Schema`. `posts/reader_window.ex` is included
-  because its `t/0` references `Foglet.Posts.Post.t/0`...". The
-  reader_window inclusion was added during Phase 46 to silence a propagated
-  unresolved-type warning, not because the module is itself an Ecto schema.
-  The Phase 46 D-07 invariant commits to "every kept entry has a stated
-  reason"; this entry has a stated reason but the bucket header makes it
-  non-obvious.
-- Files: `.dialyzer_ignore.exs:5-15`.
-- Impact: Honesty/maintainability footgun. A future reader running the
-  invariant audit may miss why reader_window is in this bucket. Behaviour
-  unchanged.
-- Fix approach: Already applied in part during Phase 46 fix iter — the
-  header now mentions reader_window explicitly. If further drift accumulates,
-  split into A1 (schemas) and A2 (propagated-from-schema) buckets.
-- Source: Phase 46 review WR-02 (`46-REVIEW.iter1.md`).
-
 ### Two "unnecessary skip" entries kept in `.dialyzer_ignore.exs` for documentation
 
 - Issue: The `:no_match` string-pattern entries on
@@ -45,7 +26,7 @@ paths that haven't yet hit their pagination ceiling.
   reports "Unnecessary Skips: 2" for them. They are intentionally retained
   per Phase 46 CONTEXT D-06 because the inline rationale documents the
   Phase 25 defensive-fallback design intent.
-- Files: `.dialyzer_ignore.exs:43-47`.
+- Files: `.dialyzer_ignore.exs:38-42`.
 - Impact: Minor noise in dialyxir output. Locked decision; should be
   revisited only if the underlying defensive `:no_match` clauses in the
   forms are removed.
