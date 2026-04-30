@@ -53,6 +53,11 @@ defmodule Foglet.Posts do
       not PostingPolicy.can_post?(user, board) ->
         {:error, :posting_not_allowed}
 
+      # IN-02: this clause intentionally folds three failure modes —
+      # (a) thread does not exist (`safe_get` returned nil), (b) thread
+      # belongs to a different board, (c) `thread` is not a `%Thread{}` —
+      # into a single `:posting_not_allowed` error so callers without
+      # post-creation permission cannot probe thread existence.
       not match?(%Thread{board_id: ^board_id}, thread) ->
         {:error, :posting_not_allowed}
 
