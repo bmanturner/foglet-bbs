@@ -41,6 +41,24 @@ defmodule Foglet.PostsTest do
     {thread, root}
   end
 
+  defp setup_thread_with_posts(count) when count >= 1 do
+    board = setup_board_with_server()
+    user = user_fixture()
+    {thread, root} = setup_thread(board, user)
+
+    replies =
+      for index <- 2..count do
+        {:ok, reply} =
+          Foglet.Posts.create_reply(thread.id, board.id, user.id, %{
+            body: "Reply #{index}"
+          })
+
+        reply
+      end
+
+    {board, user, thread, [root | replies]}
+  end
+
   defp active_user_fixture(attrs \\ %{}) do
     user = user_fixture()
 
@@ -239,6 +257,92 @@ defmodule Foglet.PostsTest do
         assert after_board.next_message_number == before_board.next_message_number
         assert :sys.get_state(pid).next_number == before_next_number
       end
+    end
+  end
+
+  describe "list_reader_window/2" do
+    test "returns a bounded initial window with ascending message numbers and next metadata" do
+      {_board, user, thread, _posts} = setup_thread_with_posts(5)
+
+      window = Foglet.Posts.list_reader_window(thread.id, limit: 2)
+
+      assert Enum.map(window.posts, & &1.message_number) == [1, 2]
+      assert Enum.all?(window.posts, &(&1.user.id == user.id))
+      assert window.first_message_number == 1
+      assert window.last_message_number == 2
+      refute window.has_previous?
+      assert window.has_next?
+      assert window.direction == :initial
+    end
+
+    test "moves forward and backward with message-number cursors" do
+      {_board, _user, thread, _posts} = setup_thread_with_posts(5)
+
+      first_window = Foglet.Posts.list_reader_window(thread.id, limit: 2)
+
+      next_window =
+        Foglet.Posts.list_reader_window(thread.id,
+          direction: :next,
+          after_message_number: first_window.last_message_number,
+          limit: 2
+        )
+
+      assert Enum.map(next_window.posts, & &1.message_number) == [3, 4]
+      assert next_window.first_message_number == 3
+      assert next_window.last_message_number == 4
+      assert next_window.has_previous?
+      assert next_window.has_next?
+
+      previous_window =
+        Foglet.Posts.list_reader_window(thread.id,
+          direction: :previous,
+          before_message_number: next_window.first_message_number,
+          limit: 2
+        )
+
+      assert Enum.map(previous_window.posts, & &1.message_number) == [1, 2]
+      assert previous_window.first_message_number == 1
+      assert previous_window.last_message_number == 2
+      refute previous_window.has_previous?
+      assert previous_window.has_next?
+    end
+
+    test "returns the newest bounded window in ascending order" do
+      {_board, _user, thread, _posts} = setup_thread_with_posts(5)
+
+      last_window =
+        Foglet.Posts.list_reader_window(thread.id,
+          direction: :last,
+          limit: 2
+        )
+
+      assert Enum.map(last_window.posts, & &1.message_number) == [4, 5]
+      assert last_window.first_message_number == 4
+      assert last_window.last_message_number == 5
+      assert last_window.has_previous?
+      refute last_window.has_next?
+      assert last_window.direction == :last
+    end
+
+    test "includes soft-deleted posts in reader windows" do
+      {_board, user, thread, posts} = setup_thread_with_posts(5)
+      deleted_post = Enum.find(posts, &(&1.message_number == 3))
+
+      # delete_post(deleted_post) then list_reader_window(...) must preserve tombstones.
+      {:ok, _deleted} = Foglet.Posts.delete_post(deleted_post)
+
+      window =
+        Foglet.Posts.list_reader_window(thread.id,
+          direction: :next,
+          after_message_number: 1,
+          limit: 3
+        )
+
+      assert Enum.map(window.posts, & &1.message_number) == [2, 3, 4]
+
+      listed_deleted_post = Enum.find(window.posts, &(&1.id == deleted_post.id))
+      assert listed_deleted_post.deleted_at != nil
+      assert listed_deleted_post.user.id == user.id
     end
   end
 
