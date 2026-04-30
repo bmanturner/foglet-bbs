@@ -10,9 +10,11 @@ defmodule Mix.Tasks.Foglet.Tui.Render do
 
   ## Options
 
-    * `--width`   — terminal width in columns (default: 80)
-    * `--height`  — terminal height in rows (default: 24)
-    * `--list`    — print the available screen names and exit
+    * `--width`      — terminal width in columns (default: 80)
+    * `--height`     — terminal height in rows (default: 24)
+    * `--substate`   — named screen sub-state fixture to render
+    * `--seed-state` — named preset or inline JSON state overlay
+    * `--list`       — print the available screen names and exit
     * `--no-frame` — omit the alignment ruler around the output
 
   ## Examples
@@ -20,6 +22,10 @@ defmodule Mix.Tasks.Foglet.Tui.Render do
       rtk mix foglet.tui.render main_menu
       rtk mix foglet.tui.render board_list --width 132 --height 50
       rtk mix foglet.tui.render post_reader --width 80 --height 30
+      rtk mix foglet.tui.render login --substate reset_request
+      rtk mix foglet.tui.render verify --substate resend_cooldown
+      rtk mix foglet.tui.render main_menu --seed-state suspended
+      rtk mix foglet.tui.render login --seed-state '{"session_context":{"registration_mode":"disabled"}}'
 
   Authenticated screens are populated with a synthetic in-memory user and
   stub board/thread/post data — no Repo, no SSH, no PubSub. The output is
@@ -36,6 +42,8 @@ defmodule Mix.Tasks.Foglet.Tui.Render do
   @switches [
     width: :integer,
     height: :integer,
+    substate: :string,
+    seed_state: :string,
     list: :boolean,
     no_frame: :boolean
   ]
@@ -82,7 +90,12 @@ defmodule Mix.Tasks.Foglet.Tui.Render do
 
         validate_size!(width, height)
 
-        state = RenderFixtures.state_for(screen, {width, height})
+        state =
+          RenderFixtures.state_for(screen, {width, height},
+            substate: opts[:substate],
+            seed_state: parse_seed_state(opts[:seed_state])
+          )
+
         view = App.view(state)
         ascii = AsciiRenderer.render(view, {width, height})
 
@@ -91,6 +104,24 @@ defmodule Mix.Tasks.Foglet.Tui.Render do
         else
           IO.puts(framed(ascii, screen, width, height))
         end
+    end
+  end
+
+  defp parse_seed_state(nil), do: nil
+
+  defp parse_seed_state(seed_state) when is_binary(seed_state) do
+    trimmed = String.trim(seed_state)
+
+    if String.starts_with?(trimmed, ["{", "["]) do
+      case Jason.decode(trimmed) do
+        {:ok, decoded} ->
+          decoded
+
+        {:error, %Jason.DecodeError{} = error} ->
+          Mix.raise("--seed-state JSON could not be decoded: #{Exception.message(error)}")
+      end
+    else
+      trimmed
     end
   end
 
