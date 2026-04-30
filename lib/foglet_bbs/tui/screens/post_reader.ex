@@ -313,7 +313,11 @@ defmodule Foglet.TUI.Screens.PostReader do
       |> place_selection_after_load(window, posts, read_pointer_msg_no)
       |> warm_selected_post_artifacts(state, posts, w)
 
-    {%{state | screen_state: Map.put(state.screen_state, :post_reader, ss)}, []}
+    # WR-03: mirror the `state.screen_state || %{}` guard from
+    # apply_flush_result/4. `load_posts/2` is documented (READER-02) as a
+    # public test seam and direct-invocation entry point; partial fixtures
+    # whose `screen_state` is nil would otherwise raise `BadMapError`.
+    {%{state | screen_state: Map.put(state.screen_state || %{}, :post_reader, ss)}, []}
   end
 
   # Phase 47 R2 (D-02 / D-03): route through list_reader_window/2 with
