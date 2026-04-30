@@ -71,7 +71,7 @@ defmodule Foglet.TUI.Screens.Verify.State do
 
   Returns the updated screen state with `buffer` cleared.
   """
-  @spec record_invalid_attempt(map(), non_neg_integer(), non_neg_integer()) :: map()
+  @spec record_invalid_attempt(t(), non_neg_integer(), non_neg_integer()) :: t()
   def record_invalid_attempt(vs, max_attempts, cooldown_seconds) do
     new_attempts = vs.attempts + 1
 
@@ -92,7 +92,7 @@ defmodule Foglet.TUI.Screens.Verify.State do
   attempts and the invalid-attempts cooldown, and sets `resend_cooldown_until`
   to `now + cooldown_seconds`.
   """
-  @spec after_resend(map(), non_neg_integer()) :: map()
+  @spec after_resend(t(), non_neg_integer()) :: t()
   def after_resend(vs, cooldown_seconds) do
     %{
       vs
