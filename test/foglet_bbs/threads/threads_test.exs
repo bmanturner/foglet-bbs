@@ -754,6 +754,44 @@ defmodule Foglet.ThreadsTest do
       assert length(Foglet.Threads.list_threads(board.id, reader.id, limit: -5)) == 50
       assert length(Foglet.Threads.list_threads(board.id, reader.id, limit: "garbage")) == 50
     end
+
+    # WR-02 (iteration 2): Verify the @max_page_size hard-ceiling clamp is
+    # enforced at the SQL boundary. Inspecting the generated query keeps the
+    # assertion cheap (no need to seed 500+ threads) and pins the clamp to
+    # the SQL `LIMIT` clause so a future refactor of normalize_limit/1 cannot
+    # silently weaken the cap without this test catching it. Ecto parameterises
+    # the LIMIT value, so we inspect the params list rather than the SQL
+    # string (the literal "LIMIT 500" is never embedded — it appears as
+    # `LIMIT $N` with `500` in the params slot).
+    test "limit > @max_page_size clamps to ceiling at the SQL boundary" do
+      {board, _pid} = setup_board_with_server()
+      reader = user_fixture()
+
+      # User-scoped query path (list_threads/3 with binary user_id).
+      query = Foglet.Threads.list_threads_query(board.id, reader.id, limit: 1_000_000)
+      {sql, params} = Ecto.Adapters.SQL.to_sql(:all, Repo, query)
+      assert sql =~ ~r/LIMIT \$\d+/
+      assert 500 in params
+      refute 1_000_000 in params
+
+      # Anonymous (nil user_id) query path.
+      query2 = Foglet.Threads.list_threads_query(board.id, nil, limit: 999_999)
+      {sql2, params2} = Ecto.Adapters.SQL.to_sql(:all, Repo, query2)
+      assert sql2 =~ ~r/LIMIT \$\d+/
+      assert 500 in params2
+      refute 999_999 in params2
+
+      # Explicit boundary value: limit == @max_page_size passes through unchanged.
+      query3 = Foglet.Threads.list_threads_query(board.id, reader.id, limit: 500)
+      {_sql3, params3} = Ecto.Adapters.SQL.to_sql(:all, Repo, query3)
+      assert 500 in params3
+
+      # Sub-ceiling values are not clamped up.
+      query4 = Foglet.Threads.list_threads_query(board.id, reader.id, limit: 25)
+      {_sql4, params4} = Ecto.Adapters.SQL.to_sql(:all, Repo, query4)
+      assert 25 in params4
+      refute 500 in params4
+    end
   end
 
   describe "scope_for/1 (D-08)" do
