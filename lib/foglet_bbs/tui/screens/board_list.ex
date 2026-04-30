@@ -243,7 +243,10 @@ defmodule Foglet.TUI.Screens.BoardList do
     )
   end
 
-  def render(local_state, %Context{} = context), do: render(normalize_state(local_state), context)
+  # WR-03: previously had a `def render(local_state, %Context{})` fallback that
+  # called `normalize_state/1`. Routing.render_local_state/4 always either
+  # returns a stored `%State{}` or calls `init/1` (which returns `%State{}`),
+  # so the fallback was unreachable and Dialyzer flagged its `@spec`.
 
   @impl true
   @spec subscriptions(State.t() | map() | nil, Context.t()) :: [String.t()]
