@@ -11,80 +11,12 @@ in the current tree, plus several pre-existing issues newly catalogued during
 Phase 46 (`deferred-items.md`).
 
 The codebase is in a healthy state: most domain/runtime concerns surfaced in
-v2.0 have been addressed across Phases 41-46. Remaining items are bounded
-debt, defensive code paths, or pre-existing issues that were already routed
-to a future cleanup phase.
+v2.0 have been addressed across Phases 41-46. `mix precommit` and the full
+test suite (2,224 tests, 1 property) are green; CI runs the same gates.
+Remaining items are bounded debt, defensive code paths, and unbounded query
+paths that haven't yet hit their pagination ceiling.
 
 ## Tech Debt
-
-### `mix precommit` does not currently pass cleanly
-
-- Issue: `mix precommit` exits 16 due to a `credo --strict` warning about
-  unregistered Logger metadata keys. `mix dialyzer` also exits 2 with three
-  pre-existing hints. None block compilation, formatting, or Sobelow, but the
-  precommit gate is effectively red.
-- Files:
-  - `lib/foglet_bbs/sessions/session.ex:196` — Logger metadata keys `event`,
-    `session_pid`, `user_id`, `handle`, `ssh_peer`, `replacement` are not
-    declared in Logger config.
-  - `lib/foglet_bbs/ssh/cli_handler.ex:467` — `pattern_match` warning: a
-    `nil` clause against a `pid()`-typed `lifecycle_pid` parameter that the
-    success-typing says can never be `nil`.
-  - `lib/foglet_bbs/ssh/cli_handler.ex:554` — `unmatched_return` on the
-    `decrement_connection_count/0` return value (`nil | [integer()] | integer()`).
-  - `lib/foglet_bbs/tui/screens/post_reader/render.ex:26` — `guard_fail` on a
-    `nil` guard against a `terminal_size` parameter typed as
-    `{pos_integer(), pos_integer()}`.
-- Impact: Every contributor running the documented finish-line gate
-  (`rtk mix precommit`) sees red output. The signal-to-noise ratio of the
-  gate erodes; new real warnings can hide in the same exit code.
-- Fix approach:
-  - Register the Sessions Logger metadata keys in `config/config.exs` (or
-    a dedicated `Logger.metadata/1` setup in the Sessions supervisor).
-  - For the cli_handler warnings: either narrow `lifecycle_pid` to
-    `pid() | nil` and keep the defensive nil clause, or drop the
-    unreachable clause. Match `decrement_connection_count/0` with `_ =`.
-  - For `post_reader/render.ex:26`: drop the unreachable nil guard or widen
-    the `terminal_size` type alias.
-- Tracked in: `.planning/phases/46-domain-cleanup-and-final-quality-gate/deferred-items.md`.
-
-### `Foglet.TUI.AppTest` has 13 pre-existing failures
-
-- Issue: `mix test test/foglet_bbs/tui/app_test.exs` reports 13 failures
-  (5-13 intermittently in full-suite runs). The root cause is a
-  `FakePosts.list_reader_window/2` undefined function in the test mock —
-  PostReader migrated from `list_posts/1` to `list_reader_window/2` during
-  Phase 44 but the test mock was not updated.
-- Files:
-  - `test/foglet_bbs/tui/app_test.exs:52-65` (FakePosts mock).
-  - `lib/foglet_bbs/posts.ex:106-107` (real `list_reader_window/2`).
-- Impact: AppTest no longer provides full coverage of route hydration,
-  PubSub dispatch, sysop screen-task lifecycle, or PostReader navigation
-  through the App layer. A regression on any of those surfaces would be
-  masked by the existing failures.
-- Fix approach: Add `list_reader_window/2` to FakePosts returning a
-  `Foglet.Posts.ReaderWindow.t()` consistent with the real query shape.
-  Verify all 13 listed tests recover.
-- Tracked in: `.planning/phases/46-domain-cleanup-and-final-quality-gate/deferred-items.md`.
-
-### Verify-screen state typing is half-narrowed
-
-- Issue: `Foglet.TUI.Screens.Verify.State` introduces `@type t/0` and applies
-  it to readers and `default/0` / `put/2`, but the two mutators
-  `record_invalid_attempt/3` and `after_resend/2` keep `map() :: map()`
-  specs even though every caller feeds a value returned from `get/1` (which
-  the new contract promises is `t()`).
-- Files:
-  - `lib/foglet_bbs/tui/screens/verify/state.ex:74` (`record_invalid_attempt/3`).
-  - `lib/foglet_bbs/tui/screens/verify/state.ex:95` (`after_resend/2`).
-  - Callers: `lib/foglet_bbs/tui/screens/verify.ex:216,241`.
-- Impact: Documentation drift only — the typing story for the module is
-  inconsistent (`t()` for reads, `map()` for writes). No behavioural risk;
-  no Pitfall-1 plain-map caller pressure (unlike `register/state.ex`).
-- Fix approach: Change both specs to `t() :: t()` and rerun dialyzer.
-  Both function bodies return `%{vs | ...}` over a struct-shaped map; the
-  return narrowing is sound.
-- Source: Phase 46 review WR-01 (`46-REVIEW.iter1.md`).
 
 ### `.dialyzer_ignore.exs` Bucket A header rationale is not fully accurate
 
@@ -178,9 +110,9 @@ to a future cleanup phase.
 
 ## Known Bugs
 
-No outstanding production bugs are tracked. The 13 AppTest failures and
-3 unsilenced dialyzer warnings catalogued under Tech Debt above are
-pre-existing test/typing-only issues, not user-visible bugs.
+No outstanding production bugs are tracked. `mix precommit` and the full
+test suite (`mix test` — 2,224 tests, 1 property) are green as of this
+audit; CI exercises the same gates.
 
 ## Security Considerations
 
@@ -277,21 +209,18 @@ pre-existing test/typing-only issues, not user-visible bugs.
 - Test coverage: Render-purity guard test (Phase 44) + render module
   decomposition (Phase 43).
 
-### `Foglet.SSH.CLIHandler` cleanup is centralized but reads with stale dialyzer hints
+### `Foglet.SSH.CLIHandler` cleanup is centralized through a single helper
 
 - Files: `lib/foglet_bbs/ssh/cli_handler.ex` (entire file, especially
   `cleanup/2`, `decrement_connection_count/0`, lifecycle clauses).
 - Why fragile: Phase 45 unified termination paths through a single
   `cleanup/2` helper with `cleanup_done?` and `counter_counted?` guards
   for exactly-once semantics across normal close, EOF, lifecycle EXIT,
-  over-limit reject, rate-limit reject, and crash-during-init. The
-  dispatch logic is now correct but dialyzer flags two real-looking
-  hints (the `nil` pattern against `lifecycle_pid` and the unmatched
-  `decrement_connection_count/0` return). These hints look like real
-  bugs at first glance even though the runtime invariant holds.
+  over-limit reject, rate-limit reject, and crash-during-init. Multiple
+  callers funnel through this helper; a missed call site would leak a
+  connection-count slot.
 - Safe modification: Any new termination path must funnel through
-  `cleanup/2`. The dialyzer hints should be cleaned up so future
-  warnings stand out.
+  `cleanup/2`.
 - Test coverage: Connection-counter lifecycle proof tests and idempotent
   cleanup tests landed in Phase 45 (`45-03-SUMMARY.md`).
 
@@ -331,18 +260,6 @@ pre-existing test/typing-only issues, not user-visible bugs.
 - Priority: Low. Defensive code; exercising it requires careful test
   setup with hand-managed pids. Phase 45 hardened SSH-side cleanup but
   did not add coverage for this Sessions-side fallback.
-
-### `Foglet.TUI.AppTest` is broken; route + PubSub coverage is partial
-
-- What's not tested: 13 tests under `Foglet.TUI.AppTest` are currently
-  failing due to an outdated `FakePosts` mock (see Tech Debt above).
-  Affected coverage areas include sysop screen-task lifecycle, PostReader
-  navigation hydration, and PubSub `:thread_activity` dispatch.
-- Files: `test/foglet_bbs/tui/app_test.exs`.
-- Risk: A regression on any of these surfaces is masked by the existing
-  failures. Severity scales with how many of those features the
-  regression touches.
-- Priority: Medium. The fix is mechanical (extend FakePosts).
 
 ### Soft-delete-aware list paths
 
