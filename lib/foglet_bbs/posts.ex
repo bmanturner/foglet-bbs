@@ -150,7 +150,21 @@ defmodule Foglet.Posts do
        when direction in [:initial, :next, :previous, :last, :around],
        do: direction
 
-  defp normalize_reader_direction(_direction), do: :initial
+  # WR-04 (iteration 2): mirror the WR-06 fix in `reader_rows_around/3`. A
+  # buggy caller (e.g. a typo like `:before` or a string `"next"`) would
+  # otherwise silently degrade to the `:initial` window with no diagnostic.
+  # Surface the coercion via Logger.warning while keeping the defensive
+  # default — `:direction` is an external-API-shaped option (documented in
+  # the @spec keyword list shape) so a future caller can easily get it
+  # wrong, and we want a breadcrumb when that happens.
+  defp normalize_reader_direction(direction) do
+    Logger.warning(
+      "Foglet.Posts.list_reader_window/2 received unknown direction; " <>
+        "coercing to :initial. direction=#{inspect(direction)}"
+    )
+
+    :initial
+  end
 
   defp reader_rows(thread_id, opts) do
     order = Keyword.fetch!(opts, :order)
