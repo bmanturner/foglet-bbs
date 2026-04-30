@@ -19,8 +19,8 @@ Requirements for the v2.1 hardening milestone. Every item in the concerns audit 
 ### Post Reader And Content Queries
 
 - [x] **POST-01**: User can read very large threads without PostReader requiring every post in the thread to be loaded eagerly.
-- [ ] **POST-02**: User can resize the terminal during PostReader sessions without stale-width render-cache entries accumulating for the life of the screen.
-- [ ] **POST-03**: Maintainer has automated protection for the PostReader render-path purity invariant so render helpers do not mutate state.
+- [x] **POST-02**: User can resize the terminal during PostReader sessions without stale-width render-cache entries accumulating for the life of the screen.
+- [x] **POST-03**: Maintainer has automated protection for the PostReader render-path purity invariant so render helpers do not mutate state.
 - [x] **POST-04**: Maintainer has automated coverage or a shared query helper that prevents soft-deleted posts from reappearing in list paths.
 
 ### SSH And Session Runtime
@@ -76,8 +76,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TUI-04 | Phase 42 | Complete |
 | TUI-05 | Phase 43 | Pending |
 | POST-01 | Phase 44 | Complete |
-| POST-02 | Phase 44 | Pending |
-| POST-03 | Phase 44 | Pending |
+| POST-02 | Phase 44 | Complete |
+| POST-03 | Phase 44 | Complete |
 | POST-04 | Phase 44 | Complete |
 | SSH-01 | Phase 45 | Pending |
 | SSH-02 | Phase 45 | Pending |
