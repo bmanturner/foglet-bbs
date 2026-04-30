@@ -518,14 +518,21 @@ defmodule Foglet.TUI.Screens.PostReader do
   # Populates the render_cache for the currently-selected post if it's
   # not yet cached. Returns the updated screen_state map.
   defp warm_cache(ss, state, post, w) do
+    cache = render_cache_for_width(ss.render_cache, w)
     key = {post.id, w}
 
-    if Map.has_key?(ss.render_cache, key) do
-      ss
+    if Map.has_key?(cache, key) do
+      %{ss | render_cache: cache}
     else
       tuples = parse_body(state, post)
-      %{ss | render_cache: Map.put(ss.render_cache, key, tuples)}
+      %{ss | render_cache: Map.put(cache, key, tuples)}
     end
+  end
+
+  defp render_cache_for_width(render_cache, width) do
+    render_cache
+    |> Enum.reject(fn {{_post_id, cached_width}, _tuples} -> cached_width != width end)
+    |> Map.new()
   end
 
   # Warms the cache for the post at the given index (used by load_posts/2

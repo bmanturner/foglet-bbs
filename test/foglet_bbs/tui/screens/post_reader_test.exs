@@ -1461,7 +1461,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
              "Expected cache key {\"p1\", 80}, got: #{inspect(Map.keys(cache))}"
     end
 
-    test "cache is keyed on {post.id, width} — width change adds a new entry" do
+    test "cache is keyed on {post.id, width} and width change evicts stale entries" do
       s = p2_state(%{posts: [p2_post(id: "p1", body: "A\n\nB")]})
 
       # Warm cache at width 80.
@@ -1473,8 +1473,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       {:update, s3, _} = handle_key_screen(%{key: :char, char: "j"}, s2)
 
       cache = s3.screen_state[:post_reader].render_cache
-      assert Map.has_key?(cache, {"p1", 80})
       assert Map.has_key?(cache, {"p1", 40})
+      refute Enum.any?(Map.keys(cache), &(elem(&1, 1) == 80))
     end
 
     test "Q clears :post_reader screen_state (cache is discarded)" do
