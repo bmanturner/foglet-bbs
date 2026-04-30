@@ -86,13 +86,8 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
       tuples =
         case ss.render_cache[{post.id, w}] do
-          nil ->
-            require Logger
-            Logger.warning("[PostReader] render cache miss for post=#{post.id} width=#{w}")
-            PostReader.body_tuples_for(frame_view, post)
-
-          cached ->
-            cached
+          nil -> PostReader.body_tuples_for(frame_view, post)
+          cached -> cached
         end
 
       parts = reader_parts(post, tuples, w, theme, idx, total)
