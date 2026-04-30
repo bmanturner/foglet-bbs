@@ -269,10 +269,33 @@ defmodule Foglet.TUI.Screens.Register do
     end
   end
 
-  defp keys_for(:invite_code), do: [{"Enter", "Submit"}, {"Esc", "Cancel"}]
+  defp keys_for(:invite_code) do
+    [
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Submit", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      }
+    ]
+  end
 
-  defp keys_for(:combined),
-    do: [{"Tab", "Switch field"}, {"Enter", "Next/Submit"}, {"Esc", "Cancel"}]
+  defp keys_for(:combined) do
+    [
+      %{
+        label: "Field",
+        commands: [%{key: "Tab", label: "Switch field", priority: 10}]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Next/Submit", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      }
+    ]
+  end
 
   # §6 Private state plumbing
 

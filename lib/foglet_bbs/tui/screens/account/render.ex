@@ -42,12 +42,28 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # left-to-right: arrows / numbers / tab-cycle.
   defp key_bar(ss) do
     [
-      {"←/→", "Tab"},
-      {jump_hint(length(tab_labels(ss))), "Jump"},
-      {"Tab", "Field"},
-      {"Enter", "Save"},
-      {"Esc", "Cancel"},
-      {"Ctrl+Q", "Back"}
+      %{
+        label: "Tabs",
+        commands: [
+          %{key: "←/→", label: "Tab", priority: 10},
+          %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 10}
+        ]
+      },
+      %{
+        label: "Field",
+        commands: [%{key: "Tab", label: "Field", priority: 10}]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Save", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      },
+      %{
+        label: "System",
+        commands: [%{key: "Ctrl+Q", label: "Back", priority: 0}]
+      }
     ]
   end
 

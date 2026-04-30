@@ -52,9 +52,17 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
       end
 
     ScreenFrame.render(state, new_thread_chrome(ss), board_content, [
-      {"j/k", "Select"},
-      {"Enter", "Choose"},
-      {"Esc", "Cancel"}
+      %{
+        label: "Navigate",
+        commands: [
+          %{key: "j/k", label: "Select", priority: 10},
+          %{key: "Enter", label: "Choose", priority: 10}
+        ]
+      },
+      %{
+        label: "Actions",
+        commands: [%{key: "Esc", label: "Cancel", priority: 30}]
+      }
     ])
   end
 
@@ -83,9 +91,17 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
       )
 
     ScreenFrame.render(state, new_thread_chrome(ss), content, [
-      {"Tab", compose_tab_hint(ss)},
-      {"Ctrl+S", "Submit"},
-      {"Ctrl+C", "Cancel"}
+      %{
+        label: "Field",
+        commands: [%{key: "Tab", label: compose_tab_hint(ss), priority: 10}]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Ctrl+S", label: "Submit", priority: 30},
+          %{key: "Ctrl+C", label: "Cancel", priority: 30}
+        ]
+      }
     ])
   end
 

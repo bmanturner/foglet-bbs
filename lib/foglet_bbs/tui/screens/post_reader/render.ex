@@ -29,12 +29,23 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     }
 
     ScreenFrame.render(frame_state, chrome, post_content, [
-      {"N", "Next"},
-      {"P", "Prev"},
-      {"J", "Scroll ↓"},
-      {"K", "Scroll ↑"},
-      {"R", "Reply"},
-      {"Q", "Back"}
+      %{
+        label: "Navigate",
+        commands: [
+          %{key: "N", label: "Next", priority: 10},
+          %{key: "P", label: "Prev", priority: 10},
+          %{key: "J", label: "Scroll ↓", priority: 10},
+          %{key: "K", label: "Scroll ↑", priority: 10}
+        ]
+      },
+      %{
+        label: "Actions",
+        commands: [%{key: "R", label: "Reply", priority: 30}]
+      },
+      %{
+        label: "System",
+        commands: [%{key: "Q", label: "Back", priority: 0}]
+      }
     ])
   end
 

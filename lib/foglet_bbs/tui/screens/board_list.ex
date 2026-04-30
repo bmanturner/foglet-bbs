@@ -223,11 +223,22 @@ defmodule Foglet.TUI.Screens.BoardList do
       %{breadcrumb_parts: ["Foglet", "Boards"]},
       render_board_content(local_state, context, theme),
       [
-        {"j/k", "Select"},
-        {"←/→", "Collapse/Expand"},
-        {"Enter", "Open"},
-        {"s/u", "Subscribe/Unsubscribe"},
-        {"Q", "Back"}
+        %{
+          label: "Navigate",
+          commands: [
+            %{key: "j/k", label: "Select", priority: 10},
+            %{key: "←/→", label: "Collapse/Expand", priority: 10},
+            %{key: "Enter", label: "Open", priority: 10}
+          ]
+        },
+        %{
+          label: "Actions",
+          commands: [%{key: "s/u", label: "Subscribe/Unsubscribe", priority: 30}]
+        },
+        %{
+          label: "System",
+          commands: [%{key: "Q", label: "Back", priority: 0}]
+        }
       ]
     )
   end

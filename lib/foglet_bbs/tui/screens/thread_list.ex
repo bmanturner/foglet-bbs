@@ -130,10 +130,21 @@ defmodule Foglet.TUI.Screens.ThreadList do
     chrome = %{breadcrumb_parts: ["Foglet", board_label(state)]}
 
     ScreenFrame.render(frame_state, chrome, thread_content, [
-      {"j/k", "Select"},
-      {"Enter", "Open"},
-      {"C", "Compose"},
-      {"Q", "Back"}
+      %{
+        label: "Navigate",
+        commands: [
+          %{key: "j/k", label: "Select", priority: 10},
+          %{key: "Enter", label: "Open", priority: 10}
+        ]
+      },
+      %{
+        label: "Actions",
+        commands: [%{key: "C", label: "Compose", priority: 30}]
+      },
+      %{
+        label: "System",
+        commands: [%{key: "Q", label: "Back", priority: 0}]
+      }
     ])
   end
 

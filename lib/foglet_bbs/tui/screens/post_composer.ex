@@ -139,9 +139,19 @@ defmodule Foglet.TUI.Screens.PostComposer do
     }
 
     ScreenFrame.render(frame_state, chrome, content, [
-      {"Tab", if(state.mode == :edit, do: "Preview", else: "Edit")},
-      {"Ctrl+S", "Send"},
-      {"Ctrl+C", "Cancel"}
+      %{
+        label: "Field",
+        commands: [
+          %{key: "Tab", label: if(state.mode == :edit, do: "Preview", else: "Edit"), priority: 10}
+        ]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Ctrl+S", label: "Send", priority: 30},
+          %{key: "Ctrl+C", label: "Cancel", priority: 30}
+        ]
+      }
     ])
   end
 

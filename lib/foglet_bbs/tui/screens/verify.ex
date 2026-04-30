@@ -60,10 +60,15 @@ defmodule Foglet.TUI.Screens.Verify do
       end
 
     ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Verify"]}, content, [
-      {"Enter", "Submit"},
-      {"Backspace", "Delete"},
-      {"Ctrl+R", "Resend code"},
-      {"Esc", "Cancel"}
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Submit", priority: 30},
+          %{key: "Backspace", label: "Delete", priority: 30},
+          %{key: "Ctrl+R", label: "Resend code", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      }
     ])
   end
 

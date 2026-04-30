@@ -58,22 +58,55 @@ defmodule Foglet.TUI.Screens.Login.Render do
     }
   end
 
-  defp keys_for(:login_form, _),
-    do: [{"Tab", "Switch field"}, {"Enter", "Submit/Next"}, {"Esc", "Cancel"}]
+  defp keys_for(:login_form, _) do
+    [
+      %{
+        label: "Field",
+        commands: [%{key: "Tab", label: "Switch field", priority: 10}]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Submit/Next", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      }
+    ]
+  end
 
-  defp keys_for(:reset_request, _),
-    do: [{"Enter", "Request reset"}, {"Esc", "Cancel"}]
+  defp keys_for(:reset_request, _) do
+    [
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Request reset", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      }
+    ]
+  end
 
   # D-06, D-07: Reset-consume form advertises Tab/Shift+Tab focus cycle, Enter
   # to submit, Esc to cancel. The raw token value is intentionally not echoed
   # back through this hint set (D-11).
-  defp keys_for(:reset_consume, _),
-    do: [
-      {"Tab", "Next field"},
-      {"Shift+Tab", "Prev field"},
-      {"Enter", "Submit"},
-      {"Esc", "Cancel"}
+  defp keys_for(:reset_consume, _) do
+    [
+      %{
+        label: "Field",
+        commands: [
+          %{key: "Tab", label: "Next field", priority: 10},
+          %{key: "Shift+Tab", label: "Prev field", priority: 10}
+        ]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Submit", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      }
     ]
+  end
 
   defp keys_for(_, mode), do: menu_commands(mode)
 

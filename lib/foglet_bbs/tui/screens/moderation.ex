@@ -172,7 +172,9 @@ defmodule Foglet.TUI.Screens.Moderation do
           [text("Moderation is not available.", fg: theme.warning.fg)]
         end
 
-      ScreenFrame.render(state, moderation_chrome(), empty, [{"Q", "Back"}])
+      ScreenFrame.render(state, moderation_chrome(), empty, [
+        %{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]}
+      ])
     end
   end
 
@@ -200,9 +202,17 @@ defmodule Foglet.TUI.Screens.Moderation do
   # this module — verified by grep test in layout_smoke_test.exs.
   defp key_list(ss) do
     [
-      {"←/→", "Tab"},
-      {jump_hint(length(tab_labels_from_tabs(ss.tabs))), "Jump"},
-      {"Q", "Back"}
+      %{
+        label: "Tabs",
+        commands: [
+          %{key: "←/→", label: "Tab", priority: 10},
+          %{key: jump_hint(length(tab_labels_from_tabs(ss.tabs))), label: "Jump", priority: 10}
+        ]
+      },
+      %{
+        label: "System",
+        commands: [%{key: "Q", label: "Back", priority: 0}]
+      }
     ]
   end
 
