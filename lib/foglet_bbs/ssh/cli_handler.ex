@@ -159,9 +159,11 @@ defmodule Foglet.SSH.CLIHandler do
     window = Raxol.Core.Events.Event.new(:window, %{width: width, height: height})
     dispatch_events(state.lifecycle_pid, [resize, window])
 
-    if is_pid(state.session_pid) do
-      Sessions.Session.set_terminal_size(state.session_pid, {width, height})
-    end
+    # IN-01: Session.set_terminal_size/2 is owned by the App's
+    # do_update({:window_change, …}, …) handler, which already fires from the
+    # :window event dispatched above. Casting here too would double-write the
+    # same value and obscure ownership of the "session knows its size"
+    # invariant.
 
     {:ok, %{state | width: width, height: height}}
   end

@@ -63,7 +63,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert event
     end
 
-    test ":window_change updates returned state, dispatches resize, and updates session size" do
+    test ":window_change updates returned state and dispatches resize+window events" do
+      # IN-01 (Phase 45): Session.set_terminal_size/2 is now driven by
+      # Foglet.TUI.App's do_update({:window_change, …}, …) handler in response
+      # to the :window event dispatched here, rather than by CLIHandler casting
+      # directly. The App is the single owner of the "session knows its size"
+      # invariant.
       {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()
       lifecycle_pid = start_fake_lifecycle!(self())
       width = 132
@@ -86,12 +91,11 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert returned_state.width == width
       assert returned_state.height == height
 
-      assert_receive {:"$gen_cast", {:dispatch, event}}
-      assert event.type == :resize
-      assert event.data == %{width: width, height: height}
+      assert_receive {:"$gen_cast", {:dispatch, %{type: :resize} = resize_event}}
+      assert resize_event.data == %{width: width, height: height}
 
-      _ = :sys.get_state(session_pid)
-      assert Foglet.Sessions.Session.get_state(session_pid).terminal_size == {width, height}
+      assert_receive {:"$gen_cast", {:dispatch, %{type: :window} = window_event}}
+      assert window_event.data == %{width: width, height: height}
     end
 
     test ":closed stops the guest session and returns a channel stop tuple" do
