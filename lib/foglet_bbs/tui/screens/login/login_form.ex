@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   alias Foglet.Accounts.{Auth, Verification}
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
-  alias Foglet.TUI.Screens.Shared.FocusInput
+  alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @typep login_result ::
@@ -272,25 +272,10 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
     end
   end
 
-  # --- App-state wrap/unwrap (duplicated from Login per Phase 47 plan 05 D-14) ---
-  # TODO(WR-01): five sibling modules (login/render.ex, login/login_form.ex,
-  # register.ex, verify.ex, main_menu.ex) ship near-verbatim copies of this
-  # helper. Drift has already started — `:session_pid` is missing from
-  # login/reset_consume's variant — and adding any new App-state field
-  # (`:modal`, `:flash`, …) requires touching all five. Extract to a shared
-  # `Foglet.TUI.Screens.Login.AppStateBridge` (or similar) once Plan 05 D-14
-  # consolidation lands.
+  # --- App-state wrap/unwrap (Phase 47 plan 05 D-14 + WR-04 shared module) ---
+
   defp app_state_from_local(local_state, %Context{} = context) do
-    %{
-      current_screen: :login,
-      current_user: context.current_user,
-      session_context: context.session_context,
-      session_pid: context.session_pid,
-      terminal_size: context.terminal_size,
-      route_params: context.route_params,
-      domain: context.domain,
-      screen_state: %{login: local_state || LoginState.default()}
-    }
+    AppStateBridge.from_context(local_state, context, :login, &LoginState.default/0)
   end
 
   defp local_result({state, effects}, _local_state) when is_list(effects) do

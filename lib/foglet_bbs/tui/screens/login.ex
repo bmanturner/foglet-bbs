@@ -35,6 +35,7 @@ defmodule Foglet.TUI.Screens.Login do
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Login.{LoginForm, Menu, Render, ResetConsume, ResetRequest}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
+  alias Foglet.TUI.Screens.Shared.AppStateBridge
 
   @impl true
   @spec init(Context.t()) :: map()
@@ -81,17 +82,9 @@ defmodule Foglet.TUI.Screens.Login do
 
   # --- App-state wrap/unwrap glue ---
 
+  # WR-04: shared bridge — see Foglet.TUI.Screens.Shared.AppStateBridge.
   defp app_state_from_local(local_state, %Context{} = context) do
-    %{
-      current_screen: :login,
-      current_user: context.current_user,
-      session_context: context.session_context,
-      session_pid: context.session_pid,
-      terminal_size: context.terminal_size,
-      route_params: context.route_params,
-      domain: context.domain,
-      screen_state: %{login: local_state || LoginState.default()}
-    }
+    AppStateBridge.from_context(local_state, context, :login, &LoginState.default/0)
   end
 
   defp local_result(:no_match, local_state), do: {local_state, []}

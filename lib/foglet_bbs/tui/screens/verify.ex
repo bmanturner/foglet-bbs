@@ -20,6 +20,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
   alias Foglet.Accounts.Verification
   alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -288,20 +289,8 @@ defmodule Foglet.TUI.Screens.Verify do
     Foglet.Config.email_verify_resend_cooldown_seconds()
   end
 
-  # TODO(WR-01): see login/login_form.ex — this is one of five sibling
-  # copies of the App-state bridge. Extract to a shared module once
-  # Plan 05 D-14 consolidation lands.
   defp app_state_from_local(local_state, %Context{} = context) do
-    %{
-      current_screen: :verify,
-      current_user: context.current_user,
-      session_context: context.session_context,
-      session_pid: context.session_pid,
-      terminal_size: context.terminal_size,
-      route_params: context.route_params,
-      domain: context.domain,
-      screen_state: %{verify: local_state || init(context)}
-    }
+    AppStateBridge.from_context(local_state, context, :verify, fn -> init(context) end)
   end
 
   defp domain_module(%Context{} = context, key) do

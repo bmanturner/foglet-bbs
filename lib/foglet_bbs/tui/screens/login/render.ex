@@ -5,6 +5,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.Login.State, as: LoginState
+  alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -45,20 +46,8 @@ defmodule Foglet.TUI.Screens.Login.Render do
     )
   end
 
-  # TODO(WR-01): see login_form.ex — this is one of five sibling copies
-  # of the App-state bridge. Extract to a shared module once Plan 05
-  # D-14 consolidation lands.
   defp app_state_from_local(local_state, %Context{} = context) do
-    %{
-      current_screen: :login,
-      current_user: context.current_user,
-      session_context: context.session_context,
-      session_pid: context.session_pid,
-      terminal_size: context.terminal_size,
-      route_params: context.route_params,
-      domain: context.domain,
-      screen_state: %{login: local_state || LoginState.default()}
-    }
+    AppStateBridge.from_context(local_state, context, :login, &LoginState.default/0)
   end
 
   defp keys_for(:login_form, _) do
