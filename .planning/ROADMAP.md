@@ -54,19 +54,7 @@ Cross-cutting constraints:
   2. Maintainer can find modal overlay and dismissal behavior in a modal helper without screen-specific business logic.
   3. Maintainer can find dynamic PubSub topic refresh and subscription diffing in a subscription helper.
   4. Maintainer can find generic effect interpretation in an effect helper while domain mutations remain in `Foglet.*` contexts.
-**Plans**:
-
-**Wave 1**
-- `45-01` - SSH public-key stash TTL and sweep cleanup.
-- `45-02` - Guest promotion audit metadata and replacement proof preservation.
-
-**Wave 2** *(blocked on Wave 1 completion)*
-- `45-03` - Unified SSH cleanup helper and connection-counter lifecycle proof.
-
-Cross-cutting constraints:
-- Keep SSH handoff and connection accounting in ephemeral ETS/process state.
-- Preserve no-auth guest fallback and one-session-per-user replacement semantics.
-- Prove lifecycle behavior with focused callback/process tests rather than brittle full-network simulations.
+**Plans**: TBD
 **UI hint**: yes
 
 ### Phase 43: Large Screen Decomposition
@@ -120,7 +108,19 @@ Cross-cutting constraints:
   3. Maintainer can change SSH channel termination behavior in one helper that owns alt-screen leave, lifecycle stop, session stop, and connection-count cleanup.
   4. Operator can trust the global SSH connection counter after normal closes, EOF, lifecycle exits, over-limit rejects, and crash-during-init paths.
   5. Maintainer has direct coverage for the forced-termination fallback in `replace_then_promote/3`.
-**Plans**: TBD
+**Plans**:
+
+**Wave 1**
+- `45-01` - SSH public-key stash TTL and sweep cleanup.
+- `45-02` - Guest promotion audit metadata and replacement proof preservation.
+
+**Wave 2** *(blocked on Wave 1 completion)*
+- `45-03` - Unified SSH cleanup helper and connection-counter lifecycle proof.
+
+Cross-cutting constraints:
+- Keep SSH handoff and connection accounting in ephemeral ETS/process state.
+- Preserve no-auth guest fallback and one-session-per-user replacement semantics.
+- Prove lifecycle behavior with focused callback/process tests rather than brittle full-network simulations.
 
 ### Phase 46: Domain Cleanup And Final Quality Gate
 **Goal**: Maintainers close the remaining audit concerns with domain cleanup, Dialyzer baseline reduction, and explicit verification evidence.
