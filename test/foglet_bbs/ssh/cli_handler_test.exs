@@ -52,9 +52,11 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
   describe "direct SSH callbacks" do
     test ":data parses SSH bytes and dispatches input events" do
-      lifecycle_pid = start_fake_lifecycle!(self())
-
-      state = %CLIHandler{lifecycle_pid: lifecycle_pid}
+      # WR-05 (Phase 45): dispatcher pid is resolved once at PTY start and
+      # stashed on state, so per-keystroke dispatches are pure casts. Tests
+      # that exercise :data directly seed `dispatcher_pid` here rather than
+      # relying on a per-event GenServer.call into the Lifecycle.
+      state = %CLIHandler{dispatcher_pid: self()}
 
       assert {:ok, ^state} =
                CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:data, 1, 0, "a"}}, state)
@@ -70,13 +72,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
       # directly. The App is the single owner of the "session knows its size"
       # invariant.
       {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()
-      lifecycle_pid = start_fake_lifecycle!(self())
       width = 132
       height = 50
 
       state = %CLIHandler{
         channel_id: 1,
-        lifecycle_pid: lifecycle_pid,
+        dispatcher_pid: self(),
         session_pid: session_pid,
         width: 80,
         height: 24
@@ -580,21 +581,6 @@ defmodule Foglet.SSH.CLIHandlerTest do
         remaining ->
           flunk("timed out waiting for SSH channel bytes; collected=#{inspect(acc)}")
       end
-    end
-  end
-
-  defp start_fake_lifecycle!(dispatcher_pid) do
-    start_supervised!({Task, fn -> fake_lifecycle_loop(dispatcher_pid) end})
-  end
-
-  defp fake_lifecycle_loop(dispatcher_pid) do
-    receive do
-      {:"$gen_call", from, :get_full_state} ->
-        GenServer.reply(from, %{dispatcher_pid: dispatcher_pid})
-        fake_lifecycle_loop(dispatcher_pid)
-
-      _other ->
-        fake_lifecycle_loop(dispatcher_pid)
     end
   end
 end
