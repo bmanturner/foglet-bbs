@@ -54,7 +54,11 @@ Cross-cutting constraints:
   2. Maintainer can find modal overlay and dismissal behavior in a modal helper without screen-specific business logic.
   3. Maintainer can find dynamic PubSub topic refresh and subscription diffing in a subscription helper.
   4. Maintainer can find generic effect interpretation in an effect helper while domain mutations remain in `Foglet.*` contexts.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
+- [ ] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
+- [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
+- [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
 **UI hint**: yes
 
 ### Phase 43: Large Screen Decomposition
@@ -66,7 +70,11 @@ Cross-cutting constraints:
   2. Maintainer can test reducer behavior for decomposed screens without invoking render helpers.
   3. Maintainer can identify each decomposed screen's local state owner and render entry point from module names and documentation.
   4. Existing TUI behavior remains stable through reducer tests and render smoke verification after the splits.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
+- [ ] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
+- [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
+- [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
 **UI hint**: yes
 
 ### Phase 44: PostReader And Content Query Hardening
@@ -132,7 +140,11 @@ Cross-cutting constraints:
   3. Maintainer can run Dialyzer with fewer ignored warnings, with each audit-called warning fixed or explicitly reclassified.
   4. Maintainer can review a final verification artifact mapping every item in `.planning/codebase/CONCERNS.md` to fixed, intentionally retained, or covered.
   5. Maintainer can run the milestone close gate and see no unaddressed concern-audit items.
-**Plans**: TBD
+**Plans**: 4 plans
+- [ ] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
+- [ ] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
+- [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
+- [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
 
 ## Concern Coverage
 
