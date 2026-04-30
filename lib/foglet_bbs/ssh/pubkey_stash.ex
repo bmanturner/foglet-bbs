@@ -99,8 +99,12 @@ defmodule Foglet.SSH.PubkeyStash do
 
   @doc """
   Delete stash entries older than `ttl_ms`. Returns the number of entries
-  removed. Entries without a timestamp (legacy two-tuple shape) are not
-  swept here; they will be consumed by the next `pop/2` call site.
+  removed. Three-tuple entries are deleted when their timestamp is below the
+  TTL cutoff. Legacy two-tuple entries (no timestamp) are unconditionally
+  swept: they have no TTL information, and the only paths that produced them
+  are no longer in service — a connection that needed one would have popped
+  it during channel_up, so any survivor is an orphan from a path that
+  bypassed put/2 (or a deployment running an older version of this module).
   """
   @spec sweep(integer(), integer()) :: non_neg_integer()
   def sweep(now_ms \\ System.monotonic_time(:millisecond), ttl_ms \\ @ttl_ms)
@@ -108,7 +112,13 @@ defmodule Foglet.SSH.PubkeyStash do
     cutoff = now_ms - ttl_ms
 
     match_spec = [
-      {{:"$1", :"$2", :"$3"}, [{:<, :"$3", cutoff}], [true]}
+      {{:"$1", :"$2", :"$3"}, [{:<, :"$3", cutoff}], [true]},
+      # Legacy two-tuple entries have no TTL info; sweep them unconditionally
+      # since a connection that needed them would have popped during
+      # channel_up. Without this, an orphaned legacy entry sits indefinitely
+      # and the moduledoc claim that sweep "removes stale orphan entries" is
+      # not accurate for the legacy shape.
+      {{:"$1", :"$2"}, [], [true]}
     ]
 
     :ets.select_delete(@table, match_spec)
