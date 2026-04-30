@@ -143,6 +143,14 @@ defmodule Foglet.TUI.Screens.Login.State do
   @type focused_field ::
           :handle | :password | :identifier | :token | :password_confirmation
 
+  @typedoc """
+  Atoms reachable through the reset-consume focus cycle (`:token →
+  :password → :password_confirmation → :token`). Narrower than
+  `t:focused_field/0` because the login-form-specific `:handle` /
+  `:password` toggle has its own helper.
+  """
+  @type reset_consume_focus :: :token | :password | :password_confirmation
+
   @doc """
   Returns the `input_key` atom for a given `focused_field`.
 
@@ -150,7 +158,14 @@ defmodule Foglet.TUI.Screens.Login.State do
   `FunctionClauseError` for any other atom — see the `t:focused_field/0`
   doc for rationale.
   """
-  @spec input_key(focused_field()) :: atom()
+  @type input_field ::
+          :handle_input
+          | :password_input
+          | :identifier_input
+          | :token_input
+          | :password_confirmation_input
+
+  @spec input_key(focused_field()) :: input_field()
   def input_key(:handle), do: :handle_input
   def input_key(:password), do: :password_input
   def input_key(:identifier), do: :identifier_input
@@ -161,7 +176,7 @@ defmodule Foglet.TUI.Screens.Login.State do
   Advance focus through the reset-consume cycle:
   `:token -> :password -> :password_confirmation -> :token`.
   """
-  @spec next_reset_consume_focus(atom()) :: atom()
+  @spec next_reset_consume_focus(reset_consume_focus()) :: reset_consume_focus()
   def next_reset_consume_focus(:token), do: :password
   def next_reset_consume_focus(:password), do: :password_confirmation
   def next_reset_consume_focus(:password_confirmation), do: :token
@@ -170,7 +185,7 @@ defmodule Foglet.TUI.Screens.Login.State do
   Reverse focus through the reset-consume cycle:
   `:token -> :password_confirmation -> :password -> :token`.
   """
-  @spec prev_reset_consume_focus(atom()) :: atom()
+  @spec prev_reset_consume_focus(reset_consume_focus()) :: reset_consume_focus()
   def prev_reset_consume_focus(:token), do: :password_confirmation
   def prev_reset_consume_focus(:password_confirmation), do: :password
   def prev_reset_consume_focus(:password), do: :token

@@ -182,7 +182,13 @@ defmodule Foglet.TUI.Screens.Login do
 
   # --- Private ---
 
-  @spec handle_login_result(map(), tuple()) :: {map(), list()}
+  @typep login_result ::
+           {:ok, Foglet.Accounts.User.t(), :main_menu}
+           | {:ok, Foglet.Accounts.User.t(), :verify,
+              :attempted | :changeset_error | :delivery_failed | :unavailable}
+           | {:error, :invalid_credentials | :pending | :rejected | :suspended}
+
+  @spec handle_login_result(map(), login_result()) :: {map(), [Effect.t()]}
   defp handle_login_result(state, {:ok, user, :main_menu}) do
     {LoginState.put(state, LoginState.default()), [Effect.session({:promote_session, user})]}
   end

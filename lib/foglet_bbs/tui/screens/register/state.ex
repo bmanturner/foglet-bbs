@@ -94,8 +94,20 @@ defmodule Foglet.TUI.Screens.Register.State do
     Enum.at(@focus_cycle, rem(idx + 1, length(@focus_cycle)))
   end
 
+  @typedoc "Atoms for the register screen's focus cycle (incl. invite-code step)."
+  @type focused_field ::
+          :invite_code | :handle | :email | :password | :confirm_password
+
+  @typedoc "Keys into the register screen-state map for each input widget."
+  @type input_field ::
+          :invite_code_input
+          | :handle_input
+          | :email_input
+          | :password_input
+          | :confirm_input
+
   @doc "Returns the input map key for a given focused field atom."
-  @spec input_key(atom()) :: atom()
+  @spec input_key(focused_field()) :: input_field()
   def input_key(:invite_code), do: :invite_code_input
   def input_key(:handle), do: :handle_input
   def input_key(:email), do: :email_input
