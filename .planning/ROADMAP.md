@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 41: TUI Contract And Modal Effects** - Retire legacy screen callbacks and route modal submits through explicit effects. (completed 2026-04-29)
 - [x] **Phase 42: App Runtime Helper Extraction** - Split routing, modal, subscription, and effect runtime helpers out of `Foglet.TUI.App`. (completed 2026-04-29)
-- [x] **Phase 43: Large Screen Decomposition** - Separate reducer, state, and render responsibilities in the largest screen modules named by the audit. (completed 2026-04-29)
+- [ ] **Phase 43: Large Screen Decomposition** - Separate reducer, state, and render responsibilities in the largest screen modules named by the audit.
 - [ ] **Phase 44: PostReader And Content Query Hardening** - Add scalable PostReader loading/cache behavior and protect soft-delete/purity invariants.
 - [ ] **Phase 45: SSH And Session Runtime Hardening** - Bound key stashes, strengthen promotion auditability, and make termination/counter behavior trustworthy.
 - [ ] **Phase 46: Domain Cleanup And Final Quality Gate** - Resolve board/domain cleanup, Dialyzer baseline debt, and prove every audit concern has a disposition.
@@ -166,7 +166,7 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 |-------|----------------|--------|-----------|
 | 41. TUI Contract And Modal Effects | 4/4 | Complete    | 2026-04-29 |
 | 42. App Runtime Helper Extraction | 5/5 | Complete    | 2026-04-29 |
-| 43. Large Screen Decomposition | 5/5 | Complete   | 2026-04-29 |
+| 43. Large Screen Decomposition | 5/5 | Gaps found | - |
 | 44. PostReader And Content Query Hardening | 2/4 | In Progress|  |
 | 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
 | 46. Domain Cleanup And Final Quality Gate | 0/TBD | Not started | - |
