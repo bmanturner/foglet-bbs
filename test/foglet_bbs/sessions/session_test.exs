@@ -172,6 +172,27 @@ defmodule Foglet.Sessions.SessionTest do
 
       assert [{^pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
     end
+
+    test "promote_to_user/3 accepts audit metadata and reaches the same user state",
+         %{user_id: user_id} do
+      {:ok, pid} = start_supervised({Session, [user_id: nil]})
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "promoted", role: :user}
+
+      :ok =
+        Session.promote_to_user(pid, user, %{
+          ssh_peer: {{127, 0, 0, 1}, 2222},
+          replacement: :none
+        })
+
+      _ = :sys.get_state(pid)
+
+      state = Session.get_state(pid)
+      assert state.user_id == user_id
+      assert state.handle == "promoted"
+      assert state.role == :user
+      assert [{^pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+    end
   end
 
   describe "update_preferences/2" do

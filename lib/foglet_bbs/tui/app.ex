@@ -383,7 +383,9 @@ defmodule Foglet.TUI.App do
   # guest pid registers under the user_id key.
   defp do_update({:promote_session, user}, state) do
     if is_pid(state.session_pid) do
-      Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user)
+      Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user,
+        audit: %{ssh_peer: Map.get(state.session_context, :ssh_peer)}
+      )
     end
 
     Effects.apply_effect(
