@@ -326,14 +326,12 @@ defmodule Foglet.TUI.Screens.NewThread do
     session_context =
       context.session_context
       |> normalize_session_context()
-      |> put_new_positive(
-        :max_post_length,
+      |> put_new_positive_lazy(:max_post_length, fn ->
         safe_config_get("max_post_length", @default_max_post_length)
-      )
-      |> put_new_positive(
-        :max_thread_title_length,
+      end)
+      |> put_new_positive_lazy(:max_thread_title_length, fn ->
         safe_config_get("max_thread_title_length", @default_max_thread_title_length)
-      )
+      end)
 
     %{context | session_context: session_context}
   end
@@ -342,14 +340,23 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp normalize_session_context(value) when is_map(value), do: value
   defp normalize_session_context(_value), do: %{}
 
-  defp put_new_positive(map, key, value) when is_integer(value) and value > 0 do
+  # Only invoke the producer (which may hit the config cache / DB) when the
+  # session_context does not already carry a positive integer for this key.
+  # This keeps callers that pre-seed limits from paying for an unnecessary
+  # config read — and lets them avoid surfacing config-read failures
+  # entirely when the limit is already known.
+  defp put_new_positive_lazy(map, key, producer) when is_function(producer, 0) do
     case Map.get(map, key) do
-      n when is_integer(n) and n > 0 -> map
-      _other -> Map.put(map, key, value)
+      n when is_integer(n) and n > 0 ->
+        map
+
+      _other ->
+        case producer.() do
+          n when is_integer(n) and n > 0 -> Map.put(map, key, n)
+          _ -> map
+        end
     end
   end
-
-  defp put_new_positive(map, _key, _value), do: map
 
   defp max_body_length(state, context) do
     sc = Map.get(context, :session_context) || %{}

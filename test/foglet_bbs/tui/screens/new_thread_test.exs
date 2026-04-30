@@ -342,7 +342,22 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   test "init/1 derives local state from route context" do
     board = %{id: "b1", name: "General"}
-    ctx = context(route_params: %{origin: :thread_list, board: board})
+
+    # Seed compose limits in session_context so init/1 does not need to read
+    # config from the DB (this test runs without the Ecto sandbox checked
+    # out — see WR-02 fix in 43-REVIEW-FIX.md).
+    ctx =
+      Context.new(
+        current_user: %{id: "u1", handle: "alice"},
+        route: :new_thread,
+        route_params: %{origin: :thread_list, board: board},
+        terminal_size: {80, 24},
+        session_context: %{
+          domain: %{boards: FakeBoards, threads: FakeThreadsOk},
+          max_post_length: 8192,
+          max_thread_title_length: 60
+        }
+      )
 
     assert %State{step: :compose, board: ^board, origin: :thread_list} = NewThread.init(ctx)
   end
