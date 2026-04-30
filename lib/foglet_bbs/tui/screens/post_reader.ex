@@ -297,94 +297,92 @@ defmodule Foglet.TUI.Screens.PostReader do
   """
   @spec load_posts(map(), String.t()) :: {map(), list()}
   def load_posts(state, thread_id) do
-    ctx = Map.get(state, :session_context) || %{}
-
-    posts_mod =
-      case Domain.get(ctx, :posts) do
-        {:ok, mod} -> mod
-        {:error, :not_configured} -> Foglet.Posts
-      end
-
-    load_thread_id = thread_id
+    posts_mod = resolve_posts_mod(state)
     ss_before = get_screen_state(state)
+    read_pointer_msg_no = read_pointer_message_number(ss_before, thread_id)
 
-    # Phase 47 R2 (D-02 / D-03): route through list_reader_window/2 with
-    # anchor mapping derived from screen-local read pointer + load_intent.
-    # The read-pointer lookup stays where it already lives — the screen-owned
-    # `pending_read_positions` map. We do NOT call Threads.get_thread_read_pointer/2
-    # from here (D-03), and we do NOT add a new :read_pointer direction to
-    # Posts (D-03) — :around with around_message_number is the existing primitive.
-    read_pointer_message_number =
-      case Map.get(ss_before.pending_read_positions || %{}, thread_id) do
-        %{last_read_message_number: n} when is_integer(n) and n > 0 -> n
-        _ -> nil
-      end
-
-    opts =
-      cond do
-        is_integer(read_pointer_message_number) ->
-          [direction: :around, around_message_number: read_pointer_message_number]
-
-        ss_before.load_intent in [:jump_last, "jump_last"] ->
-          [direction: :last]
-
-        true ->
-          [direction: :initial]
-      end
-
-    window = posts_mod.list_reader_window(load_thread_id, opts)
+    opts = load_window_opts(read_pointer_msg_no, ss_before.load_intent)
+    window = posts_mod.list_reader_window(thread_id, opts)
     posts = Map.get(window, :posts) || []
-
-    new_pending_read_positions =
-      seed_read_position_on_entry(
-        ss_before.pending_read_positions,
-        thread_id,
-        posts
-      )
 
     {w, _h} = state.terminal_size || @default_terminal_size
 
-    # D-04: reuse the Phase 44 helper to land the selected index on the
-    # read-pointer's message_number after the windowed load. This is what
-    # makes the "200 posts + pointer at 150" acceptance assertion pass.
-    ss = %{
+    ss =
       ss_before
+      |> apply_window_to_screen_state(window, posts, thread_id)
+      |> place_selection_after_load(window, posts, read_pointer_msg_no)
+      |> warm_selected_post_artifacts(state, posts, w)
+
+    {%{state | screen_state: Map.put(state.screen_state, :post_reader, ss)}, []}
+  end
+
+  # Phase 47 R2 (D-02 / D-03): route through list_reader_window/2 with
+  # anchor mapping derived from screen-local read pointer + load_intent.
+  # The read-pointer lookup stays where it already lives — the screen-owned
+  # `pending_read_positions` map (D-03 forbids calling Threads here, and D-03
+  # forbids adding a new :read_pointer direction — :around is the primitive).
+  defp load_window_opts(message_number, _load_intent) when is_integer(message_number) do
+    [direction: :around, around_message_number: message_number]
+  end
+
+  defp load_window_opts(_msg_no, intent) when intent in [:jump_last, "jump_last"] do
+    [direction: :last]
+  end
+
+  defp load_window_opts(_msg_no, _intent), do: [direction: :initial]
+
+  defp read_pointer_message_number(%State{pending_read_positions: positions}, thread_id) do
+    case Map.get(positions || %{}, thread_id) do
+      %{last_read_message_number: n} when is_integer(n) and n > 0 -> n
+      _ -> nil
+    end
+  end
+
+  defp resolve_posts_mod(state) do
+    ctx = Map.get(state, :session_context) || %{}
+
+    case Domain.get(ctx, :posts) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Posts
+    end
+  end
+
+  defp apply_window_to_screen_state(%State{} = ss, window, posts, thread_id) do
+    %{
+      ss
       | posts: posts,
-        pending_read_positions: new_pending_read_positions,
+        pending_read_positions:
+          seed_read_position_on_entry(ss.pending_read_positions, thread_id, posts),
         window_first_message_number: Map.get(window, :first_message_number),
         window_last_message_number: Map.get(window, :last_message_number),
         window_has_previous?: Map.get(window, :has_previous?, false),
         window_has_next?: Map.get(window, :has_next?, false)
     }
+  end
 
-    # D-04: when a read pointer drove the :around window, land selection on
-    # the post matching that message_number (this is what makes the
-    # "200 posts + pointer at 150" assertion pass). Otherwise, defer to the
-    # Phase 44 helper, which handles :jump_last and :initial.
+  # D-04: when a read pointer drove the :around window, land selection on
+  # the post matching that message_number (this is what makes the
+  # "200 posts + pointer at 150" acceptance assertion pass). Otherwise,
+  # defer to the Phase 44 helper, which handles :jump_last and :initial.
+  defp place_selection_after_load(%State{} = ss, window, posts, read_pointer_msg_no) do
     selected_index =
-      case read_pointer_message_number do
-        n when is_integer(n) ->
-          index_of_message_number(posts, n) ||
-            selected_index_after_window_load(ss, window, posts)
+      (is_integer(read_pointer_msg_no) && index_of_message_number(posts, read_pointer_msg_no)) ||
+        selected_index_after_window_load(ss, window, posts)
 
-        _ ->
-          selected_index_after_window_load(ss, window, posts)
-      end
+    %{ss | selected_post_index: selected_index}
+  end
 
-    ss = %{ss | selected_post_index: selected_index}
+  # WR-01: warm the render cache and viewport for the SELECTED post so the
+  # initial render (before any keypress) does not re-parse on every frame and
+  # j/k have the correct content_height for clamping on first keypress.
+  defp warm_selected_post_artifacts(%State{} = ss, state, posts, w) do
+    idx = ss.selected_post_index
+    ss = warm_cache_for_index(ss, state, posts, idx, w)
 
-    # WR-01: warm the render cache for the SELECTED post so the initial
-    # render (before any keypress) does not re-parse on every frame.
-    ss = warm_cache_for_index(ss, state, posts, selected_index, w)
-
-    # Pre-populate the viewport children for the selected post so j/k have
-    # correct content_height for clamping on first keypress.
-    selected_post = Enum.at(posts, selected_index)
-    ss = if selected_post, do: warm_viewport(ss, state, selected_post, w), else: ss
-
-    new_screen_state = Map.put(state.screen_state, :post_reader, ss)
-
-    {%{state | screen_state: new_screen_state}, []}
+    case Enum.at(posts, idx) do
+      nil -> ss
+      post -> warm_viewport(ss, state, post, w)
+    end
   end
 
   defp seed_read_position_on_entry(read_position, _thread_id, []), do: read_position
