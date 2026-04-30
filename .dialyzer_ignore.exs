@@ -2,8 +2,13 @@
 # Invariant: every kept entry has a stated reason in the shared comment
 # block immediately above it. Buckets in order: A → C2 → C* → D.
 [
-  # Bucket A — Ecto schema t/0 false positives.
-  # Dialyzer cannot resolve `t/0` from `use Ecto.Schema`; not a real bug.
+  # Bucket A — :unknown_type false positives.
+  # Mostly Ecto schemas where dialyzer cannot resolve `t/0` from
+  # `use Ecto.Schema`. `posts/reader_window.ex` is included because its
+  # `t/0` references `Foglet.Posts.Post.t/0`; the unresolved schema
+  # `t/0` propagates into reader_window's own spec surface, so the
+  # warning has the same root cause and the same not-a-real-bug status
+  # as the schemas themselves.
   {"lib/foglet_bbs/boards.ex", :unknown_type},
   {"lib/foglet_bbs/boards/server.ex", :unknown_type},
   {"lib/foglet_bbs/posts.ex", :unknown_type},
