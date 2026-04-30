@@ -100,6 +100,10 @@ None yet.
 - Keep the milestone bounded to stability and maintenance hardening; do not add new end-user product surfaces.
 - Preserve SSH-first TUI behavior while changing runtime, screen, and lifecycle internals.
 
+### Roadmap Evolution
+
+- Phase 47 added: Bound unbounded list queries, drop Chrome V1 shims, and reduce App + large screen modules
+
 ## Deferred Items
 
 Previous milestone carried forward 16 acknowledged debug/quick/seed items. They remain outside v2.1 unless represented by `.planning/codebase/CONCERNS.md`; see the previous STATE history and `.planning/MILESTONES.md` for the archive summary.

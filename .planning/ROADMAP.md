@@ -182,3 +182,13 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 | 44. PostReader And Content Query Hardening | 4/4 | Complete   | 2026-04-30 |
 | 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
 | 46. Domain Cleanup And Final Quality Gate | 4/4 | Complete   | 2026-04-30 |
+
+### Phase 47: Bound unbounded list queries, drop Chrome V1 shims, and reduce App + large screen modules
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 46
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 47 to break down)
