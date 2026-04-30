@@ -6,20 +6,16 @@ defmodule Foglet.TUI.App do
   `widgets/*` are the instruments. This module holds the canonical UI
   shell — an 8-field struct (`current_screen`, `current_user`,
   `session_context`, `session_pid`, `terminal_size`, `route_params`,
-  `modal`, `screen_state`) — while `Foglet.TUI.App.Routing`,
-  `Foglet.TUI.App.Modal`, `Foglet.TUI.App.Effects`, and
-  `Foglet.TUI.App.Subscriptions` own the extracted runtime details.
-  Per-screen state lives in screen-owned `%State{}` structs stored under
-  `screen_state`, keyed by screen atom; each screen is a reducer that exposes
-  `update/3` + `render/2` and an optional `subscriptions/2` callback.
+  `modal`, `screen_state`) — while `Foglet.TUI.App.{Routing, Modal, Effects,
+  Subscriptions, ScreenStates, SessionAlias}` own the extracted runtime
+  details. Per-screen state lives in screen-owned `%State{}` structs stored
+  under `screen_state`, keyed by screen atom; each screen is a reducer that
+  exposes `update/3` + `render/2` and an optional `subscriptions/2` callback.
 
-  State flow (D-16):
-    * Domain state → Postgres (accessed via Foglet.Boards/Threads/Posts)
-    * Session-scoped identity → Foglet.Sessions.Session
-    * UI shell → this model (%__MODULE__{})
-    * Per-screen UI state → screen-owned %State{} under screen_state[key]
-
-  See docs/ARCHITECTURE.md §4 and CONTEXT 03 D-13..D-21.
+  State flow (D-16): domain → Postgres (Foglet.Boards/Threads/Posts);
+  session-scoped identity → Foglet.Sessions.Session; UI shell → this model
+  (%__MODULE__{}); per-screen UI state → screen-owned %State{} under
+  `screen_state[key]`. See docs/ARCHITECTURE.md §4 and CONTEXT 03 D-13..D-21.
   """
 
   use Raxol.Core.Runtime.Application
@@ -28,6 +24,8 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
+  alias Foglet.TUI.App.ScreenStates
+  alias Foglet.TUI.App.SessionAlias
   alias Foglet.TUI.App.Subscriptions
   alias Foglet.TUI.Context
   alias Foglet.TUI.SizeGate
@@ -67,67 +65,37 @@ defmodule Foglet.TUI.App do
             modal: nil,
             screen_state: %{}
 
-  @doc """
-  Returns the current route value through the routing helper.
+  # Public delegators kept on App as stable public boundaries for render
+  # fixtures, smoke helpers, and screen tests that construct App state outside
+  # the live Raxol shell. Bodies delegate to the extracted helper modules
+  # (Routing, ScreenStates) which own the implementations.
 
-  This remains a public App boundary for render fixtures, smoke helpers, and
-  screen tests that construct App state directly outside the live Raxol shell.
-  """
+  @doc "Returns the current route value through the routing helper."
   @spec current_route(t()) :: atom() | {atom(), map()}
   def current_route(%__MODULE__{} = state), do: Routing.current_route(state)
 
-  @doc """
-  Returns the storage key for a screen route through the routing helper.
-
-  This public seam is used by non-live render/test fixtures that need the same
-  route-key semantics as the App runtime.
-  """
+  @doc "Returns the storage key for a screen route through the routing helper."
   @spec screen_key(atom() | {atom(), map()}) :: atom()
   def screen_key(route), do: Routing.screen_key(route)
 
-  @doc """
-  Returns local state for the current screen key through the routing helper.
-
-  This stays public for fixture code that inspects App-local screen state
-  without starting a dispatcher process.
-  """
+  @doc "Returns local state for the current screen key through the routing helper."
   @spec current_screen_state(t()) :: term()
   def current_screen_state(%__MODULE__{} = state), do: Routing.current_screen_state(state)
 
-  @doc """
-  Returns screen-local state stored under `key` through the routing helper.
-
-  This remains public for render fixtures and screen-level tests that assemble
-  App state directly.
-  """
+  @doc "Returns screen-local state stored under `key` through the ScreenStates helper."
   @spec screen_state_for(t(), term()) :: term()
-  def screen_state_for(%__MODULE__{} = state, key), do: Routing.screen_state_for(state, key)
+  def screen_state_for(%__MODULE__{} = state, key), do: ScreenStates.get(state, key)
 
-  @doc """
-  Stores screen-local state under `key` through the routing helper.
-
-  Render fixtures use this public boundary to seed screen-owned local state
-  before invoking the same render paths used by the live TUI.
-  """
+  @doc "Stores screen-local state under `key` through the ScreenStates helper."
   @spec put_screen_state(t(), term(), term()) :: t()
   def put_screen_state(%__MODULE__{} = state, key, local_state),
-    do: Routing.put_screen_state(state, key, local_state)
+    do: ScreenStates.put(state, key, local_state)
 
-  @doc """
-  Builds the narrow runtime context passed to screen reducers.
-
-  This public boundary supports render fixtures and screen-focused tests while
-  Routing owns the implementation.
-  """
+  @doc "Builds the narrow runtime context passed to screen reducers."
   @spec build_context(t()) :: Context.t()
   def build_context(%__MODULE__{} = state), do: Routing.build_context(state)
 
-  @doc """
-  Builds a screen context with explicit route params through the routing helper.
-
-  This public boundary supports render fixtures and screen-focused tests while
-  Routing owns the implementation.
-  """
+  @doc "Builds a screen context with explicit route params through the routing helper."
   @spec build_context(t(), map()) :: Context.t()
   def build_context(%__MODULE__{} = state, route_params),
     do: Routing.build_context(state, route_params)
@@ -267,9 +235,7 @@ defmodule Foglet.TUI.App do
     Effects.apply_effect(state, Foglet.TUI.Effect.navigate(screen, %{}))
   end
 
-  defp do_update({:set_user, user}, state) do
-    do_update({:promote_session, user}, state)
-  end
+  defp do_update({:set_user, user}, state), do: SessionAlias.set_user(state, user)
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
     {%{state | modal: modal}, []}
@@ -333,14 +299,7 @@ defmodule Foglet.TUI.App do
     {%{state | modal: modal}, []}
   end
 
-  # Heartbeat — keep last_seen_at alive in the Session GenServer.
-  defp do_update(:heartbeat_tick, state) do
-    if is_pid(state.session_pid) do
-      Foglet.Sessions.Session.heartbeat(state.session_pid)
-    end
-
-    {state, []}
-  end
+  defp do_update(:heartbeat_tick, state), do: SessionAlias.heartbeat(state)
 
   defp do_update(:main_menu_clock_tick, state), do: {state, []}
 
@@ -362,54 +321,10 @@ defmodule Foglet.TUI.App do
     )
   end
 
-  # A new SSH connection for the same user replaced this session.
-  # Show a notice modal and defer the quit until the user dismisses it
-  # (mirrors `:terminate_after_modal` so the user actually sees the message
-  # rather than getting torn down on the next tick).
-  defp do_update({:session_replaced, _user_id}, state) do
-    modal = %Foglet.TUI.Modal{
-      type: :warning,
-      message: "Your session was replaced by a new connection. Goodbye.",
-      on_confirm: fn s -> {s, [Command.quit()]} end,
-      on_cancel: fn s -> {s, [Command.quit()]} end
-    }
+  defp do_update({:session_replaced, payload}, state),
+    do: SessionAlias.session_replaced(state, payload)
 
-    {%{state | modal: modal}, []}
-  end
-
-  # TUI login screen authenticated a user — promote the guest session.
-  # Routes through the Supervisor so one-session-per-user (SSH-05 / D-25) is
-  # enforced: any pre-existing session for this user is replaced before this
-  # guest pid registers under the user_id key.
-  defp do_update({:promote_session, user}, state) do
-    if is_pid(state.session_pid) do
-      Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user,
-        audit: %{ssh_peer: Map.get(state.session_context, :ssh_peer)}
-      )
-    else
-      require Logger
-
-      Logger.warning(
-        "[TUI.App] promote_session without session_pid; user=#{inspect(user.handle)} — " <>
-          "Session telemetry will be missing"
-      )
-    end
-
-    # Keep session_context in lockstep with current_user so screens that read
-    # session_context.user (rather than current_user) see the authenticated
-    # identity. :pubkey_authenticated stays as-is — TUI-driven login is
-    # password-based by definition, so promoting here does NOT make the
-    # session pubkey-authenticated.
-    updated_context =
-      state.session_context
-      |> Map.put(:user, user)
-      |> Map.put(:user_id, user.id)
-
-    Effects.apply_effect(
-      %{state | current_user: user, session_context: updated_context},
-      Foglet.TUI.Effect.navigate(:main_menu, %{})
-    )
-  end
+  defp do_update({:promote_session, user}, state), do: SessionAlias.promote_session(state, user)
 
   defp do_update({:command_result, inner}, state) do
     # Raxol's Command.task runtime wraps every task return value in
