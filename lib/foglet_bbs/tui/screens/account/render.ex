@@ -68,6 +68,12 @@ defmodule Foglet.TUI.Screens.Account.Render do
   end
 
   defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
+  # IN-02 (iteration 6): same defensive shape as IN-01 in moderation.ex.
+  # If `tab_labels(ss)` returns `[]` (e.g., transient state during tab
+  # re-init), `length([]) = 0` previously crashed `jump_hint(0)` with
+  # `FunctionClauseError`. Fall back to "1" so the account screen
+  # renders rather than crashing.
+  defp jump_hint(_), do: "1"
 
   # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
   defp inner_width(state) do
