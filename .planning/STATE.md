@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: milestone
 status: executing
-stopped_at: Phase 45 context gathered (assumptions mode)
-last_updated: "2026-04-30T00:04:14.067Z"
-last_activity: 2026-04-30 -- Phase 44 planning complete
+stopped_at: Completed 44-01-PLAN.md
+last_updated: "2026-04-30T00:19:08.767Z"
+last_activity: 2026-04-30
 progress:
   total_phases: 6
   completed_phases: 3
   total_plans: 18
-  completed_plans: 14
-  percent: 78
+  completed_plans: 15
+  percent: 83
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 43 — Large Screen Decomposition
+**Current focus:** Phase 44 — postreader-and-content-query-hardening
 
 ## Current Position
 
-Phase: 43
-Plan: Not started
+Phase: 44 (postreader-and-content-query-hardening) — EXECUTING
+Plan: 2 of 4
 Status: Ready to execute
-Last activity: 2026-04-30 -- Phase 44 planning complete
+Last activity: 2026-04-30
 
 Progress: [█████████░] 89%
 
@@ -58,6 +58,7 @@ Progress: [█████████░] 89%
 | Phase 42 P42-03 | 8min | 3 tasks | 5 files |
 | Phase 42 P42-04 | 8min | 3 tasks | 4 files |
 | Phase 42 P42-05 | 7min | 3 tasks | 5 files |
+| Phase 44 P44-01 | 5min | 2 tasks | 4 files |
 
 ## Accumulated Context
 
@@ -79,6 +80,8 @@ Decisions are logged in PROJECT.md Key Decisions table. Recent decisions affecti
 - [Phase 42]: Foglet.TUI.App retains only the Raxol callback integration points for subscribe/1 and post-update refresh timing.
 - [Phase 42]: Foglet.TUI.App remains a public fixture boundary for route state helpers, but effect interpretation tests now target Foglet.TUI.App.Effects directly. — Phase 42 finalization kept App as the Raxol shell while preserving helper-owned effect behavior coverage.
 - [Phase 42]: App runtime tests use structural state, command, modal, and SizeGate element assertions instead of pure rendered-text presence checks. — This preserves behavior coverage while following AGENTS.md testing guidance.
+- [Phase 44]: Plan 44-01 reader windows use message_number cursors scoped by thread_id rather than offsets or inserted timestamps. — message_number is the stable reader sequence and preserves continuity across tombstones.
+- [Phase 44]: Plan 44-01 reader/history query paths remain tombstone-capable; no QueryHelpers.not_deleted/1 filtering was added. — Soft-deleted posts keep historical message numbers and must remain visible to reader/history consumers.
 
 ### Pending Todos
 
@@ -95,6 +98,6 @@ Previous milestone carried forward 16 acknowledged debug/quick/seed items. They 
 
 ## Session Continuity
 
-Last session: 2026-04-30T00:02:35.322Z
-Stopped at: Phase 45 context gathered (assumptions mode)
-Resume file: .planning/phases/45-ssh-and-session-runtime-hardening/45-CONTEXT.md
+Last session: 2026-04-30T00:19:08.515Z
+Stopped at: Completed 44-01-PLAN.md
+Resume file: None
