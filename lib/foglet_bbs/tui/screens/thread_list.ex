@@ -340,9 +340,9 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   defp apply_selection_intent(%State{select_thread_id: nil} = state, threads) do
-    state
-    |> select_index(state.selected_index, threads)
-    |> Map.put(:select_thread_id, nil)
+    # IN-01: select_thread_id is already nil per the head match, so the
+    # previous `Map.put(:select_thread_id, nil)` was a no-op.
+    select_index(state, state.selected_index, threads)
   end
 
   defp apply_selection_intent(%State{select_thread_id: select_thread_id} = state, threads) do
