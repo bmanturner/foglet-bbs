@@ -122,7 +122,13 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   defp render_menu(_mode, theme, state) do
     {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
-    available = max(terminal_height - 8, 1)
+    # WR-05: floor `available` at 2 so `available - top_padding - 2`
+    # cannot underflow (top_padding == div(available, 2) ≤ available/2,
+    # so available - top_padding - 2 ≥ -1 only if available < 2).
+    # SizeGate is expected to intercept anything below the contract
+    # minimum, but this keeps the arithmetic locally non-negative even
+    # if a too-small frame slips through.
+    available = max(terminal_height - 8, 2)
     top_padding = div(available, 2)
     bottom_padding = max(available - top_padding - 2, 0)
     pad = text(" ", fg: theme.primary.fg)
