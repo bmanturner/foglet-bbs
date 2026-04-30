@@ -1703,6 +1703,108 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
+  describe "load_posts/2 — windowed migration (Phase 47 R2)" do
+    # SPEC R2 acceptance: load_posts/2 must route through list_reader_window/2
+    # with anchor mapping per CONTEXT D-02:
+    #   1. Read pointer present → :around at last_read_message_number
+    #   2. load_intent: :jump_last → :last
+    #   3. No read pointer → :initial
+
+    test "with read pointer at message_number 150 in a 200-post thread requests :around and lands selection on the read pointer" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{
+            "t-1000" => %{last_read_post_id: "p150", last_read_message_number: 150}
+          },
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :around
+      assert Keyword.get(opts, :around_message_number) == 150
+
+      ss = s_after.screen_state.post_reader
+      selected = Enum.at(ss.posts, ss.selected_post_index)
+
+      assert selected,
+             "Expected a selected post from the windowed load (got nil — selected_post_index=#{ss.selected_post_index}, posts length=#{length(ss.posts || [])})"
+
+      assert selected.message_number == 150,
+             "Expected selected message_number to land on read pointer 150, got #{selected.message_number}"
+    end
+
+    test "with a 5-post thread (smaller than reader window) the load still succeeds via list_reader_window/2" do
+      # FakePostsForLoad returns 2 posts. We use it here as the "small thread"
+      # case — its list_reader_window/2 returns the 2-post window unconditionally.
+      s =
+        p2_state(%{
+          current_thread: %{id: "t1", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: FakePostsForLoad, markdown: FakeMarkdown}
+          }
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t1")
+
+      ss = s_after.screen_state.post_reader
+      assert length(ss.posts) == 2
+      assert Enum.at(ss.posts, 0).message_number == 5
+    end
+
+    test "with load_intent: :jump_last requests direction: :last (NOT :around)" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      # Set load_intent on the screen state.
+      ss = s.screen_state.post_reader
+      ss = %{ss | load_intent: :jump_last}
+      s = put_in(s.screen_state.post_reader, ss)
+
+      {_s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :last
+      refute Keyword.has_key?(opts, :around_message_number)
+    end
+
+    test "with no read pointer and no jump_last requests direction: :initial" do
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{},
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      {_s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :initial
+      refute Keyword.has_key?(opts, :around_message_number)
+    end
+  end
+
   describe "subscriptions/2 export (Phase 39 R6, D-08)" do
     test "module exports subscriptions/2" do
       assert Code.ensure_loaded?(Foglet.TUI.Screens.PostReader)
