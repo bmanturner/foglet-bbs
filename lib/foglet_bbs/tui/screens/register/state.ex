@@ -157,21 +157,19 @@ defmodule Foglet.TUI.Screens.Register.State do
   @generic_error "Please double-check the form and try again."
 
   @doc """
-  Formats an `Ecto.Changeset` from `Foglet.Accounts.User.registration_changeset/2`
-  into one or more user-readable sentences.
+  Maps the **first** error on an `Ecto.Changeset` from
+  `Foglet.Accounts.User.registration_changeset/2` to a user-facing sentence.
 
-  Known `{field, error}` shapes map to a curated sentence. Any unrecognized
-  shape collapses to a generic safe message — raw atoms or Ecto internals
-  never reach the user.
+  Copy is sourced from FOG-53 §3.6a; unrecognized `{field, error}` shapes
+  collapse to a generic safe message so raw atoms or Ecto internals never
+  reach the user. Only the first failure is surfaced — no field-name
+  prefixes, no concatenation.
   """
   @spec changeset_error_text(Ecto.Changeset.t()) :: String.t()
   def changeset_error_text(%Ecto.Changeset{errors: []}), do: @generic_error
 
-  def changeset_error_text(%Ecto.Changeset{errors: errors}) do
-    errors
-    |> Enum.map(&translate_error/1)
-    |> Enum.uniq()
-    |> Enum.join(" ")
+  def changeset_error_text(%Ecto.Changeset{errors: [first | _]}) do
+    translate_error(first)
   end
 
   defp translate_error({field, {_msg, opts}}) do
@@ -185,30 +183,32 @@ defmodule Foglet.TUI.Screens.Register.State do
     end
   end
 
-  defp required_sentence(:handle), do: "Please choose a handle."
-  defp required_sentence(:email), do: "Please enter an email address."
-  defp required_sentence(:password), do: "Please choose a password."
+  defp required_sentence(:handle), do: "Pick a handle."
+  defp required_sentence(:email), do: "Enter an email address."
+  defp required_sentence(:password), do: "Pick a password."
   defp required_sentence(_), do: @generic_error
 
-  defp unique_sentence(:handle), do: "That handle is already taken."
-  defp unique_sentence(:email), do: "That email is already in use."
+  defp unique_sentence(:handle), do: "That handle is already in use. Pick another."
+  defp unique_sentence(:email), do: "That email is already on file."
   defp unique_sentence(_), do: @generic_error
 
   defp format_sentence(:handle),
-    do: "Handle can only contain letters, numbers, underscores, and hyphens."
+    do: "Handles can only use letters, numbers, dot, dash, and underscore."
 
-  defp format_sentence(:email), do: "Please enter a valid email address."
+  defp format_sentence(:email), do: "That doesn't look like an email address."
   defp format_sentence(_), do: @generic_error
 
-  defp length_sentence(:handle, _opts), do: "Handle must be 2–20 characters."
-
-  defp length_sentence(:email, _opts), do: "That email address is too long."
+  defp length_sentence(:handle, opts) do
+    case Keyword.get(opts, :kind) do
+      :max -> "Handles can't be longer than #{Keyword.get(opts, :count)} characters."
+      _ -> @generic_error
+    end
+  end
 
   defp length_sentence(:password, opts) do
     case Keyword.get(opts, :kind) do
-      :min -> "Password must be at least 8 characters."
-      :max -> "Password is too long."
-      _ -> "Password length is invalid."
+      :min -> "Passwords need to be at least #{Keyword.get(opts, :count)} characters."
+      _ -> @generic_error
     end
   end
 

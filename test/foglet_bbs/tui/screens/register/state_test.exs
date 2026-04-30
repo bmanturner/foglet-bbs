@@ -4,28 +4,30 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
   alias Foglet.Accounts.User
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
 
-  describe "changeset_error_text/1 — known User registration shapes" do
-    test "missing handle, email, and password each produce a friendly required sentence" do
+  @generic_error "Please double-check the form and try again."
+
+  describe "changeset_error_text/1 — FOG-53 §3.6a mapped shapes" do
+    test "missing handle/email/password surfaces only the first failure (handle blank)" do
       cs = User.registration_changeset(%{})
-      text = RegisterState.changeset_error_text(cs)
 
-      assert text =~ "Please choose a handle."
-      assert text =~ "Please enter an email address."
-      assert text =~ "Please choose a password."
+      assert RegisterState.changeset_error_text(cs) == "Pick a handle."
     end
 
-    test "handle too short reports the allowed handle range" do
+    test "missing email (handle + password present) maps to the email blank sentence" do
       cs =
-        User.registration_changeset(%{
-          handle: "a",
-          email: "ok@example.test",
-          password: "sekret01"
-        })
+        User.registration_changeset(%{handle: "okhandle", password: "sekret01"})
 
-      assert RegisterState.changeset_error_text(cs) == "Handle must be 2–20 characters."
+      assert RegisterState.changeset_error_text(cs) == "Enter an email address."
     end
 
-    test "handle too long reports the allowed handle range" do
+    test "missing password (handle + email present) maps to the password blank sentence" do
+      cs =
+        User.registration_changeset(%{handle: "okhandle", email: "ok@example.test"})
+
+      assert RegisterState.changeset_error_text(cs) == "Pick a password."
+    end
+
+    test "handle too long maps to the max-length sentence with the configured limit" do
       cs =
         User.registration_changeset(%{
           handle: String.duplicate("a", 21),
@@ -33,10 +35,11 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
           password: "sekret01"
         })
 
-      assert RegisterState.changeset_error_text(cs) == "Handle must be 2–20 characters."
+      assert RegisterState.changeset_error_text(cs) ==
+               "Handles can't be longer than 20 characters."
     end
 
-    test "handle with disallowed characters reports the format rule" do
+    test "handle with disallowed characters maps to the format sentence" do
       cs =
         User.registration_changeset(%{
           handle: "bad handle!",
@@ -45,10 +48,10 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
         })
 
       assert RegisterState.changeset_error_text(cs) ==
-               "Handle can only contain letters, numbers, underscores, and hyphens."
+               "Handles can only use letters, numbers, dot, dash, and underscore."
     end
 
-    test "malformed email reports a generic email format sentence" do
+    test "malformed email maps to the email format sentence" do
       cs =
         User.registration_changeset(%{
           handle: "okhandle",
@@ -56,21 +59,11 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
           password: "sekret01"
         })
 
-      assert RegisterState.changeset_error_text(cs) == "Please enter a valid email address."
+      assert RegisterState.changeset_error_text(cs) ==
+               "That doesn't look like an email address."
     end
 
-    test "oversize email reports a length sentence" do
-      cs =
-        User.registration_changeset(%{
-          handle: "okhandle",
-          email: String.duplicate("a", 250) <> "@example.test",
-          password: "sekret01"
-        })
-
-      assert RegisterState.changeset_error_text(cs) =~ "email address is too long"
-    end
-
-    test "short password reports the minimum length" do
+    test "short password maps to the min-length sentence with the configured floor" do
       cs =
         User.registration_changeset(%{
           handle: "okhandle",
@@ -79,21 +72,10 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
         })
 
       assert RegisterState.changeset_error_text(cs) ==
-               "Password must be at least 8 characters."
+               "Passwords need to be at least 8 characters."
     end
 
-    test "long password reports the too-long sentence" do
-      cs =
-        User.registration_changeset(%{
-          handle: "okhandle",
-          email: "ok@example.test",
-          password: String.duplicate("a", 257)
-        })
-
-      assert RegisterState.changeset_error_text(cs) == "Password is too long."
-    end
-
-    test "duplicate handle reports the unique sentence" do
+    test "duplicate handle maps to the unique-handle sentence" do
       _existing = FogletBbs.AccountsFixtures.user_fixture(%{handle: "dupehandle"})
 
       cs =
@@ -103,10 +85,11 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
           password: "sekret01"
         })
 
-      assert RegisterState.changeset_error_text(cs) == "That handle is already taken."
+      assert RegisterState.changeset_error_text(cs) ==
+               "That handle is already in use. Pick another."
     end
 
-    test "duplicate email reports the unique sentence" do
+    test "duplicate email maps to the unique-email sentence" do
       _existing = FogletBbs.AccountsFixtures.user_fixture(%{email: "dupe@example.test"})
 
       cs =
@@ -116,7 +99,47 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
           password: "sekret01"
         })
 
-      assert RegisterState.changeset_error_text(cs) == "That email is already in use."
+      assert RegisterState.changeset_error_text(cs) == "That email is already on file."
+    end
+  end
+
+  describe "changeset_error_text/1 — gaps not yet mapped by FOG-53 §3.6a" do
+    # These shapes are emitted by Foglet.Accounts.User.registration_changeset/2
+    # but FOG-53 §3.6a does not yet specify user-facing copy. Per FOG-69 scope
+    # discipline, we surface the safe generic sentence and have escalated the
+    # gap to Content Designer (FOG-53). Update once copy lands.
+
+    test "handle below minimum length falls back to the generic sentence" do
+      cs =
+        User.registration_changeset(%{
+          handle: "a",
+          email: "ok@example.test",
+          password: "sekret01"
+        })
+
+      assert RegisterState.changeset_error_text(cs) == @generic_error
+    end
+
+    test "oversize email falls back to the generic sentence" do
+      cs =
+        User.registration_changeset(%{
+          handle: "okhandle",
+          email: String.duplicate("a", 250) <> "@example.test",
+          password: "sekret01"
+        })
+
+      assert RegisterState.changeset_error_text(cs) == @generic_error
+    end
+
+    test "oversize password falls back to the generic sentence" do
+      cs =
+        User.registration_changeset(%{
+          handle: "okhandle",
+          email: "ok@example.test",
+          password: String.duplicate("a", 257)
+        })
+
+      assert RegisterState.changeset_error_text(cs) == @generic_error
     end
   end
 
@@ -129,7 +152,7 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
 
       text = RegisterState.changeset_error_text(cs)
 
-      assert text == "Please double-check the form and try again."
+      assert text == @generic_error
       refute text =~ "something_else"
       refute text =~ "is weird"
     end
@@ -137,8 +160,7 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
     test "an empty error list still returns a friendly sentence" do
       cs = Ecto.Changeset.change(%User{}, %{})
 
-      assert RegisterState.changeset_error_text(cs) ==
-               "Please double-check the form and try again."
+      assert RegisterState.changeset_error_text(cs) == @generic_error
     end
   end
 end
