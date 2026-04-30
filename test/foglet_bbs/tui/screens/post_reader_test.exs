@@ -110,7 +110,67 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
+  defmodule BoundedFakePosts do
+    def list_posts(_thread_id), do: raise("unbounded list_posts/1 is forbidden")
+
+    def list_reader_window(thread_id, opts) do
+      if pid = Process.get(:reader_window_test_pid) do
+        send(pid, {:reader_window_requested, thread_id, opts})
+      end
+
+      direction = Keyword.get(opts, :direction, :initial)
+      limit = Keyword.get(opts, :limit, 50)
+      range = range_for(direction, opts, limit)
+      posts = Enum.map(range, &post/1)
+
+      %Foglet.Posts.ReaderWindow{
+        posts: posts,
+        first_message_number: posts |> List.first() |> message_number(),
+        last_message_number: posts |> List.last() |> message_number(),
+        has_previous?: range.first > 1,
+        has_next?: range.last < 1000,
+        direction: direction
+      }
+    end
+
+    defp range_for(:last, _opts, limit), do: max(1, 1000 - limit + 1)..1000
+
+    defp range_for(:next, opts, limit) do
+      first = Keyword.fetch!(opts, :after_message_number) + 1
+      first..min(1000, first + limit - 1)
+    end
+
+    defp range_for(:previous, opts, limit) do
+      last = Keyword.fetch!(opts, :before_message_number) - 1
+      max(1, last - limit + 1)..last
+    end
+
+    defp range_for(:around, opts, limit) do
+      center = Keyword.get(opts, :around_message_number) || 1
+      first = max(1, center - div(limit, 2))
+      last = min(1000, first + limit - 1)
+      max(1, last - limit + 1)..last
+    end
+
+    defp range_for(_direction, _opts, limit), do: 1..limit
+
+    defp post(message_number) do
+      %{
+        id: "p#{message_number}",
+        body: "body #{message_number}",
+        inserted_at: ~U[2026-04-18 00:00:00.000000Z],
+        user: %{handle: "sysop"},
+        message_number: message_number
+      }
+    end
+
+    defp message_number(nil), do: nil
+    defp message_number(post), do: Map.get(post, :message_number)
+  end
+
   setup do
+    Process.put(:reader_window_test_pid, self())
+
     state =
       %Foglet.TUI.App{
         current_screen: :post_reader,
@@ -538,6 +598,200 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert {:read_pointers_flushed, "t1"} = fun.()
   end
 
+  describe "bounded reader-window contract" do
+    test "route entry for a 1000-post thread uses list_reader_window/2 and bounded state" do
+      context = bounded_post_reader_context()
+      state = State.new(thread_id: "t-1000", reader_window_limit: 50)
+
+      assert {%State{} = loading,
+              [%Effect{type: :task, payload: %{op: :load_posts_window, fun: fun}}]} =
+               PostReader.update(:load, state, context)
+
+      assert %Foglet.Posts.ReaderWindow{} = window = fun.()
+
+      assert_receive {:reader_window_requested, "t-1000", [direction: :initial, limit: 50]}
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 loading,
+                 context
+               )
+
+      assert length(loaded.posts) < 1000
+      assert length(loaded.posts) == 50
+      assert loaded.window_first_message_number == 1
+      assert loaded.window_last_message_number == 50
+      assert loaded.window_has_next?
+    end
+
+    test "n at the last active post requests direction: :next and lands on next first post" do
+      context = bounded_post_reader_context()
+
+      state =
+        bounded_state(
+          posts: bounded_posts(1..50),
+          selected_post_index: 49,
+          window_first_message_number: 1,
+          window_last_message_number: 50,
+          window_has_next?: true
+        )
+
+      assert {%State{} = loading,
+              [%Effect{type: :task, payload: %{op: :load_posts_window, fun: fun}}]} =
+               PostReader.update({:key, %{key: :char, char: "n"}}, state, context)
+
+      window = fun.()
+
+      assert_receive {:reader_window_requested, "t-1000",
+                      [direction: :next, after_message_number: 50, limit: 50]}
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 loading,
+                 context
+               )
+
+      assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p51"
+
+      assert loaded.pending_read_positions["t-1000"] == %{
+               last_read_post_id: "p51",
+               last_read_message_number: 51
+             }
+    end
+
+    test "page_down at the last active post also requests direction: :next" do
+      context = bounded_post_reader_context()
+
+      state =
+        bounded_state(
+          posts: bounded_posts(1..50),
+          selected_post_index: 49,
+          window_first_message_number: 1,
+          window_last_message_number: 50,
+          window_has_next?: true
+        )
+
+      assert {%State{}, [%Effect{type: :task, payload: %{fun: fun}}]} =
+               PostReader.update({:key, %{key: :page_down}}, state, context)
+
+      _window = fun.()
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :next
+    end
+
+    test "p at the first active post requests direction: :previous and lands on previous last post" do
+      context = bounded_post_reader_context()
+
+      state =
+        bounded_state(
+          posts: bounded_posts(51..100),
+          selected_post_index: 0,
+          window_first_message_number: 51,
+          window_last_message_number: 100,
+          window_has_previous?: true
+        )
+
+      assert {%State{} = loading,
+              [%Effect{type: :task, payload: %{op: :load_posts_window, fun: fun}}]} =
+               PostReader.update({:key, %{key: :char, char: "p"}}, state, context)
+
+      window = fun.()
+
+      assert_receive {:reader_window_requested, "t-1000",
+                      [direction: :previous, before_message_number: 51, limit: 50]}
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 loading,
+                 context
+               )
+
+      assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p50"
+
+      assert loaded.pending_read_positions["t-1000"] == %{
+               last_read_post_id: "p50",
+               last_read_message_number: 50
+             }
+    end
+
+    test "page_up at the first active post also requests direction: :previous" do
+      context = bounded_post_reader_context()
+
+      state =
+        bounded_state(
+          posts: bounded_posts(51..100),
+          selected_post_index: 0,
+          window_first_message_number: 51,
+          window_last_message_number: 100,
+          window_has_previous?: true
+        )
+
+      assert {%State{}, [%Effect{type: :task, payload: %{fun: fun}}]} =
+               PostReader.update({:key, %{key: :page_up}}, state, context)
+
+      _window = fun.()
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :previous
+    end
+
+    test "load_intent: :jump_last requests direction: :last and selects newest post" do
+      context = bounded_post_reader_context()
+      state = State.new(thread_id: "t-1000", load_intent: :jump_last, reader_window_limit: 50)
+
+      assert {%State{} = loading, [%Effect{type: :task, payload: %{fun: fun}}]} =
+               PostReader.update(:load, state, context)
+
+      window = fun.()
+      assert_receive {:reader_window_requested, "t-1000", [direction: :last, limit: 50]}
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 loading,
+                 context
+               )
+
+      assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p1000"
+    end
+
+    test "matching thread_activity uses list_reader_window/2 and preserves selected post id" do
+      context = bounded_post_reader_context()
+
+      state =
+        bounded_state(
+          posts: bounded_posts(451..500),
+          selected_post_index: 24,
+          window_first_message_number: 451,
+          window_last_message_number: 500,
+          window_has_previous?: true,
+          window_has_next?: true
+        )
+
+      selected_before = Enum.at(state.posts, state.selected_post_index)
+
+      assert {%State{} = loading, [%Effect{type: :task, payload: %{fun: fun}}]} =
+               PostReader.update({:thread_activity, "t-1000", :new_post}, state, context)
+
+      window = fun.()
+
+      assert_receive {:reader_window_requested, "t-1000", opts}
+      assert Keyword.get(opts, :direction) == :around
+      assert Keyword.get(opts, :around_message_number) == selected_before.message_number
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 loading,
+                 context
+               )
+
+      assert Enum.at(loaded.posts, loaded.selected_post_index).id == selected_before.id
+    end
+  end
+
   test "render/1 with posts loaded does not crash", %{state: state} do
     {s, _} = PostReader.load_posts(state, "t1")
     assert _ = render_screen(s)
@@ -824,6 +1078,41 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # --- Helper for Phase 2 integration tests (simpler state shape) ---
 
   defp theme, do: Foglet.TUI.Theme.default()
+
+  defp bounded_post_reader_context do
+    Context.new(
+      current_user: %{id: "u1", handle: "alice"},
+      terminal_size: {80, 24},
+      route: :post_reader,
+      route_params: %{thread_id: "t-1000"},
+      session_context: %{domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}}
+    )
+  end
+
+  defp bounded_state(opts) do
+    State.new(
+      Keyword.merge(
+        [
+          thread_id: "t-1000",
+          reader_window_limit: 50,
+          status: :loaded,
+          window_first_message_number: 1,
+          window_last_message_number: 50
+        ],
+        opts
+      )
+    )
+  end
+
+  defp bounded_posts(range) do
+    Enum.map(range, fn message_number ->
+      p2_post(
+        id: "p#{message_number}",
+        body: "body #{message_number}",
+        message_number: message_number
+      )
+    end)
+  end
 
   defp post_reader_context do
     Context.new(
