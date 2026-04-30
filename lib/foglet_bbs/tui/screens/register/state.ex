@@ -68,20 +68,20 @@ defmodule Foglet.TUI.Screens.Register.State do
   end
 
   @doc "Reads the register screen-state map from the app state."
-  @spec get(map()) :: map() | nil
+  @spec get(Foglet.TUI.App.t()) :: map() | nil
   def get(state) do
     Map.get(state.screen_state || %{}, :register)
   end
 
   @doc "Writes an updated register screen-state map into the app state."
-  @spec put(map(), map()) :: map()
+  @spec put(Foglet.TUI.App.t(), map()) :: Foglet.TUI.App.t()
   def put(state, reg) do
     new_screen_state = Map.put(state.screen_state || %{}, :register, reg)
     %{state | screen_state: new_screen_state}
   end
 
   @doc "Removes the register screen state from the app state."
-  @spec clear(map()) :: map()
+  @spec clear(Foglet.TUI.App.t()) :: Foglet.TUI.App.t()
   def clear(state) do
     new_screen_state = Map.delete(state.screen_state || %{}, :register)
     %{state | screen_state: new_screen_state}
@@ -94,8 +94,20 @@ defmodule Foglet.TUI.Screens.Register.State do
     Enum.at(@focus_cycle, rem(idx + 1, length(@focus_cycle)))
   end
 
+  @typedoc "Atoms for the register screen's focus cycle (incl. invite-code step)."
+  @type focused_field ::
+          :invite_code | :handle | :email | :password | :confirm_password
+
+  @typedoc "Keys into the register screen-state map for each input widget."
+  @type input_field ::
+          :invite_code_input
+          | :handle_input
+          | :email_input
+          | :password_input
+          | :confirm_input
+
   @doc "Returns the input map key for a given focused field atom."
-  @spec input_key(atom()) :: atom()
+  @spec input_key(focused_field()) :: input_field()
   def input_key(:invite_code), do: :invite_code_input
   def input_key(:handle), do: :handle_input
   def input_key(:email), do: :email_input

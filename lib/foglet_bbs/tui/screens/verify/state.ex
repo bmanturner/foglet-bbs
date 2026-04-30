@@ -20,30 +20,37 @@ defmodule Foglet.TUI.Screens.Verify.State do
   The two cooldowns are independent (VERIFY-02 D-10).
   """
 
+  @type t :: %{
+          buffer: String.t(),
+          attempts: non_neg_integer(),
+          cooldown_until: DateTime.t() | nil,
+          resend_cooldown_until: DateTime.t() | nil
+        }
+
   @doc "Returns the default (empty) verify screen state."
-  @spec default() :: map()
+  @spec default() :: t()
   def default do
     %{buffer: "", attempts: 0, cooldown_until: nil, resend_cooldown_until: nil}
   end
 
   @doc "Reads the verify screen-state map from the app state."
-  @spec get(map()) :: map()
+  @spec get(Foglet.TUI.App.t()) :: t()
   def get(state), do: Map.get(state.screen_state || %{}, :verify) || default()
 
   @doc "Writes an updated verify screen-state map into the app state."
-  @spec put(map(), map()) :: map()
+  @spec put(Foglet.TUI.App.t(), t()) :: Foglet.TUI.App.t()
   def put(state, vs) do
     %{state | screen_state: Map.put(state.screen_state || %{}, :verify, vs)}
   end
 
   @doc "Removes the verify screen state from the app state."
-  @spec clear(map()) :: map()
+  @spec clear(Foglet.TUI.App.t()) :: Foglet.TUI.App.t()
   def clear(state) do
     %{state | screen_state: Map.delete(state.screen_state || %{}, :verify)}
   end
 
   @doc "Returns `true` if the invalid-attempts cooldown is currently active."
-  @spec cooldown?(map()) :: boolean()
+  @spec cooldown?(t()) :: boolean()
   def cooldown?(%{cooldown_until: nil}), do: false
 
   def cooldown?(%{cooldown_until: t}) do
@@ -51,7 +58,7 @@ defmodule Foglet.TUI.Screens.Verify.State do
   end
 
   @doc "Returns `true` if the resend cooldown is currently active."
-  @spec resend_cooldown?(map()) :: boolean()
+  @spec resend_cooldown?(t()) :: boolean()
   def resend_cooldown?(%{resend_cooldown_until: nil}), do: false
 
   def resend_cooldown?(%{resend_cooldown_until: t}) do

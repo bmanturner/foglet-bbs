@@ -23,11 +23,11 @@ defmodule Foglet.TUI.SizeGate do
   @min_rows 22
 
   @doc "Returns the code-level minimum columns. 64."
-  @spec min_cols() :: pos_integer()
+  @spec min_cols() :: 64
   def min_cols, do: @min_cols
 
   @doc "Returns the code-level minimum rows. 22."
-  @spec min_rows() :: pos_integer()
+  @spec min_rows() :: 22
   def min_rows, do: @min_rows
 
   @doc """
