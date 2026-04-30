@@ -108,13 +108,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     }
   ]
   @render_forbidden_runtime_call_patterns [
+    {"SiteForm.init", ~r/\bSiteForm\.init\(/},
     {"Effect.task", ~r/\bEffect\.task\(/},
     {"Effect.navigate", ~r/\bEffect\.navigate\(/},
     {"Repo", ~r/\bRepo\./},
     {"Config.get", ~r/\bConfig\.get\(/},
     {"Config.get!", ~r/\bConfig\.get!\(/},
     {"Config.fetch", ~r/\bConfig\.fetch\(/},
-    {"PubSub", ~r/\bPubSub\./},
+    {"PubSub", ~r/\bPubSub\b/},
     {"Config.put", ~r/\bConfig\.put!?\(/},
     {"start_supervised", ~r/\bstart_supervised!?\(/}
   ]
