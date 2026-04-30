@@ -387,12 +387,25 @@ defmodule Foglet.TUI.Screens.PostReader do
       if is_integer(read_pointer_msg_no) do
         index_of_message_number(posts, read_pointer_msg_no) ||
           index_of_first_message_number_at_or_after(posts, read_pointer_msg_no) ||
-          selected_index_after_window_load(ss, window, posts)
+          if pointer_past_window_tail?(window, read_pointer_msg_no),
+            do: max(length(posts) - 1, 0),
+            else: selected_index_after_window_load(ss, window, posts)
       else
         selected_index_after_window_load(ss, window, posts)
       end
 
     %{ss | selected_post_index: selected_index}
+  end
+
+  # IN-02: when the read pointer is greater than every loaded message_number,
+  # prefer the last loaded index over the generic-fallback's index 0 — the
+  # user's pointer is past the loaded window, so landing them at the start
+  # of an already-read window is worse than landing at its tail.
+  defp pointer_past_window_tail?(window, pointer) do
+    case Map.get(window, :last_message_number) do
+      last when is_integer(last) -> pointer > last
+      _ -> false
+    end
   end
 
   # WR-04: locate the index of the first post whose `message_number` is
