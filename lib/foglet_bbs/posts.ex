@@ -10,6 +10,8 @@ defmodule Foglet.Posts do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
   alias Foglet.Accounts.User
   alias Foglet.Boards
   alias Foglet.Boards.Board
@@ -199,7 +201,17 @@ defmodule Foglet.Posts do
      next_extra != []}
   end
 
-  defp reader_rows_around(thread_id, _around_message_number, limit) do
+  # WR-06: defensive fallback for non-int / non-nil `around_message_number`.
+  # Callers always pass `int | nil`; if a buggy caller passes anything else
+  # (e.g. a stringified number), surface it via a Logger.warning rather than
+  # silently coercing to the initial-window query.
+  defp reader_rows_around(thread_id, around_message_number, limit) do
+    Logger.warning(
+      "Foglet.Posts.reader_rows_around/3 received non-integer around_message_number; " <>
+        "coercing to initial window. thread_id=#{inspect(thread_id)} " <>
+        "around_message_number=#{inspect(around_message_number)}"
+    )
+
     reader_rows_around(thread_id, nil, limit)
   end
 
