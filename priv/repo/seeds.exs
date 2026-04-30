@@ -13,28 +13,32 @@ alias Foglet.Accounts.User
 alias FogletBbs.Repo
 
 # --- Tombstone user ---
-tombstone_id = Accounts.tombstone_user_id()
-now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+# Skip in :test — tests insert their own tombstone via fixtures, and a
+# pre-seeded row would collide on the fixed UUID (FOG-61).
+if Mix.env() != :test do
+  tombstone_id = Accounts.tombstone_user_id()
+  now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 
-case Repo.get(User, tombstone_id) do
-  nil ->
-    Repo.insert!(
-      %User{
-        id: tombstone_id,
-        handle: "[deleted]",
-        email: "tombstone@localhost",
-        password_hash: "invalid-tombstone",
-        confirmed_at: now,
-        role: :user,
-        show_in_last_callers: false
-      },
-      on_conflict: :nothing
-    )
+  case Repo.get(User, tombstone_id) do
+    nil ->
+      Repo.insert!(
+        %User{
+          id: tombstone_id,
+          handle: "[deleted]",
+          email: "tombstone@localhost",
+          password_hash: "invalid-tombstone",
+          confirmed_at: now,
+          role: :user,
+          show_in_last_callers: false
+        },
+        on_conflict: :nothing
+      )
 
-    IO.puts("  [seed] inserted tombstone user #{tombstone_id}")
+      IO.puts("  [seed] inserted tombstone user #{tombstone_id}")
 
-  _existing ->
-    IO.puts("  [seed] tombstone user already present")
+    _existing ->
+      IO.puts("  [seed] tombstone user already present")
+  end
 end
 
 # --- Default configuration entries ---
@@ -48,9 +52,9 @@ IO.puts("Seeds complete.")
 #
 # These exist for local UAT and bootstrapping; they are NOT prerequisites for
 # the application or its test suite. Skipping them under `MIX_ENV=test` keeps
-# the test database free of bleed-through fixtures (FOG-55) — tests that need
-# users/boards/posts must create them via fixtures so behavior under "no
-# sysops exist" / "no boards exist" is honestly exercisable.
+# the test database free of bleed-through fixtures (FOG-55, FOG-61) — tests
+# that need users/boards/posts must create them via fixtures so behavior under
+# "no sysops exist" / "no boards exist" is honestly exercisable.
 if Mix.env() == :test do
   IO.puts("  [seed] skipping dev-only fixtures (MIX_ENV=test)")
 else
