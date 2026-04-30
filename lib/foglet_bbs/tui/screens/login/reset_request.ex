@@ -131,6 +131,27 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
 
           "no_email" ->
             {:no_email_operator_assisted, verification_mod.active_sysop_contact_emails()}
+
+          # WR-03 (iteration 6): if `Foglet.Config.delivery_mode/0` ever
+          # returns an unexpected string (typo'd config value, future
+          # mode, schema migration that admits a new variant), the case
+          # would otherwise raise `CaseClauseError`. That propagates as
+          # a `{:task_error, :reset_request, …}` and is surfaced by
+          # `handle_task_result({:error, _reason}, …)` as the
+          # `@reset_invalid_email_message` modal -- telling the user
+          # their email is malformed when the actual fault is server
+          # misconfiguration. Log a breadcrumb and fall back to the
+          # safer no-email operator-assisted path so the request is not
+          # silently swallowed.
+          other ->
+            require Logger
+
+            Logger.warning(
+              "[Login.ResetRequest] unknown delivery_mode #{inspect(other)}; " <>
+                "treating as no_email"
+            )
+
+            {:no_email_operator_assisted, verification_mod.active_sysop_contact_emails()}
         end
       end)
 
