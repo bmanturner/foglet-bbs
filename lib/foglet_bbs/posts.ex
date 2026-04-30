@@ -129,7 +129,17 @@ defmodule Foglet.Posts do
         # by definition nothing to page forward into either — pass `false`
         # rather than letting `reader_has_next?` infer `true` from the
         # mere presence of an integer cursor.
-        has_next? = posts != [] and reader_has_next?(thread_id, posts, cursor)
+        #
+        # IN-04: mirror BL-01 for the nil-cursor case. Without a positive
+        # cursor we cannot meaningfully report `has_next?`: there is no
+        # "current window" to page forward from. The `:previous` direction
+        # with `before_message_number: nil` collapses to "the tail of the
+        # thread"; reporting `has_next?: true` for that result misleads
+        # callers that map it to a "Next" affordance.
+        has_next? =
+          posts != [] and is_integer(cursor) and cursor > 0 and
+            reader_has_next?(thread_id, posts, cursor)
+
         reader_window(posts, direction, extra != [], has_next?)
 
       :last ->
