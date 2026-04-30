@@ -237,7 +237,13 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   end
 
   # --- App-state wrap/unwrap (duplicated from Login per Phase 47 plan 05 D-14) ---
-
+  # TODO(WR-01): five sibling modules (login/render.ex, login/login_form.ex,
+  # register.ex, verify.ex, main_menu.ex) ship near-verbatim copies of this
+  # helper. Drift has already started — `:session_pid` is missing from
+  # login/reset_consume's variant — and adding any new App-state field
+  # (`:modal`, `:flash`, …) requires touching all five. Extract to a shared
+  # `Foglet.TUI.Screens.Login.AppStateBridge` (or similar) once Plan 05 D-14
+  # consolidation lands.
   defp app_state_from_local(local_state, %Context{} = context) do
     %{
       current_screen: :login,

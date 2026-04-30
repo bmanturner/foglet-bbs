@@ -45,6 +45,9 @@ defmodule Foglet.TUI.Screens.Login.Render do
     )
   end
 
+  # TODO(WR-01): see login_form.ex — this is one of five sibling copies
+  # of the App-state bridge. Extract to a shared module once Plan 05
+  # D-14 consolidation lands.
   defp app_state_from_local(local_state, %Context{} = context) do
     %{
       current_screen: :login,

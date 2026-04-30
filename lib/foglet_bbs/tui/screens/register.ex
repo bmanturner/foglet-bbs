@@ -307,6 +307,9 @@ defmodule Foglet.TUI.Screens.Register do
     RegisterState.for_mode(registration_mode(state))
   end
 
+  # TODO(WR-01): see login/login_form.ex — this is one of five sibling
+  # copies of the App-state bridge. Extract to a shared module once
+  # Plan 05 D-14 consolidation lands.
   defp app_state_from_local(local_state, %Context{} = context) do
     %{
       current_screen: :register,
