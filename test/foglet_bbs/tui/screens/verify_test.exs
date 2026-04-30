@@ -325,9 +325,11 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       {state, effects} =
         Verify.update({:task_result, :verify_resend, {:ok, result}}, state, context(user))
 
-      # On failure, drop the optimistic cooldown so the user is not locked
-      # out waiting for a request that never landed.
-      assert state.cooldown_until == future
+      # On failure, drop the optimistic resend cooldown so the user is not
+      # locked out waiting for a request that never landed. The pre-existing
+      # invalid-attempts `cooldown_until` is cleared by `after_resend/2` at
+      # dispatch (FOG-64), so it stays nil here regardless of outcome.
+      assert state.cooldown_until == nil
       assert state.resend_cooldown_until == nil
       assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
       assert modal.type == :error
