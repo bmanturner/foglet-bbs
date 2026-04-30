@@ -28,6 +28,11 @@ defmodule Foglet.Threads do
   # drift. Query bodies reference `@page_size` only — never the literal.
   @page_size 50
 
+  # WR-07: hard ceiling on `:limit` — even an explicitly-passed positive
+  # integer is clamped to this maximum so a future caller cannot
+  # re-introduce the unbounded scan that Phase 47 R3/R4 removed.
+  @max_page_size 500
+
   @doc "Default page size for `list_threads/{1,2,3}` (Phase 47 — R4)."
   # No @spec: the success typing is the literal `50`; widening to
   # `pos_integer()` triggers Dialyzer :contract_supertype.
@@ -116,8 +121,10 @@ defmodule Foglet.Threads do
   ## Options
 
     * `:limit` — positive integer overriding the default `@page_size` of
-      `#{@page_size}`. Non-positive or non-integer values fall back to
-      `@page_size` (defensive default — D-06).
+      `#{@page_size}`. Clamped to a hard ceiling of `@max_page_size`
+      (`#{@max_page_size}`) so an erroneous caller cannot re-introduce
+      an unbounded scan (WR-07). Non-positive or non-integer values fall
+      back to `@page_size` (defensive default — D-06).
 
   ### Reserved keys (not yet implemented — D-06)
 
@@ -204,7 +211,9 @@ defmodule Foglet.Threads do
     QueryHelpers.not_deleted(query)
   end
 
-  defp normalize_limit(limit) when is_integer(limit) and limit > 0, do: limit
+  defp normalize_limit(limit) when is_integer(limit) and limit > 0,
+    do: min(limit, @max_page_size)
+
   defp normalize_limit(_limit), do: @page_size
 
   defp preload_created_by(rows) do
