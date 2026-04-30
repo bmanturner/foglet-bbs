@@ -24,6 +24,23 @@ defmodule Foglet.Boards.Server do
   and resumes from `MAX + 1`. This makes the Server self-healing even if
   the persisted `boards.next_message_number` column is out of sync after
   a mid-flight crash.
+
+  ## Transaction strategy
+
+  This module is the intentional, locked deviation from `Repo.transact/1`,
+  the project-wide convention for multi-row writes. The two write paths,
+  `run_post_insert_multi/5` and `run_thread_create_multi/4`, end with
+  `|> Repo.transaction()` directly so the success result preserves the
+  `Ecto.Multi` step map.
+
+  The Multi step labels `:post` and `:thread_update` are load-bearing.
+  The `handle_call` clauses at lines 86-93 and 102-108 pattern-match on
+  `{:ok, %{post: post}}` and `{:ok, %{thread_update: thread, post: post}}`
+  to extract the success-side values; renaming or restructuring these
+  labels would silently break message-number allocation. Converting to
+  `Repo.transact/1` would require manually rebuilding the result map at
+  every call site without changing observed behavior, and the `GenServer`
+  reply contract is locked, so this divergence stays.
   """
 
   use GenServer
