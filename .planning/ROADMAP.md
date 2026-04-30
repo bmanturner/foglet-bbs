@@ -56,7 +56,7 @@ Cross-cutting constraints:
   4. Maintainer can find generic effect interpretation in an effect helper while domain mutations remain in `Foglet.*` contexts.
 **Plans**: 4 plans
 - [x] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
-- [ ] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
+- [x] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
 - [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
 - [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
 **UI hint**: yes
@@ -71,7 +71,7 @@ Cross-cutting constraints:
   3. Maintainer can identify each decomposed screen's local state owner and render entry point from module names and documentation.
   4. Existing TUI behavior remains stable through reducer tests and render smoke verification after the splits.
 **Plans**: 4 plans
-- [ ] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
+- [x] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
 - [ ] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
 - [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
 - [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
@@ -181,4 +181,4 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 | 43. Large Screen Decomposition | 6/6 | Complete   | 2026-04-30 |
 | 44. PostReader And Content Query Hardening | 4/4 | Complete   | 2026-04-30 |
 | 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
-| 46. Domain Cleanup And Final Quality Gate | 1/4 | In Progress|  |
+| 46. Domain Cleanup And Final Quality Gate | 2/4 | In Progress|  |
