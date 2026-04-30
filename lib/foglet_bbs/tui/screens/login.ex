@@ -19,10 +19,10 @@ defmodule Foglet.TUI.Screens.Login do
 
   State shape is owned by `Foglet.TUI.Screens.Login.State`.
 
-  ## Config.get Safety (D-07)
+  ## Config snapshotting (D-07)
 
-  Foglet.Config.get/1 calls in registration_mode/1 are safe for render paths —
-  Foglet.Config is ETS read-through cached. No render-path change required.
+  Registration mode is read by reducer helpers or from session context before
+  render. Sibling render modules consume only already-loaded state/context.
 
   TextInput structs are created lazily in enter_login_form/1 each time the
   user presses L — this keeps per-session memory footprint small.

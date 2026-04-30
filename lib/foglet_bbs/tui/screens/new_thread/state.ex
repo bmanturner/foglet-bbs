@@ -13,6 +13,7 @@ defmodule Foglet.TUI.Screens.NewThread.State do
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Raxol.UI.Components.Input.MultiLineInput
 
+  @default_max_post_length 8192
   @default_max_thread_title_length 60
 
   @type load_status :: :idle | :loading | :loaded | :empty | {:error, term()}
@@ -29,6 +30,8 @@ defmodule Foglet.TUI.Screens.NewThread.State do
           focused: :title | :body,
           mode: :edit | :preview,
           error: String.t() | nil,
+          max_post_length: pos_integer(),
+          max_thread_title_length: pos_integer(),
           origin: atom(),
           load_status: load_status(),
           submission_status: submission_status(),
@@ -45,6 +48,8 @@ defmodule Foglet.TUI.Screens.NewThread.State do
             focused: :title,
             mode: :edit,
             error: nil,
+            max_post_length: @default_max_post_length,
+            max_thread_title_length: @default_max_thread_title_length,
             origin: :main_menu,
             load_status: :idle,
             submission_status: :idle,
@@ -57,7 +62,12 @@ defmodule Foglet.TUI.Screens.NewThread.State do
   def new(opts \\ []) do
     width = Keyword.get(opts, :width, 80)
     height = Keyword.get(opts, :height, 10)
-    max_title_length = Keyword.get(opts, :max_title_length, @default_max_thread_title_length)
+
+    max_post_length =
+      positive_integer(Keyword.get(opts, :max_post_length), @default_max_post_length)
+
+    max_title_length =
+      positive_integer(Keyword.get(opts, :max_title_length), @default_max_thread_title_length)
 
     {:ok, body_input_state} =
       MultiLineInput.init(%{
@@ -85,6 +95,8 @@ defmodule Foglet.TUI.Screens.NewThread.State do
       focused: Keyword.get(opts, :focused, :title),
       mode: Keyword.get(opts, :mode, :edit),
       error: Keyword.get(opts, :error, nil),
+      max_post_length: max_post_length,
+      max_thread_title_length: max_title_length,
       origin: Keyword.get(opts, :origin, :main_menu),
       load_status: Keyword.get(opts, :load_status, :idle),
       submission_status: Keyword.get(opts, :submission_status, :idle),
@@ -98,6 +110,16 @@ defmodule Foglet.TUI.Screens.NewThread.State do
     origin = Map.get(params, :origin) || Map.get(params, "origin") || :main_menu
     board = Map.get(params, :board) || Map.get(params, "board")
     {w, _h} = context.terminal_size || {80, 24}
+    session_context = context.session_context || %{}
+
+    max_post_length =
+      positive_integer(Map.get(session_context, :max_post_length), @default_max_post_length)
+
+    max_title_length =
+      positive_integer(
+        Map.get(session_context, :max_thread_title_length),
+        @default_max_thread_title_length
+      )
 
     board_id =
       Map.get(params, :board_id) || Map.get(params, "board_id") || board_id_from_board(board)
@@ -111,13 +133,26 @@ defmodule Foglet.TUI.Screens.NewThread.State do
         board: board,
         boards: [board],
         selected_board_index: 0,
+        max_post_length: max_post_length,
+        max_title_length: max_title_length,
         origin: origin,
         load_status: :loaded
       )
     else
-      new(width: w, step: :board, boards: nil, origin: origin, load_status: :idle)
+      new(
+        width: w,
+        step: :board,
+        boards: nil,
+        max_post_length: max_post_length,
+        max_title_length: max_title_length,
+        origin: origin,
+        load_status: :idle
+      )
     end
   end
+
+  defp positive_integer(value, _default) when is_integer(value) and value > 0, do: value
+  defp positive_integer(_value, default), do: default
 
   defp board_id_from_board(%{} = board), do: Map.get(board, :id) || Map.get(board, "id")
   defp board_id_from_board(_board), do: nil

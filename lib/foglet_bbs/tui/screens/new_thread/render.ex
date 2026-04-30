@@ -3,7 +3,6 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   Pure render entry point for the NewThread screen.
   """
 
-  alias Foglet.Config
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.NewThread.State
   alias Foglet.TUI.TextWidth
@@ -62,7 +61,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   defp render_compose_step(state, ss) do
     theme = Theme.from_state(state)
     {width, height} = state.terminal_size || @default_terminal_size
-    cap = max_thread_title_length()
+    cap = max_thread_title_length(ss)
     title_value = ss.title_input_state.raxol_state.value
     body_value = ss.body_input_state.value
 
@@ -75,7 +74,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
         body: render_body_section(state, ss, theme),
         budgets: [
           %{label: "Title", count: String.length(title_value), limit: cap},
-          %{label: "Body", count: String.length(body_value), limit: max_body_length(state)}
+          %{label: "Body", count: String.length(body_value), limit: max_body_length(ss, state)}
         ],
         error: ss.error,
         width: max(width - 4, 20),
@@ -181,33 +180,26 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
     }
   end
 
-  defp max_thread_title_length do
-    case Config.get!("max_thread_title_length") do
-      n when is_integer(n) and n > 0 -> n
-      _ -> @default_max_thread_title_length
-    end
-  rescue
-    _ -> @default_max_thread_title_length
-  end
+  defp max_thread_title_length(%State{max_thread_title_length: n})
+       when is_integer(n) and n > 0,
+       do: n
 
-  defp max_body_length(state) do
+  defp max_thread_title_length(_state), do: @default_max_thread_title_length
+
+  defp max_body_length(ss, state) do
     sc = Map.get(state, :session_context) || %{}
 
     case Map.get(sc, :max_post_length) do
       n when is_integer(n) and n > 0 ->
         n
 
-      _ ->
-        safe_config_get("max_post_length", @default_max_post_length)
+      _other ->
+        max_body_length_from_state(ss)
     end
   end
 
-  defp safe_config_get(key, default) do
-    case Config.get!(key) do
-      n when is_integer(n) and n > 0 -> n
-      _ -> default
-    end
-  rescue
-    _ -> default
-  end
+  defp max_body_length_from_state(%State{max_post_length: n}) when is_integer(n) and n > 0,
+    do: n
+
+  defp max_body_length_from_state(_ss), do: @default_max_post_length
 end

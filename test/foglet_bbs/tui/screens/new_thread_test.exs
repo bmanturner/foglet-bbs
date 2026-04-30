@@ -253,6 +253,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert is_struct(ss.body_input_state, MultiLineInput)
     assert ss.focused == :title
     assert ss.error == nil
+    assert ss.max_post_length == 8192
+    assert ss.max_thread_title_length == 60
     assert ss.origin == :main_menu
     assert ss.load_status == :idle
     assert ss.submission_status == :idle
@@ -277,6 +279,20 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
              load_status: :idle,
              submission_status: :idle,
              submit_result: nil
+           } = NewThread.State.from_context(ctx)
+  end
+
+  test "NewThread.State.from_context/1 snapshots compose limits from session context" do
+    ctx =
+      Context.new(
+        route: :new_thread,
+        route_params: %{},
+        session_context: %{max_post_length: 1234, max_thread_title_length: 12}
+      )
+
+    assert %State{
+             max_post_length: 1234,
+             max_thread_title_length: 12
            } = NewThread.State.from_context(ctx)
   end
 

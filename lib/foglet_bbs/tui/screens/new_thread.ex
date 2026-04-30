@@ -27,10 +27,11 @@ defmodule Foglet.TUI.Screens.NewThread do
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @default_max_post_length 8192
+  @default_max_thread_title_length 60
 
   @impl true
   @spec init(Context.t()) :: State.t()
-  def init(%Context{} = context), do: State.from_context(context)
+  def init(%Context{} = context), do: State.from_context(context_with_config_limits(context))
 
   @impl true
   @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
@@ -209,7 +210,7 @@ defmodule Foglet.TUI.Screens.NewThread do
     title = String.trim(state.title_input_state.raxol_state.value)
     body = state.body_input_state.value
     board = state.board
-    max = max_body_length(context)
+    max = max_body_length(state, context)
     user_id = context.current_user && context.current_user.id
 
     cond do
@@ -321,17 +322,52 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(reason), do: inspect(reason)
 
-  defp max_body_length(state) do
-    sc = Map.get(state, :session_context) || %{}
+  defp context_with_config_limits(%Context{} = context) do
+    session_context =
+      context.session_context
+      |> normalize_session_context()
+      |> put_new_positive(
+        :max_post_length,
+        safe_config_get("max_post_length", @default_max_post_length)
+      )
+      |> put_new_positive(
+        :max_thread_title_length,
+        safe_config_get("max_thread_title_length", @default_max_thread_title_length)
+      )
+
+    %{context | session_context: session_context}
+  end
+
+  defp normalize_session_context(%_{} = value), do: Map.from_struct(value)
+  defp normalize_session_context(value) when is_map(value), do: value
+  defp normalize_session_context(_value), do: %{}
+
+  defp put_new_positive(map, key, value) when is_integer(value) and value > 0 do
+    case Map.get(map, key) do
+      n when is_integer(n) and n > 0 -> map
+      _other -> Map.put(map, key, value)
+    end
+  end
+
+  defp put_new_positive(map, _key, _value), do: map
+
+  defp max_body_length(state, context) do
+    sc = Map.get(context, :session_context) || %{}
 
     case Map.get(sc, :max_post_length) do
       n when is_integer(n) and n > 0 ->
         n
 
       _ ->
-        safe_config_get("max_post_length", @default_max_post_length)
+        max_body_length_from_state(state)
     end
   end
+
+  defp max_body_length_from_state(%State{max_post_length: n}) when is_integer(n) and n > 0,
+    do: n
+
+  defp max_body_length_from_state(_state),
+    do: safe_config_get("max_post_length", @default_max_post_length)
 
   defp safe_config_get(key, default) do
     case Config.get!(key) do

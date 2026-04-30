@@ -3,7 +3,6 @@ defmodule Foglet.TUI.Screens.Login.Render do
   Pure render entry point for the Login screen.
   """
 
-  alias Foglet.Config
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.TextWidth
@@ -79,10 +78,11 @@ defmodule Foglet.TUI.Screens.Login.Render do
   defp keys_for(_, mode), do: menu_commands(mode)
 
   defp registration_mode(state) do
-    case Map.get(session_ctx(state), :registration_mode) do
-      nil -> Config.get("registration_mode", "open")
-      mode -> mode
-    end
+    login_ss = LoginState.get(state)
+
+    Map.get(login_ss, :registration_mode) ||
+      Map.get(session_ctx(state), :registration_mode) ||
+      "open"
   end
 
   defp session_ctx(state), do: Map.get(state, :session_context) || %{}

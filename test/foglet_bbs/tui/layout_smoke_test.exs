@@ -107,13 +107,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       render_arity: 1
     }
   ]
-  @render_forbidden_side_effect_strings [
-    "Effect.task",
-    "Effect.navigate",
-    "Repo.",
-    "PubSub",
-    "Config.put",
-    "start_supervised"
+  @render_forbidden_runtime_call_patterns [
+    {"Effect.task", ~r/\bEffect\.task\(/},
+    {"Effect.navigate", ~r/\bEffect\.navigate\(/},
+    {"Repo", ~r/\bRepo\./},
+    {"Config.get", ~r/\bConfig\.get\(/},
+    {"Config.get!", ~r/\bConfig\.get!\(/},
+    {"Config.fetch", ~r/\bConfig\.fetch\(/},
+    {"PubSub", ~r/\bPubSub\./},
+    {"Config.put", ~r/\bConfig\.put!?\(/},
+    {"start_supervised", ~r/\bstart_supervised!?\(/}
   ]
 
   # Seed the ETS config cache so render paths that call Config.get/2
@@ -288,13 +291,13 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end
     end
 
-    test "render entry point files do not contain forbidden side-effect calls" do
+    test "render entry point files do not contain forbidden runtime calls" do
       for contract <- @large_screen_contract do
         source = contract.render_file |> repo_path() |> File.read!()
 
-        for forbidden <- @render_forbidden_side_effect_strings do
-          refute source =~ forbidden,
-                 "#{contract.render_file} must not contain #{inspect(forbidden)}"
+        for {label, pattern} <- @render_forbidden_runtime_call_patterns do
+          refute Regex.match?(pattern, source),
+                 "#{contract.render_file} must not contain #{label} runtime calls"
         end
       end
     end
