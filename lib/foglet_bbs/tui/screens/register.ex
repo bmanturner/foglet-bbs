@@ -411,8 +411,8 @@ defmodule Foglet.TUI.Screens.Register do
   defp handle_register_result(state, {:ok, :pending_approval, _user}) do
     modal = %Foglet.TUI.Modal{
       type: :info,
-      title: "Account Pending",
-      message: "Your account has been created and is pending sysop approval."
+      title: "Account waiting for approval",
+      message: pending_approval_message(Config.delivery_mode())
     }
 
     {RegisterState.put(state, RegisterState.default()),
@@ -508,4 +508,24 @@ defmodule Foglet.TUI.Screens.Register do
   defp default_domain_module(:accounts), do: Accounts
   defp default_domain_module(:verification), do: Verification
   defp default_domain_module(:invites), do: Invites
+
+  defp pending_approval_message("email") do
+    "Your account has been created and is pending sysop approval. " <>
+      "You'll receive an email when a sysop reviews your request."
+  end
+
+  defp pending_approval_message("no_email") do
+    "Your account has been created and is pending sysop approval. " <>
+      "A sysop will review your request and contact you directly."
+  end
+
+  defp pending_approval_message(other) do
+    require Logger
+
+    Logger.warning(
+      "[Register] unknown delivery_mode #{inspect(other)}; using no_email pending-approval copy"
+    )
+
+    pending_approval_message("no_email")
+  end
 end

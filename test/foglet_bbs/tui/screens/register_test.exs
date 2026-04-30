@@ -393,8 +393,9 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert user.handle == "invited"
     end
 
-    test "sysop-approved registration requests pending-approval termination" do
+    test "sysop-approved registration requests pending-approval termination (email mode)" do
       Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "email")
 
       state =
         combined_state(
@@ -421,12 +422,49 @@ defmodule Foglet.TUI.Screens.RegisterTest do
         )
 
       assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
-      assert modal.message == "Your account has been created and is pending sysop approval."
+      assert modal.title == "Account waiting for approval"
+      assert modal.message =~ "pending sysop approval"
+      assert modal.message =~ "email"
 
       assert %Effect{
                type: :session,
                payload: {:terminate_after_modal, :pending_approval}
              } = session_effect(effects)
+    end
+
+    test "sysop-approved pending-approval modal omits email under no_email delivery" do
+      Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "no_email")
+
+      state =
+        combined_state(
+          [
+            handle: "pendingnoemail",
+            email: "pendingnoemail@example.test",
+            password: "sekret01",
+            confirm: "sekret01"
+          ],
+          :confirm_password,
+          "sysop_approved"
+        )
+
+      {_submitting, effects} =
+        Register.update({:key, %{key: :enter}}, state, context("sysop_approved"))
+
+      result = run_register_task(task_effect(effects, :register))
+
+      {_local_state, effects} =
+        Register.update(
+          {:task_result, :register, {:ok, result}},
+          state,
+          context("sysop_approved")
+        )
+
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.title == "Account waiting for approval"
+      assert modal.message =~ "pending sysop approval"
+      assert modal.message =~ "contact you"
+      refute modal.message =~ ~r/email/i
     end
 
     test "registration validation failures return to the first field with changeset text" do
