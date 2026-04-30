@@ -464,9 +464,7 @@ defmodule Foglet.SSH.CLIHandler do
   # Resolve the Raxol dispatcher pid from the Lifecycle once at PTY start.
   # Returns nil if the Lifecycle is unreachable (already exited) so dispatching
   # before the EXIT message is observed becomes a no-op.
-  defp resolve_dispatcher(nil), do: nil
-
-  defp resolve_dispatcher(lifecycle_pid) do
+  defp resolve_dispatcher(lifecycle_pid) when is_pid(lifecycle_pid) do
     %{dispatcher_pid: pid} = GenServer.call(lifecycle_pid, :get_full_state)
     pid
   catch
@@ -551,9 +549,10 @@ defmodule Foglet.SSH.CLIHandler do
       maybe_close_channel(state)
     end
 
-    if state.counter_counted? do
-      _ = decrement_connection_count()
-    end
+    _ =
+      if state.counter_counted? do
+        _ = decrement_connection_count()
+      end
 
     %__MODULE__{state | cleanup_done?: true, counter_counted?: false}
   end

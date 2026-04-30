@@ -10,6 +10,8 @@ defmodule Foglet.Posts.Post do
   """
   use Foglet.Schema
 
+  @type t :: %__MODULE__{}
+
   schema "posts" do
     field :message_number, :integer
     field :body, :string

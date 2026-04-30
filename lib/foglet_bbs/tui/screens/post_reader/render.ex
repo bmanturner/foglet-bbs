@@ -18,12 +18,10 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
   import Raxol.Core.Renderer.View
 
-  @default_terminal_size {80, 24}
-
   def render(%State{} = state, %Context{} = context) do
     frame_state = frame_state(state, context)
     theme = Theme.from_state(frame_state)
-    {w, h} = context.terminal_size || @default_terminal_size
+    {w, h} = context.terminal_size
     post_content = render_local_post_content(state, frame_state, theme, w, h)
 
     chrome = %{
