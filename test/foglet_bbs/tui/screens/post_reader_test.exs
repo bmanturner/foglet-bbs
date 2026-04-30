@@ -8,10 +8,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # Test-only fake modules — standard ExUnit pattern, exempt from the CLAUDE.md
   # "no nested modules" convention (no cyclic-dependency risk in test files).
   defmodule FakePosts do
-    def list_posts(_thread_id) do
-      posts()
-    end
-
     def list_reader_window(_thread_id, opts) do
       direction = Keyword.get(opts, :direction, :initial)
 
@@ -59,8 +55,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   defmodule EmptyPosts do
-    def list_posts(_tid), do: []
-
     def list_reader_window(_tid, opts) do
       %Foglet.Posts.ReaderWindow{
         posts: [],
@@ -75,10 +69,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # load-specific read-position keying and distinguish from default-fixture
   # data. The distinct message_numbers are load-post seeding assertions.
   defmodule FakePostsForLoad do
-    def list_posts(_thread_id) do
-      posts()
-    end
-
     def list_reader_window(_thread_id, opts) do
       %Foglet.Posts.ReaderWindow{
         posts: posts(),
@@ -111,8 +101,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   defmodule BoundedFakePosts do
-    def list_posts(_thread_id), do: raise("unbounded list_posts/1 is forbidden")
-
     def list_reader_window(thread_id, opts) do
       if pid = Process.get(:reader_window_test_pid) do
         send(pid, {:reader_window_requested, thread_id, opts})
@@ -430,7 +418,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "PostReader.update/3 stores loaded posts and seeds pending read data" do
     context = post_reader_context()
     state = %{PostReader.State.from_context(context) | load_intent: :jump_last}
-    posts = FakePosts.list_posts("t1")
+    posts = FakePosts.list_reader_window("t1", []).posts
 
     assert {%State{} = loaded, []} =
              PostReader.update({:task_result, :load_posts, {:ok, posts}}, state, context)
@@ -538,7 +526,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       State.new(
         board_id: "b1",
         thread_id: "t1",
-        posts: FakePosts.list_posts("t1"),
+        posts: FakePosts.list_reader_window("t1", []).posts,
         status: :loaded
       )
 
@@ -555,7 +543,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
   test "PostReader.update/3 emits reply navigation with selected post" do
     context = post_reader_context()
-    posts = FakePosts.list_posts("t1")
+    posts = FakePosts.list_reader_window("t1", []).posts
 
     state =
       State.new(
