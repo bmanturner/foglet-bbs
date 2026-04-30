@@ -616,8 +616,13 @@ defmodule Foglet.BoardsTest do
 
       Repo.update_all(
         from(t in Thread, where: t.id == ^deleted.id),
-        set: [last_post_at: t_deleted_later, deleted_at: now]
+        set: [last_post_at: t_deleted_later]
       )
+
+      assert {:ok, _deleted_thread} =
+               deleted.id
+               |> Foglet.Threads.get_thread!()
+               |> Foglet.Threads.delete_thread()
 
       directory = Foglet.Boards.board_directory_for(user)
 
@@ -884,6 +889,79 @@ defmodule Foglet.BoardsTest do
       counts = Foglet.Boards.unread_counts(user.id)
       # Only p1 is unread (p2 is deleted)
       assert Map.get(counts, board.id) == 1
+    end
+
+    test "unread_count/2 excludes a soft-deleted post beyond the board read pointer" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+      poster = user_fixture()
+
+      allow_board_server!(board.id)
+
+      {:ok, %{thread: thread, post: p1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T1", body: "b"})
+
+      {:ok, p2} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "deleted unread"})
+
+      {:ok, _} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, p1.message_number)
+      assert p2.message_number > p1.message_number
+
+      {:ok, _deleted_post} = Foglet.Posts.delete_post(p2)
+
+      assert Foglet.Boards.unread_count(user.id, board.id) == 0
+    end
+
+    test "unread_counts/1 excludes soft-deleted posts for subscribed boards" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+      poster = user_fixture()
+
+      allow_board_server!(board.id)
+      Foglet.Boards.subscribe(user.id, board.id)
+
+      {:ok, %{thread: thread, post: p1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T1", body: "b"})
+
+      {:ok, p2} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "deleted unread"})
+
+      {:ok, _} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, p1.message_number)
+      assert p2.message_number > p1.message_number
+
+      {:ok, _deleted_post} = Foglet.Posts.delete_post(p2)
+
+      counts = Foglet.Boards.unread_counts(user.id)
+      assert Map.get(counts, board.id) == 0
+    end
+
+    test "board_directory_for/1 reports zero unread when the only unread post is soft-deleted" do
+      category = category_fixture()
+      board = board_fixture(category)
+      user = user_fixture()
+      poster = user_fixture()
+
+      allow_board_server!(board.id)
+      assert {:ok, :subscribed} = Foglet.Boards.subscribe_user_to_board(user, board.id)
+
+      {:ok, %{thread: thread, post: p1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T1", body: "b"})
+
+      {:ok, p2} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "deleted unread"})
+
+      {:ok, _} = Foglet.Boards.advance_board_read_pointer(user.id, board.id, p1.message_number)
+      assert p2.message_number > p1.message_number
+
+      {:ok, _deleted_post} = Foglet.Posts.delete_post(p2)
+
+      directory = Foglet.Boards.board_directory_for(user)
+      entry = find_board_entry(directory, board.id)
+
+      assert entry.subscribed? == true
+      assert entry.unread_count == 0
     end
   end
 end
