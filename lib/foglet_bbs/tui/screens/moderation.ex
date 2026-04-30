@@ -393,6 +393,12 @@ defmodule Foglet.TUI.Screens.Moderation do
     end)
   end
 
+  # IN-03: fallback for corrupt `%Tabs{}` structures (raxol_state without
+  # `:tabs`, or non-list `:tabs`). Used inside `render/1`, so silently
+  # degrading to an empty list (treated as "QUEUE only" upstream) is
+  # preferable to crashing the whole moderation screen.
+  defp tab_labels_from_tabs(_tabs), do: []
+
   defp handle_active_key(event, %State{} = ss, %Context{} = context) do
     case Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab) do
       "INVITES" ->
