@@ -9,6 +9,8 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   writes are preserved verbatim from the pre-refactor `login.ex`.
   """
 
+  require Logger
+
   alias Foglet.Accounts
   alias Foglet.Accounts.{Auth, Verification}
   alias Foglet.TUI.{Context, Effect}
@@ -49,11 +51,28 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
     |> local_result(local_state)
   end
 
-  def handle_task_result({:error, _reason}, local_state, %Context{} = ctx) do
+  # WR-01: Reserve `{:error, :invalid_credentials}` for the explicit auth
+  # failure shape returned by `authenticate_login/5`. A `{:error, _reason}`
+  # arriving here means the task itself failed (network, GenServer crash,
+  # WithClauseError surfaced from WR-02's catch-all, Ecto pool timeout) —
+  # log it as an operator fault signal and surface an "unavailable" modal
+  # rather than silently miscategorizing the bug as bad credentials.
+  def handle_task_result({:error, reason}, local_state, %Context{} = ctx) do
+    Logger.error("[Login] login task crashed: #{inspect(reason)}")
+
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Login is temporarily unavailable. Please try again."
+    }
+
     local_state
     |> app_state_from_local(ctx)
-    |> handle_login_result({:error, :invalid_credentials})
+    |> login_error_modal_unavailable(modal)
     |> local_result(local_state)
+  end
+
+  defp login_error_modal_unavailable(state, modal) do
+    {unlock_login_form(state), [Effect.open_modal(modal)]}
   end
 
   # --- Key handlers ---
@@ -142,6 +161,23 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
       status when status in [:pending, :rejected, :suspended] ->
         {:error, status}
+
+      # WR-02: surface unanticipated auth-error tuples (e.g. a future
+      # `{:error, :rate_limited}` or `{:error, :unavailable}`) instead of
+      # raising `WithClauseError` and getting silently masked as
+      # "invalid credentials" by the task-result handler above.
+      {:error, other} ->
+        Logger.error("[Login] unexpected auth error: #{inspect(other)}")
+        {:error, :invalid_credentials}
+
+      # WR-02: same defensive treatment for unanticipated user statuses.
+      # `Foglet.Accounts.User.status` is an atom and could in principle
+      # take values outside the known set (e.g. test fixtures or a future
+      # state); raise a logged breadcrumb and fall back to the generic
+      # invalid-credentials path rather than crashing.
+      other ->
+        Logger.error("[Login] unexpected user status: #{inspect(other)}")
+        {:error, :invalid_credentials}
     end
   end
 
