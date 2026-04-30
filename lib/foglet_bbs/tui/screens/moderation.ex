@@ -472,12 +472,25 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp unwrap_task_result({:ok, value}), do: {:ok, value}
   defp unwrap_task_result({:error, reason}), do: {:error, reason}
 
+  # WR-08: explicit case-based resolution so each branch is forced to
+  # produce an atom (or `default`). The previous `||`-chain silently
+  # returned `nil` whenever any intermediate value was `false`, causing
+  # downstream `Effect.task` bodies to crash with `UndefinedFunctionError`.
   defp domain_module(%Context{} = context, key, default) do
-    Map.get(context.domain || %{}, key) ||
-      (is_map(context.session_context) &&
-         get_in(context.session_context, [:domain, key])) ||
-      default
+    case Map.get(context.domain || %{}, key) do
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _ -> session_context_domain(context, key, default)
+    end
   end
+
+  defp session_context_domain(%Context{session_context: sc}, key, default) when is_map(sc) do
+    case get_in(sc, [:domain, key]) do
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      _ -> default
+    end
+  end
+
+  defp session_context_domain(_context, _key, default), do: default
 
   # Wraps KvGrid output in a column container. KvGrid.render/2 can return a list
   # containing [text, badge] pairs (when entries have badge metadata). Raxol's
