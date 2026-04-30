@@ -185,10 +185,32 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
   defp login_success_result(verification_mod, user, :verify) do
     case verification_mod.deliver_verification_code(user) do
-      {:ok, :attempted} -> {:ok, user, :verify, :attempted}
-      {:error, :unavailable} -> {:ok, user, :verify, :unavailable}
-      {:error, :delivery_failed} -> {:ok, user, :verify, :delivery_failed}
-      {:error, %Ecto.Changeset{}} -> {:ok, user, :verify, :changeset_error}
+      {:ok, :attempted} ->
+        {:ok, user, :verify, :attempted}
+
+      {:error, :unavailable} ->
+        {:ok, user, :verify, :unavailable}
+
+      {:error, :delivery_failed} ->
+        {:ok, user, :verify, :delivery_failed}
+
+      {:error, %Ecto.Changeset{}} ->
+        {:ok, user, :verify, :changeset_error}
+
+      # WR-01 (iteration 6): mirror the `authenticate_login/5` defensive
+      # treatment a few lines above. If `deliver_verification_code/1`ever
+      # returns a shape outside the four listed (e.g., a future
+      # `{:ok, :queued}` or `{:error, :rate_limited}`), log a breadcrumb
+      # and fall back to `:delivery_failed` — the closest existing
+      # semantic — instead of raising `CaseClauseError` and surfacing
+      # the contract drift as an opaque "temporarily unavailable" modal.
+      other ->
+        Logger.warning(
+          "[Login] unexpected deliver_verification_code shape #{inspect(other)}; " <>
+            "treating as :delivery_failed"
+        )
+
+        {:ok, user, :verify, :delivery_failed}
     end
   end
 
