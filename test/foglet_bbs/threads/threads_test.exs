@@ -537,7 +537,7 @@ defmodule Foglet.ThreadsTest do
       assert t.title == "A"
     end
 
-    test "excludes soft-deleted threads" do
+    test "excludes deleted threads from list_threads/1, list_threads/2, and nil-user delegation" do
       {board, _pid} = setup_board_with_server()
       poster = user_fixture()
       reader = user_fixture()
@@ -550,11 +550,16 @@ defmodule Foglet.ThreadsTest do
 
       {:ok, _} = Foglet.Threads.delete_thread(Foglet.Threads.get_thread!(dead.id))
 
-      results = Foglet.Threads.list_threads(board.id, reader.id)
-      ids = Enum.map(results, & &1.id)
+      anonymous_ids = board.id |> Foglet.Threads.list_threads() |> Enum.map(& &1.id)
+      reader_ids = board.id |> Foglet.Threads.list_threads(reader.id) |> Enum.map(& &1.id)
+      nil_user_ids = board.id |> Foglet.Threads.list_threads(nil) |> Enum.map(& &1.id)
 
-      assert alive.id in ids
-      refute dead.id in ids
+      assert alive.id in anonymous_ids
+      assert alive.id in reader_ids
+      assert alive.id in nil_user_ids
+      refute dead.id in anonymous_ids
+      refute dead.id in reader_ids
+      refute dead.id in nil_user_ids
     end
 
     test "empty thread (last_post_at nil) is has_unread: false" do
