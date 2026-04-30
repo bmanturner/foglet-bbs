@@ -14,7 +14,7 @@ defmodule Foglet.Posts do
   alias Foglet.Boards
   alias Foglet.Boards.Board
   alias Foglet.PostingPolicy
-  alias Foglet.Posts.{Edit, Post}
+  alias Foglet.Posts.{Edit, Post, ReaderWindow}
   alias Foglet.Threads.Thread
   alias FogletBbs.Repo
 
@@ -80,7 +80,12 @@ defmodule Foglet.Posts do
     |> Repo.preload([:user, :reply_to])
   end
 
-  @doc "List all posts in a thread, in insertion order. Preloads :user."
+  @doc """
+  List all posts in a thread, in insertion order. Preloads :user.
+
+  This is a tombstone-capable reader/history API: soft-deleted posts remain
+  visible so historical message numbers and reader continuity are preserved.
+  """
   @spec list_posts(String.t()) :: [Post.t()]
   def list_posts(thread_id) do
     Repo.all(
@@ -90,6 +95,168 @@ defmodule Foglet.Posts do
         preload: [:user]
     )
   end
+
+  @doc """
+  Returns a bounded, tombstone-capable reader window for a thread.
+
+  Cursor semantics are based on per-board `message_number` scoped by
+  `thread_id`, and returned posts are always ordered ascending for reader
+  display. This intentionally does not filter soft-deleted rows.
+  """
+  @spec list_reader_window(String.t(), keyword()) :: ReaderWindow.t()
+  def list_reader_window(thread_id, opts \\ []) do
+    limit = normalize_reader_limit(Keyword.get(opts, :limit, 50))
+    direction = normalize_reader_direction(Keyword.get(opts, :direction, :initial))
+
+    case direction do
+      :initial ->
+        rows = reader_rows(thread_id, order: :asc, limit: limit + 1)
+        {posts, extra} = Enum.split(rows, limit)
+        reader_window(posts, direction, false, extra != [])
+
+      :next ->
+        cursor = Keyword.get(opts, :after_message_number, 0)
+        rows = reader_rows(thread_id, after_message_number: cursor, order: :asc, limit: limit + 1)
+        {posts, extra} = Enum.split(rows, limit)
+
+        reader_window(
+          posts,
+          direction,
+          reader_has_previous?(thread_id, posts, cursor),
+          extra != []
+        )
+
+      :previous ->
+        cursor = Keyword.get(opts, :before_message_number, nil)
+
+        rows =
+          reader_rows(thread_id, before_message_number: cursor, order: :desc, limit: limit + 1)
+
+        {window_rows, extra} = Enum.split(rows, limit)
+        posts = Enum.reverse(window_rows)
+        reader_window(posts, direction, extra != [], reader_has_next?(thread_id, posts, cursor))
+
+      :last ->
+        rows = reader_rows(thread_id, order: :desc, limit: limit + 1)
+        {window_rows, extra} = Enum.split(rows, limit)
+        posts = Enum.reverse(window_rows)
+        reader_window(posts, direction, extra != [], false)
+
+      :around ->
+        around_message_number = Keyword.get(opts, :around_message_number, nil)
+
+        {posts, has_previous?, has_next?} =
+          reader_rows_around(thread_id, around_message_number, limit)
+
+        reader_window(posts, direction, has_previous?, has_next?)
+    end
+  end
+
+  defp normalize_reader_limit(limit) when is_integer(limit) and limit > 0, do: limit
+  defp normalize_reader_limit(_limit), do: 50
+
+  defp normalize_reader_direction(direction)
+       when direction in [:initial, :next, :previous, :last, :around],
+       do: direction
+
+  defp normalize_reader_direction(_direction), do: :initial
+
+  defp reader_rows(thread_id, opts) do
+    order = Keyword.fetch!(opts, :order)
+    limit = Keyword.fetch!(opts, :limit)
+
+    Post
+    |> where([p], p.thread_id == ^thread_id)
+    |> maybe_after_message_number(Keyword.get(opts, :after_message_number))
+    |> maybe_before_message_number(Keyword.get(opts, :before_message_number))
+    |> order_by_message_number(order)
+    |> limit(^limit)
+    |> preload([:user])
+    |> Repo.all()
+  end
+
+  defp reader_rows_around(thread_id, nil, limit) do
+    rows = reader_rows(thread_id, order: :asc, limit: limit + 1)
+    {posts, extra} = Enum.split(rows, limit)
+    {posts, false, extra != []}
+  end
+
+  defp reader_rows_around(thread_id, around_message_number, limit)
+       when is_integer(around_message_number) do
+    before_limit = div(limit - 1, 2)
+    after_limit = limit - before_limit
+
+    previous_rows =
+      reader_rows(
+        thread_id,
+        before_message_number: around_message_number,
+        order: :desc,
+        limit: before_limit + 1
+      )
+
+    {previous_window_rows, previous_extra} = Enum.split(previous_rows, before_limit)
+
+    next_rows =
+      reader_rows(
+        thread_id,
+        after_message_number: around_message_number - 1,
+        order: :asc,
+        limit: after_limit + 1
+      )
+
+    {next_window_rows, next_extra} = Enum.split(next_rows, after_limit)
+
+    {Enum.reverse(previous_window_rows) ++ next_window_rows, previous_extra != [],
+     next_extra != []}
+  end
+
+  defp reader_rows_around(thread_id, _around_message_number, limit) do
+    reader_rows_around(thread_id, nil, limit)
+  end
+
+  defp maybe_after_message_number(query, nil), do: query
+
+  defp maybe_after_message_number(query, message_number) when is_integer(message_number) do
+    where(query, [p], p.message_number > ^message_number)
+  end
+
+  defp maybe_after_message_number(query, _message_number), do: query
+
+  defp maybe_before_message_number(query, nil), do: query
+
+  defp maybe_before_message_number(query, message_number) when is_integer(message_number) do
+    where(query, [p], p.message_number < ^message_number)
+  end
+
+  defp maybe_before_message_number(query, _message_number), do: query
+
+  defp order_by_message_number(query, :desc), do: order_by(query, [p], desc: p.message_number)
+  defp order_by_message_number(query, _asc), do: order_by(query, [p], asc: p.message_number)
+
+  defp reader_window(posts, direction, has_previous?, has_next?) do
+    %ReaderWindow{
+      posts: posts,
+      first_message_number: posts |> List.first() |> message_number(),
+      last_message_number: posts |> List.last() |> message_number(),
+      has_previous?: has_previous?,
+      has_next?: has_next?,
+      direction: direction
+    }
+  end
+
+  defp reader_has_previous?(_thread_id, [_ | _posts], _fallback_cursor), do: true
+
+  defp reader_has_previous?(_thread_id, [], cursor) when is_integer(cursor) and cursor > 0,
+    do: true
+
+  defp reader_has_previous?(_thread_id, _posts, _cursor), do: false
+
+  defp reader_has_next?(_thread_id, [_ | _posts], _fallback_cursor), do: true
+  defp reader_has_next?(_thread_id, [], cursor) when is_integer(cursor), do: true
+  defp reader_has_next?(_thread_id, _posts, _cursor), do: false
+
+  defp message_number(nil), do: nil
+  defp message_number(%Post{message_number: message_number}), do: message_number
 
   # ---------- Post editing (BOARD-04) ----------
 
