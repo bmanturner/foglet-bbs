@@ -29,3 +29,21 @@ Out-of-scope discoveries logged during plan execution. These are NOT introduced 
 13. `App-routed sysop screen tasks (Phase 38) all four lifecycle slots round-trip through screen task results`
 
 **Disposition:** Defer to plan 46-04 (QUAL-03). The phase 46 baseline floor for D-14 will need to be re-stated against the actual current pass count once these are triaged.
+
+## Pre-existing credo --strict warning in `lib/foglet_bbs/sessions/session.ex:196`
+
+**Discovered during:** Plan 46-02 Task 3 (cadence gate).
+
+**Verified pre-existing:** Yes. The warning fires against unmodified code at session.ex:196 — content unchanged from base commit c672accb. The plan-02 edits are confined to `lib/foglet_bbs/boards/server.ex` (moduledoc + two single-line comments above `|> Repo.transaction()` calls); they cannot influence Logger metadata configuration in `Foglet.Sessions.Session`.
+
+**Warning text:**
+
+```
+[W] Logger metadata key event, session_pid, user_id, handle, ssh_peer,
+    replacement not found in Logger config.
+    lib/foglet_bbs/sessions/session.ex:196 #(Foglet.Sessions.Session.handle_cast)
+```
+
+**Effect:** `mix credo --strict` exits 16, which causes `mix precommit` to exit 16. `mix compile --warnings-as-errors`, `mix format --check-formatted`, and `mix sobelow --exit Low` all pass.
+
+**Disposition:** Defer to plan 46-04 (QUAL-03). The fix is to register the missing Logger metadata keys in runtime config (or the Sessions Logger setup) — out of scope for DOM-02 documentation-only work.
