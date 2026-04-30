@@ -43,14 +43,31 @@ defmodule Foglet.TUI.Screens.ThreadList do
     threads_mod = resolve_threads_module(context)
     user_id = context.current_user && context.current_user.id
 
-    new_state = %{state | status: :loading, last_op: :load_threads, last_error: nil}
+    if threads_mod_supported?(threads_mod) do
+      new_state = %{state | status: :loading, last_op: :load_threads, last_error: nil}
 
-    effect =
-      Effect.task(:load_threads, :thread_list, fn ->
-        dispatch_thread_load(threads_mod, board_id, user_id)
-      end)
+      effect =
+        Effect.task(:load_threads, :thread_list, fn ->
+          dispatch_thread_load(threads_mod, board_id, user_id)
+        end)
 
-    {new_state, [effect]}
+      {new_state, [effect]}
+    else
+      require Logger
+
+      Logger.warning(
+        "[ThreadList] threads_mod #{inspect(threads_mod)} exports neither " <>
+          "list_threads/1 nor list_threads/2; returning empty result"
+      )
+
+      {%{
+         state
+         | threads: [],
+           status: :empty,
+           last_op: nil,
+           last_error: :threads_mod_unsupported
+       }, []}
+    end
   end
 
   def update(:load, %State{} = state, %Context{}) do
@@ -291,7 +308,25 @@ defmodule Foglet.TUI.Screens.ThreadList do
         threads_mod.list_threads(board_id) |> Enum.map(&annotate_fallback/1)
 
       true ->
+        require Logger
+
+        Logger.warning(
+          "[ThreadList] threads_mod #{inspect(threads_mod)} exports neither " <>
+            "list_threads/1 nor list_threads/2; returning empty result"
+        )
+
         []
+    end
+  end
+
+  defp threads_mod_supported?(threads_mod) do
+    case Code.ensure_loaded(threads_mod) do
+      {:module, _} ->
+        function_exported?(threads_mod, :list_threads, 2) or
+          function_exported?(threads_mod, :list_threads, 1)
+
+      _ ->
+        false
     end
   end
 
