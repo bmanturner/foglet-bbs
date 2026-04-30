@@ -46,13 +46,14 @@ mix test --only some_tag
 ## QA adapter sandbox baseline
 
 QA adapter runs should use the same pinned runtime as `.tool-versions`:
-Elixir `1.19.5-otp-28` and Erlang/OTP `28.3.1`. In this workspace, `rtk`
-resolves those tools through the local mise shims, so QA should run Mix through
-`rtk`, for example:
+Elixir `1.19.5-otp-28` and Erlang/OTP `28.3.1`. In this workspace, use
+`mise exec --` to run Elixir and Mix through the pinned toolchain. The `rtk`
+binary on PATH is a separate CLI proxy and does not provide `elixir` or `mix`
+subcommands.
 
 ```bash
-rtk elixir --version
-rtk mix --version
+mise exec -- elixir --version
+mise exec -- mix --version
 ```
 
 Do not rely on whatever database is bound to host port `5432`. If another local
@@ -61,8 +62,8 @@ port and carry the matching `DATABASE_URL` through every Mix command:
 
 ```bash
 POSTGRES_PORT=55432 docker compose up -d postgres
-DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev rtk mix ecto.reset
-DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev rtk mix foglet.tui.render main_menu
+DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev mise exec -- mix ecto.reset
+DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev mise exec -- mix foglet.tui.render main_menu
 ```
 
 The QA harness should run from a per-issue git worktree under
