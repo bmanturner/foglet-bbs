@@ -55,7 +55,7 @@ Cross-cutting constraints:
   3. Maintainer can find dynamic PubSub topic refresh and subscription diffing in a subscription helper.
   4. Maintainer can find generic effect interpretation in an effect helper while domain mutations remain in `Foglet.*` contexts.
 **Plans**: 4 plans
-- [ ] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
+- [x] 46-01-PLAN.md — DOM-01: Delete misleading Foglet.Boards.Supervisor.boot_board_servers/0 stub
 - [ ] 46-02-PLAN.md — DOM-02: Document Foglet.Boards.Server Multi+Repo.transaction as intentional locked deviation
 - [ ] 46-03-PLAN.md — QUAL-01: Aggressive .dialyzer_ignore.exs baseline reduction (fix :call_without_opaque, narrow specs, annotate residue)
 - [ ] 46-04-PLAN.md — QUAL-03: Inline Disposition register on every CONCERNS.md heading + v2.1 close-pass intro
@@ -181,4 +181,4 @@ Phases execute in numeric order: 41 -> 42 -> 43 -> 44 -> 45 -> 46
 | 43. Large Screen Decomposition | 6/6 | Complete   | 2026-04-30 |
 | 44. PostReader And Content Query Hardening | 4/4 | Complete   | 2026-04-30 |
 | 45. SSH And Session Runtime Hardening | 0/TBD | Not started | - |
-| 46. Domain Cleanup And Final Quality Gate | 0/TBD | Not started | - |
+| 46. Domain Cleanup And Final Quality Gate | 1/4 | In Progress|  |
