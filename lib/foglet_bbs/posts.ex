@@ -118,7 +118,12 @@ defmodule Foglet.Posts do
 
         {window_rows, extra} = Enum.split(rows, limit)
         posts = Enum.reverse(window_rows)
-        reader_window(posts, direction, extra != [], reader_has_next?(thread_id, posts, cursor))
+        # BL-01: when no previous posts exist relative to `cursor`, there is
+        # by definition nothing to page forward into either — pass `false`
+        # rather than letting `reader_has_next?` infer `true` from the
+        # mere presence of an integer cursor.
+        has_next? = posts != [] and reader_has_next?(thread_id, posts, cursor)
+        reader_window(posts, direction, extra != [], has_next?)
 
       :last ->
         rows = reader_rows(thread_id, order: :desc, limit: limit + 1)
@@ -236,7 +241,12 @@ defmodule Foglet.Posts do
   defp reader_has_previous?(_thread_id, _posts, _cursor), do: false
 
   defp reader_has_next?(_thread_id, [_ | _posts], _fallback_cursor), do: true
-  defp reader_has_next?(_thread_id, [], cursor) when is_integer(cursor), do: true
+
+  # BL-01: require cursor > 0 (mirrors reader_has_previous?/3 — a cursor of
+  # 0 with no posts means there is no adjacent next window).
+  defp reader_has_next?(_thread_id, [], cursor) when is_integer(cursor) and cursor > 0,
+    do: true
+
   defp reader_has_next?(_thread_id, _posts, _cursor), do: false
 
   defp message_number(nil), do: nil
