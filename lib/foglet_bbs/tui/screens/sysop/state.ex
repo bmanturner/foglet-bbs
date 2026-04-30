@@ -17,7 +17,6 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
-  alias Foglet.TUI.Screens.Sysop.SiteForm
   alias Foglet.TUI.Screens.Sysop.SystemSnapshot
   alias Foglet.TUI.Screens.Sysop.UsersView
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -81,15 +80,18 @@ defmodule Foglet.TUI.Screens.Sysop.State do
     labels = tab_labels(opts)
     active = clamp_active(active, labels)
 
+    # site_form starts nil and is seeded lazily on first SITE entry by
+    # `Foglet.TUI.Screens.Sysop.update(:load, ...)` (when SITE is the active
+    # tab and an actor is present) or by the first key event delegated to
+    # SITE. Eager seeding here would drag `Foglet.Config.get!/1` into every
+    # caller of `new/1`, including async unit tests that construct a Sysop
+    # state without an Ecto sandbox.
     %__MODULE__{
       tabs: Tabs.init(tabs: labels, active: active),
       active_tab: active,
       tab_labels: labels,
       invites: Keyword.get(opts, :invites, InvitesState.new()),
-      site_form:
-        Keyword.get_lazy(opts, :site_form, fn ->
-          SiteForm.init(current_user: Keyword.get(opts, :current_user))
-        end)
+      site_form: Keyword.get(opts, :site_form)
     }
   end
 

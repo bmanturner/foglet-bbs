@@ -50,12 +50,44 @@ defmodule Foglet.TUI.AppTest do
   end
 
   defmodule FakePosts do
+    alias Foglet.Posts.ReaderWindow
+
     def list_posts("t1") do
       [%{id: "p1", body: "Hello", message_number: 1, inserted_at: ~U[2026-04-28 18:00:00Z]}]
     end
 
     def list_posts("t2") do
       [%{id: "p2", body: "Second", message_number: 2, inserted_at: ~U[2026-04-28 19:00:00Z]}]
+    end
+
+    # PostReader switched from `list_posts/1` to `list_reader_window/2`
+    # (Foglet.Posts.list_reader_window/2). The mock returns a degenerate
+    # single-post window since the AppTest fixtures only carry one post per
+    # thread.
+    def list_reader_window("t1", _opts) do
+      [post] = list_posts("t1")
+
+      %ReaderWindow{
+        posts: [post],
+        first_message_number: post.message_number,
+        last_message_number: post.message_number,
+        has_previous?: false,
+        has_next?: false,
+        direction: :initial
+      }
+    end
+
+    def list_reader_window("t2", _opts) do
+      [post] = list_posts("t2")
+
+      %ReaderWindow{
+        posts: [post],
+        first_message_number: post.message_number,
+        last_message_number: post.message_number,
+        has_previous?: false,
+        has_next?: false,
+        direction: :initial
+      }
     end
   end
 
@@ -121,6 +153,12 @@ defmodule Foglet.TUI.AppTest do
     :ets.insert(:foglet_config, {"require_email_verification", false})
     :ets.insert(:foglet_config, {"email_verify_resend_cooldown_seconds", 60})
     :ets.insert(:foglet_config, {"invite_code_generators", "sysop_only"})
+    # Sysop SITE form keys consumed by `Sysop.update(:load, ...)` on entry,
+    # plus NewThread.init's optional config-driven limits. Seeding them here
+    # keeps async unit tests off the Ecto sandbox.
+    :ets.insert(:foglet_config, {"invite_generation_per_user_limit", 5})
+    :ets.insert(:foglet_config, {"max_post_length", 8000})
+    :ets.insert(:foglet_config, {"max_thread_title_length", 200})
     :ok
   end
 
@@ -586,8 +624,8 @@ defmodule Foglet.TUI.AppTest do
 
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
-      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
-               task.()
+      assert {:screen_task_result, :post_reader, :load_posts_window,
+              {:ok, %Foglet.Posts.ReaderWindow{posts: [%{id: "p1"}]}}} = task.()
     end
 
     test "{:screen_task_result, :new_thread, :create_thread, result} routes through NewThread local state",
@@ -696,8 +734,8 @@ defmodule Foglet.TUI.AppTest do
 
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
-      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
-               task.()
+      assert {:screen_task_result, :post_reader, :load_posts_window,
+              {:ok, %Foglet.Posts.ReaderWindow{posts: [%{id: "p1"}]}}} = task.()
     end
 
     test "navigating post_reader from one thread to another refreshes route-owned local state", %{
@@ -736,8 +774,8 @@ defmodule Foglet.TUI.AppTest do
       assert %PostReader.State{thread_id: "t2"} = App.screen_state_for(state_b, :post_reader)
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
-      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p2"}]}} =
-               task.()
+      assert {:screen_task_result, :post_reader, :load_posts_window,
+              {:ok, %Foglet.Posts.ReaderWindow{posts: [%{id: "p2"}]}}} = task.()
     end
 
     test "navigating thread_list to another board refreshes route-owned local state", %{
@@ -1844,13 +1882,13 @@ defmodule Foglet.TUI.AppTest do
 
       {new_state, cmds} = App.update({:thread_activity, "t1", :new_post}, state)
 
-      assert %PostReader.State{last_op: :load_posts} =
+      assert %PostReader.State{last_op: :load_posts_window} =
                App.screen_state_for(new_state, :post_reader)
 
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
-      assert {:screen_task_result, :post_reader, :load_posts, {:ok, [%{id: "p1"}]}} =
-               task.()
+      assert {:screen_task_result, :post_reader, :load_posts_window,
+              {:ok, %Foglet.Posts.ReaderWindow{posts: [%{id: "p1"}]}}} = task.()
     end
 
     test "{:thread_activity} for a different thread is a no-op", %{state: state} do
@@ -2220,8 +2258,10 @@ defmodule Foglet.TUI.AppTest do
 
       assert new_state.current_screen == :sysop
       assert cmds == []
-      # SITE remains :nil-default (D-03)
-      assert new_state.screen_state.sysop.site_form == nil
+      # D-03: SITE is synchronous — no Effect.task is emitted. The form is
+      # seeded inline by `Sysop.update(:load, ...)` from the Config cache.
+      assert %Foglet.TUI.Screens.Sysop.SiteForm.State{current_user: ^user} =
+               new_state.screen_state.sysop.site_form
     end
 
     test "{:navigate, :sysop} is idempotent — re-entering a {:loaded, _} tab emits no command",

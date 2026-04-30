@@ -52,9 +52,14 @@ defmodule Foglet.Sessions.SupervisorTest do
       ref = Process.monitor(pid)
       assert :ok = Sup.terminate_session(user_id)
       assert_receive {:DOWN, ^ref, :process, ^pid, _}, 1_000
-      # Drain the Registry's mailbox so the unregistration is processed.
-      _ = :sys.get_state(Foglet.Sessions.Registry)
-      assert {:error, :not_found} = Sup.lookup_session(user_id)
+
+      # Both the test and Foglet.Sessions.Registry monitor `pid`. After our
+      # DOWN fires, the Registry's DOWN handler may not have run yet, so a
+      # single `:sys.get_state(@registry)` drain has a race window on slower
+      # CI runners (observed CI flake: lookup still returns {:ok, pid}).
+      # Poll the Registry view until the unregistration propagates.
+      assert wait_for_lookup_not_found(user_id, 1_000),
+             "Registry never unregistered #{inspect(pid)}"
     end
 
     test "terminate_session/1 returns :not_found for unknown user", %{user_id: user_id} do
@@ -306,6 +311,34 @@ defmodule Foglet.Sessions.SupervisorTest do
           _ -> :ok
         end
       end)
+    end
+  end
+
+  # Bounded poll for Registry unregistration after the session pid exits.
+  # Returns true once `lookup_session/1` flips to `{:error, :not_found}`,
+  # false on timeout. Uses `receive ... after` for spacing — `Process.sleep/1`
+  # is forbidden by AGENTS.md.
+  defp wait_for_lookup_not_found(user_id, timeout_ms) do
+    deadline = System.monotonic_time(:millisecond) + timeout_ms
+    do_wait_for_lookup_not_found(user_id, deadline)
+  end
+
+  defp do_wait_for_lookup_not_found(user_id, deadline) do
+    case Sup.lookup_session(user_id) do
+      {:error, :not_found} ->
+        true
+
+      {:ok, _pid} ->
+        if System.monotonic_time(:millisecond) >= deadline do
+          false
+        else
+          receive do
+          after
+            5 -> :ok
+          end
+
+          do_wait_for_lookup_not_found(user_id, deadline)
+        end
     end
   end
 end

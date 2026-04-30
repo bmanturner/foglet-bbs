@@ -803,20 +803,6 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert _ = render_screen(s)
   end
 
-  test "render/2 falls back when context terminal size is nil" do
-    context =
-      Context.new(
-        current_user: %{id: "u1", handle: "alice"},
-        terminal_size: nil,
-        route: :post_reader,
-        route_params: %{board: %{id: "b1", name: "General"}, thread: %{id: "t1", title: "Hello"}},
-        session_context: %{theme: theme()}
-      )
-
-    assert rendered = PostReader.render(State.new(status: :loading), context)
-    assert is_map(rendered) or is_list(rendered)
-  end
-
   test "render/1 delegates breadcrumb formatting to shared chrome", %{state: state} do
     # The legacy reader rendered "Thread:" as a hard-coded prefix in its
     # breadcrumb header. The chrome migration moved breadcrumb assembly

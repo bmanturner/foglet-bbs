@@ -65,6 +65,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   def update(:load, local_state, %Context{} = context) do
     local_state
     |> normalize_state(context)
+    |> maybe_init_site_form(context)
     |> maybe_request_active_load(context)
   end
 
@@ -233,6 +234,7 @@ defmodule Foglet.TUI.Screens.Sysop do
       new_ss = %{ss | tabs: new_tabs, active_tab: new_active, armed_revoke?: false}
 
       new_ss
+      |> maybe_init_site_form(context)
       |> maybe_request_invites_load(context)
       |> maybe_request_active_load(context)
     end
@@ -325,6 +327,22 @@ defmodule Foglet.TUI.Screens.Sysop do
         else
           {new_ss, []}
         end
+    end
+  end
+
+  # SITE tab carries config-backed form state seeded from `Foglet.Config.get!/1`.
+  # The seed is synchronous (ETS-backed in the live system) but reaches the DB
+  # on cache miss, so we defer it from `Sysop.State.new/1` to here. This runs
+  # only when SITE is the active tab and an authenticated actor is present —
+  # tests that navigate through Sysop with active != SITE never trigger Config.
+  defp maybe_init_site_form(%State{site_form: %_{}} = ss, _context), do: ss
+
+  defp maybe_init_site_form(%State{} = ss, %Context{current_user: nil}), do: ss
+
+  defp maybe_init_site_form(%State{} = ss, %Context{current_user: user}) do
+    case Enum.at(State.tab_labels(ss), ss.active_tab) do
+      "SITE" -> %{ss | site_form: SiteForm.init(current_user: user)}
+      _ -> ss
     end
   end
 

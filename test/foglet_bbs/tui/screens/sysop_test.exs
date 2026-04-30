@@ -302,11 +302,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert ss.limits_form == :not_loaded
       assert ss.system_snapshot == :not_loaded
       assert ss.users_view == :not_loaded
-      # SITE stays synchronous but is initialized before render.
-      assert %SiteFormState{} = ss.site_form
+      # SITE form is seeded lazily by `Sysop.update(:load, ...)` on entry.
+      assert ss.site_form == nil
     end
 
-    test "SITE form initializes with the current actor" do
+    test "SITE form initializes with the current actor on :load" do
       sysop = %Foglet.Accounts.User{
         id: Ecto.UUID.generate(),
         handle: "sysop",
@@ -314,7 +314,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
         status: :active
       }
 
-      ss = SysopState.new(current_user: sysop)
+      context = %Foglet.TUI.Context{
+        current_user: sysop,
+        session_context: %{}
+      }
+
+      {ss, _effects} = Foglet.TUI.Screens.Sysop.update(:load, SysopState.new(), context)
 
       assert %SiteFormState{current_user: ^sysop} = ss.site_form
     end
