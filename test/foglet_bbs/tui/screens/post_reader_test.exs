@@ -1020,62 +1020,94 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # ===========================================================================
   # READER-05: Render helper purity guard — static source check
   #
-  # No defp render_* block may contain put_in(, %{state |, or Map.put( writes.
-  # This test enforces the render purity boundary (D-07, D-08) at the source level.
+  # PostReader.Render is the active render boundary after Phase 43. It must not
+  # contain state-write operations, and any top-level render helpers that remain
+  # in post_reader.ex stay covered as compatibility surface.
   # ===========================================================================
 
   describe "render helper purity (READER-05, D-07, D-08)" do
-    test "defp render_* blocks contain no state-write operations" do
-      # Resolve source path relative to this test file's compile-time location.
-      source_path =
+    test "PostReader.Render boundary contains no state-write operations" do
+      source_dir =
         __ENV__.file
         |> Path.dirname()
-        |> Path.join("../../../../lib/foglet_bbs/tui/screens/post_reader.ex")
+        |> Path.join("../../../../lib/foglet_bbs/tui/screens")
         |> Path.expand()
 
-      source = File.read!(source_path)
-      lines = String.split(source, "\n")
+      active_render_path = Path.join(source_dir, "post_reader/render.ex")
+      top_level_path = Path.join(source_dir, "post_reader.ex")
 
-      # Collect lines belonging to defp render_* bodies.
-      # Note: This regex is sufficient for the current source. If multi-clause
-      # render_* functions are added back-to-back, the second clause head
-      # re-triggers scope entry — harmless but non-monotonic. A two-pass
-      # line-range approach would be needed for full correctness.
-      {render_lines, _} =
-        Enum.reduce(lines, {[], false}, fn line, {acc, inside} ->
-          cond do
-            # Entering a render helper
-            String.match?(line, ~r/^\s+defp render_/) ->
-              {[line | acc], true}
+      assert Code.ensure_loaded?(PostReader.Render)
+      assert function_exported?(PostReader.Render, :render, 2)
 
-            # Entering a non-render defp or public def — exit render scope
-            inside and String.match?(line, ~r/^\s+defp [^r]|^\s+defp r[^e]|^\s+def /) ->
-              {acc, false}
+      sources = [
+        {:all, active_render_path},
+        {:render_helpers, top_level_path}
+      ]
 
-            inside ->
-              {[line | acc], true}
-
-            true ->
-              {acc, false}
-          end
-        end)
-
-      forbidden_patterns = [~r/put_in\(/, ~r/%\{state \|/, ~r/Map\.put\(/]
+      forbidden_patterns = [
+        ~r/put_in\(/,
+        ~r/%\{state \|/,
+        ~r/Map\.put\(/,
+        ~r/Map\.update\(/,
+        ~r/Map\.delete\(/
+      ]
 
       violations =
-        Enum.flat_map(render_lines, fn line ->
-          Enum.flat_map(forbidden_patterns, fn pat ->
-            if Regex.match?(pat, line), do: [String.trim(line)], else: []
+        Enum.flat_map(sources, fn {scope, path} ->
+          path
+          |> render_boundary_lines(scope)
+          |> Enum.flat_map(fn {line_number, line} ->
+            if Enum.any?(forbidden_patterns, &Regex.match?(&1, line)) do
+              ["#{path}:#{line_number}: #{String.trim(line)}"]
+            else
+              []
+            end
           end)
         end)
 
       assert violations == [],
-             "render_* helpers contain forbidden state-write operations:\n" <>
+             "PostReader render boundary contains forbidden state-write operations:\n" <>
                Enum.join(violations, "\n")
     end
   end
 
   # --- Helper for Phase 2 integration tests (simpler state shape) ---
+
+  defp render_boundary_lines(path, :all) do
+    path
+    |> File.read!()
+    |> String.split("\n")
+    |> Enum.with_index(1)
+    |> Enum.map(fn {line, line_number} -> {line_number, line} end)
+  end
+
+  defp render_boundary_lines(path, :render_helpers) do
+    lines =
+      path
+      |> File.read!()
+      |> String.split("\n")
+      |> Enum.with_index(1)
+
+    {render_lines, _inside} =
+      Enum.reduce(lines, {[], false}, fn {line, line_number}, {acc, inside} ->
+        cond do
+          String.match?(line, ~r/^\s+def render\(/) or
+              String.match?(line, ~r/^\s+defp render_/) ->
+            {[{line_number, line} | acc], true}
+
+          inside and String.match?(line, ~r/^\s+(def|defp)\s+/) ->
+            {acc, false}
+
+          inside ->
+            {[{line_number, line} | acc], true}
+
+          true ->
+            {acc, false}
+        end
+      end)
+
+    Enum.reverse(render_lines)
+  end
 
   defp theme, do: Foglet.TUI.Theme.default()
 
