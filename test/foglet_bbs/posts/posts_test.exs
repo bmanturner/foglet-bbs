@@ -430,6 +430,39 @@ defmodule Foglet.PostsTest do
       assert listed_deleted_post.deleted_at != nil
       assert listed_deleted_post.user.id == user.id
     end
+
+    test "soft-deleted posts remain visible to list_posts/1 and list_reader_window/2 with message numbers intact" do
+      board = setup_board_with_server()
+      user = user_fixture()
+      {thread, _root} = setup_thread(board, user)
+
+      {:ok, kept_post} =
+        Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Still here"})
+
+      {:ok, post_to_delete} =
+        Foglet.Posts.create_reply(thread.id, board.id, user.id, %{body: "Historical"})
+
+      deleted_message_number = post_to_delete.message_number
+      {:ok, _deleted_post} = Foglet.Posts.delete_post(post_to_delete)
+
+      list_deleted_post =
+        thread.id
+        |> Foglet.Posts.list_posts()
+        |> Enum.find(&(&1.id == post_to_delete.id))
+
+      window_deleted_post =
+        thread.id
+        |> Foglet.Posts.list_reader_window(limit: 10)
+        |> then(&Enum.find(&1.posts, fn post -> post.id == post_to_delete.id end))
+
+      assert kept_post.message_number < deleted_message_number
+      assert list_deleted_post.deleted_at != nil
+      assert list_deleted_post.message_number == deleted_message_number
+      assert list_deleted_post.user.id == user.id
+      assert window_deleted_post.deleted_at != nil
+      assert window_deleted_post.message_number == deleted_message_number
+      assert window_deleted_post.user.id == user.id
+    end
   end
 
   describe "delete_post/3 actor-aware gate" do
