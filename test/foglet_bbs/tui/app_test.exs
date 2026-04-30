@@ -456,7 +456,7 @@ defmodule Foglet.TUI.AppTest do
         )
 
       assert cmds == []
-      assert new_state.screen_state.login.error == "Invalid credentials."
+      assert new_state.screen_state.login.error == "That handle and password don't match."
       assert new_state.screen_state.login.submitting? == false
     end
 

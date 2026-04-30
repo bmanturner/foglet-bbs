@@ -44,7 +44,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
     status_item =
       if VerifyState.cooldown?(vs) do
-        text("Too many attempts. Please wait.", fg: theme.error.fg, style: [:bold])
+        text("Too many tries. Wait it out.", fg: theme.error.fg, style: [:bold])
       else
         text("Attempts: #{vs.attempts}/#{@max_attempts}", fg: theme.dim.fg)
       end
@@ -52,7 +52,7 @@ defmodule Foglet.TUI.Screens.Verify do
     content =
       column style: %{gap: 0} do
         [
-          text("Enter the 6-character verification code:", fg: theme.primary.fg),
+          text("Enter the 6-character code we sent you.", fg: theme.primary.fg),
           text(""),
           text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
           text(""),
@@ -100,7 +100,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
     cond do
       VerifyState.cooldown?(vs) ->
-        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many attempts."))]}
+        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many tries."))]}
 
       String.match?(new_char, ~r/\A[A-Z0-9]\z/) and String.length(vs.buffer) < @code_length ->
         {%{vs | buffer: vs.buffer <> new_char}, []}
@@ -129,7 +129,7 @@ defmodule Foglet.TUI.Screens.Verify do
   def update({:task_result, :verify_submit, {:error, _reason}}, local_state, %Context{} = context) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Verification failed. Please try again later."
+      message: "We couldn't verify the code. Try again in a minute."
     }
 
     {local_state || init(context), [Effect.open_modal(modal)]}
@@ -142,7 +142,7 @@ defmodule Foglet.TUI.Screens.Verify do
   def update({:task_result, :verify_resend, {:error, _reason}}, local_state, %Context{} = context) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Verification instructions could not be sent. Please try again later."
+      message: "We couldn't send the verification email. Try again in a minute."
     }
 
     {clear_optimistic_resend_cooldown(local_state || init(context)), [Effect.open_modal(modal)]}
@@ -151,14 +151,18 @@ defmodule Foglet.TUI.Screens.Verify do
   def update(_message, local_state, %Context{} = context), do: {local_state || init(context), []}
 
   defp submit(_vs, %Context{current_user: nil}) do
-    modal = %Foglet.TUI.Modal{type: :error, message: "No user context. Please register again."}
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Your session is gone. Register or log in again."
+    }
+
     {VerifyState.default(), [Effect.open_modal(modal), Effect.navigate(:login, %{})]}
   end
 
   defp submit(vs, %Context{} = context) do
     cond do
       VerifyState.cooldown?(vs) ->
-        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many attempts."))]}
+        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many tries."))]}
 
       String.length(vs.buffer) != @code_length ->
         modal = %Foglet.TUI.Modal{type: :error, message: "Enter all 6 characters."}
@@ -172,7 +176,7 @@ defmodule Foglet.TUI.Screens.Verify do
   defp resend_code(vs, %Context{} = context) do
     if VerifyState.resend_cooldown?(vs) do
       {vs,
-       [Effect.open_modal(cooldown_modal(vs.resend_cooldown_until, "Please wait to resend."))]}
+       [Effect.open_modal(cooldown_modal(vs.resend_cooldown_until, "Slow down on the resend."))]}
     else
       resend_code_raw(vs, context)
     end
@@ -228,7 +232,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Invalid code (#{new_vs.attempts}/#{@max_attempts})."
+      message: "That code didn't match (#{new_vs.attempts}/#{@max_attempts} tries)."
     }
 
     {new_vs, [Effect.open_modal(modal)]}
@@ -237,7 +241,7 @@ defmodule Foglet.TUI.Screens.Verify do
   defp handle_verify_submit_result({:error, _reason}, vs, %Context{}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Verification failed. Please try again later."
+      message: "We couldn't verify the code. Try again in a minute."
     }
 
     {vs, [Effect.open_modal(modal)]}
@@ -261,7 +265,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Verification failed. Please try again later."
+      message: "We couldn't verify the code. Try again in a minute."
     }
 
     {vs, [Effect.open_modal(modal)]}
@@ -279,7 +283,8 @@ defmodule Foglet.TUI.Screens.Verify do
   defp handle_verify_resend_result({:error, :unavailable}, vs) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Email verification is unavailable because email delivery is disabled."
+      message:
+        "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
     }
 
     {clear_optimistic_resend_cooldown(vs), [Effect.open_modal(modal)]}
@@ -288,7 +293,7 @@ defmodule Foglet.TUI.Screens.Verify do
   defp handle_verify_resend_result({:error, _reason}, vs) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Verification instructions could not be sent. Please try again later."
+      message: "We couldn't send the verification email. Try again in a minute."
     }
 
     {clear_optimistic_resend_cooldown(vs), [Effect.open_modal(modal)]}
@@ -344,12 +349,12 @@ defmodule Foglet.TUI.Screens.Verify do
   defp resend_sent_message(%{resend_cooldown_until: %DateTime{} = until}) do
     remaining = max(DateTime.diff(until, DateTime.utc_now(), :second), 0)
 
-    "If email delivery is available, new verification instructions have been sent." <>
+    "If email is set up on this Foglet, a new code is on its way." <>
       " You can request another in #{remaining}s."
   end
 
   defp resend_sent_message(_vs) do
-    "If email delivery is available, new verification instructions have been sent."
+    "If email is set up on this Foglet, a new code is on its way."
   end
 
   # Drop the optimistic dispatch-time cooldown when delivery fails so the

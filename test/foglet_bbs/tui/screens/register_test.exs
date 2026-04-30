@@ -210,7 +210,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       {local_state, []} = Register.update({:key, %{key: :enter}}, state, context())
 
-      assert local_state.error == "Passwords do not match."
+      assert local_state.error == "Those two passwords don't match."
       assert local_state.focused_field == :confirm_password
     end
 
@@ -291,7 +291,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert modal.type == :error
 
       assert modal.message ==
-               "Email verification is unavailable because email delivery is disabled."
+               "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
 
       refute_email_sent()
     end

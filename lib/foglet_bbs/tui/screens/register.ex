@@ -124,7 +124,7 @@ defmodule Foglet.TUI.Screens.Register do
   def update({:task_result, :register, {:error, _reason}}, local_state, %Context{} = context) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Registration could not be completed. Please try again later."
+      message: "We couldn't finish your registration. Try again in a minute."
     }
 
     {local_state || init(context), [Effect.open_modal(modal)]}
@@ -196,7 +196,7 @@ defmodule Foglet.TUI.Screens.Register do
     if pw == cpw do
       submit(reg, state)
     else
-      new_reg = %{reg | error: "Passwords do not match."}
+      new_reg = %{reg | error: "Those two passwords don't match."}
       {:update, RegisterState.put(state, new_reg), []}
     end
   end
@@ -468,7 +468,8 @@ defmodule Foglet.TUI.Screens.Register do
   defp handle_register_result(state, {:error, :unavailable}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Email verification is unavailable because email delivery is disabled."
+      message:
+        "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
     }
 
     {state, [Effect.open_modal(modal)]}
@@ -477,7 +478,7 @@ defmodule Foglet.TUI.Screens.Register do
   defp handle_register_result(state, {:error, _delivery_error}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Verification instructions could not be sent. Please try again later."
+      message: "We couldn't send the verification email. Try again in a minute."
     }
 
     {state, [Effect.open_modal(modal)]}
