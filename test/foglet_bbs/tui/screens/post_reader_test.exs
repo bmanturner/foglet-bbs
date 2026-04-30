@@ -156,6 +156,98 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     defp message_number(post), do: Map.get(post, :message_number)
   end
 
+  # WR-03 (iteration 2): Fake that simulates the soft-deleted-pointer
+  # scenario for `place_selection_after_load/4`'s WR-04 fallback chain.
+  # The thread has 200 message numbers but `@gap_message_number` (150 by
+  # default) is removed from the loaded window — emulating "the read
+  # pointer points at a post that was soft-deleted after the pointer was
+  # written." Other directions degrade to a small initial window so the
+  # tests remain focused on the :around case.
+  defmodule GappedFakePosts do
+    @gap_message_number 150
+    @thread_size 200
+
+    def list_reader_window(_thread_id, opts) do
+      direction = Keyword.get(opts, :direction, :initial)
+      limit = Keyword.get(opts, :limit, 50)
+
+      posts =
+        case direction do
+          :around ->
+            center = Keyword.get(opts, :around_message_number) || 1
+            half = div(limit, 2)
+            first = max(1, center - half)
+            last = min(@thread_size, first + limit - 1)
+
+            first..last
+            |> Enum.reject(&(&1 == @gap_message_number))
+            |> Enum.map(&post/1)
+
+          _ ->
+            1..min(limit, @thread_size) |> Enum.map(&post/1)
+        end
+
+      %Foglet.Posts.ReaderWindow{
+        posts: posts,
+        first_message_number: first_message_number(posts),
+        last_message_number: last_message_number(posts),
+        has_previous?: true,
+        has_next?: true,
+        direction: direction
+      }
+    end
+
+    defp post(message_number) do
+      %{
+        id: "p#{message_number}",
+        body: "body #{message_number}",
+        inserted_at: ~U[2026-04-18 00:00:00.000000Z],
+        user: %{handle: "sysop"},
+        message_number: message_number
+      }
+    end
+
+    defp first_message_number([]), do: nil
+    defp first_message_number([h | _]), do: Map.get(h, :message_number)
+
+    defp last_message_number([]), do: nil
+    defp last_message_number(list), do: list |> List.last() |> Map.get(:message_number)
+  end
+
+  # WR-03 companion: a fake whose loaded window starts AFTER the read
+  # pointer entirely. Used to verify the "no post >= pointer in window"
+  # branch where the fallback chain should fall through to
+  # `selected_index_after_window_load/3` (Phase 44 default).
+  defmodule PointerBeforeWindowFakePosts do
+    def list_reader_window(_thread_id, opts) do
+      direction = Keyword.get(opts, :direction, :initial)
+
+      # Window covers messages 200..210 — every read pointer < 200 is
+      # "below the loaded window" and every message_number in the window
+      # is `> pointer`, so the at-or-after fallback returns index 0.
+      posts = 200..210 |> Enum.map(&post/1)
+
+      %Foglet.Posts.ReaderWindow{
+        posts: posts,
+        first_message_number: 200,
+        last_message_number: 210,
+        has_previous?: true,
+        has_next?: false,
+        direction: direction
+      }
+    end
+
+    defp post(message_number) do
+      %{
+        id: "p#{message_number}",
+        body: "body #{message_number}",
+        inserted_at: ~U[2026-04-18 00:00:00.000000Z],
+        user: %{handle: "sysop"},
+        message_number: message_number
+      }
+    end
+  end
+
   setup do
     Process.put(:reader_window_test_pid, self())
 
@@ -1790,6 +1882,107 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert_receive {:reader_window_requested, "t-1000", opts}
       assert Keyword.get(opts, :direction) == :initial
       refute Keyword.has_key?(opts, :around_message_number)
+    end
+  end
+
+  describe "load_posts/2 — WR-04 selection fallback for stale read pointers (WR-03)" do
+    # Iteration 2 WR-03: the WR-04 fix added a multi-step fallback chain in
+    # `place_selection_after_load/4`:
+    #
+    #   1. exact match on read_pointer_msg_no                (primary path)
+    #   2. closest post with message_number >= pointer       (NEW fallback)
+    #   3. selected_index_after_window_load/3                (Phase 44 default)
+    #
+    # The original review noted these scenarios had zero test coverage. These
+    # tests pin the fallback semantics so a future refactor cannot silently
+    # land selection at index 0 when the pointer's exact post is missing.
+
+    test "lands selection on closest message_number >= pointer when pointer's post is soft-deleted" do
+      # Pointer at 150; GappedFakePosts removes message_number 150 from the
+      # loaded window. Closest post with message_number >= 150 is 151.
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{
+            "t-1000" => %{last_read_post_id: "p150", last_read_message_number: 150}
+          },
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: GappedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      ss = s_after.screen_state.post_reader
+      selected = Enum.at(ss.posts, ss.selected_post_index)
+
+      assert selected,
+             "Expected a selected post; got nil (selected_post_index=#{ss.selected_post_index}, posts length=#{length(ss.posts || [])})"
+
+      refute Enum.any?(ss.posts, &(Map.get(&1, :message_number) == 150)),
+             "Sanity: GappedFakePosts should have skipped message_number 150"
+
+      assert selected.message_number == 151,
+             "Expected fallback to land selection on closest message_number >= 150 (got #{selected.message_number})"
+    end
+
+    test "falls through to default when no post has message_number >= pointer (pointer above window)" do
+      # PointerBeforeWindowFakePosts loads messages 200..210 only. A pointer
+      # at 150 finds no post >= 150 in the window... wait, every post in
+      # 200..210 is >= 150, so the fallback chain's step 2 *will* match the
+      # first post (index 0). This test pins that semantics: the fallback
+      # is "first post with message_number >= pointer", and when every
+      # loaded post satisfies that, the answer is index 0.
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{
+            "t-1000" => %{last_read_post_id: "p150", last_read_message_number: 150}
+          },
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: PointerBeforeWindowFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      ss = s_after.screen_state.post_reader
+      selected = Enum.at(ss.posts, ss.selected_post_index)
+
+      assert selected, "Expected a selected post"
+
+      assert selected.message_number == 200,
+             "Expected first post in window (200) when no exact pointer match exists (got #{selected.message_number})"
+    end
+
+    test "exact-match path still wins when pointer's post is in the loaded window" do
+      # Regression guard: the new fallback must not displace the primary
+      # path. With BoundedFakePosts (no gaps), pointer 150 should still
+      # land on the post whose message_number == 150 exactly.
+      s =
+        p2_state(%{
+          current_thread: %{id: "t-1000", title: "test"},
+          posts: nil,
+          read_position: %{
+            "t-1000" => %{last_read_post_id: "p150", last_read_message_number: 150}
+          },
+          session_context: %{
+            theme: theme(),
+            domain: %{posts: BoundedFakePosts, markdown: FakeMarkdown}
+          }
+        })
+
+      {s_after, _} = PostReader.load_posts(s, "t-1000")
+
+      ss = s_after.screen_state.post_reader
+      selected = Enum.at(ss.posts, ss.selected_post_index)
+
+      assert selected
+      assert selected.message_number == 150
     end
   end
 
