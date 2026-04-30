@@ -690,7 +690,13 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
           selected_post_index: 0,
           window_first_message_number: 51,
           window_last_message_number: 100,
-          window_has_previous?: true
+          window_has_previous?: true,
+          pending_read_positions: %{
+            "t-1000" => %{
+              last_read_post_id: "p100",
+              last_read_message_number: 100
+            }
+          }
         )
 
       assert {%State{} = loading,
@@ -712,8 +718,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p50"
 
       assert loaded.pending_read_positions["t-1000"] == %{
-               last_read_post_id: "p50",
-               last_read_message_number: 50
+               last_read_post_id: "p100",
+               last_read_message_number: 100
              }
     end
 

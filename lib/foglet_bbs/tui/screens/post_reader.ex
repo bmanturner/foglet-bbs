@@ -657,14 +657,21 @@ defmodule Foglet.TUI.Screens.PostReader do
         state
 
       post ->
-        pending = %{
+        next = %{
           last_read_post_id: Map.get(post, :id),
           last_read_message_number: Map.get(post, :message_number) || 0
         }
 
+        pending =
+          Map.update(state.pending_read_positions, thread_id, next, fn current ->
+            if next.last_read_message_number >= Map.get(current, :last_read_message_number, 0),
+              do: next,
+              else: current
+          end)
+
         %{
           state
-          | pending_read_positions: Map.put(state.pending_read_positions, thread_id, pending)
+          | pending_read_positions: pending
         }
     end
   end

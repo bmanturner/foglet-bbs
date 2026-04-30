@@ -277,17 +277,43 @@ defmodule Foglet.Threads do
   @doc """
   Advance (or create) a thread read pointer.
   Upserts on (user_id, thread_id) — safe to call multiple times.
+  Existing pointers only move forward by post `message_number`.
   """
   @spec advance_thread_read_pointer(String.t(), String.t(), String.t()) ::
           {:ok, ReadPointer.t()} | {:error, Ecto.Changeset.t()}
   def advance_thread_read_pointer(user_id, thread_id, last_read_post_id) do
     now = DateTime.utc_now()
+    new_post = Repo.get_by!(Post, id: last_read_post_id, thread_id: thread_id)
+
+    on_conflict_query =
+      from(rp in ReadPointer,
+        update: [
+          set: [
+            last_read_post_id:
+              fragment(
+                """
+                CASE
+                WHEN ? >= COALESCE((SELECT message_number FROM posts WHERE id = ?), 0)
+                THEN ?
+                ELSE ?
+                END
+                """,
+                ^new_post.message_number,
+                rp.last_read_post_id,
+                type(^last_read_post_id, :binary_id),
+                rp.last_read_post_id
+              ),
+            last_read_at: ^now
+          ]
+        ]
+      )
 
     %ReadPointer{user_id: user_id, thread_id: thread_id}
     |> ReadPointer.changeset(%{last_read_post_id: last_read_post_id, last_read_at: now})
     |> Repo.insert(
-      on_conflict: [set: [last_read_post_id: last_read_post_id, last_read_at: now]],
-      conflict_target: [:user_id, :thread_id]
+      on_conflict: on_conflict_query,
+      conflict_target: [:user_id, :thread_id],
+      returning: true
     )
   end
 

@@ -277,6 +277,24 @@ defmodule Foglet.ThreadsTest do
 
       assert count == 1
     end
+
+    test "does not move thread read pointer backward" do
+      {board, _pid} = setup_board_with_server()
+      user = user_fixture()
+      poster = user_fixture()
+
+      {:ok, %{thread: thread, post: p1}} =
+        Foglet.Threads.create_thread(board.id, poster.id, %{title: "T", body: "b"})
+
+      {:ok, p2} =
+        Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "reply"})
+
+      {:ok, _} = Foglet.Threads.advance_thread_read_pointer(user.id, thread.id, p2.id)
+      {:ok, unchanged} = Foglet.Threads.advance_thread_read_pointer(user.id, thread.id, p1.id)
+
+      assert unchanged.last_read_post_id == p2.id
+      assert Foglet.Threads.get_thread_read_pointer(user.id, thread.id).last_read_post_id == p2.id
+    end
   end
 
   describe "lock_thread/1, sticky_thread/1 (BOARD-12)" do
