@@ -178,6 +178,15 @@ defmodule Foglet.Sessions.Supervisor do
             Process.exit(old_pid, :kill)
         end
 
+        # Drain Foglet.Sessions.Registry's own mailbox so its monitor on
+        # old_pid is processed and the user.id slot is cleared before we
+        # cast promote_to_user. Both terminate_child's synchronous return
+        # and Process.exit(:kill) are asynchronous w.r.t. the Registry's
+        # own DOWN handling — without this sync, the guest's
+        # Registry.register/3 could observe {:already_registered, old_pid}
+        # for a now-dead pid (matches the supervisor_test.exs:56 idiom).
+        _ = :sys.get_state(@registry)
+
         Foglet.Sessions.Session.promote_to_user(guest_pid, user, audit)
     end
   end
@@ -194,8 +203,24 @@ defmodule Foglet.Sessions.Supervisor do
     after
       @replacement_timeout_ms ->
         Process.demonitor(ref, [:flush])
-        # Forcefully terminate if the old Session didn't stop in time.
-        :ok = DynamicSupervisor.terminate_child(__MODULE__, old_pid)
+
+        # Mirror replace_then_promote/4: tolerate a non-supervised /
+        # already-dead old_pid so a benign timing race (old session crashed
+        # of its own accord just past the timeout window) does not crash
+        # the calling CLIHandler and drop the new connection.
+        case DynamicSupervisor.terminate_child(__MODULE__, old_pid) do
+          :ok ->
+            :ok
+
+          {:error, reason} ->
+            Logger.warning(
+              "Sessions.Supervisor.replace: terminate_child failed (#{inspect(reason)}); " <>
+                "sending EXIT to #{inspect(old_pid)}"
+            )
+
+            Process.exit(old_pid, :kill)
+        end
+
         start_or_adopt(opts)
     end
   end

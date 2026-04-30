@@ -63,6 +63,7 @@ defmodule Foglet.SSH.CLIHandler do
     :peer,
     :session_pid,
     :lifecycle_pid,
+    :dispatcher_pid,
     :width,
     :height,
     over_limit: false,
@@ -134,13 +135,27 @@ defmodule Foglet.SSH.CLIHandler do
     Process.link(lifecycle_pid)
     :ssh_connection.reply_request(conn, want_reply, :success, ch)
 
-    {:ok, %{state | lifecycle_pid: lifecycle_pid, width: width, height: height}}
+    # WR-05: resolve the dispatcher pid once here, immediately after Lifecycle
+    # start, and stash it on state so per-keystroke / per-resize dispatches do
+    # not block on a synchronous GenServer.call into the Lifecycle. The
+    # dispatcher pid is stable for the Lifecycle's lifetime; if a future Raxol
+    # version can rebuild it, refresh on the EXIT path or expose a notification.
+    dispatcher_pid = resolve_dispatcher(lifecycle_pid)
+
+    {:ok,
+     %{
+       state
+       | lifecycle_pid: lifecycle_pid,
+         dispatcher_pid: dispatcher_pid,
+         width: width,
+         height: height
+     }}
   end
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:data, _ch, _type, data}}, state) do
     events = IOAdapter.parse_input(data)
-    dispatch_events(state.lifecycle_pid, events)
+    dispatch_events(state.dispatcher_pid, events)
     {:ok, state}
   end
 
@@ -157,11 +172,13 @@ defmodule Foglet.SSH.CLIHandler do
     #      and the gate never triggers on resize.
     resize = Raxol.Core.Events.Event.new(:resize, %{width: width, height: height})
     window = Raxol.Core.Events.Event.new(:window, %{width: width, height: height})
-    dispatch_events(state.lifecycle_pid, [resize, window])
+    dispatch_events(state.dispatcher_pid, [resize, window])
 
-    if is_pid(state.session_pid) do
-      Sessions.Session.set_terminal_size(state.session_pid, {width, height})
-    end
+    # IN-01: Session.set_terminal_size/2 is owned by the App's
+    # do_update({:window_change, …}, …) handler, which already fires from the
+    # :window event dispatched above. Casting here too would double-write the
+    # same value and obscure ownership of the "session knows its size"
+    # invariant.
 
     {:ok, %{state | width: width, height: height}}
   end
@@ -218,13 +235,16 @@ defmodule Foglet.SSH.CLIHandler do
         # Over-limit reject is a fully-rejected state. check_connection_limit/0
         # already compensated its own increment, so no later cleanup is owed:
         # cleanup_done? is true and counter_counted? is false. Future cleanup
-        # delegations are no-ops.
+        # delegations are no-ops. Use update-syntax (not a fresh struct) so any
+        # field init/1 sets in the future is preserved on the rejection path
+        # symmetrically with the accepted branch.
         new_state = %__MODULE__{
-          over_limit: true,
-          channel_id: channel_id,
-          connection_ref: connection_ref,
-          cleanup_done?: true,
-          counter_counted?: false
+          state
+          | over_limit: true,
+            channel_id: channel_id,
+            connection_ref: connection_ref,
+            cleanup_done?: true,
+            counter_counted?: false
         }
 
         {:ok, new_state}
@@ -270,11 +290,12 @@ defmodule Foglet.SSH.CLIHandler do
           _ = safe_ssh_close(connection_ref, channel_id)
 
           new_state = %__MODULE__{
-            over_limit: true,
-            channel_id: channel_id,
-            connection_ref: connection_ref,
-            cleanup_done?: true,
-            counter_counted?: false
+            state
+            | over_limit: true,
+              channel_id: channel_id,
+              connection_ref: connection_ref,
+              cleanup_done?: true,
+              counter_counted?: false
           }
 
           {:ok, new_state}
@@ -436,14 +457,16 @@ defmodule Foglet.SSH.CLIHandler do
 
   defp dispatch_events(nil, _events), do: :ok
 
-  defp dispatch_events(lifecycle_pid, events) do
-    case get_dispatcher(lifecycle_pid) do
-      nil -> :ok
-      pid -> Enum.each(events, &GenServer.cast(pid, {:dispatch, &1}))
-    end
+  defp dispatch_events(dispatcher_pid, events) when is_pid(dispatcher_pid) do
+    Enum.each(events, &GenServer.cast(dispatcher_pid, {:dispatch, &1}))
   end
 
-  defp get_dispatcher(lifecycle_pid) do
+  # Resolve the Raxol dispatcher pid from the Lifecycle once at PTY start.
+  # Returns nil if the Lifecycle is unreachable (already exited) so dispatching
+  # before the EXIT message is observed becomes a no-op.
+  defp resolve_dispatcher(nil), do: nil
+
+  defp resolve_dispatcher(lifecycle_pid) do
     %{dispatcher_pid: pid} = GenServer.call(lifecycle_pid, :get_full_state)
     pid
   catch

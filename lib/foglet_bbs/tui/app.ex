@@ -386,10 +386,27 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Supervisor.promote_guest_session(state.session_pid, user,
         audit: %{ssh_peer: Map.get(state.session_context, :ssh_peer)}
       )
+    else
+      require Logger
+
+      Logger.warning(
+        "[TUI.App] promote_session without session_pid; user=#{inspect(user.handle)} — " <>
+          "Session telemetry will be missing"
+      )
     end
 
+    # Keep session_context in lockstep with current_user so screens that read
+    # session_context.user (rather than current_user) see the authenticated
+    # identity. :pubkey_authenticated stays as-is — TUI-driven login is
+    # password-based by definition, so promoting here does NOT make the
+    # session pubkey-authenticated.
+    updated_context =
+      state.session_context
+      |> Map.put(:user, user)
+      |> Map.put(:user_id, user.id)
+
     Effects.apply_effect(
-      %{state | current_user: user},
+      %{state | current_user: user, session_context: updated_context},
       Foglet.TUI.Effect.navigate(:main_menu, %{})
     )
   end
