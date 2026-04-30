@@ -126,6 +126,14 @@ post fixtures from `Foglet.TUI.RenderFixtures` — no Repo, no SSH, no PubSub.
 This is for visual inspection, not behaviour assertions; for those, use
 `test/foglet_bbs/tui/layout_smoke_test.exs` patterns.
 
+For live SSH/TUI inspection, use the QA harness after starting a local Foglet
+instance. Install Node dependencies with `rtk npm install`, then run
+`rtk npm run ssh:harness -- --user sysop --password 'seedpassword123!'`.
+Inside the harness, `screen` prints the current terminal buffer, `key <name>`
+sends keys such as `enter`, `tab`, `up`, and `down`, `type <text>` sends
+literal input, `resize 100x30` changes the PTY, and `--script <path>` runs a
+newline-delimited command file. Keep credentials local and prefer test accounts.
+
 ## Workflows
 
 For domain mutations: start at the owning context, add changeset fields only for
