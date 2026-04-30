@@ -499,28 +499,27 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp session_context_domain(_context, _key, default), do: default
 
-  # Wraps KvGrid output in a column container. KvGrid.render/2 can return a list
-  # containing [text, badge] pairs (when entries have badge metadata). Raxol's
-  # flexbox cannot process nested lists as children; List.flatten/1 normalises
-  # the list so every child is a single element map before the column is built.
-  # This does NOT touch the internals of map values — only collapses list nesting.
-  defp kv_grid_column(summary, theme, width) do
-    flat =
-      KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
-      |> List.flatten()
-
-    column style: %{gap: 0} do
-      flat
-    end
-  end
-
   defp compact_table_children(summary, table, theme, width, height) do
     table_node = ConsoleTable.render(table, theme: theme)
 
     if height <= 18 do
       [table_node]
     else
-      [kv_grid_column(summary, theme, width), table_node]
+      # KvGrid.render/2 can return a list containing [text, badge] pairs (when
+      # entries have badge metadata). Raxol's flexbox cannot process nested
+      # lists as children; List.flatten/1 normalises the list so every child
+      # is a single element map before the column is built. This does NOT
+      # touch the internals of map values — only collapses list nesting.
+      flat =
+        KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
+        |> List.flatten()
+
+      kv_column =
+        column style: %{gap: 0} do
+          flat
+        end
+
+      [kv_column, table_node]
     end
   end
 
