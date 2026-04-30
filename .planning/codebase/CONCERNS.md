@@ -37,57 +37,52 @@ paths that haven't yet hit their pagination ceiling.
 
 ### Legacy Chrome V1 / flat-key-hint compatibility shims
 
-- Issue: `Foglet.TUI.Widgets.Chrome.KeyBar`, `ScreenFrame`, `StatusBar`,
-  and `Normalizer` carry explicit "compatibility wrapper for legacy flat
-  key hint lists" / "legacy screen title string or Chrome V2 model" code
-  paths. Both legacy `{key, description}` tuples and Chrome V2 grouped
-  command bars are supported.
-- Files:
+- Disposition: **Resolved by Phase 47 plan 03 (R5).** Chrome V1
+  compatibility wrappers and `Normalizer` indirection were removed; all
+  callers emit V2 grouped command bars directly. See `47-03-SUMMARY.md`.
+- Original issue (kept for historical context): `Foglet.TUI.Widgets.Chrome.KeyBar`,
+  `ScreenFrame`, `StatusBar`, and `Normalizer` carried explicit
+  "compatibility wrapper for legacy flat key hint lists" / "legacy screen
+  title string or Chrome V2 model" code paths. Both legacy
+  `{key, description}` tuples and Chrome V2 grouped command bars were
+  supported.
+- Files (pre-Phase-47):
   - `lib/foglet_bbs/tui/widgets/chrome/key_bar.ex:3-16`.
   - `lib/foglet_bbs/tui/widgets/chrome/screen_frame.ex:14-191`.
   - `lib/foglet_bbs/tui/widgets/chrome/status_bar.ex:42-101`.
   - `lib/foglet_bbs/tui/widgets/chrome/normalizer.ex:3-28`.
-- Impact: Two shapes for the same data wherever chrome is rendered. Each
-  caller has to know whether it's emitting V1 or V2 data; bug-fixes need
-  to be tested against both branches.
-- Fix approach: Audit screen call sites for remaining V1 emitters,
-  migrate them to V2 grouped commands, then drop the normalizer/legacy
-  branches. Deferred while migration is in progress.
 
 ### `Foglet.TUI.App` is still 483 lines and concentrates routing + effects
 
-- Issue: After Phase 42 extracted `App.Routing`, `App.Modal`, `App.Effects`,
-  and `App.Subscriptions`, the App module is down from 1006 to 483 lines —
-  but it is still the largest non-screen module in `lib/` and still owns
-  the runtime callbacks, screen-state plumbing, generic effect dispatch,
-  and the `set_user`/`promote_session` aliasing.
+- Disposition: **Reduced by Phase 47 plan 04 (R6).** App.ex shrank
+  further after extracting per-effect dispatchers. Remaining
+  responsibilities (runtime callbacks, screen-state plumbing) are
+  intentional. See `47-04-SUMMARY.md`.
+- Original issue (kept for historical context): After Phase 42 extracted
+  `App.Routing`, `App.Modal`, `App.Effects`, and `App.Subscriptions`, the
+  App module was down from 1006 to 483 lines — but it was still the
+  largest non-screen module in `lib/`.
 - Files: `lib/foglet_bbs/tui/app.ex`.
-- Impact: Adding a new screen still requires touching App in several
-  places (route table, initial-route hook, novel effect dispatch). The
-  blast radius is much smaller than v2.0 but non-trivial.
-- Fix approach: Continue extracting helpers as new screen patterns
-  emerge. No urgent refactor needed at current size.
 
 ### Several screen modules remain large
 
-- Issue: After Phase 43 decomposition the largest screens are now:
+- Disposition (login.ex): **Resolved by Phase 47 plan 05 (R7).**
+  `login.ex` decomposed from 606 lines into a thin top-level dispatcher
+  (~106 lines) + four per-mode reducer modules under
+  `lib/foglet_bbs/tui/screens/login/` (`menu.ex`, `login_form.ex`,
+  `reset_request.ex`, `reset_consume.ex`). State remains a `:sub`-keyed
+  map per D-13 (no tagged-union conversion). See `47-05-SUMMARY.md`.
+- Disposition (other screens): Out of scope for Phase 47. PostReader is
+  at its natural size given the bounded-window reducer + PubSub
+  plumbing; Modal Form is a large widget by necessity.
+- Original issue (kept for historical context): After Phase 43
+  decomposition the largest screens were:
   - `lib/foglet_bbs/tui/screens/post_reader.ex` — 867 lines
   - `lib/foglet_bbs/tui/widgets/modal/form.ex` — 683 lines
   - `lib/foglet_bbs/tui/screens/main_menu.ex` — 646 lines
   - `lib/foglet_bbs/tui/screens/sysop/boards_view.ex` — 644 lines
-  - `lib/foglet_bbs/tui/screens/login.ex` — 606 lines
+  - `lib/foglet_bbs/tui/screens/login.ex` — 606 lines (now ~106)
   - `lib/foglet_bbs/ssh/cli_handler.ex` — 590 lines
-- Files: see paths above.
-- Impact: Reducer logic and render/state helpers are split into sibling
-  modules per Phase 43, but the primary reducer files still concentrate
-  multi-mode key handling (especially `login.ex` with its menu /
-  login_form / reset_request / reset_consume modes — see also the
-  `:contract_supertype` ignore entry for that module's tagged-union
-  problem).
-- Fix approach: Login and Register would benefit from a tagged-union
-  state refactor (called out in `46-CONTEXT D-03` as out of scope).
-  PostReader is at its natural size given the bounded-window reducer +
-  PubSub plumbing. Modal Form is a large widget by necessity.
 
 ## Known Bugs
 
@@ -143,30 +138,31 @@ audit; CI exercises the same gates.
 
 ### `Foglet.Posts.list_posts/1` still loads every post in a thread
 
-- Problem: `list_posts/1` returns every non-paginated post in a thread,
-  ordered by `inserted_at` ascending, with `:user` preloaded. PostReader
-  no longer uses this path (Phase 44 routed PostReader through
+- Disposition: **Resolved by Phase 47 plans 01 + 02 (R1, R2).** The
+  unbounded path was bounded with a hard `LIMIT` ceiling and remaining
+  callers were migrated to the bounded variant. See `47-01-SUMMARY.md`
+  and `47-02-SUMMARY.md`.
+- Original problem (kept for historical context): `list_posts/1`
+  returned every non-paginated post in a thread, ordered by
+  `inserted_at` ascending, with `:user` preloaded. PostReader no longer
+  used this path (Phase 44 routed PostReader through
   `list_reader_window/2`), but other consumers — moderation views,
   search/export, future API surfaces — still hit the unbounded query.
-- Files:
+- Files (pre-Phase-47):
   - `lib/foglet_bbs/posts.ex:84-92` (`list_posts/1`).
   - `lib/foglet_bbs/posts.ex:106-107` (`list_reader_window/2` — bounded).
-- Cause: `list_posts/1` is the legacy unbounded reader; bounded callers
-  have migrated but the function itself is still public API.
-- Improvement path: Audit remaining call sites. If they all tolerate
-  a bounded variant, deprecate `list_posts/1` and migrate them. Otherwise
-  document the unbounded contract and add a `LIMIT` ceiling guard.
 
 ### `Foglet.Threads.list_threads/2` runs a per-thread aggregation join
 
-- Problem: When called with a `user_id`, `list_threads/2` joins thread
-  read-pointer rows and computes per-thread unread state. No `LIMIT` is
-  applied; very active boards return all threads.
-- Files: `lib/foglet_bbs/threads.ex:106-152`.
-- Cause: Board view requirements include "show every thread with unread
-  state". Boards with thousands of threads will blow up the response.
-- Improvement path: Add cursor pagination keyed by activity timestamp.
-  Same shape as the PostReader bounded-window pattern from Phase 44.
+- Disposition: **Resolved by Phase 47 plan 02 (R3, R4).**
+  `list_threads/2` is now bounded by a `LIMIT` ceiling, with cursor
+  support added for callers that need pagination. See
+  `47-02-SUMMARY.md`.
+- Original problem (kept for historical context): When called with a
+  `user_id`, `list_threads/2` joined thread read-pointer rows and
+  computed per-thread unread state. No `LIMIT` was applied; very active
+  boards returned all threads.
+- Files (pre-Phase-47): `lib/foglet_bbs/threads.ex:106-152`.
 
 ## Fragile Areas
 

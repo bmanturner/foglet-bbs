@@ -14,6 +14,13 @@
   # internal types not exported in a Dialyzer-resolvable way; narrowing
   # emits a fresh :contract_supertype on the same line (Pitfall 1 in
   # 46-RESEARCH.md). init/1, update/3 on these screens already narrow.
+  #
+  # Phase 47 plan 05: the login.ex entry survived the per-mode reducer
+  # extraction (D-17). After Bucket C* dropped from login.ex (state-shape
+  # warning resolved by the extraction), the surviving warning is on
+  # render/2's Raxol element return, identical to the other Bucket C2
+  # entries. Per D-17 we did not chase with speculative @specs.
+  {"lib/foglet_bbs/tui/screens/login.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/new_thread.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/post_reader.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/size_gate.ex", :contract_supertype},
@@ -29,8 +36,15 @@
   # Bucket C* — multi-shape state maps. Login (:menu/:login_form/
   # :reset_request/:reset_consume) and register (:invite_code/:combined)
   # have variant required-field sets; a single @type t/0 collapses to
-  # map(). Tagged-union refactor out of scope per 46-CONTEXT D-03.
-  {"lib/foglet_bbs/tui/screens/login.ex", :contract_supertype},
+  # map(). Tagged-union refactor out of scope per 46-CONTEXT D-03 and
+  # confirmed out of scope by 47-CONTEXT D-13.
+  #
+  # Phase 47 plan 05 (D-17): the parent login.ex entry was removed after
+  # the per-mode reducer extraction collapsed the multi-shape state map
+  # leaks to the per-mode boundary; state.ex still requires the ignore
+  # because LoginState.get/put still operate on the union of sub-state
+  # shapes. Per D-17 we did not chase the entry by adding speculative
+  # @specs; it dropped naturally.
   {"lib/foglet_bbs/tui/screens/login/state.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/register/state.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/verify/state.ex", :contract_supertype},
