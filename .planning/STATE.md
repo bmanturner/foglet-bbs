@@ -4,14 +4,14 @@ milestone: v2.1
 milestone_name: milestone
 status: executing
 stopped_at: Completed 44-02-PLAN.md
-last_updated: "2026-04-30T00:33:30.052Z"
-last_activity: 2026-04-30
+last_updated: "2026-04-30T00:48:17.118Z"
+last_activity: 2026-04-30 -- Phase 43 execution started
 progress:
   total_phases: 6
-  completed_phases: 3
-  total_plans: 21
-  completed_plans: 16
-  percent: 76
+  completed_phases: 2
+  total_plans: 22
+  completed_plans: 17
+  percent: 77
 ---
 
 # Project State
@@ -21,14 +21,14 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-29)
 
 **Core value:** A user can SSH into a living, reliable BBS and participate in conversations through a terminal-native experience that feels like arriving somewhere.
-**Current focus:** Phase 44 — postreader-and-content-query-hardening
+**Current focus:** Phase 43 — large-screen-decomposition
 
 ## Current Position
 
-Phase: 44 (postreader-and-content-query-hardening) — EXECUTING
-Plan: 3 of 4
-Status: Ready to execute
-Last activity: 2026-04-30
+Phase: 43 (large-screen-decomposition) — EXECUTING
+Plan: 1 of 6
+Status: Executing Phase 43
+Last activity: 2026-04-30 -- Phase 43 execution started
 
 Progress: [█████████░] 89%
 

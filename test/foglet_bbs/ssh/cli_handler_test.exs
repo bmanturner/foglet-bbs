@@ -129,6 +129,11 @@ defmodule Foglet.SSH.CLIHandlerTest do
   end
 
   describe "PubkeyStash correlation" do
+    setup do
+      reset_pubkey_stash!()
+      :ok
+    end
+
     test "pop returns :miss when no key was stashed for that peer" do
       peer = {{10, 0, 0, 1}, 11_111}
       assert PubkeyStash.pop(peer) == :miss
@@ -147,6 +152,45 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
     test "pop(:unknown) always returns :miss" do
       assert PubkeyStash.pop(:unknown) == :miss
+    end
+
+    test "sweep removes stale entries past the TTL window" do
+      peer = {{10, 0, 0, 3}, 33_333}
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+
+      PubkeyStash.put(peer, public_key, 1_000)
+
+      now = 1_000 + :timer.minutes(6)
+      assert PubkeyStash.sweep(now, :timer.minutes(5)) == 1
+      assert PubkeyStash.pop(peer, now) == :miss
+    end
+
+    test "sweep only removes stale entries and leaves fresh entries consumable once" do
+      stale_peer = {{10, 0, 0, 4}, 44_444}
+      fresh_peer = {{10, 0, 0, 5}, 55_555}
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+
+      PubkeyStash.put(stale_peer, public_key, 1_000)
+      fresh_inserted_at = 1_000 + :timer.minutes(5)
+      PubkeyStash.put(fresh_peer, public_key, fresh_inserted_at)
+
+      now = 1_000 + :timer.minutes(6)
+      assert PubkeyStash.sweep(now, :timer.minutes(5)) == 1
+      assert PubkeyStash.pop(stale_peer, now) == :miss
+      assert {:ok, ^public_key} = PubkeyStash.pop(fresh_peer, now)
+      assert PubkeyStash.pop(fresh_peer, now) == :miss
+    end
+
+    test "expired entry returns :miss from pop without prior sweep" do
+      peer = {{10, 0, 0, 6}, 66_666}
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+
+      PubkeyStash.put(peer, public_key, 1_000)
+
+      assert PubkeyStash.pop(peer, 1_000 + :timer.minutes(6)) == :miss
+      # Expired entry should have been deleted by the pop, so a follow-up
+      # pop with a fresh timestamp must also miss.
+      assert PubkeyStash.pop(peer, 1_000 + :timer.minutes(6)) == :miss
     end
   end
 
@@ -254,6 +298,14 @@ defmodule Foglet.SSH.CLIHandlerTest do
   defp warm_login_config_cache! do
     _ = Foglet.Config.registration_mode()
     _ = Foglet.Config.delivery_mode()
+  end
+
+  defp reset_pubkey_stash! do
+    if :ets.whereis(PubkeyStash) != :undefined do
+      :ets.delete(PubkeyStash)
+    end
+
+    PubkeyStash.init()
   end
 
   defp reset_cli_counter! do
