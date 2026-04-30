@@ -138,8 +138,18 @@ defmodule Foglet.Boards.Server do
   # Multi.run/3, etc. The composition is correct at runtime — Ecto's public
   # API supports exactly this pattern — and there is no spec-level workaround
   # that survives dialyzer's struct-shape inference. Scoping the directive to
-  # these two functions keeps any future :call_without_opaque elsewhere in the
-  # module observable.
+  # these two functions keeps any future :no_opaque-family warning elsewhere
+  # in the module observable.
+  #
+  # Scope caveat: the :no_opaque tag is family-level — it covers
+  # :call_without_opaque (the warning we are silencing), :opaque_match,
+  # :opaque_neq, :opaque_size, etc. Only :call_without_opaque fires here
+  # today because neither helper pattern-matches or compares against
+  # Ecto.Multi internal fields. If a future edit to either helper introduces
+  # such a match (e.g. `%Ecto.Multi{operations: [_ | _]}`) or comparison,
+  # re-run dialyzer with this directive removed before re-applying it — the
+  # family-level tag will silently absorb the new warning, which may be a
+  # real bug.
   @dialyzer {:no_opaque, [run_post_insert_multi: 5, run_thread_create_multi: 4]}
 
   defp run_post_insert_multi(board_id, thread_id, user_id, attrs, message_number) do
