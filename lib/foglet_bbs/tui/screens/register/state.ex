@@ -154,9 +154,63 @@ defmodule Foglet.TUI.Screens.Register.State do
 
   def verify_invite_code(_code, _invites_mod), do: {:error, :format}
 
-  @doc "Formats an Ecto.Changeset error map into a single display string."
+  @generic_error "Please double-check the form and try again."
+
+  @doc """
+  Formats an `Ecto.Changeset` from `Foglet.Accounts.User.registration_changeset/2`
+  into one or more user-readable sentences.
+
+  Known `{field, error}` shapes map to a curated sentence. Any unrecognized
+  shape collapses to a generic safe message — raw atoms or Ecto internals
+  never reach the user.
+  """
   @spec changeset_error_text(Ecto.Changeset.t()) :: String.t()
-  def changeset_error_text(cs) do
-    Enum.map_join(cs.errors, "; ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+  def changeset_error_text(%Ecto.Changeset{errors: []}), do: @generic_error
+
+  def changeset_error_text(%Ecto.Changeset{errors: errors}) do
+    errors
+    |> Enum.map(&translate_error/1)
+    |> Enum.uniq()
+    |> Enum.join(" ")
   end
+
+  defp translate_error({field, {_msg, opts}}) do
+    cond do
+      Keyword.get(opts, :validation) == :required -> required_sentence(field)
+      Keyword.get(opts, :validation) == :format -> format_sentence(field)
+      Keyword.get(opts, :validation) == :length -> length_sentence(field, opts)
+      Keyword.get(opts, :validation) == :unsafe_unique -> unique_sentence(field)
+      Keyword.get(opts, :constraint) == :unique -> unique_sentence(field)
+      true -> @generic_error
+    end
+  end
+
+  defp required_sentence(:handle), do: "Please choose a handle."
+  defp required_sentence(:email), do: "Please enter an email address."
+  defp required_sentence(:password), do: "Please choose a password."
+  defp required_sentence(_), do: @generic_error
+
+  defp unique_sentence(:handle), do: "That handle is already taken."
+  defp unique_sentence(:email), do: "That email is already in use."
+  defp unique_sentence(_), do: @generic_error
+
+  defp format_sentence(:handle),
+    do: "Handle can only contain letters, numbers, underscores, and hyphens."
+
+  defp format_sentence(:email), do: "Please enter a valid email address."
+  defp format_sentence(_), do: @generic_error
+
+  defp length_sentence(:handle, _opts), do: "Handle must be 2–20 characters."
+
+  defp length_sentence(:email, _opts), do: "That email address is too long."
+
+  defp length_sentence(:password, opts) do
+    case Keyword.get(opts, :kind) do
+      :min -> "Password must be at least 8 characters."
+      :max -> "Password is too long."
+      _ -> "Password length is invalid."
+    end
+  end
+
+  defp length_sentence(_field, _opts), do: @generic_error
 end
