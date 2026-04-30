@@ -694,7 +694,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       # `@reset_no_email_no_sysops_fallback`. Without this, the test would
       # still pass even if the fallback constant were never inserted —
       # the intro copy alone matches the broader sysop|operator regex.
-      assert rendered =~ "No sysop contact email is published"
+      assert rendered =~ "No sysop contact is listed"
     end
 
     test "reset confirmation copy wraps via TextWidth.wrap at compact widths (D-12, AUTH-02)" do
