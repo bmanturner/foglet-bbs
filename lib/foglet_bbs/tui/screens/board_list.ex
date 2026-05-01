@@ -94,12 +94,13 @@ defmodule Foglet.TUI.Screens.BoardList do
 
         :node_activated ->
           case BoardTree.focused_board_entry(new_tree) do
-            %{board: board} ->
+            %{board: board} = entry ->
               {local_state,
                [
                  Effect.navigate(:thread_list, %{
                    board: board_identity(board),
-                   board_id: Map.get(board, :id)
+                   board_id: Map.get(board, :id),
+                   subscribed?: Map.get(entry, :subscribed?, true)
                  })
                ]}
 
@@ -193,7 +194,7 @@ defmodule Foglet.TUI.Screens.BoardList do
       {:error, reason} ->
         {%{
            local_state
-           | feedback: "Subscription change failed: #{inspect(reason)}",
+           | feedback: "Couldn't change your subscription. Try again in a moment.",
              last_op: nil,
              last_error: reason
          }, []}
@@ -227,13 +228,13 @@ defmodule Foglet.TUI.Screens.BoardList do
           label: "Navigate",
           commands: [
             %{key: "j/k", label: "Select", priority: 10},
-            %{key: "←/→", label: "Collapse/Expand", priority: 10},
-            %{key: "Enter", label: "Open", priority: 10}
+            %{key: "←/→", label: "Collapse/Expand", priority: 20},
+            %{key: "Enter", label: "Open", priority: 5}
           ]
         },
         %{
           label: "Actions",
-          commands: [%{key: "s/u", label: "Subscribe/Unsubscribe", priority: 30}]
+          commands: [%{key: "s/u", label: "Sub/Unsub", priority: 15}]
         },
         %{
           label: "System",
@@ -278,10 +279,10 @@ defmodule Foglet.TUI.Screens.BoardList do
     end
   end
 
-  defp render_board_content(%State{status: {:error, reason}} = state, _context, theme) do
+  defp render_board_content(%State{status: {:error, _reason}} = state, _context, theme) do
     column style: %{gap: 0} do
       maybe_feedback(state, theme) ++
-        [text("Unable to load boards: #{inspect(reason)}", fg: theme.warning.fg)]
+        [text("Couldn't load boards. Press R to retry.", fg: theme.warning.fg)]
     end
   end
 
@@ -451,7 +452,9 @@ defmodule Foglet.TUI.Screens.BoardList do
     %{
       id: Map.get(board, :id),
       name: Map.get(board, :name),
-      slug: Map.get(board, :slug)
+      slug: Map.get(board, :slug),
+      archived: Map.get(board, :archived, false),
+      postable_by: Map.get(board, :postable_by, :members)
     }
   end
 
