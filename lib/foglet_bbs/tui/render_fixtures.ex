@@ -49,7 +49,9 @@ defmodule Foglet.TUI.RenderFixtures do
     login: ~w(login_form reset_request reset_consume suspended rejected pending)a,
     register: ~w(invite_only)a,
     verify: ~w(resend_cooldown unverified)a,
-    main_menu: ~w(suspended rejected pending unverified)a
+    main_menu: ~w(suspended rejected pending unverified)a,
+    thread_list: ~w(archived)a,
+    post_reader: ~w(archived)a
   }
 
   @seed_presets ~w(suspended rejected pending unverified invite_only resend_cooldown)a
@@ -345,6 +347,24 @@ defmodule Foglet.TUI.RenderFixtures do
   defp seed_substate(state, :main_menu, substate)
        when substate in [:suspended, :rejected, :pending, :unverified] do
     apply_seed_state(state, substate)
+  end
+
+  defp seed_substate(state, :thread_list, :archived) do
+    ss = App.screen_state_for(state, :thread_list)
+    board = Map.merge(ss.board, %{archived: true})
+    ss = %{ss | board: board}
+
+    %{state | route_params: %{state.route_params | board: board}}
+    |> App.put_screen_state(:thread_list, ss)
+  end
+
+  defp seed_substate(state, :post_reader, :archived) do
+    ss = App.screen_state_for(state, :post_reader)
+    board = Map.merge(ss.board, %{archived: true})
+    ss = %{ss | board: board}
+
+    %{state | route_params: %{state.route_params | board: board}}
+    |> App.put_screen_state(:post_reader, ss)
   end
 
   defp seed_account_gate(state, status) when status in [:suspended, :rejected, :pending] do

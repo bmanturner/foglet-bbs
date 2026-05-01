@@ -221,7 +221,7 @@ defmodule Foglet.TUI.Screens.NewThread do
         {%{state | error: "Post body cannot be empty."}, []}
 
       String.length(body) > max ->
-        {%{state | error: "Post body exceeds maximum length of #{max} characters."}, []}
+        {%{state | error: "Post body is too long (max #{max} characters)."}, []}
 
       is_nil(user_id) ->
         {%{state | error: "You must be logged in to create a thread."}, []}
@@ -322,14 +322,14 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp cancel_params(%State{}), do: %{}
 
   defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."
-  defp format_error(:thread_locked), do: "This thread is locked"
+  defp format_error(:board_archived), do: "That board has been archived. Pick another."
 
   defp format_error(%Ecto.Changeset{} = cs) do
     Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
   end
 
   defp format_error(reason) when is_binary(reason), do: reason
-  defp format_error(reason), do: inspect(reason)
+  defp format_error(_reason), do: "Could not create thread."
 
   defp context_with_config_limits(%Context{} = context) do
     session_context =

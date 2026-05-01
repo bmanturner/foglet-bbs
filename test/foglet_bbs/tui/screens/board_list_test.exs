@@ -224,7 +224,14 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert effect ==
              Effect.navigate(:thread_list, %{
                board_id: "b1",
-               board: %{id: "b1", name: "General", slug: "general"}
+               subscribed?: true,
+               board: %{
+                 id: "b1",
+                 name: "General",
+                 slug: "general",
+                 archived: false,
+                 postable_by: :members
+               }
              })
   end
 
@@ -310,7 +317,21 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     {state, []} =
       BoardList.update({:task_result, :subscribe_to_board, {:error, :unavailable}}, state, ctx)
 
-    assert state.feedback == "Subscription change failed: :unavailable"
+    assert state.feedback == "Couldn't change your subscription. Try again in a moment."
+    refute state.feedback =~ ":"
+  end
+
+  test "load failure renders friendly retry copy without raw reason" do
+    ctx = context()
+    state = BoardList.init(ctx)
+
+    {state, []} =
+      BoardList.update({:task_result, :load_boards, {:error, :database_timeout}}, state, ctx)
+
+    text = BoardList.render(state, ctx) |> flatten_text()
+
+    assert text =~ "Couldn't load boards. Press R to retry."
+    refute text =~ ":database_timeout"
   end
 
   test "board activity emits reload task" do

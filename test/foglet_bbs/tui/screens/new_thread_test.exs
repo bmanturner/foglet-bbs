@@ -417,7 +417,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
                context()
              )
 
-    assert {%State{load_status: {:error, :boom}, error: ":boom"}, []} =
+    assert {%State{load_status: {:error, :boom}, error: "Could not create thread."}, []} =
              NewThread.update(
                {:task_result, :load_boards_for_new_thread, {:error, :boom}},
                State.new(),
@@ -530,8 +530,12 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     ctx = context()
     ctx = %{ctx | session_context: Map.put(ctx.session_context, :max_post_length, 5)}
 
-    assert {%State{error: "Post body exceeds maximum length of 5 characters."}, []} =
+    assert {%State{error: message}, []} =
              NewThread.update({:key, %{key: :char, char: "s", ctrl: true}}, state, ctx)
+
+    assert message == "Post body is too long (max 5 characters)."
+    assert message =~ "max 5"
+    refute message =~ "(D-31)"
   end
 
   test "NewThread.update/3 handles successful create_thread task result with ThreadList route params" do
@@ -576,6 +580,23 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
             }, []} =
              NewThread.update(
                {:task_result, :create_thread, {:ok, {:error, :posting_not_allowed}}},
+               state,
+               context()
+             )
+
+    assert {%State{
+              submission_status: {:error, :board_archived},
+              error: "That board has been archived. Pick another."
+            }, []} =
+             NewThread.update(
+               {:task_result, :create_thread, {:ok, {:error, :board_archived}}},
+               state,
+               context()
+             )
+
+    assert {%State{submission_status: {:error, :boom}, error: "Could not create thread."}, []} =
+             NewThread.update(
+               {:task_result, :create_thread, {:error, :boom}},
                state,
                context()
              )
@@ -1256,7 +1277,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {:update, final, cmds} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, state)
 
     assert final.current_screen == :new_thread
-    assert get_ss(final).error =~ "maximum length"
+    assert get_ss(final).error == "Post body is too long (max 5 characters)."
+    refute get_ss(final).error =~ "(D-31)"
     refute Enum.any?(cmds, &match?({:load_threads, _}, &1))
   end
 

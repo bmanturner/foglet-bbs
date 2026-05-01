@@ -917,6 +917,29 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
+  describe "render/1 empty and boundary states" do
+    test "empty thread and end-of-thread states render distinct guidance" do
+      empty_thread =
+        p2_state(
+          posts: [],
+          screen_state: %{post_reader: State.new(status: :empty)}
+        )
+
+      end_of_thread =
+        p2_state(
+          posts: [p2_post([])],
+          screen_state: %{post_reader: State.new(status: :loaded, selected_post_index: 1)}
+        )
+
+      empty_text = flatten_text(render_screen(empty_thread))
+      end_text = flatten_text(render_screen(end_of_thread))
+
+      assert empty_text =~ "This thread has no readable posts."
+      assert end_text =~ "You're at the end of this thread."
+      refute empty_text == end_text
+    end
+  end
+
   describe "render/1 - Phase 22 reader facelift" do
     test "renders compact reader metadata for the selected post" do
       post =
@@ -2106,6 +2129,128 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       assert effects == []
       assert new_state == state
+    end
+  end
+
+  describe "FOG-91: locked-thread reply gate" do
+    test "R on a locked thread is a no-op and emits no navigation" do
+      context = post_reader_context()
+      posts = FakePosts.list_reader_window("t1", []).posts
+
+      state =
+        State.new(
+          board: %{id: "b1"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello", locked: true},
+          thread_id: "t1",
+          posts: posts,
+          status: :loaded
+        )
+
+      assert {^state, []} =
+               PostReader.update({:key, %{key: :char, char: "r"}}, state, context)
+
+      assert {^state, []} =
+               PostReader.update({:key, %{key: :char, char: "R"}}, state, context)
+    end
+
+    test "R on an unlocked thread still navigates to the composer" do
+      context = post_reader_context()
+      posts = FakePosts.list_reader_window("t1", []).posts
+
+      state =
+        State.new(
+          board: %{id: "b1"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello", locked: false},
+          thread_id: "t1",
+          posts: posts,
+          status: :loaded
+        )
+
+      assert {%State{}, [%Effect{type: :navigate, payload: payload}]} =
+               PostReader.update({:key, %{key: :char, char: "r"}}, state, context)
+
+      assert payload.screen == :post_composer
+    end
+
+    test "render reflects locked thread in the Reply keybar label" do
+      context = post_reader_context()
+      posts = FakePosts.list_reader_window("t1", []).posts
+
+      locked_state =
+        State.new(
+          board: %{id: "b1", name: "General"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello", locked: true},
+          thread_id: "t1",
+          posts: posts,
+          status: :loaded
+        )
+
+      unlocked_state = %{locked_state | thread: %{id: "t1", title: "Hello", locked: false}}
+
+      assert PostReader.locked_thread?(locked_state)
+      refute PostReader.locked_thread?(unlocked_state)
+
+      # Render does not crash and produces a tree for both shapes.
+      assert PostReader.render(locked_state, context)
+      assert PostReader.render(unlocked_state, context)
+    end
+  end
+
+  describe "FOG-96: archived-board reply gate" do
+    test "R on an archived board is a no-op and emits no navigation" do
+      context = post_reader_context()
+      posts = FakePosts.list_reader_window("t1", []).posts
+
+      state =
+        State.new(
+          board: %{id: "b1", archived: true},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello", locked: false},
+          thread_id: "t1",
+          posts: posts,
+          status: :loaded
+        )
+
+      assert {^state, []} =
+               PostReader.update({:key, %{key: :char, char: "r"}}, state, context)
+
+      assert {^state, []} =
+               PostReader.update({:key, %{key: :char, char: "R"}}, state, context)
+    end
+
+    test "render surfaces archived board before reply attempt" do
+      state =
+        p2_state(
+          current_board: %{id: "b1", name: "General", archived: true},
+          current_thread: %{id: "t1", title: "Hello", locked: false},
+          posts: [p2_post(body: "Reader body")]
+        )
+
+      flat = state |> render_screen() |> flatten_text()
+
+      assert flat =~ "Archived board — replies are closed."
+      assert flat =~ "Reply (archived)"
+      refute flat =~ "Reply (locked)"
+      assert PostReader.archived_board?(reader_ss(state))
+    end
+
+    test "locked thread copy takes precedence when the board is also archived" do
+      state =
+        p2_state(
+          current_board: %{id: "b1", name: "General", archived: true},
+          current_thread: %{id: "t1", title: "Hello", locked: true},
+          posts: [p2_post(body: "Reader body")]
+        )
+
+      flat = state |> render_screen() |> flatten_text()
+
+      assert flat =~ "Thread locked — replies disabled."
+      assert flat =~ "Reply (locked)"
+      refute flat =~ "Archived board — replies are closed."
+      refute flat =~ "Reply (archived)"
     end
   end
 end

@@ -20,6 +20,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   alias Foglet.Config
   alias Foglet.TUI.App
   alias Foglet.TUI.Context
+  alias Foglet.TUI.RenderFixtures
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Widgets.List.BoardTree
 
@@ -165,6 +166,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     |> Enum.filter(&(&1.y == y))
     |> Enum.sort_by(& &1.x)
     |> Enum.map_join(& &1.text)
+  end
+
+  defp bottom_row_text(positioned) do
+    y =
+      positioned
+      |> text_elements()
+      |> Enum.map(& &1.y)
+      |> Enum.max()
+
+    positioned_row_text(positioned, y)
   end
 
   defp chrome_frame_element?(element) do
@@ -555,6 +566,56 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         refute sticky_text =~ "[S] "
         refute locked_text =~ "[S] "
         refute plain_text =~ "[S] "
+      end
+    end
+
+    test "closed board banners sit above threads and suppress compose", %{
+      threads: threads
+    } do
+      size = {80, 24}
+      user = %Foglet.Accounts.User{id: "u1", handle: "alice", status: :active, role: :user}
+
+      cases = [
+        {%{id: "b1", name: "Archived", slug: "archived", archived: true, postable_by: :members},
+         true, "This board is archived. New threads and replies are disabled."},
+        {%{id: "b2", name: "Mods", slug: "mods", archived: false, postable_by: :mods_only}, true,
+         "This board is read-only."},
+        {%{id: "b3", name: "Open", slug: "open", archived: false}, false,
+         "You're not subscribed to this board. Press S on Boards to subscribe."}
+      ]
+
+      for {board, subscribed?, banner} <- cases do
+        state =
+          ThreadList.State.new(
+            board: board,
+            board_id: board.id,
+            subscribed?: subscribed?,
+            threads: threads,
+            selected_index: 0,
+            status: :loaded
+          )
+
+        tree =
+          ThreadList.render(
+            state,
+            screen_context(:thread_list, user, size, %{board: board, board_id: board.id})
+          )
+
+        positioned = apply_at_size(tree, size)
+        texts = content_text_elements(positioned)
+        banner_element = Enum.find(texts, &(&1.text == banner))
+        {first_thread_y, _row} = thread_row_elements(positioned, "Sticky")
+
+        assert %{y: banner_y} = banner_element
+        assert banner_y < first_thread_y
+        refute bottom_row_text(positioned) =~ "C Compose"
+
+        assert {^state, []} =
+                 ThreadList.update(
+                   {:key, %{key: :char, char: "C"}},
+                   state,
+                   screen_context(:thread_list, user, size)
+                 )
       end
     end
   end
@@ -1020,6 +1081,59 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     end
   end
 
+  describe "command bar — minimum width primary hints" do
+    test "primary board, thread, reader, and composer actions survive at 64x22" do
+      size = {64, 22}
+
+      expectations = [
+        {:board_list, ["Q Back", "Enter Open"]},
+        {:thread_list, ["Q Back", "C Compose"]},
+        {:post_reader, ["Q Back", "R Reply"]},
+        {:new_thread, ["Ctrl+S Submit", "Ctrl+C Cancel"]},
+        {:post_composer, ["Ctrl+S Send", "Ctrl+C Cancel"]}
+      ]
+
+      for {screen, expected_hints} <- expectations do
+        command_row =
+          screen
+          |> RenderFixtures.state_for(size)
+          |> App.view()
+          |> apply_at_size(size)
+          |> bottom_row_text()
+
+        for hint <- expected_hints do
+          assert command_row =~ hint,
+                 "expected #{inspect(screen)} command row at 64x22 to include #{inspect(hint)}, " <>
+                   "got: #{inspect(command_row)}"
+        end
+
+        assert TextWidth.display_width(command_row) <= elem(size, 0),
+               "#{inspect(screen)} command row exceeds 64 columns: #{inspect(command_row)}"
+      end
+    end
+
+    test "archived thread_list fixture renders banner and suppresses compose" do
+      size = {80, 24}
+
+      positioned =
+        :thread_list
+        |> RenderFixtures.state_for(size, substate: :archived)
+        |> App.view()
+        |> apply_at_size(size)
+
+      rows = text_rows(text_elements(positioned))
+
+      assert Enum.any?(rows, fn {_y, row} ->
+               String.contains?(
+                 row,
+                 "This board is archived. New threads and replies are disabled."
+               )
+             end)
+
+      refute bottom_row_text(positioned) =~ "C Compose"
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Phase 22 — PostReader size contracts (READER-01/02/03/04)
   # ---------------------------------------------------------------------------
@@ -1181,6 +1295,35 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
         assert_no_phase_22_overlap!(elements, size)
       end
+    end
+
+    test "post_reader archived fixture renders the reply-closed banner and keybar state" do
+      size = {80, 24}
+
+      positioned =
+        :post_reader
+        |> RenderFixtures.state_for(size, substate: :archived)
+        |> App.view()
+        |> apply_at_size(size)
+
+      rows = positioned |> content_text_elements() |> text_rows()
+
+      {banner_y, _banner_text} =
+        Enum.find(rows, fn {_y, row} ->
+          String.contains?(row, "Archived board — replies are closed.")
+        end)
+
+      {post_y, _post_text} =
+        Enum.find(rows, fn {_y, row} ->
+          String.contains?(row, "Post 1 of")
+        end)
+
+      command_row = bottom_row_text(positioned)
+
+      assert banner_y < post_y
+      assert command_row =~ "R Reply (archived)"
+      refute command_row =~ "R Reply (locked)"
+      assert TextWidth.display_width(command_row) <= elem(size, 0)
     end
   end
 
@@ -1700,6 +1843,44 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
     assert length(ys) >= 3,
            "expected at least 3 distinct y positions, got #{length(ys)}: #{inspect(elements)}"
+  end
+
+  test "post_reader positions distinct empty-thread and end-of-thread guidance" do
+    thread = %{id: "t1", title: "Reader Boundary"}
+    user = %{handle: "frank", id: "u3", status: :active, role: :member}
+    size = {80, 24}
+    context = screen_context(:post_reader, user, size, %{thread: thread, thread_id: thread.id})
+
+    empty_positioned =
+      PostReader.State.new(thread: thread, thread_id: thread.id, posts: [], status: :empty)
+      |> PostReader.render(context)
+      |> apply_at_size(size)
+
+    end_positioned =
+      PostReader.State.new(
+        thread: thread,
+        thread_id: thread.id,
+        posts: [
+          %{
+            id: "p1",
+            body: "First post body here",
+            inserted_at: DateTime.utc_now(),
+            message_number: 1,
+            user: %{handle: "dave"}
+          }
+        ],
+        status: :loaded,
+        selected_post_index: 1
+      )
+      |> PostReader.render(context)
+      |> apply_at_size(size)
+
+    empty_texts = empty_positioned |> content_text_elements() |> Enum.map(& &1.text)
+    end_texts = end_positioned |> content_text_elements() |> Enum.map(& &1.text)
+
+    assert "This thread has no readable posts." in empty_texts
+    assert "You're at the end of this thread." in end_texts
+    refute empty_texts == end_texts
   end
 
   # ---------------------------------------------------------------------------

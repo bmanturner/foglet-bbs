@@ -474,7 +474,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     |> then(fn s ->
       {:update, new_state, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
       assert new_state.modal.type == :error
-      assert new_state.modal.message == ":nope"
+      assert new_state.modal.message == "Could not submit post."
       assert new_state.current_screen == :post_composer
       assert Map.has_key?(new_state.screen_state, :post_composer)
     end)
@@ -550,7 +550,9 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
     {:update, s, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
     assert s.modal.type == :error
-    assert s.modal.message =~ "maximum length"
+    assert s.modal.message == "Post body is too long (max 1000 characters)."
+    assert s.modal.message =~ "max 1000"
+    refute s.modal.message =~ "(D-31)"
   end
 
   test "typing past max_post_length truncates silently (D-31)", %{state: state} do
@@ -698,6 +700,25 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       assert state.mode == :edit
     end
 
+    test "PostComposer.update(:on_route_enter, ...) keeps initialized route state idle" do
+      context =
+        composer_context(
+          route_params: %{
+            board_id: "b1",
+            thread_id: "t1",
+            reply_to: reply_post(),
+            origin: :post_reader
+          }
+        )
+
+      state = State.from_context(context)
+
+      {new_state, effects} = PostComposer.update(:on_route_enter, state, context)
+
+      assert new_state == state
+      assert effects == []
+    end
+
     test "PostComposer.update({:key, char}, ...) updates local input state" do
       context = composer_context()
       state = State.from_context(context)
@@ -726,7 +747,9 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       {state, []} =
         PostComposer.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
 
-      assert state.error == "Post body exceeds maximum length of 3 characters (D-31)."
+      assert state.error == "Post body is too long (max 3 characters)."
+      assert state.error =~ "max 3"
+      refute state.error =~ "(D-31)"
       assert state.submission_status == :idle
     end
 

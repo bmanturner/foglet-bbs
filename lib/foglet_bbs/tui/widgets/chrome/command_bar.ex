@@ -6,6 +6,11 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
   does not authorize, route, or execute actions. Implements the Phase 18
   command-bar contract while honoring the theme-routing decisions D-07, D-09,
   D-13, and stateless widget decision D-16.
+
+  Command priority is a retention priority: lower numbers are kept first when
+  the bar must drop hints to fit a narrow terminal. Use `0` for system escape
+  hatches, `5` for the screen's primary action, `10` for routine navigation,
+  and larger numbers for secondary hints that may disappear first.
   """
 
   import Raxol.Core.Renderer.View

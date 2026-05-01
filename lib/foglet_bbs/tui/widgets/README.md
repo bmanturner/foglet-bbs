@@ -24,6 +24,11 @@ New widgets should:
 | `Chrome.StatusBar`   | [`chrome/status_bar.ex`](chrome/status_bar.ex)   | Top-of-screen title + handle bar (FRAME-02) |
 | `Chrome.CommandBar`  | [`chrome/command_bar.ex`](chrome/command_bar.ex) | Bottom-of-screen V2 grouped command bar |
 
+`Chrome.CommandBar` treats command priority as retention priority: lower
+numbers stay visible longer under tight width. Use `0` for system escape
+hatches, `5` for the active screen's primary action, `10` for routine
+navigation, and larger numbers for secondary hints that may drop first.
+
 ## Compose / Modal (Phase 4 / 7, flat — unchanged per D-11)
 
 | Module | File | Description |
