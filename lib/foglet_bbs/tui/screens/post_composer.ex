@@ -49,6 +49,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   @impl true
   @spec update(term(), State.t(), Context.t()) :: {State.t(), [Effect.t()]}
+  def update(:on_route_enter, %State{} = state, %Context{}), do: {state, []}
+
   def update({:key, %{key: :tab}}, %State{} = state, %Context{}) do
     new_mode = if state.mode == :edit, do: :preview, else: :edit
     {%{state | mode: new_mode}, []}
@@ -273,7 +275,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   end
 
   defp format_error(reason) when is_binary(reason), do: reason
-  defp format_error(reason), do: inspect(reason)
+  defp format_error(_reason), do: "Could not submit post."
 
   defp submit_success(%State{} = state, result) do
     new_state = %{state | submission_status: :submitted, submit_result: result, error: nil}
@@ -298,7 +300,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
         {%{state | error: "Post body cannot be empty."}, []}
 
       String.length(draft) > max ->
-        {%{state | error: "Post body exceeds maximum length of #{max} characters (D-31)."}, []}
+        {%{state | error: "Post body is too long (max #{max} characters)."}, []}
 
       is_nil(context.current_user) ->
         {%{state | error: "You must be logged in to post."}, []}

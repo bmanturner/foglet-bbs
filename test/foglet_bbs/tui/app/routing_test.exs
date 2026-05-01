@@ -175,6 +175,34 @@ defmodule Foglet.TUI.App.RoutingTest do
              } = Routing.screen_state_for(new_state, :sample_runtime)
     end
 
+    test "built-in post_composer accepts route entry after reply navigation initialization" do
+      params = %{
+        origin: :post_reader,
+        board: %{id: "b1", name: "General"},
+        board_id: "b1",
+        thread: %{id: "t1", title: "Hello", board_id: "b1"},
+        thread_id: "t1",
+        reply_to: %{id: "p1", body: "root post"}
+      }
+
+      state =
+        state(
+          current_screen: :post_composer,
+          route_params: params,
+          session_context: %{max_post_length: 1_000},
+          current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+          screen_state: %{}
+        )
+        |> Routing.init_route_screen_state(:post_composer, params)
+
+      {new_state, cmds} = Routing.dispatch_route_entry(state, :post_composer, params)
+
+      assert cmds == []
+
+      assert %Foglet.TUI.Screens.PostComposer.State{thread_id: "t1", board_id: "b1"} =
+               Routing.screen_state_for(new_state, :post_composer)
+    end
+
     test "route_screen_update/3 no-ops when the override screen has no update/3" do
       state =
         state(
