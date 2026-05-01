@@ -2108,4 +2108,71 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert new_state == state
     end
   end
+
+  describe "FOG-91: locked-thread reply gate" do
+    test "R on a locked thread is a no-op and emits no navigation" do
+      context = post_reader_context()
+      posts = FakePosts.list_reader_window("t1", []).posts
+
+      state =
+        State.new(
+          board: %{id: "b1"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello", locked: true},
+          thread_id: "t1",
+          posts: posts,
+          status: :loaded
+        )
+
+      assert {^state, []} =
+               PostReader.update({:key, %{key: :char, char: "r"}}, state, context)
+
+      assert {^state, []} =
+               PostReader.update({:key, %{key: :char, char: "R"}}, state, context)
+    end
+
+    test "R on an unlocked thread still navigates to the composer" do
+      context = post_reader_context()
+      posts = FakePosts.list_reader_window("t1", []).posts
+
+      state =
+        State.new(
+          board: %{id: "b1"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello", locked: false},
+          thread_id: "t1",
+          posts: posts,
+          status: :loaded
+        )
+
+      assert {%State{}, [%Effect{type: :navigate, payload: payload}]} =
+               PostReader.update({:key, %{key: :char, char: "r"}}, state, context)
+
+      assert payload.screen == :post_composer
+    end
+
+    test "render reflects locked thread in the Reply keybar label" do
+      context = post_reader_context()
+      posts = FakePosts.list_reader_window("t1", []).posts
+
+      locked_state =
+        State.new(
+          board: %{id: "b1", name: "General"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello", locked: true},
+          thread_id: "t1",
+          posts: posts,
+          status: :loaded
+        )
+
+      unlocked_state = %{locked_state | thread: %{id: "t1", title: "Hello", locked: false}}
+
+      assert PostReader.locked_thread?(locked_state)
+      refute PostReader.locked_thread?(unlocked_state)
+
+      # Render does not crash and produces a tree for both shapes.
+      assert PostReader.render(locked_state, context)
+      assert PostReader.render(unlocked_state, context)
+    end
+  end
 end

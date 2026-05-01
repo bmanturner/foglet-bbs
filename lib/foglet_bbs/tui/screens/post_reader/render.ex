@@ -22,7 +22,8 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     frame_state = frame_state(state, context)
     theme = Theme.from_state(frame_state)
     {w, h} = context.terminal_size
-    post_content = render_local_post_content(state, frame_state, theme, w, h)
+    locked? = PostReader.locked_thread?(state)
+    post_content = render_local_post_content(state, frame_state, theme, w, h, locked?)
 
     chrome = %{
       breadcrumb_parts: ["Foglet", board_label(state), thread_title_label(state)]
@@ -40,7 +41,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       },
       %{
         label: "Actions",
-        commands: [%{key: "R", label: "Reply", priority: 30}]
+        commands: [reply_command(locked?)]
       },
       %{
         label: "System",
@@ -48,6 +49,9 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       }
     ])
   end
+
+  defp reply_command(true), do: %{key: "R", label: "Reply (locked)", priority: 5}
+  defp reply_command(false), do: %{key: "R", label: "Reply", priority: 5}
 
   @doc false
   @spec frame_state(State.t(), Context.t()) :: map()
@@ -115,23 +119,58 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     end
   end
 
-  defp render_local_post_content(%State{status: :loading}, _frame_state, theme, _w, _h),
+  defp render_local_post_content(%State{status: :loading}, _frame_state, theme, _w, _h, _locked?),
     do: render_loading(theme)
 
-  defp render_local_post_content(%State{status: :empty}, _frame_state, theme, _w, _h) do
+  defp render_local_post_content(%State{status: :empty}, _frame_state, theme, _w, _h, locked?) do
     column style: %{gap: 0} do
-      [text("No more posts.", fg: theme.warning.fg)]
+      Enum.reject(
+        [
+          locked_notice(theme, locked?),
+          text("No more posts.", fg: theme.warning.fg)
+        ],
+        &is_nil/1
+      )
     end
   end
 
-  defp render_local_post_content(%State{status: {:error, _}}, _frame_state, theme, _w, _h) do
+  defp render_local_post_content(
+         %State{status: {:error, _}},
+         _frame_state,
+         theme,
+         _w,
+         _h,
+         locked?
+       ) do
     column style: %{gap: 0} do
-      [text("Unable to load posts.", fg: theme.error.fg)]
+      Enum.reject(
+        [
+          locked_notice(theme, locked?),
+          text("Unable to load posts.", fg: theme.error.fg)
+        ],
+        &is_nil/1
+      )
     end
   end
 
-  defp render_local_post_content(%State{} = state, frame_state, theme, w, h) do
-    render_post_content(frame_state, state, theme, w, h)
+  defp render_local_post_content(%State{} = state, frame_state, theme, w, h, locked?) do
+    body = render_post_content(frame_state, state, theme, w, h)
+
+    case locked_notice(theme, locked?) do
+      nil ->
+        body
+
+      notice ->
+        column style: %{gap: 0} do
+          [notice, body]
+        end
+    end
+  end
+
+  defp locked_notice(_theme, false), do: nil
+
+  defp locked_notice(theme, true) do
+    text("Thread locked — replies disabled.", fg: theme.warning.fg)
   end
 
   # Spinner-based loading affordance used when posts is nil/[]

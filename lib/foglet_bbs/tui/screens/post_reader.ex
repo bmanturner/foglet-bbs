@@ -243,16 +243,20 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
       when c in ["r", "R"] do
-    params = %{
-      origin: :post_reader,
-      board: state.board,
-      board_id: state.board_id,
-      thread: state.thread,
-      thread_id: state.thread_id,
-      reply_to: selected_post(state)
-    }
+    if locked_thread?(state) do
+      {state, []}
+    else
+      params = %{
+        origin: :post_reader,
+        board: state.board,
+        board_id: state.board_id,
+        thread: state.thread,
+        thread_id: state.thread_id,
+        reply_to: selected_post(state)
+      }
 
-    {state, [Effect.navigate(:post_composer, params)]}
+      {state, [Effect.navigate(:post_composer, params)]}
+    end
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -269,6 +273,20 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update(_message, %State{} = state, %Context{}), do: {state, []}
+
+  @doc """
+  Returns true when the screen-local thread is locked.
+
+  FOG-91: PostReader uses this both to gate the `R` reply key and to surface
+  a locked-thread affordance in render. Public so the render module and
+  tests can call it without re-deriving the predicate.
+  """
+  @spec locked_thread?(State.t()) :: boolean()
+  def locked_thread?(%State{thread: thread}) when is_map(thread) do
+    Map.get(thread, :locked) == true
+  end
+
+  def locked_thread?(%State{}), do: false
 
   @impl true
   @spec render(State.t(), Context.t()) :: any()
