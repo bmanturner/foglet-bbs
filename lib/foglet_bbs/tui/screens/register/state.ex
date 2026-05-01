@@ -13,12 +13,15 @@ defmodule Foglet.TUI.Screens.Register.State do
 
   The combined step focus cycle is:
     `:handle` → `:email` → `:password` → `:confirm_password` → `:handle`
+  When an unmatched offered SSH public key is present, the cycle includes:
+    `:handle` → `:email` → `:password` → `:confirm_password` → `:ssh_key_opt_in` → `:handle`
   """
 
   alias Foglet.Accounts.{Invites, User}
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @focus_cycle [:handle, :email, :password, :confirm_password]
+  @focus_cycle_with_ssh_key @focus_cycle ++ [:ssh_key_opt_in]
 
   @doc """
   Returns a minimal `"open"`-mode stub (AUDIT-19 / D-05).
@@ -37,6 +40,7 @@ defmodule Foglet.TUI.Screens.Register.State do
       email_input: TextInput.init([]),
       password_input: TextInput.init(mask_char: "*"),
       confirm_input: TextInput.init(mask_char: "*"),
+      save_offered_ssh_key?: false,
       collected: %{},
       error: nil
     }
@@ -62,6 +66,7 @@ defmodule Foglet.TUI.Screens.Register.State do
       email_input: TextInput.init([]),
       password_input: TextInput.init(mask_char: "*"),
       confirm_input: TextInput.init(mask_char: "*"),
+      save_offered_ssh_key?: false,
       collected: %{},
       error: nil
     }
@@ -89,21 +94,31 @@ defmodule Foglet.TUI.Screens.Register.State do
 
   @doc "Advances focus to the next field in the combined-step cycle."
   @spec next_field(atom()) :: atom()
-  def next_field(current) do
-    idx = Enum.find_index(@focus_cycle, &(&1 == current)) || 0
-    Enum.at(@focus_cycle, rem(idx + 1, length(@focus_cycle)))
+  def next_field(current), do: next_field(current, false)
+
+  @doc "Advances focus to the next field in the context-aware combined-step cycle."
+  @spec next_field(atom(), boolean()) :: atom()
+  def next_field(current, has_offered_ssh_key?) do
+    cycle = focus_cycle(has_offered_ssh_key?)
+    idx = Enum.find_index(cycle, &(&1 == current)) || 0
+    Enum.at(cycle, rem(idx + 1, length(cycle)))
   end
 
   @doc "Moves focus to the previous field in the combined-step cycle."
   @spec prev_field(atom()) :: atom()
-  def prev_field(current) do
-    idx = Enum.find_index(@focus_cycle, &(&1 == current)) || 0
-    Enum.at(@focus_cycle, rem(idx - 1 + length(@focus_cycle), length(@focus_cycle)))
+  def prev_field(current), do: prev_field(current, false)
+
+  @doc "Moves focus to the previous field in the context-aware combined-step cycle."
+  @spec prev_field(atom(), boolean()) :: atom()
+  def prev_field(current, has_offered_ssh_key?) do
+    cycle = focus_cycle(has_offered_ssh_key?)
+    idx = Enum.find_index(cycle, &(&1 == current)) || 0
+    Enum.at(cycle, rem(idx - 1 + length(cycle), length(cycle)))
   end
 
   @typedoc "Atoms for the register screen's focus cycle (incl. invite-code step)."
   @type focused_field ::
-          :invite_code | :handle | :email | :password | :confirm_password
+          :invite_code | :handle | :email | :password | :confirm_password | :ssh_key_opt_in
 
   @typedoc "Keys into the register screen-state map for each input widget."
   @type input_field ::
@@ -120,6 +135,9 @@ defmodule Foglet.TUI.Screens.Register.State do
   def input_key(:email), do: :email_input
   def input_key(:password), do: :password_input
   def input_key(:confirm_password), do: :confirm_input
+
+  defp focus_cycle(true), do: @focus_cycle_with_ssh_key
+  defp focus_cycle(false), do: @focus_cycle
 
   @doc """
   Validates that an invite code string meets the accepted format.

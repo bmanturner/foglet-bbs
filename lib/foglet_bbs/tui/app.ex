@@ -119,7 +119,7 @@ defmodule Foglet.TUI.App do
       Foglet.Sessions.Session.set_tui_pid(session_pid, self())
     end
 
-    screen = initial_screen(user)
+    screen = initial_screen(user, session_context)
 
     state =
       %__MODULE__{
@@ -129,13 +129,50 @@ defmodule Foglet.TUI.App do
         session_pid: session_pid,
         terminal_size: terminal_size
       }
+      |> maybe_put_account_gate_modal(user)
       |> maybe_init_initial_screen_state()
 
     {:ok, state}
   end
 
-  defp initial_screen(nil), do: :login
-  defp initial_screen(user), do: Accounts.post_login_screen(user)
+  defp initial_screen(nil, _session_context), do: :login
+
+  defp initial_screen(%{status: status}, _session_context)
+       when status in [:pending, :rejected, :suspended],
+       do: :login
+
+  defp initial_screen(%{status: :active, confirmed_at: nil} = user, _session_context),
+    do: Accounts.post_login_screen(user)
+
+  defp initial_screen(user, _session_context), do: Accounts.post_login_screen(user)
+
+  defp maybe_put_account_gate_modal(state, %{status: status})
+       when status in [:pending, :rejected, :suspended] do
+    %{state | modal: account_gate_modal(status)}
+  end
+
+  defp maybe_put_account_gate_modal(state, _user), do: state
+
+  defp account_gate_modal(:pending) do
+    %Foglet.TUI.Modal{
+      type: :error,
+      message: "Your account is waiting for sysop approval. Try again once you've heard back."
+    }
+  end
+
+  defp account_gate_modal(:rejected) do
+    %Foglet.TUI.Modal{
+      type: :error,
+      message: "Your registration was turned down. Reach the sysop if you think that's a mistake."
+    }
+  end
+
+  defp account_gate_modal(:suspended) do
+    %Foglet.TUI.Modal{
+      type: :error,
+      message: "Your account is suspended. Reach the sysop to ask why."
+    }
+  end
 
   # Extract session_context + terminal_size from either:
   #   (a) Lifecycle-produced map: %{width:, height:, options: [context: %{...}]}

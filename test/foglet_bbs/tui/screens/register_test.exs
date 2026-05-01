@@ -8,6 +8,12 @@ defmodule Foglet.TUI.Screens.RegisterTest do
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Widgets.Input.TextInput
 
+  defmodule AccountsRecorder do
+    def register_user(attrs), do: {:ok, %{id: "user", handle: attrs.handle, attrs: attrs}}
+    def register_pending_user(attrs), do: {:ok, %{id: "pending-user", attrs: attrs}}
+    def post_login_screen(_user), do: :main_menu
+  end
+
   import FogletBbs.AccountsFixtures
   import Swoosh.TestAssertions
 
@@ -47,6 +53,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       confirm_input:
         TextInput.init(value: Keyword.get(fields, :confirm, ""), mask_char: "*")
         |> text_input_at_end(),
+      save_offered_ssh_key?: Keyword.get(fields, :save_offered_ssh_key?, false),
       collected: Keyword.get(fields, :collected, %{}),
       error: Keyword.get(fields, :error, nil)
     }
@@ -111,6 +118,20 @@ defmodule Foglet.TUI.Screens.RegisterTest do
     test "Register.render/2 renders local state without App-shaped input" do
       assert Register.render(Register.init(context("open")), context("open"))
       assert Register.render(Register.init(context("invite_only")), context("invite_only"))
+
+      assert Register.render(
+               Register.init(
+                 context("open",
+                   session_context: %{offered_ssh_public_key: default_ssh_public_key()}
+                 )
+               ),
+               context("open",
+                 session_context: %{
+                   registration_mode: "open",
+                   offered_ssh_public_key: default_ssh_public_key()
+                 }
+               )
+             )
     end
   end
 
@@ -220,6 +241,68 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert local_state.focused_field == :confirm_password
     end
 
+    test "offered SSH key opt-in joins tab order only when session context carries a key" do
+      {local_state, []} =
+        Register.update(
+          {:key, %{key: :tab}},
+          combined_state([], :confirm_password),
+          context()
+        )
+
+      assert local_state.focused_field == :handle
+
+      {local_state, []} =
+        Register.update(
+          {:key, %{key: :tab}},
+          combined_state([], :confirm_password),
+          context("open",
+            session_context: %{
+              registration_mode: "open",
+              offered_ssh_public_key: default_ssh_public_key()
+            }
+          )
+        )
+
+      assert local_state.focused_field == :ssh_key_opt_in
+
+      {local_state, []} =
+        Register.update(
+          {:key, %{key: :tab, shift: true}},
+          local_state,
+          context("open",
+            session_context: %{
+              registration_mode: "open",
+              offered_ssh_public_key: default_ssh_public_key()
+            }
+          )
+        )
+
+      assert local_state.focused_field == :confirm_password
+    end
+
+    test "space toggles offered SSH key opt-in while enter keeps next-submit semantics" do
+      context =
+        context("open",
+          session_context: %{
+            registration_mode: "open",
+            offered_ssh_public_key: default_ssh_public_key()
+          }
+        )
+
+      state = combined_state([password: "sekret01", confirm: "sekret01"], :confirm_password)
+
+      {local_state, []} = Register.update({:key, %{key: :enter}}, state, context)
+      assert local_state.focused_field == :ssh_key_opt_in
+      refute local_state.save_offered_ssh_key?
+
+      {local_state, effects} = Register.update({:key, %{key: :enter}}, local_state, context)
+      refute local_state.save_offered_ssh_key?
+      assert %Effect{type: :task, payload: %{op: :register}} = task_effect(effects, :register)
+
+      {local_state, []} = Register.update({:key, %{key: :space}}, local_state, context)
+      assert local_state.save_offered_ssh_key?
+    end
+
     test "character input edits only the focused field" do
       {local_state, []} =
         Register.update({:key, %{key: :char, char: "a"}}, combined_state([], :handle), context())
@@ -253,6 +336,72 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       assert %Effect{type: :task, payload: %{op: :register, screen_key: :register}} =
                task_effect(effects, :register)
+    end
+
+    test "offered SSH key is included in open registration payload only when checked" do
+      offered_key = default_ssh_public_key()
+
+      context =
+        context("open",
+          session_context: %{registration_mode: "open", offered_ssh_public_key: offered_key},
+          domain: %{accounts: AccountsRecorder}
+        )
+
+      unchecked =
+        combined_state(
+          [
+            handle: "nokeyreg",
+            email: "nokeyreg@example.test",
+            password: "sekret01",
+            confirm: "sekret01",
+            save_offered_ssh_key?: false
+          ],
+          :ssh_key_opt_in
+        )
+
+      {_submitting, effects} = Register.update({:key, %{key: :enter}}, unchecked, context)
+      assert {:ok, user, :main_menu, nil} = run_register_task(task_effect(effects, :register))
+      refute Map.has_key?(user.attrs, :offered_ssh_public_key)
+
+      checked = %{
+        unchecked
+        | save_offered_ssh_key?: true,
+          handle_input: TextInput.init(value: "keyreg") |> text_input_at_end()
+      }
+
+      {_submitting, effects} = Register.update({:key, %{key: :enter}}, checked, context)
+      assert {:ok, user, :main_menu, nil} = run_register_task(task_effect(effects, :register))
+      assert user.attrs.offered_ssh_public_key == offered_key
+    end
+
+    test "offered SSH key is included in sysop-approved registration payload when checked" do
+      offered_key = default_ssh_public_key()
+
+      context =
+        context("sysop_approved",
+          session_context: %{
+            registration_mode: "sysop_approved",
+            offered_ssh_public_key: offered_key
+          },
+          domain: %{accounts: AccountsRecorder}
+        )
+
+      state =
+        combined_state(
+          [
+            handle: "pendingkey",
+            email: "pendingkey@example.test",
+            password: "sekret01",
+            confirm: "sekret01",
+            save_offered_ssh_key?: true
+          ],
+          :ssh_key_opt_in,
+          "sysop_approved"
+        )
+
+      {_submitting, effects} = Register.update({:key, %{key: :enter}}, state, context)
+      assert {:ok, :pending_approval, user} = run_register_task(task_effect(effects, :register))
+      assert user.attrs.offered_ssh_public_key == offered_key
     end
   end
 

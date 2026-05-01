@@ -16,7 +16,8 @@ defmodule Foglet.TUI.Screens.Register do
     * "open" / "invite_only" success → transition to :verify with a built code
     * "sysop_approved" success       → Accounts.register_pending_user/1 + terminate
 
-  SSH keys are NEVER collected here (D-24).
+  SSH keys are only offered as an opt-in carry-through when the SSH connection
+  already presented an unmatched public key.
 
   Register owns invite and combined-form local state, registration outcomes,
   verification-routing decisions, and pending-approval termination requests
@@ -24,12 +25,13 @@ defmodule Foglet.TUI.Screens.Register do
   """
 
   alias Foglet.{Accounts, Config}
-  alias Foglet.Accounts.{Invites, Verification}
+  alias Foglet.Accounts.{Invites, SSHKey, Verification}
   alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Input.Checkbox
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @behaviour Foglet.TUI.Screen
@@ -54,7 +56,7 @@ defmodule Foglet.TUI.Screens.Register do
         [
           case reg.step do
             :invite_code -> render_invite_step(reg, theme)
-            :combined -> render_combined_step(reg, theme)
+            :combined -> render_combined_step(reg, theme, context)
           end
         ]
       end
@@ -186,32 +188,93 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp move_combined_focus(state, :next) do
     reg = get_register_ss(state)
-    new_reg = %{reg | focused_field: RegisterState.next_field(reg.focused_field), error: nil}
+    has_offered_key? = offered_ssh_key?(state)
+
+    new_reg = %{
+      reg
+      | focused_field: RegisterState.next_field(reg.focused_field, has_offered_key?),
+        error: nil
+    }
+
     {:update, RegisterState.put(state, new_reg), []}
   end
 
   defp move_combined_focus(state, :previous) do
     reg = get_register_ss(state)
-    new_reg = %{reg | focused_field: RegisterState.prev_field(reg.focused_field), error: nil}
+    has_offered_key? = offered_ssh_key?(state)
+
+    new_reg = %{
+      reg
+      | focused_field: RegisterState.prev_field(reg.focused_field, has_offered_key?),
+        error: nil
+    }
+
     {:update, RegisterState.put(state, new_reg), []}
   end
 
   defp handle_combined_input_key(%{key: :enter}, state) do
     reg = get_register_ss(state)
+    has_offered_key? = offered_ssh_key?(state)
 
     case reg.focused_field do
       :confirm_password ->
+        if has_offered_key? do
+          new_reg = %{reg | focused_field: :ssh_key_opt_in, error: nil}
+          {:update, RegisterState.put(state, new_reg), []}
+        else
+          validate_and_submit(reg, state)
+        end
+
+      :ssh_key_opt_in ->
         validate_and_submit(reg, state)
 
       field ->
-        new_reg = %{reg | focused_field: RegisterState.next_field(field), error: nil}
+        new_reg = %{
+          reg
+          | focused_field: RegisterState.next_field(field, has_offered_key?),
+            error: nil
+        }
+
         {:update, RegisterState.put(state, new_reg), []}
     end
   end
 
+  defp handle_combined_input_key(%{key: :space}, state), do: toggle_ssh_key_opt_in(state)
+
+  defp handle_combined_input_key(%{key: :char, char: " "}, state) do
+    reg = get_register_ss(state)
+
+    if reg.focused_field == :ssh_key_opt_in do
+      toggle_ssh_key_opt_in(state)
+    else
+      handle_text_input_key(%{key: :char, char: " "}, state)
+    end
+  end
+
   defp handle_combined_input_key(event, state) do
+    reg = get_register_ss(state)
+
+    if reg.focused_field == :ssh_key_opt_in do
+      {:update, state, []}
+    else
+      handle_text_input_key(event, state)
+    end
+  end
+
+  defp handle_text_input_key(event, state) do
     {new_input, _action} = TextInput.handle_event(event, focused_input(state))
     {:update, update_focused_input(state, new_input), []}
+  end
+
+  defp toggle_ssh_key_opt_in(state) do
+    reg = get_register_ss(state)
+
+    if reg.focused_field == :ssh_key_opt_in and offered_ssh_key?(state) do
+      new_reg = %{reg | save_offered_ssh_key?: !Map.get(reg, :save_offered_ssh_key?, false)}
+      {:update, RegisterState.put(state, new_reg), []}
+    else
+      {:update, state, []}
+    end
   end
 
   # --- Focus + validation helpers ---
@@ -264,8 +327,9 @@ defmodule Foglet.TUI.Screens.Register do
     end
   end
 
-  defp render_combined_step(reg, theme) do
+  defp render_combined_step(reg, theme, context) do
     focused = reg.focused_field
+    offered_key = offered_ssh_public_key(context)
 
     fields = [
       {:handle, "Handle:           ", reg.handle_input},
@@ -287,6 +351,8 @@ defmodule Foglet.TUI.Screens.Register do
         end
       end)
 
+    rows = rows ++ ssh_key_opt_in_rows(reg, focused, offered_key, theme)
+
     error_items =
       if reg.error do
         [text(""), text(reg.error, fg: theme.error.fg, style: [:bold])]
@@ -297,6 +363,30 @@ defmodule Foglet.TUI.Screens.Register do
     column style: %{gap: 0} do
       rows ++ error_items
     end
+  end
+
+  defp ssh_key_opt_in_rows(_reg, _focused, nil, _theme), do: []
+
+  defp ssh_key_opt_in_rows(reg, focused, offered_key, theme) do
+    selected? = Map.get(reg, :save_offered_ssh_key?, false)
+    focus_marker = if focused == :ssh_key_opt_in, do: "> ", else: "  "
+    fg = if focused == :ssh_key_opt_in, do: theme.accent.fg, else: theme.primary.fg
+    st = if focused == :ssh_key_opt_in, do: [:bold], else: []
+
+    [
+      text(""),
+      row style: %{gap: 0} do
+        [
+          text(focus_marker, fg: fg, style: st),
+          Checkbox.render("Use this SSH key for future logins",
+            checked?: selected?,
+            marker_style: :ascii,
+            theme: theme
+          )
+        ]
+      end,
+      text("  Fingerprint: #{offered_key_fingerprint(offered_key)}", fg: theme.dim.fg)
+    ]
   end
 
   defp keys_for(:invite_code) do
@@ -380,11 +470,13 @@ defmodule Foglet.TUI.Screens.Register do
   # §7 Private domain plumbing
 
   defp submit(%{mode: "sysop_approved"} = reg, state) do
-    data = %{
-      handle: reg.handle_input.raxol_state.value,
-      email: reg.email_input.raxol_state.value,
-      password: reg.password_input.raxol_state.value
-    }
+    data =
+      %{
+        handle: reg.handle_input.raxol_state.value,
+        email: reg.email_input.raxol_state.value,
+        password: reg.password_input.raxol_state.value
+      }
+      |> maybe_put_offered_ssh_key(reg, state)
 
     accounts_mod = domain_module(state, :accounts)
     submitting_state = RegisterState.put(state, %{reg | error: nil})
@@ -401,12 +493,14 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp submit(%{mode: mode} = reg, state) when mode in ["open", "invite_only"] do
-    data = %{
-      handle: reg.handle_input.raxol_state.value,
-      email: reg.email_input.raxol_state.value,
-      password: reg.password_input.raxol_state.value,
-      invite_code: Map.get(reg.collected, :invite_code)
-    }
+    data =
+      %{
+        handle: reg.handle_input.raxol_state.value,
+        email: reg.email_input.raxol_state.value,
+        password: reg.password_input.raxol_state.value,
+        invite_code: Map.get(reg.collected, :invite_code)
+      }
+      |> maybe_put_offered_ssh_key(reg, state)
 
     accounts_mod = domain_module(state, :accounts)
     verification_mod = domain_module(state, :verification)
@@ -470,18 +564,17 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp handle_register_result(state, {:error, changeset})
        when is_struct(changeset, Ecto.Changeset) do
-    if Keyword.has_key?(changeset.errors, :invite_code) do
+    reg = get_register_ss(state)
+
+    if reg.mode == "invite_only" and Keyword.has_key?(changeset.errors, :invite_code) do
       modal = %Foglet.TUI.Modal{
         type: :error,
         message: "Invite is no longer valid. Please request a new code from the sysop."
       }
 
-      reg = get_register_ss(state)
       reset_reg = %{reg | step: :invite_code, focused_field: :invite_code, error: nil}
       {:update, RegisterState.put(state, reset_reg), [Effect.open_modal(modal)]}
     else
-      reg = get_register_ss(state)
-
       new_reg = %{
         reg
         | error: RegisterState.changeset_error_text(changeset),
@@ -500,6 +593,18 @@ defmodule Foglet.TUI.Screens.Register do
     }
 
     {state, [Effect.open_modal(modal)]}
+  end
+
+  defp handle_register_result(state, {:error, {:ssh_key, _message}}) do
+    reg = get_register_ss(state)
+
+    new_reg = %{
+      reg
+      | error: "That SSH key couldn't be saved. Uncheck it to finish registration.",
+        focused_field: if(offered_ssh_key?(state), do: :ssh_key_opt_in, else: :handle)
+    }
+
+    {:update, RegisterState.put(state, new_reg), []}
   end
 
   defp handle_register_result(state, {:error, _delivery_error}) do
@@ -522,6 +627,43 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp session_ctx(state), do: Map.get(state, :session_context) || %{}
+
+  defp offered_ssh_key?(state), do: not is_nil(offered_ssh_public_key(state))
+
+  defp offered_ssh_public_key(%Context{} = context) do
+    offered_ssh_public_key(%{session_context: context.session_context})
+  end
+
+  defp offered_ssh_public_key(state) do
+    case Map.get(session_ctx(state), :offered_ssh_public_key) do
+      key when is_binary(key) ->
+        case String.trim(key) do
+          "" -> nil
+          trimmed -> trimmed
+        end
+
+      _other ->
+        nil
+    end
+  end
+
+  defp maybe_put_offered_ssh_key(data, reg, state) do
+    if Map.get(reg, :save_offered_ssh_key?, false) do
+      case offered_ssh_public_key(state) do
+        nil -> data
+        offered_key -> Map.put(data, :offered_ssh_public_key, offered_key)
+      end
+    else
+      data
+    end
+  end
+
+  defp offered_key_fingerprint(offered_key) do
+    case SSHKey.compute_fingerprint(offered_key) do
+      {:ok, fingerprint} -> fingerprint
+      {:error, _reason} -> "unavailable"
+    end
+  end
 
   defp domain_module(state, key) do
     domain = Map.get(state, :domain) || %{}

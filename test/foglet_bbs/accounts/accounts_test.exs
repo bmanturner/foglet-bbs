@@ -16,6 +16,8 @@ defmodule Foglet.AccountsTest do
 
   import Swoosh.TestAssertions
 
+  @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
+
   describe "register_user/1 (IDNT-01)" do
     setup :set_swoosh_global
 
@@ -41,6 +43,85 @@ defmodule Foglet.AccountsTest do
       assert {:ok, %User{} = user} = Accounts.register_user(attrs)
       assert user.password_hash != "opensesame"
       assert Argon2.verify_pass("opensesame", user.password_hash)
+    end
+
+    test "creates a registration SSH key when offered a public key" do
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          offered_ssh_public_key: AccountsFixtures.default_ssh_public_key()
+        })
+
+      assert {:ok, %User{} = user} = Accounts.register_user(attrs)
+
+      assert [
+               %SSHKey{
+                 user_id: user_id,
+                 label: "Registration SSH key",
+                 public_key: public_key,
+                 fingerprint: "SHA256:" <> _rest
+               }
+             ] = Accounts.list_ssh_keys(user)
+
+      assert user_id == user.id
+      assert public_key == AccountsFixtures.default_ssh_public_key()
+    end
+
+    test "does not create an SSH key when no key is offered" do
+      attrs = AccountsFixtures.valid_user_attributes()
+
+      assert {:ok, %User{} = user} = Accounts.register_user(attrs)
+      assert [] = Accounts.list_ssh_keys(user)
+    end
+
+    test "rejects duplicate offered public key without orphaning a user" do
+      owner = AccountsFixtures.user_fixture()
+
+      assert {:ok, _key} =
+               Accounts.register_ssh_key(owner, %{
+                 label: "laptop",
+                 public_key: AccountsFixtures.default_ssh_public_key()
+               })
+
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          handle: "duplicatekeyuser",
+          email: "duplicatekeyuser@example.com",
+          offered_ssh_public_key: AccountsFixtures.default_ssh_public_key()
+        })
+
+      assert {:error, {:ssh_key, "That SSH public key is already registered."}} =
+               Accounts.register_user(attrs)
+
+      refute Accounts.get_user_by_handle("duplicatekeyuser")
+    end
+
+    test "rejects malformed offered public key without orphaning a user" do
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          handle: "invalidkeyuser",
+          email: "invalidkeyuser@example.com",
+          offered_ssh_public_key: "not an openssh key"
+        })
+
+      assert {:error, {:ssh_key, "That SSH public key is not valid."}} =
+               Accounts.register_user(attrs)
+
+      refute Accounts.get_user_by_handle("invalidkeyuser")
+    end
+
+    test "register_pending_user/1 creates a pending user with a registration SSH key" do
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          offered_ssh_public_key: @alternate_ssh_public_key
+        })
+
+      assert {:ok, %User{status: :pending} = user} = Accounts.register_pending_user(attrs)
+
+      assert [%SSHKey{label: "Registration SSH key", public_key: public_key}] =
+               Accounts.list_ssh_keys(user)
+
+      assert public_key == @alternate_ssh_public_key
+      assert Repo.get!(User, user.id).status == :pending
     end
 
     test "creates users with account preference defaults" do
@@ -511,8 +592,6 @@ defmodule Foglet.AccountsTest do
   end
 
   describe "register_ssh_key/2 (IDNT-04, KEYS-02, KEYS-03, KEYS-04)" do
-    @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
-
     test "KEYS-02 stores key with computed fingerprint" do
       user = AccountsFixtures.user_fixture()
 

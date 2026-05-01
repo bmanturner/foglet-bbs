@@ -10,6 +10,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
   alias Foglet.SSH.CLIHandler
   alias Foglet.SSH.PubkeyStash
+  alias FogletBbs.AccountsFixtures
 
   @static_openssh_key FogletBbs.AccountsFixtures.default_ssh_public_key()
   @terminal_takeover "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J"
@@ -356,6 +357,19 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert PubkeyStash.pop(peer) == :miss
     end
 
+    test "pop_offer preserves the OpenSSH text alongside the decoded key" do
+      peer = {{10, 0, 0, 7}, 77_777}
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+
+      PubkeyStash.put(peer, public_key)
+
+      assert {:ok, %{public_key: ^public_key, openssh_text: openssh_text}} =
+               PubkeyStash.pop_offer(peer)
+
+      assert openssh_text == openssh_text_for(public_key)
+      assert PubkeyStash.pop_offer(peer) == :miss
+    end
+
     test "pop(:unknown) always returns :miss" do
       assert PubkeyStash.pop(:unknown) == :miss
     end
@@ -450,6 +464,74 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert state.current_user == user
       assert state.terminal_size == {132, 50}
     end
+
+    test "unmatched offered key is carried into guest SessionContext" do
+      reset_cli_counter!()
+      reset_pubkey_stash!()
+      warm_login_config_cache!()
+      start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
+
+      peer = {{10, 0, 0, 8}, 88_888}
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      PubkeyStash.put(peer, public_key)
+
+      assert {:ok, returned_state} = CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      context = CLIHandler.context_for_test(returned_state, 80, 24)
+      session_context = context.session_context
+
+      assert session_context.user == nil
+      assert session_context.user_id == nil
+      refute session_context.pubkey_authenticated
+      assert session_context.offered_ssh_public_key == openssh_text_for(public_key)
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+    end
+
+    test "password-only guest context leaves offered key blank" do
+      reset_cli_counter!()
+      reset_pubkey_stash!()
+      warm_login_config_cache!()
+      start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
+
+      peer = {{10, 0, 0, 9}, 99_999}
+
+      assert {:ok, returned_state} = CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      context = CLIHandler.context_for_test(returned_state, 80, 24)
+
+      assert context.session_context.user == nil
+      assert context.session_context.offered_ssh_public_key == nil
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+    end
+
+    test "registered public-key login does not carry offered key into SessionContext" do
+      reset_cli_counter!()
+      reset_pubkey_stash!()
+      warm_login_config_cache!()
+      start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
+
+      user =
+        AccountsFixtures.user_fixture()
+        |> Ecto.Changeset.change(status: :active)
+        |> FogletBbs.Repo.update!()
+
+      _key = AccountsFixtures.ssh_key_fixture(user, %{public_key: @static_openssh_key})
+      peer = {{10, 0, 0, 10}, 10_010}
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      PubkeyStash.put(peer, public_key)
+
+      assert {:ok, returned_state} = CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      context = CLIHandler.context_for_test(returned_state, 80, 24)
+
+      assert context.session_context.user.id == user.id
+      assert context.session_context.pubkey_authenticated
+      assert context.session_context.offered_ssh_public_key == nil
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+    end
   end
 
   defp tmp_host_key_dir! do
@@ -529,6 +611,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
   defp assert_counter!(expected) do
     assert [{:count, ^expected}] =
              :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
+  end
+
+  defp openssh_text_for(public_key) do
+    public_key
+    |> then(&:ssh_file.encode([{&1, []}], :openssh_key))
+    |> to_string()
   end
 
   defp daemon_port!(daemon_ref) do

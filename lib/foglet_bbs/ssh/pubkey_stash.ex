@@ -12,7 +12,7 @@ defmodule Foglet.SSH.PubkeyStash do
   ## Approach
 
   `KeyCB.is_auth_key/3` receives the connecting peer address via the `opts`
-  keyword list. We stash `{peer_key, public_key, inserted_at_ms}` in an ETS
+  keyword list. We stash `{peer_key, offer, inserted_at_ms}` in an ETS
   table named `__MODULE__`. The CLIHandler reads the stash immediately after
   `ssh_channel_up` using the peer address it finds via
   `:ssh.connection_info(connection_ref, [:peer])`. After reading, it deletes
@@ -32,6 +32,8 @@ defmodule Foglet.SSH.PubkeyStash do
 
   @table __MODULE__
   @ttl_ms :timer.minutes(5)
+
+  @type offer :: %{public_key: term(), openssh_text: String.t() | nil}
 
   @doc "Ensure the ETS table exists. Called from Application.start/2."
   def init do
@@ -57,7 +59,7 @@ defmodule Foglet.SSH.PubkeyStash do
   """
   @spec put(term(), term(), integer()) :: true
   def put(peer_key, public_key, now_ms) when is_integer(now_ms) do
-    :ets.insert(@table, {peer_key, public_key, now_ms})
+    :ets.insert(@table, {peer_key, build_offer(public_key), now_ms})
   end
 
   @doc """
@@ -68,7 +70,10 @@ defmodule Foglet.SSH.PubkeyStash do
   def pop(:unknown), do: :miss
 
   def pop(peer_key) do
-    pop(peer_key, System.monotonic_time(:millisecond))
+    case pop_offer(peer_key) do
+      {:ok, %{public_key: public_key}} -> {:ok, public_key}
+      :miss -> :miss
+    end
   end
 
   @doc """
@@ -80,17 +85,42 @@ defmodule Foglet.SSH.PubkeyStash do
   def pop(:unknown, _now_ms), do: :miss
 
   def pop(peer_key, now_ms) when is_integer(now_ms) do
+    case pop_offer(peer_key, now_ms) do
+      {:ok, %{public_key: public_key}} -> {:ok, public_key}
+      :miss -> :miss
+    end
+  end
+
+  @doc """
+  Retrieve and delete the full public-key offer for the given peer.
+
+  The offer keeps both the decoded Erlang key record and the OpenSSH-encoded
+  text so the SSH channel can authenticate known keys while preserving the
+  exact text guest registration needs when no active user matches.
+  """
+  @spec pop_offer(term()) :: {:ok, offer()} | :miss
+  def pop_offer(:unknown), do: :miss
+
+  def pop_offer(peer_key) do
+    pop_offer(peer_key, System.monotonic_time(:millisecond))
+  end
+
+  @doc "Retrieve and delete the full public-key offer using `now_ms` for TTL checks."
+  @spec pop_offer(term(), integer()) :: {:ok, offer()} | :miss
+  def pop_offer(:unknown, _now_ms), do: :miss
+
+  def pop_offer(peer_key, now_ms) when is_integer(now_ms) do
     case :ets.take(@table, peer_key) do
-      [{^peer_key, public_key, inserted_at_ms}] ->
+      [{^peer_key, offer, inserted_at_ms}] ->
         if now_ms - inserted_at_ms <= @ttl_ms do
-          {:ok, public_key}
+          normalize_offer(offer)
         else
           :miss
         end
 
       [{^peer_key, public_key}] ->
         # Legacy entry without timestamp — accept for compatibility.
-        {:ok, public_key}
+        normalize_offer(public_key)
 
       [] ->
         :miss
@@ -122,5 +152,25 @@ defmodule Foglet.SSH.PubkeyStash do
     ]
 
     :ets.select_delete(@table, match_spec)
+  end
+
+  defp build_offer(public_key) do
+    %{public_key: public_key, openssh_text: encode_public_key(public_key)}
+  end
+
+  defp normalize_offer(%{public_key: _public_key, openssh_text: openssh_text} = offer)
+       when is_binary(openssh_text) or is_nil(openssh_text),
+       do: {:ok, offer}
+
+  defp normalize_offer(public_key), do: {:ok, build_offer(public_key)}
+
+  defp encode_public_key(public_key) do
+    public_key
+    |> then(&:ssh_file.encode([{&1, []}], :openssh_key))
+    |> to_string()
+  rescue
+    _ -> nil
+  catch
+    _, _ -> nil
   end
 end
