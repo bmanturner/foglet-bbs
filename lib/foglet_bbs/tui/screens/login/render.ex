@@ -4,12 +4,12 @@ defmodule Foglet.TUI.Screens.Login.Render do
   """
 
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Screens.Login.{MenuScramble, State}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
-  alias Foglet.TUI.Widgets.Display.ScrambleText
   alias Foglet.TUI.Widgets.Input.TextInput
 
   import Raxol.Core.Renderer.View
@@ -19,7 +19,6 @@ defmodule Foglet.TUI.Screens.Login.Render do
   @login_panel_width 40
   @login_panel_height 8
   @login_input_display_width 25
-  @menu_scramble_opts [direction: :left_to_right, reveal_rate: 2]
 
   @spec render(map(), Context.t()) :: any()
   def render(local_state, %Context{} = context) do
@@ -126,15 +125,10 @@ defmodule Foglet.TUI.Screens.Login.Render do
     top_padding = div(available, 2)
     bottom_padding = max(available - top_padding - 2, 0)
     pad = text(" ", fg: theme.primary.fg)
-    login_ss = LoginState.get(state)
-    frame = Map.get(login_ss, :menu_scramble_frame, 0)
 
     column style: %{gap: 0, align_items: :center} do
       List.duplicate(pad, top_padding) ++
-        [
-          ScrambleText.render("you are outside.", frame, [theme: theme] ++ @menu_scramble_opts),
-          ScrambleText.render("knock or hang up.", frame, [theme: theme] ++ @menu_scramble_opts)
-        ] ++
+        MenuScramble.render(State.get(state), theme) ++
         List.duplicate(pad, bottom_padding)
     end
   end

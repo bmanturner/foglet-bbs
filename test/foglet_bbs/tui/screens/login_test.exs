@@ -7,7 +7,8 @@ defmodule Foglet.TUI.Screens.LoginTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Login
-  alias Foglet.TUI.Widgets.Display.ScrambleText
+  alias Foglet.TUI.Screens.Login.MenuScramble
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.TextInput
 
   import Ecto.Query
@@ -225,6 +226,51 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
   end
 
+  describe "MenuScramble" do
+    test "active? tracks menu sub-state until the settled frame" do
+      assert MenuScramble.active?(%{sub: :menu, menu_scramble_frame: 0})
+      refute MenuScramble.active?(%{sub: :login_form})
+
+      refute MenuScramble.active?(%{
+               sub: :menu,
+               menu_scramble_frame: MenuScramble.settled_frame()
+             })
+    end
+
+    test "tick advances frames and stops at the settled frame" do
+      near_settled = %{sub: :menu, menu_scramble_frame: MenuScramble.settled_frame() - 1}
+
+      settled = MenuScramble.tick(near_settled)
+      assert MenuScramble.frame(settled) == MenuScramble.settled_frame()
+      assert MenuScramble.tick(settled) == settled
+    end
+
+    test "tick ignores non-menu sub-states" do
+      state = %{sub: :login_form}
+      assert MenuScramble.tick(state) == state
+    end
+
+    test "render helper returns two display lines for the current frame" do
+      rendered = MenuScramble.render(%{sub: :menu, menu_scramble_frame: 0}, Theme.default())
+
+      assert length(rendered) == 2
+      assert Enum.all?(rendered, &match?(%{type: :flex, children: [_ | _]}, &1))
+    end
+
+    test "subscription metadata is present only while active" do
+      assert [{interval, :login_menu_scramble_tick}] =
+               MenuScramble.subscriptions(%{sub: :menu, menu_scramble_frame: 0})
+
+      assert is_integer(interval)
+      assert interval > 0
+
+      assert MenuScramble.subscriptions(%{
+               sub: :menu,
+               menu_scramble_frame: MenuScramble.settled_frame()
+             }) == []
+    end
+  end
+
   describe "render/1 (SSH-04, D-06)" do
     test "declares BBS presentation mode and renders" do
       assert Presentation.mode_for!(:login) == :bbs
@@ -340,10 +386,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
     end
 
     test "menu scramble tick advances frame and then stays settled" do
-      settled_frame =
-        ["you are outside.", "knock or hang up."]
-        |> Enum.map(&ScrambleText.settled_frame(&1, direction: :left_to_right, reveal_rate: 2))
-        |> Enum.max()
+      settled_frame = MenuScramble.settled_frame()
 
       state =
         base_state()

@@ -33,13 +33,18 @@ defmodule Foglet.TUI.Screens.Login do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.TUI.{Context, Effect}
-  alias Foglet.TUI.Screens.Login.{LoginForm, Menu, Render, ResetConsume, ResetRequest}
+
+  alias Foglet.TUI.Screens.Login.{
+    LoginForm,
+    Menu,
+    MenuScramble,
+    Render,
+    ResetConsume,
+    ResetRequest
+  }
+
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.AppStateBridge
-  alias Foglet.TUI.Widgets.Display.ScrambleText
-
-  @menu_scramble_targets ["you are outside.", "knock or hang up."]
-  @menu_scramble_opts [direction: :left_to_right, reveal_rate: 2]
 
   @impl true
   @spec init(Context.t()) :: map()
@@ -74,17 +79,19 @@ defmodule Foglet.TUI.Screens.Login do
   def update(:menu_scramble_tick, local_state, %Context{} = context) do
     local_state
     |> app_state_from_local(context)
-    |> advance_menu_scramble()
+    |> update_menu_scramble()
     |> local_result(local_state)
   end
 
   def update(_message, local_state, %Context{}), do: {local_state, []}
 
-  @doc "Returns true while the login menu scramble animation still has frames to advance."
-  @spec menu_scramble_active?(map()) :: boolean()
-  def menu_scramble_active?(local_state) when is_map(local_state) do
-    Map.get(local_state, :sub, :menu) == :menu &&
-      Map.get(local_state, :menu_scramble_frame, 0) < menu_scramble_settled_frame()
+  @impl true
+  @spec subscriptions(map(), Context.t()) :: %{
+          topics: [String.t()],
+          intervals: [MenuScramble.interval_subscription()]
+        }
+  def subscriptions(local_state, %Context{}) do
+    %{topics: [], intervals: MenuScramble.subscriptions(local_state)}
   end
 
   # --- Top-level dispatch (D-15) ---
@@ -98,29 +105,10 @@ defmodule Foglet.TUI.Screens.Login do
     end
   end
 
-  defp advance_menu_scramble(state) do
+  defp update_menu_scramble(state) do
     login_ss = LoginState.get(state)
-
-    cond do
-      Map.get(login_ss, :sub, :menu) != :menu ->
-        {:update, state, []}
-
-      Map.get(login_ss, :menu_scramble_frame, 0) >= menu_scramble_settled_frame() ->
-        {:update, state, []}
-
-      true ->
-        next =
-          login_ss
-          |> Map.update(:menu_scramble_frame, 1, &min(&1 + 1, menu_scramble_settled_frame()))
-
-        {:update, LoginState.put(state, next), []}
-    end
-  end
-
-  defp menu_scramble_settled_frame do
-    @menu_scramble_targets
-    |> Enum.map(&ScrambleText.settled_frame(&1, @menu_scramble_opts))
-    |> Enum.max()
+    next = MenuScramble.tick(login_ss)
+    {:update, LoginState.put(state, next), []}
   end
 
   # --- App-state wrap/unwrap glue ---
