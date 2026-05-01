@@ -141,13 +141,8 @@ defmodule Foglet.TUI.App do
        when status in [:pending, :rejected, :suspended],
        do: :login
 
-  defp initial_screen(%{status: :active, confirmed_at: nil} = user, session_context) do
-    if Map.get(session_context, :pubkey_authenticated) do
-      :verify
-    else
-      Accounts.post_login_screen(user)
-    end
-  end
+  defp initial_screen(%{status: :active, confirmed_at: nil} = user, _session_context),
+    do: Accounts.post_login_screen(user)
 
   defp initial_screen(user, _session_context), do: Accounts.post_login_screen(user)
 

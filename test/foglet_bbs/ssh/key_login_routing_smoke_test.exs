@@ -309,6 +309,7 @@ defmodule Foglet.SSH.KeyLoginRoutingSmokeTest do
   defp assert_persisted_registration_key!(%User{id: id}, openssh_text) do
     {:ok, fingerprint} = SSHKey.compute_fingerprint(openssh_text)
     keys = Repo.all(Ecto.Query.from(k in SSHKey, where: k.user_id == ^id))
+
     assert Enum.any?(keys, &(&1.fingerprint == fingerprint)),
            "expected an ssh_keys row for user #{id} matching offered key fingerprint"
   end
