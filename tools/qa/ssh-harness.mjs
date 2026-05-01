@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
+import { fileURLToPath } from 'node:url';
 import xterm from '@xterm/headless';
 import { Client } from 'ssh2';
 
@@ -23,6 +24,8 @@ const SPECIAL_KEYS = new Map([
   ['escape', '\x1b'],
   ['esc', '\x1b'],
   ['tab', '\t'],
+  ['shift-tab', '\x1b[Z'],
+  ['backtab', '\x1b[Z'],
   ['backspace', '\x7f'],
   ['space', ' '],
   ['up', '\x1b[A'],
@@ -88,7 +91,7 @@ Options:
 
 Commands:
   screen               Print the current terminal screen as plain text
-  key NAME             Send a key: enter, escape, tab, up, down, left, right
+  key NAME             Send a key: enter, escape, tab, shift-tab, up, down, left, right
   key ctrl-c           Send a Ctrl key chord
   type TEXT            Send literal text
   resize COLSxROWS     Resize the PTY and terminal buffer
@@ -170,7 +173,7 @@ function screenText(term) {
   return lines.join('\n');
 }
 
-function keyBytes(name) {
+export function keyBytes(name) {
   const normalized = name.trim().toLowerCase();
 
   if (SPECIAL_KEYS.has(normalized)) {
@@ -313,7 +316,9 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  console.error(`foglet SSH harness failed: ${error.message}`);
-  process.exitCode = 1;
-});
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(error => {
+    console.error(`foglet SSH harness failed: ${error.message}`);
+    process.exitCode = 1;
+  });
+}

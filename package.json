@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "ssh:harness": "node tools/qa/ssh-harness.mjs"
+    "ssh:harness": "node tools/qa/ssh-harness.mjs",
+    "test:ssh-harness": "node tools/qa/ssh-harness-keybytes.test.mjs"
   },
   "dependencies": {
     "@xterm/headless": "^6.0.0",
