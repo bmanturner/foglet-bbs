@@ -11,6 +11,9 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.Accounts.User
+  alias Foglet.Boards.Board
+  alias Foglet.PostingPolicy
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
   alias Foglet.TUI.{Context, Effect}
@@ -117,10 +120,14 @@ defmodule Foglet.TUI.Screens.ThreadList do
     end
   end
 
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["c", "C"] do
-    params = %{origin: :thread_list, board: state.board, board_id: state.board_id}
-    {state, [Effect.navigate(:new_thread, params)]}
+    if posting_disabled?(state, context.current_user) do
+      {state, []}
+    else
+      params = %{origin: :thread_list, board: state.board, board_id: state.board_id}
+      {state, [Effect.navigate(:new_thread, params)]}
+    end
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -146,7 +153,18 @@ defmodule Foglet.TUI.Screens.ThreadList do
     thread_content = render_thread_content(state, context, theme)
     chrome = %{breadcrumb_parts: ["Foglet", board_label(state)]}
 
-    ScreenFrame.render(frame_state, chrome, thread_content, [
+    ScreenFrame.render(frame_state, chrome, thread_content, keybar_groups(state, context))
+  end
+
+  defp keybar_groups(%State{} = state, %Context{} = context) do
+    action_commands =
+      if posting_disabled?(state, context.current_user) do
+        []
+      else
+        [%{key: "C", label: "Compose", priority: 5}]
+      end
+
+    [
       %{
         label: "Navigate",
         commands: [
@@ -156,13 +174,13 @@ defmodule Foglet.TUI.Screens.ThreadList do
       },
       %{
         label: "Actions",
-        commands: [%{key: "C", label: "Compose", priority: 30}]
+        commands: action_commands
       },
       %{
         label: "System",
         commands: [%{key: "Q", label: "Back", priority: 0}]
       }
-    ])
+    ]
   end
 
   defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name
@@ -181,28 +199,36 @@ defmodule Foglet.TUI.Screens.ThreadList do
     end
   end
 
-  defp render_thread_content(%State{status: :loading}, _context, theme) do
+  defp render_thread_content(%State{status: :loading} = state, context, theme) do
     column style: %{gap: 0} do
-      [
-        row style: %{gap: 1} do
-          [
-            Spinner.render(0, theme: theme, style: :dots),
-            text("Loading...", fg: theme.dim.fg)
-          ]
-        end
-      ]
+      banner_nodes(state, context, theme) ++
+        [
+          row style: %{gap: 1} do
+            [
+              Spinner.render(0, theme: theme, style: :dots),
+              text("Loading...", fg: theme.dim.fg)
+            ]
+          end
+        ]
     end
   end
 
-  defp render_thread_content(%State{status: :empty}, _context, theme) do
+  defp render_thread_content(%State{status: :empty} = state, context, theme) do
+    empty_copy =
+      if posting_disabled?(state, context.current_user) do
+        "No threads in this board yet."
+      else
+        "No threads in this board yet. Press [C] to compose."
+      end
+
     column style: %{gap: 0} do
-      [text("No threads in this board yet. Press [C] to compose.", fg: theme.warning.fg)]
+      banner_nodes(state, context, theme) ++ [text(empty_copy, fg: theme.warning.fg)]
     end
   end
 
-  defp render_thread_content(%State{status: {:error, _reason}}, _context, theme) do
+  defp render_thread_content(%State{status: {:error, _reason}} = state, context, theme) do
     column style: %{gap: 0} do
-      [text("Unable to load threads.", fg: theme.error.fg)]
+      banner_nodes(state, context, theme) ++ [text("Unable to load threads.", fg: theme.error.fg)]
     end
   end
 
@@ -211,9 +237,75 @@ defmodule Foglet.TUI.Screens.ThreadList do
     {width, _h} = context.terminal_size || {80, 24}
     inner_width = max(width - 4, 40)
 
-    SelectionList.render(sorted, state.selected_index, fn {thread, _idx, selected} ->
-      render_thread_row(thread, selected, inner_width, theme)
-    end)
+    list =
+      SelectionList.render(sorted, state.selected_index, fn {thread, _idx, selected} ->
+        render_thread_row(thread, selected, inner_width, theme)
+      end)
+
+    column style: %{gap: 0} do
+      banner_nodes(state, context, theme) ++ [list]
+    end
+  end
+
+  defp banner_nodes(%State{} = state, %Context{} = context, theme) do
+    case board_state_banner(state, context.current_user) do
+      nil -> []
+      copy -> [text(copy, fg: theme.warning.fg)]
+    end
+  end
+
+  defp board_state_banner(%State{} = state, user) do
+    cond do
+      archived?(state.board) ->
+        "This board is archived. New threads and replies are disabled."
+
+      read_only?(state.board, user) ->
+        "This board is read-only."
+
+      state.subscribed? == false ->
+        "You're not subscribed to this board. Press S on Boards to subscribe."
+
+      true ->
+        nil
+    end
+  end
+
+  defp archived?(%{} = board) do
+    Map.get(board, :archived, Map.get(board, "archived", false)) == true
+  end
+
+  defp archived?(_board), do: false
+
+  defp read_only?(board, %User{} = user) do
+    case normalize_board(board) do
+      %Board{} = normalized -> not PostingPolicy.can_post?(user, normalized)
+      nil -> false
+    end
+  end
+
+  defp read_only?(_board, _user), do: false
+
+  defp normalize_board(%Board{} = board), do: board
+
+  defp normalize_board(%{} = board) do
+    postable_by = Map.get(board, :postable_by, Map.get(board, "postable_by"))
+
+    if is_nil(postable_by) do
+      nil
+    else
+      %Board{
+        id: Map.get(board, :id, Map.get(board, "id")),
+        name: Map.get(board, :name, Map.get(board, "name")),
+        postable_by: postable_by,
+        archived: Map.get(board, :archived, Map.get(board, "archived", false))
+      }
+    end
+  end
+
+  defp normalize_board(_board), do: nil
+
+  defp posting_disabled?(%State{} = state, current_user) do
+    not is_nil(board_state_banner(state, current_user))
   end
 
   defp render_thread_row(thread, selected, width, theme) do

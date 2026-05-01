@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
   @type t :: %__MODULE__{
           board: map() | nil,
           board_id: String.t() | nil,
+          subscribed?: boolean(),
           threads: [ThreadEntry.t() | map()] | nil,
           selected_index: non_neg_integer(),
           select_thread_id: String.t() | nil,
@@ -25,6 +26,7 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
 
   defstruct board: nil,
             board_id: nil,
+            subscribed?: true,
             threads: nil,
             selected_index: 0,
             select_thread_id: nil,
@@ -37,6 +39,7 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
     %__MODULE__{
       board: Keyword.get(opts, :board),
       board_id: Keyword.get(opts, :board_id),
+      subscribed?: Keyword.get(opts, :subscribed?, true),
       threads: Keyword.get(opts, :threads),
       selected_index: Keyword.get(opts, :selected_index, 0),
       select_thread_id: Keyword.get(opts, :select_thread_id),
@@ -52,11 +55,13 @@ defmodule Foglet.TUI.Screens.ThreadList.State do
     board = Map.get(params, :board) || Map.get(params, "board")
 
     explicit_board_id = Map.get(params, :board_id) || Map.get(params, "board_id")
+    subscribed? = Map.get(params, :subscribed?, Map.get(params, "subscribed?", true))
     select_thread_id = Map.get(params, :select_thread_id) || Map.get(params, "select_thread_id")
 
     new(
       board: board,
       board_id: explicit_board_id || board_id_from_board(board),
+      subscribed?: subscribed? != false,
       select_thread_id: select_thread_id
     )
   end

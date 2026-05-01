@@ -99,6 +99,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
   @board %{id: "b1", name: "General", slug: "general"}
   @user %Foglet.Accounts.User{id: "u1", handle: "alice"}
+  @active_user %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user, status: :active}
 
   defp context(overrides \\ []) do
     threads = Keyword.get(overrides, :threads, FakeThreads)
@@ -359,6 +360,14 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
             ]} = ThreadList.update({:key, %{key: :char, char: "c"}}, state, context())
   end
 
+  test "C emits no navigation when board posting is disabled" do
+    board = Map.merge(@board, %{archived: true, postable_by: :members})
+    state = State.new(board: board, board_id: "b1", threads: [], status: :empty)
+    ctx = context(current_user: @active_user, route_params: %{board: board, board_id: "b1"})
+
+    assert {^state, []} = ThreadList.update({:key, %{key: :char, char: "C"}}, state, ctx)
+  end
+
   test "Q emits board_list navigation plus BoardList-owned refresh task" do
     state = load_state()
 
@@ -419,6 +428,61 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
     assert TextWidth.display_width(active_cluster) ==
              TextWidth.display_width(sticky_locked_cluster)
+  end
+
+  test "render/2 shows archived banner and suppresses compose command" do
+    board = Map.merge(@board, %{archived: true, postable_by: :members})
+    state = State.new(board: board, board_id: "b1", threads: [], status: :empty)
+    ctx = context(current_user: @active_user, route_params: %{board: board, board_id: "b1"})
+    flat = flatten_text(ThreadList.render(state, ctx))
+
+    assert flat =~ "This board is archived. New threads and replies are disabled."
+    refute flat =~ "CCompose"
+    refute flat =~ "C Compose"
+  end
+
+  test "render/2 maps read-only and unsubscribed banners with documented precedence" do
+    read_only_board = Map.merge(@board, %{archived: false, postable_by: :mods_only})
+
+    read_only_state =
+      State.new(board: read_only_board, board_id: "b1", threads: [], status: :empty)
+
+    read_only_ctx =
+      context(
+        current_user: @active_user,
+        route_params: %{board: read_only_board, board_id: "b1"}
+      )
+
+    read_only_flat = flatten_text(ThreadList.render(read_only_state, read_only_ctx))
+    assert read_only_flat =~ "This board is read-only."
+
+    unsubscribed_state =
+      State.new(
+        board: Map.merge(@board, %{archived: false, postable_by: :members}),
+        board_id: "b1",
+        subscribed?: false,
+        threads: [],
+        status: :empty
+      )
+
+    unsubscribed_flat = flatten_text(ThreadList.render(unsubscribed_state, read_only_ctx))
+
+    assert unsubscribed_flat =~
+             "You're not subscribed to this board. Press S on Boards to subscribe."
+
+    archived_unsubscribed =
+      State.new(
+        board: Map.merge(@board, %{archived: true, postable_by: :mods_only}),
+        board_id: "b1",
+        subscribed?: false,
+        threads: [],
+        status: :empty
+      )
+
+    archived_flat = flatten_text(ThreadList.render(archived_unsubscribed, read_only_ctx))
+    assert archived_flat =~ "This board is archived. New threads and replies are disabled."
+    refute archived_flat =~ "This board is read-only."
+    refute archived_flat =~ "You're not subscribed"
   end
 
   test "render/2 falls back to @unknown and new for handleless nil-time rows" do
