@@ -18,6 +18,7 @@ defmodule Foglet.TUI.Screens.Account.State do
 
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Account.SSHKeysState
+  alias Foglet.TUI.Screens.Account.Timezones
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Theme
@@ -212,10 +213,11 @@ defmodule Foglet.TUI.Screens.Account.State do
       fields: [
         %{
           name: :timezone,
-          type: :text,
+          type: :enum,
           label: "Timezone",
           required: true,
-          description: "Use an IANA name, like America/Chicago or Etc/UTC.",
+          choices: Timezones.choices_for(draft.timezone),
+          description: "Use ↑/↓ to pick a timezone; save to keep it.",
           value: draft.timezone || "Etc/UTC"
         },
         %{

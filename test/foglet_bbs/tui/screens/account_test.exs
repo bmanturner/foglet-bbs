@@ -1055,18 +1055,17 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = build_user_with_profile()
       ss = AccountState.new(current_user: user)
 
-      # Mutate the live prefs form by typing a char into the focused field
+      # Mutate the live prefs form by cycling the focused enum picker
       # (focus starts at :timezone — first field).
-      {form_after_type, nil} =
-        ModalForm.handle_event(%{key: :char, char: "X"}, ss.prefs_form)
+      {form_after_pick, nil} =
+        ModalForm.handle_event(%{key: :down}, ss.prefs_form)
 
-      # Sanity: typing event mutated :timezone away from "Etc/UTC".
-      assert ModalForm.field_value(form_after_type, :timezone) != "Etc/UTC"
-      assert ModalForm.field_value(form_after_type, :timezone) =~ "X"
+      # Sanity: cycling moved :timezone off the seeded "Etc/UTC".
+      assert ModalForm.field_value(form_after_pick, :timezone) != "Etc/UTC"
 
       ss_dirty = %{
         ss
-        | prefs_form: form_after_type,
+        | prefs_form: form_after_pick,
           prefs_dirty?: true,
           candidate_theme_id: "amber"
       }
@@ -1091,10 +1090,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = build_user_with_profile()
       ss = AccountState.new(current_user: user)
 
-      {form_after_type, nil} =
-        ModalForm.handle_event(%{key: :char, char: "X"}, ss.prefs_form)
+      {form_after_pick, nil} =
+        ModalForm.handle_event(%{key: :down}, ss.prefs_form)
 
-      ss_dirty = %{ss | prefs_form: form_after_type, prefs_dirty?: true}
+      ss_dirty = %{ss | prefs_form: form_after_pick, prefs_dirty?: true}
 
       {:ok, after_esc, []} = PrefsForm.handle_key(%{key: :escape}, ss_dirty, user)
 
@@ -1190,6 +1189,42 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert Enum.any?(form.fields, &match?(%{name: :theme, type: :enum}, &1)),
              "expected theme enum field in prefs form spec"
+    end
+
+    test "FOG-131: timezone is an enum picker, not a raw text field", %{state: state} do
+      form = state.screen_state.account.prefs_form
+      tz = Enum.find(form.fields, &(&1.name == :timezone))
+
+      assert tz.type == :enum, "expected :timezone field to be an enum picker (FOG-131)"
+      assert is_list(tz.choices) and length(tz.choices) > 1
+      assert "Etc/UTC" in tz.choices
+      assert "America/Chicago" in tz.choices
+    end
+
+    test "FOG-131: cycling timezone enum changes the picker value without saving" do
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = build_user_with_profile(timezone: "Etc/UTC")
+      ss = AccountState.new(current_user: user)
+
+      {form2, action} = ModalForm.handle_event(%{key: :down}, ss.prefs_form)
+
+      assert action == nil, "cycling must not emit a submit action (FOG-131 save-only-on-save)"
+      assert ModalForm.field_value(form2, :timezone) != "Etc/UTC"
+      assert ModalForm.field_value(form2, :timezone) in Foglet.TUI.Screens.Account.Timezones.curated()
+    end
+
+    test "FOG-131: a non-curated saved timezone is preserved in picker choices" do
+      user = build_user_with_profile(timezone: "Pacific/Tarawa")
+      ss = AccountState.new(current_user: user)
+
+      tz = Enum.find(ss.prefs_form.fields, &(&1.name == :timezone))
+
+      assert "Pacific/Tarawa" in tz.choices,
+             "user's saved timezone must remain selectable even if not curated"
+
+      assert Foglet.TUI.Widgets.Modal.Form.field_value(ss.prefs_form, :timezone) ==
+               "Pacific/Tarawa"
     end
 
     test "cycling down on focused theme enum field updates candidate_theme_id" do
@@ -1816,7 +1851,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       timezone = Enum.find(ss.prefs_form.fields, &(&1.name == :timezone))
       theme = Enum.find(ss.prefs_form.fields, &(&1.name == :theme))
 
-      assert timezone.description == "Use an IANA name, like America/Chicago or Etc/UTC."
+      assert timezone.description == "Use ↑/↓ to pick a timezone; save to keep it."
       assert theme.description == "Preview changes here; save to keep them."
     end
   end
