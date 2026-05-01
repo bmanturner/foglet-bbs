@@ -1211,6 +1211,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert action == nil, "cycling must not emit a submit action (FOG-131 save-only-on-save)"
       assert ModalForm.field_value(form2, :timezone) != "Etc/UTC"
+
       assert ModalForm.field_value(form2, :timezone) in Foglet.TUI.Screens.Account.Timezones.curated()
     end
 
@@ -1225,6 +1226,49 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert Foglet.TUI.Widgets.Modal.Form.field_value(ss.prefs_form, :timezone) ==
                "Pacific/Tarawa"
+    end
+
+    test "FOG-132: timezone enum field is configured for compact display", %{state: state} do
+      tz = Enum.find(state.screen_state.account.prefs_form.fields, &(&1.name == :timezone))
+
+      assert Map.get(tz, :display) == :compact,
+             "expected :timezone field to render with display: :compact (FOG-132 — bound vertical footprint)"
+    end
+
+    test "FOG-132: PREFS render contains a single compact timezone row, not the full curated list",
+         %{state: state} do
+      flat = render_account(state) |> collect_text_values()
+
+      curated = Foglet.TUI.Screens.Account.Timezones.curated()
+      current = "Etc/UTC"
+      others = curated -- [current]
+
+      compact_rows =
+        Enum.filter(flat, fn line ->
+          is_binary(line) and String.contains?(line, "‹ #{current} ›")
+        end)
+
+      assert length(compact_rows) == 1,
+             "expected exactly one compact timezone row showing the current value (FOG-132); got #{inspect(compact_rows)}"
+
+      # No other curated zone may be painted as its own row — that is the
+      # FOG-132 regression: the RadioGroup used to render every choice and
+      # overlap Time format / Theme / footer at 80x24.
+      leaked =
+        Enum.filter(flat, fn line ->
+          is_binary(line) and Enum.any?(others, &String.contains?(line, &1))
+        end)
+
+      assert leaked == [],
+             "no non-current curated timezone may appear in the rendered PREFS body (FOG-132); leaked rows: #{inspect(leaked)}"
+
+      # Time format and Theme labels must remain visible alongside the
+      # bounded picker — overlap was the original symptom.
+      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Time format"))),
+             "Time format label must still render after the bounded timezone picker (FOG-132)"
+
+      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Theme"))),
+             "Theme label must still render after the bounded timezone picker (FOG-132)"
     end
 
     test "cycling down on focused theme enum field updates candidate_theme_id" do

@@ -658,13 +658,37 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     Checkbox.render(label, checked?: field_state, theme: theme)
   end
 
-  defp render_widget(%{type: :enum, choices: choices}, field_state, _focused?, theme) do
+  defp render_widget(%{type: :enum, choices: choices} = spec, field_state, _focused?, theme) do
     str_choices = Enum.map(choices, &to_string/1)
-    RadioGroup.render(str_choices, field_state, theme: theme)
+
+    case Map.get(spec, :display, :radio) do
+      :compact ->
+        render_compact_enum(str_choices, field_state, theme)
+
+      _radio ->
+        RadioGroup.render(str_choices, field_state, theme: theme)
+    end
   end
 
   defp render_widget(%{type: :textarea}, %{mli_state: mli}, focused?, theme) do
     Compose.render_input(mli, focused?, theme)
+  end
+
+  # Compact single-line enum picker (FOG-132).
+  #
+  # Renders the current selection as `‹ value › (i/n)` on one row instead of
+  # one row per choice. Used for enum fields whose choice count would otherwise
+  # overflow the modal body at 80x24 (timezone has 24 IANA zones). Cycling
+  # still uses the unchanged :up/:down dispatcher.
+  defp render_compact_enum([], _idx, %Theme{} = theme) do
+    text("‹ — › (0/0)", fg: theme.dim.fg)
+  end
+
+  defp render_compact_enum(choices, idx, %Theme{} = theme) when is_list(choices) do
+    n = length(choices)
+    safe_idx = idx |> max(0) |> min(n - 1)
+    value = Enum.at(choices, safe_idx)
+    text("‹ #{value} › (#{safe_idx + 1}/#{n})", fg: theme.selected.fg, style: [:bold])
   end
 
   # ---------------------------------------------------------------------------

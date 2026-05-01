@@ -214,6 +214,7 @@ defmodule Foglet.TUI.Screens.Account.State do
         %{
           name: :timezone,
           type: :enum,
+          display: :compact,
           label: "Timezone",
           required: true,
           choices: Timezones.choices_for(draft.timezone),
