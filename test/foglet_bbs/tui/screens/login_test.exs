@@ -7,6 +7,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Login
+  alias Foglet.TUI.Widgets.Display.ScrambleText
   alias Foglet.TUI.Widgets.Input.TextInput
 
   import Ecto.Query
@@ -197,12 +198,15 @@ defmodule Foglet.TUI.Screens.LoginTest do
   defp collect_panels(_other, acc), do: acc
 
   describe "Login.init/1 (AUDIT-19)" do
-    test "returns minimal menu sub-state" do
-      assert Login.init(Context.new(route: :login)) == %{sub: :menu}
+    test "returns menu sub-state with scramble frame" do
+      assert Login.init(Context.new(route: :login)) == %{sub: :menu, menu_scramble_frame: 0}
     end
 
-    test "ignores unrelated context values for the minimal menu state" do
-      assert Login.init(Context.new(route: :login, route_params: %{foo: :bar})) == %{sub: :menu}
+    test "ignores unrelated context values for the menu state" do
+      assert Login.init(Context.new(route: :login, route_params: %{foo: :bar})) == %{
+               sub: :menu,
+               menu_scramble_frame: 0
+             }
     end
 
     test "Login render decomposition contract is explicit" do
@@ -333,6 +337,31 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     test "unknown key returns :no_match in menu sub" do
       assert {:update, _state, []} = update_login(%{key: :char, char: "x"}, base_state())
+    end
+
+    test "menu scramble tick advances frame and then stays settled" do
+      settled_frame =
+        ["you are outside.", "knock or hang up."]
+        |> Enum.map(&ScrambleText.settled_frame(&1, direction: :left_to_right, reveal_rate: 2))
+        |> Enum.max()
+
+      state =
+        base_state()
+        |> put_login_state(%{sub: :menu, menu_scramble_frame: settled_frame - 1})
+
+      {:update, settled_state, []} = update_message(:menu_scramble_tick, state)
+      assert get_in(settled_state, [:screen_state, :login, :menu_scramble_frame]) == settled_frame
+
+      {:update, unchanged_state, []} = update_message(:menu_scramble_tick, settled_state)
+      assert unchanged_state == settled_state
+    end
+
+    test "menu scramble tick ignores non-menu sub-states" do
+      state = form_state(handle: "alice", password: "secret")
+      {:update, new_state, []} = update_message(:menu_scramble_tick, state)
+
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :login_form
+      refute Map.has_key?(get_in(new_state, [:screen_state, :login]), :menu_scramble_frame)
     end
   end
 

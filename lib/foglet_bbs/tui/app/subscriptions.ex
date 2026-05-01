@@ -12,6 +12,8 @@ defmodule Foglet.TUI.App.Subscriptions do
   alias Foglet.TUI.App.Routing
   alias Foglet.TUI.InitialRouteEnterForwarder
   alias Foglet.TUI.PubSubForwarder
+  alias Foglet.TUI.Screens.Login
+  alias Foglet.TUI.Widgets.Display.ScrambleText
   alias Raxol.Core.Runtime.Subscription
 
   @doc "Builds the stable Raxol subscriptions for the current App state."
@@ -25,10 +27,11 @@ defmodule Foglet.TUI.App.Subscriptions do
       end
 
     clock = [subscribe_interval(60_000, :main_menu_clock_tick)]
+    login_scramble = login_scramble_interval(state)
     pubsub = [Subscription.custom(PubSubForwarder, %{topics: topics(state)})]
     initial_route = [Subscription.custom(InitialRouteEnterForwarder, %{})]
 
-    heartbeat ++ clock ++ pubsub ++ initial_route
+    heartbeat ++ clock ++ login_scramble ++ pubsub ++ initial_route
   end
 
   @doc "Returns App-owned user topics plus topics declared by the active screen."
@@ -70,5 +73,16 @@ defmodule Foglet.TUI.App.Subscriptions do
 
   defp subscribe_interval(interval, message) do
     Subscription.interval(interval, message)
+  end
+
+  defp login_scramble_interval(%App{} = state) do
+    local_state = Routing.screen_state_for(state, :login)
+
+    if state.current_screen == :login && is_map(local_state) &&
+         Login.menu_scramble_active?(local_state) do
+      [subscribe_interval(ScrambleText.frame_duration_ms(), :login_menu_scramble_tick)]
+    else
+      []
+    end
   end
 end
