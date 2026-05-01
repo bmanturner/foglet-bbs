@@ -193,14 +193,22 @@ defmodule Foglet.TUI.Screens.Register.State do
   defp unique_sentence(_), do: @generic_error
 
   defp format_sentence(:handle),
-    do: "Handles can only use letters, numbers, dot, dash, and underscore."
+    do: "Handles can only use letters, numbers, dashes, and underscores."
 
   defp format_sentence(:email), do: "That doesn't look like an email address."
   defp format_sentence(_), do: @generic_error
 
   defp length_sentence(:handle, opts) do
     case Keyword.get(opts, :kind) do
+      :min -> "Handles need to be at least #{Keyword.get(opts, :count)} characters."
       :max -> "Handles can't be longer than #{Keyword.get(opts, :count)} characters."
+      _ -> @generic_error
+    end
+  end
+
+  defp length_sentence(:email, opts) do
+    case Keyword.get(opts, :kind) do
+      :max -> "Emails can't be longer than #{Keyword.get(opts, :count)} characters."
       _ -> @generic_error
     end
   end
@@ -208,6 +216,7 @@ defmodule Foglet.TUI.Screens.Register.State do
   defp length_sentence(:password, opts) do
     case Keyword.get(opts, :kind) do
       :min -> "Passwords need to be at least #{Keyword.get(opts, :count)} characters."
+      :max -> "Passwords can't be longer than #{Keyword.get(opts, :count)} characters."
       _ -> @generic_error
     end
   end

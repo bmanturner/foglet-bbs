@@ -42,13 +42,13 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
     test "handle with disallowed characters maps to the format sentence" do
       cs =
         User.registration_changeset(%{
-          handle: "bad handle!",
+          handle: "has.dot",
           email: "ok@example.test",
           password: "sekret01"
         })
 
       assert RegisterState.changeset_error_text(cs) ==
-               "Handles can only use letters, numbers, dot, dash, and underscore."
+               "Handles can only use letters, numbers, dashes, and underscores."
     end
 
     test "malformed email maps to the email format sentence" do
@@ -101,15 +101,8 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
 
       assert RegisterState.changeset_error_text(cs) == "That email is already on file."
     end
-  end
 
-  describe "changeset_error_text/1 — gaps not yet mapped by FOG-53 §3.6a" do
-    # These shapes are emitted by Foglet.Accounts.User.registration_changeset/2
-    # but FOG-53 §3.6a does not yet specify user-facing copy. Per FOG-69 scope
-    # discipline, we surface the safe generic sentence and have escalated the
-    # gap to Content Designer (FOG-53). Update once copy lands.
-
-    test "handle below minimum length falls back to the generic sentence" do
+    test "handle below minimum length maps to the min-length sentence with the configured floor" do
       cs =
         User.registration_changeset(%{
           handle: "a",
@@ -117,10 +110,11 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
           password: "sekret01"
         })
 
-      assert RegisterState.changeset_error_text(cs) == @generic_error
+      assert RegisterState.changeset_error_text(cs) ==
+               "Handles need to be at least 2 characters."
     end
 
-    test "oversize email falls back to the generic sentence" do
+    test "oversize email maps to the max-length sentence with the configured limit" do
       cs =
         User.registration_changeset(%{
           handle: "okhandle",
@@ -128,10 +122,11 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
           password: "sekret01"
         })
 
-      assert RegisterState.changeset_error_text(cs) == @generic_error
+      assert RegisterState.changeset_error_text(cs) ==
+               "Emails can't be longer than 254 characters."
     end
 
-    test "oversize password falls back to the generic sentence" do
+    test "oversize password maps to the max-length sentence with the configured limit" do
       cs =
         User.registration_changeset(%{
           handle: "okhandle",
@@ -139,7 +134,8 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
           password: String.duplicate("a", 257)
         })
 
-      assert RegisterState.changeset_error_text(cs) == @generic_error
+      assert RegisterState.changeset_error_text(cs) ==
+               "Passwords can't be longer than 256 characters."
     end
   end
 
