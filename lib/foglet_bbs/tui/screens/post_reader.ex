@@ -243,7 +243,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
       when c in ["r", "R"] do
-    if locked_thread?(state) do
+    if locked_thread?(state) or archived_board?(state) do
       {state, []}
     else
       params = %{
@@ -287,6 +287,19 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def locked_thread?(%State{}), do: false
+
+  @doc """
+  Returns true when the screen-local board is archived.
+
+  FOG-96: PostReader uses this to gate the `R` reply key and to surface an
+  archived-board affordance before the composer can be opened.
+  """
+  @spec archived_board?(State.t()) :: boolean()
+  def archived_board?(%State{board: board}) when is_map(board) do
+    Map.get(board, :archived, Map.get(board, "archived", false)) == true
+  end
+
+  def archived_board?(%State{}), do: false
 
   @impl true
   @spec render(State.t(), Context.t()) :: any()
