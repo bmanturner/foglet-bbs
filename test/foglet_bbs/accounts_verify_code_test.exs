@@ -1,8 +1,9 @@
 defmodule Foglet.AccountsVerifyCodeTest do
-  use FogletBbs.DataCase, async: true
+  use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts
   alias Foglet.Accounts.{UserToken, Verification}
+  alias Foglet.Config
   alias FogletBbs.Repo
 
   import FogletBbs.AccountsFixtures
@@ -110,6 +111,18 @@ defmodule Foglet.AccountsVerifyCodeTest do
   end
 
   describe "Accounts.register_user/1 (existing — confirming status defaults to :active)" do
+    setup do
+      current_registration_mode = Config.get("registration_mode", "open")
+      Config.put!("registration_mode", "open")
+
+      on_exit(fn ->
+        Config.put!("registration_mode", current_registration_mode)
+        Config.invalidate("registration_mode")
+      end)
+
+      :ok
+    end
+
     test "creates user with status: :active" do
       attrs = valid_user_attributes()
       assert {:ok, user} = Accounts.register_user(attrs)
