@@ -32,11 +32,12 @@ defmodule Foglet.TUI.Screens.Login.State do
   """
 
   alias Foglet.Accounts.User
+  alias Foglet.TUI.Screens.Login.MenuScramble
   alias Foglet.TUI.Widgets.Input.TextInput
 
-  @doc "Returns the minimal menu sub-state (AUDIT-19 intentional)."
+  @doc "Returns the menu sub-state."
   @spec default() :: map()
-  def default, do: %{sub: :menu}
+  def default, do: %{sub: :menu, menu_scramble_frame: MenuScramble.default_frame()}
 
   @doc "Builds a fresh login form sub-state with inputs initialised."
   @spec login_form() :: map()

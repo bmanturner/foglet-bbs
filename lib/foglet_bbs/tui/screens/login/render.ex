@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
   """
 
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Screens.Login.{MenuScramble, State}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.TextWidth
@@ -127,10 +128,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
     column style: %{gap: 0, align_items: :center} do
       List.duplicate(pad, top_padding) ++
-        [
-          text("you are outside.", fg: theme.primary.fg),
-          text("knock or hang up.", fg: theme.primary.fg)
-        ] ++
+        MenuScramble.render(State.get(state), theme) ++
         List.duplicate(pad, bottom_padding)
     end
   end

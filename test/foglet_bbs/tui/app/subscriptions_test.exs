@@ -23,6 +23,12 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
     def render(local_state, %Context{}), do: {:no_subscription_render, local_state}
   end
 
+  defmodule IntervalScreen do
+    def subscriptions(%{topic: topic}, %Context{}) do
+      %{topics: ["interval:#{topic}"], intervals: [{25, :interval_screen_tick}]}
+    end
+  end
+
   defp state(attrs \\ %{}) do
     attrs = Map.new(attrs)
 
@@ -31,6 +37,7 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
         domain: %{
           screen_modules: %{
             sample: SampleScreen,
+            interval: IntervalScreen,
             no_subscriptions: NoSubscriptionsScreen
           }
         }
@@ -90,6 +97,24 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
              state(session_pid: nil)
              |> Subscriptions.subscribe()
              |> interval_subscription(:main_menu_clock_tick)
+  end
+
+  test "screen-declared interval subscriptions are picked up generically" do
+    subscriptions =
+      state(
+        current_screen: :interval,
+        route_params: %{},
+        screen_state: %{interval: %{topic: "state"}}
+      )
+      |> Subscriptions.subscribe()
+
+    assert %Subscription{type: :interval, data: %{interval: 25}} =
+             interval_subscription(subscriptions, :interval_screen_tick)
+
+    assert %Subscription{
+             type: :custom,
+             data: %{args: %{topics: ["interval:state"]}}
+           } = custom_subscription(subscriptions, Foglet.TUI.PubSubForwarder)
   end
 
   test "PubSubForwarder subscription combines user and active screen topics" do

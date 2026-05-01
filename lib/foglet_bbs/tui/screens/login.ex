@@ -33,7 +33,16 @@ defmodule Foglet.TUI.Screens.Login do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.TUI.{Context, Effect}
-  alias Foglet.TUI.Screens.Login.{LoginForm, Menu, Render, ResetConsume, ResetRequest}
+
+  alias Foglet.TUI.Screens.Login.{
+    LoginForm,
+    Menu,
+    MenuScramble,
+    Render,
+    ResetConsume,
+    ResetRequest
+  }
+
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.AppStateBridge
 
@@ -67,7 +76,23 @@ defmodule Foglet.TUI.Screens.Login do
   def update({:task_result, :reset_token, result}, local_state, %Context{} = ctx),
     do: ResetConsume.handle_task_result(result, local_state, ctx)
 
+  def update(:menu_scramble_tick, local_state, %Context{} = context) do
+    local_state
+    |> app_state_from_local(context)
+    |> update_menu_scramble()
+    |> local_result(local_state)
+  end
+
   def update(_message, local_state, %Context{}), do: {local_state, []}
+
+  @impl true
+  @spec subscriptions(map(), Context.t()) :: %{
+          topics: [String.t()],
+          intervals: [MenuScramble.interval_subscription()]
+        }
+  def subscriptions(local_state, %Context{}) do
+    %{topics: [], intervals: MenuScramble.subscriptions(local_state)}
+  end
 
   # --- Top-level dispatch (D-15) ---
 
@@ -78,6 +103,12 @@ defmodule Foglet.TUI.Screens.Login do
       :reset_consume -> ResetConsume.handle_key(key, state)
       _ -> Menu.handle_key(key, state)
     end
+  end
+
+  defp update_menu_scramble(state) do
+    login_ss = LoginState.get(state)
+    next = MenuScramble.tick(login_ss)
+    {:update, LoginState.put(state, next), []}
   end
 
   # --- App-state wrap/unwrap glue ---

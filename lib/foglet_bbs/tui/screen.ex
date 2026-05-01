@@ -8,7 +8,7 @@ defmodule Foglet.TUI.Screen do
   - `update/3` consumes normalized runtime messages, screen-local state, and
     context, then returns `{new_local_state, effects}`.
   - `render/2` renders from screen-local state plus context.
-  - `subscriptions/2` is optional for focused-screen PubSub topics.
+  - `subscriptions/2` is optional for focused-screen PubSub topics and runtime intervals.
 
   ## State conventions
 
@@ -30,16 +30,20 @@ defmodule Foglet.TUI.Screen do
   @callback render(local_state(), Foglet.TUI.Context.t()) :: any()
 
   @doc """
-  Optional PubSub topic-interest declaration. Screens that wish to receive
-  PubSub updates while focused declare the topics they want subscribed by
-  returning a list of topic strings. Stateless screens and screens with no
-  PubSub interest may omit this callback entirely.
+  Optional runtime subscription declaration. Screens that wish to receive
+  PubSub updates while focused may keep returning a list of topic strings.
+  Screens that also need runtime intervals return `%{topics: [...],
+  intervals: [{interval_ms, message}, ...]}`. Stateless screens and screens
+  with no runtime subscription interest may omit this callback entirely.
 
-  Per D-05 / SPEC R6, this is the App-shell-decoupled replacement for
-  central App pattern-matching on the current screen — the App calls into
-  this callback rather than encoding screen-specific topic logic itself.
+  Per D-05 / SPEC R6, this is the App-shell-decoupled replacement for central
+  App pattern-matching on the current screen — the App calls into this callback
+  rather than encoding screen-specific topic or interval logic itself.
   """
-  @callback subscriptions(local_state(), Foglet.TUI.Context.t()) :: [String.t()]
+  @callback subscriptions(local_state(), Foglet.TUI.Context.t()) ::
+              [String.t()]
+              | %{topics: [String.t()], intervals: [{pos_integer(), term()}]}
+              | keyword()
 
   @optional_callbacks init: 1,
                       update: 3,

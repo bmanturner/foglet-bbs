@@ -107,8 +107,9 @@ start tasks.
 
 ## `subscriptions/2`
 
-Screens that need focused PubSub topics implement `subscriptions/2`. App owns
-user-level topics; the active screen owns screen-specific topics.
+Screens that need focused PubSub topics or screen-owned runtime intervals
+implement `subscriptions/2`. App owns user-level topics and stable shell
+intervals; the active screen owns screen-specific topics and intervals.
 
 ```elixir
 @impl Foglet.TUI.Screen
@@ -120,7 +121,10 @@ end
 def subscriptions(_state, _context), do: []
 ```
 
-Return only topic strings. PubSub messages route back through `update/3`.
+Topic-only screens return a list of topic strings. Screens that also need
+intervals return a map or keyword with `:topics` and `:intervals`, where each
+interval is `{interval_ms, message}`. PubSub messages and interval messages
+route back through `update/3`.
 
 ## Context
 

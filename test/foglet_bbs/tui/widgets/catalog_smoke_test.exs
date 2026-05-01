@@ -16,7 +16,7 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
 
   alias Foglet.TUI.Theme
 
-  alias Foglet.TUI.Widgets.Display.{Progress, Table, Tree}
+  alias Foglet.TUI.Widgets.Display.{Progress, ScrambleText, Table, Tree}
   alias Foglet.TUI.Widgets.Input.{Button, Checkbox, Menu, RadioGroup, Tabs, TextInput}
   alias Foglet.TUI.Widgets.List.SmartList
   alias Foglet.TUI.Widgets.Progress.Spinner
@@ -37,6 +37,7 @@ defmodule Foglet.TUI.Widgets.CatalogSmokeTest do
       ),
       Tree.render(Tree.init(nodes: [%{id: :root, label: "R", children: []}]), theme: t),
       Progress.render(0.5, theme: t),
+      ScrambleText.render("Foglet", 1, theme: t, seed: 1),
       Spinner.render(0, theme: t),
       SmartList.render(SmartList.init(options: [{"A", 1}]), theme: t)
     ]

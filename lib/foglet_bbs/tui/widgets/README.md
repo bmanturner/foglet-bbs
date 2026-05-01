@@ -74,6 +74,7 @@ New widgets should:
 | `Display.ConsoleTable` | [`display/console_table.ex`](display/console_table.ex) | Dense operator-console facade over `Display.Table` with compact defaults and empty-state handling |
 | `Display.Tree`         | [`display/tree.ex`](display/tree.ex)                   | Hierarchical tree with expand/collapse |
 | `Display.Progress`     | [`display/progress.ex`](display/progress.ex)           | Animated progress bar (stateless) |
+| `Display.ScrambleText` | [`display/scramble_text.ex`](display/scramble_text.ex) | Deterministic frame-index-driven scramble-text reveal |
 
 ## Workspace (Phase 24)
 

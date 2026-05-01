@@ -312,6 +312,14 @@ defmodule Foglet.TUI.App do
 
   defp do_update(:main_menu_clock_tick, state), do: {state, []}
 
+  defp do_update(:login_menu_scramble_tick, state) do
+    if state.current_screen == :login do
+      Routing.route_screen_update(state, :login, :menu_scramble_tick)
+    else
+      {state, []}
+    end
+  end
+
   # Phase 39 CR-01 / SPEC R4 / D-04: deliver :on_route_enter to the active
   # screen after `App.init/1` has run. Raxol's init/1 contract returns
   # `{:ok, model}` (no commands), so `init/1` itself can't fan out the

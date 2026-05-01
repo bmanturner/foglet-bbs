@@ -25,10 +25,11 @@ defmodule Foglet.TUI.App.Subscriptions do
       end
 
     clock = [subscribe_interval(60_000, :main_menu_clock_tick)]
+    screen_intervals = screen_declared_intervals(state)
     pubsub = [Subscription.custom(PubSubForwarder, %{topics: topics(state)})]
     initial_route = [Subscription.custom(InitialRouteEnterForwarder, %{})]
 
-    heartbeat ++ clock ++ pubsub ++ initial_route
+    heartbeat ++ clock ++ screen_intervals ++ pubsub ++ initial_route
   end
 
   @doc "Returns App-owned user topics plus topics declared by the active screen."
@@ -47,13 +48,29 @@ defmodule Foglet.TUI.App.Subscriptions do
   @doc "Returns topics from the active screen's optional `subscriptions/2` callback."
   @spec screen_declared_topics(App.t()) :: [String.t()]
   def screen_declared_topics(%App{} = state) do
+    state
+    |> screen_declared_subscription_shape()
+    |> Map.fetch!(:topics)
+  end
+
+  @doc "Returns interval subscriptions from the active screen's optional `subscriptions/2` callback."
+  @spec screen_declared_intervals(App.t()) :: [Subscription.t()]
+  def screen_declared_intervals(%App{} = state) do
+    state
+    |> screen_declared_subscription_shape()
+    |> Map.fetch!(:intervals)
+    |> Enum.map(fn {interval, message} -> subscribe_interval(interval, message) end)
+  end
+
+  defp screen_declared_subscription_shape(%App{} = state) do
     key = Routing.screen_key(Routing.current_route(state))
     module = Routing.screen_module_for(state, key)
 
     if Code.ensure_loaded?(module) and function_exported?(module, :subscriptions, 2) do
       module.subscriptions(Routing.screen_state_for(state, key), Routing.build_context(state))
+      |> normalize_screen_subscriptions()
     else
-      []
+      %{topics: [], intervals: []}
     end
   end
 
@@ -70,5 +87,37 @@ defmodule Foglet.TUI.App.Subscriptions do
 
   defp subscribe_interval(interval, message) do
     Subscription.interval(interval, message)
+  end
+
+  defp normalize_screen_subscriptions(topics) when is_list(topics) do
+    if Keyword.keyword?(topics) do
+      topics
+      |> Map.new()
+      |> normalize_screen_subscriptions()
+    else
+      %{topics: topics, intervals: []}
+    end
+  end
+
+  defp normalize_screen_subscriptions(%{} = subscriptions) do
+    %{
+      topics: Map.get(subscriptions, :topics, []),
+      intervals: subscriptions |> Map.get(:intervals, []) |> Enum.map(&normalize_interval/1)
+    }
+  end
+
+  defp normalize_interval({interval, message}) when is_integer(interval) and interval > 0,
+    do: {interval, message}
+
+  defp normalize_interval(%{interval: interval, message: message})
+       when is_integer(interval) and interval > 0,
+       do: {interval, message}
+
+  defp normalize_interval(%{interval_ms: interval, message: message})
+       when is_integer(interval) and interval > 0,
+       do: {interval, message}
+
+  defp normalize_interval(invalid) do
+    raise ArgumentError, "invalid screen interval subscription: #{inspect(invalid)}"
   end
 end
