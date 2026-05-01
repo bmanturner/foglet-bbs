@@ -16,12 +16,13 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   @invite_columns [
     %{key: :code, label: "Code", width: 8, grow: 3, priority: 100, demand: :content},
     %{key: :status, label: "Status", width: 8, priority: 60, demand: :content},
-    %{key: :created, label: "Created", width: 10, priority: 40, demand: :content},
+    %{key: :issued, label: "Issued", width: 10, priority: 40, demand: :content},
     %{key: :used_by, label: "Used by", width: 7, grow: 1, priority: 10, demand: :content}
   ]
   @default_width 60
 
   @type invite_status :: map()
+  @type mode :: :list | :confirm_revoke
 
   @type t :: %__MODULE__{
           items: nil | [invite_status()],
@@ -30,6 +31,8 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
           loading?: boolean(),
           last_generated_code: String.t() | nil,
           error: String.t() | nil,
+          mode: mode(),
+          confirm_target: map() | nil,
           frame: non_neg_integer()
         }
 
@@ -39,6 +42,8 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
             loading?: false,
             last_generated_code: nil,
             error: nil,
+            mode: :list,
+            confirm_target: nil,
             frame: 0
 
   @spec new(keyword()) :: t()
@@ -115,7 +120,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
       Enum.map(items, fn item ->
         status_str = item |> Map.get(:status) |> to_string()
 
-        created_str =
+        issued_str =
           case Map.get(item, :inserted_at) do
             %DateTime{} = dt -> Calendar.strftime(dt, "%Y-%m-%d")
             nil -> ""
@@ -131,7 +136,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
         %{
           code: to_string(Map.get(item, :code, "")),
           status: status_str,
-          created: created_str,
+          issued: issued_str,
           used_by: used_by_str
         }
       end)
@@ -141,8 +146,33 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
       rows: rows,
       selectable: true,
       width: Keyword.get(opts, :width, @default_width),
-      empty_state: "No invites issued yet."
+      empty_state: "No invites yet. Generate one when someone should join."
     )
+  end
+
+  @doc """
+  Enter the revoke confirmation sub-mode for the currently selected invite.
+  """
+  @spec start_confirm_revoke(t()) :: t()
+  def start_confirm_revoke(%__MODULE__{} = state) do
+    case selected_item(state) do
+      %{code: code} = item when is_binary(code) ->
+        target = %{
+          code: code,
+          status: to_string(Map.get(item, :status) || "")
+        }
+
+        %{state | mode: :confirm_revoke, confirm_target: target, error: nil}
+
+      _ ->
+        %{state | error: "Select an invite first."}
+    end
+  end
+
+  @doc "Cancel a pending revoke confirmation, returning to the list unchanged."
+  @spec cancel_confirm_revoke(t()) :: t()
+  def cancel_confirm_revoke(%__MODULE__{} = state) do
+    %{state | mode: :list, confirm_target: nil, error: nil}
   end
 
   # ---------------------------------------------------------------------------

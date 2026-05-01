@@ -195,7 +195,7 @@ defmodule Foglet.TUI.Screens.Account.State do
           name: :real_name,
           type: :text,
           label: "Real name",
-          required: true,
+          description: "For friends and the sysop; blank uses your handle.",
           value: draft.real_name || ""
         }
       ],
@@ -215,6 +215,7 @@ defmodule Foglet.TUI.Screens.Account.State do
           type: :text,
           label: "Timezone",
           required: true,
+          description: "Use an IANA name, like America/Chicago or Etc/UTC.",
           value: draft.timezone || "Etc/UTC"
         },
         %{
@@ -229,6 +230,7 @@ defmodule Foglet.TUI.Screens.Account.State do
           type: :enum,
           label: "Theme",
           choices: theme_ids,
+          description: "Preview changes here; save to keep them.",
           value: draft.theme || "gray"
         }
       ],

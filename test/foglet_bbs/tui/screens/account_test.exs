@@ -195,7 +195,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert %AccountState{} = state
       assert state.profile_draft.location == "New Cove"
-      assert state.status_message == "Account changes saved."
+      assert state.status_message == "Profile saved."
       assert [%Effect{type: :session, payload: {:set_current_user, ^updated}}] = effects
     end
 
@@ -211,7 +211,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         Account.update({:task_result, :account_save_prefs, {:ok, {:ok, user}}}, state, context)
 
       assert state.candidate_theme_id == nil
-      assert state.status_message == "Account changes saved."
+      assert state.status_message == "Preferences saved."
 
       assert [
                %Effect{type: :session, payload: {:set_current_user, ^user}},
@@ -242,7 +242,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert %ModalForm{submit_state: {:error, _}} = state.profile_form
       assert %{location: message} = state.profile_form.errors
-      assert String.contains?(message, "Location error:")
+      assert String.contains?(message, "Location must be 80 characters or fewer.")
     end
 
     test "prefs task failure moves Modal.Form out of submitting" do
@@ -267,7 +267,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert %ModalForm{submit_state: {:error, _}} = state.prefs_form
       assert %{timezone: message} = state.prefs_form.errors
-      assert String.contains?(message, "Timezone error:")
+      assert String.contains?(message, "Timezone must be a valid IANA name")
     end
 
     test "SSH key and invite tabs request task-backed loads" do
@@ -318,7 +318,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state = put_in(state, [:screen_state, :account], account_state)
       flat = render_account(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet."))
+      assert Enum.any?(
+               flat,
+               &String.contains?(&1, "No SSH keys yet. Add one to sign in without a password.")
+             )
     end
 
     test "omits INVITES when InvitesSurface.visible?/2 returns false" do
@@ -671,11 +674,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Session.get_state(session_pid).theme_id == original_session.theme_id
 
       assert %{timezone: message} = new_state.screen_state.account.prefs_errors
-      assert String.contains?(message, "valid IANA timezone")
+      assert String.contains?(message, "valid IANA")
       assert match?({:error, _}, new_state.screen_state.account.prefs_form.submit_state)
 
       flat = render_account(Map.from_struct(new_state)) |> collect_text_values()
-      assert Enum.any?(flat, &String.contains?(&1, "Timezone error:"))
+      assert Enum.any?(flat, &String.contains?(&1, "Timezone must be a valid IANA name"))
     end
   end
 
@@ -698,7 +701,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert code == invite.code
 
       flat = render_account(state) |> collect_text_values()
-      assert Enum.any?(flat, &String.contains?(&1, "New invite code: #{invite.code}"))
+      assert Enum.any?(flat, &String.contains?(&1, "Invite code ready: #{invite.code}"))
     end
 
     test "refresh, select, and revoke delegate through shared Account INVITES actions" do
@@ -716,7 +719,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
       selected_code = Enum.at(state.screen_state.account.invites.items, 1).code
       other_code = Enum.find([first.code, second.code], &(&1 != selected_code))
 
+      # FOG-130 Item 3: D opens the revoke confirm sub-mode; Enter actually
+      # calls revoke. The shared invites action then surfaces the forbidden
+      # error to the user.
       {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
+      assert state.screen_state.account.invites.mode == :confirm_revoke
+      assert state.screen_state.account.invites.confirm_target.code == selected_code
+
+      {:update, state, []} = handle_account_key(%{key: :enter}, state)
+      assert state.screen_state.account.invites.mode == :list
       assert state.screen_state.account.invites.error == "You are not allowed to manage invites."
       assert {:ok, %{status: :available}} = Invites.get_invite_status(selected_code)
       assert {:ok, %{status: :available}} = Invites.get_invite_status(other_code)
@@ -791,8 +802,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:update, blank_state, []} = handle_account_key(%{key: :enter}, state)
 
       blank_flat = render_account(blank_state) |> collect_text_values()
-      assert Enum.any?(blank_flat, &String.contains?(&1, "label"))
-      assert Enum.any?(blank_flat, &String.contains?(&1, "public_key"))
+      assert Enum.any?(blank_flat, &String.contains?(&1, "Label is required."))
+      assert Enum.any?(blank_flat, &String.contains?(&1, "Public key is required."))
 
       account_state =
         put_ssh_key_form(blank_state.screen_state.account, %{
@@ -804,7 +815,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       {:update, invalid_state, []} = handle_account_key(%{key: :enter}, invalid_state)
       invalid_flat = render_account(invalid_state) |> collect_text_values()
-      assert Enum.any?(invalid_flat, &String.contains?(&1, "invalid OpenSSH"))
+      assert Enum.any?(invalid_flat, &String.contains?(&1, "valid OpenSSH public key"))
 
       account_state =
         put_ssh_key_form(invalid_state.screen_state.account, %{
@@ -821,7 +832,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       duplicate_fingerprint_flat =
         duplicate_fingerprint_state |> render_account() |> collect_text_values()
 
-      assert Enum.any?(duplicate_fingerprint_flat, &String.contains?(&1, "already been taken"))
+      assert Enum.any?(
+               duplicate_fingerprint_flat,
+               &String.contains?(&1, "That public key is already on this account.")
+             )
 
       account_state =
         put_ssh_key_form(duplicate_fingerprint_state.screen_state.account, %{
@@ -836,7 +850,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
         handle_account_key(%{key: :enter}, duplicate_label_state)
 
       duplicate_label_flat = duplicate_label_state |> render_account() |> collect_text_values()
-      assert Enum.any?(duplicate_label_flat, &String.contains?(&1, "already been taken"))
+
+      assert Enum.any?(
+               duplicate_label_flat,
+               &String.contains?(&1, "You already have an SSH key with that label.")
+             )
     end
 
     test "KEYS-04 revoke selected key refreshes list and reports missing selections" do
@@ -855,8 +873,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:update, state, []} = handle_account_key(%{key: :down}, state)
       assert state.screen_state.account.ssh_keys.selected_index == 1
 
+      # FOG-130 Item 2: D opens the revoke confirmation; Enter actually
+      # performs the destructive action.
       {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
+      assert state.screen_state.account.ssh_keys.mode == :confirm_revoke
+      assert state.screen_state.account.ssh_keys.confirm_target.label == "second"
 
+      {:update, state, []} = handle_account_key(%{key: :enter}, state)
+
+      assert state.screen_state.account.ssh_keys.mode == :list
       assert state.screen_state.account.ssh_keys.status_message == "SSH key revoked."
       assert [%{id: remaining_id}] = state.screen_state.account.ssh_keys.items
       assert remaining_id == first.id
@@ -870,8 +895,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       empty_state = put_in(state, [:screen_state, :account], account_state)
 
+      # On an empty list D refuses to open the confirm sub-mode and surfaces
+      # the friendly selection error directly.
       {:update, empty_state, []} = handle_account_key(%{key: :char, char: "d"}, empty_state)
-      assert empty_state.screen_state.account.ssh_keys.errors.general == "No SSH key is selected."
+      assert empty_state.screen_state.account.ssh_keys.mode == :list
+
+      assert empty_state.screen_state.account.ssh_keys.errors.general ==
+               "Select an SSH key first."
     end
 
     test "KEYS-04 revoke handles not found without crashing" do
@@ -883,9 +913,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:ok, _revoked} = Accounts.revoke_ssh_key(user, key.id)
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
+      assert state.screen_state.account.ssh_keys.mode == :confirm_revoke
+
+      {:update, state, []} = handle_account_key(%{key: :enter}, state)
 
       assert state.screen_state.account.ssh_keys.errors.general ==
-               "That SSH key could not be found."
+               "That SSH key is no longer here. Refresh the list."
     end
   end
 
@@ -1099,11 +1132,21 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.map(ss.profile_form.fields, & &1.label) == ["Location", "Tagline", "Real name"]
     end
 
-    test "marks required profile fields in the form spec" do
+    test "real_name is optional (FOG-130 Item 6 reconciliation with domain validation)" do
       ss = AccountState.new()
 
-      assert [%{name: :real_name, required: true}] =
-               Enum.filter(ss.profile_form.fields, &Map.get(&1, :required, false))
+      # Real name is NOT required at the form level because
+      # User.profile_changeset/2 does not require it. Domain truth wins.
+      assert [] = Enum.filter(ss.profile_form.fields, &Map.get(&1, :required, false))
+
+      assert Enum.find(ss.profile_form.fields, &(&1.name == :real_name)) ==
+               %{
+                 name: :real_name,
+                 type: :text,
+                 label: "Real name",
+                 description: "For friends and the sysop; blank uses your handle.",
+                 value: ""
+               }
     end
 
     test "renders inline error text when set_errors is applied" do
@@ -1210,7 +1253,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.map(table.columns, & &1.label) == [
                "Label",
                "Fingerprint",
-               "Created",
+               "Added",
                "Last used"
              ]
     end
@@ -1227,7 +1270,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       flat = render_account(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "No SSH keys registered yet.")),
+      assert Enum.any?(
+               flat,
+               &String.contains?(&1, "No SSH keys yet. Add one to sign in without a password.")
+             ),
              "expected empty state copy in SSH KEYS tab"
     end
 
@@ -1450,6 +1496,328 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert after_esc.modal == nil,
              "BL-01: Esc must dismiss hide-modal after a doomed submit; modal still open: " <>
                inspect(after_esc.modal)
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # FOG-130 — context-aware key bar, revoke confirms, PREFS enum hint
+  # ---------------------------------------------------------------------------
+
+  describe "FOG-130 Item 1: tab-context-aware key bar" do
+    # Account chrome at 80×24 is tight enough that the priority-truncating key
+    # bar drops the Actions group on some tabs. We render at a wider terminal
+    # so every advertised command shows up in `collect_text_values/1`.
+    defp wide_terminal(state), do: %{state | terminal_size: {140, 30}}
+
+    test "PROFILE shows form-tab cluster (Tab Next, Enter Save, Esc Cancel)" do
+      state =
+        build_state_for_role(:user)
+        |> wide_terminal()
+        |> put_in([:screen_state, :account], AccountState.new())
+
+      joined = render_account(state) |> collect_text_values() |> Enum.join("|")
+
+      assert String.contains?(joined, "Next"), "expected 'Next' key bar label on PROFILE"
+      assert String.contains?(joined, "Save")
+      assert String.contains?(joined, "Cancel")
+      refute String.contains?(joined, "Add key")
+      # "Generate invite" must not advertise on the PROFILE tab key bar.
+      refute String.contains?(joined, "Generate invite")
+    end
+
+    test "SSH KEYS list mode advertises A Add key / R Refresh / D Revoke key, no Save/Cancel" do
+      account_state =
+        AccountState.new()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(:ssh_keys, SSHKeysState.loaded(SSHKeysState.new(), []))
+
+      state =
+        build_state_for_role(:user)
+        |> wide_terminal()
+        |> put_in([:screen_state, :account], account_state)
+
+      joined = render_account(state) |> collect_text_values() |> Enum.join("|")
+
+      assert String.contains?(joined, "Add key")
+      assert String.contains?(joined, "Refresh")
+      assert String.contains?(joined, "Revoke key")
+      # The key bar must not still advertise Save on the SSH KEYS list mode.
+      assert not Enum.any?(
+               render_account(state) |> collect_text_values(),
+               &(&1 == "Save")
+             )
+    end
+
+    test "SSH KEYS confirm-revoke mode advertises Enter Revoke key / Esc Keep key" do
+      keys = SSHKeysState.new()
+      keys = SSHKeysState.loaded(keys, [%{id: "k1", label: "laptop", fingerprint: "SHA256:abc"}])
+      keys = SSHKeysState.start_confirm_revoke(keys)
+
+      account_state =
+        AccountState.new()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(:ssh_keys, keys)
+
+      state =
+        build_state_for_role(:user)
+        |> wide_terminal()
+        |> put_in([:screen_state, :account], account_state)
+
+      joined = render_account(state) |> collect_text_values() |> Enum.join("|")
+
+      assert String.contains?(joined, "Revoke key")
+      assert String.contains?(joined, "Keep key")
+      # In confirm-revoke mode, Add key must not be advertised on the key bar.
+      refute String.contains?(joined, "Add key")
+    end
+
+    test "INVITES list mode advertises G Generate invite / D Revoke invite" do
+      state =
+        :sysop
+        |> build_state_for_role()
+        |> wide_terminal()
+        |> put_in(
+          [:screen_state, :account],
+          AccountState.new(invites_visible?: true, active: 3)
+          |> Map.update!(:invites, &Foglet.TUI.Screens.Shared.InvitesState.loaded(&1, []))
+        )
+
+      joined = render_account(state) |> collect_text_values() |> Enum.join("|")
+
+      assert String.contains?(joined, "Generate invite")
+      assert String.contains?(joined, "Revoke invite")
+    end
+
+    test "PREFS adds ↑/↓ Change hint when an enum field is focused (Item 4)" do
+      ss =
+        AccountState.new()
+        |> Map.put(:active_tab, 1)
+        |> Map.put(:prefs_focus, :theme)
+
+      state =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], ss)
+
+      joined = render_account(state) |> collect_text_values() |> Enum.join("|")
+
+      assert String.contains?(joined, "Change"),
+             "expected ↑/↓ Change hint when Theme enum is focused"
+    end
+
+    test "PREFS does not add Change hint when a text field is focused" do
+      ss =
+        AccountState.new()
+        |> Map.put(:active_tab, 1)
+        |> Map.put(:prefs_focus, :timezone)
+
+      state =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], ss)
+
+      flat = render_account(state) |> collect_text_values()
+
+      # The "Change" key-bar label only renders for enum fields. Some surface
+      # copy may contain "Change", so anchor on the exact key-bar element.
+      refute Enum.any?(flat, &(&1 == "Change")),
+             "↑/↓ Change must not advertise when a text field is focused"
+    end
+  end
+
+  describe "FOG-130 Item 2: SSH KEYS revoke confirmation flow" do
+    test "D opens confirm sub-mode without performing the revoke" do
+      user = AccountsFixtures.user_fixture()
+      key = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
+      state = build_state(user, %{})
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
+
+      assert state.screen_state.account.ssh_keys.mode == :confirm_revoke
+      assert state.screen_state.account.ssh_keys.confirm_target.label == "laptop"
+      assert [%{id: still_there}] = Accounts.list_ssh_keys(user)
+      assert still_there == key.id
+    end
+
+    test "Esc cancels the confirm and leaves the list unchanged" do
+      user = AccountsFixtures.user_fixture()
+      _ = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
+      state = build_state(user, %{})
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
+      assert state.screen_state.account.ssh_keys.mode == :confirm_revoke
+
+      {:update, state, []} = handle_account_key(%{key: :escape}, state)
+
+      assert state.screen_state.account.ssh_keys.mode == :list
+      assert state.screen_state.account.ssh_keys.confirm_target == nil
+      assert [_] = Accounts.list_ssh_keys(user)
+    end
+
+    test "confirm body shows label + fingerprint and never the raw public key" do
+      raw_key = "ssh-ed25519 SECRET-MATERIAL-DO-NOT-LEAK alice@example"
+
+      keys =
+        SSHKeysState.loaded(SSHKeysState.new(), [
+          %{id: "k1", label: "laptop", fingerprint: "SHA256:abc", public_key: raw_key}
+        ])
+
+      keys = SSHKeysState.start_confirm_revoke(keys)
+
+      account_state =
+        AccountState.new()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(:ssh_keys, keys)
+
+      state =
+        build_state_for_role(:user)
+        |> wide_terminal()
+        |> put_in([:screen_state, :account], account_state)
+
+      flat = render_account(state) |> collect_text_values()
+      joined = Enum.join(flat, "\n")
+
+      assert Enum.any?(flat, &String.contains?(&1, "Revoke SSH key?"))
+      assert String.contains?(joined, "This removes laptop from your account.")
+      refute String.contains?(joined, "SECRET-MATERIAL")
+    end
+  end
+
+  describe "FOG-130 Item 3: INVITES revoke confirmation flow" do
+    alias Foglet.TUI.Screens.Shared.InvitesState
+
+    test "D opens confirm sub-mode and Esc cancels back to the list" do
+      invites =
+        InvitesState.loaded(InvitesState.new(), [
+          %{code: "ABC123", status: :available, issuer_id: 1, inserted_at: nil}
+        ])
+
+      account_state =
+        AccountState.new(invites_visible?: true, active: 3)
+        |> Map.put(:invites, invites)
+
+      state =
+        build_state_for_role(:sysop)
+        |> put_in([:screen_state, :account], account_state)
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
+      assert state.screen_state.account.invites.mode == :confirm_revoke
+      assert state.screen_state.account.invites.confirm_target.code == "ABC123"
+
+      {:update, state, []} = handle_account_key(%{key: :escape}, state)
+      assert state.screen_state.account.invites.mode == :list
+      assert state.screen_state.account.invites.confirm_target == nil
+    end
+
+    test "confirm body advertises Revoke invite / Keep invite copy" do
+      invites =
+        InvitesState.start_confirm_revoke(
+          InvitesState.loaded(InvitesState.new(), [
+            %{code: "XYZ987", status: :available, issuer_id: 1, inserted_at: nil}
+          ])
+        )
+
+      account_state =
+        AccountState.new(invites_visible?: true, active: 3)
+        |> Map.put(:invites, invites)
+
+      state =
+        build_state_for_role(:sysop)
+        |> put_in([:screen_state, :account], account_state)
+
+      flat = render_account(state) |> collect_text_values()
+      joined = Enum.join(flat, "\n")
+
+      assert Enum.any?(flat, &String.contains?(&1, "Revoke invite?"))
+      assert String.contains?(joined, "Code XYZ987 will stop working.")
+      assert Enum.any?(flat, &String.contains?(&1, "Enter Revoke invite"))
+      assert Enum.any?(flat, &String.contains?(&1, "Esc Keep invite"))
+    end
+  end
+
+  describe "FOG-130 Item 5/6: copy + Real name optional reconciliation" do
+    test "PROFILE save success uses 'Profile saved.' (not generic Account changes saved)" do
+      user = build_user_with_profile()
+      context = Context.new(current_user: user, route: :account)
+
+      {state, _} =
+        Account.update(
+          {:task_result, :account_save_profile, {:ok, {:ok, user}}},
+          Account.init(context),
+          context
+        )
+
+      assert state.status_message == "Profile saved."
+    end
+
+    test "PREFS save success uses 'Preferences saved.'" do
+      user = build_user_with_profile()
+      context = Context.new(current_user: user, route: :account)
+
+      {state, _} =
+        Account.update(
+          {:task_result, :account_save_prefs, {:ok, {:ok, user}}},
+          Account.init(context),
+          context
+        )
+
+      assert state.status_message == "Preferences saved."
+    end
+
+    test "PROFILE save failure uses 'Profile was not saved.'" do
+      user = build_user_with_profile()
+      context = Context.new(current_user: user, route: :account)
+
+      changeset = Accounts.User.profile_changeset(user, %{location: String.duplicate("x", 200)})
+
+      {state, _} =
+        Account.update(
+          {:task_result, :account_save_profile, {:ok, {:error, changeset}}},
+          Account.init(context),
+          context
+        )
+
+      assert state.status_message == "Profile was not saved."
+    end
+
+    test "Submitting a Profile draft no longer flashes 'Profile ready to save.'" do
+      alias Foglet.TUI.Screens.Account.ProfileForm
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = build_user_with_profile()
+      ss = AccountState.new(current_user: user)
+
+      # Drive ProfileForm to submit by jumping focus to last field then Enter.
+      {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
+      {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.profile_form.focus_index == 2
+      assert ModalForm.field_value(ss.profile_form, :real_name) == user.real_name
+
+      {:ok, after_submit, cmds} = ProfileForm.handle_key(%{key: :enter}, ss, user)
+
+      assert [{:account_save_profile, _}] = cmds
+      refute after_submit.status_message == "Profile ready to save."
+    end
+
+    test "real_name field carries optional helper description" do
+      ss = AccountState.new()
+
+      real_name_field = Enum.find(ss.profile_form.fields, &(&1.name == :real_name))
+
+      refute Map.get(real_name_field, :required, false)
+
+      assert real_name_field.description ==
+               "For friends and the sysop; blank uses your handle."
+    end
+
+    test "Timezone and Theme fields carry helper descriptions per FOG-127" do
+      ss = AccountState.new()
+
+      timezone = Enum.find(ss.prefs_form.fields, &(&1.name == :timezone))
+      theme = Enum.find(ss.prefs_form.fields, &(&1.name == :theme))
+
+      assert timezone.description == "Use an IANA name, like America/Chicago or Etc/UTC."
+      assert theme.description == "Preview changes here; save to keep them."
     end
   end
 end

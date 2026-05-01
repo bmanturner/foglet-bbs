@@ -83,7 +83,7 @@ defmodule Foglet.TUI.Screens.Account do
     case unwrap_task_result(result) do
       {:ok, user} ->
         new_ss =
-          State.seed_from_user(ss, user) |> Map.put(:status_message, "Account changes saved.")
+          State.seed_from_user(ss, user) |> Map.put(:status_message, "Profile saved.")
 
         {new_ss, [Effect.session({:set_current_user, user})]}
 
@@ -105,7 +105,7 @@ defmodule Foglet.TUI.Screens.Account do
         new_ss =
           ss
           |> State.seed_from_user(user)
-          |> Map.put(:status_message, "Account changes saved.")
+          |> Map.put(:status_message, "Preferences saved.")
           |> Map.put(:candidate_theme_id, nil)
 
         effects = [
@@ -249,7 +249,16 @@ defmodule Foglet.TUI.Screens.Account do
         {ss, [ssh_keys_effect(:account_load_ssh_keys, context, ss.ssh_keys)]}
 
       {key, :list} when key in ["d", "D"] ->
-        {ss, [ssh_keys_effect(:account_revoke_ssh_key, context, ss.ssh_keys)]}
+        {%{ss | ssh_keys: SSHKeysState.start_confirm_revoke(ss.ssh_keys)}, []}
+
+      {:enter, :confirm_revoke} ->
+        revoking = %{ss.ssh_keys | mode: :list, confirm_target: nil}
+
+        {%{ss | ssh_keys: revoking},
+         [ssh_keys_effect(:account_revoke_ssh_key, context, revoking)]}
+
+      {:escape, :confirm_revoke} ->
+        {%{ss | ssh_keys: SSHKeysState.cancel_confirm_revoke(ss.ssh_keys)}, []}
 
       {:enter, :add} ->
         {ss, [ssh_keys_effect(:account_add_ssh_key, context, ss.ssh_keys)]}
@@ -264,20 +273,31 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp handle_invites_update(event, %State{} = ss, %Context{} = context) do
     key = action_key(event)
+    invites = ss.invites
+    mode = Map.get(invites, :mode, :list)
 
-    case key do
-      key when key in ["r", "R"] ->
-        {ss, [invites_effect(:account_load_invites, context, ss.invites)]}
+    case {key, mode} do
+      {key, :list} when key in ["r", "R"] ->
+        {ss, [invites_effect(:account_load_invites, context, invites)]}
 
-      key when key in ["g", "G"] ->
-        {ss, [invites_effect(:account_generate_invite, context, ss.invites)]}
+      {key, :list} when key in ["g", "G"] ->
+        {ss, [invites_effect(:account_generate_invite, context, invites)]}
 
-      key when key in ["d", "D"] ->
-        {ss, [invites_effect(:account_revoke_invite, context, ss.invites)]}
+      {key, :list} when key in ["d", "D"] ->
+        {%{ss | invites: Foglet.TUI.Screens.Shared.InvitesState.start_confirm_revoke(invites)},
+         []}
+
+      {:enter, :confirm_revoke} ->
+        cleared = %{invites | mode: :list, confirm_target: nil}
+        {%{ss | invites: cleared}, [invites_effect(:account_revoke_invite, context, cleared)]}
+
+      {:escape, :confirm_revoke} ->
+        {%{ss | invites: Foglet.TUI.Screens.Shared.InvitesState.cancel_confirm_revoke(invites)},
+         []}
 
       _ ->
-        case InvitesActions.handle_key(key, context.current_user, ss.invites) do
-          {:ok, invites} -> {%{ss | invites: invites}, []}
+        case InvitesActions.handle_key(key, context.current_user, invites) do
+          {:ok, new_invites} -> {%{ss | invites: new_invites}, []}
           :no_match -> {ss, []}
         end
     end
@@ -373,9 +393,12 @@ defmodule Foglet.TUI.Screens.Account do
   defp put_account_errors(%State{} = ss, section, errors) do
     ss
     |> Map.put(error_field(section), errors)
-    |> Map.put(:status_message, "Account save failed.")
+    |> Map.put(:status_message, save_failure_message(section))
     |> apply_form_errors(section, errors)
   end
+
+  defp save_failure_message(:profile), do: "Profile was not saved."
+  defp save_failure_message(:prefs), do: "Preferences were not saved."
 
   @profile_labels %{location: "Location", tagline: "Tagline", real_name: "Real name"}
   @prefs_labels %{timezone: "Timezone", time_format: "Time format", theme: "Theme"}
@@ -404,11 +427,72 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp apply_form_errors(ss, _section, _errors), do: ss
 
+  # Friendly user-facing validation copy (FOG-127). Falls back to a generic
+  # "{Label} error: {message}" string for any field/message we have not yet
+  # rewritten so we never silently drop validation feedback.
   defp prefix_errors(errors, labels) do
     Map.new(errors, fn {field, message} ->
-      label = Map.get(labels, field, to_string(field))
-      {field, "#{label} error: #{message}"}
+      {field, friendly_error(field, message, labels)}
     end)
+  end
+
+  defp friendly_error(:location, msg, _labels) do
+    if String.contains?(msg, "at most") or String.contains?(msg, "character") do
+      "Location must be 80 characters or fewer."
+    else
+      "Location: #{msg}"
+    end
+  end
+
+  defp friendly_error(:tagline, msg, _labels) do
+    if String.contains?(msg, "at most") or String.contains?(msg, "character") do
+      "Tagline must be 120 characters or fewer."
+    else
+      "Tagline: #{msg}"
+    end
+  end
+
+  defp friendly_error(:real_name, msg, _labels) do
+    cond do
+      String.contains?(msg, "blank") or String.contains?(msg, "required") ->
+        "Real name is required."
+
+      String.contains?(msg, "at most") or String.contains?(msg, "character") ->
+        "Real name must be 120 characters or fewer."
+
+      true ->
+        "Real name: #{msg}"
+    end
+  end
+
+  defp friendly_error(:timezone, msg, _labels) do
+    cond do
+      String.contains?(msg, "blank") or String.contains?(msg, "required") ->
+        "Timezone is required."
+
+      String.contains?(msg, "IANA") or String.contains?(msg, "timezone") ->
+        "Timezone must be a valid IANA name, like America/Chicago."
+
+      true ->
+        "Timezone: #{msg}"
+    end
+  end
+
+  defp friendly_error(:time_format, _msg, _labels), do: "Time format must be 12h or 24h."
+
+  defp friendly_error(:preferences, msg, _labels) do
+    if String.contains?(msg, "time_format") do
+      "Time format must be 12h or 24h."
+    else
+      "Preferences: #{msg}"
+    end
+  end
+
+  defp friendly_error(:theme, _msg, _labels), do: "Theme is not available."
+
+  defp friendly_error(field, message, labels) do
+    label = Map.get(labels, field, to_string(field))
+    "#{label} error: #{message}"
   end
 
   defp error_field(:profile), do: :profile_errors

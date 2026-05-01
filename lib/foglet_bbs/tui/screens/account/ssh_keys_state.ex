@@ -28,14 +28,14 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
       priority: 100,
       demand: :content
     },
-    %{key: :created, label: "Created", width: 16, grow: 1, priority: 50, demand: :content},
+    %{key: :added, label: "Added", width: 16, grow: 1, priority: 50, demand: :content},
     %{key: :last_used, label: "Last used", width: 12, grow: 1, priority: 40, demand: :content}
   ]
 
-  @empty_state "No SSH keys registered yet."
+  @empty_state "No SSH keys yet. Add one to sign in without a password."
 
   @type focus :: :label | :public_key
-  @type mode :: :list | :add
+  @type mode :: :list | :add | :confirm_revoke
 
   @type t :: %__MODULE__{
           items: [map()] | nil,
@@ -47,6 +47,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
           form: %{label: String.t(), public_key: String.t()},
           focus: focus(),
           mode: mode(),
+          confirm_target: map() | nil,
           errors: map(),
           status_message: String.t() | nil
         }
@@ -57,6 +58,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
             form: %{label: "", public_key: ""},
             focus: :label,
             mode: :list,
+            confirm_target: nil,
             errors: %{},
             status_message: nil
 
@@ -102,6 +104,38 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   @spec cancel_add(t()) :: t()
   def cancel_add(%__MODULE__{} = state) do
     %{state | mode: :list, form: %{label: "", public_key: ""}, focus: :label, errors: %{}}
+  end
+
+  @doc """
+  Enter the revoke confirmation sub-mode for the currently selected key.
+  Returns the unchanged state if no key is selected.
+  """
+  @spec start_confirm_revoke(t()) :: t()
+  def start_confirm_revoke(%__MODULE__{items: items, selected_index: idx} = state)
+      when is_list(items) do
+    case Enum.at(items, idx) do
+      nil ->
+        %{state | errors: %{general: "Select an SSH key first."}, status_message: nil}
+
+      %{} = item ->
+        target = %{
+          id: Map.get(item, :id),
+          label: to_string(Map.get(item, :label) || ""),
+          fingerprint: to_string(Map.get(item, :fingerprint) || "")
+        }
+
+        %{state | mode: :confirm_revoke, confirm_target: target, errors: %{}, status_message: nil}
+    end
+  end
+
+  def start_confirm_revoke(%__MODULE__{} = state) do
+    %{state | errors: %{general: "Select an SSH key first."}, status_message: nil}
+  end
+
+  @doc "Cancel a pending revoke confirmation, returning to the list unchanged."
+  @spec cancel_confirm_revoke(t()) :: t()
+  def cancel_confirm_revoke(%__MODULE__{} = state) do
+    %{state | mode: :list, confirm_target: nil, errors: %{}}
   end
 
   @spec toggle_focus(t()) :: t()
@@ -174,19 +208,17 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
       id: Map.get(item, :id),
       label: to_string(Map.get(item, :label) || ""),
       fingerprint: to_string(Map.get(item, :fingerprint) || ""),
-      created: format_created(Map.get(item, :inserted_at)),
+      added: format_added(Map.get(item, :inserted_at)),
       last_used: format_last_used(Map.get(item, :last_used_at))
     }
   end
 
-  # "created: YYYY-MM-DD HH:MM:SSZ" matches the format the old row_label
-  # function used, so existing KEYS-03 render tests continue to pass (D-19).
-  defp format_created(nil), do: ""
+  defp format_added(nil), do: ""
 
-  defp format_created(%DateTime{} = ts),
-    do: "created: " <> Calendar.strftime(ts, "%Y-%m-%d %H:%M:%SZ")
+  defp format_added(%DateTime{} = ts),
+    do: "added: " <> Calendar.strftime(ts, "%Y-%m-%d %H:%M:%SZ")
 
-  defp format_created(other), do: to_string(other)
+  defp format_added(other), do: to_string(other)
 
   # "Never used" or "last used: YYYY-MM-DD HH:MM:SSZ" — old KEYS-03 format.
   defp format_last_used(nil), do: "Never used"

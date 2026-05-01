@@ -851,7 +851,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       flat = table |> ConsoleTable.render(theme: Theme.default()) |> collect_text_values()
       joined = Enum.join(flat, " ")
 
-      for header <- ["Code", "Status", "Created", "Used by"] do
+      for header <- ["Code", "Status", "Issued", "Used by"] do
         assert joined =~ header,
                "Expected #{header} to render at compact width, got: #{inspect(flat)}"
       end

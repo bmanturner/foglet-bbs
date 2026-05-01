@@ -15,10 +15,13 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
   alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.Progress.Spinner
 
-  @key_hints "A Add   R Refresh   D Revoke   ↑/↓ Select"
+  @key_hints "A Add key   R Refresh   D Revoke key   ↑/↓ Select"
 
   @spec render(SSHKeysState.t(), Theme.t()) :: any()
   def render(%SSHKeysState{items: nil}, %Theme{} = theme), do: render_loading(theme)
+
+  def render(%SSHKeysState{mode: :confirm_revoke} = state, %Theme{} = theme),
+    do: render_confirm_revoke(state, theme)
 
   def render(%SSHKeysState{} = state, %Theme{} = theme) do
     column style: %{gap: 1} do
@@ -37,8 +40,30 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
     column style: %{gap: 0} do
       [
         row style: %{gap: 1} do
-          [Spinner.render(0, style: :line, theme: theme), text("Loading…", fg: theme.dim.fg)]
+          [
+            Spinner.render(0, style: :line, theme: theme),
+            text("Loading SSH keys…", fg: theme.dim.fg)
+          ]
         end
+      ]
+    end
+  end
+
+  # Item 2 (FOG-130): destructive confirmation. Render label + fingerprint only;
+  # raw public key material is never echoed.
+  defp render_confirm_revoke(%SSHKeysState{confirm_target: target}, theme) do
+    label = (target && target.label) || ""
+    fingerprint = (target && target.fingerprint) || ""
+
+    column style: %{gap: 1} do
+      [
+        text("Revoke SSH key?", fg: theme.accent.fg),
+        text(
+          "This removes #{label} from your account. Existing sessions stay open, but this key cannot sign in again.",
+          fg: theme.primary.fg
+        ),
+        text("fingerprint: #{fingerprint}", fg: theme.dim.fg),
+        text("Enter Revoke key   Esc Keep key", fg: theme.dim.fg)
       ]
     end
   end
@@ -51,8 +76,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
   defp maybe_errors(errors, theme) when is_map(errors) do
     errors
     |> Enum.map_join("; ", fn
-      {:general, message} -> to_string(message)
-      {field, message} -> "#{field} error: #{message}"
+      {_field, message} -> to_string(message)
     end)
     |> text(fg: theme.error.fg)
   end
@@ -60,16 +84,34 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
   defp maybe_form(%SSHKeysState{mode: :add, form: form, focus: focus}, theme) do
     label_marker = if focus == :label, do: ">", else: " "
     key_marker = if focus == :public_key, do: ">", else: " "
+    public_key_value = truncate_key(Map.get(form, :public_key, ""))
 
     column style: %{gap: 0} do
       [
         text("Add SSH key", fg: theme.accent.fg),
         text("#{label_marker} Label: #{Map.get(form, :label, "")}"),
-        text("#{key_marker} Public key: #{Map.get(form, :public_key, "")}", fg: theme.dim.fg),
-        text("Tab: field  Enter: add  Esc: cancel", fg: theme.dim.fg)
+        text("  Name this key so you can recognize the machine later.", fg: theme.dim.fg),
+        text("#{key_marker} Public key: #{public_key_value}", fg: theme.dim.fg),
+        text("  Paste the full public key, starting with ssh-ed25519 or ssh-rsa.",
+          fg: theme.dim.fg
+        ),
+        text("Tab Field   Enter Add key   Esc Cancel", fg: theme.dim.fg)
       ]
     end
   end
 
   defp maybe_form(_state, _theme), do: nil
+
+  # Polish: keep a single pasted public key from blowing past the viewport.
+  # Trim with an ellipsis once the value gets long; full validation still runs
+  # on the underlying form value.
+  defp truncate_key(value) when is_binary(value) do
+    if String.length(value) > 60 do
+      String.slice(value, 0, 57) <> "…"
+    else
+      value
+    end
+  end
+
+  defp truncate_key(_other), do: ""
 end

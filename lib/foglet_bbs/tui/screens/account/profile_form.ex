@@ -47,7 +47,7 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
           real_name: payload.real_name
         }
 
-        {:ok, %{state | profile_dirty?: false, status_message: "Profile ready to save."},
+        {:ok, %{state | profile_dirty?: false, status_message: nil},
          [{:account_save_profile, attrs}]}
 
       :cancelled ->
