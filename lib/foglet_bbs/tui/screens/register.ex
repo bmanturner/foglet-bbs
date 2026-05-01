@@ -564,18 +564,17 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp handle_register_result(state, {:error, changeset})
        when is_struct(changeset, Ecto.Changeset) do
-    if Keyword.has_key?(changeset.errors, :invite_code) do
+    reg = get_register_ss(state)
+
+    if reg.mode == "invite_only" and Keyword.has_key?(changeset.errors, :invite_code) do
       modal = %Foglet.TUI.Modal{
         type: :error,
         message: "Invite is no longer valid. Please request a new code from the sysop."
       }
 
-      reg = get_register_ss(state)
       reset_reg = %{reg | step: :invite_code, focused_field: :invite_code, error: nil}
       {:update, RegisterState.put(state, reset_reg), [Effect.open_modal(modal)]}
     else
-      reg = get_register_ss(state)
-
       new_reg = %{
         reg
         | error: RegisterState.changeset_error_text(changeset),
