@@ -36,7 +36,8 @@ defmodule Foglet.SSH.CLIHandler do
      which is rejected at the daemon level — all connections use no_auth_needed).
   3. If a pubkey was offered, authenticate it through
      `Accounts.authenticate_by_public_key/1` to find the matching user and
-     record last-used metadata.
+     record last-used metadata. When no active user matches, keep the
+     OpenSSH-encoded text for guest registration.
   4. Build the session context accordingly.
 
   ## Connection limit
@@ -61,9 +62,12 @@ defmodule Foglet.SSH.CLIHandler do
     :channel_id,
     :connection_ref,
     :peer,
+    :pubkey_user,
+    :pubkey_gate,
     :session_pid,
     :lifecycle_pid,
     :dispatcher_pid,
+    :offered_ssh_public_key,
     :width,
     :height,
     over_limit: false,
@@ -253,12 +257,16 @@ defmodule Foglet.SSH.CLIHandler do
         if Foglet.SSH.RateLimiter.allow?(peer) do
           # check_connection_limit/0 already incremented the counter; the
           # accepted path now owns one decrement, tracked via counter_counted?.
-          pubkey_user = resolve_pubkey_user(peer)
-          session_pid = start_session(pubkey_user)
+          pubkey_resolution = resolve_pubkey_identity(peer)
+          pubkey_user = Map.get(pubkey_resolution, :user)
+          pubkey_gate = Map.get(pubkey_resolution, :gate)
+          offered_ssh_public_key = Map.get(pubkey_resolution, :offered_ssh_public_key)
+          session_pid = start_session(pubkey_resolution)
 
           Logger.info(
             "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
               "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
+              "pubkey_gate=#{inspect(pubkey_gate)} " <>
               "session_pid=#{inspect(session_pid)}"
           )
 
@@ -267,7 +275,10 @@ defmodule Foglet.SSH.CLIHandler do
             | channel_id: channel_id,
               connection_ref: connection_ref,
               peer: peer,
+              pubkey_user: pubkey_user,
+              pubkey_gate: pubkey_gate,
               session_pid: session_pid,
+              offered_ssh_public_key: offered_ssh_public_key,
               counter_counted?: true,
               cleanup_done?: false
           }
@@ -309,6 +320,11 @@ defmodule Foglet.SSH.CLIHandler do
   # over-limit branches of the handler.
   def channel_up_for_test(%__MODULE__{} = state, channel_id, connection_ref, peer) do
     do_channel_up(state, channel_id, connection_ref, peer)
+  end
+
+  @doc false
+  def context_for_test(%__MODULE__{} = state, width, height) do
+    build_context(state, width, height)
   end
 
   # Clear the primary screen + scrollback, enter alt-screen, then clear the alt
@@ -368,35 +384,44 @@ defmodule Foglet.SSH.CLIHandler do
     _ -> :unknown
   end
 
-  defp resolve_pubkey_user(peer) do
-    case Foglet.SSH.PubkeyStash.pop(peer) do
-      {:ok, public_key} ->
-        case encode_public_key(public_key) do
-          {:ok, openssh_text} ->
-            case Auth.authenticate_by_public_key(openssh_text) do
-              {:ok, user} -> user
-              _ -> nil
-            end
+  defp resolve_pubkey_identity(peer) do
+    case Foglet.SSH.PubkeyStash.pop_offer(peer) do
+      {:ok, %{openssh_text: openssh_text}} when is_binary(openssh_text) ->
+        case Auth.lookup_by_public_key(openssh_text) do
+          {:ok, %{user: user}} ->
+            resolve_matched_pubkey_identity(user, openssh_text)
 
-          _ ->
-            nil
+          {:error, :not_found} ->
+            %{user: nil, offered_ssh_public_key: openssh_text}
         end
 
       :miss ->
-        nil
+        %{user: nil, offered_ssh_public_key: nil}
     end
   end
 
-  defp encode_public_key(public_key) do
-    text = :ssh_file.encode([{public_key, []}], :openssh_key)
-    {:ok, to_string(text)}
-  rescue
-    _ -> :error
-  catch
-    _, _ -> :error
+  defp resolve_matched_pubkey_identity(user, openssh_text) do
+    case Auth.authorize_session(user) do
+      {:ok, :authorized, _authorized_user} ->
+        case Auth.authenticate_by_public_key(openssh_text) do
+          {:ok, user} ->
+            %{kind: :authorized, user: user, gate: nil, offered_ssh_public_key: nil}
+
+          {:error, :not_found} ->
+            %{kind: :guest, user: nil, gate: nil, offered_ssh_public_key: nil}
+        end
+
+      {:ok, :verify, user} ->
+        %{kind: :gated, user: user, gate: :verify, offered_ssh_public_key: nil}
+
+      {:error, gate} ->
+        %{kind: :gated, user: user, gate: gate, offered_ssh_public_key: nil}
+    end
   end
 
-  defp start_session(nil) do
+  defp start_session(%{kind: :authorized, user: user}), do: start_authenticated_session(user)
+
+  defp start_session(_pubkey_resolution) do
     # Guest session — no user_id yet; will be promoted on TUI login.
     case Sessions.Supervisor.start_guest_session() do
       {:ok, pid} -> pid
@@ -404,7 +429,7 @@ defmodule Foglet.SSH.CLIHandler do
     end
   end
 
-  defp start_session(user) do
+  defp start_authenticated_session(user) do
     preferences = Preferences.from_user(user)
 
     case Sessions.Supervisor.start_session(
@@ -425,15 +450,7 @@ defmodule Foglet.SSH.CLIHandler do
   # The Lifecycle passes `%{width:, height:, options: [all_lifecycle_opts]}` to
   # init/1. App.init/1 reads `context[:options][:context]` to get this map.
   defp build_context(state, width, height) do
-    user =
-      if is_pid(state.session_pid) do
-        case Sessions.Session.get_state(state.session_pid) do
-          %{user_id: nil} -> nil
-          %{user_id: uid} -> Foglet.Accounts.get_user(uid)
-        end
-      else
-        nil
-      end
+    user = session_user(state) || state.pubkey_user
 
     preferences = Preferences.from_user(user)
 
@@ -442,17 +459,29 @@ defmodule Foglet.SSH.CLIHandler do
         user: user,
         user_id: user && user.id,
         session_pid: state.session_pid,
-        pubkey_authenticated: not is_nil(user),
+        pubkey_authenticated: not is_nil(state.pubkey_user),
         registration_mode: Foglet.Config.registration_mode(),
         max_post_length: Foglet.Config.max_post_length(),
         timezone: preferences.timezone,
         time_format: preferences.time_format,
         theme_id: preferences.theme_id,
         theme: preferences.theme,
-        ssh_peer: state.peer
+        ssh_peer: state.peer,
+        offered_ssh_public_key: if(is_nil(user), do: state.offered_ssh_public_key)
       },
       terminal_size: {width, height}
     }
+  end
+
+  defp session_user(state) do
+    if is_pid(state.session_pid) do
+      case Sessions.Session.get_state(state.session_pid) do
+        %{user_id: nil} -> nil
+        %{user_id: uid} -> Foglet.Accounts.get_user(uid)
+      end
+    else
+      nil
+    end
   end
 
   defp dispatch_events(nil, _events), do: :ok

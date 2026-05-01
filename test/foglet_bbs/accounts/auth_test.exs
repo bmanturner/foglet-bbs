@@ -77,7 +77,7 @@ defmodule Foglet.Accounts.AuthTest do
 
   describe "authenticate_by_public_key/1 (KEYS-05)" do
     test "finds a registered active user and records last_used_at only on the matched key" do
-      user = AccountsFixtures.user_fixture()
+      {:ok, user} = AccountsFixtures.user_fixture() |> Accounts.confirm_user()
       default_key = AccountsFixtures.default_ssh_public_key()
       other_key = @alternate_ssh_public_key
       registered = AccountsFixtures.ssh_key_fixture(user, %{public_key: default_key})
@@ -95,7 +95,7 @@ defmodule Foglet.Accounts.AuthTest do
     end
 
     test "invalid, unregistered, revoked, and deleted-user keys return not_found without writes" do
-      user = AccountsFixtures.user_fixture()
+      {:ok, user} = AccountsFixtures.user_fixture() |> Accounts.confirm_user()
       default_key = AccountsFixtures.default_ssh_public_key()
       unregistered_key = @alternate_ssh_public_key
       registered = AccountsFixtures.ssh_key_fixture(user, %{public_key: default_key})
@@ -141,6 +141,73 @@ defmodule Foglet.Accounts.AuthTest do
                Auth.authenticate_by_password(user.handle, "letmein12")
 
       assert user_id == user.id
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+    end
+  end
+
+  describe "lookup_by_public_key/1 and authorize_session/1 (FOG-116)" do
+    test "active confirmed user is authorized and records key use only through authentication" do
+      {:ok, user} = AccountsFixtures.user_fixture() |> Accounts.confirm_user()
+      key = AccountsFixtures.ssh_key_fixture(user)
+
+      assert {:ok, %{user: %User{id: user_id}, ssh_key: %SSHKey{id: key_id}}} =
+               Auth.lookup_by_public_key(key.public_key)
+
+      assert user_id == user.id
+      assert key_id == key.id
+      assert {:ok, :authorized, %User{id: ^user_id}} = Auth.authorize_session(user)
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+
+      assert {:ok, %User{id: ^user_id}} = Auth.authenticate_by_public_key(key.public_key)
+      assert %SSHKey{last_used_at: %DateTime{}} = Repo.get(SSHKey, key.id)
+    end
+
+    test "active unconfirmed user is a matched verification gate without last_used_at writes" do
+      user = AccountsFixtures.user_fixture()
+      key = AccountsFixtures.ssh_key_fixture(user)
+
+      assert {:ok, %{user: %User{id: user_id}}} = Auth.lookup_by_public_key(key.public_key)
+      assert user_id == user.id
+      assert {:ok, :verify, %User{id: ^user_id}} = Auth.authorize_session(user)
+      assert {:error, :not_found} = Auth.authenticate_by_public_key(key.public_key)
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+    end
+
+    test "pending user is matched but not authorized and does not record key use" do
+      user = user_with_status(:pending, "pubkeypendinglookup")
+      key = AccountsFixtures.ssh_key_fixture(user)
+
+      assert {:ok, %{user: %User{id: user_id}}} = Auth.lookup_by_public_key(key.public_key)
+      assert user_id == user.id
+      assert {:error, :pending} = Auth.authorize_session(user)
+      assert {:error, :not_found} = Auth.authenticate_by_public_key(key.public_key)
+      assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+    end
+
+    test "suspended and rejected users are explicit blocked outcomes without key-use writes" do
+      for {status, key_text} <- [
+            {:suspended, @alternate_ssh_public_key},
+            {:rejected, public_key_for(:rejected)}
+          ] do
+        user = user_with_status(status, "pk#{status}lookup")
+        key = AccountsFixtures.ssh_key_fixture(user, %{public_key: key_text})
+
+        assert {:ok, %{user: %User{id: user_id}}} = Auth.lookup_by_public_key(key.public_key)
+        assert user_id == user.id
+        assert {:error, ^status} = Auth.authorize_session(user)
+        assert {:error, :not_found} = Auth.authenticate_by_public_key(key.public_key)
+        assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+      end
+    end
+
+    test "deleted user keys and unknown fingerprints do not return a matched identity" do
+      user = AccountsFixtures.user_fixture()
+      key = AccountsFixtures.ssh_key_fixture(user)
+      _deleted = user |> User.deletion_changeset() |> Repo.update!()
+
+      assert {:error, :not_found} = Auth.lookup_by_public_key(key.public_key)
+      assert {:error, :not_found} = Auth.lookup_by_public_key(@alternate_ssh_public_key)
+      assert {:error, :not_found} = Auth.authenticate_by_public_key(key.public_key)
       assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
     end
   end

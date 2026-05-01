@@ -38,6 +38,11 @@ defmodule Foglet.Accounts do
           delivery: status_transition_delivery()
         }
 
+  @type registration_error :: Ecto.Changeset.t() | {:ssh_key, String.t()}
+
+  @registration_ssh_key_label "Registration SSH key"
+  @max_registration_ssh_key_label_attempts 5
+
   @doc "UUID of the tombstone user. Post-anonymization (Phase 2+) rewrites authorship to this id."
   @spec tombstone_user_id() :: String.t()
   def tombstone_user_id, do: @tombstone_user_id
@@ -55,7 +60,7 @@ defmodule Foglet.Accounts do
   The subscription call is made post-commit (not inside Multi) so a subscription
   failure does not roll back user creation.
   """
-  @spec register_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  @spec register_user(map()) :: {:ok, User.t()} | {:error, registration_error()}
   def register_user(attrs) do
     case Foglet.Config.registration_mode() do
       "invite_only" -> register_invite_only_user(attrs)
@@ -65,10 +70,12 @@ defmodule Foglet.Accounts do
   end
 
   defp register_open_user(attrs) do
+    {attrs, offered_ssh_public_key} = pop_offered_ssh_public_key(attrs)
+
     result =
       %User{}
       |> User.registration_changeset(attrs)
-      |> Repo.insert()
+      |> insert_user_with_optional_registration_ssh_key(offered_ssh_public_key)
 
     case result do
       {:ok, user} ->
@@ -82,6 +89,7 @@ defmodule Foglet.Accounts do
   end
 
   defp register_invite_only_user(attrs) do
+    {attrs, offered_ssh_public_key} = pop_offered_ssh_public_key(attrs)
     attrs = Map.new(attrs)
     invite_code = attrs[:invite_code] || attrs["invite_code"]
     user_changeset = User.registration_changeset(%User{}, attrs)
@@ -95,7 +103,7 @@ defmodule Foglet.Accounts do
 
       true ->
         invite_code
-        |> redeem_invite_registration(user_changeset)
+        |> redeem_invite_registration(user_changeset, offered_ssh_public_key)
         |> handle_invite_registration_result(user_changeset)
     end
   end
@@ -103,13 +111,14 @@ defmodule Foglet.Accounts do
   defp blank_invite_code?(nil), do: true
   defp blank_invite_code?(code), do: String.trim(to_string(code)) == ""
 
-  defp redeem_invite_registration(invite_code, user_changeset) do
+  defp redeem_invite_registration(invite_code, user_changeset, offered_ssh_public_key) do
     code = String.trim(to_string(invite_code))
 
     Repo.transact(fn ->
-      case Repo.insert(user_changeset) do
-        {:ok, user} -> consume_invite_for_user(Repo, code, user)
-        {:error, changeset} -> {:error, changeset}
+      with {:ok, user} <- Repo.insert(user_changeset),
+           {:ok, user} <- consume_invite_for_user(Repo, code, user),
+           {:ok, _key} <- maybe_register_registration_ssh_key(user, offered_ssh_public_key) do
+        {:ok, user}
       end
     end)
   end
@@ -126,6 +135,10 @@ defmodule Foglet.Accounts do
 
   defp handle_invite_registration_result({:error, %Ecto.Changeset{} = changeset}, _user_changeset) do
     {:error, changeset}
+  end
+
+  defp handle_invite_registration_result({:error, {:ssh_key, _message}} = error, _user_changeset) do
+    error
   end
 
   defp consume_invite_for_user(repo, code, %User{} = user) do
@@ -224,12 +237,14 @@ defmodule Foglet.Accounts do
   Same validation as `register_user/1`; differs only in the persisted status value.
   Login is blocked for pending users in Phase 3's login flow.
   """
-  @spec register_pending_user(map()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
+  @spec register_pending_user(map()) :: {:ok, User.t()} | {:error, registration_error()}
   def register_pending_user(attrs) do
+    {attrs, offered_ssh_public_key} = pop_offered_ssh_public_key(attrs)
+
     result =
       %User{status: :pending}
       |> User.registration_changeset(attrs)
-      |> Repo.insert()
+      |> insert_user_with_optional_registration_ssh_key(offered_ssh_public_key)
 
     case result do
       {:ok, %User{} = user} ->
@@ -449,6 +464,98 @@ defmodule Foglet.Accounts do
 
       user |> User.deletion_changeset() |> Repo.update()
     end)
+  end
+
+  defp pop_offered_ssh_public_key(attrs) when is_map(attrs) do
+    offered_ssh_public_key = attrs[:offered_ssh_public_key] || attrs["offered_ssh_public_key"]
+
+    attrs =
+      attrs
+      |> Map.delete(:offered_ssh_public_key)
+      |> Map.delete("offered_ssh_public_key")
+
+    {attrs, normalize_offered_ssh_public_key(offered_ssh_public_key)}
+  end
+
+  defp normalize_offered_ssh_public_key(nil), do: nil
+
+  defp normalize_offered_ssh_public_key(public_key) when is_binary(public_key) do
+    case String.trim(public_key) do
+      "" -> nil
+      trimmed -> trimmed
+    end
+  end
+
+  defp normalize_offered_ssh_public_key(_public_key), do: nil
+
+  defp insert_user_with_optional_registration_ssh_key(changeset, nil), do: Repo.insert(changeset)
+
+  defp insert_user_with_optional_registration_ssh_key(changeset, offered_ssh_public_key) do
+    with :ok <- validate_offered_ssh_public_key_available(offered_ssh_public_key) do
+      Repo.transact(fn ->
+        with {:ok, user} <- Repo.insert(changeset),
+             {:ok, _key} <- maybe_register_registration_ssh_key(user, offered_ssh_public_key) do
+          {:ok, user}
+        end
+      end)
+    end
+  end
+
+  defp maybe_register_registration_ssh_key(_user, nil), do: {:ok, nil}
+
+  defp maybe_register_registration_ssh_key(%User{} = user, public_key) do
+    register_registration_ssh_key(user, public_key, 1)
+  end
+
+  defp register_registration_ssh_key(_user, _public_key, attempt)
+       when attempt > @max_registration_ssh_key_label_attempts do
+    {:error, {:ssh_key, "That SSH key label is already in use."}}
+  end
+
+  defp register_registration_ssh_key(%User{} = user, public_key, attempt) do
+    case register_ssh_key(user, %{
+           label: registration_ssh_key_label(attempt),
+           public_key: public_key
+         }) do
+      {:ok, %SSHKey{} = key} ->
+        {:ok, key}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        handle_registration_ssh_key_error(user, public_key, attempt, changeset)
+    end
+  end
+
+  defp registration_ssh_key_label(1), do: @registration_ssh_key_label
+  defp registration_ssh_key_label(attempt), do: "#{@registration_ssh_key_label} (#{attempt})"
+
+  defp handle_registration_ssh_key_error(user, public_key, attempt, changeset) do
+    cond do
+      changeset_error?(changeset, :label) ->
+        register_registration_ssh_key(user, public_key, attempt + 1)
+
+      changeset_error?(changeset, :fingerprint) ->
+        {:error, {:ssh_key, "That SSH public key is already registered."}}
+
+      changeset_error?(changeset, :public_key) ->
+        {:error, {:ssh_key, "That SSH public key is not valid."}}
+
+      true ->
+        {:error, {:ssh_key, "That SSH public key could not be saved."}}
+    end
+  end
+
+  defp validate_offered_ssh_public_key_available(public_key) do
+    with {:ok, fingerprint} <- SSHKey.compute_fingerprint(public_key),
+         false <- Repo.exists?(from k in SSHKey, where: k.fingerprint == ^fingerprint) do
+      :ok
+    else
+      {:error, _reason} -> {:error, {:ssh_key, "That SSH public key is not valid."}}
+      true -> {:error, {:ssh_key, "That SSH public key is already registered."}}
+    end
+  end
+
+  defp changeset_error?(%Ecto.Changeset{} = changeset, field) do
+    Keyword.has_key?(changeset.errors, field)
   end
 
   # ---------- SSH Keys ----------

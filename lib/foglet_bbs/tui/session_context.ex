@@ -35,6 +35,9 @@ defmodule Foglet.TUI.SessionContext do
     for non-SSH callers (tests, render fixtures). Carried into the
     guest-to-user promotion path so promotion audit logs can include peer
     context (SSH-02 / D-04).
+  - `offered_ssh_public_key` — OpenSSH public-key text offered by the connecting
+    SSH client when no active registered user matched it. Populated only for
+    guest sessions; authenticated public-key sessions keep this as `nil`.
   """
 
   @type t :: %__MODULE__{
@@ -48,7 +51,8 @@ defmodule Foglet.TUI.SessionContext do
           time_format: String.t(),
           theme_id: String.t(),
           theme: Foglet.TUI.Theme.t(),
-          ssh_peer: term() | nil
+          ssh_peer: term() | nil,
+          offered_ssh_public_key: String.t() | nil
         }
 
   defstruct [
@@ -62,6 +66,7 @@ defmodule Foglet.TUI.SessionContext do
     :time_format,
     :theme_id,
     :theme,
-    :ssh_peer
+    :ssh_peer,
+    :offered_ssh_public_key
   ]
 end
