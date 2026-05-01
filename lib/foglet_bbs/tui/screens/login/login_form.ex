@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.{Auth, Verification}
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -62,7 +62,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Login is temporarily unavailable. Please try again."
+      message: "Login is offline right now. Try again in a minute."
     }
 
     local_state
@@ -77,15 +77,24 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
   # --- Key handlers ---
 
-  # Tab cycles focus between :handle and :password
-  defp handle_unlocked_form_key(%{key: :tab}, state) do
+  defp handle_unlocked_form_key(event, state) do
+    if Input.backward_tab?(event) or Input.forward_tab?(event) do
+      cycle_login_focus(state)
+    else
+      handle_unlocked_input_key(event, state)
+    end
+  end
+
+  # Tab cycles focus between :handle and :password. The two-field form is
+  # direction-symmetric, but this helper keeps Shift+Tab out of TextInput.
+  defp cycle_login_focus(state) do
     login_ss = LoginState.get(state)
     new_login_ss = LoginState.toggle_focus(login_ss)
     {:update, LoginState.put(state, new_login_ss), []}
   end
 
   # Enter: submit if focused on password; advance focus if on handle
-  defp handle_unlocked_form_key(%{key: :enter}, state) do
+  defp handle_unlocked_input_key(%{key: :enter}, state) do
     login_ss = LoginState.get(state)
 
     if login_ss.focused_field == :password do
@@ -97,12 +106,12 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   end
 
   # Escape: return to menu sub, clear form state
-  defp handle_unlocked_form_key(%{key: :escape}, state) do
+  defp handle_unlocked_input_key(%{key: :escape}, state) do
     {:update, LoginState.put(state, LoginState.default()), []}
   end
 
   # Everything else — delegate to focused TextInput
-  defp handle_unlocked_form_key(event, state) do
+  defp handle_unlocked_input_key(event, state) do
     {new_input, _action} = TextInput.handle_event(event, focused_input(state))
     {:update, update_focused_input(state, new_input), []}
   end
@@ -226,19 +235,19 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   defp handle_login_result(state, {:ok, _user, :verify, :unavailable}) do
     login_error_modal(
       state,
-      "Email verification is unavailable because email delivery is disabled."
+      "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
     )
   end
 
   defp handle_login_result(state, {:ok, _user, :verify, :delivery_failed}) do
     login_error_modal(
       state,
-      "Verification instructions could not be sent. Please try again later."
+      "We couldn't send the verification email. Try again in a minute."
     )
   end
 
   defp handle_login_result(state, {:ok, _user, :verify, :changeset_error}) do
-    login_error_modal(state, "Could not prepare verification instructions. Please try again.")
+    login_error_modal(state, "We couldn't prepare a verification code. Try again.")
   end
 
   defp handle_login_result(state, {:error, :invalid_credentials}) do
@@ -247,7 +256,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
     new_login_ss =
       Map.merge(login_ss, %{
-        error: "Invalid credentials.",
+        error: "That handle and password don't match.",
         password_input: new_password_input,
         submitting?: false
       })
@@ -256,15 +265,25 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   end
 
   defp handle_login_result(state, {:error, :pending}) do
-    login_error_modal(state, "Your account is pending sysop approval.", clear?: true)
+    login_error_modal(
+      state,
+      "Your account is waiting for sysop approval. Try again once you've heard back.",
+      clear?: true
+    )
   end
 
   defp handle_login_result(state, {:error, :rejected}) do
-    login_error_modal(state, "Your registration was rejected. Contact the sysop.", clear?: true)
+    login_error_modal(
+      state,
+      "Your registration was turned down. Reach the sysop if you think that's a mistake.",
+      clear?: true
+    )
   end
 
   defp handle_login_result(state, {:error, :suspended}) do
-    login_error_modal(state, "Your account is suspended. Contact the sysop.", clear?: true)
+    login_error_modal(state, "Your account is suspended. Reach the sysop to ask why.",
+      clear?: true
+    )
   end
 
   defp complete_verify_login(state, user) do

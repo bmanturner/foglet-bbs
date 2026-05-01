@@ -82,6 +82,15 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
       assert {:error, changeset} = Accounts.register_user(second_attrs)
       assert errors_on(changeset).invite_code
     end
+
+    test "generic user fixture supplies an available invite code" do
+      user = AccountsFixtures.user_fixture()
+
+      consumed_invite = Repo.get_by!(Invite, consumed_by_user_id: user.id)
+      assert consumed_invite.consumed_at
+      assert consumed_invite.revoked_at == nil
+      assert Invite.status(consumed_invite) == :consumed
+    end
   end
 
   defp registration_errors(code) do

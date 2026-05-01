@@ -77,6 +77,12 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
   defp run_register_task(%Effect{payload: %{fun: fun}}), do: fun.()
 
+  defp sysop_user_fixture do
+    user = user_fixture()
+    {:ok, promoted} = user |> Ecto.Changeset.change(role: :sysop) |> FogletBbs.Repo.update()
+    promoted
+  end
+
   setup do
     Config.init_cache()
     original_mode = Config.get("registration_mode", "open")
@@ -124,16 +130,18 @@ defmodule Foglet.TUI.Screens.RegisterTest do
     end
 
     test "valid invite code advances to combined form without App delegation" do
+      invite = invite_fixture()
+
       {local_state, []} =
         Register.update(
-          {:wizard, {:submit_step, :invite_code, "VALIDINVITECODE1"}},
+          {:wizard, {:submit_step, :invite_code, invite.code}},
           invite_state(),
           context("invite_only")
         )
 
       assert local_state.step == :combined
       assert local_state.focused_field == :handle
-      assert local_state.collected.invite_code == "VALIDINVITECODE1"
+      assert local_state.collected.invite_code == invite.code
       assert local_state.error == nil
     end
 
@@ -146,7 +154,35 @@ defmodule Foglet.TUI.Screens.RegisterTest do
         )
 
       assert local_state.step == :invite_code
-      assert local_state.error == "Invalid code."
+      assert local_state.error == "Invalid or expired invite code."
+    end
+
+    test "well-formed but unknown invite code stays on invite step" do
+      {local_state, []} =
+        Register.update(
+          {:wizard, {:submit_step, :invite_code, "ZZZZZZZZZZZZZZZZ"}},
+          invite_state(),
+          context("invite_only")
+        )
+
+      assert local_state.step == :invite_code
+      assert local_state.error == "Invalid or expired invite code."
+    end
+
+    test "revoked invite code stays on invite step instead of advancing" do
+      issuer = sysop_user_fixture()
+      invite = invite_fixture(issuer)
+      {:ok, _} = Foglet.Accounts.Invites.revoke_invite(issuer, invite.code)
+
+      {local_state, []} =
+        Register.update(
+          {:wizard, {:submit_step, :invite_code, invite.code}},
+          invite_state(invite.code),
+          context("invite_only")
+        )
+
+      assert local_state.step == :invite_code
+      assert local_state.error == "Invalid or expired invite code."
     end
   end
 
@@ -159,6 +195,29 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       {local_state, []} = Register.update({:key, %{key: :enter}}, local_state, context())
       assert local_state.focused_field == :password
+    end
+
+    test "shift tab retreats focus through local reducer state" do
+      {local_state, []} =
+        Register.update(
+          {:key, %{key: :tab, shift: true}},
+          combined_state([], :password),
+          context()
+        )
+
+      assert local_state.focused_field == :email
+
+      {local_state, []} =
+        Register.update({:key, %{key: :backtab}}, local_state, context())
+
+      assert local_state.focused_field == :handle
+    end
+
+    test "plain tab from password still advances to confirm password" do
+      {local_state, []} =
+        Register.update({:key, %{key: :tab}}, combined_state([], :password), context())
+
+      assert local_state.focused_field == :confirm_password
     end
 
     test "character input edits only the focused field" do
@@ -174,7 +233,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       {local_state, []} = Register.update({:key, %{key: :enter}}, state, context())
 
-      assert local_state.error == "Passwords do not match."
+      assert local_state.error == "Those two passwords don't match."
       assert local_state.focused_field == :confirm_password
     end
 
@@ -255,7 +314,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert modal.type == :error
 
       assert modal.message ==
-               "Email verification is unavailable because email delivery is disabled."
+               "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
 
       refute_email_sent()
     end
@@ -288,6 +347,48 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert user.handle == "openmain"
     end
 
+    test "invite revoked between wizard steps surfaces friendly modal" do
+      Config.put!("delivery_mode", "no_email")
+      Config.put!("require_email_verification", false)
+      Config.put!("registration_mode", "open")
+
+      issuer = sysop_user_fixture()
+      invite = invite_fixture(issuer)
+      Config.put!("registration_mode", "invite_only")
+
+      state =
+        combined_state(
+          [
+            handle: "racer",
+            email: "racer@example.test",
+            password: "sekret01",
+            confirm: "sekret01",
+            collected: %{invite_code: invite.code}
+          ],
+          :confirm_password,
+          "invite_only"
+        )
+
+      {_submitting, effects} =
+        Register.update({:key, %{key: :enter}}, state, context("invite_only"))
+
+      {:ok, _} = Foglet.Accounts.Invites.revoke_invite(issuer, invite.code)
+      result = run_register_task(task_effect(effects, :register))
+
+      {local_state, effects} =
+        Register.update({:task_result, :register, {:ok, result}}, state, context("invite_only"))
+
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.type == :error
+
+      assert modal.message ==
+               "Invite is no longer valid. Please request a new code from the sysop."
+
+      assert local_state.step == :invite_code
+      assert local_state.focused_field == :invite_code
+      refute local_state.error
+    end
+
     test "invite-only registration submits the collected invite code" do
       Config.put!("delivery_mode", "no_email")
       Config.put!("require_email_verification", false)
@@ -315,8 +416,9 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert user.handle == "invited"
     end
 
-    test "sysop-approved registration requests pending-approval termination" do
+    test "sysop-approved registration requests pending-approval termination (email mode)" do
       Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "email")
 
       state =
         combined_state(
@@ -343,12 +445,49 @@ defmodule Foglet.TUI.Screens.RegisterTest do
         )
 
       assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
-      assert modal.message == "Your account has been created and is pending sysop approval."
+      assert modal.title == "Account waiting for approval"
+      assert modal.message =~ "pending sysop approval"
+      assert modal.message =~ "email"
 
       assert %Effect{
                type: :session,
                payload: {:terminate_after_modal, :pending_approval}
              } = session_effect(effects)
+    end
+
+    test "sysop-approved pending-approval modal omits email under no_email delivery" do
+      Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "no_email")
+
+      state =
+        combined_state(
+          [
+            handle: "pendingnoemail",
+            email: "pendingnoemail@example.test",
+            password: "sekret01",
+            confirm: "sekret01"
+          ],
+          :confirm_password,
+          "sysop_approved"
+        )
+
+      {_submitting, effects} =
+        Register.update({:key, %{key: :enter}}, state, context("sysop_approved"))
+
+      result = run_register_task(task_effect(effects, :register))
+
+      {_local_state, effects} =
+        Register.update(
+          {:task_result, :register, {:ok, result}},
+          state,
+          context("sysop_approved")
+        )
+
+      assert %Effect{type: :modal, payload: {:open, modal}} = modal_effect(effects)
+      assert modal.title == "Account waiting for approval"
+      assert modal.message =~ "pending sysop approval"
+      assert modal.message =~ "contact you"
+      refute modal.message =~ ~r/email/i
     end
 
     test "registration validation failures return to the first field with changeset text" do

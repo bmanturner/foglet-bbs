@@ -162,7 +162,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
   end
 
   defp add_reset_consume_key(keys) do
-    List.insert_at(keys, max(length(keys) - 1, 0), {"T", "Reset token"})
+    List.insert_at(keys, max(length(keys) - 1, 0), {"T", "Enter reset token"})
   end
 
   defp render_login_form(state, theme) do
@@ -188,7 +188,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
       %{
         type: :panel,
         attrs: %{
-          title: "Identify Yourself",
+          title: "Identify yourself",
           title_attrs: %{fg: theme.title.fg},
           border: :single,
           border_fg: theme.border.fg,
@@ -261,7 +261,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
     column style: %{gap: 0} do
       [
-        text("Password reset", fg: theme.primary.fg, style: [:bold]),
+        text("Forgot password", fg: theme.primary.fg, style: [:bold]),
         row style: %{gap: 0} do
           [
             text("Email: ", fg: theme.accent.fg, style: [:bold]),

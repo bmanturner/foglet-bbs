@@ -4,6 +4,24 @@ defmodule Foglet.TUI.Input do
   """
 
   @doc """
+  Returns true for every Shift+Tab/back-tab event shape Foglet accepts.
+
+  Raxol can emit shifted tab as `%{key: :tab, shift: true}` while Foglet's
+  SSH path may normalize terminal back-tab to `:shift_tab` or `:backtab`.
+  """
+  @spec backward_tab?(map()) :: boolean()
+  def backward_tab?(%{key: :tab, shift: true}), do: true
+  def backward_tab?(%{key: :shift_tab}), do: true
+  def backward_tab?(%{key: :backtab}), do: true
+  def backward_tab?(_event), do: false
+
+  @doc "Returns true for a plain forward Tab event."
+  @spec forward_tab?(map()) :: boolean()
+  def forward_tab?(%{key: :tab, shift: true}), do: false
+  def forward_tab?(%{key: :tab}), do: true
+  def forward_tab?(_event), do: false
+
+  @doc """
   Translates a Raxol-native key event map into a `MultiLineInput.update/2` message.
   Returns `nil` for events that have no MultiLineInput equivalent.
   """

@@ -21,7 +21,12 @@ defmodule FogletBbs.AccountsFixtures do
 
   @doc "Insert a user via Foglet.Accounts.register_user/1."
   def user_fixture(attrs \\ %{}) do
-    {:ok, user} = attrs |> valid_user_attributes() |> Accounts.register_user()
+    attrs =
+      attrs
+      |> valid_user_attributes()
+      |> maybe_put_invite_code()
+
+    {:ok, user} = Accounts.register_user(attrs)
     user
   end
 
@@ -72,5 +77,36 @@ defmodule FogletBbs.AccountsFixtures do
     {raw, struct} = UserToken.build_email_token(user, context)
     {:ok, inserted} = FogletBbs.Repo.insert(struct)
     {raw, inserted}
+  end
+
+  defp maybe_put_invite_code(attrs) do
+    if invite_code_present?(attrs) do
+      attrs
+    else
+      case Foglet.Config.registration_mode() do
+        "invite_only" -> Map.put(attrs, :invite_code, fixture_invite_code())
+        _mode -> attrs
+      end
+    end
+  end
+
+  defp invite_code_present?(attrs) do
+    Map.has_key?(attrs, :invite_code) or Map.has_key?(attrs, "invite_code")
+  end
+
+  defp fixture_invite_code do
+    issuer_attrs =
+      valid_user_attributes(%{
+        handle: "inviteissuer#{System.unique_integer([:positive])}",
+        email: "inviteissuer#{System.unique_integer([:positive])}@example.com"
+      })
+
+    issuer =
+      %User{}
+      |> User.registration_changeset(issuer_attrs)
+      |> Ecto.Changeset.change(role: :sysop)
+      |> Repo.insert!()
+
+    invite_fixture(issuer).code
   end
 end

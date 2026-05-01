@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.Register.State do
     `:handle` → `:email` → `:password` → `:confirm_password` → `:handle`
   """
 
-  alias Foglet.Accounts.User
+  alias Foglet.Accounts.{Invites, User}
   alias Foglet.TUI.Widgets.Input.TextInput
 
   @focus_cycle [:handle, :email, :password, :confirm_password]
@@ -94,6 +94,13 @@ defmodule Foglet.TUI.Screens.Register.State do
     Enum.at(@focus_cycle, rem(idx + 1, length(@focus_cycle)))
   end
 
+  @doc "Moves focus to the previous field in the combined-step cycle."
+  @spec prev_field(atom()) :: atom()
+  def prev_field(current) do
+    idx = Enum.find_index(@focus_cycle, &(&1 == current)) || 0
+    Enum.at(@focus_cycle, rem(idx - 1 + length(@focus_cycle), length(@focus_cycle)))
+  end
+
   @typedoc "Atoms for the register screen's focus cycle (incl. invite-code step)."
   @type focused_field ::
           :invite_code | :handle | :email | :password | :confirm_password
@@ -126,9 +133,100 @@ defmodule Foglet.TUI.Screens.Register.State do
 
   def valid_invite_code?(_), do: false
 
-  @doc "Formats an Ecto.Changeset error map into a single display string."
-  @spec changeset_error_text(Ecto.Changeset.t()) :: String.t()
-  def changeset_error_text(cs) do
-    Enum.map_join(cs.errors, "; ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+  @doc """
+  Verifies that an invite code is well-formed and currently consumable.
+
+  Returns `:ok` if the code passes the format check and the invite exists with
+  status `:available`. Returns `{:error, :format}` for format failures and
+  `{:error, :unavailable}` when the invite is missing, revoked, or already
+  consumed. Performs no consumption — that remains the responsibility of the
+  final registration step (see `Foglet.Accounts.register_user/1` for the
+  `invite_only` path).
+  """
+  @spec verify_invite_code(String.t() | any(), module()) ::
+          :ok | {:error, :format | :unavailable}
+  def verify_invite_code(code, invites_mod \\ Invites)
+
+  def verify_invite_code(code, invites_mod) when is_binary(code) do
+    if valid_invite_code?(code) do
+      case invites_mod.get_invite_status(code) do
+        {:ok, %{status: :available}} -> :ok
+        {:ok, _other} -> {:error, :unavailable}
+        {:error, :not_found} -> {:error, :unavailable}
+      end
+    else
+      {:error, :format}
+    end
   end
+
+  def verify_invite_code(_code, _invites_mod), do: {:error, :format}
+
+  @generic_error "Please double-check the form and try again."
+
+  @doc """
+  Maps the **first** error on an `Ecto.Changeset` from
+  `Foglet.Accounts.User.registration_changeset/2` to a user-facing sentence.
+
+  Copy is sourced from FOG-53 §3.6a; unrecognized `{field, error}` shapes
+  collapse to a generic safe message so raw atoms or Ecto internals never
+  reach the user. Only the first failure is surfaced — no field-name
+  prefixes, no concatenation.
+  """
+  @spec changeset_error_text(Ecto.Changeset.t()) :: String.t()
+  def changeset_error_text(%Ecto.Changeset{errors: []}), do: @generic_error
+
+  def changeset_error_text(%Ecto.Changeset{errors: [first | _]}) do
+    translate_error(first)
+  end
+
+  defp translate_error({field, {_msg, opts}}) do
+    cond do
+      Keyword.get(opts, :validation) == :required -> required_sentence(field)
+      Keyword.get(opts, :validation) == :format -> format_sentence(field)
+      Keyword.get(opts, :validation) == :length -> length_sentence(field, opts)
+      Keyword.get(opts, :validation) == :unsafe_unique -> unique_sentence(field)
+      Keyword.get(opts, :constraint) == :unique -> unique_sentence(field)
+      true -> @generic_error
+    end
+  end
+
+  defp required_sentence(:handle), do: "Pick a handle."
+  defp required_sentence(:email), do: "Enter an email address."
+  defp required_sentence(:password), do: "Pick a password."
+  defp required_sentence(_), do: @generic_error
+
+  defp unique_sentence(:handle), do: "That handle is already in use. Pick another."
+  defp unique_sentence(:email), do: "That email is already on file."
+  defp unique_sentence(_), do: @generic_error
+
+  defp format_sentence(:handle),
+    do: "Handles can only use letters, numbers, dashes, and underscores."
+
+  defp format_sentence(:email), do: "That doesn't look like an email address."
+  defp format_sentence(_), do: @generic_error
+
+  defp length_sentence(:handle, opts) do
+    case Keyword.get(opts, :kind) do
+      :min -> "Handles need to be at least #{Keyword.get(opts, :count)} characters."
+      :max -> "Handles can't be longer than #{Keyword.get(opts, :count)} characters."
+      _ -> @generic_error
+    end
+  end
+
+  defp length_sentence(:email, opts) do
+    case Keyword.get(opts, :kind) do
+      :max -> "Emails can't be longer than #{Keyword.get(opts, :count)} characters."
+      _ -> @generic_error
+    end
+  end
+
+  defp length_sentence(:password, opts) do
+    case Keyword.get(opts, :kind) do
+      :min -> "Passwords need to be at least #{Keyword.get(opts, :count)} characters."
+      :max -> "Passwords can't be longer than #{Keyword.get(opts, :count)} characters."
+      _ -> @generic_error
+    end
+  end
+
+  defp length_sentence(_field, _opts), do: @generic_error
 end

@@ -24,8 +24,8 @@ defmodule Foglet.TUI.Screens.Register do
   """
 
   alias Foglet.{Accounts, Config}
-  alias Foglet.Accounts.Verification
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.Accounts.{Invites, Verification}
+  alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Theme
@@ -86,19 +86,22 @@ defmodule Foglet.TUI.Screens.Register do
 
   def update({:wizard, {:submit_step, :invite_code, value}}, local_state, %Context{} = context) do
     reg = local_state || init(context)
+    state = app_state_from_local(reg, context)
 
-    if RegisterState.valid_invite_code?(value) do
-      new_reg = %{
-        reg
-        | step: :combined,
-          focused_field: :handle,
-          collected: Map.put(reg.collected, :invite_code, value),
-          error: nil
-      }
+    case verify_invite_code(state, value) do
+      :ok ->
+        new_reg = %{
+          reg
+          | step: :combined,
+            focused_field: :handle,
+            collected: Map.put(reg.collected, :invite_code, value),
+            error: nil
+        }
 
-      {new_reg, []}
-    else
-      {%{reg | error: "Invalid code."}, []}
+        {new_reg, []}
+
+      {:error, reason} ->
+        {%{reg | error: invite_step_error(reason)}, []}
     end
   end
 
@@ -121,7 +124,7 @@ defmodule Foglet.TUI.Screens.Register do
   def update({:task_result, :register, {:error, _reason}}, local_state, %Context{} = context) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Registration could not be completed. Please try again later."
+      message: "We couldn't finish your registration. Try again in a minute."
     }
 
     {local_state || init(context), [Effect.open_modal(modal)]}
@@ -152,6 +155,14 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp handle_invite_key(event, state) do
+    if Input.backward_tab?(event) or Input.forward_tab?(event) do
+      {:update, state, []}
+    else
+      handle_invite_input_key(event, state)
+    end
+  end
+
+  defp handle_invite_input_key(event, state) do
     reg = get_register_ss(state)
     {new_input, _action} = TextInput.handle_event(event, reg.invite_code_input)
     new_reg = %{reg | invite_code_input: new_input}
@@ -160,13 +171,32 @@ defmodule Foglet.TUI.Screens.Register do
 
   # --- :combined step key handlers ---
 
-  defp handle_combined_key(%{key: :tab}, state) do
+  defp handle_combined_key(event, state) do
+    cond do
+      Input.backward_tab?(event) ->
+        move_combined_focus(state, :previous)
+
+      Input.forward_tab?(event) ->
+        move_combined_focus(state, :next)
+
+      true ->
+        handle_combined_input_key(event, state)
+    end
+  end
+
+  defp move_combined_focus(state, :next) do
     reg = get_register_ss(state)
     new_reg = %{reg | focused_field: RegisterState.next_field(reg.focused_field), error: nil}
     {:update, RegisterState.put(state, new_reg), []}
   end
 
-  defp handle_combined_key(%{key: :enter}, state) do
+  defp move_combined_focus(state, :previous) do
+    reg = get_register_ss(state)
+    new_reg = %{reg | focused_field: RegisterState.prev_field(reg.focused_field), error: nil}
+    {:update, RegisterState.put(state, new_reg), []}
+  end
+
+  defp handle_combined_input_key(%{key: :enter}, state) do
     reg = get_register_ss(state)
 
     case reg.focused_field do
@@ -179,7 +209,7 @@ defmodule Foglet.TUI.Screens.Register do
     end
   end
 
-  defp handle_combined_key(event, state) do
+  defp handle_combined_input_key(event, state) do
     {new_input, _action} = TextInput.handle_event(event, focused_input(state))
     {:update, update_focused_input(state, new_input), []}
   end
@@ -193,7 +223,7 @@ defmodule Foglet.TUI.Screens.Register do
     if pw == cpw do
       submit(reg, state)
     else
-      new_reg = %{reg | error: "Passwords do not match."}
+      new_reg = %{reg | error: "Those two passwords don't match."}
       {:update, RegisterState.put(state, new_reg), []}
     end
   end
@@ -320,10 +350,10 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp handle_invite_submission(value, state) do
-    state
-    |> get_register_ss()
-    |> then(fn reg ->
-      if RegisterState.valid_invite_code?(value) do
+    reg = get_register_ss(state)
+
+    case verify_invite_code(state, value) do
+      :ok ->
         new_reg = %{
           reg
           | step: :combined,
@@ -333,11 +363,19 @@ defmodule Foglet.TUI.Screens.Register do
         }
 
         {:update, RegisterState.put(state, new_reg), []}
-      else
-        {:update, RegisterState.put(state, %{reg | error: "Invalid code."}), []}
-      end
-    end)
+
+      {:error, reason} ->
+        {:update, RegisterState.put(state, %{reg | error: invite_step_error(reason)}), []}
+    end
   end
+
+  defp verify_invite_code(state, value) do
+    invites_mod = domain_module(state, :invites)
+    RegisterState.verify_invite_code(value, invites_mod)
+  end
+
+  defp invite_step_error(:format), do: "Invalid or expired invite code."
+  defp invite_step_error(:unavailable), do: "Invalid or expired invite code."
 
   # §7 Private domain plumbing
 
@@ -400,8 +438,8 @@ defmodule Foglet.TUI.Screens.Register do
   defp handle_register_result(state, {:ok, :pending_approval, _user}) do
     modal = %Foglet.TUI.Modal{
       type: :info,
-      title: "Account Pending",
-      message: "Your account has been created and is pending sysop approval."
+      title: "Account waiting for approval",
+      message: pending_approval_message(Config.delivery_mode())
     }
 
     {RegisterState.put(state, RegisterState.default()),
@@ -432,21 +470,33 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp handle_register_result(state, {:error, changeset})
        when is_struct(changeset, Ecto.Changeset) do
-    reg = get_register_ss(state)
+    if Keyword.has_key?(changeset.errors, :invite_code) do
+      modal = %Foglet.TUI.Modal{
+        type: :error,
+        message: "Invite is no longer valid. Please request a new code from the sysop."
+      }
 
-    new_reg = %{
-      reg
-      | error: RegisterState.changeset_error_text(changeset),
-        focused_field: :handle
-    }
+      reg = get_register_ss(state)
+      reset_reg = %{reg | step: :invite_code, focused_field: :invite_code, error: nil}
+      {:update, RegisterState.put(state, reset_reg), [Effect.open_modal(modal)]}
+    else
+      reg = get_register_ss(state)
 
-    {:update, RegisterState.put(state, new_reg), []}
+      new_reg = %{
+        reg
+        | error: RegisterState.changeset_error_text(changeset),
+          focused_field: :handle
+      }
+
+      {:update, RegisterState.put(state, new_reg), []}
+    end
   end
 
   defp handle_register_result(state, {:error, :unavailable}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Email verification is unavailable because email delivery is disabled."
+      message:
+        "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
     }
 
     {state, [Effect.open_modal(modal)]}
@@ -455,7 +505,7 @@ defmodule Foglet.TUI.Screens.Register do
   defp handle_register_result(state, {:error, _delivery_error}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Verification instructions could not be sent. Please try again later."
+      message: "We couldn't send the verification email. Try again in a minute."
     }
 
     {state, [Effect.open_modal(modal)]}
@@ -484,4 +534,25 @@ defmodule Foglet.TUI.Screens.Register do
 
   defp default_domain_module(:accounts), do: Accounts
   defp default_domain_module(:verification), do: Verification
+  defp default_domain_module(:invites), do: Invites
+
+  defp pending_approval_message("email") do
+    "Your account has been created and is pending sysop approval. " <>
+      "You'll receive an email when a sysop reviews your request."
+  end
+
+  defp pending_approval_message("no_email") do
+    "Your account has been created and is pending sysop approval. " <>
+      "A sysop will review your request and contact you directly."
+  end
+
+  defp pending_approval_message(other) do
+    require Logger
+
+    Logger.warning(
+      "[Register] unknown delivery_mode #{inspect(other)}; using no_email pending-approval copy"
+    )
+
+    pending_approval_message("no_email")
+  end
 end

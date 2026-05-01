@@ -239,18 +239,18 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert _ = render_login(form_state(handle: "alice", password: "secret"))
     end
 
-    test "renders login form inside an Identify Yourself panel with comfortable width" do
+    test "renders login form inside an Identify yourself panel with comfortable width" do
       [panel] =
         form_state(handle: "alicealicealicealice", password: "secret")
         |> render_login()
         |> collect_panels()
 
-      assert panel.attrs.title == "Identify Yourself"
+      assert panel.attrs.title == "Identify yourself"
       assert panel.attrs.width >= 40
       assert panel.attrs.height >= 8
     end
 
-    test "caps long masked password display inside the Identify Yourself panel" do
+    test "caps long masked password display inside the Identify yourself panel" do
       rendered_text =
         form_state([handle: "alice", password: String.duplicate("s", 30)], :password)
         |> render_login()
@@ -452,6 +452,21 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
     end
 
+    test "Raxol shift tab shape cycles login focus without editing the field" do
+      state = form_state([handle: "alice", password: "secret"], :password)
+      {:update, new_state, []} = update_login(%{key: :tab, shift: true}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
+
+      assert get_in(new_state, [
+               :screen_state,
+               :login,
+               :password_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "secret"
+    end
+
     test "enter on :handle field moves focus to :password without submitting" do
       state = form_state([handle: "alice"], :handle)
       {:update, new_state, cmds} = update_login(%{key: :enter}, state)
@@ -633,9 +648,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
         |> collect_text_values()
         |> Enum.join("\n")
 
-      # Honest operator-assisted SSH path; advertises token entry
+      # Honest operator-assisted SSH path; advertises token entry via Esc + [T].
       assert rendered =~ ~r/sysop|operator/i
-      assert rendered =~ "Enter reset token"
+      assert rendered =~ "[T]"
       refute rendered =~ "unavailable"
       refute rendered =~ forbidden_reset_route()
       refute rendered =~ forbidden_http_prefix()
@@ -827,13 +842,13 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
     end
 
-    test "menu advertises Reset token in keys_for output" do
+    test "menu advertises Enter reset token in keys_for output" do
       rendered =
         render_login(base_state("open"))
         |> collect_text_values()
         |> Enum.join("\n")
 
-      assert rendered =~ "Reset token"
+      assert rendered =~ "Enter reset token"
     end
 
     # CR-001: bare `T`/`t` while on the reset_request screen MUST NOT navigate
@@ -935,6 +950,20 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:update, new_state, []} = update_login(%{key: :backtab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test "Raxol shift tab shape cycles :password back to :token" do
+      state = reset_consume_state(focused_field: :password)
+      {:update, new_state, []} = update_login(%{key: :tab, shift: true}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test "plain tab from :password still advances to :password_confirmation" do
+      state = reset_consume_state(focused_field: :password)
+      {:update, new_state, []} = update_login(%{key: :tab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password_confirmation
     end
 
     test "typing characters land only in the focused input field" do
@@ -1256,7 +1285,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {_submitting_state, new_state, cmds} = submit_login_form(state)
 
       assert cmds == []
-      assert get_in(new_state, [:screen_state, :login, :error]) == "Invalid credentials."
+
+      assert get_in(new_state, [:screen_state, :login, :error]) ==
+               "That handle and password don't match."
+
       # Password is cleared so user doesn't have to delete it before retrying
       assert get_in(new_state, [
                :screen_state,
@@ -1302,7 +1334,10 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {_submitting_state, _new_state, effects} = submit_login_form(state)
 
       assert %{type: :error, message: msg} = modal_effect(effects)
-      assert msg == "Your account is pending sysop approval."
+
+      assert msg ==
+               "Your account is waiting for sysop approval. Try again once you've heard back."
+
       refute msg =~ "notification"
       refute msg =~ "email"
     end
@@ -1319,8 +1354,11 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       {_submitting_state, new_state, effects} = submit_login_form(state)
 
-      assert %{type: :error, message: "Your registration was rejected. Contact the sysop."} =
-               modal_effect(effects)
+      assert %{
+               type: :error,
+               message:
+                 "Your registration was turned down. Reach the sysop if you think that's a mistake."
+             } = modal_effect(effects)
 
       assert get_in(new_state, [:screen_state, :login, :sub]) == :menu
       refute session_effect(effects)
@@ -1442,7 +1480,9 @@ defmodule Foglet.TUI.Screens.LoginTest do
       refute session_effect(effects)
 
       assert %{type: :error, message: msg} = modal_effect(effects)
-      assert msg == "Email verification is unavailable because email delivery is disabled."
+
+      assert msg ==
+               "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
 
       refute FogletBbs.Repo.exists?(
                from t in Foglet.Accounts.UserToken,
