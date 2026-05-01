@@ -14,7 +14,7 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
   """
 
   alias Foglet.Accounts.Verification
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Widgets.Input.TextInput
 
@@ -37,6 +37,14 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
     {:update, LoginState.put(state, LoginState.default()), []}
   end
 
+  def handle_key(event, state) do
+    if Input.backward_tab?(event) or Input.forward_tab?(event) do
+      {:update, state, []}
+    else
+      handle_identifier_key(event, state)
+    end
+  end
+
   # D-15 / CR-001: token-consume entry remains reachable from the Login menu
   # ([T] on `:menu`). The reset_request screen does *not* intercept bare `t`/`T`
   # because the identifier field is a free-text email input — any address
@@ -44,7 +52,7 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
   # would otherwise have its keystrokes hijacked, jumping the screen into
   # `:reset_consume` and discarding the partially-typed identifier. Users on
   # the Forgot Password screen reach token entry via Esc → menu → [T].
-  def handle_key(event, state) do
+  defp handle_identifier_key(event, state) do
     login_ss = LoginState.get(state)
     {new_input, _action} = TextInput.handle_event(event, login_ss.identifier_input)
     {:update, LoginState.put(state, %{login_ss | identifier_input: new_input}), []}

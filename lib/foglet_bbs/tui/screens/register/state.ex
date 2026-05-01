@@ -94,6 +94,13 @@ defmodule Foglet.TUI.Screens.Register.State do
     Enum.at(@focus_cycle, rem(idx + 1, length(@focus_cycle)))
   end
 
+  @doc "Moves focus to the previous field in the combined-step cycle."
+  @spec prev_field(atom()) :: atom()
+  def prev_field(current) do
+    idx = Enum.find_index(@focus_cycle, &(&1 == current)) || 0
+    Enum.at(@focus_cycle, rem(idx - 1 + length(@focus_cycle), length(@focus_cycle)))
+  end
+
   @typedoc "Atoms for the register screen's focus cycle (incl. invite-code step)."
   @type focused_field ::
           :invite_code | :handle | :email | :password | :confirm_password

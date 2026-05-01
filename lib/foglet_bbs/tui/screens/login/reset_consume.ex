@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.Login.ResetConsume do
   """
 
   alias Foglet.Accounts.Verification
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -32,31 +32,39 @@ defmodule Foglet.TUI.Screens.Login.ResetConsume do
 
   @spec handle_key(map(), map()) ::
           :no_match | {:update, map(), [Effect.t()]} | {map(), [Effect.t()]}
-  def handle_key(%{key: :tab}, state) do
+  def handle_key(event, state) do
+    cond do
+      Input.backward_tab?(event) ->
+        move_focus(state, :previous)
+
+      Input.forward_tab?(event) ->
+        move_focus(state, :next)
+
+      true ->
+        handle_input_key(event, state)
+    end
+  end
+
+  defp move_focus(state, :next) do
     login_ss = LoginState.get(state)
     next_focus = LoginState.next_reset_consume_focus(login_ss.focused_field)
     {:update, LoginState.put(state, %{login_ss | focused_field: next_focus}), []}
   end
 
-  def handle_key(%{key: :backtab}, state) do
+  defp move_focus(state, :previous) do
     login_ss = LoginState.get(state)
     prev_focus = LoginState.prev_reset_consume_focus(login_ss.focused_field)
     {:update, LoginState.put(state, %{login_ss | focused_field: prev_focus}), []}
   end
 
-  # Some terminals send Shift+Tab as `:shift_tab` rather than `:backtab`;
-  # accept both for symmetry with other Foglet forms.
-  def handle_key(%{key: :shift_tab}, state),
-    do: handle_key(%{key: :backtab}, state)
+  defp handle_input_key(%{key: :enter}, state), do: submit_reset_consume(state)
 
-  def handle_key(%{key: :enter}, state), do: submit_reset_consume(state)
-
-  def handle_key(%{key: :escape}, state) do
+  defp handle_input_key(%{key: :escape}, state) do
     # D-07: Escape clears token/password fields and returns to the menu.
     {:update, LoginState.put(state, LoginState.default()), []}
   end
 
-  def handle_key(event, state) do
+  defp handle_input_key(event, state) do
     {new_input, _action} = TextInput.handle_event(event, focused_input(state))
     {:update, update_focused_input(state, new_input), []}
   end

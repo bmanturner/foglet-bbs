@@ -452,6 +452,21 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
     end
 
+    test "Raxol shift tab shape cycles login focus without editing the field" do
+      state = form_state([handle: "alice", password: "secret"], :password)
+      {:update, new_state, []} = update_login(%{key: :tab, shift: true}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :handle
+
+      assert get_in(new_state, [
+               :screen_state,
+               :login,
+               :password_input,
+               Access.key(:raxol_state),
+               :value
+             ]) == "secret"
+    end
+
     test "enter on :handle field moves focus to :password without submitting" do
       state = form_state([handle: "alice"], :handle)
       {:update, new_state, cmds} = update_login(%{key: :enter}, state)
@@ -935,6 +950,20 @@ defmodule Foglet.TUI.Screens.LoginTest do
       {:update, new_state, []} = update_login(%{key: :backtab}, state)
 
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test "Raxol shift tab shape cycles :password back to :token" do
+      state = reset_consume_state(focused_field: :password)
+      {:update, new_state, []} = update_login(%{key: :tab, shift: true}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
+    test "plain tab from :password still advances to :password_confirmation" do
+      state = reset_consume_state(focused_field: :password)
+      {:update, new_state, []} = update_login(%{key: :tab}, state)
+
+      assert get_in(new_state, [:screen_state, :login, :focused_field]) == :password_confirmation
     end
 
     test "typing characters land only in the focused input field" do

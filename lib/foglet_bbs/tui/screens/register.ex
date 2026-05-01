@@ -25,7 +25,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.{Accounts, Config}
   alias Foglet.Accounts.{Invites, Verification}
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Theme
@@ -155,6 +155,14 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp handle_invite_key(event, state) do
+    if Input.backward_tab?(event) or Input.forward_tab?(event) do
+      {:update, state, []}
+    else
+      handle_invite_input_key(event, state)
+    end
+  end
+
+  defp handle_invite_input_key(event, state) do
     reg = get_register_ss(state)
     {new_input, _action} = TextInput.handle_event(event, reg.invite_code_input)
     new_reg = %{reg | invite_code_input: new_input}
@@ -163,13 +171,32 @@ defmodule Foglet.TUI.Screens.Register do
 
   # --- :combined step key handlers ---
 
-  defp handle_combined_key(%{key: :tab}, state) do
+  defp handle_combined_key(event, state) do
+    cond do
+      Input.backward_tab?(event) ->
+        move_combined_focus(state, :previous)
+
+      Input.forward_tab?(event) ->
+        move_combined_focus(state, :next)
+
+      true ->
+        handle_combined_input_key(event, state)
+    end
+  end
+
+  defp move_combined_focus(state, :next) do
     reg = get_register_ss(state)
     new_reg = %{reg | focused_field: RegisterState.next_field(reg.focused_field), error: nil}
     {:update, RegisterState.put(state, new_reg), []}
   end
 
-  defp handle_combined_key(%{key: :enter}, state) do
+  defp move_combined_focus(state, :previous) do
+    reg = get_register_ss(state)
+    new_reg = %{reg | focused_field: RegisterState.prev_field(reg.focused_field), error: nil}
+    {:update, RegisterState.put(state, new_reg), []}
+  end
+
+  defp handle_combined_input_key(%{key: :enter}, state) do
     reg = get_register_ss(state)
 
     case reg.focused_field do
@@ -182,7 +209,7 @@ defmodule Foglet.TUI.Screens.Register do
     end
   end
 
-  defp handle_combined_key(event, state) do
+  defp handle_combined_input_key(event, state) do
     {new_input, _action} = TextInput.handle_event(event, focused_input(state))
     {:update, update_focused_input(state, new_input), []}
   end

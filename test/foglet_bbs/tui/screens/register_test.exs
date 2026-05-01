@@ -197,6 +197,29 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert local_state.focused_field == :password
     end
 
+    test "shift tab retreats focus through local reducer state" do
+      {local_state, []} =
+        Register.update(
+          {:key, %{key: :tab, shift: true}},
+          combined_state([], :password),
+          context()
+        )
+
+      assert local_state.focused_field == :email
+
+      {local_state, []} =
+        Register.update({:key, %{key: :backtab}}, local_state, context())
+
+      assert local_state.focused_field == :handle
+    end
+
+    test "plain tab from password still advances to confirm password" do
+      {local_state, []} =
+        Register.update({:key, %{key: :tab}}, combined_state([], :password), context())
+
+      assert local_state.focused_field == :confirm_password
+    end
+
     test "character input edits only the focused field" do
       {local_state, []} =
         Register.update({:key, %{key: :char, char: "a"}}, combined_state([], :handle), context())

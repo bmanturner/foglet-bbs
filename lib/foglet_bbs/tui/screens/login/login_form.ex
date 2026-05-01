@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.{Auth, Verification}
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -77,15 +77,24 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
   # --- Key handlers ---
 
-  # Tab cycles focus between :handle and :password
-  defp handle_unlocked_form_key(%{key: :tab}, state) do
+  defp handle_unlocked_form_key(event, state) do
+    if Input.backward_tab?(event) or Input.forward_tab?(event) do
+      cycle_login_focus(state)
+    else
+      handle_unlocked_input_key(event, state)
+    end
+  end
+
+  # Tab cycles focus between :handle and :password. The two-field form is
+  # direction-symmetric, but this helper keeps Shift+Tab out of TextInput.
+  defp cycle_login_focus(state) do
     login_ss = LoginState.get(state)
     new_login_ss = LoginState.toggle_focus(login_ss)
     {:update, LoginState.put(state, new_login_ss), []}
   end
 
   # Enter: submit if focused on password; advance focus if on handle
-  defp handle_unlocked_form_key(%{key: :enter}, state) do
+  defp handle_unlocked_input_key(%{key: :enter}, state) do
     login_ss = LoginState.get(state)
 
     if login_ss.focused_field == :password do
@@ -97,12 +106,12 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   end
 
   # Escape: return to menu sub, clear form state
-  defp handle_unlocked_form_key(%{key: :escape}, state) do
+  defp handle_unlocked_input_key(%{key: :escape}, state) do
     {:update, LoginState.put(state, LoginState.default()), []}
   end
 
   # Everything else — delegate to focused TextInput
-  defp handle_unlocked_form_key(event, state) do
+  defp handle_unlocked_input_key(event, state) do
     {new_input, _action} = TextInput.handle_event(event, focused_input(state))
     {:update, update_focused_input(state, new_input), []}
   end
