@@ -60,19 +60,14 @@ defmodule Foglet.TUI.Screens.Sysop.SystemSnapshot do
 
     footer = text("[R] Refresh snapshot", fg: theme.dim.fg)
 
-    # KvGrid.render/2 returns a list whose elements may themselves be
-    # `[text, badge]` pairs (for entries with `state:` badges). Raxol's
-    # layout preparer matches on maps only — a bare list child crashes
-    # `Raxol.UI.Layout.Preparer.prepare/1` (FOG-166). Flatten and host the
-    # rows in a dedicated sub-column so every child the outer column sees
-    # is a single map.
-    kv_rows =
-      entries
-      |> KvGrid.render(theme: theme, width: 60, label_width: 16, gap: 2)
-      |> List.flatten()
+    # FOG-177: KvGrid.render/2 now returns one layout element per entry
+    # (entries with badges are pre-wrapped in a `row`), so the outer column
+    # gets homogeneous map children — no nested lists, no embedded newline
+    # text nodes that previously broke the Sysop frame on the SYSTEM tab.
+    kv_rows = KvGrid.render(entries, theme: theme, width: 60, label_width: 16, gap: 2)
 
     kv_column =
-      column style: %{gap: 0} do
+      column style: %{gap: 1} do
         kv_rows
       end
 

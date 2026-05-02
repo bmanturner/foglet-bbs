@@ -512,18 +512,14 @@ defmodule Foglet.TUI.Screens.Moderation do
     if height <= 18 do
       [table_node]
     else
-      # KvGrid.render/2 can return a list containing [text, badge] pairs (when
-      # entries have badge metadata). Raxol's flexbox cannot process nested
-      # lists as children; List.flatten/1 normalises the list so every child
-      # is a single element map before the column is built. This does NOT
-      # touch the internals of map values — only collapses list nesting.
-      flat =
-        KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
-        |> List.flatten()
+      # FOG-177: KvGrid.render/2 now returns one layout element per entry
+      # (badge entries pre-wrapped in `row`), so the outer column receives
+      # homogeneous map children with no embedded newline text nodes.
+      kv_rows = KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
 
       kv_column =
         column style: %{gap: 0} do
-          flat
+          kv_rows
         end
 
       [kv_column, table_node]

@@ -250,11 +250,16 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
         end
       end
 
-      # Sentinel check via raw tree traversal (D-09 primitive presence).
-      # KvGrid returns nested lists that cause BadMapError in apply_at_size;
-      # raw traversal confirms KvGrid renders the "Live sessions:" key label.
+      # FOG-177: SYSTEM previously rendered through a KvGrid call that
+      # interspersed text("\n") nodes, which produced literal embedded
+      # newlines in the layout and pushed the Sysop chrome off-screen in the
+      # live SSH harness (parent issue: FOG-151 / PR #26). KvGrid now emits
+      # one layout element per entry, so we can both verify the key sentinel
+      # AND assert primitive bounds (the BOARDS-style apply_at_size check)
+      # so a regression that overflows or breaks rows is caught here without
+      # needing the live PTY sweep.
       describe "sysop system tab — size contract" do
-        for {width, height} <- [{64, 22}, {80, 24}] do
+        for {width, height} <- [{64, 22}, {80, 24}, {100, 30}] do
           @width width
           @height height
           @tag :"sysop system size contract"
@@ -283,13 +288,36 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            texts =
-              state
-              |> SysopHelper.render_sysop_smoke_state()
-              |> SysopHelper.collect_text()
+            tree = SysopHelper.render_sysop_smoke_state(state)
+
+            texts = SysopHelper.collect_text(tree)
 
             assert Enum.any?(texts, &String.contains?(&1, "Live sessions:")),
                    "expected 'Live sessions:' at #{width}x#{height}"
+
+            # Frame sentinels: the Sysop shell breadcrumb and the SYSTEM tab
+            # marker must render — their absence is the FOG-177 regression
+            # signature (the entire chrome was clipped off screen).
+            assert Enum.any?(texts, &String.contains?(&1, "Foglet")),
+                   "expected 'Foglet' breadcrumb at #{width}x#{height}"
+
+            assert Enum.any?(texts, &String.contains?(&1, "SYSTEM")),
+                   "expected 'SYSTEM' tab label at #{width}x#{height}"
+
+            # No text node should embed a literal \n — that was the layout
+            # corruption that broke the chrome on the SYSTEM tab.
+            refute Enum.any?(texts, &String.contains?(&1, "\n")),
+                   "no text node should embed a literal newline"
+
+            # Bounds: every positioned text element must fit inside the
+            # terminal width. Now reachable because KvGrid no longer emits
+            # nested `[text, badge]` lists that crashed apply_at_size.
+            positioned = apply_at_size(tree, {width, height})
+
+            for el <- text_elements(positioned) do
+              assert el.x + TextWidth.display_width(el.text) <= width,
+                     "element #{inspect(el.text)} at x=#{el.x} exceeds width #{width}"
+            end
           end
         end
       end
