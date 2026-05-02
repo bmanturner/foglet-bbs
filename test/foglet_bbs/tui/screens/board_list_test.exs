@@ -383,6 +383,54 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert text =~ "Town Square • 3 boards • 3 unread total"
   end
 
+  test "render/2 pluralizes the category board count by length" do
+    one_board_directory = [
+      %{
+        category: %{id: "c1", name: "Solo"},
+        boards: [
+          %{
+            board: %{id: "b1", name: "Only", slug: "only"},
+            subscribed?: true,
+            required_subscription?: false,
+            unread_count: 2,
+            last_post_at: DateTime.add(DateTime.utc_now(), -600, :second)
+          }
+        ]
+      }
+    ]
+
+    empty_category_directory = [
+      %{category: %{id: "c1", name: "Empty"}, boards: []}
+    ]
+
+    ctx = context()
+
+    one_state =
+      BoardList.update(
+        {:task_result, :load_boards, {:ok, one_board_directory}},
+        BoardList.init(ctx),
+        ctx
+      )
+      |> elem(0)
+
+    empty_state =
+      BoardList.update(
+        {:task_result, :load_boards, {:ok, empty_category_directory}},
+        BoardList.init(ctx),
+        ctx
+      )
+      |> elem(0)
+
+    one_text = BoardList.render(one_state, ctx) |> flatten_text()
+    empty_text = BoardList.render(empty_state, ctx) |> flatten_text()
+    many_text = BoardList.render(load_state(ctx), ctx) |> flatten_text()
+
+    assert one_text =~ "Solo • 1 board • 2 unread total"
+    refute one_text =~ "1 boards"
+    assert empty_text =~ "Empty • 0 boards • 0 unread total"
+    assert many_text =~ "Town Square • 3 boards • 3 unread total"
+  end
+
   test "render/2 shows focused board details strip at compact width" do
     ctx = context(terminal_size: {64, 22})
     state = load_state(ctx) |> move_to_board(ctx, 1)
