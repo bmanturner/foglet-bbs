@@ -246,6 +246,51 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
                _ -> false
              end)
     end
+
+    test "q from threads tab still triggers back-nav (FOG-279 regression guard)" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+      assert state.current_tab == :threads
+
+      {_state, effects} = BoardScreen.update({:key, %{key: :char, char: "q"}}, state, ctx)
+
+      assert PresenceTracker.count(b.id) == 0
+
+      assert Enum.any?(effects, fn
+               %Effect{type: :navigate, payload: %{screen: :board_list}} -> true
+               _ -> false
+             end)
+    end
+
+    test "q/Q in chat composer is typed, not consumed as back-nav (FOG-279)" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+      assert state.current_tab == :chat
+
+      {state, e1} = BoardScreen.update({:key, %{key: :char, char: "q"}}, state, ctx)
+      {state, e2} = BoardScreen.update({:key, %{key: :char, char: "a"}}, state, ctx)
+      {state, e3} = BoardScreen.update({:key, %{key: :char, char: "b"}}, state, ctx)
+      {state, e4} = BoardScreen.update({:key, %{key: :char, char: "c"}}, state, ctx)
+      {state, e5} = BoardScreen.update({:key, %{key: :char, char: "Q"}}, state, ctx)
+
+      assert state.current_tab == :chat
+      assert state.chat_room.composer == "qabcQ"
+
+      for effects <- [e1, e2, e3, e4, e5] do
+        refute Enum.any?(effects, fn
+                 %Effect{type: :navigate, payload: %{screen: :board_list}} -> true
+                 _ -> false
+               end)
+      end
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
   end
 
   describe "presence broadcasts" do

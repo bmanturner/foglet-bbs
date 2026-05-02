@@ -107,10 +107,17 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   def update({:key, %{key: :right}}, %State{current_tab: :threads} = state, %Context{} = context),
     do: switch_tab(state, context, :chat)
 
-  # Q from any tab: untrack presence before delegating ThreadList's back-nav.
-  # ThreadList itself still owns the navigate-to-board_list effect, so the
-  # wrapper only adds the explicit untrack.
-  def update({:key, %{key: :char, char: c} = ev}, %State{} = state, %Context{} = context)
+  # Q from the threads tab: untrack presence before delegating ThreadList's
+  # back-nav. ThreadList still owns the navigate-to-board_list effect, so the
+  # wrapper only adds the explicit untrack. The match is gated to
+  # `current_tab: :threads` so `q`/`Q` typed in the chat composer (a text
+  # input) is not consumed as back-nav and falls through to the chat-tab
+  # forwarder below — see FOG-279.
+  def update(
+        {:key, %{key: :char, char: c} = ev},
+        %State{current_tab: :threads} = state,
+        %Context{} = context
+      )
       when c in ["q", "Q"] do
     state = untrack_presence(state)
     {new_thread_state, effects} = ThreadList.update({:key, ev}, state.thread_list, context)

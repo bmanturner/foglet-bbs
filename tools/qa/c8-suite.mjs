@@ -210,7 +210,7 @@ async function main() {
     await b.openBoardByName(PERM_BOARD);
     await a.type('2'); await a.wait(400);
     await b.type('2'); await b.wait(400);
-    const marker = `c8s5-${Date.now().toString(36).replace(/q/g, 'z')}`;
+    const marker = `c8s5-${Date.now().toString(36)}`;
     await a.type(`hi ${marker}`);
     await a.key('enter');
     const start = Date.now();
@@ -239,7 +239,7 @@ async function main() {
     await a.login(QA1.username, QA1.password);
     await a.openBoardByName(PERM_BOARD);
     await a.type('2'); await a.wait(400);
-    const marker = `c8s6-${Date.now().toString(36).replace(/q/g, 'z')}`;
+    const marker = `c8s6-${Date.now().toString(36)}`;
     await a.type(`reload ${marker}`);
     await a.key('enter');
     await a.wait(800);
@@ -269,7 +269,7 @@ async function main() {
     await a.login(QA1.username, QA1.password);
     await a.openBoardByName(EPH_BOARD);
     await a.type('2'); await a.wait(400);
-    const marker = `c8s7-${Date.now().toString(36).replace(/q/g, 'z')}`;
+    const marker = `c8s7-${Date.now().toString(36)}`;
     await a.type(`bye ${marker}`);
     await a.key('enter');
     await a.wait(800);
