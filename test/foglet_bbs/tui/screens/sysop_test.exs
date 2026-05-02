@@ -1926,7 +1926,81 @@ defmodule Foglet.TUI.Screens.SysopTest do
       new = current_system_snapshot(new_state)
       assert new == old
     end
+
+    # FOG-166: KvGrid.render/2 returns nested `[text, badge]` lists for
+    # rows with `state:` badges. Earlier versions of this screen handed
+    # that mixed list directly to the outer column, which crashed
+    # `Raxol.UI.Layout.Preparer.prepare/1` (FunctionClauseError on a bare
+    # list child) and tore down the SSH/TUI session. The fix flattens the
+    # KvGrid output and hosts it in a dedicated sub-column. Walk the
+    # rendered tree and assert no list child survives anywhere — this
+    # reproduces the original preparer crash, which static text presence
+    # checks did not catch.
+    test "SYSTEM render tree has no nested list children (preparer-safe)",
+         %{state: state} do
+      state = activate_system_tab(state)
+      tree = render_sysop(state)
+
+      assert_no_list_children!(tree, [:root])
+    end
+
+    test "SYSTEM render tree survives Raxol.UI.Layout.Preparer.prepare/1",
+         %{state: state} do
+      state = activate_system_tab(state)
+      tree = render_sysop(state)
+
+      # If any child is a bare list, prepare/1 raises FunctionClauseError.
+      assert %{} = Raxol.UI.Layout.Preparer.prepare(tree)
+    end
+
+    for {w, h} <- [{100, 30}, {80, 24}, {64, 22}] do
+      @w w
+      @h h
+      test "SYSTEM render at #{@w}x#{@h} prepares without crash",
+           %{state: state} do
+        state =
+          state
+          |> Map.put(:terminal_size, {@w, @h})
+          |> activate_system_tab()
+
+        tree = render_sysop(state)
+        assert_no_list_children!(tree, [:root])
+        assert %{} = Raxol.UI.Layout.Preparer.prepare(tree)
+      end
+    end
   end
+
+  defp assert_no_list_children!(node, path) when is_map(node) do
+    case Map.get(node, :children) do
+      nil ->
+        :ok
+
+      children when is_list(children) ->
+        children
+        |> Enum.with_index()
+        |> Enum.each(fn {child, idx} ->
+          if is_list(child) do
+            flunk(
+              "Bare list child at #{inspect(Enum.reverse([idx | path]))} would crash " <>
+                "Raxol.UI.Layout.Preparer.prepare/1: #{inspect(child, limit: 5)}"
+            )
+          end
+
+          assert_no_list_children!(child, [idx | path])
+        end)
+    end
+
+    :ok
+  end
+
+  defp assert_no_list_children!(node, path) when is_list(node) do
+    flunk(
+      "Bare list at #{inspect(Enum.reverse(path))} (preparer requires a map): " <>
+        inspect(node, limit: 5)
+    )
+  end
+
+  defp assert_no_list_children!(_other, _path), do: :ok
 
   describe "INVITES tab shared delegation (SYSO-05)" do
     setup %{state: state} do
