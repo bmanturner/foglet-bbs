@@ -335,6 +335,21 @@ defmodule Foglet.TUI.App do
     Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
 
+  # FOG-253: forward board-screen presence broadcasts (FOG-250) to the active
+  # screen so `BoardScreen` can re-render its `2 CHAT (#)` counter.
+  defp do_update({:board_screen, _event, _payload} = msg, state) do
+    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
+  end
+
+  # FOG-284: forward live chat broadcasts (FOG-254/256) to the active screen so
+  # `BoardScreen` can append `{:board_chat, :new_message, _}` events into the
+  # chat tab transcript. Without this clause the catch-all silently drops the
+  # message and the sender's own session never sees its post — which made
+  # C8 scenario 7/8 fail on chat-enabled (esp. ephemeral) boards.
+  defp do_update({:board_chat, _event, _payload} = msg, state) do
+    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
+  end
+
   # User-level notifications — show a modal badge.
   defp do_update({:notification, _user_id, kind, payload}, state) do
     modal = %Foglet.TUI.Modal{

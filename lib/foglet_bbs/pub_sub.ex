@@ -17,4 +17,10 @@ defmodule Foglet.PubSub do
 
   @spec boards_aggregate() :: String.t()
   def boards_aggregate, do: "boards"
+
+  @spec board_chat_topic(binary()) :: String.t()
+  def board_chat_topic(board_id), do: "board_chat:" <> board_id
+
+  @spec board_screen_topic(binary()) :: String.t()
+  def board_screen_topic(board_id), do: "board_screen:" <> board_id
 end

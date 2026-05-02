@@ -156,7 +156,27 @@ defmodule Foglet.TUI.Screens.ThreadList do
     ScreenFrame.render(frame_state, chrome, thread_content, keybar_groups(state, context))
   end
 
-  defp keybar_groups(%State{} = state, %Context{} = context) do
+  @doc false
+  # Public-but-internal helper used by `Foglet.TUI.Screens.BoardScreen` (FOG-253
+  # C5) to compose the ThreadList content under a tab strip on chat-enabled
+  # boards. Returns the inner content view without the surrounding screen
+  # frame so the wrapper can place a tab strip above it.
+  @spec render_inner_content(State.t(), Context.t()) :: any()
+  def render_inner_content(%State{} = state, %Context{} = context) do
+    frame_state = frame_state(state, context)
+    theme = Theme.from_state(frame_state)
+    render_thread_content(state, context, theme)
+  end
+
+  @doc false
+  # Public-but-internal helper used by `Foglet.TUI.Screens.BoardScreen` (FOG-253
+  # C5) to merge ThreadList's keybar entries with the wrapper's tab keybar.
+  @spec keybar_groups(State.t(), Context.t()) :: [map()]
+  def keybar_groups(%State{} = state, %Context{} = context) do
+    keybar_groups_internal(state, context)
+  end
+
+  defp keybar_groups_internal(%State{} = state, %Context{} = context) do
     action_commands =
       if posting_disabled?(state, context.current_user) do
         []

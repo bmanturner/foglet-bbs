@@ -454,7 +454,10 @@ defmodule Foglet.TUI.Screens.BoardList do
       name: Map.get(board, :name),
       slug: Map.get(board, :slug),
       archived: Map.get(board, :archived, false),
-      postable_by: Map.get(board, :postable_by, :members)
+      postable_by: Map.get(board, :postable_by, :members),
+      chat_enabled: Map.get(board, :chat_enabled, false),
+      chat_storage_mode: Map.get(board, :chat_storage_mode),
+      chat_message_ttl_seconds: Map.get(board, :chat_message_ttl_seconds)
     }
   end
 

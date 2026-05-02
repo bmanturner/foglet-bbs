@@ -1619,13 +1619,30 @@ defmodule Foglet.TUI.Screens.SysopTest do
                :category_id,
                :postable_by,
                :default_subscription,
-               :required_subscription
+               :required_subscription,
+               :chat_enabled,
+               :chat_storage_mode,
+               :chat_message_ttl_seconds
              ]
 
       required_field = Enum.find(bv.modal.fields, &(&1.name == :required_subscription))
       assert required_field.label == "Required subscription"
       assert required_field.type == :boolean
       assert required_field.value == false
+
+      chat_enabled_field = Enum.find(bv.modal.fields, &(&1.name == :chat_enabled))
+      assert chat_enabled_field.type == :boolean
+      assert chat_enabled_field.value == false
+
+      storage_field = Enum.find(bv.modal.fields, &(&1.name == :chat_storage_mode))
+      assert storage_field.type == :enum
+      assert storage_field.choices == ["ephemeral", "permanent"]
+      assert storage_field.value == "ephemeral"
+
+      ttl_field = Enum.find(bv.modal.fields, &(&1.name == :chat_message_ttl_seconds))
+      assert ttl_field.type == :integer
+      assert ttl_field.value == "7200"
+
       assert bv.modal_kind == :create_board
     end
 

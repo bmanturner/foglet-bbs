@@ -230,7 +230,10 @@ defmodule Foglet.TUI.Screens.BoardListTest do
                  name: "General",
                  slug: "general",
                  archived: false,
-                 postable_by: :members
+                 postable_by: :members,
+                 chat_enabled: false,
+                 chat_storage_mode: nil,
+                 chat_message_ttl_seconds: nil
                }
              })
   end
