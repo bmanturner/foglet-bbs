@@ -314,9 +314,9 @@ async function main() {
     await a.type('2'); await a.wait(500);
     const ephScreen = a.screen();
     const ephHas = hasEphemeralNotice(ephScreen);
-    // FOG-279: Q on the chat tab is consumed by the composer; switch back to
-    // the threads tab before triggering back-nav.
-    await a.type('1'); await a.wait(300);
+    // FOG-279/FOG-284: Q and digits on the chat tab are consumed by the
+    // composer; switch back to threads via ← before triggering back-nav.
+    await a.key('left'); await a.wait(300);
     await a.type('Q'); await a.wait(500);
     await a.openBoardByName(PERM_BOARD);
     await a.type('2'); await a.wait(500);
