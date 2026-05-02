@@ -120,13 +120,25 @@ defmodule Foglet.TUI.Screens.BoardList do
     local_state = normalize_state(local_state)
 
     with %BoardTree{} = tree <- tree_for_state(local_state),
-         %{board: board, subscribed?: false} <- BoardTree.focused_board_entry(tree) do
-      local_state = %{local_state | board_tree: tree, feedback: nil, last_op: :subscribe_to_board}
-      {local_state, [subscription_effect(:subscribe_to_board, board, context)]}
-    else
-      %{subscribed?: true} ->
-        {%{local_state | feedback: "Already subscribed."}, []}
+         focused when is_map(focused) <- BoardTree.focused_board_entry(tree) do
+      case focused do
+        %{archived?: true} ->
+          {%{local_state | board_tree: tree, feedback: "That board is archived."}, []}
 
+        %{board: board, subscribed?: false} ->
+          local_state = %{
+            local_state
+            | board_tree: tree,
+              feedback: nil,
+              last_op: :subscribe_to_board
+          }
+
+          {local_state, [subscription_effect(:subscribe_to_board, board, context)]}
+
+        %{subscribed?: true} ->
+          {%{local_state | feedback: "Already subscribed."}, []}
+      end
+    else
       _other ->
         {local_state, []}
     end
@@ -138,6 +150,9 @@ defmodule Foglet.TUI.Screens.BoardList do
     with %BoardTree{} = tree <- tree_for_state(local_state),
          focused when is_map(focused) <- BoardTree.focused_board_entry(tree) do
       case focused do
+        %{archived?: true} ->
+          {%{local_state | board_tree: tree, feedback: "That board is archived."}, []}
+
         %{required_subscription?: true} ->
           {%{
              local_state
@@ -295,10 +310,12 @@ defmodule Foglet.TUI.Screens.BoardList do
     width = row_width(context)
     height = body_height(context)
     feedback_rows = feedback_row_count(state)
-    detail? = detail_strip?(height, feedback_rows)
+    archived_note? = archived_present?(directory)
+    archived_note_rows = if archived_note?, do: 1, else: 0
+    detail? = detail_strip?(height, feedback_rows + archived_note_rows)
 
     reserved_rows =
-      feedback_rows +
+      feedback_rows + archived_note_rows +
         if(detail?, do: 1, else: 0)
 
     visible_height = visible_tree_rows(max(height - reserved_rows, 3))
@@ -306,6 +323,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     column style: %{gap: 0} do
       [
         maybe_feedback(state, theme),
+        maybe_archived_note(archived_note?, theme),
         BoardTree.render(board_tree, theme: theme, width: width, visible_height: visible_height),
         if(detail?, do: details_strip(board_tree, directory, theme, width))
       ]
@@ -313,6 +331,19 @@ defmodule Foglet.TUI.Screens.BoardList do
       |> Enum.reject(&is_nil/1)
     end
   end
+
+  defp archived_present?(directory) when is_list(directory) do
+    Enum.any?(directory, fn %{boards: boards} ->
+      Enum.any?(boards, &Map.get(&1, :archived?, false))
+    end)
+  end
+
+  defp archived_present?(_directory), do: false
+
+  defp maybe_archived_note(true, theme),
+    do: text("Archived boards are visible to sysops/mods (read-only).", fg: theme.dim.fg)
+
+  defp maybe_archived_note(false, _theme), do: nil
 
   defp update_tree(key, local_state) do
     local_state = normalize_state(local_state)

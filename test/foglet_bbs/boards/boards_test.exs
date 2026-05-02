@@ -693,6 +693,78 @@ defmodule Foglet.BoardsTest do
       assert Foglet.Boards.board_directory_for(nil) == []
     end
 
+    test "regular :user actor sees archived boards filtered from the directory (FOG-305)" do
+      category = category_fixture(%{name: "Public", display_order: 1})
+      active = board_fixture(category, %{slug: "active-305", display_order: 1})
+
+      archived =
+        board_fixture(category, %{slug: "archived-305", display_order: 2, archived: true})
+
+      user = user_fixture()
+
+      directory = Foglet.Boards.board_directory_for(user)
+      board_ids = directory |> Enum.flat_map(& &1.boards) |> Enum.map(& &1.board.id)
+
+      assert active.id in board_ids
+      refute archived.id in board_ids
+    end
+
+    test ":mod actor sees archived boards in the directory marked archived? (FOG-305)" do
+      category = category_fixture(%{name: "Public", display_order: 1})
+      active = board_fixture(category, %{slug: "active-mod", display_order: 1})
+
+      archived =
+        board_fixture(category, %{slug: "archived-mod", display_order: 2, archived: true})
+
+      mod =
+        user_fixture()
+        |> Ecto.Changeset.change(role: :mod)
+        |> Repo.update!()
+
+      directory = Foglet.Boards.board_directory_for(mod)
+      entries = Enum.flat_map(directory, & &1.boards)
+
+      active_entry = Enum.find(entries, &(&1.board.id == active.id))
+      archived_entry = Enum.find(entries, &(&1.board.id == archived.id))
+
+      assert active_entry.archived? == false
+      assert archived_entry.archived? == true
+    end
+
+    test ":sysop actor sees archived boards and boards in archived categories (FOG-305)" do
+      live_category = category_fixture(%{name: "Live", display_order: 1})
+      archived_category = category_fixture(%{name: "Retired", display_order: 2, archived: true})
+
+      live_board = board_fixture(live_category, %{slug: "live-sys", display_order: 1})
+
+      archived_board =
+        board_fixture(live_category, %{slug: "archived-sys", display_order: 2, archived: true})
+
+      hidden_board = board_fixture(archived_category, %{slug: "hidden-sys", display_order: 1})
+
+      sysop =
+        user_fixture()
+        |> Ecto.Changeset.change(role: :sysop)
+        |> Repo.update!()
+
+      directory = Foglet.Boards.board_directory_for(sysop)
+      entries = Enum.flat_map(directory, & &1.boards)
+
+      assert Enum.find(entries, &(&1.board.id == live_board.id)).archived? == false
+      assert Enum.find(entries, &(&1.board.id == archived_board.id)).archived? == true
+      # An active board in an archived category is exposed and marked archived
+      # because it is unreachable for posting.
+      assert Enum.find(entries, &(&1.board.id == hidden_board.id)).archived? == true
+
+      # Active boards come first within a category, archived boards follow by
+      # display_order.
+      live_cat_entry = Enum.find(directory, &(&1.category.id == live_category.id))
+      assert Enum.map(live_cat_entry.boards, & &1.board.id) == [live_board.id, archived_board.id]
+
+      # Archived categories sort after live categories.
+      assert List.last(directory).category.id == archived_category.id
+    end
+
     test "returns max thread last_post_at across non-deleted threads (BOARDS-03)" do
       category = category_fixture(%{name: "Cat A", display_order: 1})
       board = board_fixture(category, %{slug: "cat-a-board", name: "Board A"})

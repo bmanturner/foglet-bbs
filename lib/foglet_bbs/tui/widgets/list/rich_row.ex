@@ -219,6 +219,14 @@ defmodule Foglet.TUI.Widgets.List.RichRow do
     }
   end
 
+  defp styles_for(false, :dim, theme) do
+    {
+      [fg: theme.dim.fg],
+      [fg: theme.dim.fg],
+      [fg: theme.dim.fg]
+    }
+  end
+
   defp styles_for(false, _emphasis, theme) do
     {
       [fg: theme.unselected.fg],

@@ -58,6 +58,7 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   @glyph_subscribed "✓"
   @glyph_available "+"
   @glyph_no_age "—"
+  @archived_suffix " [archived]"
   @indent_per_depth 2
   @default_width 80
 
@@ -71,7 +72,8 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
           required(:subscribed?) => boolean(),
           required(:required_subscription?) => boolean(),
           required(:unread_count) => non_neg_integer() | nil,
-          required(:last_post_at) => DateTime.t() | nil
+          required(:last_post_at) => DateTime.t() | nil,
+          optional(:archived?) => boolean()
         }
 
   @typep state_cluster_cell ::
@@ -156,8 +158,16 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
     rows =
       Enum.map(visible, fn {node, depth} ->
         case Map.get(node, :data) do
-          %{kind: :category, category: cat} ->
-            render_category(cat, depth, expanded, node.id == cursor, theme, width)
+          %{kind: :category, category: cat} = data ->
+            render_category(
+              cat,
+              depth,
+              expanded,
+              node.id == cursor,
+              theme,
+              width,
+              Map.get(data, :archived?, false) || Map.get(cat, :archived, false)
+            )
 
           %{kind: :board} = data ->
             render_board(data, depth, node.id == cursor, theme, width)
@@ -253,9 +263,16 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
     Enum.slice(visible, start, height)
   end
 
-  @spec render_category(map(), non_neg_integer(), MapSet.t(), boolean(), Theme.t(), pos_integer()) ::
-          any()
-  defp render_category(cat, depth, expanded, selected?, theme, width) do
+  @spec render_category(
+          map(),
+          non_neg_integer(),
+          MapSet.t(),
+          boolean(),
+          Theme.t(),
+          pos_integer(),
+          boolean()
+        ) :: any()
+  defp render_category(cat, depth, expanded, selected?, theme, width, archived?) do
     indent = TextWidth.pad_trailing("", depth * @indent_per_depth)
 
     glyph =
@@ -263,23 +280,29 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
         do: @category_glyph_expanded,
         else: @category_glyph_collapsed
 
-    full_label = "#{indent}#{glyph} #{cat.name}"
+    name = if archived?, do: cat.name <> @archived_suffix, else: cat.name
+    full_label = "#{indent}#{glyph} #{name}"
     label = TextWidth.truncate(full_label, max(width, 2))
 
-    if selected? do
-      text(label,
-        fg: theme.selected.fg,
-        bg: theme.selected.bg,
-        style: Map.get(theme.selected, :style, [:bold])
-      )
-    else
-      style = Map.get(theme.primary, :style, [])
+    cond do
+      selected? ->
+        text(label,
+          fg: theme.selected.fg,
+          bg: theme.selected.bg,
+          style: Map.get(theme.selected, :style, [:bold])
+        )
 
-      if style == [] do
-        text(label, fg: theme.primary.fg, style: [:bold])
-      else
-        text(label, fg: theme.primary.fg, style: Enum.uniq(style ++ [:bold]))
-      end
+      archived? ->
+        text(label, fg: theme.dim.fg)
+
+      true ->
+        style = Map.get(theme.primary, :style, [])
+
+        if style == [] do
+          text(label, fg: theme.primary.fg, style: [:bold])
+        else
+          text(label, fg: theme.primary.fg, style: Enum.uniq(style ++ [:bold]))
+        end
     end
   end
 
@@ -300,21 +323,29 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
       last_post_at: last_post_at
     } = data
 
+    archived? = Map.get(data, :archived?, false) || Map.get(board, :archived, false)
+
     RichRow.render(
-      title: compose_title(depth, board.name),
-      metadata: compose_metadata(unread, last_post_at),
-      state_cluster: build_state_cluster(unread, subscribed?, required?),
+      title: compose_title(depth, board.name, archived?),
+      metadata: compose_metadata(unread, last_post_at, archived?),
+      state_cluster: build_state_cluster(unread, subscribed?, required?, archived?),
       selected: selected?,
       theme: theme,
       width: width,
-      emphasis: if(unread_present?(unread), do: :bold)
+      emphasis: row_emphasis(unread, archived?)
     )
   end
 
-  @spec build_state_cluster(non_neg_integer() | nil, boolean(), boolean()) :: [
+  @spec row_emphasis(non_neg_integer() | nil, boolean()) :: :dim | :bold | nil
+  defp row_emphasis(_unread, true), do: :dim
+  defp row_emphasis(unread, false), do: if(unread_present?(unread), do: :bold)
+
+  @spec build_state_cluster(non_neg_integer() | nil, boolean(), boolean(), boolean()) :: [
           state_cluster_cell()
         ]
-  defp build_state_cluster(unread, subscribed?, required?) do
+  defp build_state_cluster(_unread, _subscribed?, _required?, true), do: [:locked]
+
+  defp build_state_cluster(unread, subscribed?, required?, false) do
     read_cells = if unread_present?(unread), do: [:unread], else: []
     sub_cell = subscription_cluster_cell(subscribed?, required?)
     read_cells ++ [sub_cell]
@@ -333,19 +364,21 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   defp subscription_cluster_cell(false, false),
     do: %{key: :available_board, glyph: @glyph_available, slot: :dim}
 
-  @spec compose_title(non_neg_integer(), String.t()) :: String.t()
-  defp compose_title(depth, name) do
+  @spec compose_title(non_neg_integer(), String.t(), boolean()) :: String.t()
+  defp compose_title(depth, name, archived?) do
     indent = TextWidth.pad_trailing("", depth * @indent_per_depth)
-    indent <> name
+    suffix = if archived?, do: @archived_suffix, else: ""
+    indent <> name <> suffix
   end
 
-  @spec compose_metadata(non_neg_integer() | nil, DateTime.t() | nil) :: String.t()
-  defp compose_metadata(nil, last_post_at), do: format_age(last_post_at)
+  @spec compose_metadata(non_neg_integer() | nil, DateTime.t() | nil, boolean()) :: String.t()
+  defp compose_metadata(_unread, last_post_at, true), do: format_age(last_post_at)
+  defp compose_metadata(nil, last_post_at, false), do: format_age(last_post_at)
 
-  defp compose_metadata(0, last_post_at),
+  defp compose_metadata(0, last_post_at, false),
     do: "all read  " <> format_age(last_post_at)
 
-  defp compose_metadata(n, last_post_at) when is_integer(n) and n >= 1,
+  defp compose_metadata(n, last_post_at, false) when is_integer(n) and n >= 1,
     do: "#{n} unread  " <> format_age(last_post_at)
 
   @spec format_age(DateTime.t() | nil) :: String.t()
@@ -355,11 +388,15 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   @spec directory_to_nodes([directory_entry()]) :: [Tree.tree_node()]
   defp directory_to_nodes(directory) do
     Enum.map(directory, fn %{category: cat, boards: boards} ->
+      cat_archived? =
+        Map.get(cat, :archived, false) or
+          (boards != [] and Enum.all?(boards, &Map.get(&1, :archived?, false)))
+
       %{
         id: {:category, cat.id},
         label: cat.name,
         children: Enum.map(boards, &board_to_node/1),
-        data: %{kind: :category, category: cat}
+        data: %{kind: :category, category: cat, archived?: cat_archived?}
       }
     end)
   end
