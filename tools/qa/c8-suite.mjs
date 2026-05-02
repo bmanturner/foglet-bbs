@@ -243,8 +243,11 @@ async function main() {
     await a.type(`reload ${marker}`);
     await a.key('enter');
     await a.wait(800);
-    // Leave the board screen.
-    await a.type('1'); await a.wait(300); // back to THREADS tab
+    // Leave the board screen. Tab-switch digits are gated to :threads tab
+    // (FOG-284) to keep '1'/'2' in the chat composer from hijacking nav, so
+    // use the left-arrow shortcut documented in the keybar to flip back to
+    // THREADS before pressing Q.
+    await a.key('left'); await a.wait(300); // back to THREADS tab
     await a.type('Q'); await a.wait(600); // back to Boards
     // Re-enter and switch to CHAT.
     await a.openBoardByName(PERM_BOARD);
@@ -283,8 +286,9 @@ async function main() {
     }
     console.log(`     [scenario 7] waiting ${opts.ephemeralWaitMs}ms for TTL expiry...`);
     await a.wait(opts.ephemeralWaitMs);
-    // Force fresh history pull: leave and re-enter chat.
-    await a.type('1'); await a.wait(400);
+    // Force fresh history pull: leave and re-enter chat. Use the gated-safe
+    // ←/Q sequence (see scenario 6 note re: FOG-284 digit-shortcut gating).
+    await a.key('left'); await a.wait(400);
     await a.type('Q'); await a.wait(600);
     await a.openBoardByName(EPH_BOARD);
     await a.type('2'); await a.wait(800);
