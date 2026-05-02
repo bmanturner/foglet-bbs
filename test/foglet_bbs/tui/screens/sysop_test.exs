@@ -2199,6 +2199,98 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert new_state.screen_state.sysop.armed_revoke? == false
     end
 
+    test "FOG-162: D on focused non-revoked INVITES row arms (no immediate revoke, no boundary call)",
+         %{state: state, sysop: sysop} do
+      invites = build_invites([:available, :available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      # Pre-condition: not armed, only body hint advertises Revoke.
+      assert state.screen_state.sysop.armed_revoke? == false
+      assert count_revoke_tokens(state) == 1
+
+      {:update, new_state, events} = handle_sysop_key(%{key: :char, char: "D"}, state)
+
+      # D arms instead of dispatching the revoke effect. No task effect is
+      # emitted on the arm step.
+      assert new_state.screen_state.sysop.armed_revoke? == true
+      assert events == []
+
+      # Items are unchanged (no boundary call, no list refresh).
+      assert new_state.screen_state.sysop.invites.items == invites.items
+
+      # Command bar now advertises [X] Revoke alongside the body hint.
+      assert count_revoke_tokens(new_state) >= 2
+    end
+
+    test "FOG-162: lowercase d also arms instead of revoking", %{state: state, sysop: sysop} do
+      invites = build_invites([:available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      {:update, new_state, events} = handle_sysop_key(%{key: :char, char: "d"}, state)
+
+      assert new_state.screen_state.sysop.armed_revoke? == true
+      assert events == []
+      assert new_state.screen_state.sysop.invites.items == invites.items
+    end
+
+    test "FOG-162: D on focused :revoked INVITES row surfaces error and does not arm",
+         %{state: state, sysop: sysop} do
+      invites = build_invites([:revoked, :available], 0)
+      state = activate_invites(state, sysop, invites)
+
+      {:update, new_state, events} = handle_sysop_key(%{key: :char, char: "D"}, state)
+
+      assert new_state.screen_state.sysop.armed_revoke? == false
+      assert new_state.screen_state.sysop.invites.error == "Invite already revoked."
+      assert events == []
+    end
+
+    test "FOG-162: D + X end-to-end performs the actual revoke", %{state: state, sysop: sysop} do
+      {:ok, invite} = Foglet.Accounts.Invites.create_invite(sysop)
+
+      live_item = %{
+        code: invite.code,
+        status: :available,
+        issuer_id: invite.issuer_id,
+        inserted_at: invite.inserted_at,
+        consumed_at: nil,
+        consumed_by_user_id: nil,
+        revoked_at: nil
+      }
+
+      invites_state = InvitesState.new(items: [live_item], selected_index: 0)
+      state = activate_invites(state, sysop, invites_state)
+
+      # Arm via D (instead of Enter).
+      {:update, armed_state, []} = handle_sysop_key(%{key: :char, char: "D"}, state)
+      assert armed_state.screen_state.sysop.armed_revoke? == true
+
+      # The persisted invite is still :available — D alone did not revoke.
+      assert {:ok, [pre_x | _]} = Foglet.Accounts.Invites.list_invites(sysop)
+      assert pre_x.status == :available
+
+      # X follows through on the armed gesture.
+      {:update, fired_state, _} = handle_sysop_key(%{key: :char, char: "X"}, armed_state)
+      assert fired_state.screen_state.sysop.armed_revoke? == false
+
+      assert {:ok, [refreshed | _]} = Foglet.Accounts.Invites.list_invites(sysop)
+      assert refreshed.status == :revoked
+    end
+
+    test "FOG-162: focus movement after D-arm clears armed_revoke?", %{
+      state: state,
+      sysop: sysop
+    } do
+      invites = build_invites([:available, :available, :available], 1)
+      state = activate_invites(state, sysop, invites)
+
+      {:update, armed_state, []} = handle_sysop_key(%{key: :char, char: "D"}, state)
+      assert armed_state.screen_state.sysop.armed_revoke? == true
+
+      {:update, moved_state, _} = handle_sysop_key(%{key: :down}, armed_state)
+      assert moved_state.screen_state.sysop.armed_revoke? == false
+    end
+
     test "no new revoke logic added in invites_actions.ex (D-25 boundary lock)" do
       # The existing revoke_selected/2 path is the only side effect. This grep
       # guard ensures Plan 04 didn't introduce duplicate revoke logic.
