@@ -278,6 +278,21 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
 
       assert is_function(fun, 0)
     end
+
+    # FOG-277 regression — task results were dropped at routing because
+    # ChatRoom dispatched with screen_key `:chat_room`, which is not a
+    # known top-level screen. The task's screen_key must be the active
+    # route so BoardScreen forwards `{:task_result, ...}` to ChatRoom.
+    test "send_chat task uses the active route key, not :chat_room" do
+      b = board()
+      {state, ctx} = init_state(b)
+      state = %{state | composer: "hello"}
+
+      {_state, [%Effect{type: :task, payload: %{op: :send_chat, screen_key: key}}]} =
+        ChatRoom.update({:key, %{key: :enter}}, state, ctx)
+
+      assert key == :thread_list
+    end
   end
 
   describe "live message ingest" do
@@ -358,6 +373,47 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
         ChatRoom.load_effects(state, ctx)
 
       assert state.status == :loading
+    end
+
+    # FOG-277 regression — see send_chat task screen_key test above.
+    test "load_chat_history task uses the active route key, not :chat_room" do
+      b = board()
+      {state, ctx} = init_state(b)
+
+      {_state, [%Effect{type: :task, payload: %{op: :load_chat_history, screen_key: key}}]} =
+        ChatRoom.load_effects(state, ctx)
+
+      assert key == :thread_list
+    end
+
+    # FOG-277 regression — the route param is a plain map (BoardList
+    # produces it via `board_identity/1`); BoardChat.post / .recent
+    # function-clause on `%Board{}`. The closure must coerce so the
+    # task does not crash before reaching Repo / RoomServer.
+    test "load_chat_history closure runs against a plain-map board (no FunctionClauseError)" do
+      b = board()
+      {state, ctx} = init_state(b)
+
+      {_state, [%Effect{type: :task, payload: %{fun: fun}}]} =
+        ChatRoom.load_effects(state, ctx)
+
+      try do
+        fun.()
+      rescue
+        FunctionClauseError ->
+          flunk(
+            "load_chat_history task raised FunctionClauseError — board was not coerced to %Board{}"
+          )
+
+        _ ->
+          # Backend errors (DB unavailable, etc.) are acceptable for this
+          # screen-shape regression; we only guard against the upstream
+          # FunctionClauseError that drops results before they can be
+          # routed back to the reducer.
+          :ok
+      catch
+        _, _ -> :ok
+      end
     end
 
     test "is idempotent after a successful load" do
