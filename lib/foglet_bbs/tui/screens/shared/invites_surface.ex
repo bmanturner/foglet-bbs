@@ -26,7 +26,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   alias Foglet.TUI.Widgets.Progress.Spinner
 
   @title "INVITES"
-  @key_hints "G Generate   R Refresh   D Revoke   ↑/↓ Select"
+  @key_hints "G Generate invite   R Refresh   D Revoke invite   ↑/↓ Select"
 
   @spec title() :: String.t()
   def title, do: @title
@@ -42,6 +42,9 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   def visible?(_, _), do: false
 
   @spec render(map(), Theme.t()) :: any()
+  def render(%InvitesState{mode: :confirm_revoke} = state, %Theme{} = theme),
+    do: render_confirm_revoke(state, theme)
+
   def render(%{items: nil, frame: frame}, %Theme{} = theme) when is_integer(frame),
     do: render_loading(frame, theme)
 
@@ -51,6 +54,22 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   def render(%{items: [_ | _]} = state, %Theme{} = theme), do: render_items(state, theme)
 
+  # Item 3 (FOG-130): destructive confirmation for revoking an invite.
+  defp render_confirm_revoke(%InvitesState{confirm_target: target}, theme) do
+    code = (target && target.code) || ""
+
+    column style: %{gap: 1} do
+      [
+        text("Revoke invite?", fg: theme.accent.fg),
+        text(
+          "Code #{code} will stop working. Accounts already created with it stay intact.",
+          fg: theme.primary.fg
+        ),
+        text("Enter Revoke invite   Esc Keep invite", fg: theme.dim.fg)
+      ]
+    end
+  end
+
   # Monotonic-clock fallback frame when the caller does not supply one.
   defp current_frame do
     System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
@@ -58,7 +77,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   defp render_loading(frame, theme) when is_integer(frame) do
     spinner_el = Spinner.render(frame, style: :line, theme: theme)
-    loading_el = text("Loading…", fg: theme.dim.fg)
+    loading_el = text("Loading invites…", fg: theme.dim.fg)
 
     column style: %{gap: 0} do
       [
@@ -129,7 +148,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   end
 
   defp invite_rows([], _selected_index, theme) do
-    text("No invites issued yet.", fg: theme.dim.fg)
+    text("No invites yet. Generate one when someone should join.", fg: theme.dim.fg)
   end
 
   # Phase 29 D-24 (SYSOP-06): focused INVITES row carries theme.selected.fg/bg
@@ -153,8 +172,8 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
     base = [
       field(item, :code),
       "status: #{field(item, :status)}",
-      "issuer_id: #{field(item, :issuer_id)}",
-      "inserted_at: #{timestamp_field(item, :inserted_at)}"
+      "issued by: #{field(item, :issuer_id)}",
+      "issued: #{timestamp_field(item, :inserted_at)}"
     ]
 
     item
@@ -165,13 +184,13 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   defp lifecycle_fields(%{status: :consumed} = item) do
     [
-      "consumed_at: #{timestamp_field(item, :consumed_at)}",
-      "consumed_by_user_id: #{field(item, :consumed_by_user_id)}"
+      "used: #{timestamp_field(item, :consumed_at)}",
+      "used by: #{field(item, :consumed_by_user_id)}"
     ]
   end
 
   defp lifecycle_fields(%{status: :revoked} = item) do
-    ["revoked_at: #{timestamp_field(item, :revoked_at)}"]
+    ["revoked: #{timestamp_field(item, :revoked_at)}"]
   end
 
   defp lifecycle_fields(_item), do: []
@@ -192,28 +211,27 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
         nil
 
       item ->
-        label = "Focused: #{focused_row_label(item)}"
+        label = "Selected invite: #{focused_row_label(item)}"
         text(label, fg: theme.selected.fg, bg: theme.selected.bg)
     end
   end
 
   defp focused_invite_indicator(_items, _selected_index, _theme), do: nil
 
-  # A compact one-line summary of the focused invite — the row label format
-  # is reused so the focus indicator carries every field a sysop would
-  # consult to confirm which row they're acting on.
+  # A compact one-line summary of the focused invite — friendly labels per
+  # FOG-127 (no schema names like consumed_by_user_id / revoked_at).
   defp focused_row_label(item) do
     code = field(item, :code)
     status = field(item, :status)
 
-    base = "#{code} | status: #{status}"
+    base = "#{code} | #{status}"
 
     case item do
       %{status: :consumed} ->
-        base <> " | consumed_by_user_id: #{field(item, :consumed_by_user_id)}"
+        base <> " | used by: #{field(item, :consumed_by_user_id)}"
 
       %{status: :revoked} ->
-        base <> " | revoked_at: #{timestamp_field(item, :revoked_at)}"
+        base <> " | revoked: #{timestamp_field(item, :revoked_at)}"
 
       _ ->
         base
@@ -235,7 +253,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   defp maybe_banner(nil, _theme), do: nil
 
   defp maybe_banner(code, theme) when is_binary(code) do
-    text("New invite code: #{code}", fg: theme.accent.fg)
+    text("Invite code ready: #{code}", fg: theme.accent.fg)
   end
 
   defp maybe_error(nil, _theme), do: nil

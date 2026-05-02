@@ -45,7 +45,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
         revoke_code(actor, code, state)
 
       _missing ->
-        {:ok, InvitesState.with_error(state, "No invite is selected.")}
+        {:ok, InvitesState.with_error(state, "Select an invite first.")}
     end
   end
 
@@ -115,16 +115,22 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActions do
     do: {:ok, InvitesState.with_error(state, error_message(reason))}
 
   defp error_message(:forbidden), do: "You are not allowed to manage invites."
-  defp error_message(:limit_reached), do: "Invite generation limit reached."
-  defp error_message(:not_found), do: "That invite could not be found."
-  defp error_message(:unavailable), do: "That invite is already consumed or revoked."
+
+  defp error_message(:limit_reached),
+    do: "Invite limit reached. Revoke an unused invite or ask the sysop."
+
+  defp error_message(:not_found),
+    do: "That invite is no longer here. Refresh the list."
+
+  defp error_message(:unavailable),
+    do: "That invite has already been used or revoked."
 
   defp error_message(%Changeset{} = changeset) do
     changeset
     |> Changeset.traverse_errors(fn {message, _opts} -> message end)
     |> Enum.map_join("; ", fn {field, messages} -> "#{field} #{Enum.join(messages, ", ")}" end)
     |> case do
-      "" -> "Invite could not be saved."
+      "" -> "Invite was not saved."
       message -> message
     end
   end

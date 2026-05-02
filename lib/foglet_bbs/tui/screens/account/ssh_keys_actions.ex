@@ -45,12 +45,12 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysActions do
         revoke_key(actor, id, state)
 
       _missing ->
-        {:ok, SSHKeysState.with_error(state, "No SSH key is selected.")}
+        {:ok, SSHKeysState.with_error(state, "Select an SSH key first.")}
     end
   end
 
   def revoke_selected(%User{}, %SSHKeysState{} = state) do
-    {:ok, SSHKeysState.with_error(state, "No SSH key is selected.")}
+    {:ok, SSHKeysState.with_error(state, "Select an SSH key first.")}
   end
 
   @spec select_next(SSHKeysState.t()) :: SSHKeysState.t()
@@ -104,13 +104,58 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysActions do
         {:ok, SSHKeysState.with_status(loaded, "SSH key revoked.")}
 
       {:error, :not_found} ->
-        {:ok, SSHKeysState.with_error(state, "That SSH key could not be found.")}
+        {:ok, SSHKeysState.with_error(state, "That SSH key is no longer here. Refresh the list.")}
     end
   end
 
+  # Translate domain validation messages into the friendly user-facing strings
+  # specified in FOG-127. Unknown messages fall through with the field name so
+  # we never silently drop validation feedback.
   defp changeset_errors(%Changeset{} = changeset) do
     changeset
     |> Changeset.traverse_errors(fn {message, _opts} -> message end)
-    |> Enum.into(%{}, fn {field, messages} -> {field, Enum.join(messages, ", ")} end)
+    |> Enum.into(%{}, fn {field, messages} ->
+      raw = Enum.join(messages, ", ")
+      {field, friendly_ssh_error(field, raw)}
+    end)
   end
+
+  defp friendly_ssh_error(:label, msg) do
+    cond do
+      String.contains?(msg, "blank") or String.contains?(msg, "required") ->
+        "Label is required."
+
+      String.contains?(msg, "taken") ->
+        "You already have an SSH key with that label."
+
+      String.contains?(msg, "at most") or String.contains?(msg, "character") ->
+        "Label must be 64 characters or fewer."
+
+      true ->
+        "Label: #{msg}"
+    end
+  end
+
+  defp friendly_ssh_error(:public_key, msg) do
+    cond do
+      String.contains?(msg, "blank") or String.contains?(msg, "required") ->
+        "Public key is required."
+
+      String.contains?(msg, "invalid") or String.contains?(msg, "OpenSSH") ->
+        "Public key must be a valid OpenSSH public key."
+
+      true ->
+        "Public key: #{msg}"
+    end
+  end
+
+  defp friendly_ssh_error(:fingerprint, msg) do
+    if String.contains?(msg, "taken") do
+      "That public key is already on this account."
+    else
+      "Public key: #{msg}"
+    end
+  end
+
+  defp friendly_ssh_error(field, msg), do: "#{field}: #{msg}"
 end

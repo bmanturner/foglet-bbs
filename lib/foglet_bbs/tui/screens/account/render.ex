@@ -36,36 +36,152 @@ defmodule Foglet.TUI.Screens.Account.Render do
     ScreenFrame.render(preview_state(state, theme), account_chrome(), content, key_bar(ss))
   end
 
-  # Phase 29 D-26 (SYSOP-07): the key bar is rendered at request time so the
-  # `1-N Jump` hint reflects the actual tab count (3 without INVITES, 4 with).
-  # Inserted between `←/→ Tab` and `Tab Field` so the navigation cluster reads
-  # left-to-right: arrows / numbers / tab-cycle.
-  defp key_bar(ss) do
+  # FOG-130 Item 1: the key bar is tab-context-aware. The Tabs and System
+  # groups are constant; the middle groups (Fields/List, Actions) reflect the
+  # active tab and the SSH/INVITES sub-mode (list vs. add vs. confirm).
+  # The 1-arity entry point is preserved for the D-26 contract
+  # (layout_smoke_test).
+  defp key_bar(ss), do: key_bar_for(ss, active_label(ss) || "PROFILE")
+
+  defp key_bar_for(ss, active_label) do
+    tabs_group = %{
+      label: "Tabs",
+      commands: [
+        %{key: "←/→", label: "Tab", priority: 10},
+        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 10}
+      ]
+    }
+
+    system_group = %{
+      label: "System",
+      commands: [%{key: "Ctrl+Q", label: "Back", priority: 0}]
+    }
+
+    middle = middle_groups(active_label, ss)
+
+    [tabs_group | middle] ++ [system_group]
+  end
+
+  defp middle_groups("PROFILE", ss), do: form_middle_groups(ss, :profile)
+  defp middle_groups("PREFS", ss), do: form_middle_groups(ss, :prefs)
+
+  defp middle_groups("SSH KEYS", %State{ssh_keys: %{mode: :add}}) do
+    [
+      %{label: "Field", commands: [%{key: "Tab", label: "Field", priority: 10}]},
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: "Add key", priority: 30},
+          %{key: "Esc", label: "Cancel", priority: 30}
+        ]
+      }
+    ]
+  end
+
+  defp middle_groups("SSH KEYS", %State{ssh_keys: %{mode: :confirm_revoke}}) do
     [
       %{
-        label: "Tabs",
+        label: "Actions",
         commands: [
-          %{key: "←/→", label: "Tab", priority: 10},
-          %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 10}
+          %{key: "Enter", label: "Revoke key", priority: 30},
+          %{key: "Esc", label: "Keep key", priority: 30}
         ]
-      },
+      }
+    ]
+  end
+
+  defp middle_groups("SSH KEYS", _ss) do
+    [
+      %{label: "List", commands: [%{key: "↑/↓", label: "Select", priority: 20}]},
       %{
-        label: "Field",
-        commands: [%{key: "Tab", label: "Field", priority: 10}]
-      },
+        label: "Actions",
+        commands: [
+          %{key: "A", label: "Add key", priority: 30},
+          %{key: "R", label: "Refresh", priority: 25},
+          %{key: "D", label: "Revoke key", priority: 30}
+        ]
+      }
+    ]
+  end
+
+  defp middle_groups("INVITES", %State{invites: %{mode: invites_mode}}) do
+    case invites_mode do
+      :confirm_revoke ->
+        [
+          %{
+            label: "Actions",
+            commands: [
+              %{key: "Enter", label: "Revoke invite", priority: 30},
+              %{key: "Esc", label: "Keep invite", priority: 30}
+            ]
+          }
+        ]
+
+      _ ->
+        [
+          %{label: "List", commands: [%{key: "↑/↓", label: "Select", priority: 20}]},
+          %{
+            label: "Actions",
+            commands: [
+              %{key: "G", label: "Generate invite", priority: 30},
+              %{key: "R", label: "Refresh", priority: 25},
+              %{key: "D", label: "Revoke invite", priority: 30}
+            ]
+          }
+        ]
+    end
+  end
+
+  defp middle_groups(_unknown, _ss) do
+    [
+      %{label: "Field", commands: [%{key: "Tab", label: "Next", priority: 10}]},
       %{
         label: "Actions",
         commands: [
           %{key: "Enter", label: "Save", priority: 30},
           %{key: "Esc", label: "Cancel", priority: 30}
         ]
-      },
-      %{
-        label: "System",
-        commands: [%{key: "Ctrl+Q", label: "Back", priority: 0}]
       }
     ]
   end
+
+  # PROFILE/PREFS share the form-tab key cluster. PREFS adds an explicit
+  # `↑/↓ Change` advert when an enum field (Time format / Theme) is focused
+  # so users can discover the cycling affordance (FOG-130 Item 4).
+  defp form_middle_groups(%State{} = ss, section) do
+    base = [
+      %{label: "Field", commands: [%{key: "Tab", label: "Next", priority: 10}]}
+    ]
+
+    fields =
+      if section == :prefs and prefs_enum_focused?(ss) do
+        base ++
+          [
+            %{
+              label: "Value",
+              commands: [%{key: "↑/↓", label: "Change", priority: 25}]
+            }
+          ]
+      else
+        base
+      end
+
+    fields ++
+      [
+        %{
+          label: "Actions",
+          commands: [
+            %{key: "Enter", label: "Save", priority: 30},
+            %{key: "Esc", label: "Cancel", priority: 30}
+          ]
+        }
+      ]
+  end
+
+  defp prefs_enum_focused?(%State{prefs_focus: focus}) when focus in [:time_format, :theme],
+    do: true
+
+  defp prefs_enum_focused?(_), do: false
 
   defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
   # IN-02 (iteration 6): same defensive shape as IN-01 in moderation.ex.

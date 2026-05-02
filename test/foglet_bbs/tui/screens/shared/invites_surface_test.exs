@@ -91,7 +91,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurfaceTest do
       flat = collect_text_values(result)
       joined = Enum.join(flat, " ")
 
-      assert String.contains?(joined, "No invites issued yet.")
+      assert String.contains?(joined, "No invites yet. Generate one when someone should join.")
       assert String.contains?(joined, "G Generate")
       assert String.contains?(joined, "R Refresh")
       assert String.contains?(joined, "D Revoke")
@@ -142,17 +142,18 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurfaceTest do
 
       joined = result |> collect_text_values() |> Enum.join(" ")
 
+      # FOG-130 Item 5: detail labels are user-friendly, not schema names.
       assert String.contains?(joined, "AVAILABLECODE001")
-      assert String.contains?(joined, "issuer_id: issuer-1")
-      assert String.contains?(joined, "inserted_at: 2026-04-24 01:00:00Z")
+      assert String.contains?(joined, "issued by: issuer-1")
+      assert String.contains?(joined, "issued: 2026-04-24 01:00:00Z")
       assert String.contains?(joined, "available")
       assert String.contains?(joined, "CONSUMEDCODE001")
       assert String.contains?(joined, "consumed")
-      assert String.contains?(joined, "consumed_at: 2026-04-24 01:05:00Z")
-      assert String.contains?(joined, "consumed_by_user_id: consumer-1")
+      assert String.contains?(joined, "used: 2026-04-24 01:05:00Z")
+      assert String.contains?(joined, "used by: consumer-1")
       assert String.contains?(joined, "REVOKEDCODE001")
       assert String.contains?(joined, "revoked")
-      assert String.contains?(joined, "revoked_at: 2026-04-24 01:10:00Z")
+      assert String.contains?(joined, "revoked: 2026-04-24 01:10:00Z")
     end
 
     test "renders New invite code banner, error, and key hints", %{theme: theme} do
@@ -168,7 +169,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurfaceTest do
 
       joined = result |> collect_text_values() |> Enum.join(" ")
 
-      assert String.contains?(joined, "New invite code: NEWCODE001")
+      assert String.contains?(joined, "Invite code ready: NEWCODE001")
       assert String.contains?(joined, "Invite generation limit reached.")
       assert String.contains?(joined, "G Generate")
       assert String.contains?(joined, "R Refresh")

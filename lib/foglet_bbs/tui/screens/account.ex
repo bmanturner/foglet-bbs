@@ -33,6 +33,7 @@ defmodule Foglet.TUI.Screens.Account do
   alias Foglet.TUI.Screens.Account.SSHKeysActions
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Account.State
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -60,20 +61,24 @@ defmodule Foglet.TUI.Screens.Account do
       |> normalize_state(context)
       |> sync_prefs_focus()
 
-    {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-
-    if action != nil do
-      new_active =
-        case action do
-          {:tab_changed, idx} -> idx
-          _ -> ss.active_tab
-        end
-
-      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-      {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
-      {loaded_ss, effects}
-    else
+    if shield_tab_shortcut?(event, ss) do
       handle_active_key(event, ss, context)
+    else
+      {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
+
+      if action != nil do
+        new_active =
+          case action do
+            {:tab_changed, idx} -> idx
+            _ -> ss.active_tab
+          end
+
+        new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
+        {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
+        {loaded_ss, effects}
+      else
+        handle_active_key(event, ss, context)
+      end
     end
   end
 
@@ -83,7 +88,7 @@ defmodule Foglet.TUI.Screens.Account do
     case unwrap_task_result(result) do
       {:ok, user} ->
         new_ss =
-          State.seed_from_user(ss, user) |> Map.put(:status_message, "Account changes saved.")
+          State.seed_from_user(ss, user) |> Map.put(:status_message, "Profile saved.")
 
         {new_ss, [Effect.session({:set_current_user, user})]}
 
@@ -105,7 +110,7 @@ defmodule Foglet.TUI.Screens.Account do
         new_ss =
           ss
           |> State.seed_from_user(user)
-          |> Map.put(:status_message, "Account changes saved.")
+          |> Map.put(:status_message, "Preferences saved.")
           |> Map.put(:candidate_theme_id, nil)
 
         effects = [
@@ -234,6 +239,7 @@ defmodule Foglet.TUI.Screens.Account do
   defp handle_prefs_update(event, %State{} = ss, %Context{} = context) do
     case PrefsForm.handle_key(event, ss, context.current_user) do
       {:ok, new_ss, cmds} ->
+        new_ss = sync_prefs_focus_from_form(new_ss)
         {new_ss, account_command_effects(cmds, context, new_ss)}
 
       :no_match ->
@@ -249,7 +255,16 @@ defmodule Foglet.TUI.Screens.Account do
         {ss, [ssh_keys_effect(:account_load_ssh_keys, context, ss.ssh_keys)]}
 
       {key, :list} when key in ["d", "D"] ->
-        {ss, [ssh_keys_effect(:account_revoke_ssh_key, context, ss.ssh_keys)]}
+        {%{ss | ssh_keys: SSHKeysState.start_confirm_revoke(ss.ssh_keys)}, []}
+
+      {:enter, :confirm_revoke} ->
+        revoking = %{ss.ssh_keys | mode: :list, confirm_target: nil}
+
+        {%{ss | ssh_keys: revoking},
+         [ssh_keys_effect(:account_revoke_ssh_key, context, revoking)]}
+
+      {:escape, :confirm_revoke} ->
+        {%{ss | ssh_keys: SSHKeysState.cancel_confirm_revoke(ss.ssh_keys)}, []}
 
       {:enter, :add} ->
         {ss, [ssh_keys_effect(:account_add_ssh_key, context, ss.ssh_keys)]}
@@ -264,20 +279,31 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp handle_invites_update(event, %State{} = ss, %Context{} = context) do
     key = action_key(event)
+    invites = ss.invites
+    mode = Map.get(invites, :mode, :list)
 
-    case key do
-      key when key in ["r", "R"] ->
-        {ss, [invites_effect(:account_load_invites, context, ss.invites)]}
+    case {key, mode} do
+      {key, :list} when key in ["r", "R"] ->
+        {ss, [invites_effect(:account_load_invites, context, invites)]}
 
-      key when key in ["g", "G"] ->
-        {ss, [invites_effect(:account_generate_invite, context, ss.invites)]}
+      {key, :list} when key in ["g", "G"] ->
+        {ss, [invites_effect(:account_generate_invite, context, invites)]}
 
-      key when key in ["d", "D"] ->
-        {ss, [invites_effect(:account_revoke_invite, context, ss.invites)]}
+      {key, :list} when key in ["d", "D"] ->
+        {%{ss | invites: Foglet.TUI.Screens.Shared.InvitesState.start_confirm_revoke(invites)},
+         []}
+
+      {:enter, :confirm_revoke} ->
+        cleared = %{invites | mode: :list, confirm_target: nil}
+        {%{ss | invites: cleared}, [invites_effect(:account_revoke_invite, context, cleared)]}
+
+      {:escape, :confirm_revoke} ->
+        {%{ss | invites: Foglet.TUI.Screens.Shared.InvitesState.cancel_confirm_revoke(invites)},
+         []}
 
       _ ->
-        case InvitesActions.handle_key(key, context.current_user, ss.invites) do
-          {:ok, invites} -> {%{ss | invites: invites}, []}
+        case InvitesActions.handle_key(key, context.current_user, invites) do
+          {:ok, new_invites} -> {%{ss | invites: new_invites}, []}
           :no_match -> {ss, []}
         end
     end
@@ -346,15 +372,36 @@ defmodule Foglet.TUI.Screens.Account do
     end)
   end
 
+  # FOG-142: Tabs widget consumes digit shortcuts 1–9 unconditionally
+  # (Pitfall 6 in `Foglet.TUI.Widgets.Input.Tabs`). Active text-entry
+  # forms must shield digits or real input (e.g. an `ssh-ed25519` public
+  # key) silently jumps to another Account tab.
+  defp shield_tab_shortcut?(event, %State{} = ss) do
+    digit_event?(event) and text_entry_active?(ss)
+  end
+
+  defp digit_event?(%{key: :char, char: <<c>>}) when c in ?0..?9, do: true
+  defp digit_event?(_), do: false
+
+  defp text_entry_active?(%State{} = ss) do
+    case active_label(ss) do
+      "SSH KEYS" -> ss.ssh_keys.mode == :add
+      _ -> false
+    end
+  end
+
   defp action_key(%{key: :char, char: char}) when is_binary(char), do: char
   defp action_key(%{key: key}), do: key
   defp action_key(event), do: event
 
   defp domain_module(%Context{} = context, key, default) do
-    Map.get(context.domain || %{}, key) ||
-      (is_map(context.session_context) &&
-         get_in(context.session_context, [:domain, key])) ||
+    with nil <- Map.get(context.domain || %{}, key),
+         {:error, :not_configured} <- Domain.get(context.session_context || %{}, key) do
       default
+    else
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      {:ok, mod} -> mod
+    end
   end
 
   defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
@@ -373,9 +420,12 @@ defmodule Foglet.TUI.Screens.Account do
   defp put_account_errors(%State{} = ss, section, errors) do
     ss
     |> Map.put(error_field(section), errors)
-    |> Map.put(:status_message, "Account save failed.")
+    |> Map.put(:status_message, save_failure_message(section))
     |> apply_form_errors(section, errors)
   end
+
+  defp save_failure_message(:profile), do: "Profile was not saved."
+  defp save_failure_message(:prefs), do: "Preferences were not saved."
 
   @profile_labels %{location: "Location", tagline: "Tagline", real_name: "Real name"}
   @prefs_labels %{timezone: "Timezone", time_format: "Time format", theme: "Theme"}
@@ -404,11 +454,72 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp apply_form_errors(ss, _section, _errors), do: ss
 
+  # Friendly user-facing validation copy (FOG-127). Falls back to a generic
+  # "{Label} error: {message}" string for any field/message we have not yet
+  # rewritten so we never silently drop validation feedback.
   defp prefix_errors(errors, labels) do
     Map.new(errors, fn {field, message} ->
-      label = Map.get(labels, field, to_string(field))
-      {field, "#{label} error: #{message}"}
+      {field, friendly_error(field, message, labels)}
     end)
+  end
+
+  defp friendly_error(:location, msg, _labels) do
+    if String.contains?(msg, "at most") or String.contains?(msg, "character") do
+      "Location must be 80 characters or fewer."
+    else
+      "Location: #{msg}"
+    end
+  end
+
+  defp friendly_error(:tagline, msg, _labels) do
+    if String.contains?(msg, "at most") or String.contains?(msg, "character") do
+      "Tagline must be 120 characters or fewer."
+    else
+      "Tagline: #{msg}"
+    end
+  end
+
+  defp friendly_error(:real_name, msg, _labels) do
+    cond do
+      String.contains?(msg, "blank") or String.contains?(msg, "required") ->
+        "Real name is required."
+
+      String.contains?(msg, "at most") or String.contains?(msg, "character") ->
+        "Real name must be 120 characters or fewer."
+
+      true ->
+        "Real name: #{msg}"
+    end
+  end
+
+  defp friendly_error(:timezone, msg, _labels) do
+    cond do
+      String.contains?(msg, "blank") or String.contains?(msg, "required") ->
+        "Timezone is required."
+
+      String.contains?(msg, "IANA") or String.contains?(msg, "timezone") ->
+        "Timezone must be a valid IANA name, like America/Chicago."
+
+      true ->
+        "Timezone: #{msg}"
+    end
+  end
+
+  defp friendly_error(:time_format, _msg, _labels), do: "Time format must be 12h or 24h."
+
+  defp friendly_error(:preferences, msg, _labels) do
+    if String.contains?(msg, "time_format") do
+      "Time format must be 12h or 24h."
+    else
+      "Preferences: #{msg}"
+    end
+  end
+
+  defp friendly_error(:theme, _msg, _labels), do: "Theme is not available."
+
+  defp friendly_error(field, message, labels) do
+    label = Map.get(labels, field, to_string(field))
+    "#{label} error: #{message}"
   end
 
   defp error_field(:profile), do: :profile_errors
@@ -424,7 +535,14 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   @prefs_focus_index %{timezone: 0, time_format: 1, theme: 2}
+  @prefs_focus_atom %{0 => :timezone, 1 => :time_format, 2 => :theme}
 
+  # Pre-dispatch: tests/seeders write `prefs_focus` directly on the struct;
+  # mirror it onto `prefs_form.focus_index` so Modal.Form dispatches to the
+  # field the screen thinks is focused. After PrefsForm runs,
+  # `sync_prefs_focus_from_form/1` mirrors any focus advancement (Tab,
+  # Shift-Tab, Enter) back into `prefs_focus` so this pre-dispatch step does
+  # not stomp Modal.Form's focus on the next keystroke (FOG-139).
   defp sync_prefs_focus(%State{prefs_focus: pf, prefs_form: form} = ss)
        when not is_nil(form) do
     idx = Map.get(@prefs_focus_index, pf, 0)
@@ -437,4 +555,14 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp sync_prefs_focus(ss), do: ss
+
+  # Dialyzer infers `prefs_form` is always set by the time this helper runs
+  # (PrefsForm.handle_key only succeeds when the form is built), so a nil
+  # fallback would be flagged as unreachable.
+  defp sync_prefs_focus_from_form(%State{prefs_form: %{focus_index: idx}} = ss) do
+    case Map.get(@prefs_focus_atom, idx) do
+      nil -> ss
+      atom -> %{ss | prefs_focus: atom}
+    end
+  end
 end

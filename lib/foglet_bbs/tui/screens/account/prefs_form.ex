@@ -64,7 +64,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
          %{
            state
            | prefs_dirty?: false,
-             status_message: "Preferences ready to save.",
+             status_message: nil,
              candidate_theme_id: nil
          }, [{:account_save_prefs, attrs}]}
 
