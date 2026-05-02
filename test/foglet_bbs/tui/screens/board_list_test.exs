@@ -268,9 +268,9 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
     {state, []} = BoardList.update({:key, %{key: :char, char: "u"}}, state, ctx)
 
-    assert state.feedback == "This board is a required subscription."
+    assert state.feedback == "Required subscriptions can't be cancelled."
     flat = BoardList.render(state, ctx) |> flatten_text()
-    assert flat =~ "required subscription"
+    assert flat =~ "Required subscriptions"
     assert flat =~ "⚿"
     refute flat =~ "[required]"
   end
@@ -310,12 +310,12 @@ defmodule Foglet.TUI.Screens.BoardListTest do
         ctx
       )
 
-    assert state.feedback == "This board is a required subscription."
+    assert state.feedback == "Required subscriptions can't be cancelled."
 
     {state, []} =
       BoardList.update({:task_result, :subscribe_to_board, {:error, :board_archived}}, state, ctx)
 
-    assert state.feedback == "That board is archived."
+    assert state.feedback == "This board is archived; you can't subscribe."
 
     {state, []} =
       BoardList.update({:task_result, :subscribe_to_board, {:error, :unavailable}}, state, ctx)

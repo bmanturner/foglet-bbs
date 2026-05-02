@@ -139,8 +139,11 @@ defmodule Foglet.TUI.Screens.BoardList do
          focused when is_map(focused) <- BoardTree.focused_board_entry(tree) do
       case focused do
         %{required_subscription?: true} ->
-          {%{local_state | board_tree: tree, feedback: "This board is a required subscription."},
-           []}
+          {%{
+             local_state
+             | board_tree: tree,
+               feedback: "Required subscriptions can't be cancelled."
+           }, []}
 
         %{board: board, subscribed?: true} ->
           local_state = %{
@@ -153,7 +156,7 @@ defmodule Foglet.TUI.Screens.BoardList do
           {local_state, [subscription_effect(:unsubscribe_from_board, board, context)]}
 
         %{subscribed?: false} ->
-          {%{local_state | board_tree: tree, feedback: "Not subscribed."}, []}
+          {%{local_state | board_tree: tree}, []}
       end
     else
       _other -> {local_state, []}
@@ -178,7 +181,7 @@ defmodule Foglet.TUI.Screens.BoardList do
       {:error, :required_subscription} ->
         {%{
            local_state
-           | feedback: "This board is a required subscription.",
+           | feedback: "Required subscriptions can't be cancelled.",
              last_op: nil,
              last_error: :required_subscription
          }, []}
@@ -186,7 +189,7 @@ defmodule Foglet.TUI.Screens.BoardList do
       {:error, :board_archived} ->
         {%{
            local_state
-           | feedback: "That board is archived.",
+           | feedback: "This board is archived; you can't subscribe.",
              last_op: nil,
              last_error: :board_archived
          }, []}
@@ -421,7 +424,7 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp subscription_label(%{required_subscription?: true}), do: "required"
   defp subscription_label(%{subscribed?: true}), do: "subscribed"
-  defp subscription_label(_entry), do: "subscribe"
+  defp subscription_label(_entry), do: "available"
 
   defp unread_label(nil), do: nil
   defp unread_label(0), do: "all read"
