@@ -4,62 +4,116 @@ defmodule Foglet.Config.TestIsolationTest do
 
   `Foglet.Config` writes go through ETS (`:foglet_config`), which the Ecto
   sandbox does not roll back. A test that mutates a key without invalidating
-  the cache on exit can leave a stale value visible to the rest of the suite.
-  Originally surfaced as a CI flake on PR #33 / FOG-253 where a sibling test
-  pinned `registration_mode = "invite_only"` and downstream registration
-  assertions then failed with `invite_code: is invalid or unavailable`.
+  the cache on exit can leave a stale value visible to the rest of the suite
+  (originally surfaced on PR #33 / FOG-253 as a sticky
+  `registration_mode = "invite_only"` that broke unrelated `register_user`
+  assertions with `invite_code: is invalid or unavailable`).
 
-  This file pairs two sequential tests: step A mutates `registration_mode`
-  through `FogletBbs.ConfigTestHelpers.put_config!/3`, step B asserts the
-  ETS cache was invalidated on step A's exit. ExUnit runs tests within a
-  module in source order, so step B observes step A's exit-time effects
-  even at `--seed 0`.
+  These tests pin `FogletBbs.ConfigTestHelpers`' contract directly: after a
+  helper-managed mutation, an `on_exit` callback is registered with
+  `ExUnit.OnExitHandler` that invalidates the ETS row. We drive that handler
+  ourselves against a controlled child pid so the assertion is deterministic
+  under any `--seed` and does not depend on inter-test ordering.
 
   `async: false` is required because `:foglet_config` is a process-global
-  named ETS table — we must own ordering relative to siblings.
+  named ETS table.
   """
 
   use FogletBbs.DataCase, async: false
 
+  alias ExUnit.OnExitHandler
   alias Foglet.Config
   alias FogletBbs.ConfigTestHelpers
 
   setup do
     Config.init_cache()
     Config.invalidate("registration_mode")
+    Config.invalidate("delivery_mode")
     Config.put!("registration_mode", "open", nil)
-    on_exit(fn -> Config.invalidate("registration_mode") end)
+    Config.put!("delivery_mode", "no_email", nil)
+
+    on_exit(fn ->
+      Config.invalidate("registration_mode")
+      Config.invalidate("delivery_mode")
+    end)
+
     :ok
   end
 
-  describe "FOG-263 regression" do
-    test "step A: put_config!/3 mutates registration_mode for this test" do
+  describe "put_config!/3" do
+    test "registers an on_exit callback that invalidates the ETS cache for the key" do
       assert Config.get!("registration_mode") == "open"
-      ConfigTestHelpers.put_config!("registration_mode", "invite_only", nil)
-      assert Config.get!("registration_mode") == "invite_only"
-    end
 
-    test "step B: ETS cache was invalidated on step A's exit (no leak)" do
-      # The sandbox rolled back step A's DB write; without ETS invalidation
-      # the cache would still hand back "invite_only" and this read would
-      # raise `Ecto.NoResultsError` on the cache miss path or return the
-      # stale cached string. With the helper's on_exit invalidation the
-      # cache miss reloads from DB, where setup just seeded "open".
-      assert Config.get!("registration_mode") == "open"
+      child =
+        run_in_isolated_test_pid(fn ->
+          ConfigTestHelpers.put_config!("registration_mode", "invite_only", nil)
+        end)
+
+      # The mutation is visible (DB sandbox is shared with this owner pid; the
+      # helper's put!/3 invalidates ETS, so a re-read repopulates from DB).
+      assert Config.get!("registration_mode") == "invite_only"
+
+      # Drive the on_exit callbacks that ExUnit would fire on test exit.
+      assert OnExitHandler.run(child, 5_000) == :ok
+
+      refute :ets.member(:foglet_config, "registration_mode"),
+             "expected put_config!/3's on_exit callback to drop the registration_mode cache row"
     end
   end
 
   describe "ensure_config_isolated/1" do
-    test "drops listed keys from the ETS cache on test exit" do
-      Config.put!("registration_mode", "invite_only", nil)
-      assert Config.get!("registration_mode") == "invite_only"
+    test "registers an on_exit callback that invalidates each listed key" do
+      # Prime the cache so we can observe invalidation.
+      assert Config.get!("registration_mode") == "open"
+      assert Config.get!("delivery_mode") == "no_email"
+      assert :ets.member(:foglet_config, "registration_mode")
+      assert :ets.member(:foglet_config, "delivery_mode")
 
-      ConfigTestHelpers.ensure_config_isolated(["registration_mode"])
+      child =
+        run_in_isolated_test_pid(fn ->
+          :ok = ConfigTestHelpers.ensure_config_isolated(["registration_mode", "delivery_mode"])
+        end)
 
-      # The on_exit hook registered above will invalidate after this test
-      # body returns. We can at least verify the helper itself is a no-op
-      # synchronously and does not blow up on an empty key list.
+      assert OnExitHandler.run(child, 5_000) == :ok
+
+      refute :ets.member(:foglet_config, "registration_mode")
+      refute :ets.member(:foglet_config, "delivery_mode")
+    end
+
+    test "an empty key list is a no-op that returns :ok" do
       assert ConfigTestHelpers.ensure_config_isolated([]) == :ok
     end
+  end
+
+  # ---- helpers --------------------------------------------------------------
+
+  # `ExUnit.Callbacks.on_exit/1` binds to `self()` and writes through
+  # `ExUnit.OnExitHandler`. To unit-test the helper's contract without
+  # depending on ExUnit's per-test lifecycle (and the inter-test ordering
+  # that an "A then B" pair would imply), we run the helper inside a
+  # short-lived child process that we explicitly register with the handler.
+  # After the child exits we hand its pid to the caller so they can drive
+  # `OnExitHandler.run/2` and assert the registered callbacks fire.
+  defp run_in_isolated_test_pid(fun) when is_function(fun, 0) do
+    parent = self()
+
+    child =
+      spawn(fn ->
+        OnExitHandler.register(self())
+        fun.()
+        send(parent, {:ready, self()})
+
+        receive do
+          :exit -> :ok
+        end
+      end)
+
+    assert_receive {:ready, ^child}, 5_000
+
+    ref = Process.monitor(child)
+    send(child, :exit)
+    assert_receive {:DOWN, ^ref, :process, ^child, _}, 5_000
+
+    child
   end
 end
