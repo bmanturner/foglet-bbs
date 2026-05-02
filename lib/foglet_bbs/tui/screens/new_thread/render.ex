@@ -98,7 +98,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
       %{
         label: "Actions",
         commands: [
-          %{key: "Ctrl+S", label: "Submit", priority: 5},
+          %{key: "Ctrl+S", label: "Post", priority: 5},
           %{key: "Ctrl+C", label: "Cancel", priority: 5}
         ]
       }

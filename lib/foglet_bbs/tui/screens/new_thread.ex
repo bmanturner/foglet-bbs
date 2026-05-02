@@ -325,11 +325,41 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp format_error(:board_archived), do: "That board has been archived. Pick another."
 
   defp format_error(%Ecto.Changeset{} = cs) do
-    Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+    Enum.map_join(cs.errors, ", ", fn {field, {msg, opts}} ->
+      "#{humanize_field(field)}: #{humanize_changeset_message(msg, opts)}"
+    end)
   end
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(_reason), do: "Could not create thread."
+
+  defp humanize_field(field) when is_atom(field),
+    do: field |> Atom.to_string() |> humanize_field()
+
+  defp humanize_field(field) when is_binary(field) do
+    field
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp humanize_changeset_message(msg, opts) when is_binary(msg) do
+    msg
+    |> interpolate_changeset_opts(opts)
+    |> strip_plural_artifact()
+  end
+
+  defp humanize_changeset_message(msg, _opts), do: msg
+
+  defp interpolate_changeset_opts(msg, opts) when is_list(opts) do
+    Enum.reduce(opts, msg, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
+
+  defp interpolate_changeset_opts(msg, _opts), do: msg
+
+  defp strip_plural_artifact(msg) when is_binary(msg), do: String.replace(msg, "(s)", "s")
+  defp strip_plural_artifact(msg), do: msg
 
   defp context_with_config_limits(%Context{} = context) do
     session_context =
