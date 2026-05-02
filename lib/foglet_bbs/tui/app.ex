@@ -335,6 +335,12 @@ defmodule Foglet.TUI.App do
     Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
 
+  # FOG-253: forward board-screen presence broadcasts (FOG-250) to the active
+  # screen so `BoardScreen` can re-render its `2 CHAT (#)` counter.
+  defp do_update({:board_screen, _event, _payload} = msg, state) do
+    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
+  end
+
   # User-level notifications — show a modal badge.
   defp do_update({:notification, _user_id, kind, payload}, state) do
     modal = %Foglet.TUI.Modal{

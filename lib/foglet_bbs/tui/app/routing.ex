@@ -262,7 +262,7 @@ defmodule Foglet.TUI.App.Routing do
   defp built_in_screen_module_for(:verify), do: Screens.Verify
   defp built_in_screen_module_for(:main_menu), do: Screens.MainMenu
   defp built_in_screen_module_for(:board_list), do: Screens.BoardList
-  defp built_in_screen_module_for(:thread_list), do: Screens.ThreadList
+  defp built_in_screen_module_for(:thread_list), do: Screens.BoardScreen
   defp built_in_screen_module_for(:post_reader), do: Screens.PostReader
   defp built_in_screen_module_for(:post_composer), do: Screens.PostComposer
   defp built_in_screen_module_for(:new_thread), do: Screens.NewThread

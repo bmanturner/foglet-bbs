@@ -23,6 +23,10 @@
   {"lib/foglet_bbs/tui/screens/login.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/new_thread.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/screens/post_reader.ex", :contract_supertype},
+  # FOG-253: ThreadList.render/2 surfaces the same Raxol-element-return
+  # warning after C5 added the public render_inner_content/2 helper next
+  # to it. Same C2 pattern as the other entries in this bucket.
+  {"lib/foglet_bbs/tui/screens/thread_list.ex", :contract_supertype},
   {"lib/foglet_bbs/tui/size_gate.ex", :contract_supertype},
   # Phase 47-03 R5: ScreenFrame.render/4 returns a Raxol element struct;
   # narrowing the @spec emits a fresh :contract_supertype on the same line
