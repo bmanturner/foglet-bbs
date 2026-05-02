@@ -111,15 +111,15 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     [
       columns: [
         %{key: :when, label: "When", width: 14, priority: 80, demand: :content},
-        %{key: :actor, label: "Actor", width: 9, priority: 60, demand: :content},
+        %{key: :actor, label: "Mod", width: 9, priority: 60, demand: :content},
         %{key: :action, label: "Action", width: 9, priority: 50, demand: :content},
-        %{key: :body, label: "Body", width: 14, grow: 5, priority: 100, demand: :content},
+        %{key: :body, label: "Oneliner", width: 14, grow: 5, priority: 100, demand: :content},
         %{key: :reason, label: "Reason", width: 10, grow: 3, priority: 70, demand: :content}
       ],
       rows: items,
       selectable: false,
       width: Keyword.get(opts, :width),
-      empty_state: "No moderation events in scope."
+      empty_state: "No moderation events for this scope."
     ]
     |> maybe_put_page_size(opts)
     |> ConsoleTable.init()
@@ -148,7 +148,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       rows: items,
       selectable: false,
       width: Keyword.get(opts, :width),
-      empty_state: "No active users in scope."
+      empty_state: "No users found for this scope."
     ]
     |> maybe_put_page_size(opts)
     |> ConsoleTable.init()
@@ -177,7 +177,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       rows: items,
       selectable: false,
       width: Keyword.get(opts, :width),
-      empty_state: "No boards in scope."
+      empty_state: "No boards visible in this scope."
     ]
     |> maybe_put_page_size(opts)
     |> ConsoleTable.init()
@@ -206,12 +206,12 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       if error do
         %{label: "Status", value: to_string(error), state: :error}
       else
-        %{label: "Status", value: "Read-only", state: :info}
+        %{label: "Status", value: "Viewing only", state: :info}
       end
 
     [
       %{label: "Scope", value: scope_label},
-      %{label: "Type", value: "hide_oneliner audit log"},
+      %{label: "Type", value: "Oneliner moderation log"},
       %{label: "Events", value: Integer.to_string(count)},
       status_entry
     ]
@@ -231,7 +231,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       if error do
         %{label: "Status", value: to_string(error), state: :error}
       else
-        %{label: "Status", value: "Read-only", state: :info}
+        %{label: "Status", value: "Viewing only", state: :info}
       end
 
     [
@@ -250,11 +250,11 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     scope_label = format_scopes(scopes)
     count = length(boards)
 
-    status_value = if error, do: to_string(error), else: "Read-only"
+    status_value = if error, do: to_string(error), else: "Viewing only"
 
     [
       %{label: "Scope", value: scope_label},
-      %{label: "Context", value: "hide_oneliner scope: #{scope_label}"},
+      %{label: "Context", value: "Visible boards: #{scope_label}"},
       %{label: "Boards", value: Integer.to_string(count)},
       %{label: "Status", value: status_value}
     ]
@@ -309,7 +309,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
   defp format_scopes(scopes), do: Enum.map_join(scopes, ", ", &format_scope/1)
 
   defp format_scope(:site), do: "site"
-  defp format_scope({:board, board_id}), do: "board:#{board_id}"
+  defp format_scope({:board, board_id}), do: "board #{board_id}"
   defp format_scope(scope), do: to_string(scope)
 
   defp field(nil, _key, default), do: default

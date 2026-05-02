@@ -172,7 +172,7 @@ defmodule Foglet.TUI.Screens.Moderation do
 
       empty =
         column style: %{gap: 0} do
-          [text("Moderation is not available.", fg: theme.warning.fg)]
+          [text("Moderation is not available for this account.", fg: theme.warning.fg)]
         end
 
       ScreenFrame.render(state, moderation_chrome(), empty, [
@@ -204,20 +204,56 @@ defmodule Foglet.TUI.Screens.Moderation do
   # The hardcoded literal pair (key=1-6, label=Jump) no longer appears in
   # this module — verified by grep test in layout_smoke_test.exs.
   defp key_list(ss) do
-    [
-      %{
-        label: "Tabs",
-        commands: [
-          %{key: "←/→", label: "Tab", priority: 10},
-          %{key: jump_hint(length(tab_labels_from_tabs(ss.tabs))), label: "Jump", priority: 10}
-        ]
-      },
-      %{
-        label: "System",
-        commands: [%{key: "Q", label: "Back", priority: 0}]
-      }
-    ]
+    tabs_group = %{
+      label: "Tabs",
+      commands: [
+        %{key: "←/→", label: "Tab", priority: 10},
+        %{key: jump_hint(length(tab_labels_from_tabs(ss.tabs))), label: "Jump", priority: 10}
+      ]
+    }
+
+    system_group = %{
+      label: "System",
+      commands: [%{key: "Q", label: "Back", priority: 0}]
+    }
+
+    middle = middle_groups(Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab), ss)
+
+    [tabs_group | middle] ++ [system_group]
   end
+
+  # FOG-164: ScreenFrame keybar is active-tab aware on INVITES so revoke /
+  # generate / refresh hints are first-class command-bar entries (not body-only).
+  # Mirrors `Foglet.TUI.Screens.Account.Render.middle_groups/2`.
+  defp middle_groups("INVITES", %State{invites: %{mode: invites_mode}}) do
+    case invites_mode do
+      :confirm_revoke ->
+        [
+          %{
+            label: "Actions",
+            commands: [
+              %{key: "Enter", label: "Revoke invite", priority: 30},
+              %{key: "Esc", label: "Keep invite", priority: 30}
+            ]
+          }
+        ]
+
+      _ ->
+        [
+          %{label: "List", commands: [%{key: "↑/↓", label: "Select", priority: 20}]},
+          %{
+            label: "Actions",
+            commands: [
+              %{key: "G", label: "Generate invite", priority: 30},
+              %{key: "R", label: "Refresh", priority: 25},
+              %{key: "D", label: "Revoke invite", priority: 30}
+            ]
+          }
+        ]
+    end
+  end
+
+  defp middle_groups(_label, _ss), do: []
 
   defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
   # IN-01 (iteration 6): the iteration-3 IN-03 defense in
@@ -264,7 +300,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
-        text("No report queue workflow is available in v1.1.", fg: theme.dim.fg)
+        text("Report queue is not available yet.", fg: theme.dim.fg)
       ]
       |> Enum.reject(&is_nil/1)
     end
@@ -294,7 +330,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     column style: %{gap: 0} do
       [
         status_line(ss, theme),
-        text("No sanction workflow is available in v1.1.", fg: theme.dim.fg)
+        text("Sanctions are not available yet.", fg: theme.dim.fg)
       ]
       |> Enum.reject(&is_nil/1)
     end
@@ -316,7 +352,7 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp render_tab_body(_label, _ss, theme, _width, _height, _user, _timezone) do
     column style: %{gap: 0} do
-      [text("No report queue workflow is available in v1.1.", fg: theme.dim.fg)]
+      [text("This moderation tab is not available.", fg: theme.dim.fg)]
     end
   end
 
@@ -326,7 +362,7 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp status_line(%{error: nil}, _theme), do: nil
 
   defp status_line(%{error: error}, theme),
-    do: text("Unable to load moderation workspace: #{truncate(error)}", fg: theme.error.fg)
+    do: text("Could not load moderation workspace: #{truncate(error)}", fg: theme.error.fg)
 
   defp truncate(value, limit \\ @text_limit)
 
@@ -436,20 +472,32 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp handle_invites_update(event, %State{} = ss, %Context{} = context) do
     key = key_for_invites(event)
+    invites = ss.invites
+    mode = Map.get(invites, :mode, :list)
 
-    case key do
-      key when key in ["r", "R"] ->
-        {ss, [invites_effect(:moderation_load_invites, context, ss.invites)]}
+    case {key, mode} do
+      {key, :list} when key in ["r", "R"] ->
+        {ss, [invites_effect(:moderation_load_invites, context, invites)]}
 
-      key when key in ["g", "G"] ->
-        {ss, [invites_effect(:moderation_generate_invite, context, ss.invites)]}
+      {key, :list} when key in ["g", "G"] ->
+        {ss, [invites_effect(:moderation_generate_invite, context, invites)]}
 
-      key when key in ["d", "D"] ->
-        {ss, [invites_effect(:moderation_revoke_invite, context, ss.invites)]}
+      # FOG-164: D arms the confirm flow rather than dispatching the revoke directly.
+      {key, :list} when key in ["d", "D"] ->
+        {%{ss | invites: Foglet.TUI.Screens.Shared.InvitesState.start_confirm_revoke(invites)},
+         []}
+
+      {:enter, :confirm_revoke} ->
+        cleared = %{invites | mode: :list, confirm_target: nil}
+        {%{ss | invites: cleared}, [invites_effect(:moderation_revoke_invite, context, cleared)]}
+
+      {:escape, :confirm_revoke} ->
+        {%{ss | invites: Foglet.TUI.Screens.Shared.InvitesState.cancel_confirm_revoke(invites)},
+         []}
 
       _ ->
-        case InvitesActions.handle_key(key, context.current_user, ss.invites) do
-          {:ok, invites} -> {%{ss | invites: invites}, []}
+        case InvitesActions.handle_key(key, context.current_user, invites) do
+          {:ok, new_invites} -> {%{ss | invites: new_invites}, []}
           :no_match -> {ss, []}
         end
     end
