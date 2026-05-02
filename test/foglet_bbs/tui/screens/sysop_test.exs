@@ -2391,6 +2391,51 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert moved_state.screen_state.sysop.armed_revoke? == false
     end
 
+    test "FOG-175: D arms even when INVITES tab was just entered via tab nav (last_action carry-over)",
+         %{state: state, sysop: sysop} do
+      # Repro for FOG-175: in live SSH the user always reaches INVITES via a
+      # tab-changing key (Right arrow or `6`). That sets the Tabs widget's
+      # `last_action` to {:tab_changed, _}. The first per-tab key after the
+      # navigation (e.g. D/d) flips `last_action` to nil, which used to make
+      # `handle_update_key/3`'s `new_tabs == ss.tabs` check fail and route
+      # the event through the "tabs changed" branch — clearing
+      # armed_revoke? and never reaching delegate_update_to_invites/3.
+      invites = build_invites([:available, :available], 0)
+
+      # Start one tab to the left of INVITES, then nav onto INVITES so the
+      # Tabs wrapper has a fresh {:tab_changed, _} `last_action` residue.
+      state =
+        state
+        |> Map.put(:current_user, sysop)
+        |> with_invite_policy("sysop_only")
+
+      ss =
+        SysopState.new(
+          active: 4,
+          current_user: state.current_user,
+          session_context: state.session_context
+        )
+
+      state = put_in(state, [:screen_state, :sysop], %{ss | invites: invites})
+
+      {:update, on_invites_state, _} = handle_sysop_key(%{key: :right}, state)
+      assert Enum.at(SysopState.tab_labels(on_invites_state.screen_state.sysop), 5) == "INVITES"
+      assert on_invites_state.screen_state.sysop.active_tab == 5
+      assert on_invites_state.screen_state.sysop.tabs.last_action == {:tab_changed, 5}
+
+      # The seeded invites might have been wiped by the tab change's
+      # `maybe_request_invites_load` clobber; re-seed them so we can assert
+      # on the arm path directly.
+      seeded =
+        update_in(on_invites_state, [:screen_state, :sysop], fn s -> %{s | invites: invites} end)
+
+      {:update, armed_state, events} = handle_sysop_key(%{key: :char, char: "D"}, seeded)
+
+      assert armed_state.screen_state.sysop.armed_revoke? == true
+      assert events == []
+      assert armed_state.screen_state.sysop.invites.items == invites.items
+    end
+
     test "no new revoke logic added in invites_actions.ex (D-25 boundary lock)" do
       # The existing revoke_selected/2 path is the only side effect. This grep
       # guard ensures Plan 04 didn't introduce duplicate revoke logic.
