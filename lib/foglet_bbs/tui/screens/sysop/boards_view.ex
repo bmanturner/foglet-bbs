@@ -410,20 +410,26 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       %{
         name: :chat_enabled,
         type: :boolean,
-        label: "Chat enabled",
+        label: "Chat",
+        description:
+          "When on, this board adds a CHAT tab next to THREADS. Off keeps the board threads-only. Storage mode and TTL below apply once chat is on.",
         value: Map.get(values, :chat_enabled, false)
       },
       %{
         name: :chat_storage_mode,
         type: :enum,
-        label: "Chat storage mode (ephemeral / permanent)",
+        label: "Chat storage",
+        description:
+          "Ephemeral — messages live in memory only and expire (use the TTL below). Permanent — messages are saved to the database and reload when users open chat.",
         choices: @chat_storage_choices,
         value: Map.get(values, :chat_storage_mode, "ephemeral")
       },
       %{
         name: :chat_message_ttl_seconds,
         type: :integer,
-        label: "Ephemeral chat TTL (seconds, 60–86400)",
+        label: "Ephemeral chat TTL (seconds)",
+        description:
+          "How long ephemeral messages stay visible before they expire. 60 seconds minimum, 86400 seconds (24h) maximum. Ignored when chat storage is permanent.",
         value: Map.get(values, :chat_message_ttl_seconds, 7200) |> to_string()
       }
     ]
