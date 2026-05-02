@@ -197,7 +197,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       :ok = PresenceTracker.untrack(b.id, "u1")
     end
 
-    test "pressing 1 from chat returns to threads" do
+    test "left arrow from chat returns to threads (back-nav)" do
       b = board(chat_enabled: true)
       ctx = context(b)
       state = BoardScreen.init(ctx)
@@ -206,10 +206,35 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
       assert state.current_tab == :chat
 
-      {state, []} = BoardScreen.update({:key, %{key: :char, char: "1"}}, state, ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :left}}, state, ctx)
       assert state.current_tab == :threads
 
       assert PresenceTracker.list(b.id) == [%{user_id: "u1", tab: :threads}]
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    # FOG-282: digit shortcuts on the chat tab fall through to the chat
+    # composer so messages containing '1' or '2' are not truncated by the
+    # tab-switch handler. Back-nav from chat is via ←/→ instead.
+    test "digits in chat composer are typed, not consumed as tab switches (FOG-282)" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+      assert state.current_tab == :chat
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "h"}}, state, ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "i"}}, state, ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: " "}}, state, ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "1"}}, state, ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "3"}}, state, ctx)
+
+      assert state.current_tab == :chat
+      assert state.chat_room.composer == "hi 123"
 
       :ok = PresenceTracker.untrack(b.id, "u1")
     end
@@ -245,6 +270,51 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
                %Effect{type: :navigate, payload: %{screen: :board_list}} -> true
                _ -> false
              end)
+    end
+
+    test "q from threads tab still triggers back-nav (FOG-279 regression guard)" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+      assert state.current_tab == :threads
+
+      {_state, effects} = BoardScreen.update({:key, %{key: :char, char: "q"}}, state, ctx)
+
+      assert PresenceTracker.count(b.id) == 0
+
+      assert Enum.any?(effects, fn
+               %Effect{type: :navigate, payload: %{screen: :board_list}} -> true
+               _ -> false
+             end)
+    end
+
+    test "q/Q in chat composer is typed, not consumed as back-nav (FOG-279)" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+      assert state.current_tab == :chat
+
+      {state, e1} = BoardScreen.update({:key, %{key: :char, char: "q"}}, state, ctx)
+      {state, e2} = BoardScreen.update({:key, %{key: :char, char: "a"}}, state, ctx)
+      {state, e3} = BoardScreen.update({:key, %{key: :char, char: "b"}}, state, ctx)
+      {state, e4} = BoardScreen.update({:key, %{key: :char, char: "c"}}, state, ctx)
+      {state, e5} = BoardScreen.update({:key, %{key: :char, char: "Q"}}, state, ctx)
+
+      assert state.current_tab == :chat
+      assert state.chat_room.composer == "qabcQ"
+
+      for effects <- [e1, e2, e3, e4, e5] do
+        refute Enum.any?(effects, fn
+                 %Effect{type: :navigate, payload: %{screen: :board_list}} -> true
+                 _ -> false
+               end)
+      end
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
     end
   end
 

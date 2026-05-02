@@ -39,6 +39,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   """
 
   alias Foglet.BoardChat
+  alias Foglet.Boards.Board
   alias Foglet.Sessions.BoardScreen, as: PresenceTracker
   alias Foglet.TimeAgo
   alias Foglet.TUI.Context
@@ -84,10 +85,11 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   def load_effects(%State{board: nil} = state, _context), do: {state, []}
 
   def load_effects(%State{} = state, %Context{} = context) do
-    board = state.board
+    board = to_board_struct(state.board)
+    screen_key = task_screen_key(context)
 
     history_effect =
-      Effect.task(:load_chat_history, :chat_room, fn ->
+      Effect.task(:load_chat_history, screen_key, fn ->
         BoardChat.recent(board)
       end)
 
@@ -393,22 +395,40 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     {%{state | last_error: :not_authenticated}, []}
   end
 
-  defp submit_composer(%State{} = state, %Context{current_user: user}) do
+  defp submit_composer(%State{} = state, %Context{current_user: user} = context) do
     body = String.trim(state.composer)
 
     if body == "" do
       {%{state | composer: ""}, []}
     else
-      board = state.board
+      board = to_board_struct(state.board)
+      screen_key = task_screen_key(context)
 
       effect =
-        Effect.task(:send_chat, :chat_room, fn ->
+        Effect.task(:send_chat, screen_key, fn ->
           BoardChat.post(board, user, body)
         end)
 
       {%{state | composer: "", status: :sending, last_error: nil}, [effect]}
     end
   end
+
+  # ChatRoom is embedded inside `BoardScreen` at the `:thread_list` route key —
+  # there is no top-level `:chat_room` screen. Tasks must be dispatched with the
+  # active route's key so `Foglet.TUI.App.Routing.route_screen_update/3` can find
+  # the screen module (`BoardScreen`) and forward the `{:task_result, ...}` to
+  # this reducer. Falls back to `:thread_list` when context.route is missing.
+  defp task_screen_key(%Context{route: route}) when is_atom(route) and not is_nil(route),
+    do: route
+
+  defp task_screen_key(_context), do: :thread_list
+
+  # Route params land here as a plain map (see BoardList.board_identity/1) but
+  # `Foglet.BoardChat` dispatches on `%Board{}` field guards. Coerce so the task
+  # closure does not raise FunctionClauseError before reaching Repo.insert.
+  defp to_board_struct(%Board{} = b), do: b
+  defp to_board_struct(%{} = m), do: struct(Board, m)
+  defp to_board_struct(other), do: other
 
   defp append_message(%State{messages: msgs} = state, msg) do
     %{state | messages: msgs ++ [msg]}
