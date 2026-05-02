@@ -2510,6 +2510,49 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert armed_state.screen_state.sysop.invites.items == invites.items
     end
 
+    test "FOG-179: g generates an invite on the first press after navigating into INVITES via Right arrow",
+         %{state: state, sysop: sysop} do
+      # Regression for FOG-179: handle_update_key/3 must gate on the Tabs
+      # `action` alone, not on `new_tabs == ss.tabs`. Reaching INVITES via a
+      # tab-changing key seeds tabs.last_action with `{:tab_changed, _}`. The
+      # next non-nav key (here `g`) flips last_action to nil, which would have
+      # made a struct-equality guard misroute the press into the tab-change
+      # branch and silently drop the generate effect.
+      state =
+        state
+        |> Map.put(:current_user, sysop)
+        |> with_invite_policy("sysop_only")
+
+      ss =
+        SysopState.new(
+          active: 4,
+          current_user: state.current_user,
+          session_context: state.session_context
+        )
+
+      state = put_in(state, [:screen_state, :sysop], ss)
+
+      {:update, on_invites_state, _} = handle_sysop_key(%{key: :right}, state)
+      assert Enum.at(SysopState.tab_labels(on_invites_state.screen_state.sysop), 5) == "INVITES"
+      assert on_invites_state.screen_state.sysop.active_tab == 5
+      assert on_invites_state.screen_state.sysop.tabs.last_action == {:tab_changed, 5}
+
+      assert {:ok, before_items} = Invites.list_invites(sysop)
+
+      {:update, generated_state, _cmds} =
+        handle_sysop_key(%{key: :char, char: "g"}, on_invites_state)
+
+      # Active tab did not change — the press reached delegate_update_to_invites/3.
+      assert generated_state.screen_state.sysop.active_tab == 5
+
+      assert {:ok, after_items} = Invites.list_invites(sysop)
+      assert length(after_items) == length(before_items) + 1
+
+      invites_after = generated_state.screen_state.sysop.invites
+      assert invites_after.last_generated_code == hd(after_items).code
+      assert is_binary(invites_after.last_generated_code)
+    end
+
     test "no new revoke logic added in invites_actions.ex (D-25 boundary lock)" do
       # The existing revoke_selected/2 path is the only side effect. This grep
       # guard ensures Plan 04 didn't introduce duplicate revoke logic.
