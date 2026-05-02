@@ -71,6 +71,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     {"Sysops only", "sysop_only"}
   ]
 
+  @chat_storage_choices ["ephemeral", "permanent"]
+
   # ---------------------------------------------------------------------------
   # Init + list load
   # ---------------------------------------------------------------------------
@@ -404,6 +406,25 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         type: :boolean,
         label: "Required subscription",
         value: Map.get(values, :required_subscription, false)
+      },
+      %{
+        name: :chat_enabled,
+        type: :boolean,
+        label: "Chat enabled",
+        value: Map.get(values, :chat_enabled, false)
+      },
+      %{
+        name: :chat_storage_mode,
+        type: :enum,
+        label: "Chat storage mode (ephemeral / permanent)",
+        choices: @chat_storage_choices,
+        value: Map.get(values, :chat_storage_mode, "ephemeral")
+      },
+      %{
+        name: :chat_message_ttl_seconds,
+        type: :integer,
+        label: "Ephemeral chat TTL (seconds, 60–86400)",
+        value: Map.get(values, :chat_message_ttl_seconds, 7200) |> to_string()
       }
     ]
   end
@@ -440,7 +461,10 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       category_id: board.category_id,
       postable_by: to_string(board.postable_by),
       default_subscription: board.default_subscription,
-      required_subscription: board.required_subscription
+      required_subscription: board.required_subscription,
+      chat_enabled: board.chat_enabled,
+      chat_storage_mode: to_string(board.chat_storage_mode),
+      chat_message_ttl_seconds: board.chat_message_ttl_seconds
     }
   end
 

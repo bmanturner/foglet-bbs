@@ -142,6 +142,150 @@ defmodule Foglet.BoardsTest do
     end
   end
 
+  describe "Board.changeset/2 chat configuration (FOG-242 C1)" do
+    test "defaults chat fields when chat is not configured" do
+      category = category_fixture()
+
+      assert {:ok, board} =
+               Foglet.Boards.create_board(sysop_actor(), category.id, %{
+                 slug: "chat-defaults",
+                 name: "Chat Defaults"
+               })
+
+      assert board.chat_enabled == false
+      assert board.chat_storage_mode == :ephemeral
+      assert board.chat_message_ttl_seconds == 7200
+    end
+
+    test "accepts ephemeral chat with TTL inside the 60..86400 window" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "chat-ttl",
+          name: "Chat TTL",
+          chat_enabled: true,
+          chat_storage_mode: :ephemeral,
+          chat_message_ttl_seconds: 3600
+        })
+
+      assert changeset.valid?
+    end
+
+    test "accepts ephemeral chat at the bounds (60 and 86400)" do
+      category = category_fixture()
+
+      for ttl <- [60, 86_400] do
+        cs =
+          Board.changeset(%Board{category_id: category.id}, %{
+            slug: "chat-bound-#{ttl}",
+            name: "Chat Bound #{ttl}",
+            chat_enabled: true,
+            chat_storage_mode: :ephemeral,
+            chat_message_ttl_seconds: ttl
+          })
+
+        assert cs.valid?, "expected ttl=#{ttl} to be valid"
+      end
+    end
+
+    test "rejects ephemeral chat with TTL below the lower bound" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "chat-too-short",
+          name: "Chat Too Short",
+          chat_enabled: true,
+          chat_storage_mode: :ephemeral,
+          chat_message_ttl_seconds: 30
+        })
+
+      refute changeset.valid?
+
+      assert "must be between 60 and 86400 seconds" in errors_on(changeset).chat_message_ttl_seconds
+    end
+
+    test "rejects ephemeral chat with TTL above the upper bound" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "chat-too-long",
+          name: "Chat Too Long",
+          chat_enabled: true,
+          chat_storage_mode: :ephemeral,
+          chat_message_ttl_seconds: 86_401
+        })
+
+      refute changeset.valid?
+
+      assert "must be between 60 and 86400 seconds" in errors_on(changeset).chat_message_ttl_seconds
+    end
+
+    test "rejects unknown chat_storage_mode values" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "chat-bad-mode",
+          name: "Chat Bad Mode",
+          chat_storage_mode: "transient"
+        })
+
+      refute changeset.valid?
+      assert Map.has_key?(errors_on(changeset), :chat_storage_mode)
+    end
+
+    test "permanent chat ignores ephemeral TTL bounds" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "chat-permanent",
+          name: "Chat Permanent",
+          chat_enabled: true,
+          chat_storage_mode: :permanent,
+          chat_message_ttl_seconds: 1
+        })
+
+      assert changeset.valid?
+    end
+
+    test "disabled chat ignores ephemeral TTL bounds" do
+      category = category_fixture()
+
+      changeset =
+        Board.changeset(%Board{category_id: category.id}, %{
+          slug: "chat-disabled-out-of-range",
+          name: "Chat Disabled OOR",
+          chat_enabled: false,
+          chat_storage_mode: :ephemeral,
+          chat_message_ttl_seconds: 1
+        })
+
+      assert changeset.valid?
+    end
+
+    test "database constraint rejects ephemeral chat with out-of-range TTL" do
+      category = category_fixture()
+
+      assert {:error, changeset} =
+               %Board{category_id: category.id}
+               |> Board.changeset(%{
+                 slug: "chat-db-bounds",
+                 name: "Chat DB Bounds",
+                 chat_enabled: true,
+                 chat_storage_mode: :ephemeral,
+                 chat_message_ttl_seconds: 3600
+               })
+               |> Ecto.Changeset.put_change(:chat_message_ttl_seconds, 30)
+               |> Repo.insert()
+
+      assert Map.has_key?(errors_on(changeset), :chat_message_ttl_seconds)
+    end
+  end
+
   describe "Boards.scope_for/1 (Task 1)" do
     test "returns {:board, id} for a board struct" do
       category = category_fixture()
