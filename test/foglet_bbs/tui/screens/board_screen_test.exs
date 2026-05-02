@@ -189,7 +189,10 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       assert PresenceTracker.list(b.id) == [%{user_id: "u1", tab: :chat}]
 
       text = BoardScreen.render(state, ctx) |> flatten_text()
-      assert text =~ "Chat is enabled"
+      # FOG-254 C6 replaced the placeholder body with the real ChatRoom view.
+      # The empty-state line is the cheapest signal that the chat tab body
+      # is rendered instead of the threads list.
+      assert text =~ "No messages yet"
 
       :ok = PresenceTracker.untrack(b.id, "u1")
     end

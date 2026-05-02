@@ -1,0 +1,518 @@
+defmodule Foglet.TUI.Screens.ChatRoom do
+  @moduledoc """
+  Chat tab content for board screens with `chat_enabled: true` (FOG-254 C6
+  of FOG-242).
+
+  Embedded inside `Foglet.TUI.Screens.BoardScreen` rather than mounted as a
+  standalone screen route. The wrapper:
+
+    * holds a `%ChatRoom.State{}` next to its `ThreadList.State`,
+    * forwards key events and PubSub messages to `update/3` while the
+      `:chat` tab is active,
+    * calls `render/2` for the chat-tab body and merges `keybar_groups/2`
+      into the screen frame's command bar.
+
+  ## Responsive layout
+
+  `terminal_size` from `Foglet.TUI.Context` drives a three-mode layout:
+
+    * `width >= 80` — transcript + sidebar visible by default.
+    * `60 <= width < 80` — sidebar collapsed by default, Ctrl+B toggles.
+    * `width < 60` — single-pane transcript only; toggle is hidden.
+
+  The user's most-recent toggle override is sticky across width changes
+  via `sidebar_user_pref` (`:show | :hide | nil`), but a freshly-mounted
+  screen always derives its initial state from width.
+
+  See the `design` document on FOG-254 for the keybinding rationale and
+  rejected alternatives.
+
+  ## Backend wiring
+
+  Reads recent history via `Foglet.BoardChat.recent/1`, writes via
+  `Foglet.BoardChat.post/3`, and listens for `{:board_chat, :new_message,
+  msg}` on `Foglet.PubSub.board_chat_topic/1` plus presence updates on
+  `Foglet.PubSub.board_screen_topic/1`. The façade dispatches to the
+  permanent or ephemeral backend based on the board's `chat_storage_mode`,
+  so this view never branches on storage mode for read/write — only for
+  the ephemeral notice band.
+  """
+
+  alias Foglet.BoardChat
+  alias Foglet.Sessions.BoardScreen, as: PresenceTracker
+  alias Foglet.TimeAgo
+  alias Foglet.TUI.Context
+  alias Foglet.TUI.Effect
+  alias Foglet.TUI.Screens.ChatRoom.State
+  alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.Theme
+
+  import Raxol.Core.Renderer.View
+
+  @sidebar_width 20
+  @sidebar_min_width 60
+  @sidebar_default_width 80
+  @transcript_history_lines 1_000
+  @ephemeral_notice_placeholder "Ephemeral chat — messages fade after the board's TTL."
+  @empty_transcript_placeholder "No messages yet. Be the first to say hello."
+  @send_failure_message "Could not send message."
+
+  # ---------------------------------------------------------------------------
+  # init / load
+  # ---------------------------------------------------------------------------
+
+  @spec init(Context.t()) :: State.t()
+  def init(%Context{route_params: params} = context) do
+    board = board_from_params(params)
+    board_id = board_id_from_params(params)
+    user_id = context.current_user && context.current_user.id
+
+    %State{
+      board: board,
+      board_id: board_id,
+      user_id: user_id
+    }
+  end
+
+  @doc """
+  Effects to run when the chat tab becomes active. Loads recent history and
+  the current online list. Idempotent — only loads once per State instance.
+  """
+  @spec load_effects(State.t() | nil, Context.t()) :: {State.t() | nil, [Effect.t()]}
+  def load_effects(nil, _context), do: {nil, []}
+  def load_effects(%State{loaded?: true} = state, _context), do: {state, []}
+  def load_effects(%State{board: nil} = state, _context), do: {state, []}
+
+  def load_effects(%State{} = state, %Context{} = context) do
+    board = state.board
+
+    history_effect =
+      Effect.task(:load_chat_history, :chat_room, fn ->
+        BoardChat.recent(board)
+      end)
+
+    state =
+      %{state | status: :loading, online: refresh_online(state)}
+      |> resolve_handles(context)
+
+    {state, [history_effect]}
+  end
+
+  # ---------------------------------------------------------------------------
+  # update
+  # ---------------------------------------------------------------------------
+
+  @spec update(term(), State.t() | nil, Context.t()) :: {State.t() | nil, [Effect.t()]}
+  def update(_msg, nil, _context), do: {nil, []}
+
+  # Sidebar toggle (Ctrl+B). Decision documented on FOG-254 `design`.
+  def update({:key, %{key: :char, char: "b", ctrl: true}}, %State{} = state, %Context{} = context) do
+    {toggle_sidebar(state, context), []}
+  end
+
+  # Submit composer.
+  def update({:key, %{key: :enter}}, %State{} = state, %Context{} = context) do
+    submit_composer(state, context)
+  end
+
+  # Backspace.
+  def update({:key, %{key: :backspace}}, %State{composer: ""} = state, %Context{}) do
+    {state, []}
+  end
+
+  def update({:key, %{key: :backspace}}, %State{} = state, %Context{}) do
+    {%{state | composer: String.slice(state.composer, 0..-2//1)}, []}
+  end
+
+  # Printable char into composer. Ignore ctrl/alt-modified chars we did not
+  # explicitly bind above so they don't leak into the buffer.
+  def update({:key, %{key: :char, char: <<c::utf8>>} = ev}, %State{} = state, %Context{}) do
+    cond do
+      Map.get(ev, :ctrl, false) -> {state, []}
+      Map.get(ev, :alt, false) -> {state, []}
+      true -> {%{state | composer: state.composer <> <<c::utf8>>}, []}
+    end
+  end
+
+  # Live updates from the chat backend.
+  def update({:board_chat, :new_message, msg}, %State{} = state, %Context{} = context) do
+    state =
+      state
+      |> append_message(msg)
+      |> resolve_handles(context)
+
+    {state, []}
+  end
+
+  # Presence updates from FOG-250.
+  def update({:board_screen, _event, _payload}, %State{} = state, %Context{} = context) do
+    {%{state | online: refresh_online(state)} |> resolve_handles(context), []}
+  end
+
+  # History load result.
+  def update(
+        {:task_result, :load_chat_history, result},
+        %State{} = state,
+        %Context{} = context
+      ) do
+    messages =
+      case Effect.unwrap_task_result(result) do
+        {:ok, msgs} when is_list(msgs) -> msgs
+        _ -> []
+      end
+
+    state =
+      %{state | messages: messages, status: :idle, loaded?: true}
+      |> resolve_handles(context)
+
+    {state, []}
+  end
+
+  # Send result.
+  def update({:task_result, :send_chat, result}, %State{} = state, %Context{}) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, _msg} ->
+        # Live message arrives via PubSub; just clear the sending status.
+        {%{state | status: :idle, last_error: nil}, []}
+
+      {:error, reason} ->
+        {%{state | status: :idle, last_error: reason}, []}
+    end
+  end
+
+  def update(_msg, %State{} = state, %Context{}), do: {state, []}
+
+  # ---------------------------------------------------------------------------
+  # render
+  # ---------------------------------------------------------------------------
+
+  @spec render(State.t(), Context.t()) :: any()
+  def render(%State{} = state, %Context{} = context) do
+    theme = Theme.from_state(%{session_context: context.session_context})
+    {width, _height} = context.terminal_size || {80, 24}
+    show_sidebar? = sidebar_visible?(state, width)
+
+    column style: %{gap: 0} do
+      [
+        ephemeral_notice(state, theme),
+        body_row(state, theme, width, show_sidebar?),
+        composer_row(state, theme, width)
+      ]
+    end
+  end
+
+  defp ephemeral_notice(%State{board: %{chat_storage_mode: :ephemeral}}, theme) do
+    text("  " <> @ephemeral_notice_placeholder, fg: theme.dim.fg, style: [:italic])
+  end
+
+  defp ephemeral_notice(_state, _theme), do: text("")
+
+  defp body_row(state, theme, width, true) when width >= @sidebar_min_width do
+    transcript_width = max(width - @sidebar_width - 2, 20)
+
+    row style: %{gap: 0} do
+      [
+        transcript_pane(state, theme, transcript_width),
+        sidebar_separator(theme),
+        sidebar_pane(state, theme, @sidebar_width)
+      ]
+    end
+  end
+
+  defp body_row(state, theme, width, _show_sidebar?) do
+    transcript_pane(state, theme, max(width - 2, 20))
+  end
+
+  defp sidebar_separator(theme) do
+    column style: %{gap: 0} do
+      [text(" │ ", fg: theme.border.fg)]
+    end
+  end
+
+  defp transcript_pane(%State{messages: []} = _state, theme, _width) do
+    column style: %{gap: 0} do
+      [
+        text("  " <> @empty_transcript_placeholder, fg: theme.dim.fg, style: [:italic])
+      ]
+    end
+  end
+
+  defp transcript_pane(%State{messages: messages} = state, theme, _width) do
+    rows =
+      messages
+      |> Enum.take(-@transcript_history_lines)
+      |> Enum.map(fn msg -> transcript_row(msg, state, theme) end)
+
+    column style: %{gap: 0} do
+      rows
+    end
+  end
+
+  defp transcript_row(msg, %State{} = state, theme) do
+    handle = handle_for(state, msg)
+    body = Map.get(msg, :body, "")
+    when_label = relative_time(msg)
+
+    row style: %{gap: 0} do
+      [
+        text(handle, fg: theme.accent.fg, style: [:bold]),
+        text(" • ", fg: theme.dim.fg),
+        text(body, fg: theme.primary.fg),
+        text("  ", fg: theme.dim.fg),
+        text(when_label, fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  defp sidebar_pane(%State{} = state, theme, _width) do
+    rows = sidebar_entries(state, theme)
+
+    column style: %{gap: 0} do
+      [text("Online", fg: theme.accent.fg, style: [:bold]) | rows]
+    end
+  end
+
+  defp sidebar_entries(%State{online: []} = _state, theme) do
+    [text("(no one)", fg: theme.dim.fg, style: [:italic])]
+  end
+
+  defp sidebar_entries(%State{} = state, theme) do
+    Enum.map(state.online, fn entry ->
+      handle = handle_for_user(state, entry.user_id)
+      label = if entry.user_id == state.user_id, do: "#{handle} (you)", else: handle
+
+      text("• " <> label, fg: theme.primary.fg)
+    end)
+  end
+
+  defp composer_row(%State{} = state, theme, width) do
+    prompt = "> "
+    cursor_glyph = if state.status == :sending, do: "…", else: "▎"
+    available = max(width - 4, 10)
+    body = String.slice(state.composer, 0, available)
+
+    error_line =
+      case state.last_error do
+        nil -> text("")
+        _ -> text("  " <> @send_failure_message, fg: theme.error.fg)
+      end
+
+    column style: %{gap: 0} do
+      [
+        row style: %{gap: 0} do
+          [
+            text(prompt, fg: theme.dim.fg),
+            text(body, fg: theme.primary.fg),
+            text(cursor_glyph, fg: theme.accent.fg)
+          ]
+        end,
+        error_line
+      ]
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # subscriptions / keybar
+  # ---------------------------------------------------------------------------
+
+  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  def subscriptions(%State{board_id: board_id}, _context) when is_binary(board_id) do
+    [
+      Foglet.PubSub.board_chat_topic(board_id),
+      Foglet.PubSub.board_screen_topic(board_id)
+    ]
+  end
+
+  def subscriptions(_state, %Context{route_params: params}) do
+    case board_id_from_params(params) do
+      id when is_binary(id) ->
+        [Foglet.PubSub.board_chat_topic(id), Foglet.PubSub.board_screen_topic(id)]
+
+      _ ->
+        []
+    end
+  end
+
+  @doc """
+  Keybar groups for the chat tab, merged into the BoardScreen wrapper's
+  command bar. Always advertises Send; advertises sidebar toggle only when
+  the layout is wide enough for collapse/visible to be a meaningful choice.
+  """
+  @spec keybar_groups(State.t(), Context.t()) :: [map()]
+  def keybar_groups(%State{} = state, %Context{} = context) do
+    {width, _} = context.terminal_size || {80, 24}
+
+    chat_group = %{
+      label: "Chat",
+      commands: [%{key: "Enter", label: "Send", priority: 30}]
+    }
+
+    if width >= @sidebar_min_width do
+      toggle_label =
+        if sidebar_visible?(state, width), do: "Hide sidebar", else: "Show sidebar"
+
+      [
+        Map.update!(chat_group, :commands, fn cmds ->
+          cmds ++ [%{key: "Ctrl+B", label: toggle_label, priority: 20}]
+        end)
+      ]
+    else
+      [chat_group]
+    end
+  end
+
+  @doc """
+  Returns true when the sidebar should be rendered at `width` given the
+  user's preference. Public so the wrapper / tests can compute the same
+  layout decision without re-rendering.
+  """
+  @spec sidebar_visible?(State.t(), pos_integer()) :: boolean()
+  def sidebar_visible?(%State{sidebar_user_pref: pref}, width) do
+    cond do
+      width < @sidebar_min_width -> false
+      pref == :show -> true
+      pref == :hide -> false
+      true -> width >= @sidebar_default_width
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # helpers
+  # ---------------------------------------------------------------------------
+
+  defp toggle_sidebar(%State{} = state, %Context{} = context) do
+    {width, _} = context.terminal_size || {80, 24}
+    new_pref = if sidebar_visible?(state, width), do: :hide, else: :show
+    %{state | sidebar_user_pref: new_pref}
+  end
+
+  defp submit_composer(%State{composer: ""} = state, _context), do: {state, []}
+  defp submit_composer(%State{board: nil} = state, _context), do: {state, []}
+
+  defp submit_composer(%State{} = state, %Context{current_user: nil}) do
+    {%{state | last_error: :not_authenticated}, []}
+  end
+
+  defp submit_composer(%State{} = state, %Context{current_user: user}) do
+    body = String.trim(state.composer)
+
+    if body == "" do
+      {%{state | composer: ""}, []}
+    else
+      board = state.board
+
+      effect =
+        Effect.task(:send_chat, :chat_room, fn ->
+          BoardChat.post(board, user, body)
+        end)
+
+      {%{state | composer: "", status: :sending, last_error: nil}, [effect]}
+    end
+  end
+
+  defp append_message(%State{messages: msgs} = state, msg) do
+    %{state | messages: msgs ++ [msg]}
+  end
+
+  defp refresh_online(%State{board_id: nil}), do: []
+
+  defp refresh_online(%State{board_id: board_id}) do
+    PresenceTracker.list(board_id)
+  rescue
+    _ -> []
+  catch
+    :exit, _ -> []
+  end
+
+  defp resolve_handles(%State{} = state, %Context{} = context) do
+    accounts_mod = resolve_accounts_module(context)
+
+    needed =
+      ([state.user_id] ++
+         Enum.map(state.online, & &1.user_id) ++
+         Enum.map(state.messages, &Map.get(&1, :user_id)))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.uniq()
+      |> Enum.reject(&Map.has_key?(state.handles, &1))
+
+    if needed == [] do
+      state
+    else
+      additions =
+        needed
+        |> Enum.map(fn id -> {id, fetch_handle(accounts_mod, id)} end)
+        |> Map.new()
+
+      %{state | handles: Map.merge(state.handles, additions)}
+    end
+  end
+
+  defp fetch_handle(nil, _id), do: nil
+
+  defp fetch_handle(mod, id) do
+    if function_exported?(mod, :get_user, 1) do
+      case mod.get_user(id) do
+        %{handle: h} when is_binary(h) -> h
+        _ -> nil
+      end
+    end
+  rescue
+    _ -> nil
+  end
+
+  defp resolve_accounts_module(%Context{} = context) do
+    case Domain.get(context.session_context || %{}, :accounts) do
+      {:ok, mod} -> mod
+      {:error, :not_configured} -> Foglet.Accounts
+    end
+  end
+
+  defp handle_for(state, msg) do
+    handle_for_user(state, Map.get(msg, :user_id))
+  end
+
+  defp handle_for_user(_state, nil), do: "unknown"
+
+  defp handle_for_user(%State{handles: handles}, user_id) do
+    case Map.get(handles, user_id) do
+      h when is_binary(h) and h != "" -> h
+      _ -> "user-" <> String.slice(user_id, 0, 6)
+    end
+  end
+
+  defp relative_time(msg) do
+    case Map.get(msg, :inserted_at) do
+      %DateTime{} = dt ->
+        TimeAgo.format(dt)
+
+      %NaiveDateTime{} = ndt ->
+        ndt |> DateTime.from_naive!("Etc/UTC") |> TimeAgo.format()
+
+      ts when is_integer(ts) ->
+        case DateTime.from_unix(ts) do
+          {:ok, dt} -> TimeAgo.format(dt)
+          _ -> "?"
+        end
+
+      _ ->
+        "?"
+    end
+  end
+
+  defp board_from_params(params) when is_map(params) do
+    Map.get(params, :board) || Map.get(params, "board")
+  end
+
+  defp board_from_params(_), do: nil
+
+  defp board_id_from_params(params) when is_map(params) do
+    Map.get(params, :board_id) || Map.get(params, "board_id") ||
+      case board_from_params(params) do
+        %{id: id} -> id
+        %{"id" => id} -> id
+        _ -> nil
+      end
+  end
+
+  defp board_id_from_params(_), do: nil
+end
