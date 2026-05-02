@@ -2027,6 +2027,41 @@ defmodule Foglet.TUI.Screens.AccountTest do
       refute after_submit.status_message == "Profile ready to save."
     end
 
+    test "FOG-144: PROFILE save tolerates struct session_context (no Access crash)" do
+      user = build_user_with_profile()
+
+      session_context = %Foglet.TUI.SessionContext{
+        user: user,
+        user_id: user.id,
+        pubkey_authenticated: false,
+        registration_mode: "open",
+        max_post_length: 4_000,
+        timezone: "Etc/UTC",
+        time_format: "iso",
+        theme_id: "gray",
+        theme: Theme.default()
+      }
+
+      context =
+        Context.new(
+          current_user: user,
+          session_context: session_context,
+          route: :account
+        )
+
+      ss =
+        Account.init(context)
+        |> Map.put(:active_tab, 0)
+
+      # Land focus on the last PROFILE field, then submit with Enter.
+      {ss, []} = Account.update({:key, %{key: :tab}}, ss, context)
+      {ss, []} = Account.update({:key, %{key: :tab}}, ss, context)
+
+      {_after, effects} = Account.update({:key, %{key: :enter}}, ss, context)
+
+      assert [%Effect{type: :task, payload: %{op: :account_save_profile}}] = effects
+    end
+
     test "real_name field carries optional helper description" do
       ss = AccountState.new()
 

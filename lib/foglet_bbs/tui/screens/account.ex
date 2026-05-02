@@ -33,6 +33,7 @@ defmodule Foglet.TUI.Screens.Account do
   alias Foglet.TUI.Screens.Account.SSHKeysActions
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Account.State
+  alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Widgets.Input.Tabs
@@ -394,10 +395,13 @@ defmodule Foglet.TUI.Screens.Account do
   defp action_key(event), do: event
 
   defp domain_module(%Context{} = context, key, default) do
-    Map.get(context.domain || %{}, key) ||
-      (is_map(context.session_context) &&
-         get_in(context.session_context, [:domain, key])) ||
+    with nil <- Map.get(context.domain || %{}, key),
+         {:error, :not_configured} <- Domain.get(context.session_context || %{}, key) do
       default
+    else
+      mod when is_atom(mod) and not is_nil(mod) -> mod
+      {:ok, mod} -> mod
+    end
   end
 
   defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
