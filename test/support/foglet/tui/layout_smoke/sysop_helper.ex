@@ -37,6 +37,59 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
   defp node_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
   defp node_text(_node, acc), do: acc
 
+  @doc """
+  FOG-181: assert the SYSTEM tab footer "[R] Refresh snapshot" renders
+  strictly below every kv-row label in the positioned tree, given a list of
+  positioned text elements.
+
+  Returns a list of `{label, reason}` violations — empty when the layout is
+  clean. The caller does the ExUnit assertion so failures point at the test
+  source line.
+  """
+  @spec system_tab_footer_violations([map()]) ::
+          [{String.t(), :missing} | {String.t(), :overlap, non_neg_integer(), non_neg_integer()}]
+          | {:no_footer}
+          | {:footer_text, String.t()}
+  def system_tab_footer_violations(elements) when is_list(elements) do
+    footer_el =
+      Enum.find(elements, fn el ->
+        is_binary(Map.get(el, :text)) and String.contains?(el.text, "[R] Refresh snapshot")
+      end)
+
+    cond do
+      footer_el == nil ->
+        {:no_footer}
+
+      footer_el.text != "[R] Refresh snapshot" ->
+        {:footer_text, footer_el.text}
+
+      true ->
+        kv_row_labels = [
+          "Version:",
+          "Uptime:",
+          "Live sessions:",
+          "Active boards:",
+          "BEAM processes:",
+          "Database pool:"
+        ]
+
+        for label <- kv_row_labels,
+            violation = check_kv_row(label, elements, footer_el),
+            not is_nil(violation),
+            do: violation
+    end
+  end
+
+  defp check_kv_row(label, elements, footer_el) do
+    case Enum.find(elements, fn el ->
+           is_binary(Map.get(el, :text)) and String.contains?(el.text, label)
+         end) do
+      nil -> {label, :missing}
+      %{y: y} when y >= footer_el.y -> {label, :overlap, y, footer_el.y}
+      _ -> nil
+    end
+  end
+
   @doc false
   def render_sysop_smoke_state(state) do
     app = struct!(Foglet.TUI.App, Map.take(state, Map.keys(%Foglet.TUI.App{})))
@@ -318,6 +371,16 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               assert el.x + TextWidth.display_width(el.text) <= width,
                      "element #{inspect(el.text)} at x=#{el.x} exceeds width #{width}"
             end
+
+            # FOG-181: the SYSTEM action footer "[R] Refresh snapshot" must
+            # render strictly below every kv-row label. Before the fix the
+            # nested kv `column` was measured as a single line in the parent
+            # flex layout, so the inner rows stacked at y values that
+            # overlapped the sibling helper / footer text — the BEAM-process
+            # value bled through the shorter footer
+            # ("[R] Refresh snapshot9").
+            assert SysopHelper.system_tab_footer_violations(text_elements(positioned)) == [],
+                   "SYSTEM tab footer overlap at #{width}x#{height}: #{inspect(SysopHelper.system_tab_footer_violations(text_elements(positioned)))}"
           end
         end
       end

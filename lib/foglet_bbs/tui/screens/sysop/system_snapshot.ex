@@ -66,20 +66,26 @@ defmodule Foglet.TUI.Screens.Sysop.SystemSnapshot do
     # text nodes that previously broke the Sysop frame on the SYSTEM tab.
     kv_rows = KvGrid.render(entries, theme: theme, width: 60, label_width: 16, gap: 2)
 
-    kv_column =
-      column style: %{gap: 1} do
-        kv_rows
-      end
-
+    # FOG-181: keep kv_rows as direct children of the single outer column.
+    # A nested `column` measures as one line in the parent flex layout
+    # (children with no explicit `:height` default to a 1-line slot), so the
+    # inner kv rows rendered past that slot and overlapped the sibling
+    # helper/footer. The visible symptom was the trailing digit of the BEAM
+    # process count bleeding through the shorter footer text
+    # (e.g. "[R] Refresh snapshot9" with the "9" coming from "...709" on the
+    # BEAM processes row underneath). Flatten the structure into one column
+    # so the parent's measured height matches the actual rendered height.
     column style: %{gap: 0} do
       [
         text("System snapshot", fg: theme.title.fg, style: [:bold]),
-        text(""),
-        kv_column,
-        text(""),
-        helper,
-        footer
-      ]
+        text("")
+      ] ++
+        kv_rows ++
+        [
+          text(""),
+          helper,
+          footer
+        ]
     end
   end
 
