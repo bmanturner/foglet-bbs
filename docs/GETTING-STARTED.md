@@ -88,6 +88,24 @@ inserts:
 - A few sample threads and posts in the `general` board (a sticky welcome
   thread, "Introduce Yourself", and "General Chat") so the TUI has content
   to navigate on first run.
+- A **QA gate fixture set** (FOG-113) under the `QA Gates` category so SSH/TUI
+  QA can exercise each permission/state gate without ad-hoc DB edits:
+  - `general` → thread **"Locked: archived discussion (QA)"** — locked thread on
+    a normal board (reply/edit/delete must be rejected by the lock gate).
+  - `qa-archived` — archived board with one historical thread
+    ("Historical announcement"); board is read-only.
+  - `qa-optional` — `default_subscription: false`. `foglet` starts
+    **unsubscribed**; useful for the no-subscription / subscribe flow.
+  - `qa-required` — `default_subscription: true, required_subscription: true`.
+    `sysop` and `foglet` are pre-subscribed and unsubscribe must be rejected.
+  - `qa-mods-only` — `postable_by: :mods_only`. `foglet` (role `:user`) sees
+    the board but cannot start a thread or reply.
+
+  The QA fixtures are also runnable standalone:
+
+  ```bash
+  mix run priv/repo/seeds/qa_gates.exs
+  ```
 
 > The seed users share the password `seedpassword123!`. This is a well-known
 > dev fixture — never run `mix run priv/repo/seeds.exs` against a production

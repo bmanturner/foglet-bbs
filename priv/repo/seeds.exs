@@ -277,4 +277,11 @@ else
   else
     IO.puts("  [seed] general board not found — skipping threads/posts (run Phase 2 seeds first)")
   end
+
+  # ============================================================
+  # QA gate fixtures (FOG-113) — locked / archived / no-subscription /
+  # required-subscription / non-postable scenarios so QA can drive each gate
+  # through SSH without ad-hoc DB edits. Idempotent.
+  # ============================================================
+  Code.eval_file(Path.join(__DIR__, "seeds/qa_gates.exs"))
 end

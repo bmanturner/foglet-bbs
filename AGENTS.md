@@ -134,6 +134,20 @@ sends keys such as `enter`, `tab`, `up`, and `down`, `type <text>` sends
 literal input, `resize 100x30` changes the PTY, and `--script <path>` runs a
 newline-delimited command file. Keep credentials local and prefer test accounts.
 
+`priv/repo/seeds.exs` also creates a `QA Gates` category (FOG-113) so SSH/TUI
+QA can drive each permission/state gate without ad-hoc DB edits. Sign in as
+`sysop` or `foglet` (password `seedpassword123!`) and reach:
+
+- `general` → "Locked: archived discussion (QA)" — locked thread on a normal
+  board.
+- `qa-archived` — archived board with one historical thread.
+- `qa-optional` — `default_subscription: false`; `foglet` starts unsubscribed.
+- `qa-required` — `default_subscription: true, required_subscription: true`;
+  `sysop` and `foglet` are pre-subscribed and unsubscribe is rejected.
+- `qa-mods-only` — `postable_by: :mods_only`; `foglet` cannot post.
+
+Run standalone with `mix run priv/repo/seeds/qa_gates.exs`.
+
 ## Workflows
 
 For domain mutations: start at the owning context, add changeset fields only for
