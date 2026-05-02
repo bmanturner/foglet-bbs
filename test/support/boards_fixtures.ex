@@ -70,7 +70,16 @@ defmodule FogletBbs.BoardsFixtures do
     post
   end
 
-  @doc "Create a user via Foglet.Accounts.register_user/1."
+  @doc """
+  Create a user via `Foglet.Accounts.register_user/1`.
+
+  Delegates to `FogletBbs.AccountsFixtures.user_fixture/1` so the fixture
+  is robust to whatever global `registration_mode` the suite has left in
+  the Repo-backed `Foglet.Config` cache. When another async-false test
+  has set `registration_mode` to `"invite_only"` and its `on_exit` reset
+  has not yet propagated, `AccountsFixtures` mints and supplies a valid
+  invite code so registration still succeeds.
+  """
   def user_fixture(attrs \\ %{}) do
     attrs =
       Map.merge(
@@ -82,8 +91,7 @@ defmodule FogletBbs.BoardsFixtures do
         attrs
       )
 
-    {:ok, user} = Foglet.Accounts.register_user(attrs)
-    user
+    FogletBbs.AccountsFixtures.user_fixture(attrs)
   end
 
   @doc "Valid attrs for board creation."

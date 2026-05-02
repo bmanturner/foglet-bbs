@@ -46,7 +46,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
 
     empty =
       column style: %{gap: 0} do
-        [text("Sysop is not available.", fg: theme.warning.fg)]
+        [text("Sysop tools are not available for this account.", fg: theme.warning.fg)]
       end
 
     ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Sysop"]}, empty, [
@@ -67,7 +67,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       %{
         label: "Tabs",
         commands: [
-          %{key: "←/→", label: "Tab", priority: 10},
+          %{key: "←/→", label: "Switch", priority: 10},
           %{key: jump_hint, label: "Jump", priority: 10}
         ]
       }
@@ -202,19 +202,19 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
   # `{:error, _other}` — see Pitfall 3.
   defp loading_panel(theme) do
     column style: %{gap: 0} do
-      [text("Loading…", fg: theme.dim.fg)]
+      [text("Loading sysop tools…", fg: theme.dim.fg)]
     end
   end
 
   defp forbidden_panel(theme) do
     column style: %{gap: 0} do
-      [text("Insufficient role to view this tab.", fg: theme.warning.fg)]
+      [text("Your role no longer allows access to this tab.", fg: theme.warning.fg)]
     end
   end
 
   defp error_panel(tab, theme) do
     column style: %{gap: 0} do
-      [text("Could not load #{tab}. Press R to retry.", fg: theme.error.fg)]
+      [text("Could not load #{tab}. Press R to try again.", fg: theme.error.fg)]
     end
   end
 

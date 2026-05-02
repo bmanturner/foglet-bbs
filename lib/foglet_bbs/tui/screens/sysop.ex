@@ -114,16 +114,12 @@ defmodule Foglet.TUI.Screens.Sysop do
     ss = normalize_state(local_state, context)
     active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
 
-    case {active_label, InvitesState.selected_item(ss.invites)} do
-      {"INVITES", %{status: status}} when status != :revoked ->
-        {%{ss | armed_revoke?: true}, []}
+    case {active_label, arm_revoke_intent(ss.invites)} do
+      {"INVITES", {:arm, new_invites}} ->
+        {%{ss | invites: new_invites, armed_revoke?: true}, []}
 
-      {"INVITES", %{status: :revoked}} ->
-        {%{
-           ss
-           | invites: InvitesState.with_error(ss.invites, "Invite already revoked."),
-             armed_revoke?: false
-         }, []}
+      {"INVITES", {:already_revoked, new_invites}} ->
+        {%{ss | invites: new_invites, armed_revoke?: false}, []}
 
       _ ->
         handle_update_key(event, ss, context)
@@ -158,6 +154,26 @@ defmodule Foglet.TUI.Screens.Sysop do
 
       _ ->
         handle_update_key(event, ss, context)
+    end
+  end
+
+  # FOG-175: D/d on the INVITES tab arms the same two-step confirm flow as
+  # Enter. Handled at the top-level update clause so the Tabs wrapper's
+  # `last_action` field (set by a previous tab change to e.g.
+  # `{:tab_changed, 5}` and reset to `nil` on subsequent non-tab keys)
+  # does not spuriously trip the "tabs changed" branch in
+  # `handle_update_key/3`, which would otherwise clear `armed_revoke?` and
+  # drop the gesture. Unit tests pre-FOG-175 didn't reproduce this because
+  # they constructed states with `last_action: nil`; live SSH always carries
+  # the residue from the navigation that opened INVITES.
+  def update({:key, %{key: :char, char: c} = event}, local_state, %Context{} = context)
+      when c in ["d", "D"] do
+    ss = normalize_state(local_state, context)
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    case active_label do
+      "INVITES" -> apply_arm_revoke_intent(ss)
+      _ -> handle_update_key(event, ss, context)
     end
   end
 
@@ -220,6 +236,37 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp handle_update_key(event, %State{} = ss, %Context{} = context) do
+    if digit_consumed_by_active_tab?(event, ss) do
+      delegate_update_to_active_tab(event, ss, context)
+    else
+      route_through_tabs(event, ss, context)
+    end
+  end
+
+  # FOG-185: LIMITS is an always-editable integer form, so digit chars 0–9
+  # must reach `LimitsForm.handle_key/2` instead of being swallowed by the
+  # numeric tab-jump shortcut in `Foglet.TUI.Widgets.Input.Tabs`. The Raxol
+  # tabs component (vendor/raxol/lib/raxol/ui/components/input/tabs.ex)
+  # consumes 1–9 unconditionally, so we filter at this routing seam (the
+  # pitfall called out in the Tabs widget moduledoc).
+  defp digit_consumed_by_active_tab?(event, %State{} = ss) do
+    case Enum.at(State.tab_labels(ss), ss.active_tab) do
+      "LIMITS" -> plain_digit_event?(event)
+      _ -> false
+    end
+  end
+
+  # Modifiers are intentionally ignored: the Raxol Tabs widget pattern-matches
+  # only on `char` and would tab-jump even with `ctrl: true`. Routing all
+  # digits through `LimitsForm.handle_key/2` is safe — it itself drops events
+  # whose `:ctrl` or `:meta` flag is set.
+  defp plain_digit_event?(%{key: :char, char: ch}) when is_binary(ch) do
+    ch =~ ~r/^[0-9]$/
+  end
+
+  defp plain_digit_event?(_), do: false
+
+  defp route_through_tabs(event, %State{} = ss, %Context{} = context) do
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
     # FOG-173: gate on `action != nil` instead of `new_tabs == ss.tabs`.
@@ -280,20 +327,55 @@ defmodule Foglet.TUI.Screens.Sysop do
         {ss, [invites_effect(:sysop_generate_invite, context, ss.invites)]}
 
       key when key in ["d", "D"] ->
-        {ss, [invites_effect(:sysop_revoke_invite, context, ss.invites)]}
+        # FOG-162: D/d no longer fires an immediate revoke. It routes into
+        # the same arm-then-confirm flow as Enter so the destructive action
+        # always requires a deliberate X follow-up.
+        apply_arm_revoke_intent(ss)
 
       _ ->
-        case InvitesActions.handle_key(key, context.current_user, ss.invites) do
-          {:ok, invites} ->
-            armed_after =
-              ss.armed_revoke? and
-                invites_arm_preserved?(key, invites, ss.invites)
+        delegate_invites_fallback(key, ss, context)
+    end
+  end
 
-            {%{ss | invites: invites, armed_revoke?: armed_after}, []}
+  defp delegate_invites_fallback(key, %State{} = ss, %Context{} = context) do
+    case InvitesActions.handle_key(key, context.current_user, ss.invites) do
+      {:ok, invites} ->
+        armed_after =
+          ss.armed_revoke? and
+            invites_arm_preserved?(key, invites, ss.invites)
 
-          :no_match ->
-            {ss, []}
-        end
+        {%{ss | invites: invites, armed_revoke?: armed_after}, []}
+
+      :no_match ->
+        {ss, []}
+    end
+  end
+
+  defp apply_arm_revoke_intent(%State{} = ss) do
+    case arm_revoke_intent(ss.invites) do
+      {:arm, new_invites} ->
+        {%{ss | invites: new_invites, armed_revoke?: true}, []}
+
+      {:already_revoked, new_invites} ->
+        {%{ss | invites: new_invites, armed_revoke?: false}, []}
+
+      :noop ->
+        {ss, []}
+    end
+  end
+
+  # FOG-162: shared arm-revoke decision used by both Enter and D/d on the
+  # Sysop INVITES tab. Returns the intent the caller should apply.
+  defp arm_revoke_intent(%InvitesState{} = invites) do
+    case InvitesState.selected_item(invites) do
+      %{status: :revoked} ->
+        {:already_revoked, InvitesState.with_error(invites, "Invite already revoked.")}
+
+      %{status: _} ->
+        {:arm, invites}
+
+      _ ->
+        :noop
     end
   end
 

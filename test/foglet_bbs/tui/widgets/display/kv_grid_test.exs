@@ -2,7 +2,7 @@ defmodule Foglet.TUI.Widgets.Display.KvGridTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [color_atom_leaked?: 2, color_names: 0, flatten_text: 1]
+    only: [color_atom_leaked?: 2, color_names: 0, flatten_text: 1, text_runs: 1]
 
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
@@ -43,7 +43,10 @@ defmodule Foglet.TUI.Widgets.Display.KvGridTest do
         assert flat =~ "Health"
         assert flat =~ "healthy"
         assert flat =~ "pending"
-        assert TextWidth.display_width(flat) <= width * length(status_summary_rows())
+
+        for line <- text_lines(tree) do
+          assert TextWidth.display_width(line) <= width
+        end
       end
     end
 
@@ -97,11 +100,20 @@ defmodule Foglet.TUI.Widgets.Display.KvGridTest do
     end
   end
 
+  # FOG-177: KvGrid.render/2 no longer interleaves text("\n") separators —
+  # each entry is its own layout element (a single `text` for badge-less
+  # entries, or a `row` containing label/value text + badge text). For
+  # width-safety assertions we walk individual text runs since each
+  # render_entry guarantees label+gap+value+separator+badge sums to <= width.
   defp text_lines(tree) do
     tree
-    |> flatten_text()
-    |> String.split("\n", trim: true)
+    |> text_runs()
+    |> Enum.map(&run_text/1)
+    |> Enum.reject(&(&1 == ""))
   end
+
+  defp run_text(%{content: content}) when is_binary(content), do: content
+  defp run_text(%{text: text}) when is_binary(text), do: text
 
   defp account_profile_rows do
     [

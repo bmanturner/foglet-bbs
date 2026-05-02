@@ -35,11 +35,16 @@ defmodule Foglet.TUI.Widgets.Display.KvGrid do
     label_width = opts |> Keyword.get(:label_width, @default_label_width) |> normalize_width()
     gap = opts |> Keyword.get(:gap, @default_gap) |> normalize_width()
 
-    entries
-    |> Enum.map(&render_entry(&1, theme, width, label_width, gap))
-    |> Enum.intersperse(text("\n"))
+    Enum.map(entries, &render_entry(&1, theme, width, label_width, gap))
   end
 
+  # FOG-177: each entry is a single layout element. Entries with badges are
+  # wrapped in a `row` so the badge sits inline with the label/value text.
+  # Earlier versions interspersed `text("\n")` separators and returned bare
+  # `[text, badge]` lists; in production that produced literal newline content
+  # mid-row, breaking the parent `column` past the bottom of the screen and
+  # losing the Sysop shell frame on the SYSTEM tab. Callers stack entries with
+  # a `column` (use `gap: 0` for tight rows, `gap: 1` for visual spacing).
   defp render_entry(entry, %Theme{} = theme, width, label_width, gap) do
     entry = normalize_entry(entry)
     label = format_label(entry.label, label_width)
@@ -58,14 +63,21 @@ defmodule Foglet.TUI.Widgets.Display.KvGrid do
 
     value = TextWidth.truncate(entry.value, value_width)
 
-    text(label <> gap_text <> value <> badge_separator(badge_width),
-      fg: theme.dim.fg
-    )
-    |> append_badge(badge)
-  end
+    prefix =
+      text(label <> gap_text <> value <> badge_separator(badge_width),
+        fg: theme.dim.fg
+      )
 
-  defp append_badge(prefix, nil), do: prefix
-  defp append_badge(prefix, badge), do: [prefix, badge]
+    case badge do
+      nil ->
+        prefix
+
+      badge_node ->
+        row style: %{gap: 0} do
+          [prefix, badge_node]
+        end
+    end
+  end
 
   defp format_label(label, label_width) do
     label

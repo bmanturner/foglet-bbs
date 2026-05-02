@@ -33,7 +33,7 @@ defmodule Foglet.TUI.Screens.Sysop.SystemSnapshot do
   def init(_opts \\ []), do: %__MODULE__{snapshot: take_snapshot()}
 
   @spec handle_key(map(), t()) :: {t(), [{atom(), any()}]}
-  def handle_key(%{key: :char, char: "r"}, state),
+  def handle_key(%{key: :char, char: c}, state) when c in ["r", "R"],
     do: {%{state | snapshot: take_snapshot()}, []}
 
   def handle_key(_event, state), do: {state, []}
@@ -49,22 +49,43 @@ defmodule Foglet.TUI.Screens.Sysop.SystemSnapshot do
     entries = [
       %{label: "Version:", value: s.version},
       %{label: "Uptime:", value: format_uptime(s.uptime_ms)},
-      %{label: "Sessions:", value: Integer.to_string(s.session_count), state: :healthy},
+      %{label: "Live sessions:", value: Integer.to_string(s.session_count), state: :healthy},
       %{label: "Active boards:", value: Integer.to_string(s.board_count), state: :healthy},
-      %{label: "OTP processes:", value: Integer.to_string(s.process_count)},
-      %{label: "DB pool size:", value: Integer.to_string(s.db_pool_size), state: :info}
+      %{label: "BEAM processes:", value: Integer.to_string(s.process_count)},
+      %{label: "Database pool:", value: Integer.to_string(s.db_pool_size), state: :info}
     ]
 
-    footer = text("[r] Refresh", fg: theme.dim.fg)
+    helper =
+      text("Snapshot updates when you open this tab or press R.", fg: theme.dim.fg)
 
+    footer = text("[R] Refresh snapshot", fg: theme.dim.fg)
+
+    # FOG-177: KvGrid.render/2 now returns one layout element per entry
+    # (entries with badges are pre-wrapped in a `row`), so the outer column
+    # gets homogeneous map children — no nested lists, no embedded newline
+    # text nodes that previously broke the Sysop frame on the SYSTEM tab.
+    kv_rows = KvGrid.render(entries, theme: theme, width: 60, label_width: 16, gap: 2)
+
+    # FOG-181: keep kv_rows as direct children of the single outer column.
+    # A nested `column` measures as one line in the parent flex layout
+    # (children with no explicit `:height` default to a 1-line slot), so the
+    # inner kv rows rendered past that slot and overlapped the sibling
+    # helper/footer. The visible symptom was the trailing digit of the BEAM
+    # process count bleeding through the shorter footer text
+    # (e.g. "[R] Refresh snapshot9" with the "9" coming from "...709" on the
+    # BEAM processes row underneath). Flatten the structure into one column
+    # so the parent's measured height matches the actual rendered height.
     column style: %{gap: 0} do
       [
         text("System snapshot", fg: theme.title.fg, style: [:bold]),
-        text(""),
-        KvGrid.render(entries, theme: theme, width: 60, label_width: 16, gap: 2),
-        text(""),
-        footer
-      ]
+        text("")
+      ] ++
+        kv_rows ++
+        [
+          text(""),
+          helper,
+          footer
+        ]
     end
   end
 

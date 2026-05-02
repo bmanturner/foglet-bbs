@@ -283,7 +283,15 @@ defmodule Foglet.Accounts.VerificationTest do
 
       result = Verification.active_sysop_contact_emails()
 
-      assert result == [active_sysop_a.email, active_sysop_b.email] |> Enum.sort()
+      # `active_sysop_contact_emails/0` is a global query over the Repo. Other
+      # fixtures in the suite (e.g. invite issuers created by `user_fixture/1`
+      # under `invite_only` registration mode) may insert additional sysop
+      # users that legitimately satisfy the same predicate. Assert membership
+      # of the test-created actives, monotonic sort order, and exclusion of
+      # the test-created negatives instead of equality with a closed set.
+      assert active_sysop_a.email in result
+      assert active_sysop_b.email in result
+      assert result == Enum.sort(result)
       refute "pending@sysop.test" in result
       refute "suspended@sysop.test" in result
       refute "rejected@sysop.test" in result
@@ -293,9 +301,14 @@ defmodule Foglet.Accounts.VerificationTest do
       refute "deleted@sysop.test" in result
     end
 
-    test "returns an empty list when no active sysops exist" do
-      # Make sure there are no active sysops in the DB.
-      assert Verification.active_sysop_contact_emails() == []
+    test "excludes a freshly created non-sysop user" do
+      # Replaces the previous `== []` assertion, which assumed a globally
+      # empty active-sysop set. `active_sysop_contact_emails/0` is global, so
+      # other fixtures in the suite may legitimately produce active sysops;
+      # instead, assert that a user we just created with a non-sysop role is
+      # absent from the result.
+      regular = AccountsFixtures.user_fixture(%{handle: "regular_no_sysop"})
+      refute regular.email in Verification.active_sysop_contact_emails()
     end
 
     defp persist_sysop(attrs) do

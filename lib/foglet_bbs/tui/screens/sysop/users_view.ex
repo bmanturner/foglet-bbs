@@ -130,13 +130,13 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
         columns: @table_columns,
         rows: table_rows,
         selectable: true,
-        empty_state: "No administrable users."
+        empty_state: "No users need status changes."
       )
 
     body = render_body(state, users_table, theme)
 
     column style: %{gap: 0} do
-      [text("User status administration", fg: theme.title.fg, style: [:bold]), text("")] ++
+      [text("User status", fg: theme.title.fg, style: [:bold]), text("")] ++
         render_message(state.message, theme) ++
         [body, text(""), text(footer_text(state), fg: theme.dim.fg)]
     end
@@ -153,11 +153,11 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
     allowed = Accounts.valid_status_transitions(focused_status)
 
     [
+      "[j/k] Move",
       if(focused_status == :pending and :active in allowed, do: "[A] Approve"),
       if(focused_status == :pending and :rejected in allowed, do: "[R] Reject"),
       if(focused_status == :active and :suspended in allowed, do: "[S] Suspend"),
-      if(focused_status == :suspended and :active in allowed, do: "[U] Reactivate"),
-      "[j/k] Move"
+      if(focused_status == :suspended and :active in allowed, do: "[U] Reactivate")
     ]
     |> Enum.reject(&is_nil/1)
     |> Enum.join("  ")
@@ -219,7 +219,13 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
         %{state | groups: groups, rows: rows, selection_index: selection_index}
 
       {:error, :forbidden} ->
-        %{state | groups: empty_groups(), rows: [], selection_index: 0, message: "Forbidden."}
+        %{
+          state
+          | groups: empty_groups(),
+            rows: [],
+            selection_index: 0,
+            message: "Your role no longer allows user status changes."
+        }
     end
   end
 
@@ -272,20 +278,26 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   end
 
   defp success_message(handle, from, to, {:failed, _reason}),
-    do: "Status changed: @#{handle} #{from} -> #{to}. Notification failed."
+    do: "#{verb_for(from, to)} @#{handle}. Notification could not be sent."
 
   defp success_message(handle, from, to, _delivery),
-    do: "Status changed: @#{handle} #{from} -> #{to}."
+    do: "#{verb_for(from, to)} @#{handle}."
 
-  defp error_message(:forbidden), do: "Forbidden."
-  defp error_message(:not_found), do: "User not found."
+  defp verb_for(:pending, :active), do: "Approved"
+  defp verb_for(:suspended, :active), do: "Reactivated"
+  defp verb_for(_from, :rejected), do: "Rejected"
+  defp verb_for(_from, :suspended), do: "Suspended"
+  defp verb_for(_from, to), do: "Updated to #{to}:"
+
+  defp error_message(:forbidden), do: "Your role no longer allows user status changes."
+  defp error_message(:not_found), do: "That user is no longer available."
   defp error_message(:deleted), do: "Deleted users cannot be changed."
-  defp error_message(:invalid_status), do: "Invalid target status."
+  defp error_message(:invalid_status), do: "That status change is not available."
 
   # Phase 29 D-16: from->to copy. The raw error atom MUST NOT appear in
   # rendered output — verified by a grep test against string literals.
   defp invalid_transition_message(handle, from, to),
-    do: "Cannot change @#{handle} from #{to_string(from)} to #{to_string(to)}."
+    do: "@#{handle} cannot move from #{to_string(from)} to #{to_string(to)}."
 
   defp clamp_selection(_idx, []), do: 0
   defp clamp_selection(idx, rows), do: idx |> max(0) |> min(length(rows) - 1)

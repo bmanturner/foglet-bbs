@@ -67,8 +67,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   @postable_choices [
     {"Members", "members"},
-    {"Mods only", "mods_only"},
-    {"Sysop only", "sysop_only"}
+    {"Moderators only", "mods_only"},
+    {"Sysops only", "sysop_only"}
   ]
 
   # ---------------------------------------------------------------------------
@@ -101,22 +101,36 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   @spec render(t(), map()) :: any()
   def render(%__MODULE__{} = state, theme) do
     body = render_list(state, theme)
-
-    footer =
-      text(
-        "[n] New board  [e] Edit  [D] Archive  [N] New category  [E] Edit cat  [Shift+D] Archive cat",
-        fg: theme.dim.fg
-      )
+    footer = text(footer_text(state), fg: theme.dim.fg)
 
     column style: %{gap: 0} do
-      [text("Boards & categories", fg: theme.title.fg, style: [:bold]), text("")] ++
+      [text("Boards and categories", fg: theme.title.fg, style: [:bold]), text("")] ++
         [body, text(""), footer] ++ render_modal(state.modal, theme)
+    end
+  end
+
+  # FOG-154: row-aware footer per the FOG-152 audit + FOG-153 deck. The
+  # advertised actions follow the focused row so operators do not need to
+  # remember uppercase/lowercase variants for category vs board archive.
+  defp footer_text(%__MODULE__{rows: []}),
+    do: "[N] New category"
+
+  defp footer_text(%__MODULE__{} = state) do
+    case selected_row(state) do
+      {:category, _} ->
+        "[j/k] Move  [N] New category  [E] Edit category  [D] Archive category  [n] New board"
+
+      {:board, _} ->
+        "[j/k] Move  [n] New board  [e] Edit board  [D] Archive board  [N] New category"
+
+      _ ->
+        "[j/k] Move  [n] New board  [N] New category"
     end
   end
 
   defp render_list(%__MODULE__{rows: []}, theme) do
     column style: %{gap: 0} do
-      [text("No categories yet. Press N to create one.", fg: theme.warning.fg)]
+      [text("No categories yet. Press N to create the first category.", fg: theme.warning.fg)]
     end
   end
 
@@ -308,7 +322,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       | modal: %Modal{
           type: :confirm,
           title: "Archive board",
-          message: "Archive board '#{board.name}'? [Y/N]"
+          message:
+            "Archive \"#{board.name}\"? Members will stop seeing it in active board lists. Existing threads are kept. [Y] Archive board   [N/Esc] Keep board"
         },
         modal_kind: :archive_board,
         archive_target: board
@@ -322,7 +337,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       | modal: %Modal{
           type: :confirm,
           title: "Archive category",
-          message: "Archive category '#{category.name}'? [Y/N]"
+          message:
+            "Archive \"#{category.name}\"? Boards in this category will stop appearing in active board lists. [Y] Archive category   [N/Esc] Keep category"
         },
         modal_kind: :archive_category,
         archive_target: category
@@ -499,7 +515,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
       {:error, :forbidden} ->
         {reset_modal(state),
-         [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}
+         [{:error_modal, "Your role changed. Board changes were not saved.", :main_menu}]}
 
       {:error, reason} when is_atom(reason) ->
         {reset_modal(state), [{:error_modal, db_error_message(reason), :main_menu}]}
@@ -567,15 +583,19 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   end
 
   defp db_error_message(:board_server_unavailable),
-    do: "Board server unavailable. Please retry."
+    do: "Board service is not ready. Try again in a moment."
 
-  defp db_error_message(kind) when kind in [:create_board, :edit_board, :archive_board],
-    do: "Database error saving board."
+  defp db_error_message(:create_board), do: "Could not save board changes."
+  defp db_error_message(:edit_board), do: "Could not save board changes."
+  defp db_error_message(:archive_board), do: "Could not archive board."
+  defp db_error_message(:create_category), do: "Could not save category changes."
+  defp db_error_message(:edit_category), do: "Could not save category changes."
+  defp db_error_message(:archive_category), do: "Could not archive category."
 
   defp db_error_message(reason) when is_atom(reason),
-    do: "Board operation failed: #{inspect(reason)}"
+    do: "Could not finish that board action."
 
-  defp db_error_message(_), do: "Database error saving category."
+  defp db_error_message(_), do: "Could not finish that board action."
 
   defp reset_modal(state),
     do: %{
@@ -629,7 +649,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
       {:error, :forbidden} ->
         {reset_modal(state),
-         [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}
+         [{:error_modal, "Your role changed. Board changes were not saved.", :main_menu}]}
 
       {:error, _} ->
         {reset_modal(state), [{:error_modal, db_error_message(kind), :main_menu}]}
