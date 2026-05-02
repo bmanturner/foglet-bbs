@@ -54,15 +54,15 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   def render(%{items: [_ | _]} = state, %Theme{} = theme), do: render_items(state, theme)
 
-  # Item 3 (FOG-130): destructive confirmation for revoking an invite.
+  # FOG-164: destructive confirmation for revoking an invite (Moderation+Account).
   defp render_confirm_revoke(%InvitesState{confirm_target: target}, theme) do
     code = (target && target.code) || ""
 
     column style: %{gap: 1} do
       [
-        text("Revoke invite?", fg: theme.accent.fg),
+        text("Revoke invite #{code}?", fg: theme.accent.fg),
         text(
-          "Code #{code} will stop working. Accounts already created with it stay intact.",
+          "Code #{code} will stop working. Existing accounts stay intact.",
           fg: theme.primary.fg
         ),
         text("Enter Revoke invite   Esc Keep invite", fg: theme.dim.fg)
@@ -148,7 +148,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   end
 
   defp invite_rows([], _selected_index, theme) do
-    text("No invites yet. Generate one when someone should join.", fg: theme.dim.fg)
+    text("No invites yet. Generate one when someone is ready to join.", fg: theme.dim.fg)
   end
 
   # Phase 29 D-24 (SYSOP-06): focused INVITES row carries theme.selected.fg/bg
@@ -224,14 +224,14 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
     code = field(item, :code)
     status = field(item, :status)
 
-    base = "#{code} | #{status}"
+    base = "#{code} — #{status}"
 
     case item do
       %{status: :consumed} ->
-        base <> " | used by: #{field(item, :consumed_by_user_id)}"
+        base <> " — used by #{field(item, :consumed_by_user_id)}"
 
       %{status: :revoked} ->
-        base <> " | revoked: #{timestamp_field(item, :revoked_at)}"
+        base <> " — revoked #{timestamp_field(item, :revoked_at)}"
 
       _ ->
         base
@@ -253,7 +253,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   defp maybe_banner(nil, _theme), do: nil
 
   defp maybe_banner(code, theme) when is_binary(code) do
-    text("Invite code ready: #{code}", fg: theme.accent.fg)
+    text("Invite code ready: #{code}. Share it once.", fg: theme.accent.fg)
   end
 
   defp maybe_error(nil, _theme), do: nil

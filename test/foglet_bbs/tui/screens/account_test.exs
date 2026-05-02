@@ -826,7 +826,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       {:update, state, []} = handle_account_key(%{key: :enter}, state)
       assert state.screen_state.account.invites.mode == :list
-      assert state.screen_state.account.invites.error == "You are not allowed to manage invites."
+      assert state.screen_state.account.invites.error == "Your account cannot manage invites."
       assert {:ok, %{status: :available}} = Invites.get_invite_status(selected_code)
       assert {:ok, %{status: :available}} = Invites.get_invite_status(other_code)
 
@@ -1960,8 +1960,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
       flat = render_account(state) |> collect_text_values()
       joined = Enum.join(flat, "\n")
 
-      assert Enum.any?(flat, &String.contains?(&1, "Revoke invite?"))
+      assert Enum.any?(flat, &String.contains?(&1, "Revoke invite XYZ987?"))
       assert String.contains?(joined, "Code XYZ987 will stop working.")
+      assert String.contains?(joined, "Existing accounts stay intact.")
       assert Enum.any?(flat, &String.contains?(&1, "Enter Revoke invite"))
       assert Enum.any?(flat, &String.contains?(&1, "Esc Keep invite"))
     end

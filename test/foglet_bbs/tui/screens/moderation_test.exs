@@ -179,6 +179,32 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert effects == []
     end
 
+    test "Moderation.update(:load) does not crash when session_context is a SessionContext struct (FOG-168)" do
+      # Regression: `domain_module/3` previously called `get_in(sc, [:domain, key])`
+      # against `context.session_context`. When that field is a real
+      # `%Foglet.TUI.SessionContext{}` struct (the live SSH path), `get_in/2`
+      # raises `UndefinedFunctionError: SessionContext.fetch/2` because structs
+      # do not implement Access. This test locks in the safe `Map.get` traversal.
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          session_context: %Foglet.TUI.SessionContext{}
+        )
+
+      assert {state, effects} = Moderation.update(:load, Moderation.init(context), context)
+      assert state.loading?
+
+      assert [
+               %Effect{
+                 type: :task,
+                 payload: %{op: :load_moderation_workspace, screen_key: :moderation}
+               }
+             ] = effects
+    end
+
     test "moderator INVITES tab requests task-backed generate" do
       user = %User{id: "u1", handle: "mod", role: :mod}
 
@@ -198,6 +224,61 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: :moderation}}] =
                effects
+    end
+
+    # FOG-173: regression — pressing G after a prior tab-jump (e.g. "6")
+    # leaves `tabs.last_action == {:tab_changed, _}`. The earlier dispatch
+    # condition `new_tabs == ss.tabs` would treat the G keypress as a tab
+    # event because `Tabs.handle_event/2` rewrites `last_action` to nil,
+    # and bypass `handle_active_key`, silently dropping G/D in live SSH.
+    test "INVITES G still dispatches generate after a prior tab-jump keypress" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          session_context: %{invite_code_generators: "mods"}
+        )
+
+      state = ModerationState.new(invites_visible?: true, active: 0)
+
+      # Jump to INVITES (tab 6) — this seeds tabs.last_action with {:tab_changed, 5}.
+      {state, _effects} =
+        Moderation.update({:key, %{key: :char, char: "6"}}, state, context)
+
+      assert state.active_tab == 5
+      assert state.tabs.last_action == {:tab_changed, 5}
+
+      # Now press G — must reach handle_invites_update and emit a generate effect.
+      {state, effects} =
+        Moderation.update({:key, %{key: :char, char: "g"}}, state, context)
+
+      assert state.active_tab == 5
+
+      assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: :moderation}}] =
+               effects
+    end
+
+    test "INVITES D arms confirm_revoke after a prior tab-jump keypress" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          session_context: %{invite_code_generators: "mods"}
+        )
+
+      items = [%{code: "ABC", status: :available, inserted_at: ~U[2026-01-01 00:00:00Z]}]
+      invites = InvitesState.loaded(InvitesState.new(), items)
+      state = %{ModerationState.new(invites_visible?: true, active: 0) | invites: invites}
+
+      {state, _} = Moderation.update({:key, %{key: :char, char: "6"}}, state, context)
+      {state, effects} = Moderation.update({:key, %{key: :char, char: "d"}}, state, context)
+
+      assert state.invites.mode == :confirm_revoke
+      assert effects == []
     end
   end
 
@@ -348,7 +429,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
-      assert joined =~ "hide_oneliner"
+      # FOG-164: Type label is "Oneliner moderation log"; the per-row action
+      # column truncates `:hide_oneliner` to "hide_on…" (8-char width).
+      assert joined =~ "Oneliner"
+      assert joined =~ "hide_on"
       assert joined =~ "new-mod"
       assert joined =~ "second body"
       assert joined =~ "abuse"
@@ -389,7 +473,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
-      assert joined =~ "No report queue workflow"
+      assert joined =~ "Report queue is not available"
       refute joined =~ "fake report"
       refute joined =~ "Approve"
     end
@@ -404,7 +488,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
-      assert joined =~ "Read-only"
+      assert joined =~ "Viewing only"
       assert joined =~ "alice"
       refute joined =~ "Promote"
       refute joined =~ "Suspend"
@@ -420,8 +504,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
-      assert joined =~ "No sanction workflow"
-      refute joined =~ "Sanction"
+      assert joined =~ "Sanctions are not available"
       refute joined =~ "Ban"
     end
 
@@ -440,9 +523,9 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
-      assert joined =~ "Read-only"
+      assert joined =~ "Viewing only"
       assert joined =~ "General"
-      assert joined =~ "hide_oneliner"
+      assert joined =~ "Visible boards:"
       refute joined =~ "Archive"
       refute joined =~ "Create Board"
       refute joined =~ "Edit Board"
@@ -555,6 +638,108 @@ defmodule Foglet.TUI.Screens.ModerationTest do
             :ok
         end
       end
+    end
+
+    # FOG-164: D arms a confirm sub-mode; Enter dispatches the revoke; Esc
+    # cancels and keeps the invite. Mirrors the Account confirm pattern so
+    # the destructive INVITES action always requires a deliberate follow-up.
+    test "INVITES D opens confirm_revoke mode without dispatching revoke" do
+      mod = actor_fixture(:mod)
+      Config.put!("invite_code_generators", "mods", actor_fixture(:sysop).id)
+      AccountsFixtures.invite_fixture(mod, %{code: "FOG164CONFIRM001"})
+      {:ok, items} = Invites.list_invites(mod)
+
+      state =
+        mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          ModerationState.new(invites_visible?: true, active: 5)
+          |> Map.put(:invites, InvitesState.new(items: items))
+        )
+
+      {:update, new_state, _} = handle_moderation_key(%{key: :char, char: "d"}, state)
+
+      invites = new_state.screen_state.moderation.invites
+      assert invites.mode == :confirm_revoke
+      assert invites.confirm_target.code == "FOG164CONFIRM001"
+      assert {:ok, %{status: :available}} = Invites.get_invite_status("FOG164CONFIRM001")
+    end
+
+    test "INVITES Enter from confirm_revoke dispatches revoke and clears mode" do
+      sysop = actor_fixture(:sysop)
+      Config.put!("invite_code_generators", "mods", sysop.id)
+      mod = actor_fixture(:mod)
+      AccountsFixtures.invite_fixture(mod, %{code: "FOG164REVOKE0001"})
+      {:ok, items} = Invites.list_invites(mod)
+
+      state =
+        mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          ModerationState.new(invites_visible?: true, active: 5)
+          |> Map.put(:invites, InvitesState.new(items: items))
+        )
+
+      {:update, armed, _} = handle_moderation_key(%{key: :char, char: "d"}, state)
+      {:update, after_enter, _} = handle_moderation_key(%{key: :enter}, armed)
+
+      invites = after_enter.screen_state.moderation.invites
+      assert invites.mode == :list
+      assert invites.confirm_target == nil
+      assert {:ok, %{status: :revoked}} = Invites.get_invite_status("FOG164REVOKE0001")
+    end
+
+    test "INVITES Esc from confirm_revoke cancels and keeps the invite" do
+      sysop = actor_fixture(:sysop)
+      Config.put!("invite_code_generators", "mods", sysop.id)
+      mod = actor_fixture(:mod)
+      AccountsFixtures.invite_fixture(mod, %{code: "FOG164KEEPME0001"})
+      {:ok, items} = Invites.list_invites(mod)
+
+      state =
+        mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          ModerationState.new(invites_visible?: true, active: 5)
+          |> Map.put(:invites, InvitesState.new(items: items))
+        )
+
+      {:update, armed, _} = handle_moderation_key(%{key: :char, char: "d"}, state)
+      {:update, after_esc, _} = handle_moderation_key(%{key: :escape}, armed)
+
+      invites = after_esc.screen_state.moderation.invites
+      assert invites.mode == :list
+      assert invites.confirm_target == nil
+      assert {:ok, %{status: :available}} = Invites.get_invite_status("FOG164KEEPME0001")
+    end
+
+    test "INVITES confirm_revoke surface renders title/body/keybar with code" do
+      mod = actor_fixture(:mod)
+      Config.put!("invite_code_generators", "mods", actor_fixture(:sysop).id)
+
+      invites =
+        InvitesState.new(items: [%{code: "FOG164SHOWREV001", status: :available}])
+        |> InvitesState.start_confirm_revoke()
+
+      state =
+        mod
+        |> build_state_with_policy("mods")
+        |> put_in(
+          [:screen_state, :moderation],
+          ModerationState.new(invites_visible?: true, active: 5)
+          |> Map.put(:invites, invites)
+        )
+
+      flat = render_moderation(state) |> collect_text_values()
+      joined = Enum.join(flat, "\n")
+
+      assert joined =~ "Revoke invite FOG164SHOWREV001?"
+      assert joined =~ "Code FOG164SHOWREV001 will stop working. Existing accounts stay intact."
+      assert joined =~ "Enter Revoke invite"
+      assert joined =~ "Esc Keep invite"
     end
 
     test "persists exactly one invite and records last_generated_code for unlimited mods policy" do
@@ -763,7 +948,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       joined = Enum.join(flat, " ")
 
-      assert joined =~ "No active users",
+      assert joined =~ "No users found",
              "Expected empty-state copy in USERS tab, got: #{inspect(flat)}"
     end
 

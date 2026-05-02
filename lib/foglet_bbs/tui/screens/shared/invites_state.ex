@@ -146,7 +146,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
       rows: rows,
       selectable: true,
       width: Keyword.get(opts, :width, @default_width),
-      empty_state: "No invites yet. Generate one when someone should join."
+      empty_state: "No invites yet. Generate one when someone is ready to join."
     )
   end
 
@@ -165,7 +165,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
         %{state | mode: :confirm_revoke, confirm_target: target, error: nil}
 
       _ ->
-        %{state | error: "Select an invite first."}
+        %{state | error: "Select an invite first, then press D."}
     end
   end
 
