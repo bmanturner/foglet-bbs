@@ -150,7 +150,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
       %{
         label: "Actions",
         commands: [
-          %{key: "Ctrl+S", label: "Send", priority: 30},
+          %{key: "Ctrl+S", label: "Post", priority: 30},
           %{key: "Ctrl+C", label: "Cancel", priority: 30}
         ]
       }
@@ -246,13 +246,21 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   defp quote_preview_lines(post, width, theme) do
     body = Map.get(post, :body, "")
+    lines = String.split(body, "\n")
+    preview_cap = 2
 
-    body
-    |> String.split("\n")
-    |> Enum.take(2)
-    |> Enum.map(fn line ->
-      text("> #{TextWidth.truncate(line, max(width - 2, 1))}", fg: theme.dim.fg)
-    end)
+    preview =
+      lines
+      |> Enum.take(preview_cap)
+      |> Enum.map(fn line ->
+        text("> #{TextWidth.truncate(line, max(width - 2, 1))}", fg: theme.dim.fg)
+      end)
+
+    if length(lines) > preview_cap do
+      preview ++ [text("> …", fg: theme.dim.fg)]
+    else
+      preview
+    end
   end
 
   # Delegate to PostCard.get_handle/1 (strict: returns nil on empty or
@@ -268,14 +276,44 @@ defmodule Foglet.TUI.Screens.PostComposer do
   end
 
   defp format_error(:posting_not_allowed), do: "You are not allowed to post on this board."
-  defp format_error(:thread_locked), do: "This thread is locked"
+  defp format_error(:thread_locked), do: "This thread is locked."
 
   defp format_error(%Ecto.Changeset{} = cs) do
-    Enum.map_join(cs.errors, ", ", fn {field, {msg, _}} -> "#{field}: #{msg}" end)
+    Enum.map_join(cs.errors, ", ", fn {field, {msg, opts}} ->
+      "#{humanize_field(field)}: #{humanize_changeset_message(msg, opts)}"
+    end)
   end
 
   defp format_error(reason) when is_binary(reason), do: reason
   defp format_error(_reason), do: "Could not submit post."
+
+  defp humanize_field(field) when is_atom(field),
+    do: field |> Atom.to_string() |> humanize_field()
+
+  defp humanize_field(field) when is_binary(field) do
+    field
+    |> String.replace("_", " ")
+    |> String.capitalize()
+  end
+
+  defp humanize_changeset_message(msg, opts) when is_binary(msg) do
+    msg
+    |> interpolate_changeset_opts(opts)
+    |> strip_plural_artifact()
+  end
+
+  defp humanize_changeset_message(msg, _opts), do: msg
+
+  defp interpolate_changeset_opts(msg, opts) when is_list(opts) do
+    Enum.reduce(opts, msg, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
+
+  defp interpolate_changeset_opts(msg, _opts), do: msg
+
+  defp strip_plural_artifact(msg) when is_binary(msg), do: String.replace(msg, "(s)", "s")
+  defp strip_plural_artifact(msg), do: msg
 
   defp submit_success(%State{} = state, result) do
     new_state = %{state | submission_status: :submitted, submit_result: result, error: nil}

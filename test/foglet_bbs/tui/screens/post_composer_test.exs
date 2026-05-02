@@ -351,6 +351,39 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert text =~ ">" or text =~ "┃"
   end
 
+  test "render/1 reply context appends a truncation indicator when the body overflows the preview window",
+       %{state: state} do
+    # reply_post/0 body has 3 lines; preview cap is 2 → expect "> …" line.
+    state = with_reply(state)
+
+    runs =
+      render_screen(state) |> Foglet.TUI.WidgetHelpers.text_runs() |> Enum.map(&run_content/1)
+
+    assert "> …" in runs
+  end
+
+  test "render/1 reply context omits the truncation indicator when body fits the preview window",
+       %{state: state} do
+    short_reply = %{id: "p2", body: "single line", user: %{handle: "alice"}}
+
+    ss =
+      State.new(
+        reply_to: short_reply,
+        input_state: fresh_input(),
+        thread: %{id: "t1", title: "Hello", board_id: "b1"},
+        thread_id: "t1",
+        board: %{id: "b1"},
+        board_id: "b1"
+      )
+
+    state = put_in(state.screen_state.post_composer, ss)
+
+    runs =
+      render_screen(state) |> Foglet.TUI.WidgetHelpers.text_runs() |> Enum.map(&run_content/1)
+
+    refute "> …" in runs
+  end
+
   test "PostComposer render delegates to EditorFrame and keeps preview off PostCard", %{
     state: state
   } do
@@ -509,7 +542,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     {:update, new_state, _} = handle_key_screen(%{key: :char, char: "s", ctrl: true}, s)
 
     assert new_state.modal.type == :error
-    assert new_state.modal.message == "This thread is locked"
+    assert new_state.modal.message == "This thread is locked."
     assert new_state.current_screen == :post_composer
     assert Map.has_key?(new_state.screen_state, :post_composer)
   end
@@ -841,7 +874,29 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
 
       assert locked_effects == []
       assert locked_state.submission_status == {:error, :thread_locked}
-      assert locked_state.error == "This thread is locked"
+      assert locked_state.error == "This thread is locked."
+    end
+
+    test "PostComposer.update humanizes changeset errors and strips plural artifact" do
+      context = composer_context()
+      state = State.new(thread_id: "t1", board_id: "b1", submission_status: :submitting)
+
+      changeset = %Ecto.Changeset{
+        errors: [
+          body: {"can't be blank", [validation: :required]},
+          title:
+            {"should be at most %{count} character(s)",
+             [count: 60, validation: :length, kind: :max, type: :string]}
+        ]
+      }
+
+      {next, []} =
+        PostComposer.update({:task_result, :submit_reply, {:error, changeset}}, state, context)
+
+      assert next.error =~ "Body: can't be blank"
+      assert next.error =~ "Title: should be at most 60 characters"
+      refute next.error =~ "(s)"
+      refute next.error =~ "%{"
     end
 
     test "PostComposer.update Ctrl+C navigates to post_reader route identity" do
