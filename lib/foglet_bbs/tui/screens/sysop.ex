@@ -236,6 +236,37 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp handle_update_key(event, %State{} = ss, %Context{} = context) do
+    if digit_consumed_by_active_tab?(event, ss) do
+      delegate_update_to_active_tab(event, ss, context)
+    else
+      route_through_tabs(event, ss, context)
+    end
+  end
+
+  # FOG-185: LIMITS is an always-editable integer form, so digit chars 0–9
+  # must reach `LimitsForm.handle_key/2` instead of being swallowed by the
+  # numeric tab-jump shortcut in `Foglet.TUI.Widgets.Input.Tabs`. The Raxol
+  # tabs component (vendor/raxol/lib/raxol/ui/components/input/tabs.ex)
+  # consumes 1–9 unconditionally, so we filter at this routing seam (the
+  # pitfall called out in the Tabs widget moduledoc).
+  defp digit_consumed_by_active_tab?(event, %State{} = ss) do
+    case Enum.at(State.tab_labels(ss), ss.active_tab) do
+      "LIMITS" -> plain_digit_event?(event)
+      _ -> false
+    end
+  end
+
+  # Modifiers are intentionally ignored: the Raxol Tabs widget pattern-matches
+  # only on `char` and would tab-jump even with `ctrl: true`. Routing all
+  # digits through `LimitsForm.handle_key/2` is safe — it itself drops events
+  # whose `:ctrl` or `:meta` flag is set.
+  defp plain_digit_event?(%{key: :char, char: ch}) when is_binary(ch) do
+    ch =~ ~r/^[0-9]$/
+  end
+
+  defp plain_digit_event?(_), do: false
+
+  defp route_through_tabs(event, %State{} = ss, %Context{} = context) do
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
     if action == nil and new_tabs == ss.tabs do

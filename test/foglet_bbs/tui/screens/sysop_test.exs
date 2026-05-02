@@ -1117,6 +1117,63 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert current_limits_form(new_state).drafts == before_drafts
     end
+
+    # FOG-185: digit chars on LIMITS must edit the focused integer field
+    # rather than triggering the numeric tab-jump shortcut. The Raxol Tabs
+    # widget consumes 1–9 unconditionally, so the Sysop screen filters
+    # them at the routing seam when LIMITS is active.
+    for digit <- ~w(0 1 2 3 4 5 6 7 8 9) do
+      test "digit '#{digit}' edits the focused LIMITS field instead of jumping tabs",
+           %{state: state} do
+        focused_key = "max_post_length"
+
+        before_lf = current_limits_form(state)
+
+        assert Enum.at(Foglet.TUI.Screens.Sysop.LimitsForm.limits_keys(), before_lf.focused) ==
+                 focused_key
+
+        before_value =
+          case Map.get(before_lf.drafts, focused_key) do
+            n when is_integer(n) -> Integer.to_string(n)
+            s when is_binary(s) -> s
+            _ -> ""
+          end
+
+        {:update, new_state, _cmds} =
+          handle_sysop_key(%{key: :char, char: unquote(digit)}, state)
+
+        # Active tab must remain LIMITS (index 2) — no numeric tab jump.
+        assert new_state.screen_state.sysop.active_tab == 2
+
+        # The focused integer field must have appended the digit.
+        assert Map.get(current_limits_form(new_state).drafts, focused_key) ==
+                 before_value <> unquote(digit)
+      end
+    end
+
+    test "Ctrl+digit on LIMITS is not treated as a field edit", %{state: state} do
+      before_drafts = current_limits_form(state).drafts
+
+      result = handle_sysop_key(%{key: :char, char: "2", ctrl: true}, state)
+
+      new_state =
+        case result do
+          {:update, s, _cmds} -> s
+          :no_match -> state
+        end
+
+      # Active tab should not have jumped, and the field should not have
+      # accepted a Ctrl-modified digit.
+      assert new_state.screen_state.sysop.active_tab == 2
+      assert current_limits_form(new_state).drafts == before_drafts
+    end
+
+    test "Left/Right still navigate tabs while LIMITS is active", %{state: state} do
+      {:update, right_state, _cmds} =
+        handle_sysop_key(%{key: :right}, state)
+
+      assert right_state.screen_state.sysop.active_tab == 3
+    end
   end
 
   # =========================================================================
