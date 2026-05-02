@@ -581,6 +581,108 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
     end
   end
 
+  defp directory_with_archived(opts \\ []) do
+    cat_archived? = Keyword.get(opts, :archived_category?, false)
+
+    [
+      %{
+        category: %{id: "c-arc", name: "Archive Land", archived: cat_archived?},
+        boards: [
+          %{
+            board: %{id: "b-active", name: "general", slug: "general", archived: false},
+            subscribed?: true,
+            required_subscription?: false,
+            unread_count: 2,
+            last_post_at: ten_min_ago(),
+            archived?: false
+          },
+          %{
+            board: %{
+              id: "b-arc",
+              name: "old-news",
+              slug: "old-news",
+              archived: true
+            },
+            subscribed?: false,
+            required_subscription?: false,
+            unread_count: nil,
+            last_post_at: three_days_ago(),
+            archived?: true
+          }
+        ]
+      }
+    ]
+  end
+
+  describe "render/2 - archived rows (FOG-305)" do
+    test "archived board row carries [archived] suffix and routes through dim slot",
+         %{theme: theme} do
+      state = BoardTree.init(directory: directory_with_archived(), id: "bt-arc")
+
+      rows = render_rows(state, theme, width: 60)
+      arc_row = Enum.find(rows, &String.contains?(&1, "old-news"))
+
+      assert arc_row, "expected archived row in render output"
+      assert arc_row =~ "[archived]"
+      # Subscription cluster is :locked for archived rows.
+      assert arc_row =~ @glyph_required
+      # Unread cell is suppressed and metadata collapses to age only — no
+      # "unread" / "all read" string and no leading ◆ unread glyph.
+      refute arc_row =~ "unread"
+      refute arc_row =~ "all read"
+      refute arc_row =~ @glyph_unread
+
+      arc_node =
+        BoardTree.render(state, theme: theme, width: 60)
+        |> Map.get(:children, [])
+        |> Enum.find(fn node -> flatten_text(node) |> String.contains?("old-news") end)
+
+      assert arc_node
+      runs = text_runs(arc_node)
+      title_run = Enum.find(runs, fn run -> run_text(run) =~ "old-news" end)
+      assert title_run
+      assert run_fg(title_run) == theme.dim.fg
+    end
+
+    test "active row in same category is not marked archived", %{theme: theme} do
+      state = BoardTree.init(directory: directory_with_archived(), id: "bt-arc-active")
+      rows = render_rows(state, theme, width: 60)
+
+      active_row = Enum.find(rows, &String.contains?(&1, "general"))
+      assert active_row
+      refute active_row =~ "[archived]"
+    end
+
+    test "all-archived category is suffixed [archived] and dim", %{theme: theme} do
+      dir = [
+        %{
+          category: %{id: "c-all-arc", name: "Legacy", archived: true},
+          boards: [
+            %{
+              board: %{id: "b-x", name: "wayback", slug: "wayback", archived: false},
+              subscribed?: false,
+              required_subscription?: false,
+              unread_count: nil,
+              last_post_at: nil,
+              archived?: true
+            }
+          ]
+        }
+      ]
+
+      state = BoardTree.init(directory: dir, id: "bt-arc-cat")
+      rows = render_rows(state, theme, width: 60)
+
+      cat_row = Enum.find(rows, &String.contains?(&1, "Legacy"))
+      board_row = Enum.find(rows, &String.contains?(&1, "wayback"))
+
+      assert cat_row =~ "[archived]"
+      # Active board within an archived category still shows the [archived] tag
+      # because it is unreachable for posting.
+      assert board_row =~ "[archived]"
+    end
+  end
+
   describe "theme-routing hygiene (BOARDS-01)" do
     test "BoardTree source contains no hardcoded color atoms", %{theme: _theme} do
       source = File.read!("lib/foglet_bbs/tui/widgets/list/board_tree.ex")

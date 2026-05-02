@@ -214,25 +214,46 @@ defmodule Foglet.Boards do
   def get_board_by_slug(slug) when is_binary(slug), do: Repo.get_by(Board, slug: slug)
 
   @doc """
-  List all non-archived boards in non-archived categories, ordered by
-  category.display_order then board.display_order. Preloads :category.
+  List boards ordered by category and board display_order, preloading :category.
+
+  Defaults to active boards in active categories, matching the user-facing
+  directory. Pass `include_archived?: true` to also return archived boards
+  and boards in archived categories — within each category, active boards
+  come first, archived boards follow, both by `display_order`.
   """
   @spec list_boards() :: [Board.t()]
-  def list_boards do
-    from(b in Board, as: :b)
-    |> join(:inner, [b: b], c in assoc(b, :category), as: :c)
-    |> QueryHelpers.active_boards()
-    |> order_by([b: b, c: c], asc: c.display_order, asc: b.display_order)
-    |> preload([b: b, c: c], category: c)
+  def list_boards, do: list_boards([])
+
+  @spec list_boards(keyword()) :: [Board.t()]
+  def list_boards(opts) when is_list(opts) do
+    include_archived? = Keyword.get(opts, :include_archived?, false)
+
+    base =
+      from(b in Board, as: :b)
+      |> join(:inner, [b: b], c in assoc(b, :category), as: :c)
+      |> preload([b: b, c: c], category: c)
+
+    base
+    |> maybe_active_boards(include_archived?)
+    |> order_by([b: b, c: c],
+      asc: c.archived,
+      asc: c.display_order,
+      asc: b.archived,
+      asc: b.display_order
+    )
     |> Repo.all()
   end
+
+  defp maybe_active_boards(query, true), do: query
+  defp maybe_active_boards(query, false), do: QueryHelpers.active_boards(query)
 
   @type directory_board :: %{
           board: Board.t(),
           subscribed?: boolean(),
           required_subscription?: boolean(),
           unread_count: non_neg_integer() | nil,
-          last_post_at: DateTime.t() | nil
+          last_post_at: DateTime.t() | nil,
+          archived?: boolean()
         }
 
   @type directory_category :: %{
@@ -241,24 +262,35 @@ defmodule Foglet.Boards do
         }
 
   @doc """
-  Return active boards in active categories grouped for the user-facing board directory.
+  Return boards grouped by category for the directory screen.
+
+  Visibility is role-gated: regular `:user` actors and unauthenticated
+  callers see only active boards in active categories (the historical
+  behaviour). `:mod` and `:sysop` actors additionally see archived boards
+  and boards in archived categories so they can audit and reach the
+  read-only screens. Within a category, active rows come first by
+  `display_order`; archived rows follow by `display_order`.
 
   Subscribed board entries include unread counts; unsubscribed entries keep
   `unread_count` nil so callers do not imply unread state for boards the user
   has not joined. `:last_post_at` is the max thread last_post_at across
   non-deleted threads, or nil when the board has no non-deleted threads.
-  Identical for subscribed and unsubscribed actors.
+  Identical for subscribed and unsubscribed actors. Each entry exposes
+  `:archived?` so renderers can mark archived rows without re-deriving from
+  the board/category structs.
   """
   @spec board_directory_for(Foglet.Accounts.User.t() | nil) :: [directory_category()]
   def board_directory_for(nil), do: []
 
   def board_directory_for(actor) do
+    include_archived? = archived_visible_to?(actor)
     user_id = user_id(actor)
     subscribed_board_ids = subscribed_board_ids(user_id)
     unread_counts = unread_counts(user_id)
     last_post_ats = last_post_ats()
 
-    list_boards()
+    [include_archived?: include_archived?]
+    |> list_boards()
     |> Enum.chunk_by(& &1.category.id)
     |> Enum.map(fn boards ->
       category = hd(boards).category
@@ -274,12 +306,18 @@ defmodule Foglet.Boards do
               subscribed?: subscribed?,
               required_subscription?: board.required_subscription,
               unread_count: if(subscribed?, do: Map.get(unread_counts, board.id, 0), else: nil),
-              last_post_at: Map.get(last_post_ats, board.id)
+              last_post_at: Map.get(last_post_ats, board.id),
+              archived?: board.archived or category.archived
             }
           end)
       }
     end)
   end
+
+  @doc false
+  @spec archived_visible_to?(Foglet.Accounts.User.t() | nil) :: boolean()
+  def archived_visible_to?(%{role: role}) when role in [:sysop, :mod], do: true
+  def archived_visible_to?(_actor), do: false
 
   # ---------- Subscriptions (BOARD-07) ----------
 
