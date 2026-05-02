@@ -134,9 +134,13 @@ defmodule Foglet.TUI.Screens.Moderation do
     ss = normalize_state(local_state, context)
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
-    if action == nil and new_tabs == ss.tabs do
-      handle_active_key(event, ss, context)
-    else
+    # FOG-173: only treat the event as tab navigation when Tabs reports a real
+    # action. Comparing `new_tabs == ss.tabs` is unsafe because `Tabs.handle_event/2`
+    # always rewrites `last_action` (resetting it to nil after a previous
+    # `{:tab_changed, _}`), so any post-tab-change keypress would falsely look
+    # like a tab event and route around `handle_active_key`, silently dropping
+    # G/D on the INVITES tab. Mirrors the `if action != nil` guard in Account.
+    if action != nil do
       new_active =
         case action do
           {:tab_changed, idx} -> idx
@@ -146,6 +150,8 @@ defmodule Foglet.TUI.Screens.Moderation do
       new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
       {loaded_ss, effects} = maybe_request_invites(new_ss, context)
       {loaded_ss, effects}
+    else
+      handle_active_key(event, %{ss | tabs: new_tabs}, context)
     end
   end
 

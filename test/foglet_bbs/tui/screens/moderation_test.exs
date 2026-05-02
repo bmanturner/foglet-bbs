@@ -225,6 +225,61 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: :moderation}}] =
                effects
     end
+
+    # FOG-173: regression — pressing G after a prior tab-jump (e.g. "6")
+    # leaves `tabs.last_action == {:tab_changed, _}`. The earlier dispatch
+    # condition `new_tabs == ss.tabs` would treat the G keypress as a tab
+    # event because `Tabs.handle_event/2` rewrites `last_action` to nil,
+    # and bypass `handle_active_key`, silently dropping G/D in live SSH.
+    test "INVITES G still dispatches generate after a prior tab-jump keypress" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          session_context: %{invite_code_generators: "mods"}
+        )
+
+      state = ModerationState.new(invites_visible?: true, active: 0)
+
+      # Jump to INVITES (tab 6) — this seeds tabs.last_action with {:tab_changed, 5}.
+      {state, _effects} =
+        Moderation.update({:key, %{key: :char, char: "6"}}, state, context)
+
+      assert state.active_tab == 5
+      assert state.tabs.last_action == {:tab_changed, 5}
+
+      # Now press G — must reach handle_invites_update and emit a generate effect.
+      {state, effects} =
+        Moderation.update({:key, %{key: :char, char: "g"}}, state, context)
+
+      assert state.active_tab == 5
+
+      assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: :moderation}}] =
+               effects
+    end
+
+    test "INVITES D arms confirm_revoke after a prior tab-jump keypress" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          session_context: %{invite_code_generators: "mods"}
+        )
+
+      items = [%{code: "ABC", status: :available, inserted_at: ~U[2026-01-01 00:00:00Z]}]
+      invites = InvitesState.loaded(InvitesState.new(), items)
+      state = %{ModerationState.new(invites_visible?: true, active: 0) | invites: invites}
+
+      {state, _} = Moderation.update({:key, %{key: :char, char: "6"}}, state, context)
+      {state, effects} = Moderation.update({:key, %{key: :char, char: "d"}}, state, context)
+
+      assert state.invites.mode == :confirm_revoke
+      assert effects == []
+    end
   end
 
   describe "render/1" do
