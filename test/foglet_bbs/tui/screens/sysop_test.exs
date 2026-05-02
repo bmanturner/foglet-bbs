@@ -246,6 +246,36 @@ defmodule Foglet.TUI.Screens.SysopTest do
                effects
     end
 
+    test "tab load with struct session_context does not raise on Access lookup" do
+      # Regression for FOG-170: domain_module/3 used get_in on session_context,
+      # which crashed when session_context was a %Foglet.TUI.SessionContext{}
+      # struct (Access not implemented). Default Context session_context is a
+      # struct, so production right-arrow / number-jump into USERS hit
+      # Foglet.TUI.SessionContext.fetch/2 inside lifecycle_effect/1.
+      user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "alice",
+        role: :sysop,
+        status: :active
+      }
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :sysop,
+          session_context: %Foglet.TUI.SessionContext{}
+        )
+
+      {jump_state, jump_effects} =
+        Sysop.update({:key, %{key: :char, char: "5"}}, Sysop.init(context), context)
+
+      assert jump_state.active_tab == 4
+      assert jump_state.users_view == :loading
+
+      assert [%Effect{type: :task, payload: %{op: :sysop_load_users, screen_key: :sysop}}] =
+               jump_effects
+    end
+
     test "task result stores loaded sysop submodule state" do
       context = Context.new(route: :sysop)
       state = %{Sysop.init(context) | active_tab: 4}

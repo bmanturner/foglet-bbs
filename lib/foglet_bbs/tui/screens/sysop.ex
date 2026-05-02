@@ -461,10 +461,14 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   defp domain_module(%Context{} = context, key, default) do
     Map.get(context.domain || %{}, key) ||
-      (is_map(context.session_context) &&
-         get_in(context.session_context, [:domain, key])) ||
+      session_context_domain(context.session_context, key) ||
       default
   end
+
+  defp session_context_domain(%{domain: domain}, key) when is_map(domain),
+    do: Map.get(domain, key)
+
+  defp session_context_domain(_session_context, _key), do: nil
 
   defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
   defp unwrap_task_result({:ok, {:error, reason}}), do: {:error, reason}
