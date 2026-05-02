@@ -546,9 +546,19 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp session_context_domain(%Context{session_context: sc}, key, default) when is_map(sc) do
-    case get_in(sc, [:domain, key]) do
-      mod when is_atom(mod) and not is_nil(mod) -> mod
-      _ -> default
+    # `sc` may be a `%Foglet.TUI.SessionContext{}` struct; structs do not
+    # implement the Access protocol, so `get_in/2` would crash with
+    # `UndefinedFunctionError: SessionContext.fetch/2`. Use Map.get/2 so the
+    # lookup is safe for both structs and plain test/legacy maps.
+    case Map.get(sc, :domain) do
+      domain when is_map(domain) ->
+        case Map.get(domain, key) do
+          mod when is_atom(mod) and not is_nil(mod) -> mod
+          _ -> default
+        end
+
+      _ ->
+        default
     end
   end
 

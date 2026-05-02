@@ -179,6 +179,32 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert effects == []
     end
 
+    test "Moderation.update(:load) does not crash when session_context is a SessionContext struct (FOG-168)" do
+      # Regression: `domain_module/3` previously called `get_in(sc, [:domain, key])`
+      # against `context.session_context`. When that field is a real
+      # `%Foglet.TUI.SessionContext{}` struct (the live SSH path), `get_in/2`
+      # raises `UndefinedFunctionError: SessionContext.fetch/2` because structs
+      # do not implement Access. This test locks in the safe `Map.get` traversal.
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          session_context: %Foglet.TUI.SessionContext{}
+        )
+
+      assert {state, effects} = Moderation.update(:load, Moderation.init(context), context)
+      assert state.loading?
+
+      assert [
+               %Effect{
+                 type: :task,
+                 payload: %{op: :load_moderation_workspace, screen_key: :moderation}
+               }
+             ] = effects
+    end
+
     test "moderator INVITES tab requests task-backed generate" do
       user = %User{id: "u1", handle: "mod", role: :mod}
 
