@@ -1033,8 +1033,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state =
         Enum.reduce(~w(1 2 3 4 5 6 7 8 9 0), state, fn digit, acc ->
           {:update, acc, []} = handle_account_key(%{key: :char, char: digit}, acc)
+
           assert acc.screen_state.account.active_tab == 2,
                  "digit #{digit} in label field switched tabs"
+
           acc
         end)
 
@@ -1049,8 +1051,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       state =
         Enum.reduce(pk_chars, state, fn ch, acc ->
           {:update, acc, []} = handle_account_key(%{key: :char, char: ch}, acc)
+
           assert acc.screen_state.account.active_tab == 2,
                  "char #{ch} in public_key field switched tabs"
+
           acc
         end)
 
