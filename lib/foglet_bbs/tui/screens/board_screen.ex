@@ -94,12 +94,22 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     {state, effects ++ chat_effects}
   end
 
-  # Tab-switch keys: digit and arrows.
-  def update({:key, %{key: :char, char: "1"}}, %State{} = state, %Context{} = context),
-    do: switch_tab(state, context, :threads)
+  # Tab-switch keys: digit shortcuts are gated to the :threads tab so they do
+  # not steal characters from the chat composer (FOG-282). Left / Right cycle
+  # is unconditional and is the documented back-nav from chat → threads.
+  def update(
+        {:key, %{key: :char, char: "1"}},
+        %State{current_tab: :threads} = state,
+        %Context{} = context
+      ),
+      do: switch_tab(state, context, :threads)
 
-  def update({:key, %{key: :char, char: "2"}}, %State{} = state, %Context{} = context),
-    do: switch_tab(state, context, :chat)
+  def update(
+        {:key, %{key: :char, char: "2"}},
+        %State{current_tab: :threads} = state,
+        %Context{} = context
+      ),
+      do: switch_tab(state, context, :chat)
 
   def update({:key, %{key: :left}}, %State{current_tab: :chat} = state, %Context{} = context),
     do: switch_tab(state, context, :threads)
@@ -240,23 +250,35 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   defp keybar_groups(%State{current_tab: current_tab} = state, context) do
     threads_group = ThreadList.keybar_groups(state.thread_list, context)
 
-    tab_group = %{
-      label: "Tabs",
-      commands: [
-        %{key: "1", label: tab_command_label(:threads, current_tab), priority: 9},
-        %{
-          key: "2",
-          label: tab_command_label(:chat, current_tab, state.presence_count),
-          priority: 9
-        }
-      ]
-    }
-
     case current_tab do
       :threads ->
+        # Digit shortcuts switch tabs from threads. '1' is also a no-op
+        # (already on threads) but advertised for symmetry with '2'.
+        tab_group = %{
+          label: "Tabs",
+          commands: [
+            %{key: "1", label: tab_command_label(:threads, current_tab), priority: 9},
+            %{
+              key: "2",
+              label: tab_command_label(:chat, current_tab, state.presence_count),
+              priority: 9
+            }
+          ]
+        }
+
         [tab_group | threads_group]
 
       :chat ->
+        # Digit shortcuts are intentionally absent here (FOG-282): they fall
+        # through to the chat composer so messages containing '1' or '2' are
+        # not truncated. ←/→ is the back-nav to threads.
+        tab_group = %{
+          label: "Tabs",
+          commands: [
+            %{key: "←", label: tab_command_label(:threads, current_tab), priority: 9}
+          ]
+        }
+
         # When the chat tab is active, suppress threads-only actions
         # (j/k/Enter/C) — they belong to the threads body. Keep the System
         # group (Q/back-nav) by isolating it from the threads group, then
@@ -269,7 +291,9 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   defp tab_command_label(:threads, :threads), do: "Threads*"
   defp tab_command_label(:threads, _), do: "Threads"
-  defp tab_command_label(:chat, :chat, count), do: "Chat (#{count})*"
+  # FOG-282: the chat keybar omits a "Chat" digit-shortcut entry because '2'
+  # falls through to the composer, so the active-chat (`Chat (n)*`) variant is
+  # never rendered — only the threads tab still advertises a `Chat (n)` jump.
   defp tab_command_label(:chat, _, count), do: "Chat (#{count})"
 
   # --- subscriptions ------------------------------------------------------
