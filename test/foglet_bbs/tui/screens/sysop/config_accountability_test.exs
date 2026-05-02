@@ -114,7 +114,7 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
         |> put_draft("max_post_length", 4096)
 
       assert {_limits_form,
-              [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]} =
+              [{:error_modal, "Your role changed. Runtime limits were not saved.", :main_menu}]} =
                LimitsForm.handle_key(%{key: :char, char: "s", ctrl: true}, limits_form)
 
       assert Config.get!("registration_mode") == "open"

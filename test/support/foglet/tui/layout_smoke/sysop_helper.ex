@@ -252,7 +252,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
 
       # Sentinel check via raw tree traversal (D-09 primitive presence).
       # KvGrid returns nested lists that cause BadMapError in apply_at_size;
-      # raw traversal confirms KvGrid renders the "Sessions:" key label.
+      # raw traversal confirms KvGrid renders the "Live sessions:" key label.
       describe "sysop system tab — size contract" do
         for {width, height} <- [{64, 22}, {80, 24}] do
           @width width
@@ -288,8 +288,8 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               |> SysopHelper.render_sysop_smoke_state()
               |> SysopHelper.collect_text()
 
-            assert Enum.any?(texts, &String.contains?(&1, "Sessions:")),
-                   "expected 'Sessions:' at #{width}x#{height}"
+            assert Enum.any?(texts, &String.contains?(&1, "Live sessions:")),
+                   "expected 'Live sessions:' at #{width}x#{height}"
           end
         end
       end

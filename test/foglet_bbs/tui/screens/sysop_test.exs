@@ -356,12 +356,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "USERS :not_loaded renders the Loading… panel", %{state: state} do
       flat = state |> put_users_slot(:not_loaded) |> render_sysop() |> collect_text_values()
-      assert Enum.any?(flat, &String.contains?(&1, "Loading…"))
+      assert Enum.any?(flat, &String.contains?(&1, "Loading sysop tools…"))
     end
 
     test "USERS :loading renders the Loading… panel", %{state: state} do
       flat = state |> put_users_slot(:loading) |> render_sysop() |> collect_text_values()
-      assert Enum.any?(flat, &String.contains?(&1, "Loading…"))
+      assert Enum.any?(flat, &String.contains?(&1, "Loading sysop tools…"))
     end
 
     test "USERS {:loaded, sub} delegates to UsersView.render", %{state: state} do
@@ -375,7 +375,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       sub = Foglet.TUI.Screens.Sysop.UsersView.from_groups(%{}, sysop)
       flat = state |> put_users_slot({:loaded, sub}) |> render_sysop() |> collect_text_values()
       # UsersView render emits the heading.
-      assert Enum.any?(flat, &String.contains?(&1, "User status administration"))
+      assert Enum.any?(flat, &String.contains?(&1, "User status"))
     end
 
     test "USERS {:error, :forbidden} renders forbidden panel (no Retry copy, Pitfall 3)",
@@ -387,9 +387,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
         |> collect_text_values()
         |> Enum.join("\n")
 
-      assert String.contains?(flat, "Insufficient role to view this tab.")
+      assert String.contains?(flat, "Your role no longer allows access to this tab.")
       refute String.contains?(flat, "Could not load")
-      refute String.contains?(flat, "Press R to retry")
+      refute String.contains?(flat, "Press R to try again")
     end
 
     test "USERS {:error, :timeout} renders generic error panel with retry copy",
@@ -402,8 +402,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
         |> Enum.join("\n")
 
       assert String.contains?(flat, "Could not load users.")
-      assert String.contains?(flat, "Press R to retry")
-      refute String.contains?(flat, "Insufficient role")
+      assert String.contains?(flat, "Press R to try again")
+      refute String.contains?(flat, "Your role no longer allows")
     end
 
     test "no \"Press any key\" literal remains in lib/foglet_bbs/tui/screens/sysop.ex" do
@@ -1167,7 +1167,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_users_tab(state, sysop)
       flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
 
-      assert String.contains?(flat, "User status administration")
+      assert String.contains?(flat, "User status")
 
       for {status, user} <- [
             {"pending", pending},
@@ -1186,7 +1186,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       view = UsersView.init(current_user: sysop)
       flat = UsersView.render(view, Foglet.TUI.Theme.default()) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "No administrable users."))
+      assert Enum.any?(flat, &String.contains?(&1, "No users need status changes."))
       # Phase 29 D-15: footer is render-time. With no rows, the only key hint
       # advertised is [j/k] Move (no transition keys are gated-in).
       assert Enum.any?(flat, &String.contains?(&1, "[j/k] Move"))
@@ -1203,8 +1203,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Accounts.get_user!(pending.id).status == :active
 
-      assert current_users_view(state).message ==
-               "Status changed: @approve_me pending -> active."
+      assert current_users_view(state).message == "Approved @approve_me."
     end
 
     test "rejects pending users through Accounts and refreshes as rejected", %{state: state} do
@@ -1216,8 +1215,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Accounts.get_user!(pending.id).status == :rejected
 
-      assert current_users_view(state).message ==
-               "Status changed: @reject_me pending -> rejected."
+      assert current_users_view(state).message == "Rejected @reject_me."
     end
 
     test "suspends active users through Accounts and refreshes as suspended", %{state: state} do
@@ -1230,8 +1228,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Accounts.get_user!(active.id).status == :suspended
 
-      assert current_users_view(state).message ==
-               "Status changed: @suspend_me active -> suspended."
+      assert current_users_view(state).message == "Suspended @suspend_me."
     end
 
     test "reactivates suspended users through Accounts and refreshes as active", %{state: state} do
@@ -1244,8 +1241,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Accounts.get_user!(suspended.id).status == :active
 
-      assert current_users_view(state).message ==
-               "Status changed: @reactivate_me suspended -> active."
+      assert current_users_view(state).message == "Reactivated @reactivate_me."
     end
 
     test "invalid row action is a no-op (Phase 29 D-15: pressing R on :active is gated)",
@@ -1408,7 +1404,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       # D-16: from->to copy uses the focused row's *displayed* (stale) source
       # status and the keypress's target. The handle is named explicitly.
-      assert message == "Cannot change @stale_user from pending to active."
+      assert message == "@stale_user cannot move from pending to active."
       refute message =~ "invalid_transition"
     end
 
@@ -1891,7 +1887,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = activate_system_tab(state)
       flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
 
-      for label <- ["Version:", "Sessions:", "Active boards:", "OTP processes:"] do
+      for label <- ["Version:", "Live sessions:", "Active boards:", "BEAM processes:"] do
         assert String.contains?(flat, label),
                "Expected #{inspect(label)} in SYSTEM render output"
       end
@@ -2409,7 +2405,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, new_state, _} = handle_sysop_key(%{key: :enter}, state)
 
       assert %Foglet.TUI.Modal{type: :error, message: message} = new_state.modal
-      assert message == "Board server unavailable. Please retry."
+      assert message == "Board service is not ready. Try again in a moment."
       assert new_state.current_screen == :main_menu
       assert current_boards_view(new_state).modal == nil
     end

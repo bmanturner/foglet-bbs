@@ -21,6 +21,27 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     "email_verify_resend_cooldown_seconds"
   ]
 
+  # FOG-154 polish: human labels and helper sentences per the FOG-153 content
+  # deck. The schema key remains the storage identifier but is no longer the
+  # operator-facing string.
+  @field_labels %{
+    "max_post_length" => %{
+      label: "Post length limit",
+      helper: "Maximum post body length, in characters.",
+      min_unit: ""
+    },
+    "max_thread_title_length" => %{
+      label: "Thread title limit",
+      helper: "Maximum thread title length, in characters.",
+      min_unit: ""
+    },
+    "email_verify_resend_cooldown_seconds" => %{
+      label: "Verification resend wait",
+      helper: "Minimum time between resend-code requests, in seconds.",
+      min_unit: " second"
+    }
+  }
+
   @type t :: %__MODULE__{
           current_user: Foglet.Accounts.User.t() | nil,
           drafts: %{optional(String.t()) => term()},
@@ -134,20 +155,26 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
               {:cont, {%{acc_state | errors: Map.delete(acc_state.errors, key)}, acc_events}}
 
             {:error, :invalid_value} ->
-              {:cont, {set_error(acc_state, key, "Invalid value (see min/max)"), acc_events}}
+              {:cont,
+               {set_error(acc_state, key, "Enter a value at or above the minimum."), acc_events}}
 
             {:error, :unknown_key} ->
-              {:cont, {set_error(acc_state, key, "Unknown schema key"), acc_events}}
+              {:cont,
+               {set_error(acc_state, key, "This limit is not recognized by this build."),
+                acc_events}}
 
             {:error, :forbidden} ->
               {:halt,
                {acc_state,
-                [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]}}
+                [{:error_modal, "Your role changed. Runtime limits were not saved.", :main_menu}]}}
 
             {:error, :db_error} ->
               {:halt,
                {acc_state,
-                [{:error_modal, "Database error saving limits configuration.", :main_menu}]}}
+                [
+                  {:error_modal, "Could not save runtime limits because storage is unavailable.",
+                   :main_menu}
+                ]}}
           end
 
         {:error, msg} ->
@@ -163,11 +190,11 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
   defp coerce_integer(v) when is_binary(v) do
     case Integer.parse(v) do
       {int, ""} -> {:ok, int}
-      _ -> {:error, "Must be an integer"}
+      _ -> {:error, "Enter a whole number."}
     end
   end
 
-  defp coerce_integer(_), do: {:error, "Must be an integer"}
+  defp coerce_integer(_), do: {:error, "Enter a whole number."}
 
   @spec render(t(), map()) :: any()
   def render(state, theme) do
@@ -183,9 +210,11 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
       |> Enum.with_index()
       |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme) end)
 
-    # Modal.Form footer sentinel "[Enter] Submit   [Esc] Cancel" satisfies
-    # primitive-presence requirements (D-09).
-    footer = text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)
+    # FOG-154: Esc on LIMITS is a no-op (handle_key has no :escape clause), so
+    # the footer must not advertise it. The Modal.Form footer sentinel
+    # "[Enter] Submit" still satisfies primitive-presence requirements (D-09).
+    footer =
+      text("[Tab] Next  [Shift+Tab] Previous  [Enter] Submit  [Ctrl+S] Save", fg: theme.dim.fg)
 
     column style: %{gap: 0} do
       [text("Runtime limits", fg: theme.title.fg, style: [:bold]), text("")] ++
@@ -195,18 +224,24 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   defp render_row(state, key, idx, theme) do
     {:ok, spec} = Schema.fetch_spec(key)
+    field = Map.fetch!(@field_labels, key)
     focused? = state.focused == idx
     marker = if focused?, do: "▸ ", else: "  "
     label_fg = if focused?, do: theme.accent.fg, else: theme.primary.fg
     label_style = if focused?, do: [:bold], else: []
     value = format_value(Map.get(state.drafts, key))
 
-    min_hint = if is_integer(spec.min), do: "  (min: #{spec.min})", else: ""
-
     label_line =
-      text("#{marker}#{key}: #{value}#{min_hint}", fg: label_fg, style: label_style)
+      text("#{marker}#{field.label}: #{value}", fg: label_fg, style: label_style)
 
-    description_line = text("    " <> spec.description, fg: theme.dim.fg)
+    helper_with_min =
+      if is_integer(spec.min) do
+        "#{field.helper} Minimum: #{spec.min}#{field.min_unit}."
+      else
+        field.helper
+      end
+
+    description_line = text("    " <> helper_with_min, fg: theme.dim.fg)
 
     extras =
       case Map.get(state.errors, key) do
