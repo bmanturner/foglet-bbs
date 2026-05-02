@@ -60,20 +60,24 @@ defmodule Foglet.TUI.Screens.Account do
       |> normalize_state(context)
       |> sync_prefs_focus()
 
-    {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-
-    if action != nil do
-      new_active =
-        case action do
-          {:tab_changed, idx} -> idx
-          _ -> ss.active_tab
-        end
-
-      new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-      {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
-      {loaded_ss, effects}
-    else
+    if shield_tab_shortcut?(event, ss) do
       handle_active_key(event, ss, context)
+    else
+      {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
+
+      if action != nil do
+        new_active =
+          case action do
+            {:tab_changed, idx} -> idx
+            _ -> ss.active_tab
+          end
+
+        new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
+        {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
+        {loaded_ss, effects}
+      else
+        handle_active_key(event, ss, context)
+      end
     end
   end
 
@@ -365,6 +369,24 @@ defmodule Foglet.TUI.Screens.Account do
         :account_revoke_invite -> InvitesActions.revoke_selected(context.current_user, invites)
       end
     end)
+  end
+
+  # FOG-142: Tabs widget consumes digit shortcuts 1–9 unconditionally
+  # (Pitfall 6 in `Foglet.TUI.Widgets.Input.Tabs`). Active text-entry
+  # forms must shield digits or real input (e.g. an `ssh-ed25519` public
+  # key) silently jumps to another Account tab.
+  defp shield_tab_shortcut?(event, %State{} = ss) do
+    digit_event?(event) and text_entry_active?(ss)
+  end
+
+  defp digit_event?(%{key: :char, char: <<c>>}) when c in ?0..?9, do: true
+  defp digit_event?(_), do: false
+
+  defp text_entry_active?(%State{} = ss) do
+    case active_label(ss) do
+      "SSH KEYS" -> ss.ssh_keys.mode == :add
+      _ -> false
+    end
   end
 
   defp action_key(%{key: :char, char: char}) when is_binary(char), do: char

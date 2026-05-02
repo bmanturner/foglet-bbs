@@ -1018,6 +1018,57 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert state.screen_state.account.ssh_keys.errors.general ==
                "That SSH key is no longer here. Refresh the list."
     end
+
+    test "FOG-142: digit chars typed in SSH KEYS add mode insert into focused field, not tab nav" do
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{})
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      assert state.screen_state.account.active_tab == 2
+      {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
+      assert state.screen_state.account.ssh_keys.mode == :add
+      assert state.screen_state.account.ssh_keys.focus == :label
+
+      # Digits in label field must NOT switch tabs.
+      state =
+        Enum.reduce(~w(1 2 3 4 5 6 7 8 9 0), state, fn digit, acc ->
+          {:update, acc, []} = handle_account_key(%{key: :char, char: digit}, acc)
+          assert acc.screen_state.account.active_tab == 2,
+                 "digit #{digit} in label field switched tabs"
+          acc
+        end)
+
+      assert state.screen_state.account.ssh_keys.form.label == "1234567890"
+
+      # Tab to public key field; digits there must also be inserted, not consumed.
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.ssh_keys.focus == :public_key
+
+      pk_chars = ~w(s s h - e d 2 5 5 1 9)
+
+      state =
+        Enum.reduce(pk_chars, state, fn ch, acc ->
+          {:update, acc, []} = handle_account_key(%{key: :char, char: ch}, acc)
+          assert acc.screen_state.account.active_tab == 2,
+                 "char #{ch} in public_key field switched tabs"
+          acc
+        end)
+
+      assert state.screen_state.account.ssh_keys.form.public_key == "ssh-ed25519"
+    end
+
+    test "FOG-142: digit chars are still tab shortcuts in SSH KEYS list mode" do
+      user = AccountsFixtures.user_fixture()
+      state = build_state(user, %{})
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      assert state.screen_state.account.active_tab == 2
+      assert state.screen_state.account.ssh_keys.mode == :list
+
+      # No add form active — digits remain tab shortcuts (jump to PROFILE).
+      {:update, state, []} = handle_account_key(%{key: :char, char: "1"}, state)
+      assert state.screen_state.account.active_tab == 0
+    end
   end
 
   # ---------------------------------------------------------------------------
