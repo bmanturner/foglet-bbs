@@ -411,10 +411,13 @@ defmodule Foglet.TUI.Screens.BoardList do
       |> Enum.filter(&is_integer/1)
       |> Enum.sum()
 
-    "#{category.name} • #{length(boards)} boards • #{unread_total} unread total"
+    "#{category.name} • #{board_count_label(length(boards))} • #{unread_total} unread total"
   end
 
   defp detail_text(_entry, _directory), do: ""
+
+  defp board_count_label(1), do: "1 board"
+  defp board_count_label(count) when is_integer(count), do: "#{count} boards"
 
   defp subscription_label(%{required_subscription?: true}), do: "required"
   defp subscription_label(%{subscribed?: true}), do: "subscribed"
