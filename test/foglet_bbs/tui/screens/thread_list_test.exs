@@ -405,7 +405,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     loading = ThreadList.init(ctx)
     empty = State.new(board: @board, board_id: "b1", threads: [], status: :empty)
 
-    assert flatten_text(ThreadList.render(loading, ctx)) =~ "Loading..."
+    assert flatten_text(ThreadList.render(loading, ctx)) =~ "Loading…"
     assert flatten_text(ThreadList.render(empty, ctx)) =~ "No threads in this board yet"
   end
 

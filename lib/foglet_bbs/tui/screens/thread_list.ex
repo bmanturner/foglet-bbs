@@ -226,7 +226,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
           row style: %{gap: 1} do
             [
               Spinner.render(0, theme: theme, style: :dots),
-              text("Loading...", fg: theme.dim.fg)
+              text("Loading…", fg: theme.dim.fg)
             ]
           end
         ]
@@ -238,7 +238,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
       if posting_disabled?(state, context.current_user) do
         "No threads in this board yet."
       else
-        "No threads in this board yet. Press [C] to compose."
+        "No threads in this board yet. Press C to start one."
       end
 
     column style: %{gap: 0} do
@@ -248,7 +248,8 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp render_thread_content(%State{status: {:error, _reason}} = state, context, theme) do
     column style: %{gap: 0} do
-      banner_nodes(state, context, theme) ++ [text("Unable to load threads.", fg: theme.error.fg)]
+      banner_nodes(state, context, theme) ++
+        [text("Couldn't load threads. Press Q to back out and try again.", fg: theme.error.fg)]
     end
   end
 
