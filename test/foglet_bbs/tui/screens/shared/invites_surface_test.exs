@@ -91,7 +91,11 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurfaceTest do
       flat = collect_text_values(result)
       joined = Enum.join(flat, " ")
 
-      assert String.contains?(joined, "No invites yet. Generate one when someone should join.")
+      assert String.contains?(
+               joined,
+               "No invites yet. Generate one when someone is ready to join."
+             )
+
       assert String.contains?(joined, "G Generate")
       assert String.contains?(joined, "R Refresh")
       assert String.contains?(joined, "D Revoke")

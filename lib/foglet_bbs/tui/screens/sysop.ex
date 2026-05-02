@@ -222,9 +222,11 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp handle_update_key(event, %State{} = ss, %Context{} = context) do
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
-    if action == nil and new_tabs == ss.tabs do
-      delegate_update_to_active_tab(event, ss, context)
-    else
+    # FOG-173: gate on `action != nil` instead of `new_tabs == ss.tabs`.
+    # `Tabs.handle_event/2` rewrites `last_action` on every dispatch, so a
+    # post-tab-change keypress would look like a tab event and bypass active-tab
+    # delegation, silently dropping INVITES G/D the same way Moderation did.
+    if action != nil do
       new_active =
         case action do
           {:tab_changed, idx} -> idx
@@ -237,6 +239,8 @@ defmodule Foglet.TUI.Screens.Sysop do
       |> maybe_init_site_form(context)
       |> maybe_request_invites_load(context)
       |> maybe_request_active_load(context)
+    else
+      delegate_update_to_active_tab(event, %{ss | tabs: new_tabs}, context)
     end
   end
 
@@ -430,10 +434,21 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   defp domain_module(%Context{} = context, key, default) do
     Map.get(context.domain || %{}, key) ||
-      (is_map(context.session_context) &&
-         get_in(context.session_context, [:domain, key])) ||
+      session_context_domain(context.session_context, key) ||
       default
   end
+
+  # `session_context` may be a `%Foglet.TUI.SessionContext{}` struct; structs
+  # do not implement Access, so `get_in/2` would crash. Use Map.get/2 so the
+  # lookup is safe for both structs and plain test/legacy maps.
+  defp session_context_domain(sc, key) when is_map(sc) do
+    case Map.get(sc, :domain) do
+      domain when is_map(domain) -> Map.get(domain, key)
+      _ -> nil
+    end
+  end
+
+  defp session_context_domain(_sc, _key), do: nil
 
   defp unwrap_task_result({:ok, {:ok, value}}), do: {:ok, value}
   defp unwrap_task_result({:ok, {:error, reason}}), do: {:error, reason}

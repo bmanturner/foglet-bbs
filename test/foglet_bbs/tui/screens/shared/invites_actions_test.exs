@@ -63,7 +63,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert failed.items == state.items
       assert failed.selected_index == state.selected_index
       assert failed.last_generated_code == "OLD"
-      assert failed.error == "You are not allowed to manage invites."
+      assert failed.error == "Your account cannot manage invites."
     end
   end
 
@@ -120,7 +120,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert failed.items == state.items
       assert failed.selected_index == state.selected_index
       assert failed.last_generated_code == "OLD"
-      assert failed.error == "You are not allowed to manage invites."
+      assert failed.error == "Your account cannot manage invites."
 
       assert invite_status!(invite.code) == before_status
     end
@@ -142,7 +142,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert {:ok, failed} = InvitesActions.revoke_selected(sysop, state)
       assert failed.items == state.items
       assert failed.selected_index == state.selected_index
-      assert failed.error == "That invite has already been used or revoked."
+      assert failed.error == "That invite was already used or revoked."
 
       assert invite_status!(invite.code) == before_status
     end
@@ -163,7 +163,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert {:ok, failed} = InvitesActions.revoke_selected(sysop, state)
       assert failed.items == state.items
       assert failed.selected_index == state.selected_index
-      assert failed.error == "That invite has already been used or revoked."
+      assert failed.error == "That invite was already used or revoked."
 
       assert invite_status!(invite.code) == before_status
     end
@@ -190,7 +190,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert {:ok, failed} = InvitesActions.revoke_selected(sysop, state)
       assert failed.items == state.items
       assert failed.selected_index == state.selected_index
-      assert failed.error == "That invite is no longer here. Refresh the list."
+      assert failed.error == "That invite is no longer available. Refresh the list."
 
       assert invite_status!(invite.code) == before_status
     end
