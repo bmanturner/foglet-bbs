@@ -34,6 +34,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.BoardScreen.State
+  alias Foglet.TUI.Screens.ChatRoom
   alias Foglet.TUI.Screens.ThreadList
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -50,6 +51,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
       %State{
         thread_list: thread_state,
+        chat_room: ChatRoom.init(context),
         current_tab: :threads,
         presence_count: 0,
         presence_tracked?: false,
@@ -85,7 +87,11 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     state = ensure_tracked(state, :threads)
     state = refresh_presence_count(state)
 
-    {state, effects}
+    # Pre-load chat history so the first flip to :chat is instant.
+    {chat_state, chat_effects} = ChatRoom.load_effects(state.chat_room, context)
+    state = %{state | chat_room: chat_state}
+
+    {state, effects ++ chat_effects}
   end
 
   # Tab-switch keys: digit and arrows.
@@ -111,9 +117,28 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     {%{state | thread_list: new_thread_state}, effects}
   end
 
-  # PubSub presence events from FOG-250 — refresh the tab-strip counter.
-  def update({:board_screen, _event, _payload}, %State{} = state, %Context{}) do
-    {refresh_presence_count(state), []}
+  # PubSub presence events from FOG-250 — refresh the tab-strip counter and
+  # let the chat-tab reducer refresh its sidebar list.
+  def update({:board_screen, _event, _payload} = msg, %State{} = state, %Context{} = context) do
+    state = refresh_presence_count(state)
+    {chat_state, chat_effects} = ChatRoom.update(msg, state.chat_room, context)
+    {%{state | chat_room: chat_state}, chat_effects}
+  end
+
+  # Live chat messages are owned by the chat-tab reducer regardless of which
+  # tab is currently active so transcripts stay current when the user flips
+  # back from threads.
+  def update({:board_chat, _event, _payload} = msg, %State{} = state, %Context{} = context) do
+    {chat_state, chat_effects} = ChatRoom.update(msg, state.chat_room, context)
+    {%{state | chat_room: chat_state}, chat_effects}
+  end
+
+  # Chat history / send results are routed by op so the right reducer owns
+  # the result regardless of which tab is currently active.
+  def update({:task_result, op, _result} = msg, %State{} = state, %Context{} = context)
+      when op in [:load_chat_history, :send_chat] do
+    {chat_state, chat_effects} = ChatRoom.update(msg, state.chat_room, context)
+    {%{state | chat_room: chat_state}, chat_effects}
   end
 
   # Threads tab is active: delegate every other message to ThreadList.
@@ -122,16 +147,28 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     {%{state | thread_list: new_thread_state}, effects}
   end
 
-  # Chat tab is active: C6 will replace this placeholder with ChatRoom's
-  # reducer. Until then we still forward task results / activity messages
-  # down to ThreadList so its background loading stays consistent if the
-  # user flips back to threads.
-  def update({:task_result, _op, _result} = msg, %State{} = state, %Context{} = context) do
+  # Chat tab is active: forward keys to ChatRoom; thread-flavoured task /
+  # activity messages still go to ThreadList so its background loading
+  # stays consistent if the user flips back.
+  def update({:key, _ev} = msg, %State{current_tab: :chat} = state, %Context{} = context) do
+    {chat_state, chat_effects} = ChatRoom.update(msg, state.chat_room, context)
+    {%{state | chat_room: chat_state}, chat_effects}
+  end
+
+  def update(
+        {:task_result, _op, _result} = msg,
+        %State{current_tab: :chat} = state,
+        %Context{} = context
+      ) do
     {new_thread_state, effects} = ThreadList.update(msg, state.thread_list, context)
     {%{state | thread_list: new_thread_state}, effects}
   end
 
-  def update({:board_activity, _board_id, _event} = msg, %State{} = state, %Context{} = context) do
+  def update(
+        {:board_activity, _board_id, _event} = msg,
+        %State{current_tab: :chat} = state,
+        %Context{} = context
+      ) do
     {new_thread_state, effects} = ThreadList.update(msg, state.thread_list, context)
     {%{state | thread_list: new_thread_state}, effects}
   end
@@ -189,12 +226,8 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     ThreadList.render_inner_content(state.thread_list, context)
   end
 
-  defp render_active_tab(%State{current_tab: :chat}, _context, theme) do
-    # Placeholder content. FOG-254 C6 replaces this with the real ChatRoom
-    # view; FOG-255 C7 ships the final copy.
-    column style: %{gap: 0} do
-      [text("Chat is enabled for this board.", fg: theme.dim.fg)]
-    end
+  defp render_active_tab(%State{current_tab: :chat} = state, context, _theme) do
+    ChatRoom.render(state.chat_room, context)
   end
 
   defp keybar_groups(%State{current_tab: current_tab} = state, context) do
@@ -219,9 +252,11 @@ defmodule Foglet.TUI.Screens.BoardScreen do
       :chat ->
         # When the chat tab is active, suppress threads-only actions
         # (j/k/Enter/C) — they belong to the threads body. Keep the System
-        # group (Q/back-nav) by isolating it from the threads group.
+        # group (Q/back-nav) by isolating it from the threads group, then
+        # let ChatRoom contribute its Send / Sidebar commands.
         system_groups = Enum.filter(threads_group, &(&1.label == "System"))
-        [tab_group | system_groups]
+        chat_groups = ChatRoom.keybar_groups(state.chat_room, context)
+        [tab_group] ++ chat_groups ++ system_groups
     end
   end
 
@@ -239,7 +274,11 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   def subscriptions(%State{board_id: board_id} = state, context) when is_binary(board_id) do
     thread_topics = ThreadList.subscriptions(state.thread_list, context)
-    [PubSubTopics.board_screen_topic(board_id) | thread_topics]
+
+    [
+      PubSubTopics.board_screen_topic(board_id),
+      PubSubTopics.board_chat_topic(board_id) | thread_topics
+    ]
   end
 
   def subscriptions(_state, %Context{route_params: params} = context) do
@@ -248,9 +287,14 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
       base = ThreadList.subscriptions(nil, context)
 
-      if is_binary(board_id),
-        do: [PubSubTopics.board_screen_topic(board_id) | base],
-        else: base
+      if is_binary(board_id) do
+        [
+          PubSubTopics.board_screen_topic(board_id),
+          PubSubTopics.board_chat_topic(board_id) | base
+        ]
+      else
+        base
+      end
     else
       ThreadList.subscriptions(nil, context)
     end

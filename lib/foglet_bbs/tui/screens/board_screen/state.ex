@@ -11,12 +11,14 @@ defmodule Foglet.TUI.Screens.BoardScreen.State do
   presence count rendered as `2 CHAT (#)`.
   """
 
+  alias Foglet.TUI.Screens.ChatRoom
   alias Foglet.TUI.Screens.ThreadList
 
   @type tab :: :threads | :chat
 
   @type t :: %__MODULE__{
           thread_list: ThreadList.State.t(),
+          chat_room: ChatRoom.State.t() | nil,
           current_tab: tab(),
           presence_count: non_neg_integer(),
           presence_tracked?: boolean(),
@@ -26,6 +28,7 @@ defmodule Foglet.TUI.Screens.BoardScreen.State do
         }
 
   defstruct thread_list: %ThreadList.State{},
+            chat_room: nil,
             current_tab: :threads,
             presence_count: 0,
             presence_tracked?: false,
