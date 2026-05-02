@@ -157,6 +157,26 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
+  # FOG-175: D/d on the INVITES tab arms the same two-step confirm flow as
+  # Enter. Handled at the top-level update clause so the Tabs wrapper's
+  # `last_action` field (set by a previous tab change to e.g.
+  # `{:tab_changed, 5}` and reset to `nil` on subsequent non-tab keys)
+  # does not spuriously trip the "tabs changed" branch in
+  # `handle_update_key/3`, which would otherwise clear `armed_revoke?` and
+  # drop the gesture. Unit tests pre-FOG-175 didn't reproduce this because
+  # they constructed states with `last_action: nil`; live SSH always carries
+  # the residue from the navigation that opened INVITES.
+  def update({:key, %{key: :char, char: c} = event}, local_state, %Context{} = context)
+      when c in ["d", "D"] do
+    ss = normalize_state(local_state, context)
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    case active_label do
+      "INVITES" -> apply_arm_revoke_intent(ss)
+      _ -> handle_update_key(event, ss, context)
+    end
+  end
+
   def update({:key, event}, local_state, %Context{} = context) do
     handle_update_key(event, normalize_state(local_state, context), context)
   end
