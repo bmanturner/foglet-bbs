@@ -44,6 +44,8 @@ defmodule FogletBbs.Application do
       {Registry, keys: :unique, name: Foglet.Sessions.Registry},
       Foglet.Sessions.Supervisor,
       Foglet.Sessions.BoardScreen,
+      {Registry, keys: :unique, name: Foglet.BoardChat.Ephemeral.Registry},
+      Foglet.BoardChat.Ephemeral.Supervisor,
       # Start to serve requests, typically the last entry
       FogletBbsWeb.Endpoint
     ]
