@@ -160,7 +160,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       Enum.reject(
         [
           reply_notice(theme, reply_state),
-          text("Unable to load posts.", fg: theme.error.fg)
+          text("Couldn't load posts. Press Q to back out and try again.", fg: theme.error.fg)
         ],
         &is_nil/1
       )

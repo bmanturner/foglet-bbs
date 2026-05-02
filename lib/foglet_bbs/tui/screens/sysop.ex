@@ -266,28 +266,23 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   defp plain_digit_event?(_), do: false
 
+  # FOG-179: gate on the Tabs `action` alone. `Tabs.handle_event/2` rewrites
+  # `last_action` on every dispatch, so a struct comparison `new_tabs == ss.tabs`
+  # would treat the first per-tab keypress after a tab change as a tab event
+  # and drop INVITES G/D the same way Moderation did pre-FOG-173. Active-tab
+  # changes only happen on `{:tab_changed, _}`.
   defp route_through_tabs(event, %State{} = ss, %Context{} = context) do
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
-    # FOG-173: gate on `action != nil` instead of `new_tabs == ss.tabs`.
-    # `Tabs.handle_event/2` rewrites `last_action` on every dispatch, so a
-    # post-tab-change keypress would look like a tab event and bypass active-tab
-    # delegation, silently dropping INVITES G/D the same way Moderation did.
-    if action != nil do
-      new_active =
-        case action do
-          {:tab_changed, idx} -> idx
-          _ -> ss.active_tab
-        end
+    case action do
+      nil ->
+        delegate_update_to_active_tab(event, %{ss | tabs: new_tabs}, context)
 
-      new_ss = %{ss | tabs: new_tabs, active_tab: new_active, armed_revoke?: false}
-
-      new_ss
-      |> maybe_init_site_form(context)
-      |> maybe_request_invites_load(context)
-      |> maybe_request_active_load(context)
-    else
-      delegate_update_to_active_tab(event, %{ss | tabs: new_tabs}, context)
+      {:tab_changed, idx} ->
+        %{ss | tabs: new_tabs, active_tab: idx, armed_revoke?: false}
+        |> maybe_init_site_form(context)
+        |> maybe_request_invites_load(context)
+        |> maybe_request_active_load(context)
     end
   end
 

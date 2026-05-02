@@ -405,7 +405,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     loading = ThreadList.init(ctx)
     empty = State.new(board: @board, board_id: "b1", threads: [], status: :empty)
 
-    assert flatten_text(ThreadList.render(loading, ctx)) =~ "Loading..."
+    assert flatten_text(ThreadList.render(loading, ctx)) =~ "Loading…"
     assert flatten_text(ThreadList.render(empty, ctx)) =~ "No threads in this board yet"
   end
 
@@ -495,10 +495,6 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   end
 
   describe "subscriptions/2 export (Phase 39 R6, D-08)" do
-    test "module exports subscriptions/2" do
-      assert function_exported?(Foglet.TUI.Screens.ThreadList, :subscriptions, 2)
-    end
-
     test "returns board topic from local state" do
       state = %Foglet.TUI.Screens.ThreadList.State{board_id: "b-77"}
       ctx = %Foglet.TUI.Context{route_params: %{}}
