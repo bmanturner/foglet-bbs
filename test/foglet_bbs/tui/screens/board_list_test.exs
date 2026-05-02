@@ -428,6 +428,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
   describe "subscriptions/2 export (Phase 39 R7, D-22)" do
     test "module exports subscriptions/2" do
+      Code.ensure_loaded!(Foglet.TUI.Screens.BoardList)
       assert function_exported?(Foglet.TUI.Screens.BoardList, :subscriptions, 2)
     end
 
