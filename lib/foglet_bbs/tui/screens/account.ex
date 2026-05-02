@@ -234,6 +234,7 @@ defmodule Foglet.TUI.Screens.Account do
   defp handle_prefs_update(event, %State{} = ss, %Context{} = context) do
     case PrefsForm.handle_key(event, ss, context.current_user) do
       {:ok, new_ss, cmds} ->
+        new_ss = sync_prefs_focus_from_form(new_ss)
         {new_ss, account_command_effects(cmds, context, new_ss)}
 
       :no_match ->
@@ -508,7 +509,14 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   @prefs_focus_index %{timezone: 0, time_format: 1, theme: 2}
+  @prefs_focus_atom %{0 => :timezone, 1 => :time_format, 2 => :theme}
 
+  # Pre-dispatch: tests/seeders write `prefs_focus` directly on the struct;
+  # mirror it onto `prefs_form.focus_index` so Modal.Form dispatches to the
+  # field the screen thinks is focused. After PrefsForm runs,
+  # `sync_prefs_focus_from_form/1` mirrors any focus advancement (Tab,
+  # Shift-Tab, Enter) back into `prefs_focus` so this pre-dispatch step does
+  # not stomp Modal.Form's focus on the next keystroke (FOG-139).
   defp sync_prefs_focus(%State{prefs_focus: pf, prefs_form: form} = ss)
        when not is_nil(form) do
     idx = Map.get(@prefs_focus_index, pf, 0)
@@ -521,4 +529,14 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp sync_prefs_focus(ss), do: ss
+
+  # Dialyzer infers `prefs_form` is always set by the time this helper runs
+  # (PrefsForm.handle_key only succeeds when the form is built), so a nil
+  # fallback would be flagged as unreachable.
+  defp sync_prefs_focus_from_form(%State{prefs_form: %{focus_index: idx}} = ss) do
+    case Map.get(@prefs_focus_atom, idx) do
+      nil -> ss
+      atom -> %{ss | prefs_focus: atom}
+    end
+  end
 end

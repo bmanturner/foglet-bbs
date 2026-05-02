@@ -492,6 +492,104 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert :no_match = handle_account_key(%{key: :f12}, state)
     end
 
+    # FOG-139: regression test for PREFS Tab key advancing focus through
+    # all-enum fields (Timezone -> Time format -> Theme). The previous
+    # bug was a one-way pre-dispatch sync from prefs_focus to
+    # form.focus_index that stomped Modal.Form's focus advancement on the
+    # next keystroke; Tab visually no-op'd and Down kept mutating Timezone.
+    test "FOG-139: Tab in PREFS advances focus through enum fields and back-syncs prefs_focus" do
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "12h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+
+      account = state.screen_state.account
+      assert account.prefs_focus == :timezone
+      assert account.prefs_form.focus_index == 0
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      account = state.screen_state.account
+      assert account.prefs_form.focus_index == 1
+      assert account.prefs_focus == :time_format
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      account = state.screen_state.account
+      assert account.prefs_form.focus_index == 2
+      assert account.prefs_focus == :theme
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      account = state.screen_state.account
+      assert account.prefs_form.focus_index == 0
+      assert account.prefs_focus == :timezone
+    end
+
+    test "FOG-139: Down after Tab cycles the next enum field, not Timezone" do
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "12h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+
+      original_tz = state.screen_state.account.prefs_form |> ModalForm.field_value(:timezone)
+      original_tf = state.screen_state.account.prefs_form |> ModalForm.field_value(:time_format)
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      {:update, state, []} = handle_account_key(%{key: :down}, state)
+
+      account = state.screen_state.account
+      new_tz = account.prefs_form |> ModalForm.field_value(:timezone)
+      new_tf = account.prefs_form |> ModalForm.field_value(:time_format)
+
+      assert new_tz == original_tz, "Timezone must not change after Tab + Down"
+      assert new_tf != original_tf, "Time format must cycle on Down after Tab"
+    end
+
+    test "FOG-139: Shift-Tab in PREFS retreats focus and back-syncs prefs_focus" do
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "12h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+
+      {:update, state, []} = handle_account_key(%{key: :shift_tab}, state)
+      account = state.screen_state.account
+      assert account.prefs_form.focus_index == 2
+      assert account.prefs_focus == :theme
+    end
+
     test "Account screen does NOT dispatch any fake operator commands (Save/Generate/Revoke)", %{
       state: state
     } do
