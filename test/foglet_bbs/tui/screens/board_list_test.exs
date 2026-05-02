@@ -232,7 +232,8 @@ defmodule Foglet.TUI.Screens.BoardListTest do
                  archived: false,
                  postable_by: :members,
                  chat_enabled: false,
-                 chat_storage_mode: nil
+                 chat_storage_mode: nil,
+                 chat_message_ttl_seconds: nil
                }
              })
   end
