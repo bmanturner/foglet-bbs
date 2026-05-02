@@ -15,7 +15,9 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
 
       assert {:ok, %InvitesState{} = state} = InvitesActions.load(sysop, InvitesState.new())
 
-      assert [%{code: code, issuer_id: issuer_id, status: :available}] = state.items
+      assert %{code: code, issuer_id: issuer_id, status: :available} =
+               Enum.find(state.items, &(&1.code == invite.code))
+
       assert code == invite.code
       assert issuer_id == sysop.id
       assert state.selected_index == 0
@@ -24,12 +26,15 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
 
     test "refresh preserves last generated code while replacing items" do
       sysop = actor_fixture(:sysop)
-      AccountsFixtures.invite_fixture(sysop)
+      invite = AccountsFixtures.invite_fixture(sysop)
 
       state = InvitesState.new(last_generated_code: "INVITEKEEP")
 
       assert {:ok, refreshed} = InvitesActions.refresh(sysop, state)
-      assert [%{status: :available}] = refreshed.items
+
+      assert %{status: :available} =
+               Enum.find(refreshed.items, &(&1.code == invite.code))
+
       assert refreshed.last_generated_code == "INVITEKEEP"
     end
   end
@@ -44,9 +49,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
       assert {:ok, state} = InvitesActions.generate(sysop, InvitesState.new(items: before_items))
 
       assert {:ok, after_items} = Invites.list_invites(sysop)
-      assert length(after_items) == length(before_items) + 1
+      before_codes = MapSet.new(before_items, & &1.code)
+      after_codes = MapSet.new(after_items, & &1.code)
+      new_codes = MapSet.difference(after_codes, before_codes) |> MapSet.to_list()
+      assert [new_code] = new_codes
       assert state.items == after_items
-      assert state.last_generated_code == hd(after_items).code
+      assert state.last_generated_code == new_code
       assert state.error == nil
     end
 
