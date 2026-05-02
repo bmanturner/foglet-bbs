@@ -1,101 +1,126 @@
-<!-- generated-by: gsd-doc-writer -->
 # Foglet BBS
 
-Foglet is an SSH-first bulletin board system built with Elixir, Phoenix,
-Postgres, and a terminal UI served over SSH. Accounts, boards, threads, posts,
-oneliners, subscriptions, moderation, and sysop workflows all live in the
-terminal experience.
+Foglet is a small, self-hostable bulletin board system for people who still like the feeling of dialing into a place.
 
-Phoenix is operational infrastructure for the endpoint, PubSub, telemetry,
-LiveDashboard, mail delivery plumbing, and future structured clients. 
+The main door is SSH. The interface is a terminal UI. Phoenix is present, but the web surface is a lobby and operational shell, not a browser forum.
 
-## Requirements
-
-- Elixir `~> 1.17` and a matching Erlang/OTP release
-- PostgreSQL (any currently supported major version)
-- An SSH client for connecting to the running BBS
-
-## Quick Start
-
-Clone the repo:
+Try the public pre-alpha:
 
 ```bash
-git clone <your-fork-or-remote-url> foglet_bbs
-cd foglet_bbs
+ssh bbs.foglet.io
 ```
 
-Then choose the database you want Mix to use. If you already have a local
-Postgres that matches `config/dev.exs`, run:
+Source: https://github.com/bmanturner/foglet-bbs
+
+## What Foglet is
+
+Foglet is an SSH-first BBS built with Elixir/OTP, Phoenix, Postgres, and a modern terminal UI. It is meant to feel old-network without pretending to be old software: small communities, named boards, readable threads, a sysop in charge, and enough modern plumbing to keep the place reliable.
+
+Foglet is not trying to be Discord, a social network, a web forum, or a hosted SaaS product. You run it yourself. Your users connect over SSH. The BBS lives in the terminal.
+
+## What exists today
+
+Current Foglet builds include:
+
+- SSH-served terminal UI with account registration, login, verification, password reset, and account management flows.
+- Password authentication and SSH public-key authentication.
+- In-TUI SSH key management, including adding and removing public keys from an account.
+- Boards, threads, posts, replies, edits, soft deletion, read pointers, board subscriptions, and per-board message numbering.
+- Oneliners for short public notes.
+- Moderation/sysop workflows for account, board, configuration, and oneliner administration where implemented.
+- One active session per user: a new login promotes the new connection and closes the older session.
+- Phoenix endpoint, health check, LiveDashboard, PubSub, telemetry, mail plumbing, and other operational infrastructure.
+
+The web page is intentionally just a lobby/window into the SSH BBS. It is not an end-user web client.
+
+## SSH public-key login
+
+Foglet treats SSH keys as a first-class way to enter the BBS.
+
+After an account has a public key on file, a user can connect with a normal SSH client and authenticate by key instead of typing a password every time. The key stays on the user's machine; Foglet stores the public half and checks it during SSH authentication.
+
+That gives the project one of its signature textures: your ssh-agent can knock on a bulletin board.
+
+Local development connection example:
+
+```bash
+ssh USERNAME@localhost -p 2222
+```
+
+Public pre-alpha connection:
+
+```bash
+ssh bbs.foglet.io
+```
+
+## Run Foglet locally
+
+### Requirements
+
+The repo's `.tool-versions` file is the source of truth for local language versions. At the time of this writing it specifies:
+
+- Elixir `1.19.5-otp-28`
+- Erlang/OTP `28.3.1`
+
+You will also need:
+
+- PostgreSQL, or Docker Compose for the included Postgres service.
+- A standard SSH client.
+
+### Clone
+
+```bash
+git clone git@github.com:bmanturner/foglet-bbs.git
+cd foglet-bbs
+```
+
+### Set up the database
+
+If you already have a local Postgres that matches `config/dev.exs`:
 
 ```bash
 mix setup
 ```
 
-To use the included Docker-backed Postgres instead of an existing local
-database, start it first:
+To use the included Docker-backed Postgres instead:
 
 ```bash
 docker compose up -d postgres
 mix setup
 ```
 
-If host port `5432` is already in use, set `POSTGRES_PORT` for Compose and
-`DATABASE_URL` for Mix, for example:
+If host port `5432` is already in use, set `POSTGRES_PORT` for Compose and `DATABASE_URL` for Mix:
 
 ```bash
 POSTGRES_PORT=55432 docker compose up -d postgres
 DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev mix setup
 ```
 
-`mix setup` runs `deps.get`, `ecto.create`, `ecto.migrate`, `run priv/repo/seeds.exs`,
-and configures the project's git hooks path.
+`mix setup` gets dependencies, creates and migrates the database, runs seeds, and configures the project's git hooks path.
 
-Start the application:
+### Start the app
 
 ```bash
 mix phx.server
 ```
 
-Phoenix and the SSH daemon both come up under the OTP supervision tree. The
-default SSH port is `2222` (override with the `FOGLET_SSH_PORT` environment
-variable).
+Phoenix and the SSH daemon start under the OTP supervision tree. The default SSH port is `2222`; override it with `FOGLET_SSH_PORT`.
 
-## Connecting
-
-Connect with any standard SSH client:
+Then connect:
 
 ```bash
 ssh USERNAME@localhost -p 2222
 ```
 
-Foglet supports both **SSH key** and **password** authentication. Users may
-register and add SSH keys through the in-TUI account workflows. Once a key is
-registered, subsequent sessions can authenticate without a password.
+## Operator notes
 
-Only one active session per user is allowed; opening a second session will
-promote the new connection and close the older one.
+Foglet stores the active delivery mode in runtime configuration as `delivery_mode`.
 
-## Operator Notes
+Email mode (`delivery_mode=email`) may send registration verification, password reset, and account-status notices through the configured mail adapter. SMTP host, port, username, password, and adapter settings belong in environment/runtime config, not in DB-backed runtime config.
 
-### Delivery Modes
+No-email mode (`delivery_mode=no_email`) sends no outbound email. Operators retrieve reset tokens or verification codes through break-glass Mix tasks and communicate them out-of-band.
 
-Foglet stores the active delivery mode in runtime configuration as
-`delivery_mode`.
-
-**Email mode** (`delivery_mode=email`): registration verification, password
-reset, and account-status notices may be delivered through the configured
-mail adapter. SMTP host, port, username, password, and adapter settings
-belong in environment/runtime config (`config/runtime.exs` or deployment
-environment variables) and **not** in DB-backed runtime config.
-
-**no-email mode** (`delivery_mode=no_email`): no outbound email is sent.
-Operators retrieve reset tokens or verification codes through break-glass
-Mix tasks and communicate them out-of-band.
-
-### Break-Glass Mix Tasks
-
-Run these from the application release or source checkout against the same
-database and runtime environment as the running node:
+Useful operator tasks include:
 
 ```bash
 mix foglet.user.reset_password HANDLE
@@ -104,62 +129,42 @@ mix foglet.user.status HANDLE --actor SYSOP --status active
 mix foglet.board_subscriptions list --user HANDLE
 ```
 
-- `foglet.user.reset_password HANDLE` — generates a raw reset token for
-  operator-assisted SSH reset handling. Does not send email and does not
-  produce a browser reset URL.
-- `foglet.user.verification_code HANDLE` — generates a verification code for
-  no-email operation. In email mode, prefer the normal Login or Verify
-  resend flow.
-- `foglet.user.status HANDLE --actor SYSOP --status STATUS` — changes user
-  status through the same Accounts authorization boundary as TUI workflows.
-  Valid statuses are `active`, `rejected`, and `suspended`.
-- `foglet.board_subscriptions list --user HANDLE` — lists a user's board
-  subscription directory. Also supports `subscribe` and `unsubscribe` actions
-  with `--board BOARD_SLUG`. Required-subscription and archived-board rules
-  still route through `Foglet.Boards`.
+More tasks live in `lib/mix/tasks/`, including `foglet.user.create`, `foglet.user.promote`, and `foglet.doctor`.
 
-Additional operator tasks live in `lib/mix/tasks/`, including
-`foglet.user.create`, `foglet.user.promote`, and `foglet.doctor`.
+## What is intentionally not present yet
 
-## Launch Caveats
+Do not operate Foglet as though these exist today:
 
-The following are **not** v1.2 pre-alpha capabilities. Foglet should not be
-operated as though they exist yet:
-
-- No end-user web UI. Browser-facing Phoenix surfaces are operational
-  infrastructure only.
+- No end-user web forum UI.
 - No browser admin console.
-- No webhook notifications.
+- No hosted service or managed Foglet cloud.
+- No federation.
+- No mobile app.
+- No direct messages or private mail system.
+- No @mention notification system.
 - No email digests.
+- No webhook notifications.
+- No full case-management moderation suite.
 - No delivery retry queues or outbound delivery logs.
-- No full case-management moderation.
 
-## Repository Layout
+## Repository layout
 
-- `lib/foglet_bbs/` — `Foglet.*` domain code (Accounts, Boards, Threads, Posts,
-  Sessions, SSH, TUI, Authorization, Config) plus `FogletBbs.*` Phoenix
-  infrastructure (Application, Repo, Mailer, etc.). Both namespaces coexist in
-  this directory; the boundary is by module name, not by path.
-- `lib/foglet_bbs_web/` — `FogletBbsWeb.*` Phoenix endpoint, telemetry,
-  LiveDashboard.
-- `lib/mix/tasks/` — operator break-glass Mix tasks.
-- `docs/` — project documentation. See
-  [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) and
-  [`docs/DATA_MODEL.md`](docs/DATA_MODEL.md).
-- `docs/raxol/` — **vendored** Raxol library documentation. These are
-  upstream library docs, not Foglet-specific content.
+- `lib/foglet_bbs/` — `Foglet.*` domain code and `FogletBbs.*` Phoenix infrastructure. The boundary is by module name, not by path.
+- `lib/foglet_bbs_web/` — `FogletBbsWeb.*` endpoint, router, controllers, telemetry, and web views.
+- `lib/mix/tasks/` — operator and break-glass Mix tasks.
+- `docs/` — project documentation, including `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, and `docs/DEVELOPMENT.md`.
+- `docs/raxol/` — vendored Raxol documentation.
 - `vendor/raxol/` — vendored Raxol TUI library source.
 
 ## Development
 
-The project finish line is:
+Run the full project finish line with:
 
 ```bash
 mix precommit
 ```
 
-`precommit` runs `compile --warnings-as-errors`, `deps.unlock --unused`,
-`format`, `credo --strict`, `sobelow --exit Low`, and `dialyzer`.
+`precommit` runs compile with warnings as errors, formatter, unused dependency checks, Credo, Sobelow, and Dialyzer.
 
 Run the test suite with:
 
@@ -167,25 +172,10 @@ Run the test suite with:
 mix test
 ```
 
-`mix test` ensures the test database is created and migrated, seeds runtime
-config, and then runs the suite.
-
-For deeper context on namespaces, persistence invariants, authorization
-scopes, SSH/TUI ownership, and workflow conventions, read
-[`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) before non-trivial changes.
+For deeper context on namespaces, persistence invariants, authorization scopes, SSH/TUI ownership, and workflow conventions, read `docs/DEVELOPMENT.md` before non-trivial changes.
 
 ## License
 
 Copyright 2026 Brendan Turner
 
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-
-  http://www.apache.org/licenses/LICENSE-2.0
-
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
+Licensed under the Apache License, Version 2.0. See `LICENSE` for details.
