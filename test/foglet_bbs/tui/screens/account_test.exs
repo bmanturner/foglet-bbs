@@ -581,6 +581,66 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert account.prefs_focus == :timezone
     end
 
+    test "PREFS timezone uses searchable select-list and preserves non-curated saved values" do
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "Antarctica/Troll",
+        preferences: %{"time_format" => "12h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      state = leave_profile_form(state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+      form = state.screen_state.account.prefs_form
+
+      assert %{type: :select_list, name: :timezone} = hd(form.fields)
+      assert ModalForm.field_value(form, :timezone) == "Antarctica/Troll"
+
+      flat = render_account(state) |> collect_text_values() |> Enum.join("")
+      assert flat =~ "Type to filter"
+      assert flat =~ "Antarctica/Troll"
+    end
+
+    test "PREFS timezone can search America/Chicago without full cycling" do
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "Etc/UTC",
+        preferences: %{"time_format" => "12h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      state = leave_profile_form(state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+      assert ModalForm.field_value(state.screen_state.account.prefs_form, :timezone) == "Etc/UTC"
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "C"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "h"}, state)
+      {:update, state, []} = handle_account_key(%{key: :enter}, state)
+
+      assert ModalForm.field_value(state.screen_state.account.prefs_form, :timezone) ==
+               "America/Chicago"
+
+      assert state.screen_state.account.prefs_form.focus_index == 1
+    end
+
     test "FOG-139: Down after Tab cycles the next enum field, not Timezone" do
       alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
@@ -1206,15 +1266,15 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert ModalForm.field_value(state.screen_state.account.profile_form, :real_name) =~ "3"
     end
 
-    test "FOG-333: digit chars on PREFS still switch tabs (focused field is :enum)" do
+    test "FOG-333/FOG-350: digit chars on PREFS still switch tabs (focused field is select-list)" do
       user = AccountsFixtures.user_fixture()
 
       state =
         build_state(user, %{})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
-      # Move to PREFS via arrow (index 1). Timezone is :enum, so digits are
-      # NOT shielded and should still drive the global tab shortcut.
+      # Move to PREFS via arrow (index 1). A blank timezone select-list keeps
+      # digit tab shortcuts available, so users can still jump tabs.
       {:update, state, []} = handle_account_key(%{key: :right}, state)
       assert state.screen_state.account.active_tab == 1
 
@@ -1224,7 +1284,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
           state.screen_state.account.prefs_form.focus_index
         )
 
-      assert focused_field.type == :enum
+      assert focused_field.type == :select_list
 
       {:update, state, _} = handle_account_key(%{key: :char, char: "3"}, state)
       assert state.screen_state.account.active_tab == 2
@@ -1364,13 +1424,17 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = build_user_with_profile()
       ss = AccountState.new(current_user: user)
 
-      # Mutate the live prefs form by cycling the focused enum picker
+      # Mutate the live prefs form by searching/selecting the focused timezone select-list
       # (focus starts at :timezone — first field).
-      {form_after_pick, nil} =
-        ModalForm.handle_event(%{key: :down}, ss.prefs_form)
+      {form_after_search, nil} = ModalForm.handle_event(%{key: :char, char: "C"}, ss.prefs_form)
 
-      # Sanity: cycling moved :timezone off the seeded "Etc/UTC".
-      assert ModalForm.field_value(form_after_pick, :timezone) != "Etc/UTC"
+      {form_after_search, nil} =
+        ModalForm.handle_event(%{key: :char, char: "h"}, form_after_search)
+
+      {form_after_pick, nil} = ModalForm.handle_event(%{key: :enter}, form_after_search)
+
+      # Sanity: selection moved :timezone off the seeded "Etc/UTC".
+      assert ModalForm.field_value(form_after_pick, :timezone) == "America/Chicago"
 
       ss_dirty = %{
         ss
@@ -1503,26 +1567,30 @@ defmodule Foglet.TUI.Screens.AccountTest do
              "expected theme enum field in prefs form spec"
     end
 
-    test "FOG-131: timezone is an enum picker, not a raw text field", %{state: state} do
+    test "FOG-131/FOG-350: timezone is a searchable select-list, not a raw text field", %{
+      state: state
+    } do
       form = state.screen_state.account.prefs_form
       tz = Enum.find(form.fields, &(&1.name == :timezone))
 
-      assert tz.type == :enum, "expected :timezone field to be an enum picker (FOG-131)"
+      assert tz.type == :select_list, "expected :timezone field to be a searchable select-list"
       assert is_list(tz.choices) and length(tz.choices) > 1
       assert "Etc/UTC" in tz.choices
       assert "America/Chicago" in tz.choices
     end
 
-    test "FOG-131: cycling timezone enum changes the picker value without saving" do
+    test "FOG-350: searching timezone select-list changes the picker value without saving" do
       alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
       user = build_user_with_profile(timezone: "Etc/UTC")
       ss = AccountState.new(current_user: user)
 
-      {form2, action} = ModalForm.handle_event(%{key: :down}, ss.prefs_form)
+      {form1, nil} = ModalForm.handle_event(%{key: :char, char: "C"}, ss.prefs_form)
+      {form1, nil} = ModalForm.handle_event(%{key: :char, char: "h"}, form1)
+      {form2, action} = ModalForm.handle_event(%{key: :enter}, form1)
 
-      assert action == nil, "cycling must not emit a submit action (FOG-131 save-only-on-save)"
-      assert ModalForm.field_value(form2, :timezone) != "Etc/UTC"
+      assert action == nil, "selecting must not emit a submit action (save-only-on-save)"
+      assert ModalForm.field_value(form2, :timezone) == "America/Chicago"
 
       assert ModalForm.field_value(form2, :timezone) in Foglet.TUI.Screens.Account.Timezones.curated()
     end
@@ -1540,39 +1608,26 @@ defmodule Foglet.TUI.Screens.AccountTest do
                "Pacific/Tarawa"
     end
 
-    test "FOG-132: timezone enum field is configured for compact display", %{state: state} do
+    test "FOG-350: timezone select-list is height-bounded", %{state: state} do
       tz = Enum.find(state.screen_state.account.prefs_form.fields, &(&1.name == :timezone))
 
-      assert Map.get(tz, :display) == :compact,
-             "expected :timezone field to render with display: :compact (FOG-132 — bound vertical footprint)"
+      assert Map.get(tz, :max_height) == 8
     end
 
-    test "FOG-132: PREFS render contains a single compact timezone row, not the full curated list",
+    test "FOG-350: PREFS render contains a searchable bounded timezone picker",
          %{state: state} do
       flat = render_account(state) |> collect_text_values()
 
       curated = Foglet.TUI.Screens.Account.Timezones.curated()
-      current = "Etc/UTC"
-      others = curated -- [current]
 
-      compact_rows =
+      visible_timezone_rows =
         Enum.filter(flat, fn line ->
-          is_binary(line) and String.contains?(line, "‹ #{current} ›")
+          is_binary(line) and Enum.any?(curated, &String.contains?(line, &1))
         end)
 
-      assert length(compact_rows) == 1,
-             "expected exactly one compact timezone row showing the current value (FOG-132); got #{inspect(compact_rows)}"
-
-      # No other curated zone may be painted as its own row — that is the
-      # FOG-132 regression: the RadioGroup used to render every choice and
-      # overlap Time format / Theme / footer at 80x24.
-      leaked =
-        Enum.filter(flat, fn line ->
-          is_binary(line) and Enum.any?(others, &String.contains?(line, &1))
-        end)
-
-      assert leaked == [],
-             "no non-current curated timezone may appear in the rendered PREFS body (FOG-132); leaked rows: #{inspect(leaked)}"
+      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Type to filter")))
+      assert length(visible_timezone_rows) <= 8
+      assert Enum.any?(visible_timezone_rows, &String.contains?(&1, "Etc/UTC"))
 
       # Time format and Theme labels must remain visible alongside the
       # bounded picker — overlap was the original symptom.
@@ -2282,7 +2337,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       timezone = Enum.find(ss.prefs_form.fields, &(&1.name == :timezone))
       theme = Enum.find(ss.prefs_form.fields, &(&1.name == :theme))
 
-      assert timezone.description == "Use ↑/↓ to pick a timezone; save to keep it."
+      assert timezone.description == "Search by city or IANA name; save to keep it."
       assert theme.description == "Preview changes here; save to keep them."
     end
   end

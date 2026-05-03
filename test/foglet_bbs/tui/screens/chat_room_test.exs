@@ -112,6 +112,72 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
   end
 
   describe "render/2 — with messages" do
+    test "scroll keys move the transcript viewport without typing into the composer" do
+      b = board()
+      {state, ctx} = init_state(b, size: {80, 10})
+
+      messages =
+        for i <- 1..12 do
+          %{id: "m#{i}", board_id: b.id, user_id: "u2", body: "message #{i}", inserted_at: nil}
+        end
+
+      {state, []} =
+        ChatRoom.update({:task_result, :load_chat_history, {:ok, messages}}, state, ctx)
+
+      assert state.autoscroll?
+      assert state.scroll_offset == 0
+
+      {state, []} = ChatRoom.update({:key, %{key: :page_up}}, state, ctx)
+
+      refute state.autoscroll?
+      assert state.scroll_offset > 0
+      assert state.composer == ""
+
+      text = ChatRoom.render(state, ctx) |> flatten_text()
+      assert text =~ "message 1"
+      refute text =~ "message 12"
+    end
+
+    test "new messages tail-follow only while transcript is at the tail" do
+      b = board()
+      {state, ctx} = init_state(b, size: {80, 10})
+
+      messages =
+        for i <- 1..8 do
+          %{id: "m#{i}", board_id: b.id, user_id: "u2", body: "message #{i}", inserted_at: nil}
+        end
+
+      {state, []} =
+        ChatRoom.update({:task_result, :load_chat_history, {:ok, messages}}, state, ctx)
+
+      {state, []} =
+        ChatRoom.update(
+          {:board_chat, :new_message,
+           %{id: "m9", board_id: b.id, user_id: "u2", body: "message 9", inserted_at: nil}},
+          state,
+          ctx
+        )
+
+      assert state.autoscroll?
+      assert state.scroll_offset == 0
+      assert ChatRoom.render(state, ctx) |> flatten_text() =~ "message 9"
+
+      {state, []} = ChatRoom.update({:key, %{key: :up}}, state, ctx)
+      scrolled_offset = state.scroll_offset
+      refute state.autoscroll?
+
+      {state, []} =
+        ChatRoom.update(
+          {:board_chat, :new_message,
+           %{id: "m10", board_id: b.id, user_id: "u2", body: "message 10", inserted_at: nil}},
+          state,
+          ctx
+        )
+
+      assert state.scroll_offset == scrolled_offset
+      refute ChatRoom.render(state, ctx) |> flatten_text() =~ "message 10"
+    end
+
     test "renders one row per message with handle, body, and relative time" do
       b = board()
       {state, ctx} = init_state(b)
