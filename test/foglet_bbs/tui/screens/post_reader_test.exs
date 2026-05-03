@@ -736,8 +736,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p51"
 
       assert loaded.pending_read_positions["t-1000"] == %{
-               last_read_post_id: "p51",
-               last_read_message_number: 51
+               last_read_post_id: "p53",
+               last_read_message_number: 53
              }
     end
 
@@ -1077,9 +1077,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     {s, _} = PostReader.load_posts(state, "t1")
     {:update, s, _} = handle_key_screen(%{key: :char, char: "n"}, s)
     ss = s.screen_state.post_reader
-    assert ss.selected_post_index == 1
-    assert ss.pending_read_positions["t1"][:last_read_post_id] == "p2"
-    assert ss.pending_read_positions["t1"][:last_read_message_number] == 2
+    assert ss.selected_post_index == 0
+    assert ss.pending_read_positions["t1"][:last_read_post_id] == "p1"
+    assert ss.pending_read_positions["t1"][:last_read_message_number] == 1
   end
 
   test "'p' decrements bounded at 0", %{state: state} do
@@ -1552,6 +1552,121 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       # render/1 still works on the final state.
       tree = render_screen(s3)
       refute is_nil(tree)
+    end
+  end
+
+  # =================================================================
+  # FOG-554: multi-post screenful pagination
+  # =================================================================
+
+  describe "FOG-554 multi-post screenful pagination" do
+    test "renders multiple consecutive short posts in one 80x24 reader screen" do
+      posts =
+        Enum.map(1..4, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+
+      flat = s |> render_screen() |> flatten_text()
+
+      assert flat =~ "short body 1"
+      assert flat =~ "short body 2"
+      assert flat =~ "short body 3"
+    end
+
+    test "n advances by the visible screenful and marks the last fully visible post read" do
+      posts =
+        Enum.map(1..5, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+
+      assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "n"}, s)
+      ss = s1.screen_state[:post_reader]
+
+      assert ss.selected_post_index == 3
+      assert ss.viewport.scroll_top == 0
+
+      assert ss.pending_read_positions["t1"] == %{
+               last_read_post_id: "p5",
+               last_read_message_number: 5
+             }
+    end
+
+    test "p returns to the previous packed screenful anchor" do
+      posts =
+        Enum.map(1..5, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+
+      {:update, s1, []} = handle_key_screen(%{key: :char, char: "n"}, s)
+      assert {:update, s2, []} = handle_key_screen(%{key: :char, char: "p"}, s1)
+
+      assert s2.screen_state[:post_reader].selected_post_index == 0
+    end
+
+    test "long top post keeps single-post viewport scrolling and does not pack following posts" do
+      long_body = Enum.map_join(1..20, "\n\n", &"Long line #{&1}")
+
+      s =
+        p2_state(%{
+          posts: [
+            p2_post(id: "p1", body: long_body, message_number: 1),
+            p2_post(id: "p2", body: "short after long", message_number: 2)
+          ],
+          terminal_size: {80, 24}
+        })
+
+      flat = s |> render_screen() |> flatten_text()
+      assert flat =~ "Long line 1"
+      refute flat =~ "short after long"
+
+      assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      assert s1.screen_state[:post_reader].viewport.scroll_top == 1
+    end
+
+    test "direct jump selection is rendered as the top visible post" do
+      posts =
+        Enum.map(1..5, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s =
+        p2_state(%{
+          posts: posts,
+          terminal_size: {80, 24},
+          screen_state: %{post_reader: State.new(selected_post_index: 2)}
+        })
+
+      rows = s |> render_screen() |> rendered_rows({80, 24})
+
+      post3_row = row_index_containing!(rows, "short body 3")
+      post2_row = Enum.find_index(rows, &String.contains?(&1, "short body 2"))
+
+      assert is_nil(post2_row) or post2_row > post3_row
+    end
+
+    test "64x22 keeps usable full-card packing without clipping the next post" do
+      posts = [
+        p2_post(id: "p1", body: "short body 1", message_number: 1),
+        p2_post(id: "p2", body: "short body 2", message_number: 2),
+        p2_post(
+          id: "p3",
+          body: Enum.map_join(1..10, "\n\n", &"long body #{&1}"),
+          message_number: 3
+        )
+      ]
+
+      s = p2_state(%{posts: posts, terminal_size: {64, 22}})
+      flat = s |> render_screen() |> flatten_text()
+
+      assert flat =~ "short body 1"
+      assert flat =~ "short body 2"
+      refute flat =~ "long body 1"
     end
   end
 

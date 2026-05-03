@@ -137,8 +137,8 @@ defmodule Foglet.TUI.Screens.PostReader do
           window_has_next?: Map.get(window, :has_next?, false),
           pending_window_direction: nil
       }
-      |> seed_pending_read_position()
       |> warm_selected_post(context)
+      |> seed_pending_read_position_through_visible(context)
 
     {%{state | last_op: nil, last_error: nil}, []}
   end
@@ -154,8 +154,8 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     state =
       %{state | posts: posts, status: status, selected_post_index: selected_index}
-      |> seed_pending_read_position()
       |> warm_selected_post(context)
+      |> seed_pending_read_position_through_visible(context)
 
     {%{state | last_op: nil, last_error: nil}, []}
   end
@@ -304,6 +304,38 @@ defmodule Foglet.TUI.Screens.PostReader do
   @impl true
   @spec render(State.t(), Context.t()) :: any()
   def render(%State{} = state, %Context{} = context), do: Render.render(state, context)
+
+  @doc false
+  @spec visible_screenful(State.t(), Context.t()) :: %{
+          available_height: pos_integer(),
+          indexes: [non_neg_integer()],
+          mode: :packed | :long
+        }
+  def visible_screenful(%State{posts: posts} = state, %Context{} = context)
+      when is_list(posts) and posts != [] do
+    {w, h} = context.terminal_size || @default_terminal_size
+    available_height = reader_available_height(h)
+    total = length(posts)
+    top_idx = state.selected_post_index |> max(0) |> min(total - 1)
+    frame_state = Render.frame_state(state, context)
+
+    first_rows =
+      post_card_row_count(frame_state, state, Enum.at(posts, top_idx), w, top_idx, total)
+
+    if total == 1 or first_rows > available_height do
+      %{available_height: available_height, indexes: [top_idx], mode: :long}
+    else
+      indexes =
+        pack_screenful_indexes(posts, frame_state, state, w, top_idx, total, available_height)
+
+      %{available_height: available_height, indexes: indexes, mode: :packed}
+    end
+  end
+
+  def visible_screenful(%State{}, %Context{} = context) do
+    {_w, h} = context.terminal_size || @default_terminal_size
+    %{available_height: reader_available_height(h), indexes: [], mode: :packed}
+  end
 
   @impl true
   @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
@@ -695,6 +727,89 @@ defmodule Foglet.TUI.Screens.PostReader do
     PostCard.reader_parts(post, tuples, w, theme, index: idx, total: total)
   end
 
+  defp reader_available_height(h) when is_integer(h), do: max(h - 12, 5)
+  defp reader_available_height(_h), do: 12
+
+  defp pack_screenful_indexes(posts, frame_state, state, w, top_idx, total, available_height) do
+    top_idx..(total - 1)
+    |> Enum.reduce_while({[], 0}, fn idx, {indexes, used_rows} ->
+      rows = post_card_row_count(frame_state, state, Enum.at(posts, idx), w, idx, total)
+      separator_rows = if indexes == [], do: 0, else: 1
+      next_used_rows = used_rows + separator_rows + rows
+
+      cond do
+        indexes == [] ->
+          {:cont, {[idx], rows}}
+
+        next_used_rows <= available_height ->
+          {:cont, {indexes ++ [idx], next_used_rows}}
+
+        true ->
+          {:halt, {indexes, used_rows}}
+      end
+    end)
+    |> elem(0)
+  end
+
+  defp post_card_row_count(_frame_state, _state, nil, _w, _idx, _total), do: 0
+
+  defp post_card_row_count(frame_state, state, post, w, idx, total) do
+    theme = Theme.from_state(frame_state)
+    tuples = state.render_cache[{post.id, w}] || parse_body(frame_state, post)
+    parts = reader_parts(post, tuples, w, theme, idx, total)
+
+    2 + length(parts.body_lines)
+  end
+
+  defp previous_screenful_anchor(%State{selected_post_index: current_idx}, %Context{})
+       when current_idx <= 0,
+       do: 0
+
+  defp previous_screenful_anchor(%State{posts: posts} = state, %Context{} = context) do
+    current_idx = state.selected_post_index
+
+    0..(current_idx - 1)
+    |> Enum.reduce(0, fn idx, best ->
+      prior = visible_screenful(%{state | selected_post_index: idx}, context)
+      last_visible = List.last(prior.indexes) || idx
+
+      if last_visible < current_idx, do: idx, else: best
+    end)
+    |> min(length(posts) - 1)
+  end
+
+  defp seed_pending_read_position_through_visible(%State{} = state, %Context{} = context) do
+    case visible_screenful(state, context).indexes do
+      [] -> state
+      indexes -> seed_pending_read_position_at(state, List.last(indexes))
+    end
+  end
+
+  defp seed_pending_read_position_at(%State{thread_id: thread_id, posts: posts} = state, idx)
+       when is_binary(thread_id) and is_list(posts) and is_integer(idx) do
+    case Enum.at(posts, idx) do
+      nil ->
+        state
+
+      post ->
+        next = %{
+          last_read_post_id: Map.get(post, :id),
+          last_read_message_number: Map.get(post, :message_number) || 0
+        }
+
+        pending =
+          Map.update(state.pending_read_positions, thread_id, next, fn current ->
+            if next.last_read_message_number >= Map.get(current, :last_read_message_number, 0),
+              do: next,
+              else: current
+          end)
+
+        %{state | pending_read_positions: pending}
+    end
+  end
+
+  defp seed_pending_read_position_at(%State{} = state, _idx), do: state
+
   # IN-03: `load_direction/1` removed — `update(:load, …)` now uses
   # `load_window_opts/2`, which already encodes the same `:jump_last → :last`,
   # `else → :initial` mapping plus the new pointer-aware `:around` branch.
@@ -790,34 +905,6 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp message_number(nil), do: nil
   defp message_number(post), do: Map.get(post, :message_number)
 
-  defp seed_pending_read_position(%State{thread_id: thread_id, posts: posts} = state)
-       when is_binary(thread_id) and is_list(posts) do
-    case selected_post(state) do
-      nil ->
-        state
-
-      post ->
-        next = %{
-          last_read_post_id: Map.get(post, :id),
-          last_read_message_number: Map.get(post, :message_number) || 0
-        }
-
-        pending =
-          Map.update(state.pending_read_positions, thread_id, next, fn current ->
-            if next.last_read_message_number >= Map.get(current, :last_read_message_number, 0),
-              do: next,
-              else: current
-          end)
-
-        %{
-          state
-          | pending_read_positions: pending
-        }
-    end
-  end
-
-  defp seed_pending_read_position(%State{} = state), do: state
-
   defp selected_post(%State{posts: posts, selected_post_index: idx}) when is_list(posts) do
     Enum.at(posts, idx)
   end
@@ -831,25 +918,49 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp advance_local_post(%State{posts: posts} = state, delta, %Context{} = context) do
     current_idx = state.selected_post_index
-    new_idx = (current_idx + delta) |> max(0) |> min(length(posts) - 1)
+    screenful = visible_screenful(state, context)
+    last_visible_idx = List.last(screenful.indexes) || current_idx
 
     cond do
-      delta > 0 and current_idx == length(posts) - 1 and state.window_has_next? ->
+      should_load_next_window?(state, posts, delta, last_visible_idx) ->
         load_adjacent_window(state, :next, context)
 
-      delta < 0 and current_idx == 0 and state.window_has_previous? ->
+      should_load_previous_window?(state, delta, current_idx) ->
         load_adjacent_window(state, :previous, context)
 
       true ->
+        new_idx = next_post_index(state, posts, delta, current_idx, last_visible_idx, context)
         {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, state.viewport)
 
         state =
           %{state | selected_post_index: new_idx, viewport: reset_vp}
-          |> seed_pending_read_position()
           |> warm_selected_post(context)
+          |> seed_pending_read_position_through_visible(context)
 
         {state, []}
     end
+  end
+
+  defp should_load_next_window?(%State{} = state, posts, delta, last_visible_idx) do
+    delta > 0 and last_visible_idx == length(posts) - 1 and state.window_has_next?
+  end
+
+  defp should_load_previous_window?(%State{} = state, delta, current_idx) do
+    delta < 0 and current_idx == 0 and state.window_has_previous?
+  end
+
+  defp next_post_index(_state, posts, delta, _current_idx, last_visible_idx, _context)
+       when delta > 0 do
+    min(last_visible_idx + 1, length(posts) - 1)
+  end
+
+  defp next_post_index(state, _posts, delta, _current_idx, _last_visible_idx, context)
+       when delta < 0 do
+    previous_screenful_anchor(state, context)
+  end
+
+  defp next_post_index(_state, _posts, _delta, current_idx, _last_visible_idx, _context) do
+    current_idx
   end
 
   defp load_adjacent_window(%State{thread_id: thread_id} = state, direction, %Context{} = context)
@@ -899,13 +1010,21 @@ defmodule Foglet.TUI.Screens.PostReader do
         state
 
       _post ->
-        {_w, h} = context.terminal_size || @default_terminal_size
-        available_height = max(h - 12, 5)
-
         state = warm_selected_post(state, context)
-        {new_vp, _cmds} = Viewport.update({:set_visible_height, available_height}, state.viewport)
-        {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
-        %{state | viewport: new_vp}
+        screenful = visible_screenful(state, context)
+
+        if screenful.mode == :long do
+          {_w, h} = context.terminal_size
+          available_height = reader_available_height(h)
+
+          {new_vp, _cmds} =
+            Viewport.update({:set_visible_height, available_height}, state.viewport)
+
+          {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
+          %{state | viewport: new_vp}
+        else
+          state
+        end
     end
   end
 

@@ -100,29 +100,75 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         [text("You're at the end of this thread.", fg: theme.warning.fg)]
       end
     else
-      post = Enum.at(posts, idx)
-      available_height = max(h - 12, 5)
+      screenful = PostReader.visible_screenful(ss, context_from_frame_view(frame_view, w, h))
 
-      tuples =
-        case ss.render_cache[{post.id, w}] do
-          nil -> PostReader.body_tuples_for(frame_view, post)
-          cached -> cached
-        end
+      case screenful.mode do
+        :long ->
+          render_long_post(frame_view, ss, theme, w, screenful, total)
 
-      parts = reader_parts(post, tuples, w, theme, idx, total)
-
-      # Wire visible_height and children for this frame. render_post_content
-      # is a read-only function — the Viewport state built here is transient,
-      # not written back into screen_state. State-writing happens in
-      # scroll_post / advance_post / load_posts via warm_viewport.
-      {vp, _cmds} = Viewport.update({:set_visible_height, available_height}, ss.viewport)
-      {vp, _cmds} = Viewport.update({:set_children, parts.body_lines}, vp)
-      body_rendered = Viewport.render(vp, %{})
-
-      column style: %{gap: 0} do
-        [parts.header, parts.progress, body_rendered]
+        :packed ->
+          render_packed_posts(frame_view, ss, theme, w, screenful, total)
       end
     end
+  end
+
+  defp render_long_post(frame_view, ss, theme, w, screenful, total) do
+    post = Enum.at(frame_view.posts, List.first(screenful.indexes) || ss.selected_post_index)
+
+    tuples =
+      case ss.render_cache[{post.id, w}] do
+        nil -> PostReader.body_tuples_for(frame_view, post)
+        cached -> cached
+      end
+
+    parts = reader_parts(post, tuples, w, theme, ss.selected_post_index, total)
+
+    # Wire visible_height and children for this frame. render_post_content
+    # is a read-only function — the Viewport state built here is transient,
+    # not written back into screen_state. State-writing happens in
+    # scroll_post / advance_post / load_posts via warm_viewport.
+    {vp, _cmds} = Viewport.update({:set_visible_height, screenful.available_height}, ss.viewport)
+    {vp, _cmds} = Viewport.update({:set_children, parts.body_lines}, vp)
+    body_rendered = Viewport.render(vp, %{})
+
+    column style: %{gap: 0} do
+      [parts.header, parts.progress, body_rendered]
+    end
+  end
+
+  defp render_packed_posts(frame_view, ss, theme, w, screenful, total) do
+    children =
+      screenful.indexes
+      |> Enum.with_index()
+      |> Enum.flat_map(fn {idx, position} ->
+        post = Enum.at(frame_view.posts, idx)
+
+        tuples =
+          case ss.render_cache[{post.id, w}] do
+            nil -> PostReader.body_tuples_for(frame_view, post)
+            cached -> cached
+          end
+
+        parts = reader_parts(post, tuples, w, theme, idx, total)
+        prefix = if position == 0, do: [], else: [packed_post_separator(theme)]
+        prefix ++ [parts.header, parts.progress | parts.body_lines]
+      end)
+
+    column style: %{gap: 0} do
+      children
+    end
+  end
+
+  defp packed_post_separator(theme), do: divider(char: "─", style: %{fg: theme.border.fg})
+
+  defp context_from_frame_view(frame_view, w, h) do
+    Context.new(
+      current_user: Map.get(frame_view, :current_user),
+      session_context: Map.get(frame_view, :session_context) || %{},
+      terminal_size: {w, h},
+      route: Map.get(frame_view, :current_screen) || :post_reader,
+      route_params: Map.get(frame_view, :route_params) || %{}
+    )
   end
 
   defp render_local_post_content(
