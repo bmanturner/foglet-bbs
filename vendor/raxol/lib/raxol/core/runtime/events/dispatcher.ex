@@ -218,8 +218,14 @@ defmodule Raxol.Core.Runtime.Events.Dispatcher do
     process_commands(commands, context, state.command_module)
 
     updated_state = handle_theme_update(state, updated_model)
-    send(state.runtime_pid, :render_needed)
+    maybe_request_render(state, updated_model, commands)
     {:ok, updated_state, commands}
+  end
+
+  defp maybe_request_render(state, updated_model, commands) do
+    if updated_model != state.model or commands != [] do
+      send(state.runtime_pid, :render_needed)
+    end
   end
 
   defp build_command_context(state) do
@@ -547,7 +553,7 @@ defmodule Raxol.Core.Runtime.Events.Dispatcher do
         )
     end
 
-    send(state.runtime_pid, :render_needed)
+    maybe_request_render(state, updated_model, commands)
     {:noreply, %{state | model: updated_model}}
   end
 
