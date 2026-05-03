@@ -6,8 +6,10 @@ defmodule Foglet.SSH.KeyCB do
 
   We chose **Option A** for `is_auth_key/3`:
 
-  - Always return `true` — the daemon runs with `no_auth_needed: true` anyway,
-    so the return value has no gating effect on connection acceptance.
+  - Always return `true` so every structurally valid SSH key can pass the SSH
+    transport. Foglet does account identity and access gates after the channel
+    starts; an unmatched key becomes a guest/registration session, not an
+    authenticated account.
   - Record the offered pubkey in `Foglet.SSH.PubkeyStash` (an ETS table) keyed
     by `{peer_ip, peer_port}`. The CLIHandler reads this stash on
     `{:ssh_channel_up, ...}` to decide whether to skip the login screen.
@@ -21,8 +23,6 @@ defmodule Foglet.SSH.KeyCB do
 
   @behaviour :ssh_server_key_api
 
-  require Logger
-
   @impl true
   def host_key(algorithm, opts) do
     :ssh_file.host_key(algorithm, opts)
@@ -34,8 +34,9 @@ defmodule Foglet.SSH.KeyCB do
     # Peer address is available as {ip, port} in opts under :peer.
     peer = extract_peer(opts)
     Foglet.SSH.PubkeyStash.put(peer, public_key)
-    # Always allow — connection acceptance is via no_auth_needed: true;
-    # identity resolution happens inside the TUI.
+    # Always allow structurally valid SSH keys through the transport. Foglet
+    # resolves account identity inside the session layer; unmatched keys become
+    # guest/registration sessions rather than authenticated users.
     true
   end
 

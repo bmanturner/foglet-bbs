@@ -32,8 +32,8 @@ defmodule Foglet.SSH.CLIHandler do
   in `Foglet.SSH.PubkeyStash` (ETS). On `ssh_channel_up` we:
 
   1. Obtain the peer address via `:ssh.connection_info(connection_ref, [:peer])`.
-  2. Pop the stashed pubkey (or `:miss` if the client used password-based flow,
-     which is rejected at the daemon level — all connections use no_auth_needed).
+  2. Pop the stashed pubkey (or `:miss` if no key was offered; the SSH transport
+     normally requires public-key auth, so `:miss` is a defensive guest path).
   3. If a pubkey was offered, authenticate it through
      `Accounts.authenticate_by_public_key/1` to find the matching user and
      record last-used metadata. When no active user matches, keep the

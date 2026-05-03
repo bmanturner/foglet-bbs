@@ -543,9 +543,17 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
     File.mkdir_p!(dir)
     key_path = Path.join(dir, "ssh_host_ed25519_key")
+    client_key_path = Path.join(dir, "id_ed25519")
 
     {_, 0} =
       System.cmd("ssh-keygen", ["-t", "ed25519", "-f", key_path, "-N", ""],
+        stderr_to_stdout: true
+      )
+
+    {_, 0} =
+      System.cmd(
+        "ssh-keygen",
+        ["-t", "ed25519", "-f", client_key_path, "-N", ""],
         stderr_to_stdout: true
       )
 
@@ -559,11 +567,17 @@ defmodule Foglet.SSH.CLIHandlerTest do
     host_dir = tmp_host_key_dir!()
     start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
 
+    daemon_opts =
+      host_dir
+      |> Foglet.SSH.Supervisor.daemon_opts()
+      # These channel-lifecycle tests assert PTY/rendering behavior, not SSH
+      # transport auth. Keep them on no-auth so they do not depend on client key
+      # discovery; SupervisorTest and end-to-end harnesses cover production auth.
+      |> Keyword.delete(:auth_methods)
+      |> Keyword.put(:no_auth_needed, true)
+
     daemon_pid =
-      start_supervised!(
-        {Foglet.SSH.DaemonOwner,
-         port: 0, daemon_opts: Foglet.SSH.Supervisor.daemon_opts(host_dir)}
-      )
+      start_supervised!({Foglet.SSH.DaemonOwner, port: 0, daemon_opts: daemon_opts})
 
     %{daemon_ref: daemon_ref} = :sys.get_state(daemon_pid)
     port = daemon_port!(daemon_ref)
@@ -574,6 +588,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
         port,
         [
           user: ~c"test",
+          user_dir: String.to_charlist(host_dir),
           user_interaction: false,
           silently_accept_hosts: true,
           save_accepted_host: false
