@@ -1016,6 +1016,38 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       refute viewport_text =~ "Posts 1/1"
     end
 
+    test "Viewport renders wrapped reader rows contiguously at cramped width" do
+      body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+      s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {40, 24}})
+      tree = render_screen(s)
+      viewport = find_node(tree, &match?(%{id: "post_reader_vp"}, &1))
+
+      [%{type: :column, attrs: viewport_content_attrs} | _] = viewport.children
+
+      assert viewport_content_attrs[:gap] == 0
+
+      rows = rendered_rows(tree, {40, 24})
+      first_wrap_row = row_index_containing!(rows, "alpha beta gamma")
+      second_wrap_row = row_index_containing!(rows, "eta theta iota")
+
+      assert second_wrap_row == first_wrap_row + 1
+      refute row_blank?(Enum.at(rows, first_wrap_row))
+      refute row_blank?(Enum.at(rows, second_wrap_row))
+    end
+
+    test "Viewport keeps an explicit paragraph break visible between reader paragraphs" do
+      body = "first paragraph wraps before the blank separator\n\nsecond paragraph follows"
+      s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {40, 24}})
+      rows = render_screen(s) |> rendered_rows({40, 24})
+
+      first_paragraph_row = row_index_containing!(rows, "blank separator")
+      second_paragraph_row = row_index_containing!(rows, "second paragraph")
+      separator_rows = Enum.slice(rows, (first_paragraph_row + 1)..(second_paragraph_row - 1))
+
+      assert second_paragraph_row > first_paragraph_row + 1
+      assert Enum.any?(separator_rows, &row_blank?/1)
+    end
+
     test "PostReader delegates reader assembly to PostCard reader helper", %{state: state} do
       # Behavioural check: rendering a thread with at least one post produces
       # the reader-card contract — a "Post N of M" header (PostCard.reader_parts
@@ -1353,6 +1385,27 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # Local flatten helpers (same pattern as MarkdownBodyTest)
 
   defp flatten_text(tree), do: tree |> p2_collect_text([]) |> Enum.reverse() |> Enum.join("")
+
+  defp rendered_rows(tree, size) do
+    tree
+    |> Foglet.TUI.AsciiRenderer.render(size)
+    |> String.split("\n", trim: false)
+  end
+
+  defp row_index_containing!(rows, text) do
+    case Enum.find_index(rows, &String.contains?(&1, text)) do
+      nil ->
+        flunk("expected rendered row containing #{inspect(text)} in:\n" <> Enum.join(rows, "\n"))
+
+      index ->
+        index
+    end
+  end
+
+  defp row_blank?(row) when is_binary(row) do
+    stripped = String.replace(row, ~r/[│┌┐└┘├┤┬┴┼─╭╮╰╯┏┓┗┛━\s]/u, "")
+    stripped == ""
+  end
 
   defp p2_collect_text(nil, acc), do: acc
 
