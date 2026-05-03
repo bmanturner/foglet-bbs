@@ -53,6 +53,16 @@ defmodule Foglet.TUI.Screens.AccountTest do
     Account.render(local_state, context)
   end
 
+  # FOG-333: PROFILE shields digit shortcuts while a text field is focused.
+  # Many tests assume the legacy behavior of digit chars switching tabs
+  # directly from the seeded initial state. This helper steps out of the
+  # PROFILE form via the right-arrow tab navigation so a subsequent digit
+  # press reaches the Tabs widget.
+  defp leave_profile_form(state) do
+    {:update, state, _} = handle_account_key(%{key: :right}, state)
+    state
+  end
+
   defp handle_account_key(event, state) do
     context = account_context(state)
     local_state = get_in(state, [:screen_state, :account]) || Account.init(context)
@@ -280,8 +290,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
           session_context: %{invite_code_generators: "any_user"}
         )
 
+      # FOG-333: PROFILE shields digit shortcuts while a text field is
+      # focused. Step out of the form via :right before exercising digit
+      # navigation; from PREFS (Timezone is :enum) digits are not shielded.
+      initial = Account.init(context)
+      {after_right, _} = Account.update({:key, %{key: :right}}, initial, context)
+
       {ssh_state, ssh_effects} =
-        Account.update({:key, %{key: :char, char: "3"}}, Account.init(context), context)
+        Account.update({:key, %{key: :char, char: "3"}}, after_right, context)
 
       assert ssh_state.active_tab == 2
       assert [%Effect{payload: %{op: :account_load_ssh_keys}}] = ssh_effects
@@ -421,6 +437,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
       before_preview = inspect(render_account(state))
 
@@ -455,6 +472,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "visibility changes in session_context rebuild tab list on handle-key", %{state: state} do
       state = %{state | session_context: %{invite_code_generators: "any_user"}}
 
+      # PROFILE shields digit shortcuts (FOG-333) — step out of the text
+      # form first so the digit reaches the Tabs widget.
+      {:update, state, _} = handle_account_key(%{key: :right}, state)
+
       {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "4"}, state)
 
       assert new_state.screen_state.account.active_tab == 3
@@ -462,12 +483,18 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
-    test "digit '2' jumps to second tab (index 1)", %{state: state} do
+    test "digit '2' jumps to second tab (index 1) when no text field is focused", %{state: state} do
+      # FOG-333: PROFILE Location field is text-typed and shields digits.
+      # Move focus to PREFS (Timezone is :enum) before exercising the shortcut.
+      {:update, state, _} = handle_account_key(%{key: :right}, state)
       {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "2"}, state)
       assert new_state.screen_state.account.active_tab == 1
     end
 
     test "KEYS-01 digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
+      # FOG-333: leave PROFILE first so the digit shortcut isn't shielded.
+      {:update, state, _} = handle_account_key(%{key: :right}, state)
+
       {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "3"}, state)
       assert new_state.screen_state.account.active_tab == 2
 
@@ -512,6 +539,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
 
       account = state.screen_state.account
@@ -551,6 +579,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
 
       original_tz = state.screen_state.account.prefs_form |> ModalForm.field_value(:timezone)
@@ -582,6 +611,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
 
       {:update, state, []} = handle_account_key(%{key: :shift_tab}, state)
@@ -790,6 +820,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert {:ok, []} = Invites.list_invites(user)
 
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "4"}, state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "g"}, state)
 
@@ -809,6 +840,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:ok, first} = Invites.create_invite(user)
       {:ok, second} = Invites.create_invite(user)
 
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "4"}, state)
       assert Enum.count(state.screen_state.account.invites.items) == 2
 
@@ -853,7 +885,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       _other_key =
         AccountsFixtures.ssh_key_fixture(other_user, %{public_key: @alternate_ssh_public_key})
 
-      state = build_state(user, %{})
+      state = build_state(user, %{}) |> leave_profile_form()
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
 
@@ -870,7 +902,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "KEYS-02 add flow stores a valid key, refreshes list, and shows status" do
       user = AccountsFixtures.user_fixture()
-      state = build_state(user, %{})
+      state = build_state(user, %{}) |> leave_profile_form()
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
@@ -893,7 +925,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "KEYS-02 add flow shows terminal-visible validation errors" do
       user = AccountsFixtures.user_fixture()
       _existing = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
-      state = build_state(user, %{})
+      state = build_state(user, %{}) |> leave_profile_form()
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
@@ -965,7 +997,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
           public_key: @alternate_ssh_public_key
         })
 
-      state = build_state(user, %{})
+      state = build_state(user, %{}) |> leave_profile_form()
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
       {:update, state, []} = handle_account_key(%{key: :down}, state)
@@ -1005,7 +1037,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "KEYS-04 revoke handles not found without crashing" do
       user = AccountsFixtures.user_fixture()
       key = AccountsFixtures.ssh_key_fixture(user)
-      state = build_state(user, %{})
+      state = build_state(user, %{}) |> leave_profile_form()
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
       {:ok, _revoked} = Accounts.revoke_ssh_key(user, key.id)
@@ -1023,7 +1055,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{})
 
-      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      # Navigate to SSH KEYS without using the digit shortcut: PROFILE shields
+      # digits while the Location text field is focused (FOG-333).
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
       assert state.screen_state.account.active_tab == 2
       {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
       assert state.screen_state.account.ssh_keys.mode == :add
@@ -1065,13 +1100,86 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{})
 
-      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      # FOG-333: PROFILE shields digit shortcuts while a text field is
+      # focused, so navigate via arrow keys to reach SSH KEYS list mode.
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
       assert state.screen_state.account.active_tab == 2
       assert state.screen_state.account.ssh_keys.mode == :list
 
-      # No add form active — digits remain tab shortcuts (jump to PROFILE).
+      # No add form active and no text-form focus — digits remain tab
+      # shortcuts (jump to PROFILE).
       {:update, state, []} = handle_account_key(%{key: :char, char: "1"}, state)
       assert state.screen_state.account.active_tab == 0
+    end
+
+    test "FOG-333: digit chars typed in PROFILE text fields insert into the focused field, not tab nav" do
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = AccountsFixtures.user_fixture()
+
+      state =
+        build_state(user, %{})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      account = state.screen_state.account
+      assert account.active_tab == 0
+      assert Enum.at(account.profile_form.fields, 0).name == :location
+
+      original_location = ModalForm.field_value(account.profile_form, :location)
+
+      # Location (index 0): every digit must insert and not switch tabs.
+      state =
+        Enum.reduce(~w(2 3 4 5 6 7 8 9 0 1), state, fn digit, acc ->
+          {:update, acc, []} = handle_account_key(%{key: :char, char: digit}, acc)
+
+          assert acc.screen_state.account.active_tab == 0,
+                 "digit #{digit} in Location switched tabs"
+
+          acc
+        end)
+
+      location_after = ModalForm.field_value(state.screen_state.account.profile_form, :location)
+      assert location_after =~ "2345678901"
+      refute location_after == original_location
+
+      # Tagline (index 1)
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.profile_form.focus_index == 1
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+      assert state.screen_state.account.active_tab == 0
+      assert ModalForm.field_value(state.screen_state.account.profile_form, :tagline) =~ "2"
+
+      # Real name (index 2)
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.profile_form.focus_index == 2
+      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
+      assert state.screen_state.account.active_tab == 0
+      assert ModalForm.field_value(state.screen_state.account.profile_form, :real_name) =~ "3"
+    end
+
+    test "FOG-333: digit chars on PREFS still switch tabs (focused field is :enum)" do
+      user = AccountsFixtures.user_fixture()
+
+      state =
+        build_state(user, %{})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      # Move to PREFS via arrow (index 1). Timezone is :enum, so digits are
+      # NOT shielded and should still drive the global tab shortcut.
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      assert state.screen_state.account.active_tab == 1
+
+      focused_field =
+        Enum.at(
+          state.screen_state.account.prefs_form.fields,
+          state.screen_state.account.prefs_form.focus_index
+        )
+
+      assert focused_field.type == :enum
+
+      {:update, state, _} = handle_account_key(%{key: :char, char: "3"}, state)
+      assert state.screen_state.account.active_tab == 2
     end
   end
 
@@ -1324,6 +1432,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
   describe "PREFS Modal.Form contract" do
     setup %{state: state} do
+      # FOG-333: PROFILE shields digit shortcuts while a text field is
+      # focused. Move out of the form before using the digit shortcut.
+      state = leave_profile_form(state)
       {:update, prefs_state, []} = handle_account_key(%{key: :char, char: "2"}, state)
       %{state: prefs_state}
     end
@@ -1439,6 +1550,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
 
       account_state = %{state.screen_state.account | prefs_focus: :theme}
@@ -1859,7 +1971,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "D opens confirm sub-mode without performing the revoke" do
       user = AccountsFixtures.user_fixture()
       key = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
-      state = build_state(user, %{})
+      state = build_state(user, %{}) |> leave_profile_form()
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
@@ -1873,7 +1985,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "Esc cancels the confirm and leaves the list unchanged" do
       user = AccountsFixtures.user_fixture()
       _ = AccountsFixtures.ssh_key_fixture(user, %{label: "laptop"})
-      state = build_state(user, %{})
+      state = build_state(user, %{}) |> leave_profile_form()
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
