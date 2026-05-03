@@ -271,6 +271,13 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   defp visible_window(visible, _cursor, height) when not is_integer(height), do: visible
   defp visible_window(_visible, _cursor, height) when height <= 0, do: []
 
+  # FOG-492 board-tree audit decision: keep this bespoke cursor-pinned
+  # window instead of wrapping the rendered rows in Raxol Viewport. BoardTree's
+  # scroll state is already owned by Raxol Tree (cursor + expanded nodes), and
+  # adding a second Viewport state would need synchronization on every expand,
+  # collapse, and cursor movement. The UX requirement here is "selected row is
+  # always visible," not free transcript-style scrolling; the focused tests in
+  # board_tree_test.exs cover the bounded row count and cursor-pinning behavior.
   defp visible_window(visible, cursor, height) do
     cursor_index =
       Enum.find_index(visible, fn {node, _depth} ->

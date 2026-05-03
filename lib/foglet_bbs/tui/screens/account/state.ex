@@ -213,13 +213,13 @@ defmodule Foglet.TUI.Screens.Account.State do
       fields: [
         %{
           name: :timezone,
-          type: :enum,
-          display: :compact,
+          type: :select_list,
           label: "Timezone",
           required: true,
           choices: Timezones.choices_for(draft.timezone),
-          description: "Use ↑/↓ to pick a timezone; save to keep it.",
-          value: draft.timezone || "Etc/UTC"
+          description: "Search by city or IANA name; save to keep it.",
+          value: draft.timezone || "Etc/UTC",
+          max_height: 6
         },
         %{
           name: :time_format,

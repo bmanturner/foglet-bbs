@@ -103,8 +103,10 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Input.{Checkbox, RadioGroup, TextInput}
   alias Raxol.UI.Components.Input.MultiLineInput
+  alias Raxol.UI.Components.Input.SelectList
+  alias Raxol.UI.Components.Input.SelectList.Selection, as: SelectListSelection
 
-  @type field_type :: :text | :integer | :boolean | :enum | :textarea
+  @type field_type :: :text | :integer | :boolean | :enum | :select_list | :textarea
   @type field_spec :: %{
           required(:name) => atom(),
           required(:type) => field_type(),
@@ -306,17 +308,21 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   # {:error, _} back to :idle, so submit_state here is always :idle.
   # FOG-349: "last field" tracks the last *visible* field; hidden fields are
   # excluded from both navigation and the submit payload.
-  defp do_handle_event(%__MODULE__{} = state, %{key: :enter}) do
-    case List.last(visible_indices(state)) do
-      nil ->
+  defp do_handle_event(%__MODULE__{} = state, %{key: :enter} = event) do
+    case {List.last(visible_indices(state)), focused_field_type(state)} do
+      {nil, _type} ->
         {state, nil}
 
-      last_visible when state.focus_index == last_visible ->
+      {_last_visible, :select_list} ->
+        {state, nil} = dispatch_event_to_field(event, state)
+        {%{state | focus_index: next_visible_index(state)}, nil}
+
+      {last_visible, _type} when state.focus_index == last_visible ->
         payload = collect_values(state)
         submit_result = state.on_submit.(payload)
         {%{state | submit_state: :submitting}, submitted_action(submit_result)}
 
-      _ ->
+      {_last_visible, _type} ->
         {%{state | focus_index: next_visible_index(state)}, nil}
     end
   end
@@ -556,6 +562,31 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end
   end
 
+  defp build_field_state(%{type: :select_list} = spec) do
+    pairs = normalized_choices(spec)
+    selected_index = initial_choice_index(pairs, Map.get(spec, :value))
+
+    {:ok, select_list} =
+      SelectList.init(%{
+        id: "modal-form-#{spec.name}",
+        options: pairs,
+        enable_search: true,
+        multiple: false,
+        max_height: Map.get(spec, :max_height, 8),
+        placeholder: Map.get(spec, :placeholder, "Type to filter…")
+      })
+
+    select_list = %{
+      select_list
+      | selected_index: selected_index,
+        focused_index: selected_index,
+        has_focus: true,
+        is_search_focused: true
+    }
+
+    %{select_list: select_list, value: choice_value_at(pairs, selected_index)}
+  end
+
   defp build_field_state(%{type: :textarea} = spec) do
     initial_value = Map.get(spec, :value, "")
 
@@ -598,6 +629,10 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   defp dispatch_to_field(%{type: :enum}, field_state, _event) do
     field_state
+  end
+
+  defp dispatch_to_field(%{type: :select_list}, field_state, event) do
+    dispatch_to_select_list(field_state, event)
   end
 
   defp dispatch_to_field(
@@ -668,6 +703,19 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end)
   end
 
+  defp initial_choice_index(pairs, nil) when is_list(pairs), do: if(pairs == [], do: 0, else: 0)
+
+  defp initial_choice_index(pairs, value) when is_list(pairs) do
+    Enum.find_index(pairs, fn {_label, candidate} -> candidate == value end) || 0
+  end
+
+  defp choice_value_at(pairs, idx) do
+    case Enum.at(pairs, idx) do
+      {_label, value} -> value
+      nil -> nil
+    end
+  end
+
   # FOG-349: indices of fields whose :visible_when predicate returns truthy.
   # Fields without :visible_when are always visible. Predicates receive the
   # current coerced values map (current_values/1).
@@ -718,6 +766,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       {_label, value} -> value
     end
   end
+
+  defp coerce(%{type: :select_list}, %{value: value}), do: value
 
   defp coerce(%{type: :textarea}, %{raw_value: rv}), do: rv
 
@@ -771,8 +821,127 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end
   end
 
+  defp render_widget(
+         %{type: :select_list},
+         %{select_list: select_list, value: value},
+         focused?,
+         theme
+       ) do
+    render_select_list(select_list, value, focused?, theme)
+  end
+
   defp render_widget(%{type: :textarea}, %{mli_state: mli}, focused?, theme) do
     Compose.render_input(mli, focused?, theme)
+  end
+
+  defp dispatch_to_select_list(%{select_list: %{search_buffer: ""}} = field_state, %{
+         key: :char,
+         char: <<c>>
+       })
+       when c in ?0..?9 do
+    field_state
+  end
+
+  defp dispatch_to_select_list(%{select_list: select_list} = field_state, %{
+         key: :char,
+         char: char
+       })
+       when is_binary(char) do
+    search = select_list.search_buffer <> char
+    {select_list, _} = SelectList.update({:apply_search, search}, select_list)
+    %{field_state | select_list: %{select_list | is_search_focused: true, search_buffer: search}}
+  end
+
+  defp dispatch_to_select_list(%{select_list: select_list} = field_state, %{key: :backspace}) do
+    search = String.slice(select_list.search_buffer || "", 0..-2//1)
+    {select_list, _} = SelectList.update({:apply_search, search}, select_list)
+    %{field_state | select_list: %{select_list | is_search_focused: true, search_buffer: search}}
+  end
+
+  defp dispatch_to_select_list(%{select_list: select_list} = field_state, %{key: :enter}) do
+    {select_list, _commands} =
+      SelectList.update({:select_option, select_list.focused_index}, select_list)
+
+    %{
+      field_state
+      | select_list: select_list,
+        value: SelectListSelection.get_selected_value(select_list)
+    }
+  end
+
+  defp dispatch_to_select_list(%{select_list: select_list} = field_state, %{key: key})
+       when key in [:up, :down, :page_up, :page_down, :pageup, :pagedown, :home, :end] do
+    raxol_key = select_list_key(key)
+
+    {select_list, _action} =
+      SelectList.handle_event(%{type: :key, data: %{key: raxol_key}}, select_list, %{})
+
+    %{field_state | select_list: select_list}
+  end
+
+  defp dispatch_to_select_list(field_state, _event), do: field_state
+
+  defp select_list_key(:up), do: :up
+  defp select_list_key(:down), do: :down
+  defp select_list_key(:page_up), do: :page_up
+  defp select_list_key(:pageup), do: :page_up
+  defp select_list_key(:page_down), do: :page_down
+  defp select_list_key(:pagedown), do: :page_down
+  defp select_list_key(:home), do: :home
+  defp select_list_key(:end), do: :end
+
+  defp render_select_list(select_list, value, focused?, %Theme{} = theme) do
+    options = effective_select_options(select_list)
+    prompt_fg = if focused?, do: theme.accent.fg, else: theme.dim.fg
+    query = select_list.search_buffer || select_list.search_text || ""
+
+    option_rows =
+      options
+      |> Enum.take(select_list.max_height || 8)
+      |> Enum.map(&render_select_option(&1, options, value, select_list.focused_index, theme))
+
+    rows = [text("Type to filter: #{query}", fg: prompt_fg)] ++ option_rows
+
+    column [] do
+      rows
+    end
+  end
+
+  defp effective_select_options(%{filtered_options: opts}) when is_list(opts), do: opts
+  defp effective_select_options(%{options: opts}) when is_list(opts), do: opts
+  defp effective_select_options(_), do: []
+
+  defp render_select_option({label, candidate}, options, value, focused_index, %Theme{} = theme) do
+    selected? = candidate == value
+    cursor? = option_index(options, candidate) == focused_index
+
+    text("#{select_option_marker(selected?, cursor?)} #{label}",
+      fg: select_option_fg(selected?, cursor?, theme),
+      style: select_option_style(selected?, cursor?)
+    )
+  end
+
+  defp select_option_marker(true, _cursor?), do: "✓"
+  defp select_option_marker(false, true), do: "›"
+  defp select_option_marker(false, false), do: " "
+
+  defp select_option_fg(true, _cursor?, %Theme{} = theme), do: theme.selected.fg
+  defp select_option_fg(false, true, %Theme{} = theme), do: theme.selected.fg
+  defp select_option_fg(false, false, %Theme{} = theme), do: theme.primary.fg
+
+  defp select_option_style(true, _cursor?), do: [:bold]
+  defp select_option_style(false, true), do: [:bold]
+  defp select_option_style(false, false), do: []
+
+  defp option_index(options, value) do
+    Enum.find_index(options, fn {_label, candidate} -> candidate == value end)
+  end
+
+  defp focused_field_type(%__MODULE__{} = state) do
+    case Enum.at(state.fields, state.focus_index) do
+      %{type: type} -> type
+      _ -> nil
+    end
   end
 
   # Compact single-line enum picker (FOG-132).

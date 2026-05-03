@@ -112,6 +112,13 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     {toggle_sidebar(state, context), []}
   end
 
+  # Transcript viewport navigation. These keys are reserved for history
+  # browsing and must not leak into the composer buffer.
+  def update({:key, %{key: key}}, %State{} = state, %Context{} = context)
+      when key in [:up, :down, :page_up, :page_down, :pageup, :pagedown, :home, :end] do
+    {scroll_transcript(state, key, context), []}
+  end
+
   # Submit composer.
   def update({:key, %{key: :enter}}, %State{} = state, %Context{} = context) do
     submit_composer(state, context)
@@ -191,13 +198,13 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   @spec render(State.t(), Context.t()) :: any()
   def render(%State{} = state, %Context{} = context) do
     theme = Theme.from_state(%{session_context: context.session_context})
-    {width, _height} = context.terminal_size || {80, 24}
+    {width, height} = context.terminal_size || {80, 24}
     show_sidebar? = sidebar_visible?(state, width)
 
     column style: %{gap: 0} do
       [
         ephemeral_notice(state, theme),
-        body_row(state, theme, width, show_sidebar?),
+        body_row(state, theme, width, transcript_height(height), show_sidebar?),
         composer_row(state, theme, width)
       ]
     end
@@ -209,20 +216,20 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
   defp ephemeral_notice(_state, _theme), do: text("")
 
-  defp body_row(state, theme, width, true) when width >= @sidebar_min_width do
+  defp body_row(state, theme, width, height, true) when width >= @sidebar_min_width do
     transcript_width = max(width - @sidebar_width - 2, 20)
 
     row style: %{gap: 0} do
       [
-        transcript_pane(state, theme, transcript_width),
+        transcript_pane(state, theme, transcript_width, height),
         sidebar_separator(theme),
         sidebar_pane(state, theme, @sidebar_width)
       ]
     end
   end
 
-  defp body_row(state, theme, width, _show_sidebar?) do
-    transcript_pane(state, theme, max(width - 2, 20))
+  defp body_row(state, theme, width, height, _show_sidebar?) do
+    transcript_pane(state, theme, max(width - 2, 20), height)
   end
 
   defp sidebar_separator(theme) do
@@ -231,7 +238,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     end
   end
 
-  defp transcript_pane(%State{messages: []} = _state, theme, _width) do
+  defp transcript_pane(%State{messages: []} = _state, theme, _width, _height) do
     column style: %{gap: 0} do
       [
         text("  " <> @empty_transcript_placeholder, fg: theme.dim.fg, style: [:italic])
@@ -239,10 +246,11 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     end
   end
 
-  defp transcript_pane(%State{messages: messages} = state, theme, _width) do
+  defp transcript_pane(%State{messages: messages} = state, theme, _width, height) do
     rows =
       messages
       |> Enum.take(-@transcript_history_lines)
+      |> visible_messages(state.scroll_offset, height)
       |> Enum.map(fn msg -> transcript_row(msg, state, theme) end)
 
     column style: %{gap: 0} do
@@ -431,8 +439,54 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   defp to_board_struct(other), do: other
 
   defp append_message(%State{messages: msgs} = state, msg) do
-    %{state | messages: msgs ++ [msg]}
+    scroll_offset = if state.autoscroll?, do: 0, else: state.scroll_offset
+    %{state | messages: msgs ++ [msg], scroll_offset: scroll_offset}
   end
+
+  defp scroll_transcript(%State{} = state, key, %Context{} = context) do
+    {_width, height} = context.terminal_size || {80, 24}
+    step = scroll_step(key, transcript_height(height))
+    max_scroll = max_scroll_offset(state, transcript_height(height))
+
+    new_offset =
+      case key do
+        :home -> max_scroll
+        :end -> 0
+        _ -> state.scroll_offset + step
+      end
+      |> min(max_scroll)
+      |> max(0)
+
+    %{state | scroll_offset: new_offset, autoscroll?: new_offset == 0}
+  end
+
+  defp scroll_step(key, height) when key in [:page_up, :pageup], do: height
+  defp scroll_step(key, height) when key in [:page_down, :pagedown], do: -height
+  defp scroll_step(:up, _height), do: 1
+  defp scroll_step(:down, _height), do: -1
+  defp scroll_step(_key, _height), do: 0
+
+  defp max_scroll_offset(%State{messages: messages}, height) do
+    messages
+    |> Enum.take(-@transcript_history_lines)
+    |> length()
+    |> Kernel.-(height)
+    |> max(0)
+  end
+
+  defp visible_messages(messages, scroll_offset, height) do
+    total = length(messages)
+    count = max(height, 1)
+    max_scroll = max(total - count, 0)
+    offset = scroll_offset |> min(max_scroll) |> max(0)
+    start = max(total - count - offset, 0)
+
+    messages
+    |> Enum.drop(start)
+    |> Enum.take(count)
+  end
+
+  defp transcript_height(height), do: max(height - 4, 1)
 
   defp refresh_online(%State{board_id: nil}), do: []
 

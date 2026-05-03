@@ -173,6 +173,54 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert_receive {:submitted, %{color: :green}}
   end
 
+  test "typed coercion (select_list): search narrows, enter selects tuple value, submit gives raw value" do
+    fields = [
+      %{
+        name: :timezone,
+        type: :select_list,
+        label: "Timezone",
+        choices: [
+          {"UTC", "Etc/UTC"},
+          {"Central — Chicago", "America/Chicago"},
+          {"Eastern — New York", "America/New_York"}
+        ],
+        value: "Etc/UTC"
+      },
+      %{name: :confirm, type: :text, label: "Confirm"}
+    ]
+
+    state = test_form(fields)
+
+    {state, nil} = Form.handle_event(%{key: :char, char: "C"}, state)
+    {state, nil} = Form.handle_event(%{key: :char, char: "h"}, state)
+    assert Form.field_value(state, :timezone) == "Etc/UTC"
+
+    {state, nil} = Form.handle_event(%{key: :enter}, state)
+    assert Form.field_value(state, :timezone) == "America/Chicago"
+    assert state.focus_index == 1
+
+    {_state, _action} = Form.handle_event(%{key: :enter}, state)
+    assert_receive {:submitted, %{timezone: "America/Chicago", confirm: ""}}
+  end
+
+  test "select_list render includes search prompt and filtered options instead of cycling chrome" do
+    fields = [
+      %{
+        name: :timezone,
+        type: :select_list,
+        label: "Timezone",
+        choices: ["Etc/UTC", "America/Chicago", "America/New_York"],
+        value: "America/Chicago"
+      }
+    ]
+
+    flat = fields |> test_form() |> Form.render(theme: theme()) |> flatten_text()
+
+    assert flat =~ "Type to filter"
+    assert flat =~ "America/Chicago"
+    refute flat =~ "‹ America/Chicago ›"
+  end
+
   test "typed coercion (textarea): multi-line content submits as string with newline" do
     fields = [%{name: :body, type: :textarea, label: "Body", rows: 3}]
     state = test_form(fields)
