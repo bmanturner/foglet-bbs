@@ -129,6 +129,10 @@ This is for visual inspection, not behaviour assertions; for those, use
 For live SSH/TUI inspection, use the QA harness after starting a local Foglet
 instance. Install Node dependencies with `rtk npm install`, then run
 `rtk npm run ssh:harness -- --user sysop --password 'seedpassword123!'`.
+Seeds also create `foglet` (regular member) and `mod` (moderator) with the
+same `seedpassword123!`. Use `sysop` for sysop-only flows, `foglet` for the
+default member experience, and `mod` to exercise moderator-only affordances
+such as the `qa-archived` archived-board controls and `qa-mods-only` posting.
 Inside the harness, `screen` prints the current terminal buffer, `key <name>`
 sends keys such as `enter`, `tab`, `up`, and `down`, `type <text>` sends
 literal input, `resize 100x30` changes the PTY, and `--script <path>` runs a
@@ -136,7 +140,7 @@ newline-delimited command file. Keep credentials local and prefer test accounts.
 
 `priv/repo/seeds.exs` also creates a `QA Gates` category (FOG-113) so SSH/TUI
 QA can drive each permission/state gate without ad-hoc DB edits. Sign in as
-`sysop` or `foglet` (password `seedpassword123!`) and reach:
+`sysop`, `foglet`, or `mod` (password `seedpassword123!`) and reach:
 
 - `general` → "Locked: archived discussion (QA)" — locked thread on a normal
   board.
@@ -144,7 +148,8 @@ QA can drive each permission/state gate without ad-hoc DB edits. Sign in as
 - `qa-optional` — `default_subscription: false`; `foglet` starts unsubscribed.
 - `qa-required` — `default_subscription: true, required_subscription: true`;
   `sysop` and `foglet` are pre-subscribed and unsubscribe is rejected.
-- `qa-mods-only` — `postable_by: :mods_only`; `foglet` cannot post.
+- `qa-mods-only` — `postable_by: :mods_only`; `foglet` cannot post, `mod`
+  can.
 
 Run standalone with `mix run priv/repo/seeds/qa_gates.exs`.
 
