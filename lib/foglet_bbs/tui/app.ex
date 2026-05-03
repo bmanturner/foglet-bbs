@@ -224,6 +224,13 @@ defmodule Foglet.TUI.App do
     {:window_change, w, h}
   end
 
+  defp normalize_message(%Raxol.Core.Events.Event{
+         type: :foglet_runtime,
+         data: %{message: message}
+       }) do
+    message
+  end
+
   defp normalize_message(other), do: other
 
   @impl true
@@ -356,6 +363,24 @@ defmodule Foglet.TUI.App do
     modal = %Foglet.TUI.Modal{
       type: :info,
       message: format_notification(kind, payload)
+    }
+
+    {%{state | modal: modal}, []}
+  end
+
+  defp do_update({:door_exited, door_id, reason, _status}, state) do
+    modal = %Foglet.TUI.Modal{
+      type: :info,
+      message: "Door #{door_id} exited (#{inspect(reason)}). You are back in Foglet."
+    }
+
+    {%{state | modal: modal}, []}
+  end
+
+  defp do_update({:door_launch_failed, door_id, reason}, state) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message: "Door #{door_id} failed to launch: #{inspect(reason)}"
     }
 
     {%{state | modal: modal}, []}

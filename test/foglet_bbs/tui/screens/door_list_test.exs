@@ -60,13 +60,9 @@ defmodule Foglet.TUI.Screens.DoorListTest do
                ctx
              )
 
-    assert message == "Launched External Echo. You are back in Foglet."
+    assert message == "Launching External Echo. The door has the terminal until it exits."
     assert Enum.any?(effects, &match?(%Effect{type: :door, payload: %{action: :launch}}, &1))
-
-    assert Enum.any?(
-             effects,
-             &match?(%Effect{type: :modal, payload: {:open, %Modal{type: :info}}}, &1)
-           )
+    refute Enum.any?(effects, &match?(%Effect{type: :modal}, &1))
   end
 
   test "q returns to main menu" do

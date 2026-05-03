@@ -50,6 +50,43 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
     end
 
+    test "built-in Native Hello remains attached until user exit input" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "native-hello",
+          display_name: "Native Hello",
+          description: "demo",
+          runtime: :native_elixir,
+          module: Foglet.Doors.Demo.NativeHello,
+          timeout_ms: 5_000
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {100, 30},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^pid, "native-hello"}
+      assert_receive {:door_output, output}
+      assert IO.iodata_to_binary(output) =~ "Native Hello welcomes alice (100x30)"
+      assert %{status: :running} = Runner.snapshot(pid)
+
+      ref = Process.monitor(pid)
+      Runner.input(pid, "hello\n")
+      assert_receive {:door_output, echo_output}
+      assert IO.iodata_to_binary(echo_output) =~ "native> hello"
+
+      Runner.input(pid, "/quit\n")
+      assert_receive {:door_output, quit_output}
+      assert IO.iodata_to_binary(quit_output) =~ "Leaving Native Hello."
+      assert_receive {:door_exited, ^pid, "native-hello", :normal, nil}
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+    end
+
     test "native callback crash is reported as a crash exit" do
       {:ok, manifest} =
         manifest(%{
@@ -97,6 +134,41 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:door_started, ^pid, "external-env"}
       assert_receive {:door_output, output}
       assert IO.iodata_to_binary(output) =~ "external-env:alice:132"
+      assert %{status: :running} = Runner.snapshot(pid)
+
+      Runner.input(pid, "hello\n")
+      assert_receive {:door_output, echo_output}
+
+      echo_output =
+        echo_output
+        |> IO.iodata_to_binary()
+        |> then(fn output ->
+          if output =~ "external> hello" do
+            output
+          else
+            assert_receive {:door_output, more_echo_output}
+            output <> IO.iodata_to_binary(more_echo_output)
+          end
+        end)
+
+      assert echo_output =~ "external> hello"
+
+      Runner.input(pid, "/quit\n")
+      assert_receive {:door_output, quit_output}
+
+      quit_output =
+        quit_output
+        |> IO.iodata_to_binary()
+        |> then(fn output ->
+          if output =~ "Leaving External Echo." do
+            output
+          else
+            assert_receive {:door_output, more_quit_output}
+            output <> IO.iodata_to_binary(more_quit_output)
+          end
+        end)
+
+      assert quit_output =~ "Leaving External Echo."
       assert_receive {:door_exited, ^pid, "external-env", :normal, 0}
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
     end

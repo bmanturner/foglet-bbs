@@ -127,28 +127,18 @@ defmodule Foglet.TUI.App.Effects do
 
     output = Map.get(payload, :output) || fn _iodata -> :ok end
 
-    case Foglet.Doors.Supervisor.start_runner(
-           manifest: manifest,
-           session: session,
-           terminal_size: state.terminal_size,
-           output: output,
-           # The Raxol dispatcher process does not consume runner lifecycle
-           # tuples directly; completion is surfaced by the selector's return
-           # modal. Keep owner notifications disabled here to avoid noisy
-           # unhandled-info logs until a dedicated SSH door-attachment boundary
-           # subscribes to them.
-           owner: nil
-         ) do
-      {:ok, _pid} ->
+    case door_handler_pid(state) do
+      pid when is_pid(pid) ->
+        Process.send_after(
+          pid,
+          {:foglet_launch_door, manifest, session, state.terminal_size},
+          100
+        )
+
         {state, []}
 
-      {:error, reason} ->
-        modal = %Foglet.TUI.Modal{
-          type: :error,
-          message: "Door launch failed: #{inspect(reason)}"
-        }
-
-        {%{state | modal: modal}, []}
+      _other ->
+        start_detached_runner(state, manifest, session, output)
     end
   end
 
@@ -191,6 +181,32 @@ defmodule Foglet.TUI.App.Effects do
     module = Routing.screen_module_for(state, screen_key)
     Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
   end
+
+  defp start_detached_runner(state, manifest, session, output) do
+    case Foglet.Doors.Supervisor.start_runner(
+           manifest: manifest,
+           session: session,
+           terminal_size: state.terminal_size,
+           output: output,
+           owner: nil
+         ) do
+      {:ok, _pid} ->
+        {state, []}
+
+      {:error, reason} ->
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Door launch failed: #{inspect(reason)}"
+        }
+
+        {%{state | modal: modal}, []}
+    end
+  end
+
+  defp door_handler_pid(%App{session_context: session_context}) when is_map(session_context),
+    do: Map.get(session_context, :door_handler_pid)
+
+  defp door_handler_pid(_state), do: nil
 
   defp session_identifier(pid) when is_pid(pid), do: inspect(pid)
   defp session_identifier(_pid), do: nil

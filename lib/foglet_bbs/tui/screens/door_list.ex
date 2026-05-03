@@ -65,10 +65,9 @@ defmodule Foglet.TUI.Screens.DoorList do
 
     case doors_module(context).get_visible(context.current_user, door_id) do
       {:ok, %Manifest{} = manifest} ->
-        message = "Launched #{manifest.display_name}. You are back in Foglet."
+        message = "Launching #{manifest.display_name}. The door has the terminal until it exits."
 
-        {%{state | status_message: message},
-         [Effect.launch_door(manifest), Effect.open_modal(return_modal(message))]}
+        {%{state | status_message: message}, [Effect.launch_door(manifest)]}
 
       {:error, :not_found} ->
         {%{state | status_message: "That door is no longer available."},
@@ -148,8 +147,6 @@ defmodule Foglet.TUI.Screens.DoorList do
       on_cancel: :dismiss_modal
     }
   end
-
-  defp return_modal(message), do: %Modal{type: :info, message: message}
 
   defp normalize_state(%State{} = state, %Context{} = context) do
     doors = if state.doors == [], do: visible_doors(context), else: state.doors

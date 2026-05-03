@@ -38,6 +38,9 @@ defmodule Foglet.TUI.SessionContext do
   - `offered_ssh_public_key` — OpenSSH public-key text offered by the connecting
     SSH client when no active registered user matched it. Populated only for
     guest sessions; authenticated public-key sessions keep this as `nil`.
+  - `door_handler_pid` — PID of the owning SSH channel handler when this TUI is
+    attached to SSH. Door launch effects send requests back to that process so
+    it can route terminal input/output while the supervised runner is active.
   """
 
   @type t :: %__MODULE__{
@@ -52,7 +55,8 @@ defmodule Foglet.TUI.SessionContext do
           theme_id: String.t(),
           theme: Foglet.TUI.Theme.t(),
           ssh_peer: term() | nil,
-          offered_ssh_public_key: String.t() | nil
+          offered_ssh_public_key: String.t() | nil,
+          door_handler_pid: pid() | nil
         }
 
   defstruct [
@@ -67,6 +71,7 @@ defmodule Foglet.TUI.SessionContext do
     :theme_id,
     :theme,
     :ssh_peer,
-    :offered_ssh_public_key
+    :offered_ssh_public_key,
+    :door_handler_pid
   ]
 end
