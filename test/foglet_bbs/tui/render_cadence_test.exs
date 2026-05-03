@@ -19,15 +19,6 @@ defmodule Foglet.TUI.RenderCadenceTest do
   end
 
   setup do
-    Process.flag(:trap_exit, true)
-
-    on_exit(fn ->
-      case Process.whereis(Dispatcher) do
-        nil -> :ok
-        pid -> _ = catch_exit(GenServer.stop(pid, :normal, 1_000))
-      end
-    end)
-
     initial_state = %{
       app_module: TestApp,
       model: %{count: 0},
@@ -38,7 +29,13 @@ defmodule Foglet.TUI.RenderCadenceTest do
       command_registry_table: :render_cadence_command_registry
     }
 
-    {:ok, dispatcher} = Dispatcher.start_link(self(), initial_state)
+    dispatcher =
+      start_supervised!(%{
+        id: {Dispatcher, self()},
+        start: {Dispatcher, :start_link, [self(), initial_state, [name: nil]]},
+        restart: :temporary
+      })
+
     %{dispatcher: dispatcher}
   end
 
