@@ -99,14 +99,17 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
   end
 
   describe "focused_board_entry/1 - public encapsulation API (D-13)" do
-    test "returns nil before any navigation when cursor is on a category", %{theme: _theme} do
+    test "returns the first board entry on initial entry (FOG-105)", %{theme: _theme} do
       dir = directory_with_one_board(%{})
-      state = BoardTree.init(directory: dir, id: "bt-focus-cat")
+      state = BoardTree.init(directory: dir, id: "bt-focus-initial")
 
-      assert BoardTree.focused_board_entry(state) == nil
+      entry = BoardTree.focused_board_entry(state)
+      assert is_map(entry)
+      assert entry.board.id == "b1"
+      refute Map.has_key?(entry, :kind)
     end
 
-    test "returns the focused board entry map after navigating onto a board row",
+    test "stays on the first board after a no-op down (already on last visible row)",
          %{theme: _theme} do
       dir = directory_with_one_board(%{})
       state = BoardTree.init(directory: dir, id: "bt-focus-board")
@@ -119,9 +122,10 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
       refute Map.has_key?(entry, :kind)
     end
 
-    test "returns nil when the cursor is on a category", %{theme: _theme} do
+    test "returns nil after the cursor moves up onto a category", %{theme: _theme} do
       dir = directory_with_one_board(%{})
       state = BoardTree.init(directory: dir, id: "bt-focus-cat-explicit")
+      {state, _action} = BoardTree.handle_event(%{key: :up}, state)
 
       assert BoardTree.focused_board_entry(state) == nil
     end
@@ -141,6 +145,9 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
     test "collapsed category row contains ▸ glyph and hides board children", %{theme: theme} do
       dir = directory_with_one_board(%{}, "Town Square")
       state = BoardTree.init(directory: dir, id: "bt-cat-collapsed")
+      # FOG-105: initial cursor parks on the first board, so collapsing
+      # the parent category requires walking up to it first.
+      {state, _action} = BoardTree.handle_event(%{key: :left}, state)
       {state, _action} = BoardTree.handle_event(%{key: :left}, state)
 
       text = render_text(state, theme)
@@ -560,15 +567,21 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
 
       rendered_rows = String.split(text, "\n", trim: true)
       assert length(rendered_rows) <= 8
-      assert text =~ "Large"
+      # FOG-105: initial cursor lands on Board 01 (first leaf); the
+      # windowing pin keeps it visible, so assert that anchor instead of
+      # the off-screen "Large" category header.
+      assert text =~ "Board 01"
     end
 
     test "keeps the focused board visible after cursor moves below the initial window",
          %{theme: theme} do
       state = BoardTree.init(directory: large_directory(), id: "bt-visible-focused")
 
+      # FOG-105: initial cursor is on Board 01, so 14 downs land on
+      # Board 15 — past the initial window. The pin should keep that
+      # row visible and push Board 01 off-screen.
       state =
-        Enum.reduce(1..15, state, fn _index, acc ->
+        Enum.reduce(1..14, state, fn _index, acc ->
           {next, _action} = BoardTree.handle_event(%{key: :down}, acc)
           next
         end)

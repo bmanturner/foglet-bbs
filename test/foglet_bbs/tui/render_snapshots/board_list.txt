@@ -2,10 +2,10 @@
 ── board_list 80×24 ────────────────────────────────────────────────────────────
 ┌ Foglet ▸ Boards ───────────────────────────────────────────── @alice | 22:36 ┐
 │▾ main                                                                        │
-│  ◆✓    general                                                 3 unread  1d  │
+│▌ ◆✓    general                                                 3 unread  1d  │
 │  ✓     tech                                                    all read  1d  │
 │  ◆✓    lounge                                                  1 unread  1d  │
-│main • 3 boards • 4 unread total                                              │
+│general • subscribed • 3 unread • 1d ago                                      │
 │                                                                              │
 │                                                                              │
 │                                                                              │

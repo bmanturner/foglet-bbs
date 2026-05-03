@@ -104,11 +104,24 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert payload.params == params
   end
 
-  defp move_to_board(state, ctx, board_index) do
-    Enum.reduce(1..board_index, state, fn _index, acc ->
+  # FOG-105: BoardList now parks the initial cursor on the first board
+  # (`b1`) instead of the category, so reaching the N-th board only
+  # requires N-1 downs. Callers still pass the 1-based board index.
+  defp move_to_board(state, _ctx, 1), do: state
+
+  defp move_to_board(state, ctx, board_index) when board_index > 1 do
+    Enum.reduce(2..board_index, state, fn _index, acc ->
       {next, []} = BoardList.update({:key, %{key: :down}}, acc, ctx)
       next
     end)
+  end
+
+  # FOG-105 helper: walk the cursor up onto the parent category from the
+  # initial-board cursor position. Used by tests that need to exercise
+  # category-row rendering or category detail-strip behavior.
+  defp focus_category(state, ctx) do
+    {next, []} = BoardList.update({:key, %{key: :up}}, state, ctx)
+    next
   end
 
   test "BoardList.State.new/0 returns directory-owner defaults" do
@@ -185,16 +198,20 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     ctx = context()
     state = load_state(ctx)
 
+    # FOG-105: initial cursor parks on b1, so `j` advances to b2.
     {state, []} = BoardList.update({:key, %{key: :char, char: "j"}}, state, ctx)
 
-    assert %{board: %{id: "b1"}} = BoardTree.focused_board_entry(state.board_tree)
+    assert %{board: %{id: "b2"}} = BoardTree.focused_board_entry(state.board_tree)
     assert [%{boards: boards}] = state.directory
     assert Enum.map(boards, & &1.board.id) == ["b1", "b2", "b3"]
   end
 
   test "enter on a category parent toggles expanded state without effects" do
     ctx = context(terminal_size: {64, 22})
-    state = load_state(ctx)
+    # FOG-105: initial cursor parks on the first board, where Enter
+    # opens the board. To exercise the category expand/collapse path we
+    # walk the cursor up to the parent category first.
+    state = load_state(ctx) |> focus_category(ctx)
 
     initial_text = BoardList.render(state, ctx) |> flatten_text()
     assert initial_text =~ "▾"
@@ -380,7 +397,10 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     refute text =~ "[required]"
     refute text =~ "[subscribed]"
     refute text =~ "[unsubscribed]"
-    assert text =~ "Town Square • 3 boards • 3 unread total"
+    # FOG-105: initial cursor parks on the first board, so the detail
+    # strip reflects that board's identity rather than the parent
+    # category summary.
+    assert text =~ "General • subscribed • 3 unread"
   end
 
   test "render/2 pluralizes the category board count by length" do
@@ -421,9 +441,16 @@ defmodule Foglet.TUI.Screens.BoardListTest do
       )
       |> elem(0)
 
+    # FOG-105: initial cursor parks on the first board. Move it up onto
+    # the category so the detail strip exercises the category-summary
+    # pluralization branch under test. The empty-category state has no
+    # boards, so its cursor is already on the category.
+    one_state = focus_category(one_state, ctx)
+    many_state = focus_category(load_state(ctx), ctx)
+
     one_text = BoardList.render(one_state, ctx) |> flatten_text()
     empty_text = BoardList.render(empty_state, ctx) |> flatten_text()
-    many_text = BoardList.render(load_state(ctx), ctx) |> flatten_text()
+    many_text = BoardList.render(many_state, ctx) |> flatten_text()
 
     assert one_text =~ "Solo • 1 board • 2 unread total"
     refute one_text =~ "1 boards"

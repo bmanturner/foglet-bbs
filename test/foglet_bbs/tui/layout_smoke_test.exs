@@ -724,6 +724,16 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       [%{category: %{id: "overlarge", name: "Overlarge"}, boards: boards}]
     end
 
+    # FOG-105: BoardList parks the initial cursor on the first board.
+    # Tests that need the cursor parked on the parent category use this
+    # helper to walk it back up `n` rows.
+    defp walk_cursor_up(board_tree, n) do
+      Enum.reduce(1..n, board_tree, fn _index, acc ->
+        {next, _action} = BoardTree.handle_event(%{key: :up}, acc)
+        next
+      end)
+    end
+
     for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
       @width width
       @height height
@@ -858,16 +868,27 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
       directory = overlarge_board_directory(30)
 
+      # FOG-105: BoardList parks the initial cursor on the first board
+      # (Overlarge Board 01) so the detail strip reflects board details
+      # by default. This test pins the strip to the category-summary
+      # branch by walking the cursor back up to the parent category
+      # before rendering — the y-position contract is what's under test.
+      ctx = screen_context(:board_list, user, size)
+
+      board_tree =
+        BoardTree.init(directory: directory, id: "board-directory")
+        |> walk_cursor_up(1)
+
       state =
         BoardList.State.new(
           directory: directory,
-          board_tree: BoardTree.init(directory: directory, id: "board-directory"),
+          board_tree: board_tree,
           status: :loaded
         )
 
       positioned =
         state
-        |> BoardList.render(screen_context(:board_list, user, size))
+        |> BoardList.render(ctx)
         |> apply_at_size(size)
 
       elements = text_elements(positioned)

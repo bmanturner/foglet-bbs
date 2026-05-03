@@ -123,7 +123,26 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
 
     tree = put_in(tree.raxol_state.expanded, expanded)
 
+    # FOG-105: park the initial cursor on the first board (leaf) so the
+    # selection marker is visible on first entry and Enter on the first
+    # frame opens that board deterministically. Raxol's default lands the
+    # cursor on the first category, which renders without a `▌` marker
+    # and binds Enter to expand/collapse rather than open.
+    tree =
+      case first_board_id(nodes) do
+        nil -> tree
+        board_id -> put_in(tree.raxol_state.cursor, board_id)
+      end
+
     %__MODULE__{tree: tree, directory: directory, last_action: nil}
+  end
+
+  @spec first_board_id([Tree.tree_node()]) :: term() | nil
+  defp first_board_id(nodes) do
+    Enum.find_value(nodes, fn
+      %{children: [first | _]} -> first.id
+      _ -> nil
+    end)
   end
 
   @doc "Forward an input event to the underlying tree and surface its action."
