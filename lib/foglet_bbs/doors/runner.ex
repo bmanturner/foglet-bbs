@@ -330,11 +330,9 @@ defmodule Foglet.Doors.Runner do
   defp maybe_term_os_process(_pid), do: :ok
 
   # sobelow: context paths are generated under System.tmp_dir!/0 with
-  # System.unique_integer/1, never from user-controlled input.
+  # cryptographic random bytes, never from user-controlled input.
   @sobelow_skip ["Traversal.FileModule"]
   defp write_context_file(%Manifest{} = manifest, session, terminal_size) do
-    path = Path.join(System.tmp_dir!(), "foglet-door-#{System.unique_integer([:positive])}.json")
-
     body =
       Jason.encode!(%{
         door_id: manifest.id,
@@ -346,11 +344,24 @@ defmodule Foglet.Doors.Runner do
         terminal_height: elem(terminal_size, 1)
       })
 
+    write_context_file(body, 3)
+  end
+
+  # sobelow: path is generated here under System.tmp_dir!/0 with
+  # cryptographic random bytes and written with :exclusive to avoid races.
+  @sobelow_skip ["Traversal.FileModule"]
+  defp write_context_file(body, attempts) when attempts > 0 do
+    nonce = Base.url_encode64(:crypto.strong_rand_bytes(16), padding: false)
+    path = Path.join(System.tmp_dir!(), "foglet-door-#{nonce}.json")
+
     case File.write(path, body, [:exclusive]) do
       :ok -> {:ok, path}
+      {:error, :eexist} -> write_context_file(body, attempts - 1)
       {:error, reason} -> {:error, {:context_file, reason}}
     end
   end
+
+  defp write_context_file(_body, 0), do: {:error, {:context_file, :eexist}}
 
   defp remove_context_file(nil), do: :ok
 
