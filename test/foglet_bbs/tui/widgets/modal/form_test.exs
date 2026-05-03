@@ -1378,6 +1378,135 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     end
   end
 
+  # =========================================================================
+  # FOG-344 — :enum choices with operator-facing labels
+  # =========================================================================
+
+  describe "FOG-344 :enum choices accept {label, value} pairs" do
+    test "renders the operator-facing label, not the raw value" do
+      fields = [
+        %{
+          name: :registration_mode,
+          type: :enum,
+          label: "Account registration",
+          choices: [
+            {"Open — anyone can sign up", "open"},
+            {"Invite only — requires an invite code", "invite_only"},
+            {"Sysop approval — applications queue for review", "sysop_approved"}
+          ],
+          value: "open"
+        }
+      ]
+
+      form = test_form(fields)
+      flat = form |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Open — anyone can sign up")
+      assert String.contains?(flat, "Invite only — requires an invite code")
+      # Raw schema strings should not leak into rendered widget rows.
+      refute flat =~ ~r/^open$/m
+      refute flat =~ ~r/^invite_only$/m
+    end
+
+    test "submit/coerce returns the raw value, not the label" do
+      fields = [
+        %{
+          name: :registration_mode,
+          type: :enum,
+          label: "Account registration",
+          choices: [
+            {"Open — anyone can sign up", "open"},
+            {"Invite only — requires an invite code", "invite_only"}
+          ],
+          value: "open"
+        }
+      ]
+
+      state = test_form(fields)
+      send_events(state, [%{key: :down}, %{key: :enter}])
+
+      assert_receive {:submitted, %{registration_mode: "invite_only"}}
+    end
+
+    test "field_value/2 returns raw value while cycling" do
+      fields = [
+        %{
+          name: :delivery_mode,
+          type: :enum,
+          label: "Email delivery",
+          choices: [
+            {"Send email", "email"},
+            {"No email (offline mode)", "no_email"}
+          ],
+          value: "email"
+        }
+      ]
+
+      state = test_form(fields)
+      assert Form.field_value(state, :delivery_mode) == "email"
+
+      {state2, _} = Form.handle_event(%{key: :down}, state)
+      assert Form.field_value(state2, :delivery_mode) == "no_email"
+    end
+
+    test "backward compatible with flat choices: [value, ...]" do
+      fields = [
+        %{name: :color, type: :enum, label: "Color", choices: [:red, :green, :blue]}
+      ]
+
+      state = test_form(fields)
+      flat = state |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "red")
+      assert String.contains?(flat, "green")
+
+      send_events(state, [%{key: :down}, %{key: :down}, %{key: :enter}])
+      assert_receive {:submitted, %{color: :blue}}
+    end
+
+    test "initial :value seeds index against the value half of {label, value}" do
+      fields = [
+        %{
+          name: :registration_mode,
+          type: :enum,
+          label: "Account registration",
+          choices: [
+            {"Open — anyone can sign up", "open"},
+            {"Invite only — requires an invite code", "invite_only"},
+            {"Sysop approval — applications queue for review", "sysop_approved"}
+          ],
+          value: "sysop_approved"
+        }
+      ]
+
+      state = test_form(fields)
+      send_events(state, [%{key: :enter}])
+      assert_receive {:submitted, %{registration_mode: "sysop_approved"}}
+    end
+
+    test ":compact display renders labels in the cycler" do
+      fields = [
+        %{
+          name: :delivery_mode,
+          type: :enum,
+          label: "Email delivery",
+          display: :compact,
+          choices: [
+            {"Send email", "email"},
+            {"No email (offline mode)", "no_email"}
+          ],
+          value: "email"
+        }
+      ]
+
+      state = test_form(fields)
+      flat = state |> Form.render(theme: theme()) |> flatten_text()
+
+      assert String.contains?(flat, "Send email")
+      refute flat =~ ~r/‹\s*email\s*›/
+    end
+  end
+
   describe "init/1 input validation (Phase 28 BL-03)" do
     test "raises ArgumentError when :fields is an empty list" do
       assert_raise ArgumentError, ~r/at least one field/, fn ->

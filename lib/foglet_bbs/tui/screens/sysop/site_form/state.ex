@@ -38,6 +38,33 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     "invite_generation_per_user_limit"
   ]
 
+  # Operator-facing field labels for enum SITE keys (FOG-342 / FOG-344).
+  # Keys not listed here keep the raw schema key as their label.
+  @field_labels %{
+    "registration_mode" => "Account registration",
+    "invite_code_generators" => "Invite code generators",
+    "delivery_mode" => "Email delivery"
+  }
+
+  # Operator-facing per-value labels for enum SITE keys (FOG-342 / FOG-344).
+  # Persisted values remain the raw schema strings; the labels are display only.
+  @value_labels %{
+    "registration_mode" => %{
+      "open" => "Open — anyone can sign up",
+      "invite_only" => "Invite only — requires an invite code",
+      "sysop_approved" => "Sysop approval — applications queue for review"
+    },
+    "invite_code_generators" => %{
+      "sysop_only" => "Sysops only",
+      "mods" => "Sysops and moderators",
+      "any_user" => "Any signed-in user"
+    },
+    "delivery_mode" => %{
+      "email" => "Send email",
+      "no_email" => "No email (offline mode)"
+    }
+  }
+
   # Compile-time atom interning — guarantees String.to_existing_atom/1 will
   # succeed for every site key when build_field/2 derives field-name atoms.
   # Without this, the rarely-referenced :invite_generation_per_user_limit
@@ -191,14 +218,14 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
       # the codebase (Schema specs, SiteForm wrapper) — safe to use
       # to_existing_atom here.
       name: String.to_existing_atom(key),
-      label: key,
+      label: Map.get(@field_labels, key, key),
       value: raw_value,
       description: spec.description
     }
 
     case spec do
       %{type: :string, enum: enum} when is_list(enum) ->
-        Map.merge(base, %{type: :enum, choices: enum})
+        Map.merge(base, %{type: :enum, choices: choices_for(key, enum)})
 
       %{type: :string, enum: nil} ->
         Map.merge(base, %{type: :text})
@@ -209,6 +236,15 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
       %{type: :boolean} ->
         Map.merge(base, %{type: :boolean, value: !!raw_value})
     end
+  end
+
+  # Build the `[{label, value}, ...]` choices list for a given enum SITE key.
+  # Falls back to the raw value as the label if a value is not in the label
+  # map — defense against schema drift so a new enum value never crashes the
+  # form.
+  defp choices_for(key, enum) when is_list(enum) do
+    labels = Map.get(@value_labels, key, %{})
+    Enum.map(enum, fn value -> {Map.get(labels, value, value), value} end)
   end
 
   defp stringify_int(nil), do: ""

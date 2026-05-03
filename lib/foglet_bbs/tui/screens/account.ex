@@ -386,9 +386,23 @@ defmodule Foglet.TUI.Screens.Account do
   defp text_entry_active?(%State{} = ss) do
     case active_label(ss) do
       "SSH KEYS" -> ss.ssh_keys.mode == :add
+      "PROFILE" -> form_text_field_focused?(ss.profile_form)
+      "PREFS" -> form_text_field_focused?(ss.prefs_form)
       _ -> false
     end
   end
+
+  # FOG-333: Generalized text-entry shielding for Modal.Form-backed tabs.
+  # Any focused field whose `:type` accepts free-form text (digits included)
+  # shields the global digit tab shortcuts; enum/select fields fall through.
+  defp form_text_field_focused?(%{fields: fields, focus_index: idx}) do
+    case Enum.at(fields, idx) do
+      %{type: type} when type in [:text, :textarea, :integer, :password] -> true
+      _ -> false
+    end
+  end
+
+  defp form_text_field_focused?(_), do: false
 
   defp action_key(%{key: :char, char: char}) when is_binary(char), do: char
   defp action_key(%{key: key}), do: key

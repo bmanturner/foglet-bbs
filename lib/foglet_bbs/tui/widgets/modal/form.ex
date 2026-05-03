@@ -42,6 +42,21 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   Up/Down on `:enum` fields cycle the field value via the existing field
   dispatcher and do NOT change `focus_index` (D-13).
 
+  ## Enum choices: `[value]` or `[{label, value}]` (FOG-344)
+
+  `:enum` field specs accept either:
+
+    * `choices: [value, value, ...]` — flat list; the rendered label is
+      `to_string(value)`. Used by Account Preferences and Sysop Boards.
+    * `choices: [{label, value}, ...]` — explicit operator-facing label
+      distinct from the persisted raw value. Used by Sysop SiteForm so the
+      picker can show "Open — anyone can sign up" while persisting `"open"`.
+
+  Both shapes round-trip the **value** half through `coerce/2` on submit, so
+  callers' `on_submit` payloads do not change when migrating from flat to
+  tuple form. Selection state remains an integer index into the normalized
+  pair list and `:up`/`:down` keyboard cycling is unchanged.
+
   ## Enum field cycling and screen-side preview (D-25 D-03 / Pitfall 5)
 
   `:enum` fields update their internal field state on every `:up`/`:down` event
@@ -530,14 +545,14 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   end
 
   defp build_field_state(%{type: :enum} = spec) do
-    values = enum_values(spec)
+    pairs = normalized_choices(spec)
 
     case Map.get(spec, :value) do
       nil ->
         0
 
       val ->
-        Enum.find_index(values, &(&1 == val)) || 0
+        Enum.find_index(pairs, fn {_lbl, v} -> v == val end) || 0
     end
   end
 
@@ -571,9 +586,9 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   end
 
   defp dispatch_to_field(%{type: :enum} = spec, field_state, %{key: :down}) do
-    case length(enum_values(spec)) do
-      0 -> field_state
-      n -> max(0, min(field_state + 1, n - 1))
+    case normalized_choices(spec) do
+      [] -> field_state
+      pairs -> max(0, min(field_state + 1, length(pairs) - 1))
     end
   end
 
@@ -637,6 +652,22 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     |> Map.new(fn {spec, st} -> {spec.name, coerce(spec, st)} end)
   end
 
+  # Normalize :enum `choices` into `[{label, value}]` pairs (FOG-344/FOG-335).
+  #
+  # Backward-compatible with the legacy `choices: [value, value, ...]` shape
+  # used by Account Preferences and Boards (label defaults to `to_string(value)`),
+  # and accepts the `choices: [{label, value}, ...]` shape used by Sysop
+  # SiteForm to render operator-facing labels distinct from persisted raw values.
+  defp normalized_choices(%{choices: choices}) when is_list(choices), do: do_normalize(choices)
+  defp normalized_choices(_spec), do: []
+
+  defp do_normalize(choices) do
+    Enum.map(choices, fn
+      {label, value} -> {to_string(label), value}
+      value -> {to_string(value), value}
+    end)
+  end
+
   # FOG-349: indices of fields whose :visible_when predicate returns truthy.
   # Fields without :visible_when are always visible. Predicates receive the
   # current coerced values map (current_values/1).
@@ -670,26 +701,6 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end
   end
 
-  # FOG-349: tuple-form `:enum` choice support. Choices may be either a flat
-  # list of values (`[:red, :green]`, `["a", "b"]`) or `{label, value}` tuples
-  # (`[{"Red", :red}, {"Green", :green}]`). Persisted/coerced values are always
-  # the raw value (right-hand side); render uses the human label.
-  defp enum_values(%{type: :enum} = spec) do
-    Map.get(spec, :choices, [])
-    |> Enum.map(fn
-      {_label, value} -> value
-      value -> value
-    end)
-  end
-
-  defp enum_labels(%{type: :enum} = spec) do
-    Map.get(spec, :choices, [])
-    |> Enum.map(fn
-      {label, _value} -> to_string(label)
-      value -> to_string(value)
-    end)
-  end
-
   defp coerce(%{type: :text}, %TextInput{raxol_state: %{value: v}}), do: v || ""
 
   defp coerce(%{type: :integer}, %TextInput{raxol_state: %{value: v}}) do
@@ -702,7 +713,10 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   defp coerce(%{type: :boolean}, bool), do: !!bool
 
   defp coerce(%{type: :enum} = spec, idx) when is_integer(idx) do
-    Enum.at(enum_values(spec), idx)
+    case Enum.at(normalized_choices(spec), idx) do
+      nil -> nil
+      {_label, value} -> value
+    end
   end
 
   defp coerce(%{type: :textarea}, %{raw_value: rv}), do: rv
@@ -746,14 +760,14 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   end
 
   defp render_widget(%{type: :enum} = spec, field_state, _focused?, theme) do
-    str_choices = enum_labels(spec)
+    labels = Enum.map(normalized_choices(spec), fn {label, _value} -> label end)
 
     case Map.get(spec, :display, :radio) do
       :compact ->
-        render_compact_enum(str_choices, field_state, theme)
+        render_compact_enum(labels, field_state, theme)
 
       _radio ->
-        RadioGroup.render(str_choices, field_state, theme: theme)
+        RadioGroup.render(labels, field_state, theme: theme)
     end
   end
 

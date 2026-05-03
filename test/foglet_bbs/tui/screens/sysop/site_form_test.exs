@@ -243,18 +243,15 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       state = SState.new([])
       form = SState.build_modal_form(state)
 
-      types_by_label = Map.new(form.fields, fn f -> {f.label, f.type} end)
+      # FOG-344: enum SITE keys carry operator-facing field labels distinct
+      # from the schema key. Index by :name (atom) which remains stable.
+      types_by_name = Map.new(form.fields, fn f -> {f.name, f.type} end)
 
-      # registration_mode: :string + enum -> :enum
-      assert types_by_label["registration_mode"] == :enum
-      # invite_code_generators: :string + enum -> :enum
-      assert types_by_label["invite_code_generators"] == :enum
-      # delivery_mode: :string + enum -> :enum
-      assert types_by_label["delivery_mode"] == :enum
-      # require_email_verification: :boolean -> :boolean
-      assert types_by_label["require_email_verification"] == :boolean
-      # invite_generation_per_user_limit: :integer -> :integer
-      assert types_by_label["invite_generation_per_user_limit"] == :integer
+      assert types_by_name[:registration_mode] == :enum
+      assert types_by_name[:invite_code_generators] == :enum
+      assert types_by_name[:delivery_mode] == :enum
+      assert types_by_name[:require_email_verification] == :boolean
+      assert types_by_name[:invite_generation_per_user_limit] == :integer
     end
 
     test "build_modal_form/1 enum value is preserved in field spec :value" do
@@ -262,11 +259,13 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       state = SState.new([])
       form = SState.build_modal_form(state)
 
-      delivery_field = Enum.find(form.fields, fn f -> f.label == "delivery_mode" end)
+      delivery_field = Enum.find(form.fields, fn f -> f.name == :delivery_mode end)
       assert delivery_field.value == "email"
       assert delivery_field.type == :enum
-      assert "email" in delivery_field.choices
-      assert "no_email" in delivery_field.choices
+      # FOG-344: choices are now {label, value} pairs; raw values still present.
+      values = Enum.map(delivery_field.choices, fn {_label, value} -> value end)
+      assert "email" in values
+      assert "no_email" in values
     end
 
     test "validate_delivery_verification_pair/1 errors on no_email + require_verification true" do
@@ -714,12 +713,18 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
         |> collect_text_values()
         |> Enum.join("\n")
 
-      # D-20/D-21 (b): saved value present, mutated draft NOT echoed.
-      saved_value = Config.get!("registration_mode")
+      # D-20/D-21 (b): drafts reseeded to saved Config value; the rendered
+      # selection (per FOG-344, shown via the operator-facing label) marks the
+      # saved value, and the previously-mutated draft is NOT the selection.
+      assert form_after_esc.drafts["registration_mode"] == "open"
 
-      assert text =~ saved_value,
-             "Expected saved value #{inspect(saved_value)} to appear in " <>
-               "rendered output after Esc reseed. Got: #{inspect(text)}"
+      assert text =~ ~r/●\s*Open — anyone can sign up/,
+             "Expected the saved 'open' value's label to be the selected radio after " <>
+               "Esc reseed. Got: #{inspect(text)}"
+
+      assert text =~ ~r/◇\s*Invite only — requires an invite code/,
+             "Expected the previously-mutated 'invite_only' draft to be unselected " <>
+               "after Esc reseed. Got: #{inspect(text)}"
     end
 
     test "(c) Esc does not navigate away from the Sysop Site tab" do
@@ -762,6 +767,96 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
                "Found forbidden discard substring #{inspect(forbidden)} in: " <>
                  inspect(text)
       end
+    end
+  end
+
+  # =========================================================================
+  # FOG-344 — operator-facing labels for enum SITE keys with raw-value persistence
+  # =========================================================================
+
+  describe "FOG-344 enum operator-facing labels" do
+    test "registration_mode renders human label, not raw atom" do
+      Config.put!("registration_mode", "open", nil)
+      form = SiteForm.init([])
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(text, "Open — anyone can sign up")
+      assert String.contains?(text, "Invite only — requires an invite code")
+      assert String.contains?(text, "Sysop approval — applications queue for review")
+      assert String.contains?(text, "Account registration")
+    end
+
+    test "delivery_mode renders human labels for both choices" do
+      Config.put!("delivery_mode", "email", nil)
+      form = SiteForm.init([])
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(text, "Send email")
+      assert String.contains?(text, "No email (offline mode)")
+      assert String.contains?(text, "Email delivery")
+    end
+
+    test "invite_code_generators renders human labels for all three choices" do
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      form = SiteForm.init([])
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(text, "Sysops only")
+      assert String.contains?(text, "Sysops and moderators")
+      assert String.contains?(text, "Any signed-in user")
+      assert String.contains?(text, "Invite code generators")
+    end
+
+    test "selecting a labeled enum round-trips a raw value through Foglet.Config.put/3" do
+      sysop = sysop_fixture()
+      Config.put!("registration_mode", "open", nil)
+
+      form = SiteForm.init(current_user: sysop)
+
+      reg_index =
+        SiteForm.visible_keys(form)
+        |> Enum.find_index(&(&1 == "registration_mode"))
+
+      form = %{form | focused: reg_index}
+
+      # Cycle Down once: open → invite_only.
+      {form, []} = SiteForm.handle_key(%{key: :down}, form)
+      assert form.drafts["registration_mode"] == "invite_only"
+
+      # Submit (Ctrl-S) and verify Config persists the raw schema string.
+      {_form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      assert Config.get!("registration_mode") == "invite_only"
+    end
+
+    test "submit on delivery_mode persists the raw schema string, not the label" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("delivery_mode", "no_email")
+
+      {_form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      raw = Config.get!("delivery_mode")
+      assert raw == "no_email"
+      refute raw == "No email (offline mode)"
     end
   end
 
