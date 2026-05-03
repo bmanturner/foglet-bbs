@@ -158,6 +158,29 @@ else
         existing
     end
 
+  _seed_mod =
+    case Accounts.get_user_by_handle("mod") do
+      nil ->
+        {:ok, user} =
+          Accounts.register_user(%{
+            handle: "mod",
+            email: "mod@foglet.local",
+            password: "seedpassword123!"
+          })
+
+        user
+        |> User.confirm_changeset()
+        |> Ecto.Changeset.change(%{role: :mod})
+        |> Repo.update!()
+
+        IO.puts("  [seed] inserted user: mod")
+        user
+
+      existing ->
+        IO.puts("  [seed] user mod already present")
+        existing
+    end
+
   general_board = Repo.get_by(Board, slug: "general")
 
   if general_board do

@@ -82,8 +82,9 @@ inserts:
 - **Default configuration entries** (delegated to `priv/repo/seeds/config.exs`).
 - A **`General` category** and a default **`general` board** marked as
   `default_subscription: true` so new users are auto-subscribed.
-- Two seed users for development:
+- Three seed users for development:
   - `sysop` — promoted to the `:sysop` role and confirmed.
+  - `mod` — promoted to the `:mod` role and confirmed.
   - `foglet` — a regular member, confirmed.
 - A few sample threads and posts in the `general` board (a sticky welcome
   thread, "Introduce Yourself", and "General Chat") so the TUI has content
@@ -166,7 +167,8 @@ Two flows are possible on first connect, owned by
   authenticate with handle + password or create a new account.
 
 Sign in as `sysop` with the seed password `seedpassword123!` to land on a
-fully-configured account, or as `foglet` for a regular-member view.
+fully-configured account, as `mod` to exercise moderator-only affordances, or
+as `foglet` for a regular-member view.
 
 > Host key trust: the first connection prompts your SSH client to accept the
 > server's host key, which lives under `priv/ssh` (configurable via
