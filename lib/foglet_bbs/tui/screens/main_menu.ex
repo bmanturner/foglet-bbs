@@ -61,6 +61,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @main_menu_commands [
     %{key: "B", label: "Boards", glyph: "●", kind: :destination, visibility: :always},
     %{key: "C", label: "Compose", glyph: "✎", kind: :destination, visibility: :always},
+    %{key: "D", label: "Door Games", glyph: "▸", kind: :destination, visibility: :doors},
     %{key: "A", label: "Account", glyph: "◇", kind: :destination, visibility: :account},
     %{key: "M", label: "Moderation", glyph: "⚑", kind: :destination, visibility: :moderation},
     %{key: "S", label: "Sysop", glyph: "▣", kind: :destination, visibility: :sysop},
@@ -122,6 +123,17 @@ defmodule Foglet.TUI.Screens.MainMenu do
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
       when c in ["c", "C"] do
     {normalize_state(local_state, context), [Effect.navigate(:new_thread, %{origin: :main_menu})]}
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["d", "D"] do
+    local_state = normalize_state(local_state, context)
+
+    if Foglet.Doors.list_visible(context.current_user) == [] do
+      {local_state, []}
+    else
+      {local_state, [Effect.navigate(:door_list)]}
+    end
   end
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
@@ -560,6 +572,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   @spec destination_visible?(atom(), map() | nil) :: boolean()
   defp destination_visible?(:always, _user), do: true
+  defp destination_visible?(:doors, user), do: Foglet.Doors.list_visible(user) != []
   defp destination_visible?(:account, user), do: ShellVisibility.account_visible?(user)
   defp destination_visible?(:moderation, user), do: ShellVisibility.moderation_visible?(user)
   defp destination_visible?(:sysop, user), do: ShellVisibility.sysop_visible?(user)

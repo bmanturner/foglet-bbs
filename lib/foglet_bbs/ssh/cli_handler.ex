@@ -67,6 +67,7 @@ defmodule Foglet.SSH.CLIHandler do
     :session_pid,
     :lifecycle_pid,
     :dispatcher_pid,
+    :door_runner_pid,
     :offered_ssh_public_key,
     :width,
     :height,
@@ -103,6 +104,28 @@ defmodule Foglet.SSH.CLIHandler do
     new_state = cleanup(state, close_channel: true)
     {:stop, new_state.channel_id || 0, new_state}
   end
+
+  @impl true
+  def handle_msg({:foglet_launch_door, manifest, session, terminal_size}, state) do
+    {:ok, launch_door_runner(state, manifest, session, terminal_size)}
+  end
+
+  @impl true
+  def handle_msg({:door_started, pid, door_id}, %{door_runner_pid: pid} = state) do
+    _ = safe_ssh_send(state.connection_ref, state.channel_id, "\r\n[Door #{door_id} started]\r\n")
+    {:ok, state}
+  end
+
+  @impl true
+  def handle_msg({:door_exited, pid, door_id, reason, status}, %{door_runner_pid: pid} = state) do
+    message = "\r\n[Door #{door_id} exited: #{inspect(reason)}#{exit_status_suffix(status)}]\r\n"
+    _ = safe_ssh_send(state.connection_ref, state.channel_id, message)
+    dispatch_raw(state.dispatcher_pid, {:door_exited, door_id, reason, status})
+    {:ok, %{state | door_runner_pid: nil}}
+  end
+
+  @impl true
+  def handle_msg({:door_exited, _pid, _door_id, _reason, _status}, state), do: {:ok, state}
 
   @impl true
   def handle_msg(_msg, state), do: {:ok, state}
@@ -158,8 +181,13 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:data, _ch, _type, data}}, state) do
-    events = IOAdapter.parse_input(data)
-    dispatch_events(state.dispatcher_pid, events)
+    if active_door?(state) do
+      Foglet.Doors.Runner.input(state.door_runner_pid, data)
+    else
+      events = IOAdapter.parse_input(data)
+      dispatch_events(state.dispatcher_pid, events)
+    end
+
     {:ok, state}
   end
 
@@ -177,6 +205,10 @@ defmodule Foglet.SSH.CLIHandler do
     resize = Raxol.Core.Events.Event.new(:resize, %{width: width, height: height})
     window = Raxol.Core.Events.Event.new(:window, %{width: width, height: height})
     dispatch_events(state.dispatcher_pid, [resize, window])
+
+    if active_door?(state) do
+      Foglet.Doors.Runner.resize(state.door_runner_pid, {width, height})
+    end
 
     # IN-01: Session.set_terminal_size/2 is owned by the App's
     # do_update({:window_change, …}, …) handler, which already fires from the
@@ -367,9 +399,10 @@ defmodule Foglet.SSH.CLIHandler do
   defp make_crlf_writer(connection_ref, channel_id) do
     inner = IOAdapter.make_writer(connection_ref, channel_id)
 
-    fn data when is_binary(data) ->
+    fn data ->
       cooked =
         data
+        |> IO.iodata_to_binary()
         |> :binary.replace("\r\n", "\n", [:global])
         |> :binary.replace("\n", "\r\n", [:global])
 
@@ -481,7 +514,8 @@ defmodule Foglet.SSH.CLIHandler do
         theme_id: preferences.theme_id,
         theme: preferences.theme,
         ssh_peer: state.peer,
-        offered_ssh_public_key: if(is_nil(user), do: state.offered_ssh_public_key)
+        offered_ssh_public_key: if(is_nil(user), do: state.offered_ssh_public_key),
+        door_handler_pid: self()
       },
       terminal_size: {width, height}
     }
@@ -504,6 +538,13 @@ defmodule Foglet.SSH.CLIHandler do
     Enum.each(events, &GenServer.cast(dispatcher_pid, {:dispatch, &1}))
   end
 
+  defp dispatch_raw(nil, _message), do: :ok
+
+  defp dispatch_raw(dispatcher_pid, message) when is_pid(dispatcher_pid) do
+    event = Raxol.Core.Events.Event.new(:foglet_runtime, %{message: message})
+    GenServer.cast(dispatcher_pid, {:dispatch, event})
+  end
+
   # Resolve the Raxol dispatcher pid from the Lifecycle once at PTY start.
   # Returns nil if the Lifecycle is unreachable (already exited) so dispatching
   # before the EXIT message is observed becomes a no-op.
@@ -518,6 +559,14 @@ defmodule Foglet.SSH.CLIHandler do
 
   defp stop_lifecycle(pid) do
     if Process.alive?(pid), do: Raxol.Core.Runtime.Lifecycle.stop(pid)
+  rescue
+    _ -> :ok
+  end
+
+  defp stop_door_runner(nil), do: :ok
+
+  defp stop_door_runner(pid) when is_pid(pid) do
+    if Process.alive?(pid), do: Foglet.Doors.Runner.disconnect(pid)
   rescue
     _ -> :ok
   end
@@ -584,6 +633,7 @@ defmodule Foglet.SSH.CLIHandler do
   defp cleanup(%__MODULE__{cleanup_done?: true} = state, _opts), do: state
 
   defp cleanup(%__MODULE__{} = state, opts) do
+    stop_door_runner(state.door_runner_pid)
     send_alt_screen_leave(state)
     stop_lifecycle(state.lifecycle_pid)
     _ = stop_session(state.session_pid)
@@ -597,8 +647,49 @@ defmodule Foglet.SSH.CLIHandler do
         _ = decrement_connection_count()
       end
 
-    %__MODULE__{state | cleanup_done?: true, counter_counted?: false}
+    %__MODULE__{state | cleanup_done?: true, counter_counted?: false, door_runner_pid: nil}
   end
+
+  defp launch_door_runner(%__MODULE__{door_runner_pid: pid} = state, _manifest, _session, _size)
+       when is_pid(pid) do
+    _ =
+      safe_ssh_send(state.connection_ref, state.channel_id, "\r\nA door is already running.\r\n")
+
+    state
+  end
+
+  defp launch_door_runner(%__MODULE__{} = state, manifest, session, terminal_size) do
+    output = make_crlf_writer(state.connection_ref, state.channel_id)
+    _ = safe_ssh_send(state.connection_ref, state.channel_id, "\e[2J\e[H")
+
+    case Foglet.Doors.Supervisor.start_runner(
+           manifest: manifest,
+           session: session,
+           terminal_size: terminal_size,
+           output: output,
+           owner: self()
+         ) do
+      {:ok, pid} ->
+        %{state | door_runner_pid: pid}
+
+      {:error, reason} ->
+        _ =
+          safe_ssh_send(
+            state.connection_ref,
+            state.channel_id,
+            "\r\nDoor launch failed: #{inspect(reason)}\r\n"
+          )
+
+        dispatch_raw(state.dispatcher_pid, {:door_launch_failed, manifest.id, reason})
+        state
+    end
+  end
+
+  defp active_door?(%__MODULE__{door_runner_pid: pid}) when is_pid(pid), do: Process.alive?(pid)
+  defp active_door?(_state), do: false
+
+  defp exit_status_suffix(nil), do: ""
+  defp exit_status_suffix(status), do: ", status #{status}"
 
   # --- Connection limit via ETS atomic counter ---
 

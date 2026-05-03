@@ -114,6 +114,34 @@ defmodule Foglet.TUI.App.Effects do
     {state, []}
   end
 
+  def apply_effect(%App{} = state, %Effect{
+        type: :door,
+        payload: %{action: :launch, manifest: manifest} = payload
+      }) do
+    session = %{
+      user_id: state.current_user && state.current_user.id,
+      handle: state.current_user && state.current_user.handle,
+      role: state.current_user && state.current_user.role,
+      session_id: session_identifier(state.session_pid)
+    }
+
+    output = Map.get(payload, :output) || fn _iodata -> :ok end
+
+    case door_handler_pid(state) do
+      pid when is_pid(pid) ->
+        Process.send_after(
+          pid,
+          {:foglet_launch_door, manifest, session, state.terminal_size},
+          100
+        )
+
+        {state, []}
+
+      _other ->
+        start_detached_runner(state, manifest, session, output)
+    end
+  end
+
   def apply_effect(%App{} = state, %Effect{type: :quit}) do
     {state, [Command.quit()]}
   end
@@ -153,6 +181,35 @@ defmodule Foglet.TUI.App.Effects do
     module = Routing.screen_module_for(state, screen_key)
     Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
   end
+
+  defp start_detached_runner(state, manifest, session, output) do
+    case Foglet.Doors.Supervisor.start_runner(
+           manifest: manifest,
+           session: session,
+           terminal_size: state.terminal_size,
+           output: output,
+           owner: nil
+         ) do
+      {:ok, _pid} ->
+        {state, []}
+
+      {:error, reason} ->
+        modal = %Foglet.TUI.Modal{
+          type: :error,
+          message: "Door launch failed: #{inspect(reason)}"
+        }
+
+        {%{state | modal: modal}, []}
+    end
+  end
+
+  defp door_handler_pid(%App{session_context: session_context}) when is_map(session_context),
+    do: Map.get(session_context, :door_handler_pid)
+
+  defp door_handler_pid(_state), do: nil
+
+  defp session_identifier(pid) when is_pid(pid), do: inspect(pid)
+  defp session_identifier(_pid), do: nil
 
   defp merge_session_preferences(state, snapshot) do
     session_context =

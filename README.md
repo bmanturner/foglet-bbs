@@ -152,7 +152,7 @@ Do not operate Foglet as though these exist today:
 - `lib/foglet_bbs/` — `Foglet.*` domain code and `FogletBbs.*` Phoenix infrastructure. The boundary is by module name, not by path.
 - `lib/foglet_bbs_web/` — `FogletBbsWeb.*` endpoint, router, controllers, telemetry, and web views.
 - `lib/mix/tasks/` — operator and break-glass Mix tasks.
-- `docs/` — project documentation, including `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, and `docs/DEVELOPMENT.md`.
+- `docs/` — project documentation, including `docs/ARCHITECTURE.md`, `docs/DATA_MODEL.md`, `docs/DEVELOPMENT.md`, and the Door Games guide in `docs/DOOR_GAMES.md`.
 - `docs/raxol/` — vendored Raxol documentation.
 - `vendor/raxol/` — vendored Raxol TUI library source.
 

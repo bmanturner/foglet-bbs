@@ -15,7 +15,8 @@ defmodule Foglet.TUI.PresentationTest do
             :thread_list,
             :post_reader,
             :new_thread,
-            :post_composer
+            :post_composer,
+            :door_list
           ] do
         assert Presentation.mode_for!(screen) == :bbs
       end
@@ -43,6 +44,7 @@ defmodule Foglet.TUI.PresentationTest do
                  :post_reader,
                  :new_thread,
                  :post_composer,
+                 :door_list,
                  :account,
                  :moderation,
                  :sysop

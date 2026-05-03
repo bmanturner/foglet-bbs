@@ -43,6 +43,7 @@ defmodule FogletBbs.Application do
       Foglet.Boards.Supervisor,
       {Registry, keys: :unique, name: Foglet.Sessions.Registry},
       Foglet.Sessions.Supervisor,
+      Foglet.Doors.Supervisor,
       Foglet.Sessions.BoardScreen,
       {Registry, keys: :unique, name: Foglet.BoardChat.Ephemeral.Registry},
       Foglet.BoardChat.Ephemeral.Supervisor,

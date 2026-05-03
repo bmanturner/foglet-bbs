@@ -26,6 +26,7 @@ defmodule Foglet.TUI.RenderFixtures do
   alias Foglet.TUI.Screens.{
     Account,
     BoardList,
+    DoorList,
     Login,
     MainMenu,
     Moderation,
@@ -42,7 +43,7 @@ defmodule Foglet.TUI.RenderFixtures do
 
   @screens ~w(
     login register verify main_menu board_list thread_list
-    post_reader post_composer new_thread account moderation sysop
+    post_reader post_composer new_thread door_list account moderation sysop
   )a
 
   @substates %{
@@ -67,6 +68,7 @@ defmodule Foglet.TUI.RenderFixtures do
           | :post_reader
           | :post_composer
           | :new_thread
+          | :door_list
           | :account
           | :moderation
           | :sysop
@@ -716,6 +718,10 @@ defmodule Foglet.TUI.RenderFixtures do
 
     %{state | route_params: %{board: board, board_id: board.id}}
     |> App.put_screen_state(:new_thread, ss)
+  end
+
+  defp populate(:door_list, state, _size) do
+    App.put_screen_state(state, :door_list, init_screen(DoorList, state))
   end
 
   defp populate(:account, state, _size) do
