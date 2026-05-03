@@ -64,7 +64,8 @@ defmodule Foglet.TUI.Presentation do
     :thread_list,
     :post_reader,
     :new_thread,
-    :post_composer
+    :post_composer,
+    :door_list
   ]
 
   @operator_screens [:account, :moderation, :sysop]

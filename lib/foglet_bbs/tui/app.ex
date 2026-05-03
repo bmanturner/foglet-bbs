@@ -41,6 +41,7 @@ defmodule Foglet.TUI.App do
           | :post_reader
           | :post_composer
           | :new_thread
+          | :door_list
           | :account
           | :moderation
           | :sysop

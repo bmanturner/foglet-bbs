@@ -33,8 +33,65 @@ defmodule Foglet.Doors do
     SECRET_KEY_BASE
   ]
 
+  @demo_external_path Path.expand("priv/doors/demo/external_echo.sh", File.cwd!())
+
+  @default_manifest_attrs [
+    %{
+      id: "native-hello",
+      slug: "native-hello",
+      display_name: "Native Hello",
+      description: "Tiny in-BEAM demo door that opens, says hello, and returns.",
+      runtime: :native_elixir,
+      module: Foglet.Doors.Demo.NativeHello,
+      timeout_ms: 5_000,
+      visibility: :members,
+      auth_scope: :site
+    },
+    %{
+      id: "external-echo",
+      slug: "external-echo",
+      display_name: "External Echo",
+      description: "Tiny shell-script door used to verify external executable launch/return.",
+      runtime: :external_pty,
+      command: @demo_external_path,
+      working_dir: Path.dirname(@demo_external_path),
+      timeout_ms: 5_000,
+      visibility: :members,
+      auth_scope: :site
+    }
+  ]
+
   @type manifest_attrs :: map()
   @type validation_error :: {atom(), String.t()}
+
+  @doc """
+  Returns first-slice configured door manifests.
+
+  This branch has no persisted game catalog yet, so the visible user path is
+  backed by two safe demo manifests: one native in-BEAM door and one allowlisted
+  executable under `priv/doors/demo`.
+  """
+  @spec list_manifests() :: [Manifest.t()]
+  def list_manifests do
+    @default_manifest_attrs
+    |> Enum.map(&validate_manifest!/1)
+  end
+
+  @doc "Returns door manifests the actor may launch."
+  @spec list_visible(User.t() | nil) :: [Manifest.t()]
+  def list_visible(user) do
+    list_manifests()
+    |> Enum.filter(&launchable?(user, &1))
+  end
+
+  @doc "Looks up one visible door for an actor by id or slug."
+  @spec get_visible(User.t() | nil, String.t()) :: {:ok, Manifest.t()} | {:error, :not_found}
+  def get_visible(user, id_or_slug) when is_binary(id_or_slug) do
+    case Enum.find(list_visible(user), &(&1.id == id_or_slug or &1.slug == id_or_slug)) do
+      %Manifest{} = manifest -> {:ok, manifest}
+      nil -> {:error, :not_found}
+    end
+  end
 
   @doc """
   Validate and normalize a door manifest.
@@ -69,6 +126,16 @@ defmodule Foglet.Doors do
     case validate(manifest) do
       [] -> {:ok, manifest}
       errors -> {:error, errors}
+    end
+  end
+
+  defp validate_manifest!(attrs) do
+    case validate_manifest(attrs) do
+      {:ok, manifest} ->
+        manifest
+
+      {:error, errors} ->
+        raise ArgumentError, "invalid built-in door manifest: #{inspect(errors)}"
     end
   end
 

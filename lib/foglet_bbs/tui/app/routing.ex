@@ -251,6 +251,7 @@ defmodule Foglet.TUI.App.Routing do
       :post_reader,
       :post_composer,
       :new_thread,
+      :door_list,
       :account,
       :moderation,
       :sysop
@@ -266,6 +267,7 @@ defmodule Foglet.TUI.App.Routing do
   defp built_in_screen_module_for(:post_reader), do: Screens.PostReader
   defp built_in_screen_module_for(:post_composer), do: Screens.PostComposer
   defp built_in_screen_module_for(:new_thread), do: Screens.NewThread
+  defp built_in_screen_module_for(:door_list), do: Screens.DoorList
   defp built_in_screen_module_for(:account), do: Screens.Account
   defp built_in_screen_module_for(:moderation), do: Screens.Moderation
   defp built_in_screen_module_for(:sysop), do: Screens.Sysop

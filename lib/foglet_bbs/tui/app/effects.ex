@@ -132,7 +132,12 @@ defmodule Foglet.TUI.App.Effects do
            session: session,
            terminal_size: state.terminal_size,
            output: output,
-           owner: self()
+           # The Raxol dispatcher process does not consume runner lifecycle
+           # tuples directly; completion is surfaced by the selector's return
+           # modal. Keep owner notifications disabled here to avoid noisy
+           # unhandled-info logs until a dedicated SSH door-attachment boundary
+           # subscribes to them.
+           owner: nil
          ) do
       {:ok, _pid} ->
         {state, []}
