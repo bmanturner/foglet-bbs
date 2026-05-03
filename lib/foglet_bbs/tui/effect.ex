@@ -49,6 +49,15 @@ defmodule Foglet.TUI.Effect do
           payload: {:size, {pos_integer(), pos_integer()}}
         }
 
+  @type door :: %__MODULE__{
+          type: :door,
+          payload: %{
+            action: :launch,
+            manifest: Foglet.Doors.Manifest.t(),
+            output: function() | nil
+          }
+        }
+
   @type quit :: %__MODULE__{
           type: :quit,
           payload: nil
@@ -62,6 +71,7 @@ defmodule Foglet.TUI.Effect do
           | publish()
           | session()
           | terminal()
+          | door()
           | quit()
 
   defstruct [:type, :payload]
@@ -120,6 +130,15 @@ defmodule Foglet.TUI.Effect do
   @spec terminal_size({pos_integer(), pos_integer()}) :: terminal()
   def terminal_size(size) do
     %__MODULE__{type: :terminal, payload: {:size, size}}
+  end
+
+  @doc "Requests a supervised door launch through the app runtime boundary."
+  @spec launch_door(Foglet.Doors.Manifest.t(), keyword()) :: door()
+  def launch_door(manifest, opts \\ []) do
+    %__MODULE__{
+      type: :door,
+      payload: %{action: :launch, manifest: manifest, output: Keyword.get(opts, :output)}
+    }
   end
 
   @doc "Requests runtime termination."
