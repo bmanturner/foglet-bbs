@@ -7,7 +7,8 @@ defmodule Foglet.TUI.Screens.PostComposer do
   live in `%PostComposer.State{}` and flow through `update/3`.
 
   Layout (D-27): header, quote context (when replying), text area, key bar.
-  Tab toggles edit/preview (D-28). Ctrl+S submits (D-29). Ctrl+C cancels (D-30).
+  Tab toggles edit/preview (D-28). Ctrl+S submits (D-29). Esc cancels (D-30);
+  Ctrl+C is a terminal fallback that runs the same cancel path.
   Max body length enforced via Foglet.Config.get!("max_post_length") (D-31).
 
   Uses `Raxol.UI.Components.Input.MultiLineInput` component module (D-26) for
@@ -155,7 +156,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
         label: "Actions",
         commands: [
           %{key: "Ctrl+S", label: "Post", priority: 30},
-          %{key: "Esc", label: "Cancel", priority: 30}
+          %{key: "Esc", label: "Cancel", priority: 0}
         ]
       }
     ])
