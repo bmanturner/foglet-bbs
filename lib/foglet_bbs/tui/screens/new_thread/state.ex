@@ -89,7 +89,8 @@ defmodule Foglet.TUI.Screens.NewThread.State do
         Keyword.get(opts, :title_input_state) ||
           TextInput.init(
             value: Keyword.get(opts, :title_value, ""),
-            max_length: max_title_length
+            max_length: max_title_length,
+            placeholder: "Thread title"
           ),
       body_input_state: Keyword.get(opts, :body_input_state) || body_input_state,
       focused: Keyword.get(opts, :focused, :title),
