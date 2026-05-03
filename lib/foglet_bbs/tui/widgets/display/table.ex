@@ -139,7 +139,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{raxol_state: rs, available_width: available_width}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
-    rs_with_theme = %{rs | theme: build_table_theme(theme)}
+    rs_with_theme = prepare_render_state(rs, theme)
 
     box style: %{border_fg: theme.border.fg, padding: 0} do
       RaxolTable.render(rs_with_theme, %{available_width: available_width})
@@ -187,6 +187,17 @@ defmodule Foglet.TUI.Widgets.Display.Table do
       true ->
         nil
     end
+  end
+
+  defp prepare_render_state(rs, %Theme{} = theme) do
+    # Raxol renders sortable headers as buttons. Buttons paint with their own
+    # horizontal chrome/padding, which shifts header text away from the row cell
+    # starts even when the column widths are correct. Keep sorting state/data in
+    # the Raxol state, but render headers as plain text so headers and rows both
+    # follow the same width + separator contract.
+    rs
+    |> Map.put(:theme, build_table_theme(theme))
+    |> Map.update!(:options, &Map.put(&1, :sortable, false))
   end
 
   defp build_table_theme(%Theme{} = t) do
