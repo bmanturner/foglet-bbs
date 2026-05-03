@@ -188,12 +188,7 @@ The generated `CHAIN.TXT` lines are CRLF-terminated and ordered as:
 Example content:
 
 ```text
-alice\r\n
-Alice Liddell\r\n
-132\r\n
-37\r\n
-user\r\n
-user-1\r\n
+alice\r\nAlice Liddell\r\n132\r\n37\r\nuser\r\nuser-1\r\n
 ```
 
 A classic door manifest follows the external-door shape, but uses `runtime: :classic_dropfile`:
@@ -224,15 +219,16 @@ The wrapper is responsible for placing the generated text where the classic prog
 Use this copy for the first terminal UI surface unless the interaction changes:
 
 - menu destination: `Door Games`
-- selector title: `Door Games`
+- selector title: `Foglet > Door Games`
 - empty state: `No door games are available right now.`
 - loading state: `Loading door games...`
-- load error: `Could not load door games.`
-- confirmation title: `Launch door game?`
-- confirmation body: `This will give the game the full terminal until it exits. Foglet will bring you back afterward.`
-- normal return: `Returned from <door name>.`
-- crash return: `<door name> closed unexpectedly.`
-- timeout return: `<door name> timed out and was closed.`
+- load error: `Unable to load door games.`
+- confirmation title: `Launch Door Game?`
+- confirmation body: `Foglet will hand this terminal to <door name>. When the game exits, you'll return here.`
+- external/classic safety line: `If it stops responding, disconnecting will clean up the session.`
+- normal return: `<door name> ended. You're back in Foglet.`
+- crash return: `<door name> stopped unexpectedly. You're back in Foglet.`
+- timeout return: `<door name> timed out. You're back in Foglet.`
 
 Keep the selector simple: arrows choose a door, Enter opens confirmation, and Esc goes back. Do not ask callers to type door ids, slugs, runtime names, or config values.
 
