@@ -1,6 +1,8 @@
 defmodule Foglet.Doors.RunnerTest do
   use ExUnit.Case, async: false
 
+  @event_timeout 1_000
+
   alias Foglet.Doors
   alias Foglet.Doors.Runner
   alias Foglet.Doors.Supervisor, as: DoorSupervisor
@@ -132,45 +134,17 @@ defmodule Foglet.Doors.RunnerTest do
 
       ref = Process.monitor(pid)
       assert_receive {:door_started, ^pid, "external-env"}
-      assert_receive {:door_output, output}
-      assert IO.iodata_to_binary(output) =~ "external-env:alice:132"
+      assert_door_output_contains("external-env:alice:132")
       assert %{status: :running} = Runner.snapshot(pid)
 
       Runner.input(pid, "hello\n")
-      assert_receive {:door_output, echo_output}
-
-      echo_output =
-        echo_output
-        |> IO.iodata_to_binary()
-        |> then(fn output ->
-          if output =~ "external> hello" do
-            output
-          else
-            assert_receive {:door_output, more_echo_output}
-            output <> IO.iodata_to_binary(more_echo_output)
-          end
-        end)
-
-      assert echo_output =~ "external> hello"
+      assert_door_output_contains("external> hello")
 
       Runner.input(pid, "/quit\n")
-      assert_receive {:door_output, quit_output}
+      assert_door_output_contains("Leaving External Echo.")
 
-      quit_output =
-        quit_output
-        |> IO.iodata_to_binary()
-        |> then(fn output ->
-          if output =~ "Leaving External Echo." do
-            output
-          else
-            assert_receive {:door_output, more_quit_output}
-            output <> IO.iodata_to_binary(more_quit_output)
-          end
-        end)
-
-      assert quit_output =~ "Leaving External Echo."
-      assert_receive {:door_exited, ^pid, "external-env", :normal, 0}
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+      assert_receive {:door_exited, ^pid, "external-env", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
     end
 
     test "external non-zero exit is reported as crash" do
@@ -291,6 +265,17 @@ defmodule Foglet.Doors.RunnerTest do
   end
 
   defp output_to(test_pid), do: fn data -> send(test_pid, {:door_output, data}) end
+
+  defp assert_door_output_contains(expected, timeout \\ @event_timeout) do
+    assert_receive {:door_output, output}, timeout
+    output = IO.iodata_to_binary(output)
+
+    if output =~ expected do
+      output
+    else
+      output <> assert_door_output_contains(expected, timeout)
+    end
+  end
 
   defp external_demo_path, do: Path.expand("priv/doors/demo/external_echo.sh")
 
