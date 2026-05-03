@@ -219,7 +219,7 @@ defmodule Foglet.TUI.Screens.Account.State do
           choices: Timezones.choices_for(draft.timezone),
           description: "Search by city or IANA name; save to keep it.",
           value: draft.timezone || "Etc/UTC",
-          max_height: 8
+          max_height: 6
         },
         %{
           name: :time_format,

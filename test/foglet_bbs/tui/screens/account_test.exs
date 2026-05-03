@@ -1608,13 +1608,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
                "Pacific/Tarawa"
     end
 
-    test "FOG-350: timezone select-list is height-bounded", %{state: state} do
+    test "FOG-350/FOG-498: timezone select-list is height-bounded", %{state: state} do
       tz = Enum.find(state.screen_state.account.prefs_form.fields, &(&1.name == :timezone))
 
-      assert Map.get(tz, :max_height) == 8
+      assert Map.get(tz, :max_height) == 6
     end
 
-    test "FOG-350: PREFS render contains a searchable bounded timezone picker",
+    test "FOG-350/FOG-498: PREFS render contains a searchable bounded timezone picker",
          %{state: state} do
       flat = render_account(state) |> collect_text_values()
 
@@ -1626,7 +1626,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         end)
 
       assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Type to filter")))
-      assert length(visible_timezone_rows) <= 8
+      assert length(visible_timezone_rows) <= 6
       assert Enum.any?(visible_timezone_rows, &String.contains?(&1, "Etc/UTC"))
 
       # Time format and Theme labels must remain visible alongside the

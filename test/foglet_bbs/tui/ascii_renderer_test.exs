@@ -64,6 +64,20 @@ defmodule Foglet.TUI.AsciiRendererTest do
       end
     end
 
+    test "account preferences select-list does not overlap following fields at 80x24" do
+      state =
+        RenderFixtures.state_for(:account, @size,
+          seed_state: %{"screen_state" => %{"account" => %{"active_tab" => 1}}}
+        )
+
+      ascii = state |> App.view() |> AsciiRenderer.render(@size)
+
+      refute ascii =~ "Time format:ronto",
+             "select-list option text must not bleed into the next field label:\n#{ascii}"
+
+      assert ascii =~ "Time format:"
+    end
+
     test "respects custom width and height" do
       view = App.view(RenderFixtures.state_for(:login, {120, 30}))
       ascii = AsciiRenderer.render(view, {120, 30})
