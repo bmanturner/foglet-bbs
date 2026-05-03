@@ -203,7 +203,7 @@ defmodule Foglet.BoardsTest do
 
       refute changeset.valid?
 
-      assert "must be between 60 and 86400 seconds" in errors_on(changeset).chat_message_ttl_seconds
+      assert "pick a retention window from the list" in errors_on(changeset).chat_message_ttl_seconds
     end
 
     test "rejects ephemeral chat with TTL above the upper bound" do
@@ -220,7 +220,7 @@ defmodule Foglet.BoardsTest do
 
       refute changeset.valid?
 
-      assert "must be between 60 and 86400 seconds" in errors_on(changeset).chat_message_ttl_seconds
+      assert "pick a retention window from the list" in errors_on(changeset).chat_message_ttl_seconds
     end
 
     test "rejects unknown chat_storage_mode values" do

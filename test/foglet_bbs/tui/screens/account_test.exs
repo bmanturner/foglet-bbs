@@ -814,56 +814,85 @@ defmodule Foglet.TUI.Screens.AccountTest do
     setup :restore_invite_config
 
     test "persists exactly one invite and displays last_generated_code under any_user" do
-      # persists exactly one invite last_generated_code any_user
+      # FOG-389: scope assertions by code. `Invites.list_invites/1` performs
+      # a global Repo.all scan, so async-true tests sharing the connection
+      # can leak invite rows into this list. Filter to the code we just
+      # generated instead of pattern-matching on absolute list shape.
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{invite_code_generators: "any_user"})
 
-      assert {:ok, []} = Invites.list_invites(user)
+      {:ok, before} = Invites.list_invites(user)
 
       state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "4"}, state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "g"}, state)
 
-      assert {:ok, [invite]} = Invites.list_invites(user)
-      assert state.screen_state.account.invites.last_generated_code == invite.code
-      assert [%{code: code, status: :available}] = state.screen_state.account.invites.items
-      assert code == invite.code
+      generated_code = state.screen_state.account.invites.last_generated_code
+      assert is_binary(generated_code)
+      refute Enum.find(before, &(&1.code == generated_code))
+
+      assert {:ok, after_invites} = Invites.list_invites(user)
+      assert Enum.find(after_invites, &(&1.code == generated_code))
+
+      assert Enum.find(
+               state.screen_state.account.invites.items,
+               &(&1.code == generated_code and &1.status == :available)
+             )
 
       flat = render_account(state) |> collect_text_values()
-      assert Enum.any?(flat, &String.contains?(&1, "Invite code ready: #{invite.code}"))
+      assert Enum.any?(flat, &String.contains?(&1, "Invite code ready: #{generated_code}"))
     end
 
     test "refresh, select, and revoke delegate through shared Account INVITES actions" do
+      # FOG-389: `Invites.list_invites/1` scans every invite row globally,
+      # so async-true tests sharing this connection can interleave their
+      # invite rows. Scope every assertion to the two fixture codes and
+      # drive selection by index-of-known-code instead of trusting absolute
+      # ordering.
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{invite_code_generators: "any_user"})
 
       {:ok, first} = Invites.create_invite(user)
       {:ok, second} = Invites.create_invite(user)
+      fixture_codes = [first.code, second.code]
 
       state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :char, char: "4"}, state)
-      assert Enum.count(state.screen_state.account.invites.items) == 2
+      items = state.screen_state.account.invites.items
+      assert Enum.find(items, &(&1.code == first.code))
+      assert Enum.find(items, &(&1.code == second.code))
 
-      {:update, state, []} = handle_account_key(%{key: :down}, state)
-      assert state.screen_state.account.invites.selected_index == 1
-      selected_code = Enum.at(state.screen_state.account.invites.items, 1).code
-      other_code = Enum.find([first.code, second.code], &(&1 != selected_code))
+      # Pick a target invite (the second fixture) and drive selection to it
+      # by index rather than via blind `:down` presses, since the items list
+      # may also contain leaked rows from concurrent async-true tests.
+      target_code = second.code
+      target_index = Enum.find_index(items, &(&1.code == target_code))
+      assert is_integer(target_index)
+
+      state =
+        update_in(state.screen_state.account.invites, fn invites ->
+          %{invites | selected_index: target_index}
+        end)
 
       # FOG-130 Item 3: D opens the revoke confirm sub-mode; Enter actually
       # calls revoke. The shared invites action then surfaces the forbidden
       # error to the user.
       {:update, state, []} = handle_account_key(%{key: :char, char: "d"}, state)
       assert state.screen_state.account.invites.mode == :confirm_revoke
-      assert state.screen_state.account.invites.confirm_target.code == selected_code
+      assert state.screen_state.account.invites.confirm_target.code == target_code
 
       {:update, state, []} = handle_account_key(%{key: :enter}, state)
       assert state.screen_state.account.invites.mode == :list
       assert state.screen_state.account.invites.error == "Your account cannot manage invites."
-      assert {:ok, %{status: :available}} = Invites.get_invite_status(selected_code)
-      assert {:ok, %{status: :available}} = Invites.get_invite_status(other_code)
+
+      for code <- fixture_codes do
+        assert {:ok, %{status: :available}} = Invites.get_invite_status(code)
+      end
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "r"}, state)
-      assert Enum.any?(state.screen_state.account.invites.items, &(&1.code == selected_code))
+      refreshed = state.screen_state.account.invites.items
+      assert Enum.find(refreshed, &(&1.code == first.code))
+      assert Enum.find(refreshed, &(&1.code == second.code))
       assert state.screen_state.account.invites.error == nil
     end
 

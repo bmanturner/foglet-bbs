@@ -71,7 +71,23 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     {"Sysops only", "sysop_only"}
   ]
 
-  @chat_storage_choices ["ephemeral", "permanent"]
+  # FOG-349: storage-mode and TTL choices use the {label, value} tuple form
+  # supported by Modal.Form. Persisted values stay "ephemeral"/"permanent" and
+  # integer seconds — no schema change.
+  @chat_storage_choices [
+    {"In-memory (auto-expires)", "ephemeral"},
+    {"Saved to database", "permanent"}
+  ]
+
+  @chat_ttl_preset_choices [
+    {"15 minutes", 900},
+    {"1 hour", 3600},
+    {"6 hours", 21_600},
+    {"24 hours (max)", 86_400}
+  ]
+
+  @chat_ttl_preset_seconds Enum.map(@chat_ttl_preset_choices, fn {_label, n} -> n end)
+  @chat_ttl_default_seconds 3600
 
   # ---------------------------------------------------------------------------
   # Init + list load
@@ -412,28 +428,48 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         type: :boolean,
         label: "Chat",
         description:
-          "When on, this board adds a CHAT tab next to THREADS. Off keeps the board threads-only. Storage mode and TTL below apply once chat is on.",
+          "When on, this board adds a CHAT tab next to THREADS. Off keeps the board threads-only. Storage and retention below appear once chat is on.",
         value: Map.get(values, :chat_enabled, false)
       },
       %{
         name: :chat_storage_mode,
         type: :enum,
         label: "Chat storage",
-        description:
-          "Ephemeral — messages live in memory only and expire (use the TTL below). Permanent — messages are saved to the database and reload when users open chat.",
+        description: "Where chat messages live. The picker shows what each option means.",
         choices: @chat_storage_choices,
-        value: Map.get(values, :chat_storage_mode, "ephemeral")
+        value: Map.get(values, :chat_storage_mode, "ephemeral"),
+        visible_when: fn vals -> vals[:chat_enabled] == true end
       },
       %{
         name: :chat_message_ttl_seconds,
-        type: :integer,
-        label: "Ephemeral chat TTL (seconds)",
-        description:
-          "How long ephemeral messages stay visible before they expire. 60 seconds minimum, 86400 seconds (24h) maximum. Ignored when chat storage is permanent.",
-        value: Map.get(values, :chat_message_ttl_seconds, 7200) |> to_string()
+        type: :enum,
+        label: "Chat retention",
+        description: "How long messages stay before they expire.",
+        choices: chat_ttl_choices(Map.get(values, :chat_message_ttl_seconds)),
+        value: Map.get(values, :chat_message_ttl_seconds, @chat_ttl_default_seconds),
+        visible_when: fn vals ->
+          vals[:chat_enabled] == true and vals[:chat_storage_mode] == "ephemeral"
+        end
       }
     ]
   end
+
+  # FOG-349: when an existing board carries a TTL outside the preset list (e.g.
+  # legacy 7200s default), prepend a synthetic "{n} seconds (custom)" choice so
+  # the value renders as selected and is not silently rounded. Once the operator
+  # cycles off it, `drop_legacy_ttl_choice/1` strips the synthetic head from
+  # subsequent renders.
+  defp chat_ttl_choices(nil), do: @chat_ttl_preset_choices
+
+  defp chat_ttl_choices(value) when is_integer(value) do
+    if value in @chat_ttl_preset_seconds do
+      @chat_ttl_preset_choices
+    else
+      [{"#{value} seconds (custom)", value} | @chat_ttl_preset_choices]
+    end
+  end
+
+  defp chat_ttl_choices(_), do: @chat_ttl_preset_choices
 
   defp category_fields(values) do
     [
@@ -492,6 +528,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   defp handle_form_event(event, %__MODULE__{modal: form} = state) do
     {new_form, action} = ModalForm.handle_event(event, form)
+    new_form = drop_legacy_ttl_choice(new_form)
 
     case action do
       {:submitted, submit_result} ->
@@ -504,6 +541,39 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         {%{state | modal: new_form}, []}
     end
   end
+
+  # FOG-349: once the operator cycles away from a legacy "{n} seconds (custom)"
+  # TTL entry, drop the synthetic head from the choices list so it does not
+  # reappear. The TTL field stores its selection as an integer index into
+  # `choices`; dropping the head while the selection is past it requires
+  # shifting the index down by one to keep pointing at the same value.
+  defp drop_legacy_ttl_choice(%ModalForm{} = form) do
+    case Enum.find_index(form.fields, &(&1.name == :chat_message_ttl_seconds)) do
+      nil ->
+        form
+
+      idx ->
+        spec = Enum.at(form.fields, idx)
+        cur = Enum.at(form.field_states, idx)
+
+        case ttl_legacy_head(spec) do
+          {:legacy, rest} when is_integer(cur) and cur > 0 ->
+            new_spec = %{spec | choices: rest}
+            new_states = List.replace_at(form.field_states, idx, cur - 1)
+            new_fields = List.replace_at(form.fields, idx, new_spec)
+            %{form | fields: new_fields, field_states: new_states}
+
+          _ ->
+            form
+        end
+    end
+  end
+
+  defp ttl_legacy_head(%{choices: [{label, _value} | rest]}) when is_binary(label) do
+    if String.ends_with?(label, "(custom)"), do: {:legacy, rest}, else: :no_legacy
+  end
+
+  defp ttl_legacy_head(_), do: :no_legacy
 
   defp handle_submit_result(
          %Effect{

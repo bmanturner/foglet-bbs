@@ -53,21 +53,18 @@ defmodule Foglet.Boards.Board do
       :chat_message_ttl_seconds,
       :category_id
     ])
-    |> validate_required([
-      :slug,
-      :name,
-      :category_id,
-      :chat_enabled,
-      :chat_storage_mode,
-      :chat_message_ttl_seconds
-    ])
+    |> validate_required([:slug, :name, :category_id, :chat_enabled])
+    |> validate_required(:chat_storage_mode, message: "pick a storage option")
+    |> validate_required(:chat_message_ttl_seconds, message: "pick a retention window")
     |> validate_required_subscription_policy()
     |> validate_length(:slug, min: 1, max: 50)
     |> validate_format(:slug, ~r/^[a-z0-9_-]+$/,
       message: "must be lowercase alphanumeric with _ or -"
     )
     |> validate_length(:name, min: 1, max: 100)
-    |> validate_inclusion(:chat_storage_mode, [:ephemeral, :permanent])
+    |> validate_inclusion(:chat_storage_mode, [:ephemeral, :permanent],
+      message: "pick a storage option"
+    )
     |> validate_chat_ttl_bounds()
     |> unique_constraint(:slug)
     |> foreign_key_constraint(:category_id)
@@ -77,14 +74,19 @@ defmodule Foglet.Boards.Board do
     )
     |> check_constraint(:chat_storage_mode,
       name: :boards_chat_storage_mode_allowed,
-      message: "must be ephemeral or permanent"
+      message: "pick a storage option"
     )
     |> check_constraint(:chat_message_ttl_seconds,
       name: :boards_chat_message_ttl_seconds_range,
-      message: "must be between 60 and 86400 seconds when chat is ephemeral"
+      message: "pick a retention window from the list"
     )
   end
 
+  # FOG-349: presets enforce structural bounds (15min/1h/6h/24h) at the UI layer,
+  # so the changeset only guards two cases — value missing entirely, or value
+  # outside the DB-allowed 60..86400 envelope (legacy custom value cleared, or a
+  # non-UI caller sending a bad integer). The user-facing copy does not mention
+  # the 60..86400 numeric bound; the picker is the source of truth.
   defp validate_chat_ttl_bounds(changeset) do
     chat_enabled = get_field(changeset, :chat_enabled)
     storage_mode = get_field(changeset, :chat_storage_mode)
@@ -93,13 +95,13 @@ defmodule Foglet.Boards.Board do
     if chat_enabled == true and storage_mode == :ephemeral do
       cond do
         not is_integer(ttl) ->
-          add_error(changeset, :chat_message_ttl_seconds, "is invalid")
+          add_error(changeset, :chat_message_ttl_seconds, "pick a retention window")
 
         ttl < 60 or ttl > 86_400 ->
           add_error(
             changeset,
             :chat_message_ttl_seconds,
-            "must be between 60 and 86400 seconds"
+            "pick a retention window from the list"
           )
 
         true ->

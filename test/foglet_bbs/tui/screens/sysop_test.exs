@@ -1636,14 +1636,97 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       storage_field = Enum.find(bv.modal.fields, &(&1.name == :chat_storage_mode))
       assert storage_field.type == :enum
-      assert storage_field.choices == ["ephemeral", "permanent"]
+
+      assert storage_field.choices == [
+               {"In-memory (auto-expires)", "ephemeral"},
+               {"Saved to database", "permanent"}
+             ]
+
       assert storage_field.value == "ephemeral"
+      assert is_function(storage_field.visible_when, 1)
 
       ttl_field = Enum.find(bv.modal.fields, &(&1.name == :chat_message_ttl_seconds))
-      assert ttl_field.type == :integer
-      assert ttl_field.value == "7200"
+      assert ttl_field.type == :enum
+
+      assert ttl_field.choices == [
+               {"15 minutes", 900},
+               {"1 hour", 3600},
+               {"6 hours", 21_600},
+               {"24 hours (max)", 86_400}
+             ]
+
+      assert ttl_field.value == 3600
+      assert is_function(ttl_field.visible_when, 1)
 
       assert bv.modal_kind == :create_board
+    end
+
+    test "FOG-349 edit board with legacy ttl prepends synthetic '(custom)' choice", %{
+      state: state,
+      sysop: sysop,
+      board: board
+    } do
+      # Default schema ttl is 7200, which is NOT in the preset list — exactly
+      # the legacy-custom case the implementation must preserve.
+      assert board.chat_message_ttl_seconds == 7200
+
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "e"}, state)
+
+      bv = current_boards_view(state)
+      ttl_field = Enum.find(bv.modal.fields, &(&1.name == :chat_message_ttl_seconds))
+
+      assert hd(ttl_field.choices) == {"7200 seconds (custom)", 7200}
+      assert ttl_field.value == 7200
+    end
+
+    test "FOG-349 cycling off the legacy '(custom)' entry drops it from subsequent renders",
+         %{state: state, sysop: sysop} do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "e"}, state)
+      bv = current_boards_view(state)
+
+      # First, enable chat (focus 0..7 then toggle), then jump focus directly
+      # onto the TTL field by rebuilding the modal struct (simpler than walking
+      # Tab through every preceding field across the whole flow).
+      ttl_idx = Enum.find_index(bv.modal.fields, &(&1.name == :chat_message_ttl_seconds))
+      chat_idx = Enum.find_index(bv.modal.fields, &(&1.name == :chat_enabled))
+
+      bv = %{bv | modal: %{bv.modal | focus_index: chat_idx}}
+      state = put_boards_view(state, bv)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: " "}, state)
+
+      bv = current_boards_view(state)
+      bv = %{bv | modal: %{bv.modal | focus_index: ttl_idx}}
+      state = put_boards_view(state, bv)
+
+      # Sanity check the synthetic choice is present.
+      ttl_field =
+        Enum.find(
+          current_boards_view(state).modal.fields,
+          &(&1.name == :chat_message_ttl_seconds)
+        )
+
+      assert hd(ttl_field.choices) == {"7200 seconds (custom)", 7200}
+
+      # Press ↓ once: cycles off the synthetic head, drop kicks in, value lands
+      # on the first preset (15 minutes / 900 seconds).
+      {:update, state, _} = handle_sysop_key(%{key: :down}, state)
+
+      ttl_field =
+        Enum.find(
+          current_boards_view(state).modal.fields,
+          &(&1.name == :chat_message_ttl_seconds)
+        )
+
+      refute Enum.any?(ttl_field.choices, fn {label, _} -> String.contains?(label, "custom") end)
+
+      assert hd(ttl_field.choices) == {"15 minutes", 900}
+
+      assert ModalForm.field_value(current_boards_view(state).modal, :chat_message_ttl_seconds) ==
+               900
     end
 
     test "edit board modal pre-fills required subscription", %{

@@ -1194,6 +1194,190 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     end
   end
 
+  describe "FOG-349 :enum tuple-form choices (label, value)" do
+    test "renders the human label, submits the raw value (not the label)" do
+      pid = self()
+
+      fields = [
+        %{
+          name: :mode,
+          type: :enum,
+          label: "Mode",
+          choices: [{"In-memory (auto-expires)", "ephemeral"}, {"Saved to database", "permanent"}]
+        }
+      ]
+
+      state =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn payload -> send(pid, {:submitted, payload}) end,
+          on_cancel: fn -> :ok end
+        )
+
+      flat = state |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "In-memory (auto-expires)")
+      assert String.contains?(flat, "Saved to database")
+      refute String.contains?(flat, ~s|"ephemeral"|)
+
+      {_s, _} = Form.handle_event(%{key: :enter}, state)
+      assert_receive {:submitted, %{mode: "ephemeral"}}
+    end
+
+    test "preselects the choice whose raw value matches :value" do
+      fields = [
+        %{
+          name: :mode,
+          type: :enum,
+          label: "Mode",
+          choices: [{"A", "a"}, {"B", "b"}, {"C", "c"}],
+          value: "b"
+        }
+      ]
+
+      state =
+        Form.init(
+          title: "T",
+          fields: fields,
+          on_submit: fn _ -> :ok end,
+          on_cancel: fn -> :ok end
+        )
+
+      assert Form.field_value(state, :mode) == "b"
+    end
+  end
+
+  describe "FOG-349 :visible_when predicate" do
+    defp visible_when_form(pid) do
+      Form.init(
+        title: "T",
+        fields: [
+          %{name: :on, type: :boolean, label: "On", value: false},
+          %{
+            name: :detail,
+            type: :text,
+            label: "Detail",
+            visible_when: fn vals -> vals[:on] == true end
+          },
+          %{name: :name, type: :text, label: "Name"}
+        ],
+        on_submit: fn payload -> send(pid, {:submitted, payload}) end,
+        on_cancel: fn -> :ok end
+      )
+    end
+
+    test "hidden fields are not rendered" do
+      state = visible_when_form(self())
+      flat = state |> Form.render(theme: theme()) |> flatten_text()
+      refute String.contains?(flat, "Detail:")
+      assert String.contains?(flat, "Name:")
+    end
+
+    test "Tab traversal skips hidden fields and wraps" do
+      state = visible_when_form(self())
+      assert state.focus_index == 0
+
+      {s1, _} = Form.handle_event(%{key: :tab}, state)
+      # Skips :detail (hidden), lands on :name (index 2).
+      assert s1.focus_index == 2
+
+      {s2, _} = Form.handle_event(%{key: :tab}, s1)
+      # Wraps back to :on.
+      assert s2.focus_index == 0
+    end
+
+    test "Shift-Tab traversal skips hidden fields and wraps" do
+      state = visible_when_form(self())
+
+      {s1, _} = Form.handle_event(%{key: :shift_tab}, state)
+      assert s1.focus_index == 2
+
+      {s2, _} = Form.handle_event(%{key: :shift_tab}, s1)
+      assert s2.focus_index == 0
+    end
+
+    test "submit payload excludes hidden field values" do
+      state = visible_when_form(self())
+      # Move to :name (last visible) and submit.
+      {s_at_name, _} = Form.handle_event(%{key: :tab}, state)
+      {_s, _} = Form.handle_event(%{key: :enter}, s_at_name)
+      assert_receive {:submitted, payload}
+      refute Map.has_key?(payload, :detail)
+      assert Map.has_key?(payload, :on)
+      assert Map.has_key?(payload, :name)
+    end
+
+    test "toggling the predicate's source field re-evaluates visibility live" do
+      state = visible_when_form(self())
+      # Press Space on :on (focus 0) to toggle true.
+      {s_on, _} = Form.handle_event(%{key: :char, char: " "}, state)
+      flat = s_on |> Form.render(theme: theme()) |> flatten_text()
+      assert String.contains?(flat, "Detail:")
+
+      # Tab now visits :detail before :name.
+      {s_at_detail, _} = Form.handle_event(%{key: :tab}, s_on)
+      assert s_at_detail.focus_index == 1
+    end
+
+    test "if focused field becomes hidden after an event, focus jumps to next visible" do
+      # Build a form where focusing index 1 (visible while :on) hides itself
+      # when :on flips back to false.
+      pid = self()
+
+      state =
+        Form.init(
+          title: "T",
+          fields: [
+            %{
+              name: :detail,
+              type: :text,
+              label: "Detail",
+              visible_when: fn vals -> vals[:on] == true end
+            },
+            %{name: :on, type: :boolean, label: "On", value: true},
+            %{name: :name, type: :text, label: "Name"}
+          ],
+          on_submit: fn payload -> send(pid, {:submitted, payload}) end,
+          on_cancel: fn -> :ok end
+        )
+
+      # Focus the soon-to-be-hidden field, then toggle :on off.
+      state = %{state | focus_index: 0}
+      {s_after_toggle, _} = Form.handle_event(%{key: :tab}, state)
+      assert s_after_toggle.focus_index == 1
+
+      # Now press Space to flip :on false; :detail becomes hidden but focus is
+      # currently on :on (still visible), so focus stays put.
+      {s_off, _} = Form.handle_event(%{key: :char, char: " "}, s_after_toggle)
+      assert s_off.focus_index == 1
+
+      # Move focus back to :detail manually then re-toggle off.
+      s_force = %{s_off | focus_index: 0}
+      # Make :on true again so :detail is visible; then toggle off so it hides.
+      {s_on, _} = Form.handle_event(%{key: :tab}, s_force)
+      {s_on, _} = Form.handle_event(%{key: :char, char: " "}, s_on)
+      # Move focus back to :detail (now visible) by Shift-Tab.
+      {s_force2, _} = Form.handle_event(%{key: :shift_tab}, s_on)
+      assert s_force2.focus_index == 0
+
+      # Tab to :on (visible) and toggle off; :detail becomes hidden, but the
+      # currently-focused field (:on) is still visible.
+      {s_on2, _} = Form.handle_event(%{key: :tab}, s_force2)
+      {s_off2, _} = Form.handle_event(%{key: :char, char: " "}, s_on2)
+      assert s_off2.focus_index == 1
+    end
+
+    test "Enter on the last visible field submits (skipping hidden trailing fields is moot here)" do
+      state = visible_when_form(self())
+      # :on (0), :detail (hidden), :name (2). Last visible = 2.
+      {s_at_name, _} = Form.handle_event(%{key: :tab}, state)
+      assert s_at_name.focus_index == 2
+      {_s, action} = Form.handle_event(%{key: :enter}, s_at_name)
+      assert match?(:submitted, action) or match?({:submitted, _}, action)
+      assert_receive {:submitted, _payload}
+    end
+  end
+
   # =========================================================================
   # FOG-344 — :enum choices with operator-facing labels
   # =========================================================================
