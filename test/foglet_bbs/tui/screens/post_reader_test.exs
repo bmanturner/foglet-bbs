@@ -985,6 +985,17 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert flat =~ "Selected body text"
     end
 
+    test "renders one compact scroll keybar hint while preserving reader keys" do
+      s = p2_state(%{posts: [p2_post(body: "Selected body text")]})
+      tree = render_screen(s)
+      flat = flatten_text(tree)
+
+      assert flat =~ "J/K"
+      assert flat =~ "Scroll"
+      refute flat =~ "Scroll ↓"
+      refute flat =~ "Scroll ↑"
+    end
+
     test "keeps markdown rendering delegated and strips raw markdown syntax" do
       s = p2_state(%{posts: [p2_post(body: "Hello **world**")]})
       tree = render_screen(s)

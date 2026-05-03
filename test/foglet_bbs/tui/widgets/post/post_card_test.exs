@@ -347,6 +347,31 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       assert length(result) == 5
     end
 
+    test "wrap option produces contiguous visual body rows without inserted blanks" do
+      body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+      tuples = Foglet.Markdown.render(body)
+
+      result = PostCard.render_body_lines(tuples, 18, theme(), wrap: true)
+      texts = Enum.map(result, &flatten_text/1)
+
+      assert length(result) > 1
+      refute Enum.any?(texts, &(&1 == ""))
+      assert Enum.join(texts, " ") =~ "alpha beta gamma"
+    end
+
+    test "wrap option preserves explicit blank paragraph separators" do
+      tuples = Foglet.Markdown.render("alpha beta gamma delta\n\nsecond paragraph")
+
+      result = PostCard.render_body_lines(tuples, 12, theme(), wrap: true)
+      texts = Enum.map(result, &flatten_text/1)
+
+      assert "" in texts
+      assert Enum.find_index(texts, &(&1 == "")) > 0
+
+      assert Enum.find_index(texts, &String.contains?(&1, "second")) >
+               Enum.find_index(texts, &(&1 == ""))
+    end
+
     test "body content is included but header content is NOT" do
       body = "Hello **world**."
       tuples = Foglet.Markdown.render(body)
@@ -358,7 +383,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       refute flat =~ "sysop", "handle must NOT be present"
     end
 
-    test "opts (scroll_offset, max_lines) are ignored — no windowing" do
+    test "windowing opts (scroll_offset, max_lines) are ignored — no windowing" do
       body = "A\n\nB\n\nC\n\nD"
       tuples = Foglet.Markdown.render(body)
       full = PostCard.render_body_lines(tuples, 80, theme())

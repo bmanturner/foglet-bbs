@@ -37,8 +37,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         commands: [
           %{key: "N", label: "Next", priority: 10},
           %{key: "P", label: "Prev", priority: 10},
-          %{key: "J", label: "Scroll ↓", priority: 10},
-          %{key: "K", label: "Scroll ↑", priority: 10}
+          %{key: "J/K", label: "Scroll", priority: 10}
         ]
       },
       %{
