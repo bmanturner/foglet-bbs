@@ -14,6 +14,7 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
 
   alias Foglet.PubSub, as: Topics
   alias Foglet.Sessions.BoardScreen, as: PresenceTracker
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.ChatRoom
@@ -65,6 +66,49 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
 
   defp maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
   defp maybe_add_content(_node, acc), do: acc
+
+  defp render_chat_text(state, ctx, size) do
+    state
+    |> ChatRoom.render(ctx)
+    |> AsciiRenderer.render(size)
+  end
+
+  defp first_line_containing(rendered, marker) do
+    rendered
+    |> String.split("\n")
+    |> Enum.find(fn line -> String.contains?(line, marker) end)
+  end
+
+  defp column_of(line, marker) when is_binary(line) do
+    case :binary.match(line, marker) do
+      {byte_index, _length} ->
+        line
+        |> binary_part(0, byte_index)
+        |> String.length()
+
+      :nomatch ->
+        nil
+    end
+  end
+
+  defp sidebar_columns_for_body(body, size) do
+    b = board()
+    {state, ctx} = init_state(b, size: size)
+
+    msg = %{id: "m1", board_id: b.id, user_id: "u2", body: body, inserted_at: nil}
+    {state, []} = ChatRoom.update({:task_result, :load_chat_history, {:ok, [msg]}}, state, ctx)
+
+    rendered = render_chat_text(state, ctx, size)
+    sidebar_line = first_line_containing(rendered, "Online")
+
+    {column_of(sidebar_line, "│"), column_of(sidebar_line, "Online"), sidebar_line}
+  end
+
+  defp append_message(state, ctx, msg) do
+    {:board_chat, :new_message, msg}
+    |> ChatRoom.update(state, ctx)
+    |> elem(0)
+  end
 
   describe "init/1" do
     test "captures board, board_id, and current user from context" do
@@ -286,6 +330,77 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       labels = Enum.map(chat_group.commands, & &1.label)
       refute "Hide sidebar" in labels
       refute "Show sidebar" in labels
+    end
+
+    test "rendered sidebar column is stable for short, long, and wrapped messages" do
+      short = "short"
+      long_unbroken = String.duplicate("x", 120)
+      wrapped = String.duplicate("word ", 40)
+
+      for size <- [{80, 24}, {120, 30}] do
+        {short_separator, short_online, _short_line} = sidebar_columns_for_body(short, size)
+        {long_separator, long_online, long_line} = sidebar_columns_for_body(long_unbroken, size)
+
+        {wrapped_separator, wrapped_online, wrapped_line} =
+          sidebar_columns_for_body(wrapped, size)
+
+        assert short_separator == long_separator
+        assert short_separator == wrapped_separator
+        assert short_online == long_online
+        assert short_online == wrapped_online
+        refute long_line =~ String.duplicate("x", 120)
+        refute wrapped_line =~ wrapped
+      end
+    end
+
+    test "rendered sidebar column remains stable as new messages arrive" do
+      b = board()
+      size = {80, 24}
+      {state, ctx} = init_state(b, size: size)
+
+      first = %{id: "m1", board_id: b.id, user_id: "u2", body: "short", inserted_at: nil}
+
+      {state, []} =
+        ChatRoom.update({:task_result, :load_chat_history, {:ok, [first]}}, state, ctx)
+
+      before_line = state |> render_chat_text(ctx, size) |> first_line_containing("Online")
+      before_separator = column_of(before_line, "│")
+      before_online = column_of(before_line, "Online")
+
+      state =
+        append_message(state, ctx, %{
+          id: "m2",
+          board_id: b.id,
+          user_id: "u2",
+          body: String.duplicate("appended", 30),
+          inserted_at: nil
+        })
+
+      after_line = state |> render_chat_text(ctx, size) |> first_line_containing("Online")
+
+      assert column_of(after_line, "│") == before_separator
+      assert column_of(after_line, "Online") == before_online
+    end
+
+    test "very narrow rendered layout suppresses sidebar instead of clipping it" do
+      b = board()
+      size = {50, 20}
+      {state, ctx} = init_state(b, size: size)
+
+      msg = %{
+        id: "m1",
+        board_id: b.id,
+        user_id: "u2",
+        body: String.duplicate("x", 120),
+        inserted_at: nil
+      }
+
+      {state, []} = ChatRoom.update({:task_result, :load_chat_history, {:ok, [msg]}}, state, ctx)
+
+      rendered = render_chat_text(state, ctx, size)
+
+      assert first_line_containing(rendered, "Online") == nil
+      assert first_line_containing(rendered, "│") == nil
     end
   end
 
