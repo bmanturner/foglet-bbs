@@ -214,6 +214,29 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     state
     |> maybe_auto_reset_submit_state()
     |> do_handle_event(event)
+    |> normalize_focus_to_visible()
+  end
+
+  # FOG-349 :visible_when — if the focused field is hidden after an event
+  # (e.g. user toggled chat off and the storage row vanished), hop the focus
+  # to the nearest visible field so the cursor stays usable. Wrap to the first
+  # visible field when no later visible field exists.
+  defp normalize_focus_to_visible({%__MODULE__{} = state, action}) do
+    vis = visible_indices(state)
+
+    cond do
+      vis == [] ->
+        {state, action}
+
+      state.focus_index in vis ->
+        {state, action}
+
+      true ->
+        new_idx =
+          Enum.find(vis, &(&1 > state.focus_index)) || List.last(vis) || 0
+
+        {%{state | focus_index: new_idx}, action}
+    end
   end
 
   # Auto-reset preamble (Phase 28 D-04) — collapses :saved and {:error, _}
@@ -237,53 +260,49 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   # Shape %{key: :tab, shift: true} verified against
   # vendor/raxol/lib/raxol/ui/components/modal/events.ex:94
   defp do_handle_event(%__MODULE__{} = state, %{key: :tab, shift: true}) do
-    n = length(state.fields)
-    new_idx = rem(state.focus_index - 1 + n, n)
-    {%{state | focus_index: new_idx}, nil}
+    {%{state | focus_index: prev_visible_index(state)}, nil}
   end
 
   # Clause 2b: Shift-Tab — Foglet/CLIHandler-translated shape (D-25 Pitfall 1)
   # CLIHandler emits %{key: :shift_tab} when the terminal sends back-tab (ESC[Z).
   # Keep this clause adjacent to Clause 2 so the pattern is visually obvious.
   defp do_handle_event(%__MODULE__{} = state, %{key: :shift_tab}) do
-    n = length(state.fields)
-    new_idx = rem(state.focus_index - 1 + n, n)
-    {%{state | focus_index: new_idx}, nil}
+    {%{state | focus_index: prev_visible_index(state)}, nil}
   end
 
   # Clause 2c: Back-tab — terminal `ESC[Z` after CLIHandler translation (Phase 28 D-15).
   # Equivalent to %{key: :shift_tab} and %{key: :tab, shift: true}.
-  # Body is intentionally byte-identical to Clause 2b's body.
   defp do_handle_event(%__MODULE__{} = state, %{key: :backtab}) do
-    n = length(state.fields)
-    new_idx = rem(state.focus_index - 1 + n, n)
-    {%{state | focus_index: new_idx}, nil}
+    {%{state | focus_index: prev_visible_index(state)}, nil}
   end
 
-  # Clause 3: Tab — advance with wrap (REQ-4)
+  # Clause 3: Tab — advance with wrap (REQ-4). Hidden fields (FOG-349
+  # :visible_when) are skipped during traversal.
   defp do_handle_event(%__MODULE__{} = state, %{key: :tab}) do
-    n = length(state.fields)
-    new_idx = rem(state.focus_index + 1, n)
-    {%{state | focus_index: new_idx}, nil}
+    {%{state | focus_index: next_visible_index(state)}, nil}
   end
 
-  # Clause 4: Enter — submit if last field, otherwise advance (REQ-5).
+  # Clause 4: Enter — submit if last *visible* field, otherwise advance (REQ-5).
   # Phase 28 D-05: on submit, transitions :idle → :submitting and invokes
   # on_submit exactly once; subsequent Enter events are swallowed by the
   # lock guard (Clause 0) until the consuming screen calls set_submit_state/2.
   # By the time this clause runs, the lock guard has short-circuited any
   # :submitting state and the auto-reset preamble has collapsed :saved /
   # {:error, _} back to :idle, so submit_state here is always :idle.
+  # FOG-349: "last field" tracks the last *visible* field; hidden fields are
+  # excluded from both navigation and the submit payload.
   defp do_handle_event(%__MODULE__{} = state, %{key: :enter}) do
-    last_idx = length(state.fields) - 1
+    case List.last(visible_indices(state)) do
+      nil ->
+        {state, nil}
 
-    if state.focus_index == last_idx do
-      payload = collect_values(state)
-      submit_result = state.on_submit.(payload)
-      {%{state | submit_state: :submitting}, submitted_action(submit_result)}
-    else
-      n = length(state.fields)
-      {%{state | focus_index: rem(state.focus_index + 1, n)}, nil}
+      last_visible when state.focus_index == last_visible ->
+        payload = collect_values(state)
+        submit_result = state.on_submit.(payload)
+        {%{state | submit_state: :submitting}, submitted_action(submit_result)}
+
+      _ ->
+        {%{state | focus_index: next_visible_index(state)}, nil}
     end
   end
 
@@ -295,8 +314,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   defp do_handle_event(%__MODULE__{} = state, %{key: :down} = event) do
     case Enum.at(state.fields, state.focus_index) do
       %{type: type} when type in [:text, :integer, :textarea] ->
-        n = length(state.fields)
-        {%{state | focus_index: rem(state.focus_index + 1, n)}, nil}
+        {%{state | focus_index: next_visible_index(state)}, nil}
 
       _other ->
         dispatch_event_to_field(event, state)
@@ -308,8 +326,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   defp do_handle_event(%__MODULE__{} = state, %{key: :up} = event) do
     case Enum.at(state.fields, state.focus_index) do
       %{type: type} when type in [:text, :integer, :textarea] ->
-        n = length(state.fields)
-        {%{state | focus_index: rem(state.focus_index - 1 + n, n)}, nil}
+        {%{state | focus_index: prev_visible_index(state)}, nil}
 
       _other ->
         dispatch_event_to_field(event, state)
@@ -427,9 +444,12 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     title_row = text(state.title, fg: theme.title.fg, style: [:bold])
     divider = text(String.duplicate("─", 40), fg: theme.border.fg)
 
+    vis = MapSet.new(visible_indices(state))
+
     field_rows =
       state.fields
       |> Enum.with_index()
+      |> Enum.filter(fn {_spec, idx} -> MapSet.member?(vis, idx) end)
       |> Enum.flat_map(fn {spec, idx} ->
         focused? = idx == state.focus_index
         field_state = Enum.at(state.field_states, idx)
@@ -510,14 +530,14 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   end
 
   defp build_field_state(%{type: :enum} = spec) do
-    choices = Map.get(spec, :choices, [])
+    values = enum_values(spec)
 
     case Map.get(spec, :value) do
       nil ->
         0
 
       val ->
-        Enum.find_index(choices, &(&1 == val)) || 0
+        Enum.find_index(values, &(&1 == val)) || 0
     end
   end
 
@@ -550,11 +570,11 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     field_state
   end
 
-  defp dispatch_to_field(%{type: :enum, choices: []}, field_state, %{key: :down}),
-    do: field_state
-
-  defp dispatch_to_field(%{type: :enum, choices: choices}, field_state, %{key: :down}) do
-    max(0, min(field_state + 1, length(choices) - 1))
+  defp dispatch_to_field(%{type: :enum} = spec, field_state, %{key: :down}) do
+    case length(enum_values(spec)) do
+      0 -> field_state
+      n -> max(0, min(field_state + 1, n - 1))
+    end
   end
 
   defp dispatch_to_field(%{type: :enum}, field_state, %{key: :up}) do
@@ -597,10 +617,77 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end
   end
 
-  defp collect_values(%__MODULE__{fields: fields, field_states: states}) do
+  defp collect_values(%__MODULE__{fields: fields, field_states: states} = state) do
+    vis = MapSet.new(visible_indices(state))
+
+    fields
+    |> Enum.zip(states)
+    |> Enum.with_index()
+    |> Enum.filter(fn {_pair, idx} -> MapSet.member?(vis, idx) end)
+    |> Map.new(fn {{spec, st}, _idx} -> {spec.name, coerce(spec, st)} end)
+  end
+
+  # FOG-349: full coerced values map for predicate evaluation. Unlike
+  # collect_values/1 (the submit payload) this includes every field — hidden or
+  # visible — so visible_when predicates can read sibling field values that may
+  # themselves be hidden.
+  defp current_values(%__MODULE__{fields: fields, field_states: states}) do
     fields
     |> Enum.zip(states)
     |> Map.new(fn {spec, st} -> {spec.name, coerce(spec, st)} end)
+  end
+
+  # FOG-349: indices of fields whose :visible_when predicate returns truthy.
+  # Fields without :visible_when are always visible. Predicates receive the
+  # current coerced values map (current_values/1).
+  defp visible_indices(%__MODULE__{fields: fields} = state) do
+    values = current_values(state)
+
+    fields
+    |> Enum.with_index()
+    |> Enum.filter(fn {spec, _idx} -> field_visible?(spec, values) end)
+    |> Enum.map(fn {_spec, idx} -> idx end)
+  end
+
+  defp field_visible?(spec, values) do
+    case Map.get(spec, :visible_when) do
+      nil -> true
+      fun when is_function(fun, 1) -> !!fun.(values)
+    end
+  end
+
+  defp next_visible_index(%__MODULE__{focus_index: cur} = state) do
+    case visible_indices(state) do
+      [] -> cur
+      vis -> Enum.find(vis, &(&1 > cur)) || List.first(vis)
+    end
+  end
+
+  defp prev_visible_index(%__MODULE__{focus_index: cur} = state) do
+    case visible_indices(state) do
+      [] -> cur
+      vis -> vis |> Enum.reverse() |> Enum.find(&(&1 < cur)) || List.last(vis)
+    end
+  end
+
+  # FOG-349: tuple-form `:enum` choice support. Choices may be either a flat
+  # list of values (`[:red, :green]`, `["a", "b"]`) or `{label, value}` tuples
+  # (`[{"Red", :red}, {"Green", :green}]`). Persisted/coerced values are always
+  # the raw value (right-hand side); render uses the human label.
+  defp enum_values(%{type: :enum} = spec) do
+    Map.get(spec, :choices, [])
+    |> Enum.map(fn
+      {_label, value} -> value
+      value -> value
+    end)
+  end
+
+  defp enum_labels(%{type: :enum} = spec) do
+    Map.get(spec, :choices, [])
+    |> Enum.map(fn
+      {label, _value} -> to_string(label)
+      value -> to_string(value)
+    end)
   end
 
   defp coerce(%{type: :text}, %TextInput{raxol_state: %{value: v}}), do: v || ""
@@ -614,8 +701,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   defp coerce(%{type: :boolean}, bool), do: !!bool
 
-  defp coerce(%{type: :enum, choices: choices}, idx) when is_integer(idx) do
-    Enum.at(choices, idx)
+  defp coerce(%{type: :enum} = spec, idx) when is_integer(idx) do
+    Enum.at(enum_values(spec), idx)
   end
 
   defp coerce(%{type: :textarea}, %{raw_value: rv}), do: rv
@@ -658,8 +745,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     Checkbox.render(label, checked?: field_state, theme: theme)
   end
 
-  defp render_widget(%{type: :enum, choices: choices} = spec, field_state, _focused?, theme) do
-    str_choices = Enum.map(choices, &to_string/1)
+  defp render_widget(%{type: :enum} = spec, field_state, _focused?, theme) do
+    str_choices = enum_labels(spec)
 
     case Map.get(spec, :display, :radio) do
       :compact ->
