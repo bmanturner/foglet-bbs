@@ -46,11 +46,13 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.ChatRoom.State
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
 
   import Raxol.Core.Renderer.View
 
   @sidebar_width 20
+  @sidebar_separator_width 3
   @sidebar_min_width 60
   @sidebar_default_width 80
   @transcript_history_lines 1_000
@@ -217,7 +219,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   defp ephemeral_notice(_state, _theme), do: text("")
 
   defp body_row(state, theme, width, height, true) when width >= @sidebar_min_width do
-    transcript_width = max(width - @sidebar_width - 2, 20)
+    transcript_width = max(width - @sidebar_width - @sidebar_separator_width, 20)
 
     row style: %{gap: 0} do
       [
@@ -238,47 +240,91 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     end
   end
 
-  defp transcript_pane(%State{messages: []} = _state, theme, _width, _height) do
-    column style: %{gap: 0} do
-      [
-        text("  " <> @empty_transcript_placeholder, fg: theme.dim.fg, style: [:italic])
-      ]
+  defp transcript_pane(%State{messages: []} = _state, theme, width, _height) do
+    box style: %{width: width} do
+      column style: %{gap: 0} do
+        [
+          text(
+            TextWidth.pad_trailing("  " <> @empty_transcript_placeholder, width),
+            fg: theme.dim.fg,
+            style: [:italic]
+          )
+        ]
+      end
     end
   end
 
-  defp transcript_pane(%State{messages: messages} = state, theme, _width, height) do
+  defp transcript_pane(%State{messages: messages} = state, theme, width, height) do
     rows =
       messages
       |> Enum.take(-@transcript_history_lines)
       |> visible_messages(state.scroll_offset, height)
-      |> Enum.map(fn msg -> transcript_row(msg, state, theme) end)
+      |> Enum.flat_map(fn msg -> transcript_rows(msg, state, theme, width) end)
+      |> Enum.take(max(height, 0))
 
-    column style: %{gap: 0} do
-      rows
+    box style: %{width: width} do
+      column style: %{gap: 0} do
+        rows
+      end
     end
   end
 
-  defp transcript_row(msg, %State{} = state, theme) do
-    handle = handle_for(state, msg)
+  defp transcript_rows(msg, %State{} = state, theme, width) do
+    handle = handle_for(state, msg) |> TextWidth.truncate(min(20, max(div(width, 3), 1)))
     body = Map.get(msg, :body, "")
     when_label = relative_time(msg)
+    prefix = handle <> " • "
+    suffix = "  " <> when_label
 
+    first_body_width =
+      max(width - TextWidth.display_width(prefix) - TextWidth.display_width(suffix), 1)
+
+    continuation_body_width = max(width - TextWidth.display_width(prefix), 1)
+
+    body_lines =
+      case TextWidth.wrap(body, first_body_width) do
+        [] -> [""]
+        lines -> lines
+      end
+
+    [first_body | rest] = body_lines
+
+    [
+      transcript_first_row(handle, first_body, when_label, first_body_width, theme)
+      | Enum.map(rest, fn line ->
+          transcript_continuation_row(prefix, line, continuation_body_width, theme)
+        end)
+    ]
+  end
+
+  defp transcript_first_row(handle, body, when_label, body_width, theme) do
     row style: %{gap: 0} do
       [
         text(handle, fg: theme.accent.fg, style: [:bold]),
         text(" • ", fg: theme.dim.fg),
-        text(body, fg: theme.primary.fg),
+        text(TextWidth.pad_trailing(body, body_width), fg: theme.primary.fg),
         text("  ", fg: theme.dim.fg),
         text(when_label, fg: theme.dim.fg)
       ]
     end
   end
 
-  defp sidebar_pane(%State{} = state, theme, _width) do
+  defp transcript_continuation_row(prefix, body, body_width, theme) do
+    row style: %{gap: 0} do
+      [
+        text(TextWidth.pad_trailing("", TextWidth.display_width(prefix)), fg: theme.dim.fg),
+        text(TextWidth.pad_trailing(body, body_width), fg: theme.primary.fg)
+      ]
+    end
+  end
+
+  defp sidebar_pane(%State{} = state, theme, width) do
     rows = sidebar_entries(state, theme)
 
-    column style: %{gap: 0} do
-      [text("Online", fg: theme.accent.fg, style: [:bold]) | rows]
+    box style: %{width: width} do
+      column style: %{gap: 0} do
+        [text("Online", fg: theme.accent.fg, style: [:bold]) | rows]
+      end
     end
   end
 
