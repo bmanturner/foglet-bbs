@@ -8,7 +8,7 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   Step 1 — :board   : pick a subscribed board (j/k / ↑↓ to navigate, Enter to select, Esc to cancel).
   Step 2 — :compose : enter title (Tab-switch focus) and body (MultiLineInput state, rendered as plain text/2).
-                       Ctrl+S to submit, Ctrl+C to cancel.
+                       Ctrl+S to submit, Esc to cancel (Ctrl+C is a terminal fallback).
 
   State lives in `state.screen_state[:new_thread]` as a `%NewThread.State{}`.
 

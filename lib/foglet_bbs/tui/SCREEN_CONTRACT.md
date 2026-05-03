@@ -194,6 +194,28 @@ end
 Keep failed-submit recovery in the screen reducer by preserving or rebuilding
 the form state with an error.
 
+## Cancel Keys
+
+Full-screen composers (new-thread compose step, post-reply composer, and any
+future composer that owns a draft the user can lose) follow one cancel
+contract:
+
+- **`Esc` cancels.** It discards the in-progress draft and navigates back to
+  the origin route. This is the only cancel affordance surfaced in chrome.
+- **`Ctrl+C` is a terminal fallback.** It still cancels — wired through the
+  same reducer path as `Esc` — but it is not shown in the keybar or any
+  help text. It exists for users whose terminal swallows or remaps `Esc`
+  (older clients, certain mux configurations).
+
+Keybar wording for the cancel hint is `Esc Cancel`, registered with
+`priority: 0` in the `Actions` group so the command bar's width-aware
+truncation (`Foglet.TUI.Widgets.Chrome.CommandBar`) keeps it last. When the
+terminal is too narrow for the full label, the bar collapses to bare `Esc`
+rather than dropping the cancel hint or substituting different copy.
+
+Do not surface `Ctrl+C` in the keybar alongside `Esc`. Two visible cancel
+keys imply two distinct actions and compete for scarce keybar width.
+
 ## Tests And Fixtures
 
 Direct screen tests should call `Screen.init(context)` for canonical setup or
