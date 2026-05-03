@@ -51,9 +51,9 @@ defmodule Foglet.Accounts.SSHKey do
   Returns a string like "SHA256:<base64>" to match the OpenSSH convention.
   """
   def compute_fingerprint(public_key_text) when is_binary(public_key_text) do
-    trimmed = String.trim(public_key_text)
+    normalized = normalize_public_key(public_key_text)
 
-    case decode_ssh_key(trimmed) do
+    case decode_ssh_key(normalized) do
       {:ok, key} ->
         fp = :ssh.hostkey_fingerprint(:sha256, key)
         {:ok, to_string(fp)}
@@ -65,6 +65,24 @@ defmodule Foglet.Accounts.SSHKey do
     _ -> {:error, "invalid OpenSSH public key"}
   end
 
+  @doc """
+  Normalize practical OpenSSH public-key input to the key type and key blob.
+
+  OpenSSH public-key lines commonly include a trailing comment. The comment is
+  not part of the key material, so storage and fingerprinting keep only the
+  first two whitespace-separated fields.
+  """
+  def normalize_public_key(public_key_text) do
+    public_key_text
+    |> String.trim()
+    |> String.split(~r/\s+/, parts: 3)
+    |> case do
+      [type, blob | _comment] -> type <> " " <> blob
+      [single] -> single
+      [] -> ""
+    end
+  end
+
   # ---------- Private ----------
 
   defp put_fingerprint(changeset) do
@@ -73,9 +91,16 @@ defmodule Foglet.Accounts.SSHKey do
         changeset
 
       public_key ->
-        case compute_fingerprint(public_key) do
-          {:ok, fp} -> put_change(changeset, :fingerprint, fp)
-          {:error, reason} -> add_error(changeset, :public_key, reason)
+        normalized = normalize_public_key(public_key)
+
+        case compute_fingerprint(normalized) do
+          {:ok, fp} ->
+            changeset
+            |> put_change(:public_key, normalized)
+            |> put_change(:fingerprint, fp)
+
+          {:error, reason} ->
+            add_error(changeset, :public_key, reason)
         end
     end
   end

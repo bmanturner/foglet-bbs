@@ -32,8 +32,8 @@ defmodule Foglet.SSH.CLIHandler do
   in `Foglet.SSH.PubkeyStash` (ETS). On `ssh_channel_up` we:
 
   1. Obtain the peer address via `:ssh.connection_info(connection_ref, [:peer])`.
-  2. Pop the stashed pubkey (or `:miss` if the client used password-based flow,
-     which is rejected at the daemon level — all connections use no_auth_needed).
+  2. Pop the stashed pubkey (or `:miss` if no key was offered; the SSH transport
+     normally requires public-key auth, so `:miss` is a defensive guest path).
   3. If a pubkey was offered, authenticate it through
      `Accounts.authenticate_by_public_key/1` to find the matching user and
      record last-used metadata. When no active user matches, keep the
@@ -327,6 +327,9 @@ defmodule Foglet.SSH.CLIHandler do
     build_context(state, width, height)
   end
 
+  @doc false
+  def peer_from_connection_info_for_test(info), do: peer_from_connection_info(info)
+
   # Clear the primary screen + scrollback, enter alt-screen, then clear the alt
   # buffer. `CSI 3 J` is what prevents scroll-up from revealing the caller's
   # pre-SSH shell history while the TUI is active.
@@ -375,14 +378,25 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   defp read_peer(connection_ref) do
-    case :ssh.connection_info(connection_ref, [:peer]) do
-      [{:peer, {{ip, port}, _socket}}] -> {ip, port}
-      [{:peer, {ip, port}}] when is_tuple(ip) and is_integer(port) -> {ip, port}
-      _ -> :unknown
-    end
+    connection_ref
+    |> :ssh.connection_info([:peer])
+    |> peer_from_connection_info()
   rescue
     _ -> :unknown
   end
+
+  defp peer_from_connection_info([{:peer, {transport, {ip, port}}}])
+       when is_atom(transport) and is_tuple(ip) and is_integer(port),
+       do: {ip, port}
+
+  defp peer_from_connection_info([{:peer, {{ip, port}, _socket}}])
+       when is_tuple(ip) and is_integer(port),
+       do: {ip, port}
+
+  defp peer_from_connection_info([{:peer, {ip, port}}]) when is_tuple(ip) and is_integer(port),
+    do: {ip, port}
+
+  defp peer_from_connection_info(_info), do: :unknown
 
   defp resolve_pubkey_identity(peer) do
     case Foglet.SSH.PubkeyStash.pop_offer(peer) do

@@ -17,19 +17,22 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
 
   @key_hints "A Add key   R Refresh   D Revoke key   ↑/↓ Select"
 
-  @spec render(SSHKeysState.t(), Theme.t()) :: any()
-  def render(%SSHKeysState{items: nil}, %Theme{} = theme), do: render_loading(theme)
+  @spec render(SSHKeysState.t(), Theme.t(), non_neg_integer() | nil) :: any()
+  def render(state, theme, available_width \\ nil)
 
-  def render(%SSHKeysState{mode: :confirm_revoke} = state, %Theme{} = theme),
+  def render(%SSHKeysState{items: nil}, %Theme{} = theme, _available_width),
+    do: render_loading(theme)
+
+  def render(%SSHKeysState{mode: :confirm_revoke} = state, %Theme{} = theme, _available_width),
     do: render_confirm_revoke(state, theme)
 
-  def render(%SSHKeysState{} = state, %Theme{} = theme) do
+  def render(%SSHKeysState{} = state, %Theme{} = theme, available_width) do
     column style: %{gap: 1} do
       [
         maybe_status(state.status_message, theme),
         maybe_errors(state.errors, theme),
         maybe_form(state, theme),
-        ConsoleTable.render(state.table, theme: theme),
+        ConsoleTable.render(table_for_width(state.table, available_width), theme: theme),
         text(@key_hints, fg: theme.dim.fg)
       ]
       |> Enum.reject(&is_nil/1)
@@ -101,6 +104,32 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
   end
 
   defp maybe_form(_state, _theme), do: nil
+
+  defp table_for_width(%ConsoleTable{} = table, available_width)
+       when is_integer(available_width) and available_width > 0 do
+    rebuilt =
+      ConsoleTable.init(
+        columns: table.columns,
+        rows: table.rows,
+        selectable: table.selectable,
+        empty_state: table.empty_state,
+        width: available_width
+      )
+
+    put_selected_row(rebuilt, selected_row(table))
+  end
+
+  defp table_for_width(%ConsoleTable{} = table, _available_width), do: table
+
+  defp selected_row(%ConsoleTable{table: %{raxol_state: raxol_state}}) do
+    Map.get(raxol_state, :selected_row)
+  end
+
+  defp put_selected_row(%ConsoleTable{} = table, selected_row) when is_integer(selected_row) do
+    put_in(table.table.raxol_state[:selected_row], selected_row)
+  end
+
+  defp put_selected_row(%ConsoleTable{} = table, _selected_row), do: table
 
   # Polish: keep a single pasted public key from blowing past the viewport.
   # Trim with an ellipsis once the value gets long; full validation still runs

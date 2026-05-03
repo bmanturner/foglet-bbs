@@ -8,9 +8,10 @@ defmodule Foglet.SSH.Supervisor do
 
   Daemon options:
     * system_dir          → priv/ssh/ (host keys persisted across deploys)
-    * no_auth_needed: true — TUI is the authentication boundary (Open Question 1)
-    * key_cb              → Foglet.SSH.KeyCB — loads host keys; stashes offered
-                            pubkeys in `Foglet.SSH.PubkeyStash` for CLIHandler
+    * auth_methods: 'publickey' — require the SSH client to offer a key so the
+                            app can correlate it before the TUI starts
+    * key_cb              → Foglet.SSH.KeyCB — loads host keys; accepts/stashes
+                            offered pubkeys in `Foglet.SSH.PubkeyStash` for CLIHandler
     * ssh_cli             → Foglet.SSH.CLIHandler — Foglet-owned channel handler
     * max_sessions        → 500
     * socket_options      → backlog: 4096, reuseaddr: true (accept-queue tuning)
@@ -19,8 +20,11 @@ defmodule Foglet.SSH.Supervisor do
                             host keys, ETM MACs. Omitting an algorithm blocks it
                             from negotiation — no separate rm: required.
 
-  `pwdfun` has been removed entirely: with `no_auth_needed: true` it is dead
-  code. Authentication is the responsibility of the TUI login screen.
+  `no_auth_needed` is intentionally not set. OpenSSH tries the `none` method
+  first; if the daemon accepts `none`, the client never offers a public key and
+  Foglet cannot auto-authenticate a reconnect. The daemon therefore advertises
+  `publickey` authentication only, while `Foglet.SSH.KeyCB` accepts every offered
+  key and leaves account identity resolution to the TUI/session layer.
 
   A runtime check at init/1 asserts OTP >= 27.3.3 to guard against
   CVE-2025-32433 (Pitfall 7 from 03-RESEARCH.md).
@@ -74,8 +78,9 @@ defmodule Foglet.SSH.Supervisor do
   def daemon_opts(system_dir) do
     [
       system_dir: String.to_charlist(system_dir),
-      no_auth_needed: true,
+      auth_methods: ~c"publickey",
       key_cb: {Foglet.SSH.KeyCB, [system_dir: String.to_charlist(system_dir)]},
+      connectfun: &Foglet.SSH.KeyCB.connect/3,
       ssh_cli: {Foglet.SSH.CLIHandler, []},
       max_sessions: 500,
       parallel_login: true,

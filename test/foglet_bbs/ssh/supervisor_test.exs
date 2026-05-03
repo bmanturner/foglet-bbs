@@ -11,9 +11,11 @@ defmodule Foglet.SSH.SupervisorTest do
       assert to_string(sd) == "/tmp/test_sd"
     end
 
-    test "includes no_auth_needed: true (Open Question 1 resolution)" do
+    test "requires publickey auth so clients offer keys for reconnect auto-login" do
       opts = SSHSup.daemon_opts("/tmp/sd")
-      assert {:no_auth_needed, true} = List.keyfind(opts, :no_auth_needed, 0)
+
+      assert {:auth_methods, ~c"publickey"} = List.keyfind(opts, :auth_methods, 0)
+      assert List.keyfind(opts, :no_auth_needed, 0) == nil
     end
 
     test "does NOT include pwdfun — TUI is the authentication boundary" do

@@ -26,8 +26,9 @@ defmodule Foglet.SSH.PubkeyStash do
   removes stale orphan entries (e.g. when a connection dies before
   `ssh_channel_up` fires) and returns the number of entries deleted.
 
-  Missing or expired stash entries still result in guest sessions; the TTL
-  does not change `no_auth_needed: true` or any authentication outcome.
+  Missing or expired stash entries still result in defensive guest sessions; the
+  production daemon normally requires clients to offer a public key before a
+  channel starts, so a miss should be rare outside tests or interrupted handshakes.
   """
 
   @table __MODULE__
@@ -59,6 +60,7 @@ defmodule Foglet.SSH.PubkeyStash do
   """
   @spec put(term(), term(), integer()) :: true
   def put(peer_key, public_key, now_ms) when is_integer(now_ms) do
+    init()
     :ets.insert(@table, {peer_key, build_offer(public_key), now_ms})
   end
 
@@ -110,6 +112,8 @@ defmodule Foglet.SSH.PubkeyStash do
   def pop_offer(:unknown, _now_ms), do: :miss
 
   def pop_offer(peer_key, now_ms) when is_integer(now_ms) do
+    init()
+
     case :ets.take(@table, peer_key) do
       [{^peer_key, offer, inserted_at_ms}] ->
         if now_ms - inserted_at_ms <= @ttl_ms do

@@ -60,6 +60,17 @@ defmodule Foglet.Accounts.SSHKeyTest do
       assert "has already been taken" in errors_on(changeset).label
     end
 
+    test "KEYS-02 accepts OpenSSH public keys with comments and trailing whitespace" do
+      with_comment = @key_a <> " brendan@example.local  \n"
+
+      assert {:ok, fingerprint} = SSHKey.compute_fingerprint(@key_a)
+      assert SSHKey.compute_fingerprint(with_comment) == {:ok, fingerprint}
+
+      user = insert_user!()
+      changeset = key_changeset(user, %{label: "laptop", public_key: with_comment})
+      assert changeset.valid?
+    end
+
     test "KEYS-02 rejects invalid public key text" do
       user = insert_user!()
       changeset = key_changeset(user, %{label: "bogus", public_key: "this is not a key"})

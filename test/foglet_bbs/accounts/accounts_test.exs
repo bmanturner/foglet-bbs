@@ -63,7 +63,7 @@ defmodule Foglet.AccountsTest do
              ] = Accounts.list_ssh_keys(user)
 
       assert user_id == user.id
-      assert public_key == AccountsFixtures.default_ssh_public_key()
+      assert public_key == SSHKey.normalize_public_key(AccountsFixtures.default_ssh_public_key())
     end
 
     test "does not create an SSH key when no key is offered" do
@@ -120,7 +120,7 @@ defmodule Foglet.AccountsTest do
       assert [%SSHKey{label: "Registration SSH key", public_key: public_key}] =
                Accounts.list_ssh_keys(user)
 
-      assert public_key == @alternate_ssh_public_key
+      assert public_key == SSHKey.normalize_public_key(@alternate_ssh_public_key)
       assert Repo.get!(User, user.id).status == :pending
     end
 
