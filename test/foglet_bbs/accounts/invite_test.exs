@@ -77,22 +77,28 @@ defmodule Foglet.Accounts.InviteTest do
   end
 
   describe "list_invites/1 (INVT-03)" do
+    setup :restore_invite_config
+
     test "returns status rows with invite lifecycle fields" do
+      # FOG-300: list_invites/1 is intentionally unscoped (sysops see every
+      # invite). Assert by membership on the test's own invite code so
+      # incidental fixture invites — e.g. the auto-consumed invite that
+      # user_fixture/0 creates when registration_mode=invite_only leaks in
+      # from a concurrent test — cannot fail this assertion.
       sysop = actor_fixture(:sysop)
       invite = AccountsFixtures.invite_fixture(sysop)
 
-      assert {:ok,
-              [
-                %{
-                  code: code,
-                  issuer_id: issuer_id,
-                  inserted_at: %DateTime{},
-                  consumed_at: nil,
-                  consumed_by_user_id: nil,
-                  revoked_at: nil,
-                  status: :available
-                }
-              ]} = Invites.list_invites(sysop)
+      assert {:ok, rows} = Invites.list_invites(sysop)
+
+      assert %{
+               code: code,
+               issuer_id: issuer_id,
+               inserted_at: %DateTime{},
+               consumed_at: nil,
+               consumed_by_user_id: nil,
+               revoked_at: nil,
+               status: :available
+             } = Enum.find(rows, fn row -> row.code == invite.code end)
 
       assert code == invite.code
       assert issuer_id == sysop.id
@@ -153,12 +159,21 @@ defmodule Foglet.Accounts.InviteTest do
     Config.init_cache()
     current_generators = Config.get("invite_code_generators", "sysops")
     current_limit = Config.get("invite_generation_per_user_limit", 0)
+    current_registration_mode = Config.get("registration_mode", "open")
+
+    # FOG-300: pin registration_mode to "open" so user_fixture/0 does not
+    # auto-create + consume a fixture invite (leaking an extra :consumed row
+    # into list_invites/1). Foglet.Config is process-global ETS, so an async
+    # test that flips registration_mode can otherwise bleed into this file.
+    Config.put!("registration_mode", "open", nil)
 
     on_exit(fn ->
       Config.put!("invite_code_generators", current_generators)
       Config.put!("invite_generation_per_user_limit", current_limit)
+      Config.put!("registration_mode", current_registration_mode)
       Config.invalidate("invite_code_generators")
       Config.invalidate("invite_generation_per_user_limit")
+      Config.invalidate("registration_mode")
     end)
 
     :ok
