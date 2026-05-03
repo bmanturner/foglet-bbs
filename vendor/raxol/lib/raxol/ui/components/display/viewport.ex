@@ -45,8 +45,7 @@ defmodule Raxol.UI.Components.Display.Viewport do
       end
 
     state = %{
-      id:
-        Map.get(props, :id, "viewport-#{:erlang.unique_integer([:positive])}"),
+      id: Map.get(props, :id, "viewport-#{:erlang.unique_integer([:positive])}"),
       children: children,
       content_source: content_source,
       scroll_top: Map.get(props, :scroll_top, 0),
@@ -115,9 +114,7 @@ defmodule Raxol.UI.Components.Display.Viewport do
 
     content_height =
       if new_state.content_source do
-        new_state.content_source.__struct__.total_count(
-          new_state.content_source
-        )
+        new_state.content_source.__struct__.total_count(new_state.content_source)
       else
         length(new_state.children)
       end
@@ -175,8 +172,7 @@ defmodule Raxol.UI.Components.Display.Viewport do
   def render(state, context) do
     state = %{
       state
-      | focused:
-          Raxol.UI.FocusHelper.focused?(state.id, context) or state.focused
+      | focused: Raxol.UI.FocusHelper.focused?(state.id, context) or state.focused
     }
 
     visible_children =
@@ -192,7 +188,8 @@ defmodule Raxol.UI.Components.Display.Viewport do
 
     content_column = %{
       type: :column,
-      style: %{},
+      attrs: %{gap: 0},
+      style: %{gap: 0},
       children: visible_children
     }
 

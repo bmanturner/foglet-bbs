@@ -128,8 +128,9 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   (see the `assemble_card/4` private helper for the current shape).
 
   Delegates to `MarkdownBody.render_tuples_as_lines/4`. The `opts` keyword
-  is accepted for signature parity with `render_from_tuples/5` but has no
-  effect (the Viewport handles windowing).
+  is accepted for signature parity with `render_from_tuples/5`. The Viewport
+  handles windowing; `wrap: true` remains a body-rendering concern because the
+  reader must pass one already-wrapped visual row per child.
   """
   @spec render_body_lines(
           [MarkdownBody.tuple_entry()],
@@ -158,7 +159,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   defp body_opts(opts) do
     [
       scroll_offset: Keyword.get(opts, :scroll_offset, 0),
-      max_lines: Keyword.get(opts, :max_lines, :all)
+      max_lines: Keyword.get(opts, :max_lines, :all),
+      wrap: Keyword.get(opts, :wrap, false)
     ]
   end
 
@@ -247,7 +249,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end)
   end
 
-  defp reader_text_width(width), do: max(width - 1, 1)
+  defp reader_text_width(width), do: max(width - 2, 1)
 
   defp clip_body_line(%{type: :flex, direction: :row, children: children} = row, width) do
     {children, _remaining_width} =

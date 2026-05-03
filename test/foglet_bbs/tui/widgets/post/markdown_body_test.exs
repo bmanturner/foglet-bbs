@@ -296,6 +296,53 @@ defmodule Foglet.TUI.Widgets.Post.MarkdownBodyTest do
       assert result == []
     end
 
+    test "wraps one long logical line into contiguous visual rows without blanks" do
+      body = "alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu"
+      tuples = Foglet.Markdown.render(body)
+
+      result = MarkdownBody.render_tuples_as_lines(tuples, 18, theme(), wrap: true)
+      texts = Enum.map(result, &flatten_text/1)
+
+      assert length(result) > 1
+      refute Enum.any?(texts, &(&1 == ""))
+      assert Enum.join(texts, " ") =~ "alpha beta gamma"
+      assert Enum.all?(texts, &(TextWidth.display_width(&1) <= 18))
+    end
+
+    test "wrap preserves explicit blank paragraph separators" do
+      tuples = Foglet.Markdown.render("alpha beta gamma delta\n\nsecond paragraph")
+
+      result = MarkdownBody.render_tuples_as_lines(tuples, 12, theme(), wrap: true)
+      texts = Enum.map(result, &flatten_text/1)
+
+      assert "" in texts
+      assert Enum.find_index(texts, &(&1 == "")) > 0
+
+      assert Enum.find_index(texts, &String.contains?(&1, "second")) >
+               Enum.find_index(texts, &(&1 == ""))
+    end
+
+    test "wrap preserves styled spans without inserting blank rows" do
+      t = theme()
+
+      tuples =
+        Foglet.Markdown.render(
+          "# Heading with long words\n\nPlain **bold words continue** and *italic words continue* plus `code words continue`."
+        )
+
+      result = MarkdownBody.render_tuples_as_lines(tuples, 16, t, wrap: true)
+      texts = Enum.map(result, &flatten_text/1)
+      serialized = inspect(result, printable_limit: :infinity, limit: :infinity)
+
+      assert length(result) > 4
+      assert Enum.count(texts, &(&1 == "")) == 1
+      assert serialized =~ t.title.fg
+      assert serialized =~ t.accent.fg
+      assert serialized =~ t.dim.fg
+      assert serialized =~ "italic"
+      assert serialized =~ "underline"
+    end
+
     test "bold content routes through theme.accent.fg" do
       t = theme()
       tuples = Foglet.Markdown.render("Hello **world**.")
