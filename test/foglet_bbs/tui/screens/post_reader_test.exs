@@ -1035,6 +1035,19 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       refute row_blank?(Enum.at(rows, second_wrap_row))
     end
 
+    test "Viewport preserves right-edge characters when wrapping at 64 columns" do
+      body = "Foglet BBS is a classic bulletin board system accessible over SSH."
+      s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {64, 22}})
+
+      rows = s |> render_screen() |> rendered_rows({64, 22})
+      first_wrap_row = row_index_containing!(rows, "accessible")
+      second_wrap_row = row_index_containing!(rows, "over SSH.")
+
+      assert second_wrap_row == first_wrap_row + 1
+      assert Enum.join(rows, "\n") =~ "over SSH."
+      refute Enum.join(rows, "\n") =~ "accessible ove│"
+    end
+
     test "Viewport keeps an explicit paragraph break visible between reader paragraphs" do
       body = "first paragraph wraps before the blank separator\n\nsecond paragraph follows"
       s = p2_state(%{posts: [p2_post(body: body)], terminal_size: {40, 24}})

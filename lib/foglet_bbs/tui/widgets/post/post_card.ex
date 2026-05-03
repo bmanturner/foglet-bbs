@@ -249,7 +249,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end)
   end
 
-  defp reader_text_width(width), do: max(width - 1, 1)
+  defp reader_text_width(width), do: max(width - 2, 1)
 
   defp clip_body_line(%{type: :flex, direction: :row, children: children} = row, width) do
     {children, _remaining_width} =
