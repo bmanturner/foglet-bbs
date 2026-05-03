@@ -29,7 +29,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
         [
           Tabs.render(ss.tabs, theme: theme, width: width),
           divider(char: "─", style: %{fg: theme.border.fg}),
-          render_tab_body(active_label, ss, theme)
+          render_tab_body(active_label, ss, theme, width)
         ]
       end
 
@@ -264,17 +264,18 @@ defmodule Foglet.TUI.Screens.Account.Render do
     Enum.find(Theme.ids(), &(Atom.to_string(&1) == theme_id))
   end
 
-  defp render_tab_body("PROFILE", ss, theme), do: ProfileForm.render(ss, theme)
+  defp render_tab_body("PROFILE", ss, theme, _width), do: ProfileForm.render(ss, theme)
 
-  defp render_tab_body("PREFS", ss, theme), do: PrefsForm.render(ss, theme)
+  defp render_tab_body("PREFS", ss, theme, _width), do: PrefsForm.render(ss, theme)
 
-  defp render_tab_body("SSH KEYS", ss, theme), do: SSHKeysSurface.render(ss.ssh_keys, theme)
+  defp render_tab_body("SSH KEYS", ss, theme, width),
+    do: SSHKeysSurface.render(ss.ssh_keys, theme, width)
 
-  defp render_tab_body("INVITES", ss, theme) do
+  defp render_tab_body("INVITES", ss, theme, _width) do
     InvitesSurface.render(ss.invites, theme)
   end
 
-  defp render_tab_body(_unknown, _ss, theme) do
+  defp render_tab_body(_unknown, _ss, theme, _width) do
     column style: %{gap: 0} do
       [text("", fg: theme.dim.fg)]
     end

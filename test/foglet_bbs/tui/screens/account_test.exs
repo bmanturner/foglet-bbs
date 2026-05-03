@@ -14,8 +14,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
   alias Foglet.TUI.Screens.Account
   alias Foglet.TUI.Screens.Account.SSHKeysState
   alias Foglet.TUI.Screens.Account.State, as: AccountState
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
+  alias Raxol.UI.Layout.Engine
 
   @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
 
@@ -51,6 +53,23 @@ defmodule Foglet.TUI.Screens.AccountTest do
     local_state = get_in(state, [:screen_state, :account]) || Account.init(context)
 
     Account.render(local_state, context)
+  end
+
+  defp ssh_key_table_row(positioned, sentinel) do
+    positioned
+    |> Enum.filter(fn element ->
+      element.type == :text and is_binary(Map.get(element, :text)) and
+        element.text != "" and not String.starts_with?(element.text, "A Add key") and
+        not (Map.get(element, :attrs, %{}) |> Map.get(:chrome_frame?, false))
+    end)
+    |> Enum.group_by(& &1.y)
+    |> Enum.find_value([], fn {_y, elements} ->
+      ordered = Enum.sort_by(elements, & &1.x)
+
+      if Enum.any?(ordered, &String.contains?(&1.text, sentinel)) do
+        ordered
+      end
+    end)
   end
 
   # FOG-333: PROFILE shields digit shortcuts while a text field is focused.
@@ -1606,8 +1625,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
             [
               %{
                 id: "k1",
-                label: "laptop",
-                fingerprint: "SHA256:abc123",
+                label: "qa generated",
+                fingerprint: "SHA256:HSP2xRpOjIsJVABCDE1234567890realisticfingerprint",
                 inserted_at: inserted_at,
                 last_used_at: nil,
                 public_key: "ssh-ed25519 AAAAC3 laptop@test"
@@ -1648,6 +1667,44 @@ defmodule Foglet.TUI.Screens.AccountTest do
                &String.contains?(&1, "No SSH keys yet. Add one to sign in without a password.")
              ),
              "expected empty state copy in SSH KEYS tab"
+    end
+
+    test "renders SSH key table with width-aware columns at 80x24 and 64x22", %{state: state} do
+      for {terminal_width, terminal_height, expected_fingerprint_x} <- [
+            {80, 24, 15},
+            {64, 22, 15}
+          ] do
+        positioned =
+          state
+          |> Map.put(:terminal_size, {terminal_width, terminal_height})
+          |> render_account()
+          |> Engine.apply_layout(%{width: terminal_width, height: terminal_height})
+          |> List.flatten()
+
+        header = ssh_key_table_row(positioned, "Label")
+        row = ssh_key_table_row(positioned, "qa generated")
+
+        assert [label, fingerprint, added, last_used] = header
+        assert label.x == 2
+        assert fingerprint.x == expected_fingerprint_x
+        assert added.x > fingerprint.x
+        assert last_used.x > added.x
+        assert TextWidth.display_width(label.text) > TextWidth.display_width("Label")
+
+        assert [row_label, row_fingerprint, row_added, row_last_used] = row
+        assert row_label.x == label.x
+        assert row_fingerprint.x == fingerprint.x
+        assert row_added.x == added.x
+        assert row_last_used.x == last_used.x
+
+        assert TextWidth.display_width(row_fingerprint.text) <=
+                 TextWidth.display_width(fingerprint.text)
+
+        assert TextWidth.display_width(row_added.text) <= TextWidth.display_width(added.text)
+
+        assert TextWidth.display_width(row_last_used.text) <=
+                 TextWidth.display_width(last_used.text)
+      end
     end
 
     test "pressing down on non-empty list advances cursor without crash", %{state: state} do
