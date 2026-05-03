@@ -5,10 +5,23 @@ defmodule Mix.Tasks.Foglet.User.CreateTest do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.User
+  alias Foglet.Config
 
   setup do
     # Capture Mix shell output as regular IO so capture_io works
     Mix.shell(Mix.Shell.IO)
+
+    # FOG-389: `Foglet.Config` is a process-global ETS cache that is NOT
+    # rolled back by the Ecto sandbox. Async tests elsewhere may set
+    # `registration_mode` to `"invite_only"` and leave the value live,
+    # which routes `Accounts.register_user/1` (used by the mix task) into
+    # the invite-only branch and yields `invite_code: is invalid or
+    # unavailable` for every test in this file. Pin the value to `"open"`
+    # for the duration of this file and invalidate on exit so the next
+    # test re-reads the DB-backed default.
+    Config.put!("registration_mode", "open", nil)
+    on_exit(fn -> Config.invalidate("registration_mode") end)
+
     :ok
   end
 
