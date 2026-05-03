@@ -114,7 +114,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   defp board_label(_), do: "Boards"
 
   defp empty_board_message(%State{active_board_count: 0}) do
-    "No active boards are available."
+    "There are no boards yet. Ask the sysop to create one."
   end
 
   defp empty_board_message(%State{active_board_count: count})
@@ -128,7 +128,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
 
   defp compose_tab_hint(%{focused: :body, mode: :edit}), do: "Preview"
   defp compose_tab_hint(%{focused: :body, mode: :preview}), do: "Edit"
-  defp compose_tab_hint(_ss), do: "Switch field"
+  defp compose_tab_hint(_ss), do: "To body"
 
   defp compose_context(ss, title_value, width, theme) do
     available = max(width - 10, 20)

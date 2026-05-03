@@ -1110,8 +1110,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         {:board_list, ["Q Back", "Enter Open"]},
         {:thread_list, ["Q Back", "C Compose"]},
         {:post_reader, ["Q Back", "R Reply"]},
-        {:new_thread, ["Ctrl+S Post", "Ctrl+C Cancel"]},
-        {:post_composer, ["Ctrl+S Post", "Ctrl+C Cancel"]}
+        {:new_thread, ["Ctrl+S Post", "Esc Cancel"]},
+        {:post_composer, ["Ctrl+S Post", "Esc Cancel"]}
       ]
 
       for {screen, expected_hints} <- expectations do

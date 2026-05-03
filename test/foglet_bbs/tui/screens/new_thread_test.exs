@@ -654,8 +654,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = Map.put(base_state(), :screen_state, %{new_thread: ss})
     text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
-    assert text =~ "No active boards are available"
-    refute text =~ "Ask your sysop"
+    assert text =~ "There are no boards yet. Ask the sysop to create one."
   end
 
   # ---------------------------------------------------------------------------
@@ -679,6 +678,34 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert text =~ "General"
     assert text =~ "Title"
     assert text =~ "0 / 60 chars"
+  end
+
+  test "render/1 compose step keybar advertises Esc Cancel and 'To body' Tab hint when title focused" do
+    text =
+      compose_state()
+      |> render_screen()
+      |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Esc Cancel"
+    assert text =~ "To body"
+    refute text =~ "Switch field"
+  end
+
+  test "render/1 compose step Tab hint switches to Preview/Edit when body focused" do
+    state = compose_state()
+    ss = %{get_ss(state) | focused: :body}
+    state = put_in(state.screen_state.new_thread, ss)
+
+    text = state |> render_screen() |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Preview"
+    refute text =~ "To body"
+  end
+
+  test "State.new wires the 'Thread title' placeholder onto the title input" do
+    ss = State.new(step: :compose, board: %{id: "b1", name: "General"})
+
+    assert ss.title_input_state.raxol_state.placeholder == "Thread title"
   end
 
   test "render/1 compose step shows title value when present" do
