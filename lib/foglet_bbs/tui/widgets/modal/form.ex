@@ -42,6 +42,21 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   Up/Down on `:enum` fields cycle the field value via the existing field
   dispatcher and do NOT change `focus_index` (D-13).
 
+  ## Enum choices: `[value]` or `[{label, value}]` (FOG-344)
+
+  `:enum` field specs accept either:
+
+    * `choices: [value, value, ...]` — flat list; the rendered label is
+      `to_string(value)`. Used by Account Preferences and Sysop Boards.
+    * `choices: [{label, value}, ...]` — explicit operator-facing label
+      distinct from the persisted raw value. Used by Sysop SiteForm so the
+      picker can show "Open — anyone can sign up" while persisting `"open"`.
+
+  Both shapes round-trip the **value** half through `coerce/2` on submit, so
+  callers' `on_submit` payloads do not change when migrating from flat to
+  tuple form. Selection state remains an integer index into the normalized
+  pair list and `:up`/`:down` keyboard cycling is unchanged.
+
   ## Enum field cycling and screen-side preview (D-25 D-03 / Pitfall 5)
 
   `:enum` fields update their internal field state on every `:up`/`:down` event
@@ -510,14 +525,14 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   end
 
   defp build_field_state(%{type: :enum} = spec) do
-    choices = Map.get(spec, :choices, [])
+    pairs = normalized_choices(spec)
 
     case Map.get(spec, :value) do
       nil ->
         0
 
       val ->
-        Enum.find_index(choices, &(&1 == val)) || 0
+        Enum.find_index(pairs, fn {_lbl, v} -> v == val end) || 0
     end
   end
 
@@ -550,11 +565,11 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     field_state
   end
 
-  defp dispatch_to_field(%{type: :enum, choices: []}, field_state, %{key: :down}),
-    do: field_state
-
-  defp dispatch_to_field(%{type: :enum, choices: choices}, field_state, %{key: :down}) do
-    max(0, min(field_state + 1, length(choices) - 1))
+  defp dispatch_to_field(%{type: :enum} = spec, field_state, %{key: :down}) do
+    case normalized_choices(spec) do
+      [] -> field_state
+      pairs -> max(0, min(field_state + 1, length(pairs) - 1))
+    end
   end
 
   defp dispatch_to_field(%{type: :enum}, field_state, %{key: :up}) do
@@ -597,6 +612,22 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end
   end
 
+  # Normalize :enum `choices` into `[{label, value}]` pairs (FOG-344).
+  #
+  # Backward-compatible with the legacy `choices: [value, value, ...]` shape
+  # used by Account Preferences and Boards (label defaults to `to_string(value)`),
+  # and accepts the new `choices: [{label, value}, ...]` shape used by Sysop
+  # SiteForm to render operator-facing labels distinct from persisted raw values.
+  defp normalized_choices(%{choices: choices}) when is_list(choices), do: do_normalize(choices)
+  defp normalized_choices(_spec), do: []
+
+  defp do_normalize(choices) do
+    Enum.map(choices, fn
+      {label, value} -> {to_string(label), value}
+      value -> {to_string(value), value}
+    end)
+  end
+
   defp collect_values(%__MODULE__{fields: fields, field_states: states}) do
     fields
     |> Enum.zip(states)
@@ -614,8 +645,11 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   defp coerce(%{type: :boolean}, bool), do: !!bool
 
-  defp coerce(%{type: :enum, choices: choices}, idx) when is_integer(idx) do
-    Enum.at(choices, idx)
+  defp coerce(%{type: :enum} = spec, idx) when is_integer(idx) do
+    case Enum.at(normalized_choices(spec), idx) do
+      nil -> nil
+      {_label, value} -> value
+    end
   end
 
   defp coerce(%{type: :textarea}, %{raw_value: rv}), do: rv
@@ -658,15 +692,15 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     Checkbox.render(label, checked?: field_state, theme: theme)
   end
 
-  defp render_widget(%{type: :enum, choices: choices} = spec, field_state, _focused?, theme) do
-    str_choices = Enum.map(choices, &to_string/1)
+  defp render_widget(%{type: :enum} = spec, field_state, _focused?, theme) do
+    labels = Enum.map(normalized_choices(spec), fn {label, _value} -> label end)
 
     case Map.get(spec, :display, :radio) do
       :compact ->
-        render_compact_enum(str_choices, field_state, theme)
+        render_compact_enum(labels, field_state, theme)
 
       _radio ->
-        RadioGroup.render(str_choices, field_state, theme: theme)
+        RadioGroup.render(labels, field_state, theme: theme)
     end
   end
 
