@@ -506,6 +506,14 @@ defmodule Foglet.SSH.CLIHandlerTest do
       _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
     end
 
+    test "normalizes OTP connection_info peer transport shape" do
+      peer = {{127, 0, 0, 1}, 54_321}
+
+      assert CLIHandler.peer_from_connection_info_for_test(peer: {:tcp, peer}) == peer
+      assert CLIHandler.peer_from_connection_info_for_test(peer: {peer, :socket}) == peer
+      assert CLIHandler.peer_from_connection_info_for_test(peer: peer) == peer
+    end
+
     test "registered public-key login does not carry offered key into SessionContext" do
       reset_cli_counter!()
       reset_pubkey_stash!()

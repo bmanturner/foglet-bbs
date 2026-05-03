@@ -34,5 +34,15 @@ defmodule Foglet.SSH.KeyCBTest do
 
       assert {:ok, ^public_key} = Foglet.SSH.PubkeyStash.pop(peer)
     end
+
+    test "connectfun correlates an offered pubkey to the authenticated SSH peer" do
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      peer = {{127, 0, 0, 1}, 54_321}
+
+      KeyCB.is_auth_key(public_key, "anyuser", [])
+      KeyCB.connect("anyuser", peer, "publickey")
+
+      assert {:ok, ^public_key} = Foglet.SSH.PubkeyStash.pop(peer)
+    end
   end
 end

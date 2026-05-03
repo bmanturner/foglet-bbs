@@ -80,6 +80,7 @@ defmodule Foglet.SSH.Supervisor do
       system_dir: String.to_charlist(system_dir),
       auth_methods: ~c"publickey",
       key_cb: {Foglet.SSH.KeyCB, [system_dir: String.to_charlist(system_dir)]},
+      connectfun: &Foglet.SSH.KeyCB.connect/3,
       ssh_cli: {Foglet.SSH.CLIHandler, []},
       max_sessions: 500,
       parallel_login: true,

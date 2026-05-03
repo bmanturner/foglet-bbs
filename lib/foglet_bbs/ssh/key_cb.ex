@@ -28,25 +28,57 @@ defmodule Foglet.SSH.KeyCB do
     :ssh_file.host_key(algorithm, opts)
   end
 
+  @process_offer_key {__MODULE__, :offered_public_key}
+
   @impl true
   def is_auth_key(public_key, _user, opts) do
-    # Stash the offered pubkey for CLIHandler to pick up after channel_up.
-    # Peer address is available as {ip, port} in opts under :peer.
+    # The OTP key callback receives daemon key_cb options, not the live SSH peer.
+    # Keep the offered key in the auth process until `connect/3` receives the
+    # authenticated peer and can write the peer-keyed stash CLIHandler consumes.
+    Process.put(@process_offer_key, public_key)
+
+    # Tests and older callback paths may still pass :peer explicitly; keep that
+    # direct write as a harmless compatibility path.
     peer = extract_peer(opts)
     Foglet.SSH.PubkeyStash.put(peer, public_key)
+
     # Always allow structurally valid SSH keys through the transport. Foglet
     # resolves account identity inside the session layer; unmatched keys become
     # guest/registration sessions rather than authenticated users.
     true
   end
 
+  @doc false
+  def connect(_user, peer, method) when method in ["publickey", ~c"publickey", :publickey] do
+    case Process.get(@process_offer_key) do
+      nil ->
+        :ok
+
+      public_key ->
+        Process.delete(@process_offer_key)
+        Foglet.SSH.PubkeyStash.put(normalize_peer(peer), public_key)
+        :ok
+    end
+  end
+
+  def connect(_user, _peer, _method), do: :ok
+
   # --- Private ---
 
   defp extract_peer(opts) do
-    case Keyword.get(opts, :peer) do
-      {{ip, port}, _socket} -> {ip, port}
-      {ip, port} when is_tuple(ip) and is_integer(port) -> {ip, port}
-      _ -> :unknown
-    end
+    opts
+    |> Keyword.get(:peer)
+    |> normalize_peer()
   end
+
+  defp normalize_peer({transport, {ip, port}})
+       when is_atom(transport) and is_tuple(ip) and is_integer(port),
+       do: {ip, port}
+
+  defp normalize_peer({{ip, port}, _socket}) when is_tuple(ip) and is_integer(port),
+    do: {ip, port}
+
+  defp normalize_peer({ip, port}) when is_tuple(ip) and is_integer(port), do: {ip, port}
+
+  defp normalize_peer(_peer), do: :unknown
 end

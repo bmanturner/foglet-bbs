@@ -327,6 +327,9 @@ defmodule Foglet.SSH.CLIHandler do
     build_context(state, width, height)
   end
 
+  @doc false
+  def peer_from_connection_info_for_test(info), do: peer_from_connection_info(info)
+
   # Clear the primary screen + scrollback, enter alt-screen, then clear the alt
   # buffer. `CSI 3 J` is what prevents scroll-up from revealing the caller's
   # pre-SSH shell history while the TUI is active.
@@ -375,14 +378,25 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   defp read_peer(connection_ref) do
-    case :ssh.connection_info(connection_ref, [:peer]) do
-      [{:peer, {{ip, port}, _socket}}] -> {ip, port}
-      [{:peer, {ip, port}}] when is_tuple(ip) and is_integer(port) -> {ip, port}
-      _ -> :unknown
-    end
+    connection_ref
+    |> :ssh.connection_info([:peer])
+    |> peer_from_connection_info()
   rescue
     _ -> :unknown
   end
+
+  defp peer_from_connection_info([{:peer, {transport, {ip, port}}}])
+       when is_atom(transport) and is_tuple(ip) and is_integer(port),
+       do: {ip, port}
+
+  defp peer_from_connection_info([{:peer, {{ip, port}, _socket}}])
+       when is_tuple(ip) and is_integer(port),
+       do: {ip, port}
+
+  defp peer_from_connection_info([{:peer, {ip, port}}]) when is_tuple(ip) and is_integer(port),
+    do: {ip, port}
+
+  defp peer_from_connection_info(_info), do: :unknown
 
   defp resolve_pubkey_identity(peer) do
     case Foglet.SSH.PubkeyStash.pop_offer(peer) do

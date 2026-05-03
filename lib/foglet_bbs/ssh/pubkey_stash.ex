@@ -60,6 +60,7 @@ defmodule Foglet.SSH.PubkeyStash do
   """
   @spec put(term(), term(), integer()) :: true
   def put(peer_key, public_key, now_ms) when is_integer(now_ms) do
+    init()
     :ets.insert(@table, {peer_key, build_offer(public_key), now_ms})
   end
 
@@ -111,6 +112,8 @@ defmodule Foglet.SSH.PubkeyStash do
   def pop_offer(:unknown, _now_ms), do: :miss
 
   def pop_offer(peer_key, now_ms) when is_integer(now_ms) do
+    init()
+
     case :ets.take(@table, peer_key) do
       [{^peer_key, offer, inserted_at_ms}] ->
         if now_ms - inserted_at_ms <= @ttl_ms do
