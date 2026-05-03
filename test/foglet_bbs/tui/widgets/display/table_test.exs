@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
   import Foglet.TUI.WidgetHelpers,
     only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
 
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.Table
@@ -143,6 +144,36 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
 
       assert TextWidth.display_width(get_in(state.raxol_state.data, [Access.at(0), :message])) <=
                message_width
+    end
+
+    test "keeps sortable header starts aligned with body row starts at compact and wide widths" do
+      columns = [
+        %{id: :code, label: "Code", width: 8, priority: 100, demand: :content},
+        %{id: :status, label: "Status", width: 8, priority: 60, demand: :content},
+        %{id: :created, label: "Created", width: 10, priority: 40, demand: :content},
+        %{id: :used_by, label: "Used by", width: 7, priority: 10, demand: :content}
+      ]
+
+      rows = [
+        %{
+          code: "A2TGJQGYMI74JITZAA",
+          status: "available",
+          created: "2026-04-26",
+          used_by: "very-long-handle@example.test"
+        }
+      ]
+
+      for width <- [42, 52] do
+        state = Table.init(columns: columns, rows: rows, width: width, sortable: true)
+        ascii = state |> Table.render(theme: theme()) |> AsciiRenderer.render({width + 2, 8})
+
+        header_line = rendered_line_containing(ascii, ["Code", "Status", "Created", "Used by"])
+        row_line = rendered_line_containing(ascii, ["A2TGJQ", "availab", "2026-04-26", "very"])
+
+        assert column_starts(header_line, ["Code", "Status", "Created", "Used by"]) ==
+                 column_starts(row_line, ["A2TGJQ", "availab", "2026-04-26", "very"]),
+               "expected header and row cell starts to align at width #{width}:\n#{ascii}"
+      end
     end
 
     test "uses drawable frame width rather than raw terminal columns" do
@@ -302,6 +333,25 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
 
       assert s1 != s2, "Expected different rendering with different themes"
     end
+  end
+
+  defp rendered_line_containing(ascii, fragments) do
+    ascii
+    |> String.split("\n", trim: false)
+    |> Enum.find(fn line -> Enum.all?(fragments, &String.contains?(line, &1)) end)
+  end
+
+  defp column_starts(line, fragments) do
+    graphemes = String.graphemes(line)
+
+    Enum.map(fragments, fn fragment ->
+      fragment_graphemes = String.graphemes(fragment)
+      fragment_length = length(fragment_graphemes)
+
+      Enum.find_index(0..(length(graphemes) - fragment_length), fn index ->
+        Enum.slice(graphemes, index, fragment_length) == fragment_graphemes
+      end)
+    end)
   end
 
   defp table_line_width(%Table{raxol_state: %{columns: columns}}) do
