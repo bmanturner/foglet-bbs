@@ -102,6 +102,15 @@ defmodule Foglet.TUI.Screens.Register.StateTest do
       assert RegisterState.changeset_error_text(cs) == "That email is already on file."
     end
 
+    test "bare duplicate email message maps to the unique-email sentence" do
+      cs =
+        %User{}
+        |> Ecto.Changeset.change(%{})
+        |> Ecto.Changeset.add_error(:email, "has already been taken")
+
+      assert RegisterState.changeset_error_text(cs) == "That email is already on file."
+    end
+
     test "handle below minimum length maps to the min-length sentence with the configured floor" do
       cs =
         User.registration_changeset(%{

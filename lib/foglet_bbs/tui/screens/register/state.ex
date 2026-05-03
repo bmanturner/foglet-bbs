@@ -197,13 +197,14 @@ defmodule Foglet.TUI.Screens.Register.State do
     translate_error(first)
   end
 
-  defp translate_error({field, {_msg, opts}}) do
+  defp translate_error({field, {msg, opts}}) do
     cond do
       Keyword.get(opts, :validation) == :required -> required_sentence(field)
       Keyword.get(opts, :validation) == :format -> format_sentence(field)
       Keyword.get(opts, :validation) == :length -> length_sentence(field, opts)
       Keyword.get(opts, :validation) == :unsafe_unique -> unique_sentence(field)
       Keyword.get(opts, :constraint) == :unique -> unique_sentence(field)
+      msg == "has already been taken" -> unique_sentence(field)
       true -> @generic_error
     end
   end
