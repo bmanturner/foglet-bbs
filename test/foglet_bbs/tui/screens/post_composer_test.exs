@@ -659,6 +659,53 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert cancel_state.current_screen == :main_menu
   end
 
+  # ---------------------------------------------------------------------------
+  # Esc — primary cancel (FOG-92 / FOG-339)
+  # ---------------------------------------------------------------------------
+
+  describe "Esc — primary cancel (FOG-92)" do
+    test "Esc cancels to origin without confirmation", %{state: state} do
+      {:update, s, _} = handle_key_screen(%{key: :char, char: "h"}, state)
+      {:update, s, _} = handle_key_screen(%{key: :escape}, s)
+
+      assert s.current_screen == :main_menu
+      refute Map.has_key?(s.screen_state, :post_composer)
+    end
+
+    test "Esc cancels even when body already has content (does not insert content)", %{
+      state: state
+    } do
+      state =
+        Enum.reduce(~w[h e l l o], state, fn ch, acc ->
+          {:update, next, _} = handle_key_screen(%{key: :char, char: ch}, acc)
+          next
+        end)
+
+      assert input_value(state) == "hello"
+
+      {:update, after_cancel, _} = handle_key_screen(%{key: :escape}, state)
+
+      assert after_cancel.current_screen == :main_menu
+      refute Map.has_key?(after_cancel.screen_state, :post_composer)
+    end
+
+    test "Esc with origin: :post_reader routes back to :post_reader", %{state: state} do
+      s = put_in(state.screen_state.post_composer.origin, :post_reader)
+
+      {:update, new_state, _cmds} = handle_key_screen(%{key: :escape}, s)
+
+      assert new_state.current_screen == :post_reader
+    end
+
+    test "Esc clears the composer screen_state", %{state: state} do
+      s = put_in(state.screen_state.post_composer.origin, :post_reader)
+
+      {:update, new_state, _cmds} = handle_key_screen(%{key: :escape}, s)
+
+      assert Map.get(new_state.screen_state, :post_composer) == nil
+    end
+  end
+
   # Regression: handle_key/2 clause order is load-bearing. Compose.translate_key/1
   # does NOT filter ctrl-modified char events — it produces {:input, ?s} for
   # `%{key: :char, char: "s", ctrl: true}`. If anyone moves the catch-all

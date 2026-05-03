@@ -64,6 +64,10 @@ defmodule Foglet.TUI.Screens.PostComposer do
     {state, [Effect.navigate(state.origin, cancel_params(state))]}
   end
 
+  def update({:key, %{key: :escape}}, %State{} = state, %Context{}) do
+    {state, [Effect.navigate(state.origin, cancel_params(state))]}
+  end
+
   def update({:key, key_event}, %State{} = state, %Context{} = context) do
     case Compose.apply_key(state.input_state, key_event) do
       {:ok, input_state} ->
@@ -151,7 +155,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
         label: "Actions",
         commands: [
           %{key: "Ctrl+S", label: "Post", priority: 30},
-          %{key: "Ctrl+C", label: "Cancel", priority: 30}
+          %{key: "Esc", label: "Cancel", priority: 30}
         ]
       }
     ])
