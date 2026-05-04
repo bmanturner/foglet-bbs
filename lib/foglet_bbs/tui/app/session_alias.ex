@@ -8,6 +8,7 @@ defmodule Foglet.TUI.App.SessionAlias do
   thin one-line delegating `do_update` clauses.
   """
 
+  alias Foglet.Sessions.Preferences
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
   alias Raxol.Core.Runtime.Command
@@ -52,15 +53,21 @@ defmodule Foglet.TUI.App.SessionAlias do
       )
     end
 
+    preferences = Preferences.from_user(user)
+
     # Keep session_context in lockstep with current_user so screens that read
     # session_context.user (rather than current_user) see the authenticated
-    # identity. :pubkey_authenticated stays as-is — TUI-driven login is
-    # password-based by definition, so promoting here does NOT make the
-    # session pubkey-authenticated.
+    # identity and preference snapshot. :pubkey_authenticated stays as-is —
+    # TUI-driven login is password-based by definition, so promoting here does
+    # NOT make the session pubkey-authenticated.
     updated_context =
       state.session_context
       |> Map.put(:user, user)
       |> Map.put(:user_id, user.id)
+      |> Map.put(:timezone, preferences.timezone)
+      |> Map.put(:time_format, preferences.time_format)
+      |> Map.put(:theme_id, preferences.theme_id)
+      |> Map.put(:theme, preferences.theme)
 
     Effects.apply_effect(
       %{state | current_user: user, session_context: updated_context},
