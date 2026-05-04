@@ -470,14 +470,14 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         name: :category_id,
         type: :enum,
         label: "Category",
-        choices: Enum.map(cat_choices, fn {_lbl, id} -> id end),
+        choices: cat_choices,
         value: Map.get(values, :category_id, default_cat_id)
       },
       %{
         name: :postable_by,
         type: :enum,
         label: "Postable by",
-        choices: Enum.map(@postable_choices, fn {_lbl, v} -> v end),
+        choices: @postable_choices,
         value: Map.get(values, :postable_by, "members")
       },
       %{

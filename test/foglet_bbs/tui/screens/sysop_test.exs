@@ -1640,6 +1640,20 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert String.contains?(flat, "Cancel")
       refute String.contains?(flat, "Switch")
       refute String.contains?(flat, "Jump")
+
+      # Regression for the cramped-width QA failure: at 64 columns the command
+      # bar must keep reverse navigation discoverable instead of dropping the
+      # Shift+Tab affordance to fit.
+      cramped_flat =
+        state
+        |> Map.put(:terminal_size, {64, 22})
+        |> render_sysop()
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(cramped_flat, "Shift+Tab")
+      assert String.contains?(cramped_flat, "Save")
+      assert String.contains?(cramped_flat, "Cancel")
     end
 
     test "FOG-670 archive-confirm modal advertises Y/N in screen footer", %{
@@ -1667,7 +1681,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "n opens Modal.Form for new board with expected field specs", %{
       state: state,
-      sysop: sysop
+      sysop: sysop,
+      category: category
     } do
       state = activate_boards_tab(state, sysop)
       {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
@@ -1697,6 +1712,20 @@ defmodule Foglet.TUI.Screens.SysopTest do
       chat_enabled_field = Enum.find(bv.modal.fields, &(&1.name == :chat_enabled))
       assert chat_enabled_field.type == :boolean
       assert chat_enabled_field.value == false
+
+      category_field = Enum.find(bv.modal.fields, &(&1.name == :category_id))
+      assert category_field.type == :enum
+      assert category_field.choices == [{"General", category.id}]
+      assert category_field.value == category.id
+
+      postable_field = Enum.find(bv.modal.fields, &(&1.name == :postable_by))
+      assert postable_field.type == :enum
+
+      assert postable_field.choices == [
+               {"Members", "members"},
+               {"Moderators only", "mods_only"},
+               {"Sysops only", "sysop_only"}
+             ]
 
       storage_field = Enum.find(bv.modal.fields, &(&1.name == :chat_storage_mode))
       assert storage_field.type == :enum

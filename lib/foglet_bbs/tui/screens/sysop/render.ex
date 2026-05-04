@@ -97,9 +97,8 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       %{
         label: "Form",
         commands: [
-          %{key: "Tab", label: "Next field", priority: 0},
-          %{key: "Shift+Tab", label: "Prev field", priority: 5},
-          %{key: "Enter", label: "Save", priority: 0},
+          %{key: "Tab/Shift+Tab", label: "Fields", priority: 0},
+          %{key: "Enter/Ctrl+S", label: "Save", priority: 0},
           %{key: "Esc", label: "Cancel", priority: 0}
         ]
       }
