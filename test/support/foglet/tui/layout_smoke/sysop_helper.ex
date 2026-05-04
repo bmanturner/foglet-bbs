@@ -191,13 +191,22 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            texts =
-              state
-              |> SysopHelper.render_sysop_smoke_state()
-              |> SysopHelper.collect_text()
+            tree = SysopHelper.render_sysop_smoke_state(state)
+            texts = SysopHelper.collect_text(tree)
 
             assert Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
                    "expected '[Enter] Submit' at #{width}x#{height}"
+
+            positioned = apply_at_size(tree, {width, height})
+            elements = text_elements(positioned)
+
+            assert Enum.any?(elements, &String.contains?(&1.text, "Submit")),
+                   "expected visible submit affordance at #{width}x#{height}"
+
+            for el <- elements do
+              assert el.x + TextWidth.display_width(el.text) <= width,
+                     "element #{inspect(el.text)} at x=#{el.x} exceeds width #{width}"
+            end
           end
         end
       end
