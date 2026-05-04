@@ -382,34 +382,66 @@ defmodule Foglet.Accounts do
   end
 
   @doc """
-  Decide which screen the user lands on after a successful login or
-  registration (Phase 6 D-04, VERIFY-01).
+  Decide whether an active account should enter the app or visit the Verify screen.
 
-  Returns:
-    * `:main_menu` — user is confirmed (`confirmed_at != nil`), OR
-                    `require_email_verification` is disabled globally.
-    * `:verify`   — user is unconfirmed AND verification is required.
+  Policy boundary:
+    * confirmed users always enter the app;
+    * active mods/sysops are operator-exempt from email verification;
+    * when `require_email_verification` is false, active users enter the app;
+    * when it is true, regular users inserted before the current enable transition
+      are grandfathered and regular users inserted at/after that boundary must verify.
 
-  Reads the `require_email_verification` config key with a safe default of
-  `true` — a missing seed entry (stale test DB) defaults to "verification
-  required" rather than silently bypassing the check.
-
-  Retroactive bypass policy (REQUIREMENTS locked): an existing user with
-  `confirmed_at: nil` gains access on their next login when the sysop flips
-  the toggle to `false`; no DB migration is performed.
+  The boundary uses the `configuration.updated_at` timestamp on the
+  `require_email_verification` row. Re-enabling the toggle creates a new current
+  boundary, so no per-toggle manual user migration is required.
   """
-  @spec post_login_screen(User.t()) :: :main_menu | :verify
-  def post_login_screen(%User{confirmed_at: confirmed_at}) do
+  @spec email_verification_screen(User.t()) :: :main_menu | :verify
+  def email_verification_screen(%User{} = user) do
     cond do
-      confirmed_at != nil ->
+      user.confirmed_at != nil ->
+        :main_menu
+
+      operator_role?(user.role) ->
         :main_menu
 
       Foglet.Config.require_email_verification?() == false ->
         :main_menu
 
+      grandfathered_for_current_verification_boundary?(user) ->
+        :main_menu
+
       true ->
         :verify
     end
+  end
+
+  @doc """
+  Decide which screen the user lands on after a successful login or
+  registration (Phase 6 D-04, VERIFY-01).
+
+  Delegates to `email_verification_screen/1` so password login and SSH
+  public-key authorization share one email-verification policy.
+  """
+  @spec post_login_screen(User.t()) :: :main_menu | :verify
+  def post_login_screen(%User{} = user), do: email_verification_screen(user)
+
+  defp operator_role?(role), do: role in [:mod, :sysop]
+
+  defp grandfathered_for_current_verification_boundary?(%User{
+         role: :user,
+         inserted_at: %DateTime{} = inserted_at
+       }) do
+    case require_email_verification_enabled_at() do
+      %DateTime{} = enabled_at -> DateTime.compare(inserted_at, enabled_at) == :lt
+      nil -> false
+    end
+  end
+
+  defp grandfathered_for_current_verification_boundary?(_user), do: false
+
+  defp require_email_verification_enabled_at do
+    from(e in Config.Entry, where: e.key == "require_email_verification", select: e.updated_at)
+    |> Repo.one!()
   end
 
   defp notify_sysops_pending_registration(%User{} = pending_user) do

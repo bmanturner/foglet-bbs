@@ -1,11 +1,19 @@
 defmodule Foglet.Accounts.AuthTest do
-  use FogletBbs.DataCase, async: true
+  use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts
   alias Foglet.Accounts.{Auth, SSHKey, User}
   alias FogletBbs.AccountsFixtures
 
   @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
+
+  setup do
+    on_exit(fn ->
+      Foglet.Config.invalidate("require_email_verification")
+    end)
+
+    :ok
+  end
 
   describe "authenticate_by_password/2 (IDNT-01)" do
     test "returns {:ok, user} on valid credentials" do
@@ -162,7 +170,8 @@ defmodule Foglet.Accounts.AuthTest do
       assert %SSHKey{last_used_at: %DateTime{}} = Repo.get(SSHKey, key.id)
     end
 
-    test "active unconfirmed user is a matched verification gate without last_used_at writes" do
+    test "active unconfirmed regular user created after verification is enabled is a matched verification gate without last_used_at writes" do
+      Foglet.Config.put!("require_email_verification", true)
       user = AccountsFixtures.user_fixture()
       key = AccountsFixtures.ssh_key_fixture(user)
 
@@ -171,6 +180,36 @@ defmodule Foglet.Accounts.AuthTest do
       assert {:ok, :verify, %User{id: ^user_id}} = Auth.authorize_session(user)
       assert {:error, :not_found} = Auth.authenticate_by_public_key(key.public_key)
       assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+    end
+
+    test "active unconfirmed mod and sysop users are authorized and record key use" do
+      for {role, key_text} <- [mod: @alternate_ssh_public_key, sysop: public_key_for(:sysop)] do
+        {:ok, user} =
+          AccountsFixtures.user_fixture(%{handle: "pubkey#{role}operator"})
+          |> Accounts.update_role(role)
+
+        key = AccountsFixtures.ssh_key_fixture(user, %{public_key: key_text})
+
+        assert {:ok, :authorized, %User{id: user_id}} = Auth.authorize_session(user)
+        assert user_id == user.id
+        assert {:ok, %User{id: ^user_id}} = Auth.authenticate_by_public_key(key.public_key)
+        assert %SSHKey{last_used_at: %DateTime{}} = Repo.get(SSHKey, key.id)
+      end
+    end
+
+    test "operator role exemption does not override inactive status gates" do
+      for {status, role, handle, key_text} <- [
+            {:pending, :mod, "pendopgate", AccountsFixtures.default_ssh_public_key()},
+            {:suspended, :sysop, "suspdogate", @alternate_ssh_public_key},
+            {:rejected, :mod, "rejopgate", public_key_for(:rejected)}
+          ] do
+        user = user_with_status(status, handle, role)
+        key = AccountsFixtures.ssh_key_fixture(user, %{public_key: key_text})
+
+        assert {:error, ^status} = Auth.authorize_session(user)
+        assert {:error, :not_found} = Auth.authenticate_by_public_key(key.public_key)
+        assert %SSHKey{last_used_at: nil} = Repo.get(SSHKey, key.id)
+      end
     end
 
     test "pending user is matched but not authorized and does not record key use" do
@@ -224,6 +263,10 @@ defmodule Foglet.Accounts.AuthTest do
 
   defp public_key_for(:pending), do: AccountsFixtures.default_ssh_public_key()
   defp public_key_for(:suspended), do: @alternate_ssh_public_key
+
+  defp public_key_for(:sysop),
+    do:
+      "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM6KliZnswt7Nr9W9k6a0z65K8r2MLb4B1W6YnQQ4gjP sysop@example"
 
   defp public_key_for(:rejected),
     do:

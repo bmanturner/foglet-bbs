@@ -7,6 +7,7 @@ defmodule Foglet.Accounts.Auth do
 
   import Ecto.Query, warn: false
 
+  alias Foglet.Accounts
   alias Foglet.Accounts.{SSHKey, User}
   alias FogletBbs.Repo
 
@@ -90,18 +91,21 @@ defmodule Foglet.Accounts.Auth do
   @doc """
   Decide whether a matched public-key user may enter a full session.
 
-  Active + confirmed users are authorized. Active but unconfirmed users are a
-  matched identity that must route to email verification. Pending, rejected,
-  suspended, and deleted users are explicit blocked outcomes.
+  Deleted and inactive users are blocked before any role exemption. Active users
+  share the same email-verification policy as password login: confirmed users,
+  grandfathered regular users, and operator roles are authorized; new active
+  unconfirmed regular users route to verification.
   """
   @spec authorize_session(User.t()) :: session_authorization()
   def authorize_session(%User{deleted_at: deleted_at}) when not is_nil(deleted_at),
     do: {:error, :deleted}
 
-  def authorize_session(%User{status: :active, confirmed_at: %DateTime{}} = user),
-    do: {:ok, :authorized, user}
-
-  def authorize_session(%User{status: :active} = user), do: {:ok, :verify, user}
+  def authorize_session(%User{status: :active} = user) do
+    case Accounts.email_verification_screen(user) do
+      :main_menu -> {:ok, :authorized, user}
+      :verify -> {:ok, :verify, user}
+    end
+  end
 
   def authorize_session(%User{status: status}) when status in [:pending, :rejected, :suspended],
     do: {:error, status}
