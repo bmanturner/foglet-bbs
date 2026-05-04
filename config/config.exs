@@ -32,7 +32,12 @@ config :logger, :default_formatter,
     :user_id,
     :handle,
     :ssh_peer,
-    :replacement
+    :replacement,
+    # FOG-674: SSH/session lifecycle observability — privacy-safe fields only.
+    :other_pid,
+    :peer,
+    :pid,
+    :reason
   ]
 
 # Use Jason for JSON parsing in Phoenix

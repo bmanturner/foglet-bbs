@@ -1,6 +1,8 @@
 defmodule Foglet.Sessions.SessionTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   alias Foglet.Accounts.User
   alias Foglet.Sessions.Preferences
   alias Foglet.Sessions.Session
@@ -171,6 +173,80 @@ defmodule Foglet.Sessions.SessionTest do
       _ = :sys.get_state(pid)
 
       assert [{^pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+    end
+
+    test "registry collision logs a privacy-safe warning and stops the second session",
+         %{user_id: user_id} do
+      # First session owns the registry slot for user_id.
+      {:ok, owner_pid} =
+        start_supervised(
+          {Session, [user_id: user_id, handle: "owner", role: :user]},
+          id: :owner
+        )
+
+      # Second guest session attempts to promote to the same user_id and must
+      # lose. Spawn outside the supervisor so the {:registry_collision, _}
+      # stop reason doesn't crash the test process.
+      Process.flag(:trap_exit, true)
+      {:ok, guest_pid} = Session.start_link(user_id: nil)
+      ref = Process.monitor(guest_pid)
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "intruder", role: :user}
+      ssh_peer = {{127, 0, 0, 1}, 4242}
+      bogus_secret = "ULTRA_SECRET_TOKEN_DO_NOT_LEAK"
+
+      log =
+        capture_log([level: :warning], fn ->
+          :ok =
+            Session.promote_to_user(guest_pid, user, %{
+              ssh_peer: ssh_peer,
+              # Pretend the audit map carries something sensitive — the
+              # FOG-674 warning line must NOT echo it.
+              session_secret: bogus_secret
+            })
+
+          assert_receive {:DOWN, ^ref, :process, ^guest_pid, {:registry_collision, ^user_id}},
+                         1_000
+        end)
+
+      collision_line =
+        log
+        |> String.split("\n")
+        |> Enum.find(&String.contains?(&1, "registry collision"))
+
+      assert is_binary(collision_line), "expected a `registry collision` warning line in: #{log}"
+      assert collision_line =~ "user_id=#{user_id}"
+      assert collision_line =~ "ssh_peer="
+      assert collision_line =~ "other_pid="
+      assert collision_line =~ inspect(owner_pid)
+      refute collision_line =~ bogus_secret
+      refute collision_line =~ "session_secret"
+
+      # Owner session is undisturbed and still registered.
+      assert [{^owner_pid, _}] = Registry.lookup(Foglet.Sessions.Registry, user_id)
+    end
+
+    test "registry collision falls back to ssh_peer=unknown when audit lacks the key",
+         %{user_id: user_id} do
+      {:ok, _owner_pid} =
+        start_supervised(
+          {Session, [user_id: user_id, handle: "owner", role: :user]},
+          id: :owner
+        )
+
+      Process.flag(:trap_exit, true)
+      {:ok, guest_pid} = Session.start_link(user_id: nil)
+      ref = Process.monitor(guest_pid)
+
+      user = %Foglet.Accounts.User{id: user_id, handle: "intruder", role: :user}
+
+      log =
+        capture_log(fn ->
+          :ok = Session.promote_to_user(guest_pid, user, %{})
+          assert_receive {:DOWN, ^ref, :process, ^guest_pid, _}, 1_000
+        end)
+
+      assert log =~ "ssh_peer=unknown"
     end
 
     test "promote_to_user/3 accepts audit metadata and reaches the same user state",

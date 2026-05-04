@@ -210,15 +210,44 @@ defmodule Foglet.Sessions.Session do
         {:noreply, state}
 
       {:error, {:already_registered, other_pid}} ->
-        Logger.error(
-          "Session promote_to_user: Registry slot for user_id=#{user.id} held by " <>
-            "pid=#{inspect(other_pid)}; refusing promotion to keep one-session invariant"
+        # FOG-674: privacy-safe one-session invariant violation log. Internal
+        # ids only (user_id, ssh_peer host:port, registered pid) — never the
+        # full audit map (carries replacement context not meant for logs) or
+        # any auth/key material. Level is `warn`: the `{:stop, …}` below
+        # already drives the loud teardown; this line is the
+        # invariant-violation marker, not a crash report.
+        Logger.warning("Session promote_to_user: registry collision",
+          event: :session_registry_collision,
+          user_id: user.id,
+          ssh_peer: format_ssh_peer(Map.get(audit, :ssh_peer)),
+          other_pid: inspect(other_pid)
         )
 
         # Stop loudly so the SSH channel tears down the orphan rather than
         # leaving a half-promoted session in memory.
         {:stop, {:registry_collision, user.id}, state}
     end
+  end
+
+  @impl true
+  # FOG-674: orderly stops are intentionally silent — they are not failures
+  # and would otherwise spam logs on every disconnect.
+  def terminate(:normal, _state), do: :ok
+  def terminate(:shutdown, _state), do: :ok
+  def terminate({:shutdown, _}, _state), do: :ok
+
+  def terminate(reason, state) do
+    # FOG-674: log abnormal session exits with privacy-safe context only.
+    # `sanitized_reason/1` reduces tagged tuples to their tag atom so embedded
+    # payloads (tokens, audit maps, key material) cannot leak through reasons.
+    Logger.warning("Session terminating abnormally",
+      event: :session_terminated_abnormal,
+      session_pid: self(),
+      user_id: state.user_id,
+      reason: sanitized_reason(reason)
+    )
+
+    :ok
   end
 
   @impl true
@@ -231,6 +260,19 @@ defmodule Foglet.Sessions.Session do
 
     {:stop, :normal, state}
   end
+
+  # FOG-674: render the audit ssh_peer as a logger-safe string. Missing
+  # entries collapse to the literal "unknown" string per the FOG-674 spec.
+  defp format_ssh_peer(nil), do: "unknown"
+  defp format_ssh_peer(peer) when is_binary(peer), do: peer
+  defp format_ssh_peer(peer), do: inspect(peer)
+
+  # FOG-674: collapse exit reasons to a single safe atom for logging. Tagged
+  # tuples (e.g. `{:registry_collision, user_id}`) keep only the tag; orderly
+  # stops are short-circuited above before this is reached.
+  defp sanitized_reason(reason) when is_atom(reason), do: reason
+  defp sanitized_reason(tuple) when is_tuple(tuple) and tuple_size(tuple) > 0, do: elem(tuple, 0)
+  defp sanitized_reason(_), do: :unknown
 
   defp preference_snapshot(%Foglet.Accounts.User{} = user), do: Preferences.from_user(user)
 

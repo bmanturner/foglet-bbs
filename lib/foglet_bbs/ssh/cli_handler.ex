@@ -128,6 +128,21 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_msg({:door_exited, _pid, _door_id, _reason, _status}, state), do: {:ok, state}
 
+  # FOG-674: catch unmatched linked-process EXITs so abnormal failures are
+  # observable. Privacy-safe context only: peer host:port, the involved pid,
+  # and the sanitized reason tag — no auth payloads, no channel data.
+  @impl true
+  def handle_msg({:EXIT, pid, reason}, state) when reason not in [:normal, :shutdown] do
+    Logger.warning("[SSH.CLIHandler] Unexpected linked exit",
+      event: :ssh_cli_handler_linked_exit,
+      pid: inspect(pid),
+      peer: inspect(state.peer),
+      reason: sanitize_reason(reason)
+    )
+
+    {:ok, state}
+  end
+
   @impl true
   def handle_msg(_msg, state), do: {:ok, state}
 
@@ -247,10 +262,33 @@ defmodule Foglet.SSH.CLIHandler do
   def handle_ssh_msg(_msg, state), do: {:ok, state}
 
   @impl true
-  def terminate(_reason, state) do
+  # FOG-674: orderly channel teardown is intentionally silent.
+  def terminate(:normal, state), do: terminate_cleanup(state)
+  def terminate(:shutdown, state), do: terminate_cleanup(state)
+  def terminate({:shutdown, _}, state), do: terminate_cleanup(state)
+
+  def terminate(reason, state) do
+    # FOG-674: log abnormal channel teardown with privacy-safe context only —
+    # peer host:port + sanitized reason tag. Never raw key material, password
+    # attempts, or channel data.
+    Logger.warning("[SSH.CLIHandler] Channel terminating abnormally",
+      event: :ssh_cli_handler_terminated_abnormal,
+      peer: inspect(state.peer),
+      reason: sanitize_reason(reason)
+    )
+
+    terminate_cleanup(state)
+  end
+
+  defp terminate_cleanup(state) do
     _ = cleanup(state, close_channel: false)
     :ok
   end
+
+  # FOG-674: collapse channel-teardown reasons to a single safe atom.
+  defp sanitize_reason(reason) when is_atom(reason), do: reason
+  defp sanitize_reason(tuple) when is_tuple(tuple) and tuple_size(tuple) > 0, do: elem(tuple, 0)
+  defp sanitize_reason(_), do: :unknown
 
   # Internal channel-up implementation. Exposed via channel_up_for_test/4 so
   # focused unit tests can drive the over-limit and rate-limit branches with a
