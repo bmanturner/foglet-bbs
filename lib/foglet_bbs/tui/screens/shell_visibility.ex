@@ -15,8 +15,8 @@ defmodule Foglet.TUI.Screens.ShellVisibility do
   rules are still a tampering/EoP vector via drift). Real actor-aware
   authorization is deferred to Phase 1.
 
-  See also `Foglet.TUI.Screens.Shared.InvitesSurface.visible?/2` for the
-  canonical policy/role matrix used by `invites_visible?/2`.
+  See also `Foglet.TUI.Screens.Shared.InvitesSurface.visible?/3` for the
+  canonical registration-mode + policy + role matrix used by `invites_visible?/2`.
   """
 
   alias Foglet.TUI.Screens.Shared.InvitesSurface
@@ -53,21 +53,23 @@ defmodule Foglet.TUI.Screens.ShellVisibility do
   def sysop_visible?(_), do: false
 
   @doc """
-  Returns `true` when registration mode, invite policy, and role permit invite generation.
+  Returns `true` when registration mode, invite policy, and user role permit the
+  INVITES UI.
 
-  Resolves `session_context[:registration_mode]` and
-  `session_context[:invite_code_generators]`; falls back to `Foglet.Config` when
-  either key is absent. If a config read fails (ETS not seeded, DB unavailable),
-  treats the missing value as `nil`, causing `InvitesSurface.visible?/3` to hide
-  the surface as the safe default.
+  `registration_mode == "invite_only"` is required. Open and sysop-approved
+  registration modes do not ask users for invite codes, so the INVITES tab is
+  hidden on Account, Moderation, and Sysop surfaces. Sysops still manage these
+  site settings through the Sysop SITE/config path; the list/generate/revoke UI
+  is an invite-code onboarding workflow, not a general account workflow.
 
-  Open registration deliberately hides INVITES for every role. Sysops can still
-  manage registration/invite settings through operator configuration surfaces;
-  this shared INVITES surface is for invite-code workflows in invite-backed modes.
+  Resolves `registration_mode` and `invite_code_generators` from the session
+  context first, then falls back to `Foglet.Config`. If a config read fails (ETS
+  not seeded, DB unavailable), treats that value as `nil`, which hides INVITES
+  for every role (safe default).
 
-  Delegates the role + policy + mode decision to
-  `Foglet.TUI.Screens.Shared.InvitesSurface.visible?/3` (single source of truth,
-  Plan 02). See that module for the full matrix.
+  Delegates the final decision to
+  `Foglet.TUI.Screens.Shared.InvitesSurface.visible?/3` (single source of truth).
+  See that module for the full mode/policy/role matrix.
   """
   @spec invites_visible?(map() | nil, map() | nil) :: boolean()
   def invites_visible?(user, session_context) do

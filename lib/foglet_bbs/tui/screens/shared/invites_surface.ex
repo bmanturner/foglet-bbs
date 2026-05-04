@@ -4,18 +4,17 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   shells (D-06, D-07).
 
   Visibility rules (D-02, research Pattern 4; FOG-615):
-    * Open registration hides this surface for every role. The Sysop SITE
-      configuration path remains the operator place to audit/change registration
-      settings; INVITES is an invite-code workflow, not normal Open-mode account
-      navigation.
-    * `:sysop` — visible in invite-backed modes when invite generation is configured
-    * `:mod`   — visible in invite-backed modes when `invite_code_generators == "mods"`
-    * `:user`  — visible in invite-backed modes when `invite_code_generators == "any_user"`
+    * `registration_mode == "invite_only"` is required for this UI to be shown.
+    * `:sysop` — visible in invite-only mode for operator invite management.
+    * `:mod`   — visible in invite-only mode when `invite_code_generators == "mods"`.
+    * `:user`  — visible in invite-only mode when `invite_code_generators == "any_user"`.
+    * `"open"` and `"sysop_approved"` modes hide INVITES everywhere; those
+      onboarding modes do not ask a normal user for an invite code.
     * otherwise — hidden
 
   Pitfall 3 (RESEARCH.md): menu visibility is NOT authorization — this predicate
-  controls UI rendering only. Real authz enforcement remains in `Foglet.Accounts`
-  and `Foglet.Authorization`.
+  controls UI rendering only. Real authz enforcement remains in the Accounts/
+  Invites domain actions even if UI visibility drifts.
 
   Phase 25 Plan 03: listing renders through `Display.ConsoleTable` with selection
   ownership inside the widget (D-05). The bespoke SelectionList+ListRow render
@@ -39,22 +38,12 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   @spec default_state() :: InvitesState.t()
   def default_state, do: InvitesState.new()
 
-  @spec visible?(map() | nil, String.t() | nil) :: boolean()
-  def visible?(user, policy), do: visible?(user, policy, "invite_only")
-
   @spec visible?(map() | nil, String.t() | nil, String.t() | nil) :: boolean()
-  def visible?(_user, _policy, "open"), do: false
   def visible?(nil, _policy, _registration_mode), do: false
-
-  def visible?(%{role: :sysop}, policy, mode) when mode in ["invite_only", "sysop_approved"],
-    do: policy in ["sysop_only", "mods", "any_user"]
-
-  def visible?(%{role: :mod}, "mods", mode) when mode in ["invite_only", "sysop_approved"],
-    do: true
-
-  def visible?(%{role: :user}, "any_user", mode) when mode in ["invite_only", "sysop_approved"],
-    do: true
-
+  def visible?(_user, _policy, mode) when mode != "invite_only", do: false
+  def visible?(%{role: :sysop}, _policy, "invite_only"), do: true
+  def visible?(%{role: :mod}, "mods", "invite_only"), do: true
+  def visible?(%{role: :user}, "any_user", "invite_only"), do: true
   def visible?(_, _, _), do: false
 
   @spec render(map(), Theme.t()) :: any()

@@ -2735,7 +2735,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           session_context: %{
             theme: Foglet.TUI.Theme.resolve(:gray),
             theme_id: "gray",
-            registration_mode: "invite_only",
+            registration_mode: "open",
             invite_code_generators: "sysop_only"
           },
           terminal_size: {width, height},
@@ -2799,10 +2799,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :moderation,
           current_user: user,
-          session_context: %{
-            registration_mode: "invite_only",
-            invite_code_generators: "sysop_only"
-          },
+          session_context: %{registration_mode: "open", invite_code_generators: "sysop_only"},
           terminal_size: {width, height},
           screen_state: %{moderation: Moderation.State.new()}
         }
@@ -2852,10 +2849,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :sysop,
           current_user: user,
-          session_context: %{
-            registration_mode: "invite_only",
-            invite_code_generators: "sysop_only"
-          },
+          session_context: %{registration_mode: "open", invite_code_generators: "sysop_only"},
           terminal_size: {width, height},
           screen_state: %{sysop: Sysop.State.new(current_user: user)}
         }

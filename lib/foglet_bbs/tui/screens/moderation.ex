@@ -23,7 +23,8 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   CONTEXT.md D-10 locks the base Moderation tab set to exactly the five
   listed above. Phase 4 appends the shared INVITES surface when
-  `invite_code_generators == "mods"` and the current actor is a moderator.
+  `registration_mode == "invite_only"`, `invite_code_generators == "mods"`,
+  and the current actor is a moderator.
   """
 
   @behaviour Foglet.TUI.Screen
