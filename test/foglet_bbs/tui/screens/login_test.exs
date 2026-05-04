@@ -369,7 +369,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "email")
 
       {:update, new_state, []} = update_login(%{key: :char, char: "F"}, base_state())
-      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_recovery
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :identifier
     end
 
@@ -377,7 +377,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       Config.put!("delivery_mode", "no_email")
 
       {:update, new_state, []} = update_login(%{key: :char, char: "F"}, base_state())
-      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_request
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_recovery
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :identifier
     end
 
@@ -852,7 +852,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
       {:update, new_state, []} = update_login(%{key: :char, char: "T"}, base_state())
 
-      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_recovery
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
     end
 
@@ -904,14 +904,14 @@ defmodule Foglet.TUI.Screens.LoginTest do
     test "'T' from menu enters :reset_consume sub-state with focus on :token" do
       {:update, new_state, []} = update_login(%{key: :char, char: "T"}, base_state())
 
-      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_recovery
       assert get_in(new_state, [:screen_state, :login, :focused_field]) == :token
     end
 
     test "'t' lowercase from menu also enters :reset_consume" do
       {:update, new_state, []} = update_login(%{key: :char, char: "t"}, base_state())
 
-      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_consume
+      assert get_in(new_state, [:screen_state, :login, :sub]) == :reset_recovery
     end
 
     test "menu advertises Enter reset token in keys_for output" do

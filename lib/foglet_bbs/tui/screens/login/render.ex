@@ -19,6 +19,11 @@ defmodule Foglet.TUI.Screens.Login.Render do
   @login_panel_width 40
   @login_panel_height 8
   @login_input_display_width 25
+  @recovery_pane_width 46
+  @recovery_pane_height 7
+  @recovery_pane_inner_width @recovery_pane_width - 4
+  @recovery_request_input_width 32
+  @recovery_token_input_width 22
 
   @spec render(map(), Context.t()) :: any()
   def render(local_state, %Context{} = context) do
@@ -286,7 +291,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
         "Request reset token",
         active == :request,
         theme,
-        render_reset_request(state, theme, active == :request)
+        render_reset_request(state, theme, active == :request, @recovery_pane_inner_width)
       )
 
     token_pane =
@@ -294,7 +299,13 @@ defmodule Foglet.TUI.Screens.Login.Render do
         "Use reset token",
         active == :token,
         theme,
-        render_reset_consume(state, theme, active == :token)
+        render_reset_consume(
+          state,
+          theme,
+          active == :token,
+          @recovery_pane_inner_width,
+          @recovery_token_input_width
+        )
       )
 
     body =
@@ -325,8 +336,8 @@ defmodule Foglet.TUI.Screens.Login.Render do
         title_attrs: %{fg: if(active?, do: theme.accent.fg, else: theme.title.fg)},
         border: :single,
         border_fg: border_fg,
-        width: 46,
-        height: 9
+        width: @recovery_pane_width,
+        height: @recovery_pane_height
       },
       children: [content]
     }
@@ -334,9 +345,11 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   defp render_reset_request(state, theme), do: render_reset_request(state, theme, true)
 
-  defp render_reset_request(state, theme, focused?) do
+  defp render_reset_request(state, theme, focused?),
+    do: render_reset_request(state, theme, focused?, reset_wrap_width(state))
+
+  defp render_reset_request(state, theme, focused?, wrap_width) do
     login_ss = LoginState.get(state)
-    wrap_width = reset_wrap_width(state)
 
     error_items =
       case Map.get(login_ss, :error) do
@@ -359,8 +372,9 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
     column style: %{gap: 0} do
       [
-        text(
+        wrapped_text_rows(
           "Enter your account email. If it matches a user here, reset instructions will be sent.",
+          wrap_width,
           fg: theme.dim.fg
         ),
         row style: %{gap: 0} do
@@ -368,21 +382,27 @@ defmodule Foglet.TUI.Screens.Login.Render do
             text("Email: ", fg: theme.accent.fg, style: [:bold]),
             TextInput.render(login_ss.identifier_input,
               bordered: false,
+              cap_display_width: @recovery_request_input_width,
               focused: focused?,
               theme: theme
             )
           ]
         end
-      ] ++ error_items ++ message_items
+      ]
+      |> List.flatten()
+      |> Kernel.++(error_items)
+      |> Kernel.++(message_items)
     end
   end
 
   defp render_reset_consume(state, theme), do: render_reset_consume(state, theme, true)
 
-  defp render_reset_consume(state, theme, pane_active?) do
+  defp render_reset_consume(state, theme, pane_active?),
+    do: render_reset_consume(state, theme, pane_active?, reset_wrap_width(state), nil)
+
+  defp render_reset_consume(state, theme, pane_active?, wrap_width, input_width) do
     login_ss = LoginState.get(state)
     focused = if pane_active?, do: Map.get(login_ss, :focused_field, :token), else: nil
-    wrap_width = reset_wrap_width(state)
 
     token_label = field_label("Token:           ", focused == :token, theme)
     password_label = field_label("New password:    ", focused == :password, theme)
@@ -402,38 +422,56 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
     column style: %{gap: 0} do
       [
-        text("Paste your reset token, then choose a new password.", fg: theme.dim.fg),
+        wrapped_text_rows(
+          "Paste your reset token, then choose a new password.",
+          wrap_width,
+          fg: theme.dim.fg
+        ),
         row style: %{gap: 0} do
           [
             token_label,
-            TextInput.render(login_ss.token_input,
-              bordered: false,
-              focused: focused == :token,
-              theme: theme
+            TextInput.render(
+              login_ss.token_input,
+              text_input_opts(
+                bordered: false,
+                cap_display_width: input_width,
+                focused: focused == :token,
+                theme: theme
+              )
             )
           ]
         end,
         row style: %{gap: 0} do
           [
             password_label,
-            TextInput.render(login_ss.password_input,
-              bordered: false,
-              focused: focused == :password,
-              theme: theme
+            TextInput.render(
+              login_ss.password_input,
+              text_input_opts(
+                bordered: false,
+                cap_display_width: input_width,
+                focused: focused == :password,
+                theme: theme
+              )
             )
           ]
         end,
         row style: %{gap: 0} do
           [
             confirmation_label,
-            TextInput.render(login_ss.password_confirmation_input,
-              bordered: false,
-              focused: focused == :password_confirmation,
-              theme: theme
+            TextInput.render(
+              login_ss.password_confirmation_input,
+              text_input_opts(
+                bordered: false,
+                cap_display_width: input_width,
+                focused: focused == :password_confirmation,
+                theme: theme
+              )
             )
           ]
         end
-      ] ++ error_items
+      ]
+      |> List.flatten()
+      |> Kernel.++(error_items)
     end
   end
 
@@ -442,6 +480,13 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   defp field_label(label, false, theme),
     do: text(label <> " ", fg: theme.primary.fg)
+
+  defp text_input_opts(opts) do
+    case Keyword.fetch!(opts, :cap_display_width) do
+      nil -> Keyword.delete(opts, :cap_display_width)
+      _width -> opts
+    end
+  end
 
   defp wrapped_text_rows(text_value, width, opts) when is_binary(text_value) do
     text_value

@@ -47,7 +47,7 @@ defmodule Foglet.TUI.RenderFixtures do
   )a
 
   @substates %{
-    login: ~w(login_form reset_request reset_consume suspended rejected pending)a,
+    login: ~w(login_form reset_recovery reset_request reset_consume suspended rejected pending)a,
     register: ~w(invite_only)a,
     verify: ~w(resend_cooldown unverified)a,
     main_menu: ~w(suspended rejected pending unverified)a,
@@ -315,6 +315,15 @@ defmodule Foglet.TUI.RenderFixtures do
       |> put_text_input(:identifier_input, "alice@example.com")
       |> Map.put(:message, "If the account exists, reset instructions have been sent.")
       |> Map.put(:message_category, :info)
+
+    App.put_screen_state(state, :login, ss)
+  end
+
+  defp seed_substate(state, :login, :reset_recovery) do
+    ss =
+      Login.State.reset_recovery(:request)
+      |> put_text_input(:identifier_input, "alice@example.com")
+      |> put_text_input(:token_input, "RESET-TOKEN")
 
     App.put_screen_state(state, :login, ss)
   end
