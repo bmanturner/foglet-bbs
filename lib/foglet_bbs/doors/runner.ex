@@ -17,6 +17,8 @@ defmodule Foglet.Doors.Runner do
 
   use GenServer, restart: :temporary
 
+  require Logger
+
   alias Foglet.Doors.{Manifest, PTYAdapter}
 
   Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
@@ -220,6 +222,7 @@ defmodule Foglet.Doors.Runner do
          }}
 
       {:error, reason} ->
+        log_door_failure(state, :launch_failed, reason, nil)
         {:stop, {:door_launch_failed, reason}, complete(state, {:error, reason}, nil)}
     end
   end
@@ -243,6 +246,7 @@ defmodule Foglet.Doors.Runner do
         {:stop, :normal, complete(state, reason, status)}
 
       {:error, reason} ->
+        log_door_failure(state, :helper_failed, reason, nil)
         {:stop, {:door_helper_failed, reason}, complete(state, {:error, reason}, nil)}
 
       :ignore ->
@@ -326,7 +330,52 @@ defmodule Foglet.Doors.Runner do
   defp pty_backend(%{pty_adapter: %PTYAdapter{} = adapter}), do: PTYAdapter.backend(adapter)
   defp pty_backend(_state), do: nil
 
+  defp log_door_exit(%{manifest: %Manifest{runtime: :external_pty}} = state, :normal, 0),
+    do: log_door_event(:info, state, :exited, :normal, 0)
+
+  defp log_door_exit(%{manifest: %Manifest{runtime: :external_pty}} = state, :disconnect, status),
+    do: log_door_event(:info, state, :exited, :disconnect, status)
+
+  defp log_door_exit(%{manifest: %Manifest{runtime: :external_pty}} = state, reason, status),
+    do: log_door_failure(state, :exited, reason, status)
+
+  defp log_door_exit(_state, _reason, _status), do: :ok
+
+  defp log_door_failure(
+         %{manifest: %Manifest{runtime: :external_pty}} = state,
+         event,
+         reason,
+         status
+       ),
+       do: log_door_event(:error, state, event, reason, status)
+
+  defp log_door_failure(_state, _event, _reason, _status), do: :ok
+
+  defp log_door_event(level, state, event, reason, status) do
+    Logger.log(level, fn ->
+      "door runtime event #{inspect(door_log_context(state, event, reason, status))}"
+    end)
+
+    :ok
+  end
+
+  defp door_log_context(state, event, reason, status) do
+    %{
+      door_id: state.manifest.id,
+      runtime: state.manifest.runtime,
+      event: event,
+      command: state.manifest.command,
+      cwd: state.manifest.working_dir,
+      exit_status: status,
+      reason: inspect(reason),
+      pty_backend: pty_backend(state),
+      os_pid: state.os_pid
+    }
+  end
+
   defp complete(state, reason, status) do
+    log_door_exit(state, reason, status)
+
     state = %{
       state
       | status: :exited,

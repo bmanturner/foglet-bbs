@@ -58,6 +58,18 @@ defmodule Foglet.DoorsTest do
     end
   end
 
+  describe "list_manifests/0" do
+    test "resolves the built-in external echo manifest from application priv" do
+      assert external_echo = Enum.find(Doors.list_manifests(), &(&1.id == "external-echo"))
+      assert {:ok, priv_dir} = priv_dir()
+
+      assert external_echo.command == Path.join(priv_dir, "doors/demo/external_echo.sh")
+      assert external_echo.working_dir == Path.join(priv_dir, "doors/demo")
+      assert File.regular?(external_echo.command)
+      assert executable?(external_echo.command)
+    end
+  end
+
   describe "launch audit redaction" do
     test "redacts non-allowlisted environment metadata and keeps only safe status fields" do
       {:ok, manifest} = Doors.validate_manifest(@valid_manifest)
@@ -101,5 +113,19 @@ defmodule Foglet.DoorsTest do
 
   defp stringify(map) do
     Map.new(map, fn {key, value} -> {to_string(key), value} end)
+  end
+
+  defp priv_dir do
+    case :code.priv_dir(:foglet_bbs) do
+      path when is_list(path) -> {:ok, List.to_string(path)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp executable?(path) do
+    case File.stat(path) do
+      {:ok, %{mode: mode}} -> Bitwise.band(mode, 0o111) != 0
+      _other -> false
+    end
   end
 end
