@@ -182,6 +182,23 @@ To add a config key:
 Secrets stay in environment / runtime config — not in the DB-backed
 `configuration` table.
 
+## User-facing copy workflow
+
+Read `docs/VOICE_AND_TONE.md` before adding or changing labels, prompts,
+empty states, denials, confirmations, operator task help, or public docs.
+
+For every new user-facing feature, make an explicit guest decision:
+
+1. Can guests see the surface at all?
+2. If visible, is it read-only or can it mutate state?
+3. Is the denial copy short, useful, and free of implementation details?
+4. Is the backend mutation protected even if the UI hides the action?
+5. Are tests or render evidence covering the guest path?
+
+Guest Mode is a deliberate read-only product state, not a synonym for `nil`
+user. Do not rely on copy to explain a confusing interaction; prefer a clearer
+terminal-native flow, then use copy to confirm what the user can do.
+
 ## TUI / Raxol workflow
 
 Read `docs/raxol/getting-started/QUICKSTART.md` and

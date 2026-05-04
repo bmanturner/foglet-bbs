@@ -105,10 +105,10 @@ Do not make screens infer intentional guest browsing solely from `current_user =
 ### Login menu
 
 Enabled state:
-- Visible option: `G Guest`.
+- Visible option: `[G] Visit as guest`.
 - Keyboard: `G` / `g` starts or continues an anonymous guest session and navigates to `:main_menu`.
 - Existing keys remain: `L Login`, `R Register` when registration is enabled, `F Forgot password`, `T Enter reset token`.
-- Keybar order recommendation at normal width: `L Login`, `G Guest`, `R Register`, `T Reset token`, `F Forgot password`.
+- Keybar order recommendation at normal width: `L Login`, `G Guest`, `R Register`, `T Reset token`, `F Forgot password`. If the menu body has room, use the fuller label `Visit as guest`; if only the compact keybar is available, `G Guest` is acceptable.
 - If registration is disabled, hide `R` but keep `G` when guest mode is enabled.
 
 Disabled state:
@@ -140,8 +140,7 @@ Guest-hidden destinations/actions:
 
 Guest state indicator:
 - Main body should include a compact read-only note in the right panel where oneliners normally appear, not a modal on entry.
-- Suggested draft copy for implementation/content review: `Browsing as guest — read-only. Log in to post, chat, or play games.`
-- Content Designer owns final shipped wording.
+- Final copy: `Guest mode: read-only. Read public boards, or log in to post and play.`
 
 Layout/composition:
 - Preserve the two-panel Main Menu structure at 80x24 so guest mode does not feel like a broken or lesser route.
@@ -172,9 +171,9 @@ Modal composition:
 - Body wraps inside modal borders.
 - Keybar/actions: `Enter OK`, `Esc Back` or existing modal-dismiss equivalents.
 
-Suggested draft copy for implementation/content review:
+Final copy:
 - Title: `Login Required`
-- Body: `Door games are for registered users. Log in to play.`
+- Body: `Door games are for logged-in members. Log in to play.`
 
 ### Board List / Board Screen / Thread List
 
@@ -217,7 +216,7 @@ Composition:
 - Transcript region remains the primary region.
 - Sidebar anchoring rules remain unchanged: `>=80` sidebar available, `60-79` collapsed by default/toggleable, `<60` transcript only.
 - For guests, composer row becomes a read-only note in the same composer-height slot to avoid vertical jumping when authenticated users and guests switch flows.
-- Suggested draft copy for implementation/content review: `Guest view — log in to chat.`
+- Final copy: `Guest view — log in to chat.`
 - At cramped width, clip/wrap this note inside the transcript/composer region; do not add a second keybar group.
 
 Keyboard:

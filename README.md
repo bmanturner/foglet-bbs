@@ -174,6 +174,8 @@ mix test
 
 For deeper context on namespaces, persistence invariants, authorization scopes, SSH/TUI ownership, and workflow conventions, read `docs/DEVELOPMENT.md` before non-trivial changes.
 
+For user-facing words, read `docs/VOICE_AND_TONE.md`. It defines Foglet's vocabulary, denial style, Guest Mode copy source, and contributor copy checklist.
+
 ## License
 
 Copyright 2026 Brendan Turner
