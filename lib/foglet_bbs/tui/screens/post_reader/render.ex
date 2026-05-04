@@ -7,7 +7,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   flushing, and render-cache mutation.
   """
 
-  alias Foglet.TUI.Context
+  alias Foglet.TUI.{Context, Guest}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.Theme
@@ -38,7 +38,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       },
       %{
         label: "Actions",
-        commands: [reply_command(reply_state)]
+        commands: action_commands(reply_state, context)
       },
       %{
         label: "System",
@@ -64,6 +64,10 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       _single_or_long ->
         base_commands ++ [%{key: "J/K", label: "Scroll", priority: 10}]
     end
+  end
+
+  defp action_commands(reply_state, %Context{} = context) do
+    if Guest.guest?(context), do: [], else: [reply_command(reply_state)]
   end
 
   defp reply_command(:locked), do: %{key: "R", label: "Reply (locked)", priority: 5}
