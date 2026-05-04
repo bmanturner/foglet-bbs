@@ -241,7 +241,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     # focused field; Tab/Shift+Tab own field movement.
     footer =
       text(
-        truncate("[Tab] Next  [Shift+Tab] Previous  [Ctrl+S] Save  [Enter] Save", width),
+        truncate("[Tab] Next [Shift+Tab] Previous [Ctrl+S] Save [Enter] Save", width),
         fg: theme.dim.fg
       )
 

@@ -170,7 +170,7 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
           test "at #{width}x#{height} save footer sentinel renders within bounds" do
             width = @width
             height = @height
-            footer_text = "[Tab] Next  [Shift+Tab] Previous  [Ctrl+S] Save  [Enter] Save"
+            footer_text = "[Tab] Next [Shift+Tab] Previous [Ctrl+S] Save [Enter] Save"
 
             # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
