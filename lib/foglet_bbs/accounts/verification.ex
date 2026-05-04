@@ -152,7 +152,11 @@ defmodule Foglet.Accounts.Verification do
     case Foglet.Config.delivery_mode() do
       "email" ->
         with {:ok, code} <- build_verify_code(user),
-             {:ok, _delivery} <- Foglet.Mailer.deliver(Email.verification_code(user, code)) do
+             {:ok, _delivery} <-
+               Foglet.Mailer.deliver_transactional(Email.verification_code(user, code),
+                 mail_type: :verification_code,
+                 recipient_user_id: user.id
+               ) do
           {:ok, :attempted}
         else
           {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
@@ -184,7 +188,12 @@ defmodule Foglet.Accounts.Verification do
       valid_row != nil and valid_row.user_id == user.id ->
         Repo.transact(fn ->
           with {:ok, confirmed} <- user |> User.confirm_changeset() |> Repo.update() do
-            Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["email_verify"]))
+            delete_user_tokens_for_cleanup(
+              user,
+              ["email_verify"],
+              "verification_token_cleanup_failed"
+            )
+
             {:ok, confirmed}
           end
         end)
@@ -230,7 +239,7 @@ defmodule Foglet.Accounts.Verification do
   def reset_user_password(%User{} = user, attrs) do
     Repo.transact(fn ->
       with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
-        Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
+        delete_user_tokens_for_cleanup(user, ["reset_password"], "reset_token_cleanup_failed")
         {:ok, updated}
       end
     end)
@@ -314,7 +323,7 @@ defmodule Foglet.Accounts.Verification do
     with {:ok, updated} <- user |> User.password_changeset(attrs) |> Repo.update() do
       # Defense in depth: drop any other outstanding reset tokens for this
       # user so nothing left over can be replayed.
-      Repo.delete_all(UserToken.by_user_and_contexts_query(user, ["reset_password"]))
+      delete_user_tokens_for_cleanup(user, ["reset_password"], "reset_token_cleanup_failed")
       {:ok, updated}
     end
   end
@@ -374,7 +383,12 @@ defmodule Foglet.Accounts.Verification do
 
     case Repo.insert(token_struct) do
       {:ok, _token} ->
-        _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
+        _ =
+          Foglet.Mailer.deliver_transactional(Email.password_reset(user, raw_token),
+            mail_type: :password_reset,
+            recipient_user_id: user.id
+          )
+
         :ok
 
       {:error, %Ecto.Changeset{} = changeset} ->
@@ -392,5 +406,23 @@ defmodule Foglet.Accounts.Verification do
 
         :ok
     end
+  end
+
+  defp delete_user_tokens_for_cleanup(%User{} = user, contexts, op) do
+    cleanup_repo().delete_all(UserToken.by_user_and_contexts_query(user, contexts))
+  rescue
+    exception ->
+      log_token_cleanup_failure(user, op, exception)
+      reraise exception, __STACKTRACE__
+  end
+
+  defp cleanup_repo do
+    Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo, Repo)
+  end
+
+  defp log_token_cleanup_failure(%User{id: user_id}, op, exception) do
+    Logger.warning(
+      "account_token_cleanup_failed op=#{op} user_id=#{user_id} reason=#{inspect(exception)}"
+    )
   end
 end

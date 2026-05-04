@@ -19,6 +19,8 @@ defmodule Foglet.Accounts do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
   alias Foglet.QueryHelpers
 
   alias Foglet.Accounts.{Email, Invite, RedemptionThrottle, SSHKey, User, UserToken}
@@ -135,6 +137,7 @@ defmodule Foglet.Accounts do
         end
 
       {:error, :throttled} ->
+        Logger.warning("account_invite_redemption_throttled op=invite_redemption_throttled")
         {:error, :invalid_invite_code}
     end
   end
@@ -416,7 +419,13 @@ defmodule Foglet.Accounts do
         |> QueryHelpers.not_deleted()
         |> Repo.all()
         |> Enum.each(fn sysop ->
-          _ = Mailer.deliver(Email.pending_approval_notification(sysop, pending_user))
+          _ =
+            Mailer.deliver_transactional(Email.pending_approval_notification(sysop, pending_user),
+              mail_type: :pending_approval_notification,
+              recipient_user_id: sysop.id,
+              related_user_id: pending_user.id
+            )
+
           :ok
         end)
 
@@ -426,19 +435,23 @@ defmodule Foglet.Accounts do
   end
 
   defp deliver_status_transition_notification(%User{} = user, :pending, :active) do
-    deliver_status_email(user, &Email.approval_notification/1)
+    deliver_status_email(user, :approval_notification, &Email.approval_notification/1)
   end
 
   defp deliver_status_transition_notification(%User{} = user, :pending, :rejected) do
-    deliver_status_email(user, &Email.rejection_notification/1)
+    deliver_status_email(user, :rejection_notification, &Email.rejection_notification/1)
   end
 
   defp deliver_status_transition_notification(_user, _from, _to), do: :not_applicable
 
-  defp deliver_status_email(%User{} = user, build_email) when is_function(build_email, 1) do
+  defp deliver_status_email(%User{} = user, mail_type, build_email)
+       when is_function(build_email, 1) do
     case Config.delivery_mode() do
       "email" ->
-        case Mailer.deliver(build_email.(user)) do
+        case Mailer.deliver_transactional(build_email.(user),
+               mail_type: mail_type,
+               recipient_user_id: user.id
+             ) do
           {:ok, _delivery} -> :attempted
           {:error, reason} -> {:failed, reason}
         end
@@ -465,7 +478,7 @@ defmodule Foglet.Accounts do
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def delete_user(%User{} = user) do
     Repo.transact(fn ->
-      Repo.delete_all(UserToken.by_user_and_contexts_query(user, :all))
+      delete_user_tokens_for_cleanup(user, :all, "user_delete_token_cleanup_failed")
       Repo.delete_all(from(k in SSHKey, where: k.user_id == ^user.id))
 
       # Bump `updated_at` on every rewritten post so audit trails / change
@@ -568,6 +581,21 @@ defmodule Foglet.Accounts do
       {:error, _reason} -> {:error, {:ssh_key, "That SSH public key is not valid."}}
       true -> {:error, {:ssh_key, "That SSH public key is already registered."}}
     end
+  end
+
+  defp delete_user_tokens_for_cleanup(%User{} = user, contexts, op) do
+    cleanup_repo().delete_all(UserToken.by_user_and_contexts_query(user, contexts))
+  rescue
+    exception ->
+      Logger.warning(
+        "account_token_cleanup_failed op=#{op} user_id=#{user.id} reason=#{inspect(exception)}"
+      )
+
+      reraise exception, __STACKTRACE__
+  end
+
+  defp cleanup_repo do
+    Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo, Repo)
   end
 
   defp changeset_error?(%Ecto.Changeset{} = changeset, field) do

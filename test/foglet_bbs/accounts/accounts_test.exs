@@ -3,6 +3,10 @@ defmodule FogletBbs.AccountsTest.FailingMailerAdapter do
   def deliver(_email, _config), do: {:error, :forced_failure}
 end
 
+defmodule FogletBbs.AccountsTest.FailingTokenCleanupRepo do
+  def delete_all(_query), do: raise(RuntimeError, "forced cleanup outage")
+end
+
 defmodule Foglet.AccountsTest do
   use FogletBbs.DataCase, async: false
 
@@ -14,6 +18,7 @@ defmodule Foglet.AccountsTest do
   alias Foglet.Threads.Thread
   alias FogletBbs.AccountsFixtures
 
+  import ExUnit.CaptureLog
   import Swoosh.TestAssertions
 
   @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
@@ -193,6 +198,72 @@ defmodule Foglet.AccountsTest do
       assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
       refute_email_sent()
     end
+
+    test "sysop notification delivery failure logs non-sensitive context without blocking registration" do
+      sysop =
+        AccountsFixtures.user_fixture(%{
+          handle: "approvalfailuresysop",
+          email: "approvalfailuresysop@example.test"
+        })
+
+      assert {:ok, sysop} = Accounts.update_role(sysop, :sysop)
+
+      Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "email")
+
+      Application.put_env(:foglet_bbs, Foglet.Mailer,
+        adapter: FogletBbs.AccountsTest.FailingMailerAdapter
+      )
+
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          handle: "pendingfailure",
+          email: "pendingfailure@example.test"
+        })
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
+        end)
+
+      assert log =~ "transactional_email_delivery_failed"
+      assert log =~ "mail_type=pending_approval_notification"
+      assert log =~ "delivery_mode=email"
+      assert log =~ "recipient_user_id=#{sysop.id}"
+      assert log =~ "reason=:forced_failure"
+      assert log =~ "related_user_id="
+      refute log =~ sysop.email
+      refute log =~ sysop.handle
+      refute log =~ "pendingfailure@example.test"
+      refute log =~ "pendingfailure"
+    end
+
+    test "invite-code throttling logs redemption pressure without raw invite or attrs" do
+      Foglet.Accounts.RedemptionThrottle.reset_for_tests()
+      Config.put!("registration_mode", "invite_only")
+
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          handle: "throttleinvite",
+          email: "throttleinvite@example.test",
+          invite_code: "SECRET-INVITE-CODE"
+        })
+
+      log =
+        capture_log(fn ->
+          for _ <- 1..5 do
+            assert {:error, %Ecto.Changeset{}} = Accounts.register_user(attrs)
+          end
+
+          assert {:error, %Ecto.Changeset{}} = Accounts.register_user(attrs)
+        end)
+
+      assert log =~ "account_invite_redemption_throttled"
+      assert log =~ "op=invite_redemption_throttled"
+      refute log =~ "SECRET-INVITE-CODE"
+      refute log =~ "throttleinvite@example.test"
+      refute log =~ "throttleinvite"
+    end
   end
 
   # authenticate_by_password/2 tests → test/foglet_bbs/accounts/auth_test.exs
@@ -357,7 +428,7 @@ defmodule Foglet.AccountsTest do
       end)
     end
 
-    test "status delivery failure does not roll back a valid transition" do
+    test "status delivery failure does not roll back a valid transition and is logged safely" do
       Config.put!("delivery_mode", "email")
 
       Application.put_env(:foglet_bbs, Foglet.Mailer,
@@ -365,13 +436,42 @@ defmodule Foglet.AccountsTest do
       )
 
       sysop = user_with_status(:active, "sysopfailnotify", :sysop)
-      pending = user_with_status(:pending, "failnotify")
+      approve = user_with_status(:pending, "failnotifyapprove")
+      reject = user_with_status(:pending, "failnotifyreject")
 
-      assert {:ok, %{delivery: {:failed, :forced_failure}, user: updated}} =
-               Accounts.transition_user_status(sysop, pending, :active)
+      approval_log =
+        capture_log(fn ->
+          assert {:ok, %{delivery: {:failed, :forced_failure}, user: updated}} =
+                   Accounts.transition_user_status(sysop, approve, :active)
 
-      assert updated.status == :active
-      assert Accounts.get_user!(pending.id).status == :active
+          assert updated.status == :active
+        end)
+
+      assert approval_log =~ "transactional_email_delivery_failed"
+      assert approval_log =~ "mail_type=approval_notification"
+      assert approval_log =~ "delivery_mode=email"
+      assert approval_log =~ "recipient_user_id=#{approve.id}"
+      assert approval_log =~ "reason=:forced_failure"
+      refute approval_log =~ approve.email
+      refute approval_log =~ approve.handle
+      assert Accounts.get_user!(approve.id).status == :active
+
+      rejection_log =
+        capture_log(fn ->
+          assert {:ok, %{delivery: {:failed, :forced_failure}, user: updated}} =
+                   Accounts.transition_user_status(sysop, reject, :rejected)
+
+          assert updated.status == :rejected
+        end)
+
+      assert rejection_log =~ "transactional_email_delivery_failed"
+      assert rejection_log =~ "mail_type=rejection_notification"
+      assert rejection_log =~ "delivery_mode=email"
+      assert rejection_log =~ "recipient_user_id=#{reject.id}"
+      assert rejection_log =~ "reason=:forced_failure"
+      refute rejection_log =~ reject.email
+      refute rejection_log =~ reject.handle
+      assert Accounts.get_user!(reject.id).status == :rejected
     end
 
     test "invalid transitions do not mutate persisted status" do
@@ -787,6 +887,20 @@ defmodule Foglet.AccountsTest do
   # reset_user_password/2 tests → test/foglet_bbs/accounts/verification_test.exs
 
   describe "delete_user/1 (IDNT-07)" do
+    setup do
+      original_cleanup_repo = Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo)
+
+      on_exit(fn ->
+        if original_cleanup_repo do
+          Application.put_env(:foglet_bbs, :accounts_token_cleanup_repo, original_cleanup_repo)
+        else
+          Application.delete_env(:foglet_bbs, :accounts_token_cleanup_repo)
+        end
+      end)
+
+      :ok
+    end
+
     test "clears PII on the user row and preserves the row for FK integrity" do
       user =
         AccountsFixtures.user_fixture(%{
@@ -822,6 +936,36 @@ defmodule Foglet.AccountsTest do
 
       assert Repo.aggregate(from(k in SSHKey, where: k.user_id == ^user.id), :count) == 0
       assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id), :count) == 0
+    end
+
+    test "logs non-sensitive user-delete token cleanup failures" do
+      Application.put_env(
+        :foglet_bbs,
+        :accounts_token_cleanup_repo,
+        FogletBbs.AccountsTest.FailingTokenCleanupRepo
+      )
+
+      user =
+        AccountsFixtures.user_fixture(%{
+          handle: "deletecleanfail",
+          email: "deletecleanfail@example.test"
+        })
+
+      {raw_token, _} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      log =
+        capture_log(fn ->
+          assert_raise RuntimeError, "forced cleanup outage", fn ->
+            Accounts.delete_user(user)
+          end
+        end)
+
+      assert log =~ "account_token_cleanup_failed"
+      assert log =~ "op=user_delete_token_cleanup_failed"
+      assert log =~ "user_id=#{user.id}"
+      refute log =~ user.email
+      refute log =~ user.handle
+      refute log =~ raw_token
     end
 
     test "rewrites authored posts to the tombstone user" do

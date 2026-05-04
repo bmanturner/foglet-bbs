@@ -134,12 +134,26 @@ defmodule Foglet.Doors.Runner do
   end
 
   def handle_cast({:input, data}, %{pty_adapter: %PTYAdapter{} = adapter} = state) do
-    _ = PTYAdapter.input(adapter, data)
+    case PTYAdapter.input(adapter, data) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        log_privacy_safe(:error, state, :door_input_failed, %{reason_class: reason_class(reason)})
+    end
+
     {:noreply, refresh_idle_timeout(state)}
   end
 
   def handle_cast({:input, data}, %{port: port} = state) when not is_nil(port) do
-    _ = Port.command(port, data)
+    case port_command(port, data) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        log_privacy_safe(:error, state, :door_input_failed, %{reason_class: reason_class(reason)})
+    end
+
     {:noreply, refresh_idle_timeout(state)}
   end
 
@@ -164,7 +178,14 @@ defmodule Foglet.Doors.Runner do
   end
 
   def handle_cast({:resize, size}, %{pty_adapter: %PTYAdapter{} = adapter} = state) do
-    _ = PTYAdapter.resize(adapter, size)
+    case PTYAdapter.resize(adapter, size) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        log_privacy_safe(:error, state, :door_resize_failed, %{reason_class: reason_class(reason)})
+    end
+
     notify_owner(state, {:door_resize, self(), state.manifest.id, size})
     {:noreply, %{state | terminal_size: size, last_resize: size}}
   end
@@ -245,6 +266,13 @@ defmodule Foglet.Doors.Runner do
         reason = if status == 0, do: :normal, else: :crash
         {:stop, :normal, complete(state, reason, status)}
 
+      {:error, {:bad_exit_frame, reason}} ->
+        log_bad_exit_frame(state, data, reason)
+        log_door_failure(state, :helper_failed, {:bad_exit_frame, reason}, nil)
+
+        {:stop, {:door_helper_failed, {:bad_exit_frame, reason}},
+         complete(state, {:error, {:bad_exit_frame, reason}}, nil)}
+
       {:error, reason} ->
         log_door_failure(state, :helper_failed, reason, nil)
         {:stop, {:door_helper_failed, reason}, complete(state, {:error, reason}, nil)}
@@ -319,9 +347,16 @@ defmodule Foglet.Doors.Runner do
     }
   end
 
-  defp emit(%{output: output}, data) when is_function(output, 1) do
+  defp emit(%{output: output} = state, data) when is_function(output, 1) do
     _ = output.(data)
     :ok
+  rescue
+    e ->
+      log_privacy_safe(:warning, state, :door_output_callback_failed, %{
+        reason_class: reason_class(e)
+      })
+
+      :ok
   end
 
   defp notify_owner(%{owner: owner}, message) when is_pid(owner), do: send(owner, message)
@@ -329,6 +364,66 @@ defmodule Foglet.Doors.Runner do
 
   defp pty_backend(%{pty_adapter: %PTYAdapter{} = adapter}), do: PTYAdapter.backend(adapter)
   defp pty_backend(_state), do: nil
+
+  defp port_command(port, data) do
+    true = Port.command(port, data)
+    :ok
+  rescue
+    e -> {:error, e}
+  end
+
+  defp log_privacy_safe(level, state, op, details) do
+    Logger.log(level, fn ->
+      context =
+        %{
+          door_id: state.manifest.id,
+          session_id: Map.get(state.session, :session_id),
+          op: op
+        }
+        |> Map.merge(details)
+
+      "door privacy-safe event #{inspect(context)}"
+    end)
+
+    :ok
+  end
+
+  defp log_bad_exit_frame(state, <<"X", payload::binary>>, reason) do
+    log_privacy_safe(:warning, state, :door_bad_exit_frame, %{
+      reason_class: reason_class(reason),
+      payload_hex_prefix: hex_prefix(payload)
+    })
+  end
+
+  defp log_bad_exit_frame(state, _data, reason) do
+    log_privacy_safe(:warning, state, :door_bad_exit_frame, %{reason_class: reason_class(reason)})
+  end
+
+  defp hex_prefix(payload),
+    do: payload |> binary_part(0, min(byte_size(payload), 16)) |> Base.encode16(case: :lower)
+
+  defp reason_class(%module{}), do: inspect(module)
+  defp reason_class(reason) when is_atom(reason), do: reason
+
+  defp sanitize_reason(%Jason.DecodeError{}), do: Jason.DecodeError
+  defp sanitize_reason(%module{}), do: module
+
+  defp sanitize_reason(tuple) when is_tuple(tuple) do
+    tuple
+    |> Tuple.to_list()
+    |> Enum.map(&sanitize_reason/1)
+    |> List.to_tuple()
+  end
+
+  defp sanitize_reason(list) when is_list(list), do: Enum.map(list, &sanitize_reason/1)
+  defp sanitize_reason(reason), do: reason
+
+  defp log_cleanup_failure(state, op, reason) do
+    log_privacy_safe(:warning, state, :door_cleanup_failed, %{
+      cleanup_op: op,
+      reason_class: reason_class(reason)
+    })
+  end
 
   defp log_door_exit(%{manifest: %Manifest{runtime: :external_pty}} = state, :normal, 0),
     do: log_door_event(:info, state, :exited, :normal, 0)
@@ -367,7 +462,7 @@ defmodule Foglet.Doors.Runner do
       command: state.manifest.command,
       cwd: state.manifest.working_dir,
       exit_status: status,
-      reason: inspect(reason),
+      reason: inspect(sanitize_reason(reason)),
       pty_backend: pty_backend(state),
       os_pid: state.os_pid
     }
@@ -392,35 +487,56 @@ defmodule Foglet.Doors.Runner do
   defp cleanup(%{cleanup_done?: true} = state), do: state
 
   defp cleanup(state) do
-    _ = cancel_timer(state.timeout_ref)
-    _ = cancel_timer(state.idle_timeout_ref)
-    _ = close_port(state.port, state.os_pid, state.pty_adapter)
-    _ = remove_context_file(state.context_path)
+    _ = cancel_timer(state.timeout_ref, state, :timeout_timer)
+    _ = cancel_timer(state.idle_timeout_ref, state, :idle_timeout_timer)
+    _ = close_port(state.port, state.os_pid, state.pty_adapter, state)
+    _ = remove_context_file(state.context_path, state)
     %{state | cleanup_done?: true, port: nil, pty_adapter: nil}
   end
 
-  defp cancel_timer(ref) when is_reference(ref), do: Process.cancel_timer(ref)
-  defp cancel_timer(_ref), do: :ok
+  defp cancel_timer(ref, _state, _op) when is_reference(ref), do: Process.cancel_timer(ref)
+  defp cancel_timer(_ref, _state, _op), do: :ok
 
-  defp close_port(nil, _os_pid, _adapter), do: :ok
+  defp close_port(nil, _os_pid, _adapter, _state), do: :ok
 
-  defp close_port(port, os_pid, adapter) do
-    _ = PTYAdapter.terminate(adapter)
-    _ = maybe_term_os_process(os_pid)
-    _ = Port.close(port)
+  defp close_port(port, os_pid, adapter, state) do
+    _ = terminate_adapter(adapter, state)
+    _ = maybe_term_os_process(os_pid, state)
+    _ = close_owned_port(port, state)
     :ok
-  rescue
-    _ -> :ok
   end
 
-  defp maybe_term_os_process(pid) when is_integer(pid) and pid > 0 do
+  defp terminate_adapter(adapter, state) do
+    _ = PTYAdapter.terminate(adapter)
+    :ok
+  rescue
+    e ->
+      log_cleanup_failure(state, :pty_adapter_terminate, e)
+      :ok
+  end
+
+  defp close_owned_port(port, state) do
+    if Port.info(port) do
+      _ = Port.close(port)
+    end
+
+    :ok
+  rescue
+    e ->
+      log_cleanup_failure(state, :port_close, e)
+      :ok
+  end
+
+  defp maybe_term_os_process(pid, state) when is_integer(pid) and pid > 0 do
     _ = System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
     :ok
   rescue
-    _ -> :ok
+    e ->
+      log_cleanup_failure(state, :os_process_terminate, e)
+      :ok
   end
 
-  defp maybe_term_os_process(_pid), do: :ok
+  defp maybe_term_os_process(_pid, _state), do: :ok
 
   # sobelow: context paths are generated under System.tmp_dir!/0 with
   # cryptographic random bytes, never from user-controlled input.
@@ -456,11 +572,27 @@ defmodule Foglet.Doors.Runner do
 
   defp write_context_file(_body, 0), do: {:error, {:context_file, :eexist}}
 
-  defp remove_context_file(nil), do: :ok
+  defp remove_context_file(nil, _state), do: :ok
 
   # sobelow: remove only the runner-generated context path described above.
   @sobelow_skip ["Traversal.FileModule"]
-  defp remove_context_file(path), do: File.rm(path)
+  defp remove_context_file(path, state) do
+    case File.rm(path) do
+      :ok ->
+        :ok
+
+      {:error, :enoent} ->
+        :ok
+
+      {:error, reason} ->
+        log_cleanup_failure(state, :context_file_remove, reason)
+        :ok
+    end
+  rescue
+    e ->
+      log_cleanup_failure(state, :context_file_remove, e)
+      :ok
+  end
 
   defp open_external_port(state) do
     PTYAdapter.open(state.manifest, state.terminal_size, external_env(state))

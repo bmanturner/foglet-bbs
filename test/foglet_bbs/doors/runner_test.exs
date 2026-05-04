@@ -6,6 +6,7 @@ defmodule Foglet.Doors.RunnerTest do
   @event_timeout 1_000
 
   alias Foglet.Doors
+  alias Foglet.Doors.PTYAdapter
   alias Foglet.Doors.Runner
   alias Foglet.Doors.Supervisor, as: DoorSupervisor
 
@@ -381,6 +382,61 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:door_exited, ^pid, "external-helper-crash", :crash, 1}, @event_timeout
       assert_receive {:DOWN, ^ref, :process, ^pid, {:door_helper_exit, 1}}, @event_timeout
     end
+
+    test "input write failures are logged without input bytes" do
+      port = closed_port()
+
+      state =
+        runner_state("external-input-log", port: port, session: %{session_id: "session-123"})
+
+      log =
+        capture_log(fn ->
+          assert {:noreply, _state} = Runner.handle_cast({:input, "secret typed text"}, state)
+        end)
+
+      assert log =~ "door privacy-safe event"
+      assert log =~ "op: :door_input_failed"
+      assert log =~ "door_id: \"external-input-log\""
+      assert log =~ "session_id: \"session-123\""
+      assert log =~ "reason_class:"
+      refute log =~ "secret typed text"
+    end
+
+    test "cleanup failures are logged without payload data" do
+      state =
+        runner_state("external-cleanup-log",
+          context_path: System.tmp_dir!(),
+          session: %{session_id: "session-456"}
+        )
+
+      log =
+        capture_log(fn ->
+          assert :ok = Runner.terminate(:normal, state)
+        end)
+
+      assert log =~ "door privacy-safe event"
+      assert log =~ "op: :door_cleanup_failed"
+      assert log =~ "cleanup_op: :context_file_remove"
+      assert log =~ "door_id: \"external-cleanup-log\""
+      assert log =~ "session_id: \"session-456\""
+    end
+
+    test "malformed helper exit frames log only a short hex prefix" do
+      payload = "not-json secret-payload"
+      data = "X" <> payload
+      state = runner_state("external-bad-frame", pty_adapter: %PTYAdapter{backend: :helper})
+
+      log =
+        capture_log(fn ->
+          assert {:stop, {:door_helper_failed, {:bad_exit_frame, _reason}}, _state} =
+                   Runner.handle_info({nil, {:data, data}}, state)
+        end)
+
+      assert log =~ "op: :door_bad_exit_frame"
+      assert log =~ "payload_hex_prefix: \"6e6f742d6a736f6e207365637265742d\""
+      refute log =~ payload
+      refute log =~ "secret-payload"
+    end
   end
 
   defp manifest(attrs) do
@@ -396,6 +452,40 @@ defmodule Foglet.Doors.RunnerTest do
       )
 
     Doors.validate_manifest(attrs)
+  end
+
+  defp runner_state(id, opts) do
+    {:ok, manifest} =
+      manifest(%{
+        id: id,
+        display_name: id,
+        runtime: :external_pty,
+        command: "/bin/true",
+        working_dir: "/tmp",
+        args: [],
+        timeout_ms: 5_000,
+        pty?: false
+      })
+
+    struct!(
+      Runner,
+      Keyword.merge(
+        [
+          manifest: manifest,
+          session: %{},
+          terminal_size: {80, 24},
+          output: output_to(self()),
+          owner: self()
+        ],
+        opts
+      )
+    )
+  end
+
+  defp closed_port do
+    port = Port.open({:spawn_executable, "/bin/cat"}, [:binary])
+    Port.close(port)
+    port
   end
 
   defp output_to(test_pid), do: fn data -> send(test_pid, {:door_output, data}) end
