@@ -741,14 +741,27 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert state.screen_state.account.active_tab == 1
 
-      # :left/:right are not consumed by select_list — they fall through to
-      # Tabs, which is the documented design (browse-mode tab nav). Only
-      # backspace and char filtering must remain inside the PREFS form.
+      # With an empty search, :left/:right fall through to Tabs (browse-mode
+      # tab nav). Char keys begin filtering and stay inside the form.
       {:update, state, []} = handle_account_key(%{key: :char, char: "C"}, state)
       assert state.screen_state.account.active_tab == 1
 
       {:update, state, []} = handle_account_key(%{key: :backspace}, state)
       assert state.screen_state.account.active_tab == 1
+
+      # Once the filter is active, cursor keys must stay in the form so the
+      # user is not yanked out of PREFS while editing the Timezone search.
+      {:update, state, []} = handle_account_key(%{key: :char, char: "E"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "u"}, state)
+      assert state.screen_state.account.active_tab == 1
+
+      context = account_context(state)
+      account = state.screen_state.account
+      {after_left, _} = Account.update({:key, %{key: :left}}, account, context)
+      assert after_left.active_tab == 1
+
+      {after_right, _} = Account.update({:key, %{key: :right}}, account, context)
+      assert after_right.active_tab == 1
     end
 
     test "Ctrl+Q returns to :main_menu", %{state: state} do

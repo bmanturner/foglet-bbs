@@ -372,47 +372,79 @@ defmodule Foglet.TUI.Screens.Account do
     end)
   end
 
-  # FOG-142 / FOG-333 / FOG-717: Tabs widget consumes digit shortcuts 1–9
-  # and Left/Right/Home/End for tab navigation (Pitfall 6 in
-  # `Foglet.TUI.Widgets.Input.Tabs`). Active text-entry forms must shield
-  # those keys before Tabs sees them, or real text input (e.g. an
-  # `ssh-ed25519` public key) and cursor editing keys silently jump to
-  # another Account tab instead of editing the focused field.
+  # FOG-142 / FOG-717: Tabs consumes global tab shortcuts before the
+  # active Account tab sees them. Focused text-entry fields must get first
+  # refusal for digit shortcuts and cursor-editing keys; otherwise typing
+  # digits into a form or pressing Left/Right inside populated text fields
+  # silently changes Account tabs instead of editing the field.
   defp shield_tab_shortcut?(event, %State{} = ss) do
-    text_entry_active?(ss) and editing_event?(event)
+    text_entry_event?(event, active_text_entry_field(ss))
   end
 
-  defp editing_event?(%{key: :char}), do: true
+  defp text_entry_event?(%{key: :char, char: <<c>>}, {:form, %{type: :select_list}, field_state})
+       when c in ?0..?9 do
+    select_search_active?(field_state)
+  end
 
-  defp editing_event?(%{key: key})
+  defp text_entry_event?(%{key: :char, char: <<c>>}, {:form, %{type: type}, _field_state})
+       when c in ?0..?9 and type in [:text, :textarea, :integer, :password],
+       do: true
+
+  defp text_entry_event?(%{key: :char, char: char}, {:form, %{type: :select_list}, _field_state})
+       when is_binary(char),
+       do: true
+
+  defp text_entry_event?(%{key: key}, {:form, %{type: type}, _field_state})
+       when key in [:left, :right, :home, :end, :delete] and
+              type in [:text, :textarea, :integer, :password],
+       do: true
+
+  defp text_entry_event?(%{key: :backspace}, {:form, %{type: type}, _field_state})
+       when type in [:text, :textarea, :integer, :password, :select_list],
+       do: true
+
+  defp text_entry_event?(%{key: key}, {:form, %{type: :select_list}, field_state})
+       when key in [:left, :right, :home, :end, :delete] do
+    select_search_active?(field_state)
+  end
+
+  defp text_entry_event?(%{key: :char, char: <<c>>}, :ssh_key_add) when c in ?0..?9, do: true
+
+  defp text_entry_event?(%{key: key}, :ssh_key_add)
        when key in [:left, :right, :home, :end, :delete, :backspace],
        do: true
 
-  defp editing_event?(_), do: false
+  defp text_entry_event?(_event, _entry), do: false
 
-  defp text_entry_active?(%State{} = ss) do
+  defp active_text_entry_field(%State{} = ss) do
     case active_label(ss) do
-      "SSH KEYS" -> ss.ssh_keys.mode == :add
-      "PROFILE" -> form_text_field_focused?(ss.profile_form)
-      "PREFS" -> form_text_field_focused?(ss.prefs_form)
-      _ -> false
+      "SSH KEYS" -> if ss.ssh_keys.mode == :add, do: :ssh_key_add
+      "PROFILE" -> focused_form_field(ss.profile_form)
+      "PREFS" -> focused_form_field(ss.prefs_form)
+      _ -> nil
     end
   end
 
-  # FOG-333: Generalized text-entry shielding for Modal.Form-backed tabs.
-  # Any focused field whose `:type` accepts free-form text input shields the
-  # global tab shortcuts (digits and, per FOG-717, cursor + delete keys) so
-  # the focused field receives normal terminal-native editing keys before
-  # the Tabs widget. List-mode/select fields fall through to tab navigation
-  # so digit shortcuts and arrow tab nav still work while browsing options.
-  defp form_text_field_focused?(%{fields: fields, focus_index: idx}) do
+  # FOG-333 / FOG-717: Generalized text-entry shielding for
+  # Modal.Form-backed tabs. Free-form fields shield digit and cursor-editing
+  # shortcuts. Searchable select-list filters shield letters and cursor keys,
+  # while preserving blank numeric tab jumps until the user has begun a search.
+  defp focused_form_field(%{fields: fields, field_states: field_states, focus_index: idx}) do
     case Enum.at(fields, idx) do
-      %{type: type} when type in [:text, :textarea, :integer, :password] -> true
-      _ -> false
+      %{type: type} = field when type in [:text, :textarea, :integer, :password, :select_list] ->
+        {:form, field, Enum.at(field_states, idx)}
+
+      _ ->
+        nil
     end
   end
 
-  defp form_text_field_focused?(_), do: false
+  defp focused_form_field(_), do: nil
+
+  defp select_search_active?(%{select_list: %{search_buffer: search}}) when is_binary(search),
+    do: search != ""
+
+  defp select_search_active?(_), do: false
 
   defp action_key(%{key: :char, char: char}) when is_binary(char), do: char
   defp action_key(%{key: key}), do: key
