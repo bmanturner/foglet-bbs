@@ -117,15 +117,56 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   # ---------------------------------------------------------------------------
 
   @spec render(t(), map()) :: any()
+  # FOG-670: when a modal is open, render only a calm bounded overlay so the
+  # board list does not bleed through behind the form. Footer copy switches to
+  # form-mode hints (save / cancel / Tab nav) so list-mode commands no longer
+  # masquerade as the active controls.
+  def render(%__MODULE__{modal: modal} = _state, theme) when not is_nil(modal) do
+    column style: %{gap: 0} do
+      [
+        text("Boards and categories", fg: theme.title.fg, style: [:bold]),
+        text(""),
+        render_modal_overlay(modal, theme),
+        text(""),
+        text(modal_footer_text(modal), fg: theme.dim.fg)
+      ]
+    end
+  end
+
   def render(%__MODULE__{} = state, theme) do
     body = render_list(state, theme)
     footer = text(footer_text(state), fg: theme.dim.fg)
 
     column style: %{gap: 0} do
-      [text("Boards and categories", fg: theme.title.fg, style: [:bold]), text("")] ++
-        [body, text(""), footer] ++ render_modal(state.modal, theme)
+      [
+        text("Boards and categories", fg: theme.title.fg, style: [:bold]),
+        text(""),
+        body,
+        text(""),
+        footer
+      ]
     end
   end
+
+  @doc """
+  True when the BoardsView is currently displaying a modal/form. The Sysop
+  screen uses this to swap the bottom command bar from tab-jump hints to
+  form-mode hints (save / cancel / field navigation) so stale list-mode
+  commands do not masquerade as the active controls.
+  """
+  @spec modal_active?(t()) :: boolean()
+  def modal_active?(%__MODULE__{modal: nil}), do: false
+  def modal_active?(%__MODULE__{}), do: true
+
+  @doc """
+  Returns `:form`, `:confirm`, or `nil`. Sysop render advertises Tab/Enter for
+  form modals and Y/N for confirm modals based on this.
+  """
+  @spec modal_mode(t()) :: :form | :confirm | nil
+  def modal_mode(%__MODULE__{modal: nil}), do: nil
+  def modal_mode(%__MODULE__{modal: %ModalForm{}}), do: :form
+  def modal_mode(%__MODULE__{modal: %Modal{type: :confirm}}), do: :confirm
+  def modal_mode(%__MODULE__{}), do: :form
 
   # FOG-154: row-aware footer per the FOG-152 audit + FOG-153 deck. The
   # advertised actions follow the focused row so operators do not need to
@@ -173,15 +214,43 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     ListRow.render(label, selected?, theme)
   end
 
-  defp render_modal(nil, _theme), do: []
-
-  defp render_modal(%ModalForm{} = form, theme) do
-    [text(""), ModalForm.render(form, theme: theme)]
+  # FOG-670: render the active modal as a full-width form surface (no extra
+  # bordered box) and use Modal.Form's `:max_visible` viewport so the form
+  # body fits within the surrounding ScreenFrame chrome at 80x24 / 64x22
+  # without overlapping the bottom border or interleaving with neighbour
+  # fields. The screen-level command bar (set in Sysop.Render) advertises the
+  # form-mode actions, so a separate bordered chrome here would just consume
+  # rows we need for content.
+  defp render_modal_overlay(%ModalForm{} = form, theme) do
+    column style: %{gap: 0} do
+      [ModalForm.render(form, theme: theme, max_visible: form_max_visible_fields())]
+    end
   end
 
-  defp render_modal(%Modal{} = modal, theme) do
-    [text(""), Foglet.TUI.Widgets.Modal.render(modal, theme)]
+  defp render_modal_overlay(%Modal{} = modal, theme) do
+    column justify: :center, align: :center do
+      [
+        box style: %{border: :double, padding: 1, border_fg: theme.border.fg} do
+          Foglet.TUI.Widgets.Modal.render(modal, theme)
+        end
+      ]
+    end
   end
+
+  # FOG-670: window size tuned for an 80x24 viewport with the Sysop screen
+  # frame (breadcrumb + tabs + command bar). Each rendered field is roughly
+  # 2–3 rows (label + widget, plus optional description), so 4 fields fit in
+  # the available content area without clipping at 80x24 or 64x22 while still
+  # leaving room for scroll-indicator rows.
+  defp form_max_visible_fields, do: 4
+
+  defp modal_footer_text(%ModalForm{}),
+    do: "[Tab] Next field   [Shift+Tab] Prev field   [Enter] Save   [Esc] Cancel"
+
+  defp modal_footer_text(%Modal{type: :confirm}),
+    do: "[Y] Confirm   [N/Esc] Cancel"
+
+  defp modal_footer_text(_), do: "[Esc] Close"
 
   # ---------------------------------------------------------------------------
   # Key handling
@@ -401,14 +470,14 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         name: :category_id,
         type: :enum,
         label: "Category",
-        choices: Enum.map(cat_choices, fn {_lbl, id} -> id end),
+        choices: cat_choices,
         value: Map.get(values, :category_id, default_cat_id)
       },
       %{
         name: :postable_by,
         type: :enum,
         label: "Postable by",
-        choices: Enum.map(@postable_choices, fn {_lbl, v} -> v end),
+        choices: @postable_choices,
         value: Map.get(values, :postable_by, "members")
       },
       %{

@@ -1020,6 +1020,25 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert String.contains?(flat, "invite_generation_per_user_limit"),
              "Limit row must be visible when generators == any_user"
     end
+
+    # FOG-689: When the SITE tab is active, it is a Modal.Form-style editor.
+    # The screen-level command bar must advertise Save/Cancel at a priority
+    # that survives 80x24 keybar compaction (lower priority numbers in
+    # CommandBar = higher retention).
+    test "SITE 80x24 keybar advertises Save and Cancel actions", %{state: state} do
+      state =
+        state
+        |> put_in([:screen_state, :sysop], SysopState.new())
+        |> Map.put(:terminal_size, {80, 24})
+
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Save"),
+             "SITE 80x24 keybar must retain Save action (FOG-689). Got: #{flat}"
+
+      assert String.contains?(flat, "Cancel"),
+             "SITE 80x24 keybar must retain Cancel action (FOG-689). Got: #{flat}"
+    end
   end
 
   describe "SITE tab Ctrl+S (SYSO-02)" do
@@ -1614,6 +1633,66 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert String.contains?(flat, "Chat")
       assert String.contains?(flat, "chat")
     end
+
+    test "FOG-670 opening new-board form replaces list with bounded overlay and form-mode footer",
+         %{state: state, sysop: sysop} do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
+
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
+
+      # The board list rows must not bleed through behind the open form.
+      refute String.contains?(flat, "qa-no-chat")
+      refute String.contains?(flat, "QA No Chat")
+
+      # The list-mode keybar must not advertise list actions while the form is
+      # open — those keys are no-ops while a modal is active (Pitfall 5).
+      refute String.contains?(flat, "[j/k] Move")
+      refute String.contains?(flat, "[n] New board")
+
+      # The form-mode footer advertises save/cancel/field-navigation and the
+      # screen-level command bar shows the same form group instead of generic
+      # tab navigation.
+      assert String.contains?(flat, "Tab")
+      assert String.contains?(flat, "Shift+Tab")
+      assert String.contains?(flat, "Save")
+      assert String.contains?(flat, "Cancel")
+      refute String.contains?(flat, "Switch")
+      refute String.contains?(flat, "Jump")
+
+      # Regression for the cramped-width QA failure: at 64 columns the command
+      # bar must keep reverse navigation discoverable instead of dropping the
+      # Shift+Tab affordance to fit.
+      cramped_flat =
+        state
+        |> Map.put(:terminal_size, {64, 22})
+        |> render_sysop()
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(cramped_flat, "Shift+Tab")
+      assert String.contains?(cramped_flat, "Save")
+      assert String.contains?(cramped_flat, "Cancel")
+    end
+
+    test "FOG-670 archive-confirm modal advertises Y/N in screen footer", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+      # Move selection to a board row, then trigger archive-confirm.
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "D"}, state)
+
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
+
+      # No tab-nav hints while the confirm modal is open; explicit Y/N keys
+      # are advertised instead.
+      refute String.contains?(flat, "Switch")
+      refute String.contains?(flat, "Jump")
+      assert String.contains?(flat, "Yes") or String.contains?(flat, "[Y]")
+      assert String.contains?(flat, "No") or String.contains?(flat, "[N")
+    end
   end
 
   describe "BOARDS tab create flow (SYSO-03)" do
@@ -1621,7 +1700,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
     test "n opens Modal.Form for new board with expected field specs", %{
       state: state,
-      sysop: sysop
+      sysop: sysop,
+      category: category
     } do
       state = activate_boards_tab(state, sysop)
       {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
@@ -1651,6 +1731,20 @@ defmodule Foglet.TUI.Screens.SysopTest do
       chat_enabled_field = Enum.find(bv.modal.fields, &(&1.name == :chat_enabled))
       assert chat_enabled_field.type == :boolean
       assert chat_enabled_field.value == false
+
+      category_field = Enum.find(bv.modal.fields, &(&1.name == :category_id))
+      assert category_field.type == :enum
+      assert category_field.choices == [{"General", category.id}]
+      assert category_field.value == category.id
+
+      postable_field = Enum.find(bv.modal.fields, &(&1.name == :postable_by))
+      assert postable_field.type == :enum
+
+      assert postable_field.choices == [
+               {"Members", "members"},
+               {"Moderators only", "mods_only"},
+               {"Sysops only", "sysop_only"}
+             ]
 
       storage_field = Enum.find(bv.modal.fields, &(&1.name == :chat_storage_mode))
       assert storage_field.type == :enum

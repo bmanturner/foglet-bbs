@@ -3,7 +3,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   Stateful modal-overlay form container (D-07, D-09, D-13, D-14).
 
   Hosts a caller-declared list of typed input fields and handles
-  Tab/Shift-Tab focus navigation, Enter-on-last submits, and Esc
+  Tab/Shift-Tab focus navigation, Enter/Ctrl+S submit, and Esc
   cancels. Coerces per-field values to their native Elixir types
   on submit. Renders caller-supplied inline errors beneath each
   field without dismissing.
@@ -80,8 +80,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   `:submitting` lock state is preserved.
 
     * The internal `:idle → :submitting` transition is set by the
-      Enter-on-last-field clause (search for "Clause 4: Enter" in this
-      file). After that point, the form is locked and only the consumer
+      submit clause (search for "Clause 4: Enter" / "Clause 4a: Ctrl+S" in
+      this file). After that point, the form is locked and only the consumer
       can release it.
     * The lock guard (search for "Clause 0: Lock") swallows every
       subsequent event, including `:escape`, until `submit_state`
@@ -161,7 +161,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     * `:on_submit`   — `(map() -> any())` called with typed payload on submit
     * `:on_cancel`   — `(-> any())` called on Esc
     * `:show_footer` — boolean, default `false` (Phase 28 D-06 / FORM-03).
-      When `true`, `render/2` appends a `[Enter] Submit   [Esc] Cancel` row in
+      When `true`, `render/2` appends a `[Tab] Next   [Shift+Tab] Previous   [Enter] Submit   [Ctrl+S] Save   [Esc] Cancel` row in
       `theme.dim.fg`. Tab-body consumers (Account Profile/Prefs, Sysop Site)
       should leave this default-off so the global command bar is the single
       advertiser of those keys; true overlay callers (centered modals) opt in.
@@ -299,32 +299,38 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     {%{state | focus_index: next_visible_index(state)}, nil}
   end
 
-  # Clause 4: Enter — submit if last *visible* field, otherwise advance (REQ-5).
-  # Phase 28 D-05: on submit, transitions :idle → :submitting and invokes
-  # on_submit exactly once; subsequent Enter events are swallowed by the
-  # lock guard (Clause 0) until the consuming screen calls set_submit_state/2.
-  # By the time this clause runs, the lock guard has short-circuited any
-  # :submitting state and the auto-reset preamble has collapsed :saved /
-  # {:error, _} back to :idle, so submit_state here is always :idle.
-  # FOG-349: "last field" tracks the last *visible* field; hidden fields are
-  # excluded from both navigation and the submit payload.
+  # Clause 4: Enter — submit ordinary fields from any focus (FOG-610).
+  # Tab/Shift-Tab are the only cross-field navigation keys. Enter is save/submit
+  # for ordinary single-line/boolean/enum fields, while field-specific controls
+  # keep their own semantics: select lists use Enter to select and advance, and
+  # textareas use Enter for editing/newlines. Ctrl+S always submits regardless of
+  # focused field type (see Clause 4a).
+  #
+  # On submit, transitions :idle → :submitting and invokes on_submit exactly
+  # once; subsequent submit events are swallowed by the lock guard (Clause 0)
+  # until the consuming screen calls set_submit_state/2. By the time this clause
+  # runs, the lock guard has short-circuited any :submitting state and the
+  # auto-reset preamble has collapsed :saved / {:error, _} back to :idle.
   defp do_handle_event(%__MODULE__{} = state, %{key: :enter} = event) do
-    case {List.last(visible_indices(state)), focused_field_type(state)} do
-      {nil, _type} ->
+    case {visible_indices(state), focused_field_type(state)} do
+      {[], _type} ->
         {state, nil}
 
-      {_last_visible, :select_list} ->
+      {_visible, :select_list} ->
         {state, nil} = dispatch_event_to_field(event, state)
         {%{state | focus_index: next_visible_index(state)}, nil}
 
-      {last_visible, _type} when state.focus_index == last_visible ->
-        payload = collect_values(state)
-        submit_result = state.on_submit.(payload)
-        {%{state | submit_state: :submitting}, submitted_action(submit_result)}
+      {_visible, :textarea} ->
+        dispatch_event_to_field(event, state)
 
-      {_last_visible, _type} ->
-        {%{state | focus_index: next_visible_index(state)}, nil}
+      {_visible, _type} ->
+        submit_form(state)
     end
+  end
+
+  # Clause 4a: Ctrl+S — submit from any focused field without moving focus.
+  defp do_handle_event(%__MODULE__{} = state, %{key: :char, char: "s", ctrl: true}) do
+    submit_form(state)
   end
 
   # Clause 4b: Down — focus advance on text-like fields, value cycle on :enum
@@ -367,6 +373,12 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     new_field_state = dispatch_to_field(spec, field_state, event)
     new_states = List.replace_at(state.field_states, state.focus_index, new_field_state)
     {%{state | field_states: new_states}, nil}
+  end
+
+  defp submit_form(%__MODULE__{} = state) do
+    payload = collect_values(state)
+    submit_result = state.on_submit.(payload)
+    {%{state | submit_state: :submitting}, submitted_action(submit_result)}
   end
 
   defp submitted_action(result) when result in [:ok, nil], do: :submitted
@@ -465,17 +477,31 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     title_row = text(state.title, fg: theme.title.fg, style: [:bold])
     divider = text(String.duplicate("─", 40), fg: theme.border.fg)
 
-    vis = MapSet.new(visible_indices(state))
+    visible = visible_indices(state)
+    {window, scroll_above, scroll_below} = compute_field_window(state, visible, opts)
+    vis_set = MapSet.new(window)
+
+    above_rows =
+      if scroll_above > 0,
+        do: [text("↑ #{scroll_above} more above", fg: theme.dim.fg)],
+        else: []
+
+    below_rows =
+      if scroll_below > 0,
+        do: [text("↓ #{scroll_below} more below", fg: theme.dim.fg)],
+        else: []
 
     field_rows =
       state.fields
       |> Enum.with_index()
-      |> Enum.filter(fn {_spec, idx} -> MapSet.member?(vis, idx) end)
+      |> Enum.filter(fn {_spec, idx} -> MapSet.member?(vis_set, idx) end)
       |> Enum.flat_map(fn {spec, idx} ->
         focused? = idx == state.focus_index
         field_state = Enum.at(state.field_states, idx)
         render_field(spec, field_state, focused?, state.errors, theme)
       end)
+
+    field_rows = above_rows ++ field_rows ++ below_rows
 
     base_error_rows =
       case Map.get(state.errors, :base) do
@@ -494,13 +520,54 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     # Phase 28 D-09: when a status row is present, it REPLACES the footer.
     footer_rows =
       cond do
-        status_rows != [] -> []
-        state.show_footer -> [text("[Enter] Submit   [Esc] Cancel", fg: theme.dim.fg)]
-        true -> []
+        status_rows != [] ->
+          []
+
+        state.show_footer ->
+          [
+            text(
+              "[Tab] Next   [Shift+Tab] Previous   [Enter] Submit   [Ctrl+S] Save   [Esc] Cancel",
+              fg: theme.dim.fg
+            )
+          ]
+
+        true ->
+          []
       end
 
     column [] do
       [title_row, divider] ++ field_rows ++ base_error_rows ++ status_rows ++ footer_rows
+    end
+  end
+
+  # FOG-670: viewport windowing. When `:max_visible` is set, only N visible
+  # fields around the focused one are rendered; the remainder is summarised by
+  # `↑ N more above` / `↓ N more below` scroll-indicator rows. This keeps the
+  # form body within a cramped terminal viewport (e.g. 80x24, 64x22) instead
+  # of spilling past the surrounding chrome. Returns
+  # `{window_indices, scroll_above_count, scroll_below_count}`.
+  defp compute_field_window(%__MODULE__{} = state, visible, opts) do
+    case Keyword.get(opts, :max_visible) do
+      nil ->
+        {visible, 0, 0}
+
+      n when is_integer(n) and n > 0 ->
+        case length(visible) do
+          total when total <= n ->
+            {visible, 0, 0}
+
+          total ->
+            focus_pos =
+              case Enum.find_index(visible, &(&1 == state.focus_index)) do
+                nil -> 0
+                pos -> pos
+              end
+
+            half = div(n - 1, 2)
+            start = max(0, min(focus_pos - half, total - n))
+            window = Enum.slice(visible, start, n)
+            {window, start, total - start - n}
+        end
     end
   end
 

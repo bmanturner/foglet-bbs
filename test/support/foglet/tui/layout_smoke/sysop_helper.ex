@@ -159,16 +159,18 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
       end
 
       # Sentinel check via raw tree traversal (D-09 primitive presence).
-      # LIMITS descriptions exceed terminal width, making the bounds assertion
-      # unreliable; raw traversal confirms Modal.Form renders the footer sentinel.
+      # LIMITS descriptions exceed terminal width, making full-form bounds
+      # assertions unreliable; raw traversal confirms the save footer contract,
+      # and the positioned footer check keeps the keybar text itself in bounds.
       describe "sysop limits tab — size contract" do
         for {width, height} <- [{64, 22}, {80, 24}] do
           @width width
           @height height
           @tag :"sysop limits size contract"
-          test "at #{width}x#{height} Modal.Form footer sentinel renders within bounds" do
+          test "at #{width}x#{height} save footer sentinel renders within bounds" do
             width = @width
             height = @height
+            footer_text = "[Tab] Next [Shift+Tab] Previous [Ctrl+S] Save [Enter] Save"
 
             # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
@@ -194,14 +196,22 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
             tree = SysopHelper.render_sysop_smoke_state(state)
             texts = SysopHelper.collect_text(tree)
 
-            assert Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
-                   "expected '[Enter] Submit' at #{width}x#{height}"
+            assert Enum.any?(texts, &String.contains?(&1, footer_text)),
+                   "expected '#{footer_text}' at #{width}x#{height}"
 
             positioned = apply_at_size(tree, {width, height})
             elements = text_elements(positioned)
 
-            assert Enum.any?(elements, &String.contains?(&1.text, "Submit")),
-                   "expected visible submit affordance at #{width}x#{height}"
+            footer_el =
+              Enum.find(elements, fn el -> String.contains?(el.text, "[Enter] Save") end)
+
+            assert footer_el, "expected positioned save footer at #{width}x#{height}"
+
+            assert footer_el.x + TextWidth.display_width(footer_el.text) <= width,
+                   "footer #{inspect(footer_el.text)} at x=#{footer_el.x} exceeds width #{width}"
+
+            assert footer_el.y < height,
+                   "footer #{inspect(footer_el.text)} at y=#{footer_el.y} exceeds height #{height}"
 
             for el <- elements do
               assert el.x + TextWidth.display_width(el.text) <= width,

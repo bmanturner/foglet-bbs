@@ -44,11 +44,17 @@ defmodule Foglet.TUI.Screens.Account.Render do
   defp key_bar(ss), do: key_bar_for(ss, active_label(ss) || "PROFILE")
 
   defp key_bar_for(ss, active_label) do
+    # FOG-693: `1-N Jump` is a Phase 29 D-26/D-27 hard contract that must be
+    # visible at every supported width on Account tab list screens. Pin it to
+    # priority 0 (same retention tier as System Back) so the FOG-689
+    # Save/Cancel priority elevation does not crowd it out at 64x22. The
+    # `←/→ Tab` arrow advert remains priority 10 since it is dispensable
+    # under heavy compaction.
     tabs_group = %{
       label: "Tabs",
       commands: [
         %{key: "←/→", label: "Tab", priority: 10},
-        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 10}
+        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 0}
       ]
     }
 
@@ -134,10 +140,17 @@ defmodule Foglet.TUI.Screens.Account.Render do
 
   defp middle_groups(_unknown, _ss) do
     [
-      %{label: "Field", commands: [%{key: "Tab", label: "Next", priority: 10}]},
+      %{
+        label: "Field",
+        commands: [
+          %{key: "Tab", label: "Next", priority: 10},
+          %{key: "Shift+Tab", label: "Previous", priority: 10}
+        ]
+      },
       %{
         label: "Actions",
         commands: [
+          %{key: "Ctrl+S", label: "Save", priority: 30},
           %{key: "Enter", label: "Save", priority: 30},
           %{key: "Esc", label: "Cancel", priority: 30}
         ]
@@ -148,9 +161,21 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # PROFILE/PREFS share the form-tab key cluster. PREFS adds an explicit
   # `↑/↓ Change` advert when an enum field (Time format / Theme) is focused
   # so users can discover the cycling affordance (FOG-130 Item 4).
+  #
+  # FOG-689: when a Modal.Form is active on PROFILE/PREFS, the Save/Cancel
+  # actions must outrank Field Tab/Shift+Tab and Tabs in the priority
+  # compaction so they survive 80-column compaction. CommandBar treats lower
+  # priority numbers as higher retention, so Save/Cancel use priority 0 to
+  # stay visible at 80x24 even when Field nav and Tabs are dropped.
   defp form_middle_groups(%State{} = ss, section) do
     base = [
-      %{label: "Field", commands: [%{key: "Tab", label: "Next", priority: 10}]}
+      %{
+        label: "Field",
+        commands: [
+          %{key: "Tab", label: "Next", priority: 10},
+          %{key: "Shift+Tab", label: "Previous", priority: 10}
+        ]
+      }
     ]
 
     fields =
@@ -159,7 +184,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
           [
             %{
               label: "Value",
-              commands: [%{key: "↑/↓", label: "Change", priority: 25}]
+              commands: [%{key: "↑/↓", label: "Change", priority: 5}]
             }
           ]
       else
@@ -171,8 +196,9 @@ defmodule Foglet.TUI.Screens.Account.Render do
         %{
           label: "Actions",
           commands: [
-            %{key: "Enter", label: "Save", priority: 30},
-            %{key: "Esc", label: "Cancel", priority: 30}
+            %{key: "Ctrl+S", label: "Save", priority: 5},
+            %{key: "Enter", label: "Save", priority: 5},
+            %{key: "Esc", label: "Cancel", priority: 5}
           ]
         }
       ]

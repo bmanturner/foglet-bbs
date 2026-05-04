@@ -17,8 +17,9 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   Two behaviors live at the wrapper boundary rather than inside Modal.Form:
 
   Ctrl+S (D-19): preserved at the wrapper level; routes to the same
-  validate → `Foglet.Config.put/3` path that Enter-on-last-field uses by
-  driving the form to the last visible index and dispatching `:enter`.
+  validate → `Foglet.Config.put/3` path that Enter uses while preserving the
+  current focus. Shared `Modal.Form` owns the actual "save from any focus"
+  submit contract.
 
   Esc (FORM-06 / D-12): reseeds drafts via `SiteForm.State.reseed_drafts/1`;
   no inline status copy is produced.
@@ -73,7 +74,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
 
   @spec handle_key(map(), t()) :: {t(), [{atom(), term()}]}
   def handle_key(%{key: :char, char: "s", ctrl: true}, %SState{} = state) do
-    # D-19: Ctrl+S routes to the same submit path Enter-on-last uses.
+    # D-19: Ctrl+S routes to the same submit path Enter uses while preserving focus.
     submit(state)
   end
 
@@ -109,9 +110,6 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   # ---------- Private ----------
 
   defp submit(%SState{} = state) do
-    visible = SState.visible_keys(state)
-    last_idx = max(0, length(visible) - 1)
-
     # Phase 28 Plan 06 (BL-02): seed submit_state so a held Ctrl+S whose
     # prior cascade hasn't transitioned out of :submitting is lock-swallowed
     # (FORM-05 lock guard). replay_submit_state/2 is required here because
@@ -121,9 +119,9 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
       |> SState.build_modal_form()
       |> ModalForm.replay_submit_state(state.submit_state)
       |> apply_errors(state.errors)
-      |> set_focus(last_idx)
+      |> set_focus(state.focused)
 
-    {new_form, action} = ModalForm.handle_event(%{key: :enter}, form)
+    {new_form, action} = ModalForm.handle_event(%{key: :char, char: "s", ctrl: true}, form)
 
     case action do
       {:submitted, submit_result} -> finalize_submit(state, new_form, submit_result)
@@ -266,7 +264,6 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   end
 
   defp clamp(_idx, 0), do: 0
-  defp clamp(idx, _n) when idx < 0, do: 0
   defp clamp(idx, n) when idx >= n, do: n - 1
   defp clamp(idx, _n), do: idx
 
