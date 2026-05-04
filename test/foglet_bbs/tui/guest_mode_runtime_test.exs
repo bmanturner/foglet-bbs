@@ -1,6 +1,8 @@
 defmodule Foglet.TUI.GuestModeRuntimeTest do
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.RenderHelpers
+
   alias Foglet.BoardChat
   alias Foglet.Config
   alias Foglet.Doors.Manifest
@@ -54,6 +56,88 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     assert state.current_screen == :main_menu
     assert state.current_user == nil
     assert Guest.guest?(state)
+  end
+
+  test "explicit guest initial main menu entry loads and renders read-only oneliners" do
+    Process.put(:fake_oneliners_owner, self())
+
+    Process.put(:fake_oneliners_entries, [
+      %{id: "ol1", body: "guest-readable row", user: %{handle: "alice"}}
+    ])
+
+    {:ok, state} =
+      App.init(%{
+        terminal_size: {80, 24},
+        session_context: %{
+          guest: true,
+          guest_mode_enabled: true,
+          user: nil,
+          domain: %{oneliners: Foglet.TUI.FakeOneliners}
+        }
+      })
+
+    assert state.current_screen == :main_menu
+    assert state.current_user == nil
+    assert Guest.guest?(state)
+
+    refute_received {:list_recent_visible, 5}
+
+    {state, cmds} = App.update(:initial_route_enter, state)
+
+    assert %MainMenuState{oneliner_status: :loading} = App.screen_state_for(state, :main_menu)
+    assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+    assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"} = entry]}} =
+             task.()
+
+    assert entry.body == "guest-readable row"
+    assert_received {:list_recent_visible, 5}
+
+    {state, []} =
+      App.update({:screen_task_result, :main_menu, :load_oneliners, {:ok, [entry]}}, state)
+
+    rendered_text =
+      state
+      |> App.screen_state_for(:main_menu)
+      |> MainMenu.render(
+        Context.new(
+          current_user: nil,
+          session_context: state.session_context,
+          terminal_size: {80, 24}
+        )
+      )
+      |> collect_text_values()
+
+    assert "> @alice  guest-readable ro" in rendered_text
+
+    refute Enum.any?(
+             MainMenu.visible_actions(%{current_user: nil, recent_oneliners: [entry]}),
+             fn group ->
+               Enum.any?(group.commands, &(&1.key in ["O", "H"]))
+             end
+           )
+  end
+
+  test "login-screen unauthenticated nil-user state does not load guest oneliners" do
+    Process.put(:fake_oneliners_owner, self())
+    Process.put(:fake_oneliners_entries, [%{id: "ol1", body: "should stay hidden"}])
+
+    {:ok, state} =
+      App.init(%{
+        session_context: %{
+          guest: false,
+          user: nil,
+          domain: %{oneliners: Foglet.TUI.FakeOneliners}
+        }
+      })
+
+    assert state.current_screen == :login
+    refute Guest.guest?(state)
+
+    {_state, cmds} = App.update(:initial_route_enter, state)
+
+    assert cmds == []
+    refute_received {:list_recent_visible, 5}
   end
 
   test "session effect enters guest mode in the App without crashing anonymous Session" do

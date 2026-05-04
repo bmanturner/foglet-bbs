@@ -103,7 +103,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   # 39-05 will collapse the App-side per-screen clauses into a single generic
   # dispatch, relying on this screen-side clause to decide what to load.
   def update(:on_route_enter, local_state, %Context{} = context) do
-    if context.current_user do
+    if context.current_user || Guest.guest?(context) do
       update(:load_oneliners, local_state, context)
     else
       {normalize_state(local_state, context), []}
