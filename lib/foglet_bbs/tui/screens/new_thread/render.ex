@@ -5,6 +5,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
 
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.NewThread.State
+  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -55,7 +56,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
       %{
         label: "Navigate",
         commands: [
-          %{key: "j/k", label: "Select", priority: 10},
+          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
           %{key: "Enter", label: "Choose", priority: 10}
         ]
       },

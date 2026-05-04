@@ -29,6 +29,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   alias Foglet.Boards
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
+  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
@@ -177,13 +178,13 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   defp footer_text(%__MODULE__{} = state) do
     case selected_row(state) do
       {:category, _} ->
-        "[j/k] Move  [N] New category  [E] Edit category  [D] Archive category  [n] New board"
+        "[#{ScrollKeys.commandbar_key()}] Move  [N] New category  [E] Edit category  [D] Archive category  [n] New board"
 
       {:board, _} ->
-        "[j/k] Move  [n] New board  [e] Edit board  [D] Archive board  [N] New category"
+        "[#{ScrollKeys.commandbar_key()}] Move  [n] New board  [e] Edit board  [D] Archive board  [N] New category"
 
       _ ->
-        "[j/k] Move  [n] New board  [N] New category"
+        "[#{ScrollKeys.commandbar_key()}] Move  [n] New board  [N] New category"
     end
   end
 
@@ -272,10 +273,11 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   def handle_key(%{key: :escape}, state), do: {state, []}
 
-  def handle_key(%{key: :down}, state), do: {move(state, +1), []}
-  def handle_key(%{key: :char, char: "j"}, state), do: {move(state, +1), []}
-  def handle_key(%{key: :up}, state), do: {move(state, -1), []}
-  def handle_key(%{key: :char, char: "k"}, state), do: {move(state, -1), []}
+  def handle_key(%{key: key} = event, state) when key in [:up, :down],
+    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+
+  def handle_key(%{key: :char, char: char} = event, state) when char in ["j", "k"],
+    do: {move(state, ScrollKeys.vertical_delta(event)), []}
 
   # Create board (lowercase n)
   def handle_key(%{key: :char, char: "n"} = e, state) do

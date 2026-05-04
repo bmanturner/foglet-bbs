@@ -6,7 +6,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   results, compose drafts, validation, submit status/result, and cancel origin
   live in `%NewThread.State{}` and flow through `update/3`.
 
-  Step 1 — :board   : pick a subscribed board (j/k / ↑↓ to navigate, Enter to select, Esc to cancel).
+  Step 1 — :board   : pick a subscribed board (↑/↓ to navigate; j/k fallback, Enter to select, Esc to cancel).
   Step 2 — :compose : enter title (Tab-switch focus) and body (MultiLineInput state, rendered as plain text/2).
                        Ctrl+S to submit, Esc to cancel (Ctrl+C is a terminal fallback).
 
@@ -19,7 +19,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Config
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, ScrollKeys}
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.NewThread.Render
   alias Foglet.TUI.Screens.NewThread.State
@@ -117,15 +117,14 @@ defmodule Foglet.TUI.Screens.NewThread do
     {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
   end
 
-  defp handle_board_key_event(%{key: :char, char: "j"}, %State{} = state),
-    do: board_move_state(state, +1)
+  defp handle_board_key_event(%{key: key} = event, %State{} = state) when key in [:up, :down] do
+    board_move_state(state, ScrollKeys.vertical_delta(event))
+  end
 
-  defp handle_board_key_event(%{key: :down}, %State{} = state), do: board_move_state(state, +1)
-
-  defp handle_board_key_event(%{key: :char, char: "k"}, %State{} = state),
-    do: board_move_state(state, -1)
-
-  defp handle_board_key_event(%{key: :up}, %State{} = state), do: board_move_state(state, -1)
+  defp handle_board_key_event(%{key: :char, char: char} = event, %State{} = state)
+       when char in ["j", "k"] do
+    board_move_state(state, ScrollKeys.vertical_delta(event))
+  end
 
   defp handle_board_key_event(%{key: :enter}, %State{} = state) do
     boards = state.boards || []

@@ -269,7 +269,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     overflow_hint =
       if viewport.content_height > viewport.visible_height do
         [
-          text(truncate("More limits above/below — use j/k or ↑/↓ to scroll.", width),
+          text(truncate("More limits above/below — use ↑/↓ to scroll.", width),
             fg: theme.dim.fg
           )
         ]

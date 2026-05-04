@@ -432,6 +432,18 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
     assert state.selected_board_index == 1
 
+    {state, []} = NewThread.update({:key, %{key: :up}}, state, context())
+    assert state.selected_board_index == 0
+
+    {state, []} = NewThread.update({:key, %{key: :down}}, state, context())
+    assert state.selected_board_index == 1
+
+    {state, []} = NewThread.update({:key, %{key: :char, char: "k"}}, state, context())
+    assert state.selected_board_index == 0
+
+    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+    assert state.selected_board_index == 1
+
     {state, []} = NewThread.update({:key, %{key: :enter}}, state, context())
     assert state.step == :compose
     assert state.board.id == "b2"
@@ -632,6 +644,15 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   test "render/1 board step does not crash" do
     state = base_state()
     assert _ = render_screen(state)
+  end
+
+  test "render/1 board step advertises arrows only for selectable board movement" do
+    ss = State.new(boards: [%{id: "b1", name: "General"}], load_status: :loaded)
+    state = Map.put(base_state(), :screen_state, %{new_thread: ss})
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "↑/↓ Select"
+    refute text =~ "j/k Select"
   end
 
   test "render/1 board step with nil boards does not crash" do

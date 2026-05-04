@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.User
+  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   import Raxol.Core.Renderer.View
@@ -80,10 +81,11 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   end
 
   @spec handle_key(map(), t()) :: {t(), list()}
-  def handle_key(%{key: :down}, state), do: {move(state, +1), []}
-  def handle_key(%{key: :char, char: "j"}, state), do: {move(state, +1), []}
-  def handle_key(%{key: :up}, state), do: {move(state, -1), []}
-  def handle_key(%{key: :char, char: "k"}, state), do: {move(state, -1), []}
+  def handle_key(%{key: key} = event, state) when key in [:up, :down],
+    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+
+  def handle_key(%{key: :char, char: char} = event, state) when char in ["j", "k"],
+    do: {move(state, ScrollKeys.vertical_delta(event)), []}
 
   # Phase 29 D-15 + A2 disambiguation: each transition keybind is gated by
   # the focused row's *source* status. [A] Approve and [U] Reactivate both
@@ -146,14 +148,14 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   # is in `Accounts.valid_status_transitions/1` for the focused row's source
   # status are advertised. A2 disambiguation: [A] Approve targets :active
   # from :pending only; [U] Reactivate targets :active from :suspended only.
-  defp footer_text(%__MODULE__{rows: []}), do: "[j/k] Move"
+  defp footer_text(%__MODULE__{rows: []}), do: "[#{ScrollKeys.commandbar_key()}] Move"
 
   defp footer_text(%__MODULE__{rows: rows, selection_index: idx}) do
     {focused_status, _user} = Enum.at(rows, idx)
     allowed = Accounts.valid_status_transitions(focused_status)
 
     [
-      "[j/k] Move",
+      "[#{ScrollKeys.commandbar_key()}] Move",
       if(focused_status == :pending and :active in allowed, do: "[A] Approve"),
       if(focused_status == :pending and :rejected in allowed, do: "[R] Reject"),
       if(focused_status == :active and :suspended in allowed, do: "[S] Suspend"),
