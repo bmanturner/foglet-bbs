@@ -61,24 +61,10 @@ defmodule Foglet.TUI.Screens.Account do
       |> normalize_state(context)
       |> sync_prefs_focus()
 
-    if shield_tab_shortcut?(event, ss) do
-      handle_active_key(event, ss, context)
+    if tab_navigation_focus?(ss) and event.key == :enter do
+      {%{ss | tab_navigation?: false}, []}
     else
-      {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-
-      if action != nil do
-        new_active =
-          case action do
-            {:tab_changed, idx} -> idx
-            _ -> ss.active_tab
-          end
-
-        new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-        {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
-        {loaded_ss, effects}
-      else
-        handle_active_key(event, ss, context)
-      end
+      do_update_key(event, ss, context)
     end
   end
 
@@ -203,6 +189,28 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp active_label(%State{} = ss), do: Enum.at(tab_labels(ss), ss.active_tab)
 
+  defp do_update_key(event, %State{} = ss, %Context{} = context) do
+    if shield_tab_shortcut?(event, ss) do
+      handle_active_key(event, ss, context)
+    else
+      {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
+
+      if action != nil do
+        new_active =
+          case action do
+            {:tab_changed, idx} -> idx
+            _ -> ss.active_tab
+          end
+
+        new_ss = %{ss | tabs: new_tabs, active_tab: new_active, tab_navigation?: false}
+        {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
+        {loaded_ss, effects}
+      else
+        handle_active_key(event, ss, context)
+      end
+    end
+  end
+
   defp maybe_request_tab_load(%State{} = ss, %Context{} = context) do
     case active_label(ss) do
       "SSH KEYS" when not is_list(ss.ssh_keys.items) ->
@@ -229,6 +237,7 @@ defmodule Foglet.TUI.Screens.Account do
   defp handle_profile_update(event, %State{} = ss, %Context{} = context) do
     case ProfileForm.handle_key(event, ss, context.current_user) do
       {:ok, new_ss, cmds} ->
+        new_ss = maybe_enter_tab_navigation(event, new_ss, cmds)
         {new_ss, account_command_effects(cmds, context, new_ss)}
 
       :no_match ->
@@ -240,6 +249,7 @@ defmodule Foglet.TUI.Screens.Account do
     case PrefsForm.handle_key(event, ss, context.current_user) do
       {:ok, new_ss, cmds} ->
         new_ss = sync_prefs_focus_from_form(new_ss)
+        new_ss = maybe_enter_tab_navigation(event, new_ss, cmds)
         {new_ss, account_command_effects(cmds, context, new_ss)}
 
       :no_match ->
@@ -378,8 +388,19 @@ defmodule Foglet.TUI.Screens.Account do
   # digits into a form or pressing Left/Right inside populated text fields
   # silently changes Account tabs instead of editing the field.
   defp shield_tab_shortcut?(event, %State{} = ss) do
-    text_entry_event?(event, active_text_entry_field(ss))
+    not tab_navigation_focus?(ss) and text_entry_event?(event, active_text_entry_field(ss))
   end
+
+  defp tab_navigation_focus?(%State{tab_navigation?: value}), do: value == true
+
+  # FOG-741: Esc from a PROFILE/PREFS form still performs honest cancel, but
+  # it also parks focus on the Account tab strip. The next advertised tab
+  # shortcut (1-3 or ←/→) reaches Tabs instead of being inserted into the
+  # focused text field; Enter returns to the form.
+  defp maybe_enter_tab_navigation(%{key: :escape}, %State{} = ss, []),
+    do: %{ss | tab_navigation?: true}
+
+  defp maybe_enter_tab_navigation(_event, %State{} = ss, _cmds), do: ss
 
   defp text_entry_event?(%{key: :char, char: <<c>>}, {:form, %{type: :select_list}, field_state})
        when c in ?0..?9 do

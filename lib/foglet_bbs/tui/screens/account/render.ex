@@ -51,11 +51,17 @@ defmodule Foglet.TUI.Screens.Account.Render do
     # Save/Cancel priority elevation does not crowd it out at 64x22. The
     # `←/→ Tab` arrow advert remains priority 10 since it is dispensable
     # under heavy compaction.
+    form_tab_navigation? = form_tab?(active_label) and not Map.get(ss, :tab_navigation?, false)
+
     tabs_group = %{
       label: "Tabs",
       commands: [
-        %{key: "←/→", label: "Tab", priority: 10},
-        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 0}
+        %{key: tab_arrow_hint(form_tab_navigation?), label: "Tab", priority: 10},
+        %{
+          key: tab_jump_hint(form_tab_navigation?, length(tab_labels(ss))),
+          label: "Jump",
+          priority: 0
+        }
       ]
     }
 
@@ -159,6 +165,10 @@ defmodule Foglet.TUI.Screens.Account.Render do
     ]
   end
 
+  defp form_tab?("PROFILE"), do: true
+  defp form_tab?("PREFS"), do: true
+  defp form_tab?(_), do: false
+
   # PROFILE/PREFS share the form-tab key cluster. PREFS adds an explicit
   # `↑/↓ Change` advert when an enum field (Time format / Theme) is focused
   # so users can discover the cycling affordance (FOG-130 Item 4).
@@ -217,6 +227,12 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # `FunctionClauseError`. Fall back to "1" so the account screen
   # renders rather than crashing.
   defp jump_hint(_), do: "1"
+
+  defp tab_arrow_hint(true), do: "Esc,←/→"
+  defp tab_arrow_hint(false), do: "←/→"
+
+  defp tab_jump_hint(true, n), do: "Esc," <> jump_hint(n)
+  defp tab_jump_hint(false, n), do: jump_hint(n)
 
   # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
   defp inner_width(state) do

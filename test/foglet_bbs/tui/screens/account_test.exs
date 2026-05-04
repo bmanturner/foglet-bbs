@@ -630,6 +630,47 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert new_state.screen_state.account.active_tab == 1
     end
 
+    test "FOG-741: Esc from Profile exposes tab jumps without mutating text", %{state: state} do
+      state = ensure_account_seeded(state)
+
+      state =
+        update_in(state.screen_state.account, fn account ->
+          %{account | profile_form: %{account.profile_form | focus_index: 0}}
+        end)
+
+      before_location =
+        Foglet.TUI.Widgets.Modal.Form.field_value(
+          state.screen_state.account.profile_form,
+          :location
+        )
+
+      {:update, state, []} = handle_account_key(%{key: :escape}, state)
+      assert state.screen_state.account.active_tab == 0
+      assert state.screen_state.account.tab_navigation?
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+      assert state.screen_state.account.active_tab == 1
+      refute state.screen_state.account.tab_navigation?
+
+      assert Foglet.TUI.Widgets.Modal.Form.field_value(
+               state.screen_state.account.profile_form,
+               :location
+             ) == before_location
+    end
+
+    test "FOG-741: Account form keybar advertises Esc before tab jumps", %{state: state} do
+      flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
+
+      assert flat =~ "Esc,1-3"
+      refute flat =~ "1-3 Jump"
+
+      {:update, state, []} = handle_account_key(%{key: :escape}, state)
+      flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
+
+      assert flat =~ "1-3"
+      refute flat =~ "Esc,1-3"
+    end
+
     test "KEYS-01 digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
       # FOG-333: leave PROFILE first so the digit shortcut isn't shielded.
       state = leave_profile_form(state)
