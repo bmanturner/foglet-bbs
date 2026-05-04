@@ -26,7 +26,6 @@ import signal
 import struct
 import sys
 import termios
-import tty
 
 
 def write_frame(kind: bytes, payload: bytes = b"") -> None:
@@ -119,12 +118,6 @@ def main() -> int:
         try:
             if args.cwd:
                 os.chdir(args.cwd)
-            # Make the child terminal raw-ish from the start; full-screen apps may
-            # still configure their own modes after exec.
-            try:
-                tty.setraw(0)
-            except Exception:
-                pass
             os.execvpe(command[0], command, os.environ.copy())
         except Exception as exc:
             os.write(2, ("foglet-pty exec failed: %r\r\n" % (exc,)).encode("utf-8", "replace"))

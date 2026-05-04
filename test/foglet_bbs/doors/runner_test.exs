@@ -137,10 +137,13 @@ defmodule Foglet.Doors.RunnerTest do
       assert_door_output_contains("external-env:alice:132")
       assert %{status: :running, pty_backend: :helper} = Runner.snapshot(pid)
 
-      Runner.input(pid, "hello\n")
+      # SSH clients send Enter as carriage return. The helper must preserve the
+      # child PTY's default CR->NL translation so shell/readline-style doors see
+      # a complete line.
+      Runner.input(pid, "hello\r")
       assert_door_output_contains("external> hello")
 
-      Runner.input(pid, "/quit\n")
+      Runner.input(pid, "/quit\r")
       assert_door_output_contains("Leaving External Echo.")
 
       assert_receive {:door_exited, ^pid, "external-env", :normal, 0}, @event_timeout
