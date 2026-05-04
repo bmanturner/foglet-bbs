@@ -16,7 +16,7 @@ defmodule Foglet.Posts do
   alias Foglet.Boards
   alias Foglet.Boards.Board
   alias Foglet.PostingPolicy
-  alias Foglet.Posts.{Edit, Post, ReaderWindow}
+  alias Foglet.Posts.{Edit, Post, ReaderWindow, Upvote}
   alias Foglet.Threads.Thread
   alias FogletBbs.Repo
 
@@ -85,6 +85,67 @@ defmodule Foglet.Posts do
   def get_post!(id) do
     Repo.get!(Post, id)
     |> Repo.preload([:user, :reply_to])
+  end
+
+  @doc """
+  Toggles `user_id`'s upvote on `post_id` and returns the refreshed post.
+
+  Own-post attempts are silent no-ops. The post row is locked while the upvote
+  row is inserted/deleted and the denormalized `posts.upvote_count` is
+  reconciled to the actual upvote row count, so rapid repeat toggles and
+  concurrent sessions cannot create duplicate rows or drifting counts.
+  """
+  @spec toggle_upvote(String.t(), String.t()) :: {:ok, Post.t()} | {:error, term()}
+  def toggle_upvote(user_id, post_id) do
+    with {:ok, user_uuid} <- Ecto.UUID.cast(user_id),
+         {:ok, post_uuid} <- Ecto.UUID.cast(post_id) do
+      Repo.transaction(fn ->
+        post = locked_post!(post_uuid)
+
+        if post.user_id == user_uuid do
+          Repo.preload(post, [:user, :reply_to])
+        else
+          toggle_upvote_row!(user_uuid, post_uuid)
+          reconcile_post_upvote_count!(post_uuid)
+        end
+      end)
+    else
+      :error -> {:error, :not_found}
+    end
+  end
+
+  defp locked_post!(post_id) do
+    query = from p in Post, where: p.id == ^post_id, lock: "FOR UPDATE"
+
+    case Repo.one(query) do
+      %Post{} = post -> post
+      nil -> Repo.rollback(:not_found)
+    end
+  end
+
+  defp toggle_upvote_row!(user_id, post_id) do
+    case Repo.get_by(Upvote, user_id: user_id, post_id: post_id) do
+      %Upvote{} = upvote ->
+        Repo.delete!(upvote)
+
+      nil ->
+        %Upvote{user_id: user_id, post_id: post_id}
+        |> Upvote.changeset(%{})
+        |> Repo.insert!()
+    end
+  end
+
+  defp reconcile_post_upvote_count!(post_id) do
+    count =
+      Upvote
+      |> where([u], u.post_id == ^post_id)
+      |> Repo.aggregate(:count, :id)
+
+    Post
+    |> where([p], p.id == ^post_id)
+    |> Repo.update_all(set: [upvote_count: count])
+
+    get_post!(post_id)
   end
 
   @doc """

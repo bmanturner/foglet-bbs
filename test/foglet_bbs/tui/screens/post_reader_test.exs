@@ -41,6 +41,24 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
+  defmodule FakePostsWithUpvotes do
+    def toggle_upvote(user_id, post_id) do
+      if pid = Process.get(:toggle_upvote_test_pid) do
+        send(pid, {:toggle_upvote_requested, user_id, post_id})
+      end
+
+      {:ok,
+       %{
+         id: post_id,
+         message_number: 2,
+         body: "second",
+         upvote_count: 4,
+         user: %{handle: "bob"},
+         inserted_at: ~U[2026-04-18 00:01:00.000000Z]
+       }}
+    end
+  end
+
   defmodule FakeBoards do
     def advance_board_read_pointer(_user_id, _board_id, _msg_num), do: {:ok, %{}}
   end
@@ -466,6 +484,73 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
              thread_id: "t-route",
              load_intent: "jump_last"
            } = PostReader.State.from_context(context)
+  end
+
+  describe "upvote selected post action" do
+    test "U toggles the selected visible action post, not the anchor post, and refreshes count" do
+      Process.put(:toggle_upvote_test_pid, self())
+
+      posts = [
+        %{
+          id: "p1",
+          message_number: 1,
+          body: "first",
+          upvote_count: 0,
+          user: %{handle: "alice"},
+          inserted_at: ~U[2026-04-18 00:00:00.000000Z]
+        },
+        %{
+          id: "p2",
+          message_number: 2,
+          body: "second",
+          upvote_count: 3,
+          user: %{handle: "bob"},
+          inserted_at: ~U[2026-04-18 00:01:00.000000Z]
+        }
+      ]
+
+      state =
+        State.new(
+          status: :loaded,
+          posts: posts,
+          thread_id: "t1",
+          selected_post_index: 0,
+          selected_action_post_index: 1
+        )
+
+      context =
+        Context.new(
+          current_user: %{id: "u1", handle: "reader"},
+          terminal_size: {100, 40},
+          domain: %{posts: FakePostsWithUpvotes},
+          session_context: %{theme: theme(), domain: %{markdown: FakeMarkdown}}
+        )
+
+      {pending, effects} = PostReader.update({:key, %{key: :char, char: "u"}}, state, context)
+
+      assert [%Effect{type: :task, payload: %{op: :toggle_upvote, fun: fun}}] = effects
+      assert {:ok, refreshed_post} = fun.()
+      assert_receive {:toggle_upvote_requested, "u1", "p2"}
+
+      {updated, []} =
+        PostReader.update(
+          {:task_result, :toggle_upvote, {:ok, {:ok, refreshed_post}}},
+          pending,
+          context
+        )
+
+      assert Enum.at(updated.posts, 0).upvote_count == 0
+      assert Enum.at(updated.posts, 1).id == "p2"
+      assert Enum.at(updated.posts, 1).upvote_count == 4
+      assert updated.selected_action_post_index == 1
+    end
+
+    test "U silently no-ops without a current user" do
+      state = State.new(status: :loaded, posts: [%{id: "p1", body: "first"}])
+      context = Context.new(current_user: nil, terminal_size: {100, 40})
+
+      assert {^state, []} = PostReader.update({:key, %{key: :char, char: "u"}}, state, context)
+    end
   end
 
   describe "decomposition contract" do

@@ -260,6 +260,74 @@ defmodule Foglet.PostsTest do
     end
   end
 
+  describe "toggle_upvote/2" do
+    test "inserts an upvote and increments the denormalized count" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      voter = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "Good"})
+
+      assert {:ok, toggled} = Foglet.Posts.toggle_upvote(voter.id, post.id)
+
+      assert toggled.id == post.id
+      assert toggled.upvote_count == 1
+      assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == 1
+      assert Repo.get_by(Foglet.Posts.Upvote, user_id: voter.id, post_id: post.id)
+    end
+
+    test "second toggle by the same user deletes the upvote and decrements count" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      voter = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "Good"})
+
+      assert {:ok, %{upvote_count: 1}} = Foglet.Posts.toggle_upvote(voter.id, post.id)
+      assert {:ok, toggled} = Foglet.Posts.toggle_upvote(voter.id, post.id)
+
+      assert toggled.upvote_count == 0
+      assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == 0
+      refute Repo.get_by(Foglet.Posts.Upvote, user_id: voter.id, post_id: post.id)
+    end
+
+    test "own-post toggle silently no-ops without row or count changes" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "Mine"})
+
+      assert {:ok, toggled} = Foglet.Posts.toggle_upvote(author.id, post.id)
+
+      assert toggled.id == post.id
+      assert toggled.upvote_count == 0
+      assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == 0
+      refute Repo.get_by(Foglet.Posts.Upvote, user_id: author.id, post_id: post.id)
+    end
+
+    test "repeat toggles keep count equal to actual upvote rows" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      voter = active_user_fixture()
+      other_voter = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "Good"})
+
+      assert {:ok, %{upvote_count: 1}} = Foglet.Posts.toggle_upvote(voter.id, post.id)
+      assert {:ok, %{upvote_count: 0}} = Foglet.Posts.toggle_upvote(voter.id, post.id)
+      assert {:ok, %{upvote_count: 1}} = Foglet.Posts.toggle_upvote(voter.id, post.id)
+      assert {:ok, %{upvote_count: 2}} = Foglet.Posts.toggle_upvote(other_voter.id, post.id)
+
+      row_count =
+        Foglet.Posts.Upvote
+        |> Ecto.Query.where([u], u.post_id == ^post.id)
+        |> Repo.aggregate(:count, :id)
+
+      assert row_count == 2
+      assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == row_count
+    end
+  end
+
   describe "list_reader_window/2" do
     test "returns a bounded initial window with ascending message numbers and next metadata" do
       {_board, user, thread, _posts} = setup_thread_with_posts(5)
