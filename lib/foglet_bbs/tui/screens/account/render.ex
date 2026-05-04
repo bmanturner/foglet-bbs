@@ -155,6 +155,12 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # PROFILE/PREFS share the form-tab key cluster. PREFS adds an explicit
   # `↑/↓ Change` advert when an enum field (Time format / Theme) is focused
   # so users can discover the cycling affordance (FOG-130 Item 4).
+  #
+  # FOG-689: when a Modal.Form is active on PROFILE/PREFS, the Save/Cancel
+  # actions must outrank Field Tab/Shift+Tab and Tabs in the priority
+  # compaction so they survive 80-column compaction. CommandBar treats lower
+  # priority numbers as higher retention, so Save/Cancel use priority 0 to
+  # stay visible at 80x24 even when Field nav and Tabs are dropped.
   defp form_middle_groups(%State{} = ss, section) do
     base = [
       %{
@@ -184,9 +190,9 @@ defmodule Foglet.TUI.Screens.Account.Render do
         %{
           label: "Actions",
           commands: [
-            %{key: "Ctrl+S", label: "Save", priority: 30},
-            %{key: "Enter", label: "Save", priority: 30},
-            %{key: "Esc", label: "Cancel", priority: 30}
+            %{key: "Ctrl+S", label: "Save", priority: 5},
+            %{key: "Enter", label: "Save", priority: 5},
+            %{key: "Esc", label: "Cancel", priority: 5}
           ]
         }
       ]

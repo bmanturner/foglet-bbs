@@ -61,11 +61,69 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
 
   defp sysop_commands(ss, jump_hint) do
     case boards_modal_mode(ss) do
-      :form -> boards_form_commands()
-      :confirm -> boards_confirm_commands()
-      nil -> base_sysop_commands(ss, jump_hint)
+      :form ->
+        boards_form_commands()
+
+      :confirm ->
+        boards_confirm_commands()
+
+      nil ->
+        case form_tab_label(ss) do
+          nil -> base_sysop_commands(ss, jump_hint)
+          label -> form_tab_commands(label, jump_hint)
+        end
     end
   end
+
+  # FOG-689: when the active Sysop tab is SITE or LIMITS, both rendered as
+  # inline Modal.Form-style editors, advertise Save/Cancel/Field navigation in
+  # the screen-level command bar at priority 5 so they outrank Tab/Tabs (10)
+  # and survive 80x24 keybar compaction. Lower priority numbers are higher
+  # retention in CommandBar. Tabs nav is preserved at priority 10 so wide
+  # terminals still show it; the System Back hint uses priority 0 so it wins
+  # at every width.
+  defp form_tab_label(ss) do
+    case Enum.at(State.tab_labels(ss), ss.active_tab) do
+      "SITE" -> "SITE"
+      "LIMITS" -> "LIMITS"
+      _ -> nil
+    end
+  end
+
+  defp form_tab_commands(label, jump_hint) do
+    [
+      %{
+        label: "System",
+        commands: [%{key: "Q", label: "Back", priority: 0}]
+      },
+      %{
+        label: form_group_label(label),
+        commands: [
+          %{key: "Ctrl+S", label: "Save", priority: 5},
+          %{key: "Enter", label: "Save", priority: 5},
+          %{key: "Esc", label: "Cancel", priority: 5}
+        ]
+      },
+      %{
+        label: "Field",
+        commands: [
+          %{key: "Tab", label: "Next", priority: 10},
+          %{key: "Shift+Tab", label: "Previous", priority: 10}
+        ]
+      },
+      %{
+        label: "Tabs",
+        commands: [
+          %{key: "←/→", label: "Switch", priority: 10},
+          %{key: jump_hint, label: "Jump", priority: 10}
+        ]
+      }
+    ]
+  end
+
+  defp form_group_label("SITE"), do: "Site"
+  defp form_group_label("LIMITS"), do: "Limits"
+  defp form_group_label(_), do: "Form"
 
   defp base_sysop_commands(ss, jump_hint) do
     base = [

@@ -2208,6 +2208,53 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
   end
 
+  # ---------------------------------------------------------------------------
+  # FOG-689 — Modal.Form Save/Cancel must outrank Field/Tabs at 80x24
+  # ---------------------------------------------------------------------------
+  #
+  # Regression: at 80x24 the priority-truncating CommandBar previously dropped
+  # the Actions group (Enter/Ctrl+S Save, Esc Cancel) on PROFILE/PREFS because
+  # they were tagged at priority 30 while Field Tab/Shift+Tab and Tabs nav
+  # were at priority 10. Lower priority numbers are higher retention in the
+  # CommandBar, so Save must outrank Field/Tabs to survive compaction.
+  describe "FOG-689 Modal.Form Save/Cancel keybar priority at 80x24" do
+    test "PROFILE keybar at 80x24 keeps Enter Save (and Esc Cancel) visible" do
+      state =
+        build_state_for_role(:user)
+        |> Map.put(:terminal_size, {80, 24})
+        |> put_in([:screen_state, :account], AccountState.new())
+
+      joined = render_account(state) |> collect_text_values() |> Enum.join("|")
+
+      assert String.contains?(joined, "Save"),
+             "PROFILE 80x24 keybar must retain the Save action (FOG-689). " <>
+               "Got: #{joined}"
+
+      assert String.contains?(joined, "Cancel"),
+             "PROFILE 80x24 keybar must retain the Cancel action (FOG-689)."
+    end
+
+    test "PREFS keybar at 80x24 keeps Enter Save (and Esc Cancel) visible" do
+      ss =
+        AccountState.new()
+        |> Map.put(:active_tab, 1)
+
+      state =
+        build_state_for_role(:user)
+        |> Map.put(:terminal_size, {80, 24})
+        |> put_in([:screen_state, :account], ss)
+
+      joined = render_account(state) |> collect_text_values() |> Enum.join("|")
+
+      assert String.contains?(joined, "Save"),
+             "PREFS 80x24 keybar must retain the Save action (FOG-689). " <>
+               "Got: #{joined}"
+
+      assert String.contains?(joined, "Cancel"),
+             "PREFS 80x24 keybar must retain the Cancel action (FOG-689)."
+    end
+  end
+
   describe "FOG-130 Item 2: SSH KEYS revoke confirmation flow" do
     test "D opens confirm sub-mode without performing the revoke" do
       user = AccountsFixtures.user_fixture()

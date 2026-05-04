@@ -1020,6 +1020,25 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert String.contains?(flat, "invite_generation_per_user_limit"),
              "Limit row must be visible when generators == any_user"
     end
+
+    # FOG-689: When the SITE tab is active, it is a Modal.Form-style editor.
+    # The screen-level command bar must advertise Save/Cancel at a priority
+    # that survives 80x24 keybar compaction (lower priority numbers in
+    # CommandBar = higher retention).
+    test "SITE 80x24 keybar advertises Save and Cancel actions", %{state: state} do
+      state =
+        state
+        |> put_in([:screen_state, :sysop], SysopState.new())
+        |> Map.put(:terminal_size, {80, 24})
+
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
+
+      assert String.contains?(flat, "Save"),
+             "SITE 80x24 keybar must retain Save action (FOG-689). Got: #{flat}"
+
+      assert String.contains?(flat, "Cancel"),
+             "SITE 80x24 keybar must retain Cancel action (FOG-689). Got: #{flat}"
+    end
   end
 
   describe "SITE tab Ctrl+S (SYSO-02)" do
