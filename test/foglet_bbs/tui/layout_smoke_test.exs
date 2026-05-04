@@ -2735,6 +2735,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           session_context: %{
             theme: Foglet.TUI.Theme.resolve(:gray),
             theme_id: "gray",
+            registration_mode: "invite_only",
             invite_code_generators: "sysop_only"
           },
           terminal_size: {width, height},
@@ -2773,7 +2774,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           current_user: user,
           session_context: %{
             theme: Foglet.TUI.Theme.resolve(:gray),
-            theme_id: "gray"
+            theme_id: "gray",
+            registration_mode: "invite_only",
+            invite_code_generators: "sysop_only"
           },
           terminal_size: {width, height},
           screen_state: %{}
@@ -2796,7 +2799,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :moderation,
           current_user: user,
-          session_context: %{invite_code_generators: "sysop_only"},
+          session_context: %{
+            registration_mode: "invite_only",
+            invite_code_generators: "sysop_only"
+          },
           terminal_size: {width, height},
           screen_state: %{moderation: Moderation.State.new()}
         }
@@ -2823,7 +2829,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :moderation,
           current_user: user,
-          session_context: %{invite_code_generators: "mods"},
+          session_context: %{registration_mode: "invite_only", invite_code_generators: "mods"},
           terminal_size: {width, height},
           screen_state: %{moderation: Moderation.State.new(invites_visible?: true)}
         }
@@ -2846,7 +2852,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :sysop,
           current_user: user,
-          session_context: %{invite_code_generators: "sysop_only"},
+          session_context: %{
+            registration_mode: "invite_only",
+            invite_code_generators: "sysop_only"
+          },
           terminal_size: {width, height},
           screen_state: %{sysop: Sysop.State.new(current_user: user)}
         }
@@ -2867,7 +2876,10 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :sysop,
           current_user: user,
-          session_context: %{invite_code_generators: "sysop_only"},
+          session_context: %{
+            registration_mode: "invite_only",
+            invite_code_generators: "sysop_only"
+          },
           terminal_size: {width, height},
           screen_state: %{sysop: Sysop.State.new(current_user: user, invites_visible?: true)}
         }

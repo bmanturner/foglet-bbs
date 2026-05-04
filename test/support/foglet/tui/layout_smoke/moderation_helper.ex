@@ -13,7 +13,7 @@ defmodule Foglet.TUI.LayoutSmoke.ModerationHelper do
     %Foglet.TUI.App{
       current_screen: :moderation,
       current_user: %Foglet.Accounts.User{id: "u1", handle: "mod", role: :mod},
-      session_context: %{invite_code_generators: policy},
+      session_context: %{registration_mode: "invite_only", invite_code_generators: policy},
       terminal_size: {width, height},
       screen_state: %{moderation: screen_state}
     }
