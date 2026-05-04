@@ -353,7 +353,7 @@ Generate selected artifacts sequentially (file I/O is fast, no benefit from para
 gsd-sdk query generate-dev-preferences --analysis "$ANALYSIS_PATH" --json
 ```
 
-Display: "✓ Generated $gsd-dev-preferences at /Users/brendan.turner/Dev/personal/foglet_bbs/.codex/commands/gsd/dev-preferences.md"
+Display: "✓ Generated $gsd-dev-preferences at /Users/brendan.turner/Dev/personal/foglet_bbs/.codex/skills/gsd-dev-preferences/SKILL.md"
 
 **For AGENTS.md profile section (if selected):**
 
@@ -412,7 +412,7 @@ Your profile:    /Users/brendan.turner/Dev/personal/foglet_bbs/.codex/get-shit-d
 Then list paths for each generated artifact:
 ```
 Artifacts:
-  ✓ $gsd-dev-preferences   /Users/brendan.turner/Dev/personal/foglet_bbs/.codex/commands/gsd/dev-preferences.md
+  ✓ $gsd-dev-preferences   /Users/brendan.turner/Dev/personal/foglet_bbs/.codex/skills/gsd-dev-preferences/SKILL.md
   ✓ AGENTS.md section       ./AGENTS.md
   ✓ Global AGENTS.md        /Users/brendan.turner/Dev/personal/foglet_bbs/.codex/AGENTS.md
 ```

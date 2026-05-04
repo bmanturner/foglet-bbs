@@ -1,8 +1,8 @@
 ---
 name: "gsd-progress"
-description: "Check project progress, show context, and route to next action (execute or plan). Use --forensic to append a 6-check integrity audit after the standard report."
+description: "Check progress, advance workflow, or dispatch freeform intent — the unified GSD situational command"
 metadata:
-  short-description: "Check project progress, show context, and route to next action (execute or plan). Use --forensic to append a 6-check integrity audit after the standard report."
+  short-description: "Check progress, advance workflow, or dispatch freeform intent — the unified GSD situational command"
 ---
 
 <codex_skill_adapter>
@@ -27,7 +27,12 @@ Multi-select workaround:
 - Codex has no `multiSelect`. Use sequential single-selects, or present a numbered freeform list asking the user to enter comma-separated numbers.
 
 Execute mode fallback:
-- When `request_user_input` is rejected (Execute mode), present a plain-text numbered list and pick a reasonable default.
+- When `request_user_input` is rejected or unavailable, you MUST stop and present the questions as a plain-text numbered list, then wait for the user's reply. Do NOT pick a default and continue (#3018).
+- You may only proceed without a user answer when one of these is true:
+  (a) the invocation included an explicit non-interactive flag (`--auto` or `--all`),
+  (b) the user has explicitly approved a specific default for this question, or
+  (c) the workflow's documented contract says defaults are safe (e.g. autonomous lifecycle paths).
+- Do NOT write workflow artifacts (CONTEXT.md, DISCUSSION-LOG.md, PLAN.md, checkpoint files) until the user has answered the plain-text questions or one of (a)-(c) above applies. Surfacing the questions and waiting is the correct response — silently defaulting and writing artifacts is the #3018 failure mode.
 
 ## C. Task() → spawn_agent Mapping
 GSD workflows use `Task(...)` (Claude Code syntax). Translate to Codex collaboration tools:
@@ -54,16 +59,34 @@ Result parsing:
 </codex_skill_adapter>
 
 <objective>
-Check project progress, summarize recent work and what's ahead, then intelligently route to the next action - either executing an existing plan or creating the next one.
+Check project progress, summarize recent work and what's ahead, then intelligently route to the next action.
 
-Provides situational awareness before continuing work.
+Three modes:
+- **default**: Show progress report + intelligently route to the next action (execute or plan). Provides situational awareness before continuing work.
+- **--next**: Automatically advance to the next logical step without manual route selection. Reads STATE.md, ROADMAP.md, and phase directories. Supports `--force` to bypass safety gates.
+- **--do "task description"**: Analyze freeform natural language and dispatch to the most appropriate GSD command. Never does the work itself — matches intent, confirms, hands off.
+- **--forensic**: Append a 6-check integrity audit after the standard progress report.
 </objective>
+
+<flags>
+- **--next**: Detect current project state and automatically invoke the next logical GSD workflow step. Scans all prior phases for incomplete work before routing. `--next --force` bypasses safety gates.
+- **--do "..."**: Smart dispatcher — match freeform intent to the best GSD command using routing rules, confirm the match, then hand off.
+- **--forensic**: Run 6-check integrity audit after the standard progress report.
+- **(no flag)**: Standard progress check + intelligent routing (Routes A through F).
+</flags>
 
 <execution_context>
 @/Users/brendan.turner/Dev/personal/foglet_bbs/.codex/get-shit-done/workflows/progress.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.codex/get-shit-done/workflows/next.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.codex/get-shit-done/workflows/do.md
+@/Users/brendan.turner/Dev/personal/foglet_bbs/.codex/get-shit-done/references/ui-brand.md
 </execution_context>
 
 <process>
-Execute the progress workflow from @/Users/brendan.turner/Dev/personal/foglet_bbs/.codex/get-shit-done/workflows/progress.md end-to-end.
-Preserve all routing logic (Routes A through F) and edge case handling.
+Parse the first token of {{GSD_ARGS}}:
+- If it is `--next`: strip the flag, execute the next workflow (passing remaining args e.g. --force).
+- If it is `--do`: strip the flag, pass remainder as freeform intent to the do workflow.
+- Otherwise: execute the progress workflow end-to-end (pass --forensic through if present).
+
+Preserve all routing logic from the target workflow.
 </process>
