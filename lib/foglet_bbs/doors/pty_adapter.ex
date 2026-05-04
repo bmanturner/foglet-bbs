@@ -9,6 +9,8 @@ defmodule Foglet.Doors.PTYAdapter do
 
   import Bitwise
 
+  require Logger
+
   alias Foglet.Doors.Manifest
 
   @type backend :: :helper | :script_fallback | :plain
@@ -27,16 +29,22 @@ defmodule Foglet.Doors.PTYAdapter do
 
   def open(%Manifest{} = manifest, _terminal_size, env), do: open_plain(manifest, env)
 
-  @spec input(t(), binary()) :: true
+  @spec input(t(), binary()) :: :ok | {:error, Exception.t()}
   def input(%__MODULE__{backend: :helper, port: port}, data),
-    do: Port.command(port, <<"D", data::binary>>)
+    do: command(port, <<"D", data::binary>>)
 
-  def input(%__MODULE__{port: port}, data), do: Port.command(port, data)
+  def input(%__MODULE__{port: port}, data), do: command(port, data)
 
-  @spec resize(t(), {pos_integer(), pos_integer()}) :: :ok
-  def resize(%__MODULE__{backend: :helper, port: port}, {cols, rows}) do
-    _ = Port.command(port, "R" <> Jason.encode!(%{cols: cols, rows: rows}))
-    :ok
+  @spec resize(t(), {pos_integer(), pos_integer()}) :: :ok | {:error, Exception.t()}
+  def resize(%__MODULE__{backend: :helper, port: port} = adapter, {cols, rows}) do
+    case command(port, "R" <> Jason.encode!(%{cols: cols, rows: rows})) do
+      :ok ->
+        :ok
+
+      {:error, reason} = error ->
+        log_adapter_write_failure(adapter, :pty_adapter_resize_failed, reason)
+        error
+    end
   end
 
   def resize(_adapter, _size), do: :ok
@@ -81,6 +89,21 @@ defmodule Foglet.Doors.PTYAdapter do
   def decode_frame(_data), do: :ignore
 
   def backend(%__MODULE__{backend: backend}), do: backend
+
+  defp command(port, data) do
+    true = Port.command(port, data)
+    :ok
+  rescue
+    e -> {:error, e}
+  end
+
+  defp log_adapter_write_failure(adapter, op, reason) do
+    Logger.warning(fn ->
+      "door PTY adapter event #{inspect(%{op: op, backend: adapter.backend, reason_class: reason_class(reason)})}"
+    end)
+  end
+
+  defp reason_class(%module{}), do: inspect(module)
 
   defp open_helper(helper, manifest, {cols, rows}, env) do
     args = ["--cols", Integer.to_string(cols), "--rows", Integer.to_string(rows)]
