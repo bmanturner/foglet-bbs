@@ -507,6 +507,8 @@ defmodule Foglet.SSH.CLIHandler do
         session_pid: state.session_pid,
         pubkey_authenticated: not is_nil(state.pubkey_user),
         registration_mode: Foglet.Config.registration_mode(),
+        guest_mode_enabled: Foglet.Config.guest_mode_enabled?(),
+        guest: false,
         max_post_length: Foglet.Config.max_post_length(),
         timezone: preferences.timezone,
         time_format: preferences.time_format,

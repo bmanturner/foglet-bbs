@@ -20,6 +20,12 @@ defmodule Foglet.TUI.SessionContext do
     public key that matched a registered user.
   - `registration_mode` — value of the `registration_mode` runtime config key
     at channel-attachment time (e.g. `"open"`, `"invite_only"`, `"closed"`).
+  - `guest_mode_enabled` — snapshot of the `guest_mode_enabled` runtime config
+    key at channel-attachment time. Downstream login/menu code uses this to
+    gate intentional guest browsing without round-tripping to config storage.
+  - `guest` — `true` only after the visitor intentionally enters read-only
+    Guest Mode. A nil `user` with `guest: false` means login-screen
+    unauthenticated, not guest browsing.
   - `max_post_length` — character cap for post bodies, sourced from the
     `max_post_length` runtime config key.
   - `timezone` — IANA timezone string from the user's preferences (or the
@@ -49,6 +55,8 @@ defmodule Foglet.TUI.SessionContext do
           session_pid: pid() | nil,
           pubkey_authenticated: boolean(),
           registration_mode: String.t(),
+          guest_mode_enabled: boolean(),
+          guest: boolean(),
           max_post_length: pos_integer(),
           timezone: String.t(),
           time_format: String.t(),
@@ -65,13 +73,34 @@ defmodule Foglet.TUI.SessionContext do
     :session_pid,
     :pubkey_authenticated,
     :registration_mode,
-    :max_post_length,
     :timezone,
     :time_format,
     :theme_id,
     :theme,
     :ssh_peer,
     :offered_ssh_public_key,
-    :door_handler_pid
+    :door_handler_pid,
+    guest_mode_enabled: true,
+    guest: false,
+    max_post_length: 8192
   ]
+
+  @doc "True only for an intentional read-only guest browsing session."
+  @spec guest?(t() | map()) :: boolean()
+  def guest?(context) when is_map(context),
+    do: Map.get(context, :guest, false) == true and is_nil(Map.get(context, :user))
+
+  @doc "True when the session has an authenticated user identity."
+  @spec authenticated?(t() | map()) :: boolean()
+  def authenticated?(context) when is_map(context), do: not is_nil(Map.get(context, :user))
+
+  @doc "True for the login-screen unauthenticated state before Guest Mode is intentionally entered."
+  @spec login_unauthenticated?(t() | map()) :: boolean()
+  def login_unauthenticated?(context) when is_map(context),
+    do: not authenticated?(context) and not guest?(context)
+
+  @doc "Snapshot predicate for whether Guest Mode was enabled when this context was built."
+  @spec guest_mode_enabled?(t() | map()) :: boolean()
+  def guest_mode_enabled?(context) when is_map(context),
+    do: Map.get(context, :guest_mode_enabled, true) == true
 end

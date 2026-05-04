@@ -697,9 +697,10 @@ Seeded by `priv/repo/seeds.exs`:
 - `max_post_length` — integer (characters)
 - `max_thread_title_length` — integer (characters)
 - `require_email_verification` — boolean
+- `guest_mode_enabled` — boolean; defaults enabled and gates intentional read-only Guest Mode
 - `email_verify_resend_cooldown_seconds` — integer
 
-> Programmatic access: `Foglet.Config.Schema` declares the seeded keys with their types, defaults, and constraints. `Foglet.Config` exposes typed accessors (e.g., `registration_mode/0`, `max_post_length/0`, `require_email_verification?/0`).
+> Programmatic access: `Foglet.Config.Schema` declares the seeded keys with their types, defaults, and constraints. `Foglet.Config` exposes typed accessors (e.g., `registration_mode/0`, `max_post_length/0`, `require_email_verification?/0`, `guest_mode_enabled?/0`).
 
 Aspirational (not yet seeded):
 

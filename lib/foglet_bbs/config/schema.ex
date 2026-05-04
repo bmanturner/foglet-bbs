@@ -14,7 +14,7 @@ defmodule Foglet.Config.Schema do
 
   ## Scope
 
-  Only the 8 currently-seeded keys are schematized here. "Aspirational"
+  The currently-seeded keys are schematized here. "Aspirational"
   keys listed in `docs/DATA_MODEL.md` §11 (e.g. `archive_enabled`,
   `themes_available`) are intentionally **not** schematized in this phase
   — they will be added as they graduate from aspirational to seeded.
@@ -97,6 +97,15 @@ defmodule Foglet.Config.Schema do
       type: :boolean,
       default: false,
       description: "Require email verification before login.",
+      enum: nil,
+      min: nil,
+      max: nil
+    },
+    %{
+      key: "guest_mode_enabled",
+      type: :boolean,
+      default: true,
+      description: "Allow unauthenticated visitors to enter first-class read-only Guest Mode.",
       enum: nil,
       min: nil,
       max: nil
