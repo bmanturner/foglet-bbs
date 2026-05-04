@@ -1124,6 +1124,26 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert %Foglet.TUI.Modal{type: :error} = new_state.modal
       assert new_state.current_screen == :main_menu
     end
+
+    test "SITE test-email task effects are forwarded from the submodule" do
+      Config.put!("delivery_mode", "email", nil)
+
+      sysop = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "sysop",
+        role: :sysop,
+        status: :active,
+        email: "sysop@example.test"
+      }
+
+      context = Context.new(current_user: sysop, route: :sysop)
+      {state, _effects} = Sysop.update(:load, Sysop.init(context), context)
+
+      {state, effects} = Sysop.update({:key, %{key: :char, char: "e"}}, state, context)
+
+      assert state.site_form.test_email_state == :sending
+      assert [%Effect{type: :task, payload: %{op: :sysop_send_test_email}}] = effects
+    end
   end
 
   describe "LIMITS tab render (SYSO-02)" do

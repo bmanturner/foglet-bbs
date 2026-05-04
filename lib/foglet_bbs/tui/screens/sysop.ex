@@ -69,6 +69,12 @@ defmodule Foglet.TUI.Screens.Sysop do
     |> maybe_request_active_load(context)
   end
 
+  def update({:task_result, :sysop_send_test_email, result}, local_state, %Context{} = context) do
+    ss = normalize_state(local_state, context) |> maybe_init_site_form(context)
+    site_form = SiteForm.handle_test_email_result(ss.site_form, result)
+    {%{ss | site_form: site_form}, []}
+  end
+
   def update({:task_result, op, result}, local_state, %Context{} = context)
       when op in [
              :sysop_load_boards,
@@ -406,7 +412,7 @@ defmodule Foglet.TUI.Screens.Sysop do
         if new_sub == old_sub and events == [] do
           {ss, []}
         else
-          {new_ss, []}
+          {new_ss, events}
         end
     end
   end

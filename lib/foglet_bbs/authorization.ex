@@ -43,7 +43,8 @@ defmodule Foglet.Authorization do
     :edit_config,
     :manage_user_status,
     :generate_invite,
-    :revoke_invite
+    :revoke_invite,
+    :send_test_email
   ]
 
   @mod_site_actions [

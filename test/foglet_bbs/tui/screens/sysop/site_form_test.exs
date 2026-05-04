@@ -5,6 +5,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
 
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Sysop.SiteForm
   alias Foglet.TUI.Theme
   alias FogletBbs.AccountsFixtures
@@ -881,6 +882,85 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       raw = Config.get!("delivery_mode")
       assert raw == "no_email"
       refute raw == "No email (offline mode)"
+    end
+  end
+
+  describe "test email action UX" do
+    test "email draft exposes a discoverable E action and triggers one async send" do
+      sysop = sysop_fixture()
+      Config.put!("delivery_mode", "email", nil)
+      form = SiteForm.init(current_user: sysop)
+
+      assert SiteForm.State.test_email_action_visible?(form)
+
+      {sending, effects} = SiteForm.handle_key(%{key: :char, char: "e"}, form)
+
+      assert sending.test_email_state == :sending
+
+      assert [%Effect{type: :task, payload: %{op: :sysop_send_test_email, screen_key: :sysop}}] =
+               effects
+
+      {still_sending, duplicate_effects} = SiteForm.handle_key(%{key: :char, char: "e"}, sending)
+      assert still_sending.test_email_state == :sending
+      assert duplicate_effects == []
+    end
+
+    test "no-email draft hides the action prompt and direct key produces no task" do
+      Config.put!("delivery_mode", "no_email", nil)
+      form = SiteForm.init([])
+
+      refute SiteForm.State.test_email_action_visible?(form)
+
+      text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      refute String.contains?(text, "Send test email")
+
+      {blocked, effects} = SiteForm.handle_key(%{key: :char, char: "e"}, form)
+      assert blocked.test_email_state == {:error, :no_email_mode}
+      assert effects == []
+    end
+
+    test "async result states use privacy-safe recipient copy" do
+      Config.put!("delivery_mode", "email", nil)
+      form = SiteForm.init([])
+
+      sent = SiteForm.handle_test_email_result(form, {:ok, {:ok, :delivered}})
+      assert sent.test_email_state == :sent
+
+      sent_text =
+        sent
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(sent_text, "Sent a test email to your account email.")
+      refute String.contains?(sent_text, "@")
+
+      missing = SiteForm.handle_test_email_result(form, {:ok, {:error, :missing_email}})
+      assert missing.test_email_state == {:error, :missing_email}
+
+      missing_text =
+        missing
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(missing_text, "Add an email to your account before sending a test.")
+
+      failed = SiteForm.handle_test_email_result(form, {:ok, {:error, :smtp_down}})
+      assert failed.test_email_state == {:error, :smtp_down}
+
+      failed_text =
+        failed
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert String.contains?(failed_text, "Test email could not be sent. Check operator logs.")
     end
   end
 
