@@ -477,17 +477,31 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     title_row = text(state.title, fg: theme.title.fg, style: [:bold])
     divider = text(String.duplicate("─", 40), fg: theme.border.fg)
 
-    vis = MapSet.new(visible_indices(state))
+    visible = visible_indices(state)
+    {window, scroll_above, scroll_below} = compute_field_window(state, visible, opts)
+    vis_set = MapSet.new(window)
+
+    above_rows =
+      if scroll_above > 0,
+        do: [text("↑ #{scroll_above} more above", fg: theme.dim.fg)],
+        else: []
+
+    below_rows =
+      if scroll_below > 0,
+        do: [text("↓ #{scroll_below} more below", fg: theme.dim.fg)],
+        else: []
 
     field_rows =
       state.fields
       |> Enum.with_index()
-      |> Enum.filter(fn {_spec, idx} -> MapSet.member?(vis, idx) end)
+      |> Enum.filter(fn {_spec, idx} -> MapSet.member?(vis_set, idx) end)
       |> Enum.flat_map(fn {spec, idx} ->
         focused? = idx == state.focus_index
         field_state = Enum.at(state.field_states, idx)
         render_field(spec, field_state, focused?, state.errors, theme)
       end)
+
+    field_rows = above_rows ++ field_rows ++ below_rows
 
     base_error_rows =
       case Map.get(state.errors, :base) do
@@ -523,6 +537,37 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
     column [] do
       [title_row, divider] ++ field_rows ++ base_error_rows ++ status_rows ++ footer_rows
+    end
+  end
+
+  # FOG-670: viewport windowing. When `:max_visible` is set, only N visible
+  # fields around the focused one are rendered; the remainder is summarised by
+  # `↑ N more above` / `↓ N more below` scroll-indicator rows. This keeps the
+  # form body within a cramped terminal viewport (e.g. 80x24, 64x22) instead
+  # of spilling past the surrounding chrome. Returns
+  # `{window_indices, scroll_above_count, scroll_below_count}`.
+  defp compute_field_window(%__MODULE__{} = state, visible, opts) do
+    case Keyword.get(opts, :max_visible) do
+      nil ->
+        {visible, 0, 0}
+
+      n when is_integer(n) and n > 0 ->
+        case length(visible) do
+          total when total <= n ->
+            {visible, 0, 0}
+
+          total ->
+            focus_pos =
+              case Enum.find_index(visible, &(&1 == state.focus_index)) do
+                nil -> 0
+                pos -> pos
+              end
+
+            half = div(n - 1, 2)
+            start = max(0, min(focus_pos - half, total - n))
+            window = Enum.slice(visible, start, n)
+            {window, start, total - start - n}
+        end
     end
   end
 

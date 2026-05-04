@@ -214,16 +214,16 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     ListRow.render(label, selected?, theme)
   end
 
-  # FOG-670: render the active modal as a centered, double-bordered overlay so
-  # there is no overlap with the board list at any width. Mirrors the pattern
-  # used by `Foglet.TUI.App.Modal.render_overlay/2` for app-level modals.
+  # FOG-670: render the active modal as a full-width form surface (no extra
+  # bordered box) and use Modal.Form's `:max_visible` viewport so the form
+  # body fits within the surrounding ScreenFrame chrome at 80x24 / 64x22
+  # without overlapping the bottom border or interleaving with neighbour
+  # fields. The screen-level command bar (set in Sysop.Render) advertises the
+  # form-mode actions, so a separate bordered chrome here would just consume
+  # rows we need for content.
   defp render_modal_overlay(%ModalForm{} = form, theme) do
-    column justify: :center, align: :center do
-      [
-        box style: %{border: :double, padding: 1, border_fg: theme.border.fg} do
-          ModalForm.render(form, theme: theme)
-        end
-      ]
+    column style: %{gap: 0} do
+      [ModalForm.render(form, theme: theme, max_visible: form_max_visible_fields())]
     end
   end
 
@@ -236,6 +236,13 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       ]
     end
   end
+
+  # FOG-670: window size tuned for an 80x24 viewport with the Sysop screen
+  # frame (breadcrumb + tabs + command bar). Each rendered field is roughly
+  # 2–3 rows (label + widget, plus optional description), so 4 fields fit in
+  # the available content area without clipping at 80x24 or 64x22 while still
+  # leaving room for scroll-indicator rows.
+  defp form_max_visible_fields, do: 4
 
   defp modal_footer_text(%ModalForm{}),
     do: "[Tab] Next field   [Shift+Tab] Prev field   [Enter] Save   [Esc] Cancel"

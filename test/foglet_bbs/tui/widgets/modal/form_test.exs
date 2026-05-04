@@ -1590,6 +1590,62 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     end
   end
 
+  describe "FOG-670 :max_visible viewport" do
+    @field_atoms ~w(f1 f2 f3 f4 f5 f6 f7 f8)a
+
+    defp many_fields(n) do
+      @field_atoms
+      |> Enum.take(n)
+      |> Enum.with_index(1)
+      |> Enum.map(fn {name, i} -> %{name: name, type: :text, label: "Field #{i}"} end)
+    end
+
+    test "no :max_visible renders every visible field" do
+      state = test_form(many_fields(8))
+      flat = Form.render(state, theme: theme()) |> flatten_text()
+
+      for i <- 1..8 do
+        assert flat =~ "Field #{i}:", "expected unwindowed render to include Field #{i}"
+      end
+
+      refute flat =~ "more above"
+      refute flat =~ "more below"
+    end
+
+    test ":max_visible truncates fields and shows scroll indicators" do
+      state = test_form(many_fields(8))
+      flat = Form.render(state, theme: theme(), max_visible: 3) |> flatten_text()
+
+      # focus_index is 0, so we see the top 3 fields and the rest collapse into
+      # the bottom indicator.
+      assert flat =~ "Field 1:"
+      assert flat =~ "Field 2:"
+      assert flat =~ "Field 3:"
+      refute flat =~ "Field 4:"
+      refute flat =~ "Field 8:"
+
+      assert flat =~ "5 more below"
+      refute flat =~ "more above"
+    end
+
+    test ":max_visible follows the focused field as Tab advances" do
+      state = test_form(many_fields(8))
+      # Advance focus to the 5th field (index 4) — should now be in the middle
+      # of the visible window with scroll indicators on both sides.
+      {state, _} = send_events(state, List.duplicate(%{key: :tab}, 4))
+
+      flat = Form.render(state, theme: theme(), max_visible: 3) |> flatten_text()
+
+      assert flat =~ "Field 4:"
+      assert flat =~ "Field 5:"
+      assert flat =~ "Field 6:"
+      assert flat =~ "more above"
+      assert flat =~ "more below"
+      refute flat =~ "Field 1:"
+      refute flat =~ "Field 8:"
+    end
+  end
+
   describe "init/1 input validation (Phase 28 BL-03)" do
     test "raises ArgumentError when :fields is an empty list" do
       assert_raise ArgumentError, ~r/at least one field/, fn ->
