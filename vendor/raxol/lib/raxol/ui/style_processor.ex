@@ -112,14 +112,13 @@ defmodule Raxol.UI.StyleProcessor do
     final_fg =
       Map.get(all_attrs, :foreground) || Map.get(all_attrs, :fg) || resolved_fg
 
-    final_bg =
-      Map.get(all_attrs, :background) || Map.get(all_attrs, :bg) || resolved_bg
+    final_bg = Map.get(all_attrs, :background) || Map.get(all_attrs, :bg) || resolved_bg
 
     all_attrs
     |> Map.put(:foreground, final_fg)
-    |> Map.put(:background, final_bg)
     |> Map.put(:fg, final_fg)
-    |> Map.put(:bg, final_bg)
+    |> maybe_put_if_not_nil(:background, final_bg)
+    |> maybe_put_if_not_nil(:bg, final_bg)
   end
 
   @doc """
@@ -349,8 +348,7 @@ defmodule Raxol.UI.StyleProcessor do
   # Cache key builders
 
   defp build_flatten_cache_key(parent_style, child_element, theme) do
-    {:flatten, hash_style(parent_style), hash_element(child_element),
-     get_theme_id(theme)}
+    {:flatten, hash_style(parent_style), hash_element(child_element), get_theme_id(theme)}
   end
 
   defp hash_style(nil), do: 0

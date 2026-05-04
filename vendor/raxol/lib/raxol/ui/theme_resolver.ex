@@ -308,13 +308,17 @@ defmodule Raxol.UI.ThemeResolver do
   end
 
   @doc """
-  Resolves background color with proper fallbacks.
+  Resolves background color.
+
+  Unlike foreground colors, an omitted background means "use the terminal's
+  current/default background". Do not promote the theme's palette background
+  into every cell; components that need a painted background must set `:bg`,
+  `:background`, or a variant background explicitly.
   """
   def resolve_bg_color(attrs, _component_styles, theme) do
     attrs
     |> get_explicit_color([:bg, :background])
     |> fallback_to_variant_color(attrs, theme, :background)
-    |> fallback_to_theme_color(theme, :background, :black)
     |> convert_color_to_atom()
   end
 
@@ -351,6 +355,8 @@ defmodule Raxol.UI.ThemeResolver do
   defp get_component_styles_from_map(_, _), do: %{}
 
   # Convert color values to atoms for test compatibility
+  defp convert_color_to_atom(nil), do: nil
+
   defp convert_color_to_atom(color) when is_atom(color), do: color
 
   defp convert_color_to_atom(color) when is_binary(color) do
