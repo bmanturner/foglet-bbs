@@ -24,12 +24,11 @@ defmodule Foglet.TUI.App.Subscriptions do
         []
       end
 
-    clock = [subscribe_interval(60_000, :main_menu_clock_tick)]
     screen_intervals = screen_declared_intervals(state)
     pubsub = [Subscription.custom(PubSubForwarder, %{topics: topics(state)})]
     initial_route = [Subscription.custom(InitialRouteEnterForwarder, %{})]
 
-    heartbeat ++ clock ++ screen_intervals ++ pubsub ++ initial_route
+    heartbeat ++ screen_intervals ++ pubsub ++ initial_route
   end
 
   @doc "Returns App-owned user topics plus topics declared by the active screen."
@@ -42,7 +41,9 @@ defmodule Foglet.TUI.App.Subscriptions do
         []
       end
 
-    user_topics ++ screen_declared_topics(state)
+    clock_topics = [PubSub.tui_clock_topic()]
+
+    clock_topics ++ user_topics ++ screen_declared_topics(state)
   end
 
   @doc "Returns topics from the active screen's optional `subscriptions/2` callback."
