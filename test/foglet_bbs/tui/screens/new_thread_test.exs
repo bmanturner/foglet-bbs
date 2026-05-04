@@ -425,11 +425,11 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
              )
   end
 
-  test "NewThread.update/3 handles board picker navigation and selection" do
+  test "NewThread.update/3 handles board picker navigation and selection (FOG-712)" do
     boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
     state = State.new(boards: boards, load_status: :loaded)
 
-    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :down}}, state, context())
     assert state.selected_board_index == 1
 
     {state, []} = NewThread.update({:key, %{key: :up}}, state, context())
@@ -438,15 +438,58 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     {state, []} = NewThread.update({:key, %{key: :down}}, state, context())
     assert state.selected_board_index == 1
 
-    {state, []} = NewThread.update({:key, %{key: :char, char: "k"}}, state, context())
-    assert state.selected_board_index == 0
-
-    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
-    assert state.selected_board_index == 1
-
     {state, []} = NewThread.update({:key, %{key: :enter}}, state, context())
     assert state.step == :compose
     assert state.board.id == "b2"
+  end
+
+  test "FOG-712: j character types into the filter buffer instead of navigating" do
+    boards = [
+      %{id: "b1", name: "General"},
+      %{id: "b2", name: "Java"},
+      %{id: "b3", name: "Kotlin"}
+    ]
+
+    state = State.new(boards: boards, load_status: :loaded)
+    initial_focus = state.board_picker.raxol_state.focused_index || 0
+
+    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+
+    # j is consumed by the filter, not by navigation.
+    assert state.board_picker.raxol_state.search_buffer == "j"
+    assert state.board_picker.raxol_state.focused_index == initial_focus
+  end
+
+  test "FOG-712: picker is initialized with filter focus active so chars search" do
+    boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
+    state = State.new(boards: boards, load_status: :loaded)
+
+    assert state.board_picker.raxol_state.is_search_focused == true
+    assert state.board_picker.enable_search == true
+  end
+
+  test "FOG-712: subscribed_boards denormalizes category name onto each loaded board" do
+    ctx = context()
+    {_state, [effect]} = NewThread.update(:on_route_enter, State.from_context(ctx), ctx)
+    {boards, _count} = effect.payload.fun.()
+
+    assert Enum.find(boards, &(&1.id == "b1")).category_name == "Public"
+    assert Enum.find(boards, &(&1.id == "b2")).category_name == "Ops"
+  end
+
+  test "FOG-712: load builds a SmartList board picker reflecting loaded boards" do
+    boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
+    state = State.new()
+
+    assert {%State{board_picker: picker, boards: ^boards, load_status: :loaded}, []} =
+             NewThread.update(
+               {:task_result, :load_boards_for_new_thread, {:ok, {boards, 2}}},
+               state,
+               context()
+             )
+
+    assert is_struct(picker, Foglet.TUI.Widgets.List.SmartList)
+    assert length(picker.raxol_state.options) == 2
   end
 
   test "NewThread.update/3 handles compose field focus, body preview, and cancel effects" do
@@ -880,7 +923,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = base_state()
     assert get_ss(state).selected_board_index == 0
 
-    {:update, new_state, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    # FOG-712: j is now a search character; ↓ moves focus.
+    {:update, new_state, _} = handle_key_screen(%{key: :down}, state)
     assert get_ss(new_state).selected_board_index == 1
   end
 
@@ -890,20 +934,19 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(new_state).selected_board_index == 1
   end
 
-  test "j clamps at last board index" do
+  test "down arrow clamps at last board index (FOG-712)" do
     state = base_state()
-    # Move to last board (index 1 of 2)
-    {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :down}, state)
     assert get_ss(s1).selected_board_index == 1
-    # Pressing j again should stay at 1
-    {:update, s2, _} = handle_key_screen(%{key: :char, char: "j"}, s1)
+    # Pressing down again stays at 1
+    {:update, s2, _} = handle_key_screen(%{key: :down}, s1)
     assert get_ss(s2).selected_board_index == 1
   end
 
   test "Enter on board step advances to compose step with selected board" do
     state = base_state()
     # Move to second board first
-    {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :down}, state)
     {:update, s2, _} = handle_key_screen(%{key: :enter}, s1)
 
     ss = get_ss(s2)

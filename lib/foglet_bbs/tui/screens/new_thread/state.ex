@@ -146,7 +146,11 @@ defmodule Foglet.TUI.Screens.NewThread.State do
 
   def build_board_picker(boards) when is_list(boards) do
     options = Enum.map(boards, fn board -> {board_picker_label(board), board} end)
-    SmartList.init(options: options, enable_search: true, page_size: @board_picker_page_size)
+
+    picker =
+      SmartList.init(options: options, enable_search: true, page_size: @board_picker_page_size)
+
+    %{picker | raxol_state: Map.put(picker.raxol_state, :is_search_focused, true)}
   end
 
   defp context_options(%Context{} = context, origin) do

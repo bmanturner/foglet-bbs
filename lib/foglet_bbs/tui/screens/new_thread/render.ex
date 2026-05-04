@@ -84,9 +84,9 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   end
 
   defp render_board_picker(%SmartList{raxol_state: rs} = picker, theme) do
-    query = Map.get(rs, :search_buffer, "")
-    options = Map.get(rs, :options, [])
-    filtered = Map.get(rs, :filtered_options, options)
+    query = Map.get(rs, :search_buffer) || ""
+    options = List.wrap(Map.get(rs, :options))
+    filtered = List.wrap(Map.get(rs, :filtered_options) || options)
     focused_index = Map.get(rs, :focused_index, 0)
     total = length(options)
     matches = length(filtered)
