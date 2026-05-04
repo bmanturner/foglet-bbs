@@ -56,18 +56,19 @@ Security notes
   are not passed to door processes.
 - Executable allowlisting/registration policy is intentionally not solved in
   this OTP slice; it belongs with the Door catalog/config/domain slice.
-- `/usr/bin/script -qfec ... /dev/null` is used as the first PTY wrapper when
-  present. This gives external demos PTY semantics without introducing a NIF or
-  broad dependency. Rich resize ioctls remain adapter-specific follow-up work.
+- `/usr/bin/script -qfec ... /dev/null` is the first-slice PTY wrapper only.
+  FOG-575 chose a Foglet-owned external PTY adapter helper as the supported
+  production direction before arbitrary full-screen doors are enabled. See
+  `docs/DOOR_PTY_BACKEND_DECISION.md`.
 - A non-Elixir demo executable is available at
   `priv/doors/demo/external_echo.sh`; runner tests launch it through the same
   `external_pty` path used for future SSH harness QA.
 
 Residual risks / follow-up candidates
 
-- A stronger PTY backend should replace the `script(1)` wrapper before running
-  arbitrary full-screen doors in production. Suggested owner: Elixir OTP
-  Engineer with CTO architecture approval if it introduces a dependency/NIF.
+- A stronger Foglet-owned external PTY adapter should replace the `script(1)`
+  fallback before arbitrary full-screen doors run in production. FOG-575 records
+  the selected adapter direction in `docs/DOOR_PTY_BACKEND_DECISION.md`.
 - Process-tree cleanup is best effort using the immediate port OS pid. A future
   sandbox/runner adapter should launch doors into an isolated process group or
   container before untrusted doors are enabled.
