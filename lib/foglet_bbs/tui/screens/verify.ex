@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Screens.Verify do
   @cooldown_seconds 60
   @code_length 6
   @auth_card_width AuthForm.default_width()
+  @auth_card_inner_width @auth_card_width - 4
   @auth_card_height 10
 
   @impl true
@@ -55,13 +56,17 @@ defmodule Foglet.TUI.Screens.Verify do
     panel =
       AuthForm.render(
         "Check your mailbox",
-        [
-          text("Type the 6-character code we sent to your email.", fg: theme.dim.fg),
-          text(""),
-          text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
-          text(""),
-          status_item
-        ],
+        AuthForm.helper_text(
+          "Type the 6-character code we sent to your email.",
+          theme,
+          @auth_card_inner_width
+        ) ++
+          [
+            text(""),
+            text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
+            text(""),
+            status_item
+          ],
         theme,
         width: @auth_card_width,
         height: @auth_card_height
