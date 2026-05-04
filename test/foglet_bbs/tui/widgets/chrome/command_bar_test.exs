@@ -39,16 +39,25 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBarTest do
       flat = CommandBar.render(theme(), command_groups(), width: 120) |> flatten_text()
 
       refute flat =~ "System"
+      refute flat =~ "Actions"
       assert flat =~ "Navigate"
-      assert flat =~ "Actions"
       assert flat =~ "Q Back"
       assert flat =~ "j/k Move"
       assert flat =~ "C Compose"
+      assert flat =~ "D Delete"
 
       assert String.match?(
                flat,
-               ~r/Q Back.*Navigate.*j\/k Move.*Enter Open.*Actions.*C Compose/s
+               ~r/Q Back.*Navigate.*j\/k Move.*Enter Open.*C Compose.*D Delete/s
              )
+    end
+
+    test "hides the Actions group label but still renders its commands" do
+      flat = CommandBar.render(theme(), command_groups(), width: 120) |> flatten_text()
+
+      refute flat =~ "Actions"
+      assert flat =~ "C Compose"
+      assert flat =~ "D Delete"
     end
 
     test "drops lower priority commands first under constrained width" do

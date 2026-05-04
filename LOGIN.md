@@ -22,7 +22,7 @@
 │                                                                              │
 │                                                                              │
 │                                                                              │
-└ Q Quit   Actions  L Login  R Register  F Forgot password  T Reset token ─────┘
+└ Q Quit   L Login  R Register  F Forgot password  T Reset token ──────────────┘
 ```
 
 ## Issues / Desired Fixes
@@ -204,7 +204,7 @@
 │                                                                              │
 │                                                                              │
 │                                                                              │
-└ Navigate  Enter Submit   Esc Cancel   Actions  Backspace Delete ─────────────┘
+└ Navigate  Enter Submit   Esc Cancel   Backspace Delete ──────────────────────┘
 ```
 
 ## Verify Mode Issues / Desired Fixes

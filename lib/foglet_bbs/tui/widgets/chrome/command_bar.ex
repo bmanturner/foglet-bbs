@@ -23,7 +23,7 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
   @group_gap "   "
   @command_gap "  "
   @key_gap " "
-  @hidden_group_labels MapSet.new(["System"])
+  @hidden_group_labels MapSet.new(["Actions", "System"])
 
   @type command :: %{
           required(:key) => String.t(),
