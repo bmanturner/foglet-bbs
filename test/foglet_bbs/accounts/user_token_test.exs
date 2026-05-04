@@ -26,12 +26,20 @@ defmodule Foglet.Accounts.UserTokenTest do
       assert :crypto.hash(:sha256, decoded) == token_struct.token
     end
 
-    test "raw token is Base.url_encode64 without padding" do
+    test "reset password raw token is exactly 6 case-sensitive alphanumeric characters" do
       user = insert_user!()
       {raw, _} = UserToken.build_email_token(user, "reset_password")
       refute String.contains?(raw, "=")
-      # url-safe alphabet only
-      assert Regex.match?(~r/\A[A-Za-z0-9_-]+\z/, raw)
+      assert String.length(raw) == 6
+      assert Regex.match?(~r/\A[A-Za-z0-9]+\z/, raw)
+    end
+
+    test "reset password raw token is hashed directly and not stored recoverably" do
+      user = insert_user!()
+      {raw, token_struct} = UserToken.build_email_token(user, "reset_password")
+
+      assert token_struct.token == :crypto.hash(:sha256, raw)
+      refute token_struct.token == raw
     end
 
     test "sets sent_to to user.email and user_id to user.id" do
@@ -78,8 +86,29 @@ defmodule Foglet.Accounts.UserTokenTest do
       assert Repo.one(query) == nil
     end
 
-    test "returns :error on malformed base64" do
+    test "returns :error on malformed confirm base64" do
       assert UserToken.verify_email_token_query("not valid base64!!!", "confirm") == :error
+    end
+
+    test "reset password token verification is case-sensitive" do
+      user = insert_user!()
+      raw = "Aa0Bb1"
+      hashed = :crypto.hash(:sha256, raw)
+
+      {:ok, _} =
+        Repo.insert(%UserToken{
+          token: hashed,
+          context: "reset_password",
+          sent_to: user.email,
+          user_id: user.id
+        })
+
+      {:ok, exact_query} = UserToken.verify_email_token_query(raw, "reset_password")
+      assert %User{id: found_id} = Repo.one(exact_query)
+      assert found_id == user.id
+
+      {:ok, changed_case_query} = UserToken.verify_email_token_query("aa0bb1", "reset_password")
+      assert Repo.one(changed_case_query) == nil
     end
 
     test "returns no user when sent_to no longer matches user.email" do

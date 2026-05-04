@@ -26,8 +26,7 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
       user = AccountsFixtures.user_fixture(%{handle: "helperhash"})
 
       assert {:ok, raw_token} = Verification.generate_reset_token_for_operator(user)
-      {:ok, decoded_token} = Base.url_decode64(raw_token, padding: false)
-      hashed_token = :crypto.hash(UserToken.hash_algorithm(), decoded_token)
+      hashed_token = :crypto.hash(UserToken.hash_algorithm(), raw_token)
 
       assert Repo.exists?(
                from t in UserToken,
@@ -64,8 +63,8 @@ defmodule Mix.Tasks.Foglet.User.ResetPasswordTest do
       refute output =~ "sent by email"
       refute_reset_url_copy(output)
 
-      [_, token_portion] = Regex.run(~r/Reset token: ([A-Za-z0-9_-]+)/, output)
-      refute String.contains?(token_portion, "=")
+      [_, token_portion] = Regex.run(~r/Reset token: ([A-Za-z0-9]{6})/, output)
+      assert String.length(token_portion) == 6
 
       # Round-trip the token against the API
       {:ok, query} = UserToken.verify_email_token_query(token_portion, "reset_password")

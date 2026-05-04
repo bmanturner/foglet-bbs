@@ -181,7 +181,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
     test "well-formed but unknown invite code stays on invite step" do
       {local_state, []} =
         Register.update(
-          {:wizard, {:submit_step, :invite_code, "ZZZZZZZZZZZZZZZZ"}},
+          {:wizard, {:submit_step, :invite_code, "Zz9Aa1"}},
           invite_state(),
           context("invite_only")
         )

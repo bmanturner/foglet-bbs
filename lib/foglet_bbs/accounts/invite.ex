@@ -12,7 +12,8 @@ defmodule Foglet.Accounts.Invite do
 
   @type t :: %__MODULE__{}
 
-  @code_format ~r/\A[A-Z0-9]+\z/
+  @code_length 6
+  @code_format ~r/\A[A-Za-z0-9]{6}\z/
 
   schema "invite_codes" do
     field :code, :string
@@ -30,9 +31,9 @@ defmodule Foglet.Accounts.Invite do
     invite
     |> cast(attrs, [:code])
     |> validate_required([:code])
-    |> validate_length(:code, min: 16, max: 64)
+    |> validate_length(:code, is: @code_length)
     |> validate_format(:code, @code_format,
-      message: "must contain only uppercase letters and digits"
+      message: "must be exactly 6 case-sensitive letters or digits"
     )
     |> unique_constraint(:code)
   end

@@ -2,9 +2,9 @@ defmodule Foglet.Accounts.UserToken do
   @moduledoc """
   Email confirmation, password reset, and CLI session tokens.
 
-  Follows the phx.gen.auth pattern: generate 32 random bytes, store the
-  SHA256 hash, return the raw token base64url-encoded. The raw token
-  cannot be reconstructed from the database.
+  Follows the phx.gen.auth storage pattern for durable tokens: store the
+  SHA256 hash, return the raw token only to the delivery channel. The raw
+  token cannot be reconstructed from the database.
 
   Contexts: "confirm" (7-day expiry), "reset_password" (1-day expiry),
   "cli_session" (longer-lived; wired in Phase 13).
@@ -20,6 +20,8 @@ defmodule Foglet.Accounts.UserToken do
 
   @hash_algorithm :sha256
   @rand_size 32
+  @reset_token_length 6
+  @reset_token_format ~r/\A[A-Za-z0-9]{6}\z/
 
   @confirm_validity_in_days 7
   @reset_password_validity_in_days 1
@@ -123,21 +125,16 @@ defmodule Foglet.Accounts.UserToken do
   @spec verify_email_token_query(String.t(), String.t()) :: {:ok, Ecto.Query.t()} | :error
   def verify_email_token_query(token, context)
       when context in ["confirm", "reset_password"] do
-    case Base.url_decode64(token, padding: false) do
-      {:ok, decoded} ->
-        hashed = :crypto.hash(@hash_algorithm, decoded)
-        days = days_for_context(context)
+    with {:ok, hashed} <- hash_raw_email_token(token, context) do
+      days = days_for_context(context)
 
-        query =
-          from t in by_token_and_context_query(hashed, context),
-            join: u in assoc(t, :user),
-            where: t.inserted_at > ago(^days, "day") and t.sent_to == u.email,
-            select: u
+      query =
+        from t in by_token_and_context_query(hashed, context),
+          join: u in assoc(t, :user),
+          where: t.inserted_at > ago(^days, "day") and t.sent_to == u.email,
+          select: u
 
-        {:ok, query}
-
-      :error ->
-        :error
+      {:ok, query}
     end
   end
 
@@ -162,13 +159,8 @@ defmodule Foglet.Accounts.UserToken do
   """
   @spec reset_token_claim_query(String.t()) :: {:ok, Ecto.Query.t()} | :error
   def reset_token_claim_query(raw_token) when is_binary(raw_token) do
-    case Base.url_decode64(raw_token, padding: false) do
-      {:ok, decoded} ->
-        hashed = :crypto.hash(@hash_algorithm, decoded)
-        {:ok, by_token_and_context_query(hashed, "reset_password")}
-
-      :error ->
-        :error
+    with {:ok, hashed} <- hash_raw_email_token(raw_token, "reset_password") do
+      {:ok, by_token_and_context_query(hashed, "reset_password")}
     end
   end
 
@@ -202,16 +194,40 @@ defmodule Foglet.Accounts.UserToken do
   end
 
   defp build_hashed_token(user, context, sent_to) do
-    token = :crypto.strong_rand_bytes(@rand_size)
-    hashed_token = :crypto.hash(@hash_algorithm, token)
+    {raw_token, hashed_token} = raw_and_hashed_token(context)
 
-    {Base.url_encode64(token, padding: false),
+    {raw_token,
      %__MODULE__{
        token: hashed_token,
        context: context,
        sent_to: sent_to,
        user_id: user.id
      }}
+  end
+
+  defp raw_and_hashed_token("reset_password") do
+    raw_token = Foglet.Accounts.ShortCode.generate(@reset_token_length)
+    {raw_token, :crypto.hash(@hash_algorithm, raw_token)}
+  end
+
+  defp raw_and_hashed_token(_context) do
+    token = :crypto.strong_rand_bytes(@rand_size)
+    {Base.url_encode64(token, padding: false), :crypto.hash(@hash_algorithm, token)}
+  end
+
+  defp hash_raw_email_token(token, "reset_password") do
+    if Regex.match?(@reset_token_format, token) do
+      {:ok, :crypto.hash(@hash_algorithm, token)}
+    else
+      :error
+    end
+  end
+
+  defp hash_raw_email_token(token, _context) do
+    case Base.url_decode64(token, padding: false) do
+      {:ok, decoded} -> {:ok, :crypto.hash(@hash_algorithm, decoded)}
+      :error -> :error
+    end
   end
 
   defp days_for_context("confirm"), do: @confirm_validity_in_days

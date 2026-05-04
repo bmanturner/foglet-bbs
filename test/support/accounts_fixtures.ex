@@ -42,7 +42,7 @@ defmodule FogletBbs.AccountsFixtures do
   def invite_fixture(%User{} = issuer, attrs) do
     attrs =
       Map.merge(
-        %{code: "INVITECODE#{System.unique_integer([:positive])}XYZCODE"},
+        %{code: unique_invite_code()},
         attrs
       )
 
@@ -108,5 +108,15 @@ defmodule FogletBbs.AccountsFixtures do
       |> Repo.insert!()
 
     invite_fixture(issuer).code
+  end
+
+  defp unique_invite_code do
+    suffix =
+      System.unique_integer([:positive])
+      |> Integer.to_string(36)
+      |> String.pad_leading(5, "0")
+      |> String.slice(-5, 5)
+
+    "F" <> suffix
   end
 end

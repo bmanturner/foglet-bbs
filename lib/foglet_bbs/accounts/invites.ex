@@ -126,10 +126,7 @@ defmodule Foglet.Accounts.Invites do
   end
 
   defp generate_invite_code do
-    16
-    |> :crypto.strong_rand_bytes()
-    |> Base.encode32(case: :upper, padding: false)
-    |> String.replace(~r/[^A-Z0-9]/, "")
+    Foglet.Accounts.ShortCode.generate(6)
   end
 
   defp invite_status_map(%Invite{} = invite) do
