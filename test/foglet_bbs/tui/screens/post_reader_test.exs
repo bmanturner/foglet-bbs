@@ -1807,6 +1807,170 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   # =================================================================
+  # FOG-652 / FOG-651: partial long-post selectable region
+  # =================================================================
+
+  describe "FOG-652 partial long-post selectable region" do
+    # 30 paragraphs guarantees a body that exceeds the partial body budget at
+    # any reasonable terminal height (well over the 4-row min threshold).
+    defp long_partial_body(prefix \\ "long line") do
+      Enum.map_join(1..30, "\n\n", &"#{prefix} #{&1}")
+    end
+
+    defp packed_partial_state(opts \\ []) do
+      terminal = Keyword.get(opts, :terminal_size, {80, 24})
+
+      posts = [
+        p2_post(id: "p1", body: "short body 1", message_number: 1),
+        p2_post(id: "p2", body: long_partial_body(), message_number: 2)
+      ]
+
+      p2_state(%{posts: posts, terminal_size: terminal})
+    end
+
+    defp reader_screenful(state) do
+      ss = state.screen_state[:post_reader]
+      PostReader.visible_screenful(ss, reader_context_from_state(state))
+    end
+
+    test "renders short post + partial long post region at 80x24 with the threshold met" do
+      s = packed_partial_state()
+
+      sf = reader_screenful(s)
+      assert sf.mode == :packed_partial
+      assert sf.partial != nil
+      assert sf.partial.index == 1
+      assert sf.partial.body_visible_rows >= 4
+      assert sf.partial.total_body_rows > sf.partial.body_visible_rows
+      assert sf.partial.scroll_top == 0
+      assert sf.indexes == [0, 1]
+
+      flat = s |> render_screen() |> flatten_text()
+      assert flat =~ "short body 1"
+      # Beginning of the long body must be visible (top of partial slice).
+      assert flat =~ "long line 1"
+      # And the bottom of the long body must NOT yet be visible.
+      refute flat =~ "long line 30"
+    end
+
+    test "cramped 80x18 keeps full-card behavior and does not render the partial" do
+      # available_height = max(18 - 12, 5) = 6.
+      # Short uses 3 rows; remaining 3 < 7-row partial requirement.
+      s = packed_partial_state(terminal_size: {80, 18})
+
+      sf = reader_screenful(s)
+      assert sf.mode == :packed
+      assert sf.partial == nil
+      assert sf.indexes == [0]
+    end
+
+    test "down moves action target onto partial; up moves it back" do
+      s = packed_partial_state()
+
+      assert {:update, s1, []} = handle_key_screen(%{key: :down}, s)
+      ss1 = s1.screen_state[:post_reader]
+      assert ss1.selected_action_post_index == 1
+      assert ss1.selected_post_index == 0
+      assert PostReader.selected_action_post(ss1).id == "p2"
+
+      assert {:update, s2, []} = handle_key_screen(%{key: :up}, s1)
+      ss2 = s2.screen_state[:post_reader]
+      assert ss2.selected_action_post_index == 0
+    end
+
+    test "j only scrolls the partial when it is the selected action target" do
+      s = packed_partial_state()
+
+      # Without selecting the partial, J is a no-op for partial scroll.
+      assert {:update, s_noop, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      assert s_noop.screen_state[:post_reader].partial_scroll_tops == %{}
+
+      # Select the partial via Down, then J advances the partial scroll_top.
+      {:update, s1, _} = handle_key_screen(%{key: :down}, s)
+      {:update, s2, _} = handle_key_screen(%{key: :char, char: "j"}, s1)
+      assert s2.screen_state[:post_reader].partial_scroll_tops["p2"] == 1
+
+      # K clamps at 0 (no wrap).
+      {:update, s3, _} = handle_key_screen(%{key: :char, char: "k"}, s2)
+      {:update, s4, _} = handle_key_screen(%{key: :char, char: "k"}, s3)
+      assert s4.screen_state[:post_reader].partial_scroll_tops["p2"] == 0
+    end
+
+    test "partial long post is not marked read until the partial viewport reaches its bottom" do
+      s = packed_partial_state()
+      ss = s.screen_state[:post_reader]
+
+      # On entry the read pointer should land on the post BEFORE the partial,
+      # not on the partial itself.
+      pending = ss.pending_read_positions["t1"]
+      assert pending.last_read_post_id == "p1"
+      assert pending.last_read_message_number == 1
+
+      # Select the partial and scroll to bottom.
+      {:update, s1, _} = handle_key_screen(%{key: :down}, s)
+      sf = reader_screenful(s1)
+      total = sf.partial.total_body_rows
+      visible = sf.partial.body_visible_rows
+      jumps = total - visible
+
+      s_scrolled =
+        Enum.reduce(1..jumps, s1, fn _, acc ->
+          {:update, next, _} = handle_key_screen(%{key: :char, char: "j"}, acc)
+          next
+        end)
+
+      ss_scrolled = s_scrolled.screen_state[:post_reader]
+      assert ss_scrolled.pending_read_positions["t1"].last_read_post_id == "p2"
+      assert ss_scrolled.pending_read_positions["t1"].last_read_message_number == 2
+    end
+
+    test "n on a partial that is not at bottom promotes it to the main viewport and preserves scroll_top" do
+      s = packed_partial_state()
+      {:update, s1, _} = handle_key_screen(%{key: :down}, s)
+      {:update, s2, _} = handle_key_screen(%{key: :char, char: "j"}, s1)
+      {:update, s3, _} = handle_key_screen(%{key: :char, char: "j"}, s2)
+
+      pre_promote = s3.screen_state[:post_reader].partial_scroll_tops["p2"]
+      assert pre_promote == 2
+
+      {:update, s4, _} = handle_key_screen(%{key: :char, char: "n"}, s3)
+      ss4 = s4.screen_state[:post_reader]
+      assert ss4.selected_post_index == 1
+      assert ss4.selected_action_post_index == 1
+      assert ss4.viewport.scroll_top == pre_promote
+    end
+
+    test "keybar advertises J/K Scroll only when the partial is the action target" do
+      s = packed_partial_state()
+      tree = render_screen(s)
+      bar_unselected = command_bar_text(tree)
+      refute bar_unselected =~ "J/K"
+      assert bar_unselected =~ "Up/Down"
+
+      {:update, s1, _} = handle_key_screen(%{key: :down}, s)
+      bar_selected = s1 |> render_screen() |> command_bar_text()
+      assert bar_selected =~ "J/K"
+      assert bar_selected =~ "Scroll"
+    end
+
+    test "long top/anchor post still uses single-post viewport and is not treated as packed_partial" do
+      s =
+        p2_state(%{
+          posts: [
+            p2_post(id: "p1", body: long_partial_body("Long line"), message_number: 1),
+            p2_post(id: "p2", body: "short follow-up", message_number: 2)
+          ],
+          terminal_size: {80, 24}
+        })
+
+      sf = reader_screenful(s)
+      assert sf.mode == :long
+      assert sf.partial == nil
+      assert sf.indexes == [0]
+    end
+  end
+
+  # =================================================================
   # FOG-580: visible-post action selection
   # =================================================================
 

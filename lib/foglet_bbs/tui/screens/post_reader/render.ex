@@ -10,6 +10,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   alias Foglet.TUI.{Context, Guest}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.PostCard
@@ -58,6 +59,18 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     ]
 
     case PostReader.visible_screenful(state, context) do
+      %{mode: :packed_partial, indexes: indexes, partial: partial} = sf ->
+        cmds = [%{key: "Up/Down", label: "Select", priority: 6} | base_commands]
+
+        # FOG-652 / FOG-651: only advertise J/K Scroll when the partial long
+        # post is the current action target — keep the keybar restrained for
+        # ordinary packed short-post selection.
+        if length(indexes) > 1 and action_index(state, sf) == partial.index do
+          cmds ++ [%{key: "J/K", label: "Scroll", priority: 8}]
+        else
+          cmds
+        end
+
       %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
         [%{key: "Up/Down", label: "Select", priority: 6} | base_commands]
 
@@ -123,7 +136,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         :long ->
           render_long_post(frame_view, ss, theme, w, screenful, total)
 
-        :packed ->
+        mode when mode in [:packed, :packed_partial] ->
           render_packed_posts(frame_view, ss, theme, w, screenful, total)
       end
     end
@@ -154,6 +167,12 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   defp render_packed_posts(frame_view, ss, theme, w, screenful, total) do
+    partial_idx =
+      case screenful do
+        %{mode: :packed_partial, partial: %{index: i}} -> i
+        _ -> nil
+      end
+
     children =
       screenful.indexes
       |> Enum.with_index()
@@ -168,12 +187,65 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
         selected_action? = idx == action_index(ss, screenful)
         parts = reader_parts(post, tuples, w, theme, idx, total, action_target?: selected_action?)
+
+        {progress_node, body_nodes} =
+          if idx == partial_idx do
+            partial = screenful.partial
+
+            body_nodes =
+              parts.body_lines
+              |> Enum.slice(partial.scroll_top, partial.body_visible_rows)
+
+            {partial_progress(idx, total, partial, selected_action?, w, theme), body_nodes}
+          else
+            {parts.progress, parts.body_lines}
+          end
+
         prefix = if position == 0, do: [], else: [packed_post_separator(theme)]
-        prefix ++ [parts.header, parts.progress | parts.body_lines]
+        prefix ++ [parts.header, progress_node | body_nodes]
       end)
 
     column style: %{gap: 0} do
       children
+    end
+  end
+
+  # FOG-652 / FOG-651: progress/affordance line for a partial long post.
+  # Selected: explicit J/K hint plus a visible slice indicator (or `end of
+  # post` when scrolled to the bottom).
+  # Unselected: a dim `More below` so the user knows there is unread content
+  # below the visible slice without claiming any keyboard affordance.
+  defp partial_progress(index, total, partial, selected?, w, theme) do
+    label = partial_progress_label(index, total, partial, selected?)
+    fg = if selected?, do: theme.accent.fg, else: theme.dim.fg
+
+    text(TextWidth.truncate(label, max(w - 2, 1)), fg: fg)
+  end
+
+  defp partial_progress_label(index, total, partial, true) do
+    cond do
+      partial.total_body_rows <= 0 ->
+        "Posts #{index + 1}/#{total}  ▶ Selected — J/K scroll"
+
+      PostReader.partial_at_bottom?(partial) ->
+        "Posts #{index + 1}/#{total}  ▶ Selected — end of post"
+
+      true ->
+        first = partial.scroll_top + 1
+
+        last =
+          (partial.scroll_top + partial.body_visible_rows)
+          |> min(partial.total_body_rows)
+
+        "Posts #{index + 1}/#{total}  ▶ Selected — J/K scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
+    end
+  end
+
+  defp partial_progress_label(index, total, partial, false) do
+    if PostReader.partial_at_bottom?(partial) do
+      "Posts #{index + 1}/#{total}"
+    else
+      "Posts #{index + 1}/#{total}  More below"
     end
   end
 
@@ -273,7 +345,8 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     end
   end
 
-  defp action_index(ss, %{mode: :packed, indexes: indexes}) when length(indexes) > 1 do
+  defp action_index(ss, %{mode: mode, indexes: indexes})
+       when mode in [:packed, :packed_partial] and length(indexes) > 1 do
     idx = Map.get(ss, :selected_action_post_index, ss.selected_post_index)
 
     if idx in indexes do
