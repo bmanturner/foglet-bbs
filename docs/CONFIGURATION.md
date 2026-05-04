@@ -68,6 +68,7 @@ In `:dev`, `runtime.exs` first sources `.env.local` via `Dotenvy` and copies any
 | `ECTO_IPV6` | Optional (`:prod`) | (false) | `runtime.exs` | When `"true"` or `"1"`, adds `:inet6` to the Repo socket options |
 | `DNS_CLUSTER_QUERY` | Optional (`:prod`) | (unset) | `runtime.exs` | DNS query string for libcluster-style discovery (`:foglet_bbs, :dns_cluster_query`) |
 | `FOGLET_SSH_PORT` | Optional | `2222` (compile-time default) | `runtime.exs` | Overrides `:foglet_bbs, :ssh_port` in any environment |
+| `FOGLET_GUEST_MODE_ENABLED` | Optional | enabled / `true` | `runtime.exs` + `Foglet.Config.guest_mode_enabled?/0` | Boot-time override for Guest Mode. Accepted values: `true`, `false`, `1`, `0`. Set to `false` or `0` and restart/redeploy to close read-only guest browsing regardless of the DB-backed setting for that boot. Invalid values fail startup. |
 | `SSH_HOST_KEY_DIR` | Optional (`:prod`) | `"priv/ssh"` | `runtime.exs` | Directory containing SSH host key files (set under `:foglet_bbs, :ssh, host_key_dir`) |
 | `FOGLET_MAIL_FROM` | Optional | (unset) | `runtime.exs` | Sets `:foglet_bbs, :mail_from` (envelope sender for outbound mail) |
 | `FOGLET_SMTP_RELAY` or `FOGLET_SMTP_HOST` | Optional | (unset) | `runtime.exs` | When either is set, swaps `Foglet.Mailer` to `Swoosh.Adapters.SMTP` and applies the SMTP credentials below |
@@ -137,12 +138,13 @@ Prefer the typed accessor over a raw `get!/1` call so callers get a stable funct
 | `max_thread_title_length/0` | `integer()` |
 | `delivery_mode/0` | `String.t()` |
 | `require_email_verification?/0` | `boolean()` |
+| `guest_mode_enabled?/0` | `boolean()` |
 | `email_verify_resend_cooldown_seconds/0` | `integer()` |
 | `invite_generation_per_user_limit/0` | `non_neg_integer()` |
 
 ### Schematized keys (`Foglet.Config.Schema`)
 
-These eight keys are the currently-seeded, validated configuration surface. `Schema` is a pure-data module (no Ecto/Repo dependency) so it can be loaded by tests and docs without booting the database layers.
+These keys are the currently-seeded, validated configuration surface. `Schema` is a pure-data module (no Ecto/Repo dependency) so it can be loaded by tests and docs without booting the database layers.
 
 | Key | Type | Default | Constraints | Description |
 |-----|------|---------|-------------|-------------|
@@ -154,6 +156,7 @@ These eight keys are the currently-seeded, validated configuration surface. `Sch
 | `require_email_verification` | boolean | `false` | — | When false, new registrations skip verify; existing `confirmed_at: nil` users gain access on login (Phase 6 D-01). Cannot be `true` while `delivery_mode = "no_email"`. |
 | `email_verify_resend_cooldown_seconds` | integer | `60` | min: 1 | Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02) |
 | `invite_generation_per_user_limit` | integer | `0` | min: 0 | Per-user invite generation cap when `invite_code_generators = "any_user"` (INVT-07 D-04). `0` means unlimited. |
+| `guest_mode_enabled` | boolean | `true` | — | Controls whether unauthenticated visitors can choose read-only guest browsing from the Login menu. Overridden at boot when `FOGLET_GUEST_MODE_ENABLED` is set. |
 
 `Schema.validate/2` returns `:ok`, `{:error, {:unknown_key, key}}`, or `{:error, %{reason: reason, expected: expected, got: value}}` where `reason` is one of `:type_mismatch`, `:not_in_enum`, `:below_min`, `:above_max`. The `:above_max` clause is reserved for future keys with maximum bounds — no current key uses it.
 

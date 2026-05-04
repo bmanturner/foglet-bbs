@@ -66,6 +66,7 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
         |> put_draft("invite_code_generators", "any_user")
         |> put_draft("delivery_mode", "email")
         |> put_draft("require_email_verification", true)
+        |> put_draft("guest_mode_enabled", false)
         |> put_draft("invite_generation_per_user_limit", 3)
 
       {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
@@ -75,6 +76,7 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
       assert Config.get!("invite_code_generators") == "any_user"
       assert Config.get!("delivery_mode") == "email"
       assert Config.get!("require_email_verification") == true
+      assert Config.get!("guest_mode_enabled") == false
       assert Config.get!("invite_generation_per_user_limit") == 3
     end
 
@@ -158,6 +160,9 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
       {"require_email_verification",
        {:visible,
         "SITE control changes registration/login verification gates through Foglet.Config.require_email_verification?/0 consumers"}},
+      {"guest_mode_enabled",
+       {:visible,
+        "SITE control changes whether unauthenticated visitors can enter read-only Guest Mode through Foglet.Config.guest_mode_enabled?/0 consumers"}},
       {"invite_generation_per_user_limit",
        {:conditionally_visible,
         "Visible only when invite_code_generators == \"any_user\"; affects invite generation cap through Foglet.Config.invite_generation_per_user_limit/0"}},

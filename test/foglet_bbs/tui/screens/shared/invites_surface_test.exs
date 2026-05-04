@@ -32,40 +32,54 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurfaceTest do
   # visible?/2
   # ---------------------------------------------------------------------------
 
-  describe "visible?/2" do
-    test "returns true for role :sysop regardless of policy" do
-      assert InvitesSurface.visible?(%{role: :sysop}, "sysop_only")
-      assert InvitesSurface.visible?(%{role: :sysop}, "mods")
-      assert InvitesSurface.visible?(%{role: :sysop}, "any_user")
-      assert InvitesSurface.visible?(%{role: :sysop}, nil)
+  describe "visible?/3" do
+    test "hides every role in open registration mode" do
+      for role <- [:sysop, :mod, :user], policy <- ["sysop_only", "mods", "any_user", nil] do
+        refute InvitesSurface.visible?(%{role: role}, policy, "open")
+      end
     end
 
-    test "returns true for role :mod when policy is \"mods\"" do
-      assert InvitesSurface.visible?(%{role: :mod}, "mods")
+    test "returns true for role :sysop in invite-backed modes when policy is configured" do
+      for mode <- ["invite_only", "sysop_approved"],
+          policy <- ["sysop_only", "mods", "any_user"] do
+        assert InvitesSurface.visible?(%{role: :sysop}, policy, mode)
+      end
     end
 
-    test "returns true for role :user when policy is \"any_user\"" do
-      assert InvitesSurface.visible?(%{role: :user}, "any_user")
+    test "returns false for sysop in invite-backed modes when policy is unavailable" do
+      refute InvitesSurface.visible?(%{role: :sysop}, nil, "invite_only")
+    end
+
+    test "returns true for role :mod when policy is \"mods\" and registration is invite-backed" do
+      assert InvitesSurface.visible?(%{role: :mod}, "mods", "invite_only")
+      assert InvitesSurface.visible?(%{role: :mod}, "mods", "sysop_approved")
+    end
+
+    test "returns true for role :user when policy is \"any_user\" and registration is invite-backed" do
+      assert InvitesSurface.visible?(%{role: :user}, "any_user", "invite_only")
+      assert InvitesSurface.visible?(%{role: :user}, "any_user", "sysop_approved")
     end
 
     test "returns false for role :user when policy is \"sysop_only\"" do
-      refute InvitesSurface.visible?(%{role: :user}, "sysop_only")
+      refute InvitesSurface.visible?(%{role: :user}, "sysop_only", "invite_only")
     end
 
     test "returns false for role :mod when policy is \"sysop_only\"" do
-      refute InvitesSurface.visible?(%{role: :mod}, "sysop_only")
+      refute InvitesSurface.visible?(%{role: :mod}, "sysop_only", "invite_only")
     end
 
     test "returns false when user is nil" do
-      refute InvitesSurface.visible?(nil, "any_user")
-      refute InvitesSurface.visible?(nil, "mods")
-      refute InvitesSurface.visible?(nil, nil)
+      refute InvitesSurface.visible?(nil, "any_user", "invite_only")
+      refute InvitesSurface.visible?(nil, "mods", "invite_only")
+      refute InvitesSurface.visible?(nil, nil, "invite_only")
     end
 
-    test "returns false for unknown role/policy combinations" do
-      refute InvitesSurface.visible?(%{role: :user}, "mods")
-      refute InvitesSurface.visible?(%{role: :mod}, "any_user")
-      refute InvitesSurface.visible?(%{role: :user}, nil)
+    test "returns false for unknown role/policy/mode combinations" do
+      refute InvitesSurface.visible?(%{role: :user}, "mods", "invite_only")
+      refute InvitesSurface.visible?(%{role: :mod}, "any_user", "invite_only")
+      refute InvitesSurface.visible?(%{role: :user}, nil, "invite_only")
+      refute InvitesSurface.visible?(%{role: :sysop}, "sysop_only", nil)
+      refute InvitesSurface.visible?(%{role: :sysop}, "sysop_only", "disabled")
     end
   end
 

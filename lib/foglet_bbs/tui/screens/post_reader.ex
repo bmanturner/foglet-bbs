@@ -53,6 +53,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostReader.Render
   alias Foglet.TUI.Screens.PostReader.State
@@ -264,21 +265,26 @@ defmodule Foglet.TUI.Screens.PostReader do
     {scroll_local_post(state, -1, context), []}
   end
 
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["r", "R"] do
-    if locked_thread?(state) or archived_board?(state) do
-      {state, []}
-    else
-      params = %{
-        origin: :post_reader,
-        board: state.board,
-        board_id: state.board_id,
-        thread: state.thread,
-        thread_id: state.thread_id,
-        reply_to: selected_action_post(state)
-      }
+    cond do
+      Guest.guest?(context) ->
+        {state, [Effect.open_modal(Guest.denial_modal(:post))]}
 
-      {state, [Effect.navigate(:post_composer, params)]}
+      locked_thread?(state) or archived_board?(state) ->
+        {state, []}
+
+      true ->
+        params = %{
+          origin: :post_reader,
+          board: state.board,
+          board_id: state.board_id,
+          thread: state.thread,
+          thread_id: state.thread_id,
+          reply_to: selected_action_post(state)
+        }
+
+        {state, [Effect.navigate(:post_composer, params)]}
     end
   end
 

@@ -28,6 +28,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.App.SessionAlias
   alias Foglet.TUI.App.Subscriptions
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.SizeGate
   alias Raxol.Core.Runtime.Command
 
@@ -136,7 +137,9 @@ defmodule Foglet.TUI.App do
     {:ok, state}
   end
 
-  defp initial_screen(nil, _session_context), do: :login
+  defp initial_screen(nil, session_context) do
+    if Guest.guest?(session_context), do: :main_menu, else: :login
+  end
 
   defp initial_screen(%{status: status}, _session_context)
        when status in [:pending, :rejected, :suspended],
@@ -290,6 +293,23 @@ defmodule Foglet.TUI.App do
   # input cannot mutate hidden screens. State-changing effects from
   # outside the keyboard pipeline are intentionally exempt.
   defp do_update({:set_user, user}, state), do: SessionAlias.set_user(state, user)
+
+  defp do_update(:enter_guest, state) do
+    session_context = Guest.enter(state.session_context || %Foglet.TUI.SessionContext{})
+
+    state = %{
+      state
+      | current_user: nil,
+        current_screen: :main_menu,
+        route_params: %{},
+        session_context: session_context,
+        modal: nil
+    }
+
+    local_state = Foglet.TUI.Screens.MainMenu.init(build_context(state))
+
+    {ScreenStates.put(state, :main_menu, local_state), []}
+  end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
     {%{state | modal: modal}, []}

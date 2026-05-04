@@ -11,6 +11,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   alias Foglet.TimeAgo
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.BoardList.State
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.TextWidth
@@ -119,62 +120,70 @@ defmodule Foglet.TUI.Screens.BoardList do
   def update({:key, %{key: :char, char: "s"}}, local_state, %Context{} = context) do
     local_state = normalize_state(local_state)
 
-    with %BoardTree{} = tree <- tree_for_state(local_state),
-         focused when is_map(focused) <- BoardTree.focused_board_entry(tree) do
-      case focused do
-        %{archived?: true} ->
-          {%{local_state | board_tree: tree, feedback: "That board is archived."}, []}
-
-        %{board: board, subscribed?: false} ->
-          local_state = %{
-            local_state
-            | board_tree: tree,
-              feedback: nil,
-              last_op: :subscribe_to_board
-          }
-
-          {local_state, [subscription_effect(:subscribe_to_board, board, context)]}
-
-        %{subscribed?: true} ->
-          {%{local_state | feedback: "Already subscribed."}, []}
-      end
+    if Guest.guest?(context) do
+      {%{local_state | feedback: guest_subscription_feedback(), last_op: nil}, []}
     else
-      _other ->
-        {local_state, []}
+      with %BoardTree{} = tree <- tree_for_state(local_state),
+           focused when is_map(focused) <- BoardTree.focused_board_entry(tree) do
+        case focused do
+          %{archived?: true} ->
+            {%{local_state | board_tree: tree, feedback: "That board is archived."}, []}
+
+          %{board: board, subscribed?: false} ->
+            local_state = %{
+              local_state
+              | board_tree: tree,
+                feedback: nil,
+                last_op: :subscribe_to_board
+            }
+
+            {local_state, [subscription_effect(:subscribe_to_board, board, context)]}
+
+          %{subscribed?: true} ->
+            {%{local_state | feedback: "Already subscribed."}, []}
+        end
+      else
+        _other ->
+          {local_state, []}
+      end
     end
   end
 
   def update({:key, %{key: :char, char: "u"}}, local_state, %Context{} = context) do
     local_state = normalize_state(local_state)
 
-    with %BoardTree{} = tree <- tree_for_state(local_state),
-         focused when is_map(focused) <- BoardTree.focused_board_entry(tree) do
-      case focused do
-        %{archived?: true} ->
-          {%{local_state | board_tree: tree, feedback: "That board is archived."}, []}
-
-        %{required_subscription?: true} ->
-          {%{
-             local_state
-             | board_tree: tree,
-               feedback: "Required subscriptions can't be cancelled."
-           }, []}
-
-        %{board: board, subscribed?: true} ->
-          local_state = %{
-            local_state
-            | board_tree: tree,
-              feedback: nil,
-              last_op: :unsubscribe_from_board
-          }
-
-          {local_state, [subscription_effect(:unsubscribe_from_board, board, context)]}
-
-        %{subscribed?: false} ->
-          {%{local_state | board_tree: tree}, []}
-      end
+    if Guest.guest?(context) do
+      {%{local_state | feedback: guest_subscription_feedback(), last_op: nil}, []}
     else
-      _other -> {local_state, []}
+      with %BoardTree{} = tree <- tree_for_state(local_state),
+           focused when is_map(focused) <- BoardTree.focused_board_entry(tree) do
+        case focused do
+          %{archived?: true} ->
+            {%{local_state | board_tree: tree, feedback: "That board is archived."}, []}
+
+          %{required_subscription?: true} ->
+            {%{
+               local_state
+               | board_tree: tree,
+                 feedback: "Required subscriptions can't be cancelled."
+             }, []}
+
+          %{board: board, subscribed?: true} ->
+            local_state = %{
+              local_state
+              | board_tree: tree,
+                feedback: nil,
+                last_op: :unsubscribe_from_board
+            }
+
+            {local_state, [subscription_effect(:unsubscribe_from_board, board, context)]}
+
+          %{subscribed?: false} ->
+            {%{local_state | board_tree: tree}, []}
+        end
+      else
+        _other -> {local_state, []}
+      end
     end
   end
 
@@ -241,24 +250,7 @@ defmodule Foglet.TUI.Screens.BoardList do
       render_model,
       %{breadcrumb_parts: ["Foglet", "Boards"]},
       render_board_content(local_state, context, theme),
-      [
-        %{
-          label: "Navigate",
-          commands: [
-            %{key: "j/k", label: "Select", priority: 10},
-            %{key: "←/→", label: "Collapse/Expand", priority: 20},
-            %{key: "Enter", label: "Open", priority: 5}
-          ]
-        },
-        %{
-          label: "Actions",
-          commands: [%{key: "s/u", label: "Sub/Unsub", priority: 15}]
-        },
-        %{
-          label: "System",
-          commands: [%{key: "Q", label: "Back", priority: 0}]
-        }
-      ]
+      command_groups(context)
     )
   end
 
@@ -329,6 +321,35 @@ defmodule Foglet.TUI.Screens.BoardList do
       ]
       |> List.flatten()
       |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  defp command_groups(%Context{} = context) do
+    navigate = %{
+      label: "Navigate",
+      commands: [
+        %{key: "j/k", label: "Select", priority: 10},
+        %{key: "←/→", label: "Collapse/Expand", priority: 20},
+        %{key: "Enter", label: "Open", priority: 5}
+      ]
+    }
+
+    system = %{
+      label: "System",
+      commands: [%{key: "Q", label: "Back", priority: 0}]
+    }
+
+    if Guest.guest?(context) do
+      [navigate, system]
+    else
+      [
+        navigate,
+        %{
+          label: "Actions",
+          commands: [%{key: "s/u", label: "Sub/Unsub", priority: 15}]
+        },
+        system
+      ]
     end
   end
 
@@ -473,6 +494,9 @@ defmodule Foglet.TUI.Screens.BoardList do
     do: max(rows - 4, 0)
 
   defp body_height(_context), do: 20
+
+  defp guest_subscription_feedback,
+    do: "Guests can browse boards, but only registered users can subscribe."
 
   defp render_model(%Context{} = context, %State{} = state) do
     %{

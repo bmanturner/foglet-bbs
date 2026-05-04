@@ -205,6 +205,18 @@ defmodule Foglet.ConfigTest do
       Config.put!("require_email_verification", false, nil)
       assert Config.get!("require_email_verification") == false
     end
+
+    test "rejects non-boolean guest_mode_enabled values" do
+      err =
+        assert_raise InvalidValueError, fn ->
+          Config.put!("guest_mode_enabled", "true", nil)
+        end
+
+      assert err.key == "guest_mode_enabled"
+      assert err.reason == :type_mismatch
+      assert err.expected == :boolean
+      assert err.got == "true"
+    end
   end
 
   describe "typed accessors" do
@@ -234,6 +246,31 @@ defmodule Foglet.ConfigTest do
 
     test "require_email_verification?/0 returns the seeded default with ? suffix" do
       assert Config.require_email_verification?() == false
+    end
+
+    test "guest_mode_enabled?/0 returns the enabled default with ? suffix" do
+      assert Config.guest_mode_enabled?() == true
+    end
+
+    test "guest_mode_enabled?/0 reflects subsequent writes" do
+      Config.put!("guest_mode_enabled", false, nil)
+      assert Config.guest_mode_enabled?() == false
+    end
+
+    test "guest_mode_enabled?/0 honors the boot-time application override" do
+      original = Application.get_env(:foglet_bbs, :guest_mode_enabled)
+
+      on_exit(fn ->
+        case original do
+          nil -> Application.delete_env(:foglet_bbs, :guest_mode_enabled)
+          value -> Application.put_env(:foglet_bbs, :guest_mode_enabled, value)
+        end
+      end)
+
+      Config.put!("guest_mode_enabled", true, nil)
+      Application.put_env(:foglet_bbs, :guest_mode_enabled, false)
+
+      assert Config.guest_mode_enabled?() == false
     end
 
     test "email_verify_resend_cooldown_seconds/0 returns the seeded default" do

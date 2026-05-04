@@ -35,6 +35,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     "invite_code_generators",
     "delivery_mode",
     "require_email_verification",
+    "guest_mode_enabled",
     "invite_generation_per_user_limit"
   ]
 
@@ -43,7 +44,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
   @field_labels %{
     "registration_mode" => "Account registration",
     "invite_code_generators" => "Invite code generators",
-    "delivery_mode" => "Email delivery"
+    "delivery_mode" => "Email delivery",
+    "guest_mode_enabled" => "Guest mode"
   }
 
   # Operator-facing per-value labels for enum SITE keys (FOG-342 / FOG-344).
@@ -74,6 +76,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     :invite_code_generators,
     :delivery_mode,
     :require_email_verification,
+    :guest_mode_enabled,
     :invite_generation_per_user_limit
   ]
   @doc false

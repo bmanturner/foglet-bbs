@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
                "invite_code_generators",
                "delivery_mode",
                "require_email_verification",
+               "guest_mode_enabled",
                "invite_generation_per_user_limit"
              ]
     end
@@ -210,22 +211,24 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       assert state.current_user == sysop
     end
 
-    test "visible_keys/1 returns 4 keys when invite_code_generators != any_user" do
+    test "visible_keys/1 returns 5 keys when invite_code_generators != any_user" do
       Config.put!("invite_code_generators", "sysop_only", nil)
       state = SState.new([])
       visible = SState.visible_keys(state)
 
       refute "invite_generation_per_user_limit" in visible
-      assert length(visible) == 4
+      assert "guest_mode_enabled" in visible
+      assert length(visible) == 5
     end
 
-    test "visible_keys/1 returns 5 keys when invite_code_generators == any_user" do
+    test "visible_keys/1 returns 6 keys when invite_code_generators == any_user" do
       Config.put!("invite_code_generators", "any_user", nil)
       state = SState.new([])
       visible = SState.visible_keys(state)
 
       assert "invite_generation_per_user_limit" in visible
-      assert length(visible) == 5
+      assert "guest_mode_enabled" in visible
+      assert length(visible) == 6
     end
 
     test "build_modal_form/1 returns Modal.Form with fields matching visible_keys" do
@@ -235,7 +238,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
 
       assert %ModalForm{} = form
       assert length(form.fields) == length(SState.visible_keys(state))
-      assert length(form.fields) == 4
+      assert length(form.fields) == 5
     end
 
     test "build_modal_form/1 maps Schema types to ModalForm field types" do
@@ -251,6 +254,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       assert types_by_name[:invite_code_generators] == :enum
       assert types_by_name[:delivery_mode] == :enum
       assert types_by_name[:require_email_verification] == :boolean
+      assert types_by_name[:guest_mode_enabled] == :boolean
       assert types_by_name[:invite_generation_per_user_limit] == :integer
     end
 
