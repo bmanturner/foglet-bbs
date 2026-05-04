@@ -2,9 +2,11 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
   use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts
-  alias Foglet.Accounts.Invite
+  alias Foglet.Accounts.{Invite, RedemptionThrottle}
   alias Foglet.Config
   alias FogletBbs.AccountsFixtures
+
+  import ExUnit.CaptureLog
 
   describe "invite_only registration (INVT-05)" do
     setup :force_invite_only_registration
@@ -33,7 +35,7 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
         |> Ecto.Changeset.change(consumed_at: now, consumed_by_user_id: user.id)
         |> Repo.update!()
 
-      unknown_errors = registration_errors("UNKNOWNINVITECODE1")
+      unknown_errors = registration_errors("Aa0Bb1")
       revoked_errors = registration_errors(revoked.code)
       consumed_errors = registration_errors(consumed.code)
 
@@ -83,6 +85,32 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
       assert errors_on(changeset).invite_code
     end
 
+    test "repeated invite-code probes throttle with the same generic error and no raw-code audit leak" do
+      revoked =
+        with_open_registration(fn ->
+          invite = AccountsFixtures.invite_fixture()
+          Repo.update!(Ecto.Changeset.change(invite, revoked_at: DateTime.utc_now()))
+        end)
+
+      log =
+        capture_log(fn ->
+          for _ <- 1..5 do
+            assert %{invite_code: _} = registration_errors(revoked.code)
+          end
+
+          assert %{invite_code: throttled_error} = registration_errors(revoked.code)
+          assert throttled_error
+        end)
+
+      refute log =~ revoked.code
+      assert log =~ "account redemption throttled"
+
+      reloaded = Repo.get!(Invite, revoked.id)
+      assert Invite.status(reloaded) == :revoked
+      assert reloaded.consumed_at == nil
+      assert reloaded.consumed_by_user_id == nil
+    end
+
     test "generic user fixture supplies an available invite code" do
       user = AccountsFixtures.user_fixture()
 
@@ -100,6 +128,7 @@ defmodule Foglet.Accounts.InviteRegistrationTest do
   end
 
   defp force_invite_only_registration(_context) do
+    RedemptionThrottle.reset_for_tests()
     Config.init_cache()
     current_registration_mode = Config.get("registration_mode", "open")
     Config.put!("registration_mode", "invite_only")

@@ -7,7 +7,7 @@ defmodule Foglet.Accounts.Verification do
 
   require Logger
 
-  alias Foglet.Accounts.{Email, User, UserToken}
+  alias Foglet.Accounts.{Email, RedemptionThrottle, User, UserToken}
   alias Foglet.QueryHelpers
   alias FogletBbs.Repo
 
@@ -276,25 +276,37 @@ defmodule Foglet.Accounts.Verification do
   @spec consume_reset_token(String.t(), map()) ::
           {:ok, User.t()} | {:error, :invalid_or_expired | Ecto.Changeset.t()}
   def consume_reset_token(raw_token, attrs) when is_binary(raw_token) and is_map(attrs) do
-    with {:ok, user_query} <- UserToken.verify_email_token_query(raw_token, "reset_password"),
+    with :ok <- RedemptionThrottle.check(:reset_password, raw_token),
+         {:ok, user_query} <- UserToken.verify_email_token_query(raw_token, "reset_password"),
          {:ok, claim_query} <- UserToken.reset_token_claim_query(raw_token) do
-      Repo.transact(fn ->
-        case Repo.one(user_query) do
-          nil ->
-            {:error, :invalid_or_expired}
+      result =
+        Repo.transact(fn ->
+          case Repo.one(user_query) do
+            nil ->
+              {:error, :invalid_or_expired}
 
-          %User{} = user ->
-            # Atomic single-use claim: PostgreSQL row locking ensures exactly
-            # one concurrent transaction observes {1, _}; the rest see {0, _}
-            # and short-circuit to a generic invalid_or_expired error.
-            case Repo.delete_all(claim_query) do
-              {0, _} -> {:error, :invalid_or_expired}
-              {_n, _} -> update_password_and_purge_resets(user, attrs)
-            end
-        end
-      end)
+            %User{} = user ->
+              # Atomic single-use claim: PostgreSQL row locking ensures exactly
+              # one concurrent transaction observes {1, _}; the rest see {0, _}
+              # and short-circuit to a generic invalid_or_expired error.
+              case Repo.delete_all(claim_query) do
+                {0, _} -> {:error, :invalid_or_expired}
+                {_n, _} -> update_password_and_purge_resets(user, attrs)
+              end
+          end
+        end)
+
+      case result do
+        {:ok, %User{}} = ok ->
+          RedemptionThrottle.succeeded(:reset_password, raw_token)
+          ok
+
+        other ->
+          other
+      end
     else
       :error -> {:error, :invalid_or_expired}
+      {:error, :throttled} -> {:error, :invalid_or_expired}
     end
   end
 

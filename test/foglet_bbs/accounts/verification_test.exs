@@ -11,6 +11,7 @@ defmodule Foglet.Accounts.VerificationTest do
   alias Foglet.Config
   alias FogletBbs.AccountsFixtures
 
+  import ExUnit.CaptureLog
   import Swoosh.TestAssertions
 
   describe "deliver_verification_code/1 (MAIL-02/MAIL-03)" do
@@ -319,6 +320,11 @@ defmodule Foglet.Accounts.VerificationTest do
   end
 
   describe "consume_reset_token/2 (D-08/D-09/D-10/D-16)" do
+    setup do
+      Foglet.Accounts.RedemptionThrottle.reset_for_tests()
+      :ok
+    end
+
     test "valid raw token updates the password and removes outstanding reset tokens" do
       user = AccountsFixtures.user_fixture(%{password: "original1"})
       {raw_token, _struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
@@ -402,6 +408,33 @@ defmodule Foglet.Accounts.VerificationTest do
       assert Argon2.verify_pass("original1", reloaded.password_hash)
 
       # Token row must NOT have been deleted on validation failure.
+      assert Repo.exists?(
+               from t in UserToken,
+                 where: t.user_id == ^user.id and t.context == "reset_password"
+             )
+    end
+
+    test "throttles repeated reset-token probes with generic errors and no raw-token audit leak" do
+      user = AccountsFixtures.user_fixture(%{password: "original1"})
+      {raw_token, _struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      log =
+        capture_log(fn ->
+          for _ <- 1..5 do
+            assert {:error, %Ecto.Changeset{}} =
+                     Verification.consume_reset_token(raw_token, %{password: "short"})
+          end
+
+          assert {:error, :invalid_or_expired} =
+                   Verification.consume_reset_token(raw_token, %{password: "brandnew1"})
+        end)
+
+      refute log =~ raw_token
+      assert log =~ "account redemption throttled"
+
+      reloaded = Repo.get!(User, user.id)
+      assert Argon2.verify_pass("original1", reloaded.password_hash)
+
       assert Repo.exists?(
                from t in UserToken,
                  where: t.user_id == ^user.id and t.context == "reset_password"

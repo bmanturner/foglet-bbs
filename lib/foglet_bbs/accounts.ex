@@ -21,7 +21,7 @@ defmodule Foglet.Accounts do
 
   alias Foglet.QueryHelpers
 
-  alias Foglet.Accounts.{Email, Invite, SSHKey, User, UserToken}
+  alias Foglet.Accounts.{Email, Invite, RedemptionThrottle, SSHKey, User, UserToken}
   alias Foglet.{Config, Mailer}
   alias Foglet.Posts.Post
   alias FogletBbs.Repo
@@ -114,13 +114,29 @@ defmodule Foglet.Accounts do
   defp redeem_invite_registration(invite_code, user_changeset, offered_ssh_public_key) do
     code = String.trim(to_string(invite_code))
 
-    Repo.transact(fn ->
-      with {:ok, user} <- Repo.insert(user_changeset),
-           {:ok, user} <- consume_invite_for_user(Repo, code, user),
-           {:ok, _key} <- maybe_register_registration_ssh_key(user, offered_ssh_public_key) do
-        {:ok, user}
-      end
-    end)
+    case RedemptionThrottle.check(:invite_code, code) do
+      :ok ->
+        result =
+          Repo.transact(fn ->
+            with {:ok, user} <- Repo.insert(user_changeset),
+                 {:ok, user} <- consume_invite_for_user(Repo, code, user),
+                 {:ok, _key} <- maybe_register_registration_ssh_key(user, offered_ssh_public_key) do
+              {:ok, user}
+            end
+          end)
+
+        case result do
+          {:ok, %User{}} = ok ->
+            RedemptionThrottle.succeeded(:invite_code, code)
+            ok
+
+          other ->
+            other
+        end
+
+      {:error, :throttled} ->
+        {:error, :invalid_invite_code}
+    end
   end
 
   defp handle_invite_registration_result({:ok, user}, _user_changeset) do
