@@ -80,8 +80,9 @@ Residual risks / follow-up candidates
 - FOG-522 still owns sandbox/process isolation, filesystem exposure, network
   policy, and deployment hardening for untrusted real-world door programs. The
   helper improves PTY fidelity; it is not a sandbox.
-- Docker/release packaging must include Python 3 and
-  `priv/doors/pty/foglet_pty_adapter.py`; deployments without it degrade to the
-  documented fallback instead of failing closed today.
+- Docker/release packaging now installs Python 3 in the final runtime image and
+  includes `priv/doors/pty/foglet_pty_adapter.py` via the release `priv` tree.
+  Deployments that remove Python 3 or override the helper path will degrade to
+  the documented fallback instead of failing closed today.
 - Door authorization, persistence/audit rows, and catalog policy are outside
   this runtime slice and should stay with the owning domain/platform issue.

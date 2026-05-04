@@ -23,8 +23,10 @@ helper is unavailable, Foglet may degrade to `script(1)` when present, then to a
 plain pipe. That fallback is for demos/development only: it does not provide the
 same resize or process-group cleanup semantics.
 
-Deployment requirement: package Python 3 and `priv/doors/pty/foglet_pty_adapter.py`
-with releases/Docker images that enable `external_pty` doors. FOG-522 still owns
+Deployment requirement: releases/Docker images that enable `external_pty` doors
+need Python 3 and `priv/doors/pty/foglet_pty_adapter.py`. The project Dockerfile
+installs Python 3 in the final runtime image and includes the helper via the
+release `priv` tree. FOG-522 still owns
 stronger sandboxing/process isolation; this PTY helper is not a sandbox.
 
 Door manifests are configuration data in this slice. They are not stored in database tables yet, and there is no in-BBS catalog editor yet.
