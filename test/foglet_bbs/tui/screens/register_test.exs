@@ -185,13 +185,13 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
     test "invite and combined steps render in shared auth cards" do
       [invite_panel] = Register.render(invite_state(), context("invite_only")) |> collect_panels()
-      assert invite_panel.attrs.title == "Invite required"
+      assert invite_panel.attrs.title == "Knock with your invite"
       assert invite_panel.attrs.width == 46
 
       [combined_panel] =
         Register.render(combined_state([], :handle), context("open")) |> collect_panels()
 
-      assert combined_panel.attrs.title == "Create account"
+      assert combined_panel.attrs.title == "Choose your handle"
       assert combined_panel.attrs.width == 46
     end
   end

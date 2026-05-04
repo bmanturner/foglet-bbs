@@ -54,9 +54,9 @@ defmodule Foglet.TUI.Screens.Verify do
 
     panel =
       AuthForm.render(
-        "Verify email",
+        "Check your mailbox",
         [
-          text("Enter the 6-character code we sent you.", fg: theme.dim.fg),
+          text("Type the 6-character code we sent to your email.", fg: theme.dim.fg),
           text(""),
           text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
           text(""),
@@ -230,7 +230,7 @@ defmodule Foglet.TUI.Screens.Verify do
   defp handle_verify_submit_result({:error, :expired}, vs, %Context{}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Code expired. Press [R] to request a new one."
+      message: "Code expired. Press Ctrl+R to request a new one."
     }
 
     {%{vs | buffer: ""}, [Effect.open_modal(modal)]}

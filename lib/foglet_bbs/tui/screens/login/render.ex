@@ -225,9 +225,9 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
     panel =
       AuthForm.render(
-        "Login",
+        "Back on the board",
         [
-          text("Use your Foglet handle and password.", fg: theme.dim.fg),
+          text("Enter your handle and password to pick up where you left off.", fg: theme.dim.fg),
           text(""),
           row style: %{gap: 0} do
             [
@@ -269,7 +269,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
     intro =
       wrapped_text_rows(
-        "Need a token? Request one on the left. Already have one from email or a sysop? Use it on the right.",
+        "Need a reset token? Request one on the left. Already have one from email or your sysop? Use it on the right.",
         reset_wrap_width(state),
         fg: theme.dim.fg
       )
@@ -322,7 +322,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
       )
 
     column style: %{gap: 0} do
-      [text("Password recovery", fg: theme.primary.fg, style: [:bold])] ++
+      [text("Recover your signal", fg: theme.primary.fg, style: [:bold])] ++
         intro ++ [text("")] ++ body
     end
   end

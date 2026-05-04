@@ -320,9 +320,9 @@ defmodule Foglet.TUI.Screens.Register do
 
     panel =
       AuthForm.render(
-        "Invite required",
+        "Knock with your invite",
         [
-          text("Enter the invite code from your sysop.", fg: theme.dim.fg),
+          text("Enter the invite code your sysop gave you.", fg: theme.dim.fg),
           text(""),
           row style: %{gap: 0} do
             [
@@ -386,8 +386,8 @@ defmodule Foglet.TUI.Screens.Register do
 
     panel =
       AuthForm.render(
-        "Create account",
-        [text("Choose your handle and account email.", fg: theme.dim.fg), text("")] ++
+        "Choose your handle",
+        [text("Pick the name and email this Foglet will know you by.", fg: theme.dim.fg), text("")] ++
           rows ++ error_items,
         theme,
         width: @auth_card_width,

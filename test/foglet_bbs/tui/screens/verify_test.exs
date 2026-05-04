@@ -107,7 +107,7 @@ defmodule Foglet.TUI.Screens.VerifyTest do
         Verify.render(Verify.init(context(user)), context(user))
         |> collect_panels()
 
-      assert panel.attrs.title == "Verify email"
+      assert panel.attrs.title == "Check your mailbox"
       assert panel.attrs.width == 46
     end
   end
