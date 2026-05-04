@@ -21,7 +21,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     %Foglet.TUI.App{
       current_screen: :moderation,
       current_user: user || %Foglet.Accounts.User{id: "u1", handle: "alice", role: role},
-      session_context: %{invite_code_generators: "sysop_only"},
+      session_context: %{registration_mode: "invite_only", invite_code_generators: "sysop_only"},
       terminal_size: {80, 24},
       screen_state: %{}
     }
@@ -212,7 +212,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         Context.new(
           current_user: user,
           route: :moderation,
-          session_context: %{invite_code_generators: "mods"}
+          session_context: %{registration_mode: "invite_only", invite_code_generators: "mods"}
         )
 
       state = ModerationState.new(invites_visible?: true, active: 5)
@@ -238,7 +238,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         Context.new(
           current_user: user,
           route: :moderation,
-          session_context: %{invite_code_generators: "mods"}
+          session_context: %{registration_mode: "invite_only", invite_code_generators: "mods"}
         )
 
       state = ModerationState.new(invites_visible?: true, active: 0)
@@ -267,7 +267,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
         Context.new(
           current_user: user,
           route: :moderation,
-          session_context: %{invite_code_generators: "mods"}
+          session_context: %{registration_mode: "invite_only", invite_code_generators: "mods"}
         )
 
       items = [%{code: "ABC", status: :available, inserted_at: ~U[2026-01-01 00:00:00Z]}]

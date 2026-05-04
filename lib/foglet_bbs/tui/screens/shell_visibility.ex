@@ -53,22 +53,27 @@ defmodule Foglet.TUI.Screens.ShellVisibility do
   def sysop_visible?(_), do: false
 
   @doc """
-  Returns `true` when the invite policy and user role permit invite generation.
+  Returns `true` when registration mode, invite policy, and role permit invite generation.
 
-  Resolves the invite policy from `session_context[:invite_code_generators]`;
-  falls back to `Foglet.Config.invite_code_generators/0` when the key is absent.
-  If the config read fails (ETS not seeded, DB unavailable), treats the policy as
-  `nil` — which causes `InvitesSurface.visible?/2` to return `false` for
-  non-sysops (safe default).
+  Resolves `session_context[:registration_mode]` and
+  `session_context[:invite_code_generators]`; falls back to `Foglet.Config` when
+  either key is absent. If a config read fails (ETS not seeded, DB unavailable),
+  treats the missing value as `nil`, causing `InvitesSurface.visible?/3` to hide
+  the surface as the safe default.
 
-  Delegates the role + policy decision to
-  `Foglet.TUI.Screens.Shared.InvitesSurface.visible?/2` (single source of truth,
-  Plan 02). See that module for the full policy/role matrix.
+  Open registration deliberately hides INVITES for every role. Sysops can still
+  manage registration/invite settings through operator configuration surfaces;
+  this shared INVITES surface is for invite-code workflows in invite-backed modes.
+
+  Delegates the role + policy + mode decision to
+  `Foglet.TUI.Screens.Shared.InvitesSurface.visible?/3` (single source of truth,
+  Plan 02). See that module for the full matrix.
   """
   @spec invites_visible?(map() | nil, map() | nil) :: boolean()
   def invites_visible?(user, session_context) do
     policy = resolve_policy(session_context)
-    InvitesSurface.visible?(user, policy)
+    registration_mode = resolve_registration_mode(session_context)
+    InvitesSurface.visible?(user, policy, registration_mode)
   end
 
   # --- private ---
@@ -76,9 +81,27 @@ defmodule Foglet.TUI.Screens.ShellVisibility do
   defp resolve_policy(nil), do: config_policy_or_nil()
 
   defp resolve_policy(session_context) when is_map(session_context) do
-    case Map.get(session_context, :invite_code_generators) do
-      nil -> config_policy_or_nil()
-      policy when is_binary(policy) -> policy
+    resolve_string_config(
+      session_context,
+      :invite_code_generators,
+      &config_policy_or_nil/0
+    )
+  end
+
+  defp resolve_registration_mode(nil), do: config_registration_mode_or_nil()
+
+  defp resolve_registration_mode(session_context) when is_map(session_context) do
+    resolve_string_config(
+      session_context,
+      :registration_mode,
+      &config_registration_mode_or_nil/0
+    )
+  end
+
+  defp resolve_string_config(session_context, key, fallback) when is_function(fallback, 0) do
+    case Map.get(session_context, key) do
+      nil -> fallback.()
+      value when is_binary(value) -> value
       _ -> nil
     end
   end
@@ -87,23 +110,31 @@ defmodule Foglet.TUI.Screens.ShellVisibility do
     Foglet.Config.invite_code_generators()
   rescue
     e ->
-      require Logger
-
-      Logger.warning(
-        "[ShellVisibility] invite_code_generators config read failed: " <>
-          Exception.message(e) <> " — defaulting policy to nil"
-      )
-
+      log_config_failure("invite_code_generators", Exception.message(e))
       nil
   catch
     :exit, reason ->
-      require Logger
-
-      Logger.warning(
-        "[ShellVisibility] invite_code_generators exited: #{inspect(reason)} — " <>
-          "defaulting policy to nil"
-      )
-
+      log_config_failure("invite_code_generators", "exited: #{inspect(reason)}")
       nil
+  end
+
+  defp config_registration_mode_or_nil do
+    Foglet.Config.registration_mode()
+  rescue
+    e ->
+      log_config_failure("registration_mode", Exception.message(e))
+      nil
+  catch
+    :exit, reason ->
+      log_config_failure("registration_mode", "exited: #{inspect(reason)}")
+      nil
+  end
+
+  defp log_config_failure(key, detail) do
+    require Logger
+
+    Logger.warning(
+      "[ShellVisibility] #{key} config read failed: #{detail} — defaulting #{key} to nil"
+    )
   end
 end

@@ -44,7 +44,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     %Foglet.TUI.App{
       current_screen: :sysop,
       current_user: user,
-      session_context: %{},
+      session_context: %{registration_mode: "invite_only"},
       terminal_size: {80, 24},
       screen_state: %{}
     }
@@ -200,7 +200,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
         Context.new(
           current_user: user,
           route: :sysop,
-          session_context: %{invite_code_generators: "sysop_only"}
+          session_context: %{
+            registration_mode: "invite_only",
+            invite_code_generators: "sysop_only"
+          }
         )
 
       assert %SysopState{} = state = Sysop.init(context)

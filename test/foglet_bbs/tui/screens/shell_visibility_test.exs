@@ -73,4 +73,36 @@ defmodule Foglet.TUI.Screens.ShellVisibilityTest do
       refute ShellVisibility.sysop_visible?(%{id: "u1"})
     end
   end
+
+  describe "invites_visible?/2" do
+    test "open registration hides invites for sysops, mods, and regular users" do
+      context = %{registration_mode: "open", invite_code_generators: "any_user"}
+
+      refute ShellVisibility.invites_visible?(user(:sysop), context)
+      refute ShellVisibility.invites_visible?(user(:mod), context)
+      refute ShellVisibility.invites_visible?(user(:user), context)
+    end
+
+    test "invite-backed registration applies invite generation policy" do
+      assert ShellVisibility.invites_visible?(
+               user(:sysop),
+               %{registration_mode: "invite_only", invite_code_generators: "sysop_only"}
+             )
+
+      assert ShellVisibility.invites_visible?(
+               user(:mod),
+               %{registration_mode: "invite_only", invite_code_generators: "mods"}
+             )
+
+      assert ShellVisibility.invites_visible?(
+               user(:user),
+               %{registration_mode: "sysop_approved", invite_code_generators: "any_user"}
+             )
+
+      refute ShellVisibility.invites_visible?(
+               user(:user),
+               %{registration_mode: "invite_only", invite_code_generators: "mods"}
+             )
+    end
+  end
 end
