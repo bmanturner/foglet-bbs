@@ -372,16 +372,23 @@ defmodule Foglet.TUI.Screens.Account do
     end)
   end
 
-  # FOG-142: Tabs widget consumes digit shortcuts 1–9 unconditionally
-  # (Pitfall 6 in `Foglet.TUI.Widgets.Input.Tabs`). Active text-entry
-  # forms must shield digits or real input (e.g. an `ssh-ed25519` public
-  # key) silently jumps to another Account tab.
+  # FOG-142 / FOG-333 / FOG-717: Tabs widget consumes digit shortcuts 1–9
+  # and Left/Right/Home/End for tab navigation (Pitfall 6 in
+  # `Foglet.TUI.Widgets.Input.Tabs`). Active text-entry forms must shield
+  # those keys before Tabs sees them, or real text input (e.g. an
+  # `ssh-ed25519` public key) and cursor editing keys silently jump to
+  # another Account tab instead of editing the focused field.
   defp shield_tab_shortcut?(event, %State{} = ss) do
-    digit_event?(event) and text_entry_active?(ss)
+    text_entry_active?(ss) and editing_event?(event)
   end
 
-  defp digit_event?(%{key: :char, char: <<c>>}) when c in ?0..?9, do: true
-  defp digit_event?(_), do: false
+  defp editing_event?(%{key: :char}), do: true
+
+  defp editing_event?(%{key: key})
+       when key in [:left, :right, :home, :end, :delete, :backspace],
+       do: true
+
+  defp editing_event?(_), do: false
 
   defp text_entry_active?(%State{} = ss) do
     case active_label(ss) do
@@ -393,8 +400,11 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   # FOG-333: Generalized text-entry shielding for Modal.Form-backed tabs.
-  # Any focused field whose `:type` accepts free-form text (digits included)
-  # shields the global digit tab shortcuts; enum/select fields fall through.
+  # Any focused field whose `:type` accepts free-form text input shields the
+  # global tab shortcuts (digits and, per FOG-717, cursor + delete keys) so
+  # the focused field receives normal terminal-native editing keys before
+  # the Tabs widget. List-mode/select fields fall through to tab navigation
+  # so digit shortcuts and arrow tab nav still work while browsing options.
   defp form_text_field_focused?(%{fields: fields, focus_index: idx}) do
     case Enum.at(fields, idx) do
       %{type: type} when type in [:text, :textarea, :integer, :password] -> true
