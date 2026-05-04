@@ -64,6 +64,17 @@ defmodule Foglet.TUI.Screens.PostReader do
   @default_terminal_size {80, 24}
   @reader_window_size 50
 
+  # FOG-652 / FOG-651: minimum number of body rows a trailing long post must
+  # have visible before it is rendered as a partial selectable region under
+  # preceding short posts. Below this threshold the long post is deferred to
+  # its own screenful instead of being shown as a noisy 1-3 row stub.
+  @partial_min_body_rows 4
+
+  # Chrome rows consumed by a partial card itself (separator above + header +
+  # progress line). Subtracted from the remaining-height budget when deciding
+  # whether the partial fits and how many body rows are visible.
+  @partial_chrome_rows 3
+
   @impl true
   @spec init(Context.t()) :: State.t()
   def init(%Context{} = context), do: State.from_context(context)
@@ -358,7 +369,16 @@ defmodule Foglet.TUI.Screens.PostReader do
   @spec visible_screenful(State.t(), Context.t()) :: %{
           available_height: pos_integer(),
           indexes: [non_neg_integer()],
-          mode: :packed | :long
+          mode: :packed | :long | :packed_partial,
+          partial:
+            nil
+            | %{
+                index: non_neg_integer(),
+                post_id: String.t() | nil,
+                body_visible_rows: pos_integer(),
+                total_body_rows: non_neg_integer(),
+                scroll_top: non_neg_integer()
+              }
         }
   def visible_screenful(%State{posts: posts} = state, %Context{} = context)
       when is_list(posts) and posts != [] do
@@ -372,19 +392,93 @@ defmodule Foglet.TUI.Screens.PostReader do
       post_card_row_count(frame_state, state, Enum.at(posts, top_idx), w, top_idx, total)
 
     if total == 1 or first_rows > available_height do
-      %{available_height: available_height, indexes: [top_idx], mode: :long}
+      %{available_height: available_height, indexes: [top_idx], mode: :long, partial: nil}
     else
-      indexes =
+      {indexes, used_rows} =
         pack_screenful_indexes(posts, frame_state, state, w, top_idx, total, available_height)
 
-      %{available_height: available_height, indexes: indexes, mode: :packed}
+      next_idx = (List.last(indexes) || top_idx) + 1
+      remaining = available_height - used_rows
+
+      case maybe_partial(posts, next_idx, total, frame_state, state, w, remaining) do
+        nil ->
+          %{
+            available_height: available_height,
+            indexes: indexes,
+            mode: :packed,
+            partial: nil
+          }
+
+        partial ->
+          %{
+            available_height: available_height,
+            indexes: indexes ++ [partial.index],
+            mode: :packed_partial,
+            partial: partial
+          }
+      end
     end
   end
 
   def visible_screenful(%State{}, %Context{} = context) do
     {_w, h} = context.terminal_size || @default_terminal_size
-    %{available_height: reader_available_height(h), indexes: [], mode: :packed}
+
+    %{
+      available_height: reader_available_height(h),
+      indexes: [],
+      mode: :packed,
+      partial: nil
+    }
   end
+
+  # FOG-652 / FOG-651: includes a trailing long post as a clipped, selectable
+  # partial region when there is enough remaining space for the documented
+  # minimum useful threshold (separator + header + progress + 4 body rows).
+  defp maybe_partial(posts, next_idx, total, frame_state, state, w, remaining)
+       when next_idx < total do
+    body_budget = remaining - @partial_chrome_rows
+
+    if body_budget >= @partial_min_body_rows do
+      post = Enum.at(posts, next_idx)
+      rows = post_card_row_count(frame_state, state, post, w, next_idx, total)
+      total_body_rows = max(rows - 2, 0)
+
+      # Only carve out a partial when the post would not have fit fully — a
+      # post whose body fits inside `body_budget` is trivially a normal packed
+      # card and should be added by the standard packer instead.
+      if total_body_rows > body_budget do
+        post_id = Map.get(post, :id)
+        raw_scroll_top = partial_scroll_top_for(state, post_id)
+        max_scroll = max(total_body_rows - body_budget, 0)
+        scroll_top = raw_scroll_top |> max(0) |> min(max_scroll)
+
+        %{
+          index: next_idx,
+          post_id: post_id,
+          body_visible_rows: body_budget,
+          total_body_rows: total_body_rows,
+          scroll_top: scroll_top
+        }
+      end
+    end
+  end
+
+  defp maybe_partial(_posts, _next_idx, _total, _frame_state, _state, _w, _remaining), do: nil
+
+  defp partial_scroll_top_for(%State{partial_scroll_tops: tops}, post_id)
+       when is_binary(post_id) do
+    Map.get(tops, post_id, 0)
+  end
+
+  defp partial_scroll_top_for(_state, _post_id), do: 0
+
+  @doc false
+  @spec partial_at_bottom?(map() | nil) :: boolean()
+  def partial_at_bottom?(%{scroll_top: s, body_visible_rows: v, total_body_rows: t}) do
+    s + v >= t
+  end
+
+  def partial_at_bottom?(_), do: false
 
   @doc """
   Returns the post targeted by reader actions such as reply.
@@ -813,7 +907,6 @@ defmodule Foglet.TUI.Screens.PostReader do
           {:halt, {indexes, used_rows}}
       end
     end)
-    |> elem(0)
   end
 
   defp post_card_row_count(_frame_state, _state, nil, _w, _idx, _total), do: 0
@@ -844,9 +937,29 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp seed_pending_read_position_through_visible(%State{} = state, %Context{} = context) do
-    case visible_screenful(state, context).indexes do
-      [] -> state
-      indexes -> seed_pending_read_position_at(state, List.last(indexes))
+    case visible_screenful(state, context) do
+      %{indexes: []} ->
+        state
+
+      %{mode: :packed_partial, indexes: indexes, partial: partial} ->
+        if partial_at_bottom?(partial) do
+          seed_pending_read_position_at(state, List.last(indexes))
+        else
+          # FOG-652 / FOG-651: a partial long post must not be marked read
+          # purely because its header or first slice is visible. Seed the
+          # read pointer through the post immediately preceding the partial.
+          before_partial =
+            indexes
+            |> Enum.reject(&(&1 == partial.index))
+            |> List.last()
+
+          if is_integer(before_partial),
+            do: seed_pending_read_position_at(state, before_partial),
+            else: state
+        end
+
+      %{indexes: indexes} ->
+        seed_pending_read_position_at(state, List.last(indexes))
     end
   end
 
@@ -1038,6 +1151,15 @@ defmodule Foglet.TUI.Screens.PostReader do
     last_visible_idx = List.last(screenful.indexes) || current_idx
 
     cond do
+      # FOG-652 / FOG-651: when the screenful contains a partial long post
+      # that has not been scrolled to its bottom (read-condition), N promotes
+      # that long post to the next main viewport instead of skipping past it.
+      # The partial's preserved scroll offset is carried into the viewport so
+      # the user does not lose their place.
+      delta > 0 and screenful.mode == :packed_partial and
+          not partial_at_bottom?(screenful.partial) ->
+        promote_partial_to_anchor(state, screenful.partial, context)
+
       should_load_next_window?(state, posts, delta, last_visible_idx) ->
         load_adjacent_window(state, :next, context)
 
@@ -1133,20 +1255,65 @@ defmodule Foglet.TUI.Screens.PostReader do
       _post ->
         state = warm_selected_post(state, context)
         screenful = visible_screenful(state, context)
+        action_idx = selected_action_post_index(state)
 
-        if screenful.mode == :long do
-          {_w, h} = context.terminal_size
-          available_height = reader_available_height(h)
+        cond do
+          screenful.mode == :long ->
+            {_w, h} = context.terminal_size
+            available_height = reader_available_height(h)
 
-          {new_vp, _cmds} =
-            Viewport.update({:set_visible_height, available_height}, state.viewport)
+            {new_vp, _cmds} =
+              Viewport.update({:set_visible_height, available_height}, state.viewport)
 
-          {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
-          %{state | viewport: new_vp}
-        else
-          state
+            {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
+            %{state | viewport: new_vp}
+
+          screenful.mode == :packed_partial and action_idx == screenful.partial.index ->
+            scroll_partial_post(state, delta, screenful.partial, context)
+
+          true ->
+            state
         end
     end
+  end
+
+  # FOG-652 / FOG-651: J/K scroll for the selected partial long post under
+  # preceding short-post context. Updates the per-post scroll_top, clamps at
+  # top/bottom (no wrap), and seeds the read pointer through the partial only
+  # once the bottom is reached.
+  # FOG-652 / FOG-651: promote a partial long post to the main viewport while
+  # preserving any scroll offset that was accumulated in the partial region.
+  defp promote_partial_to_anchor(%State{} = state, partial, %Context{} = context) do
+    state =
+      %{
+        state
+        | selected_post_index: partial.index,
+          selected_action_post_index: partial.index
+      }
+      |> warm_selected_post(context)
+
+    {new_vp, _cmds} = Viewport.update({:scroll_to, partial.scroll_top}, state.viewport)
+
+    state =
+      %{state | viewport: new_vp}
+      |> seed_pending_read_position_through_visible(context)
+
+    {state, []}
+  end
+
+  defp scroll_partial_post(%State{} = state, delta, partial, %Context{} = context) do
+    max_scroll = max(partial.total_body_rows - partial.body_visible_rows, 0)
+    new_scroll = (partial.scroll_top + delta) |> max(0) |> min(max_scroll)
+
+    new_tops =
+      if is_binary(partial.post_id) do
+        Map.put(state.partial_scroll_tops, partial.post_id, new_scroll)
+      else
+        state.partial_scroll_tops
+      end
+
+    state = %{state | partial_scroll_tops: new_tops}
+    seed_pending_read_position_through_visible(state, context)
   end
 
   defp move_action_target_for_visible_post(%State{posts: posts} = state, _delta, _context)
@@ -1158,7 +1325,8 @@ defmodule Foglet.TUI.Screens.PostReader do
     screenful = visible_screenful(state, context)
 
     case screenful do
-      %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
+      %{mode: mode, indexes: indexes}
+      when mode in [:packed, :packed_partial] and length(indexes) > 1 ->
         move_selected_action_post(state, indexes, delta, context)
 
       _other ->
