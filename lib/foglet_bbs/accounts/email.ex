@@ -74,6 +74,30 @@ defmodule Foglet.Accounts.Email do
     """)
   end
 
+  @doc """
+  Build the operator-initiated test email.
+
+  Sent to the acting sysop's own account email address. The body contains no
+  verification codes, reset tokens, invite codes, passwords, SSH key material,
+  or other secrets — it is purely a delivery sanity check.
+  """
+  @spec test_email(User.t()) :: Swoosh.Email.t()
+  def test_email(%User{} = sysop) do
+    new()
+    |> to({sysop.handle, sysop.email})
+    |> from(from_mailbox())
+    |> subject("Foglet test email")
+    |> text_body("""
+    This is a Foglet test email.
+
+    A sysop triggered this delivery from the SITE configuration screen to
+    confirm that transactional email is reaching this address. No action is
+    required.
+
+    If you did not request this test, you can ignore this message.
+    """)
+  end
+
   @doc "Build a sysop notification for a pending registration."
   @spec pending_approval_notification(User.t(), User.t()) :: Swoosh.Email.t()
   def pending_approval_notification(%User{} = sysop, %User{} = pending_user) do
