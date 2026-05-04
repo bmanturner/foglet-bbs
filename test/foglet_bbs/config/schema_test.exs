@@ -7,10 +7,10 @@ defmodule Foglet.Config.SchemaTest do
   alias Foglet.Config.UnknownKeyError
 
   describe "entries/0" do
-    test "returns exactly 8 entries in the documented order" do
+    test "returns exactly 9 entries in the documented order" do
       entries = Schema.entries()
 
-      assert length(entries) == 8
+      assert length(entries) == 9
 
       assert Enum.map(entries, & &1.key) == [
                "registration_mode",
@@ -19,6 +19,7 @@ defmodule Foglet.Config.SchemaTest do
                "max_thread_title_length",
                "delivery_mode",
                "require_email_verification",
+               "guest_mode_enabled",
                "email_verify_resend_cooldown_seconds",
                "invite_generation_per_user_limit"
              ]
@@ -109,6 +110,21 @@ defmodule Foglet.Config.SchemaTest do
              }
     end
 
+    test "guest_mode_enabled spec matches the locked decision table" do
+      {:ok, spec} = Schema.fetch_spec("guest_mode_enabled")
+
+      assert spec == %{
+               key: "guest_mode_enabled",
+               type: :boolean,
+               default: true,
+               description:
+                 "Allow unauthenticated visitors to enter first-class read-only Guest Mode.",
+               enum: nil,
+               min: nil,
+               max: nil
+             }
+    end
+
     test "delivery_mode spec matches the MAIL-01 delivery-mode contract" do
       {:ok, spec} = Schema.fetch_spec("delivery_mode")
 
@@ -164,7 +180,7 @@ defmodule Foglet.Config.SchemaTest do
   end
 
   describe "defaults/0" do
-    test "returns a map of key → default covering exactly the 8 schematized keys" do
+    test "returns a map of key → default covering exactly the 9 schematized keys" do
       defaults = Schema.defaults()
 
       assert defaults == %{
@@ -174,6 +190,7 @@ defmodule Foglet.Config.SchemaTest do
                "max_thread_title_length" => 60,
                "delivery_mode" => "no_email",
                "require_email_verification" => false,
+               "guest_mode_enabled" => true,
                "email_verify_resend_cooldown_seconds" => 60,
                "invite_generation_per_user_limit" => 0
              }
@@ -227,6 +244,11 @@ defmodule Foglet.Config.SchemaTest do
     test "accepts both booleans for require_email_verification" do
       assert Schema.validate("require_email_verification", true) == :ok
       assert Schema.validate("require_email_verification", false) == :ok
+    end
+
+    test "accepts both booleans for guest_mode_enabled" do
+      assert Schema.validate("guest_mode_enabled", true) == :ok
+      assert Schema.validate("guest_mode_enabled", false) == :ok
     end
   end
 

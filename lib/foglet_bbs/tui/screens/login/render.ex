@@ -4,6 +4,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
   """
 
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Login.{MenuScramble, State}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.AppStateBridge
@@ -141,7 +142,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
     ]
   end
 
-  defp keys_for(_, mode, _state), do: menu_commands(mode)
+  defp keys_for(_, mode, state), do: menu_commands(mode, state)
 
   defp registration_mode(state) do
     login_ss = LoginState.get(state)
@@ -173,20 +174,21 @@ defmodule Foglet.TUI.Screens.Login.Render do
     end
   end
 
-  defp menu_keys(mode) do
+  defp menu_keys(mode, state) do
     mode
     |> base_menu_keys()
+    |> maybe_add_guest_key(state)
     |> add_reset_key()
     |> add_reset_consume_key()
   end
 
-  defp menu_commands(mode) do
+  defp menu_commands(mode, state) do
     [
       %{
         label: "",
         commands:
           mode
-          |> menu_keys()
+          |> menu_keys(state)
           |> Enum.map(fn {key, label} -> %{key: key, label: label, priority: 30} end)
       }
     ]
@@ -194,6 +196,10 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   defp base_menu_keys("disabled"), do: @menu_keys_no_register
   defp base_menu_keys(_mode), do: @menu_keys
+
+  defp maybe_add_guest_key(keys, state) do
+    if Guest.guest_mode_enabled?(session_ctx(state)), do: keys ++ [{"G", "Guest"}], else: keys
+  end
 
   defp add_reset_key(keys) do
     keys ++ [{"F", "Forgot password"}]

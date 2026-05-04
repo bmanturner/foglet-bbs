@@ -13,6 +13,7 @@ defmodule Foglet.TUI.Screens.DoorList do
 
   alias Foglet.Doors.Manifest
   alias Foglet.TUI.{Context, Effect, Modal, TextWidth, Theme}
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   defmodule State do
@@ -42,12 +43,16 @@ defmodule Foglet.TUI.Screens.DoorList do
   def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
     state = normalize_state(local_state, context)
 
-    case selected_door(state) do
-      %Manifest{} = manifest ->
-        {state, [Effect.open_modal(confirm_modal(manifest))]}
+    if Guest.guest?(context) do
+      {state, [Effect.open_modal(Guest.denial_modal(:door))]}
+    else
+      case selected_door(state) do
+        %Manifest{} = manifest ->
+          {state, [Effect.open_modal(confirm_modal(manifest))]}
 
-      nil ->
-        {%{state | status_message: "No door games are available for this account."}, []}
+        nil ->
+          {%{state | status_message: "No door games are available for this account."}, []}
+      end
     end
   end
 
@@ -63,15 +68,20 @@ defmodule Foglet.TUI.Screens.DoorList do
       ) do
     state = normalize_state(local_state, context)
 
-    case doors_module(context).get_visible(context.current_user, door_id) do
-      {:ok, %Manifest{} = manifest} ->
-        message = "Launching #{manifest.display_name}. The door has the terminal until it exits."
+    if Guest.guest?(context) do
+      {state, [Effect.open_modal(Guest.denial_modal(:door))]}
+    else
+      case doors_module(context).get_visible(context.current_user, door_id) do
+        {:ok, %Manifest{} = manifest} ->
+          message =
+            "Launching #{manifest.display_name}. The door has the terminal until it exits."
 
-        {%{state | status_message: message}, [Effect.launch_door(manifest)]}
+          {%{state | status_message: message}, [Effect.launch_door(manifest)]}
 
-      {:error, :not_found} ->
-        {%{state | status_message: "That door is no longer available."},
-         [Effect.open_modal(%Modal{type: :error, message: "That door is no longer available."})]}
+        {:error, :not_found} ->
+          {%{state | status_message: "That door is no longer available."},
+           [Effect.open_modal(%Modal{type: :error, message: "That door is no longer available."})]}
+      end
     end
   end
 

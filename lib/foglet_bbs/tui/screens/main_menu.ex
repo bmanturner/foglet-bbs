@@ -26,6 +26,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   alias Foglet.Authorization
   alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.MainMenu.Render
   alias Foglet.TUI.Screens.{MainMenu.State, ShellVisibility}
@@ -122,17 +123,28 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
       when c in ["c", "C"] do
-    {normalize_state(local_state, context), [Effect.navigate(:new_thread, %{origin: :main_menu})]}
+    local_state = normalize_state(local_state, context)
+
+    if Guest.guest?(context) do
+      {local_state, [Effect.open_modal(Guest.denial_modal(:compose))]}
+    else
+      {local_state, [Effect.navigate(:new_thread, %{origin: :main_menu})]}
+    end
   end
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
       when c in ["d", "D"] do
     local_state = normalize_state(local_state, context)
 
-    if Foglet.Doors.list_visible(context.current_user) == [] do
-      {local_state, []}
-    else
-      {local_state, [Effect.navigate(:door_list)]}
+    cond do
+      Guest.guest?(context) ->
+        {local_state, [Effect.open_modal(Guest.denial_modal(:door))]}
+
+      Foglet.Doors.list_visible(context.current_user) == [] ->
+        {local_state, []}
+
+      true ->
+        {local_state, [Effect.navigate(:door_list)]}
     end
   end
 

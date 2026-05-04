@@ -53,7 +53,9 @@ defmodule Foglet.Sessions.BoardScreen do
 
   Tied to the caller pid; the entry is auto-evicted when that pid exits.
   """
-  @spec track(binary(), binary(), :threads | :chat) :: :ok
+  @spec track(binary(), binary() | nil, :threads | :chat) :: :ok
+  def track(_board_id, nil, tab) when tab in @valid_tabs, do: :ok
+
   def track(board_id, user_id, tab) when tab in @valid_tabs do
     GenServer.call(__MODULE__, {:track, board_id, user_id, tab, self()})
   end
@@ -62,7 +64,9 @@ defmodule Foglet.Sessions.BoardScreen do
   Update the tab for the caller's existing presence entry. If no entry
   exists for the caller, this is equivalent to `track/3`.
   """
-  @spec update_tab(binary(), binary(), :threads | :chat) :: :ok
+  @spec update_tab(binary(), binary() | nil, :threads | :chat) :: :ok
+  def update_tab(_board_id, nil, tab) when tab in @valid_tabs, do: :ok
+
   def update_tab(board_id, user_id, tab) when tab in @valid_tabs do
     GenServer.call(__MODULE__, {:update_tab, board_id, user_id, tab, self()})
   end
@@ -70,7 +74,9 @@ defmodule Foglet.Sessions.BoardScreen do
   @doc """
   Remove all of the caller's presence entries for `board_id` / `user_id`.
   """
-  @spec untrack(binary(), binary()) :: :ok
+  @spec untrack(binary(), binary() | nil) :: :ok
+  def untrack(_board_id, nil), do: :ok
+
   def untrack(board_id, user_id) do
     GenServer.call(__MODULE__, {:untrack, board_id, user_id, self()})
   end

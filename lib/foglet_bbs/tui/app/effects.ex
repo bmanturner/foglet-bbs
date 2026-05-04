@@ -12,6 +12,7 @@ defmodule Foglet.TUI.App.Effects do
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Guest
   alias Raxol.Core.Runtime.Command
 
   @doc "Interprets one runtime effect against the App shell."
@@ -22,14 +23,11 @@ defmodule Foglet.TUI.App.Effects do
       }) do
     params = params || %{}
 
-    state =
-      state
-      |> Map.put(:current_screen, screen)
-      |> Map.put(:route_params, params)
-      |> Map.put(:modal, nil)
-      |> Routing.init_route_screen_state(screen, params)
-
-    Routing.dispatch_route_entry(state, screen, params)
+    if guest_route_denied?(state, screen) do
+      {%{state | modal: Guest.denial_modal(denial_kind_for_screen(screen))}, []}
+    else
+      navigate(state, screen, params)
+    end
   end
 
   def apply_effect(%App{} = state, %Effect{type: :modal, payload: {:open, modal}}) do
@@ -118,27 +116,10 @@ defmodule Foglet.TUI.App.Effects do
         type: :door,
         payload: %{action: :launch, manifest: manifest} = payload
       }) do
-    session = %{
-      user_id: state.current_user && state.current_user.id,
-      handle: state.current_user && state.current_user.handle,
-      role: state.current_user && state.current_user.role,
-      session_id: session_identifier(state.session_pid)
-    }
-
-    output = Map.get(payload, :output) || fn _iodata -> :ok end
-
-    case door_handler_pid(state) do
-      pid when is_pid(pid) ->
-        Process.send_after(
-          pid,
-          {:foglet_launch_door, manifest, session, state.terminal_size},
-          100
-        )
-
-        {state, []}
-
-      _other ->
-        start_detached_runner(state, manifest, session, output)
+    if Guest.guest?(state) do
+      {%{state | modal: Guest.denial_modal(:door)}, []}
+    else
+      launch_door(state, manifest, payload)
     end
   end
 
@@ -177,9 +158,54 @@ defmodule Foglet.TUI.App.Effects do
     end)
   end
 
+  defp navigate(%App{} = state, screen, params) do
+    state =
+      state
+      |> Map.put(:current_screen, screen)
+      |> Map.put(:route_params, params)
+      |> Map.put(:modal, nil)
+      |> Routing.init_route_screen_state(screen, params)
+
+    Routing.dispatch_route_entry(state, screen, params)
+  end
+
   defp modal_submit_target?(%App{} = state, screen_key) do
     module = Routing.screen_module_for(state, screen_key)
     Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
+  end
+
+  defp guest_route_denied?(%App{} = state, screen) do
+    Guest.guest?(state) and
+      screen in [:new_thread, :post_composer, :door_list, :account, :moderation, :sysop]
+  end
+
+  defp denial_kind_for_screen(:door_list), do: :door
+  defp denial_kind_for_screen(:account), do: :account
+  defp denial_kind_for_screen(_screen), do: :post
+
+  defp launch_door(%App{} = state, manifest, payload) do
+    session = %{
+      user_id: state.current_user && state.current_user.id,
+      handle: state.current_user && state.current_user.handle,
+      role: state.current_user && state.current_user.role,
+      session_id: session_identifier(state.session_pid)
+    }
+
+    output = Map.get(payload, :output) || fn _iodata -> :ok end
+
+    case door_handler_pid(state) do
+      pid when is_pid(pid) ->
+        Process.send_after(
+          pid,
+          {:foglet_launch_door, manifest, session, state.terminal_size},
+          100
+        )
+
+        {state, []}
+
+      _other ->
+        start_detached_runner(state, manifest, session, output)
+    end
   end
 
   defp start_detached_runner(state, manifest, session, output) do

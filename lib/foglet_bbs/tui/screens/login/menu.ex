@@ -12,6 +12,7 @@ defmodule Foglet.TUI.Screens.Login.Menu do
 
   alias Foglet.Config
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Login.State, as: LoginState
 
   @spec handle_key(map(), map()) ::
@@ -30,6 +31,9 @@ defmodule Foglet.TUI.Screens.Login.Menu do
   # the Forgot Password flow first.
   def handle_key(%{key: :char, char: c}, state) when c in ["t", "T"],
     do: enter_reset_consume(state)
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["g", "G"],
+    do: maybe_enter_guest(state)
 
   def handle_key(_key, _state), do: :no_match
 
@@ -61,10 +65,25 @@ defmodule Foglet.TUI.Screens.Login.Menu do
     {:update, LoginState.put(state, LoginState.reset_recovery(:token)), []}
   end
 
+  defp maybe_enter_guest(state) do
+    if guest_mode_enabled?(state) do
+      {:update, state, [Effect.session(:enter_guest)]}
+    else
+      :no_match
+    end
+  end
+
   defp registration_mode(state) do
     case Map.get(session_ctx(state), :registration_mode) do
       nil -> Config.get("registration_mode", "open")
       mode -> mode
+    end
+  end
+
+  defp guest_mode_enabled?(state) do
+    case Map.get(session_ctx(state), :guest_mode_enabled) do
+      nil -> Config.guest_mode_enabled?()
+      _value -> Guest.guest_mode_enabled?(session_ctx(state))
     end
   end
 
