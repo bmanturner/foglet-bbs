@@ -44,6 +44,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   alias Foglet.TimeAgo
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.ChatRoom.State
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.TextWidth
@@ -123,7 +124,9 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
   # Submit composer.
   def update({:key, %{key: :enter}}, %State{} = state, %Context{} = context) do
-    submit_composer(state, context)
+    if Guest.guest?(context),
+      do: {state, [Effect.open_modal(Guest.denial_modal(:chat))]},
+      else: submit_composer(state, context)
   end
 
   # Backspace.
@@ -131,14 +134,21 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     {state, []}
   end
 
-  def update({:key, %{key: :backspace}}, %State{} = state, %Context{}) do
-    {%{state | composer: String.slice(state.composer, 0..-2//1)}, []}
+  def update({:key, %{key: :backspace}}, %State{} = state, %Context{} = context) do
+    if Guest.guest?(context),
+      do: {state, []},
+      else: {%{state | composer: String.slice(state.composer, 0..-2//1)}, []}
   end
 
   # Printable char into composer. Ignore ctrl/alt-modified chars we did not
   # explicitly bind above so they don't leak into the buffer.
-  def update({:key, %{key: :char, char: <<c::utf8>>} = ev}, %State{} = state, %Context{}) do
+  def update(
+        {:key, %{key: :char, char: <<c::utf8>>} = ev},
+        %State{} = state,
+        %Context{} = context
+      ) do
     cond do
+      Guest.guest?(context) -> {state, []}
       Map.get(ev, :ctrl, false) -> {state, []}
       Map.get(ev, :alt, false) -> {state, []}
       true -> {%{state | composer: state.composer <> <<c::utf8>>}, []}
@@ -342,28 +352,32 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   end
 
   defp composer_row(%State{} = state, theme, width) do
-    prompt = "> "
-    cursor_glyph = if state.status == :sending, do: "…", else: "▎"
-    available = max(width - 4, 10)
-    body = String.slice(state.composer, 0, available)
+    if is_nil(state.user_id) do
+      text("  Guest chat is read-only. Log in to send messages.", fg: theme.dim.fg)
+    else
+      prompt = "> "
+      cursor_glyph = if state.status == :sending, do: "…", else: "▎"
+      available = max(width - 4, 10)
+      body = String.slice(state.composer, 0, available)
 
-    error_line =
-      case state.last_error do
-        nil -> text("")
-        _ -> text("  " <> @send_failure_message, fg: theme.error.fg)
+      error_line =
+        case state.last_error do
+          nil -> text("")
+          _ -> text("  " <> @send_failure_message, fg: theme.error.fg)
+        end
+
+      column style: %{gap: 0} do
+        [
+          row style: %{gap: 0} do
+            [
+              text(prompt, fg: theme.dim.fg),
+              text(body, fg: theme.primary.fg),
+              text(cursor_glyph, fg: theme.accent.fg)
+            ]
+          end,
+          error_line
+        ]
       end
-
-    column style: %{gap: 0} do
-      [
-        row style: %{gap: 0} do
-          [
-            text(prompt, fg: theme.dim.fg),
-            text(body, fg: theme.primary.fg),
-            text(cursor_glyph, fg: theme.accent.fg)
-          ]
-        end,
-        error_line
-      ]
     end
   end
 
@@ -398,9 +412,12 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   def keybar_groups(%State{} = state, %Context{} = context) do
     {width, _} = context.terminal_size || {80, 24}
 
+    chat_commands =
+      if Guest.guest?(context), do: [], else: [%{key: "Enter", label: "Send", priority: 30}]
+
     chat_group = %{
       label: "Chat",
-      commands: [%{key: "Enter", label: "Send", priority: 30}]
+      commands: chat_commands
     }
 
     if width >= @sidebar_min_width do

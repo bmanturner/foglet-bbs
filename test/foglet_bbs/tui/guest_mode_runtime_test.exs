@@ -9,10 +9,16 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Guest
+  alias Foglet.TUI.Screens.ChatRoom
+  alias Foglet.TUI.Screens.ChatRoom.State, as: ChatRoomState
   alias Foglet.TUI.Screens.Login
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.MainMenu
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
+  alias Foglet.TUI.Screens.PostReader
+  alias Foglet.TUI.Screens.PostReader.State, as: PostReaderState
+  alias Foglet.TUI.Screens.ThreadList
+  alias Foglet.TUI.Screens.ThreadList.State, as: ThreadListState
   alias Foglet.TUI.SessionContext
 
   setup do
@@ -87,11 +93,66 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     assert state.modal.type == :error
   end
 
+  test "thread and post reader compose shortcuts deny guests with modal effects" do
+    context = Context.new(session_context: %{guest: true, guest_mode_enabled: true})
+
+    thread_state =
+      ThreadListState.new(
+        board: %{id: "b1", name: "General", archived: false},
+        board_id: "b1",
+        threads: [%{id: "t1", title: "Welcome"}],
+        status: :loaded
+      )
+
+    {^thread_state, thread_effects} =
+      ThreadList.update({:key, %{key: :char, char: "C"}}, thread_state, context)
+
+    assert [%Effect{type: :modal, payload: {:open, thread_modal}}] = thread_effects
+    assert thread_modal.type == :error
+
+    post_state =
+      PostReaderState.new(
+        board: %{id: "b1", name: "General", archived: false},
+        board_id: "b1",
+        thread: %{id: "t1", title: "Welcome", locked: false},
+        thread_id: "t1",
+        posts: [%{id: "p1", body: "hi"}],
+        status: :loaded
+      )
+
+    {^post_state, post_effects} =
+      PostReader.update({:key, %{key: :char, char: "R"}}, post_state, context)
+
+    assert [%Effect{type: :modal, payload: {:open, post_modal}}] = post_effects
+    assert post_modal.type == :error
+  end
+
   test "chat and board presence backends reject nil guest identity" do
     board = %Foglet.Boards.Board{id: "b1", chat_storage_mode: :ephemeral, chat_enabled: true}
 
     assert {:error, :guest_not_allowed} = BoardChat.post(board, nil, "hello")
     assert :ok = Foglet.Sessions.BoardScreen.track("b1", nil, :chat)
     assert Foglet.Sessions.BoardScreen.count("b1") == 0
+  end
+
+  test "chat tab keeps guest transcript read-only without composer send affordances" do
+    context =
+      Context.new(
+        current_user: nil,
+        session_context: %{guest: true, guest_mode_enabled: true},
+        terminal_size: {120, 40}
+      )
+
+    state = %ChatRoomState{board: %{id: "b1", chat_storage_mode: :ephemeral}, board_id: "b1"}
+
+    refute Enum.any?(ChatRoom.keybar_groups(state, context), fn group ->
+             Enum.any?(group.commands, &(&1.key == "Enter" and &1.label == "Send"))
+           end)
+
+    assert {^state, []} = ChatRoom.update({:key, %{key: :char, char: "h"}}, state, context)
+
+    {^state, effects} = ChatRoom.update({:key, %{key: :enter}}, state, context)
+    assert [%Effect{type: :modal, payload: {:open, modal}}] = effects
+    assert modal.type == :error
   end
 end

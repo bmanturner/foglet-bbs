@@ -17,6 +17,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
   alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.ThreadList.State
   alias Foglet.TUI.Theme
@@ -122,11 +123,16 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["c", "C"] do
-    if posting_disabled?(state, context.current_user) do
-      {state, []}
-    else
-      params = %{origin: :thread_list, board: state.board, board_id: state.board_id}
-      {state, [Effect.navigate(:new_thread, params)]}
+    cond do
+      Guest.guest?(context) ->
+        {state, [Effect.open_modal(Guest.denial_modal(:compose))]}
+
+      posting_disabled?(state, context.current_user) ->
+        {state, []}
+
+      true ->
+        params = %{origin: :thread_list, board: state.board, board_id: state.board_id}
+        {state, [Effect.navigate(:new_thread, params)]}
     end
   end
 
@@ -178,7 +184,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp keybar_groups_internal(%State{} = state, %Context{} = context) do
     action_commands =
-      if posting_disabled?(state, context.current_user) do
+      if Guest.guest?(context) or posting_disabled?(state, context.current_user) do
         []
       else
         [%{key: "C", label: "Compose", priority: 5}]
@@ -235,7 +241,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp render_thread_content(%State{status: :empty} = state, context, theme) do
     empty_copy =
-      if posting_disabled?(state, context.current_user) do
+      if Guest.guest?(context) or posting_disabled?(state, context.current_user) do
         "No threads in this board yet."
       else
         "No threads in this board yet. Press C to start one."
