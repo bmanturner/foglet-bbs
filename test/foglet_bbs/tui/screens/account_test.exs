@@ -73,6 +73,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end)
   end
 
+  defp selected_markers(%SSHKeysState{table: %{rows: rows}}) do
+    Enum.map(rows, fn row -> row |> Map.fetch!(:selected) |> String.trim() end)
+  end
+
   # FOG-333: PROFILE shields digit shortcuts while a text field is focused.
   # Many tests assume the legacy behavior of digit chars switching tabs
   # directly from the seeded initial state. This helper steps out of the
@@ -1795,6 +1799,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       table = state.screen_state.account.ssh_keys.table
 
       assert Enum.map(table.columns, & &1.label) == [
+               "",
                "Label",
                "Fingerprint",
                "Added",
@@ -1822,9 +1827,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
 
     test "renders SSH key table with width-aware columns at 80x24 and 64x22", %{state: state} do
-      for {terminal_width, terminal_height, expected_fingerprint_x} <- [
-            {80, 24, 15},
-            {64, 22, 15}
+      for {terminal_width, terminal_height} <- [
+            {80, 24},
+            {64, 22}
           ] do
         positioned =
           state
@@ -1836,14 +1841,18 @@ defmodule Foglet.TUI.Screens.AccountTest do
         header = ssh_key_table_row(positioned, "Label")
         row = ssh_key_table_row(positioned, "qa generated")
 
-        assert [label, fingerprint, added, last_used] = header
-        assert label.x == 2
-        assert fingerprint.x == expected_fingerprint_x
+        assert [header_marker, label, fingerprint, added, last_used] = header
+        assert String.trim(header_marker.text) == ""
+        assert header_marker.x == 2
+        assert label.x > header_marker.x
+        assert fingerprint.x > label.x
         assert added.x > fingerprint.x
         assert last_used.x > added.x
         assert TextWidth.display_width(label.text) > TextWidth.display_width("Label")
 
-        assert [row_label, row_fingerprint, row_added, row_last_used] = row
+        assert [row_marker, row_label, row_fingerprint, row_added, row_last_used] = row
+        assert row_marker.x == header_marker.x
+        assert String.trim(row_marker.text) == "▶"
         assert row_label.x == label.x
         assert row_fingerprint.x == fingerprint.x
         assert row_added.x == added.x
@@ -1856,6 +1865,64 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
         assert TextWidth.display_width(row_last_used.text) <=
                  TextWidth.display_width(last_used.text)
+      end
+    end
+
+    test "selected marker moves between multiple SSH keys and survives cramped render" do
+      keys =
+        SSHKeysState.new()
+        |> SSHKeysState.loaded([
+          %{
+            id: "k1",
+            label: "personal laptop with a very long label",
+            fingerprint: "SHA256:first-key-fingerprint-that-will-truncate-in-the-table",
+            inserted_at: ~U[2026-04-24 10:11:12Z],
+            last_used_at: nil
+          },
+          %{
+            id: "k2",
+            label: "workstation revoked-ish long label",
+            fingerprint: "SHA256:second-key-fingerprint-that-will-truncate-in-the-table",
+            inserted_at: ~U[2026-04-25 10:11:12Z],
+            last_used_at: ~U[2026-04-26 10:11:12Z]
+          }
+        ])
+
+      assert selected_markers(keys) == ["▶", ""]
+
+      after_down = SSHKeysState.select_next(keys)
+      assert after_down.selected_index == 1
+      assert selected_markers(after_down) == ["", "▶"]
+
+      # Clamp at the bottom instead of losing focus.
+      after_second_down = SSHKeysState.select_next(after_down)
+      assert after_second_down.selected_index == 1
+      assert selected_markers(after_second_down) == ["", "▶"]
+
+      after_up = SSHKeysState.select_prev(after_second_down)
+      assert after_up.selected_index == 0
+      assert selected_markers(after_up) == ["▶", ""]
+
+      account_state =
+        AccountState.new()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(:ssh_keys, after_down)
+
+      for {terminal_width, terminal_height, selected_label} <- [
+            {80, 24, "workstation"},
+            {58, 18, "workstation"}
+          ] do
+        positioned =
+          build_state_for_role(:user)
+          |> Map.put(:terminal_size, {terminal_width, terminal_height})
+          |> put_in([:screen_state, :account], account_state)
+          |> render_account()
+          |> Engine.apply_layout(%{width: terminal_width, height: terminal_height})
+          |> List.flatten()
+
+        row = ssh_key_table_row(positioned, selected_label)
+        assert [%{text: marker} | _] = row
+        assert String.trim(marker) == "▶"
       end
     end
 
