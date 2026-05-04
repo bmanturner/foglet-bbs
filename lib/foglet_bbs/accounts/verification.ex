@@ -152,7 +152,11 @@ defmodule Foglet.Accounts.Verification do
     case Foglet.Config.delivery_mode() do
       "email" ->
         with {:ok, code} <- build_verify_code(user),
-             {:ok, _delivery} <- Foglet.Mailer.deliver(Email.verification_code(user, code)) do
+             {:ok, _delivery} <-
+               Foglet.Mailer.deliver_transactional(Email.verification_code(user, code),
+                 mail_type: :verification_code,
+                 recipient_user_id: user.id
+               ) do
           {:ok, :attempted}
         else
           {:error, %Ecto.Changeset{} = changeset} -> {:error, changeset}
@@ -374,7 +378,12 @@ defmodule Foglet.Accounts.Verification do
 
     case Repo.insert(token_struct) do
       {:ok, _token} ->
-        _ = Foglet.Mailer.deliver(Email.password_reset(user, raw_token))
+        _ =
+          Foglet.Mailer.deliver_transactional(Email.password_reset(user, raw_token),
+            mail_type: :password_reset,
+            recipient_user_id: user.id
+          )
+
         :ok
 
       {:error, %Ecto.Changeset{} = changeset} ->

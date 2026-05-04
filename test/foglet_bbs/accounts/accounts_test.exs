@@ -14,6 +14,7 @@ defmodule Foglet.AccountsTest do
   alias Foglet.Threads.Thread
   alias FogletBbs.AccountsFixtures
 
+  import ExUnit.CaptureLog
   import Swoosh.TestAssertions
 
   @alternate_ssh_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
@@ -193,6 +194,45 @@ defmodule Foglet.AccountsTest do
       assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
       refute_email_sent()
     end
+
+    test "sysop notification delivery failure logs non-sensitive context without blocking registration" do
+      sysop =
+        AccountsFixtures.user_fixture(%{
+          handle: "approvalfailuresysop",
+          email: "approvalfailuresysop@example.test"
+        })
+
+      assert {:ok, sysop} = Accounts.update_role(sysop, :sysop)
+
+      Config.put!("registration_mode", "sysop_approved")
+      Config.put!("delivery_mode", "email")
+
+      Application.put_env(:foglet_bbs, Foglet.Mailer,
+        adapter: FogletBbs.AccountsTest.FailingMailerAdapter
+      )
+
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          handle: "pendingfailure",
+          email: "pendingfailure@example.test"
+        })
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %User{status: :pending}} = Accounts.register_user(attrs)
+        end)
+
+      assert log =~ "transactional_email_delivery_failed"
+      assert log =~ "mail_type=pending_approval_notification"
+      assert log =~ "delivery_mode=email"
+      assert log =~ "recipient_user_id=#{sysop.id}"
+      assert log =~ "reason=:forced_failure"
+      assert log =~ "related_user_id="
+      refute log =~ sysop.email
+      refute log =~ sysop.handle
+      refute log =~ "pendingfailure@example.test"
+      refute log =~ "pendingfailure"
+    end
   end
 
   # authenticate_by_password/2 tests → test/foglet_bbs/accounts/auth_test.exs
@@ -357,7 +397,7 @@ defmodule Foglet.AccountsTest do
       end)
     end
 
-    test "status delivery failure does not roll back a valid transition" do
+    test "status delivery failure does not roll back a valid transition and is logged safely" do
       Config.put!("delivery_mode", "email")
 
       Application.put_env(:foglet_bbs, Foglet.Mailer,
@@ -365,13 +405,42 @@ defmodule Foglet.AccountsTest do
       )
 
       sysop = user_with_status(:active, "sysopfailnotify", :sysop)
-      pending = user_with_status(:pending, "failnotify")
+      approve = user_with_status(:pending, "failnotifyapprove")
+      reject = user_with_status(:pending, "failnotifyreject")
 
-      assert {:ok, %{delivery: {:failed, :forced_failure}, user: updated}} =
-               Accounts.transition_user_status(sysop, pending, :active)
+      approval_log =
+        capture_log(fn ->
+          assert {:ok, %{delivery: {:failed, :forced_failure}, user: updated}} =
+                   Accounts.transition_user_status(sysop, approve, :active)
 
-      assert updated.status == :active
-      assert Accounts.get_user!(pending.id).status == :active
+          assert updated.status == :active
+        end)
+
+      assert approval_log =~ "transactional_email_delivery_failed"
+      assert approval_log =~ "mail_type=approval_notification"
+      assert approval_log =~ "delivery_mode=email"
+      assert approval_log =~ "recipient_user_id=#{approve.id}"
+      assert approval_log =~ "reason=:forced_failure"
+      refute approval_log =~ approve.email
+      refute approval_log =~ approve.handle
+      assert Accounts.get_user!(approve.id).status == :active
+
+      rejection_log =
+        capture_log(fn ->
+          assert {:ok, %{delivery: {:failed, :forced_failure}, user: updated}} =
+                   Accounts.transition_user_status(sysop, reject, :rejected)
+
+          assert updated.status == :rejected
+        end)
+
+      assert rejection_log =~ "transactional_email_delivery_failed"
+      assert rejection_log =~ "mail_type=rejection_notification"
+      assert rejection_log =~ "delivery_mode=email"
+      assert rejection_log =~ "recipient_user_id=#{reject.id}"
+      assert rejection_log =~ "reason=:forced_failure"
+      refute rejection_log =~ reject.email
+      refute rejection_log =~ reject.handle
+      assert Accounts.get_user!(reject.id).status == :rejected
     end
 
     test "invalid transitions do not mutate persisted status" do

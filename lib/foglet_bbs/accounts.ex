@@ -416,7 +416,13 @@ defmodule Foglet.Accounts do
         |> QueryHelpers.not_deleted()
         |> Repo.all()
         |> Enum.each(fn sysop ->
-          _ = Mailer.deliver(Email.pending_approval_notification(sysop, pending_user))
+          _ =
+            Mailer.deliver_transactional(Email.pending_approval_notification(sysop, pending_user),
+              mail_type: :pending_approval_notification,
+              recipient_user_id: sysop.id,
+              related_user_id: pending_user.id
+            )
+
           :ok
         end)
 
@@ -426,19 +432,23 @@ defmodule Foglet.Accounts do
   end
 
   defp deliver_status_transition_notification(%User{} = user, :pending, :active) do
-    deliver_status_email(user, &Email.approval_notification/1)
+    deliver_status_email(user, :approval_notification, &Email.approval_notification/1)
   end
 
   defp deliver_status_transition_notification(%User{} = user, :pending, :rejected) do
-    deliver_status_email(user, &Email.rejection_notification/1)
+    deliver_status_email(user, :rejection_notification, &Email.rejection_notification/1)
   end
 
   defp deliver_status_transition_notification(_user, _from, _to), do: :not_applicable
 
-  defp deliver_status_email(%User{} = user, build_email) when is_function(build_email, 1) do
+  defp deliver_status_email(%User{} = user, mail_type, build_email)
+       when is_function(build_email, 1) do
     case Config.delivery_mode() do
       "email" ->
-        case Mailer.deliver(build_email.(user)) do
+        case Mailer.deliver_transactional(build_email.(user),
+               mail_type: mail_type,
+               recipient_user_id: user.id
+             ) do
           {:ok, _delivery} -> :attempted
           {:error, reason} -> {:failed, reason}
         end

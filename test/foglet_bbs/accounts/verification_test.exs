@@ -59,6 +59,39 @@ defmodule Foglet.Accounts.VerificationTest do
 
       refute_email_sent()
     end
+
+    test "email delivery failure logs useful non-sensitive context" do
+      Config.put!("delivery_mode", "email")
+
+      original_mailer_config = Application.fetch_env!(:foglet_bbs, Foglet.Mailer)
+
+      on_exit(fn ->
+        Application.put_env(:foglet_bbs, Foglet.Mailer, original_mailer_config)
+      end)
+
+      Application.put_env(:foglet_bbs, Foglet.Mailer,
+        adapter: FogletBbs.VerificationTest.FailingMailerAdapter
+      )
+
+      user =
+        AccountsFixtures.user_fixture(%{
+          handle: "verifylog",
+          email: "verifylog@example.test"
+        })
+
+      log =
+        capture_log(fn ->
+          assert {:error, :delivery_failed} = Verification.deliver_verification_code(user)
+        end)
+
+      assert log =~ "transactional_email_delivery_failed"
+      assert log =~ "mail_type=verification_code"
+      assert log =~ "delivery_mode=email"
+      assert log =~ "recipient_user_id=#{user.id}"
+      assert log =~ "reason=:forced_failure"
+      refute log =~ user.email
+      refute log =~ user.handle
+    end
   end
 
   describe "request_password_reset_delivery/1 (MAIL-04/MAIL-05)" do
@@ -190,7 +223,7 @@ defmodule Foglet.Accounts.VerificationTest do
       refute_email_sent()
     end
 
-    test "email mode returns the same generic response when delivery fails" do
+    test "email mode returns the same generic response and logs non-sensitive context when delivery fails" do
       Config.put!("delivery_mode", "email")
 
       Application.put_env(:foglet_bbs, Foglet.Mailer,
@@ -200,8 +233,19 @@ defmodule Foglet.Accounts.VerificationTest do
       user =
         AccountsFixtures.user_fixture(%{handle: "failreset", email: "failreset@example.test"})
 
-      assert {:ok, :generic_response} =
-               Verification.request_password_reset_delivery("failreset@example.test")
+      log =
+        capture_log(fn ->
+          assert {:ok, :generic_response} =
+                   Verification.request_password_reset_delivery("failreset@example.test")
+        end)
+
+      assert log =~ "transactional_email_delivery_failed"
+      assert log =~ "mail_type=password_reset"
+      assert log =~ "delivery_mode=email"
+      assert log =~ "recipient_user_id=#{user.id}"
+      assert log =~ "reason=:forced_failure"
+      refute log =~ user.email
+      refute log =~ user.handle
 
       assert Repo.exists?(
                from t in UserToken,
