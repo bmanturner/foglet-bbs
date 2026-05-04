@@ -226,34 +226,38 @@ defmodule Foglet.TUI.Screens.Login.Render do
     panel =
       AuthForm.render(
         "Back on the board",
-        [
-          text("Enter your handle and password to pick up where you left off.", fg: theme.dim.fg),
-          text(""),
-          row style: %{gap: 0} do
-            [
-              text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
-              TextInput.render(login_ss.handle_input,
-                bordered: false,
-                cap_display_width: @login_input_display_width,
-                disabled: submitting?,
-                focused: focused == :handle,
-                theme: theme
-              )
-            ]
-          end,
-          row style: %{gap: 0} do
-            [
-              text("Password: ", fg: password_label_fg, style: password_label_style),
-              TextInput.render(login_ss.password_input,
-                bordered: false,
-                cap_display_width: @login_input_display_width,
-                disabled: submitting?,
-                focused: focused == :password,
-                theme: theme
-              )
-            ]
-          end
-        ] ++ error_items,
+        AuthForm.helper_text(
+          "Enter your handle and password to pick up where you left off.",
+          theme,
+          @auth_card_inner_width
+        ) ++
+          [
+            text(""),
+            row style: %{gap: 0} do
+              [
+                text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
+                TextInput.render(login_ss.handle_input,
+                  bordered: false,
+                  cap_display_width: @login_input_display_width,
+                  disabled: submitting?,
+                  focused: focused == :handle,
+                  theme: theme
+                )
+              ]
+            end,
+            row style: %{gap: 0} do
+              [
+                text("Password: ", fg: password_label_fg, style: password_label_style),
+                TextInput.render(login_ss.password_input,
+                  bordered: false,
+                  cap_display_width: @login_input_display_width,
+                  disabled: submitting?,
+                  focused: focused == :password,
+                  theme: theme
+                )
+              ]
+            end
+          ] ++ error_items,
         theme,
         width: @login_panel_width,
         height: max(@login_panel_height, 7 + length(error_items))

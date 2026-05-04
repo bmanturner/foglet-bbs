@@ -40,6 +40,7 @@ defmodule Foglet.TUI.Screens.Register do
   import Raxol.Core.Renderer.View
 
   @auth_card_width AuthForm.default_width()
+  @auth_card_inner_width @auth_card_width - 4
 
   @impl true
   @spec init(Context.t()) :: map()
@@ -387,8 +388,11 @@ defmodule Foglet.TUI.Screens.Register do
     panel =
       AuthForm.render(
         "Choose your handle",
-        [text("Pick the name and email this Foglet will know you by.", fg: theme.dim.fg), text("")] ++
-          rows ++ error_items,
+        AuthForm.helper_text(
+          "Pick the name and email this Foglet will know you by.",
+          theme,
+          @auth_card_inner_width
+        ) ++ [text("")] ++ rows ++ error_items,
         theme,
         width: @auth_card_width,
         height: panel_height
