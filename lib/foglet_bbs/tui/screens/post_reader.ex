@@ -440,8 +440,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     if body_budget >= @partial_min_body_rows do
       post = Enum.at(posts, next_idx)
-      rows = post_card_row_count(frame_state, state, post, w, next_idx, total)
-      total_body_rows = max(rows - 2, 0)
+      total_body_rows = post_card_body_row_count(frame_state, state, post, w, next_idx, total)
 
       # Only carve out a partial when the post would not have fit fully — a
       # post whose body fits inside `body_budget` is trivially a normal packed
@@ -916,7 +915,18 @@ defmodule Foglet.TUI.Screens.PostReader do
     tuples = state.render_cache[{post.id, w}] || parse_body(frame_state, post)
     parts = reader_parts(post, tuples, w, theme, idx, total)
 
-    2 + length(parts.body_lines)
+    header_rows = [parts.header, parts.progress] |> Enum.reject(&is_nil/1) |> length()
+    header_rows + length(parts.body_lines)
+  end
+
+  defp post_card_body_row_count(_frame_state, _state, nil, _w, _idx, _total), do: 0
+
+  defp post_card_body_row_count(frame_state, state, post, w, idx, total) do
+    theme = Theme.from_state(frame_state)
+    tuples = state.render_cache[{post.id, w}] || parse_body(frame_state, post)
+    parts = reader_parts(post, tuples, w, theme, idx, total)
+
+    length(parts.body_lines)
   end
 
   defp previous_screenful_anchor(%State{selected_post_index: current_idx}, %Context{})
@@ -1329,6 +1339,9 @@ defmodule Foglet.TUI.Screens.PostReader do
       when mode in [:packed, :packed_partial] and length(indexes) > 1 ->
         move_selected_action_post(state, indexes, delta, context)
 
+      %{indexes: [_single]} when delta < 0 and state.selected_post_index > 0 ->
+        move_to_previous_screenful_tail(state, context)
+
       _other ->
         {state, []}
     end
@@ -1336,31 +1349,72 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp move_selected_action_post(%State{} = state, visible_indexes, delta, %Context{} = context)
        when is_list(visible_indexes) and visible_indexes != [] do
-    current = selected_action_post_index(state)
-
-    current_position =
-      case Enum.find_index(visible_indexes, &(&1 == current)) do
-        nil -> 0
-        position -> position
-      end
-
+    current_position = visible_position(visible_indexes, selected_action_post_index(state))
     last_position = length(visible_indexes) - 1
 
-    cond do
-      delta > 0 and current_position == last_position ->
-        advance_local_post(state, 1, context)
-
-      delta < 0 and current_position == 0 ->
-        move_to_previous_screenful_tail(state, context)
-
-      true ->
-        next_position = (current_position + delta) |> max(0) |> min(last_position)
-        {%{state | selected_action_post_index: Enum.at(visible_indexes, next_position)}, []}
-    end
+    move_selected_action_post_at_position(
+      state,
+      visible_indexes,
+      delta,
+      context,
+      current_position,
+      last_position
+    )
   end
 
   defp move_selected_action_post(%State{} = state, _visible_indexes, _delta, %Context{}),
     do: {state, []}
+
+  defp visible_position(visible_indexes, current) do
+    case Enum.find_index(visible_indexes, &(&1 == current)) do
+      nil -> 0
+      position -> position
+    end
+  end
+
+  defp move_selected_action_post_at_position(
+         %State{} = state,
+         visible_indexes,
+         delta,
+         %Context{} = context,
+         current_position,
+         last_position
+       )
+       when delta > 0 and current_position == last_position do
+    if can_advance_beyond_visible_posts?(state, visible_indexes) do
+      advance_local_post(state, 1, context)
+    else
+      {state, []}
+    end
+  end
+
+  defp move_selected_action_post_at_position(
+         %State{} = state,
+         _visible_indexes,
+         delta,
+         %Context{} = context,
+         0,
+         _last_position
+       )
+       when delta < 0 do
+    move_to_previous_screenful_tail(state, context)
+  end
+
+  defp move_selected_action_post_at_position(
+         %State{} = state,
+         visible_indexes,
+         delta,
+         %Context{},
+         current_position,
+         last_position
+       ) do
+    next_position = (current_position + delta) |> max(0) |> min(last_position)
+    {%{state | selected_action_post_index: Enum.at(visible_indexes, next_position)}, []}
+  end
+
+  defp can_advance_beyond_visible_posts?(%State{} = state, visible_indexes) do
+    List.last(visible_indexes) < length(state.posts || []) - 1 or state.window_has_next?
+  end
 
   defp move_to_previous_screenful_tail(%State{} = state, %Context{} = context) do
     cond do
