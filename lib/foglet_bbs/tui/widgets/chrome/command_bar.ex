@@ -122,18 +122,23 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
         groups
 
       true ->
-        groups
-        |> drop_candidates()
-        |> Enum.reduce_while(groups, fn candidate, current ->
-          reduced = drop_command(current, candidate)
+        reduced =
+          groups
+          |> drop_candidates()
+          |> Enum.reduce_while(groups, fn candidate, current ->
+            next = drop_command(current, candidate)
 
-          if rendered_width(reduced) <= width do
-            {:halt, reduced}
-          else
-            {:cont, reduced}
-          end
-        end)
-        |> fit_highest_priority(width)
+            if rendered_width(next) <= width do
+              {:halt, next}
+            else
+              {:cont, next}
+            end
+          end)
+
+        case reduced do
+          [] -> fit_highest_priority(groups, width)
+          _ -> fit_highest_priority(reduced, width)
+        end
     end
   end
 
@@ -155,7 +160,13 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
   defp truncate_single_command([%{commands: []} = group], _width), do: [%{group | commands: []}]
 
   defp truncate_single_command([%{commands: [command | _]} = group], width) do
-    fixed_width = TextWidth.display_width(group.label <> @command_gap <> command.key <> @key_gap)
+    label_prefix =
+      case display_group_label(group.label) do
+        "" -> ""
+        label -> label <> @command_gap
+      end
+
+    fixed_width = TextWidth.display_width(label_prefix <> command.key <> @key_gap)
     label_width = max(width - fixed_width, 0)
     command = %{command | label: TextWidth.truncate(command.label, label_width)}
 
