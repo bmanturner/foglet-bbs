@@ -741,6 +741,34 @@ defmodule Foglet.TUI.Screens.LoginTest do
       refute rendered =~ forbidden_https_prefix()
     end
 
+    test "unified recovery honors advertised Esc then [T] route from no-email feedback (FOG-632)" do
+      login_state = %{
+        Foglet.TUI.Screens.Login.State.reset_recovery(:request)
+        | message:
+            "This Foglet has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it.",
+          message_category: :no_email_operator_assisted
+      }
+
+      state = base_state() |> put_login_state(login_state)
+
+      rendered =
+        render_login(state)
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert rendered =~ "Password recovery"
+      assert rendered =~ "Esc"
+      assert rendered =~ "Back"
+
+      {:update, menu_state, []} = update_login(%{key: :escape}, state)
+      assert get_in(menu_state, [:screen_state, :login, :sub]) == :menu
+
+      {:update, token_state, []} = update_login(%{key: :char, char: "T"}, menu_state)
+      assert get_in(token_state, [:screen_state, :login, :sub]) == :reset_recovery
+      assert get_in(token_state, [:screen_state, :login, :active_pane]) == :token
+      assert get_in(token_state, [:screen_state, :login, :focused_field]) == :token
+    end
+
     test "no_email mode lists active sysop emails comma-separated when present (D-14)" do
       Config.put!("delivery_mode", "no_email")
 

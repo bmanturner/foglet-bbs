@@ -101,8 +101,8 @@ defmodule Foglet.TUI.Screens.Login.Render do
       %{
         label: "Actions",
         commands: [
-          %{key: "Enter", label: primary_label, priority: 30},
-          %{key: "Esc", label: "Back", priority: 30}
+          %{key: "Esc", label: "Back", priority: 0},
+          %{key: "Enter", label: primary_label, priority: 5}
         ]
       }
     ]
