@@ -41,7 +41,7 @@ defmodule Mix.Tasks.FogletBreakGlassTasksTest do
           Mix.Tasks.Foglet.Invites.Create.run(["--actor", sysop.handle])
         end)
 
-      [code] = Regex.run(~r/\n  ([A-Z0-9]{16,64})\n/, output, capture: :all_but_first)
+      [code] = Regex.run(~r/\n  ([A-Za-z0-9]{6})\n/, output, capture: :all_but_first)
 
       assert %Invite{issuer_id: issuer_id, revoked_at: nil, consumed_at: nil} =
                Repo.get_by(Invite, code: code)
@@ -143,9 +143,8 @@ defmodule Mix.Tasks.FogletBreakGlassTasksTest do
           Mix.Tasks.Foglet.ResetToken.Inspect.run([user.handle])
         end)
 
-      [_, raw_token] = Regex.run(~r/Reset token: ([A-Za-z0-9_-]+)/, output)
-      {:ok, decoded_token} = Base.url_decode64(raw_token, padding: false)
-      hashed_token = :crypto.hash(UserToken.hash_algorithm(), decoded_token)
+      [_, raw_token] = Regex.run(~r/Reset token: ([A-Za-z0-9]{6})/, output)
+      hashed_token = :crypto.hash(UserToken.hash_algorithm(), raw_token)
 
       assert Repo.exists?(
                from t in UserToken,

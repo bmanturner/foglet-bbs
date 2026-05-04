@@ -646,7 +646,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     test "INVITES D opens confirm_revoke mode without dispatching revoke" do
       mod = actor_fixture(:mod)
       Config.put!("invite_code_generators", "mods", actor_fixture(:sysop).id)
-      AccountsFixtures.invite_fixture(mod, %{code: "FOG164CONFIRM001"})
+      AccountsFixtures.invite_fixture(mod, %{code: "Cnf001"})
       {:ok, items} = Invites.list_invites(mod)
 
       state =
@@ -662,15 +662,15 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       invites = new_state.screen_state.moderation.invites
       assert invites.mode == :confirm_revoke
-      assert invites.confirm_target.code == "FOG164CONFIRM001"
-      assert {:ok, %{status: :available}} = Invites.get_invite_status("FOG164CONFIRM001")
+      assert invites.confirm_target.code == "Cnf001"
+      assert {:ok, %{status: :available}} = Invites.get_invite_status("Cnf001")
     end
 
     test "INVITES Enter from confirm_revoke dispatches revoke and clears mode" do
       sysop = actor_fixture(:sysop)
       Config.put!("invite_code_generators", "mods", sysop.id)
       mod = actor_fixture(:mod)
-      AccountsFixtures.invite_fixture(mod, %{code: "FOG164REVOKE0001"})
+      AccountsFixtures.invite_fixture(mod, %{code: "Rvk001"})
       {:ok, items} = Invites.list_invites(mod)
 
       state =
@@ -688,14 +688,14 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       invites = after_enter.screen_state.moderation.invites
       assert invites.mode == :list
       assert invites.confirm_target == nil
-      assert {:ok, %{status: :revoked}} = Invites.get_invite_status("FOG164REVOKE0001")
+      assert {:ok, %{status: :revoked}} = Invites.get_invite_status("Rvk001")
     end
 
     test "INVITES Esc from confirm_revoke cancels and keeps the invite" do
       sysop = actor_fixture(:sysop)
       Config.put!("invite_code_generators", "mods", sysop.id)
       mod = actor_fixture(:mod)
-      AccountsFixtures.invite_fixture(mod, %{code: "FOG164KEEPME0001"})
+      AccountsFixtures.invite_fixture(mod, %{code: "Kep001"})
       {:ok, items} = Invites.list_invites(mod)
 
       state =
@@ -713,7 +713,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       invites = after_esc.screen_state.moderation.invites
       assert invites.mode == :list
       assert invites.confirm_target == nil
-      assert {:ok, %{status: :available}} = Invites.get_invite_status("FOG164KEEPME0001")
+      assert {:ok, %{status: :available}} = Invites.get_invite_status("Kep001")
     end
 
     test "INVITES confirm_revoke surface renders title/body/keybar with code" do
@@ -721,7 +721,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       Config.put!("invite_code_generators", "mods", actor_fixture(:sysop).id)
 
       invites =
-        InvitesState.new(items: [%{code: "FOG164SHOWREV001", status: :available}])
+        InvitesState.new(items: [%{code: "Shw001", status: :available}])
         |> InvitesState.start_confirm_revoke()
 
       state =
@@ -736,8 +736,8 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       flat = render_moderation(state) |> collect_text_values()
       joined = Enum.join(flat, "\n")
 
-      assert joined =~ "Revoke invite FOG164SHOWREV001?"
-      assert joined =~ "Code FOG164SHOWREV001 will stop working. Existing accounts stay intact."
+      assert joined =~ "Revoke invite Shw001?"
+      assert joined =~ "Code Shw001 will stop working. Existing accounts stay intact."
       assert joined =~ "Enter Revoke invite"
       assert joined =~ "Esc Keep invite"
     end
@@ -1026,7 +1026,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   describe "INVITES ConsoleTable behavior" do
     test "shared invite table keeps all headers visible at compact width" do
       sample_invite = %{
-        code: "ABCDEFGH12345678",
+        code: "AbC123",
         status: :available,
         inserted_at: ~U[2026-01-01 00:00:00Z],
         consumed_by_user_id: "user-123"

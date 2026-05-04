@@ -357,10 +357,8 @@ defmodule Foglet.Accounts.VerificationTest do
 
     test "an unknown raw token returns invalid_or_expired without changing any password" do
       user = AccountsFixtures.user_fixture(%{password: "original1"})
-      # Generate a properly-encoded but unrelated token (never inserted).
-      bogus_raw =
-        :crypto.strong_rand_bytes(UserToken.rand_size())
-        |> Base.url_encode64(padding: false)
+      # Generate a properly-shaped but unrelated token (never inserted).
+      bogus_raw = "Aa0Bb1"
 
       assert {:error, :invalid_or_expired} =
                Verification.consume_reset_token(bogus_raw, %{password: "brandnew1"})
@@ -371,7 +369,7 @@ defmodule Foglet.Accounts.VerificationTest do
 
     test "a malformed raw token returns invalid_or_expired" do
       assert {:error, :invalid_or_expired} =
-               Verification.consume_reset_token("not!valid!base64*", %{password: "brandnew1"})
+               Verification.consume_reset_token("not-valid", %{password: "brandnew1"})
     end
 
     test "an expired raw token returns invalid_or_expired and does not change the password" do

@@ -98,22 +98,22 @@ defmodule Foglet.TUI.Screens.Shared.InvitesActionsTest do
   describe "revoke_selected/2" do
     test "available invite revoke sets persisted revoked_at and refreshed rendered status revoked" do
       sysop = actor_fixture(:sysop)
-      AccountsFixtures.invite_fixture(sysop, %{code: "INVITEAVAILABLE001"})
-      AccountsFixtures.invite_fixture(sysop, %{code: "INVITEAVAILABLE002"})
+      AccountsFixtures.invite_fixture(sysop, %{code: "AvA001"})
+      AccountsFixtures.invite_fixture(sysop, %{code: "AvA002"})
       {:ok, items} = Invites.list_invites(sysop)
-      selected_index = Enum.find_index(items, &(&1.code == "INVITEAVAILABLE001"))
+      selected_index = Enum.find_index(items, &(&1.code == "AvA001"))
 
       state = InvitesState.new(items: items, selected_index: selected_index)
 
       assert {:ok, revoked_state} = InvitesActions.revoke_selected(sysop, state)
 
       assert %{status: :revoked, revoked_at: %DateTime{}} =
-               Enum.find(revoked_state.items, &(&1.code == "INVITEAVAILABLE001"))
+               Enum.find(revoked_state.items, &(&1.code == "AvA001"))
 
       assert revoked_state.error == nil
 
       assert {:ok, %{status: :revoked, revoked_at: %DateTime{}}} =
-               Invites.get_invite_status("INVITEAVAILABLE001")
+               Invites.get_invite_status("AvA001")
     end
 
     test "unauthorized actor revoke sets error and leaves persisted invite fields unchanged" do

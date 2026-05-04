@@ -20,12 +20,13 @@ defmodule Foglet.Accounts.InviteTest do
       assert Invite.status(%Invite{revoked_at: now}) == :revoked
     end
 
-    test "changeset validates generated public code shape" do
-      assert Invite.changeset(%Invite{}, %{code: "INVITE1234567890"}).valid?
+    test "changeset validates exact case-sensitive 6-character public code shape" do
+      assert Invite.changeset(%Invite{}, %{code: "Ab3dE4"}).valid?
 
       refute Invite.changeset(%Invite{}, %{code: "short"}).valid?
-      refute Invite.changeset(%Invite{}, %{code: "invite1234567890"}).valid?
-      refute Invite.changeset(%Invite{}, %{code: String.duplicate("A", 65)}).valid?
+      refute Invite.changeset(%Invite{}, %{code: "TOOLONG"}).valid?
+      refute Invite.changeset(%Invite{}, %{code: "ABC-12"}).valid?
+      refute Invite.changeset(%Invite{}, %{code: "ABC 12"}).valid?
     end
   end
 
@@ -38,7 +39,8 @@ defmodule Foglet.Accounts.InviteTest do
       assert {:ok, %Invite{} = invite} = Invites.create_invite(sysop)
       assert invite.issuer_id == sysop.id
       assert is_binary(invite.code)
-      assert invite.code != ""
+      assert String.length(invite.code) == 6
+      assert Regex.match?(~r/\A[A-Za-z0-9]+\z/, invite.code)
       assert Invite.status(invite) == :available
     end
 
