@@ -4,6 +4,7 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
   alias Foglet.BoardChat
   alias Foglet.Config
   alias Foglet.Doors.Manifest
+  alias Foglet.Sessions.Session
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.Context
@@ -52,6 +53,26 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     assert state.current_screen == :main_menu
     assert state.current_user == nil
     assert Guest.guest?(state)
+  end
+
+  test "session effect enters guest mode in the App without crashing anonymous Session" do
+    {:ok, session_pid} = start_supervised({Session, [user_id: nil]})
+
+    state = %App{
+      current_screen: :login,
+      session_pid: session_pid,
+      session_context: %SessionContext{guest: false, guest_mode_enabled: true, user: nil}
+    }
+
+    {state, []} = Effects.apply_effect(state, Effect.session(:enter_guest))
+
+    assert state.current_screen == :main_menu
+    assert state.current_user == nil
+    assert Guest.guest?(state)
+
+    session_state = Session.get_state(session_pid)
+    assert session_state.user_id == nil
+    assert session_state.handle == nil
   end
 
   test "Main Menu hides write/account actions and denies compose and doors for guests" do

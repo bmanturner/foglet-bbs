@@ -82,6 +82,13 @@ defmodule Foglet.TUI.App.Effects do
 
   def apply_effect(%App{} = state, %Effect{
         type: :session,
+        payload: :enter_guest
+      }) do
+    App.update(:enter_guest, state)
+  end
+
+  def apply_effect(%App{} = state, %Effect{
+        type: :session,
         payload: {:dispatch, message}
       }) do
     App.update(message, state)
