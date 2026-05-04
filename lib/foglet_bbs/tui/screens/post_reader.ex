@@ -131,6 +131,7 @@ defmodule Foglet.TUI.Screens.PostReader do
         | posts: posts,
           status: status,
           selected_post_index: selected_index,
+          selected_action_post_index: selected_index,
           window_first_message_number: Map.get(window, :first_message_number),
           window_last_message_number: Map.get(window, :last_message_number),
           window_has_previous?: Map.get(window, :has_previous?, false),
@@ -153,7 +154,13 @@ defmodule Foglet.TUI.Screens.PostReader do
     status = if posts == [], do: :empty, else: :loaded
 
     state =
-      %{state | posts: posts, status: status, selected_post_index: selected_index}
+      %{
+        state
+        | posts: posts,
+          status: status,
+          selected_post_index: selected_index,
+          selected_action_post_index: selected_index
+      }
       |> warm_selected_post(context)
       |> seed_pending_read_position_through_visible(context)
 
@@ -252,7 +259,7 @@ defmodule Foglet.TUI.Screens.PostReader do
         board_id: state.board_id,
         thread: state.thread,
         thread_id: state.thread_id,
-        reply_to: selected_post(state)
+        reply_to: selected_action_post(state)
       }
 
       {state, [Effect.navigate(:post_composer, params)]}
@@ -336,6 +343,22 @@ defmodule Foglet.TUI.Screens.PostReader do
     {_w, h} = context.terminal_size || @default_terminal_size
     %{available_height: reader_available_height(h), indexes: [], mode: :packed}
   end
+
+  @doc """
+  Returns the post targeted by reader actions such as reply.
+
+  In packed mode this may differ from `selected_post_index`, which remains the
+  top/screenful anchor. In single-post and long-post mode it intentionally
+  falls back to the anchor post. This is the named extension seam for future
+  selected-post actions such as viewing the posting user's profile.
+  """
+  @spec selected_action_post(State.t()) :: map() | nil
+  def selected_action_post(%State{posts: posts} = state) when is_list(posts) do
+    idx = selected_action_post_index(state)
+    Enum.at(posts, idx)
+  end
+
+  def selected_action_post(%State{}), do: nil
 
   @impl true
   @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
@@ -457,7 +480,7 @@ defmodule Foglet.TUI.Screens.PostReader do
         selected_index_after_window_load(ss, window, posts)
       end
 
-    %{ss | selected_post_index: selected_index}
+    %{ss | selected_post_index: selected_index, selected_action_post_index: selected_index}
   end
 
   # IN-02: when the read pointer is greater than every loaded message_number,
@@ -911,6 +934,13 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp selected_post(%State{}), do: nil
 
+  defp selected_action_post_index(%State{selected_action_post_index: idx, posts: posts})
+       when is_integer(idx) and is_list(posts) do
+    idx |> max(0) |> min(max(length(posts) - 1, 0))
+  end
+
+  defp selected_action_post_index(%State{selected_post_index: idx}), do: idx
+
   defp advance_local_post(%State{posts: posts} = state, _delta, _context)
        when posts in [nil, []] do
     {state, []}
@@ -933,7 +963,12 @@ defmodule Foglet.TUI.Screens.PostReader do
         {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, state.viewport)
 
         state =
-          %{state | selected_post_index: new_idx, viewport: reset_vp}
+          %{
+            state
+            | selected_post_index: new_idx,
+              selected_action_post_index: new_idx,
+              viewport: reset_vp
+          }
           |> warm_selected_post(context)
           |> seed_pending_read_position_through_visible(context)
 
@@ -1023,10 +1058,26 @@ defmodule Foglet.TUI.Screens.PostReader do
           {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
           %{state | viewport: new_vp}
         else
-          state
+          move_selected_action_post(state, screenful.indexes, delta)
         end
     end
   end
+
+  defp move_selected_action_post(%State{} = state, visible_indexes, delta)
+       when is_list(visible_indexes) and visible_indexes != [] do
+    current = selected_action_post_index(state)
+
+    current_position =
+      case Enum.find_index(visible_indexes, &(&1 == current)) do
+        nil -> 0
+        position -> position
+      end
+
+    next_position = (current_position + delta) |> max(0) |> min(length(visible_indexes) - 1)
+    %{state | selected_action_post_index: Enum.at(visible_indexes, next_position)}
+  end
+
+  defp move_selected_action_post(%State{} = state, _visible_indexes, _delta), do: state
 
   defp warm_selected_post(%State{} = state, %Context{} = context) do
     case selected_post(state) do

@@ -37,7 +37,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         commands: [
           %{key: "N", label: "Next", priority: 10},
           %{key: "P", label: "Prev", priority: 10},
-          %{key: "J/K", label: "Scroll", priority: 10}
+          %{key: "J/K", label: "Select/Scroll", priority: 10}
         ]
       },
       %{
@@ -149,7 +149,8 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
             cached -> cached
           end
 
-        parts = reader_parts(post, tuples, w, theme, idx, total)
+        selected_action? = idx == action_index(ss, screenful)
+        parts = reader_parts(post, tuples, w, theme, idx, total, action_target?: selected_action?)
         prefix = if position == 0, do: [], else: [packed_post_separator(theme)]
         prefix ++ [parts.header, parts.progress | parts.body_lines]
       end)
@@ -255,7 +256,19 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     end
   end
 
-  defp reader_parts(post, tuples, w, theme, idx, total) do
-    PostCard.reader_parts(post, tuples, w, theme, index: idx, total: total)
+  defp action_index(ss, %{mode: :packed, indexes: indexes}) when length(indexes) > 1 do
+    idx = Map.get(ss, :selected_action_post_index, ss.selected_post_index)
+
+    if idx in indexes do
+      idx
+    else
+      List.first(indexes)
+    end
+  end
+
+  defp action_index(ss, _screenful), do: ss.selected_post_index
+
+  defp reader_parts(post, tuples, w, theme, idx, total, opts \\ []) do
+    PostCard.reader_parts(post, tuples, w, theme, Keyword.merge([index: idx, total: total], opts))
   end
 end

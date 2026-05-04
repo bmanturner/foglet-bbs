@@ -112,7 +112,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
 
     %{
       header: reader_header(post, index, total, width, theme),
-      progress: reader_progress(index, total, width, theme),
+      progress:
+        reader_progress(index, total, width, theme, Keyword.get(opts, :action_target?, false)),
       body_lines: reader_body_lines(tuples, width, theme)
     }
   end
@@ -228,7 +229,15 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end
   end
 
-  defp reader_progress(index, total, width, theme) do
+  defp reader_progress(index, total, width, theme, true) do
+    label = "Posts #{index + 1}/#{total}  ▶ Selected — R replies here"
+
+    text(TextWidth.truncate(label, reader_text_width(width)),
+      fg: theme.accent.fg
+    )
+  end
+
+  defp reader_progress(index, total, width, theme, false) do
     text(TextWidth.truncate("Posts #{index + 1}/#{total}", reader_text_width(width)),
       fg: theme.dim.fg
     )

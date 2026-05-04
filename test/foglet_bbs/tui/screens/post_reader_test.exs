@@ -416,6 +416,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "State.new/1 returns the PostReader.State struct" do
     assert %State{
              selected_post_index: 0,
+             selected_action_post_index: 0,
              render_cache: %{},
              board: nil,
              board_id: nil,
@@ -1667,6 +1668,112 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert flat =~ "short body 1"
       assert flat =~ "short body 2"
       refute flat =~ "long body 1"
+    end
+  end
+
+  # =================================================================
+  # FOG-580: visible-post action selection
+  # =================================================================
+
+  describe "FOG-580 visible-post action selection" do
+    test "j/k move the selected action target inside a packed screenful without moving the page anchor" do
+      posts =
+        Enum.map(1..4, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+
+      assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      ss1 = s1.screen_state[:post_reader]
+
+      assert ss1.selected_post_index == 0
+      assert ss1.selected_action_post_index == 1
+      assert PostReader.selected_action_post(ss1).id == "p2"
+
+      assert {:update, s2, []} = handle_key_screen(%{key: :char, char: "k"}, s1)
+      ss2 = s2.screen_state[:post_reader]
+
+      assert ss2.selected_post_index == 0
+      assert ss2.selected_action_post_index == 0
+      assert PostReader.selected_action_post(ss2).id == "p1"
+    end
+
+    test "reply navigation targets the selected visible post instead of the screenful anchor" do
+      posts =
+        Enum.map(1..4, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s2, []} = handle_key_screen(%{key: :char, char: "r"}, s1)
+
+      assert s2.current_screen == :post_composer
+      assert s2.route_params.reply_to.id == "p2"
+      assert s2.screen_state[:post_composer].reply_to.id == "p2"
+    end
+
+    test "n resets visible action selection to the top post of the next packed screenful" do
+      posts =
+        Enum.map(1..6, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s2, []} = handle_key_screen(%{key: :char, char: "n"}, s1)
+      ss = s2.screen_state[:post_reader]
+
+      assert ss.selected_post_index == 3
+      assert ss.selected_action_post_index == 3
+      assert PostReader.selected_action_post(ss).id == "p4"
+    end
+
+    test "long-post mode keeps j/k as viewport scroll and targets the selected post" do
+      body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
+      s = p2_state(%{posts: [p2_post(id: "p1", body: body)], terminal_size: {80, 12}})
+
+      assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      ss = s1.screen_state[:post_reader]
+
+      assert ss.viewport.scroll_top == 1
+      assert ss.selected_post_index == 0
+      assert ss.selected_action_post_index == 0
+      assert PostReader.selected_action_post(ss).id == "p1"
+    end
+
+    test "render marks the selected visible post as the reply target at 80x24 and cramped size" do
+      posts =
+        Enum.map(1..3, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+
+      rows80 = s1 |> render_screen() |> rendered_rows({80, 24})
+      selected_row80 = row_index_containing!(rows80, "▶ Selected")
+      body2_row80 = row_index_containing!(rows80, "short body 2")
+      body1_row80 = row_index_containing!(rows80, "short body 1")
+
+      assert body1_row80 < selected_row80
+      assert selected_row80 < body2_row80
+
+      cramped = %{s1 | terminal_size: {64, 22}}
+      rows64 = cramped |> render_screen() |> rendered_rows({64, 22})
+      selected_row64 = row_index_containing!(rows64, "▶ Selected")
+      body2_row64 = row_index_containing!(rows64, "short body 2")
+
+      assert selected_row64 < body2_row64
+    end
+
+    test "single visible post does not render a multi-post action marker" do
+      s = p2_state(%{posts: [p2_post(id: "p1", body: "short body 1")], terminal_size: {80, 24}})
+
+      flat = s |> render_screen() |> flatten_text()
+
+      refute flat =~ "Selected — R replies here"
     end
   end
 
