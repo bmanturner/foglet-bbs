@@ -8,9 +8,10 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   `Foglet.Accounts`.
 
   Phase 25 Plan 04: render uses ConsoleTable for column headers and empty-state
-  display (primitive-presence requirement D-09, Pitfall 9: explicit column widths
-  of 16/8/12). Non-empty row content uses bespoke text to preserve the
-  "status  @handle  email" assertion format (D-19, D-05).
+  display (primitive-presence requirement D-09, Pitfall 9: explicit column widths).
+  Non-empty rows render with the same column widths so each value sits under its
+  header (FOG-740: prior bespoke header/row pair drifted out of sync and printed
+  status under "Handle", handle under "Role", and email under "Status").
   """
 
   alias Foglet.Accounts
@@ -22,11 +23,26 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
 
   @statuses [:pending, :active, :suspended, :rejected]
 
-  # Explicit column widths (Pitfall 9) — must fit within 64x22 minimum budget.
+  # Explicit column widths (Pitfall 9). Total = 16+8+12+24 + 3 single-space
+  # separators = 63 chars, fits the 64x22 minimum budget. Email is the
+  # operator-visible identifier and gets its own labelled column (FOG-740 AC).
+  @handle_width 16
+  @role_width 8
+  @status_width 12
+  @email_width 24
+
   @table_columns [
-    %{key: :handle, label: "Handle", width: 16, grow: 2, priority: 100, demand: :content},
-    %{key: :role, label: "Role", width: 8, priority: 30, demand: :content},
-    %{key: :status, label: "Status", width: 12, grow: 1, priority: 70, demand: :content}
+    %{
+      key: :handle,
+      label: "Handle",
+      width: @handle_width,
+      grow: 1,
+      priority: 100,
+      demand: :content
+    },
+    %{key: :role, label: "Role", width: @role_width, priority: 30, demand: :content},
+    %{key: :status, label: "Status", width: @status_width, priority: 70, demand: :content},
+    %{key: :email, label: "Email", width: @email_width, grow: 2, priority: 50, demand: :content}
   ]
 
   @type row ::
@@ -170,27 +186,26 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
     ConsoleTable.render(users_table, theme: theme)
   end
 
-  # When there are rows: render ConsoleTable for the header row and bespoke
-  # text for row content to preserve the "status  @handle  email" format.
+  # When there are rows: render a single fixed-width header line and matching
+  # fixed-width row lines so each cell sits under its header (FOG-740). The
+  # "Handle"/"Role"/"Status"/"Email" sentinels keep D-09 primitive presence,
+  # and rows still contain "@handle", role, status, and email substrings.
   defp render_body(%__MODULE__{rows: rows, selection_index: idx}, users_table, theme) do
-    # Render column headers as plain text (matching ConsoleTable header format)
-    # so the "Handle", "Role", "Status" sentinel strings are present in the
-    # rendered output (D-09 primitive-presence). ConsoleTable is used for the
-    # empty-state path (above) and for row data building; plain header text
-    # preserves the "status  @handle  email" row format (D-19).
     _ = users_table
 
-    header_text =
-      [
-        text("Handle          Role    Status      ", fg: theme.dim.fg, style: [:bold])
-      ]
+    header_text = [
+      text(format_row("Handle", "Role", "Status", "Email"),
+        fg: theme.dim.fg,
+        style: [:bold]
+      )
+    ]
 
     row_texts =
       rows
       |> Enum.with_index()
       |> Enum.map(fn {{status, user}, row_idx} ->
         selected? = row_idx == idx
-        label = "#{status}  @#{user.handle}  #{user.email}"
+        label = format_row("@#{user.handle}", to_string(user.role), to_string(status), user.email)
 
         if selected? do
           text(label, fg: theme.selected.fg, bg: theme.selected.bg)
@@ -203,6 +218,21 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
       header_text ++ row_texts
     end
   end
+
+  defp format_row(handle, role, status, email) do
+    [
+      pad(handle, @handle_width),
+      pad(role, @role_width),
+      pad(status, @status_width),
+      truncate(email, @email_width)
+    ]
+    |> Enum.join(" ")
+  end
+
+  defp pad(value, width), do: value |> truncate(width) |> String.pad_trailing(width)
+
+  defp truncate(value, width) when byte_size(value) <= width, do: value
+  defp truncate(value, width), do: String.slice(value, 0, width)
 
   defp row_map_for({status, user}) do
     %{
