@@ -130,7 +130,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
       {%{st | last_action: nil}, nil}
     else
       navigation_event = normalize_navigation_event(event, st)
-      raxol_event = translate_event(navigation_event)
+      raxol_event = translate_event(navigation_event, st)
       {:ok, new_rs} = RaxolTable.handle_event(raxol_event, rs, %{})
 
       action = derive_action(rs, new_rs, navigation_event)
@@ -160,8 +160,13 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   defp normalize_navigation_event(%{key: :char, char: "k"}, %__MODULE__{}), do: %{key: :up}
   defp normalize_navigation_event(event, %__MODULE__{}), do: event
 
-  # Translate Foglet key events to Raxol.UI.Components.Table event tuples
-  defp translate_event(event) do
+  # Translate Foglet key events to Raxol.UI.Components.Table event tuples.
+  # Searchable tables are text-input surfaces, so raw j/k chars must remain
+  # filter characters instead of going through the global movement fallback.
+  defp translate_event(%{key: :char} = event, %__MODULE__{filterable: true}),
+    do: translate_non_vertical_event(event)
+
+  defp translate_event(event, %__MODULE__{}) do
     case ScrollKeys.vertical_direction(event) do
       :down -> {:key, {:arrow_down, nil}}
       :up -> {:key, {:arrow_up, nil}}

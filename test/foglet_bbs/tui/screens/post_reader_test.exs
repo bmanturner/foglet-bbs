@@ -2204,14 +2204,14 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       s80 = p2_state(%{posts: posts, terminal_size: {80, 24}})
       flat80 = s80 |> render_screen() |> flatten_text()
 
-      assert flat80 =~ "Up/Down"
+      assert flat80 =~ "↑/↓"
       assert flat80 =~ "Select"
       refute flat80 =~ "J/KSelect/Scroll"
 
       s64 = %{s80 | terminal_size: {64, 22}}
       flat64 = s64 |> render_screen() |> flatten_text()
 
-      assert flat64 =~ "Up/Down"
+      assert flat64 =~ "↑/↓"
       assert flat64 =~ "Select"
       refute flat64 =~ "J/K"
     end
