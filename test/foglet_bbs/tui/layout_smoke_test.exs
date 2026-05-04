@@ -19,6 +19,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
   alias Foglet.Config
   alias Foglet.TUI.App
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Context
   alias Foglet.TUI.RenderFixtures
   alias Foglet.TUI.TextWidth
@@ -2928,6 +2929,198 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
       assert String.contains?(contents, "defp key_list(ss)"),
              "moderation.ex must define a render-time key_list/1 function (D-26)"
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # FOG-558 unified login recovery render behavior
+  # ---------------------------------------------------------------------------
+
+  describe "FOG-558 unified login recovery render behavior" do
+    defp recovery_state_at(active_pane, {width, height}) do
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{login: Foglet.TUI.Screens.Login.State.reset_recovery(active_pane)}
+      }
+    end
+
+    defp recovery_request_feedback_state_at({width, height}) do
+      login =
+        Foglet.TUI.Screens.Login.State.reset_recovery(:request)
+        |> Map.put(:identifier_input, TextInput.init(value: "person@example.test"))
+        |> Map.put(
+          :message,
+          "This Foglet has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it."
+        )
+        |> Map.put(:message_category, :no_email)
+
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{login: login}
+      }
+    end
+
+    defp recovery_token_feedback_state_at({width, height}) do
+      login =
+        Foglet.TUI.Screens.Login.State.reset_recovery(:token)
+        |> Map.put(:token_input, TextInput.init(value: "invalid-reset-token"))
+        |> Map.put(:password_input, TextInput.init(value: "password123456", mask_char: "*"))
+        |> Map.put(
+          :password_confirmation_input,
+          TextInput.init(value: "password123456", mask_char: "*")
+        )
+        |> Map.put(:focused_field, :password_confirmation)
+        |> Map.put(:error, "That reset token did not work. Ask the sysop for a new one.")
+
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{login: login}
+      }
+    end
+
+    defp ascii_login(%App{} = state, size),
+      do: state |> render_login() |> AsciiRenderer.render(size)
+
+    defp assert_no_recovery_border_feedback_collision(ascii, forbidden_fragment) do
+      lines = String.split(ascii, "\n", trim: false)
+
+      refute Enum.any?(lines, &String.contains?(&1, "└" <> forbidden_fragment)),
+             "feedback overwrote a pane bottom border:\n#{ascii}"
+    end
+
+    defp row_for_text(positioned, text) do
+      positioned
+      |> content_text_elements()
+      |> Enum.find(fn el -> String.contains?(el.text, text) end)
+      |> case do
+        nil -> flunk("expected rendered layout to contain #{inspect(text)}")
+        el -> el.y
+      end
+    end
+
+    test "wide recovery layout places request and token panes side by side" do
+      positioned =
+        :request
+        |> recovery_state_at({132, 50})
+        |> render_login()
+        |> apply_at_size({132, 50})
+
+      email_row = row_for_text(positioned, "Email:")
+      token_row = row_for_text(positioned, "Token:")
+
+      content = content_text_elements(positioned)
+      email = Enum.find(content, &String.contains?(&1.text, "Email:"))
+      token = Enum.find(content, &String.contains?(&1.text, "Token:"))
+
+      assert abs(email_row - token_row) <= 1
+      assert token.x > email.x
+    end
+
+    test "compact recovery layout stacks token pane below request pane" do
+      positioned =
+        :request
+        |> recovery_state_at({64, 22})
+        |> render_login()
+        |> apply_at_size({64, 22})
+
+      assert row_for_text(positioned, "Token:") > row_for_text(positioned, "Email:")
+    end
+
+    test "recovery command bar primary action follows the active pane" do
+      request_bar =
+        :request
+        |> recovery_state_at({132, 50})
+        |> render_login()
+        |> apply_at_size({132, 50})
+        |> bottom_row_text()
+
+      token_bar =
+        :token
+        |> recovery_state_at({132, 50})
+        |> render_login()
+        |> apply_at_size({132, 50})
+        |> bottom_row_text()
+
+      assert String.contains?(request_bar, "Request token")
+      refute String.contains?(request_bar, "Set password")
+      assert String.contains?(token_bar, "Set password")
+      refute String.contains?(token_bar, "Request token")
+    end
+
+    test "recovery panes keep helper copy inside terminal width at release QA sizes" do
+      for active_pane <- [:request, :token], {width, height} <- [{120, 28}, {80, 24}, {64, 22}] do
+        positioned =
+          active_pane
+          |> recovery_state_at({width, height})
+          |> render_login()
+          |> apply_at_size({width, height})
+
+        content_rows = positioned |> content_text_elements() |> text_rows()
+
+        for {y, row_text} <- content_rows do
+          assert TextWidth.display_width(row_text) <= width,
+                 "#{active_pane} recovery row at #{width}x#{height} y=#{y} exceeded #{width} cols: " <>
+                   inspect(row_text)
+        end
+      end
+    end
+
+    test "wide recovery request pane text stays left of token pane" do
+      positioned =
+        :request
+        |> recovery_state_at({120, 28})
+        |> render_login()
+        |> apply_at_size({120, 28})
+
+      content = content_text_elements(positioned)
+      request_title = Enum.find(content, &String.contains?(&1.text, "Request reset token"))
+      token_helper = Enum.find(content, &String.contains?(&1.text, "Paste your reset token"))
+
+      assert request_title && token_helper
+      assert token_helper.x > request_title.x
+
+      for el <- content,
+          el.y >= request_title.y,
+          el.y < 12,
+          el.x >= request_title.x,
+          el.x < token_helper.x do
+        assert el.x + TextWidth.display_width(el.text) <= token_helper.x,
+               "request pane text crossed into token pane at y=#{el.y}: #{inspect(el.text)}"
+      end
+    end
+
+    test "request-submit feedback does not overwrite recovery pane borders at QA sizes" do
+      for size <- [{100, 30}, {80, 24}, {64, 22}] do
+        ascii =
+          size
+          |> recovery_request_feedback_state_at()
+          |> ascii_login(size)
+
+        assert_no_recovery_border_feedback_collision(ascii, "This Foglet")
+
+        assert length(String.split(ascii, "This Foglet")) - 1 == 1,
+               "request feedback should render once in the active pane at #{inspect(size)}:\n#{ascii}"
+      end
+    end
+
+    test "token-submit feedback does not overwrite or duplicate across recovery pane borders" do
+      for size <- [{100, 30}, {80, 24}, {64, 22}] do
+        ascii =
+          size
+          |> recovery_token_feedback_state_at()
+          |> ascii_login(size)
+
+        assert_no_recovery_border_feedback_collision(ascii, "That reset token")
+
+        assert length(String.split(ascii, "That reset token")) - 1 == 1,
+               "token feedback should render once in the active pane at #{inspect(size)}:\n#{ascii}"
+      end
     end
   end
 

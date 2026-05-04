@@ -19,6 +19,11 @@ defmodule Foglet.TUI.Screens.Login.Render do
   @login_panel_width 40
   @login_panel_height 8
   @login_input_display_width 25
+  @recovery_pane_width 46
+  @recovery_pane_base_height 7
+  @recovery_pane_inner_width @recovery_pane_width - 4
+  @recovery_request_input_width 32
+  @recovery_token_input_width 22
 
   @spec render(map(), Context.t()) :: any()
   def render(local_state, %Context{} = context) do
@@ -32,6 +37,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
         [
           case sub do
             :login_form -> render_login_form(state, theme)
+            :reset_recovery -> render_reset_recovery(state, theme)
             :reset_request -> render_reset_request(state, theme)
             :reset_consume -> render_reset_consume(state, theme)
             _ -> render_menu(mode, theme, state)
@@ -43,7 +49,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
       state,
       %{breadcrumb_parts: ["Foglet", "Login"]},
       content,
-      keys_for(sub, mode)
+      keys_for(sub, mode, state)
     )
   end
 
@@ -51,7 +57,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
     AppStateBridge.from_context(local_state, context, :login, &LoginState.default/0)
   end
 
-  defp keys_for(:login_form, _) do
+  defp keys_for(:login_form, _, _) do
     [
       %{
         label: "Field",
@@ -67,7 +73,41 @@ defmodule Foglet.TUI.Screens.Login.Render do
     ]
   end
 
-  defp keys_for(:reset_request, _) do
+  defp keys_for(:reset_recovery, _, state) do
+    login_ss = LoginState.get(state)
+    active = Map.get(login_ss, :active_pane, :request)
+
+    field_commands =
+      case active do
+        :token ->
+          [
+            %{key: "Tab", label: "Next token field", priority: 10},
+            %{key: "Shift+Tab", label: "Prev token field", priority: 10}
+          ]
+
+        _request ->
+          [%{key: "→", label: "Token pane", priority: 10}]
+      end
+
+    primary_label = if active == :token, do: "Set password", else: "Request token"
+
+    [
+      %{
+        label: "Pane",
+        commands:
+          field_commands ++ [%{key: "←/→", label: "Switch pane at field edge", priority: 20}]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "Enter", label: primary_label, priority: 30},
+          %{key: "Esc", label: "Back", priority: 30}
+        ]
+      }
+    ]
+  end
+
+  defp keys_for(:reset_request, _, _) do
     [
       %{
         label: "Actions",
@@ -82,7 +122,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
   # D-06, D-07: Reset-consume form advertises Tab/Shift+Tab focus cycle, Enter
   # to submit, Esc to cancel. The raw token value is intentionally not echoed
   # back through this hint set (D-11).
-  defp keys_for(:reset_consume, _) do
+  defp keys_for(:reset_consume, _, _) do
     [
       %{
         label: "Field",
@@ -101,7 +141,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
     ]
   end
 
-  defp keys_for(_, mode), do: menu_commands(mode)
+  defp keys_for(_, mode, _state), do: menu_commands(mode)
 
   defp registration_mode(state) do
     login_ss = LoginState.get(state)
@@ -234,50 +274,236 @@ defmodule Foglet.TUI.Screens.Login.Render do
     end
   end
 
-  defp render_reset_request(state, theme) do
+  defp render_reset_recovery(state, theme) do
     login_ss = LoginState.get(state)
-    wrap_width = reset_wrap_width(state)
+    active = Map.get(login_ss, :active_pane, :request)
+    {terminal_width, _terminal_height} = Map.get(state, :terminal_size, {80, 24})
+
+    intro =
+      wrapped_text_rows(
+        "Need a token? Request one on the left. Already have one from email or a sysop? Use it on the right.",
+        reset_wrap_width(state),
+        fg: theme.dim.fg
+      )
+
+    request_active? = active == :request
+    token_active? = active == :token
+    request_feedback? = request_active? and has_recovery_message?(login_ss)
+    token_feedback? = token_active? and has_recovery_error?(login_ss)
+
+    request_pane =
+      recovery_pane(
+        "Request reset token",
+        request_active?,
+        theme,
+        recovery_pane_height(:request, login_ss, @recovery_pane_inner_width, request_feedback?),
+        render_reset_request(
+          state,
+          theme,
+          request_active?,
+          @recovery_pane_inner_width,
+          request_feedback?
+        )
+      )
+
+    token_pane =
+      recovery_pane(
+        "Use reset token",
+        token_active?,
+        theme,
+        recovery_pane_height(:token, login_ss, @recovery_pane_inner_width, token_feedback?),
+        render_reset_consume(
+          state,
+          theme,
+          token_active?,
+          @recovery_pane_inner_width,
+          @recovery_token_input_width,
+          token_feedback?
+        )
+      )
+
+    body =
+      recovery_body(
+        terminal_width,
+        request_pane,
+        token_pane,
+        request_active?,
+        token_active?,
+        request_feedback? or token_feedback?,
+        theme
+      )
+
+    column style: %{gap: 0} do
+      [text("Password recovery", fg: theme.primary.fg, style: [:bold])] ++
+        intro ++ [text("")] ++ body
+    end
+  end
+
+  defp recovery_body(
+         terminal_width,
+         request_pane,
+         token_pane,
+         _request_active?,
+         _token_active?,
+         _feedback?,
+         _theme
+       )
+       when terminal_width >= 96 do
+    [
+      row style: %{gap: 2, align_items: :start} do
+        [request_pane, token_pane]
+      end
+    ]
+  end
+
+  defp recovery_body(
+         _terminal_width,
+         request_pane,
+         _token_pane,
+         true,
+         _token_active?,
+         true,
+         theme
+       ),
+       do: [request_pane, compact_other_pane_hint(:token, theme)]
+
+  defp recovery_body(
+         _terminal_width,
+         _request_pane,
+         token_pane,
+         _request_active?,
+         true,
+         true,
+         theme
+       ),
+       do: [token_pane, compact_other_pane_hint(:request, theme)]
+
+  defp recovery_body(
+         _terminal_width,
+         request_pane,
+         token_pane,
+         _request_active?,
+         _token_active?,
+         _feedback?,
+         _theme
+       ),
+       do: [request_pane, text(""), token_pane]
+
+  defp recovery_pane(title, active?, theme, height, content) do
+    marker = if active?, do: "> ", else: "  "
+    border_fg = if active?, do: theme.accent.fg, else: theme.border.fg
+
+    %{
+      type: :panel,
+      attrs: %{
+        title: marker <> title,
+        title_attrs: %{fg: if(active?, do: theme.accent.fg, else: theme.title.fg)},
+        border: :single,
+        border_fg: border_fg,
+        width: @recovery_pane_width,
+        height: height
+      },
+      children: [content]
+    }
+  end
+
+  defp compact_other_pane_hint(:token, theme),
+    do: text("Use ←/→ to switch to the reset-token pane.", fg: theme.dim.fg)
+
+  defp compact_other_pane_hint(:request, theme),
+    do: text("Use ←/→ to switch to the request-token pane.", fg: theme.dim.fg)
+
+  defp recovery_pane_height(_pane, _login_ss, _wrap_width, false), do: @recovery_pane_base_height
+
+  defp recovery_pane_height(:request, login_ss, wrap_width, true) do
+    message_rows = feedback_row_count(Map.get(login_ss, :message), wrap_width)
+    max(@recovery_pane_base_height, 2 + 3 + 1 + 1 + message_rows)
+  end
+
+  defp recovery_pane_height(:token, login_ss, wrap_width, true) do
+    error_rows = feedback_row_count(Map.get(login_ss, :error), wrap_width)
+    max(@recovery_pane_base_height, 2 + 2 + 3 + 1 + error_rows)
+  end
+
+  defp has_recovery_message?(login_ss), do: is_binary(Map.get(login_ss, :message))
+  defp has_recovery_error?(login_ss), do: is_binary(Map.get(login_ss, :error))
+
+  defp feedback_row_count(nil, _wrap_width), do: 0
+
+  defp feedback_row_count(text_value, wrap_width) when is_binary(text_value) do
+    text_value
+    |> TextWidth.wrap(wrap_width)
+    |> length()
+  end
+
+  defp render_reset_request(state, theme), do: render_reset_request(state, theme, true)
+
+  defp render_reset_request(state, theme, focused?),
+    do: render_reset_request(state, theme, focused?, reset_wrap_width(state), true)
+
+  defp render_reset_request(state, theme, focused?, wrap_width, show_feedback?) do
+    login_ss = LoginState.get(state)
 
     error_items =
-      case Map.get(login_ss, :error) do
-        nil ->
-          []
+      if show_feedback? do
+        case Map.get(login_ss, :error) do
+          nil ->
+            []
 
-        error_text ->
-          [text("")] ++
-            wrapped_text_rows(error_text, wrap_width, fg: theme.error.fg, style: [:bold])
+          error_text ->
+            [text("")] ++
+              wrapped_text_rows(error_text, wrap_width, fg: theme.error.fg, style: [:bold])
+        end
+      else
+        []
       end
 
     message_items =
-      case Map.get(login_ss, :message) do
-        nil ->
-          []
+      if show_feedback? do
+        case Map.get(login_ss, :message) do
+          nil ->
+            []
 
-        message_text ->
-          [text("")] ++ wrapped_text_rows(message_text, wrap_width, fg: theme.accent.fg)
+          message_text ->
+            [text("")] ++ wrapped_text_rows(message_text, wrap_width, fg: theme.accent.fg)
+        end
+      else
+        []
       end
 
     column style: %{gap: 0} do
       [
-        text("Forgot password", fg: theme.primary.fg, style: [:bold]),
+        wrapped_text_rows(
+          "Enter your account email. If it matches a user here, reset instructions will be sent.",
+          wrap_width,
+          fg: theme.dim.fg
+        ),
         row style: %{gap: 0} do
           [
             text("Email: ", fg: theme.accent.fg, style: [:bold]),
             TextInput.render(login_ss.identifier_input,
               bordered: false,
-              focused: true,
+              cap_display_width: @recovery_request_input_width,
+              focused: focused?,
               theme: theme
             )
           ]
         end
-      ] ++ error_items ++ message_items
+      ]
+      |> List.flatten()
+      |> Kernel.++(error_items)
+      |> Kernel.++(message_items)
     end
   end
 
-  defp render_reset_consume(state, theme) do
+  defp render_reset_consume(state, theme), do: render_reset_consume(state, theme, true)
+
+  defp render_reset_consume(state, theme, pane_active?),
+    do: render_reset_consume(state, theme, pane_active?, reset_wrap_width(state), nil, true)
+
+  defp render_reset_consume(state, theme, pane_active?, wrap_width, input_width, show_feedback?) do
     login_ss = LoginState.get(state)
-    focused = Map.get(login_ss, :focused_field, :token)
-    wrap_width = reset_wrap_width(state)
+    focused = if pane_active?, do: Map.get(login_ss, :focused_field, :token), else: nil
 
     token_label = field_label("Token:           ", focused == :token, theme)
     password_label = field_label("New password:    ", focused == :password, theme)
@@ -286,49 +512,71 @@ defmodule Foglet.TUI.Screens.Login.Render do
       field_label("Confirm password:", focused == :password_confirmation, theme)
 
     error_items =
-      case Map.get(login_ss, :error) do
-        nil ->
-          []
+      if show_feedback? do
+        case Map.get(login_ss, :error) do
+          nil ->
+            []
 
-        error_text ->
-          [text("")] ++
-            wrapped_text_rows(error_text, wrap_width, fg: theme.error.fg, style: [:bold])
+          error_text ->
+            [text("")] ++
+              wrapped_text_rows(error_text, wrap_width, fg: theme.error.fg, style: [:bold])
+        end
+      else
+        []
       end
 
     column style: %{gap: 0} do
       [
-        text("Enter reset token", fg: theme.primary.fg, style: [:bold]),
+        wrapped_text_rows(
+          "Paste your reset token, then choose a new password.",
+          wrap_width,
+          fg: theme.dim.fg
+        ),
         row style: %{gap: 0} do
           [
             token_label,
-            TextInput.render(login_ss.token_input,
-              bordered: false,
-              focused: focused == :token,
-              theme: theme
+            TextInput.render(
+              login_ss.token_input,
+              text_input_opts(
+                bordered: false,
+                cap_display_width: input_width,
+                focused: focused == :token,
+                theme: theme
+              )
             )
           ]
         end,
         row style: %{gap: 0} do
           [
             password_label,
-            TextInput.render(login_ss.password_input,
-              bordered: false,
-              focused: focused == :password,
-              theme: theme
+            TextInput.render(
+              login_ss.password_input,
+              text_input_opts(
+                bordered: false,
+                cap_display_width: input_width,
+                focused: focused == :password,
+                theme: theme
+              )
             )
           ]
         end,
         row style: %{gap: 0} do
           [
             confirmation_label,
-            TextInput.render(login_ss.password_confirmation_input,
-              bordered: false,
-              focused: focused == :password_confirmation,
-              theme: theme
+            TextInput.render(
+              login_ss.password_confirmation_input,
+              text_input_opts(
+                bordered: false,
+                cap_display_width: input_width,
+                focused: focused == :password_confirmation,
+                theme: theme
+              )
             )
           ]
         end
-      ] ++ error_items
+      ]
+      |> List.flatten()
+      |> Kernel.++(error_items)
     end
   end
 
@@ -337,6 +585,13 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   defp field_label(label, false, theme),
     do: text(label <> " ", fg: theme.primary.fg)
+
+  defp text_input_opts(opts) do
+    case Keyword.fetch!(opts, :cap_display_width) do
+      nil -> Keyword.delete(opts, :cap_display_width)
+      _width -> opts
+    end
+  end
 
   defp wrapped_text_rows(text_value, width, opts) when is_binary(text_value) do
     text_value

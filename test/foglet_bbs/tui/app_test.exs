@@ -1959,6 +1959,81 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "FOG-558 unified login recovery reducer" do
+    setup do
+      {:ok, state} = App.init(%{})
+      %{state: %{state | current_screen: :login}}
+    end
+
+    test "forgot-password entry opens one recovery surface on the request pane", %{state: state} do
+      {new_state, []} = App.update({:key, %{key: :char, char: "f"}}, state)
+
+      assert %{sub: :reset_recovery, active_pane: :request, focused_field: :identifier} =
+               App.screen_state_for(new_state, :login)
+    end
+
+    test "token entry opens the same recovery surface on the token pane", %{state: state} do
+      {new_state, []} = App.update({:key, %{key: :char, char: "t"}}, state)
+
+      assert %{sub: :reset_recovery, active_pane: :token, focused_field: :token} =
+               App.screen_state_for(new_state, :login)
+    end
+
+    test "right and left switch panes at text-field boundaries without stealing cursor movement",
+         %{
+           state: state
+         } do
+      {request_state, []} = App.update({:key, %{key: :char, char: "f"}}, state)
+      {token_state, []} = App.update({:key, %{key: :right}}, request_state)
+
+      assert %{active_pane: :token, focused_field: :token} =
+               App.screen_state_for(token_state, :login)
+
+      {typed_state, []} = App.update({:key, %{key: :char, char: "A"}}, token_state)
+      {cursor_state, []} = App.update({:key, %{key: :left}}, typed_state)
+
+      assert %{active_pane: :token, token_input: token_input} =
+               App.screen_state_for(cursor_state, :login)
+
+      assert token_input.raxol_state.cursor_pos == 0
+
+      {back_to_request, []} = App.update({:key, %{key: :left}}, cursor_state)
+
+      assert %{active_pane: :request, focused_field: :identifier} =
+               App.screen_state_for(back_to_request, :login)
+    end
+
+    test "Tab stays inside the active token pane and task results route by task atom", %{
+      state: state
+    } do
+      {token_state, []} = App.update({:key, %{key: :char, char: "t"}}, state)
+      {password_state, []} = App.update({:key, %{key: :tab}}, token_state)
+
+      assert %{sub: :reset_recovery, active_pane: :token, focused_field: :password} =
+               App.screen_state_for(password_state, :login)
+
+      {after_request_result, []} =
+        App.update(
+          {:screen_task_result, :login, :reset_request, {:ok, :email_dispatched}},
+          password_state
+        )
+
+      assert %{sub: :reset_recovery, active_pane: :token, message_category: :email_dispatched} =
+               App.screen_state_for(after_request_result, :login)
+
+      {after_token_result, []} =
+        App.update(
+          {:screen_task_result, :login, :reset_token, {:ok, {:error, :invalid_or_expired}}},
+          after_request_result
+        )
+
+      assert %{
+               sub: :reset_recovery,
+               error: "That reset token did not work. Ask the sysop for a new one."
+             } = App.screen_state_for(after_token_result, :login)
+    end
+  end
+
   describe "Phase 0 screen routing" do
     setup do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}

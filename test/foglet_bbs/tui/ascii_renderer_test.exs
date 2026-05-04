@@ -104,6 +104,22 @@ defmodule Foglet.TUI.AsciiRendererTest do
       assert token_input.raxol_state.value == "RESET-TOKEN"
     end
 
+    test "seeds unified reset recovery for QA rendering" do
+      state = RenderFixtures.state_for(:login, @size, substate: "reset_recovery")
+
+      assert state.current_screen == :login
+
+      assert %{
+               sub: :reset_recovery,
+               active_pane: :request,
+               identifier_input: identifier_input,
+               token_input: token_input
+             } = state.screen_state.login
+
+      assert identifier_input.raxol_state.value == "alice@example.com"
+      assert token_input.raxol_state.value == "RESET-TOKEN"
+    end
+
     test "seeds invite-only register gating" do
       state = RenderFixtures.state_for(:register, @size, substate: "invite_only")
 

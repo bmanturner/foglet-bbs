@@ -52,13 +52,13 @@ defmodule Foglet.TUI.Screens.Login.Menu do
   # D-01: Forgot Password is unconditionally reachable; the reset request
   # sub-state handles delivery-mode branching at submit time.
   defp maybe_enter_reset_request(state) do
-    {:update, LoginState.put(state, LoginState.reset_request()), []}
+    {:update, LoginState.put(state, LoginState.reset_recovery(:request)), []}
   end
 
-  # D-04, D-15: Enter the reset-consume sub-state from any prior sub-state.
+  # D-04, D-15: Enter the unified reset recovery surface from the token pane.
   # Always builds a fresh form so prior fields cannot leak across entries.
   defp enter_reset_consume(state) do
-    {:update, LoginState.put(state, LoginState.reset_consume()), []}
+    {:update, LoginState.put(state, LoginState.reset_recovery(:token)), []}
   end
 
   defp registration_mode(state) do
