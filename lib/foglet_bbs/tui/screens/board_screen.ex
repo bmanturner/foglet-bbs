@@ -12,7 +12,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
     * owns `current_tab :: :threads | :chat` state,
     * renders a tab strip above the board content showing
-      `▌ 1 THREADS   2 CHAT (#)` where `#` is
+      `▌ THREADS   CHAT (#)` where `#` is
       `Foglet.Sessions.BoardScreen.count/1`,
     * delegates to `ThreadList` for the `:threads` tab and to a placeholder
       view for the `:chat` tab (FOG-254 C6 will replace the placeholder with
@@ -41,7 +41,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   import Raxol.Core.Renderer.View
 
-  @tabs [{:threads, "1 THREADS"}, {:chat, "2 CHAT"}]
+  @tabs [{:threads, "THREADS"}, {:chat, "CHAT"}]
 
   @impl true
   @spec init(Context.t()) :: ThreadList.State.t() | State.t()

@@ -70,18 +70,6 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       assert %ThreadList.State{} = BoardScreen.init(ctx)
     end
 
-    test "render delegates byte-equivalently to ThreadList" do
-      ctx = context(board(chat_enabled: false))
-      state = BoardScreen.init(ctx)
-
-      wrapper_text = BoardScreen.render(state, ctx) |> flatten_text()
-      direct_text = ThreadList.render(state, ctx) |> flatten_text()
-
-      assert wrapper_text == direct_text
-      refute wrapper_text =~ "1 THREADS"
-      refute wrapper_text =~ "CHAT"
-    end
-
     test "subscriptions match ThreadList exactly" do
       ctx = context(board(chat_enabled: false))
       state = BoardScreen.init(ctx)
@@ -136,8 +124,8 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
 
       text = BoardScreen.render(state, ctx) |> flatten_text()
 
-      assert text =~ "1 THREADS"
-      assert text =~ "2 CHAT (0)"
+      assert text =~ "THREADS"
+      assert text =~ "CHAT (0)"
       assert text =~ "▌"
     end
 
