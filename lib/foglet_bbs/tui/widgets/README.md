@@ -66,6 +66,12 @@ navigation, and larger numbers for secondary hints that may drop first.
 | `Input.Checkbox`   | [`input/checkbox.ex`](input/checkbox.ex)         | Toggle with `checked?` + `disabled` |
 | `Input.RadioGroup` | [`input/radio_group.ex`](input/radio_group.ex)   | Single-choice selector (DSL-composed from `text/2`) |
 | `Input.TextInput`  | [`input/text_input.ex`](input/text_input.ex)     | Single-line input with validator/mask/max_length |
+
+## Auth (FOG-612)
+
+| Module | File | Description |
+|---|---|---|
+| `Auth.AuthForm` | [`auth/auth_form.ex`](auth/auth_form.ex) | Stateless compact card shell for logged-out/login-adjacent forms; honors D-07/D-09/D-13/D-16 |
 | `Input.Tabs`       | [`input/tabs.ex`](input/tabs.ex)                 | Tab bar with Left/Right/1–9 nav |
 | `Input.Menu`       | [`input/menu.ex`](input/menu.ex)                 | Nested dropdown / context menu |
 

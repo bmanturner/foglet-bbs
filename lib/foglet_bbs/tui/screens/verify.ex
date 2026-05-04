@@ -23,6 +23,7 @@ defmodule Foglet.TUI.Screens.Verify do
   alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Auth.AuthForm
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   import Raxol.Core.Renderer.View
@@ -30,6 +31,8 @@ defmodule Foglet.TUI.Screens.Verify do
   @max_attempts 5
   @cooldown_seconds 60
   @code_length 6
+  @auth_card_width AuthForm.default_width()
+  @auth_card_height 10
 
   @impl true
   @spec init(Context.t()) :: map()
@@ -49,16 +52,22 @@ defmodule Foglet.TUI.Screens.Verify do
         text("Attempts: #{vs.attempts}/#{@max_attempts}", fg: theme.dim.fg)
       end
 
-    content =
-      column style: %{gap: 0} do
+    panel =
+      AuthForm.render(
+        "Verify email",
         [
-          text("Enter the 6-character code we sent you.", fg: theme.primary.fg),
+          text("Enter the 6-character code we sent you.", fg: theme.dim.fg),
           text(""),
           text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
           text(""),
           status_item
-        ]
-      end
+        ],
+        theme,
+        width: @auth_card_width,
+        height: @auth_card_height
+      )
+
+    content = AuthForm.centered(panel, state, theme, @auth_card_height)
 
     ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Verify"]}, content, [
       %{

@@ -3,6 +3,7 @@ defmodule Foglet.TUI.App.SessionAliasTest do
 
   alias Foglet.TUI.App
   alias Foglet.TUI.App.SessionAlias
+  alias Foglet.TUI.Theme
   alias Raxol.Core.Runtime.Command
 
   defp state(attrs \\ %{}) do
@@ -75,6 +76,29 @@ defmodule Foglet.TUI.App.SessionAliasTest do
       {new_state, _cmds} = SessionAlias.promote_session(state(), user)
       assert Map.get(new_state.session_context, :user) == user
       assert Map.get(new_state.session_context, :user_id) == user.id
+    end
+
+    test "refreshes session_context preferences from the authenticated user" do
+      user = %Foglet.Accounts.User{
+        id: "u7",
+        handle: "gwen",
+        role: :user,
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "24h"},
+        theme: "amber"
+      }
+
+      {new_state, _cmds} =
+        SessionAlias.promote_session(
+          state(session_context: %{theme_id: "gray", theme: Theme.default()}),
+          user
+        )
+
+      assert new_state.session_context.timezone == "America/Chicago"
+      assert new_state.session_context.time_format == "24h"
+      assert new_state.session_context.theme_id == "amber"
+      assert new_state.session_context.theme == Theme.resolve(:amber)
+      assert Theme.from_state(new_state) == Theme.resolve(:amber)
     end
 
     test "navigates to :main_menu via Effects.apply_effect" do

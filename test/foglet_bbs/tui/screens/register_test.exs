@@ -84,6 +84,17 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
   defp run_register_task(%Effect{payload: %{fun: fun}}), do: fun.()
 
+  defp collect_panels(tree), do: tree |> collect_panels([]) |> Enum.reverse()
+
+  defp collect_panels(nil, acc), do: acc
+  defp collect_panels(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_panels/2)
+
+  defp collect_panels(%{type: :panel, children: children} = node, acc),
+    do: collect_panels(children, [node | acc])
+
+  defp collect_panels(%{children: children}, acc), do: collect_panels(children, acc)
+  defp collect_panels(_other, acc), do: acc
+
   defp sysop_user_fixture do
     user = user_fixture()
     {:ok, promoted} = user |> Ecto.Changeset.change(role: :sysop) |> FogletBbs.Repo.update()
@@ -132,6 +143,18 @@ defmodule Foglet.TUI.Screens.RegisterTest do
                  }
                )
              )
+    end
+
+    test "invite and combined steps render in shared auth cards" do
+      [invite_panel] = Register.render(invite_state(), context("invite_only")) |> collect_panels()
+      assert invite_panel.attrs.title == "Invite required"
+      assert invite_panel.attrs.width == 46
+
+      [combined_panel] =
+        Register.render(combined_state([], :handle), context("open")) |> collect_panels()
+
+      assert combined_panel.attrs.title == "Create account"
+      assert combined_panel.attrs.width == 46
     end
   end
 

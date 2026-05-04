@@ -62,6 +62,17 @@ defmodule Foglet.TUI.Screens.VerifyTest do
 
   defp run_task(%Effect{payload: %{fun: fun}}), do: fun.()
 
+  defp collect_panels(tree), do: tree |> collect_panels([]) |> Enum.reverse()
+
+  defp collect_panels(nil, acc), do: acc
+  defp collect_panels(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_panels/2)
+
+  defp collect_panels(%{type: :panel, children: children} = node, acc),
+    do: collect_panels(children, [node | acc])
+
+  defp collect_panels(%{children: children}, acc), do: collect_panels(children, acc)
+  defp collect_panels(_other, acc), do: acc
+
   setup do
     original_delivery_mode = Foglet.Config.get("delivery_mode", "no_email")
     original_resend_cooldown = Foglet.Config.get("email_verify_resend_cooldown_seconds", 60)
@@ -89,6 +100,15 @@ defmodule Foglet.TUI.Screens.VerifyTest do
 
     test "Verify.render/2 renders local state without App-shaped input", %{user: user} do
       assert Verify.render(Verify.init(context(user)), context(user))
+    end
+
+    test "Verify.render/2 wraps code entry in the shared auth card", %{user: user} do
+      [panel] =
+        Verify.render(Verify.init(context(user)), context(user))
+        |> collect_panels()
+
+      assert panel.attrs.title == "Verify email"
+      assert panel.attrs.width == 46
     end
   end
 
