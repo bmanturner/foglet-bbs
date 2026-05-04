@@ -166,7 +166,7 @@ defmodule Foglet.TUI.Screens.DoorList do
   defp normalize_state(_state, %Context{} = context), do: init(context)
 
   defp visible_doors(%Context{} = context),
-    do: doors_module(context).list_visible(context.current_user)
+    do: doors_module(context).list_browsable(context.current_user)
 
   defp doors_module(%Context{domain: domain}) when is_map(domain) do
     case Map.get(domain, :doors) do

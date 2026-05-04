@@ -136,15 +136,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
       when c in ["d", "D"] do
     local_state = normalize_state(local_state, context)
 
-    cond do
-      Guest.guest?(context) ->
-        {local_state, [Effect.open_modal(Guest.denial_modal(:door))]}
-
-      Foglet.Doors.list_visible(context.current_user) == [] ->
-        {local_state, []}
-
-      true ->
-        {local_state, [Effect.navigate(:door_list)]}
+    if Foglet.Doors.list_browsable(context.current_user) == [] do
+      {local_state, []}
+    else
+      {local_state, [Effect.navigate(:door_list)]}
     end
   end
 
@@ -584,7 +579,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   @spec destination_visible?(atom(), map() | nil) :: boolean()
   defp destination_visible?(:always, _user), do: true
-  defp destination_visible?(:doors, user), do: Foglet.Doors.list_visible(user) != []
+  defp destination_visible?(:doors, user), do: Foglet.Doors.list_browsable(user) != []
   defp destination_visible?(:account, user), do: ShellVisibility.account_visible?(user)
   defp destination_visible?(:moderation, user), do: ShellVisibility.moderation_visible?(user)
   defp destination_visible?(:sysop, user), do: ShellVisibility.sysop_visible?(user)

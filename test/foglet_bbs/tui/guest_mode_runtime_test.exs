@@ -12,6 +12,7 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.ChatRoom
   alias Foglet.TUI.Screens.ChatRoom.State, as: ChatRoomState
+  alias Foglet.TUI.Screens.DoorList
   alias Foglet.TUI.Screens.Login
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.MainMenu
@@ -75,11 +76,12 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     assert session_state.handle == nil
   end
 
-  test "Main Menu hides write/account actions and denies compose and doors for guests" do
+  test "Main Menu hides write/account actions but routes guests to browsable doors" do
     context = Context.new(session_context: %{guest: true, guest_mode_enabled: true})
     local_state = MainMenuState.new(context)
 
     refute Enum.any?(MainMenu.visible_destinations(nil), fn {key, _label} -> key == "A" end)
+    assert Enum.any?(MainMenu.visible_destinations(nil), fn {key, _label} -> key == "D" end)
 
     refute Enum.any?(
              MainMenu.visible_actions(%{current_user: nil, recent_oneliners: []}),
@@ -93,11 +95,48 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     assert compose_modal.type == :error
 
     {_, door_effects} = MainMenu.update({:key, %{key: :char, char: "D"}}, local_state, context)
-    assert [%Effect{type: :modal, payload: {:open, door_modal}}] = door_effects
-    assert door_modal.type == :error
+    assert [%Effect{type: :navigate, payload: %{screen: :door_list}}] = door_effects
   end
 
-  test "App runtime denies direct guest routes and door launch effects" do
+  test "guests can navigate to Door Games list and launch attempts stay denied" do
+    context = Context.new(session_context: %{guest: true, guest_mode_enabled: true})
+    state = DoorList.init(context)
+
+    assert [_ | _] = state.doors
+
+    {state, effects} = DoorList.update({:key, %{key: :enter}}, state, context)
+    assert [%Effect{type: :modal, payload: {:open, modal}}] = effects
+    assert modal.type == :error
+
+    door = hd(state.doors)
+
+    {^state, effects} =
+      DoorList.update({:modal_submit, :launch_door, %{door_id: door.id}}, state, context)
+
+    assert [%Effect{type: :modal, payload: {:open, modal}}] = effects
+    assert modal.type == :error
+  end
+
+  test "App runtime allows direct guest Door Games routes but denies launches" do
+    state = %App{
+      session_context: %{guest: true, guest_mode_enabled: true},
+      current_screen: :main_menu,
+      session_pid: self(),
+      terminal_size: {80, 24}
+    }
+
+    {state, []} = Effects.apply_effect(state, Effect.navigate(:door_list))
+    assert state.current_screen == :door_list
+    assert state.modal == nil
+
+    manifest = %Manifest{id: "demo", slug: "demo", display_name: "Demo", runtime: :native_elixir}
+
+    {state, []} = Effects.apply_effect(state, Effect.launch_door(manifest))
+    assert state.modal.type == :error
+    refute_received {:foglet_launch_door, _, _, _}
+  end
+
+  test "App runtime denies direct guest write routes" do
     state = %App{
       session_context: %{guest: true, guest_mode_enabled: true},
       current_screen: :main_menu

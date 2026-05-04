@@ -70,6 +70,14 @@ defmodule Foglet.DoorsTest do
     end
   end
 
+  describe "list_browsable/1" do
+    test "keeps anonymous browsing separate from launch authorization" do
+      assert Doors.list_visible(nil) == []
+      assert [_ | _] = Doors.list_browsable(nil)
+      assert Enum.all?(Doors.list_browsable(nil), &(&1.visibility == :members))
+    end
+  end
+
   describe "launch audit redaction" do
     test "redacts non-allowlisted environment metadata and keeps only safe status fields" do
       {:ok, manifest} = Doors.validate_manifest(@valid_manifest)

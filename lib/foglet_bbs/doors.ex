@@ -73,6 +73,15 @@ defmodule Foglet.Doors do
     |> Enum.filter(&launchable?(user, &1))
   end
 
+  @doc "Returns door manifests the actor may browse in the Door Games list."
+  @spec list_browsable(User.t() | nil) :: [Manifest.t()]
+  def list_browsable(nil) do
+    list_manifests()
+    |> Enum.filter(&(&1.visibility == :members))
+  end
+
+  def list_browsable(user), do: list_visible(user)
+
   @doc "Looks up one visible door for an actor by id or slug."
   @spec get_visible(User.t() | nil, String.t()) :: {:ok, Manifest.t()} | {:error, :not_found}
   def get_visible(user, id_or_slug) when is_binary(id_or_slug) do
