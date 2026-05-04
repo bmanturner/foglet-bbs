@@ -113,14 +113,29 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       },
       %{
         label: "Tabs",
-        commands: [
-          %{key: "←/→", label: "Switch", priority: 10},
-          # FOG-693: pin `1-N Jump` to priority 0 so the Phase 29 D-26/SYSOP-07
-          # Jump advert survives 64x22 compaction even when SITE/LIMITS form
-          # Save/Cancel (priority 5) compete for keybar real estate.
-          %{key: jump_hint, label: "Jump", priority: 0}
-        ]
+        commands: tabs_commands_for(label, jump_hint)
       }
+    ]
+  end
+
+  # FOG-739: LIMITS routes plain digits 0–9 into the focused numeric draft
+  # (`Foglet.TUI.Screens.Sysop.digit_consumed_by_active_tab?/2`), so the global
+  # `1-N Jump` shortcut is not actually wired up while the form has focus.
+  # Advertising it caused sysops to press `4` expecting SYSTEM and silently
+  # extend `Post length limit`. Suppress the Jump hint on LIMITS — arrow-key
+  # tab navigation still works and remains advertised.
+  #
+  # SITE keeps the Jump advert (FOG-693): pinned at priority 0 so it survives
+  # 64x22 compaction even when Save/Cancel (priority 5) compete for keybar
+  # real estate.
+  defp tabs_commands_for("LIMITS", _jump_hint) do
+    [%{key: "←/→", label: "Switch", priority: 10}]
+  end
+
+  defp tabs_commands_for(_label, jump_hint) do
+    [
+      %{key: "←/→", label: "Switch", priority: 10},
+      %{key: jump_hint, label: "Jump", priority: 0}
     ]
   end
 
