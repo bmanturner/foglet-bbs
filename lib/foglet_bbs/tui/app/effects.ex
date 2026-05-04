@@ -8,6 +8,8 @@ defmodule Foglet.TUI.App.Effects do
   effects only route, schedule, publish, notify, and return runtime commands.
   """
 
+  require Logger
+
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
@@ -114,7 +116,20 @@ defmodule Foglet.TUI.App.Effects do
         type: :publish,
         payload: %{topic: topic, message: message}
       }) do
-    _ = Phoenix.PubSub.broadcast(FogletBbs.PubSub, topic, message)
+    case pubsub_module().broadcast(FogletBbs.PubSub, topic, message) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        # Privacy-safe (FOG-675): log only the broadcast topic plus a
+        # low-cardinality kind atom derived from the payload's tag. The raw
+        # `message` (which may carry chat content, screen state, or
+        # session-specific values) is never written to logs.
+        Logger.warning(
+          "TUI.App.Effects publish broadcast failed: topic=#{inspect(topic)} " <>
+            "message_kind=#{inspect(publish_message_kind(message))} reason=#{inspect(reason)}"
+        )
+    end
 
     {state, []}
   end
@@ -163,6 +178,23 @@ defmodule Foglet.TUI.App.Effects do
       {next_state, cmds} = apply_effect(acc_state, effect)
       {next_state, acc_cmds ++ cmds}
     end)
+  end
+
+  # Low-cardinality kind atom for failure logs. Never returns the raw payload.
+  defp publish_message_kind(message) when is_tuple(message) and tuple_size(message) > 0 do
+    case elem(message, 0) do
+      tag when is_atom(tag) -> tag
+      _ -> :unknown
+    end
+  end
+
+  defp publish_message_kind(message) when is_atom(message), do: message
+  defp publish_message_kind(_message), do: :unknown
+
+  # Test seam (FOG-675): swappable via Application env so a stub broadcast
+  # implementation can return `{:error, _}` and exercise the warning path.
+  defp pubsub_module do
+    Application.get_env(:foglet_bbs, :pubsub_module, Phoenix.PubSub)
   end
 
   defp navigate(%App{} = state, screen, params) do

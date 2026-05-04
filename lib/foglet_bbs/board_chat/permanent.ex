@@ -15,6 +15,8 @@ defmodule Foglet.BoardChat.Permanent do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
   alias Ecto.Changeset
   alias Foglet.Accounts.User
   alias Foglet.BoardChat.Message
@@ -94,13 +96,34 @@ defmodule Foglet.BoardChat.Permanent do
   defp ensure_permanent(%Board{}), do: {:error, :not_permanent}
 
   defp broadcast_new_message(board_id, %Message{} = message) do
-    _ =
-      Phoenix.PubSub.broadcast(
-        FogletBbs.PubSub,
-        Foglet.PubSub.board_chat_topic(board_id),
-        {:board_chat, :new_message, message}
-      )
+    topic = Foglet.PubSub.board_chat_topic(board_id)
 
-    :ok
+    case pubsub_module().broadcast(
+           FogletBbs.PubSub,
+           topic,
+           {:board_chat, :new_message, message}
+         ) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        # Privacy-safe (FOG-675): only the broadcast topic and a fixed
+        # low-cardinality message-type atom are logged; the message body,
+        # author, and recipient/subscriber list are intentionally omitted so
+        # operator logs cannot leak chat content during pubsub outages.
+        Logger.warning(
+          "BoardChat.Permanent broadcast failed: topic=#{inspect(topic)} " <>
+            "message_type=:board_chat_new_message reason=#{inspect(reason)}"
+        )
+
+        :ok
+    end
+  end
+
+  # Test seam (FOG-675): swappable via Application env so a stub broadcast
+  # implementation can return `{:error, _}` and exercise the warning path
+  # without tearing down `Phoenix.PubSub` or its `:pg` scope.
+  defp pubsub_module do
+    Application.get_env(:foglet_bbs, :pubsub_module, Phoenix.PubSub)
   end
 end
