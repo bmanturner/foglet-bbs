@@ -14,6 +14,21 @@ Foglet's first Door Games contract supports three registration styles:
 
 The first classic format is `CHAIN.TXT`. `DOOR.SYS` and `DORINFO.DEF` are intentionally left behind the same adapter boundary for later work.
 
+For external and classic manifests with `pty?: true`, the supported backend is
+Foglet's own helper at `priv/doors/pty/foglet_pty_adapter.py`. The runner starts
+that helper through an Erlang Port; the helper opens the child PTY, launches the
+configured `command` with structured `args`, bridges input/output with framed
+messages, and applies terminal resize using `TIOCSWINSZ` on POSIX hosts. If the
+helper is unavailable, Foglet may degrade to `script(1)` when present, then to a
+plain pipe. That fallback is for demos/development only: it does not provide the
+same resize or process-group cleanup semantics.
+
+Deployment requirement: releases/Docker images that enable `external_pty` doors
+need Python 3 and `priv/doors/pty/foglet_pty_adapter.py`. The project Dockerfile
+installs Python 3 in the final runtime image and includes the helper via the
+release `priv` tree. FOG-522 still owns
+stronger sandboxing/process isolation; this PTY helper is not a sandbox.
+
 Door manifests are configuration data in this slice. They are not stored in database tables yet, and there is no in-BBS catalog editor yet.
 
 ## Safety model
@@ -30,7 +45,7 @@ Foglet narrows what a door receives:
 
 Foglet does not pass database credentials, app secrets, API keys, private tokens, full user structs, or full session structs to door processes.
 
-This is not a full sandbox. The first slice uses allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. Stronger process isolation is future hardening, not a guarantee in this guide.
+This is not a full sandbox. The first slice uses allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. The helper launches the door in a child process group so timeout and disconnect cleanup can terminate the helper-owned door tree, but it does not isolate filesystem, network, uid/gid, or resource access. Stronger process isolation remains future hardening in FOG-522, not a guarantee in this guide.
 
 ## Door manifest fields
 
@@ -58,7 +73,7 @@ Optional fields:
 - `args` — list of string arguments
 - `env_allowlist` — uppercase environment variable names safe to expose
 - `idle_timeout_ms` — optional positive integer idle timeout in milliseconds
-- `pty?` — whether the external runner should request PTY-style wrapping when supported
+- `pty?` — whether the external runner should request the supported helper-backed PTY path (`true`) or a plain pipe (`false`)
 
 Do not put secrets in `env_allowlist`. Foglet rejects known sensitive names such as database URLs, secret key bases, tokens, and API keys.
 
@@ -145,6 +160,11 @@ Example manifest:
   pty?: true
 }
 ```
+
+When `pty?: true`, Foglet passes `command` and `args` to the helper as separate
+arguments rather than building the production launch path with shell quoting.
+Wrappers can still be shell scripts, but shell interpretation is then explicit in
+the wrapper you own.
 
 The runner adds Foglet metadata for the external process:
 

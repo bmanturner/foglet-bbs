@@ -100,6 +100,59 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert window_event.data == %{width: width, height: height}
     end
 
+    test ":window_change during an active door only resizes the door runner" do
+      width = 64
+      height = 22
+
+      state = %CLIHandler{
+        channel_id: 1,
+        dispatcher_pid: self(),
+        door_runner_pid: self(),
+        width: 80,
+        height: 24
+      }
+
+      assert {:ok, returned_state} =
+               CLIHandler.handle_ssh_msg(
+                 {:ssh_cm, make_ref(), {:window_change, 1, width, height, 0, 0}},
+                 state
+               )
+
+      assert returned_state.width == width
+      assert returned_state.height == height
+      assert_received {:"$gen_cast", {:resize, {^width, ^height}}}
+      refute_received {:"$gen_cast", {:dispatch, _event}}
+    end
+
+    test "matching door_exited clears active door after replaying current window size" do
+      door_pid = self()
+      door_id = "external-echo"
+
+      state = %CLIHandler{
+        channel_id: 1,
+        dispatcher_pid: self(),
+        door_runner_pid: door_pid,
+        width: 64,
+        height: 22
+      }
+
+      assert {:ok, returned_state} =
+               CLIHandler.handle_msg({:door_exited, door_pid, door_id, :normal, 0}, state)
+
+      assert returned_state.door_runner_pid == nil
+      assert_received {:"$gen_cast", {:dispatch, %{type: :resize} = resize_event}}
+      assert resize_event.data == %{width: 64, height: 22}
+      assert_received {:"$gen_cast", {:dispatch, %{type: :window} = window_event}}
+      assert window_event.data == %{width: 64, height: 22}
+
+      assert_received {:"$gen_cast",
+                       {:dispatch,
+                        %{
+                          type: :foglet_runtime,
+                          data: %{message: {:door_exited, ^door_id, :normal, 0}}
+                        }}}
+    end
+
     test ":closed stops the guest session and returns a channel stop tuple" do
       reset_cli_counter!()
       {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()

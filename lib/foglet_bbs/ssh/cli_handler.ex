@@ -120,6 +120,7 @@ defmodule Foglet.SSH.CLIHandler do
   def handle_msg({:door_exited, pid, door_id, reason, status}, %{door_runner_pid: pid} = state) do
     message = "\r\n[Door #{door_id} exited: #{inspect(reason)}#{exit_status_suffix(status)}]\r\n"
     _ = safe_ssh_send(state.connection_ref, state.channel_id, message)
+    dispatch_current_window(state)
     dispatch_raw(state.dispatcher_pid, {:door_exited, door_id, reason, status})
     {:ok, %{state | door_runner_pid: nil}}
   end
@@ -193,28 +194,26 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:window_change, _ch, width, height, _pxw, _pxh}}, state) do
-    # Two dispatches, on purpose:
-    #   1. :resize hits Raxol's dispatcher system-event path
-    #      (vendor/raxol/.../dispatcher.ex:615) — resizes the rendering engine
-    #      but never reaches App.update/2.
-    #   2. :window is not a system event, so it flows through to App.update/2
-    #      where normalize_message/1 turns it into {:window_change, w, h} and
-    #      do_update/2 updates state.terminal_size. Without this second
-    #      dispatch, SizeGate.too_small? stays stuck on the initial PTY size
-    #      and the gate never triggers on resize.
-    resize = Raxol.Core.Events.Event.new(:resize, %{width: width, height: height})
-    window = Raxol.Core.Events.Event.new(:window, %{width: width, height: height})
-    dispatch_events(state.dispatcher_pid, [resize, window])
-
     if active_door?(state) do
       Foglet.Doors.Runner.resize(state.door_runner_pid, {width, height})
+    else
+      # Two dispatches, on purpose:
+      #   1. :resize hits Raxol's dispatcher system-event path
+      #      (vendor/raxol/.../dispatcher.ex:615) — resizes the rendering engine
+      #      but never reaches App.update/2.
+      #   2. :window is not a system event, so it flows through to App.update/2
+      #      where normalize_message/1 turns it into {:window_change, w, h} and
+      #      do_update/2 updates state.terminal_size. Without this second
+      #      dispatch, SizeGate.too_small? stays stuck on the initial PTY size
+      #      and the gate never triggers on resize.
+      dispatch_window(state.dispatcher_pid, width, height)
     end
 
     # IN-01: Session.set_terminal_size/2 is owned by the App's
-    # do_update({:window_change, …}, …) handler, which already fires from the
-    # :window event dispatched above. Casting here too would double-write the
-    # same value and obscure ownership of the "session knows its size"
-    # invariant.
+    # do_update({:window_change, …}, …) handler. While a door is active we
+    # intentionally suppress App/Raxol resize dispatches so Foglet does not
+    # repaint over the child PTY; the current size is replayed when the door
+    # exits before Foglet renders its return modal.
 
     {:ok, %{state | width: width, height: height}}
   end
@@ -537,6 +536,19 @@ defmodule Foglet.SSH.CLIHandler do
   defp dispatch_events(dispatcher_pid, events) when is_pid(dispatcher_pid) do
     Enum.each(events, &GenServer.cast(dispatcher_pid, {:dispatch, &1}))
   end
+
+  defp dispatch_window(dispatcher_pid, width, height) do
+    resize = Raxol.Core.Events.Event.new(:resize, %{width: width, height: height})
+    window = Raxol.Core.Events.Event.new(:window, %{width: width, height: height})
+    dispatch_events(dispatcher_pid, [resize, window])
+  end
+
+  defp dispatch_current_window(%{width: width, height: height, dispatcher_pid: dispatcher_pid})
+       when is_integer(width) and width > 0 and is_integer(height) and height > 0 do
+    dispatch_window(dispatcher_pid, width, height)
+  end
+
+  defp dispatch_current_window(_state), do: :ok
 
   defp dispatch_raw(nil, _message), do: :ok
 

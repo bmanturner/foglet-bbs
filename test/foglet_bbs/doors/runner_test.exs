@@ -135,12 +135,15 @@ defmodule Foglet.Doors.RunnerTest do
       ref = Process.monitor(pid)
       assert_receive {:door_started, ^pid, "external-env"}
       assert_door_output_contains("external-env:alice:132")
-      assert %{status: :running} = Runner.snapshot(pid)
+      assert %{status: :running, pty_backend: :helper} = Runner.snapshot(pid)
 
-      Runner.input(pid, "hello\n")
+      # SSH clients send Enter as carriage return. The helper must preserve the
+      # child PTY's default CR->NL translation so shell/readline-style doors see
+      # a complete line.
+      Runner.input(pid, "hello\r")
       assert_door_output_contains("external> hello")
 
-      Runner.input(pid, "/quit\n")
+      Runner.input(pid, "/quit\r")
       assert_door_output_contains("Leaving External Echo.")
 
       assert_receive {:door_exited, ^pid, "external-env", :normal, 0}, @event_timeout
@@ -222,30 +225,106 @@ defmodule Foglet.Doors.RunnerTest do
       refute os_process_alive?(os_pid)
     end
 
-    test "resize is recorded and forwarded to the runtime owner for adapter-specific PTY handling" do
+    test "helper-backed PTY propagates resize to a full-screen child" do
       {:ok, manifest} =
         manifest(%{
           id: "external-resize",
           display_name: "External Resize",
           runtime: :external_pty,
-          command: "/bin/sleep",
-          working_dir: "/tmp",
-          args: ["30"],
+          command: fullscreen_probe_path(),
+          working_dir: Path.expand("priv/doors/demo"),
+          args: [],
           timeout_ms: 5_000,
-          pty?: false
+          pty?: true
         })
 
       {:ok, pid} =
         DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
 
       assert_receive {:door_started, ^pid, "external-resize"}
+      assert_door_output_contains("fullscreen-probe:80x24")
+      assert %{pty_backend: :helper} = Runner.snapshot(pid)
 
       Runner.resize(pid, {90, 20})
       assert_receive {:door_resize, ^pid, "external-resize", {90, 20}}
       assert %{last_resize: {90, 20}} = Runner.snapshot(pid)
+      assert_door_output_contains("resize:90x20")
 
-      Runner.disconnect(pid)
-      assert_receive {:door_exited, ^pid, "external-resize", :disconnect, nil}
+      ref = Process.monitor(pid)
+      Runner.input(pid, "/quit\n")
+      assert_door_output_contains("leaving-fullscreen")
+      assert_receive {:door_exited, ^pid, "external-resize", :normal, 0}
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+    end
+
+    test "missing helper degrades to script fallback for PTY manifests" do
+      previous = Application.get_env(:foglet_bbs, :door_pty_helper_path)
+      Application.put_env(:foglet_bbs, :door_pty_helper_path, "/tmp/foglet-missing-pty-helper")
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:foglet_bbs, :door_pty_helper_path, previous)
+        else
+          Application.delete_env(:foglet_bbs, :door_pty_helper_path)
+        end
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-fallback",
+          display_name: "External Fallback",
+          runtime: :external_pty,
+          command: external_demo_path(),
+          working_dir: Path.expand("priv/doors/demo"),
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      assert_receive {:door_started, ^pid, "external-fallback"}
+      assert %{pty_backend: backend} = Runner.snapshot(pid)
+      assert backend in [:script_fallback, :plain]
+
+      ref = Process.monitor(pid)
+      Runner.input(pid, "/quit\n")
+      assert_receive {:door_exited, ^pid, "external-fallback", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "helper crash is reported without leaking the runner" do
+      previous = Application.get_env(:foglet_bbs, :door_pty_helper_path)
+      Application.put_env(:foglet_bbs, :door_pty_helper_path, "/bin/false")
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:foglet_bbs, :door_pty_helper_path, previous)
+        else
+          Application.delete_env(:foglet_bbs, :door_pty_helper_path)
+        end
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-helper-crash",
+          display_name: "External Helper Crash",
+          runtime: :external_pty,
+          command: external_demo_path(),
+          working_dir: Path.expand("priv/doors/demo"),
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "external-helper-crash"}
+      assert_receive {:door_exited, ^pid, "external-helper-crash", :crash, 1}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, {:door_helper_exit, 1}}, @event_timeout
     end
   end
 
@@ -278,6 +357,7 @@ defmodule Foglet.Doors.RunnerTest do
   end
 
   defp external_demo_path, do: Path.expand("priv/doors/demo/external_echo.sh")
+  defp fullscreen_probe_path, do: Path.expand("priv/doors/demo/fullscreen_probe.py")
 
   defp os_process_alive?(pid) when is_integer(pid) do
     case System.cmd("kill", ["-0", Integer.to_string(pid)], stderr_to_stdout: true) do
