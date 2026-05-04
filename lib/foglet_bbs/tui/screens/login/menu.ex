@@ -26,9 +26,9 @@ defmodule Foglet.TUI.Screens.Login.Menu do
   def handle_key(%{key: :char, char: c}, state) when c in ["f", "F"],
     do: maybe_enter_reset_request(state)
 
-  # D-15: [T] Enter reset token is reachable directly from the Login menu so
-  # users with an operator-issued raw reset token do not need to walk through
-  # the Forgot Password flow first.
+  # D-15: T remains a hidden Login menu shortcut so users with an
+  # operator-issued raw reset token can still jump directly to the token pane;
+  # the public command bar advertises only the unified Forgot Password entry.
   def handle_key(%{key: :char, char: c}, state) when c in ["t", "T"],
     do: enter_reset_consume(state)
 

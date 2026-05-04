@@ -179,7 +179,6 @@ defmodule Foglet.TUI.Screens.Login.Render do
     |> base_menu_keys()
     |> maybe_add_guest_key(state)
     |> add_reset_key()
-    |> add_reset_consume_key()
   end
 
   defp menu_commands(mode, state) do
@@ -203,10 +202,6 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   defp add_reset_key(keys) do
     keys ++ [{"F", "Forgot password"}]
-  end
-
-  defp add_reset_consume_key(keys) do
-    List.insert_at(keys, max(length(keys) - 1, 0), {"T", "Enter reset token"})
   end
 
   defp render_login_form(state, theme) do
