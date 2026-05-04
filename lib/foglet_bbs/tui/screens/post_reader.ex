@@ -238,6 +238,22 @@ defmodule Foglet.TUI.Screens.PostReader do
     advance_local_post(state, -1, context)
   end
 
+  def update({:key, %{key: :down}}, %State{} = state, %Context{} = context) do
+    {move_action_target_for_visible_post(state, 1, context), []}
+  end
+
+  def update({:key, %{key: :tab}}, %State{} = state, %Context{} = context) do
+    {move_action_target_for_visible_post(state, 1, context), []}
+  end
+
+  def update({:key, %{key: :up}}, %State{} = state, %Context{} = context) do
+    {move_action_target_for_visible_post(state, -1, context), []}
+  end
+
+  def update({:key, %{key: :backtab}}, %State{} = state, %Context{} = context) do
+    {move_action_target_for_visible_post(state, -1, context), []}
+  end
+
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["j", "J"] do
     {scroll_local_post(state, 1, context), []}
@@ -1058,8 +1074,25 @@ defmodule Foglet.TUI.Screens.PostReader do
           {new_vp, _cmds} = Viewport.update({:scroll_by, delta}, new_vp)
           %{state | viewport: new_vp}
         else
-          move_selected_action_post(state, screenful.indexes, delta)
+          state
         end
+    end
+  end
+
+  defp move_action_target_for_visible_post(%State{posts: posts} = state, _delta, _context)
+       when posts in [nil, []] do
+    state
+  end
+
+  defp move_action_target_for_visible_post(%State{} = state, delta, %Context{} = context) do
+    screenful = visible_screenful(state, context)
+
+    case screenful do
+      %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
+        move_selected_action_post(state, indexes, delta)
+
+      _other ->
+        state
     end
   end
 

@@ -1676,7 +1676,30 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # =================================================================
 
   describe "FOG-580 visible-post action selection" do
-    test "j/k move the selected action target inside a packed screenful without moving the page anchor" do
+    test "down/up move the selected action target inside a packed screenful without moving the page anchor" do
+      posts =
+        Enum.map(1..4, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+
+      assert {:update, s1, []} = handle_key_screen(%{key: :down}, s)
+      ss1 = s1.screen_state[:post_reader]
+
+      assert ss1.selected_post_index == 0
+      assert ss1.selected_action_post_index == 1
+      assert PostReader.selected_action_post(ss1).id == "p2"
+
+      assert {:update, s2, []} = handle_key_screen(%{key: :up}, s1)
+      ss2 = s2.screen_state[:post_reader]
+
+      assert ss2.selected_post_index == 0
+      assert ss2.selected_action_post_index == 0
+      assert PostReader.selected_action_post(ss2).id == "p1"
+    end
+
+    test "j/k do not change packed visible-post selection" do
       posts =
         Enum.map(1..4, fn index ->
           p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
@@ -1685,18 +1708,10 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       s = p2_state(%{posts: posts, terminal_size: {80, 24}})
 
       assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
-      ss1 = s1.screen_state[:post_reader]
-
-      assert ss1.selected_post_index == 0
-      assert ss1.selected_action_post_index == 1
-      assert PostReader.selected_action_post(ss1).id == "p2"
+      assert s1.screen_state[:post_reader].selected_action_post_index == 0
 
       assert {:update, s2, []} = handle_key_screen(%{key: :char, char: "k"}, s1)
-      ss2 = s2.screen_state[:post_reader]
-
-      assert ss2.selected_post_index == 0
-      assert ss2.selected_action_post_index == 0
-      assert PostReader.selected_action_post(ss2).id == "p1"
+      assert s2.screen_state[:post_reader].selected_action_post_index == 0
     end
 
     test "reply navigation targets the selected visible post instead of the screenful anchor" do
@@ -1706,7 +1721,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         end)
 
       s = p2_state(%{posts: posts, terminal_size: {80, 24}})
-      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s1, []} = handle_key_screen(%{key: :down}, s)
       {:update, s2, []} = handle_key_screen(%{key: :char, char: "r"}, s1)
 
       assert s2.current_screen == :post_composer
@@ -1721,7 +1736,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         end)
 
       s = p2_state(%{posts: posts, terminal_size: {80, 24}})
-      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s1, []} = handle_key_screen(%{key: :down}, s)
       {:update, s2, []} = handle_key_screen(%{key: :char, char: "n"}, s1)
       ss = s2.screen_state[:post_reader]
 
@@ -1730,12 +1745,14 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert PostReader.selected_action_post(ss).id == "p4"
     end
 
-    test "long-post mode keeps j/k as viewport scroll and targets the selected post" do
+    test "long-post mode keeps j/k as viewport scroll and up/down do not change the reply target" do
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
       s = p2_state(%{posts: [p2_post(id: "p1", body: body)], terminal_size: {80, 12}})
 
       assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
-      ss = s1.screen_state[:post_reader]
+      assert {:update, s2, []} = handle_key_screen(%{key: :down}, s1)
+      assert {:update, s3, []} = handle_key_screen(%{key: :up}, s2)
+      ss = s3.screen_state[:post_reader]
 
       assert ss.viewport.scroll_top == 1
       assert ss.selected_post_index == 0
@@ -1750,7 +1767,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         end)
 
       s = p2_state(%{posts: posts, terminal_size: {80, 24}})
-      {:update, s1, []} = handle_key_screen(%{key: :char, char: "j"}, s)
+      {:update, s1, []} = handle_key_screen(%{key: :down}, s)
 
       rows80 = s1 |> render_screen() |> rendered_rows({80, 24})
       selected_row80 = row_index_containing!(rows80, "▶ Selected")
@@ -1774,6 +1791,27 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       flat = s |> render_screen() |> flatten_text()
 
       refute flat =~ "Selected — R replies here"
+    end
+
+    test "packed keybar advertises up/down selection at 80x24 and 64x22 without repurposing j/k" do
+      posts =
+        Enum.map(1..3, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      s80 = p2_state(%{posts: posts, terminal_size: {80, 24}})
+      flat80 = s80 |> render_screen() |> flatten_text()
+
+      assert flat80 =~ "Up/Down"
+      assert flat80 =~ "Select"
+      refute flat80 =~ "J/KSelect/Scroll"
+
+      s64 = %{s80 | terminal_size: {64, 22}}
+      flat64 = s64 |> render_screen() |> flatten_text()
+
+      assert flat64 =~ "Up/Down"
+      assert flat64 =~ "Select"
+      refute flat64 =~ "J/K"
     end
   end
 

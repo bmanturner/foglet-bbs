@@ -34,11 +34,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     ScreenFrame.render(frame_state, chrome, post_content, [
       %{
         label: "Navigate",
-        commands: [
-          %{key: "N", label: "Next", priority: 10},
-          %{key: "P", label: "Prev", priority: 10},
-          %{key: "J/K", label: "Select/Scroll", priority: 10}
-        ]
+        commands: navigation_commands(state, context)
       },
       %{
         label: "Actions",
@@ -54,6 +50,21 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   defp reply_state(true, _archived?), do: :locked
   defp reply_state(false, true), do: :archived
   defp reply_state(false, false), do: :open
+
+  defp navigation_commands(%State{} = state, %Context{} = context) do
+    base_commands = [
+      %{key: "N", label: "Next", priority: 10},
+      %{key: "P", label: "Prev", priority: 10}
+    ]
+
+    case PostReader.visible_screenful(state, context) do
+      %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
+        [%{key: "Up/Down", label: "Select", priority: 6} | base_commands]
+
+      _single_or_long ->
+        base_commands ++ [%{key: "J/K", label: "Scroll", priority: 10}]
+    end
+  end
 
   defp reply_command(:locked), do: %{key: "R", label: "Reply (locked)", priority: 5}
   defp reply_command(:archived), do: %{key: "R", label: "Reply (archived)", priority: 5}
