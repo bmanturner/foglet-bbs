@@ -44,15 +44,17 @@ defmodule Foglet.TUI.Screens.SysopTest do
     %Foglet.TUI.App{
       current_screen: :sysop,
       current_user: user,
-      session_context: %{registration_mode: "invite_only"},
+      session_context: %{},
       terminal_size: {80, 24},
       screen_state: %{}
     }
     |> Map.from_struct()
   end
 
-  defp with_invite_policy(state, policy) do
-    put_in(state, [:session_context, :invite_code_generators], policy)
+  defp with_invite_policy(state, policy, registration_mode \\ "invite_only") do
+    state
+    |> put_in([:session_context, :invite_code_generators], policy)
+    |> put_in([:session_context, :registration_mode], registration_mode)
   end
 
   defp sysop_context(state) do
@@ -201,8 +203,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
           current_user: user,
           route: :sysop,
           session_context: %{
-            registration_mode: "invite_only",
-            invite_code_generators: "sysop_only"
+            invite_code_generators: "sysop_only",
+            registration_mode: "invite_only"
           }
         )
 
@@ -859,13 +861,26 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
   describe "handle_key/2" do
     setup %{state: state} do
-      state = put_in(state, [:screen_state, :sysop], SysopState.new())
+      ss =
+        SysopState.new(current_user: state.current_user, session_context: state.session_context)
+
+      state = put_in(state, [:screen_state, :sysop], ss)
       %{state: state}
     end
 
-    test "advances through visible tabs with Right arrow", %{
+    test "advances through invite-only visible tabs with Right arrow", %{
       state: state
     } do
+      state = with_invite_policy(state, "sysop_only", "invite_only")
+
+      ss =
+        SysopState.new(
+          current_user: state.current_user,
+          session_context: state.session_context
+        )
+
+      state = put_in(state, [:screen_state, :sysop], ss)
+
       {state1, tab1} =
         case handle_sysop_key(%{key: :right}, state) do
           {:update, s, _} -> {s, s.screen_state.sysop.active_tab}
