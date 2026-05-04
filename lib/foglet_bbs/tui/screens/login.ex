@@ -40,6 +40,7 @@ defmodule Foglet.TUI.Screens.Login do
     MenuScramble,
     Render,
     ResetConsume,
+    ResetRecovery,
     ResetRequest
   }
 
@@ -99,6 +100,7 @@ defmodule Foglet.TUI.Screens.Login do
   defp reduce_key(state, key) do
     case LoginState.sub(state) do
       :login_form -> LoginForm.handle_key(key, state)
+      :reset_recovery -> ResetRecovery.handle_key(key, state)
       :reset_request -> ResetRequest.handle_key(key, state)
       :reset_consume -> ResetConsume.handle_key(key, state)
       _ -> Menu.handle_key(key, state)

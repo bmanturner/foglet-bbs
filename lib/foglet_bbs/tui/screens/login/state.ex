@@ -22,6 +22,15 @@ defmodule Foglet.TUI.Screens.Login.State do
       message: nil | String.t(),
       message_category: nil | atom()}
 
+  Unified reset recovery shape:
+    %{sub: :reset_recovery, active_pane: :request | :token,
+      focused_field: :identifier | :token | :password | :password_confirmation,
+      identifier_input: %TextInput{}, token_input: %TextInput{},
+      password_input: %TextInput{} (masked),
+      password_confirmation_input: %TextInput{} (masked),
+      error: nil | String.t(), message: nil | String.t(),
+      message_category: nil | atom()}
+
   Reset consume shape (Plan 31-03 / D-04, D-05):
     %{sub: :reset_consume,
       focused_field: :token | :password | :password_confirmation,
@@ -59,6 +68,23 @@ defmodule Foglet.TUI.Screens.Login.State do
       sub: :reset_request,
       focused_field: :identifier,
       identifier_input: TextInput.init([]),
+      error: nil,
+      message: nil,
+      message_category: nil
+    }
+  end
+
+  @doc "Builds the unified login recovery sub-state."
+  @spec reset_recovery(:request | :token) :: map()
+  def reset_recovery(active_pane \\ :request) when active_pane in [:request, :token] do
+    %{
+      sub: :reset_recovery,
+      active_pane: active_pane,
+      focused_field: recovery_focus(active_pane),
+      identifier_input: TextInput.init([]),
+      token_input: TextInput.init([]),
+      password_input: TextInput.init(mask_char: "*"),
+      password_confirmation_input: TextInput.init(mask_char: "*"),
       error: nil,
       message: nil,
       message_category: nil
@@ -190,4 +216,7 @@ defmodule Foglet.TUI.Screens.Login.State do
   def prev_reset_consume_focus(:token), do: :password_confirmation
   def prev_reset_consume_focus(:password_confirmation), do: :password
   def prev_reset_consume_focus(:password), do: :token
+
+  defp recovery_focus(:request), do: :identifier
+  defp recovery_focus(:token), do: :token
 end

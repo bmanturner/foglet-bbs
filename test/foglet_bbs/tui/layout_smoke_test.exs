@@ -2932,6 +2932,72 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   end
 
   # ---------------------------------------------------------------------------
+  # FOG-558 unified login recovery render behavior
+  # ---------------------------------------------------------------------------
+
+  describe "FOG-558 unified login recovery render behavior" do
+    defp recovery_state_at(active_pane, {width, height}) do
+      %App{
+        current_screen: :login,
+        session_context: %{registration_mode: "open"},
+        terminal_size: {width, height},
+        screen_state: %{login: Foglet.TUI.Screens.Login.State.reset_recovery(active_pane)}
+      }
+    end
+
+    defp row_for_text(positioned, text) do
+      positioned
+      |> content_text_elements()
+      |> Enum.find(fn el -> String.contains?(el.text, text) end)
+      |> case do
+        nil -> flunk("expected rendered layout to contain #{inspect(text)}")
+        el -> el.y
+      end
+    end
+
+    test "wide recovery layout places request and token panes side by side" do
+      positioned =
+        :request
+        |> recovery_state_at({132, 50})
+        |> render_login()
+        |> apply_at_size({132, 50})
+
+      assert row_for_text(positioned, "Email:") == row_for_text(positioned, "Token:")
+    end
+
+    test "compact recovery layout stacks token pane below request pane" do
+      positioned =
+        :request
+        |> recovery_state_at({64, 22})
+        |> render_login()
+        |> apply_at_size({64, 22})
+
+      assert row_for_text(positioned, "Token:") > row_for_text(positioned, "Email:")
+    end
+
+    test "recovery command bar primary action follows the active pane" do
+      request_bar =
+        :request
+        |> recovery_state_at({132, 50})
+        |> render_login()
+        |> apply_at_size({132, 50})
+        |> bottom_row_text()
+
+      token_bar =
+        :token
+        |> recovery_state_at({132, 50})
+        |> render_login()
+        |> apply_at_size({132, 50})
+        |> bottom_row_text()
+
+      assert String.contains?(request_bar, "Request token")
+      refute String.contains?(request_bar, "Set password")
+      assert String.contains?(token_bar, "Set password")
+      refute String.contains?(token_bar, "Request token")
+    end
+  end
+
+  # ---------------------------------------------------------------------------
   # Phase 31 reset copy compact rendering (D-12, D-14, D-18, AUTH-02, AUTH-03)
   # ---------------------------------------------------------------------------
 
