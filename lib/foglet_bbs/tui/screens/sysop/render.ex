@@ -115,7 +115,10 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
         label: "Tabs",
         commands: [
           %{key: "←/→", label: "Switch", priority: 10},
-          %{key: jump_hint, label: "Jump", priority: 10}
+          # FOG-693: pin `1-N Jump` to priority 0 so the Phase 29 D-26/SYSOP-07
+          # Jump advert survives 64x22 compaction even when SITE/LIMITS form
+          # Save/Cancel (priority 5) compete for keybar real estate.
+          %{key: jump_hint, label: "Jump", priority: 0}
         ]
       }
     ]

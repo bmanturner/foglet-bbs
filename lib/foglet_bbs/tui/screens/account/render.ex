@@ -44,11 +44,17 @@ defmodule Foglet.TUI.Screens.Account.Render do
   defp key_bar(ss), do: key_bar_for(ss, active_label(ss) || "PROFILE")
 
   defp key_bar_for(ss, active_label) do
+    # FOG-693: `1-N Jump` is a Phase 29 D-26/D-27 hard contract that must be
+    # visible at every supported width on Account tab list screens. Pin it to
+    # priority 0 (same retention tier as System Back) so the FOG-689
+    # Save/Cancel priority elevation does not crowd it out at 64x22. The
+    # `←/→ Tab` arrow advert remains priority 10 since it is dispensable
+    # under heavy compaction.
     tabs_group = %{
       label: "Tabs",
       commands: [
         %{key: "←/→", label: "Tab", priority: 10},
-        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 10}
+        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 0}
       ]
     }
 
