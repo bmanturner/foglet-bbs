@@ -280,13 +280,28 @@ defmodule Foglet.Boards do
   the board/category structs.
   """
   @spec board_directory_for(Foglet.Accounts.User.t() | nil) :: [directory_category()]
-  def board_directory_for(nil), do: []
+  def board_directory_for(nil) do
+    build_directory(
+      include_archived?: false,
+      subscribed_board_ids: MapSet.new(),
+      unread_counts: %{}
+    )
+  end
 
   def board_directory_for(actor) do
-    include_archived? = archived_visible_to?(actor)
     user_id = user_id(actor)
-    subscribed_board_ids = subscribed_board_ids(user_id)
-    unread_counts = unread_counts(user_id)
+
+    build_directory(
+      include_archived?: archived_visible_to?(actor),
+      subscribed_board_ids: subscribed_board_ids(user_id),
+      unread_counts: unread_counts(user_id)
+    )
+  end
+
+  defp build_directory(opts) do
+    include_archived? = Keyword.fetch!(opts, :include_archived?)
+    subscribed_board_ids = Keyword.fetch!(opts, :subscribed_board_ids)
+    unread_counts = Keyword.fetch!(opts, :unread_counts)
     last_post_ats = last_post_ats()
 
     [include_archived?: include_archived?]

@@ -76,7 +76,21 @@ defmodule Foglet.TUI.Screens.BoardListTest do
           current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
           terminal_size: {80, 24},
           route: :board_list,
-          domain: %{boards: FakeBoards}
+          domain: %{boards: FakeBoards},
+          session_context: %{guest: false, user: %Foglet.Accounts.User{id: "u1"}}
+        ],
+        attrs
+      )
+    )
+  end
+
+  defp guest_context(attrs \\ []) do
+    context(
+      Keyword.merge(
+        [
+          current_user: nil,
+          session_context: %{guest: true, user: nil, user_id: nil},
+          route: :board_list
         ],
         attrs
       )
@@ -253,6 +267,37 @@ defmodule Foglet.TUI.Screens.BoardListTest do
                  chat_message_ttl_seconds: nil
                }
              })
+  end
+
+  test "guest board list can open boards but cannot subscribe or unsubscribe" do
+    ctx = guest_context()
+    state = load_state(ctx) |> move_to_board(ctx, 2)
+
+    {state, [effect]} = BoardList.update({:key, %{key: :enter}}, state, ctx)
+
+    assert_navigate(effect, :thread_list, %{
+      board_id: "b2",
+      subscribed?: false,
+      board: %{
+        id: "b2",
+        name: "Tech",
+        slug: "tech",
+        archived: false,
+        postable_by: :members,
+        chat_enabled: false,
+        chat_storage_mode: nil,
+        chat_message_ttl_seconds: nil
+      }
+    })
+
+    {state, []} = BoardList.update({:key, %{key: :char, char: "s"}}, state, ctx)
+    assert state.feedback == "Guests can browse boards, but only registered users can subscribe."
+    assert state.last_op == nil
+
+    state = load_state(ctx) |> move_to_board(ctx, 1)
+    {state, []} = BoardList.update({:key, %{key: :char, char: "u"}}, state, ctx)
+    assert state.feedback == "Guests can browse boards, but only registered users can subscribe."
+    assert state.last_op == nil
   end
 
   test "'s' on an unsubscribed board emits subscribe task" do
