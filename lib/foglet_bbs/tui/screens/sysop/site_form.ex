@@ -70,6 +70,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     |> SState.build_modal_form()
     |> ModalForm.replay_submit_state(state.submit_state)
     |> apply_errors(state.errors)
+    |> set_focus(state.focused)
     |> ModalForm.render([theme: theme, show_title: false] ++ opts)
   end
 
