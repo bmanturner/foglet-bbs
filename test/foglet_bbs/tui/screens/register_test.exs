@@ -3,9 +3,10 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
   alias Foglet.Accounts.User
   alias Foglet.Config
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, TextWidth}
   alias Foglet.TUI.Screens.Register
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
+  alias Foglet.TUI.Widgets.Auth.AuthForm
   alias Foglet.TUI.Widgets.Input.TextInput
 
   defmodule AccountsRecorder do
@@ -95,6 +96,17 @@ defmodule Foglet.TUI.Screens.RegisterTest do
   defp collect_panels(%{children: children}, acc), do: collect_panels(children, acc)
   defp collect_panels(_other, acc), do: acc
 
+  defp collect_text(tree), do: tree |> collect_text([]) |> Enum.reverse()
+
+  defp collect_text(nil, acc), do: acc
+  defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
+
+  defp collect_text(%{type: :text, content: text}, acc) when is_binary(text),
+    do: [text | acc]
+
+  defp collect_text(%{children: children}, acc), do: collect_text(children, acc)
+  defp collect_text(_other, acc), do: acc
+
   defp sysop_user_fixture do
     user = user_fixture()
     {:ok, promoted} = user |> Ecto.Changeset.change(role: :sysop) |> FogletBbs.Repo.update()
@@ -143,6 +155,29 @@ defmodule Foglet.TUI.Screens.RegisterTest do
                  }
                )
              )
+    end
+
+    test "offered SSH key fingerprint line is truncated within the AuthForm panel" do
+      ctx =
+        context("open",
+          session_context: %{
+            registration_mode: "open",
+            offered_ssh_public_key: default_ssh_public_key()
+          }
+        )
+
+      tree = Register.render(Register.init(ctx), ctx)
+      max_width = AuthForm.default_width() - 2
+
+      fingerprint_line =
+        tree
+        |> collect_text()
+        |> Enum.find(&String.starts_with?(&1, "  Fingerprint: "))
+
+      assert fingerprint_line, "expected a Fingerprint: line in the rendered tree"
+      assert TextWidth.display_width(fingerprint_line) <= max_width
+      assert String.starts_with?(fingerprint_line, "  Fingerprint: SHA256:")
+      assert String.ends_with?(fingerprint_line, "…")
     end
 
     test "invite and combined steps render in shared auth cards" do

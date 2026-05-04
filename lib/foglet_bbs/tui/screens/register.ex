@@ -26,7 +26,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.{Accounts, Config}
   alias Foglet.Accounts.{Invites, SSHKey, Verification}
-  alias Foglet.TUI.{Context, Effect, Input}
+  alias Foglet.TUI.{Context, Effect, Input, TextWidth}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Theme
@@ -417,7 +417,7 @@ defmodule Foglet.TUI.Screens.Register do
           )
         ]
       end,
-      text("  Fingerprint: #{offered_key_fingerprint(offered_key)}", fg: theme.dim.fg)
+      text(fingerprint_line(offered_key), fg: theme.dim.fg)
     ]
   end
 
@@ -695,6 +695,13 @@ defmodule Foglet.TUI.Screens.Register do
       {:ok, fingerprint} -> fingerprint
       {:error, _reason} -> "unavailable"
     end
+  end
+
+  defp fingerprint_line(offered_key) do
+    TextWidth.truncate(
+      "  Fingerprint: #{offered_key_fingerprint(offered_key)}",
+      @auth_card_width - 2
+    )
   end
 
   defp domain_module(state, key) do
