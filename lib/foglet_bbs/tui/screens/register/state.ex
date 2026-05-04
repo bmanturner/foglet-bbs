@@ -142,11 +142,11 @@ defmodule Foglet.TUI.Screens.Register.State do
   @doc """
   Validates that an invite code string meets the accepted format.
 
-  Codes must be 16–64 alphanumeric characters (case-insensitive).
+  Codes must be exactly 6 case-sensitive alphanumeric characters.
   """
   @spec valid_invite_code?(String.t() | any()) :: boolean()
   def valid_invite_code?(code) when is_binary(code) and byte_size(code) > 0 do
-    Regex.match?(~r/\A[A-Z0-9]{16,64}\z/i, code)
+    Regex.match?(~r/\A[A-Za-z0-9]{6}\z/, code)
   end
 
   def valid_invite_code?(_), do: false
