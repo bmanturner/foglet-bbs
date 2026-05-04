@@ -1864,6 +1864,25 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert sf.indexes == [0]
     end
 
+    test "FOG-694: cramped 80x18 keybar does not advertise J/K Scroll" do
+      s = packed_partial_state(terminal_size: {80, 18})
+
+      sf = reader_screenful(s)
+      assert sf.mode == :packed
+      assert sf.partial == nil
+      assert sf.indexes == [0]
+
+      bar = s |> render_screen() |> command_bar_text()
+      refute bar =~ "J/K"
+      refute bar =~ "Scroll"
+
+      # J must be a no-op in this state — confirms the keybar is honest.
+      {:update, s_after_j, _} = handle_key_screen(%{key: :char, char: "j"}, s)
+      ss_after = s_after_j.screen_state[:post_reader]
+      assert ss_after.viewport.scroll_top == 0
+      assert ss_after.partial_scroll_tops == %{}
+    end
+
     test "down moves action target onto partial; up moves it back" do
       s = packed_partial_state()
 

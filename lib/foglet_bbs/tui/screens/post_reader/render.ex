@@ -74,7 +74,14 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
         [%{key: "Up/Down", label: "Select", priority: 6} | base_commands]
 
-      _single_or_long ->
+      %{mode: :packed} ->
+        # FOG-694: at the cramped FOG-651 negative threshold the screenful
+        # carries a single packed short card with no partial region, so J is
+        # a no-op (`viewport.scroll_top` stays 0 and `partial_scroll_tops`
+        # stays empty). Do not advertise J/K Scroll in that state.
+        base_commands
+
+      _long ->
         base_commands ++ [%{key: "J/K", label: "Scroll", priority: 10}]
     end
   end
