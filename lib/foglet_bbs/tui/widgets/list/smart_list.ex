@@ -36,6 +36,7 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
 
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Input.SelectList, as: RaxolSelectList
+  alias Raxol.UI.Components.Input.SelectList.Search, as: RaxolSelectListSearch
 
   @default_page_size 10
   @focused_marker "▌"
@@ -124,13 +125,37 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
     navigation_event = normalize_navigation_event(event, st)
     raxol_data = translate_event_for_select_list(navigation_event)
     raxol_event = %Raxol.Core.Events.Event{type: :key, data: raxol_data}
-    {new_rs, _cmds} = RaxolSelectList.handle_event(raxol_event, rs, %{})
+    {raw_rs, _cmds} = RaxolSelectList.handle_event(raxol_event, rs, %{})
+    # FOG-742: SelectList.update({:search, _}) defers filtering through a
+    # debounced `{:apply_search, ...}` self-message and stashes a fake
+    # `System.unique_integer/1` value as `:search_timer`. We have no process
+    # routing those messages, so filtered_options never updated and the next
+    # keystroke crashed in `Process.cancel_timer/1` on the bogus integer.
+    # Apply the search synchronously here so each char/backspace updates the
+    # filtered rows and counter, and clear the timer so subsequent events do
+    # not try to cancel a non-reference.
+    new_rs = apply_pending_search(rs, raw_rs)
     # IN-06: derive_action/4 receives the normalized navigation event. For searchable
     # lists this is still the original `:char` event; for non-search j/k fallbacks it
     # is the equivalent arrow event so navigation stays semantically quiet.
     action = derive_action(rs, new_rs, navigation_event, st.multiple)
     {%{st | raxol_state: new_rs, last_action: action}, action}
   end
+
+  defp apply_pending_search(prev_rs, %{enable_search: true, search_buffer: buffer} = rs) do
+    prev_buffer = Map.get(prev_rs, :search_buffer, "")
+    quiescent? = buffer == prev_buffer and Map.get(rs, :search_timer) == nil
+
+    if quiescent? do
+      rs
+    else
+      rs
+      |> RaxolSelectListSearch.update_search_state(buffer)
+      |> Map.put(:search_timer, nil)
+    end
+  end
+
+  defp apply_pending_search(_prev_rs, rs), do: rs
 
   @doc """
   Pure renderer.

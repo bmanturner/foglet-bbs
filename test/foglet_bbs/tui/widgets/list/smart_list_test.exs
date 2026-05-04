@@ -151,6 +151,40 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert new_st.raxol_state.search_buffer == "a"
     end
 
+    test "FOG-742: consecutive char/backspace keep growing/shrinking buffer and filter live" do
+      st =
+        SmartList.init(
+          options: [{"Alpha", 1}, {"Beta", 2}, {"Apple", 3}],
+          enable_search: true
+        )
+        |> activate_search()
+
+      {st, _} = SmartList.handle_event(%{key: :char, char: "a"}, st)
+      {st, _} = SmartList.handle_event(%{key: :char, char: "p"}, st)
+
+      assert st.raxol_state.search_buffer == "ap"
+      # Filter must apply synchronously, not be deferred behind a debounce timer.
+      assert st.raxol_state.filtered_options == [{"Apple", 3}]
+      # Timer slot must be nil so the next keystroke does not raise on
+      # Process.cancel_timer/1 (the underlying SelectList stashes a fake
+      # integer there).
+      assert st.raxol_state.search_timer == nil
+
+      {st, _} = SmartList.handle_event(%{key: :backspace}, st)
+      assert st.raxol_state.search_buffer == "a"
+      # All three labels contain "a" — filter widens.
+      assert length(st.raxol_state.filtered_options) == 3
+
+      {st, _} = SmartList.handle_event(%{key: :backspace}, st)
+      assert st.raxol_state.search_buffer == ""
+      # Empty query restores the full list view.
+      assert st.raxol_state.filtered_options in [nil, [{"Alpha", 1}, {"Beta", 2}, {"Apple", 3}]]
+
+      {st, _} = SmartList.handle_event(%{key: :char, char: "z"}, st)
+      assert st.raxol_state.search_buffer == "z"
+      assert st.raxol_state.filtered_options == []
+    end
+
     test "multi-select Space toggles focused option in selected_indices" do
       st =
         SmartList.init(

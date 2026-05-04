@@ -460,6 +460,46 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert state.board_picker.raxol_state.focused_index == initial_focus
   end
 
+  test "FOG-742: live picker filters rows and updates buffer for multi-char + backspace + empty" do
+    boards = [
+      %{id: "b1", name: "General"},
+      %{id: "b2", name: "QA Required"}
+    ]
+
+    state = State.new(boards: boards, load_status: :loaded)
+
+    # 1. Single char filters down to the matching board.
+    {state, []} = NewThread.update({:key, %{key: :char, char: "q"}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == "q"
+    assert rs.filtered_options == [{"QA Required", %{id: "b2", name: "QA Required"}}]
+    assert rs.search_timer == nil
+
+    # 2. Subsequent char must NOT crash and must keep growing the buffer.
+    {state, []} = NewThread.update({:key, %{key: :char, char: "a"}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == "qa"
+    assert length(rs.filtered_options || []) == 1
+
+    # 3. Backspace edits the buffer and re-widens the filter.
+    {state, []} = NewThread.update({:key, %{key: :backspace}}, state, context())
+    assert state.board_picker.raxol_state.search_buffer == "q"
+
+    {state, []} = NewThread.update({:key, %{key: :backspace}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == ""
+    # Empty buffer => show full list (filtered_options nil falls back to options).
+    assert rs.filtered_options in [nil, Enum.map(boards, fn b -> {b.name, b} end)]
+
+    # 4. Empty-result query is reachable through live keystrokes.
+    {state, []} = NewThread.update({:key, %{key: :char, char: "z"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "z"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "z"}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == "zzz"
+    assert rs.filtered_options == []
+  end
+
   test "FOG-712: picker is initialized with filter focus active so chars search" do
     boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
     state = State.new(boards: boards, load_status: :loaded)
