@@ -17,9 +17,7 @@ defmodule Foglet.Doors.Runner do
 
   use GenServer, restart: :temporary
 
-  require Logger
-
-  alias Foglet.Doors.Manifest
+  alias Foglet.Doors.{Manifest, PTYAdapter}
 
   Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
 
@@ -33,6 +31,7 @@ defmodule Foglet.Doors.Runner do
     :owner,
     :native_state,
     :port,
+    :pty_adapter,
     :os_pid,
     :context_path,
     :timeout_ref,
@@ -103,7 +102,11 @@ defmodule Foglet.Doors.Runner do
 
   @impl true
   def handle_call(:snapshot, _from, state) do
-    {:reply, Map.take(state, [:status, :exit_reason, :exit_status, :os_pid, :last_resize]), state}
+    snapshot =
+      Map.take(state, [:status, :exit_reason, :exit_status, :os_pid, :last_resize])
+      |> Map.put(:pty_backend, pty_backend(state))
+
+    {:reply, snapshot, state}
   end
 
   @impl true
@@ -126,6 +129,11 @@ defmodule Foglet.Doors.Runner do
   rescue
     e ->
       {:stop, {:door_crash, e}, complete(state, :crash, nil)}
+  end
+
+  def handle_cast({:input, data}, %{pty_adapter: %PTYAdapter{} = adapter} = state) do
+    _ = PTYAdapter.input(adapter, data)
+    {:noreply, refresh_idle_timeout(state)}
   end
 
   def handle_cast({:input, data}, %{port: port} = state) when not is_nil(port) do
@@ -153,10 +161,16 @@ defmodule Foglet.Doors.Runner do
       {:stop, {:door_crash, e}, complete(state, :crash, nil)}
   end
 
+  def handle_cast({:resize, size}, %{pty_adapter: %PTYAdapter{} = adapter} = state) do
+    _ = PTYAdapter.resize(adapter, size)
+    notify_owner(state, {:door_resize, self(), state.manifest.id, size})
+    {:noreply, %{state | terminal_size: size, last_resize: size}}
+  end
+
   def handle_cast({:resize, size}, state) do
-    # External PTY resize support is adapter-dependent. The runner records the
-    # new size for audit/handoff and notifies its owner so the SSH interpreter can
-    # plug in a concrete PTY backend later without moving ownership into screens.
+    # Plain-pipe/fallback external doors cannot receive an adapter-level
+    # TIOCSWINSZ update. The runner still records the size and notifies the
+    # owner for audit/terminal restoration.
     notify_owner(state, {:door_resize, self(), state.manifest.id, size})
     {:noreply, %{state | terminal_size: size, last_resize: size}}
   end
@@ -193,9 +207,17 @@ defmodule Foglet.Doors.Runner do
 
   def handle_info(:launch, %{manifest: %{runtime: :external_pty}} = state) do
     case open_external_port(state) do
-      {:ok, port, os_pid} ->
+      {:ok, %PTYAdapter{} = adapter} ->
         notify_owner(state, {:door_started, self(), state.manifest.id})
-        {:noreply, %{state | port: port, os_pid: os_pid, status: :running}}
+
+        {:noreply,
+         %{
+           state
+           | port: adapter.port,
+             pty_adapter: adapter,
+             os_pid: adapter.os_pid,
+             status: :running
+         }}
 
       {:error, reason} ->
         {:stop, {:door_launch_failed, reason}, complete(state, {:error, reason}, nil)}
@@ -210,9 +232,34 @@ defmodule Foglet.Doors.Runner do
     {:stop, :normal, complete(state, :idle_timeout, nil)}
   end
 
+  def handle_info({_port, {:data, data}}, %{pty_adapter: %PTYAdapter{} = _adapter} = state) do
+    case PTYAdapter.decode_frame(data) do
+      {:output, output} ->
+        emit(state, output)
+        {:noreply, refresh_idle_timeout(state)}
+
+      {:exit, status} ->
+        reason = if status == 0, do: :normal, else: :crash
+        {:stop, :normal, complete(state, reason, status)}
+
+      {:error, reason} ->
+        {:stop, {:door_helper_failed, reason}, complete(state, {:error, reason}, nil)}
+
+      :ignore ->
+        {:noreply, state}
+    end
+  end
+
   def handle_info({_port, {:data, data}}, state) do
     emit(state, data)
     {:noreply, refresh_idle_timeout(state)}
+  end
+
+  def handle_info(
+        {port, {:exit_status, status}},
+        %{port: port, pty_adapter: %PTYAdapter{backend: :helper}} = state
+      ) do
+    {:stop, {:door_helper_exit, status}, complete(state, :crash, status)}
   end
 
   def handle_info({port, {:exit_status, status}}, %{port: port} = state) do
@@ -276,6 +323,9 @@ defmodule Foglet.Doors.Runner do
   defp notify_owner(%{owner: owner}, message) when is_pid(owner), do: send(owner, message)
   defp notify_owner(_state, _message), do: :ok
 
+  defp pty_backend(%{pty_adapter: %PTYAdapter{} = adapter}), do: PTYAdapter.backend(adapter)
+  defp pty_backend(_state), do: nil
+
   defp complete(state, reason, status) do
     state = %{
       state
@@ -295,29 +345,23 @@ defmodule Foglet.Doors.Runner do
   defp cleanup(state) do
     _ = cancel_timer(state.timeout_ref)
     _ = cancel_timer(state.idle_timeout_ref)
-    _ = close_port(state.port, state.os_pid)
+    _ = close_port(state.port, state.os_pid, state.pty_adapter)
     _ = remove_context_file(state.context_path)
-    %{state | cleanup_done?: true, port: nil}
+    %{state | cleanup_done?: true, port: nil, pty_adapter: nil}
   end
 
   defp cancel_timer(ref) when is_reference(ref), do: Process.cancel_timer(ref)
   defp cancel_timer(_ref), do: :ok
 
-  defp close_port(nil, _os_pid), do: :ok
+  defp close_port(nil, _os_pid, _adapter), do: :ok
 
-  defp close_port(port, os_pid) do
+  defp close_port(port, os_pid, adapter) do
+    _ = PTYAdapter.terminate(adapter)
     _ = maybe_term_os_process(os_pid)
     _ = Port.close(port)
     :ok
   rescue
     _ -> :ok
-  end
-
-  defp os_pid(port) do
-    case Port.info(port, :os_pid) do
-      {:os_pid, pid} when is_integer(pid) and pid > 0 -> pid
-      _other -> nil
-    end
   end
 
   defp maybe_term_os_process(pid) when is_integer(pid) and pid > 0 do
@@ -370,32 +414,7 @@ defmodule Foglet.Doors.Runner do
   defp remove_context_file(path), do: File.rm(path)
 
   defp open_external_port(state) do
-    {executable, args} = external_command(state.manifest)
-
-    opts = [
-      :binary,
-      :exit_status,
-      {:args, args},
-      {:env, external_env(state)},
-      {:cd, state.manifest.working_dir || File.cwd!()}
-    ]
-
-    port = Port.open({:spawn_executable, executable}, opts)
-    os_pid = os_pid(port)
-    {:ok, port, os_pid}
-  rescue
-    e -> {:error, e}
-  end
-
-  defp external_command(%Manifest{} = manifest) do
-    if manifest.pty? do
-      case System.find_executable("script") do
-        nil -> {manifest.command, manifest.args}
-        script -> {script, ["-qfec", shell_join([manifest.command | manifest.args]), "/dev/null"]}
-      end
-    else
-      {manifest.command, manifest.args}
-    end
+    PTYAdapter.open(state.manifest, state.terminal_size, external_env(state))
   end
 
   defp external_env(state) do
@@ -415,15 +434,4 @@ defmodule Foglet.Doors.Runner do
 
   defp to_env(nil), do: ""
   defp to_env(value), do: to_string(value)
-
-  defp shell_join(parts) do
-    Enum.map_join(parts, " ", &shell_quote/1)
-  end
-
-  defp shell_quote(value) do
-    value
-    |> to_string()
-    |> String.replace("'", "'\\''")
-    |> then(&"'#{&1}'")
-  end
 end
