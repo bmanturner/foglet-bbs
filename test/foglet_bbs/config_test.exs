@@ -257,6 +257,22 @@ defmodule Foglet.ConfigTest do
       assert Config.guest_mode_enabled?() == false
     end
 
+    test "guest_mode_enabled?/0 honors the boot-time application override" do
+      original = Application.get_env(:foglet_bbs, :guest_mode_enabled)
+
+      on_exit(fn ->
+        case original do
+          nil -> Application.delete_env(:foglet_bbs, :guest_mode_enabled)
+          value -> Application.put_env(:foglet_bbs, :guest_mode_enabled, value)
+        end
+      end)
+
+      Config.put!("guest_mode_enabled", true, nil)
+      Application.put_env(:foglet_bbs, :guest_mode_enabled, false)
+
+      assert Config.guest_mode_enabled?() == false
+    end
+
     test "email_verify_resend_cooldown_seconds/0 returns the seeded default" do
       assert Config.email_verify_resend_cooldown_seconds() == 60
     end

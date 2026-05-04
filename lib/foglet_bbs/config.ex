@@ -208,7 +208,12 @@ defmodule Foglet.Config do
 
   @doc "Whether unauthenticated visitors may enter first-class read-only Guest Mode (FOG-583)."
   @spec guest_mode_enabled?() :: boolean()
-  def guest_mode_enabled?, do: get!("guest_mode_enabled")
+  def guest_mode_enabled? do
+    case Application.fetch_env(:foglet_bbs, :guest_mode_enabled) do
+      {:ok, value} -> value
+      :error -> get!("guest_mode_enabled")
+    end
+  end
 
   @doc "Minimum seconds between resend-code presses on the Verify screen (Phase 6 D-02)."
   @spec email_verify_resend_cooldown_seconds() :: integer()

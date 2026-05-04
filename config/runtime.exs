@@ -46,6 +46,22 @@ if tz = System.get_env("FOGLET_DEFAULT_TIMEZONE") do
   config :foglet_bbs, :default_timezone, tz
 end
 
+if guest_mode_enabled = System.get_env("FOGLET_GUEST_MODE_ENABLED") do
+  guest_mode_enabled =
+    case String.downcase(guest_mode_enabled) do
+      value when value in ["true", "1"] ->
+        true
+
+      value when value in ["false", "0"] ->
+        false
+
+      _ ->
+        raise "environment variable FOGLET_GUEST_MODE_ENABLED must be one of: true, false, 1, 0"
+    end
+
+  config :foglet_bbs, :guest_mode_enabled, guest_mode_enabled
+end
+
 if mail_from = System.get_env("FOGLET_MAIL_FROM") do
   config :foglet_bbs, :mail_from, mail_from
 end
