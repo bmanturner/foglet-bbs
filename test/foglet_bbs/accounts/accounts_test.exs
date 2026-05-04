@@ -3,6 +3,10 @@ defmodule FogletBbs.AccountsTest.FailingMailerAdapter do
   def deliver(_email, _config), do: {:error, :forced_failure}
 end
 
+defmodule FogletBbs.AccountsTest.FailingTokenCleanupRepo do
+  def delete_all(_query), do: raise(RuntimeError, "forced cleanup outage")
+end
+
 defmodule Foglet.AccountsTest do
   use FogletBbs.DataCase, async: false
 
@@ -232,6 +236,33 @@ defmodule Foglet.AccountsTest do
       refute log =~ sysop.handle
       refute log =~ "pendingfailure@example.test"
       refute log =~ "pendingfailure"
+    end
+
+    test "invite-code throttling logs redemption pressure without raw invite or attrs" do
+      Foglet.Accounts.RedemptionThrottle.reset_for_tests()
+      Config.put!("registration_mode", "invite_only")
+
+      attrs =
+        AccountsFixtures.valid_user_attributes(%{
+          handle: "throttleinvite",
+          email: "throttleinvite@example.test",
+          invite_code: "SECRET-INVITE-CODE"
+        })
+
+      log =
+        capture_log(fn ->
+          for _ <- 1..5 do
+            assert {:error, %Ecto.Changeset{}} = Accounts.register_user(attrs)
+          end
+
+          assert {:error, %Ecto.Changeset{}} = Accounts.register_user(attrs)
+        end)
+
+      assert log =~ "account_invite_redemption_throttled"
+      assert log =~ "op=invite_redemption_throttled"
+      refute log =~ "SECRET-INVITE-CODE"
+      refute log =~ "throttleinvite@example.test"
+      refute log =~ "throttleinvite"
     end
   end
 
@@ -856,6 +887,20 @@ defmodule Foglet.AccountsTest do
   # reset_user_password/2 tests → test/foglet_bbs/accounts/verification_test.exs
 
   describe "delete_user/1 (IDNT-07)" do
+    setup do
+      original_cleanup_repo = Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo)
+
+      on_exit(fn ->
+        if original_cleanup_repo do
+          Application.put_env(:foglet_bbs, :accounts_token_cleanup_repo, original_cleanup_repo)
+        else
+          Application.delete_env(:foglet_bbs, :accounts_token_cleanup_repo)
+        end
+      end)
+
+      :ok
+    end
+
     test "clears PII on the user row and preserves the row for FK integrity" do
       user =
         AccountsFixtures.user_fixture(%{
@@ -891,6 +936,36 @@ defmodule Foglet.AccountsTest do
 
       assert Repo.aggregate(from(k in SSHKey, where: k.user_id == ^user.id), :count) == 0
       assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id), :count) == 0
+    end
+
+    test "logs non-sensitive user-delete token cleanup failures" do
+      Application.put_env(
+        :foglet_bbs,
+        :accounts_token_cleanup_repo,
+        FogletBbs.AccountsTest.FailingTokenCleanupRepo
+      )
+
+      user =
+        AccountsFixtures.user_fixture(%{
+          handle: "deletecleanfail",
+          email: "deletecleanfail@example.test"
+        })
+
+      {raw_token, _} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      log =
+        capture_log(fn ->
+          assert_raise RuntimeError, "forced cleanup outage", fn ->
+            Accounts.delete_user(user)
+          end
+        end)
+
+      assert log =~ "account_token_cleanup_failed"
+      assert log =~ "op=user_delete_token_cleanup_failed"
+      assert log =~ "user_id=#{user.id}"
+      refute log =~ user.email
+      refute log =~ user.handle
+      refute log =~ raw_token
     end
 
     test "rewrites authored posts to the tombstone user" do

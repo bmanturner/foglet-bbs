@@ -1,3 +1,7 @@
+defmodule FogletBbs.VerifyCodeTest.FailingTokenCleanupRepo do
+  def delete_all(_query), do: raise(RuntimeError, "forced cleanup outage")
+end
+
 defmodule Foglet.AccountsVerifyCodeTest do
   use FogletBbs.DataCase, async: false
 
@@ -6,6 +10,7 @@ defmodule Foglet.AccountsVerifyCodeTest do
   alias Foglet.Config
   alias FogletBbs.Repo
 
+  import ExUnit.CaptureLog
   import FogletBbs.AccountsFixtures
 
   describe "UserToken.build_verify_code/1" do
@@ -93,6 +98,41 @@ defmodule Foglet.AccountsVerifyCodeTest do
         Repo.all(UserToken.by_user_and_contexts_query(user, ["email_verify"]))
 
       assert remaining == []
+    end
+
+    test "logs non-sensitive email verification token cleanup failures" do
+      original_cleanup_repo = Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo)
+
+      on_exit(fn ->
+        if original_cleanup_repo do
+          Application.put_env(:foglet_bbs, :accounts_token_cleanup_repo, original_cleanup_repo)
+        else
+          Application.delete_env(:foglet_bbs, :accounts_token_cleanup_repo)
+        end
+      end)
+
+      Application.put_env(
+        :foglet_bbs,
+        :accounts_token_cleanup_repo,
+        FogletBbs.VerifyCodeTest.FailingTokenCleanupRepo
+      )
+
+      user = user_fixture(%{handle: "verifycleanfail", email: "verifycleanfail@example.test"})
+      {:ok, code} = Verification.build_verify_code(user)
+
+      log =
+        capture_log(fn ->
+          assert_raise RuntimeError, "forced cleanup outage", fn ->
+            Verification.verify_email_code(user, code)
+          end
+        end)
+
+      assert log =~ "account_token_cleanup_failed"
+      assert log =~ "op=verification_token_cleanup_failed"
+      assert log =~ "user_id=#{user.id}"
+      refute log =~ user.email
+      refute log =~ user.handle
+      refute log =~ code
     end
   end
 

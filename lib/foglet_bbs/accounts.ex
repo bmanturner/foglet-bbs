@@ -19,6 +19,8 @@ defmodule Foglet.Accounts do
 
   import Ecto.Query, warn: false
 
+  require Logger
+
   alias Foglet.QueryHelpers
 
   alias Foglet.Accounts.{Email, Invite, RedemptionThrottle, SSHKey, User, UserToken}
@@ -135,6 +137,7 @@ defmodule Foglet.Accounts do
         end
 
       {:error, :throttled} ->
+        Logger.warning("account_invite_redemption_throttled op=invite_redemption_throttled")
         {:error, :invalid_invite_code}
     end
   end
@@ -475,7 +478,7 @@ defmodule Foglet.Accounts do
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
   def delete_user(%User{} = user) do
     Repo.transact(fn ->
-      Repo.delete_all(UserToken.by_user_and_contexts_query(user, :all))
+      delete_user_tokens_for_cleanup(user, :all, "user_delete_token_cleanup_failed")
       Repo.delete_all(from(k in SSHKey, where: k.user_id == ^user.id))
 
       # Bump `updated_at` on every rewritten post so audit trails / change
@@ -578,6 +581,21 @@ defmodule Foglet.Accounts do
       {:error, _reason} -> {:error, {:ssh_key, "That SSH public key is not valid."}}
       true -> {:error, {:ssh_key, "That SSH public key is already registered."}}
     end
+  end
+
+  defp delete_user_tokens_for_cleanup(%User{} = user, contexts, op) do
+    cleanup_repo().delete_all(UserToken.by_user_and_contexts_query(user, contexts))
+  rescue
+    exception ->
+      Logger.warning(
+        "account_token_cleanup_failed op=#{op} user_id=#{user.id} reason=#{inspect(exception)}"
+      )
+
+      reraise exception, __STACKTRACE__
+  end
+
+  defp cleanup_repo do
+    Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo, Repo)
   end
 
   defp changeset_error?(%Ecto.Changeset{} = changeset, field) do

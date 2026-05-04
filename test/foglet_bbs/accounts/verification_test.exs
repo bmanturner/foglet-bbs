@@ -3,6 +3,10 @@ defmodule FogletBbs.VerificationTest.FailingMailerAdapter do
   def deliver(_email, _config), do: {:error, :forced_failure}
 end
 
+defmodule FogletBbs.VerificationTest.FailingTokenCleanupRepo do
+  def delete_all(_query), do: raise(RuntimeError, "forced cleanup outage")
+end
+
 defmodule Foglet.Accounts.VerificationTest do
   use FogletBbs.DataCase, async: false
 
@@ -270,6 +274,20 @@ defmodule Foglet.Accounts.VerificationTest do
   end
 
   describe "reset_user_password/2 (IDNT-08)" do
+    setup do
+      original_cleanup_repo = Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo)
+
+      on_exit(fn ->
+        if original_cleanup_repo do
+          Application.put_env(:foglet_bbs, :accounts_token_cleanup_repo, original_cleanup_repo)
+        else
+          Application.delete_env(:foglet_bbs, :accounts_token_cleanup_repo)
+        end
+      end)
+
+      :ok
+    end
+
     test "updates password and invalidates outstanding reset tokens" do
       user = AccountsFixtures.user_fixture(%{password: "original1"})
       {_raw, _} = AccountsFixtures.user_token_fixture(user, "reset_password")
@@ -287,6 +305,38 @@ defmodule Foglet.Accounts.VerificationTest do
                from t in UserToken,
                  where: t.user_id == ^user.id and t.context == "reset_password"
              )
+    end
+
+    test "logs non-sensitive reset-token cleanup failures" do
+      Application.put_env(
+        :foglet_bbs,
+        :accounts_token_cleanup_repo,
+        FogletBbs.VerificationTest.FailingTokenCleanupRepo
+      )
+
+      user =
+        AccountsFixtures.user_fixture(%{
+          handle: "resetcleanfail",
+          email: "resetcleanfail@example.test",
+          password: "original1"
+        })
+
+      {raw_token, _} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      log =
+        capture_log(fn ->
+          assert_raise RuntimeError, "forced cleanup outage", fn ->
+            Verification.reset_user_password(user, %{password: "brandnew1"})
+          end
+        end)
+
+      assert log =~ "account_token_cleanup_failed"
+      assert log =~ "op=reset_token_cleanup_failed"
+      assert log =~ "user_id=#{user.id}"
+      assert log =~ "reason=%RuntimeError{message: \"forced cleanup outage\"}"
+      refute log =~ user.email
+      refute log =~ user.handle
+      refute log =~ raw_token
     end
   end
 
@@ -366,6 +416,16 @@ defmodule Foglet.Accounts.VerificationTest do
   describe "consume_reset_token/2 (D-08/D-09/D-10/D-16)" do
     setup do
       Foglet.Accounts.RedemptionThrottle.reset_for_tests()
+      original_cleanup_repo = Application.get_env(:foglet_bbs, :accounts_token_cleanup_repo)
+
+      on_exit(fn ->
+        if original_cleanup_repo do
+          Application.put_env(:foglet_bbs, :accounts_token_cleanup_repo, original_cleanup_repo)
+        else
+          Application.delete_env(:foglet_bbs, :accounts_token_cleanup_repo)
+        end
+      end)
+
       :ok
     end
 
@@ -388,6 +448,37 @@ defmodule Foglet.Accounts.VerificationTest do
                from t in UserToken,
                  where: t.user_id == ^user.id and t.context == "reset_password"
              )
+    end
+
+    test "logs non-sensitive consumed reset-token cleanup failures" do
+      Application.put_env(
+        :foglet_bbs,
+        :accounts_token_cleanup_repo,
+        FogletBbs.VerificationTest.FailingTokenCleanupRepo
+      )
+
+      user =
+        AccountsFixtures.user_fixture(%{
+          handle: "consumecleanfail",
+          email: "consume-cleanup@example.test",
+          password: "original1"
+        })
+
+      {raw_token, _struct} = AccountsFixtures.user_token_fixture(user, "reset_password")
+
+      log =
+        capture_log(fn ->
+          assert_raise RuntimeError, "forced cleanup outage", fn ->
+            Verification.consume_reset_token(raw_token, %{password: "brandnew1"})
+          end
+        end)
+
+      assert log =~ "account_token_cleanup_failed"
+      assert log =~ "op=reset_token_cleanup_failed"
+      assert log =~ "user_id=#{user.id}"
+      refute log =~ user.email
+      refute log =~ user.handle
+      refute log =~ raw_token
     end
 
     test "an already-used raw token cannot be consumed a second time" do
