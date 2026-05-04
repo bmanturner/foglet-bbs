@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   """
 
   alias Foglet.Config
+  alias Foglet.SiteOps
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SState
   alias Foglet.TUI.Theme
@@ -71,10 +72,14 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     |> ModalForm.render(theme: theme)
   end
 
-  @spec handle_key(map(), t()) :: {t(), [{atom(), term()}]}
+  @spec handle_key(map(), t()) :: {t(), [Effect.t() | {atom(), term()}]}
   def handle_key(%{key: :char, char: "s", ctrl: true}, %SState{} = state) do
     # D-19: Ctrl+S routes to the same submit path Enter-on-last uses.
     submit(state)
+  end
+
+  def handle_key(%{key: :char, char: c}, %SState{} = state) when c in ["e", "E"] do
+    trigger_test_email(state)
   end
 
   def handle_key(%{key: :escape}, %SState{} = state) do
@@ -106,7 +111,29 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     end
   end
 
+  @doc "Apply the async test-email result returned by `Foglet.SiteOps.send_test_email/1`."
+  @spec handle_test_email_result(t(), term()) :: t()
+  def handle_test_email_result(%SState{} = state, result) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, _delivery} -> %{state | test_email_state: :sent}
+      {:error, reason} -> %{state | test_email_state: {:error, reason}}
+    end
+  end
+
   # ---------- Private ----------
+
+  defp trigger_test_email(%SState{test_email_state: :sending} = state), do: {state, []}
+
+  defp trigger_test_email(%SState{} = state) do
+    if SState.test_email_action_visible?(state) do
+      actor = state.current_user
+
+      {%{state | test_email_state: :sending},
+       [Effect.task(:sysop_send_test_email, :sysop, fn -> SiteOps.send_test_email(actor) end)]}
+    else
+      {%{state | test_email_state: {:error, :no_email_mode}}, []}
+    end
+  end
 
   defp submit(%SState{} = state) do
     visible = SState.visible_keys(state)
@@ -234,7 +261,16 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     # contract on this consumer — without it, persist_payload/finalize_submit
     # write :saved / {:error, "validation"} into the form, but those values
     # vanish here (BL-02 root cause).
-    %{state | drafts: drafts, focused: clamp(idx, length(visible)), submit_state: ss}
+    test_email_state =
+      if Map.get(drafts, "delivery_mode") == "email", do: state.test_email_state, else: :idle
+
+    %{
+      state
+      | drafts: drafts,
+        focused: clamp(idx, length(visible)),
+        submit_state: ss,
+        test_email_state: test_email_state
+    }
   end
 
   defp collect_drafts(%ModalForm{} = form, visible, existing_drafts) do

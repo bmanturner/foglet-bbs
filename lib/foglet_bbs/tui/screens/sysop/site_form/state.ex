@@ -87,7 +87,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
           drafts: %{optional(String.t()) => term()},
           errors: %{optional(String.t()) => String.t()},
           focused: non_neg_integer(),
-          submit_state: ModalForm.submit_state()
+          submit_state: ModalForm.submit_state(),
+          test_email_state: :idle | :sending | :sent | {:error, term()}
         }
 
   # Phase 28 Plan 06 (BL-02): submit_state persists the FORM-05 lifecycle
@@ -99,7 +100,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
             drafts: %{},
             errors: %{},
             focused: 0,
-            submit_state: :idle
+            submit_state: :idle,
+            test_email_state: :idle
 
   @doc "The canonical Sysop SITE key list, in render order."
   @spec site_keys() :: [String.t()]
@@ -132,7 +134,20 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     # Phase 28 Plan 06 (BL-02): Esc reseed drops in-flight FORM-05 lifecycle
     # along with drafts (D-12 honest-Esc semantics — no stale "Saved." or
     # "Error: …" pinned across a discard).
-    %{state | drafts: load_drafts(), errors: %{}, focused: 0, submit_state: :idle}
+    %{
+      state
+      | drafts: load_drafts(),
+        errors: %{},
+        focused: 0,
+        submit_state: :idle,
+        test_email_state: :idle
+    }
+  end
+
+  @doc "Whether the current draft should expose the test-email action row."
+  @spec test_email_action_visible?(t()) :: boolean()
+  def test_email_action_visible?(%__MODULE__{drafts: drafts}) do
+    Map.get(drafts, "delivery_mode") == "email"
   end
 
   @doc """
@@ -211,7 +226,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     Map.new(@site_keys, fn k -> {k, Config.get!(k)} end)
   end
 
-  defp build_field(key, %__MODULE__{drafts: drafts}) do
+  defp build_field(key, %__MODULE__{drafts: drafts} = state) do
     {:ok, spec} = Schema.fetch_spec(key)
     raw_value = Map.get(drafts, key)
 
@@ -223,7 +238,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
       name: String.to_existing_atom(key),
       label: Map.get(@field_labels, key, key),
       value: raw_value,
-      description: spec.description
+      description: description_for(key, spec.description, state)
     }
 
     case spec do
@@ -240,6 +255,21 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
         Map.merge(base, %{type: :boolean, value: !!raw_value})
     end
   end
+
+  defp description_for("delivery_mode", description, %__MODULE__{} = state) do
+    case {Map.get(state.drafts, "delivery_mode"), state.test_email_state} do
+      {"email", :idle} -> "[E] Send test email to your account email"
+      {"email", :sending} -> "[E] Sending test email…"
+      {"email", :sent} -> "Sent a test email to your account email."
+      {"email", {:error, :missing_email}} -> "Add an email to your account before sending a test."
+      {"email", {:error, :forbidden}} -> "Permission denied. You may have been demoted."
+      {"email", {:error, _reason}} -> "Test email could not be sent. Check operator logs."
+      {"no_email", {:error, :no_email_mode}} -> "Test email unavailable in no-email mode."
+      _ -> description
+    end
+  end
+
+  defp description_for(_key, description, %__MODULE__{}), do: description
 
   # Build the `[{label, value}, ...]` choices list for a given enum SITE key.
   # Falls back to the raw value as the label if a value is not in the label
