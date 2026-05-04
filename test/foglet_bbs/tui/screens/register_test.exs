@@ -167,7 +167,10 @@ defmodule Foglet.TUI.Screens.RegisterTest do
         )
 
       tree = Register.render(Register.init(ctx), ctx)
-      max_width = AuthForm.default_width() - 2
+      # Panel width minus side borders (-2) minus the column's padding: 1
+      # on each side (-2). Anything wider overwrites the inner right
+      # border at 80x24 (FOG-702).
+      max_width = AuthForm.default_width() - 4
 
       fingerprint_line =
         tree

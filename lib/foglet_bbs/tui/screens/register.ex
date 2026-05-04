@@ -698,9 +698,12 @@ defmodule Foglet.TUI.Screens.Register do
   end
 
   defp fingerprint_line(offered_key) do
+    # Panel width minus the two side borders (-2) and the column's
+    # padding: 1 on each side (-2) — anything wider overwrites the
+    # inner right border at 80x24 (FOG-702).
     TextWidth.truncate(
       "  Fingerprint: #{offered_key_fingerprint(offered_key)}",
-      @auth_card_width - 2
+      @auth_card_width - 4
     )
   end
 
