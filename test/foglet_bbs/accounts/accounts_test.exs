@@ -221,12 +221,34 @@ defmodule Foglet.AccountsTest do
       assert Accounts.post_login_screen(confirmed) == :main_menu
     end
 
-    test "unconfirmed user with require_email_verification=true routes to :verify" do
+    test "existing active regular user is grandfathered when verification is enabled later" do
+      Foglet.Config.put!("require_email_verification", false)
+      user = AccountsFixtures.user_fixture()
+      assert user.confirmed_at == nil
+
+      Foglet.Config.put!("require_email_verification", true)
+
+      assert Accounts.post_login_screen(user) == :main_menu
+    end
+
+    test "new active regular user created after verification is enabled routes to :verify" do
       Foglet.Config.put!("require_email_verification", true)
       user = AccountsFixtures.user_fixture()
       assert user.confirmed_at == nil
 
       assert Accounts.post_login_screen(user) == :verify
+    end
+
+    test "unconfirmed mod and sysop users route to :main_menu when verification is required" do
+      Foglet.Config.put!("require_email_verification", true)
+
+      for role <- [:mod, :sysop] do
+        user = AccountsFixtures.user_fixture(%{handle: "unconfirmed#{role}"})
+        {:ok, operator} = Accounts.update_role(user, role)
+
+        assert operator.confirmed_at == nil
+        assert Accounts.post_login_screen(operator) == :main_menu
+      end
     end
 
     test "unconfirmed user with require_email_verification=false routes to :main_menu" do

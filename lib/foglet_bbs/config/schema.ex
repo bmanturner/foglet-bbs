@@ -96,7 +96,7 @@ defmodule Foglet.Config.Schema do
       key: "require_email_verification",
       type: :boolean,
       default: false,
-      description: "Require email verification before login.",
+      description: "Verify future users; existing/operators exempt.",
       enum: nil,
       min: nil,
       max: nil
