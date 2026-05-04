@@ -134,10 +134,17 @@ defmodule Foglet.TUI.Screens.Account.Render do
 
   defp middle_groups(_unknown, _ss) do
     [
-      %{label: "Field", commands: [%{key: "Tab", label: "Next", priority: 10}]},
+      %{
+        label: "Field",
+        commands: [
+          %{key: "Tab", label: "Next", priority: 10},
+          %{key: "Shift+Tab", label: "Previous", priority: 10}
+        ]
+      },
       %{
         label: "Actions",
         commands: [
+          %{key: "Ctrl+S", label: "Save", priority: 30},
           %{key: "Enter", label: "Save", priority: 30},
           %{key: "Esc", label: "Cancel", priority: 30}
         ]
@@ -150,7 +157,13 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # so users can discover the cycling affordance (FOG-130 Item 4).
   defp form_middle_groups(%State{} = ss, section) do
     base = [
-      %{label: "Field", commands: [%{key: "Tab", label: "Next", priority: 10}]}
+      %{
+        label: "Field",
+        commands: [
+          %{key: "Tab", label: "Next", priority: 10},
+          %{key: "Shift+Tab", label: "Previous", priority: 10}
+        ]
+      }
     ]
 
     fields =
@@ -171,6 +184,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
         %{
           label: "Actions",
           commands: [
+            %{key: "Ctrl+S", label: "Save", priority: 30},
             %{key: "Enter", label: "Save", priority: 30},
             %{key: "Esc", label: "Cancel", priority: 30}
           ]

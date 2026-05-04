@@ -2372,6 +2372,42 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert state.status_message == "Profile was not saved."
     end
 
+    test "Submitting a Profile draft from the first field saves without moving to the last field" do
+      alias Foglet.TUI.Screens.Account.ProfileForm
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = build_user_with_profile()
+      ss = AccountState.new(current_user: user)
+
+      assert ss.profile_form.focus_index == 0
+      assert ModalForm.field_value(ss.profile_form, :location) == user.location
+
+      {:ok, after_submit, cmds} = ProfileForm.handle_key(%{key: :enter}, ss, user)
+
+      assert after_submit.profile_form.focus_index == 0
+      assert [{:account_save_profile, attrs}] = cmds
+      assert attrs.location == user.location
+      refute after_submit.status_message == "Profile ready to save."
+    end
+
+    test "Submitting Preferences from a non-last focused field saves without moving focus" do
+      alias Foglet.TUI.Screens.Account.PrefsForm
+
+      user = build_user_with_profile()
+      ss = AccountState.new(current_user: user)
+
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
+      assert ss.prefs_form.focus_index == 1
+
+      {:ok, after_submit, cmds} = PrefsForm.handle_key(%{key: :enter}, ss, user)
+
+      assert after_submit.prefs_form.focus_index == 1
+      assert [{:account_save_prefs, attrs}] = cmds
+      assert attrs.timezone == user.timezone
+      assert attrs.preferences == %{"time_format" => "12h"}
+      assert attrs.theme == user.theme
+    end
+
     test "Submitting a Profile draft no longer flashes 'Profile ready to save.'" do
       alias Foglet.TUI.Screens.Account.ProfileForm
       alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
@@ -2379,7 +2415,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = build_user_with_profile()
       ss = AccountState.new(current_user: user)
 
-      # Drive ProfileForm to submit by jumping focus to last field then Enter.
+      # Drive ProfileForm to submit from the last field as a compatibility path.
       {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
       {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
       assert ss.profile_form.focus_index == 2

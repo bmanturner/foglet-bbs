@@ -227,8 +227,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     # Pitfall 4: do NOT wrap Modal.Form output in box/border.
     #
     # Bespoke "key: value" row format is preserved (D-19: existing tests assert
-    # on this format). The Modal.Form footer sentinel "[Enter] Submit" is added
-    # to satisfy primitive-presence requirements (D-09).
+    # on this format).
     width = Keyword.get(opts, :width, 76)
     visible_height = Keyword.get(opts, :visible_height, 12)
 
@@ -238,10 +237,13 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
       |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme, width) end)
 
     # FOG-154: Esc on LIMITS is a no-op (handle_key has no :escape clause), so
-    # the footer must not advertise it. The Modal.Form footer sentinel
-    # "[Enter] Submit" still satisfies primitive-presence requirements (D-09).
+    # the footer must not advertise it. Enter and Ctrl+S both save from any
+    # focused field; Tab/Shift+Tab own field movement.
     footer =
-      text(truncate("[Enter] Submit  [Tab] Next  [Shift+Tab] Previous", width), fg: theme.dim.fg)
+      text(
+        truncate("[Tab] Next  [Shift+Tab] Previous  [Ctrl+S] Save  [Enter] Save", width),
+        fg: theme.dim.fg
+      )
 
     children =
       [text("Runtime limits", fg: theme.title.fg, style: [:bold]), text("")] ++ rows ++ [footer]

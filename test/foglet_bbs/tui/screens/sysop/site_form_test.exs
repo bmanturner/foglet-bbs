@@ -360,7 +360,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
       assert form.drafts["invite_generation_per_user_limit"] == 5
     end
 
-    test "Ctrl+S invokes Foglet.Config.put/3 (D-19)" do
+    test "Ctrl+S invokes Foglet.Config.put/3 from current focus without moving focus (D-19)" do
       sysop = sysop_fixture()
       Config.put!("delivery_mode", "email", nil)
       Config.put!("registration_mode", "open", nil)
@@ -369,9 +369,29 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
         SiteForm.init(current_user: sysop)
         |> put_draft("registration_mode", "invite_only")
 
-      {_form, _events} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+      assert form.focused == 0
 
+      {form, _events} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+
+      assert form.focused == 0
       assert Config.get!("registration_mode") == "invite_only"
+    end
+
+    test "Enter invokes Foglet.Config.put/3 from current non-last focus (D-19)" do
+      sysop = sysop_fixture()
+      Config.put!("invite_code_generators", "sysop_only", nil)
+      Config.put!("registration_mode", "open", nil)
+
+      form =
+        SiteForm.init(current_user: sysop)
+        |> put_draft("registration_mode", "sysop_approved")
+
+      assert form.focused == 0
+
+      {form, _events} = SiteForm.handle_key(%{key: :enter}, form)
+
+      assert form.focused == 0
+      assert Config.get!("registration_mode") == "sysop_approved"
     end
 
     test "Enter on last visible field invokes Foglet.Config.put/3 (D-19)" do

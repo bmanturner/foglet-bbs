@@ -225,11 +225,12 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     fields = [%{name: :body, type: :textarea, label: "Body", rows: 3}]
     state = test_form(fields)
 
-    # Type some content including a newline sequence
+    # Type some content including a newline sequence, then save with Ctrl+S
+    # because Enter is reserved for textarea editing semantics.
     events =
       Enum.map(String.codepoints("hello\nworld"), fn ch ->
         %{key: :char, char: ch}
-      end) ++ [%{key: :enter}]
+      end) ++ [%{key: :char, char: "s", ctrl: true}]
 
     send_events(state, events)
 
@@ -319,7 +320,7 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     refute_receive {:submitted, _payload}
   end
 
-  test "REQ-5 Enter on non-last field advances focus, does not submit" do
+  test "REQ-5 Enter on non-last ordinary field submits without moving focus" do
     fields = [
       %{name: :a, type: :text, label: "A"},
       %{name: :b, type: :text, label: "B"},
@@ -330,9 +331,43 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert state.focus_index == 0
 
     {new_state, action} = Form.handle_event(%{key: :enter}, state)
+
+    assert new_state.focus_index == 0
+    assert action == {:submitted, {:submitted, %{a: "", b: "", c: ""}}}
+    assert_receive {:submitted, %{a: "", b: "", c: ""}}
+  end
+
+  test "Ctrl+S submits from current focus without moving focus" do
+    fields = [
+      %{name: :a, type: :text, label: "A"},
+      %{name: :b, type: :text, label: "B"},
+      %{name: :c, type: :text, label: "C"}
+    ]
+
+    state = test_form(fields)
+    {state, nil} = Form.handle_event(%{key: :tab}, state)
+    assert state.focus_index == 1
+
+    {new_state, action} = Form.handle_event(%{key: :char, char: "s", ctrl: true}, state)
+
     assert new_state.focus_index == 1
-    refute action == :submitted
+    assert action == {:submitted, {:submitted, %{a: "", b: "", c: ""}}}
+    assert_receive {:submitted, %{a: "", b: "", c: ""}}
+  end
+
+  test "Enter on textarea edits the field while Ctrl+S submits textarea forms" do
+    fields = [%{name: :body, type: :textarea, label: "Body", rows: 3}]
+    state = test_form(fields)
+
+    {state, action} = Form.handle_event(%{key: :enter}, state)
+
+    assert action == nil
     refute_receive {:submitted, _}
+
+    {_state, action} = Form.handle_event(%{key: :char, char: "s", ctrl: true}, state)
+
+    assert action == {:submitted, {:submitted, %{body: "\n"}}}
+    assert_receive {:submitted, %{body: "\n"}}
   end
 
   # --- REQ-6: Escape cancels ---
