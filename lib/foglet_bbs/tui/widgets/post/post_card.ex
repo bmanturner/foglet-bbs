@@ -51,6 +51,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
           optional(:body) => String.t() | nil,
           optional(:message_number) => pos_integer() | nil,
           optional(:inserted_at) => DateTime.t() | NaiveDateTime.t() | nil,
+          optional(:upvote_count) => non_neg_integer(),
           optional(:user) => map() | nil
         }
 
@@ -188,6 +189,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     message_number = reader_message_number(post)
     handle = get_handle(post) || "unknown"
     age = reader_age(post)
+    upvotes = reader_upvote_count(post)
+    upvote_label = "▲#{upvotes}"
     position = "Post #{index + 1} of #{total}"
     message = "##{message_number}"
     handle_prefix = "@"
@@ -198,6 +201,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
         position,
         separator,
         message,
+        separator,
+        upvote_label,
         separator,
         handle_prefix,
         separator,
@@ -215,6 +220,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
           text(position, fg: theme.title.fg),
           text(separator, fg: theme.dim.fg),
           text(message, fg: theme.badge.fg),
+          text(separator, fg: theme.dim.fg),
+          text(upvote_label, fg: theme.badge.fg),
           text(separator, fg: theme.dim.fg),
           text(handle_prefix <> handle, fg: theme.accent.fg),
           text(separator, fg: theme.dim.fg),
@@ -298,6 +305,11 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   end
 
   defp reader_message_number(_post), do: "?"
+
+  defp reader_upvote_count(%{upvote_count: count}) when is_integer(count) and count > 0,
+    do: count
+
+  defp reader_upvote_count(_post), do: 0
 
   defp reader_age(post) do
     case get_time_ago(post) do

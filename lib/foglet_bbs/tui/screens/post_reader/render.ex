@@ -67,8 +67,10 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   defp action_commands(reply_state, %Context{} = context) do
-    if Guest.guest?(context), do: [], else: [reply_command(reply_state)]
+    if Guest.guest?(context), do: [], else: [upvote_command(), reply_command(reply_state)]
   end
+
+  defp upvote_command, do: %{key: "U", label: "Upvote", priority: 8}
 
   defp reply_command(:locked), do: %{key: "R", label: "Reply (locked)", priority: 5}
   defp reply_command(:archived), do: %{key: "R", label: "Reply (archived)", priority: 5}

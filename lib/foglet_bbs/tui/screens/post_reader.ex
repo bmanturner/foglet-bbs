@@ -217,6 +217,21 @@ defmodule Foglet.TUI.Screens.PostReader do
     {%{state | last_error: reason}, []}
   end
 
+  def update({:task_result, :toggle_upvote, result}, %State{} = state, %Context{} = context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, refreshed_post} when is_map(refreshed_post) ->
+        state =
+          state
+          |> replace_loaded_post(refreshed_post)
+          |> warm_selected_post(context)
+
+        {%{state | last_op: nil, last_error: nil}, []}
+
+      {:error, reason} ->
+        {%{state | last_op: nil, last_error: reason}, []}
+    end
+  end
+
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["n", "N"] do
     advance_local_post(state, 1, context)
@@ -263,6 +278,11 @@ defmodule Foglet.TUI.Screens.PostReader do
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["k", "K"] do
     {scroll_local_post(state, -1, context), []}
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["u", "U"] do
+    toggle_selected_post_upvote(state, context)
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -962,6 +982,50 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp selected_action_post_index(%State{selected_post_index: idx}), do: idx
+
+  defp toggle_selected_post_upvote(%State{} = state, %Context{} = context) do
+    with %{id: user_id} when is_binary(user_id) <- context.current_user,
+         %{id: post_id} when is_binary(post_id) <- selected_action_post(state) do
+      posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+
+      effect =
+        Effect.task(:toggle_upvote, :post_reader, fn ->
+          posts_mod.toggle_upvote(user_id, post_id)
+        end)
+
+      {%{state | last_op: :toggle_upvote, last_error: nil}, [effect]}
+    else
+      _ -> {state, []}
+    end
+  end
+
+  defp replace_loaded_post(%State{posts: posts} = state, refreshed_post) when is_list(posts) do
+    refreshed_id = Map.get(refreshed_post, :id)
+
+    posts =
+      Enum.map(posts, fn post ->
+        if same_post_id?(post, refreshed_id),
+          do: merge_refreshed_post(post, refreshed_post),
+          else: post
+      end)
+
+    %{state | posts: posts}
+  end
+
+  defp replace_loaded_post(%State{} = state, _refreshed_post), do: state
+
+  defp same_post_id?(post, refreshed_id) when is_binary(refreshed_id) do
+    Map.get(post, :id) == refreshed_id
+  end
+
+  defp same_post_id?(_post, _refreshed_id), do: false
+
+  defp merge_refreshed_post(original, refreshed_post) do
+    Map.merge(
+      original,
+      Map.take(refreshed_post, [:upvote_count, :user, :reply_to, :body, :deleted_at])
+    )
+  end
 
   defp advance_local_post(%State{posts: posts} = state, _delta, _context)
        when posts in [nil, []] do
