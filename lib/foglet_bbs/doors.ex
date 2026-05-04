@@ -33,8 +33,6 @@ defmodule Foglet.Doors do
     SECRET_KEY_BASE
   ]
 
-  @demo_external_path Path.expand("priv/doors/demo/external_echo.sh", File.cwd!())
-
   @default_manifest_attrs [
     %{
       id: "native-hello",
@@ -46,20 +44,10 @@ defmodule Foglet.Doors do
       timeout_ms: 5_000,
       visibility: :members,
       auth_scope: :site
-    },
-    %{
-      id: "external-echo",
-      slug: "external-echo",
-      display_name: "External Echo",
-      description: "Tiny shell-script door used to verify external executable launch/return.",
-      runtime: :external_pty,
-      command: @demo_external_path,
-      working_dir: Path.dirname(@demo_external_path),
-      timeout_ms: 5_000,
-      visibility: :members,
-      auth_scope: :site
     }
   ]
+
+  @external_echo_relative_path "doors/demo/external_echo.sh"
 
   @type manifest_attrs :: map()
   @type validation_error :: {atom(), String.t()}
@@ -74,6 +62,7 @@ defmodule Foglet.Doors do
   @spec list_manifests() :: [Manifest.t()]
   def list_manifests do
     @default_manifest_attrs
+    |> Kernel.++([external_echo_manifest_attrs()])
     |> Enum.map(&validate_manifest!/1)
   end
 
@@ -136,6 +125,33 @@ defmodule Foglet.Doors do
 
       {:error, errors} ->
         raise ArgumentError, "invalid built-in door manifest: #{inspect(errors)}"
+    end
+  end
+
+  defp external_echo_manifest_attrs do
+    demo_external_path = priv_path(@external_echo_relative_path)
+
+    %{
+      id: "external-echo",
+      slug: "external-echo",
+      display_name: "External Echo",
+      description: "Tiny shell-script door used to verify external executable launch/return.",
+      runtime: :external_pty,
+      command: demo_external_path,
+      working_dir: Path.dirname(demo_external_path),
+      timeout_ms: 5_000,
+      visibility: :members,
+      auth_scope: :site
+    }
+  end
+
+  defp priv_path(relative_path) do
+    case :code.priv_dir(:foglet_bbs) do
+      path when is_list(path) ->
+        Path.join(List.to_string(path), relative_path)
+
+      {:error, _reason} ->
+        Path.expand(Path.join("priv", relative_path))
     end
   end
 

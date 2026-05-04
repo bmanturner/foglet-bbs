@@ -368,6 +368,16 @@ defmodule Foglet.TUI.App do
     {%{state | modal: modal}, []}
   end
 
+  defp do_update({:door_exited, door_id, {:error, _reason}, _status}, state) do
+    modal = %Foglet.TUI.Modal{
+      type: :error,
+      message:
+        "#{door_display_name(door_id)} could not start. You are still connected and back in Foglet. Check server logs for launch details."
+    }
+
+    {%{state | modal: modal}, []}
+  end
+
   defp do_update({:door_exited, door_id, reason, _status}, state) do
     modal = %Foglet.TUI.Modal{
       type: :info,
@@ -485,6 +495,13 @@ defmodule Foglet.TUI.App do
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
+  end
+
+  defp door_display_name(door_id) when is_binary(door_id) do
+    door_id
+    |> String.replace(["-", "_"], " ")
+    |> String.split(" ", trim: true)
+    |> Enum.map_join(" ", &String.capitalize/1)
   end
 
   defp format_notification(:dm, %{body: body}), do: "New message: #{body}"

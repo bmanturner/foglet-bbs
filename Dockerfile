@@ -82,7 +82,10 @@ ENV MIX_ENV="prod"
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/foglet_bbs ./
-RUN chmod +x /app/bin/server /app/bin/migrate
+RUN chmod +x /app/bin/server /app/bin/migrate \
+  /app/lib/foglet_bbs-*/priv/doors/demo/external_echo.sh \
+  /app/lib/foglet_bbs-*/priv/doors/demo/fullscreen_probe.py \
+  /app/lib/foglet_bbs-*/priv/doors/pty/foglet_pty_adapter.py
 
 USER nobody
 

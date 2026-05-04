@@ -350,6 +350,15 @@ defmodule Foglet.TUI.AppTest do
       assert cleared.modal == nil
     end
 
+    test "external door launch failure is shown as a friendly recoverable error", %{state: state} do
+      {new_state, []} = App.update({:door_exited, "external-echo", {:error, :enoent}, nil}, state)
+
+      assert new_state.modal.type == :error
+      assert new_state.modal.message =~ "External Echo"
+      assert new_state.modal.message =~ "could not start"
+      refute new_state.modal.message =~ ":enoent"
+    end
+
     test "form modal submit effect routes through App to target screen update", %{state: state} do
       form =
         Form.init(

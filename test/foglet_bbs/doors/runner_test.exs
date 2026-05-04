@@ -1,6 +1,8 @@
 defmodule Foglet.Doors.RunnerTest do
   use ExUnit.Case, async: false
 
+  import ExUnit.CaptureLog
+
   @event_timeout 1_000
 
   alias Foglet.Doors
@@ -150,7 +152,7 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
     end
 
-    test "external non-zero exit is reported as crash" do
+    test "external non-zero exit is reported as crash with actionable launch context in logs" do
       {:ok, manifest} =
         manifest(%{
           id: "external-crash",
@@ -163,14 +165,67 @@ defmodule Foglet.Doors.RunnerTest do
           pty?: false
         })
 
-      {:ok, pid} =
-        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+      log =
+        capture_log(fn ->
+          {:ok, pid} =
+            DoorSupervisor.start_runner(
+              manifest: manifest,
+              output: output_to(self()),
+              owner: self()
+            )
 
-      ref = Process.monitor(pid)
+          ref = Process.monitor(pid)
 
-      assert_receive {:door_started, ^pid, "external-crash"}
-      assert_receive {:door_exited, ^pid, "external-crash", :crash, 42}
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+          assert_receive {:door_started, ^pid, "external-crash"}
+          assert_receive {:door_exited, ^pid, "external-crash", :crash, 42}
+          assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+        end)
+
+      assert log =~ "door runtime event"
+      assert log =~ "external-crash"
+      assert log =~ "runtime: :external_pty"
+      assert log =~ "command: \"/bin/sh\""
+      assert log =~ "cwd: \"/tmp\""
+      assert log =~ "exit_status: 42"
+      refute log =~ "DATABASE_URL"
+    end
+
+    test "external launch failure exits runner cleanly and logs redacted launch context" do
+      missing_command = Path.join(System.tmp_dir!(), "foglet-missing-door-command")
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-missing",
+          display_name: "External Missing",
+          runtime: :external_pty,
+          command: missing_command,
+          working_dir: System.tmp_dir!(),
+          args: [],
+          timeout_ms: 5_000,
+          pty?: false
+        })
+
+      log =
+        capture_log(fn ->
+          {:ok, pid} =
+            DoorSupervisor.start_runner(
+              manifest: manifest,
+              output: output_to(self()),
+              owner: self()
+            )
+
+          ref = Process.monitor(pid)
+
+          assert_receive {:door_exited, ^pid, "external-missing", {:error, _reason}, nil}
+          assert_receive {:DOWN, ^ref, :process, ^pid, {:door_launch_failed, _reason}}
+        end)
+
+      assert log =~ "door runtime event"
+      assert log =~ "event: :launch_failed"
+      assert log =~ "external-missing"
+      assert log =~ missing_command
+      assert log =~ "runtime: :external_pty"
+      refute log =~ "DATABASE_URL"
     end
 
     test "timeout terminates the external OS process and removes context file" do
