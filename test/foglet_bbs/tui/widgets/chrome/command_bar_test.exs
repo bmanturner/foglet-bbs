@@ -39,16 +39,25 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBarTest do
       flat = CommandBar.render(theme(), command_groups(), width: 120) |> flatten_text()
 
       refute flat =~ "System"
+      refute flat =~ "Actions"
       assert flat =~ "Navigate"
-      assert flat =~ "Actions"
       assert flat =~ "Q Back"
       assert flat =~ "j/k Move"
       assert flat =~ "C Compose"
+      assert flat =~ "D Delete"
 
       assert String.match?(
                flat,
-               ~r/Q Back.*Navigate.*j\/k Move.*Enter Open.*Actions.*C Compose/s
+               ~r/Q Back.*Navigate.*j\/k Move.*Enter Open.*C Compose.*D Delete/s
              )
+    end
+
+    test "hides the Actions group label but still renders its commands" do
+      flat = CommandBar.render(theme(), command_groups(), width: 120) |> flatten_text()
+
+      refute flat =~ "Actions"
+      assert flat =~ "C Compose"
+      assert flat =~ "D Delete"
     end
 
     test "drops lower priority commands first under constrained width" do
@@ -58,6 +67,39 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBarTest do
       assert flat =~ "j/k Move"
       refute flat =~ "D Delete"
       assert TextWidth.display_width(flat) <= 44
+    end
+
+    test "retains hidden-label highest-priority command at cramped widths" do
+      groups = [
+        %{
+          label: "Actions",
+          commands: [%{key: "C", label: "ComposeLong", priority: 5}]
+        }
+      ]
+
+      for width <- [5, 8, 10, 12] do
+        text = CommandBar.render_text(groups, width: width)
+
+        refute text =~ "Actions",
+               "expected hidden Actions label not to render at width #{width}, got: #{inspect(text)}"
+
+        assert String.starts_with?(text, "C "),
+               "expected key C to be retained at width #{width}, got: #{inspect(text)}"
+
+        assert TextWidth.display_width(text) <= width
+      end
+    end
+
+    test "keeps hidden System group hidden under constrained width" do
+      groups = [
+        %{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]}
+      ]
+
+      text = CommandBar.render_text(groups, width: 6)
+
+      refute text =~ "System"
+      assert String.starts_with?(text, "Q ")
+      assert TextWidth.display_width(text) <= 6
     end
 
     test "uses display width truncation for wide glyph labels" do
