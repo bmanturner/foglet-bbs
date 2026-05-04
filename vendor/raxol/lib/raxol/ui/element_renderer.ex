@@ -270,9 +270,11 @@ defmodule Raxol.UI.ElementRenderer do
        do: []
 
   defp render_text_if_valid_coordinates(x, y, text, style) do
-    # Resolve colors properly
+    # Foreground falls back to white for legibility, but background intentionally
+    # stays nil unless set by the element/variant. Nil lets the terminal keep its
+    # default background and avoids painting plain spaces with SGR 40.
     fg = Map.get(style, :fg) || Map.get(style, :foreground, :white)
-    bg = Map.get(style, :bg) || Map.get(style, :background, :black)
+    bg = Map.get(style, :bg) || Map.get(style, :background)
 
     attrs =
       Enum.filter([:bold, :italic, :underline], fn attr ->
