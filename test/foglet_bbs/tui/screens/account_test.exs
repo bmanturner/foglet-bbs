@@ -1580,20 +1580,18 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   describe "PROFILE Modal.Form contract" do
-    test "renders form heading and suppresses Modal.Form footer (FORM-03 default-off)" do
-      # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
-      # Modal.Form footer; the global command bar is the single advertiser of
-      # [Enter] Submit / [Esc] Cancel. Profile/Prefs build forms without
-      # `show_footer: true`, so render must contain the form heading but NOT
-      # the footer sentinel.
+    test "suppresses redundant Modal.Form title and footer (FORM-03 default-off)" do
+      # Phase 28 FORM-03 / D-06 plus FOG-710 account polish: Account tab-body
+      # forms do NOT render Modal.Form title/footer chrome; the selected tab
+      # and global command bar are the single screen-level labels/advertisers.
       state =
         build_state_for_role(:user)
         |> put_in([:screen_state, :account], AccountState.new())
 
       flat = render_account(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "Profile")),
-             "expected form heading 'Profile' in profile tab"
+      refute Enum.any?(flat, &(&1 == "Profile")),
+             "Modal.Form title must NOT duplicate the selected Account tab label"
 
       refute Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
              "Modal.Form footer must NOT appear in Account tab body (Phase 28 D-06)"
