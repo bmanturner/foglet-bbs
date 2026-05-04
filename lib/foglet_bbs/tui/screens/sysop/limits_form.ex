@@ -236,17 +236,9 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
       |> Enum.with_index()
       |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme, width) end)
 
-    # FOG-154: Esc on LIMITS is a no-op (handle_key has no :escape clause), so
-    # the footer must not advertise it. Enter and Ctrl+S both save from any
-    # focused field; Tab/Shift+Tab own field movement.
-    footer =
-      text(
-        truncate("[Tab] Next [Shift+Tab] Previous [Ctrl+S] Save [Enter] Save", width),
-        fg: theme.dim.fg
-      )
-
-    children =
-      [text("Runtime limits", fg: theme.title.fg, style: [:bold]), text("")] ++ rows ++ [footer]
+    # FOG-713: full-page Sysop tabs use the screen command bar for actions;
+    # keep the body to actual form content so cramped terminals do not lose rows.
+    children = rows
 
     {:ok, viewport} =
       Viewport.init(%{
@@ -301,7 +293,10 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
         field.helper
       end
 
-    description_line = text(truncate("    " <> helper_with_min, width), fg: theme.dim.fg)
+    description_line =
+      helper_with_min
+      |> TextWidth.wrap(max(width - 4, 1))
+      |> Enum.map(&text("    " <> &1, fg: theme.dim.fg))
 
     extras =
       case Map.get(state.errors, key) do
@@ -309,7 +304,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
         msg -> [text(truncate("    " <> msg, width), fg: theme.error.fg, style: [:bold])]
       end
 
-    [label_line, description_line] ++ extras ++ [text("")]
+    [label_line] ++ description_line ++ extras ++ [text("")]
   end
 
   defp format_value(nil), do: "(unset)"

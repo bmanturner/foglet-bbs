@@ -125,6 +125,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
   end
 
   defp form_group_label("SITE"), do: "Site"
+  defp form_group_label("BOARDS"), do: "Boards"
   defp form_group_label("LIMITS"), do: "Limits"
   defp form_group_label(_), do: "Form"
 
@@ -144,6 +145,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     ]
 
     base
+    |> maybe_add_boards(ss)
     |> maybe_add_retry(ss)
     |> maybe_add_revoke(ss)
   end
@@ -184,6 +186,28 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     case {active_label, ss.boards_view} do
       {"BOARDS", {:loaded, sub}} -> BoardsView.modal_mode(sub)
       _ -> nil
+    end
+  end
+
+  defp maybe_add_boards(groups, ss) do
+    case Enum.at(State.tab_labels(ss), ss.active_tab) do
+      "BOARDS" ->
+        groups ++
+          [
+            %{
+              label: "Boards",
+              commands: [
+                %{key: "↑/↓", label: "Move", priority: 0},
+                %{key: "Enter", label: "Collapse/expand", priority: 0},
+                %{key: "n/e", label: "Board", priority: 5},
+                %{key: "N/E", label: "Category", priority: 5},
+                %{key: "D", label: "Archive", priority: 5}
+              ]
+            }
+          ]
+
+      _ ->
+        groups
     end
   end
 
@@ -265,18 +289,18 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("SITE", ss, theme, _width, _height) do
+  defp render_tab_body("SITE", ss, theme, width, height) do
     case ss.site_form do
       nil -> loading_panel(theme)
-      form -> SiteForm.render(form, theme)
+      form -> SiteForm.render(form, theme, form_viewport_opts(height, :site, width))
     end
   end
 
-  defp render_tab_body("BOARDS", ss, theme, _width, _height) do
+  defp render_tab_body("BOARDS", ss, theme, width, height) do
     case ss.boards_view do
       :not_loaded -> loading_panel(theme)
       :loading -> loading_panel(theme)
-      {:loaded, sub} -> BoardsView.render(sub, theme)
+      {:loaded, sub} -> BoardsView.render(sub, theme, width: width, visible_height: height)
       {:error, :forbidden} -> forbidden_panel(theme)
       {:error, _other} -> error_panel("boards", theme)
     end
@@ -335,6 +359,11 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       [text("Could not load #{tab}. Press R to try again.", fg: theme.error.fg)]
     end
   end
+
+  defp form_viewport_opts(height, _section, width) when is_integer(height) and height <= 18,
+    do: [max_visible: 2, width: width]
+
+  defp form_viewport_opts(_height, _section, width), do: [width: width]
 
   defp get_screen_state(state) do
     ss =
