@@ -721,6 +721,95 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert text =~ "There are no boards yet. Ask the sysop to create one."
   end
 
+  for {label, size} <- [{"80x24", {80, 24}}, {"64x22", {64, 22}}] do
+    test "render/1 board step at #{label} shows FOG-731 picker contract (FOG-735)" do
+      ss =
+        State.new(
+          boards: [
+            %{id: "b1", name: "General", category_name: "Public"},
+            %{id: "b2", name: "QA Required", category_name: "Ops"}
+          ],
+          load_status: :loaded
+        )
+
+      state =
+        base_state()
+        |> Map.put(:screen_state, %{new_thread: ss})
+        |> Map.put(:terminal_size, unquote(Macro.escape(size)))
+
+      text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+      assert text =~ "Type to filter:", "expected filter prompt at #{unquote(label)}"
+      assert text =~ "2 boards", "expected status footer with match count at #{unquote(label)}"
+      assert text =~ "Type Filter", "expected commandbar Type Filter at #{unquote(label)}"
+      assert text =~ "Backspace Edit", "expected commandbar Backspace Edit at #{unquote(label)}"
+      assert text =~ "Enter Choose", "expected commandbar Enter Choose at #{unquote(label)}"
+      assert text =~ "Esc Cancel", "expected commandbar Esc Cancel at #{unquote(label)}"
+    end
+  end
+
+  test "FOG-735: at wide widths the picker also advertises Page and Select" do
+    ss =
+      State.new(
+        boards: [
+          %{id: "b1", name: "General", category_name: "Public"},
+          %{id: "b2", name: "QA Required", category_name: "Ops"}
+        ],
+        load_status: :loaded
+      )
+
+    state =
+      base_state()
+      |> Map.put(:screen_state, %{new_thread: ss})
+      |> Map.put(:terminal_size, {120, 30})
+
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Type Filter"
+    assert text =~ "Backspace Edit"
+    assert text =~ "↑/↓ Select"
+    assert text =~ "PgUp/PgDn Page"
+    assert text =~ "Enter Choose"
+    assert text =~ "Esc Cancel"
+  end
+
+  test "FOG-735: picker prompt reflects current search buffer in render" do
+    boards = [
+      %{id: "b1", name: "General", category_name: "Public"},
+      %{id: "b2", name: "Announcements", category_name: "Ops"}
+    ]
+
+    ss = State.new(boards: boards, load_status: :loaded)
+    picker = ss.board_picker
+    rs = Map.put(picker.raxol_state, :search_buffer, "ge")
+    rs = Map.put(rs, :filtered_options, [{"Public / General", Enum.at(boards, 0)}])
+    picker = %{picker | raxol_state: rs}
+    ss = %{ss | board_picker: picker}
+    state = base_state() |> Map.put(:screen_state, %{new_thread: ss})
+
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+    assert text =~ "Type to filter: ge"
+    assert text =~ "1 of 2 boards"
+  end
+
+  test "FOG-735: empty filter result renders recovery hint" do
+    boards = [%{id: "b1", name: "General", category_name: "Public"}]
+    ss = State.new(boards: boards, load_status: :loaded)
+    picker = ss.board_picker
+
+    rs =
+      picker.raxol_state
+      |> Map.put(:search_buffer, "zzz")
+      |> Map.put(:filtered_options, [])
+
+    ss = %{ss | board_picker: %{picker | raxol_state: rs}}
+    state = base_state() |> Map.put(:screen_state, %{new_thread: ss})
+
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+    assert text =~ "No boards match"
+    assert text =~ "Backspace to clear"
+  end
+
   # ---------------------------------------------------------------------------
   # Render — compose step
   # ---------------------------------------------------------------------------
@@ -781,6 +870,26 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     assert text =~ "Title"
     assert text =~ "A Thread"
+  end
+
+  for {label, size} <- [{"80x24", {80, 24}}, {"64x22", {64, 22}}] do
+    test "render/1 compose step at #{label} does not render a Draft row (FOG-735)" do
+      state =
+        compose_state()
+        |> put_title("QA selector test")
+        |> Map.put(:terminal_size, unquote(Macro.escape(size)))
+
+      text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+      assert text =~ "QA selector test"
+      assert text =~ "Board General"
+
+      refute text =~ "Draft QA selector test",
+             "compose context must not echo title as a Draft row at #{unquote(label)}"
+
+      refute text =~ ~r/\bDraft\s+QA/,
+             "compose context must not render any Draft <title> line at #{unquote(label)}"
+    end
   end
 
   test "render/1 body-focused edit mode keeps body text and body counter in shell" do

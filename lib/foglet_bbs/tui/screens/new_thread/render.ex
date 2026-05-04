@@ -60,20 +60,19 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
           end
       end
 
+    # FOG-735: empty group label and retention priorities tuned so the
+    # primary picker affordances (Type Filter, Backspace Edit, Enter Choose,
+    # Esc Cancel) survive the 80x24 narrow-fit drop pass. Page/Select are
+    # secondary and drop first when the bar must shed hints.
     ScreenFrame.render(state, new_thread_chrome(ss), board_content, [
       %{
-        label: "Filter",
+        label: "",
         commands: [
-          %{key: "Type", label: "Filter", priority: 15},
-          %{key: "Backspace", label: "Edit", priority: 5}
-        ]
-      },
-      %{
-        label: "Navigate",
-        commands: [
-          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
-          %{key: "PgUp/PgDn", label: "Page", priority: 5},
-          %{key: "Enter", label: "Choose", priority: 10}
+          %{key: "Type", label: "Filter", priority: 5},
+          %{key: "Backspace", label: "Edit", priority: 8},
+          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 25},
+          %{key: "PgUp/PgDn", label: "Page", priority: 30},
+          %{key: "Enter", label: "Choose", priority: 5}
         ]
       },
       %{
