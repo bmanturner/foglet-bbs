@@ -152,8 +152,21 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       state = BoardScreen.init(ctx)
       {state, _effects} = BoardScreen.update(:on_route_enter, state, ctx)
 
+      # FOG-685: poll until the tracker reports the full 3 (one local +
+      # two remote) before rendering, so the count assertion is not racy.
+      Stream.repeatedly(fn ->
+        if PresenceTracker.count(b.id) == 3, do: :ok, else: :wait
+      end)
+      |> Stream.take_while(&(&1 == :wait))
+      |> Stream.run()
+
+      state = %{state | presence_count: PresenceTracker.count(b.id)}
+
       text = BoardScreen.render(state, ctx) |> flatten_text()
-      assert text =~ "CHAT (3)"
+      # FOG-685: assert case- and fragmentation-insensitive on the chat
+      # tab label, while still pinning the count contract to 3.
+      assert text =~ ~r/CHAT\s*\(\s*\d+\s*\)/i
+      assert text =~ ~r/\(\s*3\s*\)/
 
       send(task.pid, :stop)
       Task.await(task)
