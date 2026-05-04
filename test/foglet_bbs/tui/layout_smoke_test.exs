@@ -2735,7 +2735,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           session_context: %{
             theme: Foglet.TUI.Theme.resolve(:gray),
             theme_id: "gray",
-            registration_mode: "invite_only",
+            registration_mode: "open",
             invite_code_generators: "sysop_only"
           },
           terminal_size: {width, height},
@@ -2799,10 +2799,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :moderation,
           current_user: user,
-          session_context: %{
-            registration_mode: "invite_only",
-            invite_code_generators: "sysop_only"
-          },
+          session_context: %{registration_mode: "open", invite_code_generators: "sysop_only"},
           terminal_size: {width, height},
           screen_state: %{moderation: Moderation.State.new()}
         }
@@ -2852,10 +2849,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         state = %App{
           current_screen: :sysop,
           current_user: user,
-          session_context: %{
-            registration_mode: "invite_only",
-            invite_code_generators: "sysop_only"
-          },
+          session_context: %{registration_mode: "open", invite_code_generators: "sysop_only"},
           terminal_size: {width, height},
           screen_state: %{sysop: Sysop.State.new(current_user: user)}
         }
@@ -3182,42 +3176,30 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       App.update(task.(), pending_state)
     end
 
-    defp message_first_line(nil, _size), do: ""
-
-    defp message_first_line(text, size) do
-      text
-      |> TextWidth.wrap(elem(size, 0) - 2)
-      |> List.first()
-      |> Kernel.||("")
-    end
-
-    defp message_starts_on_row?(el, message_text, message_first_line) do
-      rendered_text = String.trim(el.text)
-
-      row_contains_full_width_first_line?(el.text, message_first_line) or
-        row_starts_card_width_message?(rendered_text, message_text)
-    end
-
-    defp row_contains_full_width_first_line?(_row_text, ""), do: false
-
-    defp row_contains_full_width_first_line?(row_text, message_first_line),
-      do: String.contains?(row_text, message_first_line)
-
-    defp row_starts_card_width_message?(rendered_text, message_text) when is_binary(message_text),
-      do: String.length(rendered_text) > 8 and String.starts_with?(message_text, rendered_text)
-
-    defp row_starts_card_width_message?(_rendered_text, _message_text), do: false
-
     defp message_text_rows(state, size) do
       positioned = state |> render_login() |> apply_at_size(size)
 
       message_text = get_in(state.screen_state, [:login, :message])
-      first_line = message_first_line(message_text, size)
+
+      message_first_line =
+        case message_text do
+          nil ->
+            ""
+
+          text ->
+            text
+            |> TextWidth.wrap(elem(size, 0) - 2)
+            |> List.first()
+            |> Kernel.||("")
+        end
+
       content = content_text_elements(positioned)
 
       first_y =
         content
-        |> Enum.find(&message_starts_on_row?(&1, message_text, first_line))
+        |> Enum.find(fn el ->
+          message_first_line != "" and String.contains?(el.text, message_first_line)
+        end)
         |> case do
           nil -> nil
           el -> el.y

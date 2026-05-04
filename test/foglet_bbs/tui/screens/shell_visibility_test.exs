@@ -75,17 +75,30 @@ defmodule Foglet.TUI.Screens.ShellVisibilityTest do
   end
 
   describe "invites_visible?/2" do
-    test "open registration hides invites for sysops, mods, and regular users" do
+    test "hides INVITES for all roles when registration is open" do
       context = %{registration_mode: "open", invite_code_generators: "any_user"}
 
-      refute ShellVisibility.invites_visible?(user(:sysop), context)
-      refute ShellVisibility.invites_visible?(user(:mod), context)
       refute ShellVisibility.invites_visible?(user(:user), context)
+      refute ShellVisibility.invites_visible?(user(:mod), context)
+      refute ShellVisibility.invites_visible?(user(:sysop), context)
     end
 
-    test "invite-backed registration applies invite generation policy" do
+    test "hides INVITES for all roles when registration is sysop-approved" do
+      context = %{registration_mode: "sysop_approved", invite_code_generators: "any_user"}
+
+      refute ShellVisibility.invites_visible?(user(:user), context)
+      refute ShellVisibility.invites_visible?(user(:mod), context)
+      refute ShellVisibility.invites_visible?(user(:sysop), context)
+    end
+
+    test "gates invite-only mode by role and invite_code_generators policy" do
       assert ShellVisibility.invites_visible?(
                user(:sysop),
+               %{registration_mode: "invite_only", invite_code_generators: "sysop_only"}
+             )
+
+      refute ShellVisibility.invites_visible?(
+               user(:mod),
                %{registration_mode: "invite_only", invite_code_generators: "sysop_only"}
              )
 
@@ -94,14 +107,14 @@ defmodule Foglet.TUI.Screens.ShellVisibilityTest do
                %{registration_mode: "invite_only", invite_code_generators: "mods"}
              )
 
-      assert ShellVisibility.invites_visible?(
-               user(:user),
-               %{registration_mode: "sysop_approved", invite_code_generators: "any_user"}
-             )
-
       refute ShellVisibility.invites_visible?(
                user(:user),
                %{registration_mode: "invite_only", invite_code_generators: "mods"}
+             )
+
+      assert ShellVisibility.invites_visible?(
+               user(:user),
+               %{registration_mode: "invite_only", invite_code_generators: "any_user"}
              )
     end
   end

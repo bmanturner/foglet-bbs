@@ -32,15 +32,16 @@ defmodule Foglet.TUI.Screens.AccountTest do
     |> Map.from_struct()
   end
 
+  defp user(role) do
+    %Foglet.Accounts.User{
+      id: "00000000-0000-0000-0000-000000000001",
+      handle: "alice",
+      role: role
+    }
+  end
+
   defp build_state_for_role(role, session_context \\ %{}) do
-    build_state(
-      %Foglet.Accounts.User{
-        id: "00000000-0000-0000-0000-000000000001",
-        handle: "alice",
-        role: role
-      },
-      session_context
-    )
+    build_state(user(role), session_context)
   end
 
   defp account_context(state) do
@@ -204,6 +205,62 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert "INVITES" in AccountState.tab_labels(true)
     end
 
+    test "Account INVITES tab is hidden for normal users and sysops under open registration" do
+      open_any_user = %{registration_mode: "open", invite_code_generators: "any_user"}
+
+      user_state =
+        Account.init(Context.new(current_user: user(:user), session_context: open_any_user))
+
+      sysop_state =
+        Account.init(Context.new(current_user: user(:sysop), session_context: open_any_user))
+
+      assert user_state.tab_labels == AccountState.tab_labels(false)
+      assert sysop_state.tab_labels == AccountState.tab_labels(false)
+    end
+
+    test "Account INVITES tab follows role policy when registration is invite-only" do
+      invite_sysop_only = %{
+        registration_mode: "invite_only",
+        invite_code_generators: "sysop_only"
+      }
+
+      invite_any_user = %{registration_mode: "invite_only", invite_code_generators: "any_user"}
+
+      user_hidden =
+        Account.init(Context.new(current_user: user(:user), session_context: invite_sysop_only))
+
+      sysop_visible =
+        Account.init(Context.new(current_user: user(:sysop), session_context: invite_sysop_only))
+
+      user_visible =
+        Account.init(Context.new(current_user: user(:user), session_context: invite_any_user))
+
+      assert user_hidden.tab_labels == AccountState.tab_labels(false)
+      assert sysop_visible.tab_labels == AccountState.tab_labels(true)
+      assert user_visible.tab_labels == AccountState.tab_labels(true)
+    end
+
+    test "Account render clamps away from stale INVITES tab when registration mode changes to open" do
+      sysop = user(:sysop)
+
+      stale_invites_state =
+        AccountState.new(current_user: sysop, invites_visible?: true, active: 3)
+
+      context =
+        Context.new(
+          current_user: sysop,
+          session_context: %{registration_mode: "open", invite_code_generators: "sysop_only"},
+          route: :account,
+          terminal_size: {80, 24}
+        )
+
+      synced = Account.update(:noop, stale_invites_state, context) |> elem(0)
+
+      assert synced.tab_labels == AccountState.tab_labels(false)
+      assert synced.active_tab == 2
+      assert _node = Account.render(stale_invites_state, context)
+    end
+
     test "Account.render/2 renders from local state and Context without App-shaped input" do
       user = build_user_with_profile()
       context = Context.new(current_user: user, route: :account, terminal_size: {80, 24})
@@ -362,8 +419,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
              )
     end
 
-    test "omits INVITES when InvitesSurface.visible?/2 returns false" do
-      # role: :user with sysop_only policy => not visible
+    test "omits INVITES when InvitesSurface.visible?/3 returns false" do
+      # role: :user with sysop_only policy in invite-only mode => not visible
       state =
         :user
         |> build_state_for_role(%{
@@ -376,39 +433,20 @@ defmodule Foglet.TUI.Screens.AccountTest do
       refute Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
-    test "includes INVITES when invite-backed registration and policy allow sysop" do
+    test "includes INVITES when InvitesSurface.visible?/3 returns true" do
+      # role: :sysop with invite-only registration => operator invite management visible
       state =
-        :sysop
-        |> build_state_for_role(%{
+        build_state_for_role(:sysop, %{
           registration_mode: "invite_only",
           invite_code_generators: "sysop_only"
         })
-        |> put_in([:screen_state, :account], AccountState.new(role: :sysop))
 
+      state = put_in(state, [:screen_state, :account], AccountState.new(role: :sysop))
       flat = render_account(state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
-    test "open registration hides Account INVITES for both normal users and sysops" do
-      for role <- [:user, :sysop] do
-        state =
-          role
-          |> build_state_for_role(%{
-            registration_mode: "open",
-            invite_code_generators: "any_user"
-          })
-          |> put_in([:screen_state, :account], AccountState.new(role: role))
-
-        local_state = Account.init(account_context(state))
-        labels = AccountState.tab_labels(false)
-
-        assert Enum.map(local_state.tabs.raxol_state.tabs, & &1.label) == labels
-        assert local_state.active_tab == 0
-      end
-    end
-
-    test "any_user policy shows INVITES for a regular user" do
-      # any_user
+    test "any_user policy shows INVITES for a regular user in invite-only mode" do
       state =
         :user
         |> build_state_for_role(%{
@@ -422,7 +460,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
 
     test "mods and sysop_only policies hide INVITES for a regular user" do
-      # mods sysop_only
       for policy <- ["mods", "sysop_only"] do
         state =
           :user
@@ -438,7 +475,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
 
     test "nil user does not see INVITES under any_user policy" do
-      # nil user
       state =
         build_state(nil, %{registration_mode: "invite_only", invite_code_generators: "any_user"})
 
@@ -1035,8 +1071,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
           invite_code_generators: "sysop_only"
         })
 
+      {:ok, before} = Invites.list_invites(user)
       assert {:update, _state, []} = handle_account_key(%{key: :char, char: "g"}, state)
-      assert {:ok, []} = Invites.list_invites(user)
+      assert {:ok, ^before} = Invites.list_invites(user)
     end
   end
 
@@ -1379,15 +1416,19 @@ defmodule Foglet.TUI.Screens.AccountTest do
   defp restore_invite_config(_context) do
     Config.init_cache()
     current_generators = Config.get("invite_code_generators", "sysops")
+    current_registration_mode = Config.get("registration_mode", "open")
     current_limit = Config.get("invite_generation_per_user_limit", 0)
 
     on_exit(fn ->
       Config.put!("invite_code_generators", current_generators)
+      Config.put!("registration_mode", current_registration_mode)
       Config.put!("invite_generation_per_user_limit", current_limit)
       Config.invalidate("invite_code_generators")
+      Config.invalidate("registration_mode")
       Config.invalidate("invite_generation_per_user_limit")
     end)
 
+    Config.put!("registration_mode", "invite_only")
     Config.put!("invite_code_generators", "any_user")
     Config.put!("invite_generation_per_user_limit", 0)
     :ok
@@ -2241,8 +2282,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         |> Map.put(:invites, invites)
 
       state =
-        :sysop
-        |> build_state_for_role(%{
+        build_state_for_role(:sysop, %{
           registration_mode: "invite_only",
           invite_code_generators: "sysop_only"
         })
@@ -2270,8 +2310,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         |> Map.put(:invites, invites)
 
       state =
-        :sysop
-        |> build_state_for_role(%{
+        build_state_for_role(:sysop, %{
           registration_mode: "invite_only",
           invite_code_generators: "sysop_only"
         })

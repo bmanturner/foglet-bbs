@@ -136,7 +136,13 @@ defmodule Foglet.TUI.Screens.Account.State do
       state
     else
       active = clamp_active(state.active_tab, labels)
-      %{state | tabs: Tabs.init(tabs: labels, active: active), active_tab: active}
+
+      %{
+        state
+        | tabs: Tabs.init(tabs: labels, active: active),
+          active_tab: active,
+          tab_labels: labels
+      }
     end
   end
 

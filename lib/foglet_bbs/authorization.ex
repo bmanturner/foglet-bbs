@@ -122,7 +122,7 @@ defmodule Foglet.Authorization do
   # "any_user" generation is enabled and applies user caps.
   def authorize(:generate_invite, %User{role: :user}, :site), do: :ok
 
-  # Safe default deny (D-13 catch-all; mirrors InvitesSurface.visible?/2 final clause).
+  # Safe default deny (D-13 catch-all; mirrors InvitesSurface.visible?/3 final clause).
   def authorize(_action, _actor, _scope), do: {:error, :forbidden}
 
   # ---------- Public helpers (non-Bodyguard) ----------
