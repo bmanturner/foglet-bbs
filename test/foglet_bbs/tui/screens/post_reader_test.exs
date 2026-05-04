@@ -1745,6 +1745,88 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert PostReader.selected_action_post(ss).id == "p4"
     end
 
+    test "down at last visible post loads the next window and replies to its first visible post" do
+      context = bounded_post_reader_context()
+
+      state =
+        bounded_state(
+          posts: bounded_posts(1..50),
+          selected_post_index: 47,
+          selected_action_post_index: 49,
+          window_first_message_number: 1,
+          window_last_message_number: 50,
+          window_has_next?: true
+        )
+
+      assert {%State{} = loading,
+              [%Effect{type: :task, payload: %{op: :load_posts_window, fun: fun}}]} =
+               PostReader.update({:key, %{key: :down}}, state, context)
+
+      window = fun.()
+
+      assert_receive {:reader_window_requested, "t-1000",
+                      [direction: :next, after_message_number: 50, limit: 50]}
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 loading,
+                 context
+               )
+
+      assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p51"
+      assert PostReader.selected_action_post(loaded).id == "p51"
+
+      assert {%State{}, [%Effect{type: :navigate, payload: %{params: params}}]} =
+               PostReader.update({:key, %{key: :char, char: "r"}}, loaded, context)
+
+      assert params.reply_to.id == "p51"
+    end
+
+    test "up at first visible post loads the previous window and replies to its last visible post" do
+      context = bounded_post_reader_context()
+
+      state =
+        bounded_state(
+          posts: bounded_posts(51..100),
+          selected_post_index: 0,
+          selected_action_post_index: 0,
+          window_first_message_number: 51,
+          window_last_message_number: 100,
+          window_has_previous?: true,
+          pending_read_positions: %{
+            "t-1000" => %{
+              last_read_post_id: "p100",
+              last_read_message_number: 100
+            }
+          }
+        )
+
+      assert {%State{} = loading,
+              [%Effect{type: :task, payload: %{op: :load_posts_window, fun: fun}}]} =
+               PostReader.update({:key, %{key: :up}}, state, context)
+
+      window = fun.()
+
+      assert_receive {:reader_window_requested, "t-1000",
+                      [direction: :previous, before_message_number: 51, limit: 50]}
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 loading,
+                 context
+               )
+
+      assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p50"
+      assert PostReader.selected_action_post(loaded).id == "p50"
+
+      assert {%State{}, [%Effect{type: :navigate, payload: %{params: params}}]} =
+               PostReader.update({:key, %{key: :char, char: "r"}}, loaded, context)
+
+      assert params.reply_to.id == "p50"
+    end
+
     test "long-post mode keeps j/k as viewport scroll and up/down do not change the reply target" do
       body = Enum.map_join(1..8, "\n\n", &"Line #{&1}")
       s = p2_state(%{posts: [p2_post(id: "p1", body: body)], terminal_size: {80, 12}})

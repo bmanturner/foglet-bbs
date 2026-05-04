@@ -239,19 +239,19 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update({:key, %{key: :down}}, %State{} = state, %Context{} = context) do
-    {move_action_target_for_visible_post(state, 1, context), []}
+    move_action_target_for_visible_post(state, 1, context)
   end
 
   def update({:key, %{key: :tab}}, %State{} = state, %Context{} = context) do
-    {move_action_target_for_visible_post(state, 1, context), []}
+    move_action_target_for_visible_post(state, 1, context)
   end
 
   def update({:key, %{key: :up}}, %State{} = state, %Context{} = context) do
-    {move_action_target_for_visible_post(state, -1, context), []}
+    move_action_target_for_visible_post(state, -1, context)
   end
 
   def update({:key, %{key: :backtab}}, %State{} = state, %Context{} = context) do
-    {move_action_target_for_visible_post(state, -1, context), []}
+    move_action_target_for_visible_post(state, -1, context)
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -1081,7 +1081,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp move_action_target_for_visible_post(%State{posts: posts} = state, _delta, _context)
        when posts in [nil, []] do
-    state
+    {state, []}
   end
 
   defp move_action_target_for_visible_post(%State{} = state, delta, %Context{} = context) do
@@ -1089,14 +1089,14 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     case screenful do
       %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
-        move_selected_action_post(state, indexes, delta)
+        move_selected_action_post(state, indexes, delta, context)
 
       _other ->
-        state
+        {state, []}
     end
   end
 
-  defp move_selected_action_post(%State{} = state, visible_indexes, delta)
+  defp move_selected_action_post(%State{} = state, visible_indexes, delta, %Context{} = context)
        when is_list(visible_indexes) and visible_indexes != [] do
     current = selected_action_post_index(state)
 
@@ -1106,11 +1106,54 @@ defmodule Foglet.TUI.Screens.PostReader do
         position -> position
       end
 
-    next_position = (current_position + delta) |> max(0) |> min(length(visible_indexes) - 1)
-    %{state | selected_action_post_index: Enum.at(visible_indexes, next_position)}
+    last_position = length(visible_indexes) - 1
+
+    cond do
+      delta > 0 and current_position == last_position ->
+        advance_local_post(state, 1, context)
+
+      delta < 0 and current_position == 0 ->
+        move_to_previous_screenful_tail(state, context)
+
+      true ->
+        next_position = (current_position + delta) |> max(0) |> min(last_position)
+        {%{state | selected_action_post_index: Enum.at(visible_indexes, next_position)}, []}
+    end
   end
 
-  defp move_selected_action_post(%State{} = state, _visible_indexes, _delta), do: state
+  defp move_selected_action_post(%State{} = state, _visible_indexes, _delta, %Context{}),
+    do: {state, []}
+
+  defp move_to_previous_screenful_tail(%State{} = state, %Context{} = context) do
+    cond do
+      should_load_previous_window?(state, -1, state.selected_post_index) ->
+        load_adjacent_window(state, :previous, context)
+
+      state.selected_post_index > 0 ->
+        new_anchor = previous_screenful_anchor(state, context)
+
+        previous_screenful =
+          visible_screenful(%{state | selected_post_index: new_anchor}, context)
+
+        new_action_idx = List.last(previous_screenful.indexes) || new_anchor
+        {reset_vp, _cmds} = Viewport.update({:scroll_to, 0}, state.viewport)
+
+        state =
+          %{
+            state
+            | selected_post_index: new_anchor,
+              selected_action_post_index: new_action_idx,
+              viewport: reset_vp
+          }
+          |> warm_selected_post(context)
+          |> seed_pending_read_position_through_visible(context)
+
+        {state, []}
+
+      true ->
+        {state, []}
+    end
+  end
 
   defp warm_selected_post(%State{} = state, %Context{} = context) do
     case selected_post(state) do
