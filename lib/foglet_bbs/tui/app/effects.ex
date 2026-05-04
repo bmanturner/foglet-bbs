@@ -183,7 +183,7 @@ defmodule Foglet.TUI.App.Effects do
 
   defp guest_route_denied?(%App{} = state, screen) do
     Guest.guest?(state) and
-      screen in [:new_thread, :post_composer, :door_list, :account, :moderation, :sysop]
+      screen in [:new_thread, :post_composer, :account, :moderation, :sysop]
   end
 
   defp denial_kind_for_screen(:door_list), do: :door

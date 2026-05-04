@@ -752,12 +752,17 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   describe "Phase 19 destinations vs. actions split" do
-    test "visible_destinations/1 anonymous returns B, C, Q only (anonymous still sees Compose)" do
+    test "visible_destinations/1 anonymous returns B, C, D, Q (FOG-660 guest Door Games browse)" do
       # Anonymous-C: destination row is present even when authenticated; handle_key/2's
       # anonymous-C route to login is unchanged from pre-Phase-19 contract.
+      # FOG-660: guests see Door Games (D) when browsable :members-visibility doors
+      # are configured, so they can browse the catalog before signing in. Account
+      # (A), Moderation (M), and Sysop (S) remain hidden — see the role-gated
+      # destination_visible? clauses and the disjointness sweep below.
       assert MainMenu.visible_destinations(nil) == [
                {"B", "Boards"},
                {"C", "Compose"},
+               {"D", "Door Games"},
                {"Q", "Logout"}
              ]
     end
