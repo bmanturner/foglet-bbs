@@ -134,12 +134,40 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
     # Apply the search synchronously here so each char/backspace updates the
     # filtered rows and counter, and clear the timer so subsequent events do
     # not try to cancel a non-reference.
-    new_rs = apply_pending_search(rs, raw_rs)
+    searched_rs = apply_pending_search(rs, raw_rs)
+    # FOG-744: Raxol's navigation helpers compute `max_index` from the unfiltered
+    # `options` list, so PageDown/End/arrows on a filtered list can park
+    # `focused_index` past the last visible row and produce an impossible
+    # `2/1` style status. Clamp against the active (filtered) result set.
+    new_rs = clamp_focus_to_filtered(searched_rs)
     # IN-06: derive_action/4 receives the normalized navigation event. For searchable
     # lists this is still the original `:char` event; for non-search j/k fallbacks it
     # is the equivalent arrow event so navigation stays semantically quiet.
     action = derive_action(rs, new_rs, navigation_event, st.multiple)
     {%{st | raxol_state: new_rs, last_action: action}, action}
+  end
+
+  defp clamp_focus_to_filtered(rs) do
+    active = Map.get(rs, :filtered_options) || Map.get(rs, :options, [])
+    count = length(active)
+    visible = max(Map.get(rs, :visible_items) || Map.get(rs, :page_size, @default_page_size), 1)
+    focused = clamp(Map.get(rs, :focused_index, 0), 0, max(count - 1, 0))
+    scroll = clamp_scroll(Map.get(rs, :scroll_offset, 0), focused, count, visible)
+
+    %{rs | focused_index: focused, scroll_offset: scroll}
+  end
+
+  defp clamp(value, lo, hi), do: value |> max(lo) |> min(hi)
+
+  defp clamp_scroll(scroll, focused, count, visible) do
+    max_scroll = max(count - visible, 0)
+    bounded = clamp(scroll, 0, max_scroll)
+
+    cond do
+      focused < bounded -> focused
+      focused >= bounded + visible -> focused - visible + 1
+      true -> bounded
+    end
   end
 
   defp apply_pending_search(prev_rs, %{enable_search: true, search_buffer: buffer} = rs) do

@@ -227,6 +227,66 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert is_nil(action)
     end
 
+    test "FOG-744: PageDown on filtered list cannot park focus past last filtered row" do
+      st =
+        SmartList.init(
+          options: [{"General", 1}, {"QA Required", 2}],
+          enable_search: true,
+          page_size: 12
+        )
+        |> activate_search()
+
+      {st, _} = SmartList.handle_event(%{key: :char, char: "q"}, st)
+      {st, _} = SmartList.handle_event(%{key: :char, char: "a"}, st)
+
+      assert st.raxol_state.filtered_options == [{"QA Required", 2}]
+      assert st.raxol_state.focused_index == 0
+
+      {st, _} = SmartList.handle_event(%{key: :page_down}, st)
+
+      assert st.raxol_state.focused_index == 0,
+             "PageDown must clamp to last filtered index (0/1), got #{st.raxol_state.focused_index}"
+
+      {st, _} = SmartList.handle_event(%{key: :page_up}, st)
+      assert st.raxol_state.focused_index == 0
+
+      {st, _} = SmartList.handle_event(%{key: :end}, st)
+      assert st.raxol_state.focused_index == 0
+
+      {st, _} = SmartList.handle_event(%{key: :down}, st)
+      assert st.raxol_state.focused_index == 0
+    end
+
+    test "FOG-744: navigation on full (unfiltered) list still reaches last item" do
+      opts = Enum.map(1..3, fn i -> {"Item #{i}", i} end)
+      st = SmartList.init(options: opts, enable_search: true, page_size: 12)
+
+      {st, _} = SmartList.handle_event(%{key: :page_down}, st)
+      assert st.raxol_state.focused_index == 2
+
+      {st, _} = SmartList.handle_event(%{key: :page_up}, st)
+      assert st.raxol_state.focused_index == 0
+    end
+
+    test "FOG-744: empty filtered list keeps focused_index at 0 across paging" do
+      st =
+        SmartList.init(
+          options: [{"Alpha", 1}, {"Beta", 2}],
+          enable_search: true,
+          page_size: 12
+        )
+        |> activate_search()
+
+      {st, _} = SmartList.handle_event(%{key: :char, char: "z"}, st)
+      assert st.raxol_state.filtered_options == []
+
+      {st, _} = SmartList.handle_event(%{key: :page_down}, st)
+      assert st.raxol_state.focused_index == 0
+
+      {st, _} = SmartList.handle_event(%{key: :end}, st)
+      assert st.raxol_state.focused_index == 0
+    end
+
     test "purity: same state + event produces same output" do
       st = two_item_fixture()
 
