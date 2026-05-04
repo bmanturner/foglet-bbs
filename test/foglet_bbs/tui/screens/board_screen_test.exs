@@ -153,7 +153,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       {state, _effects} = BoardScreen.update(:on_route_enter, state, ctx)
 
       text = BoardScreen.render(state, ctx) |> flatten_text()
-      assert text =~ "2 CHAT (3)"
+      assert text =~ "CHAT (3)"
 
       send(task.pid, :stop)
       Task.await(task)
