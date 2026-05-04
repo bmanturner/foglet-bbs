@@ -1076,8 +1076,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       tree = render_screen(s)
       flat = flatten_text(tree)
 
-      assert flat =~ "J/K"
+      assert flat =~ "↑/↓"
       assert flat =~ "Scroll"
+      refute flat =~ "J/K"
       refute flat =~ "Scroll ↓"
       refute flat =~ "Scroll ↑"
     end
@@ -1959,16 +1960,17 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert ss4.viewport.scroll_top == pre_promote
     end
 
-    test "keybar advertises J/K Scroll only when the partial is the action target" do
+    test "keybar advertises arrow Scroll only when the partial is the action target" do
       s = packed_partial_state()
       tree = render_screen(s)
       bar_unselected = command_bar_text(tree)
       refute bar_unselected =~ "J/K"
-      assert bar_unselected =~ "Up/Down"
+      assert bar_unselected =~ "↑/↓"
 
       {:update, s1, _} = handle_key_screen(%{key: :down}, s)
       bar_selected = s1 |> render_screen() |> command_bar_text()
-      assert bar_selected =~ "J/K"
+      refute bar_selected =~ "J/K"
+      assert bar_selected =~ "↑/↓"
       assert bar_selected =~ "Scroll"
     end
 

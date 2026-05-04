@@ -23,13 +23,14 @@ defmodule Foglet.TUI.Screens.Account.Render do
     theme = account_theme(state, ss)
     active_label = active_label(ss) || "PROFILE"
     width = inner_width(state)
+    height = terminal_height(state)
 
     content =
       column style: %{gap: 0} do
         [
           Tabs.render(ss.tabs, theme: theme, width: width),
           divider(char: "─", style: %{fg: theme.border.fg}),
-          render_tab_body(active_label, ss, theme, width)
+          render_tab_body(active_label, ss, theme, width, height)
         ]
       end
 
@@ -225,6 +226,13 @@ defmodule Foglet.TUI.Screens.Account.Render do
     end
   end
 
+  defp terminal_height(state) do
+    case Map.get(state, :terminal_size) do
+      {_w, h} when is_integer(h) -> h
+      _ -> 24
+    end
+  end
+
   defp synced_screen_state(state) do
     state
     |> get_screen_state()
@@ -290,20 +298,30 @@ defmodule Foglet.TUI.Screens.Account.Render do
     Enum.find(Theme.ids(), &(Atom.to_string(&1) == theme_id))
   end
 
-  defp render_tab_body("PROFILE", ss, theme, _width), do: ProfileForm.render(ss, theme)
+  defp render_tab_body("PROFILE", ss, theme, _width, height),
+    do: ProfileForm.render(ss, theme, form_viewport_opts(height, :profile))
 
-  defp render_tab_body("PREFS", ss, theme, _width), do: PrefsForm.render(ss, theme)
+  defp render_tab_body("PREFS", ss, theme, _width, height),
+    do: PrefsForm.render(ss, theme, form_viewport_opts(height, :prefs))
 
-  defp render_tab_body("SSH KEYS", ss, theme, width),
+  defp render_tab_body("SSH KEYS", ss, theme, width, _height),
     do: SSHKeysSurface.render(ss.ssh_keys, theme, width)
 
-  defp render_tab_body("INVITES", ss, theme, _width) do
+  defp render_tab_body("INVITES", ss, theme, _width, _height) do
     InvitesSurface.render(ss.invites, theme)
   end
 
-  defp render_tab_body(_unknown, _ss, theme, _width) do
+  defp render_tab_body(_unknown, _ss, theme, _width, _height) do
     column style: %{gap: 0} do
       [text("", fg: theme.dim.fg)]
     end
   end
+
+  defp form_viewport_opts(height, :prefs) when is_integer(height) and height <= 18,
+    do: [max_visible: 1]
+
+  defp form_viewport_opts(height, _section) when is_integer(height) and height <= 18,
+    do: [max_visible: 2]
+
+  defp form_viewport_opts(_height, _section), do: []
 end

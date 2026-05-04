@@ -2312,6 +2312,48 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     refute tab_row =~ "│"
   end
 
+  test "account prefs uses a focused field window on cramped terminals" do
+    user = %{
+      id: "u1",
+      handle: "alice",
+      role: :user,
+      status: :active,
+      timezone: "America/Chicago",
+      theme: "gray",
+      preferences: %{"time_format" => "12h"}
+    }
+
+    account_state = Account.State.new(current_user: user, active: 1)
+
+    {prefs_form, nil} =
+      Foglet.TUI.Widgets.Modal.Form.handle_event(%{key: :tab}, account_state.prefs_form)
+
+    {prefs_form, nil} = Foglet.TUI.Widgets.Modal.Form.handle_event(%{key: :tab}, prefs_form)
+    account_state = %{account_state | prefs_form: prefs_form, prefs_focus: :theme}
+
+    state = %App{
+      current_screen: :account,
+      current_user: user,
+      screen_state: %{account: account_state},
+      terminal_size: {64, 16}
+    }
+
+    positioned = state |> render_app_screen(Account, :account) |> apply_at_size({64, 16})
+    elements = content_text_elements(positioned)
+    flat = Enum.map_join(elements, "\n", & &1.text)
+
+    assert flat =~ "more above"
+    assert flat =~ "Theme:"
+
+    max_y =
+      elements
+      |> Enum.map(fn el -> Map.get(el, :y, 0) + Map.get(el, :height, 1) end)
+      |> Enum.max(fn -> 0 end)
+
+    assert max_y <= 16,
+           "account prefs cramped render: total height #{max_y} exceeds 16 rows"
+  end
+
   test "sysop shell clamps tab row to 64-column framed content budget without inner border glyphs" do
     user = %{
       id: "u2",

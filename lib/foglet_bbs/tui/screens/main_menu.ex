@@ -25,7 +25,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Authorization
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, ScrollKeys}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.MainMenu.Render
@@ -83,14 +83,16 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
-  def update({:key, %{key: :up}}, local_state, %Context{} = context) do
+  def update({:key, %{key: key} = event}, local_state, %Context{} = context)
+      when key in [:up, :down] do
     local_state = normalize_state(local_state, context)
-    {State.select_delta(local_state, -1), []}
+    {State.select_delta(local_state, ScrollKeys.vertical_delta(event)), []}
   end
 
-  def update({:key, %{key: :down}}, local_state, %Context{} = context) do
+  def update({:key, %{key: :char, char: c} = event}, local_state, %Context{} = context)
+      when c in ["j", "k"] do
     local_state = normalize_state(local_state, context)
-    {State.select_delta(local_state, 1), []}
+    {State.select_delta(local_state, ScrollKeys.vertical_delta(event)), []}
   end
 
   def update({:key, %{key: :enter}}, local_state, %Context{} = context) do

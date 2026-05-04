@@ -115,12 +115,15 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
 
             texts = Enum.map(elements, & &1.text)
 
-            # Phase 28 FORM-03 / D-06: Account tab-body forms render WITHOUT
-            # Modal.Form's footer; the global command bar advertises [Enter]/[Esc].
-            # Smoke contract: assert the heading is visible (Modal.Form is
-            # present) and the footer sentinel is suppressed.
-            assert Enum.any?(texts, &String.contains?(&1, "Profile")),
-                   "expected 'Profile' heading at #{width}x#{height}, got: #{inspect(texts)}"
+            # FOG-710: Account tab-body forms render WITHOUT Modal.Form's
+            # redundant title heading; the selected tab already communicates
+            # the active section. Assert fields still render and the tab-body
+            # heading is suppressed.
+            assert Enum.any?(texts, &String.contains?(&1, "Location:")),
+                   "expected profile field label at #{width}x#{height}, got: #{inspect(texts)}"
+
+            refute Enum.any?(texts, &String.contains?(&1, "Profile")),
+                   "Profile tab body must not repeat a redundant 'Profile' heading at #{width}x#{height}"
 
             refute Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
                    "Modal.Form footer must NOT appear at #{width}x#{height} (Phase 28 D-06)"
