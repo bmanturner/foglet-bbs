@@ -2,13 +2,13 @@ defmodule Foglet.TUI.Screens.NewThread do
   @moduledoc """
   New-thread compose wizard (Audit #9 fix).
 
-  Phase 37 makes NewThread screen-owned: board picker state, board-load
-  results, compose drafts, validation, submit status/result, and cancel origin
-  live in `%NewThread.State{}` and flow through `update/3`.
-
-  Step 1 — :board   : pick a subscribed board (↑/↓ to navigate; j/k fallback, Enter to select, Esc to cancel).
-  Step 2 — :compose : enter title (Tab-switch focus) and body (MultiLineInput state, rendered as plain text/2).
-                       Ctrl+S to submit, Esc to cancel (Ctrl+C is a terminal fallback).
+  Step 1 — :board   : pick a subscribed board through a searchable
+                       picker (type to filter, ↑/↓ to navigate, Enter to
+                       choose, Esc to cancel). FOG-712: replaced the plain
+                       SelectionList with a SmartList-backed picker so j/k
+                       characters search the filter buffer.
+  Step 2 — :compose : enter title (Tab-switch focus) and body (MultiLineInput
+                       state). Ctrl+S to submit, Esc to cancel.
 
   State lives in `state.screen_state[:new_thread]` as a `%NewThread.State{}`.
 
@@ -19,12 +19,13 @@ defmodule Foglet.TUI.Screens.NewThread do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Config
-  alias Foglet.TUI.{Context, Effect, ScrollKeys}
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.NewThread.Render
   alias Foglet.TUI.Screens.NewThread.State
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Input.TextInput
+  alias Foglet.TUI.Widgets.List.SmartList
 
   @default_max_post_length 8192
   @default_max_thread_title_length 60
@@ -67,6 +68,7 @@ defmodule Foglet.TUI.Screens.NewThread do
        | boards: boards,
          active_board_count: active_board_count,
          selected_board_index: 0,
+         board_picker: State.build_board_picker(boards),
          load_status: status,
          error: nil
      }, []}
@@ -117,40 +119,32 @@ defmodule Foglet.TUI.Screens.NewThread do
     {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
   end
 
-  defp handle_board_key_event(%{key: key} = event, %State{} = state) when key in [:up, :down] do
-    board_move_state(state, ScrollKeys.vertical_delta(event))
-  end
+  defp handle_board_key_event(_event, %State{board_picker: nil} = state), do: {state, []}
 
-  defp handle_board_key_event(%{key: :char, char: char} = event, %State{} = state)
-       when char in ["j", "k"] do
-    board_move_state(state, ScrollKeys.vertical_delta(event))
-  end
-
-  defp handle_board_key_event(%{key: :enter}, %State{} = state) do
-    boards = state.boards || []
-
-    case Enum.at(boards, state.selected_board_index) do
+  defp handle_board_key_event(%{key: :enter}, %State{board_picker: picker} = state) do
+    case picker_focused_board(picker) do
       nil -> {state, []}
       board -> {%{state | step: :compose, board: board}, []}
     end
   end
 
-  defp handle_board_key_event(_key, %State{} = state), do: {state, []}
+  defp handle_board_key_event(event, %State{board_picker: picker} = state) do
+    {new_picker, _action} = SmartList.handle_event(event, picker)
+    new_idx = Map.get(new_picker.raxol_state, :focused_index, 0)
+    {%{state | board_picker: new_picker, selected_board_index: new_idx}, []}
+  end
 
-  defp board_move_state(%State{} = state, delta) do
-    boards = state.boards || []
+  defp picker_focused_board(%SmartList{raxol_state: rs}) do
+    options = Map.get(rs, :filtered_options) || Map.get(rs, :options) || []
+    idx = Map.get(rs, :focused_index, 0)
 
-    if boards == [] do
-      {state, []}
-    else
-      new_idx =
-        (state.selected_board_index + delta)
-        |> max(0)
-        |> min(length(boards) - 1)
-
-      {%{state | selected_board_index: new_idx}, []}
+    case Enum.at(options, idx) do
+      {_label, board} -> board
+      _ -> nil
     end
   end
+
+  defp picker_focused_board(_picker), do: nil
 
   defp handle_compose_key_event(
          %{key: :char, char: "c", ctrl: true},
@@ -298,11 +292,20 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp domain_module(%Context{session_context: ctx}, key), do: Domain.get(ctx || %{}, key)
 
   defp subscribed_boards(directory) do
-    directory
-    |> Enum.flat_map(& &1.boards)
-    |> Enum.filter(& &1.subscribed?)
-    |> Enum.map(& &1.board)
+    Enum.flat_map(directory, fn category ->
+      category_name = category |> Map.get(:category, %{}) |> Map.get(:name)
+
+      category.boards
+      |> Enum.filter(& &1.subscribed?)
+      |> Enum.map(fn entry -> annotate_board(entry.board, category_name) end)
+    end)
   end
+
+  defp annotate_board(%{} = board, category_name) when is_binary(category_name) do
+    Map.put_new(board, :category_name, category_name)
+  end
+
+  defp annotate_board(board, _category_name), do: board
 
   defp active_board_count(directory) do
     Enum.reduce(directory, 0, fn category, acc -> acc + length(category.boards) end)
@@ -311,9 +314,6 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp origin_for(%State{origin: origin}) when is_atom(origin), do: origin
   defp origin_for(_state), do: :main_menu
 
-  # When canceling back to a board-scoped origin (e.g. :thread_list), forward
-  # the board context so the destination can re-mount with its breadcrumb and
-  # thread query intact instead of falling into the missing-board error path.
   defp cancel_params(%State{origin: :thread_list, board: %{} = board}) do
     %{board: board, board_id: Map.get(board, :id) || Map.get(board, "id")}
   end
@@ -378,11 +378,6 @@ defmodule Foglet.TUI.Screens.NewThread do
   defp normalize_session_context(value) when is_map(value), do: value
   defp normalize_session_context(_value), do: %{}
 
-  # Only invoke the producer (which may hit the config cache / DB) when the
-  # session_context does not already carry a positive integer for this key.
-  # This keeps callers that pre-seed limits from paying for an unnecessary
-  # config read — and lets them avoid surfacing config-read failures
-  # entirely when the limit is already known.
   defp put_new_positive_lazy(map, key, producer) when is_function(producer, 0) do
     case Map.get(map, key) do
       n when is_integer(n) and n > 0 ->

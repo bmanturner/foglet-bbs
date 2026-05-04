@@ -1,6 +1,11 @@
 defmodule Foglet.TUI.Screens.NewThread.Render do
   @moduledoc """
   Pure render entry point for the NewThread screen.
+
+  FOG-712: removes the redundant `Draft <title>` compose-context line and
+  replaces the plain board SelectionList with a SmartList-backed
+  searchable picker (filter on top, filtered rows in the middle, match
+  count footer).
   """
 
   alias Foglet.TUI.Context
@@ -12,7 +17,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Composer.EditorFrame
   alias Foglet.TUI.Widgets.Input.TextInput
-  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.Widgets.List.SmartList
   alias Foglet.TUI.Widgets.Post.MarkdownBody
 
   import Raxol.Core.Renderer.View
@@ -35,28 +40,39 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
     theme = Theme.from_state(state)
 
     board_content =
-      case ss.boards do
-        nil ->
+      case {ss.boards, ss.board_picker} do
+        {nil, _} ->
           column style: %{gap: 0} do
             [text("Loading boards…", fg: theme.dim.fg)]
           end
 
-        [] ->
+        {[], _} ->
           column style: %{gap: 0} do
             [text(empty_board_message(ss), fg: theme.warning.fg)]
           end
 
-        boards ->
-          SelectionList.render(boards, ss.selected_board_index, fn {board, _idx, selected} ->
-            ListRow.render(board.name, selected, theme)
-          end)
+        {_boards, %SmartList{} = picker} ->
+          render_board_picker(picker, theme)
+
+        {_boards, nil} ->
+          column style: %{gap: 0} do
+            [text(empty_board_message(ss), fg: theme.warning.fg)]
+          end
       end
 
     ScreenFrame.render(state, new_thread_chrome(ss), board_content, [
       %{
+        label: "Filter",
+        commands: [
+          %{key: "Type", label: "Filter", priority: 15},
+          %{key: "Backspace", label: "Edit", priority: 5}
+        ]
+      },
+      %{
         label: "Navigate",
         commands: [
           %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
+          %{key: "PgUp/PgDn", label: "Page", priority: 5},
           %{key: "Enter", label: "Choose", priority: 10}
         ]
       },
@@ -65,6 +81,39 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
         commands: [%{key: "Esc", label: "Cancel", priority: 0}]
       }
     ])
+  end
+
+  defp render_board_picker(%SmartList{raxol_state: rs} = picker, theme) do
+    query = Map.get(rs, :search_buffer, "")
+    options = Map.get(rs, :options, [])
+    filtered = Map.get(rs, :filtered_options, options)
+    focused_index = Map.get(rs, :focused_index, 0)
+    total = length(options)
+    matches = length(filtered)
+
+    column style: %{gap: 0} do
+      [
+        text("Type to filter: #{query}", fg: theme.accent.fg, style: [:bold]),
+        SmartList.render(picker, theme: theme),
+        text(picker_status_line(query, matches, total, focused_index), fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  defp picker_status_line(query, 0, _total, _focused) when query != "" do
+    "No boards match \"#{query}\" — Backspace to clear"
+  end
+
+  defp picker_status_line(_query, 0, total, _focused) do
+    "0 of #{total} boards"
+  end
+
+  defp picker_status_line(_query, matches, total, focused) when matches == total do
+    "#{matches} boards · #{focused + 1}/#{matches}"
+  end
+
+  defp picker_status_line(_query, matches, total, focused) do
+    "#{matches} of #{total} boards · #{focused + 1}/#{matches}"
   end
 
   defp render_compose_step(state, ss) do
@@ -78,7 +127,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
       EditorFrame.render(
         mode: ss.mode,
         focused?: ss.focused == :body and ss.mode == :edit,
-        context: compose_context(ss, title_value, width, theme),
+        context: compose_context(ss, width, theme),
         title: render_title_input(ss, theme),
         body: render_body_section(state, ss, theme),
         budgets: [
@@ -131,23 +180,18 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   defp compose_tab_hint(%{focused: :body, mode: :preview}), do: "Edit"
   defp compose_tab_hint(_ss), do: "To body"
 
-  defp compose_context(ss, title_value, width, theme) do
+  # FOG-712: drop the redundant `Draft <title>` row. The Title input itself
+  # plus the breadcrumb (`Foglet ▸ <board> ▸ New Thread`) and this Board row
+  # already convey compose context without echoing user input.
+  defp compose_context(ss, width, theme) do
     available = max(width - 10, 20)
     board_name = ss.board && Map.get(ss.board, :name, "Unknown board")
 
     [
       text("Board #{TextWidth.truncate(board_name || "Unknown board", available)}",
         fg: theme.dim.fg
-      ),
-      title_context(title_value, available, theme)
+      )
     ]
-    |> Enum.reject(&is_nil/1)
-  end
-
-  defp title_context("", _available, _theme), do: nil
-
-  defp title_context(title_value, available, theme) do
-    text("Draft #{TextWidth.truncate(title_value, available)}", fg: theme.dim.fg)
   end
 
   defp render_title_input(ss, theme) do
@@ -174,8 +218,6 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
 
     case ss.mode do
       :edit ->
-        # D-09: delegate to shared widget. NewThread preserves its legacy
-        # single-space placeholder for empty lines (see Plan 04-01's opt).
         render_body_input(ss.body_input_state, body_focused, theme, body_width)
 
       :preview ->
