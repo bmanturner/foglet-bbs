@@ -60,6 +60,14 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
   end
 
   defp sysop_commands(ss, jump_hint) do
+    case boards_modal_mode(ss) do
+      :form -> boards_form_commands()
+      :confirm -> boards_confirm_commands()
+      nil -> base_sysop_commands(ss, jump_hint)
+    end
+  end
+
+  defp base_sysop_commands(ss, jump_hint) do
     base = [
       %{
         label: "System",
@@ -77,6 +85,46 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     base
     |> maybe_add_retry(ss)
     |> maybe_add_revoke(ss)
+  end
+
+  # FOG-670: when the BOARDS tab has a modal/form active, the screen-level
+  # command bar advertises save/cancel/field navigation instead of generic
+  # tab-jump hints, so the form is not silently competing with stale list-mode
+  # advice. Tab navigation is gated by the active screen reducer (Pitfall 5)
+  # and would just fall through to no-ops while the modal is open.
+  defp boards_form_commands do
+    [
+      %{
+        label: "Form",
+        commands: [
+          %{key: "Tab", label: "Next field", priority: 0},
+          %{key: "Shift+Tab", label: "Prev field", priority: 5},
+          %{key: "Enter", label: "Save", priority: 0},
+          %{key: "Esc", label: "Cancel", priority: 0}
+        ]
+      }
+    ]
+  end
+
+  defp boards_confirm_commands do
+    [
+      %{
+        label: "Confirm",
+        commands: [
+          %{key: "Y", label: "Yes", priority: 0},
+          %{key: "N/Esc", label: "No", priority: 0}
+        ]
+      }
+    ]
+  end
+
+  defp boards_modal_mode(ss) do
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    case {active_label, ss.boards_view} do
+      {"BOARDS", {:loaded, sub}} -> BoardsView.modal_mode(sub)
+      _ -> nil
+    end
   end
 
   # Phase 29 D-25 (SYSOP-06): [X] Revoke is advertised in the Sysop command

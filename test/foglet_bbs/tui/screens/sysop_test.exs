@@ -1614,6 +1614,52 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert String.contains?(flat, "Chat")
       assert String.contains?(flat, "chat")
     end
+
+    test "FOG-670 opening new-board form replaces list with bounded overlay and form-mode footer",
+         %{state: state, sysop: sysop} do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
+
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
+
+      # The board list rows must not bleed through behind the open form.
+      refute String.contains?(flat, "qa-no-chat")
+      refute String.contains?(flat, "QA No Chat")
+
+      # The list-mode keybar must not advertise list actions while the form is
+      # open — those keys are no-ops while a modal is active (Pitfall 5).
+      refute String.contains?(flat, "[j/k] Move")
+      refute String.contains?(flat, "[n] New board")
+
+      # The form-mode footer advertises save/cancel/field-navigation and the
+      # screen-level command bar shows the same form group instead of generic
+      # tab navigation.
+      assert String.contains?(flat, "Tab")
+      assert String.contains?(flat, "Shift+Tab")
+      assert String.contains?(flat, "Save")
+      assert String.contains?(flat, "Cancel")
+      refute String.contains?(flat, "Switch")
+      refute String.contains?(flat, "Jump")
+    end
+
+    test "FOG-670 archive-confirm modal advertises Y/N in screen footer", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+      # Move selection to a board row, then trigger archive-confirm.
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "D"}, state)
+
+      flat = render_sysop(state) |> collect_text_values() |> Enum.join("\n")
+
+      # No tab-nav hints while the confirm modal is open; explicit Y/N keys
+      # are advertised instead.
+      refute String.contains?(flat, "Switch")
+      refute String.contains?(flat, "Jump")
+      assert String.contains?(flat, "Yes") or String.contains?(flat, "[Y]")
+      assert String.contains?(flat, "No") or String.contains?(flat, "[N")
+    end
   end
 
   describe "BOARDS tab create flow (SYSO-03)" do
