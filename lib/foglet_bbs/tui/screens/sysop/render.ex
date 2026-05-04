@@ -32,7 +32,8 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     ss = get_screen_state(state)
     theme = Theme.from_state(state)
     width = inner_width(state)
-    content = build_content(ss, theme, width)
+    height = inner_height(state)
+    content = build_content(ss, theme, width, height)
     # Phase 29 D-26 (SYSOP-07): jump hint reads `1-N` where N is the
     # actual tab count. No INVITES special-case — generalises to any
     # future tab visibility flag.
@@ -134,9 +135,18 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp build_content(ss, theme, width) do
+  # ScreenFrame contributes the top and bottom rows; sysop content then spends
+  # one row on tabs and one row on its divider before rendering the active tab.
+  defp inner_height(state) do
+    case Map.get(state, :terminal_size) do
+      {_, h} when is_integer(h) -> max(h - 4, 1)
+      _ -> 20
+    end
+  end
+
+  defp build_content(ss, theme, width, height) do
     active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
-    body = render_tab_body(active_label, ss, theme)
+    body = render_tab_body(active_label, ss, theme, width, height)
 
     column style: %{gap: 0} do
       [
@@ -147,14 +157,14 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("SITE", ss, theme) do
+  defp render_tab_body("SITE", ss, theme, _width, _height) do
     case ss.site_form do
       nil -> loading_panel(theme)
       form -> SiteForm.render(form, theme)
     end
   end
 
-  defp render_tab_body("BOARDS", ss, theme) do
+  defp render_tab_body("BOARDS", ss, theme, _width, _height) do
     case ss.boards_view do
       :not_loaded -> loading_panel(theme)
       :loading -> loading_panel(theme)
@@ -164,17 +174,17 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("LIMITS", ss, theme) do
+  defp render_tab_body("LIMITS", ss, theme, width, height) do
     case ss.limits_form do
       :not_loaded -> loading_panel(theme)
       :loading -> loading_panel(theme)
-      {:loaded, sub} -> LimitsForm.render(sub, theme)
+      {:loaded, sub} -> LimitsForm.render(sub, theme, width: width, visible_height: height)
       {:error, :forbidden} -> forbidden_panel(theme)
       {:error, _other} -> error_panel("limits", theme)
     end
   end
 
-  defp render_tab_body("SYSTEM", ss, theme) do
+  defp render_tab_body("SYSTEM", ss, theme, _width, _height) do
     case ss.system_snapshot do
       :not_loaded -> loading_panel(theme)
       :loading -> loading_panel(theme)
@@ -184,7 +194,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("USERS", ss, theme) do
+  defp render_tab_body("USERS", ss, theme, _width, _height) do
     case ss.users_view do
       :not_loaded -> loading_panel(theme)
       :loading -> loading_panel(theme)
@@ -194,7 +204,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("INVITES", ss, theme),
+  defp render_tab_body("INVITES", ss, theme, _width, _height),
     do: InvitesSurface.render(ss.invites, theme)
 
   # Lifecycle panels (D-08, D-11, D-12). Pattern-match order in

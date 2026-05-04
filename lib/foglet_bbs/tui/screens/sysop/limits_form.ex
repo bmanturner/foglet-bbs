@@ -12,6 +12,8 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.TextWidth
+  alias Raxol.UI.Components.Display.Viewport
 
   import Raxol.Core.Renderer.View
 
@@ -46,10 +48,11 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
           current_user: Foglet.Accounts.User.t() | nil,
           drafts: %{optional(String.t()) => term()},
           errors: %{optional(String.t()) => String.t()},
-          focused: non_neg_integer()
+          focused: non_neg_integer(),
+          scroll_top: non_neg_integer()
         }
 
-  defstruct current_user: nil, drafts: %{}, errors: %{}, focused: 0
+  defstruct current_user: nil, drafts: %{}, errors: %{}, focused: 0, scroll_top: 0
 
   @spec limits_keys() :: [String.t()]
   def limits_keys, do: @limits_keys
@@ -76,6 +79,14 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
   def handle_key(%{key: :tab}, state), do: {rotate_focus(state, +1), []}
   def handle_key(%{key: :shift_tab}, state), do: {rotate_focus(state, -1), []}
   def handle_key(%{key: :backtab}, state), do: {rotate_focus(state, -1), []}
+  def handle_key(%{key: key}, state) when key in [:down, :j], do: {scroll_by(state, 1), []}
+  def handle_key(%{key: key}, state) when key in [:up, :k], do: {scroll_by(state, -1), []}
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["j", "J"],
+    do: {scroll_by(state, 1), []}
+
+  def handle_key(%{key: :char, char: c}, state) when c in ["k", "K"],
+    do: {scroll_by(state, -1), []}
 
   def handle_key(%{key: :enter}, state), do: submit(state)
   def handle_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
@@ -96,7 +107,20 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   defp rotate_focus(state, delta) do
     n = length(@limits_keys)
-    %{state | focused: Integer.mod(state.focused + delta, n)}
+    focused = Integer.mod(state.focused + delta, n)
+
+    state
+    |> Map.put(:focused, focused)
+    |> scroll_to_focused()
+  end
+
+  defp scroll_by(state, delta), do: %{state | scroll_top: max(state.scroll_top + delta, 0)}
+
+  defp scroll_to_focused(state) do
+    # Each field currently renders as label, helper, optional error, and spacer.
+    # Keep focus movement deterministic without depending on renderer-measured
+    # heights; the viewport clamps the final value to available content.
+    %{state | scroll_top: min(state.scroll_top, state.focused * 3)}
   end
 
   defp focused_key(state), do: Enum.at(@limits_keys, state.focused)
@@ -196,8 +220,8 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   defp coerce_integer(_), do: {:error, "Enter a whole number."}
 
-  @spec render(t(), map()) :: any()
-  def render(state, theme) do
+  @spec render(t(), map(), keyword()) :: any()
+  def render(state, theme, opts \\ []) do
     # Renders through Modal.Form (Phase 25 Plan 04, Pattern 1).
     # All LIMITS keys are :integer — no conditional visibility needed.
     # Pitfall 4: do NOT wrap Modal.Form output in box/border.
@@ -205,24 +229,58 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     # Bespoke "key: value" row format is preserved (D-19: existing tests assert
     # on this format). The Modal.Form footer sentinel "[Enter] Submit" is added
     # to satisfy primitive-presence requirements (D-09).
+    width = Keyword.get(opts, :width, 76)
+    visible_height = Keyword.get(opts, :visible_height, 12)
+
     rows =
       @limits_keys
       |> Enum.with_index()
-      |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme) end)
+      |> Enum.flat_map(fn {key, idx} -> render_row(state, key, idx, theme, width) end)
 
     # FOG-154: Esc on LIMITS is a no-op (handle_key has no :escape clause), so
     # the footer must not advertise it. The Modal.Form footer sentinel
     # "[Enter] Submit" still satisfies primitive-presence requirements (D-09).
     footer =
-      text("[Tab] Next  [Shift+Tab] Previous  [Enter] Submit  [Ctrl+S] Save", fg: theme.dim.fg)
+      text(truncate("[Enter] Submit  [Tab] Next  [Shift+Tab] Previous", width), fg: theme.dim.fg)
+
+    children =
+      [text("Runtime limits", fg: theme.title.fg, style: [:bold]), text("")] ++ rows ++ [footer]
+
+    {:ok, viewport} =
+      Viewport.init(%{
+        id: "sysop-limits-viewport",
+        children: children,
+        scroll_top: state.scroll_top,
+        visible_height: max(visible_height, 1),
+        show_scrollbar: length(children) > visible_height,
+        style: %{gap: 0, width: width}
+      })
+
+    viewport = %{
+      viewport
+      | scroll_top:
+          min(viewport.scroll_top, max(viewport.content_height - viewport.visible_height, 0))
+    }
+
+    body = Viewport.render(viewport, %{})
+
+    overflow_hint =
+      if viewport.content_height > viewport.visible_height do
+        [
+          text(truncate("More limits above/below — use j/k or ↑/↓ to scroll.", width),
+            fg: theme.dim.fg
+          )
+        ]
+      else
+        []
+      end
 
     column style: %{gap: 0} do
-      [text("Runtime limits", fg: theme.title.fg, style: [:bold]), text("")] ++
-        rows ++ [text(""), footer]
+      [body] ++ overflow_hint
     end
   end
 
-  defp render_row(state, key, idx, theme) do
+  defp render_row(state, key, idx, theme, width) do
     {:ok, spec} = Schema.fetch_spec(key)
     field = Map.fetch!(@field_labels, key)
     focused? = state.focused == idx
@@ -232,7 +290,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     value = format_value(Map.get(state.drafts, key))
 
     label_line =
-      text("#{marker}#{field.label}: #{value}", fg: label_fg, style: label_style)
+      text(truncate("#{marker}#{field.label}: #{value}", width), fg: label_fg, style: label_style)
 
     helper_with_min =
       if is_integer(spec.min) do
@@ -241,12 +299,12 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
         field.helper
       end
 
-    description_line = text("    " <> helper_with_min, fg: theme.dim.fg)
+    description_line = text(truncate("    " <> helper_with_min, width), fg: theme.dim.fg)
 
     extras =
       case Map.get(state.errors, key) do
         nil -> []
-        msg -> [text("    " <> msg, fg: theme.error.fg, style: [:bold])]
+        msg -> [text(truncate("    " <> msg, width), fg: theme.error.fg, style: [:bold])]
       end
 
     [label_line, description_line] ++ extras ++ [text("")]
@@ -256,4 +314,8 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
   defp format_value(n) when is_integer(n), do: Integer.to_string(n)
   defp format_value(s) when is_binary(s), do: s
   defp format_value(other), do: inspect(other)
+
+  defp truncate(text, width) when is_binary(text) and is_integer(width) do
+    TextWidth.truncate(text, max(width, 0))
+  end
 end
