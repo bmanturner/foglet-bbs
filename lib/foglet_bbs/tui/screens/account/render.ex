@@ -172,7 +172,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
           [
             %{
               label: "Value",
-              commands: [%{key: "↑/↓", label: "Change", priority: 25}]
+              commands: [%{key: "↑/↓", label: "Change", priority: 5}]
             }
           ]
       else
