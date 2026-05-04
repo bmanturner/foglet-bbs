@@ -289,15 +289,15 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert _ = render_login(form_state(handle: "alice", password: "secret"))
     end
 
-    test "renders login form inside an Identify yourself panel with comfortable width" do
+    test "renders login form inside the shared Login auth card" do
       [panel] =
         form_state(handle: "alicealicealicealice", password: "secret")
         |> render_login()
         |> collect_panels()
 
-      assert panel.attrs.title == "Identify yourself"
-      assert panel.attrs.width >= 40
-      assert panel.attrs.height >= 8
+      assert panel.attrs.title == "Login"
+      assert panel.attrs.width == 46
+      assert panel.attrs.height >= 9
     end
 
     test "caps long masked password display inside the Identify yourself panel" do
@@ -557,6 +557,18 @@ defmodule Foglet.TUI.Screens.LoginTest do
   end
 
   describe "update/3 — reset request subflow" do
+    test "renders legacy reset request inside the shared auth card" do
+      Config.put!("delivery_mode", "email")
+
+      [panel] =
+        reset_request_state("")
+        |> render_login()
+        |> collect_panels()
+
+      assert panel.attrs.title == "Request reset token"
+      assert panel.attrs.width == 46
+    end
+
     test "renders email-only field label (D-02)" do
       Config.put!("delivery_mode", "email")
       state = reset_request_state("")
@@ -901,6 +913,16 @@ defmodule Foglet.TUI.Screens.LoginTest do
   end
 
   describe "update/3 - reset_consume entry (D-15)" do
+    test "renders legacy reset consume inside the shared auth card" do
+      [panel] =
+        reset_consume_state(token: "abc", password: "secret", password_confirmation: "secret")
+        |> render_login()
+        |> collect_panels()
+
+      assert panel.attrs.title == "Use reset token"
+      assert panel.attrs.width == 46
+    end
+
     test "'T' from menu enters :reset_consume sub-state with focus on :token" do
       {:update, new_state, []} = update_login(%{key: :char, char: "T"}, base_state())
 

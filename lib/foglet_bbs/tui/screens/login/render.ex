@@ -9,6 +9,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
   alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Auth.AuthForm
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.TextInput
 
@@ -16,8 +17,9 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   @menu_keys [{"L", "Login"}, {"R", "Register"}]
   @menu_keys_no_register [{"L", "Login"}]
-  @login_panel_width 40
-  @login_panel_height 8
+  @login_panel_width AuthForm.default_width()
+  @login_panel_height 9
+  @auth_card_inner_width @login_panel_width - 4
   @login_input_display_width 25
   @recovery_pane_width 46
   @recovery_pane_base_height 7
@@ -86,7 +88,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
           ]
 
         _request ->
-          [%{key: "→", label: "Token pane", priority: 10}]
+          [%{key: "→", label: "Switch pane", priority: 10}]
       end
 
     primary_label = if active == :token, do: "Set password", else: "Request token"
@@ -94,8 +96,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
     [
       %{
         label: "Pane",
-        commands:
-          field_commands ++ [%{key: "←/→", label: "Switch pane at field edge", priority: 20}]
+        commands: field_commands ++ [%{key: "←/→", label: "Switch pane", priority: 20}]
       },
       %{
         label: "Actions",
@@ -206,7 +207,6 @@ defmodule Foglet.TUI.Screens.Login.Render do
   defp render_login_form(state, theme) do
     login_ss = LoginState.get(state)
     focused = Map.get(login_ss, :focused_field, :handle)
-    {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
     submitting? = Map.get(login_ss, :submitting?, false)
 
     handle_label_fg = if focused == :handle, do: theme.accent.fg, else: theme.primary.fg
@@ -223,55 +223,42 @@ defmodule Foglet.TUI.Screens.Login.Render do
       end
 
     panel =
-      %{
-        type: :panel,
-        attrs: %{
-          title: "Identify yourself",
-          title_attrs: %{fg: theme.title.fg},
-          border: :single,
-          border_fg: theme.border.fg,
-          width: @login_panel_width,
-          height: @login_panel_height
-        },
-        children: [
-          column style: %{gap: 2, padding: 1} do
+      AuthForm.render(
+        "Login",
+        [
+          text("Use your Foglet handle and password.", fg: theme.dim.fg),
+          text(""),
+          row style: %{gap: 0} do
             [
-              row style: %{gap: 0} do
-                [
-                  text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
-                  TextInput.render(login_ss.handle_input,
-                    bordered: false,
-                    cap_display_width: @login_input_display_width,
-                    disabled: submitting?,
-                    focused: focused == :handle,
-                    theme: theme
-                  )
-                ]
-              end,
-              row style: %{gap: 0} do
-                [
-                  text("Password: ", fg: password_label_fg, style: password_label_style),
-                  TextInput.render(login_ss.password_input,
-                    bordered: false,
-                    cap_display_width: @login_input_display_width,
-                    disabled: submitting?,
-                    focused: focused == :password,
-                    theme: theme
-                  )
-                ]
-              end
-            ] ++ error_items
+              text("Handle:   ", fg: handle_label_fg, style: handle_label_style),
+              TextInput.render(login_ss.handle_input,
+                bordered: false,
+                cap_display_width: @login_input_display_width,
+                disabled: submitting?,
+                focused: focused == :handle,
+                theme: theme
+              )
+            ]
+          end,
+          row style: %{gap: 0} do
+            [
+              text("Password: ", fg: password_label_fg, style: password_label_style),
+              TextInput.render(login_ss.password_input,
+                bordered: false,
+                cap_display_width: @login_input_display_width,
+                disabled: submitting?,
+                focused: focused == :password,
+                theme: theme
+              )
+            ]
           end
-        ]
-      }
+        ] ++ error_items,
+        theme,
+        width: @login_panel_width,
+        height: max(@login_panel_height, 7 + length(error_items))
+      )
 
-    available = max(terminal_height - 8, 1)
-    top_padding = div(max(available - @login_panel_height, 0), 2)
-    pad = text(" ", fg: theme.primary.fg)
-
-    column style: %{gap: 0, align_items: :center} do
-      List.duplicate(pad, top_padding) ++ [panel]
-    end
+    AuthForm.centered(panel, state, theme, @login_panel_height)
   end
 
   defp render_reset_recovery(state, theme) do
@@ -436,10 +423,26 @@ defmodule Foglet.TUI.Screens.Login.Render do
     |> length()
   end
 
-  defp render_reset_request(state, theme), do: render_reset_request(state, theme, true)
+  defp render_reset_request(state, theme) do
+    login_ss = LoginState.get(state)
+    wrap_width = @auth_card_inner_width
+    content = render_reset_request(state, theme, true, wrap_width, true)
 
-  defp render_reset_request(state, theme, focused?),
-    do: render_reset_request(state, theme, focused?, reset_wrap_width(state), true)
+    panel_height =
+      max(
+        12,
+        8 + feedback_row_count(Map.get(login_ss, :error), wrap_width) +
+          feedback_row_count(Map.get(login_ss, :message), wrap_width)
+      )
+
+    panel =
+      AuthForm.render("Request reset token", [content], theme,
+        width: @login_panel_width,
+        height: panel_height
+      )
+
+    AuthForm.centered(panel, state, theme, panel_height)
+  end
 
   defp render_reset_request(state, theme, focused?, wrap_width, show_feedback?) do
     login_ss = LoginState.get(state)
@@ -496,10 +499,14 @@ defmodule Foglet.TUI.Screens.Login.Render do
     end
   end
 
-  defp render_reset_consume(state, theme), do: render_reset_consume(state, theme, true)
+  defp render_reset_consume(state, theme) do
+    content = render_reset_consume(state, theme, true, @auth_card_inner_width, nil, true)
 
-  defp render_reset_consume(state, theme, pane_active?),
-    do: render_reset_consume(state, theme, pane_active?, reset_wrap_width(state), nil, true)
+    panel =
+      AuthForm.render("Use reset token", [content], theme, width: @login_panel_width, height: 11)
+
+    AuthForm.centered(panel, state, theme, 11)
+  end
 
   defp render_reset_consume(state, theme, pane_active?, wrap_width, input_width, show_feedback?) do
     login_ss = LoginState.get(state)

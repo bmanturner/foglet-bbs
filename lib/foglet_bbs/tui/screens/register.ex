@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Screens.Register do
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Auth.AuthForm
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Input.Checkbox
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -37,6 +38,8 @@ defmodule Foglet.TUI.Screens.Register do
   @behaviour Foglet.TUI.Screen
 
   import Raxol.Core.Renderer.View
+
+  @auth_card_width AuthForm.default_width()
 
   @impl true
   @spec init(Context.t()) :: map()
@@ -55,8 +58,8 @@ defmodule Foglet.TUI.Screens.Register do
       column style: %{gap: 0} do
         [
           case reg.step do
-            :invite_code -> render_invite_step(reg, theme)
-            :combined -> render_combined_step(reg, theme, context)
+            :invite_code -> render_invite_step(reg, state, theme)
+            :combined -> render_combined_step(reg, state, theme, context)
           end
         ]
       end
@@ -303,7 +306,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   # §5 Private render helpers
 
-  defp render_invite_step(reg, theme) do
+  defp render_invite_step(reg, state, theme) do
     focused = reg.focused_field == :invite_code
     fg = if focused, do: theme.accent.fg, else: theme.primary.fg
     st = if focused, do: [:bold], else: []
@@ -315,19 +318,33 @@ defmodule Foglet.TUI.Screens.Register do
         []
       end
 
-    column style: %{gap: 0} do
-      [
-        row style: %{gap: 0} do
-          [
-            text("Invite code: ", fg: fg, style: st),
-            TextInput.render(reg.invite_code_input, bordered: false, focused: true, theme: theme)
-          ]
-        end
-      ] ++ error_items
-    end
+    panel =
+      AuthForm.render(
+        "Invite required",
+        [
+          text("Enter the invite code from your sysop.", fg: theme.dim.fg),
+          text(""),
+          row style: %{gap: 0} do
+            [
+              text("Invite code: ", fg: fg, style: st),
+              TextInput.render(reg.invite_code_input,
+                bordered: false,
+                cap_display_width: 26,
+                focused: true,
+                theme: theme
+              )
+            ]
+          end
+        ] ++ error_items,
+        theme,
+        width: @auth_card_width,
+        height: 9
+      )
+
+    AuthForm.centered(panel, state, theme, 9)
   end
 
-  defp render_combined_step(reg, theme, context) do
+  defp render_combined_step(reg, state, theme, context) do
     focused = reg.focused_field
     offered_key = offered_ssh_public_key(context)
 
@@ -346,7 +363,12 @@ defmodule Foglet.TUI.Screens.Register do
         row style: %{gap: 0} do
           [
             text(label, fg: fg, style: st),
-            TextInput.render(input, bordered: false, focused: focused == field, theme: theme)
+            TextInput.render(input,
+              bordered: false,
+              cap_display_width: 24,
+              focused: focused == field,
+              theme: theme
+            )
           ]
         end
       end)
@@ -360,9 +382,19 @@ defmodule Foglet.TUI.Screens.Register do
         []
       end
 
-    column style: %{gap: 0} do
-      rows ++ error_items
-    end
+    panel_height = if offered_key, do: 15, else: 12
+
+    panel =
+      AuthForm.render(
+        "Create account",
+        [text("Choose your handle and account email.", fg: theme.dim.fg), text("")] ++
+          rows ++ error_items,
+        theme,
+        width: @auth_card_width,
+        height: panel_height
+      )
+
+    AuthForm.centered(panel, state, theme, panel_height)
   end
 
   defp ssh_key_opt_in_rows(_reg, _focused, nil, _theme), do: []
