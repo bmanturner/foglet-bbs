@@ -997,6 +997,52 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       refute flat =~ "Scroll ↑"
     end
 
+    test "guest keybar hides unavailable reply command while registered users keep it" do
+      posts = [p2_post(body: "Read-only guest body")]
+      registered_tree = render_screen(p2_state(%{posts: posts}))
+
+      guest_tree =
+        render_screen(
+          p2_state(%{
+            posts: posts,
+            current_user: nil,
+            session_context: %{guest: true, guest_mode_enabled: true, theme: theme()}
+          })
+        )
+
+      assert command_bar_text(registered_tree) =~ "R Reply"
+      refute command_bar_text(guest_tree) =~ "R Reply"
+      refute command_bar_text(guest_tree) =~ "Reply"
+      assert command_bar_text(guest_tree) =~ "Q Back"
+    end
+
+    test "guest keybar does not show locked or archived reply labels" do
+      posts = [p2_post(body: "Read-only guest body")]
+
+      locked_guest_tree =
+        render_screen(
+          p2_state(%{
+            posts: posts,
+            current_user: nil,
+            current_thread: %{id: "t1", title: "Locked", locked: true},
+            session_context: %{guest: true, guest_mode_enabled: true, theme: theme()}
+          })
+        )
+
+      archived_guest_tree =
+        render_screen(
+          p2_state(%{
+            posts: posts,
+            current_user: nil,
+            current_board: %{id: "b1", archived: true},
+            session_context: %{guest: true, guest_mode_enabled: true, theme: theme()}
+          })
+        )
+
+      refute command_bar_text(locked_guest_tree) =~ "Reply"
+      refute command_bar_text(archived_guest_tree) =~ "Reply"
+    end
+
     test "keeps markdown rendering delegated and strips raw markdown syntax" do
       s = p2_state(%{posts: [p2_post(body: "Hello **world**")]})
       tree = render_screen(s)
@@ -1397,6 +1443,10 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   defp seed_pending_for_posts(_thread_id, _posts), do: %{}
 
   # Local flatten helpers (same pattern as MarkdownBodyTest)
+
+  defp command_bar_text(%{bottom_segments: segments}) do
+    flatten_text(segments)
+  end
 
   defp flatten_text(tree), do: tree |> p2_collect_text([]) |> Enum.reverse() |> Enum.join("")
 
