@@ -266,7 +266,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update({:key, %{key: :down}}, %State{} = state, %Context{} = context) do
-    move_action_target_for_visible_post(state, 1, context)
+    scroll_or_move_action_target(state, 1, context)
   end
 
   def update({:key, %{key: :tab}}, %State{} = state, %Context{} = context) do
@@ -274,7 +274,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update({:key, %{key: :up}}, %State{} = state, %Context{} = context) do
-    move_action_target_for_visible_post(state, -1, context)
+    scroll_or_move_action_target(state, -1, context)
   end
 
   def update({:key, %{key: :backtab}}, %State{} = state, %Context{} = context) do
@@ -1314,6 +1314,43 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     state = %{state | partial_scroll_tops: new_tops}
     seed_pending_read_position_through_visible(state, context)
+  end
+
+  defp scroll_or_move_action_target(%State{} = state, delta, %Context{} = context) do
+    state = warm_selected_post(state, context)
+    screenful = visible_screenful(state, context)
+    action_idx = selected_action_post_index(state)
+
+    cond do
+      screenful.mode == :long ->
+        {scroll_local_post(state, delta, context), []}
+
+      screenful.mode == :packed_partial and action_idx == screenful.partial.index ->
+        maybe_scroll_selected_partial_or_move(state, delta, screenful.partial, context)
+
+      true ->
+        move_action_target_for_visible_post(state, delta, context)
+    end
+  end
+
+  defp maybe_scroll_selected_partial_or_move(
+         %State{} = state,
+         delta,
+         partial,
+         %Context{} = context
+       ) do
+    max_scroll = max(partial.total_body_rows - partial.body_visible_rows, 0)
+
+    cond do
+      delta > 0 and partial.scroll_top < max_scroll ->
+        {scroll_partial_post(state, delta, partial, context), []}
+
+      delta < 0 and partial.scroll_top > 0 ->
+        {scroll_partial_post(state, delta, partial, context), []}
+
+      true ->
+        move_action_target_for_visible_post(state, delta, context)
+    end
   end
 
   defp move_action_target_for_visible_post(%State{posts: posts} = state, _delta, _context)

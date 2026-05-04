@@ -126,24 +126,19 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       [
         text("Boards and categories", fg: theme.title.fg, style: [:bold]),
         text(""),
-        render_modal_overlay(modal, theme),
-        text(""),
-        text(modal_footer_text(modal), fg: theme.dim.fg)
+        render_modal_overlay(modal, theme)
       ]
     end
   end
 
   def render(%__MODULE__{} = state, theme) do
     body = render_list(state, theme)
-    footer = text(footer_text(state), fg: theme.dim.fg)
 
     column style: %{gap: 0} do
       [
         text("Boards and categories", fg: theme.title.fg, style: [:bold]),
         text(""),
-        body,
-        text(""),
-        footer
+        body
       ]
     end
   end
@@ -168,23 +163,44 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   def modal_mode(%__MODULE__{modal: %Modal{type: :confirm}}), do: :confirm
   def modal_mode(%__MODULE__{}), do: :form
 
-  # FOG-154: row-aware footer per the FOG-152 audit + FOG-153 deck. The
-  # advertised actions follow the focused row so operators do not need to
-  # remember uppercase/lowercase variants for category vs board archive.
-  defp footer_text(%__MODULE__{rows: []}),
-    do: "[N] New category"
+  @doc """
+  Command-bar groups for the BOARDS list mode. Sysop.Render owns the global
+  chrome, so list actions live in the bottom keybar instead of body footer copy.
+  """
+  @spec keybar_groups(t()) :: [map()]
+  def keybar_groups(%__MODULE__{rows: []}) do
+    [%{label: "Boards", commands: [%{key: "N", label: "New category", priority: 5}]}]
+  end
 
-  defp footer_text(%__MODULE__{} = state) do
-    case selected_row(state) do
-      {:category, _} ->
-        "[j/k] Move  [N] New category  [E] Edit category  [D] Archive category  [n] New board"
+  def keybar_groups(%__MODULE__{} = state) do
+    list_group = %{label: "List", commands: [%{key: "↑/↓", label: "Move", priority: 10}]}
 
-      {:board, _} ->
-        "[j/k] Move  [n] New board  [e] Edit board  [D] Archive board  [N] New category"
+    action_commands =
+      case selected_row(state) do
+        {:category, _} ->
+          [
+            %{key: "N", label: "New category", priority: 5},
+            %{key: "E", label: "Edit category", priority: 15},
+            %{key: "D", label: "Archive category", priority: 15},
+            %{key: "n", label: "New board", priority: 20}
+          ]
 
-      _ ->
-        "[j/k] Move  [n] New board  [N] New category"
-    end
+        {:board, _} ->
+          [
+            %{key: "n", label: "New board", priority: 5},
+            %{key: "e", label: "Edit board", priority: 15},
+            %{key: "D", label: "Archive board", priority: 15},
+            %{key: "N", label: "New category", priority: 20}
+          ]
+
+        _ ->
+          [
+            %{key: "n", label: "New board", priority: 5},
+            %{key: "N", label: "New category", priority: 5}
+          ]
+      end
+
+    [list_group, %{label: "Boards", commands: action_commands}]
   end
 
   defp render_list(%__MODULE__{rows: []}, theme) do
@@ -243,14 +259,6 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   # the available content area without clipping at 80x24 or 64x22 while still
   # leaving room for scroll-indicator rows.
   defp form_max_visible_fields, do: 4
-
-  defp modal_footer_text(%ModalForm{}),
-    do: "[Tab] Next field   [Shift+Tab] Prev field   [Enter] Save   [Esc] Cancel"
-
-  defp modal_footer_text(%Modal{type: :confirm}),
-    do: "[Y] Confirm   [N/Esc] Cancel"
-
-  defp modal_footer_text(_), do: "[Esc] Close"
 
   # ---------------------------------------------------------------------------
   # Key handling

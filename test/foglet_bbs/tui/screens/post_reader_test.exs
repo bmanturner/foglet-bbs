@@ -1071,13 +1071,14 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert flat =~ "Selected body text"
     end
 
-    test "renders one compact scroll keybar hint while preserving reader keys" do
+    test "renders one compact arrow scroll keybar hint while preserving reader keys" do
       s = p2_state(%{posts: [p2_post(body: "Selected body text")]})
       tree = render_screen(s)
       flat = flatten_text(tree)
 
-      assert flat =~ "J/K"
+      assert flat =~ "↑/↓"
       assert flat =~ "Scroll"
+      refute flat =~ "J/K"
       refute flat =~ "Scroll ↓"
       refute flat =~ "Scroll ↑"
     end
@@ -1915,6 +1916,20 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert s4.screen_state[:post_reader].partial_scroll_tops["p2"] == 0
     end
 
+    test "arrows scroll the selected partial while still allowing action-target navigation at bounds" do
+      s = packed_partial_state()
+
+      {:update, s1, _} = handle_key_screen(%{key: :down}, s)
+      {:update, s2, _} = handle_key_screen(%{key: :down}, s1)
+      assert s2.screen_state[:post_reader].partial_scroll_tops["p2"] == 1
+
+      {:update, s3, _} = handle_key_screen(%{key: :up}, s2)
+      assert s3.screen_state[:post_reader].partial_scroll_tops["p2"] == 0
+
+      {:update, s4, _} = handle_key_screen(%{key: :up}, s3)
+      assert s4.screen_state[:post_reader].selected_action_post_index == 0
+    end
+
     test "partial long post is not marked read until the partial viewport reaches its bottom" do
       s = packed_partial_state()
       ss = s.screen_state[:post_reader]
@@ -1959,17 +1974,18 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert ss4.viewport.scroll_top == pre_promote
     end
 
-    test "keybar advertises J/K Scroll only when the partial is the action target" do
+    test "arrow scroll is advertised only when the partial is the action target" do
       s = packed_partial_state()
       tree = render_screen(s)
       bar_unselected = command_bar_text(tree)
-      refute bar_unselected =~ "J/K"
+      refute bar_unselected =~ "Scroll"
       assert bar_unselected =~ "Up/Down"
 
       {:update, s1, _} = handle_key_screen(%{key: :down}, s)
       bar_selected = s1 |> render_screen() |> command_bar_text()
-      assert bar_selected =~ "J/K"
+      assert bar_selected =~ "↑/↓"
       assert bar_selected =~ "Scroll"
+      refute bar_selected =~ "J/K"
     end
 
     test "long top/anchor post still uses single-post viewport and is not treated as packed_partial" do

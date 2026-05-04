@@ -66,7 +66,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         # post is the current action target — keep the keybar restrained for
         # ordinary packed short-post selection.
         if length(indexes) > 1 and action_index(state, sf) == partial.index do
-          cmds ++ [%{key: "J/K", label: "Scroll", priority: 8}]
+          cmds ++ [%{key: "↑/↓", label: "Scroll", priority: 8}]
         else
           cmds
         end
@@ -82,7 +82,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         base_commands
 
       _long ->
-        base_commands ++ [%{key: "J/K", label: "Scroll", priority: 10}]
+        base_commands ++ [%{key: "↑/↓", label: "Scroll", priority: 10}]
     end
   end
 

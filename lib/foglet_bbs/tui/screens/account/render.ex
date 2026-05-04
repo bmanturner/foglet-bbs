@@ -44,18 +44,9 @@ defmodule Foglet.TUI.Screens.Account.Render do
   defp key_bar(ss), do: key_bar_for(ss, active_label(ss) || "PROFILE")
 
   defp key_bar_for(ss, active_label) do
-    # FOG-693: `1-N Jump` is a Phase 29 D-26/D-27 hard contract that must be
-    # visible at every supported width on Account tab list screens. Pin it to
-    # priority 0 (same retention tier as System Back) so the FOG-689
-    # Save/Cancel priority elevation does not crowd it out at 64x22. The
-    # `←/→ Tab` arrow advert remains priority 10 since it is dispensable
-    # under heavy compaction.
     tabs_group = %{
       label: "Tabs",
-      commands: [
-        %{key: "←/→", label: "Tab", priority: 10},
-        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 0}
-      ]
+      commands: [%{key: "←/→", label: "Tabs", priority: 10}]
     }
 
     system_group = %{
@@ -150,8 +141,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
       %{
         label: "Actions",
         commands: [
-          %{key: "Ctrl+S", label: "Save", priority: 30},
-          %{key: "Enter", label: "Save", priority: 30},
+          %{key: "Enter/Ctrl+S", label: "Save", priority: 30},
           %{key: "Esc", label: "Cancel", priority: 30}
         ]
       }
@@ -196,8 +186,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
         %{
           label: "Actions",
           commands: [
-            %{key: "Ctrl+S", label: "Save", priority: 5},
-            %{key: "Enter", label: "Save", priority: 5},
+            %{key: "Enter/Ctrl+S", label: "Save", priority: 5},
             %{key: "Esc", label: "Cancel", priority: 5}
           ]
         }
@@ -208,14 +197,6 @@ defmodule Foglet.TUI.Screens.Account.Render do
     do: true
 
   defp prefs_enum_focused?(_), do: false
-
-  defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
-  # IN-02 (iteration 6): same defensive shape as IN-01 in moderation.ex.
-  # If `tab_labels(ss)` returns `[]` (e.g., transient state during tab
-  # re-init), `length([]) = 0` previously crashed `jump_hint(0)` with
-  # `FunctionClauseError`. Fall back to "1" so the account screen
-  # renders rather than crashing.
-  defp jump_hint(_), do: "1"
 
   # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
   defp inner_width(state) do
