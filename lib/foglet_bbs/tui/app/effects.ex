@@ -250,14 +250,12 @@ defmodule Foglet.TUI.App.Effects do
 
   defp route_activity(_screen, _params), do: :clear
 
-  defp board_from_params(params) when is_map(params) do
+  defp board_from_params(params) do
     case Map.get(params, :board) || Map.get(params, "board") do
       board when is_map(board) -> board
       _other -> board_from_id(params)
     end
   end
-
-  defp board_from_params(_params), do: nil
 
   defp board_from_id(params) do
     case Map.get(params, :board_id) || Map.get(params, "board_id") do
