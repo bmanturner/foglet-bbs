@@ -128,6 +128,18 @@ defmodule Foglet.MarkdownTest do
       assert String.contains?(all_text, "fake red bold")
     end
 
+    test "OSC payloads and BEL controls are stripped from output" do
+      malicious = "hello \e]52;c;clipboard\a world\abel"
+      result = Markdown.render(malicious)
+
+      all_text = Enum.map_join(result, "", fn {s, _} -> s end)
+      refute String.contains?(all_text, "\e")
+      refute String.contains?(all_text, "\a")
+      refute String.contains?(all_text, "clipboard")
+      assert String.contains?(all_text, "hello")
+      assert String.contains?(all_text, "worldbel")
+    end
+
     test "legitimate markdown bold still works after stripping" do
       result = Markdown.render("**real bold**")
       assert {"real bold", :bold} in result
