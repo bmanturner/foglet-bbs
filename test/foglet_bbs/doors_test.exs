@@ -1,9 +1,19 @@
 defmodule Foglet.DoorsTest do
-  use FogletBbs.DataCase, async: true
+  use FogletBbs.DataCase, async: false
 
   alias Foglet.Accounts.User
   alias Foglet.Doors
   alias Foglet.Sessions.Session
+
+  @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+  @demo_door_ids ~w[native-hello external-echo python-context-demo classic-dropfile-demo]
+
+  setup do
+    original = System.get_env(@demo_doors_env)
+    System.delete_env(@demo_doors_env)
+    on_exit(fn -> restore_env(@demo_doors_env, original) end)
+    :ok
+  end
 
   @valid_manifest %{
     id: "trade-wars",
@@ -99,7 +109,33 @@ defmodule Foglet.DoorsTest do
   end
 
   describe "list_manifests/0" do
-    test "resolves the built-in external echo manifest from application priv" do
+    test "hides built-in demo manifests when the env var is absent or empty" do
+      assert Doors.list_manifests() == []
+
+      System.put_env(@demo_doors_env, "")
+
+      assert Doors.list_manifests() == []
+    end
+
+    test "hides built-in demo manifests for false-like env values" do
+      for value <- ["0", "false", "no", "off", "random"] do
+        System.put_env(@demo_doors_env, value)
+
+        assert Doors.list_manifests() == []
+      end
+    end
+
+    test "includes all built-in demo manifests for documented truthy env values" do
+      for value <- ["true", "1", "yes", " TRUE ", "Yes"] do
+        System.put_env(@demo_doors_env, value)
+
+        assert Enum.map(Doors.list_manifests(), & &1.id) == @demo_door_ids
+      end
+    end
+
+    test "resolves the built-in external echo manifest from application priv when demos are enabled" do
+      enable_demo_doors()
+
       assert external_echo = Enum.find(Doors.list_manifests(), &(&1.id == "external-echo"))
       assert {:ok, priv_dir} = priv_dir()
 
@@ -111,10 +147,26 @@ defmodule Foglet.DoorsTest do
   end
 
   describe "list_browsable/1" do
-    test "keeps anonymous browsing separate from launch authorization" do
+    test "derives anonymous browsing from the gated manifest list" do
+      assert Doors.list_visible(nil) == []
+      assert Doors.list_browsable(nil) == []
+
+      enable_demo_doors()
+
       assert Doors.list_visible(nil) == []
       assert [_ | _] = Doors.list_browsable(nil)
       assert Enum.all?(Doors.list_browsable(nil), &(&1.visibility == :members))
+    end
+
+    test "get_visible/2 respects the gated manifest list" do
+      actor = %User{role: :user, status: :active, deleted_at: nil}
+
+      assert {:error, :not_found} = Doors.get_visible(actor, "native-hello")
+
+      enable_demo_doors()
+
+      assert {:ok, manifest} = Doors.get_visible(actor, "native-hello")
+      assert manifest.id == "native-hello"
     end
   end
 
@@ -308,6 +360,11 @@ defmodule Foglet.DoorsTest do
       {:error, reason} -> {:error, reason}
     end
   end
+
+  defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
+
+  defp restore_env(name, nil), do: System.delete_env(name)
+  defp restore_env(name, value), do: System.put_env(name, value)
 
   defp executable?(path) do
     case File.stat(path) do

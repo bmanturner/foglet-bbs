@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.Screens.MainMenuTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Foglet.TUI.RenderHelpers
 
@@ -7,6 +7,15 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.{MainMenu, ShellVisibility}
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
+
+  @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+
+  setup do
+    original = System.get_env(@demo_doors_env)
+    System.delete_env(@demo_doors_env)
+    on_exit(fn -> restore_env(@demo_doors_env, original) end)
+    :ok
+  end
 
   defp build_state(nil) do
     %Foglet.TUI.App{
@@ -762,7 +771,17 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   describe "Phase 19 destinations vs. actions split" do
-    test "visible_destinations/1 anonymous returns B, C, D, Q (FOG-660 guest Door Games browse)" do
+    test "visible_destinations/1 anonymous hides Door Games when no browseable doors exist" do
+      assert MainMenu.visible_destinations(nil) == [
+               {"B", "Boards"},
+               {"C", "Compose"},
+               {"Q", "Logout"}
+             ]
+    end
+
+    test "visible_destinations/1 anonymous includes Door Games when demo doors are enabled" do
+      enable_demo_doors()
+
       # Anonymous-C: destination row is present even when authenticated; handle_key/2's
       # anonymous-C route to login is unchanged from pre-Phase-19 contract.
       # FOG-660: guests see Door Games (D) when browsable :members-visibility doors
@@ -939,6 +958,11 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       end
     end
   end
+
+  defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
+
+  defp restore_env(name, nil), do: System.delete_env(name)
+  defp restore_env(name, value), do: System.put_env(name, value)
 
   describe "update(:on_route_enter, …) — Phase 39 Plan 04" do
     # These reducer pins document the screen-side ownership of the route-entry

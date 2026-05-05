@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.Screens.DoorListTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Foglet.Accounts.User
   alias Foglet.Config
@@ -14,6 +14,8 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   alias Foglet.TUI.Screens.DoorList.State
   alias Foglet.TUI.TextWidth
 
+  @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+
   setup_all do
     Config.init_cache()
 
@@ -22,6 +24,13 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     end)
 
     {:ok, _} = Application.ensure_all_started(:tzdata)
+    :ok
+  end
+
+  setup do
+    original = System.get_env(@demo_doors_env)
+    System.delete_env(@demo_doors_env)
+    on_exit(fn -> restore_env(@demo_doors_env, original) end)
     :ok
   end
 
@@ -37,7 +46,13 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     )
   end
 
-  test "init lists launchable built-in native and external demo doors" do
+  test "init shows an empty catalog by default when demo doors are disabled" do
+    assert %State{doors: [], selected_index: 0} = DoorList.init(context())
+  end
+
+  test "init lists launchable built-in native and external demo doors when enabled" do
+    enable_demo_doors()
+
     assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
 
     assert Enum.map(doors, & &1.id) == [
@@ -51,6 +66,8 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   end
 
   test "up/down and j/k clamp selection to available doors" do
+    enable_demo_doors()
+
     ctx = context()
     state = DoorList.init(ctx)
 
@@ -72,6 +89,8 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   end
 
   test "enter opens a launch confirmation modal instead of spawning from reducer" do
+    enable_demo_doors()
+
     ctx = context()
     state = DoorList.init(ctx)
 
@@ -82,6 +101,8 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   end
 
   test "modal submit emits explicit launch_door effect for selected visible door" do
+    enable_demo_doors()
+
     ctx = context()
     state = DoorList.init(ctx)
 
@@ -98,6 +119,8 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   end
 
   test "q returns to main menu" do
+    enable_demo_doors()
+
     ctx = context()
     state = DoorList.init(ctx)
 
@@ -106,6 +129,8 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   end
 
   test "door intro stays bounded and preserves controls at supported breakpoints" do
+    enable_demo_doors()
+
     for {width, height} = size <- [{64, 22}, {80, 24}, {100, 30}] do
       ascii =
         :door_list
@@ -145,4 +170,28 @@ defmodule Foglet.TUI.Screens.DoorListTest do
       refute String.contains?(ascii, "then ret\n"), "warning should not be silently clipped"
     end
   end
+
+  test "empty catalog fallback has no launch affordance and enter is inert" do
+    ctx = context()
+    state = DoorList.init(ctx)
+
+    assert {^state, []} = DoorList.update({:key, %{key: :enter}}, state, ctx)
+
+    ascii =
+      :door_list
+      |> RenderFixtures.state_for({80, 24})
+      |> App.view()
+      |> AsciiRenderer.render({80, 24})
+
+    assert String.contains?(ascii, "No door games are available right now.")
+    assert String.contains?(ascii, "Check back later.")
+    refute String.contains?(ascii, "No visible door games are configured")
+    refute String.contains?(ascii, "Enter Launch")
+    assert String.contains?(ascii, "Q Back")
+  end
+
+  defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
+
+  defp restore_env(name, nil), do: System.delete_env(name)
+  defp restore_env(name, value), do: System.put_env(name, value)
 end
