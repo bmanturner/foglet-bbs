@@ -168,7 +168,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     body_rendered = Viewport.render(vp, %{})
 
     column style: %{gap: 0} do
-      [parts.header, parts.progress, body_rendered]
+      Enum.reject([parts.header, parts.progress, body_rendered], &is_nil/1)
     end
   end
 
@@ -208,7 +208,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
           end
 
         prefix = if position == 0, do: [], else: [packed_post_separator(theme)]
-        prefix ++ [parts.header, progress_node | body_nodes]
+        prefix ++ Enum.reject([parts.header, progress_node | body_nodes], &is_nil/1)
       end)
 
     column style: %{gap: 0} do
@@ -228,13 +228,13 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     text(TextWidth.truncate(label, max(w - 2, 1)), fg: fg)
   end
 
-  defp partial_progress_label(index, total, partial, true) do
+  defp partial_progress_label(_index, _total, partial, true) do
     cond do
       partial.total_body_rows <= 0 ->
-        "Posts #{index + 1}/#{total}  ▶ Selected — #{ScrollKeys.commandbar_key()} scroll"
+        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll"
 
       PostReader.partial_at_bottom?(partial) ->
-        "Posts #{index + 1}/#{total}  ▶ Selected — end of post"
+        "▶ Selected — end of post"
 
       true ->
         first = partial.scroll_top + 1
@@ -243,15 +243,15 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
           (partial.scroll_top + partial.body_visible_rows)
           |> min(partial.total_body_rows)
 
-        "Posts #{index + 1}/#{total}  ▶ Selected — #{ScrollKeys.commandbar_key()} scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
+        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
     end
   end
 
-  defp partial_progress_label(index, total, partial, false) do
+  defp partial_progress_label(_index, _total, partial, false) do
     if PostReader.partial_at_bottom?(partial) do
-      "Posts #{index + 1}/#{total}"
+      ""
     else
-      "Posts #{index + 1}/#{total}  More below"
+      "More below"
     end
   end
 

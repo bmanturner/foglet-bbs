@@ -1272,16 +1272,15 @@ defmodule Foglet.TUI.LayoutSmokeTest do
 
         flat = Enum.map_join(elements, "", & &1.text)
 
-        assert flat =~ "Post 3 of 12"
+        assert flat =~ "▶ Post 3 of 12"
         assert flat =~ "#33"
         assert flat =~ "@mina"
-        assert flat =~ "Posts 3/12"
+        refute flat =~ "Posts 3/12"
         assert flat =~ "Selected body sentinel"
         assert flat =~ String.slice(phase_22_long_unbroken_body(), 0, 20)
         assert flat =~ "│" or flat =~ "|"
 
-        header = phase_22_text_element!(elements, "Post 3 of 12", size)
-        progress = phase_22_text_element!(elements, "Posts 3/12", size)
+        header = phase_22_text_element!(elements, "▶ Post 3 of 12", size)
         body = phase_22_text_element!(elements, "Selected body sentinel", size)
 
         long_body =
@@ -1312,8 +1311,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
                "expected command text on bottom-most occupied command row at #{inspect(size)}"
 
         assert header.y < body.y
-        assert header.y < progress.y
-        assert progress.y < command_y
+        assert body.y < command_y
 
         assert_no_phase_22_overlap!(elements, size)
       end

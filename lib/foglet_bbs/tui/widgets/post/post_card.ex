@@ -111,10 +111,11 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     index = Keyword.get(opts, :index, 0)
     total = Keyword.get(opts, :total, 1)
 
+    selected? = Keyword.get(opts, :action_target?, false)
+
     %{
-      header: reader_header(post, index, total, width, theme),
-      progress:
-        reader_progress(index, total, width, theme, Keyword.get(opts, :action_target?, false)),
+      header: reader_header(post, index, total, width, theme, selected?),
+      progress: reader_progress(width, theme, selected?),
       body_lines: reader_body_lines(tuples, width, theme)
     }
   end
@@ -184,14 +185,16 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end
   end
 
-  defp reader_header(post, index, total, width, theme) do
+  defp reader_header(post, index, total, width, theme, selected?) do
     text_width = reader_text_width(width)
     message_number = reader_message_number(post)
     handle = get_handle(post) || "unknown"
     age = reader_age(post)
     upvotes = reader_upvote_count(post)
     upvote_label = "▲#{upvotes}"
-    position = "Post #{index + 1} of #{total}"
+    marker = if selected?, do: "▶ ", else: ""
+    position = "#{marker}Post #{index + 1} of #{total}"
+    position_fg = if selected?, do: theme.accent.fg, else: theme.title.fg
     message = "##{message_number}"
     handle_prefix = "@"
     separator = " • "
@@ -217,7 +220,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     nodes =
       if fixed_width + TextWidth.display_width(handle) <= text_width do
         [
-          text(position, fg: theme.title.fg),
+          text(position, fg: position_fg),
           text(separator, fg: theme.dim.fg),
           text(message, fg: theme.badge.fg),
           text(separator, fg: theme.dim.fg),
@@ -228,7 +231,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
           text(age, fg: theme.dim.fg)
         ]
       else
-        [text(TextWidth.truncate(position, text_width), fg: theme.title.fg)]
+        [text(TextWidth.truncate(position, text_width), fg: position_fg)]
       end
 
     row style: %{gap: 0} do
@@ -236,19 +239,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end
   end
 
-  defp reader_progress(index, total, width, theme, true) do
-    label = "Posts #{index + 1}/#{total}  ▶ Selected — R replies here"
-
-    text(TextWidth.truncate(label, reader_text_width(width)),
-      fg: theme.accent.fg
-    )
-  end
-
-  defp reader_progress(index, total, width, theme, false) do
-    text(TextWidth.truncate("Posts #{index + 1}/#{total}", reader_text_width(width)),
-      fg: theme.dim.fg
-    )
-  end
+  defp reader_progress(_width, _theme, _selected?), do: nil
 
   defp reader_body_lines(tuples, width, theme) do
     gutter = "│"
