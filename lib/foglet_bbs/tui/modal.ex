@@ -33,7 +33,7 @@ defmodule Foglet.TUI.Modal do
   Be deliberate about which shape a given callback returns.
   """
 
-  @type modal_type :: :info | :success | :error | :warning | :confirm | :form
+  @type modal_type :: :info | :success | :error | :warning | :confirm | :form | :reply_context
 
   @typedoc """
   See the moduledoc for the full callback contract.

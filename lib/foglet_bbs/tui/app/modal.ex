@@ -15,6 +15,7 @@ defmodule Foglet.TUI.App.Modal do
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Foglet.TUI.Widgets.Post.ReplyContext
   alias Raxol.Core.Runtime.Command
 
   @doc """
@@ -96,6 +97,52 @@ defmodule Foglet.TUI.App.Modal do
   end
 
   defp handle_modal_key(
+         :reply_context,
+         %{key: :down},
+         %App{modal: %Foglet.TUI.Modal{message: %ReplyContext{} = context}} = state
+       ) do
+    update_reply_context(state, ReplyContext.scroll(context, 1))
+  end
+
+  defp handle_modal_key(
+         :reply_context,
+         %{key: :up},
+         %App{modal: %Foglet.TUI.Modal{message: %ReplyContext{} = context}} = state
+       ) do
+    update_reply_context(state, ReplyContext.scroll(context, -1))
+  end
+
+  defp handle_modal_key(
+         :reply_context,
+         %{key: key},
+         %App{modal: %Foglet.TUI.Modal{message: %ReplyContext{} = context}} = state
+       )
+       when key in [:page_down, :page_up] do
+    delta = if key == :page_down, do: context.visible_body_rows, else: -context.visible_body_rows
+    update_reply_context(state, ReplyContext.scroll(context, delta))
+  end
+
+  defp handle_modal_key(
+         :reply_context,
+         %{key: :char, char: c},
+         %App{modal: %Foglet.TUI.Modal{message: %ReplyContext{} = context}} = state
+       )
+       when c in ["u", "U"] do
+    if context.upvote? do
+      Routing.route_screen_update(
+        state,
+        :post_reader,
+        {:reply_context_upvote, context.post.id, context.scroll_top}
+      )
+    else
+      {state, []}
+    end
+  end
+
+  defp handle_modal_key(:reply_context, %{key: :escape}, %App{} = state), do: dismiss(state)
+  defp handle_modal_key(:reply_context, %{key: :enter}, %App{} = state), do: dismiss(state)
+
+  defp handle_modal_key(
          :form,
          key,
          %App{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
@@ -137,6 +184,11 @@ defmodule Foglet.TUI.App.Modal do
   end
 
   defp handle_modal_key(_type, _key, %App{} = state), do: {state, []}
+
+  defp update_reply_context(%App{} = state, %ReplyContext{} = context) do
+    modal = %{state.modal | message: context}
+    {%{state | modal: modal}, []}
+  end
 
   defp route_modal_submit(
          %App{} = state,

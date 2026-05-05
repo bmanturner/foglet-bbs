@@ -60,6 +60,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Post.PostCard
+  alias Foglet.TUI.Widgets.Post.ReplyContext
   alias Raxol.UI.Components.Display.Viewport
 
   @default_terminal_size {80, 24}
@@ -252,6 +253,58 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
+  def update({:task_result, :load_reply_context, result}, %State{} = state, %Context{} = context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, post} when is_map(post) ->
+        reply_context = build_reply_context(post, context)
+        modal = reply_context_modal(reply_context)
+
+        {%{state | reply_context: reply_context, last_op: nil, last_error: nil},
+         [Effect.open_modal(modal)]}
+
+      {:error, _reason} ->
+        {%{state | last_op: nil, last_error: :reply_context_unavailable},
+         [Effect.open_modal(reply_context_unavailable_modal())]}
+    end
+  end
+
+  def update(
+        {:task_result, :toggle_reply_context_upvote, result},
+        %State{} = state,
+        %Context{} = context
+      ) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, refreshed_post} when is_map(refreshed_post) ->
+        scroll_top = if state.reply_context, do: state.reply_context.scroll_top, else: 0
+        reply_context = build_reply_context(refreshed_post, context, scroll_top: scroll_top)
+        modal = reply_context_modal(reply_context)
+
+        {%{state | reply_context: reply_context, last_op: nil, last_error: nil},
+         [Effect.open_modal(modal)]}
+
+      {:error, reason} ->
+        {%{state | last_op: nil, last_error: reason}, []}
+    end
+  end
+
+  def update({:reply_context_upvote, post_id, scroll_top}, %State{} = state, %Context{} = context)
+      when is_binary(post_id) do
+    if Guest.guest?(context) do
+      {state, []}
+    else
+      posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+      user_id = user_id(context.current_user)
+      state = update_reply_context_scroll(state, scroll_top)
+
+      effect =
+        Effect.task(:toggle_reply_context_upvote, :post_reader, fn ->
+          posts_mod.toggle_upvote(user_id, post_id)
+        end)
+
+      {%{state | last_op: :toggle_reply_context_upvote, last_error: nil}, [effect]}
+    end
+  end
+
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["n", "N"] do
     advance_local_post(state, 1, context)
@@ -308,6 +361,11 @@ defmodule Foglet.TUI.Screens.PostReader do
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["v", "V"] do
     open_selected_author_profile(state, context)
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["c", "C"] do
+    open_selected_reply_context(state, context)
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -1156,6 +1214,81 @@ defmodule Foglet.TUI.Screens.PostReader do
       _ -> {state, []}
     end
   end
+
+  defp open_selected_reply_context(%State{} = state, %Context{} = context) do
+    with post when is_map(post) <- selected_action_post(state),
+         reply_to_id when is_binary(reply_to_id) <- reply_target_id(post) do
+      posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
+
+      effect =
+        Effect.task(:load_reply_context, :post_reader, fn ->
+          posts_mod.fetch_readable_post(context.current_user, reply_to_id)
+        end)
+
+      {%{state | last_op: :load_reply_context, last_error: nil}, [effect]}
+    else
+      _ -> {state, []}
+    end
+  end
+
+  defp reply_target_id(%{reply_to_id: id}) when is_binary(id), do: id
+  defp reply_target_id(%{"reply_to_id" => id}) when is_binary(id), do: id
+  defp reply_target_id(%{reply_to: %{id: id}}) when is_binary(id), do: id
+  defp reply_target_id(%{"reply_to" => %{"id" => id}}) when is_binary(id), do: id
+  defp reply_target_id(_post), do: nil
+
+  @doc false
+  @spec reply_context_available?(map() | nil) :: boolean()
+  def reply_context_available?(post), do: is_binary(reply_target_id(post))
+
+  defp build_reply_context(post, %Context{} = context, opts \\ []) do
+    {terminal_w, terminal_h} = context.terminal_size || @default_terminal_size
+    frame_state = %{current_user: context.current_user, session_context: context.session_context}
+    body_tuples = body_tuples_for(frame_state, post)
+
+    ReplyContext.new(post, body_tuples,
+      visible_body_rows: reply_context_body_rows(terminal_h),
+      scroll_top: Keyword.get(opts, :scroll_top, 0),
+      upvote?: not Guest.guest?(context),
+      profile?: false,
+      width: Render.reader_width(terminal_w)
+    )
+  end
+
+  defp reply_context_body_rows(terminal_h) when is_integer(terminal_h),
+    do: (terminal_h - 14) |> max(4) |> min(10)
+
+  defp reply_context_body_rows(_terminal_h), do: 8
+
+  defp reply_context_modal(%ReplyContext{} = reply_context) do
+    %Foglet.TUI.Modal{
+      type: :reply_context,
+      title: "Reply context",
+      message: reply_context,
+      on_cancel: :dismiss_modal,
+      on_confirm: :dismiss_modal
+    }
+  end
+
+  defp reply_context_unavailable_modal do
+    %Foglet.TUI.Modal{
+      type: :warning,
+      title: "Reply unavailable",
+      message: "That replied-to post is no longer available to this session."
+    }
+  end
+
+  defp update_reply_context_scroll(
+         %State{reply_context: %ReplyContext{} = reply_context} = state,
+         scroll_top
+       ) do
+    %{state | reply_context: %{reply_context | scroll_top: max(scroll_top || 0, 0)}}
+  end
+
+  defp update_reply_context_scroll(%State{} = state, _scroll_top), do: state
+
+  defp user_id(%{id: id}) when is_binary(id), do: id
+  defp user_id(_user), do: nil
 
   defp replace_loaded_post(%State{posts: posts} = state, refreshed_post) when is_list(posts) do
     refreshed_id = Map.get(refreshed_post, :id)

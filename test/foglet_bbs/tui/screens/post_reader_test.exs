@@ -21,6 +21,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       }
     end
 
+    def fetch_readable_post(_actor, "p1"), do: {:ok, List.first(posts())}
+    def fetch_readable_post(_actor, "missing"), do: {:error, :not_found}
+
     defp posts do
       [
         %{
@@ -55,6 +58,18 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
          upvote_count: 4,
          user: %{handle: "bob"},
          inserted_at: ~U[2026-04-18 00:01:00.000000Z]
+       }}
+    end
+
+    def fetch_readable_post(_actor, post_id) do
+      {:ok,
+       %{
+         id: post_id,
+         message_number: 1,
+         body: "reply target",
+         upvote_count: 2,
+         user: %{id: "u2", handle: "bob"},
+         inserted_at: ~U[2026-04-18 00:00:00.000000Z]
        }}
     end
   end
@@ -346,6 +361,25 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     )
   end
 
+  defp app_for_reader(%State{} = local_state, opts \\ []) do
+    %{
+      current_user:
+        Keyword.get(opts, :current_user, %Foglet.Accounts.User{id: "u1", handle: "alice"}),
+      terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
+      route_params: Keyword.get(opts, :route_params),
+      session_context:
+        Keyword.get(opts, :session_context, %{
+          domain: %{
+            posts: FakePosts,
+            boards: FakeBoards,
+            threads: FakeThreads,
+            markdown: FakeMarkdown
+          }
+        }),
+      screen_state: %{post_reader: local_state}
+    }
+  end
+
   defp render_screen(state) do
     render_screen(reader_ss(state), reader_context_from_state(state))
   end
@@ -484,6 +518,201 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
              thread_id: "t-route",
              load_intent: "jump_last"
            } = PostReader.State.from_context(context)
+  end
+
+  describe "reply context action" do
+    test "only posts with reply metadata expose the reply-context seam" do
+      refute PostReader.reply_context_available?(%{id: "p1", body: "root"})
+      assert PostReader.reply_context_available?(%{id: "p2", reply_to_id: "p1"})
+      assert PostReader.reply_context_available?(%{id: "p2", reply_to: %{id: "p1"}})
+    end
+
+    test "C fetches the selected replied-to post through the readable-post boundary" do
+      state =
+        State.new(
+          posts: [
+            %{
+              id: "p1",
+              body: "root",
+              user: %{handle: "alice"},
+              inserted_at: ~U[2026-04-18 00:00:00Z]
+            },
+            %{
+              id: "p2",
+              body: "reply",
+              reply_to_id: "p1",
+              user: %{handle: "bob"},
+              inserted_at: ~U[2026-04-18 00:01:00Z]
+            }
+          ],
+          status: :loaded,
+          selected_post_index: 1,
+          selected_action_post_index: 1,
+          pending_read_positions: %{
+            "t1" => %{last_read_post_id: "p2", last_read_message_number: 2}
+          },
+          partial_scroll_tops: %{"p2" => 3}
+        )
+
+      context = reader_context_from_state(app_for_reader(state))
+      {new_state, effects} = PostReader.update({:key, %{key: :char, char: "C"}}, state, context)
+
+      assert %Effect{type: :task, payload: %{op: :load_reply_context, screen_key: :post_reader}} =
+               List.first(effects)
+
+      assert new_state.last_op == :load_reply_context
+      assert new_state.selected_post_index == 1
+      assert new_state.selected_action_post_index == 1
+      assert new_state.pending_read_positions == state.pending_read_positions
+      assert new_state.partial_scroll_tops == state.partial_scroll_tops
+    end
+
+    test "C is a no-op for posts with no reply target" do
+      state = State.new(posts: [%{id: "p1", body: "root"}], status: :loaded)
+      context = reader_context_from_state(app_for_reader(state))
+
+      assert {^state, []} = PostReader.update({:key, %{key: :char, char: "C"}}, state, context)
+    end
+
+    test "loaded reply context opens a bounded modal without mutating reader position" do
+      state =
+        State.new(
+          posts: [%{id: "p2", reply_to_id: "p1"}],
+          status: :loaded,
+          selected_post_index: 0
+        )
+
+      context = reader_context_from_state(app_for_reader(state, terminal_size: {64, 22}))
+
+      target = %{
+        id: "p1",
+        message_number: 1,
+        body: Enum.map_join(1..20, "\n", &"line #{&1}"),
+        upvote_count: 2,
+        user: %{id: "u2", handle: "bob"},
+        inserted_at: ~U[2026-04-18 00:00:00Z]
+      }
+
+      {new_state, effects} =
+        PostReader.update(
+          {:task_result, :load_reply_context, {:ok, {:ok, target}}},
+          state,
+          context
+        )
+
+      assert new_state.selected_post_index == state.selected_post_index
+
+      assert %Foglet.TUI.Widgets.Post.ReplyContext{
+               post: ^target,
+               visible_body_rows: 8,
+               upvote?: true
+             } =
+               new_state.reply_context
+
+      reply_context = new_state.reply_context
+
+      assert %Effect{
+               type: :modal,
+               payload: {:open, %{type: :reply_context, message: ^reply_context}}
+             } =
+               List.first(effects)
+    end
+
+    test "inaccessible replied-to targets show safe feedback" do
+      state = State.new(posts: [%{id: "p2", reply_to_id: "missing"}], status: :loaded)
+      context = reader_context_from_state(app_for_reader(state))
+
+      {new_state, effects} =
+        PostReader.update(
+          {:task_result, :load_reply_context, {:ok, {:error, :not_found}}},
+          state,
+          context
+        )
+
+      assert new_state.last_error == :reply_context_unavailable
+      assert %Effect{type: :modal, payload: {:open, %{type: :warning}}} = List.first(effects)
+    end
+
+    test "guest reply context omits upvote affordance while keeping readable inspection" do
+      state = State.new(posts: [%{id: "p2", reply_to_id: "p1"}], status: :loaded)
+
+      context =
+        reader_context_from_state(
+          app_for_reader(state,
+            current_user: nil,
+            session_context:
+              Foglet.TUI.Guest.enter(%{domain: %{posts: FakePosts, markdown: FakeMarkdown}})
+          )
+        )
+
+      target = %{
+        id: "p1",
+        body: "root",
+        user: %{handle: "bob"},
+        inserted_at: ~U[2026-04-18 00:00:00Z]
+      }
+
+      {new_state, _effects} =
+        PostReader.update(
+          {:task_result, :load_reply_context, {:ok, {:ok, target}}},
+          state,
+          context
+        )
+
+      assert %Foglet.TUI.Widgets.Post.ReplyContext{upvote?: false} = new_state.reply_context
+    end
+
+    test "upvote from reply context reuses Posts toggle and refreshes modal post" do
+      Process.put(:toggle_upvote_test_pid, self())
+
+      reply_context =
+        Foglet.TUI.Widgets.Post.ReplyContext.new(
+          %{id: "p1", body: "root", upvote_count: 2, user: %{handle: "bob"}},
+          [{"root", :plain}],
+          scroll_top: 2,
+          upvote?: true
+        )
+
+      state = State.new(reply_context: reply_context)
+
+      context =
+        reader_context_from_state(
+          app_for_reader(state,
+            session_context: %{domain: %{posts: FakePostsWithUpvotes, markdown: FakeMarkdown}}
+          )
+        )
+
+      {pending_state, effects} =
+        PostReader.update({:reply_context_upvote, "p1", 2}, state, context)
+
+      assert pending_state.reply_context.scroll_top == 2
+
+      assert %Effect{type: :task, payload: %{op: :toggle_reply_context_upvote, fun: fun}} =
+               List.first(effects)
+
+      assert {:ok, %{id: "p1", upvote_count: 4}} = fun.()
+      assert_received {:toggle_upvote_requested, "u1", "p1"}
+
+      refreshed = %{
+        id: "p1",
+        body: Enum.map_join(1..12, "\n", &"root #{&1}"),
+        upvote_count: 4,
+        user: %{handle: "bob"}
+      }
+
+      {refreshed_state, refreshed_effects} =
+        PostReader.update(
+          {:task_result, :toggle_reply_context_upvote, {:ok, {:ok, refreshed}}},
+          pending_state,
+          context
+        )
+
+      assert refreshed_state.reply_context.post.upvote_count == 4
+      assert refreshed_state.reply_context.scroll_top == 2
+
+      assert %Effect{type: :modal, payload: {:open, %{type: :reply_context}}} =
+               List.first(refreshed_effects)
+    end
   end
 
   describe "upvote selected post action" do
