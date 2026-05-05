@@ -650,6 +650,38 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       assert blank_first_thread_y == without_first_thread_y
     end
 
+    test "malicious board descriptions are sanitized before thread-list text output", %{
+      threads: threads,
+      user: user
+    } do
+      size = {80, 24}
+
+      board = %{
+        id: "b1",
+        name: "General",
+        slug: "general",
+        description:
+          "Welcome \e[31mred\e[0m \e]52;c;Zm9v\a bell\a " <>
+            "nul" <> <<0>> <> " end"
+      }
+
+      positioned = render_thread_list_for_board(board, threads, user, size)
+
+      description_element =
+        positioned
+        |> content_text_elements()
+        |> Enum.find(&String.starts_with?(&1.text, "About:"))
+
+      assert %{text: text} = description_element
+      assert text == "About: Welcome red  bell nul end"
+
+      refute text =~ "\e"
+      refute text =~ "\a"
+      refute text =~ <<0>>
+      refute text =~ "52;c"
+      refute text =~ "[31m"
+    end
+
     test "long board descriptions are clamped before thread rows at normal and cramped widths", %{
       threads: threads,
       user: user

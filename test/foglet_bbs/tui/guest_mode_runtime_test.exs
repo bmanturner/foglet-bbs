@@ -9,6 +9,7 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
   alias Foglet.Sessions.Session
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Guest
@@ -125,6 +126,54 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
            )
   end
 
+  test "guest main menu sanitizes hostile oneliner controls before text nodes and serialized render" do
+    Process.put(:fake_oneliners_owner, self())
+
+    hostile_body = "safe \e[31mred\e[0m \e]52;c;clipboard\a osc \e]0;title\e\\ st\abel"
+
+    Process.put(:fake_oneliners_entries, [
+      %{id: "ol1", body: hostile_body, user: %{handle: "alice"}}
+    ])
+
+    {:ok, state} =
+      App.init(%{
+        terminal_size: {80, 24},
+        session_context: %{
+          guest: true,
+          guest_mode_enabled: true,
+          user: nil,
+          domain: %{oneliners: Foglet.TUI.FakeOneliners}
+        }
+      })
+
+    {state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+      App.update(:initial_route_enter, state)
+
+    assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [entry]}} = task.()
+    assert entry.body == hostile_body
+
+    {state, []} =
+      App.update({:screen_task_result, :main_menu, :load_oneliners, {:ok, [entry]}}, state)
+
+    view =
+      state
+      |> App.screen_state_for(:main_menu)
+      |> MainMenu.render(
+        Context.new(
+          current_user: nil,
+          session_context: state.session_context,
+          terminal_size: {80, 24}
+        )
+      )
+
+    rendered_text = collect_text_values(view)
+    serialized_output = AsciiRenderer.render(view, {80, 24})
+
+    assert Enum.any?(rendered_text, &String.contains?(&1, "@alice  safe red osc"))
+    refute unsafe_terminal_text?(Enum.join(rendered_text, ""))
+    refute unsafe_terminal_text?(serialized_output)
+  end
+
   test "login-screen unauthenticated nil-user state does not load guest oneliners" do
     Process.put(:fake_oneliners_owner, self())
     Process.put(:fake_oneliners_entries, [%{id: "ol1", body: "should stay hidden"}])
@@ -147,20 +196,68 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     refute_received {:list_recent_visible, 5}
   end
 
+  test "explicit guest entry from login queues main menu oneliner load" do
+    Process.put(:fake_oneliners_owner, self())
+
+    Process.put(:fake_oneliners_entries, [
+      %{id: "ol1", body: "loaded after G", user: %{handle: "alice"}}
+    ])
+
+    {:ok, state} =
+      App.init(%{
+        terminal_size: {80, 24},
+        session_context: %{
+          guest: false,
+          guest_mode_enabled: true,
+          user: nil,
+          domain: %{oneliners: Foglet.TUI.FakeOneliners}
+        }
+      })
+
+    assert state.current_screen == :login
+    refute Guest.guest?(state)
+
+    {state, []} = App.update(:initial_route_enter, state)
+    refute_received {:list_recent_visible, 5}
+
+    {state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+      App.update(:enter_guest, state)
+
+    assert state.current_screen == :main_menu
+    assert state.current_user == nil
+    assert Guest.guest?(state)
+    assert %MainMenuState{oneliner_status: :loading} = App.screen_state_for(state, :main_menu)
+
+    assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} = task.()
+    assert_received {:list_recent_visible, 5}
+  end
+
   test "session effect enters guest mode in the App without crashing anonymous Session" do
+    Process.put(:fake_oneliners_owner, self())
+    Process.put(:fake_oneliners_entries, [%{id: "ol1", body: "guest row"}])
+
     {:ok, session_pid} = start_supervised({Session, [user_id: nil]})
 
     state = %App{
       current_screen: :login,
       session_pid: session_pid,
-      session_context: %SessionContext{guest: false, guest_mode_enabled: true, user: nil}
+      session_context: %{
+        guest: false,
+        guest_mode_enabled: true,
+        user: nil,
+        session_pid: session_pid,
+        domain: %{oneliners: Foglet.TUI.FakeOneliners}
+      }
     }
 
-    {state, []} = Effects.apply_effect(state, Effect.session(:enter_guest))
+    {state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+      Effects.apply_effect(state, Effect.session(:enter_guest))
 
     assert state.current_screen == :main_menu
     assert state.current_user == nil
     assert Guest.guest?(state)
+    assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} = task.()
+    assert_received {:list_recent_visible, 5}
 
     session_state = Session.get_state(session_pid)
     assert session_state.user_id == nil
@@ -314,5 +411,15 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     {^state, effects} = ChatRoom.update({:key, %{key: :enter}}, state, context)
     assert [%Effect{type: :modal, payload: {:open, modal}}] = effects
     assert modal.type == :error
+  end
+
+  defp unsafe_terminal_text?(text) do
+    text
+    |> String.to_charlist()
+    |> Enum.any?(fn codepoint ->
+      codepoint == 0x1B or codepoint == 0x07 or codepoint == 0x7F or
+        codepoint in 0x00..0x08 or codepoint in 0x0B..0x0C or codepoint in 0x0E..0x1F or
+        codepoint in 0x80..0x9F
+    end)
   end
 end

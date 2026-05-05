@@ -83,6 +83,32 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  defmodule FakeAuthorizedPosts do
+    alias Foglet.Accounts.User
+    alias Foglet.Posts.ReaderWindow
+
+    def list_reader_window_for(nil, "private-thread", _opts), do: {:error, :not_found}
+
+    def list_reader_window_for(%User{}, "private-thread", _opts) do
+      post = %{
+        id: "private-post",
+        body: "Private post body",
+        message_number: 1,
+        inserted_at: ~U[2026-04-28 18:00:00Z]
+      }
+
+      {:ok,
+       %ReaderWindow{
+         posts: [post],
+         first_message_number: post.message_number,
+         last_message_number: post.message_number,
+         has_previous?: false,
+         has_next?: false,
+         direction: :initial
+       }}
+    end
+  end
+
   defmodule ModalSubmitTarget do
     def update({:modal_submit, kind, payload}, state, _context) do
       received = [{kind, payload} | Map.get(state || %{}, :received, [])]
@@ -710,6 +736,72 @@ defmodule Foglet.TUI.AppTest do
                task.()
     end
 
+    test "guest bare private thread_id route leaves PostReader empty with a safe error", %{
+      state: state
+    } do
+      state = %{
+        state
+        | current_screen: :board_list,
+          current_user: nil,
+          session_context: %{
+            guest: true,
+            user: nil,
+            user_id: nil,
+            domain: %{posts: FakeAuthorizedPosts}
+          },
+          screen_state: %{board_list: %{loaded: true}}
+      }
+
+      {routed_state, cmds} =
+        Effects.apply_effect(state, Effect.navigate(:post_reader, %{thread_id: "private-thread"}))
+
+      assert routed_state.current_screen == :post_reader
+      assert routed_state.route_params == %{thread_id: "private-thread"}
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      result = task.()
+
+      assert {:screen_task_result, :post_reader, :load_posts_window, {:ok, {:error, :not_found}}} =
+               result
+
+      {loaded_state, []} = App.update(result, routed_state)
+
+      assert %PostReader.State{status: {:error, :not_found}, posts: []} =
+               App.screen_state_for(loaded_state, :post_reader)
+
+      state_dump = inspect(loaded_state)
+      refute state_dump =~ "Private post body"
+      refute state_dump =~ "Private Thread"
+    end
+
+    test "authenticated member bare private thread_id route can load PostReader", %{
+      state: state
+    } do
+      user = %Foglet.Accounts.User{id: "u-member", handle: "member", role: :user}
+
+      state = %{
+        state
+        | current_user: user,
+          session_context: %{user: user, user_id: user.id, domain: %{posts: FakeAuthorizedPosts}}
+      }
+
+      {routed_state, cmds} =
+        Effects.apply_effect(state, Effect.navigate(:post_reader, %{thread_id: "private-thread"}))
+
+      assert routed_state.current_screen == :post_reader
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      result = task.()
+
+      assert {:screen_task_result, :post_reader, :load_posts_window,
+              {:ok, %Foglet.Posts.ReaderWindow{posts: [%{body: "Private post body"}]}}} = result
+
+      {loaded_state, []} = App.update(result, routed_state)
+
+      assert %PostReader.State{status: :loaded, posts: [%{body: "Private post body"}]} =
+               App.screen_state_for(loaded_state, :post_reader)
+    end
+
     test "navigating to post_reader initializes local state and queues generic post loading", %{
       state: state
     } do
@@ -852,22 +944,43 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
-    test "{:session_replaced, user_id} shows modal that quits on dismiss", %{state: state} do
-      {new_state, cmds} = App.update({:session_replaced, "u1"}, state)
-      assert new_state.modal != nil
-      assert new_state.modal.type == :warning
-      # No immediate quit — the user must dismiss the modal first.
-      assert cmds == []
+    test "ordinary info error and warning modal key dismissals still emit no commands", %{
+      state: state
+    } do
+      modal_types = [:info, :error, :warning]
+      dismissal_keys = [%{key: :enter}, %{key: :escape}, %{key: :char, char: " "}]
 
-      # Both dismiss callbacks return Command.quit() so the session ends
-      # whether the user confirms or cancels.
-      assert is_function(new_state.modal.on_confirm, 1)
-      assert is_function(new_state.modal.on_cancel, 1)
+      for modal_type <- modal_types, key_event <- dismissal_keys do
+        with_modal = %{state | modal: %Foglet.TUI.Modal{message: "notice", type: modal_type}}
 
-      {_, [confirm_cmd]} = new_state.modal.on_confirm.(new_state)
-      {_, [cancel_cmd]} = new_state.modal.on_cancel.(new_state)
-      assert match?(%Raxol.Core.Runtime.Command{type: :quit}, confirm_cmd)
-      assert match?(%Raxol.Core.Runtime.Command{type: :quit}, cancel_cmd)
+        {new_state, cmds} = App.update({:key, key_event}, with_modal)
+
+        assert new_state.modal == nil
+        assert cmds == []
+      end
+    end
+
+    test "{:session_replaced, user_id} quits when dismissed through the App key path", %{
+      state: state
+    } do
+      dismissal_keys = [
+        %{key: :enter},
+        %{key: :escape},
+        %{key: :char, char: " "}
+      ]
+
+      for key_event <- dismissal_keys do
+        {with_modal, initial_cmds} = App.update({:session_replaced, "u1"}, state)
+        assert with_modal.modal != nil
+        assert with_modal.modal.type == :warning
+        # No immediate quit — the user must dismiss the modal first.
+        assert initial_cmds == []
+
+        {dismissed_state, cmds} = App.update({:key, key_event}, with_modal)
+
+        assert dismissed_state.modal == nil
+        assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
+      end
     end
 
     test "{:promote_session, user} transitions to main_menu and sets current_user", %{

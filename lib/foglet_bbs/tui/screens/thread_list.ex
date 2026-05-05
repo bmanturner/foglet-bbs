@@ -313,7 +313,11 @@ defmodule Foglet.TUI.Screens.ThreadList do
   defp board_description(_board), do: nil
 
   defp normalize_description(description) when is_binary(description) do
-    description = String.trim(description)
+    description =
+      description
+      |> Foglet.TerminalText.sanitize_plain_text()
+      |> String.trim()
+
     if description == "", do: nil, else: description
   end
 

@@ -328,6 +328,46 @@ defmodule Foglet.PostsTest do
     end
   end
 
+  describe "guest readability gates" do
+    test "actor-aware reader window denies nil guests members-readable board posts" do
+      category = category_fixture()
+      board = board_fixture(category, %{readable_by: :members})
+      allow_board_server!(board.id)
+      poster = user_fixture()
+
+      assert {:ok, %{thread: thread, post: post}} =
+               Foglet.Threads.create_thread(board.id, poster.id, %{
+                 title: "Members",
+                 body: "Hidden"
+               })
+
+      assert {:error, :not_found} = Foglet.Posts.fetch_readable_post(nil, post.id)
+      assert {:error, :not_found} = Foglet.Posts.list_reader_window_for(nil, thread.id)
+      assert {:ok, fetched} = Foglet.Posts.fetch_readable_post(poster, post.id)
+      assert fetched.id == post.id
+      assert {:ok, window} = Foglet.Posts.list_reader_window_for(poster, thread.id)
+      assert Enum.map(window.posts, fn row -> row.id end) == [post.id]
+    end
+
+    test "actor-aware reader window allows nil guests public board posts" do
+      category = category_fixture()
+      board = board_fixture(category, %{readable_by: :public})
+      allow_board_server!(board.id)
+      poster = user_fixture()
+
+      assert {:ok, %{thread: thread, post: post}} =
+               Foglet.Threads.create_thread(board.id, poster.id, %{
+                 title: "Public",
+                 body: "Visible"
+               })
+
+      assert {:ok, fetched} = Foglet.Posts.fetch_readable_post(nil, post.id)
+      assert fetched.id == post.id
+      assert {:ok, window} = Foglet.Posts.list_reader_window_for(nil, thread.id)
+      assert Enum.map(window.posts, fn row -> row.id end) == [post.id]
+    end
+  end
+
   describe "list_reader_window/2" do
     test "returns a bounded initial window with ascending message numbers and next metadata" do
       {_board, user, thread, _posts} = setup_thread_with_posts(5)

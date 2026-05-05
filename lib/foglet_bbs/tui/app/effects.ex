@@ -25,7 +25,7 @@ defmodule Foglet.TUI.App.Effects do
       }) do
     params = params || %{}
 
-    if guest_route_denied?(state, screen) do
+    if guest_route_denied?(state, screen, params) do
       {%{state | modal: Guest.denial_modal(denial_kind_for_screen(screen))}, []}
     else
       navigate(state, screen, params)
@@ -213,13 +213,48 @@ defmodule Foglet.TUI.App.Effects do
     Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
   end
 
-  defp guest_route_denied?(%App{} = state, screen) do
+  defp guest_route_denied?(%App{} = state, screen, params) do
     Guest.guest?(state) and
-      screen in [:new_thread, :post_composer, :account, :moderation, :sysop]
+      (screen in [:new_thread, :post_composer, :account, :moderation, :sysop] or
+         private_board_route_params?(screen, params))
+  end
+
+  defp private_board_route_params?(screen, params)
+       when screen in [:thread_list, :post_reader] and is_map(params) do
+    params
+    |> known_content_param_maps()
+    |> Enum.any?(&members_only_board_reference?/1)
+  end
+
+  defp private_board_route_params?(_screen, _params), do: false
+
+  defp known_content_param_maps(params) do
+    [
+      params,
+      Map.get(params, :board),
+      Map.get(params, "board"),
+      Map.get(params, :thread),
+      Map.get(params, "thread"),
+      Map.get(params, :post),
+      Map.get(params, "post")
+    ]
+    |> Enum.filter(&is_map/1)
+  end
+
+  defp members_only_board_reference?(%{readable_by: :members}), do: true
+  defp members_only_board_reference?(%{"readable_by" => "members"}), do: true
+  defp members_only_board_reference?(%{"readable_by" => :members}), do: true
+
+  defp members_only_board_reference?(%{} = map) do
+    [Map.get(map, :board), Map.get(map, "board")]
+    |> Enum.filter(&is_map/1)
+    |> Enum.any?(&members_only_board_reference?/1)
   end
 
   defp denial_kind_for_screen(:door_list), do: :door
   defp denial_kind_for_screen(:account), do: :account
+  defp denial_kind_for_screen(:thread_list), do: :board
+  defp denial_kind_for_screen(:post_reader), do: :board
   defp denial_kind_for_screen(_screen), do: :post
 
   defp launch_door(%App{} = state, manifest, payload) do

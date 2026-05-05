@@ -689,7 +689,7 @@ defmodule Foglet.BoardsTest do
              end)
     end
 
-    test "nil guest actor sees active boards without subscription state mutations" do
+    test "nil guest actor sees only public active boards without subscription state mutations" do
       category_a = category_fixture(%{name: "Guest Alpha", display_order: 1})
       category_b = category_fixture(%{name: "Guest Beta", display_order: 2})
 
@@ -697,7 +697,8 @@ defmodule Foglet.BoardsTest do
         board_fixture(category_a, %{
           slug: "guest-visible-directory",
           name: "Guest Visible Directory",
-          display_order: 1
+          display_order: 1,
+          readable_by: :public
         })
 
       required_board =
@@ -705,8 +706,17 @@ defmodule Foglet.BoardsTest do
           slug: "guest-required-directory",
           name: "Guest Required Directory",
           display_order: 1,
+          readable_by: :public,
           default_subscription: true,
           required_subscription: true
+        })
+
+      members_board =
+        board_fixture(category_a, %{
+          slug: "guest-members-directory",
+          name: "Guest Members Directory",
+          display_order: 2,
+          readable_by: :members
         })
 
       archived_board =
@@ -716,7 +726,6 @@ defmodule Foglet.BoardsTest do
         category_fixture(%{name: "Guest Archived", display_order: 0, archived: true})
 
       hidden_board = board_fixture(archived_category, %{slug: "guest-hidden-directory"})
-
       directory = Foglet.Boards.board_directory_for(nil)
       entries = Enum.flat_map(directory, & &1.boards)
       board_ids = Enum.map(entries, & &1.board.id)
@@ -724,6 +733,7 @@ defmodule Foglet.BoardsTest do
       assert Enum.map(directory, & &1.category.id) == [category_a.id, category_b.id]
       assert visible_board.id in board_ids
       assert required_board.id in board_ids
+      refute members_board.id in board_ids
       refute archived_board.id in board_ids
       refute hidden_board.id in board_ids
 
@@ -731,6 +741,36 @@ defmodule Foglet.BoardsTest do
       assert Enum.all?(entries, &is_nil(&1.unread_count))
       assert Enum.all?(entries, &(&1.archived? == false))
       assert Repo.aggregate(Subscription, :count, :id) == 0
+    end
+
+    test "regular active user actor sees active members-readable boards" do
+      category = category_fixture(%{name: "Member Directory", display_order: 1})
+
+      members_board =
+        board_fixture(category, %{
+          slug: "member-visible-directory",
+          name: "Member Visible Directory",
+          readable_by: :members
+        })
+
+      user = user_fixture()
+      directory = Foglet.Boards.board_directory_for(user)
+      board_ids = directory |> Enum.flat_map(& &1.boards) |> Enum.map(& &1.board.id)
+
+      assert members_board.id in board_ids
+    end
+
+    test "fetch_readable_board denies nil guests members-readable boards" do
+      category = category_fixture()
+      public_board = board_fixture(category, %{slug: "fetch-public", readable_by: :public})
+      members_board = board_fixture(category, %{slug: "fetch-members", readable_by: :members})
+      user = user_fixture()
+
+      assert {:ok, %{id: id}} = Foglet.Boards.fetch_readable_board(nil, public_board.id)
+      assert id == public_board.id
+      assert {:error, :not_found} = Foglet.Boards.fetch_readable_board(nil, members_board.id)
+      assert {:ok, %{id: member_id}} = Foglet.Boards.fetch_readable_board(user, members_board.id)
+      assert member_id == members_board.id
     end
 
     test "regular :user actor sees archived boards filtered from the directory (FOG-305)" do

@@ -17,9 +17,10 @@ defmodule Foglet.Markdown do
 
   ## Security
 
-  Raw ANSI escape sequences in user input are stripped before rendering.
-  All styled output originates from the parsed Markdown AST — user text
-  cannot inject terminal style through post bodies (T-2-03).
+  Terminal-control bytes in user input are stripped before rendering via
+  `Foglet.TerminalText.sanitize_plain_text/1`. All styled output originates
+  from the parsed Markdown AST — user text cannot inject terminal style through
+  post bodies (T-2-03).
   """
 
   @type style_atom :: :plain | :bold | :italic | :dim | :underline
@@ -54,8 +55,10 @@ defmodule Foglet.Markdown do
   """
   @spec render(String.t()) :: rendered()
   def render(markdown) when is_binary(markdown) do
-    # Strip raw ANSI escape sequences from user input (T-2-03)
-    sanitized = strip_ansi(markdown)
+    # Strip terminal-control bytes from user input (T-2-03). Keep this shared
+    # with other terminal-facing plain-text paths so post bodies and board
+    # descriptions have the same control-byte boundary.
+    sanitized = Foglet.TerminalText.sanitize_plain_text(markdown)
 
     if sanitized == "" do
       []
@@ -73,14 +76,6 @@ defmodule Foglet.Markdown do
   end
 
   # ---------- Private helpers ----------
-
-  # Strip raw ESC characters from user-supplied text before passing to MDEx.
-  # Prevents injection of terminal escape sequences through post bodies.
-  @spec strip_ansi(String.t()) :: String.t()
-  defp strip_ansi(text) do
-    # Remove ESC character (\x1b) and any following CSI sequence (optional).
-    String.replace(text, ~r/\x1b(\[[0-9;]*[A-Za-z~])?/, "")
-  end
 
   # Walk the HTML output from MDEx and replace known tags with markers.
   # Code blocks are handled first to prevent inner tag expansion.
