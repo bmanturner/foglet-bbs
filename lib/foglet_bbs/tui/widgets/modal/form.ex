@@ -99,6 +99,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Compose
   alias Foglet.TUI.Widgets.Input.{Checkbox, RadioGroup, TextInput}
@@ -161,10 +162,13 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     * `:on_submit`   — `(map() -> any())` called with typed payload on submit
     * `:on_cancel`   — `(-> any())` called on Esc
     * `:show_footer` — boolean, default `false` (Phase 28 D-06 / FORM-03).
-      When `true`, `render/2` appends a `[Tab] Next   [Shift+Tab] Previous   [Enter] Submit   [Ctrl+S] Save   [Esc] Cancel` row in
-      `theme.dim.fg`. Tab-body consumers (Account Profile/Prefs, Sysop Site)
-      should leave this default-off so the global command bar is the single
-      advertiser of those keys; true overlay callers (centered modals) opt in.
+      When `true`, `render/2` appends a responsive one-line footer in
+      `theme.dim.fg`, preferring the full Tab/Shift+Tab/Submit/Save/Cancel
+      hint when width allows and collapsing to the essential save/cancel hint
+      at cramped modal widths. Tab-body consumers (Account Profile/Prefs,
+      Sysop Site) should leave this default-off so the global command bar is
+      the single advertiser of those keys; true overlay callers (centered
+      modals) opt in.
 
   Raises `ArgumentError` if `:fields` is not a list, or is an empty list
   (Phase 28 BL-03 / IN-03). Passing a non-list value (e.g. `nil`, a map,
@@ -532,12 +536,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
           []
 
         state.show_footer ->
-          [
-            text(
-              "[Tab] Next   [Shift+Tab] Previous   [Enter] Submit   [Ctrl+S] Save   [Esc] Cancel",
-              fg: theme.dim.fg
-            )
-          ]
+          [render_footer_row(width, length(visible) > 1, theme)]
 
         true ->
           []
@@ -578,6 +577,28 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
         end
     end
   end
+
+  # Footer clauses (FOG-779): keep overlay modal command discovery to one row,
+  # but collapse by priority at cramped widths so save/cancel remain legible.
+  defp render_footer_row(width, multiple_visible_fields?, %Theme{} = theme) do
+    text(footer_hint(width, multiple_visible_fields?), fg: theme.dim.fg)
+  end
+
+  defp footer_hint(width, multiple_visible_fields?) when is_integer(width) do
+    full = "[Tab] Next   [Shift+Tab] Previous   [Enter] Submit   [Ctrl+S] Save   [Esc] Cancel"
+    middle = "[Tab] Next   [Enter/Ctrl+S] Save   [Esc] Cancel"
+    compact = "[Enter/Ctrl+S] Save   [Esc] Cancel"
+
+    cond do
+      multiple_visible_fields? and width >= 90 and fits?(full, width) -> full
+      multiple_visible_fields? and fits?(middle, width) and width > 80 -> middle
+      true -> compact
+    end
+  end
+
+  defp footer_hint(_width, _multiple_visible_fields?), do: "[Enter/Ctrl+S] Save   [Esc] Cancel"
+
+  defp fits?(text, width), do: TextWidth.display_width(text) <= width
 
   # Status row clauses (Phase 28 FORM-05 / D-08, D-09).
   defp render_status_row(:idle, _theme), do: []
