@@ -101,6 +101,33 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert new_st.raxol_state.focused_index != before_idx
     end
 
+    test "j/k fallbacks move non-search lists without becoming search input" do
+      st = two_item_fixture()
+
+      {after_j, action_j} = SmartList.handle_event(%{key: :char, char: "j"}, st)
+      assert action_j == nil
+      assert after_j.raxol_state.focused_index == 1
+      assert after_j.raxol_state.search_buffer in [nil, ""]
+
+      {after_k, action_k} = SmartList.handle_event(%{key: :char, char: "k"}, after_j)
+      assert action_k == nil
+      assert after_k.raxol_state.focused_index == 0
+    end
+
+    test "search-enabled lists keep j/k as typed search input" do
+      st =
+        SmartList.init(
+          options: [{"jay", 1}, {"kay", 2}],
+          enable_search: true
+        )
+        |> activate_search()
+
+      {after_j, action} = SmartList.handle_event(%{key: :char, char: "j"}, st)
+      assert action == {:search_changed, "j"}
+      assert after_j.raxol_state.search_buffer == "j"
+      assert after_j.raxol_state.focused_index == 0
+    end
+
     test "Enter in single-select returns {:item_selected, value} for focused item" do
       # Default fixture: focused_index is 0, option {"A", 1}
       st = two_item_fixture()

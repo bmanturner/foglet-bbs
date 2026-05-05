@@ -119,15 +119,16 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
     # SelectList.handle_event/3 pattern-matches on `data.key` — for character input
     # it expects the raw character string as the key (e.g. `%{key: "a"}`), not the
     # `:char` atom. Translate before wrapping.
-    raxol_data = translate_event_for_select_list(event)
+    # Searchable lists are text-input surfaces; keep typed j/k as search text.
+    # Non-search list/select surfaces accept j/k as unadvertised vertical fallback.
+    navigation_event = normalize_navigation_event(event, st)
+    raxol_data = translate_event_for_select_list(navigation_event)
     raxol_event = %Raxol.Core.Events.Event{type: :key, data: raxol_data}
     {new_rs, _cmds} = RaxolSelectList.handle_event(raxol_event, rs, %{})
-    # IN-06: derive_action/4 receives the ORIGINAL event (with :key => :char),
-    # NOT raxol_data (where :key has been replaced with the character string).
-    # The pattern match `%{key: :char}` in derive_action/4 depends on this.
-    # Do not collapse these variables — a future refactor that reuses
-    # raxol_data here will silently break the :search_changed action.
-    action = derive_action(rs, new_rs, event, st.multiple)
+    # IN-06: derive_action/4 receives the normalized navigation event. For searchable
+    # lists this is still the original `:char` event; for non-search j/k fallbacks it
+    # is the equivalent arrow event so navigation stays semantically quiet.
+    action = derive_action(rs, new_rs, navigation_event, st.multiple)
     {%{st | raxol_state: new_rs, last_action: action}, action}
   end
 
@@ -151,6 +152,13 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   # ---------------------------------------------------------------------------
   # Private — event translation
   # ---------------------------------------------------------------------------
+
+  defp normalize_navigation_event(%{key: :char, char: _} = event, %__MODULE__{enable_search: true}),
+       do: event
+
+  defp normalize_navigation_event(%{key: :char, char: "j"}, %__MODULE__{}), do: %{key: :down}
+  defp normalize_navigation_event(%{key: :char, char: "k"}, %__MODULE__{}), do: %{key: :up}
+  defp normalize_navigation_event(event, %__MODULE__{}), do: event
 
   # SelectList.handle_event/3 pattern-matches on `data.key`. For navigation and
   # selection keys it expects atoms (:down, :up, :enter, :space, etc.). For

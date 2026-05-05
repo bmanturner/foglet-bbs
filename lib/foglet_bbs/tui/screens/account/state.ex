@@ -44,6 +44,7 @@ defmodule Foglet.TUI.Screens.Account.State do
           prefs_errors: map(),
           profile_dirty?: boolean(),
           prefs_dirty?: boolean(),
+          tab_navigation?: boolean(),
           candidate_theme_id: String.t() | nil,
           status_message: String.t() | nil
         }
@@ -64,6 +65,7 @@ defmodule Foglet.TUI.Screens.Account.State do
     prefs_errors: %{},
     profile_dirty?: false,
     prefs_dirty?: false,
+    tab_navigation?: false,
     candidate_theme_id: nil,
     status_message: nil
   ]

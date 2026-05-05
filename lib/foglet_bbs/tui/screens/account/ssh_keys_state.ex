@@ -15,10 +15,11 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   # Column widths chosen for 80-column viewport (D-10 primary target).
   # At 64x22, Plan 05 smoke test only checks for the "Label" sentinel;
   # full-timestamp columns may overflow at 64 but that is caught by smoke tests.
-  # Label(12) + Fingerprint(20) + Created(30) + Last used(30) = 92 raw chars;
+  # Marker(1) + Label(12) + Fingerprint(20) + Created(30) + Last used(30) = 93 raw chars;
   # Table rendering truncates to column widths — full strings appear only when
   # the column width covers the string length (KEYS-03 D-19 compatibility).
   @table_columns [
+    %{key: :selected, label: "", width: 1, grow: 0, priority: 110, demand: :minimum},
     %{key: :label, label: "Label", width: 12, grow: 1, priority: 90, demand: :content},
     %{
       key: :fingerprint,
@@ -33,6 +34,8 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   ]
 
   @empty_state "No SSH keys yet. Add one to sign in without a password."
+  @selected_marker "▶"
+  @unselected_marker " "
 
   @type focus :: :label | :public_key
   @type mode :: :list | :add | :confirm_revoke
@@ -65,14 +68,21 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   @spec new() :: t()
   def new do
     %__MODULE__{
-      table: build_table([])
+      table: build_table([], 0)
     }
   end
 
   @spec loaded(t(), [map()]) :: t()
   def loaded(%__MODULE__{} = state, items) when is_list(items) do
-    rows = Enum.map(items, &to_row/1)
-    %{state | items: items, table: build_table(rows), selected_index: 0, errors: %{}}
+    selected_index = clamp_index(state.selected_index, length(items))
+
+    %{
+      state
+      | items: items,
+        table: build_table(items, selected_index),
+        selected_index: selected_index,
+        errors: %{}
+    }
   end
 
   @spec with_error(t(), String.t() | map()) :: t()
@@ -175,7 +185,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   def select_next(%__MODULE__{} = state) do
     {new_table, _action} = ConsoleTable.handle_event(%{key: :down}, state.table)
     new_idx = cursor_index(new_table)
-    %{state | table: new_table, selected_index: new_idx}
+    sync_table_cursor(%{state | table: new_table, selected_index: new_idx})
   end
 
   @doc "Move table cursor up (delegates to ConsoleTable.handle_event)."
@@ -183,7 +193,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   def select_prev(%__MODULE__{} = state) do
     {new_table, _action} = ConsoleTable.handle_event(%{key: :up}, state.table)
     new_idx = cursor_index(new_table)
-    %{state | table: new_table, selected_index: new_idx}
+    sync_table_cursor(%{state | table: new_table, selected_index: new_idx})
   end
 
   defp cursor_index(%ConsoleTable{table: table}) do
@@ -194,23 +204,50 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   # Private helpers
   # ---------------------------------------------------------------------------
 
-  defp build_table(rows) do
+  defp build_table(items, selected_index) do
     ConsoleTable.init(
       columns: @table_columns,
-      rows: rows,
+      rows: to_rows(items, selected_index),
       selectable: true,
       empty_state: @empty_state
     )
+    |> put_selected_row(selected_index)
   end
 
-  defp to_row(item) do
+  defp to_rows(items, selected_index) do
+    items
+    |> Enum.with_index()
+    |> Enum.map(fn {item, index} -> to_row(item, index == selected_index) end)
+  end
+
+  defp to_row(item, selected?) do
     %{
       id: Map.get(item, :id),
+      selected: if(selected?, do: @selected_marker, else: @unselected_marker),
       label: to_string(Map.get(item, :label) || ""),
       fingerprint: to_string(Map.get(item, :fingerprint) || ""),
       added: format_added(Map.get(item, :inserted_at)),
       last_used: format_last_used(Map.get(item, :last_used_at))
     }
+  end
+
+  defp sync_table_cursor(%__MODULE__{items: items} = state) when is_list(items) do
+    selected_index = clamp_index(state.selected_index, length(items))
+    %{state | table: build_table(items, selected_index), selected_index: selected_index}
+  end
+
+  defp sync_table_cursor(%__MODULE__{} = state), do: state
+
+  defp clamp_index(_idx, 0), do: 0
+
+  defp clamp_index(idx, count) when is_integer(idx) and idx >= 0,
+    do: min(idx, count - 1)
+
+  defp clamp_index(_idx, _count), do: 0
+
+  defp put_selected_row(%ConsoleTable{} = table, selected_index)
+       when is_integer(selected_index) do
+    put_in(table.table.raxol_state[:selected_row], selected_index)
   end
 
   defp format_added(nil), do: ""

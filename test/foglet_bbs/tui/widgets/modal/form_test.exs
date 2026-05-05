@@ -91,6 +91,26 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert value == "hi"
   end
 
+  test "text fields seeded with a value are editable from the end of the existing value" do
+    fields = [%{name: :location, type: :text, label: "Location", value: "Birmingham"}]
+    state = test_form(fields)
+
+    assert Form.field_value(state, :location) == "Birmingham"
+
+    {state, nil} = Form.handle_event(%{key: :backspace}, state)
+    assert Form.field_value(state, :location) == "Birmingha"
+
+    {state, nil} = Form.handle_event(%{key: :char, char: "m"}, state)
+    assert Form.field_value(state, :location) == "Birmingham"
+
+    {state, nil} = Form.handle_event(%{key: :left}, state)
+    {state, nil} = Form.handle_event(%{key: :delete}, state)
+    assert Form.field_value(state, :location) == "Birmingha"
+
+    {state, nil} = Form.handle_event(%{key: :char, char: "m"}, state)
+    assert Form.field_value(state, :location) == "Birmingham"
+  end
+
   test "typed coercion (integer): '42' -> 42, '' -> nil, '12x' -> nil" do
     pid = self()
 

@@ -474,8 +474,15 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   def render(%__MODULE__{} = state, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
 
-    title_row = text(state.title, fg: theme.title.fg, style: [:bold])
-    divider = text(String.duplicate("─", 40), fg: theme.border.fg)
+    title_rows =
+      if Keyword.get(opts, :show_title, true) do
+        [
+          text(state.title, fg: theme.title.fg, style: [:bold]),
+          text(String.duplicate("─", 40), fg: theme.border.fg)
+        ]
+      else
+        []
+      end
 
     visible = visible_indices(state)
     {window, scroll_above, scroll_below} = compute_field_window(state, visible, opts)
@@ -536,7 +543,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       end
 
     column [] do
-      [title_row, divider] ++ field_rows ++ base_error_rows ++ status_rows ++ footer_rows
+      title_rows ++ field_rows ++ base_error_rows ++ status_rows ++ footer_rows
     end
   end
 

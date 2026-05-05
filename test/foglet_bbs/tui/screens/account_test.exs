@@ -73,14 +73,42 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end)
   end
 
-  # FOG-333: PROFILE shields digit shortcuts while a text field is focused.
-  # Many tests assume the legacy behavior of digit chars switching tabs
-  # directly from the seeded initial state. This helper steps out of the
-  # PROFILE form via the right-arrow tab navigation so a subsequent digit
-  # press reaches the Tabs widget.
+  defp selected_markers(%SSHKeysState{table: %{rows: rows}}) do
+    Enum.map(rows, fn row -> row |> Map.fetch!(:selected) |> String.trim() end)
+  end
+
+  # FOG-333 / FOG-717: PROFILE shields digit shortcuts AND cursor/edit keys
+  # while a text field is focused so editing keys reach the form before tab
+  # navigation. Many tests assume the legacy behavior of digit chars or
+  # arrow keys switching tabs directly from the seeded initial state. This
+  # helper steps out of the PROFILE form by directly setting active_tab to
+  # PREFS (whose default Timezone select-list does not shield tab
+  # shortcuts), so subsequent digit/arrow presses reach the Tabs widget.
   defp leave_profile_form(state) do
-    {:update, state, _} = handle_account_key(%{key: :right}, state)
-    state
+    state = ensure_account_seeded(state)
+
+    update_in(state.screen_state.account, fn account ->
+      Foglet.TUI.LayoutSmokeHelpers.set_active_tab(account, "PREFS")
+    end)
+  end
+
+  # FOG-717: peek at the underlying TextInput state for the Location field
+  # so cursor-position assertions can prove arrow keys edit text instead of
+  # being swallowed by tab navigation.
+  defp location_field_state(%{fields: fields, field_states: states}) do
+    idx = Enum.find_index(fields, &(&1.name == :location))
+    Enum.at(states, idx)
+  end
+
+  defp ensure_account_seeded(state) do
+    case get_in(state, [:screen_state, :account]) do
+      nil ->
+        context = account_context(state)
+        put_in(state, [:screen_state, :account], Account.init(context))
+
+      _ ->
+        state
+    end
   end
 
   defp handle_account_key(event, state) do
@@ -369,14 +397,17 @@ defmodule Foglet.TUI.Screens.AccountTest do
           session_context: %{registration_mode: "invite_only", invite_code_generators: "any_user"}
         )
 
-      # FOG-333: PROFILE shields digit shortcuts while a text field is
-      # focused. Step out of the form via :right before exercising digit
-      # navigation; from PREFS (Timezone is :enum) digits are not shielded.
-      initial = Account.init(context)
-      {after_right, _} = Account.update({:key, %{key: :right}}, initial, context)
+      # FOG-333 / FOG-717: PROFILE shields digit/cursor/edit keys while a
+      # text field is focused. Step out of the form by parking on PREFS
+      # directly; from PREFS (Timezone is :select_list) digits are not
+      # shielded so the digit shortcut still reaches the Tabs widget.
+      initial =
+        context
+        |> Account.init()
+        |> Foglet.TUI.LayoutSmokeHelpers.set_active_tab("PREFS")
 
       {ssh_state, ssh_effects} =
-        Account.update({:key, %{key: :char, char: "3"}}, after_right, context)
+        Account.update({:key, %{key: :char, char: "3"}}, initial, context)
 
       assert ssh_state.active_tab == 2
       assert [%Effect{payload: %{op: :account_load_ssh_keys}}] = ssh_effects
@@ -563,9 +594,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
       %{state: state}
     end
 
-    test "Right arrow advances active_tab via Tabs.handle_event/2", %{state: state} do
+    test "Right arrow advances active_tab via Tabs.handle_event/2 when no text field is focused",
+         %{state: state} do
+      # FOG-717: PROFILE Location is a text field — :right is now routed to
+      # the form for cursor movement. Park on PREFS (Timezone select-list
+      # is not text-shielded) before exercising tab nav.
+      state = leave_profile_form(state)
       {:update, new_state, _cmds} = handle_account_key(%{key: :right}, state)
-      assert new_state.screen_state.account.active_tab == 1
+      assert new_state.screen_state.account.active_tab == 2
     end
 
     test "visibility changes in session_context rebuild tab list on handle-key", %{state: state} do
@@ -574,9 +610,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
         | session_context: %{registration_mode: "invite_only", invite_code_generators: "any_user"}
       }
 
-      # PROFILE shields digit shortcuts (FOG-333) — step out of the text
-      # form first so the digit reaches the Tabs widget.
-      {:update, state, _} = handle_account_key(%{key: :right}, state)
+      # FOG-717: PROFILE shields cursor/edit keys; step out of the text
+      # form via the helper so the digit shortcut reaches the Tabs widget.
+      state = leave_profile_form(state)
 
       {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "4"}, state)
 
@@ -587,21 +623,186 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
     test "digit '2' jumps to second tab (index 1) when no text field is focused", %{state: state} do
       # FOG-333: PROFILE Location field is text-typed and shields digits.
-      # Move focus to PREFS (Timezone is :enum) before exercising the shortcut.
-      {:update, state, _} = handle_account_key(%{key: :right}, state)
+      # Move focus to PREFS (Timezone is :select_list, not shielded) before
+      # exercising the shortcut.
+      state = leave_profile_form(state)
       {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "2"}, state)
       assert new_state.screen_state.account.active_tab == 1
     end
 
+    test "FOG-741: Esc from Profile exposes tab jumps without mutating text", %{state: state} do
+      state = ensure_account_seeded(state)
+
+      state =
+        update_in(state.screen_state.account, fn account ->
+          %{account | profile_form: %{account.profile_form | focus_index: 0}}
+        end)
+
+      before_location =
+        Foglet.TUI.Widgets.Modal.Form.field_value(
+          state.screen_state.account.profile_form,
+          :location
+        )
+
+      {:update, state, []} = handle_account_key(%{key: :escape}, state)
+      assert state.screen_state.account.active_tab == 0
+      assert state.screen_state.account.tab_navigation?
+
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+      assert state.screen_state.account.active_tab == 1
+      refute state.screen_state.account.tab_navigation?
+
+      assert Foglet.TUI.Widgets.Modal.Form.field_value(
+               state.screen_state.account.profile_form,
+               :location
+             ) == before_location
+    end
+
+    test "FOG-741: Account form keybar advertises Esc before tab jumps", %{state: state} do
+      flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
+
+      assert flat =~ "Esc,1-3"
+      refute flat =~ "1-3 Jump"
+
+      {:update, state, []} = handle_account_key(%{key: :escape}, state)
+      flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
+
+      assert flat =~ "1-3"
+      refute flat =~ "Esc,1-3"
+    end
+
     test "KEYS-01 digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
       # FOG-333: leave PROFILE first so the digit shortcut isn't shielded.
-      {:update, state, _} = handle_account_key(%{key: :right}, state)
+      state = leave_profile_form(state)
 
       {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "3"}, state)
       assert new_state.screen_state.account.active_tab == 2
 
       flat = render_account(new_state) |> collect_text_values()
       assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
+    end
+
+    test "FOG-717: left/right cursor keys edit Location, never advance Account tabs" do
+      alias Foglet.TUI.Widgets.Input.TextInput
+      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+      user = %Foglet.Accounts.User{
+        id: "00000000-0000-0000-0000-000000000010",
+        handle: "alice",
+        role: :user,
+        location: "Bend"
+      }
+
+      state =
+        build_state(user, %{})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      account = state.screen_state.account
+      assert account.active_tab == 0
+      assert Enum.at(account.profile_form.fields, 0).name == :location
+
+      # Cursor starts placed at end of "Bend" (length 4).
+      %TextInput{raxol_state: %{cursor_pos: start_pos}} =
+        location_field_state(account.profile_form)
+
+      assert start_pos == 4
+
+      # Two :left presses must move the cursor inside Location, NOT switch
+      # tabs. The legacy bug routed :left through Tabs first, switching tab.
+      {:update, state, []} = handle_account_key(%{key: :left}, state)
+      {:update, state, []} = handle_account_key(%{key: :left}, state)
+      assert state.screen_state.account.active_tab == 0
+
+      %TextInput{raxol_state: %{cursor_pos: pos_after_left}} =
+        location_field_state(state.screen_state.account.profile_form)
+
+      assert pos_after_left == start_pos - 2,
+             "expected :left to move TextInput cursor while Location is focused"
+
+      # Typing 'Y' between cursor positions must insert into the focused
+      # field instead of being swallowed.
+      {:update, state, []} = handle_account_key(%{key: :char, char: "Y"}, state)
+      assert state.screen_state.account.active_tab == 0
+
+      assert ModalForm.field_value(state.screen_state.account.profile_form, :location) ==
+               "BeYnd"
+
+      # :right must continue to move the cursor forward, NOT advance tab.
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      assert state.screen_state.account.active_tab == 0
+
+      # :home/:end remain text-cursor keys when Location is focused.
+      {:update, state, []} = handle_account_key(%{key: :home}, state)
+      assert state.screen_state.account.active_tab == 0
+
+      %TextInput{raxol_state: %{cursor_pos: pos_after_home}} =
+        location_field_state(state.screen_state.account.profile_form)
+
+      assert pos_after_home == 0
+
+      {:update, state, []} = handle_account_key(%{key: :end}, state)
+      assert state.screen_state.account.active_tab == 0
+
+      # Backspace and delete also stay in the focused field.
+      {:update, state, []} = handle_account_key(%{key: :backspace}, state)
+      assert state.screen_state.account.active_tab == 0
+      assert ModalForm.field_value(state.screen_state.account.profile_form, :location) == "BeYn"
+    end
+
+    test "FOG-717: cursor keys still advance tabs when no text field is focused" do
+      # PROFILE Location is text-shielded. Park on PREFS where Timezone is
+      # a select-list (not text-shielded) so :right advances to SSH KEYS.
+      user = AccountsFixtures.user_fixture()
+
+      state =
+        build_state(user, %{})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+        |> leave_profile_form()
+
+      assert state.screen_state.account.active_tab == 1
+
+      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      assert state.screen_state.account.active_tab == 2
+
+      {:update, state, []} = handle_account_key(%{key: :left}, state)
+      assert state.screen_state.account.active_tab == 1
+    end
+
+    test "FOG-717: cursor/edit keys do not switch tabs when PREFS Timezone is filtering" do
+      # PREFS Timezone is :select_list — a list/filter mode. Backspace and
+      # char keys should drive the search filter (or stay no-op when empty)
+      # without ever switching to PROFILE/SSH KEYS, even when the search
+      # buffer is empty.
+      user = AccountsFixtures.user_fixture()
+
+      state =
+        build_state(user, %{})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+        |> leave_profile_form()
+
+      assert state.screen_state.account.active_tab == 1
+
+      # With an empty search, :left/:right fall through to Tabs (browse-mode
+      # tab nav). Char keys begin filtering and stay inside the form.
+      {:update, state, []} = handle_account_key(%{key: :char, char: "C"}, state)
+      assert state.screen_state.account.active_tab == 1
+
+      {:update, state, []} = handle_account_key(%{key: :backspace}, state)
+      assert state.screen_state.account.active_tab == 1
+
+      # Once the filter is active, cursor keys must stay in the form so the
+      # user is not yanked out of PREFS while editing the Timezone search.
+      {:update, state, []} = handle_account_key(%{key: :char, char: "E"}, state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "u"}, state)
+      assert state.screen_state.account.active_tab == 1
+
+      context = account_context(state)
+      account = state.screen_state.account
+      {after_left, _} = Account.update({:key, %{key: :left}}, account, context)
+      assert after_left.active_tab == 1
+
+      {after_right, _} = Account.update({:key, %{key: :right}}, account, context)
+      assert after_right.active_tab == 1
     end
 
     test "Ctrl+Q returns to :main_menu", %{state: state} do
@@ -1256,9 +1457,10 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{})
 
-      # Navigate to SSH KEYS without using the digit shortcut: PROFILE shields
-      # digits while the Location text field is focused (FOG-333).
-      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      # FOG-717: navigate to SSH KEYS without using the digit shortcut.
+      # PROFILE shields digit/cursor keys while a text field is focused.
+      # Park on PREFS first (no text shield) then arrow into SSH KEYS.
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :right}, state)
       assert state.screen_state.account.active_tab == 2
       {:update, state, []} = handle_account_key(%{key: :char, char: "a"}, state)
@@ -1301,9 +1503,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
       user = AccountsFixtures.user_fixture()
       state = build_state(user, %{})
 
-      # FOG-333: PROFILE shields digit shortcuts while a text field is
-      # focused, so navigate via arrow keys to reach SSH KEYS list mode.
-      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      # FOG-717: PROFILE shields digit/cursor keys while a text field is
+      # focused. Park on PREFS first then arrow into SSH KEYS list mode.
+      state = leave_profile_form(state)
       {:update, state, []} = handle_account_key(%{key: :right}, state)
       assert state.screen_state.account.active_tab == 2
       assert state.screen_state.account.ssh_keys.mode == :list
@@ -1366,9 +1568,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
         build_state(user, %{})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
-      # Move to PREFS via arrow (index 1). A blank timezone select-list keeps
-      # digit tab shortcuts available, so users can still jump tabs.
-      {:update, state, []} = handle_account_key(%{key: :right}, state)
+      # FOG-717: PROFILE shields cursor/edit keys when a text field is
+      # focused, so step out of the form via the helper. From PREFS, the
+      # blank timezone select-list keeps digit tab shortcuts available so
+      # users can still jump tabs.
+      state = leave_profile_form(state)
       assert state.screen_state.account.active_tab == 1
 
       focused_field =
@@ -1576,20 +1780,18 @@ defmodule Foglet.TUI.Screens.AccountTest do
   end
 
   describe "PROFILE Modal.Form contract" do
-    test "renders form heading and suppresses Modal.Form footer (FORM-03 default-off)" do
-      # Phase 28 FORM-03 / D-06: Account tab-body forms do NOT render the
-      # Modal.Form footer; the global command bar is the single advertiser of
-      # [Enter] Submit / [Esc] Cancel. Profile/Prefs build forms without
-      # `show_footer: true`, so render must contain the form heading but NOT
-      # the footer sentinel.
+    test "suppresses redundant Modal.Form title and footer (FORM-03 default-off)" do
+      # Phase 28 FORM-03 / D-06 plus FOG-710 account polish: Account tab-body
+      # forms do NOT render Modal.Form title/footer chrome; the selected tab
+      # and global command bar are the single screen-level labels/advertisers.
       state =
         build_state_for_role(:user)
         |> put_in([:screen_state, :account], AccountState.new())
 
       flat = render_account(state) |> collect_text_values()
 
-      assert Enum.any?(flat, &String.contains?(&1, "Profile")),
-             "expected form heading 'Profile' in profile tab"
+      refute Enum.any?(flat, &(&1 == "Profile")),
+             "Modal.Form title must NOT duplicate the selected Account tab label"
 
       refute Enum.any?(flat, &String.contains?(&1, "[Enter] Submit")),
              "Modal.Form footer must NOT appear in Account tab body (Phase 28 D-06)"
@@ -1795,6 +1997,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       table = state.screen_state.account.ssh_keys.table
 
       assert Enum.map(table.columns, & &1.label) == [
+               "",
                "Label",
                "Fingerprint",
                "Added",
@@ -1822,9 +2025,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end
 
     test "renders SSH key table with width-aware columns at 80x24 and 64x22", %{state: state} do
-      for {terminal_width, terminal_height, expected_fingerprint_x} <- [
-            {80, 24, 15},
-            {64, 22, 15}
+      for {terminal_width, terminal_height} <- [
+            {80, 24},
+            {64, 22}
           ] do
         positioned =
           state
@@ -1836,14 +2039,18 @@ defmodule Foglet.TUI.Screens.AccountTest do
         header = ssh_key_table_row(positioned, "Label")
         row = ssh_key_table_row(positioned, "qa generated")
 
-        assert [label, fingerprint, added, last_used] = header
-        assert label.x == 2
-        assert fingerprint.x == expected_fingerprint_x
+        assert [header_marker, label, fingerprint, added, last_used] = header
+        assert String.trim(header_marker.text) == ""
+        assert header_marker.x == 2
+        assert label.x > header_marker.x
+        assert fingerprint.x > label.x
         assert added.x > fingerprint.x
         assert last_used.x > added.x
         assert TextWidth.display_width(label.text) > TextWidth.display_width("Label")
 
-        assert [row_label, row_fingerprint, row_added, row_last_used] = row
+        assert [row_marker, row_label, row_fingerprint, row_added, row_last_used] = row
+        assert row_marker.x == header_marker.x
+        assert String.trim(row_marker.text) == "▶"
         assert row_label.x == label.x
         assert row_fingerprint.x == fingerprint.x
         assert row_added.x == added.x
@@ -1856,6 +2063,64 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
         assert TextWidth.display_width(row_last_used.text) <=
                  TextWidth.display_width(last_used.text)
+      end
+    end
+
+    test "selected marker moves between multiple SSH keys and survives cramped render" do
+      keys =
+        SSHKeysState.new()
+        |> SSHKeysState.loaded([
+          %{
+            id: "k1",
+            label: "personal laptop with a very long label",
+            fingerprint: "SHA256:first-key-fingerprint-that-will-truncate-in-the-table",
+            inserted_at: ~U[2026-04-24 10:11:12Z],
+            last_used_at: nil
+          },
+          %{
+            id: "k2",
+            label: "workstation revoked-ish long label",
+            fingerprint: "SHA256:second-key-fingerprint-that-will-truncate-in-the-table",
+            inserted_at: ~U[2026-04-25 10:11:12Z],
+            last_used_at: ~U[2026-04-26 10:11:12Z]
+          }
+        ])
+
+      assert selected_markers(keys) == ["▶", ""]
+
+      after_down = SSHKeysState.select_next(keys)
+      assert after_down.selected_index == 1
+      assert selected_markers(after_down) == ["", "▶"]
+
+      # Clamp at the bottom instead of losing focus.
+      after_second_down = SSHKeysState.select_next(after_down)
+      assert after_second_down.selected_index == 1
+      assert selected_markers(after_second_down) == ["", "▶"]
+
+      after_up = SSHKeysState.select_prev(after_second_down)
+      assert after_up.selected_index == 0
+      assert selected_markers(after_up) == ["▶", ""]
+
+      account_state =
+        AccountState.new()
+        |> Map.put(:active_tab, 2)
+        |> Map.put(:ssh_keys, after_down)
+
+      for {terminal_width, terminal_height, selected_label} <- [
+            {80, 24, "workstation"},
+            {58, 18, "workstation"}
+          ] do
+        positioned =
+          build_state_for_role(:user)
+          |> Map.put(:terminal_size, {terminal_width, terminal_height})
+          |> put_in([:screen_state, :account], account_state)
+          |> render_account()
+          |> Engine.apply_layout(%{width: terminal_width, height: terminal_height})
+          |> List.flatten()
+
+        row = ssh_key_table_row(positioned, selected_label)
+        assert [%{text: marker} | _] = row
+        assert String.trim(marker) == "▶"
       end
     end
 

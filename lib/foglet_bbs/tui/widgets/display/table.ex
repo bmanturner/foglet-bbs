@@ -40,6 +40,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   """
 
   import Raxol.Core.Renderer.View
+  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Table, as: RaxolTable
@@ -128,10 +129,11 @@ defmodule Foglet.TUI.Widgets.Display.Table do
       # return the state unchanged with no semantic action.
       {%{st | last_action: nil}, nil}
     else
-      raxol_event = translate_event(event)
+      navigation_event = normalize_navigation_event(event, st)
+      raxol_event = translate_event(navigation_event, st)
       {:ok, new_rs} = RaxolTable.handle_event(raxol_event, rs, %{})
 
-      action = derive_action(rs, new_rs, event)
+      action = derive_action(rs, new_rs, navigation_event)
       {%{st | raxol_state: new_rs, last_action: action}, action}
     end
   end
@@ -148,21 +150,42 @@ defmodule Foglet.TUI.Widgets.Display.Table do
 
   # --- private ---
 
-  # Translate Foglet key events to Raxol.UI.Components.Table event tuples
-  defp translate_event(%{key: :down}), do: {:key, {:arrow_down, nil}}
-  defp translate_event(%{key: :up}), do: {:key, {:arrow_up, nil}}
-  defp translate_event(%{key: :left}), do: {:key, {:arrow_left, nil}}
-  defp translate_event(%{key: :right}), do: {:key, {:arrow_right, nil}}
-  defp translate_event(%{key: :enter}), do: {:key, {:enter, nil}}
-  defp translate_event(%{key: :escape}), do: {:key, {:escape, nil}}
-  defp translate_event(%{key: :page_up}), do: {:key, {:page_up, nil}}
-  defp translate_event(%{key: :page_down}), do: {:key, {:page_down, nil}}
-  defp translate_event(%{key: :home}), do: {:key, {:home, nil}}
-  defp translate_event(%{key: :end}), do: {:key, {:end, nil}}
+  # Translate unadvertised j/k fallbacks to vertical arrows only when the table
+  # is not accepting typed filter/search characters. Filterable tables keep j/k
+  # as text input so search terms remain typeable.
+  defp normalize_navigation_event(%{key: :char, char: _} = event, %__MODULE__{filterable: true}),
+    do: event
 
-  defp translate_event(%{key: :char, char: c}), do: {:key, {:char, c}}
+  defp normalize_navigation_event(%{key: :char, char: "j"}, %__MODULE__{}), do: %{key: :down}
+  defp normalize_navigation_event(%{key: :char, char: "k"}, %__MODULE__{}), do: %{key: :up}
+  defp normalize_navigation_event(event, %__MODULE__{}), do: event
 
-  defp translate_event(_), do: {:key, {:unknown, nil}}
+  # Translate Foglet key events to Raxol.UI.Components.Table event tuples.
+  # Searchable tables are text-input surfaces, so raw j/k chars must remain
+  # filter characters instead of going through the global movement fallback.
+  defp translate_event(%{key: :char} = event, %__MODULE__{filterable: true}),
+    do: translate_non_vertical_event(event)
+
+  defp translate_event(event, %__MODULE__{}) do
+    case ScrollKeys.vertical_direction(event) do
+      :down -> {:key, {:arrow_down, nil}}
+      :up -> {:key, {:arrow_up, nil}}
+      nil -> translate_non_vertical_event(event)
+    end
+  end
+
+  defp translate_non_vertical_event(%{key: :left}), do: {:key, {:arrow_left, nil}}
+  defp translate_non_vertical_event(%{key: :right}), do: {:key, {:arrow_right, nil}}
+  defp translate_non_vertical_event(%{key: :enter}), do: {:key, {:enter, nil}}
+  defp translate_non_vertical_event(%{key: :escape}), do: {:key, {:escape, nil}}
+  defp translate_non_vertical_event(%{key: :page_up}), do: {:key, {:page_up, nil}}
+  defp translate_non_vertical_event(%{key: :page_down}), do: {:key, {:page_down, nil}}
+  defp translate_non_vertical_event(%{key: :home}), do: {:key, {:home, nil}}
+  defp translate_non_vertical_event(%{key: :end}), do: {:key, {:end, nil}}
+
+  defp translate_non_vertical_event(%{key: :char, char: c}), do: {:key, {:char, c}}
+
+  defp translate_non_vertical_event(_), do: {:key, {:unknown, nil}}
 
   defp derive_action(_before_rs, after_rs, %{key: :enter}) do
     row = Map.get(after_rs, :selected_row)

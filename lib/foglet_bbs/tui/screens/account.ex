@@ -61,24 +61,10 @@ defmodule Foglet.TUI.Screens.Account do
       |> normalize_state(context)
       |> sync_prefs_focus()
 
-    if shield_tab_shortcut?(event, ss) do
-      handle_active_key(event, ss, context)
+    if tab_navigation_focus?(ss) and event.key == :enter do
+      {%{ss | tab_navigation?: false}, []}
     else
-      {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
-
-      if action != nil do
-        new_active =
-          case action do
-            {:tab_changed, idx} -> idx
-            _ -> ss.active_tab
-          end
-
-        new_ss = %{ss | tabs: new_tabs, active_tab: new_active}
-        {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
-        {loaded_ss, effects}
-      else
-        handle_active_key(event, ss, context)
-      end
+      do_update_key(event, ss, context)
     end
   end
 
@@ -203,6 +189,28 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp active_label(%State{} = ss), do: Enum.at(tab_labels(ss), ss.active_tab)
 
+  defp do_update_key(event, %State{} = ss, %Context{} = context) do
+    if shield_tab_shortcut?(event, ss) do
+      handle_active_key(event, ss, context)
+    else
+      {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
+
+      if action != nil do
+        new_active =
+          case action do
+            {:tab_changed, idx} -> idx
+            _ -> ss.active_tab
+          end
+
+        new_ss = %{ss | tabs: new_tabs, active_tab: new_active, tab_navigation?: false}
+        {loaded_ss, effects} = maybe_request_tab_load(new_ss, context)
+        {loaded_ss, effects}
+      else
+        handle_active_key(event, ss, context)
+      end
+    end
+  end
+
   defp maybe_request_tab_load(%State{} = ss, %Context{} = context) do
     case active_label(ss) do
       "SSH KEYS" when not is_list(ss.ssh_keys.items) ->
@@ -229,6 +237,7 @@ defmodule Foglet.TUI.Screens.Account do
   defp handle_profile_update(event, %State{} = ss, %Context{} = context) do
     case ProfileForm.handle_key(event, ss, context.current_user) do
       {:ok, new_ss, cmds} ->
+        new_ss = maybe_enter_tab_navigation(event, new_ss, cmds)
         {new_ss, account_command_effects(cmds, context, new_ss)}
 
       :no_match ->
@@ -240,6 +249,7 @@ defmodule Foglet.TUI.Screens.Account do
     case PrefsForm.handle_key(event, ss, context.current_user) do
       {:ok, new_ss, cmds} ->
         new_ss = sync_prefs_focus_from_form(new_ss)
+        new_ss = maybe_enter_tab_navigation(event, new_ss, cmds)
         {new_ss, account_command_effects(cmds, context, new_ss)}
 
       :no_match ->
@@ -372,37 +382,90 @@ defmodule Foglet.TUI.Screens.Account do
     end)
   end
 
-  # FOG-142: Tabs widget consumes digit shortcuts 1–9 unconditionally
-  # (Pitfall 6 in `Foglet.TUI.Widgets.Input.Tabs`). Active text-entry
-  # forms must shield digits or real input (e.g. an `ssh-ed25519` public
-  # key) silently jumps to another Account tab.
+  # FOG-142 / FOG-717: Tabs consumes global tab shortcuts before the
+  # active Account tab sees them. Focused text-entry fields must get first
+  # refusal for digit shortcuts and cursor-editing keys; otherwise typing
+  # digits into a form or pressing Left/Right inside populated text fields
+  # silently changes Account tabs instead of editing the field.
   defp shield_tab_shortcut?(event, %State{} = ss) do
-    digit_event?(event) and text_entry_active?(ss)
+    not tab_navigation_focus?(ss) and text_entry_event?(event, active_text_entry_field(ss))
   end
 
-  defp digit_event?(%{key: :char, char: <<c>>}) when c in ?0..?9, do: true
-  defp digit_event?(_), do: false
+  defp tab_navigation_focus?(%State{tab_navigation?: value}), do: value == true
 
-  defp text_entry_active?(%State{} = ss) do
+  # FOG-741: Esc from a PROFILE/PREFS form still performs honest cancel, but
+  # it also parks focus on the Account tab strip. The next advertised tab
+  # shortcut (1-3 or ←/→) reaches Tabs instead of being inserted into the
+  # focused text field; Enter returns to the form.
+  defp maybe_enter_tab_navigation(%{key: :escape}, %State{} = ss, []),
+    do: %{ss | tab_navigation?: true}
+
+  defp maybe_enter_tab_navigation(_event, %State{} = ss, _cmds), do: ss
+
+  defp text_entry_event?(%{key: :char, char: <<c>>}, {:form, %{type: :select_list}, field_state})
+       when c in ?0..?9 do
+    select_search_active?(field_state)
+  end
+
+  defp text_entry_event?(%{key: :char, char: <<c>>}, {:form, %{type: type}, _field_state})
+       when c in ?0..?9 and type in [:text, :textarea, :integer, :password],
+       do: true
+
+  defp text_entry_event?(%{key: :char, char: char}, {:form, %{type: :select_list}, _field_state})
+       when is_binary(char),
+       do: true
+
+  defp text_entry_event?(%{key: key}, {:form, %{type: type}, _field_state})
+       when key in [:left, :right, :home, :end, :delete] and
+              type in [:text, :textarea, :integer, :password],
+       do: true
+
+  defp text_entry_event?(%{key: :backspace}, {:form, %{type: type}, _field_state})
+       when type in [:text, :textarea, :integer, :password, :select_list],
+       do: true
+
+  defp text_entry_event?(%{key: key}, {:form, %{type: :select_list}, field_state})
+       when key in [:left, :right, :home, :end, :delete] do
+    select_search_active?(field_state)
+  end
+
+  defp text_entry_event?(%{key: :char, char: <<c>>}, :ssh_key_add) when c in ?0..?9, do: true
+
+  defp text_entry_event?(%{key: key}, :ssh_key_add)
+       when key in [:left, :right, :home, :end, :delete, :backspace],
+       do: true
+
+  defp text_entry_event?(_event, _entry), do: false
+
+  defp active_text_entry_field(%State{} = ss) do
     case active_label(ss) do
-      "SSH KEYS" -> ss.ssh_keys.mode == :add
-      "PROFILE" -> form_text_field_focused?(ss.profile_form)
-      "PREFS" -> form_text_field_focused?(ss.prefs_form)
-      _ -> false
+      "SSH KEYS" -> if ss.ssh_keys.mode == :add, do: :ssh_key_add
+      "PROFILE" -> focused_form_field(ss.profile_form)
+      "PREFS" -> focused_form_field(ss.prefs_form)
+      _ -> nil
     end
   end
 
-  # FOG-333: Generalized text-entry shielding for Modal.Form-backed tabs.
-  # Any focused field whose `:type` accepts free-form text (digits included)
-  # shields the global digit tab shortcuts; enum/select fields fall through.
-  defp form_text_field_focused?(%{fields: fields, focus_index: idx}) do
+  # FOG-333 / FOG-717: Generalized text-entry shielding for
+  # Modal.Form-backed tabs. Free-form fields shield digit and cursor-editing
+  # shortcuts. Searchable select-list filters shield letters and cursor keys,
+  # while preserving blank numeric tab jumps until the user has begun a search.
+  defp focused_form_field(%{fields: fields, field_states: field_states, focus_index: idx}) do
     case Enum.at(fields, idx) do
-      %{type: type} when type in [:text, :textarea, :integer, :password] -> true
-      _ -> false
+      %{type: type} = field when type in [:text, :textarea, :integer, :password, :select_list] ->
+        {:form, field, Enum.at(field_states, idx)}
+
+      _ ->
+        nil
     end
   end
 
-  defp form_text_field_focused?(_), do: false
+  defp focused_form_field(_), do: nil
+
+  defp select_search_active?(%{select_list: %{search_buffer: search}}) when is_binary(search),
+    do: search != ""
+
+  defp select_search_active?(_), do: false
 
   defp action_key(%{key: :char, char: char}) when is_binary(char), do: char
   defp action_key(%{key: key}), do: key

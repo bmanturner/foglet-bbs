@@ -14,6 +14,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.BoardList.State
   alias Foglet.TUI.Screens.Domain
+  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -328,7 +329,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     navigate = %{
       label: "Navigate",
       commands: [
-        %{key: "↑/↓", label: "Select", priority: 10},
+        %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
         %{key: "←/→", label: "Collapse/Expand", priority: 20},
         %{key: "Enter", label: "Open", priority: 5}
       ]

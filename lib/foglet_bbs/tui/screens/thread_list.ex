@@ -16,7 +16,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.PostingPolicy
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, ScrollKeys}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.ThreadList.State
@@ -92,16 +92,14 @@ defmodule Foglet.TUI.Screens.ThreadList do
      []}
   end
 
-  def update({:key, %{key: key}}, %State{} = state, %Context{})
+  def update({:key, %{key: key} = event}, %State{} = state, %Context{})
       when key in [:down, :up] do
-    delta = if key == :down, do: 1, else: -1
-    {move_selection(state, delta), []}
+    {move_selection(state, ScrollKeys.vertical_delta(event)), []}
   end
 
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{})
+  def update({:key, %{key: :char, char: c} = event}, %State{} = state, %Context{})
       when c in ["j", "k"] do
-    delta = if c == "j", do: 1, else: -1
-    {move_selection(state, delta), []}
+    {move_selection(state, ScrollKeys.vertical_delta(event)), []}
   end
 
   def update({:key, %{key: :enter}}, %State{} = state, %Context{}) do
@@ -194,7 +192,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
       %{
         label: "Navigate",
         commands: [
-          %{key: "↑/↓", label: "Select", priority: 10},
+          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
           %{key: "Enter", label: "Open", priority: 10}
         ]
       },

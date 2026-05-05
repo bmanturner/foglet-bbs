@@ -12,7 +12,7 @@ defmodule Foglet.TUI.Screens.DoorList do
   import Raxol.Core.Renderer.View
 
   alias Foglet.Doors.Manifest
-  alias Foglet.TUI.{Context, Effect, Modal, TextWidth, Theme}
+  alias Foglet.TUI.{Context, Effect, Modal, ScrollKeys, TextWidth, Theme}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
@@ -30,14 +30,26 @@ defmodule Foglet.TUI.Screens.DoorList do
     {%{state | doors: visible_doors(context)}, []}
   end
 
-  def update({:key, %{key: :up}}, local_state, %Context{} = context) do
+  def update({:key, %{key: key} = event}, local_state, %Context{} = context)
+      when key in [:up, :down] do
     state = normalize_state(local_state, context)
-    {%{state | selected_index: clamp(state.selected_index - 1, state.doors)}, []}
+
+    {%{
+       state
+       | selected_index:
+           clamp(state.selected_index + ScrollKeys.vertical_delta(event), state.doors)
+     }, []}
   end
 
-  def update({:key, %{key: :down}}, local_state, %Context{} = context) do
+  def update({:key, %{key: :char, char: c} = event}, local_state, %Context{} = context)
+      when c in ["j", "k"] do
     state = normalize_state(local_state, context)
-    {%{state | selected_index: clamp(state.selected_index + 1, state.doors)}, []}
+
+    {%{
+       state
+       | selected_index:
+           clamp(state.selected_index + ScrollKeys.vertical_delta(event), state.doors)
+     }, []}
   end
 
   def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
@@ -109,7 +121,7 @@ defmodule Foglet.TUI.Screens.DoorList do
       %{
         label: "Nav",
         commands: [
-          %{key: "↑/↓", label: "Select", priority: 10},
+          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
           %{key: "Q", label: "Back", priority: 0}
         ]
       }

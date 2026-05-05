@@ -70,6 +70,7 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
     }
 
     {:ok, raxol_state} = RaxolTextInput.init(raxol_props)
+    raxol_state = place_cursor_at_end(raxol_state)
 
     %__MODULE__{
       raxol_state: raxol_state,
@@ -126,6 +127,12 @@ defmodule Foglet.TUI.Widgets.Input.TextInput do
   end
 
   # --- private ---
+
+  defp place_cursor_at_end(%{value: value} = state) when is_binary(value) do
+    %{state | cursor_pos: length(String.graphemes(value))}
+  end
+
+  defp place_cursor_at_end(state), do: state
 
   defp render_with_cursor_marker(rs, true, %Theme{} = theme, display_width_cap) do
     value = Map.get(rs, :value, "")

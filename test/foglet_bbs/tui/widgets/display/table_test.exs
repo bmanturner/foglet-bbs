@@ -280,6 +280,35 @@ defmodule Foglet.TUI.Widgets.Display.TableTest do
       assert %Table{} = new_state
     end
 
+    test "j/k fallbacks move selectable non-filterable tables" do
+      state =
+        Table.init(
+          columns: [%{id: :name, label: "Name"}],
+          rows: [%{name: "Alice"}, %{name: "Bob"}, %{name: "Carol"}]
+        )
+
+      {after_j, action_j} = Table.handle_event(%{key: :char, char: "j"}, state)
+      assert action_j == nil
+      assert Map.get(after_j.raxol_state, :selected_row) == 1
+
+      {after_k, action_k} = Table.handle_event(%{key: :char, char: "k"}, after_j)
+      assert action_k == nil
+      assert Map.get(after_k.raxol_state, :selected_row) == 0
+    end
+
+    test "filterable tables keep j/k as typed filter input" do
+      state =
+        Table.init(
+          columns: [%{id: :name, label: "Name"}],
+          rows: [%{name: "jane"}, %{name: "kate"}],
+          filterable: true
+        )
+
+      {after_j, action} = Table.handle_event(%{key: :char, char: "j"}, state)
+      assert match?({:filter_changed, _}, action)
+      assert Map.get(after_j.raxol_state, :selected_row) == 0
+    end
+
     test "purity: same state + event → same output" do
       state =
         Table.init(
