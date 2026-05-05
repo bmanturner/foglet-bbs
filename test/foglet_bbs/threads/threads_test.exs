@@ -407,6 +407,38 @@ defmodule Foglet.ThreadsTest do
     end
   end
 
+  describe "guest readability gates" do
+    test "nil guest list_threads returns no rows for members-readable board" do
+      {board, _pid} = setup_board_with_server(%{readable_by: :members})
+      poster = user_fixture()
+
+      assert {:ok, %{thread: thread}} =
+               Foglet.Threads.create_thread(board.id, poster.id, %{
+                 title: "Members",
+                 body: "Hidden"
+               })
+
+      assert [] = Foglet.Threads.list_threads(board.id, nil)
+      assert {:error, :not_found} = Foglet.Threads.fetch_readable_thread(nil, thread.id)
+      assert {:ok, fetched} = Foglet.Threads.fetch_readable_thread(poster, thread.id)
+      assert fetched.id == thread.id
+    end
+
+    test "nil guest list_threads still returns public board rows" do
+      {board, _pid} = setup_board_with_server(%{readable_by: :public})
+      poster = user_fixture()
+
+      assert {:ok, %{thread: thread}} =
+               Foglet.Threads.create_thread(board.id, poster.id, %{
+                 title: "Public",
+                 body: "Visible"
+               })
+
+      assert [%{id: id}] = Foglet.Threads.list_threads(board.id, nil)
+      assert id == thread.id
+    end
+  end
+
   describe "list_threads/2 — unread annotation (LIST-03)" do
     test "returns empty list for a board with no threads" do
       {board, _pid} = setup_board_with_server()

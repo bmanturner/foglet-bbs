@@ -1,6 +1,7 @@
 defmodule Foglet.BoardChat.PermanentTest do
   use FogletBbs.DataCase, async: true
 
+  alias Foglet.BoardChat
   alias Foglet.BoardChat.{Message, Permanent}
   alias Foglet.Boards.Board
   alias Foglet.PubSub, as: Topics
@@ -158,6 +159,32 @@ defmodule Foglet.BoardChat.PermanentTest do
 
       assert [%Message{body: "b-only", board_id: b_id}] = Permanent.recent(board_b.id)
       assert b_id == board_b.id
+    end
+  end
+
+  describe "recent_for/2 guest readability" do
+    setup do
+      category = category_fixture()
+      user = user_fixture()
+      %{category: category, user: user}
+    end
+
+    test "returns no history to nil guests for members-readable boards", %{
+      category: category,
+      user: user
+    } do
+      board = permanent_board_fixture(category, %{readable_by: :members})
+      assert {:ok, _message} = Permanent.insert(board, user, "members only")
+
+      assert [] = BoardChat.recent_for(nil, board)
+      assert [%Message{body: "members only"}] = BoardChat.recent_for(user, board)
+    end
+
+    test "returns public history to nil guests", %{category: category, user: user} do
+      board = permanent_board_fixture(category, %{readable_by: :public})
+      assert {:ok, _message} = Permanent.insert(board, user, "public hello")
+
+      assert [%Message{body: "public hello"}] = BoardChat.recent_for(nil, board)
     end
   end
 end
