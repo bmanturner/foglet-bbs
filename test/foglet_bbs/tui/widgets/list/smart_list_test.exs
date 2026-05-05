@@ -136,6 +136,40 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert {:item_selected, 1} = action
     end
 
+    test "FOG-764: Enter in searchable single-select returns focused filtered value" do
+      st =
+        SmartList.init(
+          options: [{"Alpha", :alpha}, {"Beta", :beta}, {"Apple", :apple}],
+          enable_search: true
+        )
+        |> activate_search()
+
+      {st, action} = SmartList.handle_event(%{key: :char, char: "b"}, st)
+      assert action == {:search_changed, "b"}
+      assert st.raxol_state.filtered_options == [{"Beta", :beta}]
+      assert st.raxol_state.focused_index == 0
+
+      {_st, action} = SmartList.handle_event(%{key: :enter}, st)
+      assert action == {:item_selected, :beta}
+    end
+
+    test "FOG-764: Enter in searchable no-match state does not select a hidden option" do
+      st =
+        SmartList.init(
+          options: [{"Alpha", :alpha}, {"Beta", :beta}],
+          enable_search: true
+        )
+        |> activate_search()
+
+      {st, action} = SmartList.handle_event(%{key: :char, char: "z"}, st)
+      assert action == {:search_changed, "z"}
+      assert st.raxol_state.filtered_options == []
+      assert st.raxol_state.focused_index == 0
+
+      {_st, action} = SmartList.handle_event(%{key: :enter}, st)
+      assert action == nil
+    end
+
     test "search buffer grows after character input when search focused" do
       st =
         SmartList.init(
@@ -353,13 +387,13 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert_text_run(SmartList.render(filtered, theme: t), "No matches", fg: t.dim.fg)
     end
 
-    test "selection, search, pagination, and border affordances use theme slots" do
+    test "selection, search, and pagination affordances use theme slots" do
       state = SmartList.init(options: [{"A", 1}, {"B", 2}], enable_search: true)
       tree = SmartList.render(state, theme: distinctive_theme())
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       t = distinctive_theme()
 
-      assert serialized =~ t.border.fg
+      refute serialized =~ t.border.fg
       assert serialized =~ t.selected.fg
       assert serialized =~ t.selected.bg
       assert serialized =~ t.unselected.fg

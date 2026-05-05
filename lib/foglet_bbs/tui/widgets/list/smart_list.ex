@@ -197,18 +197,19 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
     width = Keyword.get(opts, :width)
     show_search? = Keyword.get(opts, :show_search, true)
 
-    box style: box_style(theme, width) do
-      column style: %{gap: 0} do
-        render_options(rs, theme, width) ++ render_affordances(rs, theme, show_search?)
-      end
+    # FOG-765: SmartList is an unboxed row list. The previous box wrapper only
+    # supplied `border_fg` without an explicit border setting, which made live
+    # terminal rendering treat the chrome inconsistently from the ASCII renderer:
+    # row text could paint over the top border while leaving trailing `──┐`
+    # fragments attached to ellipsized labels or the empty-state row. Keep the
+    # widget deliberately unboxed and let screen-level chrome own borders.
+    column style: column_style(width) do
+      render_options(rs, theme, width) ++ render_affordances(rs, theme, show_search?)
     end
   end
 
-  defp box_style(theme, width) when is_integer(width) and width > 0 do
-    %{border_fg: theme.border.fg, padding: 0, width: width}
-  end
-
-  defp box_style(theme, _width), do: %{border_fg: theme.border.fg, padding: 0}
+  defp column_style(width) when is_integer(width) and width > 0, do: %{gap: 0, width: width}
+  defp column_style(_width), do: %{gap: 0}
 
   # ---------------------------------------------------------------------------
   # Private — event translation
@@ -287,7 +288,7 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   end
 
   defp focused_value(rs) do
-    options = Map.get(rs, :options, [])
+    options = active_options(rs)
     idx = Map.get(rs, :focused_index, 0)
 
     case Enum.at(options, idx) do
@@ -295,6 +296,8 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
       _ -> nil
     end
   end
+
+  defp active_options(rs), do: Map.get(rs, :filtered_options) || Map.get(rs, :options, [])
 
   defp page_for(rs) do
     page_size = Map.get(rs, :page_size, @default_page_size)

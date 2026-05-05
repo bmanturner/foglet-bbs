@@ -825,9 +825,48 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       assert length(focused_rows) == 1
       assert hd(focused_rows) =~ "…"
 
+      for row <- Enum.filter(lines, &(String.contains?(&1, "▌") or String.contains?(&1, "◇"))) do
+        row_body =
+          row |> String.trim_leading("│") |> String.trim_trailing("│") |> String.trim_trailing()
+
+        refute row_body =~ ~r/…\s*[─┐]+$/,
+               "picker row must not retain orphaned box border fragments: #{inspect(row)}"
+      end
+
       status_index = Enum.find_index(lines, &String.contains?(&1, "14 boards · 1/14"))
       command_index = Enum.find_index(lines, &String.contains?(&1, "Esc Cancel"))
       assert status_index < command_index
+    end
+  end
+
+  test "FOG-765: empty board-picker filter does not paint no-match copy on a border line" do
+    boards = [%{id: "b1", name: "General", category_name: "Public"}]
+    ss = State.new(boards: boards, load_status: :loaded)
+    picker = ss.board_picker
+
+    rs =
+      picker.raxol_state
+      |> Map.put(:search_buffer, "zzz")
+      |> Map.put(:filtered_options, [])
+
+    ss = %{ss | board_picker: %{picker | raxol_state: rs}}
+
+    for size <- [{80, 24}, {64, 22}] do
+      ascii = render_ascii(ss, size)
+      lines = String.split(ascii, "\n", trim: false)
+      no_match_rows = Enum.filter(lines, &String.contains?(&1, "No matches"))
+
+      assert length(no_match_rows) == 1
+
+      for row <- no_match_rows do
+        row_body =
+          row |> String.trim_leading("│") |> String.trim_trailing("│") |> String.trim_trailing()
+
+        refute row_body =~ ~r/No matches\s*[─┐]+$/,
+               "empty state must not retain orphaned box border fragments at #{inspect(size)}: #{inspect(row)}"
+      end
+
+      assert ascii =~ "No boards match \"zzz\" — Backspace to clear"
     end
   end
 
