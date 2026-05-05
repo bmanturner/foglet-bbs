@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.GuestModeRuntimeTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Foglet.TUI.RenderHelpers
 
@@ -25,11 +25,18 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
   alias Foglet.TUI.Screens.ThreadList.State, as: ThreadListState
   alias Foglet.TUI.SessionContext
 
+  @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+
   setup do
+    original = System.get_env(@demo_doors_env)
+    System.delete_env(@demo_doors_env)
+
     Config.init_cache()
     :ets.insert(:foglet_config, {"registration_mode", "open"})
     :ets.insert(:foglet_config, {"guest_mode_enabled", true})
     :ets.insert(:foglet_config, {"max_post_length", 8000})
+
+    on_exit(fn -> restore_env(@demo_doors_env, original) end)
     :ok
   end
 
@@ -161,6 +168,8 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
   end
 
   test "Main Menu hides write/account actions but routes guests to browsable doors" do
+    enable_demo_doors()
+
     context = Context.new(session_context: %{guest: true, guest_mode_enabled: true})
     local_state = MainMenuState.new(context)
 
@@ -183,6 +192,8 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
   end
 
   test "guests can navigate to Door Games list and launch attempts stay denied" do
+    enable_demo_doors()
+
     context = Context.new(session_context: %{guest: true, guest_mode_enabled: true})
     state = DoorList.init(context)
 
@@ -236,6 +247,11 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     {state, []} = Effects.apply_effect(state, Effect.launch_door(manifest))
     assert state.modal.type == :error
   end
+
+  defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
+
+  defp restore_env(name, nil), do: System.delete_env(name)
+  defp restore_env(name, value), do: System.put_env(name, value)
 
   test "thread and post reader compose shortcuts deny guests with modal effects" do
     context = Context.new(session_context: %{guest: true, guest_mode_enabled: true})

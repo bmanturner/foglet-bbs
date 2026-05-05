@@ -51,7 +51,7 @@ Files in `config/` are evaluated at compile time and frozen into the release. Th
 
 ## Layer 2 — Deploy-time configuration (`config/runtime.exs`)
 
-`config/runtime.exs` runs after compilation and before the supervision tree starts. It is the single place environment variables are read.
+`config/runtime.exs` runs after compilation and before the supervision tree starts. Most deployment environment variables are read there. A few runtime catalog switches are read by the owning context when the catalog is queried; those are called out below.
 
 In `:dev`, `runtime.exs` first sources `.env.local` via `Dotenvy` and copies any new keys into the process environment (real env vars take precedence over file values).
 
@@ -69,6 +69,7 @@ In `:dev`, `runtime.exs` first sources `.env.local` via `Dotenvy` and copies any
 | `DNS_CLUSTER_QUERY` | Optional (`:prod`) | (unset) | `runtime.exs` | DNS query string for libcluster-style discovery (`:foglet_bbs, :dns_cluster_query`) |
 | `FOGLET_SSH_PORT` | Optional | `2222` (compile-time default) | `runtime.exs` | Overrides `:foglet_bbs, :ssh_port` in any environment |
 | `FOGLET_GUEST_MODE_ENABLED` | Optional | enabled / `true` | `runtime.exs` + `Foglet.Config.guest_mode_enabled?/0` | Boot-time override for Guest Mode. Accepted values: `true`, `false`, `1`, `0`. Set to `false` or `0` and restart/redeploy to close read-only guest browsing regardless of the DB-backed setting for that boot. Invalid values fail startup. |
+| `FOGLET_ENABLE_DEMO_DOORS` | Optional | hidden / unset | `Foglet.Doors.demo_doors_enabled?/0` | Deployment switch for bundled demo/test door manifests. Accepted truthy values: `true`, `1`, `yes` after trimming and lowercasing. Absent, empty, and false-like values hide the demos. This is not a DB-backed `Foglet.Config` key and does not appear in Sysop SITE. |
 | `SSH_HOST_KEY_DIR` | Optional (`:prod`) | `"priv/ssh"` | `runtime.exs` | Directory containing SSH host key files (set under `:foglet_bbs, :ssh, host_key_dir`) |
 | `FOGLET_MAIL_FROM` | Optional | (unset) | `runtime.exs` | Sets `:foglet_bbs, :mail_from` (envelope sender for outbound mail) |
 | `FOGLET_SMTP_RELAY` or `FOGLET_SMTP_HOST` | Optional | (unset) | `runtime.exs` | When either is set, swaps `Foglet.Mailer` to `Swoosh.Adapters.SMTP` and applies the SMTP credentials below |

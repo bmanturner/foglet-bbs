@@ -55,16 +55,16 @@ defmodule Foglet.TUI.Screens.DoorList do
   def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
     state = normalize_state(local_state, context)
 
-    if Guest.guest?(context) do
-      {state, [Effect.open_modal(Guest.denial_modal(:door))]}
-    else
-      case selected_door(state) do
-        %Manifest{} = manifest ->
+    case selected_door(state) do
+      %Manifest{} = manifest ->
+        if Guest.guest?(context) do
+          {state, [Effect.open_modal(Guest.denial_modal(:door))]}
+        else
           {state, [Effect.open_modal(confirm_modal(manifest))]}
+        end
 
-        nil ->
-          {%{state | status_message: "No door games are available for this account."}, []}
-      end
+      nil ->
+        {state, []}
     end
   end
 
@@ -114,16 +114,12 @@ defmodule Foglet.TUI.Screens.DoorList do
         ]
       end
 
-    ScreenFrame.render(frame_state, %{breadcrumb_parts: ["Foglet", "Door Games"]}, body, [
-      %{label: "Actions", commands: [%{key: "Enter", label: "Launch", priority: 5}]},
-      %{
-        label: "Nav",
-        commands: [
-          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
-          %{key: "Q", label: "Back", priority: 0}
-        ]
-      }
-    ])
+    ScreenFrame.render(
+      frame_state,
+      %{breadcrumb_parts: ["Foglet", "Door Games"]},
+      body,
+      commands_for(state)
+    )
   end
 
   defp intro_block(theme) do
@@ -136,8 +132,13 @@ defmodule Foglet.TUI.Screens.DoorList do
   end
 
   defp door_rows(%State{doors: []}, theme) do
-    column style: %{gap: 0} do
-      [text("No visible door games are configured.", fg: theme.warning.fg)]
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text("No door games are available right now.", fg: theme.warning.fg),
+          text("Check back later.", fg: theme.dim.fg)
+        ]
+      end
     end
   end
 
@@ -154,11 +155,38 @@ defmodule Foglet.TUI.Screens.DoorList do
     end
   end
 
+  defp status_line(%State{doors: [], status_message: nil}, theme),
+    do: text("Q Back", fg: theme.dim.fg)
+
   defp status_line(%State{status_message: nil}, theme),
     do: text("Enter Launch  Q Back", fg: theme.dim.fg)
 
   defp status_line(%State{status_message: message}, theme),
     do: text(message, fg: theme.success.fg)
+
+  defp commands_for(%State{doors: []}) do
+    [
+      %{
+        label: "Nav",
+        commands: [
+          %{key: "Q", label: "Back", priority: 0}
+        ]
+      }
+    ]
+  end
+
+  defp commands_for(%State{}) do
+    [
+      %{label: "Actions", commands: [%{key: "Enter", label: "Launch", priority: 5}]},
+      %{
+        label: "Nav",
+        commands: [
+          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
+          %{key: "Q", label: "Back", priority: 0}
+        ]
+      }
+    ]
+  end
 
   defp selected_door(%State{doors: doors, selected_index: index}), do: Enum.at(doors, index)
 

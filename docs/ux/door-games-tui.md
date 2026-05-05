@@ -243,13 +243,16 @@ Implementation should add render coverage for:
 
 QA should verify after implementation:
 
-1. Login as a seeded user, reach main menu, confirm `D` opens Door Games only when demo doors are configured.
-2. Use Down/Up to select a door; Enter opens confirm; Esc cancels and returns focus to same row.
-3. Confirm launch of native/demo door; door takes terminal; exit returns to Foglet selector with banner.
-4. Confirm launch of external demo door; exit returns to Foglet selector with banner.
-5. Resize while selector is open and while a door is running; selector redraws cleanly and running door receives or degrades gracefully on resize.
-6. Crash/timeout fixture returns to Foglet with clear message and no garbled terminal.
-7. Disconnect during a running door leaves no orphaned process and next login starts in a sane TUI state.
+1. With `FOGLET_ENABLE_DEMO_DOORS` absent, log in as a seeded user and confirm
+   the main menu omits `Door Games`; pressing `D` does nothing visible.
+2. With `FOGLET_ENABLE_DEMO_DOORS=true`, log in as a seeded user, reach the
+   main menu, and confirm `D` opens Door Games.
+3. Use Down/Up to select a door; Enter opens confirm; Esc cancels and returns focus to same row.
+4. Confirm launch of native/demo door; door takes terminal; exit returns to Foglet selector with banner.
+5. Confirm launch of external demo door; exit returns to Foglet selector with banner.
+6. Resize while selector is open and while a door is running; selector redraws cleanly and running door receives or degrades gracefully on resize.
+7. Crash/timeout fixture returns to Foglet with clear message and no garbled terminal.
+8. Disconnect during a running door leaves no orphaned process and next login starts in a sane TUI state.
 
 ## Implementation handoff
 

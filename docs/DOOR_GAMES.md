@@ -31,6 +31,39 @@ restricted-user/process-group sandbox contract for helper-backed external doors.
 
 Door manifests are configuration data in this slice. They are not stored in database tables yet, and there is no in-BBS catalog editor yet.
 
+## Built-in demo door switch
+
+Foglet ships a few first-party demo/test doors so developers and QA can verify
+the door handoff path. They are hidden by default. Enable them only for local
+development, QA, demos, and release verification:
+
+```sh
+FOGLET_ENABLE_DEMO_DOORS=true mix phx.server
+```
+
+`FOGLET_ENABLE_DEMO_DOORS` is a deployment environment switch. It is read at
+runtime by `Foglet.Doors`; it is not stored in `Foglet.Config`, is not backed by
+the database, and does not appear in the Sysop SITE screen.
+
+Truthy values are `true`, `1`, and `yes`. Matching is case-insensitive after
+trimming whitespace. If the variable is absent, empty, or set to anything else,
+the built-in demo/test manifests are hidden.
+
+When the switch is disabled and no other doors are available, the main menu does
+not show `Door Games`. If the selector is reached after the catalog changes, it
+shows `No door games are available right now.` and only offers Back. Do not tell
+normal callers about this environment variable in product copy.
+
+Current built-in demo/test manifests behind this switch are:
+
+- `native-hello`
+- `external-echo`
+- `python-context-demo`
+- `classic-dropfile-demo`
+
+The switch gates only Foglet's built-in demo/test manifests. It is not a future
+policy mechanism for a persisted real door catalog.
+
 ## Safety model
 
 Treat external and classic doors as untrusted programs.
@@ -289,7 +322,12 @@ Keep the selector simple: arrows choose a door, Enter opens confirmation, and Es
 
 ### The door is missing from the list
 
-Check that the manifest validates, the current caller is allowed by `visibility`, and the launch path rechecks `Foglet.Doors.launchable?/2` before starting the runner.
+For built-in demo/test doors, first check whether the deployment enables
+`FOGLET_ENABLE_DEMO_DOORS` with `true`, `1`, or `yes`. The default is hidden.
+
+For other doors, check that the manifest validates, the current caller is
+allowed by `visibility`, and the launch path rechecks
+`Foglet.Doors.launchable?/2` before starting the runner.
 
 ### The door launches and immediately returns
 
@@ -312,6 +350,7 @@ Add only specific non-secret values to manifest `env`, and add the same names to
 Before shipping a new door surface or guide, verify:
 
 - callers are never asked to type slugs, ids, schema names, env var names, or magic values
+- normal caller copy does not mention `FOGLET_ENABLE_DEMO_DOORS`; that switch belongs in operator docs and QA steps
 - launch copy explains full-terminal takeover without sounding alarming
 - error copy is short and recoverable; logs carry technical detail
 - docs distinguish current support from future hardening

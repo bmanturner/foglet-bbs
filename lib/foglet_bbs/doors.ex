@@ -43,6 +43,8 @@ defmodule Foglet.Doors do
     PAPERCLIP_API_KEY
     SECRET_KEY_BASE
   ]
+  @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+  @truthy_env_values ~w[1 true yes]
 
   @default_manifest_attrs [
     %{
@@ -66,21 +68,28 @@ defmodule Foglet.Doors do
   @type validation_error :: {atom(), String.t()}
 
   @doc """
-  Returns first-slice configured door manifests.
+  Returns configured door manifests available to the runtime catalog.
 
-  This branch has no persisted game catalog yet, so the visible user path is
-  backed by two safe demo manifests: one native in-BEAM door and one allowlisted
-  executable under `priv/doors/demo`.
+  This branch has no persisted game catalog yet. Built-in demo/test manifests
+  are deployment/QA fixtures and are hidden unless `FOGLET_ENABLE_DEMO_DOORS`
+  is set to a documented truthy value at runtime.
   """
   @spec list_manifests() :: [Manifest.t()]
   def list_manifests do
-    @default_manifest_attrs
-    |> Kernel.++([
-      external_echo_manifest_attrs(),
-      python_context_manifest_attrs(),
-      classic_dropfile_manifest_attrs()
-    ])
-    |> Enum.map(&validate_manifest!/1)
+    if demo_doors_enabled?() do
+      demo_manifest_attrs()
+      |> Enum.map(&validate_manifest!/1)
+    else
+      []
+    end
+  end
+
+  @doc "Returns true when the deployment env enables built-in demo/test doors."
+  @spec demo_doors_enabled?() :: boolean()
+  def demo_doors_enabled? do
+    @demo_doors_env
+    |> System.get_env()
+    |> truthy_env_value?()
   end
 
   @doc "Returns door manifests the actor may launch."
@@ -156,6 +165,24 @@ defmodule Foglet.Doors do
         raise ArgumentError, "invalid built-in door manifest: #{inspect(errors)}"
     end
   end
+
+  defp demo_manifest_attrs do
+    @default_manifest_attrs ++
+      [
+        external_echo_manifest_attrs(),
+        python_context_manifest_attrs(),
+        classic_dropfile_manifest_attrs()
+      ]
+  end
+
+  defp truthy_env_value?(value) when is_binary(value) do
+    value
+    |> String.trim()
+    |> String.downcase()
+    |> then(&(&1 in @truthy_env_values))
+  end
+
+  defp truthy_env_value?(_value), do: false
 
   defp external_echo_manifest_attrs do
     demo_external_path = priv_path(@external_echo_relative_path)
