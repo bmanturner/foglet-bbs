@@ -3,8 +3,13 @@
 #     mix run priv/repo/seeds.exs
 #
 # Seeds:
-#   * Tombstone user (fixed UUID for post-anonymization — D-07 / IDNT-07)
-#   * Default configuration entries (D-09, D-10)
+#   * Default configuration entries (D-09, D-10) — priv/repo/seeds/config.exs
+#   * Tombstone user (D-07 / IDNT-07)            — priv/repo/seeds/fixtures.exs
+#   * Dev-only sample users, board, and threads (this file, MIX_ENV != :test)
+#
+# Production deploys do NOT run this file. They run `FogletBbs.Release.seed/0`
+# (see fly.toml release_command), which evals only the release-safe
+# `seeds/config.exs` and `seeds/fixtures.exs`.
 
 import Ecto.Query, warn: false
 
@@ -12,39 +17,16 @@ alias Foglet.Accounts
 alias Foglet.Accounts.User
 alias FogletBbs.Repo
 
-# --- Tombstone user ---
-# Skip in :test — tests insert their own tombstone via fixtures, and a
-# pre-seeded row would collide on the fixed UUID (FOG-61).
-if Mix.env() != :test do
-  tombstone_id = Accounts.tombstone_user_id()
-  now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
-
-  case Repo.get(User, tombstone_id) do
-    nil ->
-      Repo.insert!(
-        %User{
-          id: tombstone_id,
-          handle: "[deleted]",
-          email: "tombstone@localhost",
-          password_hash: "invalid-tombstone",
-          confirmed_at: now,
-          role: :user,
-          show_in_last_callers: false
-        },
-        on_conflict: :nothing
-      )
-
-      IO.puts("  [seed] inserted tombstone user #{tombstone_id}")
-
-    _existing ->
-      IO.puts("  [seed] tombstone user already present")
-  end
-end
-
-# --- Default configuration entries ---
-# Delegated to priv/repo/seeds/config.exs so the `test` mix alias can run it
-# standalone (without dev-only fixtures below).
+# --- Release-safe seeds ---
+# Delegated so the `test` mix alias can run config.exs standalone, and so
+# `FogletBbs.Release.seed/0` can run both files in a release.
 Code.eval_file(Path.join(__DIR__, "seeds/config.exs"))
+
+# Skip fixtures.exs in :test — tests insert their own tombstone via fixtures,
+# and a pre-seeded row would collide on the fixed UUID (FOG-61).
+if Mix.env() != :test do
+  Code.eval_file(Path.join(__DIR__, "seeds/fixtures.exs"))
+end
 
 IO.puts("Seeds complete.")
 

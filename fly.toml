@@ -31,7 +31,7 @@ kill_timeout = "30s"
     path = "/up"
 
 [deploy]
-  release_command = "/app/bin/foglet_bbs eval \"Ecto.Migrator.with_repo(FogletBbs.Repo, fn repo -> Ecto.Migrator.run(repo, :up, all: true); priv = :foglet_bbs |> :code.priv_dir() |> List.to_string(); Code.eval_file(Path.join(priv, \\\"repo/seeds/config.exs\\\")) end)\""
+  release_command = "/app/bin/foglet_bbs eval FogletBbs.Release.seed"
 
 [[services]]
   internal_port = 2222
@@ -88,9 +88,13 @@ kill_timeout = "30s"
 #     fly postgres detach --app foglet-bbs --postgres-app foglet-bbs-db                                                                             
 #     fly postgres attach foglet-bbs-db --app foglet-bbs --database-name foglet_bbs --database-user foglet_bbs
 #
-# The deploy release_command runs migrations and safe production config seeds:
+# The deploy release_command runs `FogletBbs.Release.seed/0`, which runs:
 #   Ecto migrations
-#   priv/repo/seeds/config.exs
+#   priv/repo/seeds/config.exs   (config defaults)
+#   priv/repo/seeds/fixtures.exs (tombstone user)
+#
+# Add additional release-safe seed files by appending to
+# `@production_seed_files` in `lib/foglet_bbs/release.ex`.
 #
 # Optional demo/dev seed data only, after deploy:
 #   fly ssh console --app foglet-bbs -C '/app/bin/foglet_bbs eval "priv = :foglet_bbs |> :code.priv_dir() |> List.to_string(); Code.eval_file(Path.join(priv, \"repo/seeds.exs\"))"'
