@@ -7,6 +7,23 @@ defmodule Foglet.TUI.Widgets.Profile.PublicProfileCardTest do
   alias Foglet.TUI.Widgets.Profile.PublicProfileCard
 
   describe "render/2 role row" do
+    test "renders door presence as Playing <door name>" do
+      contents =
+        :user
+        |> profile()
+        |> Map.put(:presence, %PresenceSummary{
+          activity: {:playing_door, %{id: "lord", name: "Legend of the Red Dragon"}},
+          label: "Playing Legend of the Red Dragon",
+          online?: true
+        })
+        |> PublicProfileCard.render(Theme.default())
+        |> text_contents()
+        |> Enum.join("\n")
+
+      assert contents =~ "Presence:   \nPlaying Legend of the Red Dragon"
+      refute contents =~ "Last seen"
+    end
+
     test "omits the role row for normal member profiles" do
       rendered =
         :user

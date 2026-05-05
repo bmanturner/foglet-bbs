@@ -7,6 +7,7 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
     def lookup_session("online"), do: {:ok, self()}
     def lookup_session("chat"), do: {:ok, self()}
     def lookup_session("threads"), do: {:ok, self()}
+    def lookup_session("door"), do: {:ok, self()}
     def lookup_session(_user_id), do: {:error, :not_found}
   end
 
@@ -21,8 +22,19 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
   end
 
   defmodule FakeBoardScreen do
-    def list("b1"), do: [%{user_id: "chat", tab: :chat}, %{user_id: "threads", tab: :threads}]
+    def list("b1"),
+      do: [
+        %{user_id: "chat", tab: :chat},
+        %{user_id: "threads", tab: :threads},
+        %{user_id: "door", tab: :chat}
+      ]
+
     def list("b2"), do: [%{user_id: "chat", tab: :threads}]
+  end
+
+  defmodule FakeDoorPresence do
+    def get("door"), do: {:ok, %{id: "lord", name: "Legend of the Red Dragon"}}
+    def get(_user_id), do: :error
   end
 
   test "returns offline when no authenticated session exists" do
@@ -33,6 +45,21 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
   test "returns online fallback when no board activity exists" do
     assert %PresenceSummary{activity: :online, label: "Online", online?: true} =
              PresenceSummary.for_user("online", sessions: OnlineSessions, session: FakeSession)
+  end
+
+  test "prefers door activity over chat and browsing board activity deterministically" do
+    assert %PresenceSummary{
+             activity: {:playing_door, %{id: "lord", name: "Legend of the Red Dragon"}},
+             label: "Playing Legend of the Red Dragon",
+             online?: true
+           } =
+             PresenceSummary.for_user("door",
+               sessions: OnlineSessions,
+               session: FakeSession,
+               boards: FakeBoards,
+               board_screen: FakeBoardScreen,
+               door_presence: FakeDoorPresence
+             )
   end
 
   test "prefers chat board activity over browsing board activity deterministically" do
