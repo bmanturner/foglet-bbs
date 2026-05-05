@@ -1103,12 +1103,9 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   defp scroll_below_rows(window_start, visible_count, total, inner_width, %Theme{} = theme) do
     remaining = total - window_start - visible_count
+    label = if remaining > 0, do: " ↓ #{remaining} more below ", else: ""
 
-    if remaining > 0 do
-      [text(bounded_select_content("↓ #{remaining} more below", inner_width), fg: theme.dim.fg)]
-    else
-      []
-    end
+    [text(bounded_select_line("└", "┘", "─", label, inner_width), fg: theme.border.fg)]
   end
 
   defp render_select_option_text({label, candidate}, options, value, focused_index) do

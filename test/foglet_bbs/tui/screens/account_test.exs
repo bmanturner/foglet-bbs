@@ -896,6 +896,39 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert flat =~ "Antarctica/Troll"
     end
 
+    test "PREFS timezone select-list renders a closed bottom boundary before the next field" do
+      user = %Foglet.Accounts.User{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        timezone: "America/Chicago",
+        preferences: %{"time_format" => "24h"},
+        theme: "gray"
+      }
+
+      state =
+        user
+        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
+        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
+
+      state = leave_profile_form(state)
+      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
+
+      rows = render_account(state) |> collect_text_values()
+
+      bottom_boundary_index =
+        Enum.find_index(rows, fn row ->
+          String.starts_with?(row, "└") and String.ends_with?(row, "┘") and
+            String.contains?(row, "more below")
+        end)
+
+      next_field_index = Enum.find_index(rows, &String.contains?(&1, "Time format"))
+
+      assert is_integer(bottom_boundary_index)
+      assert is_integer(next_field_index)
+      assert bottom_boundary_index < next_field_index
+    end
+
     test "PREFS timezone can search America/Chicago without full cycling" do
       alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
