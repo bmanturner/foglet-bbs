@@ -12,6 +12,14 @@ Current canonical branch kickoff SHA is `3bbf60f6eed27f08f324d749204ac52949b7573
 
 This strategy intentionally covers release evidence, not implementation design. It should be updated only when the shipped user path or test harness surface changes.
 
+FOG-910 adds a deployment switch for bundled demo/test doors:
+`FOGLET_ENABLE_DEMO_DOORS`. QA must verify both modes. With the variable absent,
+empty, or false-like, bundled demo/test doors are hidden and the main menu should
+not advertise `Door Games` unless another browsable door exists. With the
+variable set to `true`, `1`, or `yes`, the bundled demo/test doors are available
+for launch-path verification. This is not a Sysop SITE setting and is not stored
+in `Foglet.Config`.
+
 ## Acceptance criteria used
 
 FOG-518 is considered complete when this strategy exists and the issue comment records:
@@ -128,6 +136,8 @@ Release gate:
 | --- | --- | --- | --- | --- | --- |
 | Native demo door launch/return | Canonical branch with seeded user and native demo door visible | SSH harness: login, open Door Games, select native demo, confirm, send demo exit input | Door takes terminal, shows native demo content, exits, returns to Foglet selector or main menu with concise banner | Pass only with clean return, stable focus, no garbled terminal, no stuck raw/alt mode | File active child if launch, input, exit, return, or terminal recovery fails |
 | External executable door launch/return | Canonical branch with non-Elixir demo executable visible and allowlisted | SSH harness: select external demo, confirm, interact, exit normally | PTY-attached executable receives input/output and returns cleanly | Pass only if external I/O works and exit status/audit is safe | File active child if executable is spawned outside owner boundary, cannot receive input, cannot return, or leaks metadata |
+| Default demo-door gate | `FOGLET_ENABLE_DEMO_DOORS` absent or empty and no other browsable doors | Render or SSH harness: reach main menu, press `D`, optionally force/open selector fallback | Main menu omits `Door Games`; `D` does nothing visible; fallback selector says `No door games are available right now.` and has Back only | Pass only if users see no misleading launch path and no env/config jargon | File active child if demo doors appear by default, `D` opens a dead path, or empty state advertises launch |
+| Enabled demo-door gate | `FOGLET_ENABLE_DEMO_DOORS=true`, `1`, or `yes` | Render or SSH harness: reach main menu, press `D`, inspect selector | Main menu includes `Door Games`; selector lists bundled demo/test doors according to actor visibility | Pass only if all documented truthy values enable demos and false-like values do not | File active child for inconsistent truthiness or Sysop SITE/runtime-config coupling |
 | Classic/dropfile fixture | Synthetic or seeded session/user context | Focused ExUnit for generated dropfile; inspect temp cleanup if files are written | Documented fields generated with expected line endings and no secrets | Pass only if fields match contract and temp policy is explicit | File active child if secret leaks, fields are wrong, or cleanup is undefined |
 | Resize while selector open | Door list rendered and active in harness | Render at 80x24 and cramped; harness resize from 80x24 to cramped and back | Borders, descriptions, keybars, and selection stay within viewport | Pass only if text wraps/clips intentionally and focus remains stable | File active child for overflow, jitter, lost focus, or hidden primary actions |
 | Resize while door active | Running native and external demo doors | Harness launch, then `resize 80x24`, cramped size, optional wide size | Resize reaches door or degrades gracefully; return UI redraws cleanly | Pass only if no terminal corruption or unhandled crash | File active child if resize breaks I/O, hangs, or corrupts return screen |

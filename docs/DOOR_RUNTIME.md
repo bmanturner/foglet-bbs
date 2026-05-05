@@ -79,6 +79,21 @@ Security notes
   same `external_pty` path used for future SSH harness QA.
 
 Runtime config contract
+=======================
+
+Built-in demo/test door catalog:
+
+- `FOGLET_ENABLE_DEMO_DOORS` controls whether Foglet registers its bundled
+  demo/test door manifests at runtime.
+- Accepted truthy values are `true`, `1`, and `yes` after trimming whitespace
+  and lowercasing.
+- Absent, empty, and false-like values hide the bundled demo/test manifests.
+- This is an environment/deployment switch for development, QA, demos, and
+  release verification. It is not a `Foglet.Config` key, database-backed sysop
+  setting, Sysop SITE field, or in-app toggle.
+- Authorization remains separate. Enabling the demo catalog makes manifests
+  available to browse; `Foglet.Doors.launchable?/2` still decides whether a
+  caller may launch a specific door.
 
 Sandboxed external-door manifest shape:
 
