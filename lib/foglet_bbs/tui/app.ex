@@ -404,17 +404,18 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:door_exited, door_id, reason, _status}, state) do
     modal = %Foglet.TUI.Modal{
-      type: :info,
-      message: "Door #{door_id} exited (#{inspect(reason)}). You are back in Foglet."
+      type: door_exit_modal_type(reason),
+      message: door_exit_message(door_id, reason)
     }
 
     {%{state | modal: modal}, []}
   end
 
-  defp do_update({:door_launch_failed, door_id, reason}, state) do
+  defp do_update({:door_launch_failed, door_id, _reason}, state) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Door #{door_id} failed to launch: #{inspect(reason)}"
+      message:
+        "#{door_display_name(door_id)} could not start. You are still connected and back in Foglet. Check server logs for launch details."
     }
 
     {%{state | modal: modal}, []}
@@ -524,6 +525,25 @@ defmodule Foglet.TUI.App do
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
+  end
+
+  defp door_exit_modal_type(reason) when reason in [:timeout, :idle_timeout], do: :warning
+  defp door_exit_modal_type(_reason), do: :info
+
+  defp door_exit_message(door_id, :normal) do
+    "#{door_display_name(door_id)} has closed. You are back in Foglet."
+  end
+
+  defp door_exit_message(door_id, :timeout) do
+    "#{door_display_name(door_id)} reached its maximum play time and was closed. You are back in Foglet."
+  end
+
+  defp door_exit_message(door_id, :idle_timeout) do
+    "#{door_display_name(door_id)} was idle too long and was closed. You are back in Foglet."
+  end
+
+  defp door_exit_message(door_id, _reason) do
+    "#{door_display_name(door_id)} closed unexpectedly. You are back in Foglet. Check server logs for details."
   end
 
   defp door_display_name(door_id) when is_binary(door_id) do
