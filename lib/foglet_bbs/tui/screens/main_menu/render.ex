@@ -3,6 +3,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   Pure render entry point for the MainMenu screen.
   """
 
+  alias Foglet.TerminalText
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.MainMenu
   alias Foglet.TUI.Screens.MainMenu.State
@@ -170,12 +171,14 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
       entry
       |> Map.get(:user)
       |> user_handle()
+      |> TerminalText.sanitize_plain_text()
+      |> single_line()
       |> clip(@oneliner_handle_limit)
 
     body =
       entry
       |> Map.get(:body, "")
-      |> to_string()
+      |> TerminalText.sanitize_plain_text()
       |> single_line()
       |> clip(@oneliner_body_limit)
 
