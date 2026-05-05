@@ -307,10 +307,10 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       t = distinctive_theme()
       tree = SmartList.render(two_item_fixture(), theme: t)
 
-      assert flatten_text(tree) =~ "▌ A\n◇ B\n"
+      assert flatten_text(tree) =~ "▌ A◇ B"
       refute flatten_text(tree) =~ "> A"
-      assert_text_run(tree, "▌ A\n", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
-      assert_text_run(tree, "◇ B\n", fg: t.unselected.fg)
+      assert_text_run(tree, "▌ A", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
+      assert_text_run(tree, "◇ B", fg: t.unselected.fg)
     end
 
     test "multi-select rows render checked and unchecked semantic marks" do
@@ -324,9 +324,9 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
 
       tree = SmartList.render(state, theme: t)
 
-      assert flatten_text(tree) =~ "✓ Alpha\n◇ Beta\n"
-      assert_text_run(tree, "✓ Alpha\n", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
-      assert_text_run(tree, "◇ Beta\n", fg: t.unselected.fg)
+      assert flatten_text(tree) =~ "✓ Alpha◇ Beta"
+      assert_text_run(tree, "✓ Alpha", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
+      assert_text_run(tree, "◇ Beta", fg: t.unselected.fg)
     end
 
     test "empty and filtered-empty states are semantic and dim" do

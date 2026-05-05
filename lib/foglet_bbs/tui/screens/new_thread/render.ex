@@ -52,7 +52,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
           end
 
         {_boards, %SmartList{} = picker} ->
-          render_board_picker(picker, theme)
+          render_board_picker(picker, state, theme)
 
         {_boards, nil} ->
           column style: %{gap: 0} do
@@ -82,19 +82,29 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
     ])
   end
 
-  defp render_board_picker(%SmartList{raxol_state: rs} = picker, theme) do
+  defp render_board_picker(%SmartList{raxol_state: rs} = picker, state, theme) do
     query = Map.get(rs, :search_buffer) || ""
     options = List.wrap(Map.get(rs, :options))
     filtered = List.wrap(Map.get(rs, :filtered_options) || options)
     focused_index = Map.get(rs, :focused_index, 0)
     total = length(options)
     matches = length(filtered)
+    {width, _height} = Map.get(state, :terminal_size) || @default_terminal_size
+    picker_width = max(width - 4, 20)
 
     column style: %{gap: 0} do
       [
-        text("Type to filter: #{query}", fg: theme.accent.fg, style: [:bold]),
-        SmartList.render(picker, theme: theme),
-        text(picker_status_line(query, matches, total, focused_index), fg: theme.dim.fg)
+        text(
+          TextWidth.truncate("Type to filter: #{query}", picker_width),
+          fg: theme.accent.fg,
+          style: [:bold]
+        ),
+        SmartList.render(picker, theme: theme, width: picker_width, show_search: false),
+        text(
+          picker_status_line(query, matches, total, focused_index)
+          |> TextWidth.truncate(picker_width),
+          fg: theme.dim.fg
+        )
       ]
     end
   end

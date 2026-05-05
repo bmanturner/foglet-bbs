@@ -64,6 +64,7 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
   use ExUnit.Case, async: true
 
   alias Foglet.TUI.App
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Context
   alias Foglet.TUI.Screens.NewThread
   alias Foglet.TUI.Screens.NewThread.State
@@ -168,6 +169,12 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
   defp render_screen(%State{} = local_state, %Context{} = context) do
     NewThread.render(local_state, context)
+  end
+
+  defp render_ascii(%State{} = local_state, size) do
+    local_state
+    |> render_screen(context(terminal_size: size))
+    |> AsciiRenderer.render(size)
   end
 
   defp handle_key_screen(key_event, state) do
@@ -785,6 +792,42 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
       assert text =~ "Backspace Edit", "expected commandbar Backspace Edit at #{unquote(label)}"
       assert text =~ "Enter Choose", "expected commandbar Enter Choose at #{unquote(label)}"
       assert text =~ "Esc Cancel", "expected commandbar Esc Cancel at #{unquote(label)}"
+    end
+  end
+
+  test "FOG-763: tall board picker with long labels preserves chrome at constrained sizes" do
+    boards =
+      for index <- 1..14 do
+        %{
+          id: "b#{index}",
+          category_name: "Extremely Long Category #{index}",
+          name:
+            "Very Long Board Name #{index} That Should Be Clamped Instead Of Bleeding Across Chrome",
+          description:
+            "description with many words and punctuation that must stay on the row without hiding the footer"
+        }
+      end
+
+    ss = State.new(boards: boards, load_status: :loaded)
+
+    for {width, height} = size <- [{80, 24}, {64, 22}] do
+      ascii = render_ascii(ss, size)
+      lines = String.split(ascii, "\n", trim: false)
+
+      assert length(lines) == height
+      assert Enum.all?(lines, &(String.length(&1) <= width))
+      assert List.last(lines) =~ "└"
+      assert List.last(lines) =~ "Esc Cancel"
+      assert ascii =~ "14 boards · 1/14"
+      refute ascii =~ "Search:"
+
+      focused_rows = Enum.filter(lines, &String.contains?(&1, "▌"))
+      assert length(focused_rows) == 1
+      assert hd(focused_rows) =~ "…"
+
+      status_index = Enum.find_index(lines, &String.contains?(&1, "14 boards · 1/14"))
+      command_index = Enum.find_index(lines, &String.contains?(&1, "Esc Cancel"))
+      assert status_index < command_index
     end
   end
 

@@ -34,7 +34,7 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
 
   import Raxol.Core.Renderer.View
 
-  alias Foglet.TUI.Theme
+  alias Foglet.TUI.{TextWidth, Theme}
   alias Raxol.UI.Components.Input.SelectList, as: RaxolSelectList
   alias Raxol.UI.Components.Input.SelectList.Search, as: RaxolSelectListSearch
 
@@ -194,13 +194,21 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{raxol_state: rs}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
+    width = Keyword.get(opts, :width)
+    show_search? = Keyword.get(opts, :show_search, true)
 
-    box style: %{border_fg: theme.border.fg, padding: 0} do
+    box style: box_style(theme, width) do
       column style: %{gap: 0} do
-        render_options(rs, theme) ++ render_affordances(rs, theme)
+        render_options(rs, theme, width) ++ render_affordances(rs, theme, show_search?)
       end
     end
   end
+
+  defp box_style(theme, width) when is_integer(width) and width > 0 do
+    %{border_fg: theme.border.fg, padding: 0, width: width}
+  end
+
+  defp box_style(theme, _width), do: %{border_fg: theme.border.fg, padding: 0}
 
   # ---------------------------------------------------------------------------
   # Private — event translation
@@ -299,17 +307,17 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   # Private — theme building
   # ---------------------------------------------------------------------------
 
-  defp render_options(rs, theme) do
+  defp render_options(rs, theme, width) do
     options = Map.get(rs, :filtered_options) || Map.get(rs, :options, [])
     visible_items = Map.get(rs, :visible_items) || Map.get(rs, :page_size, @default_page_size)
     scroll_offset = Map.get(rs, :scroll_offset, 0)
     focused_index = Map.get(rs, :focused_index, 0)
 
     options
-    |> empty_or_rows(rs, theme, scroll_offset, visible_items, focused_index)
+    |> empty_or_rows(rs, theme, scroll_offset, visible_items, focused_index, width)
   end
 
-  defp empty_or_rows([], rs, theme, _scroll_offset, _visible_items, _focused_index) do
+  defp empty_or_rows([], rs, theme, _scroll_offset, _visible_items, _focused_index, width) do
     empty_text =
       if Map.get(rs, :search_buffer, "") == "" do
         "No items"
@@ -317,10 +325,10 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
         "No matches"
       end
 
-    [text("#{empty_text}\n", fg: theme.dim.fg)]
+    [text(truncate_row(empty_text, width), fg: theme.dim.fg)]
   end
 
-  defp empty_or_rows(options, rs, theme, scroll_offset, visible_items, focused_index) do
+  defp empty_or_rows(options, rs, theme, scroll_offset, visible_items, focused_index, width) do
     selected_indices = Map.get(rs, :selected_indices, MapSet.new())
     multiple? = Map.get(rs, :multiple, false)
 
@@ -331,12 +339,30 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
       selected? = MapSet.member?(selected_indices, index)
       focused? = index == focused_index
       marker = marker_for(multiple?, selected?, focused?)
-      content = "#{marker} #{label}\n"
+      content = truncate_row("#{marker} #{sanitize_label(label)}", width)
 
       row_style(focused?, selected?, theme)
       |> then(fn {fg, bg, style} -> text(content, fg: fg, bg: bg, style: style) end)
     end)
   end
+
+  defp sanitize_label(label) when is_binary(label) do
+    label
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+  end
+
+  defp sanitize_label(label), do: label |> to_string() |> sanitize_label()
+
+  defp truncate_row(content, width) when is_integer(width) and width > 0 do
+    # Account for the surrounding SmartList box border when a caller supplies
+    # the widget width. One line per text node keeps the layout engine, live TUI,
+    # and ASCII renderer in agreement; embedded newlines in labels used to make
+    # long pickers consume double-height rows and hide surrounding chrome.
+    content |> TextWidth.truncate(max(width - 2, 1))
+  end
+
+  defp truncate_row(content, _width), do: content
 
   defp marker_for(true, true, _focused?), do: @selected_marker
   defp marker_for(true, false, _focused?), do: @unselected_marker
@@ -347,26 +373,26 @@ defmodule Foglet.TUI.Widgets.List.SmartList do
   defp row_style(false, true, theme), do: {theme.success.fg, nil, [:bold]}
   defp row_style(false, false, theme), do: {theme.unselected.fg, nil, []}
 
-  defp render_affordances(rs, theme) do
+  defp render_affordances(rs, theme, show_search?) do
     [
-      search_affordance(rs, theme),
+      search_affordance(rs, theme, show_search?),
       pagination_affordance(rs, theme)
     ]
     |> Enum.reject(&is_nil/1)
   end
 
-  defp search_affordance(%{enable_search: true} = rs, theme) do
-    text("Search: #{Map.get(rs, :search_buffer, "")}\n", fg: theme.accent.fg, style: [:bold])
+  defp search_affordance(%{enable_search: true} = rs, theme, true) do
+    text("Search: #{Map.get(rs, :search_buffer, "")}", fg: theme.accent.fg, style: [:bold])
   end
 
-  defp search_affordance(_rs, _theme), do: nil
+  defp search_affordance(_rs, _theme, _show_search?), do: nil
 
   defp pagination_affordance(rs, theme) do
     page_size = Map.get(rs, :page_size, @default_page_size)
     options = Map.get(rs, :filtered_options) || Map.get(rs, :options, [])
 
     if length(options) > page_size do
-      text("Page #{page_for(rs) + 1}\n", fg: theme.dim.fg)
+      text("Page #{page_for(rs) + 1}", fg: theme.dim.fg)
     else
       text("", fg: theme.dim.fg)
     end
