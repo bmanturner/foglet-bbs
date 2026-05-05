@@ -550,6 +550,55 @@ defmodule Foglet.Doors.RunnerTest do
                       {:door_helper_failed, {:helper, %{"reason" => "sandbox_user_not_found"}}}}
     end
 
+    test "helper sandbox reports group setup failure and does not execute door command" do
+      previous = Application.get_env(:foglet_bbs, :door_pty_helper_path)
+
+      marker =
+        Path.join(
+          System.tmp_dir!(),
+          "foglet-sandbox-executed-#{System.unique_integer([:positive])}"
+        )
+
+      helper = forced_group_failure_helper()
+      Application.put_env(:foglet_bbs, :door_pty_helper_path, helper)
+
+      on_exit(fn ->
+        File.rm(marker)
+        File.rm(helper)
+        restore_helper_path(previous)
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-sandbox-group-failure",
+          display_name: "External Sandbox Group Failure",
+          runtime: :external_pty,
+          command: "/bin/sh",
+          working_dir: "/tmp",
+          args: ["-c", "echo EXECUTED > #{marker}"],
+          timeout_ms: 5_000,
+          pty?: true,
+          sandbox: same_user_sandbox()
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "external-sandbox-group-failure"}
+
+      assert_receive {:door_exited, ^pid, "external-sandbox-group-failure",
+                      {:error, {:helper, %{"reason" => "sandbox_group_setup_failed"}}}, nil},
+                     @event_timeout
+
+      assert_receive {:DOWN, ^ref, :process, ^pid,
+                      {:door_helper_failed,
+                       {:helper, %{"reason" => "sandbox_group_setup_failed"}}}},
+                     @event_timeout
+
+      refute File.exists?(marker)
+    end
+
     test "helper sandbox passes only minimal Foglet env and no app secrets" do
       previous_secret = System.get_env("SECRET_KEY_BASE")
       previous_paperclip = System.get_env("PAPERCLIP_API_KEY")
@@ -948,6 +997,41 @@ defmodule Foglet.Doors.RunnerTest do
     fi
     sleep 0.1
     """
+  end
+
+  defp forced_group_failure_helper do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "foglet-pty-force-group-failure-#{System.unique_integer([:positive])}.py"
+      )
+
+    helper_path = Path.expand("priv/doors/pty/foglet_pty_adapter.py")
+
+    File.write!(path, """
+    #!/usr/bin/env python3
+    import os
+    import runpy
+
+    os.geteuid = lambda: 0
+    os.getegid = lambda: 0
+
+    def fail_initgroups(user, gid):
+        raise OSError("forced initgroups failure")
+
+    def fail_setgroups(groups):
+        raise OSError("forced setgroups failure")
+
+    os.initgroups = fail_initgroups
+    os.setgroups = fail_setgroups
+    os.setgid = lambda gid: None
+    os.setuid = lambda uid: None
+
+    runpy.run_path(#{inspect(helper_path)}, run_name="__main__")
+    """)
+
+    File.chmod!(path, 0o700)
+    path
   end
 
   defp restore_env(name, nil), do: System.delete_env(name)
