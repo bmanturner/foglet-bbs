@@ -135,6 +135,31 @@ def reap_child(child_pid: int):
     return {"status": None, "signal": None}
 
 
+def drain_pty_output(master_fd: int) -> bool:
+    """Forward any currently buffered PTY output before reporting child exit.
+
+    A fast child can write its final bytes and exit before the adapter's next
+    event-loop iteration. If the helper reports X(exit) first, Foglet's runner
+    stops and test/SSH owners may observe the exit before the final output. Keep
+    the protocol ordered by draining non-blocking PTY output before sending X.
+    """
+    while True:
+        try:
+            data = os.read(master_fd, 8192)
+        except BlockingIOError:
+            return True
+        except OSError as exc:
+            if exc.errno in (errno.EIO, errno.EBADF):
+                return False
+            write_json(b"E", {"reason": "pty_read_failed", "detail": repr(exc)})
+            return False
+
+        if not data:
+            return False
+
+        write_frame(b"O", data)
+
+
 def door_environment() -> dict:
     """Return the already-sanitized environment supplied by Foglet.
 
@@ -220,6 +245,7 @@ def main() -> int:
     while True:
         exit_payload = reap_child(child_pid)
         if exit_payload is not None:
+            drain_pty_output(master_fd)
             terminate_child(child_pid)
             write_json(b"X", exit_payload)
             return exit_payload["status"] if exit_payload["status"] is not None else 128 + int(exit_payload.get("signal") or 0)

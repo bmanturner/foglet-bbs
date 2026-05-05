@@ -953,7 +953,7 @@ defmodule Foglet.Doors.RunnerTest do
   defp restore_env(name, nil), do: System.delete_env(name)
   defp restore_env(name, value), do: System.put_env(name, value)
 
-  defp wait_for_pidfile(path, attempts \ 50)
+  defp wait_for_pidfile(path, attempts \\ 50)
 
   defp wait_for_pidfile(path, attempts) when attempts > 0 do
     case File.read(path) do
@@ -970,7 +970,7 @@ defmodule Foglet.Doors.RunnerTest do
 
   defp wait_for_pidfile(path, 0), do: flunk("pidfile was not written: #{path}")
 
-  defp eventually_os_process_alive?(pid, attempts \ 20)
+  defp eventually_os_process_alive?(pid, attempts \\ 20)
 
   defp eventually_os_process_alive?(pid, attempts) when attempts > 0 do
     if os_process_alive?(pid) do
