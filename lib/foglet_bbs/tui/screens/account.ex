@@ -53,7 +53,8 @@ defmodule Foglet.TUI.Screens.Account do
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
   def update({:key, %{key: :char, char: c, ctrl: true}}, local_state, %Context{})
       when c in ["q", "Q"] do
-    {normalize_state(local_state), [Effect.navigate(:main_menu, %{})]}
+    {normalize_state(local_state) |> Map.put(:candidate_theme_id, nil),
+     [Effect.navigate(:main_menu, %{})]}
   end
 
   def update({:key, event}, local_state, %Context{} = context) do
@@ -118,6 +119,16 @@ defmodule Foglet.TUI.Screens.Account do
         new_ss = put_account_errors(ss, :prefs, %{base: to_string(reason)})
         {new_ss, [PrefsForm.error_modal(new_ss, prefs_modal_errors(new_ss.prefs_errors))]}
     end
+  end
+
+  def update({:modal_change, :prefs_field, form}, local_state, %Context{}) do
+    ss = normalize_state(local_state)
+    {PrefsForm.preview_field_change(ss, form), []}
+  end
+
+  def update({:modal_cancel, :prefs_field}, local_state, %Context{}) do
+    ss = normalize_state(local_state)
+    {PrefsForm.cancel_field(ss), []}
   end
 
   def update({:modal_submit, :profile_field, payload}, local_state, %Context{} = context) do

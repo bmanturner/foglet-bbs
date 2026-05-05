@@ -1,6 +1,7 @@
 defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
   use ExUnit.Case, async: true
 
+  alias Foglet.TUI.App
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Account.PrefsForm
@@ -82,6 +83,68 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
     assert state.prefs_draft.theme == "amber"
     assert state.candidate_theme_id == nil
     assert attrs.theme == "amber"
+  end
+
+  test "opening theme modal opts into account-local live preview routing" do
+    state = %{State.new(current_user: user()) | prefs_focus: :theme}
+
+    assert {:ok, state, [%Effect{type: :modal, payload: {:open, %Modal{} = modal}}]} =
+             PrefsForm.handle_key(%{key: :enter}, state, user())
+
+    assert state.prefs_editing_field == :theme
+    assert state.candidate_theme_id == nil
+    assert modal.change_target == {:account, :prefs_field}
+    assert Form.field_value(modal.message, :theme) == "gray"
+  end
+
+  test "theme modal enum cycling previews without mutating user, session, or draft" do
+    account_state = %{State.new(current_user: user()) | prefs_editing_field: :theme}
+    form = State.build_prefs_field_form(account_state.prefs_draft, :theme)
+
+    app = %App{
+      current_screen: :account,
+      current_user: user(),
+      session_context: %{theme_id: "gray", theme: Theme.resolve(:gray)},
+      terminal_size: {80, 24},
+      screen_state: %{account: account_state},
+      modal: %Modal{
+        type: :form,
+        title: form.title,
+        message: form,
+        change_target: {:account, :prefs_field}
+      }
+    }
+
+    {previewed, []} = App.update({:key, %{key: :down}}, app)
+    preview_theme = Form.field_value(previewed.modal.message, :theme)
+
+    assert preview_theme != "gray"
+    assert previewed.screen_state.account.candidate_theme_id == preview_theme
+    assert previewed.screen_state.account.prefs_draft.theme == "gray"
+    assert previewed.current_user.theme == "gray"
+    assert previewed.session_context.theme_id == "gray"
+    assert previewed.session_context.theme == Theme.resolve(:gray)
+    assert Theme.from_state(previewed) == Theme.resolve(String.to_existing_atom(preview_theme))
+
+    {cancelled, []} = App.update({:key, %{key: :escape}}, previewed)
+
+    assert cancelled.modal == nil
+    assert cancelled.screen_state.account.candidate_theme_id == nil
+    assert cancelled.screen_state.account.prefs_editing_field == nil
+    assert cancelled.current_user.theme == "gray"
+    assert cancelled.session_context.theme_id == "gray"
+  end
+
+  test "non-theme prefs modal changes do not affect candidate_theme_id" do
+    account_state = %{State.new(current_user: user()) | prefs_editing_field: :time_format}
+    form = State.build_prefs_field_form(account_state.prefs_draft, :time_format)
+    {form, nil} = Form.handle_event(%{key: :down}, form)
+
+    assert Form.field_value(form, :time_format) == "24h"
+
+    state = PrefsForm.preview_field_change(%{account_state | candidate_theme_id: "amber"}, form)
+
+    assert state.candidate_theme_id == nil
   end
 
   test "timezone overlay Enter selects without submitting while Ctrl+S saves selected timezone" do

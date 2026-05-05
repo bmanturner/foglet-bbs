@@ -114,10 +114,10 @@ defmodule Foglet.TUI.App.Modal do
         submit_error(state)
 
       :cancelled ->
-        dismiss(state)
+        cancel_form_change(state)
 
       _other ->
-        {state, []}
+        route_form_change(state)
     end
   end
 
@@ -153,6 +153,22 @@ defmodule Foglet.TUI.App.Modal do
   end
 
   defp route_modal_submit(%App{} = state, %Effect{}), do: submit_error(state)
+
+  defp route_form_change(%App{modal: %{change_target: {screen_key, kind}, message: form}} = state)
+       when is_atom(screen_key) and is_atom(kind) do
+    Routing.route_screen_update(state, screen_key, {:modal_change, kind, form})
+  end
+
+  defp route_form_change(%App{} = state), do: {state, []}
+
+  defp cancel_form_change(%App{modal: %{change_target: {screen_key, kind}}} = state)
+       when is_atom(screen_key) and is_atom(kind) do
+    {routed_state, cmds} = Routing.route_screen_update(state, screen_key, {:modal_cancel, kind})
+    {cleared, dismiss_cmds} = dismiss(routed_state)
+    {cleared, cmds ++ dismiss_cmds}
+  end
+
+  defp cancel_form_change(%App{} = state), do: dismiss(state)
 
   defp modal_submit_target?(%App{} = state, screen_key) do
     module = Routing.screen_module_for(state, screen_key)
