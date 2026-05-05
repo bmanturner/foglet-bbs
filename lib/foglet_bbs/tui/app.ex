@@ -418,6 +418,11 @@ defmodule Foglet.TUI.App do
 
   defp do_update(:heartbeat_tick, state), do: SessionAlias.heartbeat(state)
 
+  defp do_update({:tui_clock, :minute_tick, %DateTime{} = now}, state) do
+    session_context = Map.put(state.session_context || %{}, :clock_now, now)
+    {%{state | session_context: session_context}, []}
+  end
+
   defp do_update(:main_menu_clock_tick, state), do: {state, []}
 
   defp do_update(:login_menu_scramble_tick, state) do

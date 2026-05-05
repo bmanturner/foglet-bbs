@@ -32,6 +32,8 @@ defmodule Foglet.TUI.SessionContext do
     system default when the user has no preference set).
   - `time_format` — display format string for timestamps, sourced from user
     preferences.
+  - `clock_now` — latest UTC minute-boundary tick seen by the TUI shell; nil
+    means render from the current wall clock.
   - `theme_id` — string identifier for the active colour theme (e.g. `"gray"`).
   - `theme` — flat `%Foglet.TUI.Theme{}` snapshot resolved from `theme_id` at
     session start. Screens and widgets read colour slots directly from this
@@ -60,6 +62,7 @@ defmodule Foglet.TUI.SessionContext do
           max_post_length: pos_integer(),
           timezone: String.t(),
           time_format: String.t(),
+          clock_now: DateTime.t() | nil,
           theme_id: String.t(),
           theme: Foglet.TUI.Theme.t(),
           ssh_peer: term() | nil,
@@ -75,6 +78,7 @@ defmodule Foglet.TUI.SessionContext do
     :registration_mode,
     :timezone,
     :time_format,
+    :clock_now,
     :theme_id,
     :theme,
     :ssh_peer,

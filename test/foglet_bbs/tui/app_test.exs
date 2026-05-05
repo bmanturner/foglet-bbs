@@ -831,21 +831,24 @@ defmodule Foglet.TUI.AppTest do
       assert {^state, []} = App.update(:heartbeat_tick, state)
     end
 
-    test ":main_menu_clock_tick is a no-op rerender trigger preserving loaded state", %{
+    test "central TUI clock tick updates chrome clock instant while preserving screen state", %{
       state: state
     } do
       state = %{
         state
         | current_screen: :main_menu,
+          session_context: %{clock_now: ~U[2026-05-04 22:14:00Z]},
           screen_state: %{main_menu: %{ignored: true}, board_list: %{selected_index: 2}},
           modal: %Foglet.TUI.Modal{message: "keep me", type: :info}
       }
 
-      {new_state, cmds} = App.update(:main_menu_clock_tick, state)
+      now = ~U[2026-05-04 22:15:00Z]
+      {new_state, cmds} = App.update({:tui_clock, :minute_tick, now}, state)
 
       assert new_state.current_screen == state.current_screen
       assert new_state.screen_state == state.screen_state
       assert new_state.modal == state.modal
+      assert new_state.session_context.clock_now == now
       assert cmds == []
     end
 
@@ -1558,6 +1561,7 @@ defmodule Foglet.TUI.AppTest do
 
   describe "subscribe/1" do
     test "starts stable runtime subscriptions when session_pid is nil and no user" do
+      clock_topic = Foglet.PubSub.tui_clock_topic()
       {:ok, state} = App.init(%{})
       subs = App.subscribe(state)
 
@@ -1571,11 +1575,13 @@ defmodule Foglet.TUI.AppTest do
 
       assert %Raxol.Core.Runtime.Subscription{
                type: :custom,
-               data: %{module: Foglet.TUI.PubSubForwarder, args: %{topics: []}}
+               data: %{
+                 module: Foglet.TUI.PubSubForwarder,
+                 args: %{topics: [^clock_topic]}
+               }
              } = custom_subscription(subs, Foglet.TUI.PubSubForwarder)
 
-      assert %Raxol.Core.Runtime.Subscription{type: :interval} =
-               interval_subscription(subs, :main_menu_clock_tick)
+      assert interval_subscription(subs, :main_menu_clock_tick) == nil
     end
 
     test "returns heartbeat subscription when session_pid is set" do
@@ -1584,7 +1590,7 @@ defmodule Foglet.TUI.AppTest do
       assert subs != []
     end
 
-    test "main_menu screen adds chrome clock interval subscription" do
+    test "all screens subscribe to central chrome clock PubSub topic without intervals" do
       user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
 
       {:ok, state} =
@@ -1593,33 +1599,18 @@ defmodule Foglet.TUI.AppTest do
             fake_oneliners_context(%{user: user, user_id: "u-clock", session_pid: nil})
         })
 
-      state = %{state | current_screen: :main_menu}
-      subs = App.subscribe(state)
+      for screen <- [:main_menu, :board_list] do
+        subs = App.subscribe(%{state | current_screen: screen})
 
-      assert %Raxol.Core.Runtime.Subscription{type: :interval, data: data} =
-               interval_subscription(subs, :main_menu_clock_tick)
+        assert interval_subscription(subs, :main_menu_clock_tick) == nil
 
-      assert is_integer(data.interval)
-      assert data.interval <= 60_000
-    end
+        assert %Raxol.Core.Runtime.Subscription{
+                 type: :custom,
+                 data: %{args: %{topics: topics}}
+               } = custom_subscription(subs, Foglet.TUI.PubSubForwarder)
 
-    test "non-main-menu screens also add chrome clock interval subscription" do
-      user = %Foglet.Accounts.User{id: "u-clock", handle: "alice"}
-
-      {:ok, state} =
-        App.init(%{
-          session_context:
-            fake_oneliners_context(%{user: user, user_id: "u-clock", session_pid: nil})
-        })
-
-      state = %{state | current_screen: :board_list}
-      subs = App.subscribe(state)
-
-      assert %Raxol.Core.Runtime.Subscription{type: :interval, data: data} =
-               interval_subscription(subs, :main_menu_clock_tick)
-
-      assert is_integer(data.interval)
-      assert data.interval <= 60_000
+        assert Foglet.PubSub.tui_clock_topic() in topics
+      end
     end
 
     test "returns PubSub custom subscription when current_user is set (Audit #12)" do
@@ -1637,12 +1628,16 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "PubSub forwarder starts with no topics when not logged in" do
+      clock_topic = Foglet.PubSub.tui_clock_topic()
       {:ok, state} = App.init(%{})
       subs = App.subscribe(state)
 
       assert %Raxol.Core.Runtime.Subscription{
                type: :custom,
-               data: %{module: Foglet.TUI.PubSubForwarder, args: %{topics: []}}
+               data: %{
+                 module: Foglet.TUI.PubSubForwarder,
+                 args: %{topics: [^clock_topic]}
+               }
              } = custom_subscription(subs, Foglet.TUI.PubSubForwarder)
     end
 
@@ -1655,7 +1650,9 @@ defmodule Foglet.TUI.AppTest do
 
       {_new_state, _cmds} = App.update({:set_user, user}, state)
 
-      assert_receive {:pubsub_forwarder, {:refresh_topics, ["user:u-dynamic"]}}
+      clock_topic = Foglet.PubSub.tui_clock_topic()
+
+      assert_receive {:pubsub_forwarder, {:refresh_topics, [^clock_topic, "user:u-dynamic"]}}
     end
 
     test "board_list screen adds 'boards' topic" do
@@ -1740,7 +1737,7 @@ defmodule Foglet.TUI.AppTest do
       assert "thread:t-state" in pubsub_sub.data.args.topics
     end
 
-    test "main_menu (stateless authenticated screen) produces only user topic (Phase 39 D-18)" do
+    test "main_menu (stateless authenticated screen) produces clock topic plus user topic (Phase 39 D-18)" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
 
       {:ok, state} =
@@ -1751,7 +1748,7 @@ defmodule Foglet.TUI.AppTest do
 
       pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
       assert pubsub_sub != nil
-      assert pubsub_sub.data.args.topics == ["user:u1"]
+      assert pubsub_sub.data.args.topics == [Foglet.PubSub.tui_clock_topic(), "user:u1"]
     end
   end
 
