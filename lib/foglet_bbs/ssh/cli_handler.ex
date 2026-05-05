@@ -158,41 +158,14 @@ defmodule Foglet.SSH.CLIHandler do
     send_alt_screen_enter(state)
 
     {:ok, lifecycle_pid} =
-      Raxol.Core.Runtime.Lifecycle.start_link(Foglet.TUI.App,
-        # Pid-only registration: Raxol derives a globally-unique name from the
-        # app module unless `:name` is present, which collapses every SSH
-        # session onto one Lifecycle and rejects concurrent connections with
-        # `{:error, {:already_started, _}}`. CLIHandler tracks the pid in
-        # state, so a registered name is unnecessary.
-        name: nil,
-        environment: :ssh,
+      start_lifecycle(
         io_writer: make_crlf_writer(state.connection_ref, state.channel_id),
         width: width,
         height: height,
-        context: context,
-        # Keep Raxol's own alt-screen lifecycle enabled as a backup. The direct
-        # CLIHandler takeover above runs earlier and also clears scrollback.
-        alternate_screen: true
+        context: context
       )
 
-    Process.link(lifecycle_pid)
-    :ssh_connection.reply_request(conn, want_reply, :success, ch)
-
-    # WR-05: resolve the dispatcher pid once here, immediately after Lifecycle
-    # start, and stash it on state so per-keystroke / per-resize dispatches do
-    # not block on a synchronous GenServer.call into the Lifecycle. The
-    # dispatcher pid is stable for the Lifecycle's lifetime; if a future Raxol
-    # version can rebuild it, refresh on the EXIT path or expose a notification.
-    dispatcher_pid = resolve_dispatcher(lifecycle_pid)
-
-    {:ok,
-     %{
-       state
-       | lifecycle_pid: lifecycle_pid,
-         dispatcher_pid: dispatcher_pid,
-         width: width,
-         height: height
-     }}
+    finish_lifecycle_start(state, conn, ch, want_reply, lifecycle_pid, width, height)
   end
 
   @impl true
@@ -399,6 +372,19 @@ defmodule Foglet.SSH.CLIHandler do
   @doc false
   def peer_from_connection_info_for_test(info), do: peer_from_connection_info(info)
 
+  @doc false
+  def finish_lifecycle_start_for_test(
+        %__MODULE__{} = state,
+        conn,
+        ch,
+        want_reply,
+        lifecycle_pid,
+        width,
+        height
+      ) do
+    finish_lifecycle_start(state, conn, ch, want_reply, lifecycle_pid, width, height)
+  end
+
   # Clear the primary screen + scrollback, enter alt-screen, then clear the alt
   # buffer. `CSI 3 J` is what prevents scroll-up from revealing the caller's
   # pre-SSH shell history while the TUI is active.
@@ -571,7 +557,67 @@ defmodule Foglet.SSH.CLIHandler do
     end
   end
 
-  defp dispatch_events(nil, _events), do: :ok
+  defp start_lifecycle(opts) do
+    Raxol.Core.Runtime.Lifecycle.start_link(Foglet.TUI.App,
+      # Pid-only registration: Raxol derives a globally-unique name from the
+      # app module unless `:name` is present, which collapses every SSH
+      # session onto one Lifecycle and rejects concurrent connections with
+      # `{:error, {:already_started, _}}`. CLIHandler tracks the pid in
+      # state, so a registered name is unnecessary.
+      name: nil,
+      environment: :ssh,
+      io_writer: Keyword.fetch!(opts, :io_writer),
+      width: Keyword.fetch!(opts, :width),
+      height: Keyword.fetch!(opts, :height),
+      context: Keyword.fetch!(opts, :context),
+      # Keep Raxol's own alt-screen lifecycle enabled as a backup. The direct
+      # CLIHandler takeover above runs earlier and also clears scrollback.
+      alternate_screen: true
+    )
+  end
+
+  defp finish_lifecycle_start(state, conn, ch, want_reply, lifecycle_pid, width, height) do
+    Process.link(lifecycle_pid)
+
+    # WR-05: resolve the dispatcher pid once here, immediately after Lifecycle
+    # start, and stash it on state so per-keystroke / per-resize dispatches do
+    # not block on a synchronous GenServer.call into the Lifecycle. The
+    # dispatcher pid is stable for the Lifecycle's lifetime; if a future Raxol
+    # version can rebuild it, refresh on the EXIT path or expose a notification.
+    case resolve_dispatcher(lifecycle_pid) do
+      {:ok, dispatcher_pid} ->
+        :ssh_connection.reply_request(conn, want_reply, :success, ch)
+
+        {:ok,
+         %{
+           state
+           | lifecycle_pid: lifecycle_pid,
+             dispatcher_pid: dispatcher_pid,
+             width: width,
+             height: height
+         }}
+
+      {:error, reason} ->
+        failed_state = %{
+          state
+          | lifecycle_pid: lifecycle_pid,
+            dispatcher_pid: nil,
+            width: width,
+            height: height
+        }
+
+        Logger.warning(
+          "[SSH.CLIHandler] Dispatcher resolution failed during PTY startup; closing channel #{inspect(ch)}",
+          event: :ssh_cli_handler_dispatcher_resolution_failed,
+          peer: inspect(failed_state.peer),
+          pid: inspect(lifecycle_pid),
+          reason: sanitize_reason(reason)
+        )
+
+        new_state = cleanup(failed_state, close_channel: true)
+        {:stop, ch || 0, new_state}
+    end
+  end
 
   defp dispatch_events(dispatcher_pid, events) when is_pid(dispatcher_pid) do
     Enum.each(events, &GenServer.cast(dispatcher_pid, {:dispatch, &1}))
@@ -598,13 +644,15 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   # Resolve the Raxol dispatcher pid from the Lifecycle once at PTY start.
-  # Returns nil if the Lifecycle is unreachable (already exited) so dispatching
-  # before the EXIT message is observed becomes a no-op.
+  # If the Lifecycle is unreachable, PTY startup fails closed instead of
+  # accepting a terminal whose later input and resize events would no-op.
   defp resolve_dispatcher(lifecycle_pid) when is_pid(lifecycle_pid) do
-    %{dispatcher_pid: pid} = GenServer.call(lifecycle_pid, :get_full_state)
-    pid
+    case GenServer.call(lifecycle_pid, :get_full_state) do
+      %{dispatcher_pid: pid} when is_pid(pid) -> {:ok, pid}
+      other -> {:error, {:unexpected_lifecycle_state, other}}
+    end
   catch
-    :exit, _ -> nil
+    :exit, reason -> {:error, {:lifecycle_unreachable, reason}}
   end
 
   defp stop_lifecycle(nil), do: :ok
