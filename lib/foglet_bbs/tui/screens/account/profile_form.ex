@@ -38,6 +38,11 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
     move_selection(event, state)
   end
 
+  def handle_key(%{key: key} = event, %State{} = state, _current_user)
+      when key in [:tab, :shift_tab, :backtab] do
+    move_selection(event, state)
+  end
+
   def handle_key(%{key: :char, char: c} = event, %State{} = state, _current_user)
       when c in ["j", "J", "k", "K", "g", "G"] do
     move_selection(event, state)
@@ -102,5 +107,6 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
   defp selected_index(field), do: Enum.find_index(@fields, &(&1 == field)) || 0
 
   defp action_key(%{key: :char, char: char}), do: char
+  defp action_key(%{key: key} = event) when key in [:tab, :shift_tab, :backtab], do: event
   defp action_key(%{key: key}), do: key
 end

@@ -27,6 +27,7 @@ defmodule Foglet.TUI.Screens.Account do
   alias Foglet.Sessions.Preferences
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Input
   alias Foglet.TUI.Screens.Account.PrefsForm
   alias Foglet.TUI.Screens.Account.ProfileForm
   alias Foglet.TUI.Screens.Account.Render
@@ -403,7 +404,13 @@ defmodule Foglet.TUI.Screens.Account do
   # digits into a form or pressing Left/Right inside populated text fields
   # silently changes Account tabs instead of editing the field.
   defp shield_tab_shortcut?(event, %State{} = ss) do
-    not tab_navigation_focus?(ss) and text_entry_event?(event, active_text_entry_field(ss))
+    not tab_navigation_focus?(ss) and
+      (text_entry_event?(event, active_text_entry_field(ss)) or field_list_tab_event?(event, ss))
+  end
+
+  defp field_list_tab_event?(event, %State{} = ss) do
+    active_label(ss) in ["PROFILE", "PREFS"] and
+      (Input.forward_tab?(event) or Input.backward_tab?(event))
   end
 
   defp tab_navigation_focus?(%State{tab_navigation?: value}), do: value == true

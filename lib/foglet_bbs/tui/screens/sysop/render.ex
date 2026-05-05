@@ -176,7 +176,13 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
 
       groups ++
         [
-          %{label: "List", commands: [%{key: "↑/↓", label: "Select", priority: 10}]},
+          %{
+            label: "List",
+            commands: [
+              %{key: "Tab/Shift+Tab", label: "Rows", priority: 10},
+              %{key: "↑/↓", label: "Select", priority: 20}
+            ]
+          },
           %{label: "Actions", commands: action_commands}
         ]
     else
