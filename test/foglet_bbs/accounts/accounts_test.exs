@@ -1013,6 +1013,41 @@ defmodule Foglet.AccountsTest do
     end
   end
 
+  describe "record_last_seen/2" do
+    test "sets last_seen_at for a member" do
+      user = AccountsFixtures.user_fixture()
+      timestamp = ~U[2026-05-05 20:00:00.123456Z]
+
+      assert :ok = Accounts.record_last_seen(user, timestamp)
+
+      assert Repo.get!(User, user.id).last_seen_at == timestamp
+    end
+
+    test "does not regress a newer last_seen_at" do
+      user = AccountsFixtures.user_fixture()
+      older = ~U[2026-05-05 20:00:00Z]
+      newer = ~U[2026-05-05 20:01:00.000000Z]
+
+      assert :ok = Accounts.record_last_seen(user.id, newer)
+      assert :ok = Accounts.record_last_seen(user.id, older)
+
+      assert Repo.get!(User, user.id).last_seen_at == newer
+    end
+
+    test "treats guest/nil input as a no-op" do
+      assert :ok = Accounts.record_last_seen(nil)
+    end
+
+    test "ignores deleted users" do
+      user = AccountsFixtures.user_fixture()
+      user |> User.deletion_changeset() |> Repo.update!()
+
+      assert :ok = Accounts.record_last_seen(user.id, ~U[2026-05-05 20:00:00Z])
+
+      assert Repo.get!(User, user.id).last_seen_at == nil
+    end
+  end
+
   defp insert_tombstone_user! do
     now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
 

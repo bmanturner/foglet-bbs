@@ -20,6 +20,7 @@ defmodule Foglet.Sessions.Session do
 
   require Logger
 
+  alias Foglet.Accounts
   alias Foglet.Sessions.Preferences
 
   @type t :: %__MODULE__{
@@ -139,6 +140,7 @@ defmodule Foglet.Sessions.Session do
 
   @impl true
   def init(opts) do
+    Process.flag(:trap_exit, true)
     now = DateTime.utc_now()
     preferences = Preferences.from_user(nil)
 
@@ -155,6 +157,8 @@ defmodule Foglet.Sessions.Session do
       theme_id: Keyword.get(opts, :theme_id, preferences.theme_id),
       theme: Keyword.get(opts, :theme, preferences.theme)
     }
+
+    record_last_seen(state.user_id, now)
 
     {:ok, state}
   end
@@ -202,9 +206,17 @@ defmodule Foglet.Sessions.Session do
           replacement: Map.get(audit, :replacement)
         )
 
+        now = DateTime.utc_now()
+        record_last_seen(user.id, now)
+
         state =
           state
-          |> Map.merge(%{user_id: user.id, handle: user.handle, role: user.role})
+          |> Map.merge(%{
+            user_id: user.id,
+            handle: user.handle,
+            role: user.role,
+            last_seen_at: now
+          })
           |> merge_preferences(Preferences.from_user(user))
 
         {:noreply, state}
@@ -232,11 +244,13 @@ defmodule Foglet.Sessions.Session do
   @impl true
   # FOG-674: orderly stops are intentionally silent — they are not failures
   # and would otherwise spam logs on every disconnect.
-  def terminate(:normal, _state), do: :ok
-  def terminate(:shutdown, _state), do: :ok
-  def terminate({:shutdown, _}, _state), do: :ok
+  def terminate(:normal, state), do: disconnect_last_seen(state)
+  def terminate(:shutdown, state), do: disconnect_last_seen(state)
+  def terminate({:shutdown, _}, state), do: disconnect_last_seen(state)
 
   def terminate(reason, state) do
+    disconnect_last_seen(state)
+
     # FOG-674: log abnormal session exits with privacy-safe context only.
     # `sanitized_reason/1` reduces tagged tuples to their tag atom so embedded
     # payloads (tokens, audit maps, key material) cannot leak through reasons.
@@ -273,6 +287,20 @@ defmodule Foglet.Sessions.Session do
   defp sanitized_reason(reason) when is_atom(reason), do: reason
   defp sanitized_reason(tuple) when is_tuple(tuple) and tuple_size(tuple) > 0, do: elem(tuple, 0)
   defp sanitized_reason(_), do: :unknown
+
+  defp record_last_seen(nil, _timestamp), do: :ok
+
+  defp record_last_seen(user_id, timestamp) when is_binary(user_id),
+    do: Accounts.record_last_seen(user_id, timestamp)
+
+  # Normal EOF/close, TUI/lifecycle quit, replacement, and graceful shutdown all
+  # reach Session.terminate/2 and update persisted last_seen_at here. Untrappable
+  # :kill / VM / host death cannot run Elixir cleanup; the connect/promotion
+  # write remains the honest last-known timestamp for those hard-kill cases.
+  defp disconnect_last_seen(state) do
+    record_last_seen(state.user_id, DateTime.utc_now())
+    :ok
+  end
 
   defp preference_snapshot(%Foglet.Accounts.User{} = user), do: Preferences.from_user(user)
 
