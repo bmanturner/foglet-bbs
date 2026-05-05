@@ -964,6 +964,66 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
     end
   end
 
+  describe "FOG-725 Tab focus marker render" do
+    test "Tab advances rendered ▸ marker to the next visible field" do
+      form = SiteForm.init([])
+
+      rendered_text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert rendered_text =~ "▸ Account registration:"
+
+      {form, []} = SiteForm.handle_key(%{key: :tab}, form)
+
+      rendered_text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert form.focused == 1
+      assert rendered_text =~ "▸ Invite code generators:"
+      refute rendered_text =~ "▸ Account registration:"
+    end
+
+    test "Shift+Tab from focus 0 wraps the rendered ▸ marker to the last visible field" do
+      form = SiteForm.init([])
+      visible = SiteForm.visible_keys(form)
+      last_index = length(visible) - 1
+
+      {form, []} = SiteForm.handle_key(%{key: :tab, shift: true}, form)
+
+      rendered_text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert form.focused == last_index
+      refute rendered_text =~ "▸ Account registration:"
+      # Last visible field with default config is Guest mode.
+      assert rendered_text =~ "▸ Guest mode:"
+    end
+
+    test ":backtab is treated as Shift+Tab and updates the rendered marker" do
+      form = SiteForm.init([])
+      {form, []} = SiteForm.handle_key(%{key: :tab}, form)
+      {form, []} = SiteForm.handle_key(%{key: :backtab}, form)
+
+      rendered_text =
+        form
+        |> SiteForm.render(Theme.default())
+        |> collect_text_values()
+        |> Enum.join("\n")
+
+      assert form.focused == 0
+      assert rendered_text =~ "▸ Account registration:"
+    end
+  end
+
   defp put_draft(form, key, value) do
     %{form | drafts: Map.put(form.drafts, key, value)}
   end
