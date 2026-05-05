@@ -16,6 +16,14 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     def unsubscribe_user_from_board(_user, "b3"), do: {:error, :required_subscription}
   end
 
+  defmodule FakeGuestVisibilityBoards do
+    def board_directory_for(nil),
+      do: Foglet.TUI.Screens.BoardListTest.guest_visibility_directory(:guest)
+
+    def board_directory_for(_user),
+      do: Foglet.TUI.Screens.BoardListTest.guest_visibility_directory(:member)
+  end
+
   def directory do
     ten_min_ago = DateTime.add(DateTime.utc_now(), -600, :second)
     two_h_ago = DateTime.add(DateTime.utc_now(), -7200, :second)
@@ -48,6 +56,32 @@ defmodule Foglet.TUI.Screens.BoardListTest do
         ]
       }
     ]
+  end
+
+  def guest_visibility_directory(kind) when kind in [:guest, :member] do
+    public_board = %{
+      board: %{id: "public-board", name: "Public Square", slug: "public", readable_by: :public},
+      subscribed?: false,
+      required_subscription?: false,
+      unread_count: nil,
+      last_post_at: nil
+    }
+
+    members_only_board = %{
+      board: %{
+        id: "members-board",
+        name: "Members Hidden Board",
+        slug: "members-hidden",
+        readable_by: :members
+      },
+      subscribed?: false,
+      required_subscription?: false,
+      unread_count: nil,
+      last_post_at: nil
+    }
+
+    boards = if kind == :guest, do: [public_board], else: [public_board, members_only_board]
+    [%{category: %{id: "c-public", name: "Public Category"}, boards: boards}]
   end
 
   defp overlarge_directory(count \\ 28) do
@@ -261,6 +295,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
                  name: "General",
                  slug: "general",
                  archived: false,
+                 readable_by: :public,
                  postable_by: :members,
                  chat_enabled: false,
                  chat_storage_mode: nil,
@@ -283,6 +318,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
         name: "Tech",
         slug: "tech",
         archived: false,
+        readable_by: :public,
         postable_by: :members,
         chat_enabled: false,
         chat_storage_mode: nil,
@@ -547,6 +583,29 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
     assert length(String.split(moved_text, "\n", trim: true)) <= 22
     assert moved_text =~ "Overlarge Board 25"
+  end
+
+  test "rendered guest board directory shows public boards without members-only rows from context-owned load" do
+    ctx = guest_context(domain: %{boards: FakeGuestVisibilityBoards})
+    state = BoardList.init(ctx)
+
+    {loading_state, [effect]} = BoardList.update(:load, state, ctx)
+    assert loading_state.last_op == :load_boards
+    assert [%{boards: [public_entry]}] = run_task(effect)
+    assert public_entry.board.name == "Public Square"
+
+    {loaded_state, []} =
+      BoardList.update(
+        {:task_result, :load_boards, {:ok, guest_visibility_directory(:guest)}},
+        state,
+        ctx
+      )
+
+    rendered_text = BoardList.render(loaded_state, ctx) |> flatten_text()
+
+    assert rendered_text =~ "Public Square"
+    refute rendered_text =~ "Members Hidden Board"
+    refute rendered_text =~ "members-hidden"
   end
 
   describe "subscriptions/2 export (Phase 39 R7, D-22)" do

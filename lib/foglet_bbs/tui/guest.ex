@@ -63,6 +63,10 @@ defmodule Foglet.TUI.Guest do
     %Modal{type: :error, message: "Guest sessions do not have account settings. Log in first."}
   end
 
+  def denial_modal(:board) do
+    %Modal{type: :error, message: "That board is for registered users. Log in first."}
+  end
+
   def denial_modal(_kind) do
     %Modal{type: :error, message: "Guests can browse, but only registered users can post."}
   end
