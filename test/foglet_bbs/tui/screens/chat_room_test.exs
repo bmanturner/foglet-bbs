@@ -12,6 +12,7 @@ end
 defmodule Foglet.TUI.Screens.ChatRoomTest do
   use ExUnit.Case, async: false
 
+  alias Foglet.BoardChat.Message, as: ChatMessage
   alias Foglet.PubSub, as: Topics
   alias Foglet.Sessions.BoardScreen, as: PresenceTracker
   alias Foglet.TUI.AsciiRenderer
@@ -353,6 +354,27 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       end
     end
 
+    test "bounded transcript rendering completes for a legacy huge body" do
+      b = board()
+      size = {80, 24}
+      {state, ctx} = init_state(b, size: size)
+
+      msg = %{
+        id: "huge",
+        board_id: b.id,
+        user_id: "u2",
+        body: String.duplicate("x", ChatMessage.body_max() * 200),
+        inserted_at: nil
+      }
+
+      {state, []} = ChatRoom.update({:task_result, :load_chat_history, {:ok, [msg]}}, state, ctx)
+
+      task = Task.async(fn -> render_chat_text(state, ctx, size) end)
+      rendered = Task.await(task, 1_000)
+
+      assert rendered |> String.split("\n") |> length() <= elem(size, 1) + 1
+    end
+
     test "rendered sidebar column remains stable as new messages arrive" do
       b = board()
       size = {80, 24}
@@ -415,6 +437,18 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       assert state.composer == "hi"
     end
 
+    test "composer stops accepting printable input at the shared chat body limit" do
+      b = board()
+      {state, ctx} = init_state(b)
+      state = %{state | composer: String.duplicate("x", ChatMessage.body_max())}
+
+      {state, effects} = ChatRoom.update({:key, %{key: :char, char: "y"}}, state, ctx)
+
+      assert state.composer == String.duplicate("x", ChatMessage.body_max())
+      assert state.last_error == :message_too_long
+      assert effects == []
+    end
+
     test "ctrl-modified chars do not leak into the composer" do
       b = board()
       {state, ctx} = init_state(b)
@@ -443,6 +477,19 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       {state, effects} = ChatRoom.update({:key, %{key: :enter}}, state, ctx)
 
       assert state.composer == ""
+      assert effects == []
+    end
+
+    test "Enter rejects an over-limit composer without emitting a send task" do
+      b = board()
+      {state, ctx} = init_state(b)
+      state = %{state | composer: String.duplicate("x", ChatMessage.body_max() + 1)}
+
+      {state, effects} = ChatRoom.update({:key, %{key: :enter}}, state, ctx)
+
+      assert state.composer == String.duplicate("x", ChatMessage.body_max() + 1)
+      assert state.last_error == :message_too_long
+      assert state.status == :idle
       assert effects == []
     end
 

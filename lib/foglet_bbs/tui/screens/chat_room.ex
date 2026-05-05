@@ -39,6 +39,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   """
 
   alias Foglet.BoardChat
+  alias Foglet.BoardChat.Message, as: ChatMessage
   alias Foglet.Boards.Board
   alias Foglet.Sessions.BoardScreen, as: PresenceTracker
   alias Foglet.TimeAgo
@@ -57,9 +58,11 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   @sidebar_min_width 60
   @sidebar_default_width 80
   @transcript_history_lines 1_000
+  @chat_body_max ChatMessage.body_max()
   @ephemeral_notice_placeholder "Ephemeral chat — messages fade after the board's TTL."
   @empty_transcript_placeholder "No messages yet. Be the first to say hello."
   @send_failure_message "Could not send message."
+  @message_too_long "Message is too long (max #{@chat_body_max} characters)."
 
   # ---------------------------------------------------------------------------
   # init / load
@@ -148,10 +151,20 @@ defmodule Foglet.TUI.Screens.ChatRoom do
         %Context{} = context
       ) do
     cond do
-      Guest.guest?(context) -> {state, []}
-      Map.get(ev, :ctrl, false) -> {state, []}
-      Map.get(ev, :alt, false) -> {state, []}
-      true -> {%{state | composer: state.composer <> <<c::utf8>>}, []}
+      Guest.guest?(context) ->
+        {state, []}
+
+      Map.get(ev, :ctrl, false) ->
+        {state, []}
+
+      Map.get(ev, :alt, false) ->
+        {state, []}
+
+      String.length(state.composer) >= @chat_body_max ->
+        {%{state | last_error: :message_too_long}, []}
+
+      true ->
+        {%{state | composer: state.composer <> <<c::utf8>>, last_error: nil}, []}
     end
   end
 
@@ -265,12 +278,13 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   end
 
   defp transcript_pane(%State{messages: messages} = state, theme, width, height) do
+    row_limit = max(height, 0)
+
     rows =
       messages
       |> Enum.take(-@transcript_history_lines)
       |> visible_messages(state.scroll_offset, height)
-      |> Enum.flat_map(fn msg -> transcript_rows(msg, state, theme, width) end)
-      |> Enum.take(max(height, 0))
+      |> transcript_rows_until(row_limit, state, theme, width)
 
     box style: %{width: width} do
       column style: %{gap: 0} do
@@ -279,7 +293,22 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     end
   end
 
-  defp transcript_rows(msg, %State{} = state, theme, width) do
+  defp transcript_rows_until(_messages, 0, _state, _theme, _width), do: []
+
+  defp transcript_rows_until(messages, row_limit, %State{} = state, theme, width) do
+    {rows, _remaining} =
+      Enum.reduce_while(messages, {[], row_limit}, fn msg, {rows, remaining} ->
+        msg_rows = transcript_rows(msg, state, theme, width, remaining)
+        remaining = remaining - length(msg_rows)
+        rows = rows ++ msg_rows
+
+        if remaining <= 0, do: {:halt, {rows, 0}}, else: {:cont, {rows, remaining}}
+      end)
+
+    rows
+  end
+
+  defp transcript_rows(msg, %State{} = state, theme, width, row_limit) do
     handle = handle_for(state, msg) |> TextWidth.truncate(min(20, max(div(width, 3), 1)))
     body = Map.get(msg, :body, "")
     when_label = relative_time(msg)
@@ -291,11 +320,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
     continuation_body_width = max(width - TextWidth.display_width(prefix), 1)
 
-    body_lines =
-      case TextWidth.wrap(body, first_body_width) do
-        [] -> [""]
-        lines -> lines
-      end
+    body_lines = bounded_body_lines(body, first_body_width, continuation_body_width, row_limit)
 
     [first_body | rest] = body_lines
 
@@ -317,6 +342,31 @@ defmodule Foglet.TUI.Screens.ChatRoom do
         text(when_label, fg: theme.dim.fg)
       ]
     end
+  end
+
+  defp bounded_body_lines(_body, _first_width, _continuation_width, row_limit)
+       when row_limit <= 0,
+       do: []
+
+  defp bounded_body_lines(body, first_width, continuation_width, row_limit) do
+    prefix_chars = bounded_wrap_prefix(body, first_width, continuation_width, row_limit)
+
+    body
+    |> String.slice(0, prefix_chars)
+    |> TextWidth.wrap(first_width)
+    |> case do
+      [] -> [""]
+      lines -> lines
+    end
+    |> Enum.take(row_limit)
+  end
+
+  defp bounded_wrap_prefix(_body, first_width, continuation_width, row_limit) do
+    # Cap the source text before wrapping so a bad in-memory message cannot force
+    # row allocation for the full body. The bound scales with viewport rows and
+    # transcript width, while also respecting the shared domain chat body limit.
+    width_budget = first_width + max(row_limit - 1, 0) * continuation_width
+    min(@chat_body_max, max(width_budget + row_limit, row_limit))
   end
 
   defp transcript_continuation_row(prefix, body, body_width, theme) do
@@ -363,6 +413,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
       error_line =
         case state.last_error do
           nil -> text("")
+          :message_too_long -> text("  " <> @message_too_long, fg: theme.error.fg)
           _ -> text("  " <> @send_failure_message, fg: theme.error.fg)
         end
 
@@ -469,18 +520,23 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   defp submit_composer(%State{} = state, %Context{current_user: user} = context) do
     body = String.trim(state.composer)
 
-    if body == "" do
-      {%{state | composer: ""}, []}
-    else
-      board = to_board_struct(state.board)
-      screen_key = task_screen_key(context)
+    cond do
+      body == "" ->
+        {%{state | composer: ""}, []}
 
-      effect =
-        Effect.task(:send_chat, screen_key, fn ->
-          BoardChat.post(board, user, body)
-        end)
+      String.length(body) > @chat_body_max ->
+        {%{state | last_error: :message_too_long}, []}
 
-      {%{state | composer: "", status: :sending, last_error: nil}, [effect]}
+      true ->
+        board = to_board_struct(state.board)
+        screen_key = task_screen_key(context)
+
+        effect =
+          Effect.task(:send_chat, screen_key, fn ->
+            BoardChat.post(board, user, body)
+          end)
+
+        {%{state | composer: "", status: :sending, last_error: nil}, [effect]}
     end
   end
 
