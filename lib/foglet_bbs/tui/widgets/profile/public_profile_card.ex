@@ -20,12 +20,16 @@ defmodule Foglet.TUI.Widgets.Profile.PublicProfileCard do
   def render(%PublicProfile{} = profile, %Theme{} = theme) do
     lines = detail_lines(profile)
 
-    column style: %{gap: 0} do
+    header_rows =
       [
         handle_row(profile, theme),
         role_row(profile, theme),
         text(String.duplicate("─", @divider_width), fg: theme.border.fg)
-      ] ++
+      ]
+      |> Enum.reject(&is_nil/1)
+
+    column style: %{gap: 0} do
+      header_rows ++
         public_copy_rows(profile, theme) ++
         Enum.map(lines, &detail_row(&1, theme)) ++
         [text(""), text("[Enter/Esc] close", fg: theme.dim.fg)]
@@ -38,7 +42,7 @@ defmodule Foglet.TUI.Widgets.Profile.PublicProfileCard do
 
   defp role_row(%PublicProfile{role: role}, theme) do
     case RoleBadge.badge(role) do
-      nil -> text("member", fg: theme.dim.fg)
+      nil -> nil
       badge -> text(badge, fg: theme.accent.fg, style: [:bold])
     end
   end
