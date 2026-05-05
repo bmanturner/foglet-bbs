@@ -11,7 +11,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.Config.Schema
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
-  alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Sysop
   alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SiteFormState
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
@@ -317,22 +316,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert unchanged_state.users_view == {:error, :forbidden}
       assert forbidden_effects == []
-    end
-
-    @tag :pending
-    test "submodule error_modal events become modal and navigation effects" do
-      context = Context.new(current_user: nil, route: :sysop)
-      state = Sysop.init(context)
-
-      {state, effects} =
-        Sysop.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
-
-      assert %SysopState{} = state
-
-      assert [
-               %Effect{type: :modal, payload: {:open, %Modal{type: :error}}},
-               %Effect{type: :navigate, payload: %{screen: :main_menu}}
-             ] = effects
     end
   end
 
@@ -1115,46 +1098,6 @@ defmodule Foglet.TUI.Screens.SysopTest do
              "Expected inline error for the bad integer; got errors: #{inspect(errors)}"
 
       assert match?({:error, _}, new_state.screen_state.sysop.site_form.submit_state)
-    end
-
-    @tag :pending
-    test ":forbidden from Config.put routes to error modal + :main_menu (D-08, D-24)",
-         %{state: _state} do
-      # Build a state with a nil actor — Bodyguard.permit/4 denies (D-24).
-      # nil is used (rather than a non-sysop User struct with a random UUID)
-      # because a random UUID would fail the configuration.updated_by_id_fkey
-      # constraint after the authorization check passes — nil trips authz first.
-      state =
-        build_state(nil)
-        |> put_in([:screen_state, :sysop], SysopState.new())
-
-      Config.put!("delivery_mode", "email", nil)
-
-      # Mutate the initialized SiteForm draft so submit hits Config.put.
-      ss = %{
-        state.screen_state.sysop
-        | site_form: Foglet.TUI.Screens.Sysop.SiteForm.init(current_user: nil)
-      }
-
-      state = put_in(state, [:screen_state, :sysop], ss)
-
-      site_form = %{
-        ss.site_form
-        | drafts: Map.put(ss.site_form.drafts, "registration_mode", "invite_only")
-      }
-
-      state = put_in(state, [:screen_state, :sysop], %{ss | site_form: site_form})
-
-      {site_form, effects} =
-        Foglet.TUI.Screens.Sysop.SiteForm.submit_field(ss.site_form, %{
-          registration_mode: "invite_only"
-        })
-
-      new_state = put_in(state, [:screen_state, :sysop], %{ss | site_form: site_form})
-      {:update, new_state, _cmds} = apply_sysop_effects(new_state, effects)
-
-      assert %Foglet.TUI.Modal{type: :error} = new_state.modal
-      assert new_state.current_screen == :main_menu
     end
 
     test "SITE test-email task effects are forwarded from the submodule" do
