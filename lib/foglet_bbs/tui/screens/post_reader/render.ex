@@ -279,7 +279,9 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
   defp packed_post_separator(theme, left_pad, reader_w) do
     pad = String.duplicate(" ", left_pad)
-    text(pad <> String.duplicate("─", max(reader_w, 1)), fg: theme.border.fg)
+    separator_width = max(reader_w - 2, 1)
+
+    text(pad <> String.duplicate("─", separator_width), fg: theme.border.fg)
   end
 
   defp reader_left_padding(terminal_w, reader_w), do: div(max(terminal_w - reader_w, 0), 2)
