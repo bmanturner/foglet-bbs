@@ -27,8 +27,9 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
     * `:soft_cap`, `:recent_limit`, `:idle_grace_ms`, `:ttl_seconds` —
       override defaults inherited from the Board record.
   """
-
   use GenServer
+
+  require Logger
 
   alias Foglet.BoardChat.Body
   alias Foglet.BoardChat.Ephemeral.Registry, as: RoomRegistry
@@ -199,13 +200,27 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
   end
 
   defp broadcast(board_id, message) do
-    _ =
-      Phoenix.PubSub.broadcast(
-        FogletBbs.PubSub,
-        Foglet.PubSub.board_chat_topic(board_id),
-        message
-      )
+    topic = Foglet.PubSub.board_chat_topic(board_id)
 
-    :ok
+    case pubsub_module().broadcast(FogletBbs.PubSub, topic, message) do
+      :ok ->
+        :ok
+
+      {:error, reason} ->
+        # Privacy-safe: ephemeral chat broadcast failures are actionable for
+        # operators, but the in-memory message body and user-facing content must
+        # never be emitted to logs. Keep context to the topic, fixed event kind,
+        # and sanitized result reason, mirroring the permanent chat boundary.
+        Logger.warning(
+          "BoardChat.Ephemeral.Room broadcast failed: topic=#{inspect(topic)} " <>
+            "message_type=:board_chat_new_message reason=#{inspect(reason)}"
+        )
+
+        :ok
+    end
+  end
+
+  defp pubsub_module do
+    Application.get_env(:foglet_bbs, :pubsub_module, Phoenix.PubSub)
   end
 end
