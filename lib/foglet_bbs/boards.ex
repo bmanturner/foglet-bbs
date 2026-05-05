@@ -282,6 +282,7 @@ defmodule Foglet.Boards do
   @spec board_directory_for(Foglet.Accounts.User.t() | nil) :: [directory_category()]
   def board_directory_for(nil) do
     build_directory(
+      actor: nil,
       include_archived?: false,
       subscribed_board_ids: MapSet.new(),
       unread_counts: %{}
@@ -292,13 +293,37 @@ defmodule Foglet.Boards do
     user_id = user_id(actor)
 
     build_directory(
+      actor: actor,
       include_archived?: archived_visible_to?(actor),
       subscribed_board_ids: subscribed_board_ids(user_id),
       unread_counts: unread_counts(user_id)
     )
   end
 
+  @doc "Returns true when `actor` may read `board` content through public read paths."
+  @spec readable_by?(Foglet.Accounts.User.t() | nil, Board.t()) :: boolean()
+  def readable_by?(nil, %Board{readable_by: :public}), do: true
+  def readable_by?(nil, %Board{readable_by: :members}), do: false
+  def readable_by?(%{status: :active, deleted_at: nil}, %Board{}), do: true
+  def readable_by?(%{status: :active}, %Board{}), do: true
+  def readable_by?(_actor, %Board{readable_by: :public}), do: true
+  def readable_by?(_actor, %Board{}), do: false
+
+  @doc "Fetch an active board only when it is visible to `actor`; otherwise returns `{:error, :not_found}`."
+  @spec fetch_readable_board(Foglet.Accounts.User.t() | nil, String.t()) ::
+          {:ok, Board.t()} | {:error, :not_found | :board_archived}
+  def fetch_readable_board(actor, board_id) do
+    with {:ok, board} <- fetch_active_board(board_id),
+         true <- readable_by?(actor, board) do
+      {:ok, board}
+    else
+      false -> {:error, :not_found}
+      error -> error
+    end
+  end
+
   defp build_directory(opts) do
+    actor = Keyword.fetch!(opts, :actor)
     include_archived? = Keyword.fetch!(opts, :include_archived?)
     subscribed_board_ids = Keyword.fetch!(opts, :subscribed_board_ids)
     unread_counts = Keyword.fetch!(opts, :unread_counts)
@@ -306,6 +331,7 @@ defmodule Foglet.Boards do
 
     [include_archived?: include_archived?]
     |> list_boards()
+    |> Enum.filter(&readable_by?(actor, &1))
     |> Enum.chunk_by(& &1.category.id)
     |> Enum.map(fn boards ->
       category = hd(boards).category

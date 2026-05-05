@@ -72,6 +72,69 @@ defmodule Foglet.TUI.App.EffectsTest do
            } = Routing.screen_state_for(new_state, :sample)
   end
 
+  test "guest direct navigation with stale members-only content params is denied before route state initializes" do
+    guest_state =
+      state(
+        current_user: nil,
+        session_context: %{guest: true, user: nil, user_id: nil},
+        current_screen: :board_list,
+        route_params: %{},
+        screen_state: %{board_list: %{loaded: true}}
+      )
+
+    private_board = %{
+      id: "private-board",
+      name: "Members Hidden Board",
+      readable_by: :members,
+      chat_enabled: true
+    }
+
+    cases = [
+      {:board, :thread_list, %{board: private_board, board_id: private_board.id}},
+      {:thread, :post_reader,
+       %{thread: %{id: "private-thread", title: "Hidden Thread", board: private_board}}},
+      {:post, :post_reader,
+       %{post: %{id: "private-post", body: "Hidden Post", board: private_board}}},
+      {:chat, :thread_list,
+       %{board: Map.put(private_board, :chat_enabled, true), board_id: private_board.id}}
+    ]
+
+    for {_surface, screen, params} <- cases do
+      {new_state, cmds} = Effects.apply_effect(guest_state, Effect.navigate(screen, params))
+
+      assert cmds == []
+      assert new_state.current_screen == :board_list
+      assert new_state.route_params == %{}
+      assert new_state.screen_state == guest_state.screen_state
+
+      assert %Modal{type: :error, message: "That board is for registered users. Log in first."} =
+               new_state.modal
+
+      state_dump = inspect(new_state)
+      refute state_dump =~ "Members Hidden Board"
+      refute state_dump =~ "Hidden Thread"
+      refute state_dump =~ "Hidden Post"
+    end
+  end
+
+  test "authenticated navigation may carry members-only board params for domain-authorized routes" do
+    user = %Foglet.Accounts.User{id: "u-member", handle: "member", role: :user}
+
+    {new_state, cmds} =
+      state(current_user: user, session_context: %{user: user, user_id: user.id})
+      |> Effects.apply_effect(
+        Effect.navigate(:thread_list, %{
+          board: %{id: "b-private", name: "Members Board", readable_by: :members},
+          board_id: "b-private"
+        })
+      )
+
+    assert match?([%Raxol.Core.Runtime.Command{type: :task}], cmds)
+    assert new_state.current_screen == :thread_list
+    assert new_state.route_params.board.name == "Members Board"
+    assert new_state.modal == nil
+  end
+
   test "modal open and dismiss update modal state" do
     modal = %Modal{type: :info, message: "hello"}
 

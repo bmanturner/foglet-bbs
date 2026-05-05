@@ -87,6 +87,19 @@ defmodule Foglet.Posts do
     |> Repo.preload([:user, :reply_to])
   end
 
+  @doc "Fetch a post only when its board is visible to `actor`."
+  @spec fetch_readable_post(Foglet.Accounts.User.t() | nil, String.t()) ::
+          {:ok, Post.t()} | {:error, :not_found | :board_archived}
+  def fetch_readable_post(actor, id) do
+    with %Post{} = post <- Repo.get(Post, id) |> Repo.preload([:user, :reply_to]),
+         {:ok, _board} <- Boards.fetch_readable_board(actor, post.board_id) do
+      {:ok, post}
+    else
+      nil -> {:error, :not_found}
+      error -> error
+    end
+  end
+
   @doc """
   Toggles `user_id`'s upvote on `post_id` and returns the refreshed post.
 
@@ -146,6 +159,21 @@ defmodule Foglet.Posts do
     |> Repo.update_all(set: [upvote_count: count])
 
     get_post!(post_id)
+  end
+
+  @doc """
+  Returns a reader window only when `actor` may read the thread's board.
+
+  This actor-aware wrapper is the domain boundary direct-navigation callers
+  should use; the legacy `list_reader_window/2` remains trusted/internal so
+  authenticated member flows do not lose access to members-only boards.
+  """
+  @spec list_reader_window_for(Foglet.Accounts.User.t() | nil, String.t(), keyword()) ::
+          {:ok, ReaderWindow.t()} | {:error, :not_found | :board_archived}
+  def list_reader_window_for(actor, thread_id, opts \\ []) do
+    with {:ok, _thread} <- Foglet.Threads.fetch_readable_thread(actor, thread_id) do
+      {:ok, list_reader_window(thread_id, opts)}
+    end
   end
 
   @doc """

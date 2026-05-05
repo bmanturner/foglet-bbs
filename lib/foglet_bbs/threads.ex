@@ -89,6 +89,20 @@ defmodule Foglet.Threads do
     |> Repo.preload([:board, :created_by, :first_post])
   end
 
+  @doc "Fetch a thread only when its board is visible to `actor`."
+  @spec fetch_readable_thread(Foglet.Accounts.User.t() | nil, String.t()) ::
+          {:ok, Thread.t()} | {:error, :not_found | :board_archived}
+  def fetch_readable_thread(actor, id) do
+    with %Thread{} = thread <-
+           Repo.get(Thread, id) |> Repo.preload([:board, :created_by, :first_post]),
+         {:ok, _board} <- Boards.fetch_readable_board(actor, thread.board_id) do
+      {:ok, thread}
+    else
+      nil -> {:error, :not_found}
+      error -> error
+    end
+  end
+
   @doc """
   List all non-deleted threads in a board, stickies first then by
   `last_post_at` desc.
@@ -139,17 +153,23 @@ defmodule Foglet.Threads do
   """
   @spec list_threads(String.t(), String.t() | nil, keyword()) :: [ThreadEntry.t()]
   def list_threads(board_id, nil, opts) do
-    limit = normalize_limit(Keyword.get(opts, :limit, @page_size))
+    case Boards.fetch_readable_board(nil, board_id) do
+      {:ok, _board} ->
+        limit = normalize_limit(Keyword.get(opts, :limit, @page_size))
 
-    from(t in Thread,
-      where: t.board_id == ^board_id,
-      order_by: [desc: t.sticky, desc: t.last_post_at],
-      limit: ^limit,
-      preload: [:created_by]
-    )
-    |> QueryHelpers.not_deleted()
-    |> Repo.all()
-    |> Enum.map(&annotate_no_user/1)
+        from(t in Thread,
+          where: t.board_id == ^board_id,
+          order_by: [desc: t.sticky, desc: t.last_post_at],
+          limit: ^limit,
+          preload: [:created_by]
+        )
+        |> QueryHelpers.not_deleted()
+        |> Repo.all()
+        |> Enum.map(&annotate_no_user/1)
+
+      {:error, _reason} ->
+        []
+    end
   end
 
   def list_threads(board_id, user_id, opts) when is_binary(user_id) do
@@ -174,7 +194,12 @@ defmodule Foglet.Threads do
     limit = normalize_limit(Keyword.get(opts, :limit, @page_size))
 
     from(t in Thread,
-      where: t.board_id == ^board_id,
+      join: b in Board,
+      on: b.id == t.board_id,
+      join: c in assoc(b, :category),
+      where:
+        t.board_id == ^board_id and b.readable_by == :public and b.archived == false and
+          c.archived == false,
       order_by: [desc: t.sticky, desc: t.last_post_at],
       limit: ^limit
     )

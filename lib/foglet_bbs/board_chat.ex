@@ -55,4 +55,16 @@ defmodule Foglet.BoardChat do
   def recent(%Board{chat_storage_mode: :permanent} = board) do
     Permanent.recent(board.id)
   end
+
+  @doc """
+  Actor-aware recent chat history read. Guests receive no history for
+  members-readable boards; authenticated active members keep existing access.
+  """
+  def recent_for(actor, %Board{} = board) do
+    if Foglet.Boards.readable_by?(actor, board) do
+      recent(board)
+    else
+      []
+    end
+  end
 end
