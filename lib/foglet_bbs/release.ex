@@ -3,6 +3,9 @@ defmodule FogletBbs.Release do
   Used for executing DB release tasks when run in production without Mix
   installed.
   """
+
+  Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
+
   @app :foglet_bbs
 
   @production_seed_files [
@@ -27,6 +30,9 @@ defmodule FogletBbs.Release do
   rows the running application assumes exist (config defaults, tombstone
   user). Add new release-safe seed files to `@production_seed_files`.
   """
+  # sobelow: seed file paths come from @production_seed_files constants
+  # joined under the app priv directory; no user input can select files.
+  @sobelow_skip ["RCE.CodeModule"]
   def seed do
     :ok = load_app()
     priv = priv_dir()
@@ -34,10 +40,10 @@ defmodule FogletBbs.Release do
     for repo <- repos() do
       {:ok, _, _} =
         Ecto.Migrator.with_repo(repo, fn repo ->
-          Ecto.Migrator.run(repo, :up, all: true)
+          _ = Ecto.Migrator.run(repo, :up, all: true)
 
           for relative <- @production_seed_files do
-            Code.eval_file(Path.join(priv, relative))
+            {_result, _binding} = Code.eval_file(Path.join(priv, relative))
           end
 
           repo
