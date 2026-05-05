@@ -9,7 +9,7 @@ repository and should be read with `docs/DEPLOYMENT.md`.
 
 | Area | Canonical artifact | Operational meaning |
 | --- | --- | --- |
-| Image build | `Dockerfile` | Builds a Debian-based OTP release image, runs as `nobody`, exposes SSH `2222` and HTTP `4000`, and declares `/data` as persistent storage. |
+| Image build | `Dockerfile` | Builds a Debian-based OTP release image, runs as `nobody`, exposes SSH `2222` and HTTP `4000`, declares `/data` as persistent storage, and packages Python 3 for the door PTY helper. It does not currently provide a distinct restricted door user inside the container. |
 | Local database | `docker-compose.yml` | Provides local `postgres:16` only. It is not a production app stack. |
 | Production target | `fly.toml` | Fly.io is the committed deploy target: app `foglet-bbs`, region `iad`, HTTP health on `/up`, SSH TCP service on public port `22`, and persistent `foglet_data` mounted at `/data`. |
 | Release scripts | `rel/env.sh.eex`, `rel/overlays/bin/server`, `rel/overlays/bin/migrate` | Defines release node/env behavior, starts the Phoenix server for releases, and exposes migration execution inside the release. |
@@ -79,6 +79,48 @@ Request changes if it:
 - Changes ports, host key behavior, migration behavior, or release startup
   without updating `Dockerfile`, `fly.toml`, `config/runtime.exs`, and
   `docs/DEPLOYMENT.md` together.
+
+## External Door Sandbox Operations Baseline
+
+FOG-823/FOG-829 adds the deployment contract for the stronger external-door
+hardening baseline. The supported baseline is restricted OS user plus per-door
+process-group cleanup. The process-group side is a POSIX runtime behavior owned
+by the door PTY helper; the restricted-user side is an operator/runtime capability
+that must fail closed when unavailable.
+
+Operational requirements:
+
+- Keep the Foglet app user and restricted door user distinct. Suggested names are
+  `foglet` for the release user and `foglet-door` for external/classic door
+  processes.
+- Door executables and working directories must be absolute, operator-owned, and
+  readable/executable only by the restricted door identity or a narrow door group.
+- The restricted door user must not be able to read app secrets, database URLs,
+  SMTP credentials, Fly/GitHub tokens, SSH host private keys, or backups.
+- Door launch must fail closed if a manifest/config says a restricted user is
+  required but the runtime cannot switch uid/gid before exec.
+- Process cleanup evidence should include normal exit, timeout, and disconnect
+  paths terminating the helper-owned process group.
+
+Container caveat:
+
+The committed Dockerfile runs the full release as `nobody`. That is good for the
+app container baseline, but it means the current image cannot safely switch a
+door to a separate restricted OS user without a new approved runtime shape
+(privileged helper, retained root entrypoint that drops privileges, file
+capabilities, user namespace strategy, or equivalent). Until that decision is
+made and implemented, Docker/Fly support process-group cleanup but not the
+restricted-user half of the approved sandbox baseline. Treat this as a blocker
+for untrusted third-party doors and a caveat for first-party reviewed demo doors.
+
+Rollback / incident notes:
+
+- Prefer disabling external/classic door manifests over weakening the sandbox.
+- If a bad sandbox config blocks legitimate reviewed doors, roll back to the
+  previous config/image and verify the SSH listener, welcome/login flow, board
+  listing, supervisor health, and log signal before re-enabling doors.
+- Destructive cleanup on shared hosts requires explicit incident approval; use
+  targeted restricted-user/process-group cleanup only.
 
 ## Smoke Checks
 

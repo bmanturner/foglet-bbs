@@ -186,6 +186,79 @@ LiveDashboard is gated by the sysop role (see `docs/ARCHITECTURE.md`); do
 not assume the endpoint is unauthenticated just because there is no
 end-user web UI.
 
+## External Door Sandbox Deployment Profile
+
+External/classic doors are operator-installed programs executed from allowlisted
+absolute paths. The first supported hardening baseline is:
+
+1. run the door process as a restricted OS user distinct from the Foglet release
+   user, and
+2. place the door process tree in its own process group so timeout, crash, and
+   SSH disconnect cleanup can terminate the entire tree.
+
+Process-group cleanup is implemented by the Foglet PTY helper on POSIX hosts.
+Restricted-user execution is a deployment capability that must fail closed: if a
+door manifest or runtime config requires a restricted user and the runtime cannot
+switch to that user before exec, Foglet must reject the launch rather than run the
+door as the app user. Coordinate exact config/manifest field names with the OTP
+implementation child before enabling this in a release.
+
+Supported profiles:
+
+| Profile | Support level | Required capability | Notes |
+| --- | --- | --- | --- |
+| Local/dev POSIX host | Supported for development | Python 3, POSIX PTY, `setsid`/process-group signaling, and an optional local `foglet-door` user | Good for smoke tests. Do not treat local user switching as proof of production sandboxing. |
+| Single Linux host / systemd service | Supported target once configured by the operator | `root`-owned service setup, app user such as `foglet`, restricted door user such as `foglet-door`, door files readable/executable by `foglet-door`, no app secret env inherited by doors, and permission to switch uid/gid before exec | Preferred non-container profile for the restricted-user baseline. A future systemd unit may add `DynamicUser`, `NoNewPrivileges`, `ProtectSystem`, `PrivateTmp`, or cgroup accounting, but those are host policy choices until committed. |
+| Docker release image | Divergent / limited today | The image currently runs the whole release as `nobody` | A non-root container process cannot safely switch to a second restricted user without adding a privileged helper, file capabilities, root-at-runtime entrypoint, or broader container capabilities. Do not enable restricted-user-required doors in this image until the board/CTO approves that runtime shape. Process-group cleanup still works through the helper. |
+| Fly.io container | Divergent / limited today | Same Docker image/user model as above, plus Fly machine constraints | Use external doors only in the first-slice allowlisted/process-group posture unless the restricted-user implementation is explicitly verified in the deployed image. Treat Docker divergence as a release caveat or blocker for untrusted doors. |
+| Kubernetes/other orchestrators | Unsupported by committed repo artifacts | Not defined | Add platform-specific manifests/runbooks before claiming support. |
+
+Example host setup for a single Linux host:
+
+```sh
+# Run once as an operator with root privileges. Names may be adjusted, but keep
+# the app user and door user distinct.
+useradd --system --home /srv/foglet --shell /usr/sbin/nologin foglet
+useradd --system --home /srv/foglet/doors --shell /usr/sbin/nologin foglet-door
+install -d -o root -g foglet-door -m 0750 /srv/foglet/doors
+install -d -o foglet -g foglet -m 0750 /srv/foglet
+
+# Door wrappers should be operator-owned and only executable/readable by the
+# restricted door identity or a narrow door group.
+install -o root -g foglet-door -m 0550 run.sh /srv/foglet/doors/example/run.sh
+```
+
+Do not make the restricted door user a member of groups that can read Foglet
+release secrets, database credentials, SSH host private keys, `/data/ssh`, or
+operator backup material. Door working directories should not be writable by the
+Foglet app user unless that write path is deliberately part of the door contract.
+
+Rollback / disable path:
+
+- If restricted-user setup fails during deploy validation, leave the new door
+  manifests disabled or set the restricted-user-required flag off only for
+  first-party reviewed demo doors. Do not silently run untrusted doors as the app
+  user.
+- To disable all external/classic door launches during an incident, remove or
+  disable their manifests/config entries and restart the release. Native Elixir
+  doors are not OS-sandboxed and should be evaluated separately.
+- If a rollout introduced a bad sandbox config, redeploy the previous image or
+  config bundle using the application rollback procedure below, then verify SSH
+  login, board listing, and a door-disabled path before re-enabling door
+  manifests.
+- Residual orphan cleanup after a failed deploy should target only known door
+  process groups or the restricted door user's processes; do not run broad kill
+  commands on shared hosts without incident approval.
+
+Observability baseline for the sandbox path:
+
+- Log every rejected launch caused by missing restricted-user capability without
+  logging secret env or full manifests.
+- Capture launch/exit reason, timeout/disconnect cleanup, and helper failure in
+  the existing app logs until an external telemetry reporter is approved.
+- External alerting/exporter choice remains a board/CTO decision; none is
+  configured by this repo.
+
 ## Telemetry & Monitoring
 
 Wired up in this repo (`lib/foglet_bbs_web/telemetry.ex`):
