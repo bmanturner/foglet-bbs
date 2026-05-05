@@ -196,20 +196,68 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     refute_received {:list_recent_visible, 5}
   end
 
+  test "explicit guest entry from login queues main menu oneliner load" do
+    Process.put(:fake_oneliners_owner, self())
+
+    Process.put(:fake_oneliners_entries, [
+      %{id: "ol1", body: "loaded after G", user: %{handle: "alice"}}
+    ])
+
+    {:ok, state} =
+      App.init(%{
+        terminal_size: {80, 24},
+        session_context: %{
+          guest: false,
+          guest_mode_enabled: true,
+          user: nil,
+          domain: %{oneliners: Foglet.TUI.FakeOneliners}
+        }
+      })
+
+    assert state.current_screen == :login
+    refute Guest.guest?(state)
+
+    {state, []} = App.update(:initial_route_enter, state)
+    refute_received {:list_recent_visible, 5}
+
+    {state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+      App.update(:enter_guest, state)
+
+    assert state.current_screen == :main_menu
+    assert state.current_user == nil
+    assert Guest.guest?(state)
+    assert %MainMenuState{oneliner_status: :loading} = App.screen_state_for(state, :main_menu)
+
+    assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} = task.()
+    assert_received {:list_recent_visible, 5}
+  end
+
   test "session effect enters guest mode in the App without crashing anonymous Session" do
+    Process.put(:fake_oneliners_owner, self())
+    Process.put(:fake_oneliners_entries, [%{id: "ol1", body: "guest row"}])
+
     {:ok, session_pid} = start_supervised({Session, [user_id: nil]})
 
     state = %App{
       current_screen: :login,
       session_pid: session_pid,
-      session_context: %SessionContext{guest: false, guest_mode_enabled: true, user: nil}
+      session_context: %{
+        guest: false,
+        guest_mode_enabled: true,
+        user: nil,
+        session_pid: session_pid,
+        domain: %{oneliners: Foglet.TUI.FakeOneliners}
+      }
     }
 
-    {state, []} = Effects.apply_effect(state, Effect.session(:enter_guest))
+    {state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+      Effects.apply_effect(state, Effect.session(:enter_guest))
 
     assert state.current_screen == :main_menu
     assert state.current_user == nil
     assert Guest.guest?(state)
+    assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} = task.()
+    assert_received {:list_recent_visible, 5}
 
     session_state = Session.get_state(session_pid)
     assert session_state.user_id == nil

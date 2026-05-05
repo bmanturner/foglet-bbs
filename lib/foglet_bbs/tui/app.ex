@@ -308,7 +308,9 @@ defmodule Foglet.TUI.App do
 
     local_state = Foglet.TUI.Screens.MainMenu.init(build_context(state))
 
-    {ScreenStates.put(state, :main_menu, local_state), []}
+    state
+    |> ScreenStates.put(:main_menu, local_state)
+    |> Routing.dispatch_route_entry(:main_menu, %{})
   end
 
   defp do_update({:show_modal, modal}, state) when is_struct(modal, Foglet.TUI.Modal) do
