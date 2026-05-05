@@ -254,4 +254,30 @@ defmodule Foglet.TUI.App.EffectsTest do
     refute log =~ "sysop@example.test"
     refute log =~ "super-secret"
   end
+
+  test "task thrown tuple payloads are logged with low-cardinality reason class only" do
+    secret = "raw-secret-token@example.test"
+
+    {_state, [%Command{type: :task, data: failure_task}]} =
+      Effects.apply_effect(
+        state(),
+        Effect.task(:probe, :sample, fn -> throw({secret, :details}) end)
+      )
+
+    log =
+      capture_log(fn ->
+        assert {:screen_task_result, :sample, :probe, {:error, {:task_failed, :throw}}} =
+                 failure_task.()
+      end)
+
+    assert log =~ "tui_screen_task_failed"
+    assert log =~ "screen=sample"
+    assert log =~ "operation=probe"
+    assert log =~ "failure_kind=throw"
+    assert log =~ "reason_class=tuple"
+    refute log =~ secret
+    refute log =~ "raw-secret-token"
+    refute log =~ "example.test"
+    refute log =~ "details"
+  end
 end

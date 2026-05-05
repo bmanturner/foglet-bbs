@@ -203,10 +203,14 @@ defmodule Foglet.TUI.App.Effects do
 
   defp reason_class(%module{}) when is_atom(module), do: module
   defp reason_class(value) when is_atom(value), do: value
-  defp reason_class(value) when is_tuple(value) and tuple_size(value) > 0, do: elem(value, 0)
+  defp reason_class(value) when is_tuple(value), do: tuple_reason_class(value)
   defp reason_class(value) when is_binary(value), do: :binary
   defp reason_class(value) when is_integer(value), do: :integer
   defp reason_class(_value), do: :unknown
+
+  defp tuple_reason_class({:task_failed, _kind}), do: :task_failed
+  defp tuple_reason_class({_tag, _reason}), do: :tuple
+  defp tuple_reason_class(_value), do: :tuple
 
   defp safe_failure_kind(:error), do: :exception
   defp safe_failure_kind(kind) when kind in [:exception, :throw, :exit], do: kind
