@@ -59,6 +59,8 @@ Both interfaces terminate into the same domain core: boards, threads, posts, ses
 
 The OTP supervision tree is the real blueprint of a BEAM system. This is the target shape; it will be built up in stages as the roadmap progresses.
 
+For the maintained live SSH/TUI process-boundary map and test evidence matrix, see `docs/RUNTIME_PROCESS_MAP.md`.
+
 ```
 FogletBbs.Application
 ├── Foglet.Repo                        (Ecto repo)
