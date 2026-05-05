@@ -504,19 +504,22 @@ defmodule Foglet.Doors do
 
   defp validate_string_list(errors, field, _values), do: [{field, "must be a list"} | errors]
 
-  defp validate_env(errors, values) when is_map(values) do
-    invalid =
-      Enum.find(values, fn {key, value} ->
-        not is_binary(key) or unsupported_env_name?(key) or not is_binary(value)
-      end)
+  defp validate_env(errors, env) when is_map(env) do
+    case Enum.find(env, fn {key, value} ->
+           unsupported_env_name?(to_string(key)) or not is_binary(value)
+         end) do
+      nil ->
+        errors
 
-    case invalid do
-      nil -> errors
-      {key, _value} -> [{:env, "contains unsupported variable #{inspect(key)}"} | errors]
+      {key, value} when not is_binary(value) ->
+        [{:env, "contains non-string value for #{key}"} | errors]
+
+      {key, _value} ->
+        [{:env, "contains unsupported variable #{key}"} | errors]
     end
   end
 
-  defp validate_env(errors, _values), do: [{:env, "must be a map"} | errors]
+  defp validate_env(errors, _env), do: [{:env, "must be a map"} | errors]
 
   defp validate_dropfile_formats(errors, :classic_dropfile, values) when is_list(values) do
     unsupported = Enum.find(values, &(&1 not in @classic_dropfile_formats))

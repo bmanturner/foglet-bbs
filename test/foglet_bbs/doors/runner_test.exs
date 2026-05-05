@@ -185,8 +185,22 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
     end
 
-    test "classic dropfile runtime writes requested dropfiles, launches demo, and cleans metadata" do
+    test "classic dropfile runtime writes requested dropfiles in an isolated cwd and cleans metadata" do
       working_dir = Path.expand("priv/doors/demo")
+
+      original_dropfiles = %{
+        "CHAIN.TXT" => "pre-existing chain",
+        "DOOR.SYS" => "pre-existing door",
+        "DORINFO.DEF" => "pre-existing dorinfo"
+      }
+
+      Enum.each(original_dropfiles, fn {filename, body} ->
+        File.write!(Path.join(working_dir, filename), body)
+      end)
+
+      on_exit(fn ->
+        Enum.each(Map.keys(original_dropfiles), &File.rm(Path.join(working_dir, &1)))
+      end)
 
       {:ok, manifest} =
         manifest(%{
@@ -200,8 +214,6 @@ defmodule Foglet.Doors.RunnerTest do
           timeout_ms: 5_000,
           pty?: true
         })
-
-      Enum.each(["CHAIN.TXT", "DOOR.SYS", "DORINFO.DEF"], &File.rm(Path.join(working_dir, &1)))
 
       {:ok, pid} =
         DoorSupervisor.start_runner(
@@ -221,15 +233,182 @@ defmodule Foglet.Doors.RunnerTest do
       ref = Process.monitor(pid)
       assert_receive {:door_started, ^pid, "classic-demo"}
       assert_door_output_contains("classic-dropfile-demo:DOOR.SYS:alice")
-      assert File.exists?(Path.join(working_dir, "DOOR.SYS"))
+
+      assert %{
+               dropfile_working_dir: dropfile_working_dir,
+               dropfile_paths: %{door_sys: door_sys_path}
+             } = Runner.snapshot(pid)
+
+      assert dropfile_working_dir != working_dir
+      assert Path.dirname(door_sys_path) == dropfile_working_dir
+      assert File.exists?(door_sys_path)
+
+      Enum.each(original_dropfiles, fn {filename, body} ->
+        assert File.read!(Path.join(working_dir, filename)) == body
+      end)
 
       Runner.input(pid, "/quit\n")
       assert_door_output_contains("Leaving Classic Dropfile Demo.")
       assert_receive {:door_exited, ^pid, "classic-demo", :normal, 0}, @event_timeout
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
-      refute File.exists?(Path.join(working_dir, "DOOR.SYS"))
-      refute File.exists?(Path.join(working_dir, "DORINFO.DEF"))
-      refute File.exists?(Path.join(working_dir, "CHAIN.TXT"))
+
+      refute File.exists?(dropfile_working_dir)
+
+      Enum.each(original_dropfiles, fn {filename, body} ->
+        assert File.read!(Path.join(working_dir, filename)) == body
+      end)
+    end
+
+    test "concurrent classic runners use separate dropfile directories and independent cleanup" do
+      working_dir = Path.expand("priv/doors/demo")
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "classic-concurrent",
+          display_name: "Classic Concurrent",
+          runtime: :classic_dropfile,
+          command: "/bin/sleep",
+          working_dir: working_dir,
+          dropfile_formats: [:chain_txt, :door_sys, :dorinfo_def],
+          args: ["30"],
+          timeout_ms: 5_000,
+          pty?: false
+        })
+
+      {:ok, alice_pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", role: :user, session_id: "session-alice"},
+          terminal_size: {100, 30},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      {:ok, bob_pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "bob", user_id: "u2", role: :mod, session_id: "session-bob"},
+          terminal_size: {90, 25},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^alice_pid, "classic-concurrent"}
+      assert_receive {:door_started, ^bob_pid, "classic-concurrent"}
+
+      %{dropfile_working_dir: alice_dir, dropfile_paths: alice_paths} = Runner.snapshot(alice_pid)
+      %{dropfile_working_dir: bob_dir, dropfile_paths: bob_paths} = Runner.snapshot(bob_pid)
+
+      assert alice_dir != bob_dir
+      assert Path.dirname(alice_paths.door_sys) == alice_dir
+      assert Path.dirname(bob_paths.door_sys) == bob_dir
+      assert File.exists?(alice_paths.door_sys)
+      assert File.exists?(bob_paths.door_sys)
+
+      alice_ref = Process.monitor(alice_pid)
+      bob_ref = Process.monitor(bob_pid)
+
+      Runner.disconnect(alice_pid)
+      assert_receive {:door_exited, ^alice_pid, "classic-concurrent", :disconnect, nil}
+      assert_receive {:DOWN, ^alice_ref, :process, ^alice_pid, :normal}
+
+      refute File.exists?(alice_dir)
+      assert File.exists?(bob_paths.door_sys)
+      assert File.read!(bob_paths.door_sys) =~ "session-bob"
+      refute File.read!(bob_paths.door_sys) =~ "session-alice"
+
+      Runner.disconnect(bob_pid)
+      assert_receive {:door_exited, ^bob_pid, "classic-concurrent", :disconnect, nil}
+      assert_receive {:DOWN, ^bob_ref, :process, ^bob_pid, :normal}
+      refute File.exists?(bob_dir)
+    end
+
+    test "helper-backed PTY hides inherited env while keeping Foglet and manifest env" do
+      previous_secret = System.get_env("FOGLET_TEST_INHERITED_SECRET")
+      System.put_env("FOGLET_TEST_INHERITED_SECRET", "do-not-leak")
+
+      on_exit(fn ->
+        restore_env("FOGLET_TEST_INHERITED_SECRET", previous_secret)
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-env-sanitized-helper",
+          display_name: "External Env Sanitized Helper",
+          runtime: :external_pty,
+          command: "/bin/sh",
+          working_dir: System.tmp_dir!(),
+          args: ["-c", env_probe_command()],
+          env: %{"FOGLET_TEST_MANIFEST_VALUE" => "manifest-ok"},
+          timeout_ms: 5_000,
+          pty?: true
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {132, 40},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "external-env-sanitized-helper"}
+      assert %{pty_backend: :helper} = Runner.snapshot(pid)
+      assert_door_output_contains("env-probe:absent:alice:manifest-ok:present")
+
+      assert_receive {:door_exited, ^pid, "external-env-sanitized-helper", :normal, 0},
+                     @event_timeout
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "plain and script fallback launches hide inherited env while keeping Foglet env" do
+      previous_secret = System.get_env("FOGLET_TEST_INHERITED_SECRET")
+      previous_helper = Application.get_env(:foglet_bbs, :door_pty_helper_path)
+      System.put_env("FOGLET_TEST_INHERITED_SECRET", "do-not-leak")
+      Application.put_env(:foglet_bbs, :door_pty_helper_path, "/tmp/foglet-missing-pty-helper")
+
+      on_exit(fn ->
+        restore_env("FOGLET_TEST_INHERITED_SECRET", previous_secret)
+        restore_helper_path(previous_helper)
+      end)
+
+      for {door_id, pty?} <- [
+            {"external-env-sanitized-plain", false},
+            {"external-env-sanitized-fallback", true}
+          ] do
+        {:ok, manifest} =
+          manifest(%{
+            id: door_id,
+            display_name: door_id,
+            runtime: :external_pty,
+            command: "/bin/sh",
+            working_dir: System.tmp_dir!(),
+            args: ["-c", env_probe_command()],
+            env: %{
+              "FOGLET_TEST_MANIFEST_VALUE" => "manifest-ok"
+            },
+            timeout_ms: 5_000,
+            pty?: pty?
+          })
+
+        {:ok, pid} =
+          DoorSupervisor.start_runner(
+            manifest: manifest,
+            session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+            terminal_size: {132, 40},
+            output: output_to(self()),
+            owner: self()
+          )
+
+        ref = Process.monitor(pid)
+        assert_receive {:door_started, ^pid, ^door_id}
+        assert_door_output_contains("env-probe:absent:alice:manifest-ok:present")
+        assert_receive {:door_exited, ^pid, ^door_id, :normal, 0}, @event_timeout
+        assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+      end
     end
 
     test "external non-zero exit is reported as crash with actionable launch context in logs" do
@@ -758,10 +937,23 @@ defmodule Foglet.Doors.RunnerTest do
     end
   end
 
+  defp env_probe_command do
+    """
+    if [ -z "${FOGLET_TEST_INHERITED_SECRET+x}" ]; then inherited=absent; else inherited=present; fi
+    if [ -n "${PATH}" ]; then path_status=present; else path_status=missing; fi
+    if [ -n "${FOGLET_TEST_PROBE_PATH}" ]; then
+      printf 'env-probe:%s:%s:%s:%s\n' "$inherited" "$FOGLET_USERNAME" "$FOGLET_TEST_MANIFEST_VALUE" "$path_status" > "$FOGLET_TEST_PROBE_PATH"
+    else
+      printf 'env-probe:%s:%s:%s:%s\n' "$inherited" "$FOGLET_USERNAME" "$FOGLET_TEST_MANIFEST_VALUE" "$path_status"
+    fi
+    sleep 0.1
+    """
+  end
+
   defp restore_env(name, nil), do: System.delete_env(name)
   defp restore_env(name, value), do: System.put_env(name, value)
 
-  defp wait_for_pidfile(path, attempts \\ 50)
+  defp wait_for_pidfile(path, attempts \ 50)
 
   defp wait_for_pidfile(path, attempts) when attempts > 0 do
     case File.read(path) do
@@ -778,7 +970,7 @@ defmodule Foglet.Doors.RunnerTest do
 
   defp wait_for_pidfile(path, 0), do: flunk("pidfile was not written: #{path}")
 
-  defp eventually_os_process_alive?(pid, attempts \\ 20)
+  defp eventually_os_process_alive?(pid, attempts \ 20)
 
   defp eventually_os_process_alive?(pid, attempts) when attempts > 0 do
     if os_process_alive?(pid) do
@@ -792,6 +984,11 @@ defmodule Foglet.Doors.RunnerTest do
   end
 
   defp eventually_os_process_alive?(pid, 0), do: os_process_alive?(pid)
+
+  defp restore_helper_path(nil), do: Application.delete_env(:foglet_bbs, :door_pty_helper_path)
+
+  defp restore_helper_path(path),
+    do: Application.put_env(:foglet_bbs, :door_pty_helper_path, path)
 
   defp os_process_alive?(pid) when is_integer(pid) do
     case System.cmd("kill", ["-0", Integer.to_string(pid)], stderr_to_stdout: true) do

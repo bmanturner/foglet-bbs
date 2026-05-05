@@ -135,6 +135,16 @@ def reap_child(child_pid: int):
     return {"status": None, "signal": None}
 
 
+def door_environment() -> dict:
+    """Return the already-sanitized environment supplied by Foglet.
+
+    The Elixir PTY adapter launches this helper through `env -i` with only
+    manifest env entries, required FOGLET_* metadata, and a narrow PATH. Keep
+    the exec environment explicit here instead of merging in a fresh host env.
+    """
+    return dict(os.environ)
+
+
 def handle_control(payload: bytes, master_fd: int, child_pid: int) -> bool:
     if not payload:
         return True
@@ -195,7 +205,7 @@ def main() -> int:
             if args.cwd:
                 os.chdir(args.cwd)
             drop_privileges(run_as)
-            os.execvpe(command[0], command, child_environment())
+            os.execvpe(command[0], command, door_environment())
         except Exception as exc:
             os.write(2, ("foglet-pty exec failed: %r\r\n" % (exc,)).encode("utf-8", "replace"))
             os._exit(127)

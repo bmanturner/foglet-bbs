@@ -20,22 +20,28 @@ defmodule Foglet.Doors.PTYAdapter do
 
   @spec open(Manifest.t(), {pos_integer(), pos_integer()}, [{charlist(), charlist()}]) ::
           {:ok, t()} | {:error, term()}
-  def open(%Manifest{sandbox: %{mode: mode}} = manifest, terminal_size, env)
-      when mode != :none do
+  def open(%Manifest{} = manifest, terminal_size, env) do
+    with :ok <- ensure_command_executable(manifest.command) do
+      open_validated(manifest, terminal_size, env)
+    end
+  end
+
+  defp open_validated(%Manifest{sandbox: %{mode: mode}} = manifest, terminal_size, env)
+       when mode != :none do
     case helper_path() do
       {:ok, helper} -> open_helper(helper, manifest, terminal_size, env)
       :unavailable -> {:error, {:sandbox_unavailable, :pty_helper_missing}}
     end
   end
 
-  def open(%Manifest{pty?: true} = manifest, terminal_size, env) do
+  defp open_validated(%Manifest{pty?: true} = manifest, terminal_size, env) do
     case helper_path() do
       {:ok, helper} -> open_helper(helper, manifest, terminal_size, env)
       :unavailable -> open_script_fallback(manifest, env)
     end
   end
 
-  def open(%Manifest{} = manifest, _terminal_size, env), do: open_plain(manifest, env)
+  defp open_validated(%Manifest{} = manifest, _terminal_size, env), do: open_plain(manifest, env)
 
   @spec input(t(), binary()) :: :ok | {:error, Exception.t()}
   def input(%__MODULE__{backend: :helper, port: port}, data),
@@ -114,38 +120,48 @@ defmodule Foglet.Doors.PTYAdapter do
   defp reason_class(%module{}), do: inspect(module)
 
   defp open_helper(helper, manifest, {cols, rows}, env) do
-    args = ["--cols", Integer.to_string(cols), "--rows", Integer.to_string(rows)]
+    args = [
+      "--cols",
+      Integer.to_string(cols),
+      "--rows",
+      Integer.to_string(rows)
+    ]
 
-    args =
+    helper_args =
       args ++
         sandbox_args(manifest.sandbox) ++
         working_dir_args(manifest.working_dir) ++ ["--", manifest.command | manifest.args]
 
+    {executable, args} = sanitized_exec_args(env, helper, helper_args)
+
     opts = [
       :binary,
       :exit_status,
+      :use_stdio,
       {:packet, 4},
       {:args, args},
-      {:env, env},
       {:cd, manifest.working_dir || File.cwd!()}
     ]
 
-    port = Port.open({:spawn_executable, helper}, opts)
+    port = Port.open({:spawn_executable, executable}, opts)
     {:ok, %__MODULE__{port: port, os_pid: os_pid(port), backend: :helper}}
   rescue
     e -> {:error, e}
   end
 
   defp open_plain(manifest, env) do
+    {executable, args} = sanitized_exec_args(env, manifest.command, manifest.args)
+
     opts = [
       :binary,
       :exit_status,
-      {:args, manifest.args},
-      {:env, env},
+      :use_stdio,
+      :stderr_to_stdout,
+      {:args, args},
       {:cd, manifest.working_dir || File.cwd!()}
     ]
 
-    port = Port.open({:spawn_executable, manifest.command}, opts)
+    port = Port.open({:spawn_executable, executable}, opts)
     {:ok, %__MODULE__{port: port, os_pid: os_pid(port), backend: :plain}}
   rescue
     e -> {:error, e}
@@ -157,17 +173,19 @@ defmodule Foglet.Doors.PTYAdapter do
         open_plain(manifest, env)
 
       script ->
-        args = ["-qfec", shell_join([manifest.command | manifest.args]), "/dev/null"]
+        script_args = ["-qfec", shell_join([manifest.command | manifest.args]), "/dev/null"]
+        {executable, args} = sanitized_exec_args(env, script, script_args)
 
         opts = [
           :binary,
           :exit_status,
+          :use_stdio,
+          :stderr_to_stdout,
           {:args, args},
-          {:env, env},
           {:cd, manifest.working_dir || File.cwd!()}
         ]
 
-        port = Port.open({:spawn_executable, script}, opts)
+        port = Port.open({:spawn_executable, executable}, opts)
         {:ok, %__MODULE__{port: port, os_pid: os_pid(port), backend: :script_fallback}}
     end
   rescue
@@ -194,7 +212,7 @@ defmodule Foglet.Doors.PTYAdapter do
 
   defp executable?(path) do
     case File.stat(path) do
-      {:ok, %{mode: mode}} -> (mode &&& 0o111) != 0
+      {:ok, %{type: :regular, mode: mode}} -> (mode &&& 0o111) != 0
       _ -> false
     end
   end
@@ -211,8 +229,33 @@ defmodule Foglet.Doors.PTYAdapter do
   defp maybe_add_arg(args, _name, nil), do: args
   defp maybe_add_arg(args, name, value), do: args ++ [name, value]
 
+  defp ensure_command_executable(path) when is_binary(path) do
+    if File.regular?(path) and executable?(path),
+      do: :ok,
+      else: {:error, {:command_unavailable, path}}
+  end
+
+  defp ensure_command_executable(path), do: {:error, {:command_unavailable, path}}
+
   defp working_dir_args(nil), do: []
   defp working_dir_args(path), do: ["--cwd", path]
+
+  defp sanitized_exec_args(env, command, args) do
+    sanitized_env = sanitized_env(env)
+    env_args = ["-i" | Enum.map(sanitized_env, fn {key, value} -> "#{key}=#{value}" end)]
+
+    case System.find_executable("env") do
+      nil -> {command, args}
+      env_executable -> {env_executable, env_args ++ [command | args]}
+    end
+  end
+
+  defp sanitized_env(env) do
+    env
+    |> Map.new(fn {key, value} -> {to_string(key), to_string(value)} end)
+    |> Map.put_new("PATH", "/usr/bin:/bin")
+    |> Enum.sort_by(fn {key, _value} -> key end)
+  end
 
   defp os_pid(port) do
     case Port.info(port, :os_pid) do

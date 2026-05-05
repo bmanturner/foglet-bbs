@@ -13,8 +13,10 @@ FOG-880 extends the existing `Foglet.Doors` context, `%Foglet.Doors.Manifest{}`,
 ## Persistence decision
 
 Door manifests remain validated configuration data, and launch/dropfile metadata
-remains ephemeral. Classic dropfiles are written into the door working directory
-for the life of the runner and removed during runner cleanup.
+remains ephemeral. Classic dropfiles are written into a runner-owned per-launch
+working directory for the life of the runner and removed during runner cleanup.
+The configured manifest `working_dir` remains the validated base for the door,
+but Foglet does not write per-session dropfiles into that shared directory.
 
 Rationale:
 
@@ -117,8 +119,11 @@ Wrapper checklist:
 
 1. Read `FOGLET_DOOR_CONTEXT`, or read the minimal `FOGLET_*` environment values
    if the language/runtime makes JSON awkward.
-2. For classic doors, consume the generated dropfile(s) in the working directory.
-3. Launch the target executable from the manifest working directory.
+2. For classic doors, consume the generated dropfile(s) in the current working
+   directory or from the explicit paths listed in `FOGLET_DROPFILES`.
+3. Launch the target executable from Foglet's runner-owned current working
+   directory for that session. The manifest `working_dir` is a shared validated
+   base path, not a place for per-session dropfile writes.
 4. Forward terminal input/output without writing a separate transcript by
    default.
 5. Preserve the child exit status.
@@ -126,9 +131,13 @@ Wrapper checklist:
 7. Avoid logging context files, dropfile contents, inherited env, or terminal
    input/output. Third-party programs may ask users for secrets.
 
-Foglet's runner writes requested dropfiles before launching a
-`:classic_dropfile` manifest and removes them during normal exit, crash,
-timeout, or disconnect cleanup.
+Foglet's runner creates a unique temporary working directory for each
+`:classic_dropfile` launch, writes requested fixed-name dropfiles there before
+launch, sets the child cwd to that isolated directory, exposes the generated
+paths through `FOGLET_DROPFILES`, and removes the directory during normal exit,
+crash, timeout, or disconnect cleanup. Cleanup only targets runner-owned files
+and directories; pre-existing `CHAIN.TXT`, `DOOR.SYS`, or `DORINFO.DEF` files in
+the configured manifest base directory are not overwritten or removed.
 
 ## Classic dropfile model
 
@@ -203,7 +212,8 @@ or a sandbox.
 
 Process ownership remains in `Foglet.Doors.Runner` under the Door supervisor:
 
-- Normal exit: child exit status is reported; context and dropfiles are removed.
+- Normal exit: child exit status is reported; context and runner-owned dropfile
+  directory are removed.
 - Crash/non-zero exit: status is reported as crash; cleanup still runs.
 - Timeout: runner terminates the OS process and removes context/dropfiles.
 - Disconnect: runner terminates the process owner and removes context/dropfiles.

@@ -14,6 +14,7 @@ defmodule Foglet.DoorsTest do
     command: "/srv/foglet/doors/tradewars/run.sh",
     args: ["--ansi"],
     working_dir: "/srv/foglet/doors/tradewars",
+    env: %{},
     env_allowlist: ["TERM", "LANG"],
     timeout_ms: 30_000,
     idle_timeout_ms: 5_000,
@@ -55,17 +56,19 @@ defmodule Foglet.DoorsTest do
       assert manifest.sandbox.fail_closed? == true
     end
 
-    test "rejects unsafe command paths, relative working directories, and non-allowlisted env names" do
+    test "rejects unsafe command paths, relative working directories, and unsafe env names" do
       attrs = %{
         @valid_manifest
         | command: "bin/run.sh",
           working_dir: "doors/tradewars",
+          env: %{"DATABASE_URL" => "postgres://secret"},
           env_allowlist: ["TERM", "DATABASE_URL"]
       }
 
       assert {:error, errors} = Doors.validate_manifest(attrs)
       assert {:command, "must be an absolute path"} in errors
       assert {:working_dir, "must be an absolute path"} in errors
+      assert {:env, "contains unsupported variable DATABASE_URL"} in errors
       assert {:env_allowlist, "contains unsupported variable DATABASE_URL"} in errors
     end
 
@@ -76,8 +79,15 @@ defmodule Foglet.DoorsTest do
         |> Map.put(:sandbox, %{mode: :restricted_user_process_group})
 
       assert {:error, errors} = Doors.validate_manifest(attrs)
-      assert {:env, "contains unsupported variable \"DATABASE_URL\""} in errors
+      assert {:env, "contains unsupported variable DATABASE_URL"} in errors
       assert {:sandbox_user, "is required for restricted_user_process_group"} in errors
+    end
+
+    test "rejects non-string manifest env values" do
+      attrs = %{@valid_manifest | env: %{"TERM" => :xterm}}
+
+      assert {:error, errors} = Doors.validate_manifest(attrs)
+      assert {:env, "contains non-string value for TERM"} in errors
     end
 
     test "denies launch for inactive actors even when the manifest is visible" do
