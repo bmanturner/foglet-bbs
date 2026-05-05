@@ -83,6 +83,32 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  defmodule FakeAuthorizedPosts do
+    alias Foglet.Accounts.User
+    alias Foglet.Posts.ReaderWindow
+
+    def list_reader_window_for(nil, "private-thread", _opts), do: {:error, :not_found}
+
+    def list_reader_window_for(%User{}, "private-thread", _opts) do
+      post = %{
+        id: "private-post",
+        body: "Private post body",
+        message_number: 1,
+        inserted_at: ~U[2026-04-28 18:00:00Z]
+      }
+
+      {:ok,
+       %ReaderWindow{
+         posts: [post],
+         first_message_number: post.message_number,
+         last_message_number: post.message_number,
+         has_previous?: false,
+         has_next?: false,
+         direction: :initial
+       }}
+    end
+  end
+
   defmodule ModalSubmitTarget do
     def update({:modal_submit, kind, payload}, state, _context) do
       received = [{kind, payload} | Map.get(state || %{}, :received, [])]
@@ -708,6 +734,72 @@ defmodule Foglet.TUI.AppTest do
 
       assert {:screen_task_result, :thread_list, :load_threads, {:ok, [%{id: "t1"}]}} =
                task.()
+    end
+
+    test "guest bare private thread_id route leaves PostReader empty with a safe error", %{
+      state: state
+    } do
+      state = %{
+        state
+        | current_screen: :board_list,
+          current_user: nil,
+          session_context: %{
+            guest: true,
+            user: nil,
+            user_id: nil,
+            domain: %{posts: FakeAuthorizedPosts}
+          },
+          screen_state: %{board_list: %{loaded: true}}
+      }
+
+      {routed_state, cmds} =
+        Effects.apply_effect(state, Effect.navigate(:post_reader, %{thread_id: "private-thread"}))
+
+      assert routed_state.current_screen == :post_reader
+      assert routed_state.route_params == %{thread_id: "private-thread"}
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      result = task.()
+
+      assert {:screen_task_result, :post_reader, :load_posts_window, {:ok, {:error, :not_found}}} =
+               result
+
+      {loaded_state, []} = App.update(result, routed_state)
+
+      assert %PostReader.State{status: {:error, :not_found}, posts: []} =
+               App.screen_state_for(loaded_state, :post_reader)
+
+      state_dump = inspect(loaded_state)
+      refute state_dump =~ "Private post body"
+      refute state_dump =~ "Private Thread"
+    end
+
+    test "authenticated member bare private thread_id route can load PostReader", %{
+      state: state
+    } do
+      user = %Foglet.Accounts.User{id: "u-member", handle: "member", role: :user}
+
+      state = %{
+        state
+        | current_user: user,
+          session_context: %{user: user, user_id: user.id, domain: %{posts: FakeAuthorizedPosts}}
+      }
+
+      {routed_state, cmds} =
+        Effects.apply_effect(state, Effect.navigate(:post_reader, %{thread_id: "private-thread"}))
+
+      assert routed_state.current_screen == :post_reader
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      result = task.()
+
+      assert {:screen_task_result, :post_reader, :load_posts_window,
+              {:ok, %Foglet.Posts.ReaderWindow{posts: [%{body: "Private post body"}]}}} = result
+
+      {loaded_state, []} = App.update(result, routed_state)
+
+      assert %PostReader.State{status: :loaded, posts: [%{body: "Private post body"}]} =
+               App.screen_state_for(loaded_state, :post_reader)
     end
 
     test "navigating to post_reader initializes local state and queues generic post loading", %{

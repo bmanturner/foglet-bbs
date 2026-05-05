@@ -118,7 +118,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     effect =
       Effect.task(:load_posts_window, :post_reader, fn ->
-        posts_mod.list_reader_window(thread_id, opts)
+        load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
     {new_state, [effect]}
@@ -126,6 +126,14 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   def update(:load, %State{} = state, %Context{}) do
     {%{state | status: {:error, :missing_thread}, last_op: nil, last_error: :missing_thread}, []}
+  end
+
+  def update(
+        {:task_result, :load_posts_window, {:ok, {:error, reason}}},
+        %State{} = state,
+        %Context{}
+      ) do
+    {reader_window_error_state(state, reason), []}
   end
 
   def update(
@@ -157,7 +165,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update({:task_result, :load_posts_window, {:error, reason}}, %State{} = state, %Context{}) do
-    {%{state | status: {:error, reason}, last_op: nil, last_error: reason}, []}
+    {reader_window_error_state(state, reason), []}
   end
 
   def update({:task_result, :load_posts, {:ok, posts}}, %State{} = state, %Context{} = context)
@@ -194,7 +202,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     effect =
       Effect.task(:load_posts_window, :post_reader, fn ->
-        posts_mod.list_reader_window(thread_id, opts)
+        load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
     {%{state | last_op: :load_posts_window, last_error: nil}, [effect]}
@@ -533,17 +541,23 @@ defmodule Foglet.TUI.Screens.PostReader do
     read_pointer_msg_no = read_pointer_message_number(ss_before, thread_id)
 
     opts = load_window_opts(read_pointer_msg_no, ss_before.load_intent)
-    window = posts_mod.list_reader_window(thread_id, opts)
-    posts = Map.get(window, :posts) || []
-
-    {terminal_w, _h} = state.terminal_size || @default_terminal_size
-    w = Render.reader_width(terminal_w)
 
     ss =
-      ss_before
-      |> apply_window_to_screen_state(window, posts, thread_id)
-      |> place_selection_after_load(window, posts, read_pointer_msg_no)
-      |> warm_selected_post_artifacts(state, posts, w)
+      case reader_window_result(posts_mod, Map.get(state, :current_user), thread_id, opts) do
+        {:ok, window} ->
+          posts = Map.get(window, :posts) || []
+
+          {terminal_w, _h} = state.terminal_size || @default_terminal_size
+          w = Render.reader_width(terminal_w)
+
+          ss_before
+          |> apply_window_to_screen_state(window, posts, thread_id)
+          |> place_selection_after_load(window, posts, read_pointer_msg_no)
+          |> warm_selected_post_artifacts(state, posts, w)
+
+        {:error, reason} ->
+          reader_window_error_state(ss_before, reason)
+      end
 
     # WR-03: mirror the `state.screen_state || %{}` guard from
     # apply_flush_result/4. `load_posts/2` is documented (READER-02) as a
@@ -1226,7 +1240,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
     effect =
       Effect.task(:load_posts_window, :post_reader, fn ->
-        posts_mod.list_reader_window(thread_id, opts)
+        load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
     {%{
@@ -1253,6 +1267,38 @@ defmodule Foglet.TUI.Screens.PostReader do
       before_message_number: state.window_first_message_number,
       limit: reader_window_limit(state)
     ]
+  end
+
+  defp load_reader_window(posts_mod, actor, thread_id, opts) do
+    case reader_window_result(posts_mod, actor, thread_id, opts) do
+      {:ok, window} -> window
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp reader_window_result(posts_mod, actor, thread_id, opts) do
+    if function_exported?(posts_mod, :list_reader_window_for, 3) do
+      posts_mod.list_reader_window_for(actor, thread_id, opts)
+    else
+      {:ok, posts_mod.list_reader_window(thread_id, opts)}
+    end
+  end
+
+  defp reader_window_error_state(%State{} = state, reason) do
+    %{
+      state
+      | posts: [],
+        status: {:error, reason},
+        selected_post_index: 0,
+        selected_action_post_index: 0,
+        window_first_message_number: nil,
+        window_last_message_number: nil,
+        window_has_previous?: false,
+        window_has_next?: false,
+        pending_window_direction: nil,
+        last_op: nil,
+        last_error: reason
+    }
   end
 
   defp scroll_local_post(%State{posts: posts} = state, _delta, _context)
