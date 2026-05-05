@@ -326,6 +326,8 @@ defmodule Foglet.TUI.App do
   end
 
   defp do_update({:key, key_event}, state) do
+    :ok = SessionAlias.record_user_action(state)
+
     cond do
       SizeGate.too_small?(state) ->
         # D-11: swallow keys entirely while gated. Screens behind the gate

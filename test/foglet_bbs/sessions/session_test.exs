@@ -96,17 +96,66 @@ defmodule Foglet.Sessions.SessionTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, 1_000
     end
 
-    test "heartbeat advances last_seen_at", %{user_id: user_id} do
+    test "heartbeat advances last_seen_at without resetting last_action_at", %{user_id: user_id} do
       {:ok, _pid} =
         start_supervised({Session, [user_id: user_id, handle: "alice", role: :user]})
 
-      initial = Session.get_state(user_id).last_seen_at
+      initial = Session.get_state(user_id)
+
       # Ensure a measurable time delta.
       :ok = Session.heartbeat(user_id)
       _ = :sys.get_state(Session.via_tuple(user_id))
 
-      later = Session.get_state(user_id).last_seen_at
-      assert DateTime.compare(later, initial) in [:eq, :gt]
+      later = Session.get_state(user_id)
+      assert DateTime.compare(later.last_seen_at, initial.last_seen_at) in [:eq, :gt]
+      assert later.last_action_at == initial.last_action_at
+    end
+
+    test "record_user_action advances last_action_at without touching last_seen_at", %{
+      user_id: user_id
+    } do
+      {:ok, _pid} =
+        start_supervised({Session, [user_id: user_id, handle: "alice", role: :user]})
+
+      old_action_at = ~U[2026-05-05 12:00:00Z]
+
+      :sys.replace_state(Session.via_tuple(user_id), fn state ->
+        %{state | last_action_at: old_action_at}
+      end)
+
+      before_action = Session.get_state(user_id)
+      :ok = Session.record_user_action(user_id)
+      _ = :sys.get_state(Session.via_tuple(user_id))
+
+      after_action = Session.get_state(user_id)
+      assert DateTime.compare(after_action.last_action_at, old_action_at) == :gt
+      assert after_action.last_seen_at == before_action.last_seen_at
+    end
+
+    test "idle threshold is three minutes and requires an authenticated user", %{user_id: user_id} do
+      now = ~U[2026-05-05 12:03:00Z]
+
+      refute Session.idle?(
+               %{user_id: user_id, last_action_at: ~U[2026-05-05 12:00:01Z]},
+               now
+             )
+
+      assert Session.idle?(
+               %{user_id: user_id, last_action_at: ~U[2026-05-05 12:00:00Z]},
+               now
+             )
+
+      refute Session.idle?(%{user_id: nil, last_action_at: ~U[2026-05-05 12:00:00Z]}, now)
+      refute Session.idle?(%{user_id: user_id, last_action_at: nil}, now)
+    end
+
+    test "guest record_user_action leaves last_action_at unset" do
+      {:ok, pid} = start_supervised({Session, [user_id: nil]})
+
+      :ok = Session.record_user_action(pid)
+      _ = :sys.get_state(pid)
+
+      assert Session.get_state(pid).last_action_at == nil
     end
 
     test "terminal_size cast updates state", %{user_id: user_id} do

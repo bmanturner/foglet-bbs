@@ -2,6 +2,7 @@ defmodule Foglet.TUI.AppTest do
   use ExUnit.Case, async: true
 
   alias Foglet.Config
+  alias Foglet.Sessions.Session
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.Effect
@@ -917,6 +918,61 @@ defmodule Foglet.TUI.AppTest do
       # a GenServer cast message. We verify the handler doesn't crash.
       state_with_session = %{state | session_pid: self()}
       assert {^state_with_session, []} = App.update(:heartbeat_tick, state_with_session)
+    end
+
+    test ":heartbeat_tick updates liveness without resetting action idleness", %{state: state} do
+      user = %Foglet.Accounts.User{id: Ecto.UUID.generate(), handle: "alice"}
+      session_pid = start_supervised!({Session, [user_id: nil]})
+      old_action_at = ~U[2026-05-05 12:00:00Z]
+
+      :sys.replace_state(session_pid, fn session ->
+        %{session | user_id: user.id, handle: user.handle, last_action_at: old_action_at}
+      end)
+
+      state = %{state | current_user: user, session_pid: session_pid}
+      assert {^state, []} = App.update(:heartbeat_tick, state)
+      _ = :sys.get_state(session_pid)
+
+      assert Session.get_state(session_pid).last_action_at == old_action_at
+
+      :sys.replace_state(session_pid, &%{&1 | user_id: nil})
+    end
+
+    test "central key path records authenticated user action before modal routing", %{
+      state: state
+    } do
+      user = %Foglet.Accounts.User{id: Ecto.UUID.generate(), handle: "alice"}
+      session_pid = start_supervised!({Session, [user_id: nil]})
+      old_action_at = ~U[2026-05-05 12:00:00Z]
+
+      :sys.replace_state(session_pid, fn session ->
+        %{session | user_id: user.id, handle: user.handle, last_action_at: old_action_at}
+      end)
+
+      state = %{
+        state
+        | current_user: user,
+          session_pid: session_pid,
+          modal: %Foglet.TUI.Modal{message: "notice", type: :info}
+      }
+
+      {new_state, []} = App.update({:key, %{key: :enter}}, state)
+      _ = :sys.get_state(session_pid)
+
+      assert new_state.modal == nil
+      assert DateTime.compare(Session.get_state(session_pid).last_action_at, old_action_at) == :gt
+
+      :sys.replace_state(session_pid, &%{&1 | user_id: nil})
+    end
+
+    test "guest key path does not create user action state", %{state: state} do
+      session_pid = start_supervised!({Session, [user_id: nil]})
+      state = %{state | current_user: nil, session_pid: session_pid}
+
+      {_new_state, _cmds} = App.update({:key, %{key: :char, char: "L"}}, state)
+      _ = :sys.get_state(session_pid)
+
+      assert Session.get_state(session_pid).last_action_at == nil
     end
 
     test ":heartbeat_tick is a no-op when session_pid is nil", %{state: state} do

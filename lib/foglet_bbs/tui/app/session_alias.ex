@@ -75,6 +75,16 @@ defmodule Foglet.TUI.App.SessionAlias do
     )
   end
 
+  # Record a real authenticated user action. This is intentionally separate
+  # from heartbeat/liveness so idle can age while the connection stays alive.
+  @spec record_user_action(App.t()) :: :ok
+  def record_user_action(%App{current_user: %{id: user_id}, session_pid: session_pid})
+      when is_binary(user_id) and is_pid(session_pid) do
+    Foglet.Sessions.Session.record_user_action(session_pid)
+  end
+
+  def record_user_action(%App{}), do: :ok
+
   # Heartbeat — keep last_seen_at alive in the Session GenServer.
   @spec heartbeat(App.t()) :: {App.t(), [Command.t()]}
   def heartbeat(%App{} = state) do
