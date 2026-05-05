@@ -143,17 +143,40 @@ def reap_child(child_pid: int):
     return {"status": None, "signal": None}
 
 
-def drain_pty_output(master_fd: int) -> bool:
-    """Forward any currently buffered PTY output before reporting child exit.
+FINAL_DRAIN_MAX_BYTES = 64 * 1024
+FINAL_DRAIN_MAX_FRAMES = 16
+FINAL_DRAIN_MAX_SECONDS = 0.05
+
+
+def drain_pty_output(
+    master_fd: int,
+    *,
+    max_bytes: int = FINAL_DRAIN_MAX_BYTES,
+    max_frames: int = FINAL_DRAIN_MAX_FRAMES,
+    max_seconds: float = FINAL_DRAIN_MAX_SECONDS,
+) -> bool:
+    """Forward bounded buffered PTY output before reporting child exit.
 
     A fast child can write its final bytes and exit before the adapter's next
     event-loop iteration. If the helper reports X(exit) first, Foglet's runner
-    stops and test/SSH owners may observe the exit before the final output. Keep
-    the protocol ordered by draining non-blocking PTY output before sending X.
+    stops and test/SSH owners may observe the exit before the final output.
+
+    This drain must stay strictly bounded: a forked grandchild can keep the PTY
+    slave open and write forever after the direct child exits. An unbounded
+    pre-termination drain would let that survivor delay process-group cleanup
+    and the X(exit) frame indefinitely.
     """
-    while True:
+    deadline = time.monotonic() + max_seconds
+    bytes_forwarded = 0
+    frames_forwarded = 0
+
+    while bytes_forwarded < max_bytes and frames_forwarded < max_frames:
+        if time.monotonic() >= deadline:
+            return True
+
         try:
-            data = os.read(master_fd, 8192)
+            read_size = min(8192, max_bytes - bytes_forwarded)
+            data = os.read(master_fd, read_size)
         except BlockingIOError:
             return True
         except OSError as exc:
@@ -166,6 +189,10 @@ def drain_pty_output(master_fd: int) -> bool:
             return False
 
         write_frame(b"O", data)
+        bytes_forwarded += len(data)
+        frames_forwarded += 1
+
+    return True
 
 
 def write_sandbox_error(error_fd: int | None, reason: str) -> None:
@@ -297,6 +324,7 @@ def main() -> int:
         if exit_payload is not None:
             drain_pty_output(master_fd)
             terminate_child(child_pid)
+            drain_pty_output(master_fd)
             write_json(b"X", exit_payload)
             return exit_payload["status"] if exit_payload["status"] is not None else 128 + int(exit_payload.get("signal") or 0)
 
