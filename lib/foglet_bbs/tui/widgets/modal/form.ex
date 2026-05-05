@@ -877,9 +877,14 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     label_row =
       text("#{focus_marker}#{spec.label}#{required_marker}:", fg: label_fg, style: label_style)
 
-    widget_row = render_widget(spec, field_state, focused?, theme)
+    widget_row = render_widget(spec, field_state, focused?, theme, width)
 
-    description_rows = render_description_rows(Map.get(spec, :description), theme, width)
+    description_rows =
+      if spec.type == :select_list do
+        []
+      else
+        render_description_rows(Map.get(spec, :description), theme, width)
+      end
 
     error_rows =
       case Map.get(errors, spec.name) do
@@ -902,16 +907,16 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     |> Enum.map(&text("  " <> &1, fg: theme.dim.fg))
   end
 
-  defp render_widget(%{type: type}, field_state, focused?, theme)
+  defp render_widget(%{type: type}, field_state, focused?, theme, _width)
        when type in [:text, :integer] do
     TextInput.render(field_state, focused: focused?, theme: theme)
   end
 
-  defp render_widget(%{type: :boolean, label: label}, field_state, _focused?, theme) do
+  defp render_widget(%{type: :boolean, label: label}, field_state, _focused?, theme, _width) do
     Checkbox.render(label, checked?: field_state, theme: theme)
   end
 
-  defp render_widget(%{type: :enum} = spec, field_state, _focused?, theme) do
+  defp render_widget(%{type: :enum} = spec, field_state, _focused?, theme, _width) do
     labels = Enum.map(normalized_choices(spec), fn {label, _value} -> label end)
 
     case Map.get(spec, :display, :radio) do
@@ -927,12 +932,13 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
          %{type: :select_list},
          %{select_list: select_list, value: value},
          focused?,
-         theme
+         theme,
+         width
        ) do
-    render_select_list(select_list, value, focused?, theme)
+    render_select_list(select_list, value, focused?, theme, width)
   end
 
-  defp render_widget(%{type: :textarea}, %{mli_state: mli}, focused?, theme) do
+  defp render_widget(%{type: :textarea}, %{mli_state: mli}, focused?, theme, _width) do
     Compose.render_input(mli, focused?, theme)
   end
 
@@ -992,17 +998,47 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   defp select_list_key(:home), do: :home
   defp select_list_key(:end), do: :end
 
-  defp render_select_list(select_list, value, focused?, %Theme{} = theme) do
+  defp render_select_list(select_list, value, focused?, %Theme{} = theme, width) do
     options = effective_select_options(select_list)
     prompt_fg = if focused?, do: theme.accent.fg, else: theme.dim.fg
     query = select_list.search_buffer || select_list.search_text || ""
+    total = length(options)
+    focused_index = clamp_select_index(select_list.focused_index || 0, total)
+    max_height = select_list.max_height || 8
+    {visible_options, window_start} = select_option_window(options, focused_index, max_height)
+    selected_label = selected_option_label(options, value) || "—"
+    picker_width = select_list_width(width)
+    inner_width = max(picker_width - 2, 1)
+    position = if total == 0, do: "0/0", else: "#{focused_index + 1}/#{total}"
+
+    top =
+      bounded_select_line(
+        "┌",
+        "┐",
+        "─",
+        " selected #{selected_label} · #{position} ",
+        inner_width
+      )
+
+    prompt = "Type to filter: #{query}"
 
     option_rows =
-      options
-      |> Enum.take(select_list.max_height || 8)
-      |> Enum.map(&render_select_option(&1, options, value, select_list.focused_index, theme))
+      visible_options
+      |> Enum.map(&render_select_option_text(&1, options, value, focused_index))
 
-    rows = [text("Type to filter: #{query}", fg: prompt_fg)] ++ option_rows
+    rows =
+      [
+        text(top, fg: theme.border.fg),
+        text(bounded_select_content(prompt, inner_width), fg: prompt_fg)
+      ] ++
+        scroll_above_rows(window_start, inner_width, theme) ++
+        Enum.map(option_rows, fn row ->
+          text(bounded_select_content(row, inner_width),
+            fg: select_option_row_fg(row, theme),
+            style: select_option_row_style(row)
+          )
+        end) ++
+        scroll_below_rows(window_start, length(visible_options), total, inner_width, theme)
 
     column [] do
       rows
@@ -1013,27 +1049,82 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   defp effective_select_options(%{options: opts}) when is_list(opts), do: opts
   defp effective_select_options(_), do: []
 
-  defp render_select_option({label, candidate}, options, value, focused_index, %Theme{} = theme) do
+  defp select_list_width(width) when is_integer(width), do: width |> min(72) |> max(28)
+  defp select_list_width(_width), do: 60
+
+  defp clamp_select_index(_idx, 0), do: 0
+  defp clamp_select_index(idx, total) when is_integer(idx), do: idx |> max(0) |> min(total - 1)
+  defp clamp_select_index(_idx, _total), do: 0
+
+  defp select_option_window(options, _focused_index, max_height) when max_height <= 0 do
+    {options, 0}
+  end
+
+  defp select_option_window(options, focused_index, max_height) do
+    total = length(options)
+
+    if total <= max_height do
+      {options, 0}
+    else
+      start =
+        if focused_index < max_height do
+          0
+        else
+          half = div(max_height - 1, 2)
+          focused_index |> Kernel.-(half) |> max(0) |> min(total - max_height)
+        end
+
+      {Enum.slice(options, start, max_height), start}
+    end
+  end
+
+  defp selected_option_label(options, value) do
+    case Enum.find(options, fn {_label, candidate} -> candidate == value end) do
+      {label, _value} -> label
+      nil -> nil
+    end
+  end
+
+  defp bounded_select_line(left, right, fill, label, inner_width) do
+    label = TextWidth.truncate(label, inner_width)
+    fill_width = max(inner_width - TextWidth.display_width(label), 0)
+    left <> label <> String.duplicate(fill, fill_width) <> right
+  end
+
+  defp bounded_select_content(content, inner_width) do
+    "│" <> TextWidth.pad_trailing(TextWidth.truncate(content, inner_width), inner_width) <> "│"
+  end
+
+  defp scroll_above_rows(0, _inner_width, _theme), do: []
+
+  defp scroll_above_rows(count, inner_width, %Theme{} = theme) do
+    [text(bounded_select_content("↑ #{count} more above", inner_width), fg: theme.dim.fg)]
+  end
+
+  defp scroll_below_rows(window_start, visible_count, total, inner_width, %Theme{} = theme) do
+    remaining = total - window_start - visible_count
+    label = if remaining > 0, do: " ↓ #{remaining} more below ", else: ""
+
+    [text(bounded_select_line("└", "┘", "─", label, inner_width), fg: theme.border.fg)]
+  end
+
+  defp render_select_option_text({label, candidate}, options, value, focused_index) do
     selected? = candidate == value
     cursor? = option_index(options, candidate) == focused_index
-
-    text("#{select_option_marker(selected?, cursor?)} #{label}",
-      fg: select_option_fg(selected?, cursor?, theme),
-      style: select_option_style(selected?, cursor?)
-    )
+    "#{select_option_marker(selected?, cursor?)} #{label}"
   end
+
+  defp select_option_row_fg(<<"✓", _rest::binary>>, %Theme{} = theme), do: theme.selected.fg
+  defp select_option_row_fg(<<"›", _rest::binary>>, %Theme{} = theme), do: theme.selected.fg
+  defp select_option_row_fg(_row, %Theme{} = theme), do: theme.primary.fg
+
+  defp select_option_row_style(<<"✓", _rest::binary>>), do: [:bold]
+  defp select_option_row_style(<<"›", _rest::binary>>), do: [:bold]
+  defp select_option_row_style(_row), do: []
 
   defp select_option_marker(true, _cursor?), do: "✓"
   defp select_option_marker(false, true), do: "›"
   defp select_option_marker(false, false), do: " "
-
-  defp select_option_fg(true, _cursor?, %Theme{} = theme), do: theme.selected.fg
-  defp select_option_fg(false, true, %Theme{} = theme), do: theme.selected.fg
-  defp select_option_fg(false, false, %Theme{} = theme), do: theme.primary.fg
-
-  defp select_option_style(true, _cursor?), do: [:bold]
-  defp select_option_style(false, true), do: [:bold]
-  defp select_option_style(false, false), do: []
 
   defp option_index(options, value) do
     Enum.find_index(options, fn {_label, candidate} -> candidate == value end)
