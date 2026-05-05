@@ -206,17 +206,10 @@ defmodule Foglet.TUI.Screens.Moderation do
     ScreenFrame.render(state, moderation_chrome(), content, key_list(ss))
   end
 
-  # Phase 29 D-26 (SYSOP-07): the key bar is rendered at request time so the
-  # `1-N Jump` hint reflects the actual tab count (5 without INVITES, 6 with).
-  # The hardcoded literal pair (key=1-6, label=Jump) no longer appears in
-  # this module — verified by grep test in layout_smoke_test.exs.
   defp key_list(ss) do
     tabs_group = %{
       label: "Tabs",
-      commands: [
-        %{key: "←/→", label: "Tab", priority: 10},
-        %{key: jump_hint(length(tab_labels_from_tabs(ss.tabs))), label: "Jump", priority: 10}
-      ]
+      commands: [%{key: "←/→", label: "Tabs", priority: 10}]
     }
 
     system_group = %{
@@ -261,15 +254,6 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp middle_groups(_label, _ss), do: []
-
-  defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
-  # IN-01 (iteration 6): the iteration-3 IN-03 defense in
-  # `tab_labels_from_tabs/1` returns `[]` when `ss.tabs` is malformed.
-  # `length([]) = 0`, which previously crashed `jump_hint(0)` with
-  # `FunctionClauseError` -- defeating the upstream defense. Fall back
-  # to "1" so a corrupted tab struct degrades gracefully instead of
-  # crashing the moderation screen render.
-  defp jump_hint(_), do: "1"
 
   defp moderation_chrome do
     %{

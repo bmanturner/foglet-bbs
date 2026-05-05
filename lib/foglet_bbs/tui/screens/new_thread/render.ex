@@ -55,7 +55,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
       %{
         label: "Navigate",
         commands: [
-          %{key: "j/k", label: "Select", priority: 10},
+          %{key: "↑/↓", label: "Select", priority: 10},
           %{key: "Enter", label: "Choose", priority: 10}
         ]
       },

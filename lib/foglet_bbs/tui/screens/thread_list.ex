@@ -194,7 +194,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
       %{
         label: "Navigate",
         commands: [
-          %{key: "j/k", label: "Select", priority: 10},
+          %{key: "↑/↓", label: "Select", priority: 10},
           %{key: "Enter", label: "Open", priority: 10}
         ]
       },

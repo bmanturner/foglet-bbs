@@ -2684,257 +2684,142 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   end
 
   # ---------------------------------------------------------------------------
-  # Phase 29 1-N Jump consistency (D-26, D-27, SYSOP-07)
+  # FOG-708 command bar cleanup
   # ---------------------------------------------------------------------------
 
-  describe "Phase 29 1-N Jump consistency (D-26, D-27, SYSOP-07)" do
-    @phase_29_dimensions [{64, 22}, {80, 24}]
+  describe "FOG-708 command bar cleanup" do
+    test "login command bar uses menu actions without group labels or legacy Jump hint" do
+      ascii =
+        %App{current_screen: :login, session_context: %{registration_mode: "open"}}
+        |> render_login()
+        |> AsciiRenderer.render({100, 30})
 
-    defp phase_29_collect_text(tree), do: do_collect_text(tree, []) |> Enum.reverse()
-
-    defp do_collect_text(nil, acc), do: acc
-
-    defp do_collect_text(list, acc) when is_list(list),
-      do: Enum.reduce(list, acc, &do_collect_text/2)
-
-    defp do_collect_text(%{children: children} = node, acc) do
-      acc = collect_node_content(node, acc)
-      do_collect_text(children, acc)
+      assert ascii =~ "L Login"
+      assert ascii =~ "R Register"
+      refute ascii =~ "Actions"
+      refute ascii =~ "System"
+      refute ascii =~ "Jump"
     end
 
-    defp do_collect_text(%{content: content}, acc) when is_binary(content), do: [content | acc]
-    defp do_collect_text(%{text: text}, acc) when is_binary(text), do: [text | acc]
-    defp do_collect_text(_other, acc), do: acc
+    test "register command bar uses form actions without group labels or legacy Jump hint" do
+      ascii =
+        %App{current_screen: :register, session_context: %{registration_mode: "open"}}
+        |> render_app_screen(Foglet.TUI.Screens.Register, :register)
+        |> AsciiRenderer.render({100, 30})
 
-    defp collect_node_content(%{content: content}, acc) when is_binary(content),
-      do: [content | acc]
+      assert ascii =~ "Tab Switch field"
+      assert ascii =~ "Enter Next/Submit"
+      refute ascii =~ "Actions"
+      refute ascii =~ "System"
+      refute ascii =~ "Jump"
+    end
 
-    defp collect_node_content(%{text: text}, acc) when is_binary(text), do: [text | acc]
-    defp collect_node_content(_node, acc), do: acc
+    test "account command bar uses generic help text without legacy Jump hint" do
+      user = %{id: "u1", handle: "alice", role: :user, status: :active}
 
-    test "Account command bar contains '1-3 Jump' at 64x22 and 80x24 (INVITES hidden)" do
-      for {width, height} <- @phase_29_dimensions do
-        # INVITES hidden: role :user with policy :sysop_only — InvitesSurface.visible?
-        # returns false. Account tabs become 3: PROFILE, PREFS, SSH KEYS.
-        user = %Foglet.Accounts.User{
-          id: "00000000-0000-0000-0000-000000000001",
-          handle: "alice",
-          role: :user,
-          status: :active,
-          location: "Mist Harbor",
-          tagline: "low clouds",
-          real_name: "Alice Example",
-          timezone: "Etc/UTC",
-          preferences: %{"time_format" => "12h"},
-          theme: "gray"
-        }
-
-        state = %App{
+      ascii =
+        %App{
           current_screen: :account,
           current_user: user,
-          session_context: %{
-            theme: Foglet.TUI.Theme.resolve(:gray),
-            theme_id: "gray",
-            registration_mode: "open",
-            invite_code_generators: "sysop_only"
-          },
-          terminal_size: {width, height},
-          screen_state: %{}
+          screen_state: %{account: Account.State.new(current_user: user)},
+          terminal_size: {100, 30}
         }
+        |> render_app_screen(Account, :account)
+        |> AsciiRenderer.render({100, 30})
 
-        flat = state |> render_app_screen(Account, :account) |> phase_29_collect_text()
-        joined = Enum.join(flat, " ")
-
-        assert String.contains?(joined, "Jump"),
-               "Account at #{width}x#{height}: expected 'Jump' substring; flat=#{inspect(flat)}"
-
-        assert String.contains?(joined, "1-3"),
-               "Account at #{width}x#{height} (INVITES hidden): expected '1-3' substring; flat=#{inspect(flat)}"
-      end
+      assert ascii =~ "Enter/Ctrl+S Save"
+      refute ascii =~ "Ctrl+S Save  Enter Save"
+      refute ascii =~ "Actions"
+      refute ascii =~ "System"
+      refute ascii =~ "Jump"
     end
 
-    test "Account command bar contains '1-4 Jump' at 64x22 and 80x24 (INVITES visible)" do
-      for {width, height} <- @phase_29_dimensions do
-        # INVITES visible: role :sysop. Account tabs become 4 with INVITES.
-        user = %Foglet.Accounts.User{
-          id: "00000000-0000-0000-0000-000000000002",
-          handle: "alice",
-          role: :sysop,
-          status: :active,
-          location: "Mist Harbor",
-          tagline: "low clouds",
-          real_name: "Alice Example",
-          timezone: "Etc/UTC",
-          preferences: %{"time_format" => "12h"},
-          theme: "gray"
-        }
+    test "account preferences command bar keeps field navigation discoverable" do
+      user = %{
+        id: "u1",
+        handle: "alice",
+        role: :user,
+        status: :active,
+        timezone: "Etc/UTC",
+        preferences: %{"time_format" => "12h"}
+      }
 
-        state = %App{
+      ascii =
+        %App{
           current_screen: :account,
           current_user: user,
-          session_context: %{
-            theme: Foglet.TUI.Theme.resolve(:gray),
-            theme_id: "gray",
-            registration_mode: "invite_only",
-            invite_code_generators: "sysop_only"
-          },
-          terminal_size: {width, height},
-          screen_state: %{}
+          screen_state: %{account: Account.State.new(current_user: user, active: 1)},
+          terminal_size: {100, 30}
         }
+        |> render_app_screen(Account, :account)
+        |> AsciiRenderer.render({100, 30})
 
-        flat = state |> render_app_screen(Account, :account) |> phase_29_collect_text()
-        joined = Enum.join(flat, " ")
-
-        assert String.contains?(joined, "1-4"),
-               "Account at #{width}x#{height} (INVITES visible): expected '1-4' substring; flat=#{inspect(flat)}"
-      end
+      assert ascii =~ "Tab Next"
+      assert ascii =~ "Shift+Tab Previous"
+      assert ascii =~ "Enter/Ctrl+S Save"
+      refute ascii =~ "Ctrl+S Save  Enter Save"
+      refute ascii =~ "Actions"
+      refute ascii =~ "System"
+      refute ascii =~ "Jump"
     end
 
-    test "Moderation command bar contains '1-5 Jump' at 64x22 and 80x24, INVITES hidden" do
-      for {width, height} <- @phase_29_dimensions do
-        # INVITES hidden: role :sysop on Moderation does NOT add INVITES (only
-        # role :mod with policy 'mods' adds it). Mod with sysop_only also hidden.
-        user = %Foglet.Accounts.User{id: "u1", handle: "mod", role: :mod, status: :active}
+    test "moderation command bar uses generic help text without legacy Jump hint" do
+      user = %{id: "u2", handle: "alice", role: :mod, status: :active}
 
-        state = %App{
+      ascii =
+        %App{
           current_screen: :moderation,
           current_user: user,
-          session_context: %{registration_mode: "open", invite_code_generators: "sysop_only"},
-          terminal_size: {width, height},
-          screen_state: %{moderation: Moderation.State.new()}
+          screen_state: %{moderation: Moderation.State.new()},
+          terminal_size: {100, 30}
         }
+        |> render_app_screen(Moderation, :moderation)
+        |> AsciiRenderer.render({100, 30})
 
-        flat = state |> render_app_screen(Moderation, :moderation) |> phase_29_collect_text()
-        joined = Enum.join(flat, " ")
-
-        assert String.contains?(joined, "Jump"),
-               "Moderation at #{width}x#{height}: expected 'Jump' substring; flat=#{inspect(flat)}"
-
-        assert String.contains?(joined, "1-5"),
-               "Moderation at #{width}x#{height} (INVITES hidden): expected '1-5' substring; flat=#{inspect(flat)}"
-
-        refute String.contains?(joined, "1-6"),
-               "Moderation at #{width}x#{height} (INVITES hidden): should NOT contain '1-6'; flat=#{inspect(flat)}"
-      end
+      assert ascii =~ "←/→ Tabs"
+      refute ascii =~ "Actions"
+      refute ascii =~ "System"
+      refute ascii =~ "Jump"
     end
 
-    test "Moderation command bar contains '1-6 Jump' at 64x22 and 80x24, INVITES visible" do
-      for {width, height} <- @phase_29_dimensions do
-        # INVITES visible: role :mod with policy 'mods'.
-        user = %Foglet.Accounts.User{id: "u1", handle: "mod", role: :mod, status: :active}
+    test "sysop BOARDS puts row-aware actions in the command bar instead of body footer copy" do
+      user = %{id: "u3", handle: "alice", role: :sysop, status: :active}
 
-        state = %App{
-          current_screen: :moderation,
-          current_user: user,
-          session_context: %{registration_mode: "invite_only", invite_code_generators: "mods"},
-          terminal_size: {width, height},
-          screen_state: %{moderation: Moderation.State.new(invites_visible?: true)}
-        }
+      boards_view = %Foglet.TUI.Screens.Sysop.BoardsView{
+        categories: [%{id: "cat-1", name: "General"}],
+        boards: [%{id: "board-1", category_id: "cat-1", slug: "general", name: "General"}],
+        rows: [
+          {:category, %{id: "cat-1", name: "General"}},
+          {:board, %{id: "board-1", category_id: "cat-1", slug: "general", name: "General"}}
+        ],
+        selection_index: 1
+      }
 
-        flat = state |> render_app_screen(Moderation, :moderation) |> phase_29_collect_text()
-        joined = Enum.join(flat, " ")
+      sysop_state = %{
+        Foglet.TUI.Screens.Sysop.State.new(active: 1)
+        | boards_view: {:loaded, boards_view}
+      }
 
-        assert String.contains?(joined, "1-6"),
-               "Moderation at #{width}x#{height} (INVITES visible): expected '1-6' substring; flat=#{inspect(flat)}"
-      end
-    end
-
-    test "Sysop command bar contains '1-5 Jump' at 64x22 and 80x24, INVITES hidden" do
-      for {width, height} <- @phase_29_dimensions do
-        # Sysop INVITES is gated by ShellVisibility — `sysop_only` policy makes
-        # INVITES hidden for non-sysops, but for sysop role it's always visible.
-        # Use role :sysop with default screen_state (no :invites_visible? flag).
-        user = %Foglet.Accounts.User{id: "u3", handle: "alice", role: :sysop, status: :active}
-
-        state = %App{
+      ascii =
+        %App{
           current_screen: :sysop,
           current_user: user,
-          session_context: %{registration_mode: "open", invite_code_generators: "sysop_only"},
-          terminal_size: {width, height},
-          screen_state: %{sysop: Sysop.State.new(current_user: user)}
+          screen_state: %{sysop: sysop_state},
+          terminal_size: {100, 30}
         }
+        |> render_app_screen(Sysop, :sysop)
+        |> AsciiRenderer.render({100, 30})
 
-        flat = state |> render_app_screen(Sysop, :sysop) |> phase_29_collect_text()
-        joined = Enum.join(flat, " ")
+      bottom_line = ascii |> String.split("\n", trim: true) |> List.last()
 
-        assert String.contains?(joined, "1-5") or String.contains?(joined, "1-6"),
-               "Sysop at #{width}x#{height}: expected '1-N' substring; flat=#{inspect(flat)}"
-      end
-    end
-
-    test "Sysop command bar contains '1-6 Jump' at 64x22 and 80x24, INVITES visible" do
-      for {width, height} <- @phase_29_dimensions do
-        # INVITES visible: explicitly seeded into screen state.
-        user = %Foglet.Accounts.User{id: "u3", handle: "alice", role: :sysop, status: :active}
-
-        state = %App{
-          current_screen: :sysop,
-          current_user: user,
-          session_context: %{
-            registration_mode: "invite_only",
-            invite_code_generators: "sysop_only"
-          },
-          terminal_size: {width, height},
-          screen_state: %{sysop: Sysop.State.new(current_user: user, invites_visible?: true)}
-        }
-
-        flat = state |> render_app_screen(Sysop, :sysop) |> phase_29_collect_text()
-        joined = Enum.join(flat, " ")
-
-        assert String.contains?(joined, "1-6"),
-               "Sysop at #{width}x#{height} (INVITES visible): expected '1-6' substring; flat=#{inspect(flat)}"
-      end
-    end
-
-    # ---------------------------------------------------------------------------
-    # Module-attribute removal grep guards (D-26)
-    # ---------------------------------------------------------------------------
-
-    test ~s|no hardcoded {"1-6", "Jump"} literal in moderation.ex| do
-      contents = File.read!("lib/foglet_bbs/tui/screens/moderation.ex")
-
-      refute String.contains?(contents, ~s|{"1-6", "Jump"}|),
-             "moderation.ex must not contain a hardcoded {\"1-6\", \"Jump\"} literal (D-26)"
-    end
-
-    test ~s|no hardcoded {"1-6", "Jump"} literal in account.ex| do
-      contents = File.read!("lib/foglet_bbs/tui/screens/account.ex")
-
-      refute String.contains?(contents, ~s|{"1-6", "Jump"}|),
-             "account.ex must not contain a hardcoded {\"1-6\", \"Jump\"} literal (D-26)"
-    end
-
-    test "Sysop jump_hint computes 1-N from tab count (no INVITES special-case)" do
-      contents = File.read!("lib/foglet_bbs/tui/screens/sysop/render.ex")
-
-      refute String.contains?(contents, ~s|if "INVITES" in State.tab_labels|),
-             "sysop/render.ex jump_hint must not gate on INVITES visibility (D-26)"
-
-      expected = ~S|"1-#{length(State.tab_labels(ss))}"|
-
-      assert String.contains?(contents, expected),
-             "sysop/render.ex must compute jump_hint as 1-N from State.tab_labels(ss) (D-26)"
-    end
-
-    test "Account.@key_bar module attribute removed (D-26)" do
-      top_level_contents = File.read!("lib/foglet_bbs/tui/screens/account.ex")
-      render_contents = File.read!("lib/foglet_bbs/tui/screens/account/render.ex")
-
-      refute String.contains?(top_level_contents, "@key_bar ["),
-             "account.ex must not define a @key_bar module attribute (D-26)"
-
-      assert String.contains?(render_contents, "defp key_bar(ss)"),
-             "account/render.ex must define a render-time key_bar/1 function (D-26)"
-    end
-
-    test "Moderation.@key_list module attribute removed (D-26)" do
-      contents = File.read!("lib/foglet_bbs/tui/screens/moderation.ex")
-
-      refute String.contains?(contents, "@key_list ["),
-             "moderation.ex must not define a @key_list module attribute (D-26)"
-
-      assert String.contains?(contents, "defp key_list(ss)"),
-             "moderation.ex must define a render-time key_list/1 function (D-26)"
+      assert bottom_line =~ "↑/↓ Move"
+      assert bottom_line =~ "n New board"
+      assert bottom_line =~ "e Edit board"
+      assert bottom_line =~ "D Archive board"
+      refute ascii =~ "[j/k] Move"
+      refute ascii =~ "Actions"
+      refute ascii =~ "Navigate"
+      refute ascii =~ "Jump"
     end
   end
 

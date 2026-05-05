@@ -328,7 +328,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     navigate = %{
       label: "Navigate",
       commands: [
-        %{key: "j/k", label: "Select", priority: 10},
+        %{key: "↑/↓", label: "Select", priority: 10},
         %{key: "←/→", label: "Collapse/Expand", priority: 20},
         %{key: "Enter", label: "Open", priority: 5}
       ]

@@ -23,7 +23,6 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
   @group_gap "   "
   @command_gap "  "
   @key_gap " "
-  @hidden_group_labels MapSet.new(["Actions", "System"])
 
   @type command :: %{
           required(:key) => String.t(),
@@ -247,15 +246,7 @@ defmodule Foglet.TUI.Widgets.Chrome.CommandBar do
     end
   end
 
-  defp display_group_label(label) do
-    label = to_string(label)
-
-    if MapSet.member?(@hidden_group_labels, label) do
-      ""
-    else
-      label
-    end
-  end
+  defp display_group_label(_label), do: ""
 
   defp render_commands(theme, commands, mappings) do
     commands
