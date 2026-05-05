@@ -326,6 +326,41 @@ defmodule Foglet.PostsTest do
       assert row_count == 2
       assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == row_count
     end
+
+    test "actor-aware toggle rejects guests without mutating public posts" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "Good"})
+
+      assert {:error, :forbidden} = Foglet.Posts.toggle_readable_upvote(nil, post.id)
+      assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == 0
+      refute Repo.get_by(Foglet.Posts.Upvote, post_id: post.id)
+    end
+
+    test "actor-aware toggle applies the existing own-post silent no-op" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "Mine"})
+
+      assert {:ok, refreshed} = Foglet.Posts.toggle_readable_upvote(author, post.id)
+      assert refreshed.id == post.id
+      assert refreshed.upvote_count == 0
+      refute Repo.get_by(Foglet.Posts.Upvote, user_id: author.id, post_id: post.id)
+    end
+
+    test "actor-aware toggle enforces readable-board visibility" do
+      board = setup_board_with_server(%{readable_by: :members})
+      author = active_user_fixture()
+      voter = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+      {:ok, post} = Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "Private"})
+
+      assert {:ok, %{upvote_count: 1}} = Foglet.Posts.toggle_readable_upvote(voter, post.id)
+      assert {:error, :forbidden} = Foglet.Posts.toggle_readable_upvote(nil, post.id)
+      assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == 1
+    end
   end
 
   describe "guest readability gates" do
