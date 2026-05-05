@@ -68,6 +68,7 @@ defmodule Foglet.SSH.CLIHandler do
     :lifecycle_pid,
     :dispatcher_pid,
     :door_runner_pid,
+    :active_door_manifest,
     :offered_ssh_public_key,
     :width,
     :height,
@@ -112,17 +113,19 @@ defmodule Foglet.SSH.CLIHandler do
 
   @impl true
   def handle_msg({:door_started, pid, door_id}, %{door_runner_pid: pid} = state) do
+    track_door_presence(state, pid, door_id)
     _ = safe_ssh_send(state.connection_ref, state.channel_id, "\r\n[Door #{door_id} started]\r\n")
     {:ok, state}
   end
 
   @impl true
   def handle_msg({:door_exited, pid, door_id, reason, status}, %{door_runner_pid: pid} = state) do
+    Foglet.Sessions.DoorPresence.untrack_runner(pid)
     message = "\r\n[Door #{door_id} exited: #{inspect(reason)}#{exit_status_suffix(status)}]\r\n"
     _ = safe_ssh_send(state.connection_ref, state.channel_id, message)
     dispatch_current_window(state)
     dispatch_raw(state.dispatcher_pid, {:door_exited, door_id, reason, status})
-    {:ok, %{state | door_runner_pid: nil}}
+    {:ok, %{state | door_runner_pid: nil, active_door_manifest: nil}}
   end
 
   @impl true
@@ -733,6 +736,7 @@ defmodule Foglet.SSH.CLIHandler do
   defp cleanup(%__MODULE__{cleanup_done?: true} = state, _opts), do: state
 
   defp cleanup(%__MODULE__{} = state, opts) do
+    Foglet.Sessions.DoorPresence.untrack_runner(state.door_runner_pid)
     stop_door_runner(state.door_runner_pid)
     send_alt_screen_leave(state)
     stop_lifecycle(state.lifecycle_pid)
@@ -747,7 +751,13 @@ defmodule Foglet.SSH.CLIHandler do
         _ = decrement_connection_count()
       end
 
-    %__MODULE__{state | cleanup_done?: true, counter_counted?: false, door_runner_pid: nil}
+    %__MODULE__{
+      state
+      | cleanup_done?: true,
+        counter_counted?: false,
+        door_runner_pid: nil,
+        active_door_manifest: nil
+    }
   end
 
   defp launch_door_runner(%__MODULE__{door_runner_pid: pid} = state, _manifest, _session, _size)
@@ -770,7 +780,7 @@ defmodule Foglet.SSH.CLIHandler do
            owner: self()
          ) do
       {:ok, pid} ->
-        %{state | door_runner_pid: pid}
+        %{state | door_runner_pid: pid, active_door_manifest: manifest}
 
       {:error, reason} ->
         _ =
@@ -787,6 +797,18 @@ defmodule Foglet.SSH.CLIHandler do
 
   defp active_door?(%__MODULE__{door_runner_pid: pid}) when is_pid(pid), do: Process.alive?(pid)
   defp active_door?(_state), do: false
+
+  defp track_door_presence(%__MODULE__{} = state, runner_pid, door_id) do
+    with user_id when is_binary(user_id) <- current_user_id(state),
+         door <- state.active_door_manifest || %{id: door_id, display_name: door_id} do
+      Foglet.Sessions.DoorPresence.track(user_id, door, runner_pid)
+    else
+      _ -> :ok
+    end
+  end
+
+  defp current_user_id(%{pubkey_user: %{id: user_id}}) when is_binary(user_id), do: user_id
+  defp current_user_id(_state), do: nil
 
   defp exit_status_suffix(nil), do: ""
   defp exit_status_suffix(status), do: ", status #{status}"

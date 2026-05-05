@@ -2,12 +2,11 @@ defmodule Foglet.Sessions.PresenceSummary do
   @moduledoc """
   Reusable live-presence summary boundary for public profile cards.
 
-  The boundary composes the one-session-per-user registry with board-screen
-  presence. It deliberately does not guess at route or door-game activity that
-  is not centrally tracked yet; when a live session exists but no richer source
-  is known, it returns the honest `:online` fallback.
+  The boundary composes the one-session-per-user registry with door and
+  board-screen presence. When a live session exists but no richer source is
+  known, it returns the honest `:online` fallback.
 
-  Deterministic precedence is: chat board > browsing board > online > offline.
+  Deterministic precedence is: door > chat board > browsing board > online > offline.
   If multiple boards match the same precedence, board names/ids are sorted so
   repeated renders are stable.
   """
@@ -18,6 +17,7 @@ defmodule Foglet.Sessions.PresenceSummary do
   @type activity ::
           :offline
           | :online
+          | {:playing_door, map()}
           | {:browsing_board, map()}
           | {:chatting_in_board, map()}
 
@@ -36,7 +36,9 @@ defmodule Foglet.Sessions.PresenceSummary do
     case safe_lookup_session(sessions, user_id) do
       {:ok, pid} ->
         session_state = safe_session_state(session_mod, pid)
-        activity = board_activity_for(user_id, opts) || :online
+
+        activity =
+          door_activity_for(user_id, opts) || board_activity_for(user_id, opts) || :online
 
         %__MODULE__{activity: activity, label: label(activity), online?: true}
         |> maybe_preserve_session_online(session_state)
@@ -48,6 +50,7 @@ defmodule Foglet.Sessions.PresenceSummary do
 
   def label(:offline), do: "Offline"
   def label(:online), do: "Online"
+  def label({:playing_door, door}), do: "Playing #{door_name(door)}"
   def label({:chatting_in_board, board}), do: "Chatting in #{board_name(board)}"
   def label({:browsing_board, board}), do: "Browsing #{board_name(board)}"
 
@@ -68,6 +71,19 @@ defmodule Foglet.Sessions.PresenceSummary do
   end
 
   defp maybe_preserve_session_online(%__MODULE__{} = summary, _session_state), do: summary
+
+  defp door_activity_for(user_id, opts) do
+    door_presence = Keyword.get(opts, :door_presence, Foglet.Sessions.DoorPresence)
+
+    case door_presence.get(user_id) do
+      {:ok, door} -> {:playing_door, door}
+      :error -> nil
+    end
+  rescue
+    _ -> nil
+  catch
+    :exit, _ -> nil
+  end
 
   defp board_activity_for(user_id, opts) do
     boards_mod = Keyword.get(opts, :boards, Foglet.Boards)
@@ -118,4 +134,9 @@ defmodule Foglet.Sessions.PresenceSummary do
   end
 
   defp board_id(board), do: Map.get(board, :id) || Map.get(board, "id") || ""
+
+  defp door_name(door) do
+    Map.get(door, :name) || Map.get(door, "name") || Map.get(door, :display_name) ||
+      Map.get(door, "display_name") || Map.get(door, :id) || Map.get(door, "id") || "door"
+  end
 end

@@ -47,6 +47,7 @@ defmodule FogletBbs.Application do
       Foglet.Sessions.Supervisor,
       Foglet.Doors.Supervisor,
       Foglet.Sessions.BoardScreen,
+      Foglet.Sessions.DoorPresence,
       {Registry, keys: :unique, name: Foglet.BoardChat.Ephemeral.Registry},
       Foglet.BoardChat.Ephemeral.Supervisor,
       # Start to serve requests, typically the last entry
