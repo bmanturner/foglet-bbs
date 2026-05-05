@@ -822,8 +822,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p51"
 
       assert loaded.pending_read_positions["t-1000"] == %{
-               last_read_post_id: "p53",
-               last_read_message_number: 53
+               last_read_post_id: "p54",
+               last_read_message_number: 54
              }
     end
 
@@ -1060,7 +1060,10 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       ss = State.new(selected_post_index: 2)
       s = p2_state(%{posts: posts, screen_state: %{post_reader: ss}})
 
-      assert render_screen(s) |> flatten_text() =~ "Posts 3/12"
+      text = render_screen(s) |> flatten_text()
+
+      assert text =~ "Post 3 of 12"
+      refute text =~ "Posts 3/12"
     end
 
     test "renders guttered selected body text" do
@@ -1071,13 +1074,14 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert flat =~ "Selected body text"
     end
 
-    test "renders one compact scroll keybar hint while preserving reader keys" do
+    test "renders one compact arrow scroll keybar hint while preserving reader keys" do
       s = p2_state(%{posts: [p2_post(body: "Selected body text")]})
       tree = render_screen(s)
       flat = flatten_text(tree)
 
-      assert flat =~ "J/K"
+      assert flat =~ "↑/↓"
       assert flat =~ "Scroll"
+      refute flat =~ "J/K"
       refute flat =~ "Scroll ↓"
       refute flat =~ "Scroll ↑"
     end
@@ -1722,7 +1726,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert {:update, s1, []} = handle_key_screen(%{key: :char, char: "n"}, s)
       ss = s1.screen_state[:post_reader]
 
-      assert ss.selected_post_index == 3
+      assert ss.selected_post_index == 4
       assert ss.viewport.scroll_top == 0
 
       assert ss.pending_read_positions["t1"] == %{
@@ -1915,6 +1919,20 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert s4.screen_state[:post_reader].partial_scroll_tops["p2"] == 0
     end
 
+    test "arrows scroll the selected partial while still allowing action-target navigation at bounds" do
+      s = packed_partial_state()
+
+      {:update, s1, _} = handle_key_screen(%{key: :down}, s)
+      {:update, s2, _} = handle_key_screen(%{key: :down}, s1)
+      assert s2.screen_state[:post_reader].partial_scroll_tops["p2"] == 1
+
+      {:update, s3, _} = handle_key_screen(%{key: :up}, s2)
+      assert s3.screen_state[:post_reader].partial_scroll_tops["p2"] == 0
+
+      {:update, s4, _} = handle_key_screen(%{key: :up}, s3)
+      assert s4.screen_state[:post_reader].selected_action_post_index == 0
+    end
+
     test "partial long post is not marked read until the partial viewport reaches its bottom" do
       s = packed_partial_state()
       ss = s.screen_state[:post_reader]
@@ -1959,17 +1977,20 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert ss4.viewport.scroll_top == pre_promote
     end
 
-    test "keybar advertises J/K Scroll only when the partial is the action target" do
+    test "keybar advertises arrow Scroll only when the partial is the action target" do
       s = packed_partial_state()
       tree = render_screen(s)
       bar_unselected = command_bar_text(tree)
+      refute bar_unselected =~ "Scroll"
       refute bar_unselected =~ "J/K"
-      assert bar_unselected =~ "Up/Down"
+      assert bar_unselected =~ "↑/↓"
 
       {:update, s1, _} = handle_key_screen(%{key: :down}, s)
       bar_selected = s1 |> render_screen() |> command_bar_text()
-      assert bar_selected =~ "J/K"
+      refute bar_selected =~ "J/K"
+      assert bar_selected =~ "↑/↓"
       assert bar_selected =~ "Scroll"
+      refute bar_selected =~ "J/K"
     end
 
     test "long top/anchor post still uses single-post viewport and is not treated as packed_partial" do
@@ -2017,6 +2038,61 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert PostReader.selected_action_post(ss2).id == "p1"
     end
 
+    test "down at the final visible post of a two-post thread does not strand the reader" do
+      posts = [
+        p2_post(id: "p1", body: "short body 1", message_number: 1),
+        p2_post(id: "p2", body: "short body 2", message_number: 2)
+      ]
+
+      s = p2_state(%{posts: posts, terminal_size: {80, 24}})
+
+      {:update, s1, []} = handle_key_screen(%{key: :down}, s)
+      ss1 = s1.screen_state[:post_reader]
+      assert ss1.selected_post_index == 0
+      assert ss1.selected_action_post_index == 1
+      assert PostReader.visible_screenful(ss1, reader_context_from_state(s1)).indexes == [0, 1]
+
+      {:update, s2, []} = handle_key_screen(%{key: :down}, s1)
+      ss2 = s2.screen_state[:post_reader]
+      assert ss2.selected_post_index == 0
+      assert ss2.selected_action_post_index == 1
+      assert PostReader.visible_screenful(ss2, reader_context_from_state(s2)).indexes == [0, 1]
+
+      {:update, s3, []} = handle_key_screen(%{key: :up}, s2)
+      ss3 = s3.screen_state[:post_reader]
+      assert ss3.selected_post_index == 0
+      assert ss3.selected_action_post_index == 0
+      assert PostReader.visible_screenful(ss3, reader_context_from_state(s3)).indexes == [0, 1]
+    end
+
+    test "up from a stranded one-post anchor returns to the packed screenful tail" do
+      posts = [
+        p2_post(id: "p1", body: "short body 1", message_number: 1),
+        p2_post(id: "p2", body: "short body 2", message_number: 2)
+      ]
+
+      s =
+        p2_state(%{
+          posts: posts,
+          terminal_size: {80, 24},
+          screen_state: %{
+            post_reader: State.new(selected_post_index: 1, selected_action_post_index: 1)
+          }
+        })
+
+      assert PostReader.visible_screenful(
+               s.screen_state[:post_reader],
+               reader_context_from_state(s)
+             ).indexes == [1]
+
+      {:update, s1, []} = handle_key_screen(%{key: :up}, s)
+      ss1 = s1.screen_state[:post_reader]
+
+      assert ss1.selected_post_index == 0
+      assert ss1.selected_action_post_index == 1
+      assert PostReader.visible_screenful(ss1, reader_context_from_state(s1)).indexes == [0, 1]
+    end
+
     test "j/k do not change packed visible-post selection" do
       posts =
         Enum.map(1..4, fn index ->
@@ -2058,9 +2134,9 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       {:update, s2, []} = handle_key_screen(%{key: :char, char: "n"}, s1)
       ss = s2.screen_state[:post_reader]
 
-      assert ss.selected_post_index == 3
-      assert ss.selected_action_post_index == 3
-      assert PostReader.selected_action_post(ss).id == "p4"
+      assert ss.selected_post_index == 4
+      assert ss.selected_action_post_index == 4
+      assert PostReader.selected_action_post(ss).id == "p5"
     end
 
     test "down at last visible post loads the next window and replies to its first visible post" do
@@ -2160,7 +2236,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert PostReader.selected_action_post(ss).id == "p1"
     end
 
-    test "render marks the selected visible post as the reply target at 80x24 and cramped size" do
+    test "render marks the selected visible post on the post header at 80x24 and cramped size" do
       posts =
         Enum.map(1..3, fn index ->
           p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
@@ -2170,7 +2246,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       {:update, s1, []} = handle_key_screen(%{key: :down}, s)
 
       rows80 = s1 |> render_screen() |> rendered_rows({80, 24})
-      selected_row80 = row_index_containing!(rows80, "▶ Selected")
+      selected_row80 = row_index_containing!(rows80, "▶ Post 2 of 3")
       body2_row80 = row_index_containing!(rows80, "short body 2")
       body1_row80 = row_index_containing!(rows80, "short body 1")
 
@@ -2179,10 +2255,25 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       cramped = %{s1 | terminal_size: {64, 22}}
       rows64 = cramped |> render_screen() |> rendered_rows({64, 22})
-      selected_row64 = row_index_containing!(rows64, "▶ Selected")
+      selected_row64 = row_index_containing!(rows64, "▶ Post 2 of 3")
       body2_row64 = row_index_containing!(rows64, "short body 2")
 
       assert selected_row64 < body2_row64
+    end
+
+    test "post reader renders only one post-position indicator per visible post" do
+      posts =
+        Enum.map(1..2, fn index ->
+          p2_post(id: "p#{index}", body: "short body #{index}", message_number: index)
+        end)
+
+      flat =
+        p2_state(%{posts: posts, terminal_size: {80, 24}}) |> render_screen() |> flatten_text()
+
+      assert flat =~ "Post 1 of 2"
+      assert flat =~ "Post 2 of 2"
+      refute flat =~ "Posts 1/2"
+      refute flat =~ "Posts 2/2"
     end
 
     test "single visible post does not render a multi-post action marker" do
@@ -2190,6 +2281,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       flat = s |> render_screen() |> flatten_text()
 
+      refute flat =~ "▶ Post"
       refute flat =~ "Selected — R replies here"
     end
 
@@ -2202,14 +2294,14 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       s80 = p2_state(%{posts: posts, terminal_size: {80, 24}})
       flat80 = s80 |> render_screen() |> flatten_text()
 
-      assert flat80 =~ "Up/Down"
+      assert flat80 =~ "↑/↓"
       assert flat80 =~ "Select"
       refute flat80 =~ "J/KSelect/Scroll"
 
       s64 = %{s80 | terminal_size: {64, 22}}
       flat64 = s64 |> render_screen() |> flatten_text()
 
-      assert flat64 =~ "Up/Down"
+      assert flat64 =~ "↑/↓"
       assert flat64 =~ "Select"
       refute flat64 =~ "J/K"
     end

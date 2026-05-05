@@ -7,7 +7,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   flushing, and render-cache mutation.
   """
 
-  alias Foglet.TUI.{Context, Guest}
+  alias Foglet.TUI.{Context, Guest, ScrollKeys}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.TextWidth
@@ -60,19 +60,18 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
     case PostReader.visible_screenful(state, context) do
       %{mode: :packed_partial, indexes: indexes, partial: partial} = sf ->
-        cmds = [%{key: "Up/Down", label: "Select", priority: 6} | base_commands]
+        cmds = [%{key: ScrollKeys.commandbar_key(), label: "Select", priority: 6} | base_commands]
 
-        # FOG-652 / FOG-651: only advertise J/K Scroll when the partial long
-        # post is the current action target — keep the keybar restrained for
-        # ordinary packed short-post selection.
+        # FOG-714: commandbar advertises arrows only. j/k still works as the
+        # unadvertised long-post scroll fallback for users who expect it.
         if length(indexes) > 1 and action_index(state, sf) == partial.index do
-          cmds ++ [%{key: "J/K", label: "Scroll", priority: 8}]
+          cmds ++ [%{key: ScrollKeys.commandbar_key(), label: "Scroll", priority: 8}]
         else
           cmds
         end
 
       %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
-        [%{key: "Up/Down", label: "Select", priority: 6} | base_commands]
+        [%{key: ScrollKeys.commandbar_key(), label: "Select", priority: 6} | base_commands]
 
       %{mode: :packed} ->
         # FOG-694: at the cramped FOG-651 negative threshold the screenful
@@ -82,7 +81,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         base_commands
 
       _long ->
-        base_commands ++ [%{key: "J/K", label: "Scroll", priority: 10}]
+        base_commands ++ [%{key: ScrollKeys.commandbar_key(), label: "Scroll", priority: 10}]
     end
   end
 
@@ -169,7 +168,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     body_rendered = Viewport.render(vp, %{})
 
     column style: %{gap: 0} do
-      [parts.header, parts.progress, body_rendered]
+      Enum.reject([parts.header, parts.progress, body_rendered], &is_nil/1)
     end
   end
 
@@ -209,7 +208,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
           end
 
         prefix = if position == 0, do: [], else: [packed_post_separator(theme)]
-        prefix ++ [parts.header, progress_node | body_nodes]
+        prefix ++ Enum.reject([parts.header, progress_node | body_nodes], &is_nil/1)
       end)
 
     column style: %{gap: 0} do
@@ -218,7 +217,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   # FOG-652 / FOG-651: progress/affordance line for a partial long post.
-  # Selected: explicit J/K hint plus a visible slice indicator (or `end of
+  # Selected: explicit arrow-key hint plus a visible slice indicator (or `end of
   # post` when scrolled to the bottom).
   # Unselected: a dim `More below` so the user knows there is unread content
   # below the visible slice without claiming any keyboard affordance.
@@ -229,13 +228,13 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     text(TextWidth.truncate(label, max(w - 2, 1)), fg: fg)
   end
 
-  defp partial_progress_label(index, total, partial, true) do
+  defp partial_progress_label(_index, _total, partial, true) do
     cond do
       partial.total_body_rows <= 0 ->
-        "Posts #{index + 1}/#{total}  ▶ Selected — J/K scroll"
+        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll"
 
       PostReader.partial_at_bottom?(partial) ->
-        "Posts #{index + 1}/#{total}  ▶ Selected — end of post"
+        "▶ Selected — end of post"
 
       true ->
         first = partial.scroll_top + 1
@@ -244,15 +243,15 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
           (partial.scroll_top + partial.body_visible_rows)
           |> min(partial.total_body_rows)
 
-        "Posts #{index + 1}/#{total}  ▶ Selected — J/K scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
+        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
     end
   end
 
-  defp partial_progress_label(index, total, partial, false) do
+  defp partial_progress_label(_index, _total, partial, false) do
     if PostReader.partial_at_bottom?(partial) do
-      "Posts #{index + 1}/#{total}"
+      ""
     else
-      "Posts #{index + 1}/#{total}  More below"
+      "More below"
     end
   end
 

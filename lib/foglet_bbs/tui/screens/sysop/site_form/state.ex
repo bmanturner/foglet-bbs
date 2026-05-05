@@ -180,12 +180,9 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
 
     ModalForm.init(
       title: "Site policy",
-      # Phase 28 Plan 04: Sysop's global command bar advertises Q/Tabs/Jump but
-      # NOT Enter/Esc, so the SITE form opts into Modal.Form's footer to
-      # advertise "[Enter] Submit   [Esc] Cancel" at the body level. The Phase 28
-      # D-09 status row (Saving…/Saved./Error: …) replaces this footer when
-      # active. This matches the legacy SiteForm's screen-level footer.
-      show_footer: true,
+      # FOG-713: full-page Sysop forms advertise actions in the screen command
+      # bar, not in body footers that fall off cramped terminals.
+      show_footer: false,
       fields: fields,
       on_submit: fn payload ->
         case validate_delivery_verification_pair(payload) do

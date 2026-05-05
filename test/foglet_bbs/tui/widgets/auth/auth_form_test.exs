@@ -4,7 +4,7 @@ defmodule Foglet.TUI.Widgets.Auth.AuthFormTest do
   import Foglet.TUI.WidgetHelpers, only: [color_atom_leaked?: 2, color_names: 0, flatten_text: 1]
   import Raxol.Core.Renderer.View
 
-  alias Foglet.TUI.Theme
+  alias Foglet.TUI.{TextWidth, Theme}
   alias Foglet.TUI.Widgets.Auth.AuthForm
 
   defp theme, do: Theme.default()
@@ -34,6 +34,23 @@ defmodule Foglet.TUI.Widgets.Auth.AuthFormTest do
       centered = AuthForm.centered(panel, %{terminal_size: {80, 24}}, theme(), 9)
 
       assert flatten_text(centered) =~ "Code"
+    end
+
+    test "helper_text wraps long copy to the supplied inner width" do
+      helper_rows =
+        AuthForm.helper_text(
+          "Enter your handle and password to pick up where you left off.",
+          theme(),
+          42
+        )
+
+      rendered_lines = Enum.map(helper_rows, &flatten_text/1)
+
+      assert length(rendered_lines) == 2
+      assert Enum.all?(rendered_lines, &(TextWidth.display_width(&1) <= 42))
+
+      assert Enum.join(rendered_lines, " ") ==
+               "Enter your handle and password to pick up where you left off."
     end
   end
 

@@ -425,16 +425,111 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
              )
   end
 
-  test "NewThread.update/3 handles board picker navigation and selection" do
+  test "NewThread.update/3 handles board picker navigation and selection (FOG-712)" do
     boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
     state = State.new(boards: boards, load_status: :loaded)
 
-    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :down}}, state, context())
+    assert state.selected_board_index == 1
+
+    {state, []} = NewThread.update({:key, %{key: :up}}, state, context())
+    assert state.selected_board_index == 0
+
+    {state, []} = NewThread.update({:key, %{key: :down}}, state, context())
     assert state.selected_board_index == 1
 
     {state, []} = NewThread.update({:key, %{key: :enter}}, state, context())
     assert state.step == :compose
     assert state.board.id == "b2"
+  end
+
+  test "FOG-712: j character types into the filter buffer instead of navigating" do
+    boards = [
+      %{id: "b1", name: "General"},
+      %{id: "b2", name: "Java"},
+      %{id: "b3", name: "Kotlin"}
+    ]
+
+    state = State.new(boards: boards, load_status: :loaded)
+    initial_focus = state.board_picker.raxol_state.focused_index || 0
+
+    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+
+    # j is consumed by the filter, not by navigation.
+    assert state.board_picker.raxol_state.search_buffer == "j"
+    assert state.board_picker.raxol_state.focused_index == initial_focus
+  end
+
+  test "FOG-742: live picker filters rows and updates buffer for multi-char + backspace + empty" do
+    boards = [
+      %{id: "b1", name: "General"},
+      %{id: "b2", name: "QA Required"}
+    ]
+
+    state = State.new(boards: boards, load_status: :loaded)
+
+    # 1. Single char filters down to the matching board.
+    {state, []} = NewThread.update({:key, %{key: :char, char: "q"}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == "q"
+    assert rs.filtered_options == [{"QA Required", %{id: "b2", name: "QA Required"}}]
+    assert rs.search_timer == nil
+
+    # 2. Subsequent char must NOT crash and must keep growing the buffer.
+    {state, []} = NewThread.update({:key, %{key: :char, char: "a"}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == "qa"
+    assert length(rs.filtered_options || []) == 1
+
+    # 3. Backspace edits the buffer and re-widens the filter.
+    {state, []} = NewThread.update({:key, %{key: :backspace}}, state, context())
+    assert state.board_picker.raxol_state.search_buffer == "q"
+
+    {state, []} = NewThread.update({:key, %{key: :backspace}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == ""
+    # Empty buffer => show full list (filtered_options nil falls back to options).
+    assert rs.filtered_options in [nil, Enum.map(boards, fn b -> {b.name, b} end)]
+
+    # 4. Empty-result query is reachable through live keystrokes.
+    {state, []} = NewThread.update({:key, %{key: :char, char: "z"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "z"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "z"}}, state, context())
+    rs = state.board_picker.raxol_state
+    assert rs.search_buffer == "zzz"
+    assert rs.filtered_options == []
+  end
+
+  test "FOG-712: picker is initialized with filter focus active so chars search" do
+    boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
+    state = State.new(boards: boards, load_status: :loaded)
+
+    assert state.board_picker.raxol_state.is_search_focused == true
+    assert state.board_picker.enable_search == true
+  end
+
+  test "FOG-712: subscribed_boards denormalizes category name onto each loaded board" do
+    ctx = context()
+    {_state, [effect]} = NewThread.update(:on_route_enter, State.from_context(ctx), ctx)
+    {boards, _count} = effect.payload.fun.()
+
+    assert Enum.find(boards, &(&1.id == "b1")).category_name == "Public"
+    assert Enum.find(boards, &(&1.id == "b2")).category_name == "Ops"
+  end
+
+  test "FOG-712: load builds a SmartList board picker reflecting loaded boards" do
+    boards = [%{id: "b1", name: "General"}, %{id: "b2", name: "Announcements"}]
+    state = State.new()
+
+    assert {%State{board_picker: picker, boards: ^boards, load_status: :loaded}, []} =
+             NewThread.update(
+               {:task_result, :load_boards_for_new_thread, {:ok, {boards, 2}}},
+               state,
+               context()
+             )
+
+    assert is_struct(picker, Foglet.TUI.Widgets.List.SmartList)
+    assert length(picker.raxol_state.options) == 2
   end
 
   test "NewThread.update/3 handles compose field focus, body preview, and cancel effects" do
@@ -634,6 +729,15 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert _ = render_screen(state)
   end
 
+  test "render/1 board step advertises arrows only for selectable board movement" do
+    ss = State.new(boards: [%{id: "b1", name: "General"}], load_status: :loaded)
+    state = Map.put(base_state(), :screen_state, %{new_thread: ss})
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "↑/↓ Select"
+    refute text =~ "j/k Select"
+  end
+
   test "render/1 board step with nil boards does not crash" do
     ss = State.new(boards: nil)
     state = Map.put(base_state(), :screen_state, %{new_thread: ss})
@@ -655,6 +759,95 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
 
     assert text =~ "There are no boards yet. Ask the sysop to create one."
+  end
+
+  for {label, size} <- [{"80x24", {80, 24}}, {"64x22", {64, 22}}] do
+    test "render/1 board step at #{label} shows FOG-731 picker contract (FOG-735)" do
+      ss =
+        State.new(
+          boards: [
+            %{id: "b1", name: "General", category_name: "Public"},
+            %{id: "b2", name: "QA Required", category_name: "Ops"}
+          ],
+          load_status: :loaded
+        )
+
+      state =
+        base_state()
+        |> Map.put(:screen_state, %{new_thread: ss})
+        |> Map.put(:terminal_size, unquote(Macro.escape(size)))
+
+      text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+      assert text =~ "Type to filter:", "expected filter prompt at #{unquote(label)}"
+      assert text =~ "2 boards", "expected status footer with match count at #{unquote(label)}"
+      assert text =~ "Type Filter", "expected commandbar Type Filter at #{unquote(label)}"
+      assert text =~ "Backspace Edit", "expected commandbar Backspace Edit at #{unquote(label)}"
+      assert text =~ "Enter Choose", "expected commandbar Enter Choose at #{unquote(label)}"
+      assert text =~ "Esc Cancel", "expected commandbar Esc Cancel at #{unquote(label)}"
+    end
+  end
+
+  test "FOG-735: at wide widths the picker also advertises Page and Select" do
+    ss =
+      State.new(
+        boards: [
+          %{id: "b1", name: "General", category_name: "Public"},
+          %{id: "b2", name: "QA Required", category_name: "Ops"}
+        ],
+        load_status: :loaded
+      )
+
+    state =
+      base_state()
+      |> Map.put(:screen_state, %{new_thread: ss})
+      |> Map.put(:terminal_size, {120, 30})
+
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+    assert text =~ "Type Filter"
+    assert text =~ "Backspace Edit"
+    assert text =~ "↑/↓ Select"
+    assert text =~ "PgUp/PgDn Page"
+    assert text =~ "Enter Choose"
+    assert text =~ "Esc Cancel"
+  end
+
+  test "FOG-735: picker prompt reflects current search buffer in render" do
+    boards = [
+      %{id: "b1", name: "General", category_name: "Public"},
+      %{id: "b2", name: "Announcements", category_name: "Ops"}
+    ]
+
+    ss = State.new(boards: boards, load_status: :loaded)
+    picker = ss.board_picker
+    rs = Map.put(picker.raxol_state, :search_buffer, "ge")
+    rs = Map.put(rs, :filtered_options, [{"Public / General", Enum.at(boards, 0)}])
+    picker = %{picker | raxol_state: rs}
+    ss = %{ss | board_picker: picker}
+    state = base_state() |> Map.put(:screen_state, %{new_thread: ss})
+
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+    assert text =~ "Type to filter: ge"
+    assert text =~ "1 of 2 boards"
+  end
+
+  test "FOG-735: empty filter result renders recovery hint" do
+    boards = [%{id: "b1", name: "General", category_name: "Public"}]
+    ss = State.new(boards: boards, load_status: :loaded)
+    picker = ss.board_picker
+
+    rs =
+      picker.raxol_state
+      |> Map.put(:search_buffer, "zzz")
+      |> Map.put(:filtered_options, [])
+
+    ss = %{ss | board_picker: %{picker | raxol_state: rs}}
+    state = base_state() |> Map.put(:screen_state, %{new_thread: ss})
+
+    text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+    assert text =~ "No boards match"
+    assert text =~ "Backspace to clear"
   end
 
   # ---------------------------------------------------------------------------
@@ -717,6 +910,26 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
 
     assert text =~ "Title"
     assert text =~ "A Thread"
+  end
+
+  for {label, size} <- [{"80x24", {80, 24}}, {"64x22", {64, 22}}] do
+    test "render/1 compose step at #{label} does not render a Draft row (FOG-735)" do
+      state =
+        compose_state()
+        |> put_title("QA selector test")
+        |> Map.put(:terminal_size, unquote(Macro.escape(size)))
+
+      text = render_screen(state) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+      assert text =~ "QA selector test"
+      assert text =~ "Board General"
+
+      refute text =~ "Draft QA selector test",
+             "compose context must not echo title as a Draft row at #{unquote(label)}"
+
+      refute text =~ ~r/\bDraft\s+QA/,
+             "compose context must not render any Draft <title> line at #{unquote(label)}"
+    end
   end
 
   test "render/1 body-focused edit mode keeps body text and body counter in shell" do
@@ -859,7 +1072,8 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     state = base_state()
     assert get_ss(state).selected_board_index == 0
 
-    {:update, new_state, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    # FOG-712: j is now a search character; ↓ moves focus.
+    {:update, new_state, _} = handle_key_screen(%{key: :down}, state)
     assert get_ss(new_state).selected_board_index == 1
   end
 
@@ -869,20 +1083,19 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert get_ss(new_state).selected_board_index == 1
   end
 
-  test "j clamps at last board index" do
+  test "down arrow clamps at last board index (FOG-712)" do
     state = base_state()
-    # Move to last board (index 1 of 2)
-    {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :down}, state)
     assert get_ss(s1).selected_board_index == 1
-    # Pressing j again should stay at 1
-    {:update, s2, _} = handle_key_screen(%{key: :char, char: "j"}, s1)
+    # Pressing down again stays at 1
+    {:update, s2, _} = handle_key_screen(%{key: :down}, s1)
     assert get_ss(s2).selected_board_index == 1
   end
 
   test "Enter on board step advances to compose step with selected board" do
     state = base_state()
     # Move to second board first
-    {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    {:update, s1, _} = handle_key_screen(%{key: :down}, state)
     {:update, s2, _} = handle_key_screen(%{key: :enter}, s1)
 
     ss = get_ss(s2)

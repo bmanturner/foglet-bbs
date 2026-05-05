@@ -8,8 +8,7 @@ defmodule Foglet.TUI.Widgets.Auth.AuthForm do
   and keeping rendering pure over already-loaded state.
   """
 
-  alias Foglet.TUI.Theme
-
+  alias Foglet.TUI.{TextWidth, Theme}
   import Raxol.Core.Renderer.View
 
   @default_width 46
@@ -22,6 +21,13 @@ defmodule Foglet.TUI.Widgets.Auth.AuthForm do
           | {:title_prefix, String.t()}
 
   def default_width, do: @default_width
+
+  @spec helper_text(String.t(), Theme.t(), pos_integer()) :: [map()]
+  def helper_text(copy, theme, width) when is_binary(copy) and is_integer(width) and width > 0 do
+    copy
+    |> TextWidth.wrap(width)
+    |> Enum.map(&text(&1, fg: theme.dim.fg))
+  end
 
   @spec render(String.t(), list(), Theme.t(), [panel_opt()]) :: map()
   def render(title, children, theme, opts \\ []) when is_binary(title) and is_list(children) do

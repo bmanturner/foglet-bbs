@@ -34,9 +34,6 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     width = inner_width(state)
     height = inner_height(state)
     content = build_content(ss, theme, width, height)
-    # Phase 29 D-26 (SYSOP-07): jump hint reads `1-N` where N is the
-    # actual tab count. No INVITES special-case — generalises to any
-    # future tab visibility flag.
     jump_hint = "1-#{length(State.tab_labels(ss))}"
 
     ScreenFrame.render(state, chrome_model(ss), content, sysop_commands(ss, jump_hint))
@@ -90,7 +87,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp form_tab_commands(label, jump_hint) do
+  defp form_tab_commands(label, _jump_hint) do
     [
       %{
         label: "System",
@@ -99,8 +96,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       %{
         label: form_group_label(label),
         commands: [
-          %{key: "Ctrl+S", label: "Save", priority: 5},
-          %{key: "Enter", label: "Save", priority: 5},
+          %{key: "Enter/Ctrl+S", label: "Save", priority: 5},
           %{key: "Esc", label: "Cancel", priority: 5}
         ]
       },
@@ -113,22 +109,17 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       },
       %{
         label: "Tabs",
-        commands: [
-          %{key: "←/→", label: "Switch", priority: 10},
-          # FOG-693: pin `1-N Jump` to priority 0 so the Phase 29 D-26/SYSOP-07
-          # Jump advert survives 64x22 compaction even when SITE/LIMITS form
-          # Save/Cancel (priority 5) compete for keybar real estate.
-          %{key: jump_hint, label: "Jump", priority: 0}
-        ]
+        commands: [%{key: "←/→", label: "Tabs", priority: 10}]
       }
     ]
   end
 
   defp form_group_label("SITE"), do: "Site"
+  defp form_group_label("BOARDS"), do: "Boards"
   defp form_group_label("LIMITS"), do: "Limits"
   defp form_group_label(_), do: "Form"
 
-  defp base_sysop_commands(ss, jump_hint) do
+  defp base_sysop_commands(ss, _jump_hint) do
     base = [
       %{
         label: "System",
@@ -136,14 +127,12 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       },
       %{
         label: "Tabs",
-        commands: [
-          %{key: "←/→", label: "Switch", priority: 10},
-          %{key: jump_hint, label: "Jump", priority: 10}
-        ]
+        commands: [%{key: "←/→", label: "Tabs", priority: 10}]
       }
     ]
 
     base
+    |> maybe_add_boards_actions(ss)
     |> maybe_add_retry(ss)
     |> maybe_add_revoke(ss)
   end
@@ -176,6 +165,18 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
         ]
       }
     ]
+  end
+
+  defp maybe_add_boards_actions(groups, ss) do
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    case {active_label, ss.boards_view} do
+      {"BOARDS", {:loaded, %BoardsView{} = boards_state}} ->
+        groups ++ BoardsView.keybar_groups(boards_state)
+
+      _ ->
+        groups
+    end
   end
 
   defp boards_modal_mode(ss) do
@@ -265,18 +266,18 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("SITE", ss, theme, _width, _height) do
+  defp render_tab_body("SITE", ss, theme, width, height) do
     case ss.site_form do
       nil -> loading_panel(theme)
-      form -> SiteForm.render(form, theme)
+      form -> SiteForm.render(form, theme, form_viewport_opts(height, :site, width))
     end
   end
 
-  defp render_tab_body("BOARDS", ss, theme, _width, _height) do
+  defp render_tab_body("BOARDS", ss, theme, width, height) do
     case ss.boards_view do
       :not_loaded -> loading_panel(theme)
       :loading -> loading_panel(theme)
-      {:loaded, sub} -> BoardsView.render(sub, theme)
+      {:loaded, sub} -> BoardsView.render(sub, theme, width: width, visible_height: height)
       {:error, :forbidden} -> forbidden_panel(theme)
       {:error, _other} -> error_panel("boards", theme)
     end
@@ -335,6 +336,11 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       [text("Could not load #{tab}. Press R to try again.", fg: theme.error.fg)]
     end
   end
+
+  defp form_viewport_opts(height, _section, width) when is_integer(height) and height <= 18,
+    do: [max_visible: 2, width: width]
+
+  defp form_viewport_opts(_height, _section, width), do: [width: width]
 
   defp get_screen_state(state) do
     ss =

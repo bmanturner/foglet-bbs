@@ -58,8 +58,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
   @spec init(keyword()) :: t()
   def init(opts), do: SState.new(opts)
 
-  @spec render(t(), Theme.t()) :: any()
-  def render(%SState{} = state, %Theme{} = theme) do
+  @spec render(t(), Theme.t(), keyword()) :: any()
+  def render(%SState{} = state, %Theme{} = theme, opts \\ []) do
     # Phase 28 Plan 06 (BL-02): seed the per-render Modal.Form with the
     # persisted SState.submit_state so the D-08/D-09 status row
     # ("Saving…" / "Saved." / "Error: …") survives the rebuild.
@@ -70,7 +70,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     |> SState.build_modal_form()
     |> ModalForm.replay_submit_state(state.submit_state)
     |> apply_errors(state.errors)
-    |> ModalForm.render(theme: theme)
+    |> set_focus(state.focused)
+    |> ModalForm.render([theme: theme, show_title: false] ++ opts)
   end
 
   @spec handle_key(map(), t()) :: {t(), [Effect.t() | {atom(), term()}]}

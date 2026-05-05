@@ -1231,6 +1231,43 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert right_state.screen_state.sysop.active_tab == 3
     end
+
+    # FOG-739: LIMITS routes plain digits 0–9 into the focused integer
+    # draft, so the screen-level command bar must NOT advertise the
+    # global `1-N Jump` shortcut while LIMITS is the active tab —
+    # otherwise sysops press `4` expecting SYSTEM and silently extend
+    # `Post length limit`. Arrow-key tab navigation remains advertised.
+    test "LIMITS command bar suppresses '1-N Jump' but keeps tab arrows", %{state: state} do
+      flat =
+        state
+        |> render_sysop()
+        |> collect_text_values()
+        |> Enum.join(" ")
+
+      refute String.contains?(flat, "Jump"),
+             "LIMITS must not advertise '1-N Jump' when digits edit the focused field"
+
+      refute String.contains?(flat, "1-5"),
+             "LIMITS must not advertise the '1-5' jump-key range while digits are field input"
+
+      assert String.contains?(flat, "←/→"),
+             "LIMITS must keep arrow tab navigation as the discoverable tab-nav affordance"
+    end
+
+    # FOG-739: same suppression must hold at cramped 64x22 — the bug
+    # repro harness exercises both 80x24 and 64x22 and the priority-0
+    # Jump pin used to survive compaction.
+    test "LIMITS command bar suppresses Jump at 64x22", %{state: state} do
+      flat =
+        state
+        |> Map.put(:terminal_size, {64, 22})
+        |> render_sysop()
+        |> collect_text_values()
+        |> Enum.join(" ")
+
+      refute String.contains?(flat, "Jump"),
+             "LIMITS at 64x22 must not advertise '1-N Jump' (FOG-739)"
+    end
   end
 
   # =========================================================================
@@ -1313,13 +1350,46 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert String.contains?(flat, "User status")
 
+      # FOG-740: header columns must align with row column order
+      # (Handle, Role, Status, Email).
+      header_line =
+        flat
+        |> String.split("\n")
+        |> Enum.find(&(String.contains?(&1, "Handle") and String.contains?(&1, "Status")))
+
+      assert header_line, "expected USERS header line in rendered output"
+
+      handle_col = :binary.match(header_line, "Handle") |> elem(0)
+      role_col = :binary.match(header_line, "Role") |> elem(0)
+      status_col = :binary.match(header_line, "Status") |> elem(0)
+      email_col = :binary.match(header_line, "Email") |> elem(0)
+
+      assert handle_col < role_col and role_col < status_col and status_col < email_col,
+             "expected header order Handle < Role < Status < Email; got #{inspect(header_line)}"
+
+      lines = String.split(flat, "\n")
+
       for {status, user} <- [
             {"pending", pending},
             {"active", active},
             {"suspended", suspended},
             {"rejected", rejected}
           ] do
-        assert String.contains?(flat, "#{status}  @#{user.handle}  #{user.email}")
+        row_line = Enum.find(lines, &String.contains?(&1, "@#{user.handle}"))
+
+        assert row_line,
+               "expected USERS row for @#{user.handle} (status #{status}) in rendered output"
+
+        # Each value sits under its header column at the byte offset the header set.
+        # Substrings (role "user", status "active") collide with handle/email tokens,
+        # so assert the exact column slice rather than first-match position.
+        role_str = to_string(user.role)
+        handle_str = "@#{user.handle}"
+
+        assert binary_part(row_line, handle_col, byte_size(handle_str)) == handle_str
+        assert binary_part(row_line, role_col, byte_size(role_str)) == role_str
+        assert binary_part(row_line, status_col, byte_size(status)) == status
+        assert binary_part(row_line, email_col, byte_size(user.email)) == user.email
       end
 
       refute String.contains?(flat, "deleteduser")
@@ -1332,8 +1402,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Enum.any?(flat, &String.contains?(&1, "No users need status changes."))
       # Phase 29 D-15: footer is render-time. With no rows, the only key hint
-      # advertised is [j/k] Move (no transition keys are gated-in).
-      assert Enum.any?(flat, &String.contains?(&1, "[j/k] Move"))
+      # advertised is [↑/↓] Move (no transition keys are gated-in). j/k remains
+      # an unadvertised fallback so the footer stays compact.
+      assert Enum.any?(flat, &String.contains?(&1, "[↑/↓] Move"))
+      refute Enum.any?(flat, &String.contains?(&1, "[j/k] Move"))
     end
   end
 
@@ -1480,7 +1552,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       refute String.contains?(flat, "[U] Reactivate")
     end
 
-    test "empty rows list still renders [j/k] Move and does not crash" do
+    test "empty rows list still renders arrow Move and does not crash" do
       view = %UsersView{
         current_user: nil,
         rows: [],
@@ -1488,7 +1560,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
       }
 
       flat = view |> UsersView.render(Theme.default()) |> collect_text_values() |> Enum.join("\n")
-      assert String.contains?(flat, "[j/k] Move")
+      assert String.contains?(flat, "[↑/↓] Move")
+      refute String.contains?(flat, "[j/k] Move")
     end
 
     test "pressing A on focused :active row is a no-op (no boundary call, no message)" do

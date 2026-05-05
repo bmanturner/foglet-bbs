@@ -18,6 +18,9 @@ defmodule Foglet.PubSub do
   @spec boards_aggregate() :: String.t()
   def boards_aggregate, do: "boards"
 
+  @spec tui_clock_topic() :: String.t()
+  def tui_clock_topic, do: "tui:clock:minute"
+
   @spec board_chat_topic(binary()) :: String.t()
   def board_chat_topic(board_id), do: "board_chat:" <> board_id
 

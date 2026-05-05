@@ -24,15 +24,31 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
-  @spec render(State.t(), Theme.t()) :: any()
-  def render(%State{prefs_form: form}, %Theme{} = theme) do
-    ModalForm.render(form, theme: theme)
+  @spec render(State.t(), Theme.t(), keyword()) :: any()
+  def render(%State{prefs_form: form}, %Theme{} = theme, opts \\ []) do
+    form_opts = Keyword.merge([theme: theme, show_title: false], opts)
+    ModalForm.render(form, form_opts)
   end
 
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
   def handle_key(%{key: key} = event, %State{} = state, current_user)
-      when key in [:char, :backspace, :enter, :escape, :tab, :shift_tab, :backtab, :up, :down] do
+      when key in [
+             :char,
+             :backspace,
+             :delete,
+             :left,
+             :right,
+             :home,
+             :end,
+             :enter,
+             :escape,
+             :tab,
+             :shift_tab,
+             :backtab,
+             :up,
+             :down
+           ] do
     do_handle_key(event, state, current_user)
   end
 
@@ -90,5 +106,6 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
   defp text_input_event?(%{key: :char}), do: true
   defp text_input_event?(%{key: :backspace}), do: true
+  defp text_input_event?(%{key: :delete}), do: true
   defp text_input_event?(_), do: false
 end

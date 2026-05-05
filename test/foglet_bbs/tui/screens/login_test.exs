@@ -295,7 +295,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
         |> render_login()
         |> collect_panels()
 
-      assert panel.attrs.title == "Login"
+      assert panel.attrs.title == "Back on the board"
       assert panel.attrs.width == 46
       assert panel.attrs.height >= 9
     end
@@ -756,7 +756,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
         |> collect_text_values()
         |> Enum.join("\n")
 
-      assert rendered =~ "Password recovery"
+      assert rendered =~ "Recover your signal"
       assert rendered =~ "Esc"
       assert rendered =~ "Back"
 

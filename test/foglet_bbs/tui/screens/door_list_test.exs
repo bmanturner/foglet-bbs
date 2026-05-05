@@ -27,14 +27,17 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert Enum.all?(doors, &match?(%Manifest{}, &1))
   end
 
-  test "up/down clamps selection to available doors" do
+  test "up/down and j/k clamp selection to available doors" do
     ctx = context()
     state = DoorList.init(ctx)
 
     assert {%State{selected_index: 1}, []} = DoorList.update({:key, %{key: :down}}, state, ctx)
 
     assert {%State{selected_index: 1}, []} =
-             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 1}, ctx)
+             DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 1}, ctx)
+
+    assert {%State{selected_index: 0}, []} =
+             DoorList.update({:key, %{key: :char, char: "k"}}, %{state | selected_index: 1}, ctx)
 
     assert {%State{selected_index: 0}, []} = DoorList.update({:key, %{key: :up}}, state, ctx)
   end

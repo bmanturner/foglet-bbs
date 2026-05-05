@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Screens.Verify do
   @cooldown_seconds 60
   @code_length 6
   @auth_card_width AuthForm.default_width()
+  @auth_card_inner_width @auth_card_width - 4
   @auth_card_height 10
 
   @impl true
@@ -54,14 +55,18 @@ defmodule Foglet.TUI.Screens.Verify do
 
     panel =
       AuthForm.render(
-        "Verify email",
-        [
-          text("Enter the 6-character code we sent you.", fg: theme.dim.fg),
-          text(""),
-          text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
-          text(""),
-          status_item
-        ],
+        "Check your mailbox",
+        AuthForm.helper_text(
+          "Type the 6-character code we sent to your email.",
+          theme,
+          @auth_card_inner_width
+        ) ++
+          [
+            text(""),
+            text("  [#{pad_buffer_with_cursor(vs.buffer)}]", fg: theme.accent.fg, style: [:bold]),
+            text(""),
+            status_item
+          ],
         theme,
         width: @auth_card_width,
         height: @auth_card_height
@@ -230,7 +235,7 @@ defmodule Foglet.TUI.Screens.Verify do
   defp handle_verify_submit_result({:error, :expired}, vs, %Context{}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
-      message: "Code expired. Press [R] to request a new one."
+      message: "Code expired. Press Ctrl+R to request a new one."
     }
 
     {%{vs | buffer: ""}, [Effect.open_modal(modal)]}

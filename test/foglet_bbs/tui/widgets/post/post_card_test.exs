@@ -207,7 +207,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
       end
     end
 
-    test "returns compact progress outside body lines" do
+    test "keeps reader position discoverable in the fixed header, not the body" do
       post = sample_post(%{message_number: 42})
 
       parts =
@@ -216,11 +216,14 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
           total: 12
         )
 
-      assert flatten_text(parts.progress) =~ "Posts 3/12"
+      assert parts.progress == nil
+      assert flatten_text(parts.header) =~ "Post 3 of 12"
+      refute flatten_text(parts.header) =~ "Posts 3/12"
+      refute flatten_text(parts.body_lines) =~ "Post 3 of 12"
       refute flatten_text(parts.body_lines) =~ "Posts 3/12"
     end
 
-    test "truncates progress so it stays within narrow reader width" do
+    test "truncates the reader position header so it stays within narrow reader width" do
       width = 8
       post = sample_post(%{message_number: 42})
 
@@ -230,7 +233,26 @@ defmodule Foglet.TUI.Widgets.Post.PostCardTest do
           total: 987_654
         )
 
-      assert TextWidth.display_width(flatten_text(parts.progress)) <= width
+      assert parts.progress == nil
+      assert TextWidth.display_width(flatten_text(parts.header)) <= width
+    end
+
+    test "marks the selected reader action target in the fixed header" do
+      t = theme()
+      post = sample_post(%{message_number: 42})
+
+      parts =
+        PostCard.reader_parts(post, Foglet.Markdown.render("Hello"), 80, t,
+          index: 2,
+          total: 12,
+          action_target?: true
+        )
+
+      serialized_header = inspect(parts.header, printable_limit: :infinity, limit: :infinity)
+
+      assert flatten_text(parts.header) =~ "▶ Post 3 of 12"
+      assert serialized_header =~ t.accent.fg
+      refute flatten_text(parts.body_lines) =~ "▶ Post 3 of 12"
     end
 
     test "returns guttered body lines as separate Raxol view elements" do

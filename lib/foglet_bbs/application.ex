@@ -39,6 +39,7 @@ defmodule FogletBbs.Application do
       FogletBbs.Repo,
       {DNSCluster, query: Application.get_env(:foglet_bbs, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: FogletBbs.PubSub},
+      Foglet.TUI.MinuteClock,
       Foglet.Accounts.RedemptionThrottle,
       {Registry, keys: :unique, name: Foglet.BoardRegistry},
       Foglet.Boards.Supervisor,

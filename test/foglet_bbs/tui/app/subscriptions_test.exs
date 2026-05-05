@@ -72,14 +72,14 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
     end)
   end
 
-  test "unauthenticated state has no user topic" do
+  test "unauthenticated state still subscribes to the central TUI clock topic" do
     assert Subscriptions.topics(
              state(
                current_screen: :no_subscriptions,
                route_params: %{},
                screen_state: %{}
              )
-           ) == []
+           ) == [Foglet.PubSub.tui_clock_topic()]
   end
 
   test "heartbeat_tick interval is present only when session_pid is a pid" do
@@ -92,14 +92,21 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
              interval_subscription(with_session, :heartbeat_tick)
   end
 
-  test "main_menu_clock_tick interval is always present" do
-    assert %Subscription{type: :interval, data: %{interval: 60_000}} =
-             state(session_pid: nil)
-             |> Subscriptions.subscribe()
-             |> interval_subscription(:main_menu_clock_tick)
+  test "chrome clock uses PubSub instead of a per-session interval" do
+    clock_topic = Foglet.PubSub.tui_clock_topic()
+    subscriptions = Subscriptions.subscribe(state(session_pid: nil))
+
+    assert interval_subscription(subscriptions, :main_menu_clock_tick) == nil
+
+    assert %Subscription{
+             type: :custom,
+             data: %{args: %{topics: [^clock_topic, "sample:state", "sample:route"]}}
+           } = custom_subscription(subscriptions, Foglet.TUI.PubSubForwarder)
   end
 
   test "screen-declared interval subscriptions are picked up generically" do
+    clock_topic = Foglet.PubSub.tui_clock_topic()
+
     subscriptions =
       state(
         current_screen: :interval,
@@ -113,18 +120,26 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
 
     assert %Subscription{
              type: :custom,
-             data: %{args: %{topics: ["interval:state"]}}
+             data: %{args: %{topics: [^clock_topic, "interval:state"]}}
            } = custom_subscription(subscriptions, Foglet.TUI.PubSubForwarder)
   end
 
   test "PubSubForwarder subscription combines user and active screen topics" do
     user = %Foglet.Accounts.User{id: "u-subscriptions", handle: "alice"}
+    clock_topic = Foglet.PubSub.tui_clock_topic()
 
     assert %Subscription{
              type: :custom,
              data: %{
                module: Foglet.TUI.PubSubForwarder,
-               args: %{topics: ["user:u-subscriptions", "sample:state", "sample:route"]}
+               args: %{
+                 topics: [
+                   ^clock_topic,
+                   "user:u-subscriptions",
+                   "sample:state",
+                   "sample:route"
+                 ]
+               }
              }
            } =
              state(current_user: user)
@@ -166,7 +181,15 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
 
     assert :ok = Subscriptions.refresh_dynamic(old_state, new_state)
 
+    clock_topic = Foglet.PubSub.tui_clock_topic()
+
     assert_receive {:pubsub_forwarder,
-                    {:refresh_topics, ["user:u-refresh", "sample:state", "sample:route"]}}
+                    {:refresh_topics,
+                     [
+                       ^clock_topic,
+                       "user:u-refresh",
+                       "sample:state",
+                       "sample:route"
+                     ]}}
   end
 end

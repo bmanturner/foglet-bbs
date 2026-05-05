@@ -473,9 +473,17 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{} = state, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
+    width = Keyword.get(opts, :width, 76)
 
-    title_row = text(state.title, fg: theme.title.fg, style: [:bold])
-    divider = text(String.duplicate("─", 40), fg: theme.border.fg)
+    title_rows =
+      if Keyword.get(opts, :show_title, true) do
+        [
+          text(state.title, fg: theme.title.fg, style: [:bold]),
+          text(String.duplicate("─", 40), fg: theme.border.fg)
+        ]
+      else
+        []
+      end
 
     visible = visible_indices(state)
     {window, scroll_above, scroll_below} = compute_field_window(state, visible, opts)
@@ -498,7 +506,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       |> Enum.flat_map(fn {spec, idx} ->
         focused? = idx == state.focus_index
         field_state = Enum.at(state.field_states, idx)
-        render_field(spec, field_state, focused?, state.errors, theme)
+        render_field(spec, field_state, focused?, state.errors, theme, width)
       end)
 
     field_rows = above_rows ++ field_rows ++ below_rows
@@ -536,7 +544,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       end
 
     column [] do
-      [title_row, divider] ++ field_rows ++ base_error_rows ++ status_rows ++ footer_rows
+      title_rows ++ field_rows ++ base_error_rows ++ status_rows ++ footer_rows
     end
   end
 
@@ -838,25 +846,19 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   defp coerce(%{type: :textarea}, %{raw_value: rv}), do: rv
 
-  defp render_field(spec, field_state, focused?, errors, theme) do
+  defp render_field(spec, field_state, focused?, errors, theme, width) do
     label_fg = if focused?, do: theme.accent.fg, else: theme.primary.fg
     label_style = if focused?, do: [:bold], else: []
 
-    marker = if Map.get(spec, :required, false), do: " *", else: ""
-    label_row = text("#{spec.label}#{marker}:", fg: label_fg, style: label_style)
+    focus_marker = if focused?, do: "▸ ", else: "  "
+    required_marker = if Map.get(spec, :required, false), do: " *", else: ""
+
+    label_row =
+      text("#{focus_marker}#{spec.label}#{required_marker}:", fg: label_fg, style: label_style)
+
     widget_row = render_widget(spec, field_state, focused?, theme)
 
-    # Phase 28 Plan 04 substrate add: optional :description renders as a dim
-    # row beneath the widget when the field spec carries a non-empty
-    # :description string. Used by Sysop SiteForm to preserve Schema description
-    # copy through the Modal.Form migration. Other consumers may opt in by
-    # adding :description to their field spec.
-    description_rows =
-      case Map.get(spec, :description) do
-        nil -> []
-        "" -> []
-        desc when is_binary(desc) -> [text(desc, fg: theme.dim.fg)]
-      end
+    description_rows = render_description_rows(Map.get(spec, :description), theme, width)
 
     error_rows =
       case Map.get(errors, spec.name) do
@@ -865,6 +867,18 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       end
 
     [label_row, widget_row] ++ description_rows ++ error_rows
+  end
+
+  defp render_description_rows(nil, _theme, _width), do: []
+  defp render_description_rows("", _theme, _width), do: []
+
+  # Phase 28 Plan 04 substrate add: optional :description renders as dim rows
+  # beneath the widget when the field spec carries a non-empty string. FOG-713
+  # wraps long helper copy instead of silently truncating it on narrow terminals.
+  defp render_description_rows(desc, theme, width) when is_binary(desc) do
+    desc
+    |> Foglet.TUI.TextWidth.wrap(max(width - 2, 1))
+    |> Enum.map(&text("  " <> &1, fg: theme.dim.fg))
   end
 
   defp render_widget(%{type: type}, field_state, focused?, theme)

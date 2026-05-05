@@ -23,13 +23,14 @@ defmodule Foglet.TUI.Screens.Account.Render do
     theme = account_theme(state, ss)
     active_label = active_label(ss) || "PROFILE"
     width = inner_width(state)
+    height = terminal_height(state)
 
     content =
       column style: %{gap: 0} do
         [
           Tabs.render(ss.tabs, theme: theme, width: width),
           divider(char: "─", style: %{fg: theme.border.fg}),
-          render_tab_body(active_label, ss, theme, width)
+          render_tab_body(active_label, ss, theme, width, height)
         ]
       end
 
@@ -44,18 +45,11 @@ defmodule Foglet.TUI.Screens.Account.Render do
   defp key_bar(ss), do: key_bar_for(ss, active_label(ss) || "PROFILE")
 
   defp key_bar_for(ss, active_label) do
-    # FOG-693: `1-N Jump` is a Phase 29 D-26/D-27 hard contract that must be
-    # visible at every supported width on Account tab list screens. Pin it to
-    # priority 0 (same retention tier as System Back) so the FOG-689
-    # Save/Cancel priority elevation does not crowd it out at 64x22. The
-    # `←/→ Tab` arrow advert remains priority 10 since it is dispensable
-    # under heavy compaction.
+    form_tab_navigation? = form_tab?(active_label) and not Map.get(ss, :tab_navigation?, false)
+
     tabs_group = %{
       label: "Tabs",
-      commands: [
-        %{key: "←/→", label: "Tab", priority: 10},
-        %{key: jump_hint(length(tab_labels(ss))), label: "Jump", priority: 0}
-      ]
+      commands: [%{key: tab_arrow_hint(form_tab_navigation?), label: "Tabs", priority: 10}]
     }
 
     system_group = %{
@@ -150,13 +144,16 @@ defmodule Foglet.TUI.Screens.Account.Render do
       %{
         label: "Actions",
         commands: [
-          %{key: "Ctrl+S", label: "Save", priority: 30},
-          %{key: "Enter", label: "Save", priority: 30},
+          %{key: "Enter/Ctrl+S", label: "Save", priority: 30},
           %{key: "Esc", label: "Cancel", priority: 30}
         ]
       }
     ]
   end
+
+  defp form_tab?("PROFILE"), do: true
+  defp form_tab?("PREFS"), do: true
+  defp form_tab?(_), do: false
 
   # PROFILE/PREFS share the form-tab key cluster. PREFS adds an explicit
   # `↑/↓ Change` advert when an enum field (Time format / Theme) is focused
@@ -196,8 +193,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
         %{
           label: "Actions",
           commands: [
-            %{key: "Ctrl+S", label: "Save", priority: 5},
-            %{key: "Enter", label: "Save", priority: 5},
+            %{key: "Enter/Ctrl+S", label: "Save", priority: 5},
             %{key: "Esc", label: "Cancel", priority: 5}
           ]
         }
@@ -209,19 +205,21 @@ defmodule Foglet.TUI.Screens.Account.Render do
 
   defp prefs_enum_focused?(_), do: false
 
-  defp jump_hint(n) when is_integer(n) and n > 0, do: "1-#{n}"
-  # IN-02 (iteration 6): same defensive shape as IN-01 in moderation.ex.
-  # If `tab_labels(ss)` returns `[]` (e.g., transient state during tab
-  # re-init), `length([]) = 0` previously crashed `jump_hint(0)` with
-  # `FunctionClauseError`. Fall back to "1" so the account screen
-  # renders rather than crashing.
-  defp jump_hint(_), do: "1"
+  defp tab_arrow_hint(true), do: "Esc,←/→"
+  defp tab_arrow_hint(false), do: "←/→"
 
   # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
   defp inner_width(state) do
     case Map.get(state, :terminal_size) do
       {w, _} when is_integer(w) -> max(w - 4, 0)
       _ -> 76
+    end
+  end
+
+  defp terminal_height(state) do
+    case Map.get(state, :terminal_size) do
+      {_w, h} when is_integer(h) -> h
+      _ -> 24
     end
   end
 
@@ -290,20 +288,30 @@ defmodule Foglet.TUI.Screens.Account.Render do
     Enum.find(Theme.ids(), &(Atom.to_string(&1) == theme_id))
   end
 
-  defp render_tab_body("PROFILE", ss, theme, _width), do: ProfileForm.render(ss, theme)
+  defp render_tab_body("PROFILE", ss, theme, _width, height),
+    do: ProfileForm.render(ss, theme, form_viewport_opts(height, :profile))
 
-  defp render_tab_body("PREFS", ss, theme, _width), do: PrefsForm.render(ss, theme)
+  defp render_tab_body("PREFS", ss, theme, _width, height),
+    do: PrefsForm.render(ss, theme, form_viewport_opts(height, :prefs))
 
-  defp render_tab_body("SSH KEYS", ss, theme, width),
+  defp render_tab_body("SSH KEYS", ss, theme, width, _height),
     do: SSHKeysSurface.render(ss.ssh_keys, theme, width)
 
-  defp render_tab_body("INVITES", ss, theme, _width) do
+  defp render_tab_body("INVITES", ss, theme, _width, _height) do
     InvitesSurface.render(ss.invites, theme)
   end
 
-  defp render_tab_body(_unknown, _ss, theme, _width) do
+  defp render_tab_body(_unknown, _ss, theme, _width, _height) do
     column style: %{gap: 0} do
       [text("", fg: theme.dim.fg)]
     end
   end
+
+  defp form_viewport_opts(height, :prefs) when is_integer(height) and height <= 18,
+    do: [max_visible: 1]
+
+  defp form_viewport_opts(height, _section) when is_integer(height) and height <= 18,
+    do: [max_visible: 2]
+
+  defp form_viewport_opts(_height, _section), do: []
 end

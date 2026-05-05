@@ -230,8 +230,18 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert down_state.selected_oneliner_index == 1
       assert %MainMenuState{} = down_state
 
+      {jk_up_state, []} =
+        MainMenu.update({:key, %{key: :char, char: "k"}}, down_state, context_from_app(state))
+
+      assert jk_up_state.selected_oneliner_index == 0
+
+      {jk_down_state, []} =
+        MainMenu.update({:key, %{key: :char, char: "j"}}, jk_up_state, context_from_app(state))
+
+      assert jk_down_state.selected_oneliner_index == 1
+
       {clamped_down_state, []} =
-        MainMenu.update({:key, %{key: :down}}, down_state, context_from_app(state))
+        MainMenu.update({:key, %{key: :down}}, jk_down_state, context_from_app(state))
 
       assert clamped_down_state.selected_oneliner_index == 1
 
