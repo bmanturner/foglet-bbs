@@ -697,6 +697,48 @@ defmodule Foglet.Doors.RunnerTest do
       end
     end
 
+    test "helper exit cleanup is bounded when a grandchild keeps writing to the PTY" do
+      id = "external-tree-exit-writer"
+      pidfile = Path.join(System.tmp_dir!(), "#{id}-#{System.unique_integer([:positive])}.pid")
+
+      command = """
+      printf 'final-before-exit\n'
+      sh -c 'trap \"exit 0\" TERM; while :; do printf \"writer-chunk-0123456789\\n\"; done' &
+      echo $! > #{pidfile}
+      exit 0
+      """
+
+      {:ok, manifest} =
+        manifest(%{
+          id: id,
+          display_name: id,
+          runtime: :external_pty,
+          command: "/bin/sh",
+          working_dir: "/tmp",
+          args: ["-c", command],
+          timeout_ms: 5_000,
+          pty?: true,
+          sandbox: same_user_sandbox()
+        })
+
+      {:ok, runner_pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^runner_pid, ^id}
+      writer_pid = wait_for_pidfile(pidfile)
+      ref = Process.monitor(runner_pid)
+
+      assert_door_output_contains("final-before-exit")
+      assert_receive {:door_exited, ^runner_pid, ^id, :normal, 0}, 1_000
+      assert_receive {:DOWN, ^ref, :process, ^runner_pid, :normal}, 1_000
+      refute eventually_os_process_alive?(writer_pid)
+      File.rm(pidfile)
+    end
+
     test "helper-backed PTY propagates resize to a full-screen child" do
       {:ok, manifest} =
         manifest(%{
