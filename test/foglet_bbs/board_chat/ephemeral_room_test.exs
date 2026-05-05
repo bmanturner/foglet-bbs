@@ -1,6 +1,7 @@
 defmodule Foglet.BoardChat.Ephemeral.RoomTest do
   use ExUnit.Case, async: false
 
+  alias Foglet.BoardChat.Body
   alias Foglet.BoardChat.Ephemeral.Room
 
   setup do
@@ -50,6 +51,20 @@ defmodule Foglet.BoardChat.Ephemeral.RoomTest do
       {:ok, msg} = Room.post(board_id, user_id, "hi")
 
       assert_receive {:board_chat, :new_message, ^msg}, 500
+    end
+
+    test "rejects over-limit bodies before buffering or broadcasting", %{
+      board_id: board_id,
+      user_id: user_id
+    } do
+      start_room!(board_id, [])
+      too_long = String.duplicate("a", Body.max_length() + 1)
+
+      Phoenix.PubSub.subscribe(FogletBbs.PubSub, Foglet.PubSub.board_chat_topic(board_id))
+
+      assert {:error, :body_too_long} = Room.post(board_id, user_id, too_long)
+      assert Room.recent(board_id) == []
+      refute_receive {:board_chat, :new_message, %{body: ^too_long}}, 100
     end
 
     test "soft cap drops oldest entries", %{board_id: board_id, user_id: user_id} do

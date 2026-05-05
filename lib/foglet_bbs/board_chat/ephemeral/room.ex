@@ -30,6 +30,7 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
 
   use GenServer
 
+  alias Foglet.BoardChat.Body
   alias Foglet.BoardChat.Ephemeral.Registry, as: RoomRegistry
 
   @default_soft_cap 500
@@ -125,23 +126,10 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
 
   @impl true
   def handle_call({:post, user_id, body}, _from, state) do
-    msg = %{
-      id: Ecto.UUID.generate(),
-      board_id: state.board_id,
-      user_id: user_id,
-      body: body,
-      inserted_at: state.now_fn.()
-    }
-
-    buffer =
-      [msg | state.buffer]
-      |> Enum.take(state.soft_cap)
-
-    state = %{state | buffer: buffer, last_traffic_at: state.monotonic_fn.()}
-
-    broadcast(state.board_id, {:board_chat, :new_message, msg})
-
-    {:reply, {:ok, msg}, state}
+    case Body.validate(body) do
+      {:ok, body} -> store_and_broadcast(user_id, body, state)
+      {:error, reason} -> {:reply, {:error, reason}, state}
+    end
   end
 
   def handle_call(:recent, _from, state) do
@@ -175,6 +163,26 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
   def handle_info(_, state), do: {:noreply, state}
 
   # ---------- Internals ----------
+
+  defp store_and_broadcast(user_id, body, state) do
+    msg = %{
+      id: Ecto.UUID.generate(),
+      board_id: state.board_id,
+      user_id: user_id,
+      body: body,
+      inserted_at: state.now_fn.()
+    }
+
+    buffer =
+      [msg | state.buffer]
+      |> Enum.take(state.soft_cap)
+
+    state = %{state | buffer: buffer, last_traffic_at: state.monotonic_fn.()}
+
+    broadcast(state.board_id, {:board_chat, :new_message, msg})
+
+    {:reply, {:ok, msg}, state}
+  end
 
   defp schedule_tick(%{tick_interval_ms: interval}) do
     Process.send_after(self(), :tick, interval)
