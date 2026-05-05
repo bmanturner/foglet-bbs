@@ -29,8 +29,11 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   alias Foglet.Boards
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
-  alias Foglet.TUI.Widgets.List.{ListRow, SelectionList}
+  alias Foglet.TUI.ScrollKeys
+  alias Foglet.TUI.TextWidth
+  alias Foglet.TUI.Widgets.List.ListRow
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Raxol.UI.Components.Display.Viewport
 
   import Raxol.Core.Renderer.View
 
@@ -42,6 +45,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
           boards: [map()],
           rows: [row()],
           selection_index: non_neg_integer(),
+          collapsed_category_ids: MapSet.t(),
+          scroll_top: non_neg_integer(),
           modal: nil | ModalForm.t() | Modal.t(),
           modal_kind:
             nil
@@ -60,6 +65,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
             boards: [],
             rows: [],
             selection_index: 0,
+            collapsed_category_ids: MapSet.new(),
+            scroll_top: 0,
             modal: nil,
             modal_kind: nil,
             edit_target: nil,
@@ -102,13 +109,27 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   defp refresh_lists(%__MODULE__{} = state) do
     categories = Boards.list_categories()
     boards = Boards.list_boards()
-    %{state | categories: categories, boards: boards, rows: build_rows(categories, boards)}
+    rows = build_rows(categories, boards, state.collapsed_category_ids)
+
+    %{
+      state
+      | categories: categories,
+        boards: boards,
+        rows: rows,
+        selection_index: clamp_index(state.selection_index, length(rows))
+    }
   end
 
-  defp build_rows(categories, boards) do
+  defp build_rows(categories, boards, collapsed_category_ids) do
     Enum.flat_map(categories, fn c ->
       cat_boards = Enum.filter(boards, &(&1.category_id == c.id))
-      [{:category, c} | Enum.map(cat_boards, fn b -> {:board, b} end)]
+      category_row = {:category, c}
+
+      if MapSet.member?(collapsed_category_ids, category_id(c)) do
+        [category_row]
+      else
+        [category_row | Enum.map(cat_boards, fn b -> {:board, b} end)]
+      end
     end)
   end
 
@@ -116,31 +137,23 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   # Render
   # ---------------------------------------------------------------------------
 
-  @spec render(t(), map()) :: any()
+  @spec render(t(), map(), keyword()) :: any()
+  def render(state, theme, opts \\ [])
+
   # FOG-670: when a modal is open, render only a calm bounded overlay so the
   # board list does not bleed through behind the form. Footer copy switches to
   # form-mode hints (save / cancel / Tab nav) so list-mode commands no longer
   # masquerade as the active controls.
-  def render(%__MODULE__{modal: modal} = _state, theme) when not is_nil(modal) do
+  def render(%__MODULE__{modal: modal} = _state, theme, _opts) when not is_nil(modal) do
     column style: %{gap: 0} do
-      [
-        text("Boards and categories", fg: theme.title.fg, style: [:bold]),
-        text(""),
-        render_modal_overlay(modal, theme)
-      ]
+      [render_modal_overlay(modal, theme)]
     end
   end
 
-  def render(%__MODULE__{} = state, theme) do
-    body = render_list(state, theme)
-
-    column style: %{gap: 0} do
-      [
-        text("Boards and categories", fg: theme.title.fg, style: [:bold]),
-        text(""),
-        body
-      ]
-    end
+  def render(%__MODULE__{} = state, theme, opts) do
+    width = Keyword.get(opts, :width, 76)
+    visible_height = Keyword.get(opts, :visible_height, 12)
+    render_list(state, theme, width: width, visible_height: visible_height)
   end
 
   @doc """
@@ -173,7 +186,10 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   end
 
   def keybar_groups(%__MODULE__{} = state) do
-    list_group = %{label: "List", commands: [%{key: "↑/↓", label: "Move", priority: 10}]}
+    list_group = %{
+      label: "List",
+      commands: [%{key: ScrollKeys.commandbar_key(), label: "Move", priority: 10}]
+    }
 
     action_commands =
       case selected_row(state) do
@@ -203,20 +219,56 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     [list_group, %{label: "Boards", commands: action_commands}]
   end
 
-  defp render_list(%__MODULE__{rows: []}, theme) do
+  defp render_list(%__MODULE__{rows: []}, theme, _opts) do
     column style: %{gap: 0} do
       [text("No categories yet. Press N to create the first category.", fg: theme.warning.fg)]
     end
   end
 
-  defp render_list(%__MODULE__{rows: rows, selection_index: idx}, theme) do
-    SelectionList.render(rows, idx, fn {row, _idx, selected?} ->
-      render_row(row, selected?, theme)
-    end)
+  defp render_list(%__MODULE__{rows: rows, selection_index: idx} = state, theme, opts) do
+    width = Keyword.get(opts, :width, 76)
+    visible_height = Keyword.get(opts, :visible_height, 12)
+
+    children =
+      rows
+      |> Enum.with_index()
+      |> Enum.map(fn {row, row_idx} -> render_row(row, row_idx == idx, theme, state, width) end)
+
+    {:ok, viewport} =
+      Viewport.init(%{
+        id: "sysop-boards-viewport",
+        children: children,
+        scroll_top: clamped_scroll_top(state, visible_height),
+        visible_height: max(visible_height, 1),
+        show_scrollbar: length(children) > visible_height,
+        style: %{gap: 0, width: width}
+      })
+
+    body = Viewport.render(viewport, %{})
+
+    hint =
+      if length(children) > visible_height do
+        [
+          text(
+            TextWidth.truncate(
+              "More boards above/below — use ↑/↓ to move; Enter collapses categories.",
+              width
+            ),
+            fg: theme.dim.fg
+          )
+        ]
+      else
+        []
+      end
+
+    column style: %{gap: 0} do
+      [body] ++ hint
+    end
   end
 
-  defp render_row({:category, cat}, selected?, theme) do
-    label = "▸ #{cat.name}"
+  defp render_row({:category, cat}, selected?, theme, state, width) do
+    marker = if MapSet.member?(state.collapsed_category_ids, category_id(cat)), do: "▸", else: "▾"
+    label = TextWidth.truncate("#{marker} #{cat.name}", width)
 
     if selected? do
       text(label, fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
@@ -225,8 +277,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     end
   end
 
-  defp render_row({:board, board}, selected?, theme) do
-    label = "    #{board.slug} — #{board.name}"
+  defp render_row({:board, board}, selected?, theme, _state, width) do
+    label = TextWidth.truncate("    #{board.slug} — #{board.name}", width)
     ListRow.render(label, selected?, theme)
   end
 
@@ -280,10 +332,14 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   def handle_key(%{key: :escape}, state), do: {state, []}
 
-  def handle_key(%{key: :down}, state), do: {move(state, +1), []}
-  def handle_key(%{key: :char, char: "j"}, state), do: {move(state, +1), []}
-  def handle_key(%{key: :up}, state), do: {move(state, -1), []}
-  def handle_key(%{key: :char, char: "k"}, state), do: {move(state, -1), []}
+  def handle_key(%{key: key} = event, state) when key in [:up, :down],
+    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+
+  def handle_key(%{key: :char, char: char} = event, state) when char in ["j", "k"],
+    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+
+  def handle_key(%{key: :enter}, state), do: {toggle_selected_category(state), []}
+  def handle_key(%{key: :char, char: " "}, state), do: {toggle_selected_category(state), []}
 
   # Create board (lowercase n)
   def handle_key(%{key: :char, char: "n"} = e, state) do
@@ -333,12 +389,60 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   defp move(%__MODULE__{rows: rows, selection_index: idx} = state, delta) do
     n = length(rows)
-    %{state | selection_index: Integer.mod(idx + delta, n)}
+    next_idx = Integer.mod(idx + delta, n)
+
+    %{state | selection_index: next_idx}
+    |> scroll_to_selection()
   end
 
   defp selected_row(%__MODULE__{rows: rows, selection_index: idx}) do
     Enum.at(rows, idx)
   end
+
+  defp toggle_selected_category(%__MODULE__{} = state) do
+    case selected_row(state) do
+      {:category, cat} ->
+        cat_id = category_id(cat)
+
+        collapsed =
+          if MapSet.member?(state.collapsed_category_ids, cat_id) do
+            MapSet.delete(state.collapsed_category_ids, cat_id)
+          else
+            MapSet.put(state.collapsed_category_ids, cat_id)
+          end
+
+        rows = build_rows(state.categories, state.boards, collapsed)
+
+        %{
+          state
+          | collapsed_category_ids: collapsed,
+            rows: rows,
+            selection_index: clamp_index(state.selection_index, length(rows))
+        }
+        |> scroll_to_selection()
+
+      _ ->
+        state
+    end
+  end
+
+  defp scroll_to_selection(%__MODULE__{selection_index: idx, scroll_top: top} = state) do
+    cond do
+      idx < top -> %{state | scroll_top: idx}
+      idx >= top + 8 -> %{state | scroll_top: max(idx - 7, 0)}
+      true -> state
+    end
+  end
+
+  defp clamped_scroll_top(%__MODULE__{} = state, visible_height) do
+    max_scroll = max(length(state.rows) - max(visible_height, 1), 0)
+    min(state.scroll_top, max_scroll)
+  end
+
+  defp clamp_index(_idx, 0), do: 0
+  defp clamp_index(idx, count), do: idx |> max(0) |> min(count - 1)
+
+  defp category_id(%{id: id}), do: id
 
   # ---- Modal.Form open helpers -----------------------------------------------
 

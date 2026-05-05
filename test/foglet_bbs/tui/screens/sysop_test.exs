@@ -1332,8 +1332,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Enum.any?(flat, &String.contains?(&1, "No users need status changes."))
       # Phase 29 D-15: footer is render-time. With no rows, the only key hint
-      # advertised is [j/k] Move (no transition keys are gated-in).
-      assert Enum.any?(flat, &String.contains?(&1, "[j/k] Move"))
+      # advertised is [↑/↓] Move (no transition keys are gated-in). j/k remains
+      # an unadvertised fallback so the footer stays compact.
+      assert Enum.any?(flat, &String.contains?(&1, "[↑/↓] Move"))
+      refute Enum.any?(flat, &String.contains?(&1, "[j/k] Move"))
     end
   end
 
@@ -1480,7 +1482,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
       refute String.contains?(flat, "[U] Reactivate")
     end
 
-    test "empty rows list still renders [j/k] Move and does not crash" do
+    test "empty rows list still renders arrow Move and does not crash" do
       view = %UsersView{
         current_user: nil,
         rows: [],
@@ -1488,7 +1490,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
       }
 
       flat = view |> UsersView.render(Theme.default()) |> collect_text_values() |> Enum.join("\n")
-      assert String.contains?(flat, "[j/k] Move")
+      assert String.contains?(flat, "[↑/↓] Move")
+      refute String.contains?(flat, "[j/k] Move")
     end
 
     test "pressing A on focused :active row is a no-op (no boundary call, no message)" do

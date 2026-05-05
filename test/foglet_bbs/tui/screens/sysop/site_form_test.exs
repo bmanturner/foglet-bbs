@@ -325,7 +325,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
   # =========================================================================
 
   describe "SiteForm Modal.Form wrapper (Phase 28 Plan 04 Task 2)" do
-    test "render delegates to Modal.Form with no legacy ▸ marker" do
+    test "render delegates to Modal.Form and visibly marks focused field" do
       Config.put!("delivery_mode", "email", nil)
 
       text =
@@ -334,7 +334,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
         |> collect_text_values()
         |> Enum.join("\n")
 
-      refute text =~ "▸"
+      assert text =~ "▸ Account registration:"
     end
 
     test "FORM-04 routing: char input lands in the focused integer field's draft" do

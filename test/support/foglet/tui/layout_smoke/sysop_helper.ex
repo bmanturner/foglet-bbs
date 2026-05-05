@@ -113,17 +113,12 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
       alias Foglet.TUI.Screens.Sysop.UsersView
       alias Foglet.TUI.TextWidth
 
-      # Sentinel check via raw tree traversal (D-09 primitive presence).
-      # The SITE form is taller than 22 rows, so the layout engine clips the
-      # "[Enter] Submit" footer before it reaches text_elements/1. Raw traversal
-      # proves Modal.Form's footer is present in the render tree regardless of
-      # terminal height.
       describe "sysop site tab — size contract" do
         for {width, height} <- [{64, 22}, {80, 24}] do
           @width width
           @height height
           @tag :"sysop site size contract"
-          test "at #{width}x#{height} Modal.Form footer sentinel renders within bounds" do
+          test "at #{width}x#{height} form actions live in the screen command bar" do
             width = @width
             height = @height
 
@@ -147,21 +142,24 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
               }
               |> Map.from_struct()
 
-            texts =
-              state
-              |> SysopHelper.render_sysop_smoke_state()
-              |> SysopHelper.collect_text()
+            tree = SysopHelper.render_sysop_smoke_state(state)
+            texts = SysopHelper.collect_text(tree)
 
-            assert Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
-                   "expected '[Enter] Submit' at #{width}x#{height}"
+            refute Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
+                   "expected SITE tab to suppress the Modal.Form footer at #{width}x#{height}"
+
+            assert Enum.any?(texts, &String.contains?(&1, "Ctrl+S")),
+                   "expected command-bar Ctrl+S key at #{width}x#{height}"
+
+            assert Enum.any?(texts, &String.contains?(&1, "Enter")),
+                   "expected command-bar Enter key at #{width}x#{height}"
           end
         end
       end
 
-      # Sentinel check via raw tree traversal (D-09 primitive presence).
       # LIMITS descriptions exceed terminal width, making full-form bounds
-      # assertions unreliable; raw traversal confirms the save footer contract,
-      # and the positioned footer check keeps the keybar text itself in bounds.
+      # assertions unreliable; the positioned footer check keeps the command-bar
+      # text itself in bounds after FOG-713 moved form actions out of body footers.
       describe "sysop limits tab — size contract" do
         for {width, height} <- [{64, 22}, {80, 24}] do
           @width width
@@ -170,8 +168,6 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
           test "at #{width}x#{height} save footer sentinel renders within bounds" do
             width = @width
             height = @height
-            footer_text = "[Tab] Next [Shift+Tab] Previous [Ctrl+S] Save [Enter] Save"
-
             # Phase 29 D-07: lifecycle slot wrapped as {:loaded, _}.
             ss =
               Sysop.State.new()
@@ -196,16 +192,19 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
             tree = SysopHelper.render_sysop_smoke_state(state)
             texts = SysopHelper.collect_text(tree)
 
-            assert Enum.any?(texts, &String.contains?(&1, footer_text)),
-                   "expected '#{footer_text}' at #{width}x#{height}"
+            refute Enum.any?(texts, &String.contains?(&1, "[Tab] Next")),
+                   "expected LIMITS tab to suppress body footer at #{width}x#{height}"
 
             positioned = apply_at_size(tree, {width, height})
             elements = text_elements(positioned)
 
-            footer_el =
-              Enum.find(elements, fn el -> String.contains?(el.text, "[Enter] Save") end)
+            assert Enum.any?(texts, &String.contains?(&1, "Ctrl+S")),
+                   "expected command-bar Ctrl+S key at #{width}x#{height}"
 
-            assert footer_el, "expected positioned save footer at #{width}x#{height}"
+            footer_el =
+              Enum.find(elements, fn el -> String.contains?(el.text, "Save") end)
+
+            assert footer_el, "expected positioned command-bar save at #{width}x#{height}"
 
             assert footer_el.x + TextWidth.display_width(footer_el.text) <= width,
                    "footer #{inspect(footer_el.text)} at x=#{footer_el.x} exceeds width #{width}"
