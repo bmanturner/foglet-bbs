@@ -288,11 +288,11 @@ defmodule Foglet.TUI.Screens.Account.Render do
     Enum.find(Theme.ids(), &(Atom.to_string(&1) == theme_id))
   end
 
-  defp render_tab_body("PROFILE", ss, theme, _width, height),
-    do: ProfileForm.render(ss, theme, form_viewport_opts(height, :profile))
+  defp render_tab_body("PROFILE", ss, theme, width, height),
+    do: ProfileForm.render(ss, theme, form_viewport_opts(height, :profile) ++ [width: width])
 
-  defp render_tab_body("PREFS", ss, theme, _width, height),
-    do: PrefsForm.render(ss, theme, form_viewport_opts(height, :prefs))
+  defp render_tab_body("PREFS", ss, theme, width, height),
+    do: PrefsForm.render(ss, theme, form_viewport_opts(height, :prefs) ++ [width: width])
 
   defp render_tab_body("SSH KEYS", ss, theme, width, _height),
     do: SSHKeysSurface.render(ss.ssh_keys, theme, width)

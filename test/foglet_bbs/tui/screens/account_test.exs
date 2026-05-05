@@ -1912,7 +1912,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     test "FOG-350/FOG-498: timezone select-list is height-bounded", %{state: state} do
       tz = Enum.find(state.screen_state.account.prefs_form.fields, &(&1.name == :timezone))
 
-      assert Map.get(tz, :max_height) == 6
+      assert Map.get(tz, :max_height) == 4
     end
 
     test "FOG-350/FOG-498: PREFS render contains a searchable bounded timezone picker",
@@ -1923,11 +1923,21 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       visible_timezone_rows =
         Enum.filter(flat, fn line ->
-          is_binary(line) and Enum.any?(curated, &String.contains?(line, &1))
+          trimmed = if is_binary(line), do: String.trim_leading(line), else: ""
+
+          is_binary(line) and String.starts_with?(trimmed, "│") and
+            Enum.any?(curated, &String.contains?(line, &1))
         end)
 
       assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Type to filter")))
-      assert length(visible_timezone_rows) <= 6
+
+      assert Enum.any?(
+               flat,
+               &(is_binary(&1) and String.starts_with?(String.trim_leading(&1), "┌"))
+             )
+
+      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "↓")))
+      assert length(visible_timezone_rows) <= 4
       assert Enum.any?(visible_timezone_rows, &String.contains?(&1, "Etc/UTC"))
 
       # Time format and Theme labels must remain visible alongside the
@@ -1937,6 +1947,38 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Theme"))),
              "Theme label must still render after the bounded timezone picker (FOG-132)"
+    end
+
+    test "FOG-877: timezone picker is structurally bounded at 80x24 and 64x22", %{state: state} do
+      for {terminal_width, terminal_height} <- [{80, 24}, {64, 22}] do
+        positioned =
+          state
+          |> Map.put(:terminal_size, {terminal_width, terminal_height})
+          |> render_account()
+          |> Engine.apply_layout(%{width: terminal_width, height: terminal_height})
+          |> List.flatten()
+          |> Enum.filter(&(&1.type == :text and is_binary(Map.get(&1, :text))))
+
+        top =
+          Enum.find(
+            positioned,
+            &(String.starts_with?(String.trim_leading(&1.text), "┌") and
+                String.contains?(&1.text, "selected"))
+          )
+
+        time_format = Enum.find(positioned, &String.contains?(&1.text, "Time format"))
+        save = Enum.find(positioned, &String.contains?(&1.text, "Save"))
+        cancel = Enum.find(positioned, &String.contains?(&1.text, "Cancel"))
+        selected = Enum.find(positioned, &String.contains?(&1.text, "selected"))
+        scroll = Enum.find(positioned, &String.contains?(&1.text, "more below"))
+
+        assert top && scroll && top.y < scroll.y
+        assert selected && selected.y == top.y
+        assert time_format && time_format.y > scroll.y
+
+        assert (save && cancel && save.y == terminal_height - 1) and
+                 cancel.y == terminal_height - 1
+      end
     end
 
     test "cycling down on focused theme enum field updates candidate_theme_id" do
