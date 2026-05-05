@@ -295,9 +295,16 @@ defmodule Foglet.TUI.Theme do
   """
   @spec from_state(map()) :: t()
   def from_state(state) do
-    case Map.get(state, :session_context) do
-      nil -> default()
-      ctx -> Map.get(ctx, :theme) || default()
+    with :account <- Map.get(state, :current_screen),
+         %{account: %{candidate_theme_id: id}} when is_binary(id) <- Map.get(state, :screen_state),
+         {:ok, theme} <- resolve_string(id) do
+      theme
+    else
+      _ ->
+        case Map.get(state, :session_context) do
+          nil -> default()
+          ctx -> Map.get(ctx, :theme) || default()
+        end
     end
   end
 
@@ -318,6 +325,12 @@ defmodule Foglet.TUI.Theme do
       end
 
     struct(__MODULE__, slots)
+  end
+
+  defp resolve_string(id) do
+    Enum.find_value(ids(), :error, fn theme_id ->
+      if Atom.to_string(theme_id) == id, do: {:ok, resolve(theme_id)}
+    end)
   end
 
   # --- private ---

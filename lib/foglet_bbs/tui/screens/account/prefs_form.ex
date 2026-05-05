@@ -8,6 +8,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.List.SelectableFieldList
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
   @fields [:timezone, :time_format, :theme]
 
@@ -72,6 +73,18 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
      }, [{:account_save_prefs, attrs}]}
   end
 
+  @spec preview_field_change(State.t(), ModalForm.t()) :: State.t()
+  def preview_field_change(%State{prefs_editing_field: :theme} = state, %ModalForm{} = form) do
+    %{state | candidate_theme_id: ModalForm.field_value(form, :theme), status_message: nil}
+  end
+
+  def preview_field_change(%State{} = state, %ModalForm{}), do: %{state | candidate_theme_id: nil}
+
+  @spec cancel_field(State.t()) :: State.t()
+  def cancel_field(%State{} = state) do
+    %{state | candidate_theme_id: nil, prefs_editing_field: nil}
+  end
+
   @spec error_modal(State.t(), map()) :: Effect.t()
   def error_modal(%State{} = state, errors) do
     field = state.prefs_editing_field || state.prefs_focus || :timezone
@@ -81,7 +94,8 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
       type: :form,
       title: form.title,
       message: form,
-      on_cancel: :dismiss_modal
+      on_cancel: :dismiss_modal,
+      change_target: {:account, :prefs_field}
     })
   end
 
@@ -99,7 +113,14 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   defp open_selected_field(%State{} = state) do
     field = state.prefs_focus || :timezone
     form = State.build_prefs_field_form(state.prefs_draft, field)
-    modal = %Modal{type: :form, title: form.title, message: form, on_cancel: :dismiss_modal}
+
+    modal = %Modal{
+      type: :form,
+      title: form.title,
+      message: form,
+      on_cancel: :dismiss_modal,
+      change_target: {:account, :prefs_field}
+    }
 
     {:ok, %{state | prefs_editing_field: field, prefs_errors: %{}, candidate_theme_id: nil},
      [Effect.open_modal(modal)]}
