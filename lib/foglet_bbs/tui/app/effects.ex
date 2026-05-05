@@ -154,18 +154,22 @@ defmodule Foglet.TUI.App.Effects do
         type: :task,
         payload: %{op: op, screen_key: screen_key, fun: fun}
       }) do
+    user_id = current_user_id(state)
+
     task =
       Foglet.TUI.Command.task(op, fn ->
         try do
           {:screen_task_result, screen_key, op, {:ok, fun.()}}
         rescue
           e ->
-            reason = Exception.format(:error, e, __STACKTRACE__)
-            {:screen_task_result, screen_key, op, {:error, reason}}
+            log_task_failure(screen_key, op, :exception, e, user_id)
+            {:screen_task_result, screen_key, op, {:error, {:task_failed, :exception}}}
         catch
           kind, value ->
-            reason = Exception.format(kind, value, __STACKTRACE__)
-            {:screen_task_result, screen_key, op, {:error, reason}}
+            log_task_failure(screen_key, op, kind, value, user_id)
+
+            {:screen_task_result, screen_key, op,
+             {:error, {:task_failed, safe_failure_kind(kind)}}}
         end
       end)
 
@@ -180,6 +184,47 @@ defmodule Foglet.TUI.App.Effects do
       {next_state, acc_cmds ++ cmds}
     end)
   end
+
+  defp log_task_failure(screen_key, op, failure_kind, reason, user_id) do
+    Logger.error(
+      [
+        "tui_screen_task_failed",
+        "screen=#{safe_value(screen_key)}",
+        "operation=#{safe_value(op)}",
+        "failure_kind=#{safe_value(safe_failure_kind(failure_kind))}",
+        "reason_class=#{safe_value(reason_class(reason))}",
+        "user_id=#{safe_value(user_id)}",
+        test_email_delivery_mode_fragment(op)
+      ]
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.join(" ")
+    )
+  end
+
+  defp reason_class(%module{}) when is_atom(module), do: module
+  defp reason_class(value) when is_atom(value), do: value
+  defp reason_class(value) when is_tuple(value) and tuple_size(value) > 0, do: elem(value, 0)
+  defp reason_class(value) when is_binary(value), do: :binary
+  defp reason_class(value) when is_integer(value), do: :integer
+  defp reason_class(_value), do: :unknown
+
+  defp safe_failure_kind(:error), do: :exception
+  defp safe_failure_kind(kind) when kind in [:exception, :throw, :exit], do: kind
+  defp safe_failure_kind(kind) when is_atom(kind), do: kind
+  defp safe_failure_kind(_kind), do: :unknown
+
+  defp current_user_id(%App{current_user: %{id: id}}), do: id
+  defp current_user_id(_state), do: nil
+
+  defp test_email_delivery_mode_fragment(:sysop_send_test_email),
+    do: "delivery_mode=#{safe_value(Foglet.Config.delivery_mode())}"
+
+  defp test_email_delivery_mode_fragment(_op), do: nil
+
+  defp safe_value(nil), do: "nil"
+  defp safe_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp safe_value(value) when is_binary(value), do: value
+  defp safe_value(value), do: inspect(value)
 
   # Low-cardinality kind atom for failure logs. Never returns the raw payload.
   defp publish_message_kind(message) when is_tuple(message) and tuple_size(message) > 0 do

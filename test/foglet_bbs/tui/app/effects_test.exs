@@ -1,6 +1,8 @@
 defmodule Foglet.TUI.App.EffectsTest do
   use ExUnit.Case, async: true
 
+  import ExUnit.CaptureLog
+
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.App.Routing
@@ -232,10 +234,24 @@ defmodule Foglet.TUI.App.EffectsTest do
     assert {:screen_task_result, :sample, :load, {:ok, {:loaded, 1}}} =
              success_task.()
 
-    {_state, [%Command{type: :task, data: failure_task}]} =
-      Effects.apply_effect(state(), Effect.task(:load, :sample, fn -> raise "boom" end))
+    secret = "sysop@example.test token=super-secret"
 
-    assert {:screen_task_result, :sample, :load, {:error, reason}} = failure_task.()
-    assert String.contains?(reason, "boom")
+    {_state, [%Command{type: :task, data: failure_task}]} =
+      Effects.apply_effect(state(), Effect.task(:load, :sample, fn -> raise secret end))
+
+    log =
+      capture_log(fn ->
+        assert {:screen_task_result, :sample, :load, {:error, {:task_failed, :exception}}} =
+                 failure_task.()
+      end)
+
+    assert log =~ "tui_screen_task_failed"
+    assert log =~ "screen=sample"
+    assert log =~ "operation=load"
+    assert log =~ "failure_kind=exception"
+    assert log =~ "reason_class=Elixir.RuntimeError"
+    refute log =~ secret
+    refute log =~ "sysop@example.test"
+    refute log =~ "super-secret"
   end
 end
