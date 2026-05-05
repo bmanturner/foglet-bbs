@@ -1,5 +1,5 @@
 defmodule Foglet.Sessions.SupervisorTest do
-  use ExUnit.Case, async: false
+  use FogletBbs.DataCase, async: false
 
   alias Foglet.Sessions.Session
   alias Foglet.Sessions.Supervisor, as: Sup

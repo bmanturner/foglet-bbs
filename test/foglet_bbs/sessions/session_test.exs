@@ -1,5 +1,5 @@
 defmodule Foglet.Sessions.SessionTest do
-  use ExUnit.Case, async: false
+  use FogletBbs.DataCase, async: false
 
   import ExUnit.CaptureLog
 
