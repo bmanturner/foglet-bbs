@@ -6,7 +6,7 @@ defmodule Foglet.TUI.Modal do
 
   A modal callback may take one of three shapes. `App.do_update/2` dispatches
   through this contract for `{:confirm_modal, answer}` and for key-driven
-  dismissal of `:info`, `:error`, and `:warning` modals that opt into callbacks:
+  dismissal of `:info`, `:success`, `:error`, and `:warning` modals that opt into callbacks:
 
   - `Enter` / `Space` use `:on_confirm`.
   - `Escape` uses `:on_cancel`.

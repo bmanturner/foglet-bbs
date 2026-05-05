@@ -52,6 +52,7 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.Accounts.PublicProfile
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
@@ -302,6 +303,11 @@ defmodule Foglet.TUI.Screens.PostReader do
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["u", "U"] do
     toggle_selected_post_upvote(state, context)
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["v", "V"] do
+    open_selected_author_profile(state, context)
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -1134,6 +1140,18 @@ defmodule Foglet.TUI.Screens.PostReader do
         end)
 
       {%{state | last_op: :toggle_upvote, last_error: nil}, [effect]}
+    else
+      _ -> {state, []}
+    end
+  end
+
+  defp open_selected_author_profile(%State{} = state, %Context{} = context) do
+    with false <- Guest.guest?(context),
+         %{user: user} when is_map(user) <- selected_action_post(state),
+         user_id when is_binary(user_id) <- Map.get(user, :id) || Map.get(user, "id") do
+      profile = PublicProfile.from_user(user)
+      modal = %Foglet.TUI.Modal{type: :info, title: "Public Profile", message: profile}
+      {state, [Effect.open_modal(modal)]}
     else
       _ -> {state, []}
     end

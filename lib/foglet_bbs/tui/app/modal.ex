@@ -116,17 +116,17 @@ defmodule Foglet.TUI.App.Modal do
   end
 
   defp handle_modal_key(type, %{key: :enter}, %App{} = state)
-       when type in [:info, :error, :warning] do
+       when type in [:info, :success, :error, :warning] do
     apply_callback(state, :on_confirm)
   end
 
   defp handle_modal_key(type, %{key: :escape}, %App{} = state)
-       when type in [:info, :error, :warning] do
+       when type in [:info, :success, :error, :warning] do
     apply_callback(state, :on_cancel)
   end
 
   defp handle_modal_key(type, %{key: :char, char: " "}, %App{} = state)
-       when type in [:info, :error, :warning] do
+       when type in [:info, :success, :error, :warning] do
     apply_callback(state, :on_confirm)
   end
 

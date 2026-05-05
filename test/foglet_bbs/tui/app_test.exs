@@ -944,10 +944,10 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
-    test "ordinary info error and warning modal key dismissals still emit no commands", %{
+    test "ordinary info success error and warning modal key dismissals still emit no commands", %{
       state: state
     } do
-      modal_types = [:info, :error, :warning]
+      modal_types = [:info, :success, :error, :warning]
       dismissal_keys = [%{key: :enter}, %{key: :escape}, %{key: :char, char: " "}]
 
       for modal_type <- modal_types, key_event <- dismissal_keys do

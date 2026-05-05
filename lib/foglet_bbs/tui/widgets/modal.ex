@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Widgets.Modal do
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form
+  alias Foglet.TUI.Widgets.Profile.PublicProfileCard
 
   @type modal_spec :: %{
           required(:message) => String.t(),
@@ -44,6 +45,13 @@ defmodule Foglet.TUI.Widgets.Modal do
   @spec render(modal_spec() | Foglet.TUI.Modal.t(), Theme.t()) :: any()
   def render(%Foglet.TUI.Modal{type: :form, message: %Form{} = form}, %Theme{} = theme) do
     Form.render(form, theme: theme)
+  end
+
+  def render(
+        %Foglet.TUI.Modal{message: %Foglet.Accounts.PublicProfile{} = profile},
+        %Theme{} = theme
+      ) do
+    PublicProfileCard.render(profile, theme)
   end
 
   def render(%Foglet.TUI.Modal{message: msg} = spec, %Theme{} = theme) do
