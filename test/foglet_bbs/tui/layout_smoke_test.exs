@@ -2495,8 +2495,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     elements = content_text_elements(positioned)
     flat = Enum.map_join(elements, "\n", & &1.text)
 
-    assert flat =~ "more above"
-    assert flat =~ "Theme:"
+    refute flat =~ "more above"
+    assert flat =~ "Theme"
+    assert flat =~ "▸"
 
     max_y =
       elements
@@ -2922,7 +2923,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         |> render_app_screen(Account, :account)
         |> AsciiRenderer.render({100, 30})
 
-      assert ascii =~ "Enter/Ctrl+S Save"
+      assert ascii =~ "E Edit"
+      assert ascii =~ "↑/↓ Select"
+      refute ascii =~ "Enter/Ctrl+S Save"
       refute ascii =~ "Ctrl+S Save  Enter Save"
       refute ascii =~ "Actions"
       refute ascii =~ "System"
@@ -2949,9 +2952,12 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         |> render_app_screen(Account, :account)
         |> AsciiRenderer.render({100, 30})
 
-      assert ascii =~ "Tab Next"
-      assert ascii =~ "Shift+Tab Previous"
-      assert ascii =~ "Enter/Ctrl+S Save"
+      assert ascii =~ "E Edit"
+      assert ascii =~ "↑/↓ Select"
+      assert ascii =~ "←/→ Tabs"
+      refute ascii =~ "Tab Next"
+      refute ascii =~ "Shift+Tab Previous"
+      refute ascii =~ "Enter/Ctrl+S Save"
       refute ascii =~ "Ctrl+S Save  Enter Save"
       refute ascii =~ "Actions"
       refute ascii =~ "System"

@@ -54,22 +54,20 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
   end
 
   describe "visible control behavior" do
-    test "persisted sysop saves representative SITE keys through SiteForm.handle_key/2", %{
+    test "persisted sysop saves representative SITE keys through per-field submit flow", %{
       sysop: sysop
     } do
       Config.put!("delivery_mode", "email", nil)
       Config.put!("require_email_verification", false, nil)
 
-      form =
-        SiteForm.init(current_user: sysop)
-        |> put_draft("registration_mode", "invite_only")
-        |> put_draft("invite_code_generators", "any_user")
-        |> put_draft("delivery_mode", "email")
-        |> put_draft("require_email_verification", true)
-        |> put_draft("guest_mode_enabled", false)
-        |> put_draft("invite_generation_per_user_limit", 3)
+      form = SiteForm.init(current_user: sysop)
 
-      {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+      {form, _effects} = submit_site_field(form, "registration_mode", "invite_only")
+      {form, _effects} = submit_site_field(form, "invite_code_generators", "any_user")
+      {form, _effects} = submit_site_field(form, "delivery_mode", "email")
+      {form, _effects} = submit_site_field(form, "require_email_verification", true)
+      {form, _effects} = submit_site_field(form, "guest_mode_enabled", false)
+      {form, _effects} = submit_site_field(form, "invite_generation_per_user_limit", 3)
 
       assert form.errors == %{}
       assert Config.get!("registration_mode") == "invite_only"
@@ -103,13 +101,11 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
 
       assert Config.put(nil, "registration_mode", "invite_only") == {:error, :forbidden}
 
-      site_form =
-        SiteForm.init(current_user: nil)
-        |> put_draft("registration_mode", "invite_only")
+      site_form = SiteForm.init(current_user: nil)
 
       assert {_site_form,
               [{:error_modal, "Permission denied. You may have been demoted.", :main_menu}]} =
-               SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, site_form)
+               submit_site_field(site_form, "registration_mode", "invite_only")
 
       limits_form =
         LimitsForm.init(current_user: nil)
@@ -131,10 +127,9 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
 
       form =
         SiteForm.init(current_user: sysop)
-        |> put_draft("delivery_mode", "no_email")
         |> put_draft("require_email_verification", true)
 
-      {form, []} = SiteForm.handle_key(%{key: :char, char: "s", ctrl: true}, form)
+      {form, [_effect]} = submit_site_field(form, "delivery_mode", "no_email")
 
       assert form.errors["delivery_mode"] == "No-email mode cannot require email verification"
 
@@ -176,6 +171,17 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
        {:visible,
         "LIMITS control affects Verify resend cooldown through Foglet.Config.email_verify_resend_cooldown_seconds/0"}}
     ]
+  end
+
+  defp submit_site_field(form, key, value) do
+    form
+    |> focus_site_field(key)
+    |> SiteForm.submit_field(%{String.to_existing_atom(key) => value})
+  end
+
+  defp focus_site_field(form, key) do
+    focused = Enum.find_index(SiteForm.visible_keys(form), &(&1 == key)) || 0
+    %{form | focused: focused}
   end
 
   defp put_draft(form, key, value) do
