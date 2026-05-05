@@ -92,8 +92,12 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   defp action_commands(reply_state, %Context{} = context) do
-    if Guest.guest?(context), do: [], else: [upvote_command(), reply_command(reply_state)]
+    if Guest.guest?(context),
+      do: [],
+      else: [profile_command(), upvote_command(), reply_command(reply_state)]
   end
+
+  defp profile_command, do: %{key: "V", label: "Profile", priority: 7}
 
   defp upvote_command, do: %{key: "U", label: "Upvote", priority: 8}
 

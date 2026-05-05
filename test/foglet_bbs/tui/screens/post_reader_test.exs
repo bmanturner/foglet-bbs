@@ -553,6 +553,60 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
+  describe "public profile action" do
+    test "V opens the selected visible action post author's profile modal" do
+      posts = [
+        %{
+          id: "p1",
+          message_number: 1,
+          body: "first",
+          user: %{id: "u-alice", handle: "alice", role: :user},
+          inserted_at: ~U[2026-04-18 00:00:00.000000Z]
+        },
+        %{
+          id: "p2",
+          message_number: 2,
+          body: "second",
+          user: %{
+            id: "u-bob",
+            handle: "bob",
+            role: :mod,
+            tagline: "ANSI \\e[31msafe\\e[0m",
+            location: "BBS",
+            post_count: 12,
+            inserted_at: ~U[2026-04-18 00:01:00.000000Z]
+          },
+          inserted_at: ~U[2026-04-18 00:01:00.000000Z]
+        }
+      ]
+
+      state =
+        State.new(
+          status: :loaded,
+          posts: posts,
+          selected_post_index: 0,
+          selected_action_post_index: 1
+        )
+
+      context =
+        Context.new(current_user: %{id: "reader", handle: "reader"}, terminal_size: {100, 40})
+
+      assert {^state, [%Effect{type: :modal, payload: {:open, modal}}]} =
+               PostReader.update({:key, %{key: :char, char: "v"}}, state, context)
+
+      assert %Foglet.Accounts.PublicProfile{user_id: "u-bob", handle: "bob", role: :mod} =
+               modal.message
+    end
+
+    test "V no-ops for guests and missing author targets" do
+      state = State.new(status: :loaded, posts: [%{id: "p1", body: "first"}])
+      guest_context = Context.new(current_user: nil, terminal_size: {100, 40})
+
+      assert {^state, []} =
+               PostReader.update({:key, %{key: :char, char: "v"}}, state, guest_context)
+    end
+  end
+
   describe "decomposition contract" do
     test "PostReader.Render is the sibling render entry point" do
       assert Code.ensure_loaded?(PostReader.Render)
