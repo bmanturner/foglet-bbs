@@ -227,6 +227,7 @@ def main() -> int:
 
     if child_pid == 0:
         try:
+            set_winsize(0, args.cols, args.rows)
             if args.cwd:
                 os.chdir(args.cwd)
             drop_privileges(run_as)
