@@ -51,6 +51,11 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     {move_selection(event, state), []}
   end
 
+  def handle_key(%{key: key} = event, %SState{} = state)
+      when key in [:tab, :shift_tab, :backtab] do
+    {move_selection(event, state), []}
+  end
+
   def handle_key(%{key: :char, char: c} = event, %SState{} = state)
       when c in ["j", "J", "k", "K", "g", "G"] do
     {move_selection(event, state), []}
@@ -208,6 +213,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
     do: Enum.at(SState.visible_keys(state), state.focused) || hd(SState.visible_keys(state))
 
   defp action_key(%{key: :char, char: char}), do: char
+  defp action_key(%{key: key} = event) when key in [:tab, :shift_tab, :backtab], do: event
   defp action_key(%{key: key}), do: key
 
   defp atom_payload(drafts, visible) do

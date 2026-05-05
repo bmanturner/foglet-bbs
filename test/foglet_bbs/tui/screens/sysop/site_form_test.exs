@@ -68,6 +68,28 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
     end
   end
 
+  test "SITE read mode Tab and Shift+Tab cycle visible rows and wrap" do
+    Config.put!("invite_code_generators", "sysop_only", nil)
+    state = SiteForm.init(current_user: sysop_fixture())
+    visible_count = length(SiteForm.visible_keys(state))
+
+    {state, []} = SiteForm.handle_key(%{key: :tab}, state)
+    assert state.focused == 1
+
+    {state, []} = SiteForm.handle_key(%{key: :shift_tab}, state)
+    assert state.focused == 0
+
+    {state, []} = SiteForm.handle_key(%{key: :backtab}, state)
+    assert state.focused == visible_count - 1
+
+    Config.put!("invite_code_generators", "any_user", nil)
+    state = SiteForm.init(current_user: sysop_fixture())
+    visible_count = length(SiteForm.visible_keys(state))
+
+    {state, []} = SiteForm.handle_key(%{key: :tab}, %{state | focused: visible_count - 1})
+    assert state.focused == 0
+  end
+
   test "T test email is available only from selected Email delivery field in email mode" do
     Config.put!("delivery_mode", "email", nil)
     state = SiteForm.init(current_user: sysop_fixture())

@@ -12,6 +12,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
 
   alias Foglet.Config
   alias Foglet.Config.Schema
+  alias Foglet.TUI.Input
   alias Foglet.TUI.TextWidth
   alias Raxol.UI.Components.Display.Viewport
 
@@ -76,24 +77,32 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
   def visible_keys(_state), do: @limits_keys
 
   @spec handle_key(map(), t()) :: {t(), [{atom(), any()}]}
-  def handle_key(%{key: :tab}, state), do: {rotate_focus(state, +1), []}
-  def handle_key(%{key: :shift_tab}, state), do: {rotate_focus(state, -1), []}
-  def handle_key(%{key: :backtab}, state), do: {rotate_focus(state, -1), []}
-  def handle_key(%{key: key}, state) when key in [:down, :j], do: {scroll_by(state, 1), []}
-  def handle_key(%{key: key}, state) when key in [:up, :k], do: {scroll_by(state, -1), []}
+  def handle_key(event, state) when is_map(event) do
+    cond do
+      Input.forward_tab?(event) -> {rotate_focus(state, +1), []}
+      Input.backward_tab?(event) -> {rotate_focus(state, -1), []}
+      true -> handle_non_tab_key(event, state)
+    end
+  end
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["j", "J"],
+  defp handle_non_tab_key(%{key: key}, state) when key in [:down, :j],
     do: {scroll_by(state, 1), []}
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["k", "K"],
+  defp handle_non_tab_key(%{key: key}, state) when key in [:up, :k],
     do: {scroll_by(state, -1), []}
 
-  def handle_key(%{key: :enter}, state), do: submit(state)
-  def handle_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
+  defp handle_non_tab_key(%{key: :char, char: c}, state) when c in ["j", "J"],
+    do: {scroll_by(state, 1), []}
 
-  def handle_key(%{key: :backspace}, state), do: {apply_backspace(state), []}
+  defp handle_non_tab_key(%{key: :char, char: c}, state) when c in ["k", "K"],
+    do: {scroll_by(state, -1), []}
 
-  def handle_key(%{key: :char, char: c} = event, state) when is_binary(c) do
+  defp handle_non_tab_key(%{key: :enter}, state), do: submit(state)
+  defp handle_non_tab_key(%{key: :char, char: "s", ctrl: true}, state), do: submit(state)
+
+  defp handle_non_tab_key(%{key: :backspace}, state), do: {apply_backspace(state), []}
+
+  defp handle_non_tab_key(%{key: :char, char: c} = event, state) when is_binary(c) do
     if Map.get(event, :ctrl) || Map.get(event, :meta) do
       {state, []}
     else
@@ -101,7 +110,7 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
     end
   end
 
-  def handle_key(_event, state), do: {state, []}
+  defp handle_non_tab_key(_event, state), do: {state, []}
 
   # ---------- Private ----------
 

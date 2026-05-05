@@ -557,6 +557,54 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert Enum.member?(cmds, {:load_sysop_limits})
     end
 
+    test "FOG-999: SITE Tab and Shift+Tab route through the Sysop shell to row focus", %{
+      state: state
+    } do
+      state = load_site_state(state)
+      assert state.screen_state.sysop.active_tab == 0
+      assert state.screen_state.sysop.site_form.focused == 0
+
+      {:update, state, []} = handle_sysop_key(%{key: :tab}, state)
+      assert state.screen_state.sysop.active_tab == 0
+      assert state.screen_state.sysop.site_form.focused == 1
+
+      {:update, state, []} = handle_sysop_key(%{key: :tab, shift: true}, state)
+      assert state.screen_state.sysop.site_form.focused == 0
+
+      {:update, state, []} = handle_sysop_key(%{key: :backtab}, state)
+
+      assert state.screen_state.sysop.site_form.focused ==
+               length(
+                 Foglet.TUI.Screens.Sysop.SiteForm.visible_keys(
+                   state.screen_state.sysop.site_form
+                 )
+               ) - 1
+    end
+
+    test "FOG-999: LIMITS Tab and Shift+Tab still route through the Sysop shell", %{
+      state: state
+    } do
+      limits = Foglet.TUI.Screens.Sysop.LimitsForm.init(current_user: state.current_user)
+
+      state =
+        put_in(state, [:screen_state, :sysop], %{
+          SysopState.new(active: 2)
+          | limits_form: {:loaded, limits}
+        })
+
+      {:update, state, []} = handle_sysop_key(%{key: :tab}, state)
+      assert {:loaded, limits} = state.screen_state.sysop.limits_form
+      assert limits.focused == 1
+
+      {:update, state, []} = handle_sysop_key(%{key: :shift_tab}, state)
+      assert {:loaded, limits} = state.screen_state.sysop.limits_form
+      assert limits.focused == 0
+
+      {:update, state, []} = handle_sysop_key(%{key: :backtab}, state)
+      assert {:loaded, limits} = state.screen_state.sysop.limits_form
+      assert limits.focused == 2
+    end
+
     test "switching to SYSTEM emits {:load_sysop_system}", %{state: state} do
       {:update, new_state, cmds} = handle_sysop_key(%{key: :char, char: "4"}, state)
       assert new_state.screen_state.sysop.active_tab == 3

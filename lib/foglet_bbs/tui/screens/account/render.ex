@@ -162,7 +162,13 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # stay visible at 80x24 even when Field nav and Tabs are dropped.
   defp form_middle_groups(%State{}, _section) do
     [
-      %{label: "List", commands: [%{key: "↑/↓", label: "Select", priority: 10}]},
+      %{
+        label: "List",
+        commands: [
+          %{key: "Tab/Shift+Tab", label: "Rows", priority: 10},
+          %{key: "↑/↓", label: "Select", priority: 20}
+        ]
+      },
       %{
         label: "Actions",
         commands: [%{key: "E", label: "Edit", priority: 5}]

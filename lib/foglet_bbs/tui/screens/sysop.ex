@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Input
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesState
@@ -248,11 +249,21 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp handle_update_key(event, %State{} = ss, %Context{} = context) do
-    if digit_consumed_by_active_tab?(event, ss) do
-      delegate_update_to_active_tab(event, ss, context)
-    else
-      route_through_tabs(event, ss, context)
+    cond do
+      digit_consumed_by_active_tab?(event, ss) ->
+        delegate_update_to_active_tab(event, ss, context)
+
+      field_list_tab_event?(event, ss) ->
+        delegate_update_to_active_tab(event, ss, context)
+
+      true ->
+        route_through_tabs(event, ss, context)
     end
+  end
+
+  defp field_list_tab_event?(event, %State{} = ss) do
+    Enum.at(State.tab_labels(ss), ss.active_tab) in ["SITE", "LIMITS"] and
+      (Input.forward_tab?(event) or Input.backward_tab?(event))
   end
 
   # FOG-185: LIMITS is an always-editable integer form, so digit chars 0–9

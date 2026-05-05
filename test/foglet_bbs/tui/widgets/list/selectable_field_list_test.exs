@@ -29,6 +29,19 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldListTest do
     assert SelectableFieldList.move(3, 4, :down) == 3
   end
 
+  test "move/3 wraps Tab and Shift+Tab row selection across accepted event shapes" do
+    assert SelectableFieldList.move(0, 4, :tab) == 1
+    assert SelectableFieldList.move(3, 4, :tab) == 0
+    assert SelectableFieldList.move(0, 4, %{key: :tab}) == 1
+
+    assert SelectableFieldList.move(1, 4, :shift_tab) == 0
+    assert SelectableFieldList.move(0, 4, :shift_tab) == 3
+    assert SelectableFieldList.move(0, 4, :backtab) == 3
+    assert SelectableFieldList.move(0, 4, %{key: :tab, shift: true}) == 3
+    assert SelectableFieldList.move(0, 4, %{key: :shift_tab}) == 3
+    assert SelectableFieldList.move(0, 4, %{key: :backtab}) == 3
+  end
+
   test "render marks selected row, uses empty placeholder, and includes descriptions" do
     texts = render_texts(fields(), 2, width: 64, height: 8)
     rendered = Enum.map_join(texts, "\n", & &1.text)

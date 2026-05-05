@@ -637,14 +637,75 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert state.screen_state.account.profile_draft.location == before_location
     end
 
-    test "FOG-899: Account list keybar advertises edit/select/tabs, not form chrome", %{
+    test "FOG-999: Profile Tab and Shift+Tab cycle rows without changing account tabs", %{
       state: state
     } do
+      state = ensure_account_seeded(state)
+      assert state.screen_state.account.active_tab == 0
+      assert state.screen_state.account.profile_focus == :location
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.active_tab == 0
+      assert state.screen_state.account.profile_focus == :tagline
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.profile_focus == :real_name
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.profile_focus == :location
+
+      {:update, state, []} = handle_account_key(%{key: :tab, shift: true}, state)
+      assert state.screen_state.account.profile_focus == :real_name
+
+      {:update, state, []} = handle_account_key(%{key: :shift_tab}, state)
+      assert state.screen_state.account.profile_focus == :tagline
+
+      {:update, state, []} = handle_account_key(%{key: :backtab}, state)
+      assert state.screen_state.account.profile_focus == :location
+    end
+
+    test "FOG-999: Prefs Tab and Shift+Tab cycle rows without changing account tabs", %{
+      state: state
+    } do
+      state = state |> ensure_account_seeded() |> leave_profile_form()
+      assert state.screen_state.account.active_tab == 1
+      assert state.screen_state.account.prefs_focus == :timezone
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.active_tab == 1
+      assert state.screen_state.account.prefs_focus == :time_format
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.prefs_focus == :theme
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.prefs_focus == :timezone
+
+      {:update, state, []} = handle_account_key(%{key: :backtab}, state)
+      assert state.screen_state.account.prefs_focus == :theme
+
+      {:update, state, []} = handle_account_key(%{key: :shift_tab}, state)
+      assert state.screen_state.account.prefs_focus == :time_format
+    end
+
+    test "FOG-999: Enter still opens the selected Profile field after row Tab", %{state: state} do
+      state = ensure_account_seeded(state)
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+
+      {:update, state, []} = handle_account_key(%{key: :enter}, state)
+
+      assert state.screen_state.account.profile_editing_field == :tagline
+    end
+
+    test "FOG-899/FOG-999: Account list keybar advertises row cycling/edit/tabs, not form chrome",
+         %{
+           state: state
+         } do
       flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
 
       assert flat =~ "E"
       assert flat =~ "Edit"
-      assert flat =~ "Select"
+      assert flat =~ "Rows"
       assert flat =~ "Tabs"
       refute flat =~ "Save"
       refute flat =~ "Cancel"

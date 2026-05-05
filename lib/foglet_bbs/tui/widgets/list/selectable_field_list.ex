@@ -10,6 +10,7 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldList do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.TUI.Input
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
 
@@ -44,11 +45,16 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldList do
   end
 
   @doc "Move selected index for list-mode navigation keys."
-  @spec move(non_neg_integer(), non_neg_integer(), atom() | String.t()) :: non_neg_integer()
+  @spec move(non_neg_integer(), non_neg_integer(), atom() | String.t() | map()) ::
+          non_neg_integer()
+  def move(_selected_index, 0, _key), do: 0
+
   def move(selected_index, count, key) do
-    selected_index
-    |> do_move(count, key)
-    |> clamp(count)
+    cond do
+      forward_tab_key?(key) -> wrap_move(selected_index, count, 1)
+      backward_tab_key?(key) -> wrap_move(selected_index, count, -1)
+      true -> selected_index |> do_move(count, key) |> clamp(count)
+    end
   end
 
   defp do_move(idx, _count, key) when key in [:up, "k", "K"], do: idx - 1
@@ -56,6 +62,16 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldList do
   defp do_move(_idx, _count, key) when key in [:home, "g", "G"], do: 0
   defp do_move(_idx, count, :end), do: count - 1
   defp do_move(idx, _count, _key), do: idx
+
+  defp forward_tab_key?(%{} = event), do: Input.forward_tab?(event)
+  defp forward_tab_key?(:tab), do: true
+  defp forward_tab_key?(_key), do: false
+
+  defp backward_tab_key?(%{} = event), do: Input.backward_tab?(event)
+  defp backward_tab_key?(key) when key in [:shift_tab, :backtab], do: true
+  defp backward_tab_key?(_key), do: false
+
+  defp wrap_move(idx, count, delta), do: Integer.mod(clamp(idx, count) + delta, count)
 
   defp field_block(field, width, label_width) do
     marker_width = 2
