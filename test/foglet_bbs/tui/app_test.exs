@@ -944,22 +944,43 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
-    test "{:session_replaced, user_id} shows modal that quits on dismiss", %{state: state} do
-      {new_state, cmds} = App.update({:session_replaced, "u1"}, state)
-      assert new_state.modal != nil
-      assert new_state.modal.type == :warning
-      # No immediate quit — the user must dismiss the modal first.
-      assert cmds == []
+    test "ordinary info error and warning modal key dismissals still emit no commands", %{
+      state: state
+    } do
+      modal_types = [:info, :error, :warning]
+      dismissal_keys = [%{key: :enter}, %{key: :escape}, %{key: :char, char: " "}]
 
-      # Both dismiss callbacks return Command.quit() so the session ends
-      # whether the user confirms or cancels.
-      assert is_function(new_state.modal.on_confirm, 1)
-      assert is_function(new_state.modal.on_cancel, 1)
+      for modal_type <- modal_types, key_event <- dismissal_keys do
+        with_modal = %{state | modal: %Foglet.TUI.Modal{message: "notice", type: modal_type}}
 
-      {_, [confirm_cmd]} = new_state.modal.on_confirm.(new_state)
-      {_, [cancel_cmd]} = new_state.modal.on_cancel.(new_state)
-      assert match?(%Raxol.Core.Runtime.Command{type: :quit}, confirm_cmd)
-      assert match?(%Raxol.Core.Runtime.Command{type: :quit}, cancel_cmd)
+        {new_state, cmds} = App.update({:key, key_event}, with_modal)
+
+        assert new_state.modal == nil
+        assert cmds == []
+      end
+    end
+
+    test "{:session_replaced, user_id} quits when dismissed through the App key path", %{
+      state: state
+    } do
+      dismissal_keys = [
+        %{key: :enter},
+        %{key: :escape},
+        %{key: :char, char: " "}
+      ]
+
+      for key_event <- dismissal_keys do
+        {with_modal, initial_cmds} = App.update({:session_replaced, "u1"}, state)
+        assert with_modal.modal != nil
+        assert with_modal.modal.type == :warning
+        # No immediate quit — the user must dismiss the modal first.
+        assert initial_cmds == []
+
+        {dismissed_state, cmds} = App.update({:key, key_event}, with_modal)
+
+        assert dismissed_state.modal == nil
+        assert [%Raxol.Core.Runtime.Command{type: :quit}] = cmds
+      end
     end
 
     test "{:promote_session, user} transitions to main_menu and sets current_user", %{

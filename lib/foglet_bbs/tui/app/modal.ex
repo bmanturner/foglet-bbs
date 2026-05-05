@@ -60,28 +60,7 @@ defmodule Foglet.TUI.App.Modal do
   """
   @spec confirm(App.t(), :yes | :no) :: {App.t(), [Command.t()]}
   def confirm(%App{} = state, answer) when answer in [:yes, :no] do
-    modal = state.modal
-    cleared = %{state | modal: nil}
-
-    callback_key = if answer == :yes, do: :on_confirm, else: :on_cancel
-    callback = modal && Map.get(modal, callback_key)
-
-    case callback do
-      nil ->
-        {cleared, []}
-
-      :dismiss_modal ->
-        {cleared, []}
-
-      fun when is_function(fun, 1) ->
-        case fun.(cleared) do
-          {%App{} = new_state, cmds} when is_list(cmds) ->
-            {new_state, wrap_commands(cmds)}
-
-          msg ->
-            App.update(msg, cleared)
-        end
-    end
+    apply_callback(state, callback_key(answer))
   end
 
   @doc "Replaces the active modal with the generic visible form-submit error."
@@ -138,17 +117,17 @@ defmodule Foglet.TUI.App.Modal do
 
   defp handle_modal_key(type, %{key: :enter}, %App{} = state)
        when type in [:info, :error, :warning] do
-    dismiss(state)
+    apply_callback(state, :on_confirm)
   end
 
   defp handle_modal_key(type, %{key: :escape}, %App{} = state)
        when type in [:info, :error, :warning] do
-    dismiss(state)
+    apply_callback(state, :on_cancel)
   end
 
   defp handle_modal_key(type, %{key: :char, char: " "}, %App{} = state)
        when type in [:info, :error, :warning] do
-    dismiss(state)
+    apply_callback(state, :on_confirm)
   end
 
   defp handle_modal_key(_type, _key, %App{} = state), do: {state, []}
@@ -172,6 +151,33 @@ defmodule Foglet.TUI.App.Modal do
   defp modal_submit_target?(%App{} = state, screen_key) do
     module = Routing.screen_module_for(state, screen_key)
     Code.ensure_loaded?(module) and function_exported?(module, :update, 3)
+  end
+
+  defp callback_key(:yes), do: :on_confirm
+  defp callback_key(:no), do: :on_cancel
+
+  defp apply_callback(%App{} = state, callback_key)
+       when callback_key in [:on_confirm, :on_cancel] do
+    modal = state.modal
+    cleared = %{state | modal: nil}
+    callback = modal && Map.get(modal, callback_key)
+
+    case callback do
+      nil ->
+        {cleared, []}
+
+      :dismiss_modal ->
+        {cleared, []}
+
+      fun when is_function(fun, 1) ->
+        case fun.(cleared) do
+          {%App{} = new_state, cmds} when is_list(cmds) ->
+            {new_state, wrap_commands(cmds)}
+
+          msg ->
+            App.update(msg, cleared)
+        end
+    end
   end
 
   defp wrap_commands(commands), do: Enum.map(commands, &wrap_command/1)
