@@ -658,17 +658,19 @@ defmodule Foglet.TUI.Screens.AccountTest do
              ) == before_location
     end
 
-    test "FOG-741: Account form keybar advertises Esc before tab jumps", %{state: state} do
+    test "FOG-741: Account form keybar advertises Esc before tab arrows", %{state: state} do
       flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
 
-      assert flat =~ "Esc,1-3"
-      refute flat =~ "1-3 Jump"
+      assert flat =~ "Esc,←/→"
+      refute flat =~ "Jump"
+      refute flat =~ "1-3"
 
       {:update, state, []} = handle_account_key(%{key: :escape}, state)
       flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
 
-      assert flat =~ "1-3"
-      refute flat =~ "Esc,1-3"
+      assert flat =~ "←/→"
+      refute flat =~ "Esc,←/→"
+      refute flat =~ "Jump"
     end
 
     test "KEYS-01 digit '3' selects SSH KEYS when invites are hidden", %{state: state} do

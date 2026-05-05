@@ -1237,7 +1237,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
     # global `1-N Jump` shortcut while LIMITS is the active tab —
     # otherwise sysops press `4` expecting SYSTEM and silently extend
     # `Post length limit`. Arrow-key tab navigation remains advertised.
-    test "LIMITS command bar suppresses '1-N Jump' but keeps Switch", %{state: state} do
+    test "LIMITS command bar suppresses '1-N Jump' but keeps tab arrows", %{state: state} do
       flat =
         state
         |> render_sysop()
@@ -1250,8 +1250,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
       refute String.contains?(flat, "1-5"),
              "LIMITS must not advertise the '1-5' jump-key range while digits are field input"
 
-      assert String.contains?(flat, "Switch"),
-             "LIMITS must keep '←/→ Switch' as the discoverable tab-nav affordance"
+      assert String.contains?(flat, "←/→"),
+             "LIMITS must keep arrow tab navigation as the discoverable tab-nav affordance"
     end
 
     # FOG-739: same suppression must hold at cramped 64x22 — the bug
