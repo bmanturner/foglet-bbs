@@ -536,7 +536,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
           []
 
         state.show_footer ->
-          [render_footer_row(width, length(visible) > 1, theme)]
+          [render_footer_row(width, length(visible) > 1, focused_field_type(state), theme)]
 
         true ->
           []
@@ -580,11 +580,25 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
   # Footer clauses (FOG-779): keep overlay modal command discovery to one row,
   # but collapse by priority at cramped widths so save/cancel remain legible.
-  defp render_footer_row(width, multiple_visible_fields?, %Theme{} = theme) do
-    text(footer_hint(width, multiple_visible_fields?), fg: theme.dim.fg)
+  # FOG-1001: select-list fields keep Enter for selection, so their footer must
+  # not collapse Enter and Ctrl+S into a shared Save affordance.
+  defp render_footer_row(width, multiple_visible_fields?, focused_type, %Theme{} = theme) do
+    text(footer_hint(width, multiple_visible_fields?, focused_type), fg: theme.dim.fg)
   end
 
-  defp footer_hint(width, multiple_visible_fields?) when is_integer(width) do
+  defp footer_hint(width, multiple_visible_fields?, :select_list) when is_integer(width) do
+    full = "[Tab] Next   [Shift+Tab] Previous   [Enter] Select   [Ctrl+S] Save   [Esc] Cancel"
+    middle = "[Tab] Next   [Enter] Select   [Ctrl+S] Save   [Esc] Cancel"
+    compact = "[Enter] Select   [Ctrl+S] Save   [Esc] Cancel"
+
+    cond do
+      multiple_visible_fields? and fits?(full, width) -> full
+      multiple_visible_fields? and fits?(middle, width) -> middle
+      true -> compact
+    end
+  end
+
+  defp footer_hint(width, multiple_visible_fields?, _focused_type) when is_integer(width) do
     full = "[Tab] Next   [Shift+Tab] Previous   [Enter] Submit   [Ctrl+S] Save   [Esc] Cancel"
     middle = "[Tab] Next   [Enter/Ctrl+S] Save   [Esc] Cancel"
     compact = "[Enter/Ctrl+S] Save   [Esc] Cancel"
@@ -596,7 +610,11 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     end
   end
 
-  defp footer_hint(_width, _multiple_visible_fields?), do: "[Enter/Ctrl+S] Save   [Esc] Cancel"
+  defp footer_hint(_width, _multiple_visible_fields?, :select_list),
+    do: "[Enter] Select   [Ctrl+S] Save   [Esc] Cancel"
+
+  defp footer_hint(_width, _multiple_visible_fields?, _focused_type),
+    do: "[Enter/Ctrl+S] Save   [Esc] Cancel"
 
   defp fits?(text, width), do: TextWidth.display_width(text) <= width
 

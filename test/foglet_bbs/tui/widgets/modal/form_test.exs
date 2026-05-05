@@ -223,6 +223,32 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert_receive {:submitted, %{timezone: "America/Chicago", confirm: ""}}
   end
 
+  test "select_list keeps Enter as selection and Ctrl+S as save" do
+    fields = [
+      %{
+        name: :timezone,
+        type: :select_list,
+        label: "Timezone",
+        choices: ["Etc/UTC", "America/Chicago", "America/New_York"],
+        value: "Etc/UTC"
+      }
+    ]
+
+    state = test_form(fields)
+    {state, nil} = Form.handle_event(%{key: :char, char: "C"}, state)
+    {state, nil} = Form.handle_event(%{key: :char, char: "h"}, state)
+    {state, action} = Form.handle_event(%{key: :enter}, state)
+
+    assert action == nil
+    assert Form.field_value(state, :timezone) == "America/Chicago"
+    refute_receive {:submitted, _}
+
+    {_state, action} = Form.handle_event(%{key: :char, char: "s", ctrl: true}, state)
+
+    assert action == {:submitted, {:submitted, %{timezone: "America/Chicago"}}}
+    assert_receive {:submitted, %{timezone: "America/Chicago"}}
+  end
+
   test "select_list render includes search prompt and filtered options instead of cycling chrome" do
     fields = [
       %{
@@ -941,6 +967,30 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       assert String.contains?(flat, "[Enter/Ctrl+S] Save")
       assert String.contains?(flat, "[Esc] Cancel")
       refute String.contains?(flat, "[Tab] Next")
+    end
+
+    test "FORM-03 select-list footer advertises Enter selection and Ctrl+S save" do
+      form =
+        footer_form(
+          fields: [
+            %{
+              name: :timezone,
+              type: :select_list,
+              label: "Timezone",
+              choices: ["Etc/UTC", "America/Chicago"],
+              value: "Etc/UTC"
+            }
+          ],
+          show_footer: true
+        )
+
+      flat = form |> Form.render(theme: theme(), width: 80) |> flatten_text()
+
+      assert String.contains?(flat, "[Enter] Select")
+      assert String.contains?(flat, "[Ctrl+S] Save")
+      assert String.contains?(flat, "[Esc] Cancel")
+      refute String.contains?(flat, "[Enter/Ctrl+S] Save")
+      refute String.contains?(flat, "[Enter] Submit")
     end
 
     test "FORM-03 explicit show_footer: false matches default-off behavior" do

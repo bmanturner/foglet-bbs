@@ -8,6 +8,8 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form
 
+  import Foglet.TUI.WidgetHelpers, only: [flatten_text: 1]
+
   defp user do
     %{
       id: "u1",
@@ -82,7 +84,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
     assert attrs.theme == "amber"
   end
 
-  test "cancel/dismiss leaves the seeded prefs draft unchanged" do
+  test "timezone overlay Enter selects without submitting while Ctrl+S saves selected timezone" do
     state = State.new(current_user: user())
     form = State.build_prefs_field_form(state.prefs_draft, :timezone)
 
@@ -90,6 +92,43 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
     {edited_form, nil} = Form.handle_event(%{key: :enter}, edited_form)
 
     assert Form.field_value(edited_form, :timezone) != state.prefs_draft.timezone
+
+    {saved_form, action} = Form.handle_event(%{key: :char, char: "s", ctrl: true}, edited_form)
+
+    assert {:submitted,
+            %Effect{
+              type: :modal_submit,
+              payload: %{
+                screen_key: :account,
+                kind: :prefs_field,
+                payload: %{timezone: timezone}
+              }
+            }} = action
+
+    assert timezone == Form.field_value(saved_form, :timezone)
+    assert saved_form.submit_state == :submitting
+  end
+
+  test "timezone overlay footer is accurate for Enter selection and Ctrl+S save at 80 columns" do
+    state = State.new(current_user: user())
+    form = State.build_prefs_field_form(state.prefs_draft, :timezone)
+    flat = form |> Form.render(theme: Theme.default(), width: 80) |> flatten_text()
+
+    assert flat =~ "[Enter] Select"
+    assert flat =~ "[Ctrl+S] Save"
+    assert flat =~ "[Esc] Cancel"
+    refute flat =~ "[Enter/Ctrl+S] Save"
+  end
+
+  test "Esc cancels timezone overlay without submitting or mutating prefs draft" do
+    state = State.new(current_user: user())
+    form = State.build_prefs_field_form(state.prefs_draft, :timezone)
+
+    {edited_form, nil} = Form.handle_event(%{key: :char, char: "P"}, form)
+    {edited_form, nil} = Form.handle_event(%{key: :enter}, edited_form)
+    {_cancelled_form, action} = Form.handle_event(%{key: :escape}, edited_form)
+
+    assert action == :cancelled
     assert state.prefs_draft == %{timezone: "America/Chicago", time_format: "12h", theme: "gray"}
   end
 
