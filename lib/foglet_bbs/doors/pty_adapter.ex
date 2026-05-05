@@ -20,6 +20,14 @@ defmodule Foglet.Doors.PTYAdapter do
 
   @spec open(Manifest.t(), {pos_integer(), pos_integer()}, [{charlist(), charlist()}]) ::
           {:ok, t()} | {:error, term()}
+  def open(%Manifest{sandbox: %{mode: mode}} = manifest, terminal_size, env)
+      when mode != :none do
+    case helper_path() do
+      {:ok, helper} -> open_helper(helper, manifest, terminal_size, env)
+      :unavailable -> {:error, {:sandbox_unavailable, :pty_helper_missing}}
+    end
+  end
+
   def open(%Manifest{pty?: true} = manifest, terminal_size, env) do
     case helper_path() do
       {:ok, helper} -> open_helper(helper, manifest, terminal_size, env)
@@ -109,7 +117,9 @@ defmodule Foglet.Doors.PTYAdapter do
     args = ["--cols", Integer.to_string(cols), "--rows", Integer.to_string(rows)]
 
     args =
-      args ++ working_dir_args(manifest.working_dir) ++ ["--", manifest.command | manifest.args]
+      args ++
+        sandbox_args(manifest.sandbox) ++
+        working_dir_args(manifest.working_dir) ++ ["--", manifest.command | manifest.args]
 
     opts = [
       :binary,
@@ -188,6 +198,18 @@ defmodule Foglet.Doors.PTYAdapter do
       _ -> false
     end
   end
+
+  defp sandbox_args(%{mode: :none}), do: []
+
+  defp sandbox_args(%{mode: :restricted_user_process_group} = sandbox) do
+    ["--sandbox-mode", "restricted_user_process_group", "--run-as-user", sandbox.user]
+    |> maybe_add_arg("--run-as-group", sandbox.group)
+  end
+
+  defp sandbox_args(_sandbox), do: []
+
+  defp maybe_add_arg(args, _name, nil), do: args
+  defp maybe_add_arg(args, name, value), do: args ++ [name, value]
 
   defp working_dir_args(nil), do: []
   defp working_dir_args(path), do: ["--cwd", path]
