@@ -69,6 +69,16 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
     |> Enum.map_join(& &1.text)
   end
 
+  defp bottom_row_text(tree, width, height) do
+    elements = positioned_text_elements(tree, width, height)
+    bottom_y = elements |> Enum.map(& &1.y) |> Enum.max()
+
+    elements
+    |> Enum.filter(&(&1.y == bottom_y))
+    |> Enum.sort_by(& &1.x)
+    |> Enum.map_join(& &1.text)
+  end
+
   defp collect_text(nil, acc), do: acc
   defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
 
@@ -200,6 +210,40 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
 
       send(task.pid, :stop)
       Task.await(task)
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "chat tab keybar at 80x24 advertises left-arrow Threads and omits threads-only Q Back" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+
+      assert state.current_tab == :chat
+
+      keybar = BoardScreen.render(state, ctx) |> bottom_row_text(80, 24)
+
+      assert keybar =~ "← Threads"
+      assert keybar =~ "Enter Send"
+      refute keybar =~ "Q Back"
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "threads tab keybar still advertises Q Back" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      assert state.current_tab == :threads
+
+      keybar = BoardScreen.render(state, ctx) |> bottom_row_text(80, 24)
+
+      assert keybar =~ "2 Chat (1)"
+      assert keybar =~ "Q Back"
 
       :ok = PresenceTracker.untrack(b.id, "u1")
     end

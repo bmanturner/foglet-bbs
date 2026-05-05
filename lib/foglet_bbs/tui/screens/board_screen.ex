@@ -280,12 +280,11 @@ defmodule Foglet.TUI.Screens.BoardScreen do
         }
 
         # When the chat tab is active, suppress threads-only actions
-        # (j/k/Enter/C) — they belong to the threads body. Keep the System
-        # group (Q/back-nav) by isolating it from the threads group, then
-        # let ChatRoom contribute its Send / Sidebar commands.
-        system_groups = Enum.filter(threads_group, &(&1.label == "System"))
+        # (j/k/Enter/C/Q) — they belong to the threads body. Chat keeps q/Q
+        # as composer input, so the only advertised tab back-nav here is
+        # ← Threads. ChatRoom contributes its Send / Sidebar commands.
         chat_groups = ChatRoom.keybar_groups(state.chat_room, context)
-        [tab_group] ++ chat_groups ++ system_groups
+        [tab_group] ++ chat_groups
     end
   end
 

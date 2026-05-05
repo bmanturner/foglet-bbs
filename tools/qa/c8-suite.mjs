@@ -244,9 +244,9 @@ async function main() {
     await a.key('enter');
     await a.wait(800);
     // Leave the board screen. Tab-switch digits are gated to :threads tab
-    // (FOG-284) to keep '1'/'2' in the chat composer from hijacking nav, so
-    // use the left-arrow shortcut documented in the keybar to flip back to
-    // THREADS before pressing Q.
+    // (FOG-284) to keep '1'/'2' in the chat composer from hijacking nav, and
+    // Q Back is THREADS-only. Use the Chat keybar's left-arrow shortcut to
+    // flip back to THREADS before pressing Q.
     await a.key('left'); await a.wait(300); // back to THREADS tab
     await a.type('Q'); await a.wait(600); // back to Boards
     // Re-enter and switch to CHAT.
@@ -286,8 +286,8 @@ async function main() {
     }
     console.log(`     [scenario 7] waiting ${opts.ephemeralWaitMs}ms for TTL expiry...`);
     await a.wait(opts.ephemeralWaitMs);
-    // Force fresh history pull: leave and re-enter chat. Use the gated-safe
-    // ←/Q sequence (see scenario 6 note re: FOG-284 digit-shortcut gating).
+    // Force fresh history pull: leave and re-enter chat. Use the supported
+    // Chat ← Threads hop, then THREADS-only Q Back.
     await a.key('left'); await a.wait(400);
     await a.type('Q'); await a.wait(600);
     await a.openBoardByName(EPH_BOARD);
@@ -315,7 +315,7 @@ async function main() {
     const ephScreen = a.screen();
     const ephHas = hasEphemeralNotice(ephScreen);
     // FOG-279/FOG-284: Q and digits on the chat tab are consumed by the
-    // composer; switch back to threads via ← before triggering back-nav.
+    // composer; switch back to THREADS via ← before using THREADS-only Q Back.
     await a.key('left'); await a.wait(300);
     await a.type('Q'); await a.wait(500);
     await a.openBoardByName(PERM_BOARD);
