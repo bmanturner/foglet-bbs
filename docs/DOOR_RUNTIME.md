@@ -77,9 +77,11 @@ Security notes
 
 Residual risks / follow-up candidates
 
-- FOG-522 still owns sandbox/process isolation, filesystem exposure, network
-  policy, and deployment hardening for untrusted real-world door programs. The
-  helper improves PTY fidelity; it is not a sandbox.
+- FOG-823/FOG-829 documents the approved restricted-user plus process-group
+  deployment baseline. The helper provides the process-group side; restricted
+  uid/gid switching still requires OTP/runtime implementation and a supported
+  host/container capability. The helper improves PTY fidelity; it is not a full
+  sandbox by itself.
 - Docker/release packaging now installs Python 3 in the final runtime image and
   includes `priv/doors/pty/foglet_pty_adapter.py` via the release `priv` tree.
   Deployments that remove Python 3 or override the helper path will degrade to

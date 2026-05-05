@@ -45,7 +45,7 @@ Foglet narrows what a door receives:
 
 Foglet does not pass database credentials, app secrets, API keys, private tokens, full user structs, or full session structs to door processes.
 
-This is not a full sandbox. The first slice uses allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. The helper launches the door in a child process group so timeout and disconnect cleanup can terminate the helper-owned door tree, but it does not isolate filesystem, network, uid/gid, or resource access. Stronger process isolation remains future hardening in FOG-522, not a guarantee in this guide.
+This is not a full sandbox. The first slice uses allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. The helper launches the door in a child process group so timeout and disconnect cleanup can terminate the helper-owned door tree, but by itself it does not isolate filesystem, network, uid/gid, or resource access. The approved stronger baseline is documented in `docs/DEPLOYMENT.md`: external/classic doors should run as a restricted OS user plus a per-door process group, and launches must fail closed when the configured restricted user cannot be applied. Docker/Fly currently diverge because the release image runs as `nobody` and cannot switch to a second door user without an approved runtime change. Treat untrusted third-party doors as unsupported on that container path until the divergence is resolved.
 
 ## Door manifest fields
 
