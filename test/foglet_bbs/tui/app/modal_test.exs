@@ -4,6 +4,7 @@ defmodule Foglet.TUI.App.ModalTest do
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
@@ -68,6 +69,48 @@ defmodule Foglet.TUI.App.ModalTest do
     )
   end
 
+  defp timezone_form do
+    Form.init(
+      title: "Edit preferences: Timezone",
+      fields: [
+        %{
+          name: :timezone,
+          type: :select_list,
+          label: "Timezone",
+          value: "Etc/UTC",
+          choices: [
+            "Etc/UTC",
+            "America/Chicago",
+            "America/New_York",
+            "America/Los_Angeles",
+            "Europe/London",
+            "Pacific/Auckland"
+          ],
+          max_height: 4
+        }
+      ],
+      show_footer: true,
+      on_submit: fn payload -> Effect.modal_submit(:account, :prefs_field, payload) end,
+      on_cancel: fn -> :ok end
+    )
+  end
+
+  defp row_containing(rendered, needle) do
+    rendered
+    |> String.split("\n")
+    |> Enum.find(&String.contains?(&1, needle))
+  end
+
+  defp assert_modal_boundary_survives(rendered, needle) do
+    row = row_containing(rendered, needle)
+
+    assert row,
+           "expected rendered modal to contain #{inspect(needle)}; got:\n#{rendered}"
+
+    assert String.ends_with?(row, "║"),
+           "expected modal right boundary to survive on #{inspect(needle)} row; got #{inspect(row)}"
+  end
+
   describe "modal key precedence" do
     test "handle_key/2 does not route keys to the active screen reducer while a modal is open" do
       modal = %Modal{type: :info, message: "pause"}
@@ -78,6 +121,30 @@ defmodule Foglet.TUI.App.ModalTest do
       assert cmds == []
       assert new_state.modal == modal
       assert %SampleScreen.State{keys: []} = Routing.screen_state_for(new_state, :source)
+    end
+  end
+
+  describe "modal overlay rendering" do
+    test "form select-list body stays inside modal border at cramped width" do
+      modal = %Modal{type: :form, message: timezone_form()}
+
+      cramped =
+        state(modal: modal, terminal_size: {64, 22})
+        |> App.view()
+        |> AsciiRenderer.render({64, 22})
+
+      assert_modal_boundary_survives(cramped, "selected Etc/UTC")
+      assert_modal_boundary_survives(cramped, "Type to filter")
+      assert_modal_boundary_survives(cramped, "America/Chicago")
+      assert_modal_boundary_survives(cramped, "Ctrl+S")
+
+      baseline =
+        state(modal: modal, terminal_size: {80, 24})
+        |> App.view()
+        |> AsciiRenderer.render({80, 24})
+
+      assert_modal_boundary_survives(baseline, "selected Etc/UTC")
+      assert_modal_boundary_survives(baseline, "[Enter] Select   [Ctrl+S] Save   [Esc] Cancel")
     end
   end
 

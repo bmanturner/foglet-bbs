@@ -23,15 +23,21 @@ defmodule Foglet.TUI.App.Modal do
   @spec render_overlay(Foglet.TUI.Modal.t(), App.t()) :: term()
   def render_overlay(modal, %App{} = state) do
     theme = Theme.from_state(state)
+    {terminal_width, _terminal_height} = state.terminal_size
 
     column justify: :center, align: :center do
       [
         box style: %{border: :double, padding: 1, border_fg: theme.border.fg} do
-          Widgets.Modal.render(modal, theme)
+          Widgets.Modal.render(modal, theme, width: overlay_body_width(terminal_width))
         end
       ]
     end
   end
+
+  defp overlay_body_width(width) when is_integer(width),
+    do: width |> Kernel.-(4) |> min(76) |> max(28)
+
+  defp overlay_body_width(_width), do: 76
 
   @doc """
   Handles a key while a modal is active.

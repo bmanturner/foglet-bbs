@@ -42,19 +42,23 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   @wrap_width 50
 
-  @spec render(modal_spec() | Foglet.TUI.Modal.t(), Theme.t()) :: any()
-  def render(%Foglet.TUI.Modal{type: :form, message: %Form{} = form}, %Theme{} = theme) do
-    Form.render(form, theme: theme)
+  @spec render(Foglet.TUI.Modal.t(), Theme.t()) :: any()
+  @spec render(Foglet.TUI.Modal.t(), Theme.t(), keyword()) :: any()
+  def render(modal, theme, opts \\ [])
+
+  def render(%Foglet.TUI.Modal{type: :form, message: %Form{} = form}, %Theme{} = theme, opts) do
+    Form.render(form, Keyword.put(opts, :theme, theme))
   end
 
   def render(
         %Foglet.TUI.Modal{message: %Foglet.Accounts.PublicProfile{} = profile},
-        %Theme{} = theme
+        %Theme{} = theme,
+        _opts
       ) do
     PublicProfileCard.render(profile, theme)
   end
 
-  def render(%Foglet.TUI.Modal{message: msg} = spec, %Theme{} = theme) do
+  def render(%Foglet.TUI.Modal{message: msg} = spec, %Theme{} = theme, _opts) do
     type = spec.type || :info
     title = spec.title || title_for(type)
     msg_fg = color_for_type(type, theme)
