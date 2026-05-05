@@ -45,7 +45,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
   defp key_bar(ss), do: key_bar_for(ss, active_label(ss) || "PROFILE")
 
   defp key_bar_for(ss, active_label) do
-    form_tab_navigation? = form_tab?(active_label) and not Map.get(ss, :tab_navigation?, false)
+    form_tab_navigation? = false
 
     tabs_group = %{
       label: "Tabs",
@@ -151,10 +151,6 @@ defmodule Foglet.TUI.Screens.Account.Render do
     ]
   end
 
-  defp form_tab?("PROFILE"), do: true
-  defp form_tab?("PREFS"), do: true
-  defp form_tab?(_), do: false
-
   # PROFILE/PREFS share the form-tab key cluster. PREFS adds an explicit
   # `↑/↓ Change` advert when an enum field (Time format / Theme) is focused
   # so users can discover the cycling affordance (FOG-130 Item 4).
@@ -164,49 +160,17 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # compaction so they survive 80-column compaction. CommandBar treats lower
   # priority numbers as higher retention, so Save/Cancel use priority 0 to
   # stay visible at 80x24 even when Field nav and Tabs are dropped.
-  defp form_middle_groups(%State{} = ss, section) do
-    base = [
+  defp form_middle_groups(%State{}, _section) do
+    [
+      %{label: "List", commands: [%{key: "↑/↓", label: "Select", priority: 10}]},
       %{
-        label: "Field",
-        commands: [
-          %{key: "Tab", label: "Next", priority: 10},
-          %{key: "Shift+Tab", label: "Previous", priority: 10}
-        ]
+        label: "Actions",
+        commands: [%{key: "E", label: "Edit", priority: 5}]
       }
     ]
-
-    fields =
-      if section == :prefs and prefs_enum_focused?(ss) do
-        base ++
-          [
-            %{
-              label: "Value",
-              commands: [%{key: "↑/↓", label: "Change", priority: 5}]
-            }
-          ]
-      else
-        base
-      end
-
-    fields ++
-      [
-        %{
-          label: "Actions",
-          commands: [
-            %{key: "Enter/Ctrl+S", label: "Save", priority: 5},
-            %{key: "Esc", label: "Cancel", priority: 5}
-          ]
-        }
-      ]
   end
 
-  defp prefs_enum_focused?(%State{prefs_focus: focus}) when focus in [:time_format, :theme],
-    do: true
-
-  defp prefs_enum_focused?(_), do: false
-
-  defp tab_arrow_hint(true), do: "Esc,←/→"
-  defp tab_arrow_hint(false), do: "←/→"
+  defp tab_arrow_hint(_), do: "←/→"
 
   # ScreenFrame uses padding: 1 and border: :single, consuming 4 columns total.
   defp inner_width(state) do
@@ -289,10 +253,10 @@ defmodule Foglet.TUI.Screens.Account.Render do
   end
 
   defp render_tab_body("PROFILE", ss, theme, width, height),
-    do: ProfileForm.render(ss, theme, form_viewport_opts(height, :profile) ++ [width: width])
+    do: ProfileForm.render(ss, theme, width: width, height: max(height - 2, 1))
 
   defp render_tab_body("PREFS", ss, theme, width, height),
-    do: PrefsForm.render(ss, theme, form_viewport_opts(height, :prefs) ++ [width: width])
+    do: PrefsForm.render(ss, theme, width: width, height: max(height - 2, 1))
 
   defp render_tab_body("SSH KEYS", ss, theme, width, _height),
     do: SSHKeysSurface.render(ss.ssh_keys, theme, width)
@@ -306,12 +270,4 @@ defmodule Foglet.TUI.Screens.Account.Render do
       [text("", fg: theme.dim.fg)]
     end
   end
-
-  defp form_viewport_opts(height, :prefs) when is_integer(height) and height <= 18,
-    do: [max_visible: 1]
-
-  defp form_viewport_opts(height, _section) when is_integer(height) and height <= 18,
-    do: [max_visible: 2]
-
-  defp form_viewport_opts(_height, _section), do: []
 end

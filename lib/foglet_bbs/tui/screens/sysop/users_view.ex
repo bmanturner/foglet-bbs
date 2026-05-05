@@ -15,7 +15,11 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   """
 
   alias Foglet.Accounts
+  alias Foglet.Accounts.PublicProfile
   alias Foglet.Accounts.User
+  alias Foglet.TUI.Effect
+  alias Foglet.TUI.Modal
+  alias Foglet.TUI.RoleBadge
   alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
@@ -103,6 +107,9 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   def handle_key(%{key: :char, char: char} = event, state) when char in ["j", "k"],
     do: {move(state, ScrollKeys.vertical_delta(event)), []}
 
+  def handle_key(%{key: :char, char: c}, state) when c in ["V", "v"],
+    do: open_selected_profile(state)
+
   # Phase 29 D-15 + A2 disambiguation: each transition keybind is gated by
   # the focused row's *source* status. [A] Approve and [U] Reactivate both
   # target :active but disambiguate on source — [A] only when source is
@@ -134,6 +141,15 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
     else
       {state, []}
     end
+  end
+
+  defp open_selected_profile(%__MODULE__{rows: []} = state), do: {state, []}
+
+  defp open_selected_profile(%__MODULE__{} = state) do
+    {_status, user} = Enum.at(state.rows, state.selection_index)
+    profile = PublicProfile.from_user(user)
+    modal = %Modal{type: :info, title: "Public Profile", message: profile}
+    {state, [Effect.open_modal(modal)]}
   end
 
   @spec render(t(), map()) :: any()
@@ -172,6 +188,7 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
 
     [
       "[#{ScrollKeys.commandbar_key()}] Move",
+      "[V] Profile",
       if(focused_status == :pending and :active in allowed, do: "[A] Approve"),
       if(focused_status == :pending and :rejected in allowed, do: "[R] Reject"),
       if(focused_status == :active and :suspended in allowed, do: "[S] Suspend"),
@@ -205,7 +222,14 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
       |> Enum.with_index()
       |> Enum.map(fn {{status, user}, row_idx} ->
         selected? = row_idx == idx
-        label = format_row("@#{user.handle}", to_string(user.role), to_string(status), user.email)
+
+        label =
+          format_row(
+            "@#{user.handle}",
+            RoleBadge.compact(user.role),
+            to_string(status),
+            user.email
+          )
 
         if selected? do
           text(label, fg: theme.selected.fg, bg: theme.selected.bg)

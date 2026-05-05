@@ -199,8 +199,11 @@ absolute paths. The first supported hardening baseline is:
 Process-group cleanup is implemented by the Foglet PTY helper on POSIX hosts.
 Restricted-user execution is a deployment capability that must fail closed: if a
 door manifest or runtime config requires a restricted user and the runtime cannot
-switch to that user before exec, Foglet must reject the launch rather than run the
-door as the app user. Coordinate exact config/manifest field names with the OTP
+switch to that user with controlled supplementary groups before exec, Foglet must
+reject the launch rather than run the door as the app user. The helper either
+sets the target user's intended supplementary groups or clears inherited
+supplementary groups; inability to guarantee that state is a launch failure, not
+a warning. Coordinate exact config/manifest field names with the OTP
 implementation child before enabling this in a release.
 
 Supported profiles:

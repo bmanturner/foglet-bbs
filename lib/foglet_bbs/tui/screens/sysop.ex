@@ -75,6 +75,12 @@ defmodule Foglet.TUI.Screens.Sysop do
     {%{ss | site_form: site_form}, []}
   end
 
+  def update({:modal_submit, :site_field, payload}, local_state, %Context{} = context) do
+    ss = normalize_state(local_state, context) |> maybe_init_site_form(context)
+    {site_form, effects} = SiteForm.submit_field(ss.site_form, payload)
+    {%{ss | site_form: site_form}, effects}
+  end
+
   def update({:task_result, op, result}, local_state, %Context{} = context)
       when op in [
              :sysop_load_boards,
