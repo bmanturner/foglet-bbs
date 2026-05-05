@@ -969,6 +969,60 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     assert _ = render_screen(s)
   end
 
+  test "FOG-842 caps reader measurement and cache keys at the chosen wide width" do
+    assert PostReader.Render.reader_width(64) == 64
+    assert PostReader.Render.reader_width(92) == 92
+    assert PostReader.Render.reader_width(120) == 92
+
+    posts = [
+      %{
+        id: "p-wide",
+        message_number: 1,
+        body: String.duplicate("wide reader wrapping contract ", 12),
+        user: %{handle: "alice"},
+        inserted_at: ~U[2026-04-18 00:00:00.000000Z]
+      }
+    ]
+
+    state = %{
+      terminal_size: {120, 36},
+      current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+      session_context: %{domain: %{markdown: FakeMarkdown}},
+      screen_state: %{post_reader: State.new(status: :loaded, posts: posts)}
+    }
+
+    prepared = PostReader.prepare_after_load(state, posts, 0)
+
+    assert Map.has_key?(prepared.render_cache, {"p-wide", 92})
+    refute Map.has_key?(prepared.render_cache, {"p-wide", 120})
+  end
+
+  test "FOG-842 wide render centers a bounded whole-reader column" do
+    posts = FakePosts.list_reader_window("t1", []).posts
+
+    local_state =
+      State.new(
+        board: %{id: "b1", name: "General"},
+        board_id: "b1",
+        thread: %{id: "t1", title: "Hello"},
+        thread_id: "t1",
+        posts: posts,
+        status: :loaded
+      )
+
+    context =
+      Context.new(
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+        terminal_size: {120, 36},
+        route: :post_reader,
+        session_context: %{domain: %{markdown: FakeMarkdown}}
+      )
+
+    tree = render_screen(local_state, context)
+
+    assert find_node(tree, &bounded_centered_reader?(&1, 92))
+  end
+
   test "render/1 delegates breadcrumb formatting to shared chrome", %{state: state} do
     # The legacy reader rendered "Thread:" as a hard-coded prefix in its
     # breadcrumb header. The chrome migration moved breadcrumb assembly
@@ -1594,6 +1648,24 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   defp do_find_node(_other, _predicate), do: nil
+
+  defp bounded_centered_reader?(node, width) do
+    node_style = node_style(node)
+
+    Map.get(node_style, :align_items) == :center and
+      node
+      |> Map.get(:children, [])
+      |> Enum.any?(fn child -> Map.get(node_style(child), :width) == width end)
+  end
+
+  defp node_style(node) when is_map(node) do
+    case Map.get(node, :style) || Map.get(node, :styles) do
+      style when is_map(style) -> style
+      _other -> %{}
+    end
+  end
+
+  defp node_style(_node), do: %{}
 
   # =================================================================
   # RENDER-01: markdown renders without literal \n artifacts

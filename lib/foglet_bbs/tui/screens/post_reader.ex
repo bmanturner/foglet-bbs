@@ -382,7 +382,8 @@ defmodule Foglet.TUI.Screens.PostReader do
         }
   def visible_screenful(%State{posts: posts} = state, %Context{} = context)
       when is_list(posts) and posts != [] do
-    {w, h} = context.terminal_size || @default_terminal_size
+    {terminal_w, h} = context.terminal_size || @default_terminal_size
+    w = Render.reader_width(terminal_w)
     available_height = reader_available_height(h)
     total = length(posts)
     top_idx = state.selected_post_index |> max(0) |> min(total - 1)
@@ -535,7 +536,8 @@ defmodule Foglet.TUI.Screens.PostReader do
     window = posts_mod.list_reader_window(thread_id, opts)
     posts = Map.get(window, :posts) || []
 
-    {w, _h} = state.terminal_size || @default_terminal_size
+    {terminal_w, _h} = state.terminal_size || @default_terminal_size
+    w = Render.reader_width(terminal_w)
 
     ss =
       ss_before
@@ -774,7 +776,8 @@ defmodule Foglet.TUI.Screens.PostReader do
   @spec prepare_after_load(map(), [map()], non_neg_integer()) :: State.t()
   def prepare_after_load(state, posts, idx) do
     ss = get_screen_state(state)
-    {w, _h} = state.terminal_size || @default_terminal_size
+    {terminal_w, _h} = state.terminal_size || @default_terminal_size
+    w = Render.reader_width(terminal_w)
     ss = warm_cache_for_index(ss, state, posts, idx, w)
 
     # Also warm the viewport for the selected post so scroll math works.
@@ -1490,7 +1493,8 @@ defmodule Foglet.TUI.Screens.PostReader do
         state
 
       post ->
-        {w, _h} = context.terminal_size || @default_terminal_size
+        {terminal_w, _h} = context.terminal_size || @default_terminal_size
+        w = Render.reader_width(terminal_w)
         frame_state = Render.frame_state(state, context)
         state = warm_cache(state, frame_state, post, w)
         frame_state = Render.frame_state(state, context)

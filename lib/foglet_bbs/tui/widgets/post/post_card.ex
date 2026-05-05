@@ -112,11 +112,12 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     total = Keyword.get(opts, :total, 1)
 
     selected? = Keyword.get(opts, :action_target?, false)
+    left_pad = Keyword.get(opts, :left_pad, 0)
 
     %{
-      header: reader_header(post, index, total, width, theme, selected?),
+      header: reader_header(post, index, total, width, theme, selected?, left_pad),
       progress: reader_progress(width, theme, selected?),
-      body_lines: reader_body_lines(tuples, width, theme)
+      body_lines: reader_body_lines(tuples, width, theme, left_pad)
     }
   end
 
@@ -185,7 +186,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     end
   end
 
-  defp reader_header(post, index, total, width, theme, selected?) do
+  defp reader_header(post, index, total, width, theme, selected?, left_pad) do
     text_width = reader_text_width(width)
     message_number = reader_message_number(post)
     handle = get_handle(post) || "unknown"
@@ -234,14 +235,16 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
         [text(TextWidth.truncate(position, text_width), fg: position_fg)]
       end
 
+    pad_node = reader_left_pad_node(left_pad)
+
     row style: %{gap: 0} do
-      nodes
+      Enum.reject([pad_node | nodes], &is_nil/1)
     end
   end
 
   defp reader_progress(_width, _theme, _selected?), do: nil
 
-  defp reader_body_lines(tuples, width, theme) do
+  defp reader_body_lines(tuples, width, theme, left_pad) do
     gutter = "│"
     gutter_gap = 1
     body_width = max(reader_text_width(width) - TextWidth.display_width(gutter) - gutter_gap, 1)
@@ -251,12 +254,21 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     |> Enum.map(&clip_body_line(&1, body_width))
     |> Enum.map(fn body_line ->
       row style: %{gap: gutter_gap} do
-        [text(gutter, fg: theme.border.fg), body_line]
+        Enum.reject(
+          [reader_left_pad_node(left_pad), text(gutter, fg: theme.border.fg), body_line],
+          &is_nil/1
+        )
       end
     end)
   end
 
   defp reader_text_width(width), do: max(width - 2, 1)
+
+  defp reader_left_pad_node(left_pad) when is_integer(left_pad) and left_pad > 0 do
+    text(String.duplicate(" ", left_pad))
+  end
+
+  defp reader_left_pad_node(_left_pad), do: nil
 
   defp clip_body_line(%{type: :flex, direction: :row, children: children} = row, width) do
     {children, _remaining_width} =
