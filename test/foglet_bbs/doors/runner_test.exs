@@ -153,6 +153,85 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
     end
 
+    test "launches the Python context example and returns cleanly" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "python-context",
+          display_name: "Python Context",
+          runtime: :external_pty,
+          command: python_context_demo_path(),
+          working_dir: Path.expand("priv/doors/demo"),
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {90, 25},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "python-context"}
+      assert_door_output_contains("python-context-demo:alice:90x25")
+
+      Runner.input(pid, "/quit\n")
+      assert_door_output_contains("Leaving Python Context Demo.")
+      assert_receive {:door_exited, ^pid, "python-context", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "classic dropfile runtime writes requested dropfiles, launches demo, and cleans metadata" do
+      working_dir = Path.expand("priv/doors/demo")
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "classic-demo",
+          display_name: "Classic Demo",
+          runtime: :classic_dropfile,
+          command: classic_dropfile_demo_path(),
+          working_dir: working_dir,
+          dropfile_formats: [:chain_txt, :door_sys, :dorinfo_def],
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true
+        })
+
+      Enum.each(["CHAIN.TXT", "DOOR.SYS", "DORINFO.DEF"], &File.rm(Path.join(working_dir, &1)))
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{
+            handle: "alice",
+            real_name: "Alice Liddell",
+            user_id: "u1",
+            role: :user,
+            session_id: "s1"
+          },
+          terminal_size: {100, 30},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "classic-demo"}
+      assert_door_output_contains("classic-dropfile-demo:DOOR.SYS:alice")
+      assert File.exists?(Path.join(working_dir, "DOOR.SYS"))
+
+      Runner.input(pid, "/quit\n")
+      assert_door_output_contains("Leaving Classic Dropfile Demo.")
+      assert_receive {:door_exited, ^pid, "classic-demo", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+      refute File.exists?(Path.join(working_dir, "DOOR.SYS"))
+      refute File.exists?(Path.join(working_dir, "DORINFO.DEF"))
+      refute File.exists?(Path.join(working_dir, "CHAIN.TXT"))
+    end
+
     test "external non-zero exit is reported as crash with actionable launch context in logs" do
       {:ok, manifest} =
         manifest(%{
@@ -660,6 +739,8 @@ defmodule Foglet.Doors.RunnerTest do
   end
 
   defp external_demo_path, do: Path.expand("priv/doors/demo/external_echo.sh")
+  defp python_context_demo_path, do: Path.expand("priv/doors/demo/python_context_demo.py")
+  defp classic_dropfile_demo_path, do: Path.expand("priv/doors/demo/classic_dropfile_demo.py")
   defp fullscreen_probe_path, do: Path.expand("priv/doors/demo/fullscreen_probe.py")
 
   defp same_user_sandbox do

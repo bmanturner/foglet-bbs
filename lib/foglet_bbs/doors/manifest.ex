@@ -26,6 +26,7 @@ defmodule Foglet.Doors.Manifest do
     :visibility,
     :auth_scope,
     args: [],
+    dropfile_formats: [],
     env: %{},
     env_allowlist: [],
     pty?: true,

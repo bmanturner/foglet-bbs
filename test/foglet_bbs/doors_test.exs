@@ -131,22 +131,161 @@ defmodule Foglet.DoorsTest do
   end
 
   describe "classic_dropfile/2" do
-    test "generates CHAIN.TXT fields from session and user metadata" do
+    test "generates CHAIN.TXT fields from session and user metadata without changing first-slice output" do
       user = %User{id: "user-1", handle: "alice", real_name: "Alice Liddell", role: :user}
-
-      session = %Session{
-        user_id: "user-1",
-        handle: "alice",
-        role: :user,
-        terminal_size: {132, 37},
-        connected_at: ~U[2026-05-03 20:00:00Z],
-        last_seen_at: ~U[2026-05-03 20:15:00Z]
-      }
+      session = session_fixture()
 
       assert {:ok, text} = Doors.classic_dropfile(:chain_txt, %{user: user, session: session})
 
       assert text == "alice\r\nAlice Liddell\r\n132\r\n37\r\nuser\r\nuser-1\r\n"
+      assert_crlf_terminated(text)
     end
+
+    test "generates DOOR.SYS with safe Foglet metadata and conservative defaults" do
+      user = %User{
+        id: "user-1",
+        handle: "alice",
+        real_name: "Alice Liddell",
+        role: :mod,
+        location: "Wonderland"
+      }
+
+      assert {:ok, text} =
+               Doors.classic_dropfile(:door_sys, %{user: user, session: session_map()})
+
+      lines = dropfile_lines(text)
+
+      assert length(lines) == 40
+      assert Enum.at(lines, 0) == "COM0:"
+      assert Enum.at(lines, 3) == "Foglet BBS"
+      assert Enum.at(lines, 4) == "alice"
+      assert Enum.at(lines, 5) == "Alice Liddell"
+      assert Enum.at(lines, 6) == "Wonderland"
+      assert Enum.at(lines, 8) == "100"
+      assert Enum.at(lines, 9) == "30"
+      assert Enum.at(lines, 19) == "user-1"
+      assert Enum.at(lines, 32) == "mod"
+      assert Enum.at(lines, 39) == "session-1"
+      assert_crlf_terminated(text)
+    end
+
+    test "generates DORINFO.DEF with safe Foglet metadata and role security level" do
+      user = %User{id: "user-1", handle: "alice", real_name: "Alice Liddell", role: :sysop}
+
+      assert {:ok, text} =
+               Doors.classic_dropfile(:dorinfo_def, %{user: user, session: session_fixture()})
+
+      assert dropfile_lines(text) == [
+               "Foglet BBS",
+               "Foglet",
+               "Sysop",
+               "COM0",
+               "38400 BAUD,N,8,1",
+               "0",
+               "alice",
+               "Alice Liddell",
+               "",
+               "100"
+             ]
+
+      assert_crlf_terminated(text)
+    end
+
+    test "dropfiles use fallback/default metadata without leaking app secrets" do
+      assert {:ok, text} =
+               Doors.classic_dropfile(:door_sys, %{
+                 user: %User{id: "user-2", role: :user},
+                 session: %Session{user_id: "user-2"}
+               })
+
+      lines = dropfile_lines(text)
+      assert Enum.at(lines, 4) == "guest"
+      assert Enum.at(lines, 5) == "Guest"
+      assert Enum.at(lines, 8) == "80"
+      assert Enum.at(lines, 9) == "24"
+      refute text =~ "DATABASE_URL"
+      refute text =~ "SECRET"
+    end
+  end
+
+  describe "adapter context/env/dropfile helpers" do
+    test "builds minimal wrapper env/context and writes requested dropfiles with fixed names" do
+      {:ok, manifest} =
+        Doors.validate_manifest(
+          Map.merge(@valid_manifest, %{
+            runtime: :classic_dropfile,
+            dropfile_formats: [:chain_txt, :door_sys, :dorinfo_def]
+          })
+        )
+
+      context = Doors.adapter_context(manifest, session_map(), {100, 30})
+      env = Doors.adapter_env(manifest, session_map(), {100, 30}, "/tmp/context.json")
+
+      assert context == %{
+               door_id: "trade-wars",
+               user_id: "user-1",
+               handle: "alice",
+               role: :user,
+               session_id: "session-1",
+               terminal_width: 100,
+               terminal_height: 30
+             }
+
+      assert env["FOGLET_DOOR_CONTEXT"] == "/tmp/context.json"
+      assert env["FOGLET_USERNAME"] == "alice"
+      refute Map.has_key?(env, "DATABASE_URL")
+
+      tmp =
+        Path.join(System.tmp_dir!(), "foglet-dropfile-test-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(tmp)
+      on_exit(fn -> File.rm_rf!(tmp) end)
+
+      assert {:ok, paths} =
+               Doors.write_dropfiles(
+                 manifest.dropfile_formats,
+                 %{user: session_map(), session: session_map()},
+                 tmp
+               )
+
+      assert paths.chain_txt == Path.join(tmp, "CHAIN.TXT")
+      assert paths.door_sys == Path.join(tmp, "DOOR.SYS")
+      assert paths.dorinfo_def == Path.join(tmp, "DORINFO.DEF")
+      assert File.read!(paths.chain_txt) =~ "alice\r\nAlice Liddell\r\n100\r\n30"
+    end
+  end
+
+  defp session_fixture do
+    %Session{
+      user_id: "user-1",
+      handle: "alice",
+      role: :user,
+      terminal_size: {132, 37},
+      connected_at: ~U[2026-05-03 20:00:00Z],
+      theme: nil
+    }
+  end
+
+  defp session_map do
+    %{
+      user_id: "user-1",
+      handle: "alice",
+      real_name: "Alice Liddell",
+      role: :user,
+      session_id: "session-1",
+      terminal_size: {100, 30}
+    }
+  end
+
+  defp assert_crlf_terminated(text) do
+    assert String.ends_with?(text, "\r\n")
+    refute text =~ ~r/(?<!\r)\n/
+  end
+
+  defp dropfile_lines(text) do
+    text
+    |> String.split("\r\n", trim: false)
+    |> List.delete_at(-1)
   end
 
   defp stringify(map) do
