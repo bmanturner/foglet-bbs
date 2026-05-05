@@ -19,6 +19,12 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
   import Raxol.Core.Renderer.View
 
+  @reader_max_width 92
+
+  @doc false
+  @spec reader_width(pos_integer()) :: pos_integer()
+  def reader_width(width) when is_integer(width) and width > 0, do: min(width, @reader_max_width)
+
   def render(%State{} = state, %Context{} = context) do
     frame_state = frame_state(state, context)
     theme = Theme.from_state(frame_state)
@@ -149,15 +155,19 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   defp render_long_post(frame_view, ss, theme, w, screenful, total) do
+    reader_w = reader_width(w)
     post = Enum.at(frame_view.posts, List.first(screenful.indexes) || ss.selected_post_index)
 
     tuples =
-      case ss.render_cache[{post.id, w}] do
+      case ss.render_cache[{post.id, reader_w}] do
         nil -> PostReader.body_tuples_for(frame_view, post)
         cached -> cached
       end
 
-    parts = reader_parts(post, tuples, w, theme, ss.selected_post_index, total)
+    parts =
+      reader_parts(post, tuples, reader_w, theme, ss.selected_post_index, total,
+        left_pad: reader_left_padding(w, reader_w)
+      )
 
     # Wire visible_height and children for this frame. render_post_content
     # is a read-only function — the Viewport state built here is transient,
@@ -179,6 +189,9 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         _ -> nil
       end
 
+    reader_w = reader_width(w)
+    left_pad = reader_left_padding(w, reader_w)
+
     children =
       screenful.indexes
       |> Enum.with_index()
@@ -186,13 +199,18 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         post = Enum.at(frame_view.posts, idx)
 
         tuples =
-          case ss.render_cache[{post.id, w}] do
+          case ss.render_cache[{post.id, reader_w}] do
             nil -> PostReader.body_tuples_for(frame_view, post)
             cached -> cached
           end
 
         selected_action? = idx == action_index(ss, screenful)
-        parts = reader_parts(post, tuples, w, theme, idx, total, action_target?: selected_action?)
+
+        parts =
+          reader_parts(post, tuples, reader_w, theme, idx, total,
+            action_target?: selected_action?,
+            left_pad: left_pad
+          )
 
         {progress_node, body_nodes} =
           if idx == partial_idx do
@@ -202,12 +220,15 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
               parts.body_lines
               |> Enum.slice(partial.scroll_top, partial.body_visible_rows)
 
-            {partial_progress(idx, total, partial, selected_action?, w, theme), body_nodes}
+            {partial_progress(idx, total, partial, selected_action?, reader_w, theme, left_pad),
+             body_nodes}
           else
             {parts.progress, parts.body_lines}
           end
 
-        prefix = if position == 0, do: [], else: [packed_post_separator(theme)]
+        prefix =
+          if position == 0, do: [], else: [packed_post_separator(theme, left_pad, reader_w)]
+
         prefix ++ Enum.reject([parts.header, progress_node | body_nodes], &is_nil/1)
       end)
 
@@ -221,11 +242,12 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   # post` when scrolled to the bottom).
   # Unselected: a dim `More below` so the user knows there is unread content
   # below the visible slice without claiming any keyboard affordance.
-  defp partial_progress(index, total, partial, selected?, w, theme) do
+  defp partial_progress(index, total, partial, selected?, w, theme, left_pad) do
     label = partial_progress_label(index, total, partial, selected?)
     fg = if selected?, do: theme.accent.fg, else: theme.dim.fg
+    pad = String.duplicate(" ", left_pad)
 
-    text(TextWidth.truncate(label, max(w - 2, 1)), fg: fg)
+    text(pad <> TextWidth.truncate(label, max(w - 2, 1)), fg: fg)
   end
 
   defp partial_progress_label(_index, _total, partial, true) do
@@ -255,7 +277,14 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     end
   end
 
-  defp packed_post_separator(theme), do: divider(char: "─", style: %{fg: theme.border.fg})
+  defp packed_post_separator(theme, left_pad, reader_w) do
+    pad = String.duplicate(" ", left_pad)
+    separator_width = max(reader_w - 2, 1)
+
+    text(pad <> String.duplicate("─", separator_width), fg: theme.border.fg)
+  end
+
+  defp reader_left_padding(terminal_w, reader_w), do: div(max(terminal_w - reader_w, 0), 2)
 
   defp context_from_frame_view(frame_view, w, h) do
     Context.new(
@@ -309,17 +338,21 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   defp render_local_post_content(%State{} = state, frame_state, theme, w, h, reply_state) do
+    reader_w = reader_width(w)
     body = render_post_content(frame_state, state, theme, w, h)
 
-    case reply_notice(theme, reply_state) do
-      nil ->
-        body
+    content =
+      case reply_notice(theme, reply_state) do
+        nil ->
+          body
 
-      notice ->
-        column style: %{gap: 0} do
-          [notice, body]
-        end
-    end
+        notice ->
+          column style: %{gap: 0} do
+            [notice, body]
+          end
+      end
+
+    centered_reader(content, w, reader_w)
   end
 
   defp reply_notice(_theme, :open), do: nil
@@ -331,6 +364,19 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   defp reply_notice(theme, :archived) do
     text("Archived board — replies are closed.", fg: theme.warning.fg)
   end
+
+  defp centered_reader(content, terminal_width, reader_width)
+       when reader_width < terminal_width do
+    column style: %{gap: 0, align_items: :center} do
+      [
+        column style: %{gap: 0, width: reader_width} do
+          [content]
+        end
+      ]
+    end
+  end
+
+  defp centered_reader(content, _terminal_width, _reader_width), do: content
 
   # Spinner-based loading affordance used when posts is nil/[]
   # (post_reader was opened but {:posts_loaded, posts} hasn't landed yet).
@@ -364,7 +410,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
   defp action_index(ss, _screenful), do: ss.selected_post_index
 
-  defp reader_parts(post, tuples, w, theme, idx, total, opts \\ []) do
+  defp reader_parts(post, tuples, w, theme, idx, total, opts) do
     PostCard.reader_parts(post, tuples, w, theme, Keyword.merge([index: idx, total: total], opts))
   end
 end
