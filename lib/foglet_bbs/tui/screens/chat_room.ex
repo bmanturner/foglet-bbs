@@ -611,6 +611,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
   defp refresh_online(%State{board_id: board_id}) do
     PresenceTracker.list(board_id)
+    |> Enum.filter(&(Map.get(&1, :tab) == :chat))
   rescue
     _ -> []
   catch

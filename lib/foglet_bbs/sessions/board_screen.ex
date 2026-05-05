@@ -82,6 +82,14 @@ defmodule Foglet.Sessions.BoardScreen do
   end
 
   @doc """
+  Number of unique `user_id`s currently on the board's chat tab.
+  """
+  @spec chat_count(binary()) :: non_neg_integer()
+  def chat_count(board_id) do
+    GenServer.call(__MODULE__, {:chat_count, board_id})
+  end
+
+  @doc """
   Number of unique `user_id`s currently present on `board_id`.
   """
   @spec count(binary()) :: non_neg_integer()
@@ -149,6 +157,23 @@ defmodule Foglet.Sessions.BoardScreen do
     count =
       refs
       |> Enum.map(fn ref -> elem(Map.fetch!(state.entries, ref), 1) end)
+      |> MapSet.new()
+      |> MapSet.size()
+
+    {:reply, count, state}
+  end
+
+  def handle_call({:chat_count, board_id}, _from, state) do
+    refs = Map.get(state.by_board, board_id, MapSet.new())
+
+    count =
+      refs
+      |> Enum.flat_map(fn ref ->
+        case Map.fetch!(state.entries, ref) do
+          {_board_id, user_id, :chat, _pid} -> [user_id]
+          _entry -> []
+        end
+      end)
       |> MapSet.new()
       |> MapSet.size()
 

@@ -211,7 +211,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
         end)
 
       Stream.repeatedly(fn ->
-        if PresenceTracker.count(b.id) >= 2, do: :ok, else: :wait
+        if PresenceTracker.chat_count(b.id) >= 2, do: :ok, else: :wait
       end)
       |> Stream.take_while(&(&1 == :wait))
       |> Stream.run()
@@ -220,7 +220,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       {state, _effects} = BoardScreen.update(:on_route_enter, state, ctx)
 
       text = BoardScreen.render(state, ctx) |> flatten_text()
-      assert text =~ "CHAT (3)"
+      assert text =~ "CHAT (2)"
 
       send(task.pid, :stop)
       Task.await(task)
@@ -291,7 +291,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
 
       keybar = BoardScreen.render(state, ctx) |> bottom_row_text(80, 24)
 
-      assert keybar =~ "2 Chat (1)"
+      assert keybar =~ "2 Chat (0)"
       assert keybar =~ "Q Back"
 
       :ok = PresenceTracker.untrack(b.id, "u1")
@@ -459,7 +459,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
         end)
 
       Stream.repeatedly(fn ->
-        if PresenceTracker.count(b.id) >= 2, do: :ok, else: :wait
+        if PresenceTracker.chat_count(b.id) >= 1, do: :ok, else: :wait
       end)
       |> Stream.take_while(&(&1 == :wait))
       |> Stream.run()
@@ -471,7 +471,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
           ctx
         )
 
-      assert state.presence_count == 2
+      assert state.presence_count == 1
 
       send(task.pid, :stop)
       Task.await(task)

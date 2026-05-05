@@ -10,6 +10,7 @@ defmodule Foglet.TUI.App.Effects do
 
   require Logger
 
+  alias Foglet.Sessions.ActivityPresence
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
@@ -205,7 +206,62 @@ defmodule Foglet.TUI.App.Effects do
       |> Map.put(:modal, nil)
       |> Routing.init_route_screen_state(screen, params)
 
+    track_route_activity(state, screen, params)
     Routing.dispatch_route_entry(state, screen, params)
+  end
+
+  defp track_route_activity(%App{} = state, screen, params) do
+    user_id = state.current_user && state.current_user.id
+
+    case route_activity(screen, params) do
+      {:track, activity} -> ActivityPresence.track(user_id, activity)
+      :clear -> ActivityPresence.clear(user_id)
+    end
+  end
+
+  defp route_activity(:board_list, _params), do: {:track, :board_list}
+
+  defp route_activity(:thread_list, params) do
+    case board_from_params(params) do
+      nil -> :clear
+      board -> {:track, {:browsing_board, board}}
+    end
+  end
+
+  defp route_activity(:post_reader, params) do
+    case board_from_params(params) do
+      nil -> :clear
+      board -> {:track, {:reading_board, board}}
+    end
+  end
+
+  defp route_activity(:post_composer, params) do
+    case {Map.get(params, :origin) || Map.get(params, "origin"), board_from_params(params)} do
+      {origin, board} when origin in [:post_reader, "post_reader"] and is_map(board) ->
+        {:track, {:reading_board, board}}
+
+      _other ->
+        :clear
+    end
+  end
+
+  defp route_activity(screen, _params) when screen in [:main_menu, :account, :door_list],
+    do: :clear
+
+  defp route_activity(_screen, _params), do: :clear
+
+  defp board_from_params(params) do
+    case Map.get(params, :board) || Map.get(params, "board") do
+      board when is_map(board) -> board
+      _other -> board_from_id(params)
+    end
+  end
+
+  defp board_from_id(params) do
+    case Map.get(params, :board_id) || Map.get(params, "board_id") do
+      board_id when is_binary(board_id) -> %{id: board_id}
+      _other -> nil
+    end
   end
 
   defp modal_submit_target?(%App{} = state, screen_key) do

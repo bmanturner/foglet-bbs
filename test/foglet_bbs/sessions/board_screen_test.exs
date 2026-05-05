@@ -34,6 +34,7 @@ defmodule Foglet.Sessions.BoardScreenTest do
       :ok = BoardScreen.track(board_id, user_id, :threads)
 
       assert BoardScreen.count(board_id) == 1
+      assert BoardScreen.chat_count(board_id) == 0
       assert BoardScreen.list(board_id) == [%{user_id: user_id, tab: :threads}]
 
       :ok = BoardScreen.untrack(board_id, user_id)
@@ -44,6 +45,7 @@ defmodule Foglet.Sessions.BoardScreenTest do
       :ok = BoardScreen.update_tab(board_id, user_id, :chat)
 
       assert BoardScreen.count(board_id) == 1
+      assert BoardScreen.chat_count(board_id) == 1
       assert BoardScreen.list(board_id) == [%{user_id: user_id, tab: :chat}]
 
       :ok = BoardScreen.untrack(board_id, user_id)
@@ -73,6 +75,7 @@ defmodule Foglet.Sessions.BoardScreenTest do
       :ok = BoardScreen.track(board_id, user_id, :chat)
 
       assert BoardScreen.count(board_id) == 2
+      assert BoardScreen.chat_count(board_id) == 1
 
       assert Enum.sort(Enum.map(BoardScreen.list(board_id), & &1.user_id)) ==
                Enum.sort([user_id, other_user_id])

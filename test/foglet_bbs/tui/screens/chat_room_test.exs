@@ -561,7 +561,7 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
         end)
 
       Stream.repeatedly(fn ->
-        if PresenceTracker.count(b.id) >= 2, do: :ok, else: :wait
+        if PresenceTracker.chat_count(b.id) >= 2, do: :ok, else: :wait
       end)
       |> Stream.take_while(&(&1 == :wait))
       |> Stream.run()
