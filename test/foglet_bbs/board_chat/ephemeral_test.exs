@@ -3,10 +3,13 @@ defmodule Foglet.BoardChat.EphemeralTest do
 
   alias Foglet.Accounts.User
   alias Foglet.BoardChat
+  alias Foglet.BoardChat.Body
   alias Foglet.BoardChat.Ephemeral
   alias Foglet.BoardChat.Ephemeral.Room
   alias Foglet.BoardChat.Ephemeral.Supervisor, as: EphemeralSupervisor
   alias Foglet.Boards.Board
+
+  import ExUnit.CaptureLog
 
   defp build_board(attrs \\ %{}) do
     %Board{
@@ -72,6 +75,25 @@ defmodule Foglet.BoardChat.EphemeralTest do
 
       assert {:error, :not_ephemeral} = Ephemeral.post(board, user_id, "wrong backend")
     end
+
+    test "rejects over-limit bodies before buffering or broadcasting" do
+      board = build_board()
+      user_id = Ecto.UUID.generate()
+      too_long = String.duplicate("a", Body.max_length() + 1)
+
+      :ok = Phoenix.PubSub.subscribe(FogletBbs.PubSub, Foglet.PubSub.board_chat_topic(board.id))
+
+      log =
+        capture_log(fn ->
+          assert {:error, :body_too_long} = Ephemeral.post(board, user_id, too_long)
+        end)
+
+      refute log =~ too_long
+      assert Ephemeral.recent(board) == []
+      refute_receive {:board_chat, :new_message, %{body: ^too_long}}, 100
+
+      EphemeralSupervisor.stop_room(board.id)
+    end
   end
 
   describe "Foglet.BoardChat dispatch (ephemeral path)" do
@@ -88,6 +110,15 @@ defmodule Foglet.BoardChat.EphemeralTest do
              "ephemeral Room should be running for board #{board.id}"
 
       EphemeralSupervisor.stop_room(board.id)
+    end
+
+    test "returns a concise error tuple for over-limit bodies" do
+      board = build_board()
+      user = %User{id: Ecto.UUID.generate()}
+      too_long = String.duplicate("x", Body.max_length() + 1)
+
+      assert {:error, :body_too_long} = BoardChat.post(board, user, too_long)
+      refute is_pid(Room.whereis(board.id))
     end
   end
 end
