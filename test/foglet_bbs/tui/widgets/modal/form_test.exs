@@ -441,7 +441,7 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
         on_cancel: fn -> send(pid, :cancelled) end
       )
 
-    flat = state |> Form.render(theme: theme()) |> flatten_text()
+    flat = state |> Form.render(theme: theme(), width: 90) |> flatten_text()
 
     assert flat =~ "Create board"
     assert flat =~ "Slug"
@@ -885,13 +885,62 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
 
     test "FORM-03 explicit show_footer: true emits both footer substrings" do
       form = footer_form(show_footer: true)
-      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      flat = form |> Form.render(theme: theme(), width: 90) |> flatten_text()
 
       assert String.contains?(flat, "[Enter] Submit"),
-             "show_footer: true must advertise [Enter] Submit, got: #{inspect(flat)}"
+             "show_footer: true must advertise [Enter] Submit when width allows, got: #{inspect(flat)}"
 
       assert String.contains?(flat, "[Esc] Cancel"),
              "show_footer: true must advertise [Esc] Cancel, got: #{inspect(flat)}"
+    end
+
+    test "FORM-03 responsive footer collapses to save/cancel at 80 columns" do
+      form = footer_form(show_footer: true)
+      flat = form |> Form.render(theme: theme(), width: 80) |> flatten_text()
+
+      assert String.contains?(flat, "[Enter/Ctrl+S] Save")
+      assert String.contains?(flat, "[Esc] Cancel")
+      refute String.contains?(flat, "[Shift+Tab] Previous")
+      refute String.contains?(flat, "[Enter] Submit")
+    end
+
+    test "FORM-03 responsive footer keeps one-line output within cramped width" do
+      form = footer_form(show_footer: true)
+      flat = form |> Form.render(theme: theme(), width: 34) |> flatten_text()
+
+      assert String.contains?(flat, "[Enter/Ctrl+S] Save   [Esc] Cancel")
+      refute String.contains?(flat, "[Tab] Next")
+      assert String.length("[Enter/Ctrl+S] Save   [Esc] Cancel") == 34
+    end
+
+    test "FORM-03 optional middle tier appears for multi-field modal above 80 when full does not fit" do
+      form = footer_form(show_footer: true)
+      flat = form |> Form.render(theme: theme(), width: 50) |> flatten_text()
+
+      assert String.contains?(flat, "[Enter/Ctrl+S] Save")
+      refute String.contains?(flat, "[Shift+Tab] Previous")
+      refute String.contains?(flat, "[Tab] Next")
+
+      flat = form |> Form.render(theme: theme(), width: 82) |> flatten_text()
+
+      assert String.contains?(flat, "[Tab] Next")
+      assert String.contains?(flat, "[Enter/Ctrl+S] Save")
+      assert String.contains?(flat, "[Esc] Cancel")
+      refute String.contains?(flat, "[Shift+Tab] Previous")
+    end
+
+    test "FORM-03 one-field compact footer does not advertise tab navigation" do
+      form =
+        footer_form(
+          fields: [%{name: :body, type: :textarea, label: "Body", rows: 3}],
+          show_footer: true
+        )
+
+      flat = form |> Form.render(theme: theme(), width: 82) |> flatten_text()
+
+      assert String.contains?(flat, "[Enter/Ctrl+S] Save")
+      assert String.contains?(flat, "[Esc] Cancel")
+      refute String.contains?(flat, "[Tab] Next")
     end
 
     test "FORM-03 explicit show_footer: false matches default-off behavior" do
@@ -1216,7 +1265,7 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
 
     test "FORM-05 :idle + show_footer: true → footer present (no status row)" do
       form = status_form(show_footer: true)
-      flat = form |> Form.render(theme: theme()) |> flatten_text()
+      flat = form |> Form.render(theme: theme(), width: 90) |> flatten_text()
       assert String.contains?(flat, "[Enter] Submit")
       refute String.contains?(flat, "Saving…")
       refute String.contains?(flat, "Saved.")

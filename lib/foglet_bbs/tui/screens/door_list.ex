@@ -108,9 +108,7 @@ defmodule Foglet.TUI.Screens.DoorList do
     body =
       column style: %{gap: 1} do
         [
-          text("Choose a door game. Doors may take over the terminal, then return here.",
-            fg: theme.primary.fg
-          ),
+          intro_block(theme),
           door_rows(state, theme),
           status_line(state, theme)
         ]
@@ -126,6 +124,15 @@ defmodule Foglet.TUI.Screens.DoorList do
         ]
       }
     ])
+  end
+
+  defp intro_block(theme) do
+    column style: %{gap: 0} do
+      [
+        text("Choose a door game.", fg: theme.primary.fg),
+        text("Doors may take over the terminal, then return here.", fg: theme.primary.fg)
+      ]
+    end
   end
 
   defp door_rows(%State{doors: []}, theme) do
