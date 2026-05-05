@@ -4,15 +4,25 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
   alias Foglet.Sessions.PresenceSummary
 
   defmodule OnlineSessions do
-    def lookup_session("online"), do: {:ok, self()}
-    def lookup_session("chat"), do: {:ok, self()}
-    def lookup_session("threads"), do: {:ok, self()}
-    def lookup_session("door"), do: {:ok, self()}
+    def lookup_session(user_id) when user_id in ["online", "chat", "threads", "door"] do
+      {:ok, user_id}
+    end
+
     def lookup_session(_user_id), do: {:error, :not_found}
   end
 
   defmodule FakeSession do
-    def get_state(_pid), do: %{user_id: "online"}
+    @active_at ~U[2099-01-01 00:00:00Z]
+
+    def get_state(user_id), do: %{user_id: user_id, last_action_at: @active_at}
+    def idle?(session_state, now), do: Foglet.Sessions.Session.idle?(session_state, now)
+  end
+
+  defmodule IdleSession do
+    @idle_at ~U[2026-05-05 12:00:00Z]
+
+    def get_state(user_id), do: %{user_id: user_id, last_action_at: @idle_at}
+    def idle?(session_state, now), do: Foglet.Sessions.Session.idle?(session_state, now)
   end
 
   defmodule FakeBoards do
@@ -88,5 +98,61 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
                boards: FakeBoards,
                board_screen: FakeBoardScreen
              )
+  end
+
+  test "annotates idle online and activity labels while preserving precedence" do
+    now = ~U[2026-05-05 12:03:00Z]
+
+    assert %PresenceSummary{label: "Online [Idle]", online?: true, idle?: true} =
+             PresenceSummary.for_user("online",
+               sessions: OnlineSessions,
+               session: IdleSession,
+               now: now
+             )
+
+    assert %PresenceSummary{label: "Browsing General [Idle]", idle?: true} =
+             PresenceSummary.for_user("threads",
+               sessions: OnlineSessions,
+               session: IdleSession,
+               boards: FakeBoards,
+               board_screen: FakeBoardScreen,
+               now: now
+             )
+
+    assert %PresenceSummary{label: "Chatting in General [Idle]", idle?: true} =
+             PresenceSummary.for_user("chat",
+               sessions: OnlineSessions,
+               session: IdleSession,
+               boards: FakeBoards,
+               board_screen: FakeBoardScreen,
+               now: now
+             )
+
+    assert %PresenceSummary{label: "Playing Legend of the Red Dragon [Idle]", idle?: true} =
+             PresenceSummary.for_user("door",
+               sessions: OnlineSessions,
+               session: IdleSession,
+               boards: FakeBoards,
+               board_screen: FakeBoardScreen,
+               door_presence: FakeDoorPresence,
+               now: now
+             )
+  end
+
+  test "leaves non-idle, offline, and guest labels unannotated" do
+    now = ~U[2026-05-05 12:03:00Z]
+
+    assert %PresenceSummary{label: "Online", online?: true, idle?: false} =
+             PresenceSummary.for_user("online",
+               sessions: OnlineSessions,
+               session: FakeSession,
+               now: ~U[2026-05-05 12:03:00Z]
+             )
+
+    assert %PresenceSummary{label: "Offline", online?: false, idle?: false} =
+             PresenceSummary.for_user("missing", sessions: OnlineSessions, now: now)
+
+    assert %PresenceSummary{label: "Offline", online?: false, idle?: false} =
+             PresenceSummary.for_user(nil, sessions: OnlineSessions, now: now)
   end
 end

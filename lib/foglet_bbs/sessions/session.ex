@@ -11,6 +11,7 @@ defmodule Foglet.Sessions.Session do
     * user_id, handle, role (nil/nil/:user for guest)
     * terminal_size (updated by CLIHandler on :window_change)
     * connected_at / last_seen_at (heartbeats from TUI)
+    * last_action_at (authenticated user input; heartbeat does not update it)
     * tui_pid (set when TUI app spawns and pings back)
 
   See ARCHITECTURE.md §4 and CONTEXT 03 D-16, D-25.
@@ -30,6 +31,7 @@ defmodule Foglet.Sessions.Session do
           terminal_size: {pos_integer(), pos_integer()},
           connected_at: DateTime.t(),
           last_seen_at: DateTime.t(),
+          last_action_at: DateTime.t() | nil,
           tui_pid: pid() | nil,
           timezone: String.t(),
           time_format: String.t(),
@@ -44,6 +46,7 @@ defmodule Foglet.Sessions.Session do
     :terminal_size,
     :connected_at,
     :last_seen_at,
+    :last_action_at,
     :tui_pid,
     :timezone,
     :time_format,
@@ -81,6 +84,19 @@ defmodule Foglet.Sessions.Session do
   def heartbeat(target) do
     GenServer.cast(resolve(target), :heartbeat)
   end
+
+  @spec record_user_action(pid() | String.t()) :: :ok
+  def record_user_action(target) do
+    GenServer.cast(resolve(target), {:user_action, DateTime.utc_now()})
+  end
+
+  @spec idle?(t() | map(), DateTime.t()) :: boolean()
+  def idle?(%{user_id: user_id, last_action_at: %DateTime{} = last_action_at}, %DateTime{} = now)
+      when is_binary(user_id) do
+    DateTime.diff(now, last_action_at, :second) >= 180
+  end
+
+  def idle?(_session_state, %DateTime{}), do: false
 
   @spec set_terminal_size(pid() | String.t(), {pos_integer(), pos_integer()}) :: :ok
   def set_terminal_size(target, {cols, rows} = size) when cols > 0 and rows > 0 do
@@ -151,6 +167,7 @@ defmodule Foglet.Sessions.Session do
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
       connected_at: now,
       last_seen_at: now,
+      last_action_at: initial_last_action_at(Keyword.get(opts, :user_id), now),
       tui_pid: nil,
       timezone: Keyword.get(opts, :timezone, preferences.timezone),
       time_format: Keyword.get(opts, :time_format, preferences.time_format),
@@ -170,6 +187,13 @@ defmodule Foglet.Sessions.Session do
   def handle_cast(:heartbeat, state) do
     {:noreply, %{state | last_seen_at: DateTime.utc_now()}}
   end
+
+  def handle_cast({:user_action, timestamp}, %{user_id: user_id} = state)
+      when is_binary(user_id) do
+    {:noreply, %{state | last_action_at: timestamp}}
+  end
+
+  def handle_cast({:user_action, _timestamp}, state), do: {:noreply, state}
 
   def handle_cast({:terminal_size, size}, state) do
     {:noreply, %{state | terminal_size: size}}
@@ -215,7 +239,8 @@ defmodule Foglet.Sessions.Session do
             user_id: user.id,
             handle: user.handle,
             role: user.role,
-            last_seen_at: now
+            last_seen_at: now,
+            last_action_at: now
           })
           |> merge_preferences(Preferences.from_user(user))
 
@@ -287,6 +312,9 @@ defmodule Foglet.Sessions.Session do
   defp sanitized_reason(reason) when is_atom(reason), do: reason
   defp sanitized_reason(tuple) when is_tuple(tuple) and tuple_size(tuple) > 0, do: elem(tuple, 0)
   defp sanitized_reason(_), do: :unknown
+
+  defp initial_last_action_at(nil, _now), do: nil
+  defp initial_last_action_at(user_id, now) when is_binary(user_id), do: now
 
   defp record_last_seen(nil, _timestamp), do: :ok
 

@@ -21,9 +21,14 @@ defmodule Foglet.Sessions.PresenceSummary do
           | {:browsing_board, map()}
           | {:chatting_in_board, map()}
 
-  @type t :: %__MODULE__{activity: activity(), label: String.t(), online?: boolean()}
+  @type t :: %__MODULE__{
+          activity: activity(),
+          label: String.t(),
+          online?: boolean(),
+          idle?: boolean()
+        }
 
-  defstruct activity: :offline, label: "Offline", online?: false
+  defstruct activity: :offline, label: "Offline", online?: false, idle?: false
 
   @spec for_user(binary() | nil, keyword()) :: t()
   def for_user(user_id, opts \\ [])
@@ -40,7 +45,15 @@ defmodule Foglet.Sessions.PresenceSummary do
         activity =
           door_activity_for(user_id, opts) || board_activity_for(user_id, opts) || :online
 
-        %__MODULE__{activity: activity, label: label(activity), online?: true}
+        idle? =
+          session_idle?(session_mod, session_state, Keyword.get(opts, :now, DateTime.utc_now()))
+
+        %__MODULE__{
+          activity: activity,
+          label: label(activity, idle?),
+          online?: true,
+          idle?: idle?
+        }
         |> maybe_preserve_session_online(session_state)
 
       {:error, :not_found} ->
@@ -48,11 +61,19 @@ defmodule Foglet.Sessions.PresenceSummary do
     end
   end
 
-  def label(:offline), do: "Offline"
-  def label(:online), do: "Online"
-  def label({:playing_door, door}), do: "Playing #{door_name(door)}"
-  def label({:chatting_in_board, board}), do: "Chatting in #{board_name(board)}"
-  def label({:browsing_board, board}), do: "Browsing #{board_name(board)}"
+  def label(activity, idle? \\ false)
+
+  def label(:offline, _idle?), do: "Offline"
+  def label(:online, idle?), do: annotate_idle("Online", idle?)
+
+  def label({:playing_door, door}, idle?),
+    do: annotate_idle("Playing #{door_name(door)}", idle?)
+
+  def label({:chatting_in_board, board}, idle?),
+    do: annotate_idle("Chatting in #{board_name(board)}", idle?)
+
+  def label({:browsing_board, board}, idle?),
+    do: annotate_idle("Browsing #{board_name(board)}", idle?)
 
   defp safe_lookup_session(sessions, user_id) do
     sessions.lookup_session(user_id)
@@ -71,6 +92,19 @@ defmodule Foglet.Sessions.PresenceSummary do
   end
 
   defp maybe_preserve_session_online(%__MODULE__{} = summary, _session_state), do: summary
+
+  defp session_idle?(_session_mod, nil, %DateTime{}), do: false
+
+  defp session_idle?(session_mod, session_state, %DateTime{} = now) do
+    session_mod.idle?(session_state, now)
+  rescue
+    _ -> false
+  catch
+    :exit, _ -> false
+  end
+
+  defp annotate_idle(label, true), do: label <> " [Idle]"
+  defp annotate_idle(label, _idle?), do: label
 
   defp door_activity_for(user_id, opts) do
     door_presence = Keyword.get(opts, :door_presence, Foglet.Sessions.DoorPresence)
