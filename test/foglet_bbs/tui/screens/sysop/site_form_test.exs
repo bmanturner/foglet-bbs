@@ -52,18 +52,20 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
     refute text =~ "Cancel"
   end
 
-  test "SITE read mode selection moves deterministically and E opens one-field overlay" do
+  test "SITE read mode selection moves deterministically and E/Enter open one-field overlay" do
     state = SiteForm.init(current_user: sysop_fixture())
 
     {state, []} = SiteForm.handle_key(%{key: :down}, state)
     assert state.focused == 1
 
-    {state, [%Effect{type: :modal, payload: {:open, %Modal{} = modal}}]} =
-      SiteForm.handle_key(%{key: :char, char: "E"}, state)
+    for event <- [%{key: :char, char: "E"}, %{key: :enter}] do
+      {updated, [%Effect{type: :modal, payload: {:open, %Modal{} = modal}}]} =
+        SiteForm.handle_key(event, state)
 
-    assert state.focused == 1
-    assert %Form{title: "Edit site: Invite code generators", fields: [field]} = modal.message
-    assert field.name == :invite_code_generators
+      assert updated.focused == 1
+      assert %Form{title: "Edit site: Invite code generators", fields: [field]} = modal.message
+      assert field.name == :invite_code_generators
+    end
   end
 
   test "T test email is available only from selected Email delivery field in email mode" do

@@ -36,9 +36,11 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
 
   @spec handle_key(map(), t()) :: {t(), [Effect.t() | {atom(), term()}]}
   def handle_key(%{key: :char, char: c}, %SState{} = state) when c in ["e", "E"] do
-    form = build_field_form(state)
-    modal = %Modal{type: :form, title: form.title, message: form, on_cancel: :dismiss_modal}
-    {%{state | errors: %{}, submit_state: :idle}, [Effect.open_modal(modal)]}
+    open_selected_field(state)
+  end
+
+  def handle_key(%{key: :enter}, %SState{} = state) do
+    open_selected_field(state)
   end
 
   def handle_key(%{key: :char, char: c}, %SState{} = state) when c in ["t", "T"] do
@@ -162,6 +164,12 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
       on_cancel: fn -> :dismiss_modal end
     )
     |> maybe_set_errors(errors)
+  end
+
+  defp open_selected_field(%SState{} = state) do
+    form = build_field_form(state)
+    modal = %Modal{type: :form, title: form.title, message: form, on_cancel: :dismiss_modal}
+    {%{state | errors: %{}, submit_state: :idle}, [Effect.open_modal(modal)]}
   end
 
   defp maybe_set_errors(form, errors) when map_size(errors) == 0, do: form

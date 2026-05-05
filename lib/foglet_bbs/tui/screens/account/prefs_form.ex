@@ -26,12 +26,11 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
   def handle_key(%{key: :char, char: c}, %State{} = state, _current_user) when c in ["e", "E"] do
-    field = state.prefs_focus || :timezone
-    form = State.build_prefs_field_form(state.prefs_draft, field)
-    modal = %Modal{type: :form, title: form.title, message: form, on_cancel: :dismiss_modal}
+    open_selected_field(state)
+  end
 
-    {:ok, %{state | prefs_editing_field: field, prefs_errors: %{}, candidate_theme_id: nil},
-     [Effect.open_modal(modal)]}
+  def handle_key(%{key: :enter}, %State{} = state, _current_user) do
+    open_selected_field(state)
   end
 
   def handle_key(%{key: key} = event, %State{} = state, _current_user)
@@ -90,6 +89,15 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
       )
 
     {:ok, %{state | prefs_focus: Enum.at(@fields, idx), candidate_theme_id: nil}, []}
+  end
+
+  defp open_selected_field(%State{} = state) do
+    field = state.prefs_focus || :timezone
+    form = State.build_prefs_field_form(state.prefs_draft, field)
+    modal = %Modal{type: :form, title: form.title, message: form, on_cancel: :dismiss_modal}
+
+    {:ok, %{state | prefs_editing_field: field, prefs_errors: %{}, candidate_theme_id: nil},
+     [Effect.open_modal(modal)]}
   end
 
   defp selected_index(field), do: Enum.find_index(@fields, &(&1 == field)) || 0

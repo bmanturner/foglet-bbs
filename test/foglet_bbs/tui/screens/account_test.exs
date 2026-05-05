@@ -225,6 +225,40 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert "INVITES" in AccountState.tab_labels(true)
     end
 
+    test "PROFILE list mode routes E and Enter to one-field edit modal effects" do
+      user = build_user_with_profile(location: "Mist Harbor")
+      context = Context.new(current_user: user, route: :account, terminal_size: {80, 24})
+      state = Account.init(context)
+
+      for event <- [%{key: :char, char: "e"}, %{key: :enter}] do
+        {updated, effects} = Account.update({:key, event}, state, context)
+
+        assert updated.profile_editing_field == :location
+
+        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{type: :form} = modal}}] =
+                 effects
+
+        assert modal.message.title == "Edit profile: Location"
+      end
+    end
+
+    test "PREFS list mode routes E and Enter to one-field edit modal effects" do
+      user = build_user_with_profile(timezone: "America/Chicago")
+      context = Context.new(current_user: user, route: :account, terminal_size: {80, 24})
+      state = Account.init(context) |> Map.put(:active_tab, 1)
+
+      for event <- [%{key: :char, char: "E"}, %{key: :enter}] do
+        {updated, effects} = Account.update({:key, event}, state, context)
+
+        assert updated.prefs_editing_field == :timezone
+
+        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{type: :form} = modal}}] =
+                 effects
+
+        assert modal.message.title == "Edit preferences: Timezone"
+      end
+    end
+
     test "Account INVITES tab is hidden for normal users and sysops under open registration" do
       open_any_user = %{registration_mode: "open", invite_code_generators: "any_user"}
 
