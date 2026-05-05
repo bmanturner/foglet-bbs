@@ -55,6 +55,7 @@ navigation, and larger numbers for secondary hints that may drop first.
 | Module | File | Description |
 |---|---|---|
 | `List.SelectionList` | [`list/selection_list.ex`](list/selection_list.ex) | Stateless selection list — caller owns `selected_index` (D-03) |
+| `List.SelectableFieldList` | [`list/selectable_field_list.ex`](list/selectable_field_list.ex) | Stateless selectable settings field/value rows with descriptions and deterministic windowing |
 | `List.ListRow`       | [`list/list_row.ex`](list/list_row.ex)             | Single list row with optional metadata (LIST-03) |
 | `List.SmartList`     | [`list/smart_list.ex`](list/smart_list.ex)         | Stateful — search + pagination + multi-select (D-02, Phase 8) |
 

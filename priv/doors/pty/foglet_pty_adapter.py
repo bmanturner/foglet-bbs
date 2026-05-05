@@ -97,14 +97,22 @@ def drop_privileges(run_as) -> None:
     if not run_as:
         return
     if os.geteuid() == 0:
-        os.setgid(run_as["gid"])
         try:
             os.initgroups(run_as["user"], run_as["gid"])
         except OSError:
-            # Some minimal containers do not permit supplementary group setup;
-            # the primary gid still applies before uid drop.
-            pass
+            # Fail closed unless inherited supplementary groups can be cleared.
+            # This keeps minimal/user-namespace deployments from executing doors
+            # with the Foglet service account's supplemental group access.
+            try:
+                os.setgroups([])
+            except OSError:
+                raise RuntimeError("sandbox_group_setup_failed")
+
+        os.setgid(run_as["gid"])
         os.setuid(run_as["uid"])
+
+        if os.geteuid() != run_as["uid"] or os.getegid() != run_as["gid"]:
+            raise RuntimeError("sandbox_identity_setup_failed")
 
 
 def child_environment() -> dict[str, str]:
@@ -135,17 +143,40 @@ def reap_child(child_pid: int):
     return {"status": None, "signal": None}
 
 
-def drain_pty_output(master_fd: int) -> bool:
-    """Forward any currently buffered PTY output before reporting child exit.
+FINAL_DRAIN_MAX_BYTES = 64 * 1024
+FINAL_DRAIN_MAX_FRAMES = 16
+FINAL_DRAIN_MAX_SECONDS = 0.05
+
+
+def drain_pty_output(
+    master_fd: int,
+    *,
+    max_bytes: int = FINAL_DRAIN_MAX_BYTES,
+    max_frames: int = FINAL_DRAIN_MAX_FRAMES,
+    max_seconds: float = FINAL_DRAIN_MAX_SECONDS,
+) -> bool:
+    """Forward bounded buffered PTY output before reporting child exit.
 
     A fast child can write its final bytes and exit before the adapter's next
     event-loop iteration. If the helper reports X(exit) first, Foglet's runner
-    stops and test/SSH owners may observe the exit before the final output. Keep
-    the protocol ordered by draining non-blocking PTY output before sending X.
+    stops and test/SSH owners may observe the exit before the final output.
+
+    This drain must stay strictly bounded: a forked grandchild can keep the PTY
+    slave open and write forever after the direct child exits. An unbounded
+    pre-termination drain would let that survivor delay process-group cleanup
+    and the X(exit) frame indefinitely.
     """
-    while True:
+    deadline = time.monotonic() + max_seconds
+    bytes_forwarded = 0
+    frames_forwarded = 0
+
+    while bytes_forwarded < max_bytes and frames_forwarded < max_frames:
+        if time.monotonic() >= deadline:
+            return True
+
         try:
-            data = os.read(master_fd, 8192)
+            read_size = min(8192, max_bytes - bytes_forwarded)
+            data = os.read(master_fd, read_size)
         except BlockingIOError:
             return True
         except OSError as exc:
@@ -158,6 +189,19 @@ def drain_pty_output(master_fd: int) -> bool:
             return False
 
         write_frame(b"O", data)
+        bytes_forwarded += len(data)
+        frames_forwarded += 1
+
+    return True
+
+
+def write_sandbox_error(error_fd: int | None, reason: str) -> None:
+    if error_fd is None:
+        return
+    try:
+        os.write(error_fd, reason.encode("utf-8", "replace"))
+    except OSError:
+        return
 
 
 def door_environment() -> dict:
@@ -219,45 +263,96 @@ def main() -> int:
         write_json(b"E", {"reason": "sandbox_user_required"})
         return 126
 
+    error_read_fd, error_write_fd = os.pipe()
+
     try:
         child_pid, master_fd = pty.fork()
     except Exception as exc:
+        os.close(error_read_fd)
+        os.close(error_write_fd)
         write_json(b"E", {"reason": "pty_fork_failed", "detail": repr(exc)})
         return 126
 
     if child_pid == 0:
+        os.close(error_read_fd)
         try:
             set_winsize(0, args.cols, args.rows)
             if args.cwd:
                 os.chdir(args.cwd)
             drop_privileges(run_as)
+            os.close(error_write_fd)
             os.execvpe(command[0], command, door_environment())
+        except RuntimeError as exc:
+            write_sandbox_error(error_write_fd, str(exc))
+            os._exit(126)
         except Exception as exc:
             os.write(2, ("foglet-pty exec failed: %r\r\n" % (exc,)).encode("utf-8", "replace"))
             os._exit(127)
 
+    os.close(error_write_fd)
     set_winsize(master_fd, args.cols, args.rows)
     stdin_fd = sys.stdin.buffer.fileno()
     os.set_blocking(stdin_fd, False)
     os.set_blocking(master_fd, False)
+    os.set_blocking(error_read_fd, False)
     control_buffer = b""
     running = True
+    stdin_eof_pending = False
 
     while True:
+        if error_read_fd is not None:
+            try:
+                reason_bytes = os.read(error_read_fd, 256)
+            except BlockingIOError:
+                reason_bytes = None
+            except OSError:
+                reason_bytes = b"sandbox_group_setup_failed"
+
+            if reason_bytes:
+                reason = reason_bytes.decode("utf-8", "replace")
+                drain_pty_output(master_fd)
+                terminate_child(child_pid)
+                write_json(b"E", {"reason": reason})
+                return 126
+            if reason_bytes == b"":
+                os.close(error_read_fd)
+                error_read_fd = None
+                if stdin_eof_pending:
+                    terminate_child(child_pid)
+
         exit_payload = reap_child(child_pid)
         if exit_payload is not None:
             drain_pty_output(master_fd)
             terminate_child(child_pid)
+            drain_pty_output(master_fd)
             write_json(b"X", exit_payload)
             return exit_payload["status"] if exit_payload["status"] is not None else 128 + int(exit_payload.get("signal") or 0)
 
         read_fds = [master_fd]
+        if error_read_fd is not None:
+            read_fds.append(error_read_fd)
         if running:
             read_fds.append(stdin_fd)
         try:
             ready, _, _ = select.select(read_fds, [], [], 0.1)
         except InterruptedError:
             continue
+
+        if error_read_fd is not None and error_read_fd in ready:
+            try:
+                reason_bytes = os.read(error_read_fd, 256)
+                reason = reason_bytes.decode("utf-8", "replace")
+            except OSError:
+                reason_bytes = b""
+                reason = "sandbox_group_setup_failed"
+            if reason:
+                drain_pty_output(master_fd)
+                terminate_child(child_pid)
+                write_json(b"E", {"reason": reason})
+                return 126
+            if not reason_bytes:
+                os.close(error_read_fd)
+                error_read_fd = None
 
         if master_fd in ready:
             try:
@@ -276,7 +371,15 @@ def main() -> int:
             except BlockingIOError:
                 chunk = b""
             if not chunk:
-                terminate_child(child_pid)
+                if error_read_fd is None:
+                    terminate_child(child_pid)
+                else:
+                    # Direct helper launches and fast setup failures can present
+                    # stdin EOF before the child has reported sandbox setup over
+                    # the side pipe. Defer termination until setup has either
+                    # failed with an E frame or succeeded and closed the pipe, so
+                    # EOF cannot race a privacy-safe sandbox error into X/SIGTERM.
+                    stdin_eof_pending = True
                 running = False
             control_buffer += chunk
             while len(control_buffer) >= 4:

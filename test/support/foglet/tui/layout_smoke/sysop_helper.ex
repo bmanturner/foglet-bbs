@@ -148,11 +148,14 @@ defmodule Foglet.TUI.LayoutSmoke.SysopHelper do
             refute Enum.any?(texts, &String.contains?(&1, "[Enter] Submit")),
                    "expected SITE tab to suppress the Modal.Form footer at #{width}x#{height}"
 
-            assert Enum.any?(texts, &String.contains?(&1, "Ctrl+S")),
-                   "expected command-bar Ctrl+S key at #{width}x#{height}"
+            assert Enum.any?(texts, &String.contains?(&1, "Edit")),
+                   "expected command-bar Edit action at #{width}x#{height}"
 
-            assert Enum.any?(texts, &String.contains?(&1, "Enter")),
-                   "expected command-bar Enter key at #{width}x#{height}"
+            assert Enum.any?(texts, &String.contains?(&1, "Select")),
+                   "expected command-bar selection help at #{width}x#{height}"
+
+            refute Enum.any?(texts, &String.contains?(&1, "Ctrl+S")),
+                   "SITE list mode must not advertise legacy full-form save at #{width}x#{height}"
           end
         end
       end

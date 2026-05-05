@@ -92,14 +92,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
     end)
   end
 
-  # FOG-717: peek at the underlying TextInput state for the Location field
-  # so cursor-position assertions can prove arrow keys edit text instead of
-  # being swallowed by tab navigation.
-  defp location_field_state(%{fields: fields, field_states: states}) do
-    idx = Enum.find_index(fields, &(&1.name == :location))
-    Enum.at(states, idx)
-  end
-
   defp ensure_account_seeded(state) do
     case get_in(state, [:screen_state, :account]) do
       nil ->
@@ -233,6 +225,40 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert "INVITES" in AccountState.tab_labels(true)
     end
 
+    test "PROFILE list mode routes E and Enter to one-field edit modal effects" do
+      user = build_user_with_profile(location: "Mist Harbor")
+      context = Context.new(current_user: user, route: :account, terminal_size: {80, 24})
+      state = Account.init(context)
+
+      for event <- [%{key: :char, char: "e"}, %{key: :enter}] do
+        {updated, effects} = Account.update({:key, event}, state, context)
+
+        assert updated.profile_editing_field == :location
+
+        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{type: :form} = modal}}] =
+                 effects
+
+        assert modal.message.title == "Edit profile: Location"
+      end
+    end
+
+    test "PREFS list mode routes E and Enter to one-field edit modal effects" do
+      user = build_user_with_profile(timezone: "America/Chicago")
+      context = Context.new(current_user: user, route: :account, terminal_size: {80, 24})
+      state = Account.init(context) |> Map.put(:active_tab, 1)
+
+      for event <- [%{key: :char, char: "E"}, %{key: :enter}] do
+        {updated, effects} = Account.update({:key, event}, state, context)
+
+        assert updated.prefs_editing_field == :timezone
+
+        assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{type: :form} = modal}}] =
+                 effects
+
+        assert modal.message.title == "Edit preferences: Timezone"
+      end
+    end
+
     test "Account INVITES tab is hidden for normal users and sysops under open registration" do
       open_any_user = %{registration_mode: "open", invite_code_generators: "any_user"}
 
@@ -313,7 +339,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert %AccountState{} = state
       assert state.profile_draft.location == "New Cove"
       assert state.status_message == "Profile saved."
-      assert [%Effect{type: :session, payload: {:set_current_user, ^updated}}] = effects
+
+      assert [
+               %Effect{type: :session, payload: {:set_current_user, ^updated}},
+               %Effect{type: :modal, payload: :dismiss}
+             ] = effects
     end
 
     test "prefs task result reseeds state and emits session refresh effects" do
@@ -332,7 +362,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       assert [
                %Effect{type: :session, payload: {:set_current_user, ^user}},
-               %Effect{type: :session, payload: {:update_preferences, snapshot}}
+               %Effect{type: :session, payload: {:update_preferences, snapshot}},
+               %Effect{type: :modal, payload: :dismiss}
              ] = effects
 
       assert snapshot.theme_id == "amber"
@@ -350,12 +381,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       changeset = Accounts.User.profile_changeset(user, %{location: String.duplicate("x", 200)})
 
-      {state, []} =
+      {state, effects} =
         Account.update(
           {:task_result, :account_save_profile, {:ok, {:error, changeset}}},
           state,
           context
         )
+
+      assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{type: :form}}}] = effects
 
       assert %ModalForm{submit_state: {:error, _}} = state.profile_form
       assert %{location: message} = state.profile_form.errors
@@ -375,12 +408,14 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       changeset = Accounts.User.profile_changeset(user, %{timezone: "Not/AZone"})
 
-      {state, []} =
+      {state, effects} =
         Account.update(
           {:task_result, :account_save_prefs, {:ok, {:error, changeset}}},
           state,
           context
         )
+
+      assert [%Effect{type: :modal, payload: {:open, %Foglet.TUI.Modal{type: :form}}}] = effects
 
       assert %ModalForm{submit_state: {:error, _}} = state.prefs_form
       assert %{timezone: message} = state.prefs_form.errors
@@ -551,41 +586,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.map(ss.profile_form.fields, & &1.label) == ["Location", "Tagline", "Real name"]
       assert Enum.map(ss.prefs_form.fields, & &1.label) == ["Timezone", "Time format", "Theme"]
     end
-
-    test "unsaved theme preview changes Account render and cancel keeps session theme unchanged" do
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "Etc/UTC",
-        preferences: %{"time_format" => "12h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-      before_preview = inspect(render_account(state))
-
-      account_state = %{state.screen_state.account | prefs_focus: :theme}
-      state = put_in(state, [:screen_state, :account], account_state)
-
-      {:update, preview_state, []} = handle_account_key(%{key: :down}, state)
-
-      assert preview_state.screen_state.account.candidate_theme_id != nil
-      assert preview_state.session_context.theme == Theme.resolve(:gray)
-      assert inspect(render_account(preview_state)) != before_preview
-
-      {:update, cancelled_state, []} = handle_account_key(%{key: :escape}, preview_state)
-
-      assert cancelled_state.screen_state.account.candidate_theme_id == nil
-      assert cancelled_state.screen_state.account.prefs_draft.theme == "gray"
-      assert cancelled_state.session_context.theme == Theme.resolve(:gray)
-    end
   end
 
   describe "handle_key/2 (handle_account_key/2 traceability)" do
@@ -621,56 +621,33 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "INVITES"))
     end
 
-    test "digit '2' jumps to second tab (index 1) when no text field is focused", %{state: state} do
-      # FOG-333: PROFILE Location field is text-typed and shields digits.
-      # Move focus to PREFS (Timezone is :select_list, not shielded) before
-      # exercising the shortcut.
-      state = leave_profile_form(state)
+    test "digit '2' leaves the Account tab on PREFS from list mode", %{state: state} do
+      state = ensure_account_seeded(state)
       {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "2"}, state)
       assert new_state.screen_state.account.active_tab == 1
     end
 
-    test "FOG-741: Esc from Profile exposes tab jumps without mutating text", %{state: state} do
+    test "FOG-741/FOG-899: Profile list mode exposes tab jumps without Escape", %{state: state} do
       state = ensure_account_seeded(state)
-
-      state =
-        update_in(state.screen_state.account, fn account ->
-          %{account | profile_form: %{account.profile_form | focus_index: 0}}
-        end)
-
-      before_location =
-        Foglet.TUI.Widgets.Modal.Form.field_value(
-          state.screen_state.account.profile_form,
-          :location
-        )
-
-      {:update, state, []} = handle_account_key(%{key: :escape}, state)
-      assert state.screen_state.account.active_tab == 0
-      assert state.screen_state.account.tab_navigation?
+      before_location = state.screen_state.account.profile_draft.location
 
       {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
       assert state.screen_state.account.active_tab == 1
       refute state.screen_state.account.tab_navigation?
-
-      assert Foglet.TUI.Widgets.Modal.Form.field_value(
-               state.screen_state.account.profile_form,
-               :location
-             ) == before_location
+      assert state.screen_state.account.profile_draft.location == before_location
     end
 
-    test "FOG-741: Account form keybar advertises Esc before tab arrows", %{state: state} do
+    test "FOG-899: Account list keybar advertises edit/select/tabs, not form chrome", %{
+      state: state
+    } do
       flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
 
-      assert flat =~ "Esc,←/→"
-      refute flat =~ "Jump"
-      refute flat =~ "1-3"
-
-      {:update, state, []} = handle_account_key(%{key: :escape}, state)
-      flat = render_account(state) |> collect_text_values() |> Enum.join(" ")
-
-      assert flat =~ "←/→"
-      refute flat =~ "Esc,←/→"
-      refute flat =~ "Jump"
+      assert flat =~ "E"
+      assert flat =~ "Edit"
+      assert flat =~ "Select"
+      assert flat =~ "Tabs"
+      refute flat =~ "Save"
+      refute flat =~ "Cancel"
     end
 
     test "KEYS-01 digit '3' selects SSH KEYS when invites are hidden", %{state: state} do
@@ -684,10 +661,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.any?(flat, &String.contains?(&1, "SSH KEYS"))
     end
 
-    test "FOG-717: left/right cursor keys edit Location, never advance Account tabs" do
-      alias Foglet.TUI.Widgets.Input.TextInput
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
+    test "FOG-899: left/right cursor keys switch Account tabs from Profile list mode" do
       user = %Foglet.Accounts.User{
         id: "00000000-0000-0000-0000-000000000010",
         handle: "alice",
@@ -699,56 +673,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
         build_state(user, %{})
         |> put_in([:screen_state, :account], AccountState.new(current_user: user))
 
-      account = state.screen_state.account
-      assert account.active_tab == 0
-      assert Enum.at(account.profile_form.fields, 0).name == :location
-
-      # Cursor starts placed at end of "Bend" (length 4).
-      %TextInput{raxol_state: %{cursor_pos: start_pos}} =
-        location_field_state(account.profile_form)
-
-      assert start_pos == 4
-
-      # Two :left presses must move the cursor inside Location, NOT switch
-      # tabs. The legacy bug routed :left through Tabs first, switching tab.
-      {:update, state, []} = handle_account_key(%{key: :left}, state)
-      {:update, state, []} = handle_account_key(%{key: :left}, state)
       assert state.screen_state.account.active_tab == 0
-
-      %TextInput{raxol_state: %{cursor_pos: pos_after_left}} =
-        location_field_state(state.screen_state.account.profile_form)
-
-      assert pos_after_left == start_pos - 2,
-             "expected :left to move TextInput cursor while Location is focused"
-
-      # Typing 'Y' between cursor positions must insert into the focused
-      # field instead of being swallowed.
-      {:update, state, []} = handle_account_key(%{key: :char, char: "Y"}, state)
-      assert state.screen_state.account.active_tab == 0
-
-      assert ModalForm.field_value(state.screen_state.account.profile_form, :location) ==
-               "BeYnd"
-
-      # :right must continue to move the cursor forward, NOT advance tab.
       {:update, state, []} = handle_account_key(%{key: :right}, state)
+      assert state.screen_state.account.active_tab == 1
+      {:update, state, []} = handle_account_key(%{key: :left}, state)
       assert state.screen_state.account.active_tab == 0
-
-      # :home/:end remain text-cursor keys when Location is focused.
-      {:update, state, []} = handle_account_key(%{key: :home}, state)
-      assert state.screen_state.account.active_tab == 0
-
-      %TextInput{raxol_state: %{cursor_pos: pos_after_home}} =
-        location_field_state(state.screen_state.account.profile_form)
-
-      assert pos_after_home == 0
-
-      {:update, state, []} = handle_account_key(%{key: :end}, state)
-      assert state.screen_state.account.active_tab == 0
-
-      # Backspace and delete also stay in the focused field.
-      {:update, state, []} = handle_account_key(%{key: :backspace}, state)
-      assert state.screen_state.account.active_tab == 0
-      assert ModalForm.field_value(state.screen_state.account.profile_form, :location) == "BeYn"
+      assert state.screen_state.account.profile_draft.location == "Bend"
     end
 
     test "FOG-717: cursor keys still advance tabs when no text field is focused" do
@@ -770,43 +700,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert state.screen_state.account.active_tab == 1
     end
 
-    test "FOG-717: cursor/edit keys do not switch tabs when PREFS Timezone is filtering" do
-      # PREFS Timezone is :select_list — a list/filter mode. Backspace and
-      # char keys should drive the search filter (or stay no-op when empty)
-      # without ever switching to PROFILE/SSH KEYS, even when the search
-      # buffer is empty.
-      user = AccountsFixtures.user_fixture()
-
-      state =
-        build_state(user, %{})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-        |> leave_profile_form()
-
-      assert state.screen_state.account.active_tab == 1
-
-      # With an empty search, :left/:right fall through to Tabs (browse-mode
-      # tab nav). Char keys begin filtering and stay inside the form.
-      {:update, state, []} = handle_account_key(%{key: :char, char: "C"}, state)
-      assert state.screen_state.account.active_tab == 1
-
-      {:update, state, []} = handle_account_key(%{key: :backspace}, state)
-      assert state.screen_state.account.active_tab == 1
-
-      # Once the filter is active, cursor keys must stay in the form so the
-      # user is not yanked out of PREFS while editing the Timezone search.
-      {:update, state, []} = handle_account_key(%{key: :char, char: "E"}, state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "u"}, state)
-      assert state.screen_state.account.active_tab == 1
-
-      context = account_context(state)
-      account = state.screen_state.account
-      {after_left, _} = Account.update({:key, %{key: :left}}, account, context)
-      assert after_left.active_tab == 1
-
-      {after_right, _} = Account.update({:key, %{key: :right}}, account, context)
-      assert after_right.active_tab == 1
-    end
-
     test "Ctrl+Q returns to :main_menu", %{state: state} do
       {:update, new_state, _cmds} =
         handle_account_key(%{key: :char, char: "Q", ctrl: true}, state)
@@ -814,10 +707,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert new_state.current_screen == :main_menu
     end
 
-    test "'q' is delegated to the active form", %{state: state} do
-      {:update, new_state, _cmds} = handle_account_key(%{key: :char, char: "q"}, state)
-      assert new_state.current_screen == :account
-      assert new_state.screen_state.account.profile_dirty?
+    test "plain 'q' is ignored by Account list mode", %{state: state} do
+      assert :no_match = handle_account_key(%{key: :char, char: "q"}, state)
     end
 
     test "non-text unknown key returns :no_match", %{state: state} do
@@ -829,194 +720,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
     # bug was a one-way pre-dispatch sync from prefs_focus to
     # form.focus_index that stomped Modal.Form's focus advancement on the
     # next keystroke; Tab visually no-op'd and Down kept mutating Timezone.
-    test "FOG-139: Tab in PREFS advances focus through enum fields and back-syncs prefs_focus" do
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "America/Chicago",
-        preferences: %{"time_format" => "12h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-
-      account = state.screen_state.account
-      assert account.prefs_focus == :timezone
-      assert account.prefs_form.focus_index == 0
-
-      {:update, state, []} = handle_account_key(%{key: :tab}, state)
-      account = state.screen_state.account
-      assert account.prefs_form.focus_index == 1
-      assert account.prefs_focus == :time_format
-
-      {:update, state, []} = handle_account_key(%{key: :tab}, state)
-      account = state.screen_state.account
-      assert account.prefs_form.focus_index == 2
-      assert account.prefs_focus == :theme
-
-      {:update, state, []} = handle_account_key(%{key: :tab}, state)
-      account = state.screen_state.account
-      assert account.prefs_form.focus_index == 0
-      assert account.prefs_focus == :timezone
-    end
-
-    test "PREFS timezone uses searchable select-list and preserves non-curated saved values" do
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "Antarctica/Troll",
-        preferences: %{"time_format" => "12h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-      form = state.screen_state.account.prefs_form
-
-      assert %{type: :select_list, name: :timezone} = hd(form.fields)
-      assert ModalForm.field_value(form, :timezone) == "Antarctica/Troll"
-
-      flat = render_account(state) |> collect_text_values() |> Enum.join("")
-      assert flat =~ "Type to filter"
-      assert flat =~ "Antarctica/Troll"
-    end
-
-    test "PREFS timezone select-list renders a closed bottom boundary before the next field" do
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "America/Chicago",
-        preferences: %{"time_format" => "24h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-
-      rows = render_account(state) |> collect_text_values()
-
-      bottom_boundary_index =
-        Enum.find_index(rows, fn row ->
-          String.starts_with?(row, "└") and String.ends_with?(row, "┘") and
-            String.contains?(row, "more below")
-        end)
-
-      next_field_index = Enum.find_index(rows, &String.contains?(&1, "Time format"))
-
-      assert is_integer(bottom_boundary_index)
-      assert is_integer(next_field_index)
-      assert bottom_boundary_index < next_field_index
-    end
-
-    test "PREFS timezone can search America/Chicago without full cycling" do
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "Etc/UTC",
-        preferences: %{"time_format" => "12h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-      assert ModalForm.field_value(state.screen_state.account.prefs_form, :timezone) == "Etc/UTC"
-
-      {:update, state, []} = handle_account_key(%{key: :char, char: "C"}, state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "h"}, state)
-      {:update, state, []} = handle_account_key(%{key: :enter}, state)
-
-      assert ModalForm.field_value(state.screen_state.account.prefs_form, :timezone) ==
-               "America/Chicago"
-
-      assert state.screen_state.account.prefs_form.focus_index == 1
-    end
-
-    test "FOG-139: Down after Tab cycles the next enum field, not Timezone" do
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "America/Chicago",
-        preferences: %{"time_format" => "12h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-
-      original_tz = state.screen_state.account.prefs_form |> ModalForm.field_value(:timezone)
-      original_tf = state.screen_state.account.prefs_form |> ModalForm.field_value(:time_format)
-
-      {:update, state, []} = handle_account_key(%{key: :tab}, state)
-      {:update, state, []} = handle_account_key(%{key: :down}, state)
-
-      account = state.screen_state.account
-      new_tz = account.prefs_form |> ModalForm.field_value(:timezone)
-      new_tf = account.prefs_form |> ModalForm.field_value(:time_format)
-
-      assert new_tz == original_tz, "Timezone must not change after Tab + Down"
-      assert new_tf != original_tf, "Time format must cycle on Down after Tab"
-    end
-
-    test "FOG-139: Shift-Tab in PREFS retreats focus and back-syncs prefs_focus" do
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "America/Chicago",
-        preferences: %{"time_format" => "12h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-
-      {:update, state, []} = handle_account_key(%{key: :shift_tab}, state)
-      account = state.screen_state.account
-      assert account.prefs_form.focus_index == 2
-      assert account.prefs_focus == :theme
-    end
 
     test "Account screen does NOT dispatch any fake operator commands (Save/Generate/Revoke)", %{
       state: state
@@ -1138,74 +841,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert session_state.theme_id == "amber"
       assert session_state.theme == Theme.resolve(:amber)
     end
-
-    test "failed save result renders errors and leaves active snapshots unchanged" do
-      user =
-        AccountsFixtures.user_fixture(%{
-          location: "Original Cove",
-          timezone: "Etc/UTC",
-          preferences: %{"time_format" => "12h"},
-          theme: "gray"
-        })
-
-      {:ok, session_pid} =
-        start_supervised(
-          {Session, [user_id: user.id, handle: user.handle, role: user.role]},
-          id: :account_save_failure_session
-        )
-
-      state = %App{
-        current_screen: :account,
-        current_user: user,
-        session_context: %{
-          session_pid: session_pid,
-          timezone: "Etc/UTC",
-          time_format: "12h",
-          theme_id: "gray",
-          theme: Theme.resolve(:gray)
-        },
-        session_pid: session_pid,
-        terminal_size: {80, 24},
-        screen_state: %{
-          account:
-            AccountState.new(current_user: user)
-            |> Map.put(:active_tab, 1)
-            |> Map.put(:prefs_dirty?, true)
-        }
-      }
-
-      original_user = state.current_user
-      original_context = state.session_context
-      original_session = Session.get_state(session_pid)
-
-      {:error, changeset} =
-        Accounts.update_profile(user, %{
-          timezone: "Not/AZone",
-          preferences: %{"time_format" => "24h"},
-          theme: "amber"
-        })
-
-      {new_state, []} =
-        App.update(
-          {:screen_task_result, :account, :account_save_prefs, {:ok, {:error, changeset}}},
-          state
-        )
-
-      assert new_state.current_user == original_user
-      assert new_state.session_context == original_context
-
-      _ = :sys.get_state(session_pid)
-      assert Session.get_state(session_pid).timezone == original_session.timezone
-      assert Session.get_state(session_pid).time_format == original_session.time_format
-      assert Session.get_state(session_pid).theme_id == original_session.theme_id
-
-      assert %{timezone: message} = new_state.screen_state.account.prefs_errors
-      assert String.contains?(message, "valid IANA")
-      assert match?({:error, _}, new_state.screen_state.account.prefs_form.submit_state)
-
-      flat = render_account(Map.from_struct(new_state)) |> collect_text_values()
-      assert Enum.any?(flat, &String.contains?(&1, "Timezone must be a valid IANA name"))
-    end
   end
 
   describe "live INVITES actions" do
@@ -1308,7 +943,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
         })
 
       {:ok, before} = Invites.list_invites(user)
-      assert {:update, _state, []} = handle_account_key(%{key: :char, char: "g"}, state)
+      assert handle_account_key(%{key: :char, char: "g"}, state) in [:no_match]
       assert {:ok, ^before} = Invites.list_invites(user)
     end
   end
@@ -1551,51 +1186,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert state.screen_state.account.active_tab == 0
     end
 
-    test "FOG-333: digit chars typed in PROFILE text fields insert into the focused field, not tab nav" do
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-      user = AccountsFixtures.user_fixture()
-
-      state =
-        build_state(user, %{})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      account = state.screen_state.account
-      assert account.active_tab == 0
-      assert Enum.at(account.profile_form.fields, 0).name == :location
-
-      original_location = ModalForm.field_value(account.profile_form, :location)
-
-      # Location (index 0): every digit must insert and not switch tabs.
-      state =
-        Enum.reduce(~w(2 3 4 5 6 7 8 9 0 1), state, fn digit, acc ->
-          {:update, acc, []} = handle_account_key(%{key: :char, char: digit}, acc)
-
-          assert acc.screen_state.account.active_tab == 0,
-                 "digit #{digit} in Location switched tabs"
-
-          acc
-        end)
-
-      location_after = ModalForm.field_value(state.screen_state.account.profile_form, :location)
-      assert location_after =~ "2345678901"
-      refute location_after == original_location
-
-      # Tagline (index 1)
-      {:update, state, []} = handle_account_key(%{key: :tab}, state)
-      assert state.screen_state.account.profile_form.focus_index == 1
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-      assert state.screen_state.account.active_tab == 0
-      assert ModalForm.field_value(state.screen_state.account.profile_form, :tagline) =~ "2"
-
-      # Real name (index 2)
-      {:update, state, []} = handle_account_key(%{key: :tab}, state)
-      assert state.screen_state.account.profile_form.focus_index == 2
-      {:update, state, []} = handle_account_key(%{key: :char, char: "3"}, state)
-      assert state.screen_state.account.active_tab == 0
-      assert ModalForm.field_value(state.screen_state.account.profile_form, :real_name) =~ "3"
-    end
-
     test "FOG-333/FOG-350: digit chars on PREFS still switch tabs (focused field is select-list)" do
       user = AccountsFixtures.user_fixture()
 
@@ -1695,125 +1285,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
   # Phase 28 Plan 03 — FORM-06 honest Esc (D-10, D-11)
   # ---------------------------------------------------------------------------
 
-  describe "FORM-06 honest Esc on Account Profile (Phase 28 D-10, D-11)" do
-    alias Foglet.TUI.Screens.Account.ProfileForm
-    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-    test "Esc reseeds profile_draft to saved-user values, clears dirty + status_message" do
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      # Mutate the live form by typing a char into the focused field
-      # (focus starts at :location — first field).
-      {form_after_type, nil} =
-        ModalForm.handle_event(%{key: :char, char: "X"}, ss.profile_form)
-
-      # Sanity: the typing event mutated :location away from "Berlin" (we don't
-      # care about cursor position — only that the live form differs from the
-      # saved-user value, which is what Esc must reseed away).
-      assert ModalForm.field_value(form_after_type, :location) != "Berlin"
-      assert ModalForm.field_value(form_after_type, :location) =~ "X"
-
-      ss_dirty = %{ss | profile_form: form_after_type, profile_dirty?: true}
-
-      {:ok, after_esc, cmds} = ProfileForm.handle_key(%{key: :escape}, ss_dirty, user)
-
-      assert after_esc.profile_draft == %{
-               location: "Berlin",
-               tagline: "hi",
-               real_name: "Brendan"
-             }
-
-      assert after_esc.profile_dirty? == false
-      assert after_esc.status_message == nil
-      assert cmds == []
-
-      # And the rendered form's first-field value reverted on the next render.
-      assert ModalForm.field_value(after_esc.profile_form, :location) == "Berlin"
-    end
-
-    test "Esc on Account Profile does not produce any 'discarded' status copy" do
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      {form_after_type, nil} =
-        ModalForm.handle_event(%{key: :char, char: "X"}, ss.profile_form)
-
-      ss_dirty = %{ss | profile_form: form_after_type, profile_dirty?: true}
-
-      {:ok, after_esc, []} = ProfileForm.handle_key(%{key: :escape}, ss_dirty, user)
-
-      # No status_message, and no "discarded" text anywhere in the state map.
-      assert after_esc.status_message == nil
-
-      serialized = inspect(after_esc, limit: :infinity)
-      refute serialized =~ "Profile changes discarded"
-      refute serialized =~ "discarded"
-    end
-  end
-
-  describe "FORM-06 honest Esc on Account Preferences (Phase 28 D-10, D-11)" do
-    alias Foglet.TUI.Screens.Account.PrefsForm
-    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-    test "Esc reseeds prefs_draft to saved-user values, clears dirty + status_message" do
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      # Mutate the live prefs form by searching/selecting the focused timezone select-list
-      # (focus starts at :timezone — first field).
-      {form_after_search, nil} = ModalForm.handle_event(%{key: :char, char: "C"}, ss.prefs_form)
-
-      {form_after_search, nil} =
-        ModalForm.handle_event(%{key: :char, char: "h"}, form_after_search)
-
-      {form_after_pick, nil} = ModalForm.handle_event(%{key: :enter}, form_after_search)
-
-      # Sanity: selection moved :timezone off the seeded "Etc/UTC".
-      assert ModalForm.field_value(form_after_pick, :timezone) == "America/Chicago"
-
-      ss_dirty = %{
-        ss
-        | prefs_form: form_after_pick,
-          prefs_dirty?: true,
-          candidate_theme_id: "amber"
-      }
-
-      {:ok, after_esc, cmds} = PrefsForm.handle_key(%{key: :escape}, ss_dirty, user)
-
-      assert after_esc.prefs_draft == %{
-               timezone: "Etc/UTC",
-               time_format: "12h",
-               theme: "gray"
-             }
-
-      assert after_esc.prefs_dirty? == false
-      assert after_esc.status_message == nil
-      assert after_esc.candidate_theme_id == nil
-      assert cmds == []
-
-      assert ModalForm.field_value(after_esc.prefs_form, :timezone) == "Etc/UTC"
-    end
-
-    test "Esc on Account Preferences does not produce any 'discarded' status copy" do
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      {form_after_pick, nil} =
-        ModalForm.handle_event(%{key: :down}, ss.prefs_form)
-
-      ss_dirty = %{ss | prefs_form: form_after_pick, prefs_dirty?: true}
-
-      {:ok, after_esc, []} = PrefsForm.handle_key(%{key: :escape}, ss_dirty, user)
-
-      assert after_esc.status_message == nil
-
-      serialized = inspect(after_esc, limit: :infinity)
-      refute serialized =~ "Preference changes discarded"
-      refute serialized =~ "discarded"
-    end
-  end
-
   describe "PROFILE Modal.Form contract" do
     test "suppresses redundant Modal.Form title and footer (FORM-03 default-off)" do
       # Phase 28 FORM-03 / D-06 plus FOG-710 account polish: Account tab-body
@@ -1854,35 +1325,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
                  value: ""
                }
     end
-
-    test "renders inline error text when set_errors is applied" do
-      ss = AccountState.new()
-
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-      ss_with_error = %{
-        ss
-        | profile_form: ModalForm.set_errors(ss.profile_form, %{location: "is too short"})
-      }
-
-      state =
-        build_state_for_role(:user)
-        |> put_in([:screen_state, :account], ss_with_error)
-
-      flat = render_account(state) |> collect_text_values()
-
-      assert Enum.any?(flat, &String.contains?(&1, "is too short")),
-             "expected inline error 'is too short' in profile tab render"
-    end
   end
 
   describe "PREFS Modal.Form contract" do
     setup %{state: state} do
-      # FOG-333: PROFILE shields digit shortcuts while a text field is
-      # focused. Move out of the form before using the digit shortcut.
-      state = leave_profile_form(state)
-      {:update, prefs_state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-      %{state: prefs_state}
+      %{state: leave_profile_form(state)}
     end
 
     test "suppresses Modal.Form footer in prefs tab (FORM-03 default-off)", %{state: state} do
@@ -1946,99 +1393,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
       tz = Enum.find(state.screen_state.account.prefs_form.fields, &(&1.name == :timezone))
 
       assert Map.get(tz, :max_height) == 4
-    end
-
-    test "FOG-350/FOG-498: PREFS render contains a searchable bounded timezone picker",
-         %{state: state} do
-      flat = render_account(state) |> collect_text_values()
-
-      curated = Foglet.TUI.Screens.Account.Timezones.curated()
-
-      visible_timezone_rows =
-        Enum.filter(flat, fn line ->
-          trimmed = if is_binary(line), do: String.trim_leading(line), else: ""
-
-          is_binary(line) and String.starts_with?(trimmed, "│") and
-            Enum.any?(curated, &String.contains?(line, &1))
-        end)
-
-      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Type to filter")))
-
-      assert Enum.any?(
-               flat,
-               &(is_binary(&1) and String.starts_with?(String.trim_leading(&1), "┌"))
-             )
-
-      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "↓")))
-      assert length(visible_timezone_rows) <= 4
-      assert Enum.any?(visible_timezone_rows, &String.contains?(&1, "Etc/UTC"))
-
-      # Time format and Theme labels must remain visible alongside the
-      # bounded picker — overlap was the original symptom.
-      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Time format"))),
-             "Time format label must still render after the bounded timezone picker (FOG-132)"
-
-      assert Enum.any?(flat, &(is_binary(&1) and String.contains?(&1, "Theme"))),
-             "Theme label must still render after the bounded timezone picker (FOG-132)"
-    end
-
-    test "FOG-877: timezone picker is structurally bounded at 80x24 and 64x22", %{state: state} do
-      for {terminal_width, terminal_height} <- [{80, 24}, {64, 22}] do
-        positioned =
-          state
-          |> Map.put(:terminal_size, {terminal_width, terminal_height})
-          |> render_account()
-          |> Engine.apply_layout(%{width: terminal_width, height: terminal_height})
-          |> List.flatten()
-          |> Enum.filter(&(&1.type == :text and is_binary(Map.get(&1, :text))))
-
-        top =
-          Enum.find(
-            positioned,
-            &(String.starts_with?(String.trim_leading(&1.text), "┌") and
-                String.contains?(&1.text, "selected"))
-          )
-
-        time_format = Enum.find(positioned, &String.contains?(&1.text, "Time format"))
-        save = Enum.find(positioned, &String.contains?(&1.text, "Save"))
-        cancel = Enum.find(positioned, &String.contains?(&1.text, "Cancel"))
-        selected = Enum.find(positioned, &String.contains?(&1.text, "selected"))
-        scroll = Enum.find(positioned, &String.contains?(&1.text, "more below"))
-
-        assert top && scroll && top.y < scroll.y
-        assert selected && selected.y == top.y
-        assert time_format && time_format.y > scroll.y
-
-        assert (save && cancel && save.y == terminal_height - 1) and
-                 cancel.y == terminal_height - 1
-      end
-    end
-
-    test "cycling down on focused theme enum field updates candidate_theme_id" do
-      user = %Foglet.Accounts.User{
-        id: "u1",
-        handle: "alice",
-        role: :user,
-        timezone: "Etc/UTC",
-        preferences: %{"time_format" => "12h"},
-        theme: "gray"
-      }
-
-      state =
-        user
-        |> build_state(%{theme: Theme.resolve(:gray), theme_id: "gray"})
-        |> put_in([:screen_state, :account], AccountState.new(current_user: user))
-
-      state = leave_profile_form(state)
-      {:update, state, []} = handle_account_key(%{key: :char, char: "2"}, state)
-
-      account_state = %{state.screen_state.account | prefs_focus: :theme}
-      state = put_in(state, [:screen_state, :account], account_state)
-
-      {:update, preview_state, []} = handle_account_key(%{key: :down}, state)
-
-      assert preview_state.screen_state.account.candidate_theme_id != nil,
-             "expected candidate_theme_id to be set after cycling theme enum field down"
     end
   end
 
@@ -2229,62 +1583,6 @@ defmodule Foglet.TUI.Screens.AccountTest do
   # Phase 28 Plan 05 — WR-01 :backtab on Account ProfileForm / PrefsForm
   # ---------------------------------------------------------------------------
 
-  describe "FORM-02 :backtab on Account ProfileForm / PrefsForm (Phase 28 WR-01)" do
-    alias Foglet.TUI.Screens.Account.PrefsForm
-    alias Foglet.TUI.Screens.Account.ProfileForm
-    alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-    test "FORM-02 :backtab on ProfileForm retreats focus by one" do
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      # Advance focus 0 → 1 via Tab so :backtab has somewhere to retreat to.
-      {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
-      assert ss.profile_form.focus_index == 1
-
-      {:ok, after_backtab, []} = ProfileForm.handle_key(%{key: :backtab}, ss, user)
-
-      assert after_backtab.profile_form.focus_index == 0,
-             "WR-01: :backtab on ProfileForm should retreat focus to 0; " <>
-               "got focus_index = #{inspect(after_backtab.profile_form.focus_index)}"
-    end
-
-    test "FORM-02 :backtab on PrefsForm retreats focus by one" do
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      # Advance focus 0 → 1 (timezone → time_format enum).
-      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
-      assert ss.prefs_form.focus_index == 1
-
-      {:ok, after_backtab, []} = PrefsForm.handle_key(%{key: :backtab}, ss, user)
-
-      assert after_backtab.prefs_form.focus_index == 0,
-             "WR-01: :backtab on PrefsForm should retreat focus to 0; " <>
-               "got focus_index = #{inspect(after_backtab.prefs_form.focus_index)}"
-    end
-
-    test "WR-01 sanity: :backtab on PrefsForm preserves focused field via Modal.Form path" do
-      # Equivalence check: Modal.Form treats :backtab ≡ :shift_tab. After WR-01
-      # lands, ProfileForm/PrefsForm route :backtab into that path instead of
-      # dropping it on the floor with :no_match.
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
-      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
-      assert ss.prefs_form.focus_index == 2
-
-      {:ok, after_backtab, []} = PrefsForm.handle_key(%{key: :backtab}, ss, user)
-      assert after_backtab.prefs_form.focus_index == 1
-
-      # Verify the form's enum value was not silently mutated by routing
-      # :backtab through an unintended clause.
-      assert ModalForm.field_value(after_backtab.prefs_form, :time_format) ==
-               ModalForm.field_value(ss.prefs_form, :time_format)
-    end
-  end
-
   # ---------------------------------------------------------------------------
   # Phase 28 Plan 05 — BL-01 :form modal lock release on async failure
   # ---------------------------------------------------------------------------
@@ -2433,7 +1731,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
     # so every advertised command shows up in `collect_text_values/1`.
     defp wide_terminal(state), do: %{state | terminal_size: {140, 30}}
 
-    test "PROFILE shows form-tab cluster (Tab Next, Enter Save, Esc Cancel)" do
+    test "PROFILE list mode shows edit/select/tab cluster, no Save/Cancel" do
       state =
         build_state_for_role(:user)
         |> wide_terminal()
@@ -2441,9 +1739,11 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       joined = render_account(state) |> collect_text_values() |> Enum.join("|")
 
-      assert String.contains?(joined, "Next"), "expected 'Next' key bar label on PROFILE"
-      assert String.contains?(joined, "Save")
-      assert String.contains?(joined, "Cancel")
+      assert String.contains?(joined, "Edit"), "expected 'Edit' key bar label on PROFILE"
+      assert String.contains?(joined, "Select")
+      assert String.contains?(joined, "Tabs")
+      refute String.contains?(joined, "Save")
+      refute String.contains?(joined, "Cancel")
       refute String.contains?(joined, "Add key")
       # "Generate invite" must not advertise on the PROFILE tab key bar.
       refute String.contains?(joined, "Generate invite")
@@ -2515,7 +1815,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert String.contains?(joined, "Revoke invite")
     end
 
-    test "PREFS adds ↑/↓ Change hint when an enum field is focused (Item 4)" do
+    test "PREFS list mode advertises Select/Edit rather than enum Change hint" do
       ss =
         AccountState.new()
         |> Map.put(:active_tab, 1)
@@ -2527,8 +1827,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       joined = render_account(state) |> collect_text_values() |> Enum.join("|")
 
-      assert String.contains?(joined, "Change"),
-             "expected ↑/↓ Change hint when Theme enum is focused"
+      assert String.contains?(joined, "Select")
+      assert String.contains?(joined, "Edit")
+      refute String.contains?(joined, "Change")
     end
 
     test "PREFS does not add Change hint when a text field is focused" do
@@ -2568,12 +1869,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       joined = render_account(state) |> collect_text_values() |> Enum.join("|")
 
-      assert String.contains?(joined, "Save"),
-             "PROFILE 80x24 keybar must retain the Save action (FOG-689). " <>
+      assert String.contains?(joined, "Edit"),
+             "PROFILE 80x24 keybar must retain the Edit action (FOG-899). " <>
                "Got: #{joined}"
 
-      assert String.contains?(joined, "Cancel"),
-             "PROFILE 80x24 keybar must retain the Cancel action (FOG-689)."
+      assert String.contains?(joined, "Select")
+      refute String.contains?(joined, "Save")
+      refute String.contains?(joined, "Cancel")
     end
 
     test "PREFS keybar at 80x24 keeps Enter Save (and Esc Cancel) visible" do
@@ -2588,12 +1890,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
 
       joined = render_account(state) |> collect_text_values() |> Enum.join("|")
 
-      assert String.contains?(joined, "Save"),
-             "PREFS 80x24 keybar must retain the Save action (FOG-689). " <>
+      assert String.contains?(joined, "Edit"),
+             "PREFS 80x24 keybar must retain the Edit action (FOG-899). " <>
                "Got: #{joined}"
 
-      assert String.contains?(joined, "Cancel"),
-             "PREFS 80x24 keybar must retain the Cancel action (FOG-689)."
+      assert String.contains?(joined, "Select")
+      refute String.contains?(joined, "Save")
+      refute String.contains?(joined, "Cancel")
     end
   end
 
@@ -2761,94 +2064,23 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert state.status_message == "Profile was not saved."
     end
 
-    test "Submitting a Profile draft from the first field saves without moving to the last field" do
-      alias Foglet.TUI.Screens.Account.ProfileForm
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      assert ss.profile_form.focus_index == 0
-      assert ModalForm.field_value(ss.profile_form, :location) == user.location
-
-      {:ok, after_submit, cmds} = ProfileForm.handle_key(%{key: :enter}, ss, user)
-
-      assert after_submit.profile_form.focus_index == 0
-      assert [{:account_save_profile, attrs}] = cmds
-      assert attrs.location == user.location
-      refute after_submit.status_message == "Profile ready to save."
-    end
-
     test "Submitting Preferences from a non-last focused field saves without moving focus" do
       alias Foglet.TUI.Screens.Account.PrefsForm
 
       user = build_user_with_profile()
       ss = AccountState.new(current_user: user)
 
-      {:ok, ss, []} = PrefsForm.handle_key(%{key: :tab}, ss, user)
-      assert ss.prefs_form.focus_index == 1
+      {:ok, ss, []} = PrefsForm.handle_key(%{key: :down}, ss, user)
+      assert ss.prefs_focus == :time_format
 
-      {:ok, after_submit, cmds} = PrefsForm.handle_key(%{key: :enter}, ss, user)
+      {after_submit, cmds} =
+        PrefsForm.submit_field(%{ss | prefs_editing_field: :time_format}, %{time_format: "12h"})
 
-      assert after_submit.prefs_form.focus_index == 1
+      assert after_submit.prefs_focus == :time_format
       assert [{:account_save_prefs, attrs}] = cmds
       assert attrs.timezone == user.timezone
       assert attrs.preferences == %{"time_format" => "12h"}
       assert attrs.theme == user.theme
-    end
-
-    test "Submitting a Profile draft no longer flashes 'Profile ready to save.'" do
-      alias Foglet.TUI.Screens.Account.ProfileForm
-      alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
-
-      user = build_user_with_profile()
-      ss = AccountState.new(current_user: user)
-
-      # Drive ProfileForm to submit from the last field as a compatibility path.
-      {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
-      {:ok, ss, []} = ProfileForm.handle_key(%{key: :tab}, ss, user)
-      assert ss.profile_form.focus_index == 2
-      assert ModalForm.field_value(ss.profile_form, :real_name) == user.real_name
-
-      {:ok, after_submit, cmds} = ProfileForm.handle_key(%{key: :enter}, ss, user)
-
-      assert [{:account_save_profile, _}] = cmds
-      refute after_submit.status_message == "Profile ready to save."
-    end
-
-    test "FOG-144: PROFILE save tolerates struct session_context (no Access crash)" do
-      user = build_user_with_profile()
-
-      session_context = %Foglet.TUI.SessionContext{
-        user: user,
-        user_id: user.id,
-        pubkey_authenticated: false,
-        registration_mode: "open",
-        max_post_length: 4_000,
-        timezone: "Etc/UTC",
-        time_format: "iso",
-        theme_id: "gray",
-        theme: Theme.default()
-      }
-
-      context =
-        Context.new(
-          current_user: user,
-          session_context: session_context,
-          route: :account
-        )
-
-      ss =
-        Account.init(context)
-        |> Map.put(:active_tab, 0)
-
-      # Land focus on the last PROFILE field, then submit with Enter.
-      {ss, []} = Account.update({:key, %{key: :tab}}, ss, context)
-      {ss, []} = Account.update({:key, %{key: :tab}}, ss, context)
-
-      {_after, effects} = Account.update({:key, %{key: :enter}}, ss, context)
-
-      assert [%Effect{type: :task, payload: %{op: :account_save_profile}}] = effects
     end
 
     test "real_name field carries optional helper description" do
