@@ -144,10 +144,11 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     }
   end
 
-  @doc "Whether the current draft should expose the test-email action row."
+  @doc "Whether the current selection should expose the test-email action row."
   @spec test_email_action_visible?(t()) :: boolean()
-  def test_email_action_visible?(%__MODULE__{drafts: drafts}) do
-    Map.get(drafts, "delivery_mode") == "email"
+  def test_email_action_visible?(%__MODULE__{drafts: drafts, focused: focused} = state) do
+    Enum.at(visible_keys(state), focused) == "delivery_mode" and
+      Map.get(drafts, "delivery_mode") == "email"
   end
 
   @doc """

@@ -81,7 +81,6 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
   # at every width.
   defp form_tab_label(ss) do
     case Enum.at(State.tab_labels(ss), ss.active_tab) do
-      "SITE" -> "SITE"
       "LIMITS" -> "LIMITS"
       _ -> nil
     end
@@ -132,6 +131,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     ]
 
     base
+    |> maybe_add_site_actions(ss)
     |> maybe_add_boards_actions(ss)
     |> maybe_add_retry(ss)
     |> maybe_add_revoke(ss)
@@ -166,6 +166,28 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       }
     ]
   end
+
+  defp maybe_add_site_actions(groups, ss) do
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    if active_label == "SITE" do
+      action_commands = [%{key: "E", label: "Edit", priority: 5}]
+      action_commands = maybe_add_test_email_action(action_commands, ss.site_form)
+
+      groups ++
+        [
+          %{label: "List", commands: [%{key: "↑/↓", label: "Select", priority: 10}]},
+          %{label: "Actions", commands: action_commands}
+        ]
+    else
+      groups
+    end
+  end
+
+  defp maybe_add_test_email_action(commands, %{drafts: %{"delivery_mode" => "email"}}),
+    do: commands ++ [%{key: "T", label: "Test email", priority: 20}]
+
+  defp maybe_add_test_email_action(commands, _site_form), do: commands
 
   defp maybe_add_boards_actions(groups, ss) do
     active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
@@ -269,7 +291,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
   defp render_tab_body("SITE", ss, theme, width, height) do
     case ss.site_form do
       nil -> loading_panel(theme)
-      form -> SiteForm.render(form, theme, form_viewport_opts(height, :site, width))
+      form -> SiteForm.render(form, theme, width: width, height: max(height - 2, 1))
     end
   end
 
@@ -336,11 +358,6 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       [text("Could not load #{tab}. Press R to try again.", fg: theme.error.fg)]
     end
   end
-
-  defp form_viewport_opts(height, _section, width) when is_integer(height) and height <= 18,
-    do: [max_visible: 2, width: width]
-
-  defp form_viewport_opts(_height, _section, width), do: [width: width]
 
   defp get_screen_state(state) do
     ss =

@@ -119,7 +119,7 @@ defmodule Foglet.TUI.LayoutSmoke.AccountHelper do
             # redundant title heading; the selected tab already communicates
             # the active section. Assert fields still render and the tab-body
             # heading is suppressed.
-            assert Enum.any?(texts, &String.contains?(&1, "Location:")),
+            assert Enum.any?(texts, &String.contains?(&1, "Location")),
                    "expected profile field label at #{width}x#{height}, got: #{inspect(texts)}"
 
             refute Enum.any?(texts, &String.contains?(&1, "Profile")),

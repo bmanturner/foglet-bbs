@@ -75,7 +75,7 @@ defmodule Foglet.TUI.AsciiRendererTest do
       refute ascii =~ "Time format:ronto",
              "select-list option text must not bleed into the next field label:\n#{ascii}"
 
-      assert ascii =~ "Time format:"
+      assert ascii =~ "Time format"
     end
 
     test "respects custom width and height" do
