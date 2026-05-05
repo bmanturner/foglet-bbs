@@ -281,6 +281,47 @@ defmodule Foglet.Accounts do
   @spec get_user!(String.t()) :: User.t()
   def get_user!(id), do: Repo.get!(User, id)
 
+  @doc """
+  Record a member's latest meaningful BBS presence timestamp.
+
+  This boundary is intentionally tolerant for runtime callers: nil/guest inputs
+  are no-ops, and stale timestamps are ignored instead of treated as failures.
+  The conditional `update_all/3` keeps writes monotonic so late disconnects or
+  racing replacements cannot move `users.last_seen_at` backwards.
+  """
+  @spec record_last_seen(User.t() | String.t() | nil, DateTime.t() | nil) :: :ok
+  def record_last_seen(user_or_id, timestamp \\ nil)
+
+  def record_last_seen(nil, _timestamp), do: :ok
+
+  def record_last_seen(%User{id: user_id}, timestamp), do: record_last_seen(user_id, timestamp)
+
+  def record_last_seen(user_id, timestamp) when is_binary(user_id) do
+    timestamp = normalize_last_seen_timestamp(timestamp || DateTime.utc_now())
+    now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+
+    _ =
+      Repo.update_all(
+        from(u in User,
+          where:
+            u.id == ^user_id and is_nil(u.deleted_at) and
+              (is_nil(u.last_seen_at) or u.last_seen_at < ^timestamp)
+        ),
+        set: [last_seen_at: timestamp, updated_at: now]
+      )
+
+    :ok
+  end
+
+  defp normalize_last_seen_timestamp(%DateTime{} = timestamp),
+    do: DateTime.truncate(timestamp, :microsecond)
+
+  defp normalize_last_seen_timestamp(%NaiveDateTime{} = timestamp) do
+    timestamp
+    |> DateTime.from_naive!("Etc/UTC")
+    |> DateTime.truncate(:microsecond)
+  end
+
   @spec get_user_by_handle(String.t()) :: User.t() | nil
   def get_user_by_handle(handle) when is_binary(handle) do
     Repo.get_by(User, handle: handle)

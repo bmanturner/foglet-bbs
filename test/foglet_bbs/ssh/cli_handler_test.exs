@@ -32,6 +32,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
   end
 
   @static_openssh_key FogletBbs.AccountsFixtures.default_ssh_public_key()
+  @alternate_openssh_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
   @terminal_takeover "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J"
   @alt_screen_enter "\e[?1049h"
   @alt_screen_leave "\e[?1049l"
@@ -187,6 +188,34 @@ defmodule Foglet.SSH.CLIHandlerTest do
       refute returned_state.counter_counted?
 
       assert_receive {:DOWN, ^ref, :process, ^session_pid, _reason}
+    end
+
+    test ":closed stops an authenticated session and persists disconnect last_seen_at" do
+      reset_cli_counter!()
+      user = AccountsFixtures.user_fixture()
+      old_seen = ~U[2026-05-05 20:00:00.000000Z]
+      user |> Ecto.Changeset.change(last_seen_at: old_seen) |> FogletBbs.Repo.update!()
+
+      {:ok, session_pid} =
+        Foglet.Sessions.Supervisor.start_session(
+          user_id: user.id,
+          handle: user.handle,
+          role: user.role
+        )
+
+      # Force an older persisted value after connect so this assertion proves
+      # the channel-close termination path, not only the connect write.
+      user |> Ecto.Changeset.change(last_seen_at: old_seen) |> FogletBbs.Repo.update!()
+      ref = Process.monitor(session_pid)
+
+      state = %CLIHandler{channel_id: 8, connection_ref: nil, session_pid: session_pid}
+
+      assert {:stop, 8, returned_state} =
+               CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 8}}, state)
+
+      assert returned_state.cleanup_done?
+      assert_receive {:DOWN, ^ref, :process, ^session_pid, _reason}
+      assert DateTime.compare(FogletBbs.Repo.reload!(user).last_seen_at, old_seen) == :gt
     end
 
     test "matching lifecycle EXIT returns stop without requiring an SSH channel" do
@@ -779,6 +808,32 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert context.session_context.user.id == user.id
       assert context.session_context.pubkey_authenticated
       assert context.session_context.offered_ssh_public_key == nil
+      assert %DateTime{} = FogletBbs.Repo.reload!(user).last_seen_at
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+    end
+
+    test "blocked public-key match starts as a guest and does not update last_seen_at" do
+      reset_cli_counter!()
+      reset_pubkey_stash!()
+      warm_login_config_cache!()
+      start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
+
+      user =
+        AccountsFixtures.user_fixture()
+        |> Ecto.Changeset.change(status: :suspended)
+        |> FogletBbs.Repo.update!()
+
+      _key = AccountsFixtures.ssh_key_fixture(user, %{public_key: @alternate_openssh_key})
+      peer = {{10, 0, 0, 11}, 10_011}
+      [{public_key, _}] = :ssh_file.decode(@alternate_openssh_key, :public_key)
+      PubkeyStash.put(peer, public_key)
+
+      assert {:ok, returned_state} = CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      assert returned_state.pubkey_gate == :suspended
+      assert Foglet.Sessions.Session.get_state(returned_state.session_pid).user_id == nil
+      assert FogletBbs.Repo.reload!(user).last_seen_at == nil
 
       _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
     end
