@@ -807,8 +807,19 @@ defmodule Foglet.SSH.CLIHandler do
     end
   end
 
-  defp current_user_id(%{pubkey_user: %{id: user_id}}) when is_binary(user_id), do: user_id
-  defp current_user_id(_state), do: nil
+  defp current_user_id(%{session_pid: session_pid} = state) when is_pid(session_pid) do
+    case Sessions.Session.get_state(session_pid) do
+      %{user_id: user_id} when is_binary(user_id) -> user_id
+      _session_state -> pubkey_user_id(state)
+    end
+  catch
+    :exit, _reason -> pubkey_user_id(state)
+  end
+
+  defp current_user_id(state), do: pubkey_user_id(state)
+
+  defp pubkey_user_id(%{pubkey_user: %{id: user_id}}) when is_binary(user_id), do: user_id
+  defp pubkey_user_id(_state), do: nil
 
   defp exit_status_suffix(nil), do: ""
   defp exit_status_suffix(status), do: ", status #{status}"
