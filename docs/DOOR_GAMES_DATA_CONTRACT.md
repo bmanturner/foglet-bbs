@@ -87,6 +87,9 @@ metadata, and non-allowlisted environment values are not retained.
 
 ## Adapter/wrapper contract
 
+Use this section when writing a Python, Node, Rust, Go, C, or shell program that
+runs as a Foglet door.
+
 External and classic wrappers receive only safe Foglet context:
 
 - Environment:
@@ -107,15 +110,21 @@ External and classic wrappers receive only safe Foglet context:
   - `terminal_width`
   - `terminal_height`
 
-Wrappers should:
+The JSON file is the preferred interface for modern doors. The environment
+values are present for small scripts and wrappers that cannot easily parse JSON.
 
-1. Read `FOGLET_DOOR_CONTEXT` or the minimal `FOGLET_*` environment values.
+Wrapper checklist:
+
+1. Read `FOGLET_DOOR_CONTEXT`, or read the minimal `FOGLET_*` environment values
+   if the language/runtime makes JSON awkward.
 2. For classic doors, consume the generated dropfile(s) in the working directory.
 3. Launch the target executable from the manifest working directory.
-4. Preserve the child exit status.
-5. Return cleanly to Foglet on normal exit.
-6. Avoid logging context files, dropfile contents, inherited env, or terminal
-   input/output as secrets could appear in third-party programs.
+4. Forward terminal input/output without writing a separate transcript by
+   default.
+5. Preserve the child exit status.
+6. Return cleanly to Foglet on normal exit.
+7. Avoid logging context files, dropfile contents, inherited env, or terminal
+   input/output. Third-party programs may ask users for secrets.
 
 Foglet's runner writes requested dropfiles before launching a
 `:classic_dropfile` manifest and removes them during normal exit, crash,
@@ -129,7 +138,9 @@ timeout, or disconnect cleanup.
 - `:door_sys` -> `DOOR.SYS`
 - `:dorinfo_def` -> `DORINFO.DEF`
 
-All lines are CRLF-terminated.
+All lines are CRLF-terminated (`\r\n`). The generated files are compatibility
+bridges for dropfile-aware programs; they are not a claim that every historical
+DOS door will run unchanged.
 
 ### CHAIN.TXT mapping
 
@@ -205,10 +216,15 @@ coverage on top of that runner cleanup behavior.
 
 ## Compatibility tiers
 
-- Tier 1: native Elixir doors.
-- Tier 2: modern external CLI/PTY doors.
-- Tier 3: classic dropfile-aware wrappers/native executables.
-- Tier 4: DOS-era doors through DOSBox/dosemu-style wrappers, experimental/future.
+- Tier 1: native Elixir doors. These run inside Foglet/OTP and can integrate
+  directly with Foglet code.
+- Tier 2: modern external CLI/PTY doors. These are ordinary executables launched
+  under a PTY with safe Foglet context.
+- Tier 3: classic dropfile-aware wrappers/native executables. These consume
+  generated `CHAIN.TXT`, `DOOR.SYS`, or `DORINFO.DEF` files from the working
+  directory.
+- Tier 4: DOS-era doors through DOSBox/dosemu-style wrappers. This tier is
+  experimental/future and is not delivered by FOG-880.
 
 ## FOG-522 alignment and sandbox limits
 
