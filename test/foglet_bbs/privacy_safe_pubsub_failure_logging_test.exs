@@ -1,10 +1,11 @@
 defmodule Foglet.PrivacySafePubSubFailureLoggingTest do
   @moduledoc """
-  FOG-675: privacy-safe `Logger.warning` on `Phoenix.PubSub.broadcast/3`
-  failure at the two PubSub broadcast sites that previously suppressed the
+  FOG-675/FOG-1008: privacy-safe `Logger.warning` on `Phoenix.PubSub.broadcast/3`
+  failure at PubSub broadcast sites that previously suppressed the
   result with `_ = ...`:
 
     * `Foglet.BoardChat.Permanent.broadcast_new_message/2` (board chat insert)
+    * `Foglet.BoardChat.Ephemeral.Room.broadcast/2` (in-memory board chat post)
     * `Foglet.TUI.App.Effects.apply_effect/2` for `%Effect{type: :publish}`
 
   Both must:
@@ -27,7 +28,7 @@ defmodule Foglet.PrivacySafePubSubFailureLoggingTest do
 
   import FogletBbs.BoardsFixtures, only: [category_fixture: 0, user_fixture: 0]
 
-  alias Foglet.BoardChat.{Message, Permanent}
+  alias Foglet.BoardChat.{Ephemeral, Message, Permanent}
   alias Foglet.Boards.Board
   alias Foglet.TUI.App
   alias Foglet.TUI.App.Effects
@@ -88,6 +89,36 @@ defmodule Foglet.PrivacySafePubSubFailureLoggingTest do
       assert log =~ Foglet.PubSub.board_chat_topic(board.id)
       refute log =~ body
       refute log =~ user.handle
+    end
+  end
+
+  describe "Foglet.BoardChat.Ephemeral.post/4 broadcast failure" do
+    test "logs topic and message_type, omits ephemeral message body" do
+      board = %Board{
+        id: Ecto.UUID.generate(),
+        slug: "fog1008-ephemeral",
+        name: "FOG-1008 ephemeral board",
+        chat_enabled: true,
+        chat_storage_mode: :ephemeral,
+        chat_message_ttl_seconds: 60
+      }
+
+      user_id = Ecto.UUID.generate()
+      body = "ephemeral-secret-#{System.unique_integer([:positive])}"
+
+      log =
+        capture_log(fn ->
+          assert {:ok, %{body: ^body}} = Ephemeral.post(board, user_id, body)
+        end)
+
+      assert log =~ "BoardChat.Ephemeral.Room broadcast failed"
+      assert log =~ "message_type=:board_chat_new_message"
+      assert log =~ "reason=:stub_failure"
+      assert log =~ Foglet.PubSub.board_chat_topic(board.id)
+      refute log =~ body
+      refute log =~ user_id
+
+      Ephemeral.stop(board)
     end
   end
 
