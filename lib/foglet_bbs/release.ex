@@ -30,8 +30,8 @@ defmodule FogletBbs.Release do
   rows the running application assumes exist (config defaults, tombstone
   user). Add new release-safe seed files to `@production_seed_files`.
   """
-  # sobelow: seed file paths come from @production_seed_files constants
-  # joined under the app priv directory; no user input can select files.
+  # sobelow: release seed scripts are a fixed module allowlist under
+  # priv/repo/seeds, not user-, environment-, or request-controlled paths.
   @sobelow_skip ["RCE.CodeModule"]
   def seed do
     :ok = load_app()
@@ -40,7 +40,7 @@ defmodule FogletBbs.Release do
     for repo <- repos() do
       {:ok, _, _} =
         Ecto.Migrator.with_repo(repo, fn repo ->
-          _ = Ecto.Migrator.run(repo, :up, all: true)
+          _migrated_versions = Ecto.Migrator.run(repo, :up, all: true)
 
           for relative <- @production_seed_files do
             {_result, _binding} = Code.eval_file(Path.join(priv, relative))
