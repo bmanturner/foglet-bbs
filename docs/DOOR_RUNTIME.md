@@ -14,6 +14,7 @@ FogletBbs.Supervisor (:one_for_one)
 │     └─ external executable Port    # Foglet PTY helper, script fallback, or plain pipe
 │        └─ priv/doors/pty/foglet_pty_adapter.py
 │           └─ child PTY + external command process group
+│              └─ optional restricted OS user/group drop before exec
 └─ Foglet.SSH.Supervisor / CLIHandler # SSH channel lifecycle, resize/disconnect source
 
 Foglet.TUI.Screen reducer
@@ -44,29 +45,31 @@ Failure path table
 | Native crash | `Foglet.Doors.Runner` | catches callback exception, posts `:crash`, stops without supervisor restart | native crash test |
 | External normal exit | helper/plain `Port` -> runner | exit status `0` becomes `:normal`; helper-backed PTY sends framed child exit before port shutdown | external env test |
 | External non-zero exit | helper/plain `Port` -> runner | non-zero status becomes `:crash` with status | external crash + helper crash tests |
-| Timeout | runner timer | sends helper terminate when present, closes port, sends best-effort `TERM` to helper/plain OS pid, removes context file, reports `:timeout` | timeout test |
-| SSH disconnect / session abandon | SSH interpreter should call `Runner.disconnect/1` | same cleanup path, reports `:disconnect` | disconnect test |
+| Timeout | runner timer | sends helper terminate when present, helper sends TERM then bounded KILL to the child process group, closes port, removes context file, reports `:timeout` | timeout + sandbox child/grandchild process-tree test |
+| SSH disconnect / session abandon | SSH interpreter should call `Runner.disconnect/1` | same cleanup path, reports `:disconnect` | disconnect + sandbox child/grandchild process-tree test |
 | Resize | SSH interpreter should call `Runner.resize/2` | native callback receives resize; helper-backed PTY receives framed resize and performs child `TIOCSWINSZ`; plain/fallback path records/notifies only | native resize + full-screen PTY resize tests |
-| Helper unavailable | `Foglet.Doors.PTYAdapter` | explicit degraded fallback to `script(1)` when available, otherwise plain pipe | fallback test |
+| Helper unavailable | `Foglet.Doors.PTYAdapter` | unsandboxed PTY manifests may degrade to `script(1)`/plain; sandbox-required manifests fail closed with `{:sandbox_unavailable, :pty_helper_missing}` | fallback + sandbox fail-closed tests |
+| Sandbox user/group missing or insufficient privilege | PTY helper | emits a framed helper error before command exec; runner exits without app-user fallback | sandbox missing-user test; same-user test covers local non-root execution |
 
 Security notes
 
-- External doors receive only an allowlisted metadata set:
+- External helper-backed doors receive only an allowlisted metadata set:
   `FOGLET_DOOR_ID`, `FOGLET_USER_ID`, `FOGLET_USERNAME`,
   `FOGLET_SESSION_ID`, `FOGLET_TERMINAL_WIDTH`, `FOGLET_TERMINAL_HEIGHT`, and
   `FOGLET_DOOR_CONTEXT`.
 - The generated JSON context file contains the same narrow user/session/terminal
   metadata and is removed during runner cleanup.
 - Application secrets, database credentials, API keys, and full session structs
-  are not passed to door processes.
+  are not passed to helper-backed door processes. The helper rebuilds the child
+  environment instead of forwarding the Foglet service environment.
 - Executable allowlisting/registration policy is intentionally not solved in
   this OTP slice; it belongs with the Door catalog/config/domain slice.
 - `priv/doors/pty/foglet_pty_adapter.py` is the supported PTY backend for
-  `pty?: true` external/classic doors. It opens a real child PTY, launches the
-  command with structured `command` + `args`, bridges framed I/O through the
-  Erlang Port, applies resize with `TIOCSWINSZ`, and terminates the child process
-  group on cleanup. It requires Python 3 and POSIX PTY/ioctl support in the
-  runtime image.
+  `pty?: true` external/classic doors. It opens a real child PTY, optionally
+  drops to the manifest sandbox user/group, launches the command with structured
+  `command` + `args`, bridges framed I/O through the Erlang Port, applies resize
+  with `TIOCSWINSZ`, and terminates the child process group on cleanup. It
+  requires Python 3 and POSIX PTY/ioctl support in the runtime image.
 - `/usr/bin/script -qfec ... /dev/null` is now only an explicit degraded
   fallback when the Foglet helper is unavailable. It is acceptable for local
   demos but does not provide the supported resize/process-group semantics.
@@ -75,11 +78,36 @@ Security notes
   `priv/doors/demo/fullscreen_probe.py`. Runner tests launch both through the
   same `external_pty` path used for future SSH harness QA.
 
+Runtime config contract
+
+Sandboxed external-door manifest shape:
+
+```elixir
+sandbox: %{
+  mode: :restricted_user_process_group,
+  user: "foglet-door",
+  group: "foglet-door",
+  process_tree: :process_group,
+  fail_closed?: true
+}
+```
+
+Only `:none` and `:restricted_user_process_group` are valid modes in this
+baseline. `process_tree` is intentionally only `:process_group`. If sandboxing is
+required and the helper cannot resolve/drop to the configured OS user/group, the
+launch fails closed before the door command executes. cgroup/systemd-scope,
+bubblewrap/firejail, namespaces, containers, and microVMs remain out of this
+branch unless the board approves a broader platform slice.
+
 Residual risks / follow-up candidates
 
-- FOG-522 still owns sandbox/process isolation, filesystem exposure, network
-  policy, and deployment hardening for untrusted real-world door programs. The
-  helper improves PTY fidelity; it is not a sandbox.
+- FOG-823/FOG-829 documents the approved restricted-user plus process-group
+  deployment baseline. The helper provides process-group cleanup and, when
+  configured with sufficient host capability, restricted uid/gid switching. This
+  baseline does not isolate filesystem mounts, network, seccomp, namespaces,
+  containers, microVMs, or resource usage; host/container setup must provide the
+  restricted `foglet-door`-style user and directory permissions for real
+  deployments.
 - Docker/release packaging now installs Python 3 in the final runtime image and
   includes `priv/doors/pty/foglet_pty_adapter.py` via the release `priv` tree.
   Deployments that remove Python 3 or override the helper path will degrade to

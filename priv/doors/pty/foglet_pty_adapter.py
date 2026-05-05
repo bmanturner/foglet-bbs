@@ -20,12 +20,15 @@ import errno
 import fcntl
 import json
 import os
+import grp
+import pwd
 import pty
 import select
 import signal
 import struct
 import sys
 import termios
+import time
 
 
 def write_frame(kind: bytes, payload: bytes = b"") -> None:
@@ -44,18 +47,78 @@ def set_winsize(fd: int, cols: int, rows: int) -> None:
     fcntl.ioctl(fd, termios.TIOCSWINSZ, packed)
 
 
-def terminate_child(child_pid: int) -> None:
+def signal_child_group(child_pid: int, sig: signal.Signals = signal.SIGTERM) -> None:
     if child_pid <= 0:
         return
     try:
-        os.killpg(child_pid, signal.SIGTERM)
+        os.killpg(child_pid, sig)
     except ProcessLookupError:
         return
     except OSError:
         try:
-            os.kill(child_pid, signal.SIGTERM)
+            os.kill(child_pid, sig)
         except OSError:
             return
+
+
+def terminate_child(child_pid: int) -> None:
+    signal_child_group(child_pid, signal.SIGTERM)
+    # Escalate for process-tree cleanup. Grandchildren are not waitable here,
+    # so this is a bounded best-effort process-group KILL after TERM.
+    time.sleep(0.1)
+    signal_child_group(child_pid, signal.SIGKILL)
+
+
+def resolve_run_as(user: str | None, group: str | None):
+    if not user:
+        return None
+    try:
+        pw = pwd.getpwnam(user)
+    except KeyError:
+        raise RuntimeError("sandbox_user_not_found")
+
+    if group:
+        try:
+            gid = grp.getgrnam(group).gr_gid
+        except KeyError:
+            raise RuntimeError("sandbox_group_not_found")
+    else:
+        gid = pw.pw_gid
+
+    uid = pw.pw_uid
+    current_euid = os.geteuid()
+    if current_euid != 0 and uid != current_euid:
+        raise RuntimeError("sandbox_privileges_insufficient")
+
+    return {"user": user, "uid": uid, "gid": gid}
+
+
+def drop_privileges(run_as) -> None:
+    if not run_as:
+        return
+    if os.geteuid() == 0:
+        os.setgid(run_as["gid"])
+        try:
+            os.initgroups(run_as["user"], run_as["gid"])
+        except OSError:
+            # Some minimal containers do not permit supplementary group setup;
+            # the primary gid still applies before uid drop.
+            pass
+        os.setuid(run_as["uid"])
+
+
+def child_environment() -> dict[str, str]:
+    # The BEAM port process may inherit application secrets from the service
+    # environment. External doors receive only the variables Foglet intentionally
+    # supplied to this helper: Foglet metadata plus explicitly configured safe
+    # terminal locale variables.
+    allowed_prefixes = ("FOGLET_",)
+    allowed_names = {"TERM", "LANG", "LC_ALL", "LC_CTYPE", "COLORTERM"}
+    return {
+        key: value
+        for key, value in os.environ.items()
+        if key.startswith(allowed_prefixes) or key in allowed_names
+    }
 
 
 def reap_child(child_pid: int):
@@ -97,6 +160,9 @@ def main() -> int:
     parser.add_argument("--cols", type=int, required=True)
     parser.add_argument("--rows", type=int, required=True)
     parser.add_argument("--cwd")
+    parser.add_argument("--sandbox-mode", choices=["none", "restricted_user_process_group"], default="none")
+    parser.add_argument("--run-as-user")
+    parser.add_argument("--run-as-group")
     parser.add_argument("--", dest="dashdash", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
@@ -109,6 +175,16 @@ def main() -> int:
         return 127
 
     try:
+        run_as = resolve_run_as(args.run_as_user, args.run_as_group)
+    except RuntimeError as exc:
+        write_json(b"E", {"reason": str(exc)})
+        return 126
+
+    if args.sandbox_mode == "restricted_user_process_group" and not run_as:
+        write_json(b"E", {"reason": "sandbox_user_required"})
+        return 126
+
+    try:
         child_pid, master_fd = pty.fork()
     except Exception as exc:
         write_json(b"E", {"reason": "pty_fork_failed", "detail": repr(exc)})
@@ -118,7 +194,8 @@ def main() -> int:
         try:
             if args.cwd:
                 os.chdir(args.cwd)
-            os.execvpe(command[0], command, os.environ.copy())
+            drop_privileges(run_as)
+            os.execvpe(command[0], command, child_environment())
         except Exception as exc:
             os.write(2, ("foglet-pty exec failed: %r\r\n" % (exc,)).encode("utf-8", "replace"))
             os._exit(127)
@@ -133,6 +210,7 @@ def main() -> int:
     while True:
         exit_payload = reap_child(child_pid)
         if exit_payload is not None:
+            terminate_child(child_pid)
             write_json(b"X", exit_payload)
             return exit_payload["status"] if exit_payload["status"] is not None else 128 + int(exit_payload.get("signal") or 0)
 

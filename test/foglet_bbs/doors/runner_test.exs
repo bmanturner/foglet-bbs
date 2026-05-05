@@ -229,6 +229,114 @@ defmodule Foglet.Doors.RunnerTest do
       refute log =~ "DATABASE_URL"
     end
 
+    test "sandbox-required door fails closed when helper is unavailable" do
+      previous = Application.get_env(:foglet_bbs, :door_pty_helper_path)
+      Application.put_env(:foglet_bbs, :door_pty_helper_path, "/tmp/foglet-missing-pty-helper")
+
+      on_exit(fn ->
+        if previous do
+          Application.put_env(:foglet_bbs, :door_pty_helper_path, previous)
+        else
+          Application.delete_env(:foglet_bbs, :door_pty_helper_path)
+        end
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-sandbox-missing-helper",
+          display_name: "External Sandbox Missing Helper",
+          runtime: :external_pty,
+          command: "/usr/bin/env",
+          working_dir: "/tmp",
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true,
+          sandbox: same_user_sandbox()
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      ref = Process.monitor(pid)
+
+      assert_receive {:door_exited, ^pid, "external-sandbox-missing-helper",
+                      {:error, {:sandbox_unavailable, :pty_helper_missing}}, nil}
+
+      assert_receive {:DOWN, ^ref, :process, ^pid,
+                      {:door_launch_failed, {:sandbox_unavailable, :pty_helper_missing}}}
+    end
+
+    test "sandbox-required launch fails closed when configured user is unavailable" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-sandbox-missing-user",
+          display_name: "External Sandbox Missing User",
+          runtime: :external_pty,
+          command: "/usr/bin/env",
+          working_dir: "/tmp",
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true,
+          sandbox: %{mode: :restricted_user_process_group, user: "foglet-missing-door-user"}
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      ref = Process.monitor(pid)
+
+      assert_receive {:door_exited, ^pid, "external-sandbox-missing-user",
+                      {:error, {:helper, %{"reason" => "sandbox_user_not_found"}}}, nil}
+
+      assert_receive {:DOWN, ^ref, :process, ^pid,
+                      {:door_helper_failed, {:helper, %{"reason" => "sandbox_user_not_found"}}}}
+    end
+
+    test "helper sandbox passes only minimal Foglet env and no app secrets" do
+      previous_secret = System.get_env("SECRET_KEY_BASE")
+      previous_paperclip = System.get_env("PAPERCLIP_API_KEY")
+      System.put_env("SECRET_KEY_BASE", "door-secret-key-base")
+      System.put_env("PAPERCLIP_API_KEY", "door-paperclip-secret")
+
+      on_exit(fn ->
+        restore_env("SECRET_KEY_BASE", previous_secret)
+        restore_env("PAPERCLIP_API_KEY", previous_paperclip)
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-env-sandbox",
+          display_name: "External Env Sandbox",
+          runtime: :external_pty,
+          command: "/usr/bin/env",
+          working_dir: "/tmp",
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true,
+          sandbox: same_user_sandbox()
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {132, 40},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "external-env-sandbox"}
+      output = assert_door_output_contains("FOGLET_USERNAME=alice")
+      assert_receive {:door_exited, ^pid, "external-env-sandbox", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+
+      refute output =~ "SECRET_KEY_BASE"
+      refute output =~ "door-secret-key-base"
+      refute output =~ "PAPERCLIP_API_KEY"
+      refute output =~ "door-paperclip-secret"
+    end
+
     test "timeout terminates the external OS process and removes context file" do
       {:ok, manifest} =
         manifest(%{
@@ -281,6 +389,56 @@ defmodule Foglet.Doors.RunnerTest do
       refute os_process_alive?(os_pid)
     end
 
+    test "sandboxed helper cleans up child and grandchild process group on timeout, crash, and disconnect" do
+      for {id, trigger, expected_reason, expected_status} <- [
+            {"external-tree-timeout", :timeout, :timeout, nil},
+            {"external-tree-crash", :crash, :crash, 42},
+            {"external-tree-disconnect", :disconnect, :disconnect, nil}
+          ] do
+        pidfile = Path.join(System.tmp_dir!(), "#{id}-#{System.unique_integer([:positive])}.pid")
+
+        command =
+          case trigger do
+            :crash ->
+              "(sh -c 'trap \"exit 0\" TERM; while :; do sleep 1; done' & echo $! > #{pidfile}; exit 42)"
+
+            _other ->
+              "sh -c 'trap \"exit 0\" TERM; while :; do sleep 1; done' & echo $! > #{pidfile}; wait"
+          end
+
+        {:ok, manifest} =
+          manifest(%{
+            id: id,
+            display_name: id,
+            runtime: :external_pty,
+            command: "/bin/sh",
+            working_dir: "/tmp",
+            args: ["-c", command],
+            timeout_ms: if(trigger == :timeout, do: 100, else: 5_000),
+            pty?: true,
+            sandbox: same_user_sandbox()
+          })
+
+        {:ok, runner_pid} =
+          DoorSupervisor.start_runner(
+            manifest: manifest,
+            output: output_to(self()),
+            owner: self()
+          )
+
+        assert_receive {:door_started, ^runner_pid, ^id}
+        child_pid = wait_for_pidfile(pidfile)
+        ref = Process.monitor(runner_pid)
+
+        if trigger == :disconnect, do: Runner.disconnect(runner_pid)
+
+        assert_receive {:door_exited, ^runner_pid, ^id, ^expected_reason, ^expected_status}, 1_500
+        assert_receive {:DOWN, ^ref, :process, ^runner_pid, _reason}, 1_500
+        refute eventually_os_process_alive?(child_pid)
+        File.rm(pidfile)
+      end
+    end
+
     test "helper-backed PTY propagates resize to a full-screen child" do
       {:ok, manifest} =
         manifest(%{
@@ -309,8 +467,8 @@ defmodule Foglet.Doors.RunnerTest do
       ref = Process.monitor(pid)
       Runner.input(pid, "/quit\n")
       assert_door_output_contains("leaving-fullscreen")
-      assert_receive {:door_exited, ^pid, "external-resize", :normal, 0}
-      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+      assert_receive {:door_exited, ^pid, "external-resize", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
     end
 
     test "missing helper degrades to script fallback for PTY manifests" do
@@ -503,6 +661,56 @@ defmodule Foglet.Doors.RunnerTest do
 
   defp external_demo_path, do: Path.expand("priv/doors/demo/external_echo.sh")
   defp fullscreen_probe_path, do: Path.expand("priv/doors/demo/fullscreen_probe.py")
+
+  defp same_user_sandbox do
+    %{
+      mode: :restricted_user_process_group,
+      user: current_username(),
+      process_tree: :process_group
+    }
+  end
+
+  defp current_username do
+    case System.cmd("id", ["-un"], stderr_to_stdout: true) do
+      {username, 0} -> String.trim(username)
+      _other -> System.get_env("USER") || "nobody"
+    end
+  end
+
+  defp restore_env(name, nil), do: System.delete_env(name)
+  defp restore_env(name, value), do: System.put_env(name, value)
+
+  defp wait_for_pidfile(path, attempts \\ 50)
+
+  defp wait_for_pidfile(path, attempts) when attempts > 0 do
+    case File.read(path) do
+      {:ok, contents} ->
+        contents |> String.trim() |> String.to_integer()
+
+      {:error, _reason} ->
+        receive do
+        after
+          20 -> wait_for_pidfile(path, attempts - 1)
+        end
+    end
+  end
+
+  defp wait_for_pidfile(path, 0), do: flunk("pidfile was not written: #{path}")
+
+  defp eventually_os_process_alive?(pid, attempts \\ 20)
+
+  defp eventually_os_process_alive?(pid, attempts) when attempts > 0 do
+    if os_process_alive?(pid) do
+      receive do
+      after
+        50 -> eventually_os_process_alive?(pid, attempts - 1)
+      end
+    else
+      false
+    end
+  end
+
+  defp eventually_os_process_alive?(pid, 0), do: os_process_alive?(pid)
 
   defp os_process_alive?(pid) when is_integer(pid) do
     case System.cmd("kill", ["-0", Integer.to_string(pid)], stderr_to_stdout: true) do

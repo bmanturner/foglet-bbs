@@ -9,6 +9,8 @@ defmodule Foglet.Doors.Manifest do
 
   @type runtime :: :native_elixir | :external_pty | :classic_dropfile
   @type visibility :: :members | :mods_only | :sysop_only
+  @type sandbox_mode :: :none | :restricted_user_process_group
+  @type process_tree :: :process_group
 
   defstruct [
     :id,
@@ -26,7 +28,8 @@ defmodule Foglet.Doors.Manifest do
     args: [],
     env: %{},
     env_allowlist: [],
-    pty?: true
+    pty?: true,
+    sandbox: %Foglet.Doors.Sandbox{}
   ]
 
   @type t :: %__MODULE__{
@@ -45,6 +48,7 @@ defmodule Foglet.Doors.Manifest do
           idle_timeout_ms: pos_integer() | nil,
           visibility: visibility(),
           auth_scope: :site | {:board, Ecto.UUID.t()},
-          pty?: boolean()
+          pty?: boolean(),
+          sandbox: Foglet.Doors.Sandbox.t()
         }
 end

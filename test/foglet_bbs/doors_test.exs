@@ -34,6 +34,25 @@ defmodule Foglet.DoorsTest do
       assert manifest.timeout_ms == 30_000
       assert manifest.idle_timeout_ms == 5_000
       assert manifest.visibility == :members
+      assert manifest.sandbox.mode == :none
+    end
+
+    test "accepts the restricted-user process-group sandbox contract" do
+      attrs =
+        Map.put(@valid_manifest, :sandbox, %{
+          mode: :restricted_user_process_group,
+          user: "foglet-door",
+          group: "foglet-door",
+          process_tree: :process_group,
+          fail_closed?: true
+        })
+
+      assert {:ok, manifest} = Doors.validate_manifest(attrs)
+      assert manifest.sandbox.mode == :restricted_user_process_group
+      assert manifest.sandbox.user == "foglet-door"
+      assert manifest.sandbox.group == "foglet-door"
+      assert manifest.sandbox.process_tree == :process_group
+      assert manifest.sandbox.fail_closed? == true
     end
 
     test "rejects unsafe command paths, relative working directories, and non-allowlisted env names" do
@@ -48,6 +67,17 @@ defmodule Foglet.DoorsTest do
       assert {:command, "must be an absolute path"} in errors
       assert {:working_dir, "must be an absolute path"} in errors
       assert {:env_allowlist, "contains unsupported variable DATABASE_URL"} in errors
+    end
+
+    test "rejects unsafe explicit env and incomplete sandbox contracts" do
+      attrs =
+        @valid_manifest
+        |> Map.put(:env, %{"DATABASE_URL" => "postgres://secret"})
+        |> Map.put(:sandbox, %{mode: :restricted_user_process_group})
+
+      assert {:error, errors} = Doors.validate_manifest(attrs)
+      assert {:env, "contains unsupported variable \"DATABASE_URL\""} in errors
+      assert {:sandbox_user, "is required for restricted_user_process_group"} in errors
     end
 
     test "denies launch for inactive actors even when the manifest is visible" do

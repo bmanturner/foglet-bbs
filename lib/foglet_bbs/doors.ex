@@ -16,10 +16,13 @@ defmodule Foglet.Doors do
 
   alias Foglet.Accounts.User
   alias Foglet.Doors.{AuditRecord, Manifest}
+  alias Foglet.Doors.Sandbox
   alias Foglet.Sessions.Session
 
   @runtime_values [:native_elixir, :external_pty, :classic_dropfile]
   @visibility_values [:members, :mods_only, :sysop_only]
+  @sandbox_modes [:none, :restricted_user_process_group]
+  @process_tree_values [:process_group]
   @safe_status_keys [:exit_status, :reason, :signal, :timed_out, :crashed, :disconnected]
   @sensitive_env_names ~w[
     AWS_ACCESS_KEY_ID
@@ -118,7 +121,8 @@ defmodule Foglet.Doors do
       idle_timeout_ms: Map.get(attrs, :idle_timeout_ms),
       visibility: Map.get(attrs, :visibility, :members),
       auth_scope: Map.get(attrs, :auth_scope, :site),
-      pty?: Map.get(attrs, :pty?, true)
+      pty?: Map.get(attrs, :pty?, true),
+      sandbox: normalize_sandbox(Map.get(attrs, :sandbox, %{}))
     }
 
     case validate(manifest) do
@@ -263,10 +267,12 @@ defmodule Foglet.Doors do
       manifest.runtime in [:external_pty, :classic_dropfile]
     )
     |> validate_string_list(:args, manifest.args)
+    |> validate_env(manifest.env)
     |> validate_env_allowlist(manifest.env_allowlist)
     |> validate_timeout(:timeout_ms, manifest.timeout_ms)
     |> validate_optional_timeout(:idle_timeout_ms, manifest.idle_timeout_ms)
     |> validate_auth_scope(manifest.auth_scope)
+    |> validate_sandbox(manifest.runtime, manifest.sandbox)
     |> Enum.reverse()
   end
 
@@ -310,6 +316,20 @@ defmodule Foglet.Doors do
 
   defp validate_string_list(errors, field, _values), do: [{field, "must be a list"} | errors]
 
+  defp validate_env(errors, values) when is_map(values) do
+    invalid =
+      Enum.find(values, fn {key, value} ->
+        not is_binary(key) or unsupported_env_name?(key) or not is_binary(value)
+      end)
+
+    case invalid do
+      nil -> errors
+      {key, _value} -> [{:env, "contains unsupported variable #{inspect(key)}"} | errors]
+    end
+  end
+
+  defp validate_env(errors, _values), do: [{:env, "must be a map"} | errors]
+
   defp validate_env_allowlist(errors, values) when is_list(values) do
     case Enum.find(values, &unsupported_env_name?/1) do
       nil -> validate_string_list(errors, :env_allowlist, values)
@@ -332,6 +352,98 @@ defmodule Foglet.Doors do
 
   defp validate_auth_scope(errors, _scope),
     do: [{:auth_scope, "must be :site or {:board, board_id}"} | errors]
+
+  defp normalize_sandbox(%Sandbox{} = sandbox), do: sandbox
+
+  defp normalize_sandbox(attrs) when is_map(attrs) do
+    attrs = atomize_sandbox_keys(attrs)
+
+    %Sandbox{
+      mode: Map.get(attrs, :mode, :none),
+      user: Map.get(attrs, :user),
+      group: Map.get(attrs, :group),
+      process_tree: Map.get(attrs, :process_tree, :process_group),
+      fail_closed?: Map.get(attrs, :fail_closed?, Map.get(attrs, :fail_closed, true))
+    }
+  end
+
+  defp normalize_sandbox(_attrs), do: :invalid
+
+  defp atomize_sandbox_keys(attrs) do
+    Map.new(attrs, fn
+      {key, value} when is_atom(key) ->
+        {key, value}
+
+      {"fail_closed", value} ->
+        {:fail_closed, value}
+
+      {"fail_closed?", value} ->
+        {:fail_closed?, value}
+
+      {key, value} when key in ["mode", "user", "group", "process_tree"] ->
+        {String.to_existing_atom(key), value}
+
+      {key, value} ->
+        {key, value}
+    end)
+  end
+
+  defp validate_sandbox(errors, _runtime, %Sandbox{mode: :none}), do: errors
+
+  defp validate_sandbox(errors, :external_pty, %Sandbox{} = sandbox) do
+    errors
+    |> validate_sandbox_mode(sandbox.mode)
+    |> validate_process_tree(sandbox.process_tree)
+    |> validate_optional_binary(:sandbox_user, sandbox.user)
+    |> validate_optional_binary(:sandbox_group, sandbox.group)
+    |> validate_fail_closed(sandbox.fail_closed?)
+    |> require_restricted_user(sandbox)
+  end
+
+  defp validate_sandbox(errors, _runtime, %Sandbox{} = sandbox) do
+    errors = validate_sandbox_mode(errors, sandbox.mode)
+
+    if sandbox.mode == :none do
+      errors
+    else
+      [{:sandbox, "is only supported for external_pty doors"} | errors]
+    end
+  end
+
+  defp validate_sandbox(errors, _runtime, _sandbox), do: [{:sandbox, "must be a map"} | errors]
+
+  defp validate_sandbox_mode(errors, mode) when mode in @sandbox_modes, do: errors
+
+  defp validate_sandbox_mode(errors, _mode),
+    do: [{:sandbox_mode, "must be none or restricted_user_process_group"} | errors]
+
+  defp validate_process_tree(errors, process_tree) when process_tree in @process_tree_values,
+    do: errors
+
+  defp validate_process_tree(errors, _process_tree),
+    do: [{:sandbox_process_tree, "must be process_group"} | errors]
+
+  defp validate_optional_binary(errors, _field, nil), do: errors
+
+  defp validate_optional_binary(errors, _field, value) when is_binary(value) and value != "",
+    do: errors
+
+  defp validate_optional_binary(errors, field, _value),
+    do: [{field, "must be a non-empty string"} | errors]
+
+  defp validate_fail_closed(errors, value) when is_boolean(value), do: errors
+
+  defp validate_fail_closed(errors, _value),
+    do: [{:sandbox_fail_closed, "must be a boolean"} | errors]
+
+  defp require_restricted_user(errors, %Sandbox{mode: :restricted_user_process_group, user: user})
+       when is_binary(user) and user != "",
+       do: errors
+
+  defp require_restricted_user(errors, %Sandbox{mode: :restricted_user_process_group}),
+    do: [{:sandbox_user, "is required for restricted_user_process_group"} | errors]
+
+  defp require_restricted_user(errors, _sandbox), do: errors
 
   defp command_required?(:native_elixir), do: false
   defp command_required?(_runtime), do: true
