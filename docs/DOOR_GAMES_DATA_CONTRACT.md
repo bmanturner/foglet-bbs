@@ -56,9 +56,11 @@ Validated manifests are `%Foglet.Doors.Manifest{}` structs with:
 - `idle_timeout_ms`
 - `visibility`: `:members`, `:mods_only`, or `:sysop_only`
 - `auth_scope`: `:site` or `{:board, board_id}` for future scoped policy
+- `env`: explicit string environment values; sensitive names are rejected
+- `sandbox`: `%Foglet.Doors.Sandbox{}` with `:none` by default or `:restricted_user_process_group` for the helper-backed sandbox baseline
 
 Sensitive variables such as database URLs, secret keys, API keys, and tokens are
-rejected from `env_allowlist`.
+rejected from both `env` and `env_allowlist`.
 
 ## Audit record shape
 
@@ -99,7 +101,8 @@ Lines are CRLF-terminated for classic door compatibility.
 
 - Persistent launch/exit audit tables should be revisited after the OTP runner
   emits authoritative lifecycle events.
-- Full sandbox posture remains a runtime/platform concern; this slice only
-  prevents obvious secret/env leakage at the metadata boundary.
+- The FOG-830 runtime baseline adds a restricted-user/process-group manifest
+  contract for helper-backed external doors. Full filesystem/network/seccomp or
+  container isolation remains a platform concern.
 - DOOR.SYS and DORINFO.DEF are intentionally deferred behind the same dropfile
   adapter boundary.

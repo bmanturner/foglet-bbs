@@ -26,8 +26,8 @@ same resize or process-group cleanup semantics.
 Deployment requirement: releases/Docker images that enable `external_pty` doors
 need Python 3 and `priv/doors/pty/foglet_pty_adapter.py`. The project Dockerfile
 installs Python 3 in the final runtime image and includes the helper via the
-release `priv` tree. FOG-522 still owns
-stronger sandboxing/process isolation; this PTY helper is not a sandbox.
+release `priv` tree. The FOG-830 baseline adds an optional fail-closed
+restricted-user/process-group sandbox contract for helper-backed external doors.
 
 Door manifests are configuration data in this slice. They are not stored in database tables yet, and there is no in-BBS catalog editor yet.
 
@@ -45,7 +45,7 @@ Foglet narrows what a door receives:
 
 Foglet does not pass database credentials, app secrets, API keys, private tokens, full user structs, or full session structs to door processes.
 
-This is not a full sandbox. The first slice uses allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. The helper launches the door in a child process group so timeout and disconnect cleanup can terminate the helper-owned door tree, but it does not isolate filesystem, network, uid/gid, or resource access. Stronger process isolation remains future hardening in FOG-522, not a guarantee in this guide.
+This is a baseline sandbox, not full containment. Unsandboxed doors still use allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. Sandboxed helper-backed doors add fail-closed restricted OS-user execution plus process-group TERM/KILL cleanup, but they do not isolate filesystem mounts, network, seccomp, namespaces, containers, or microVMs. Do not run arbitrary third-party code as a door without an operator-reviewed host/container posture.
 
 ## Door manifest fields
 
@@ -74,8 +74,10 @@ Optional fields:
 - `env_allowlist` — uppercase environment variable names safe to expose
 - `idle_timeout_ms` — optional positive integer idle timeout in milliseconds
 - `pty?` — whether the external runner should request the supported helper-backed PTY path (`true`) or a plain pipe (`false`)
+- `env` — explicit string environment values to pass to the door; sensitive names are rejected
+- `sandbox` — optional `%{mode: :restricted_user_process_group, user: "foglet-door", group: "foglet-door", process_tree: :process_group, fail_closed?: true}` contract for helper-backed external doors
 
-Do not put secrets in `env_allowlist`. Foglet rejects known sensitive names such as database URLs, secret key bases, tokens, and API keys.
+Do not put secrets in `env` or `env_allowlist`. Foglet rejects known sensitive names such as database URLs, secret key bases, tokens, and API keys.
 
 ## Add a native Elixir door
 
@@ -157,7 +159,14 @@ Example manifest:
   idle_timeout_ms: 5 * 60 * 1_000,
   visibility: :members,
   auth_scope: :site,
-  pty?: true
+  pty?: true,
+  sandbox: %{
+    mode: :restricted_user_process_group,
+    user: "foglet-door",
+    group: "foglet-door",
+    process_tree: :process_group,
+    fail_closed?: true
+  }
 }
 ```
 
@@ -165,6 +174,14 @@ When `pty?: true`, Foglet passes `command` and `args` to the helper as separate
 arguments rather than building the production launch path with shell quoting.
 Wrappers can still be shell scripts, but shell interpretation is then explicit in
 the wrapper you own.
+
+When `sandbox.mode` is `:restricted_user_process_group`, the helper resolves the
+configured `user`/optional `group` before launch. If the user/group is missing,
+Python/PTY support is unavailable, or the Foglet OS process lacks privileges to
+drop to that user, the door fails closed before the command starts. Foglet never
+silently falls back to app-user execution for a sandbox-required manifest. Use a
+locked-down OS account such as `foglet-door` with only the filesystem access
+needed by reviewed door assets.
 
 The runner adds Foglet metadata for the external process:
 
