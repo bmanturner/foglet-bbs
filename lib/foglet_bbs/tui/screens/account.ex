@@ -76,13 +76,15 @@ defmodule Foglet.TUI.Screens.Account do
         new_ss =
           State.seed_from_user(ss, user) |> Map.put(:status_message, "Profile saved.")
 
-        {new_ss, [Effect.session({:set_current_user, user})]}
+        {new_ss, [Effect.session({:set_current_user, user}), Effect.dismiss_modal()]}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {put_account_errors(ss, :profile, changeset_errors(changeset)), []}
+        new_ss = put_account_errors(ss, :profile, changeset_errors(changeset))
+        {new_ss, [ProfileForm.error_modal(new_ss, profile_modal_errors(new_ss.profile_errors))]}
 
       {:error, reason} ->
-        {put_account_errors(ss, :profile, %{base: to_string(reason)}), []}
+        new_ss = put_account_errors(ss, :profile, %{base: to_string(reason)})
+        {new_ss, [ProfileForm.error_modal(new_ss, profile_modal_errors(new_ss.profile_errors))]}
     end
   end
 
@@ -101,17 +103,32 @@ defmodule Foglet.TUI.Screens.Account do
 
         effects = [
           Effect.session({:set_current_user, user}),
-          Effect.session({:update_preferences, snapshot})
+          Effect.session({:update_preferences, snapshot}),
+          Effect.dismiss_modal()
         ]
 
         {new_ss, effects}
 
       {:error, %Ecto.Changeset{} = changeset} ->
-        {put_account_errors(ss, :prefs, changeset_errors(changeset)), []}
+        new_ss = put_account_errors(ss, :prefs, changeset_errors(changeset))
+        {new_ss, [PrefsForm.error_modal(new_ss, prefs_modal_errors(new_ss.prefs_errors))]}
 
       {:error, reason} ->
-        {put_account_errors(ss, :prefs, %{base: to_string(reason)}), []}
+        new_ss = put_account_errors(ss, :prefs, %{base: to_string(reason)})
+        {new_ss, [PrefsForm.error_modal(new_ss, prefs_modal_errors(new_ss.prefs_errors))]}
     end
+  end
+
+  def update({:modal_submit, :profile_field, payload}, local_state, %Context{} = context) do
+    ss = normalize_state(local_state)
+    {new_ss, cmds} = ProfileForm.submit_field(ss, payload)
+    {new_ss, account_command_effects(cmds, context, new_ss)}
+  end
+
+  def update({:modal_submit, :prefs_field, payload}, local_state, %Context{} = context) do
+    ss = normalize_state(local_state)
+    {new_ss, cmds} = PrefsForm.submit_field(ss, payload)
+    {new_ss, account_command_effects(cmds, context, new_ss)}
   end
 
   def update({:task_result, op, result}, local_state, %Context{})
@@ -402,33 +419,6 @@ defmodule Foglet.TUI.Screens.Account do
 
   defp maybe_enter_tab_navigation(_event, %State{} = ss, _cmds), do: ss
 
-  defp text_entry_event?(%{key: :char, char: <<c>>}, {:form, %{type: :select_list}, field_state})
-       when c in ?0..?9 do
-    select_search_active?(field_state)
-  end
-
-  defp text_entry_event?(%{key: :char, char: <<c>>}, {:form, %{type: type}, _field_state})
-       when c in ?0..?9 and type in [:text, :textarea, :integer, :password],
-       do: true
-
-  defp text_entry_event?(%{key: :char, char: char}, {:form, %{type: :select_list}, _field_state})
-       when is_binary(char),
-       do: true
-
-  defp text_entry_event?(%{key: key}, {:form, %{type: type}, _field_state})
-       when key in [:left, :right, :home, :end, :delete] and
-              type in [:text, :textarea, :integer, :password],
-       do: true
-
-  defp text_entry_event?(%{key: :backspace}, {:form, %{type: type}, _field_state})
-       when type in [:text, :textarea, :integer, :password, :select_list],
-       do: true
-
-  defp text_entry_event?(%{key: key}, {:form, %{type: :select_list}, field_state})
-       when key in [:left, :right, :home, :end, :delete] do
-    select_search_active?(field_state)
-  end
-
   defp text_entry_event?(%{key: :char, char: <<c>>}, :ssh_key_add) when c in ?0..?9, do: true
 
   defp text_entry_event?(%{key: key}, :ssh_key_add)
@@ -440,32 +430,9 @@ defmodule Foglet.TUI.Screens.Account do
   defp active_text_entry_field(%State{} = ss) do
     case active_label(ss) do
       "SSH KEYS" -> if ss.ssh_keys.mode == :add, do: :ssh_key_add
-      "PROFILE" -> focused_form_field(ss.profile_form)
-      "PREFS" -> focused_form_field(ss.prefs_form)
       _ -> nil
     end
   end
-
-  # FOG-333 / FOG-717: Generalized text-entry shielding for
-  # Modal.Form-backed tabs. Free-form fields shield digit and cursor-editing
-  # shortcuts. Searchable select-list filters shield letters and cursor keys,
-  # while preserving blank numeric tab jumps until the user has begun a search.
-  defp focused_form_field(%{fields: fields, field_states: field_states, focus_index: idx}) do
-    case Enum.at(fields, idx) do
-      %{type: type} = field when type in [:text, :textarea, :integer, :password, :select_list] ->
-        {:form, field, Enum.at(field_states, idx)}
-
-      _ ->
-        nil
-    end
-  end
-
-  defp focused_form_field(_), do: nil
-
-  defp select_search_active?(%{select_list: %{search_buffer: search}}) when is_binary(search),
-    do: search != ""
-
-  defp select_search_active?(_), do: false
 
   defp action_key(%{key: :char, char: char}) when is_binary(char), do: char
   defp action_key(%{key: key}), do: key
@@ -506,6 +473,24 @@ defmodule Foglet.TUI.Screens.Account do
 
   @profile_labels %{location: "Location", tagline: "Tagline", real_name: "Real name"}
   @prefs_labels %{timezone: "Timezone", time_format: "Time format", theme: "Theme"}
+
+  defp profile_modal_errors(errors), do: modal_errors(errors, Map.keys(@profile_labels))
+  defp prefs_modal_errors(errors), do: modal_errors(errors, Map.keys(@prefs_labels))
+
+  defp modal_errors(errors, fields) do
+    base = Map.get(errors, :base) || Map.get(errors, "base")
+
+    field_errors =
+      errors
+      |> Enum.filter(fn {key, _value} -> key in fields end)
+      |> Map.new()
+
+    cond do
+      map_size(field_errors) > 0 -> field_errors
+      is_binary(base) -> %{Enum.at(fields, 0) => base}
+      true -> %{}
+    end
+  end
 
   defp apply_form_errors(%{profile_form: form} = ss, :profile, errors) when not is_nil(form) do
     alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm

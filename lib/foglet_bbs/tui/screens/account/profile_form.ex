@@ -1,88 +1,98 @@
 defmodule Foglet.TUI.Screens.Account.ProfileForm do
   @moduledoc """
-  PROFILE tab body for Account (D-10, D-13, D-16, Phase 25 Plan 02).
-
-  Delegates rendering and event handling to Modal.Form (D-01 / Pattern 1).
-  Draft keys are atoms matching `Foglet.TUI.Screens.Account.State`.
-
-  Per RESEARCH Pitfall 4: this module renders Modal.Form body-only — no
-  outer box/border. The screen chrome (ScreenFrame) provides the border.
-
-  Submit payloads are carried explicitly by `Foglet.TUI.Effect.modal_submit/3`.
-
-  Honest Esc (Phase 28 FORM-06 / D-10, D-11): pressing Esc reseeds drafts
-  via `State.seed_from_user/2`; the visible signal is the field values
-  reverting on the next render. No flash status row — Account screens
-  already advertise [Esc] Cancel in the global command bar.
+  PROFILE tab selectable read-mode field list plus one-field edit overlay launcher.
   """
 
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Theme
-  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+  alias Foglet.TUI.Widgets.List.SelectableFieldList
+
+  @fields [:location, :tagline, :real_name]
 
   @spec render(State.t(), Theme.t(), keyword()) :: any()
-  def render(%State{profile_form: form}, %Theme{} = theme, opts \\ []) do
-    form_opts = Keyword.merge([theme: theme, show_title: false], opts)
-    ModalForm.render(form, form_opts)
+  def render(%State{} = state, %Theme{} = theme, opts \\ []) do
+    fields = State.profile_fields(state.profile_draft)
+    selected = selected_index(state.profile_focus)
+
+    SelectableFieldList.render(fields, selected,
+      theme: theme,
+      width: Keyword.get(opts, :width, 80),
+      height: Keyword.get(opts, :height, 12)
+    )
   end
 
   @spec handle_key(map(), State.t(), map() | struct() | nil) ::
           {:ok, State.t(), list()} | :no_match
-  def handle_key(%{key: key} = event, %State{} = state, current_user)
-      when key in [
-             :char,
-             :backspace,
-             :delete,
-             :left,
-             :right,
-             :home,
-             :end,
-             :enter,
-             :escape,
-             :tab,
-             :shift_tab,
-             :backtab,
-             :up,
-             :down
-           ] do
-    do_handle_key(event, state, current_user)
+  def handle_key(%{key: :char, char: c}, %State{} = state, _current_user) when c in ["e", "E"] do
+    field = state.profile_focus || :location
+    form = State.build_profile_field_form(state.profile_draft, field)
+    modal = %Modal{type: :form, title: form.title, message: form, on_cancel: :dismiss_modal}
+
+    {:ok, %{state | profile_editing_field: field, profile_errors: %{}},
+     [Effect.open_modal(modal)]}
+  end
+
+  def handle_key(%{key: key} = event, %State{} = state, _current_user)
+      when key in [:up, :down, :home, :end] do
+    move_selection(event, state)
+  end
+
+  def handle_key(%{key: :char, char: c} = event, %State{} = state, _current_user)
+      when c in ["j", "J", "k", "K", "g", "G"] do
+    move_selection(event, state)
   end
 
   def handle_key(_event, %State{}, _current_user), do: :no_match
 
-  defp do_handle_key(event, %State{profile_form: form} = state, current_user) do
-    {new_form, action} = ModalForm.handle_event(event, form)
-    state = %{state | profile_form: new_form}
+  @spec submit_field(State.t(), map()) :: {State.t(), [{atom(), map()}]}
+  def submit_field(%State{} = state, payload) do
+    field = state.profile_editing_field || state.profile_focus || :location
+    value = Map.get(payload, field)
+    draft = Map.put(state.profile_draft, field, value)
 
-    case action do
-      {:submitted, %Effect{type: :modal_submit, payload: %{kind: :profile, payload: payload}}} ->
-        attrs = %{
-          location: payload.location,
-          tagline: payload.tagline,
-          real_name: payload.real_name
-        }
+    attrs = %{
+      location: Map.get(draft, :location, ""),
+      tagline: Map.get(draft, :tagline, ""),
+      real_name: Map.get(draft, :real_name, "")
+    }
 
-        {:ok, %{state | profile_dirty?: false, status_message: nil},
-         [{:account_save_profile, attrs}]}
-
-      :cancelled ->
-        # FORM-06 / D-10, D-11: Esc reseeds drafts; the visible signal is the
-        # field values reverting on the next render. No flash status row —
-        # Account screens already advertise [Esc] Cancel in the global
-        # command bar.
-        reseeded = State.seed_from_user(state, current_user)
-        {:ok, %{reseeded | status_message: nil}, []}
-
-      _ ->
-        dirty? = action == nil and text_input_event?(event)
-
-        {:ok, %{state | profile_dirty?: state.profile_dirty? or dirty?}, []}
-    end
+    {%{
+       state
+       | profile_draft: draft,
+         profile_focus: field,
+         profile_errors: %{},
+         status_message: nil
+     }, [{:account_save_profile, attrs}]}
   end
 
-  defp text_input_event?(%{key: :char}), do: true
-  defp text_input_event?(%{key: :backspace}), do: true
-  defp text_input_event?(%{key: :delete}), do: true
-  defp text_input_event?(_), do: false
+  @spec error_modal(State.t(), map()) :: Effect.t()
+  def error_modal(%State{} = state, errors) do
+    field = state.profile_editing_field || state.profile_focus || :location
+    form = State.build_profile_field_form(state.profile_draft, field, errors)
+
+    Effect.open_modal(%Modal{
+      type: :form,
+      title: form.title,
+      message: form,
+      on_cancel: :dismiss_modal
+    })
+  end
+
+  defp move_selection(event, %State{} = state) do
+    idx =
+      SelectableFieldList.move(
+        selected_index(state.profile_focus),
+        length(@fields),
+        action_key(event)
+      )
+
+    {:ok, %{state | profile_focus: Enum.at(@fields, idx)}, []}
+  end
+
+  defp selected_index(field), do: Enum.find_index(@fields, &(&1 == field)) || 0
+
+  defp action_key(%{key: :char, char: char}), do: char
+  defp action_key(%{key: key}), do: key
 end

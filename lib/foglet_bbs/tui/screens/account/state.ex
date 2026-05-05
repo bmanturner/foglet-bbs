@@ -44,6 +44,8 @@ defmodule Foglet.TUI.Screens.Account.State do
           prefs_errors: map(),
           profile_dirty?: boolean(),
           prefs_dirty?: boolean(),
+          profile_editing_field: atom() | nil,
+          prefs_editing_field: atom() | nil,
           tab_navigation?: boolean(),
           candidate_theme_id: String.t() | nil,
           status_message: String.t() | nil
@@ -65,6 +67,8 @@ defmodule Foglet.TUI.Screens.Account.State do
     prefs_errors: %{},
     profile_dirty?: false,
     prefs_dirty?: false,
+    profile_editing_field: nil,
+    prefs_editing_field: nil,
     tab_navigation?: false,
     candidate_theme_id: nil,
     status_message: nil
@@ -120,6 +124,8 @@ defmodule Foglet.TUI.Screens.Account.State do
         prefs_errors: %{},
         profile_dirty?: false,
         prefs_dirty?: false,
+        profile_editing_field: nil,
+        prefs_editing_field: nil,
         candidate_theme_id: nil
     }
   end
@@ -194,57 +200,102 @@ defmodule Foglet.TUI.Screens.Account.State do
   # Modal.Form builders (Plan 02 — D-01 / Pattern 1)
   # ---------------------------------------------------------------------------
 
+  @doc "Returns PROFILE field specs in display order."
+  @spec profile_fields(map()) :: [map()]
+  def profile_fields(draft) do
+    [
+      %{name: :location, type: :text, label: "Location", value: draft.location || ""},
+      %{name: :tagline, type: :text, label: "Tagline", value: draft.tagline || ""},
+      %{
+        name: :real_name,
+        type: :text,
+        label: "Real name",
+        description: "For friends and the sysop; blank uses your handle.",
+        value: draft.real_name || ""
+      }
+    ]
+  end
+
+  @doc "Returns PREFS field specs in display order."
+  @spec prefs_fields(map()) :: [map()]
+  def prefs_fields(draft) do
+    theme_ids = theme_id_strings()
+
+    [
+      %{
+        name: :timezone,
+        type: :select_list,
+        label: "Timezone",
+        required: true,
+        choices: Timezones.choices_for(draft.timezone),
+        description: "Search by city or IANA name; save to keep it.",
+        value: draft.timezone || "Etc/UTC",
+        max_height: 4
+      },
+      %{
+        name: :time_format,
+        type: :enum,
+        label: "Time format",
+        choices: ["12h", "24h"],
+        value: draft.time_format || "12h"
+      },
+      %{
+        name: :theme,
+        type: :enum,
+        label: "Theme",
+        choices: theme_ids,
+        description: "Preview changes here; save to keep them.",
+        value: draft.theme || "gray"
+      }
+    ]
+  end
+
+  @doc "Builds a one-field Profile overlay form."
+  @spec build_profile_field_form(map(), atom(), map()) :: ModalForm.t()
+  def build_profile_field_form(draft, field, errors \\ %{}) do
+    build_field_form("Edit profile", profile_fields(draft), field, :profile_field, errors)
+  end
+
+  @doc "Builds a one-field Preferences overlay form."
+  @spec build_prefs_field_form(map(), atom(), map()) :: ModalForm.t()
+  def build_prefs_field_form(draft, field, errors \\ %{}) do
+    build_field_form("Edit preferences", prefs_fields(draft), field, :prefs_field, errors)
+  end
+
+  defp build_field_form(title, fields, field, kind, errors) do
+    field_spec = Enum.find(fields, &(Map.fetch!(&1, :name) == field)) || hd(fields)
+
+    ModalForm.init(
+      title: "#{title}: #{field_spec.label}",
+      show_footer: true,
+      fields: [field_spec],
+      on_submit: fn payload -> Effect.modal_submit(:account, kind, payload) end,
+      on_cancel: fn -> :dismiss_modal end
+    )
+    |> maybe_set_errors(errors)
+  end
+
+  defp maybe_set_errors(form, errors) when map_size(errors) == 0, do: form
+
+  defp maybe_set_errors(form, errors) do
+    form
+    |> ModalForm.set_errors(errors)
+    |> ModalForm.set_submit_state({:error, "validation"})
+  end
+
   defp build_profile_form(draft) do
     ModalForm.init(
       title: "Profile",
-      fields: [
-        %{name: :location, type: :text, label: "Location", value: draft.location || ""},
-        %{name: :tagline, type: :text, label: "Tagline", value: draft.tagline || ""},
-        %{
-          name: :real_name,
-          type: :text,
-          label: "Real name",
-          description: "For friends and the sysop; blank uses your handle.",
-          value: draft.real_name || ""
-        }
-      ],
+      fields: profile_fields(draft),
       on_submit: fn payload -> Effect.modal_submit(:account, :profile, payload) end,
       on_cancel: fn -> :ok end
     )
   end
 
   defp build_prefs_form(draft) do
-    theme_ids = theme_id_strings()
-
     ModalForm.init(
       title: "Preferences",
-      fields: [
-        %{
-          name: :timezone,
-          type: :select_list,
-          label: "Timezone",
-          required: true,
-          choices: Timezones.choices_for(draft.timezone),
-          description: "Search by city or IANA name; save to keep it.",
-          value: draft.timezone || "Etc/UTC",
-          max_height: 4
-        },
-        %{
-          name: :time_format,
-          type: :enum,
-          label: "Time format",
-          choices: ["12h", "24h"],
-          value: draft.time_format || "12h"
-        },
-        %{
-          name: :theme,
-          type: :enum,
-          label: "Theme",
-          choices: theme_ids,
-          description: "Preview changes here; save to keep them.",
-          value: draft.theme || "gray"
-        }
-      ],
+      fields: prefs_fields(draft),
       on_submit: fn payload -> Effect.modal_submit(:account, :prefs, payload) end,
       on_cancel: fn -> :ok end
     )
