@@ -208,6 +208,40 @@ defmodule Foglet.SSH.CLIHandlerTest do
       :ok
     end
 
+    test "init_counter is idempotent and preserves active count" do
+      assert_counter!(0)
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 42})
+
+      assert :ok = CLIHandler.init_counter()
+
+      assert_counter!(42)
+    end
+
+    test "accepted connection increments counter and close decrements exactly once" do
+      warm_login_config_cache!()
+      peer = {{10, 0, 0, 101}, 65_003}
+
+      assert {:ok, returned_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      ref = Process.monitor(returned_state.session_pid)
+
+      assert returned_state.counter_counted?
+      refute returned_state.cleanup_done?
+      assert_counter!(1)
+
+      assert {:stop, 1, after_close} =
+               CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+
+      assert_counter!(0)
+      assert after_close.cleanup_done?
+      refute after_close.counter_counted?
+      assert_receive {:DOWN, ^ref, :process, _, _reason}
+
+      assert :ok = CLIHandler.terminate(:normal, after_close)
+      assert_counter!(0)
+    end
+
     test "normal close: :closed on counted state restores counter to 0" do
       {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()
       ref = Process.monitor(session_pid)

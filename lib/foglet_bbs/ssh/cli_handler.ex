@@ -749,12 +749,36 @@ defmodule Foglet.SSH.CLIHandler do
 
   @doc """
   Initializes the ETS counter table for tracking active SSH connections.
-  Must be called once before the daemon starts accepting connections.
-  Called from `Foglet.SSH.Supervisor.init/1`.
+
+  Called from `Foglet.SSH.Supervisor.init/1` before the daemon accepts
+  connections. The table is VM-local runtime state, so initialization is
+  idempotent: if a live table already exists, preserve its current count rather
+  than resetting active-connection accounting during an SSH supervisor restart.
   """
   def init_counter do
+    case :ets.info(@counter_table) do
+      :undefined ->
+        create_counter_table()
+
+      _info ->
+        ensure_counter_row()
+    end
+
+    :ok
+  end
+
+  defp create_counter_table do
     _ = :ets.new(@counter_table, [:named_table, :public, :set])
-    :ets.insert(@counter_table, {:count, 0})
+    ensure_counter_row()
+  rescue
+    ArgumentError ->
+      # Another init path created the named table between :ets.info/1 and
+      # :ets.new/2. Treat it like an existing restart table and preserve count.
+      ensure_counter_row()
+  end
+
+  defp ensure_counter_row do
+    _ = :ets.insert_new(@counter_table, {:count, 0})
     :ok
   end
 

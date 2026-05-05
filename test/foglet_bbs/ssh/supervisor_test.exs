@@ -1,6 +1,7 @@
 defmodule Foglet.SSH.SupervisorTest do
   use ExUnit.Case, async: false
 
+  alias Foglet.SSH.CLIHandler
   alias Foglet.SSH.Supervisor, as: SSHSup
 
   describe "Foglet.SSH.Supervisor.daemon_opts/1 (SSH-01)" do
@@ -103,6 +104,36 @@ defmodule Foglet.SSH.SupervisorTest do
     end
   end
 
+  describe "restart-safe counter initialization" do
+    setup do
+      reset_cli_counter!()
+      host_dir = tmp_host_key_dir!()
+      previous_ssh_config = Application.get_env(:foglet_bbs, :ssh, [])
+
+      Application.put_env(
+        :foglet_bbs,
+        :ssh,
+        Keyword.put(previous_ssh_config, :host_key_dir, host_dir)
+      )
+
+      on_exit(fn ->
+        Application.put_env(:foglet_bbs, :ssh, previous_ssh_config)
+        File.rm_rf!(host_dir)
+      end)
+
+      :ok
+    end
+
+    test "init/1 can run when the CLIHandler counter table already exists" do
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 2})
+
+      assert {:ok, {_flags, children}} = SSHSup.init([])
+      assert Enum.any?(children, &match?(%{id: Foglet.SSH.RateLimiter}, &1))
+      assert Enum.any?(children, &match?(%{id: Foglet.SSH.DaemonOwner}, &1))
+      assert_counter!(2)
+    end
+  end
+
   describe "application config" do
     test "test env disables start_ssh_daemon" do
       assert Application.get_env(:foglet_bbs, :start_ssh_daemon) == false
@@ -111,5 +142,30 @@ defmodule Foglet.SSH.SupervisorTest do
     test "default port is 2222" do
       assert Application.get_env(:foglet_bbs, :ssh_port, 2222) == 2222
     end
+  end
+
+  defp reset_cli_counter! do
+    table = Foglet.SSH.CLIHandler.Counter
+
+    if :ets.whereis(table) != :undefined do
+      :ets.delete(table)
+    end
+
+    CLIHandler.init_counter()
+  end
+
+  defp assert_counter!(expected) do
+    assert [{:count, ^expected}] = :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
+  end
+
+  defp tmp_host_key_dir! do
+    dir =
+      Path.join(
+        System.tmp_dir!(),
+        "foglet_ssh_supervisor_#{System.unique_integer([:positive, :monotonic])}"
+      )
+
+    File.mkdir_p!(dir)
+    dir
   end
 end
