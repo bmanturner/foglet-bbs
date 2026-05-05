@@ -135,6 +135,41 @@ def reap_child(child_pid: int):
     return {"status": None, "signal": None}
 
 
+def drain_pty_output(master_fd: int) -> bool:
+    """Forward any currently buffered PTY output before reporting child exit.
+
+    A fast child can write its final bytes and exit before the adapter's next
+    event-loop iteration. If the helper reports X(exit) first, Foglet's runner
+    stops and test/SSH owners may observe the exit before the final output. Keep
+    the protocol ordered by draining non-blocking PTY output before sending X.
+    """
+    while True:
+        try:
+            data = os.read(master_fd, 8192)
+        except BlockingIOError:
+            return True
+        except OSError as exc:
+            if exc.errno in (errno.EIO, errno.EBADF):
+                return False
+            write_json(b"E", {"reason": "pty_read_failed", "detail": repr(exc)})
+            return False
+
+        if not data:
+            return False
+
+        write_frame(b"O", data)
+
+
+def door_environment() -> dict:
+    """Return the already-sanitized environment supplied by Foglet.
+
+    The Elixir PTY adapter launches this helper through `env -i` with only
+    manifest env entries, required FOGLET_* metadata, and a narrow PATH. Keep
+    the exec environment explicit here instead of merging in a fresh host env.
+    """
+    return dict(os.environ)
+
+
 def handle_control(payload: bytes, master_fd: int, child_pid: int) -> bool:
     if not payload:
         return True
@@ -192,10 +227,11 @@ def main() -> int:
 
     if child_pid == 0:
         try:
+            set_winsize(0, args.cols, args.rows)
             if args.cwd:
                 os.chdir(args.cwd)
             drop_privileges(run_as)
-            os.execvpe(command[0], command, child_environment())
+            os.execvpe(command[0], command, door_environment())
         except Exception as exc:
             os.write(2, ("foglet-pty exec failed: %r\r\n" % (exc,)).encode("utf-8", "replace"))
             os._exit(127)
@@ -210,6 +246,7 @@ def main() -> int:
     while True:
         exit_payload = reap_child(child_pid)
         if exit_payload is not None:
+            drain_pty_output(master_fd)
             terminate_child(child_pid)
             write_json(b"X", exit_payload)
             return exit_payload["status"] if exit_payload["status"] is not None else 128 + int(exit_payload.get("signal") or 0)

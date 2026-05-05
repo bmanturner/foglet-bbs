@@ -39,7 +39,14 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
   test "init lists launchable built-in native and external demo doors" do
     assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
-    assert Enum.map(doors, & &1.id) == ["native-hello", "external-echo"]
+
+    assert Enum.map(doors, & &1.id) == [
+             "native-hello",
+             "external-echo",
+             "python-context-demo",
+             "classic-dropfile-demo"
+           ]
+
     assert Enum.all?(doors, &match?(%Manifest{}, &1))
   end
 
@@ -49,11 +56,17 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
     assert {%State{selected_index: 1}, []} = DoorList.update({:key, %{key: :down}}, state, ctx)
 
-    assert {%State{selected_index: 1}, []} =
+    assert {%State{selected_index: 2}, []} =
              DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 1}, ctx)
 
-    assert {%State{selected_index: 0}, []} =
-             DoorList.update({:key, %{key: :char, char: "k"}}, %{state | selected_index: 1}, ctx)
+    assert {%State{selected_index: 3}, []} =
+             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 2}, ctx)
+
+    assert {%State{selected_index: 3}, []} =
+             DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 3}, ctx)
+
+    assert {%State{selected_index: 2}, []} =
+             DoorList.update({:key, %{key: :char, char: "k"}}, %{state | selected_index: 3}, ctx)
 
     assert {%State{selected_index: 0}, []} = DoorList.update({:key, %{key: :up}}, state, ctx)
   end

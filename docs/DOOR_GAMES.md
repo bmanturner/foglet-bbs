@@ -39,11 +39,14 @@ Foglet narrows what a door receives:
 
 - a validated manifest
 - a small set of Foglet metadata such as user id, handle, session id, and terminal size
-- only the environment variables named in the manifest `env_allowlist`
+- explicit non-secret manifest `env` entries plus required `FOGLET_*` variables
+- a narrow default `PATH` (`/usr/bin:/bin`) when no manifest `PATH` is supplied, so `/usr/bin/env` shebangs can still find interpreters
 - a temporary JSON context file for external doors
-- a generated `CHAIN.TXT` string for classic/dropfile doors
+- generated dropfiles for classic/dropfile doors
 
-Foglet does not pass database credentials, app secrets, API keys, private tokens, full user structs, or full session structs to door processes.
+External/classic launches use `env -i` across the helper-backed PTY, plain-pipe, and `script(1)` fallback paths, so the child door process does not inherit the BEAM/helper process environment. `env_allowlist` controls which manifest env names may be displayed unredacted in audit metadata; it is not a request to inherit host env.
+
+Foglet does not pass database credentials, app secrets, API keys, private tokens, full user structs, full session structs, or broad inherited host environments to door processes.
 
 This is a baseline sandbox, not full containment. Unsandboxed doors still use allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. Sandboxed helper-backed doors add fail-closed restricted OS-user execution plus process-group TERM/KILL cleanup, but they do not isolate filesystem mounts, network, seccomp, namespaces, containers, microVMs, or broad resource access. The approved stronger baseline is documented in `docs/DEPLOYMENT.md`: external/classic doors should run as a restricted OS user plus a per-door process group, and launches must fail closed when the configured restricted user cannot be applied. Docker/Fly currently diverge because the release image runs as `nobody` and cannot switch to a second door user without an approved runtime change. Treat untrusted third-party doors as unsupported on that container path until the divergence is resolved; do not run arbitrary third-party code as a door without an operator-reviewed host/container posture.
 
@@ -71,7 +74,8 @@ Optional fields:
 
 - `module` — native Elixir module for `:native_elixir` doors
 - `args` — list of string arguments
-- `env_allowlist` — uppercase environment variable names safe to expose
+- `env` — explicit non-secret environment variables to pass to the door
+- `env_allowlist` — uppercase manifest `env` names safe to show unredacted in audit records
 - `idle_timeout_ms` — optional positive integer idle timeout in milliseconds
 - `pty?` — whether the external runner should request the supported helper-backed PTY path (`true`) or a plain pipe (`false`)
 - `env` — explicit string environment values to pass to the door; sensitive names are rejected
@@ -154,6 +158,7 @@ Example manifest:
   command: "/srv/foglet/doors/trade-wars-demo/run.sh",
   args: ["--ansi"],
   working_dir: "/srv/foglet/doors/trade-wars-demo",
+  env: %{"TERM" => "xterm-256color", "LANG" => "C.UTF-8"},
   env_allowlist: ["TERM", "LANG"],
   timeout_ms: 30 * 60 * 1_000,
   idle_timeout_ms: 5 * 60 * 1_000,
@@ -205,9 +210,10 @@ Keep wrappers boring:
 
 ## Add a classic/dropfile door
 
-Classic/dropfile doors are external doors with extra BBS metadata. The first supported dropfile format is `CHAIN.TXT`.
+Classic/dropfile doors are external doors with extra BBS metadata. Foglet supports
+`CHAIN.TXT`, `DOOR.SYS`, and `DORINFO.DEF` generation for these wrappers.
 
-Use `:classic_dropfile` when a wrapper needs classic BBS-style user/session fields. Foglet currently generates the dropfile content through:
+Use `:classic_dropfile` when a wrapper needs classic BBS-style user/session fields. Foglet currently generates dropfile content through:
 
 ```elixir
 {:ok, text} = Foglet.Doors.classic_dropfile(:chain_txt, %{user: user, session: session})
@@ -240,6 +246,7 @@ A classic door manifest follows the external-door shape, but uses `runtime: :cla
   command: "/srv/foglet/doors/chain-demo/run.sh",
   args: [],
   working_dir: "/srv/foglet/doors/chain-demo",
+  env: %{"TERM" => "xterm-256color"},
   env_allowlist: ["TERM"],
   timeout_ms: 20 * 60 * 1_000,
   idle_timeout_ms: 5 * 60 * 1_000,
@@ -249,7 +256,16 @@ A classic door manifest follows the external-door shape, but uses `runtime: :cla
 }
 ```
 
-The wrapper is responsible for placing the generated text where the classic program expects it. Do not assume every historical DOS door works yet. Treat `CHAIN.TXT` support as the first compatibility contract, not a full DOS compatibility layer.
+Foglet writes fixed-name dropfiles only inside a runner-owned per-launch working
+directory. The child process starts with that isolated directory as cwd, so a
+classic program can open `CHAIN.TXT`, `DOOR.SYS`, or `DORINFO.DEF` by filename.
+Wrappers can also read the explicit colon-separated paths from `FOGLET_DROPFILES`.
+Pre-existing dropfiles in the configured manifest `working_dir` are not
+overwritten or removed by runner cleanup.
+
+The wrapper is responsible for passing those generated files to the target
+classic program. Do not assume every historical DOS door works yet. Treat these
+formats as a compatibility contract, not a full DOS compatibility layer.
 
 ## Door list and launch copy
 
@@ -289,7 +305,7 @@ The door may have left the terminal in an unusual mode or used unsupported full-
 
 ### A door needs more environment variables
 
-Add only the specific non-secret names to `env_allowlist`. Do not allowlist database URLs, app secrets, API keys, tokens, or broad inherited environments.
+Add only specific non-secret values to manifest `env`, and add the same names to `env_allowlist` only when those values are safe to display unredacted in audit records. Do not allowlist or pass database URLs, app secrets, API keys, tokens, or broad inherited environments.
 
 ## Copy review checklist
 

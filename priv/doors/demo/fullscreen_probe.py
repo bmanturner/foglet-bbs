@@ -18,8 +18,10 @@ def size():
 
 
 def write(text):
-    sys.stdout.write(text)
-    sys.stdout.flush()
+    # SIGWINCH can arrive while the probe is producing startup or prompt output.
+    # Use unbuffered writes so the signal handler cannot re-enter Python's
+    # buffered stdout object and crash with `RuntimeError: reentrant call`.
+    os.write(1, text.encode("utf-8", "replace"))
 
 
 def on_winch(_signum, _frame):
