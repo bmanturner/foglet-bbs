@@ -16,7 +16,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.PostingPolicy
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
-  alias Foglet.TUI.{Context, Effect, ScrollKeys}
+  alias Foglet.TUI.{Context, Effect, ScrollKeys, TextWidth}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.ThreadList.State
@@ -225,7 +225,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp render_thread_content(%State{status: :loading} = state, context, theme) do
     column style: %{gap: 0} do
-      banner_nodes(state, context, theme) ++
+      header_nodes(state, context, theme) ++
         [
           row style: %{gap: 1} do
             [
@@ -246,13 +246,13 @@ defmodule Foglet.TUI.Screens.ThreadList do
       end
 
     column style: %{gap: 0} do
-      banner_nodes(state, context, theme) ++ [text(empty_copy, fg: theme.warning.fg)]
+      header_nodes(state, context, theme) ++ [text(empty_copy, fg: theme.warning.fg)]
     end
   end
 
   defp render_thread_content(%State{status: {:error, _reason}} = state, context, theme) do
     column style: %{gap: 0} do
-      banner_nodes(state, context, theme) ++
+      header_nodes(state, context, theme) ++
         [text("Couldn't load threads. Press Q to back out and try again.", fg: theme.error.fg)]
     end
   end
@@ -268,14 +268,67 @@ defmodule Foglet.TUI.Screens.ThreadList do
       end)
 
     column style: %{gap: 0} do
-      banner_nodes(state, context, theme) ++ [list]
+      header_nodes(state, context, theme) ++ [list]
     end
+  end
+
+  defp header_nodes(%State{} = state, %Context{} = context, theme) do
+    banner_nodes(state, context, theme) ++ board_description_nodes(state, context, theme)
   end
 
   defp banner_nodes(%State{} = state, %Context{} = context, theme) do
     case board_state_banner(state, context.current_user) do
       nil -> []
       copy -> [text(copy, fg: theme.warning.fg)]
+    end
+  end
+
+  defp board_description_nodes(%State{} = state, %Context{} = context, theme) do
+    case board_description(state.board) do
+      nil ->
+        []
+
+      description ->
+        {width, _height} = context.terminal_size || {80, 24}
+        line_width = max(width - 12, 20)
+        max_lines = if width < 64, do: 1, else: 2
+
+        description
+        |> TextWidth.wrap(line_width)
+        |> clamp_description_lines(max_lines, line_width)
+        |> Enum.with_index()
+        |> Enum.map(fn {line, index} ->
+          prefix = if index == 0, do: "About: ", else: "       "
+          text(prefix <> line, fg: theme.dim.fg)
+        end)
+    end
+  end
+
+  defp board_description(%{} = board) do
+    board
+    |> Map.get(:description, Map.get(board, "description"))
+    |> normalize_description()
+  end
+
+  defp board_description(_board), do: nil
+
+  defp normalize_description(description) when is_binary(description) do
+    description = String.trim(description)
+    if description == "", do: nil, else: description
+  end
+
+  defp normalize_description(_description), do: nil
+
+  defp clamp_description_lines(lines, max_lines, width) do
+    case Enum.split(lines, max_lines) do
+      {visible, []} ->
+        visible
+
+      {[], _hidden} ->
+        []
+
+      {visible, _hidden} ->
+        List.update_at(visible, -1, &TextWidth.truncate(&1 <> "…", width, ellipsis: "…"))
     end
   end
 

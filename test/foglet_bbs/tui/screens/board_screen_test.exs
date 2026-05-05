@@ -18,10 +18,11 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.BoardScreen
   alias Foglet.TUI.Screens.BoardScreen.State, as: WrapperState
-  alias Foglet.TUI.Screens.ThreadList
-
   alias Foglet.TUI.Screens.BoardScreenTest.FakeBoards
   alias Foglet.TUI.Screens.BoardScreenTest.FakeThreads
+  alias Foglet.TUI.Screens.ThreadList
+  alias Foglet.TUI.TextWidth
+  alias Raxol.UI.Layout.Engine
 
   @user %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user, status: :active}
 
@@ -32,7 +33,8 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       slug: "general",
       archived: false,
       postable_by: :members,
-      chat_enabled: Keyword.get(opts, :chat_enabled, false)
+      chat_enabled: Keyword.get(opts, :chat_enabled, false),
+      description: Keyword.get(opts, :description)
     }
   end
 
@@ -47,6 +49,25 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
   end
 
   defp flatten_text(tree), do: tree |> collect_text([]) |> Enum.reverse() |> Enum.join("")
+
+  defp positioned_text_elements(tree, width \\ 80, height \\ 24) do
+    tree
+    |> Engine.apply_layout(%{width: width, height: height})
+    |> List.flatten()
+    |> Enum.filter(fn el ->
+      el.type == :text and is_binary(Map.get(el, :text, "")) and Map.get(el, :text, "") != ""
+    end)
+  end
+
+  defp row_text(elements, text) do
+    anchor = Enum.find(elements, &(&1.text == text))
+    assert %{y: y} = anchor
+
+    elements
+    |> Enum.filter(&(&1.y == y))
+    |> Enum.sort_by(& &1.x)
+    |> Enum.map_join(& &1.text)
+  end
 
   defp collect_text(nil, acc), do: acc
   defp collect_text(list, acc) when is_list(list), do: Enum.reduce(list, acc, &collect_text/2)
@@ -127,6 +148,28 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       assert text =~ "THREADS"
       assert text =~ "CHAT (0)"
       assert text =~ "▌"
+    end
+
+    test "threads tab renders one ThreadList board description below the tab strip" do
+      b = board(chat_enabled: true, description: "Board-level context lives under the tabs.")
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+
+      elements = BoardScreen.render(state, ctx) |> positioned_text_elements()
+      tab = Enum.find(elements, &(&1.text == "THREADS"))
+
+      description =
+        Enum.find(elements, &(&1.text == "About: Board-level context lives under the tabs."))
+
+      duplicate_descriptions =
+        Enum.filter(elements, &String.contains?(&1.text, "Board-level context"))
+
+      assert %{y: tab_y} = tab
+      assert %{y: description_y} = description
+      assert tab_y < description_y
+      assert length(duplicate_descriptions) == 1
+      assert row_text(elements, "About: Board-level context lives under the tabs.") =~ "About:"
+      assert description.x + TextWidth.display_width(description.text) <= 80
     end
 
     test "tab strip CHAT count reflects FOG-250 presence count" do

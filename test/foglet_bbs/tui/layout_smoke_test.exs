@@ -570,6 +570,139 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end
     end
 
+    test "board descriptions render above every thread-list state without replacing state content",
+         %{
+           threads: threads,
+           user: user
+         } do
+      size = {80, 24}
+
+      board = %{
+        id: "b1",
+        name: "General",
+        slug: "general",
+        description: "Local discussion for the whole board."
+      }
+
+      cases = [
+        {:loaded, threads, "Sticky"},
+        {:empty, [], "No threads in this board yet. Press C to start one."},
+        {:loading, nil, "Loading…"},
+        {{:error, :timeout}, threads, "Couldn't load threads. Press Q to back out and try again."}
+      ]
+
+      for {status, thread_rows, body_anchor} <- cases do
+        state =
+          ThreadList.State.new(
+            board: board,
+            board_id: board.id,
+            threads: thread_rows,
+            selected_index: 0,
+            status: status
+          )
+
+        positioned =
+          state
+          |> ThreadList.render(
+            screen_context(:thread_list, user, size, %{board: board, board_id: board.id})
+          )
+          |> apply_at_size(size)
+
+        texts = content_text_elements(positioned)
+
+        description_element =
+          Enum.find(texts, &(&1.text == "About: Local discussion for the whole board."))
+
+        body_element = Enum.find(texts, &String.contains?(&1.text, body_anchor))
+
+        assert %{y: description_y} = description_element
+        assert %{y: body_y} = body_element
+        assert description_y < body_y
+      end
+    end
+
+    test "blank and missing descriptions do not add board-description chrome or shift rows", %{
+      threads: threads,
+      user: user
+    } do
+      size = {80, 24}
+
+      positioned_without_description =
+        %{id: "b1", name: "General", slug: "general"}
+        |> render_thread_list_for_board(threads, user, size)
+
+      positioned_with_blank_description =
+        %{id: "b1", name: "General", slug: "general", description: "   "}
+        |> render_thread_list_for_board(threads, user, size)
+
+      without_rows = text_rows(content_text_elements(positioned_without_description))
+      blank_rows = text_rows(content_text_elements(positioned_with_blank_description))
+
+      refute Enum.any?(Map.values(without_rows), &String.starts_with?(&1, "About:"))
+      refute Enum.any?(Map.values(blank_rows), &String.starts_with?(&1, "About:"))
+
+      {without_first_thread_y, _row} =
+        thread_row_elements(positioned_without_description, "Sticky")
+
+      {blank_first_thread_y, _row} =
+        thread_row_elements(positioned_with_blank_description, "Sticky")
+
+      assert blank_first_thread_y == without_first_thread_y
+    end
+
+    test "long board descriptions are clamped before thread rows at normal and cramped widths", %{
+      threads: threads,
+      user: user
+    } do
+      long_description =
+        "This board collects long-form local updates, maintenance notices, weekend plans, " <>
+          "old-network ephemera, and other notes that should give visitors context without hiding the thread list."
+
+      for {width, height, max_description_rows} <- [{80, 24, 2}, {52, 18, 1}] do
+        size = {width, height}
+        board = %{id: "b1", name: "General", slug: "general", description: long_description}
+
+        positioned = render_thread_list_for_board(board, threads, user, size)
+        texts = content_text_elements(positioned)
+        description_elements = Enum.filter(texts, &String.starts_with?(&1.text, "About:"))
+        {first_thread_y, _row} = thread_row_elements(positioned, "Plain thread")
+        assert [%{y: description_y}] = description_elements
+
+        continuation_elements =
+          Enum.filter(texts, fn element ->
+            element.y > description_y and element.y <= description_y + max_description_rows - 1 and
+              String.starts_with?(element.text, "       ")
+          end)
+
+        visible_description_elements = description_elements ++ continuation_elements
+
+        assert length(visible_description_elements) <= max_description_rows
+        assert Enum.all?(visible_description_elements, &(&1.y < first_thread_y))
+        assert Enum.any?(visible_description_elements, &String.contains?(&1.text, "…"))
+
+        for element <- visible_description_elements do
+          assert element.x + TextWidth.display_width(element.text) <= width
+        end
+      end
+    end
+
+    defp render_thread_list_for_board(board, threads, user, size) do
+      state =
+        ThreadList.State.new(
+          board: board,
+          board_id: board.id,
+          threads: threads,
+          selected_index: 0,
+          status: :loaded
+        )
+
+      state
+      |> ThreadList.render(
+        screen_context(:thread_list, user, size, %{board: board, board_id: board.id})
+      )
+      |> apply_at_size(size)
+    end
+
     test "closed board banners sit above threads and suppress compose", %{
       threads: threads
     } do
@@ -577,12 +710,29 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice", status: :active, role: :user}
 
       cases = [
-        {%{id: "b1", name: "Archived", slug: "archived", archived: true, postable_by: :members},
-         true, "This board is archived. New threads and replies are disabled."},
-        {%{id: "b2", name: "Mods", slug: "mods", archived: false, postable_by: :mods_only}, true,
-         "This board is read-only."},
-        {%{id: "b3", name: "Open", slug: "open", archived: false}, false,
-         "You're not subscribed to this board. Press S on Boards to subscribe."}
+        {%{
+           id: "b1",
+           name: "Archived",
+           slug: "archived",
+           archived: true,
+           postable_by: :members,
+           description: "Historical board context"
+         }, true, "This board is archived. New threads and replies are disabled."},
+        {%{
+           id: "b2",
+           name: "Mods",
+           slug: "mods",
+           archived: false,
+           postable_by: :mods_only,
+           description: "Historical board context"
+         }, true, "This board is read-only."},
+        {%{
+           id: "b3",
+           name: "Open",
+           slug: "open",
+           archived: false,
+           description: "Historical board context"
+         }, false, "You're not subscribed to this board. Press S on Boards to subscribe."}
       ]
 
       for {board, subscribed?, banner} <- cases do
@@ -608,6 +758,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         {first_thread_y, _row} = thread_row_elements(positioned, "Sticky")
 
         assert %{y: banner_y} = banner_element
+
+        description_element = Enum.find(texts, &(&1.text == "About: Historical board context"))
+        assert %{y: description_y} = description_element
+        assert banner_y < description_y
+        assert description_y < first_thread_y
         assert banner_y < first_thread_y
         refute bottom_row_text(positioned) =~ "C Compose"
 
