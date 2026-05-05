@@ -664,7 +664,35 @@ end
 
 ---
 
-## 11. Configuration
+## 11. Site counters
+
+### `Foglet.SiteCounters.Counter`
+
+Table: `site_counters`
+
+```elixir
+schema "site_counters" do
+  field :name, :string       # e.g. "bbs_calls"
+  field :value, :integer, default: 0
+
+  timestamps()
+end
+```
+
+Durable, low-cardinality site-wide counters whose values must survive VM restarts and deploys.
+The initial counter row may be absent; `Foglet.SiteCounters.get_call_count/0` treats that as `0`, and `increment_call_count/0` bootstraps the row with an atomic Postgres upsert.
+
+**Migration notes:**
+
+- Unique index on `name`.
+- Check constraint `value >= 0`.
+- `Foglet.SiteCounters` is the public domain boundary; callers do not write this table directly.
+- The BBS call counter key is `bbs_calls`. It is distinct from `Foglet.SSH.CLIHandler.Counter`, which remains VM-local active-connection state only.
+- Rollback is reversible by dropping `site_counters`; doing so intentionally discards accumulated counter values and operational recovery is restoring the table from backup before rollback.
+
+---
+
+## 12. Configuration
 
 ### `Foglet.Config.Entry`
 
@@ -718,7 +746,7 @@ Sysop TUI edits hit this table; application code reads via a cached accessor (`F
 
 ---
 
-## 12. Entity relationship diagram
+## 13. Entity relationship diagram
 
 ```
                           categories
@@ -757,7 +785,7 @@ Sysop TUI edits hit this table; application code reads via a cached accessor (`F
 
 ---
 
-## 13. Indexes summary
+## 14. Indexes summary
 
 Critical indexes to create explicitly (beyond those implied by unique constraints and foreign keys):
 
@@ -789,11 +817,12 @@ Critical indexes to create explicitly (beyond those implied by unique constraint
 | `mod_actions` | `(inserted_at DESC)` | audit log |
 | `user_sanctions` | `(user_id) WHERE lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())` | active sanction check |
 | `last_callers` | `(connected_at DESC) WHERE visible = true` | login sequence |
+| `site_counters` | unique `name` | atomic upsert target for durable site counters |
 | `configuration` | unique `key` | config lookup |
 
 ---
 
-## 14. Consistency and invariants
+## 15. Consistency and invariants
 
 A few invariants the application enforces that aren't captured by FK or uniqueness alone:
 
@@ -807,7 +836,7 @@ A few invariants the application enforces that aren't captured by FK or uniquene
 
 ---
 
-## 15. Deferred (beyond Milestone 9)
+## 16. Deferred (beyond Milestone 9)
 
 The following are acknowledged but not specified here:
 
@@ -819,7 +848,7 @@ The following are acknowledged but not specified here:
 
 ---
 
-## 16. Open questions
+## 17. Open questions
 
 Flagging for later decision, not blocking on today:
 
