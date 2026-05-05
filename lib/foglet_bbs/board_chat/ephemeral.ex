@@ -12,6 +12,7 @@ defmodule Foglet.BoardChat.Ephemeral do
   record, but tests can override them via the optional `room_opts` argument.
   """
 
+  alias Foglet.BoardChat.Body
   alias Foglet.BoardChat.Ephemeral.{Room, Supervisor}
   alias Foglet.Boards.Board
 
@@ -22,6 +23,7 @@ defmodule Foglet.BoardChat.Ephemeral do
       when is_binary(user_id) and is_binary(body) do
     with :ok <- ensure_chat_enabled(board),
          :ok <- ensure_ephemeral(board),
+         {:ok, body} <- Body.validate(body),
          {:ok, _pid} <- ensure_room(board, room_opts) do
       Room.post(board.id, user_id, body)
     end

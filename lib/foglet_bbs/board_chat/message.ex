@@ -9,9 +9,9 @@ defmodule Foglet.BoardChat.Message do
   """
   use Foglet.Schema
 
-  @type t :: %__MODULE__{}
+  alias Foglet.BoardChat.Body
 
-  @body_max 4_000
+  @type t :: %__MODULE__{}
 
   schema "board_chat_messages" do
     field :body, :string
@@ -23,7 +23,7 @@ defmodule Foglet.BoardChat.Message do
   end
 
   @doc "Maximum allowed message body length, in characters."
-  def body_max, do: @body_max
+  def body_max, do: Body.max_length()
 
   @doc """
   Insert changeset. `board_id` and `user_id` are set on the struct by the
@@ -32,14 +32,10 @@ defmodule Foglet.BoardChat.Message do
   def insert_changeset(message, attrs) do
     message
     |> cast(attrs, [:body])
-    |> update_change(:body, &trim_body/1)
+    |> update_change(:body, &Body.trim/1)
     |> validate_required([:body])
-    |> validate_length(:body, min: 1, max: @body_max)
+    |> validate_length(:body, min: 1, max: Body.max_length())
     |> foreign_key_constraint(:board_id)
     |> foreign_key_constraint(:user_id)
   end
-
-  defp trim_body(nil), do: nil
-  defp trim_body(body) when is_binary(body), do: String.trim(body)
-  defp trim_body(other), do: other
 end

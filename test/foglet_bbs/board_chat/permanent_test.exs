@@ -2,7 +2,7 @@ defmodule Foglet.BoardChat.PermanentTest do
   use FogletBbs.DataCase, async: true
 
   alias Foglet.BoardChat
-  alias Foglet.BoardChat.{Message, Permanent}
+  alias Foglet.BoardChat.{Body, Message, Permanent}
   alias Foglet.Boards.Board
   alias Foglet.PubSub, as: Topics
 
@@ -68,6 +68,17 @@ defmodule Foglet.BoardChat.PermanentTest do
 
     test "rejects bodies that exceed the maximum length", %{board: board, user: user} do
       too_long = String.duplicate("a", Message.body_max() + 1)
+      assert {:error, changeset} = Permanent.insert(board, user, too_long)
+      assert %{body: [_ | _]} = errors_on(changeset)
+    end
+
+    test "uses the shared chat body limit", %{board: board, user: user} do
+      assert Message.body_max() == Body.max_length()
+
+      max_body = String.duplicate("a", Body.max_length())
+      too_long = max_body <> "a"
+
+      assert {:ok, %Message{body: ^max_body}} = Permanent.insert(board, user, max_body)
       assert {:error, changeset} = Permanent.insert(board, user, too_long)
       assert %{body: [_ | _]} = errors_on(changeset)
     end
