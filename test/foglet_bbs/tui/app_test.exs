@@ -387,6 +387,47 @@ defmodule Foglet.TUI.AppTest do
       refute new_state.modal.message =~ ":enoent"
     end
 
+    test "door launch failure event keeps recoverable copy without raw atoms", %{state: state} do
+      {new_state, []} = App.update({:door_launch_failed, "external-echo", :enoent}, state)
+
+      assert new_state.modal.type == :error
+
+      assert new_state.modal.message ==
+               "External Echo could not start. You are still connected and back in Foglet. Check server logs for launch details."
+
+      refute new_state.modal.message =~ ":enoent"
+    end
+
+    test "door exit reasons are mapped to caller-safe modal copy", %{state: state} do
+      cases = [
+        {:normal, :info, "Native Hello has closed. You are back in Foglet."},
+        {:timeout, :warning,
+         "Native Hello reached its maximum play time and was closed. You are back in Foglet."},
+        {:idle_timeout, :warning,
+         "Native Hello was idle too long and was closed. You are back in Foglet."},
+        {:shutdown, :info,
+         "Native Hello closed unexpectedly. You are back in Foglet. Check server logs for details."}
+      ]
+
+      for {reason, type, expected_message} <- cases do
+        {new_state, []} = App.update({:door_exited, "native-hello", reason, nil}, state)
+
+        assert new_state.modal.type == type
+        assert new_state.modal.message == expected_message
+        refute new_state.modal.message =~ inspect(reason)
+      end
+    end
+
+    test "door exit modal copy stays compact for narrow terminal sizes", %{state: state} do
+      state = %{state | terminal_size: {64, 22}}
+      {new_state, []} = App.update({:door_exited, "classic-dropfile-demo", :timeout, nil}, state)
+
+      assert String.length(new_state.modal.message) <= 120
+
+      assert new_state.modal.message ==
+               "Classic Dropfile Demo reached its maximum play time and was closed. You are back in Foglet."
+    end
+
     test "form modal submit effect routes through App to target screen update", %{state: state} do
       form =
         Form.init(

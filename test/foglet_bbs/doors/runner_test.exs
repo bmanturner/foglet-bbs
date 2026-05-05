@@ -4,6 +4,7 @@ defmodule Foglet.Doors.RunnerTest do
   import ExUnit.CaptureLog
 
   @event_timeout 1_000
+  @former_demo_timeout_ms 5_000
 
   alias Foglet.Doors
   alias Foglet.Doors.PTYAdapter
@@ -92,6 +93,93 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
     end
 
+    test "built-in Native Hello survives beyond the former five-second demo timeout" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "native-hello",
+          display_name: "Native Hello",
+          description: "demo",
+          runtime: :native_elixir,
+          module: Foglet.Doors.Demo.NativeHello,
+          timeout_ms: @former_demo_timeout_ms + 2_000
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {100, 30},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^pid, "native-hello"}
+      assert_receive {:door_output, output}
+      assert IO.iodata_to_binary(output) =~ "Native Hello welcomes alice (100x30)"
+
+      refute_receive {:door_exited, ^pid, "native-hello", :timeout, nil},
+                     @former_demo_timeout_ms + 100
+
+      assert %{status: :running} = Runner.snapshot(pid)
+
+      ref = Process.monitor(pid)
+      Runner.input(pid, "/quit\n")
+      assert_receive {:door_output, quit_output}
+      assert IO.iodata_to_binary(quit_output) =~ "Leaving Native Hello."
+      assert_receive {:door_exited, ^pid, "native-hello", :normal, nil}
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+    end
+
+    test "absolute timeout stops a native door even when idle timeout is disabled" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "native-timeout",
+          display_name: "Native Timeout",
+          runtime: :native_elixir,
+          module: Foglet.Doors.Demo.NativeHello,
+          timeout_ms: 100,
+          idle_timeout_ms: nil
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      assert_receive {:door_started, ^pid, "native-timeout"}
+      ref = Process.monitor(pid)
+      assert_receive {:door_exited, ^pid, "native-timeout", :timeout, nil}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "idle timeout refreshes on native input and expires separately from absolute timeout" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "native-idle-timeout",
+          display_name: "Native Idle Timeout",
+          runtime: :native_elixir,
+          module: Foglet.Doors.Demo.NativeHello,
+          timeout_ms: 5_000,
+          idle_timeout_ms: 200
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      assert_receive {:door_started, ^pid, "native-idle-timeout"}
+      assert_receive {:door_output, _output}
+
+      Runner.input(pid, "still here\n")
+      assert_receive {:door_output, echo_output}, @event_timeout
+      assert IO.iodata_to_binary(echo_output) =~ "native> still here"
+      refute_receive {:door_exited, ^pid, "native-idle-timeout", :idle_timeout, nil}, 100
+
+      ref = Process.monitor(pid)
+
+      assert_receive {:door_exited, ^pid, "native-idle-timeout", :idle_timeout, nil},
+                     @event_timeout
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
     test "native callback crash is reported as a crash exit" do
       {:ok, manifest} =
         manifest(%{
@@ -151,6 +239,109 @@ defmodule Foglet.Doors.RunnerTest do
 
       assert_receive {:door_exited, ^pid, "external-env", :normal, 0}, @event_timeout
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "external helper-backed demo stays alive beyond former five-second cutoff while awaiting input" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-echo-survival",
+          display_name: "External Echo Survival",
+          runtime: :external_pty,
+          command: external_demo_path(),
+          working_dir: Path.expand("priv/doors/demo"),
+          args: [],
+          timeout_ms: @former_demo_timeout_ms + 2_000,
+          pty?: true
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {132, 40},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^pid, "external-echo-survival"}
+      assert_door_output_contains("external-echo-survival:alice:132")
+      assert %{status: :running, pty_backend: :helper} = Runner.snapshot(pid)
+
+      refute_receive {:door_exited, ^pid, "external-echo-survival", :timeout, nil},
+                     @former_demo_timeout_ms + 100
+
+      assert %{status: :running} = Runner.snapshot(pid)
+
+      ref = Process.monitor(pid)
+      Runner.input(pid, "/quit\r")
+      assert_door_output_contains("Leaving External Echo.")
+      assert_receive {:door_exited, ^pid, "external-echo-survival", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "idle timeout refreshes on external helper output and input before expiring" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-idle-timeout",
+          display_name: "External Idle Timeout",
+          runtime: :external_pty,
+          command: external_demo_path(),
+          working_dir: Path.expand("priv/doors/demo"),
+          args: [],
+          timeout_ms: 5_000,
+          idle_timeout_ms: 500,
+          pty?: true
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {132, 40},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^pid, "external-idle-timeout"}
+      assert_door_output_contains("external-idle-timeout:alice:132")
+
+      Runner.input(pid, "ping\r")
+      assert_door_output_contains("external> ping")
+      refute_receive {:door_exited, ^pid, "external-idle-timeout", :idle_timeout, nil}, 100
+
+      ref = Process.monitor(pid)
+
+      assert_receive {:door_exited, ^pid, "external-idle-timeout", :idle_timeout, nil},
+                     @event_timeout
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "operator stop cleans up the external process tree owner" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "external-operator-stop",
+          display_name: "External Operator Stop",
+          runtime: :external_pty,
+          command: "/bin/sleep",
+          working_dir: "/tmp",
+          args: ["30"],
+          timeout_ms: 5_000,
+          pty?: false
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(manifest: manifest, output: output_to(self()), owner: self())
+
+      assert_receive {:door_started, ^pid, "external-operator-stop"}
+      %{os_pid: os_pid} = Runner.snapshot(pid)
+      ref = Process.monitor(pid)
+
+      Runner.stop(pid, :operator_stop)
+
+      assert_receive {:door_exited, ^pid, "external-operator-stop", :operator_stop, nil}
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}
+      refute os_process_alive?(os_pid)
     end
 
     test "launches the Python context example and returns cleanly" do

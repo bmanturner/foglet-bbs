@@ -133,6 +133,15 @@ defmodule Foglet.DoorsTest do
       end
     end
 
+    test "uses playable demo timeouts instead of the former five-second cutoff" do
+      enable_demo_doors()
+
+      for manifest <- Doors.list_manifests() do
+        assert manifest.timeout_ms == 15 * 60 * 1_000
+        assert manifest.idle_timeout_ms == 5 * 60 * 1_000
+      end
+    end
+
     test "resolves the built-in external echo manifest from application priv when demos are enabled" do
       enable_demo_doors()
 

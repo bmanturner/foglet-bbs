@@ -62,7 +62,10 @@ Current built-in demo/test manifests behind this switch are:
 - `classic-dropfile-demo`
 
 The switch gates only Foglet's built-in demo/test manifests. It is not a future
-policy mechanism for a persisted real door catalog.
+policy mechanism for a persisted real door catalog. Demo manifests use a
+15-minute absolute cleanup cap plus a 5-minute idle timeout so QA/demo callers
+can read prompts and interact normally; the short five-second timeout used by
+earlier fixtures was test-policy leakage, not product behavior.
 
 ## Safety model
 
@@ -94,7 +97,7 @@ Required fields:
 - `display_name` — name shown to callers, for example `"Native Echo"`
 - `description` — one-sentence description for the selector
 - `runtime` — one of `:native_elixir`, `:external_pty`, or `:classic_dropfile`
-- `timeout_ms` — positive integer timeout in milliseconds
+- `timeout_ms` — positive integer absolute maximum lifetime in milliseconds. This is a cleanup cap for hung/crashed/disconnected/operator-stopped doors, not an activity timer.
 - `visibility` — `:members`, `:mods_only`, or `:sysop_only`
 - `auth_scope` — `:site` or `{:board, board_id}`
 

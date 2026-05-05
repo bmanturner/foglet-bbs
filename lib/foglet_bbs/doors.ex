@@ -45,6 +45,8 @@ defmodule Foglet.Doors do
   ]
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
   @truthy_env_values ~w[1 true yes]
+  @demo_timeout_ms 15 * 60 * 1_000
+  @demo_idle_timeout_ms 5 * 60 * 1_000
 
   @default_manifest_attrs [
     %{
@@ -54,7 +56,8 @@ defmodule Foglet.Doors do
       description: "Tiny in-BEAM demo door that opens, says hello, and returns.",
       runtime: :native_elixir,
       module: Foglet.Doors.Demo.NativeHello,
-      timeout_ms: 5_000,
+      timeout_ms: @demo_timeout_ms,
+      idle_timeout_ms: @demo_idle_timeout_ms,
       visibility: :members,
       auth_scope: :site
     }
@@ -195,7 +198,8 @@ defmodule Foglet.Doors do
       runtime: :external_pty,
       command: demo_external_path,
       working_dir: Path.dirname(demo_external_path),
-      timeout_ms: 5_000,
+      timeout_ms: @demo_timeout_ms,
+      idle_timeout_ms: @demo_idle_timeout_ms,
       visibility: :members,
       auth_scope: :site
     }
@@ -212,7 +216,8 @@ defmodule Foglet.Doors do
       runtime: :external_pty,
       command: demo_python_path,
       working_dir: Path.dirname(demo_python_path),
-      timeout_ms: 5_000,
+      timeout_ms: @demo_timeout_ms,
+      idle_timeout_ms: @demo_idle_timeout_ms,
       visibility: :members,
       auth_scope: :site
     }
@@ -230,7 +235,8 @@ defmodule Foglet.Doors do
       command: demo_classic_path,
       working_dir: Path.dirname(demo_classic_path),
       dropfile_formats: [:chain_txt, :door_sys, :dorinfo_def],
-      timeout_ms: 5_000,
+      timeout_ms: @demo_timeout_ms,
+      idle_timeout_ms: @demo_idle_timeout_ms,
       visibility: :members,
       auth_scope: :site
     }
