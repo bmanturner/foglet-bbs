@@ -42,6 +42,8 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   import Raxol.Core.Renderer.View
 
   @tabs [{:threads, "THREADS"}, {:chat, "CHAT"}]
+  @screen_frame_rows 2
+  @tab_strip_rows 1
 
   @impl true
   @spec init(Context.t()) :: ThreadList.State.t() | State.t()
@@ -244,7 +246,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   end
 
   defp render_active_tab(%State{current_tab: :chat} = state, context, _theme) do
-    ChatRoom.render(state.chat_room, context)
+    ChatRoom.render(state.chat_room, content_context(context))
   end
 
   defp keybar_groups(%State{current_tab: current_tab} = state, context) do
@@ -331,6 +333,13 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   end
 
   # --- helpers ------------------------------------------------------------
+
+  defp content_context(%Context{terminal_size: {width, height}} = context) do
+    reserved_rows = @screen_frame_rows + @tab_strip_rows
+    %{context | terminal_size: {width, max(height - reserved_rows, 1)}}
+  end
+
+  defp content_context(%Context{} = context), do: context
 
   defp chat_enabled?(params) when is_map(params) do
     case Map.get(params, :board) || Map.get(params, "board") do

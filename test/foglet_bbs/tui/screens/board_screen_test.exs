@@ -38,12 +38,12 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
     }
   end
 
-  defp context(b) do
+  defp context(b, opts \\ []) do
     Context.new(
       current_user: @user,
       route: :thread_list,
       route_params: %{board: b, board_id: b.id},
-      terminal_size: {80, 24},
+      terminal_size: Keyword.get(opts, :size, {80, 24}),
       session_context: %{domain: %{threads: FakeThreads, boards: FakeBoards}}
     )
   end
@@ -77,6 +77,20 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
     |> Enum.filter(&(&1.y == bottom_y))
     |> Enum.sort_by(& &1.x)
     |> Enum.map_join(& &1.text)
+  end
+
+  defp text_element(elements, text) do
+    Enum.find(elements, &(&1.text == text))
+  end
+
+  defp chat_message(index, board_id) do
+    %{
+      id: "m#{index}",
+      board_id: board_id,
+      user_id: "u1",
+      body: "transcript row #{index} " <> String.duplicate("wrap ", 8),
+      inserted_at: nil
+    }
   end
 
   defp collect_text(nil, acc), do: acc
@@ -230,6 +244,41 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       refute keybar =~ "Q Back"
 
       :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "chat transcript budget keeps composer and validation feedback inside viewport" do
+      for {width, height} <- [{80, 24}, {64, 22}] do
+        b = board(chat_enabled: true)
+        ctx = context(b, size: {width, height})
+        state = BoardScreen.init(ctx)
+        {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+        {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+
+        state = %{
+          state
+          | chat_room: %{
+              state.chat_room
+              | messages: Enum.map(1..40, &chat_message(&1, b.id)),
+                composer: "visible draft",
+                last_error: :message_too_long
+            }
+        }
+
+        elements = BoardScreen.render(state, ctx) |> positioned_text_elements(width, height)
+        prompt = text_element(elements, "> ")
+        error = text_element(elements, "  Message is too long (max 4000 characters).")
+        bottom = text_element(elements, "└ ")
+
+        assert %{y: prompt_y} = prompt
+        assert %{y: error_y} = error
+        assert %{y: bottom_y} = bottom
+        assert prompt_y < bottom_y
+        assert error_y < bottom_y
+        assert prompt_y < height
+        assert error_y < height
+
+        :ok = PresenceTracker.untrack(b.id, "u1")
+      end
     end
 
     test "threads tab keybar still advertises Q Back" do
