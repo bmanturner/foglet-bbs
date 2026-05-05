@@ -270,6 +270,7 @@ def main() -> int:
     os.set_blocking(error_read_fd, False)
     control_buffer = b""
     running = True
+    stdin_eof_pending = False
 
     while True:
         if error_read_fd is not None:
@@ -289,6 +290,8 @@ def main() -> int:
             if reason_bytes == b"":
                 os.close(error_read_fd)
                 error_read_fd = None
+                if stdin_eof_pending:
+                    terminate_child(child_pid)
 
         exit_payload = reap_child(child_pid)
         if exit_payload is not None:
@@ -340,7 +343,15 @@ def main() -> int:
             except BlockingIOError:
                 chunk = b""
             if not chunk:
-                terminate_child(child_pid)
+                if error_read_fd is None:
+                    terminate_child(child_pid)
+                else:
+                    # Direct helper launches and fast setup failures can present
+                    # stdin EOF before the child has reported sandbox setup over
+                    # the side pipe. Defer termination until setup has either
+                    # failed with an E frame or succeeded and closed the pipe, so
+                    # EOF cannot race a privacy-safe sandbox error into X/SIGTERM.
+                    stdin_eof_pending = True
                 running = False
             control_buffer += chunk
             while len(control_buffer) >= 4:

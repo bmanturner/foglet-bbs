@@ -2,7 +2,16 @@
 """Regression tests for Foglet's PTY helper privilege-drop boundary."""
 
 import importlib.util
+import grp
+import json
+import os
 import pathlib
+import pwd
+import struct
+import subprocess
+import sys
+import tempfile
+import textwrap
 import unittest
 from unittest import mock
 
@@ -55,6 +64,17 @@ class FakeOS:
     def setuid(self, uid):
         self.calls.append(("setuid", uid))
         self.uid = uid
+
+
+def decode_frames(data):
+    frames = []
+    offset = 0
+    while offset + 4 <= len(data):
+        frame_len = struct.unpack(">I", data[offset:offset + 4])[0]
+        body = data[offset + 4:offset + 4 + frame_len]
+        frames.append((body[:1], body[1:]))
+        offset += 4 + frame_len
+    return frames
 
 
 class DropPrivilegesTest(unittest.TestCase):
@@ -113,6 +133,76 @@ class DropPrivilegesTest(unittest.TestCase):
         self.assertEqual(fake_os.gid, self.run_as["gid"])
         self.assertEqual(fake_os.groups, [7777, 8888])
         self.assertNotIn(("setgroups", []), fake_os.calls)
+
+
+class DirectHelperLaunchTest(unittest.TestCase):
+    def test_forced_group_setup_failure_reports_error_before_stdin_eof_can_terminate_child(self):
+        current_user = pwd.getpwuid(os.getuid()).pw_name
+        current_group = grp.getgrgid(pwd.getpwuid(os.getuid()).pw_gid).gr_name
+
+        with tempfile.TemporaryDirectory(prefix="foglet-pty-helper-") as tmpdir:
+            wrapper_path = pathlib.Path(tmpdir) / "force_group_failure.py"
+            marker_path = pathlib.Path(tmpdir) / "executed-marker"
+            wrapper_path.write_text(
+                textwrap.dedent(
+                    f"""
+                    #!{sys.executable}
+                    import os
+                    import runpy
+
+                    os.geteuid = lambda: 0
+                    os.getegid = lambda: 0
+
+                    def fail_initgroups(user, gid):
+                        raise OSError("forced initgroups failure")
+
+                    def fail_setgroups(groups):
+                        raise OSError("forced setgroups failure")
+
+                    os.initgroups = fail_initgroups
+                    os.setgroups = fail_setgroups
+                    os.setgid = lambda gid: None
+                    os.setuid = lambda uid: None
+
+                    runpy.run_path({str(HELPER_PATH)!r}, run_name="__main__")
+                    """
+                )
+            )
+            wrapper_path.chmod(0o700)
+
+            result = subprocess.run(
+                [
+                    sys.executable,
+                    str(wrapper_path),
+                    "--cols",
+                    "80",
+                    "--rows",
+                    "24",
+                    "--sandbox-mode",
+                    "restricted_user_process_group",
+                    "--run-as-user",
+                    current_user,
+                    "--run-as-group",
+                    current_group,
+                    "--",
+                    "/bin/sh",
+                    "-c",
+                    f"echo EXECUTED > {marker_path}",
+                ],
+                input=b"",
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            frames = decode_frames(result.stdout)
+            self.assertEqual(result.returncode, 126, result.stderr.decode("utf-8", "replace"))
+            self.assertEqual(len(frames), 1)
+            kind, payload = frames[0]
+            self.assertEqual(kind, b"E")
+            self.assertEqual(json.loads(payload.decode("utf-8")), {"reason": "sandbox_group_setup_failed"})
+            self.assertFalse(marker_path.exists())
+            self.assertNotIn(b"forced initgroups failure", result.stdout + result.stderr)
 
 
 if __name__ == "__main__":
