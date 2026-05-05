@@ -4,7 +4,8 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
   alias Foglet.Sessions.PresenceSummary
 
   defmodule OnlineSessions do
-    def lookup_session(user_id) when user_id in ["online", "chat", "threads", "door"] do
+    def lookup_session(user_id)
+        when user_id in ["online", "chat", "reading", "board_list", "threads", "door"] do
       {:ok, user_id}
     end
 
@@ -47,6 +48,13 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
     def get(_user_id), do: :error
   end
 
+  defmodule FakeActivityPresence do
+    def get("chat"), do: {:ok, {:chatting_in_board, %{id: "b2", name: "Zed"}}}
+    def get("reading"), do: {:ok, {:reading_board, %{id: "b1", name: "General"}}}
+    def get("board_list"), do: {:ok, :board_list}
+    def get(_user_id), do: :error
+  end
+
   test "returns offline when no authenticated session exists" do
     assert %PresenceSummary{activity: :offline, label: "Offline", online?: false} =
              PresenceSummary.for_user("missing", sessions: OnlineSessions)
@@ -72,21 +80,44 @@ defmodule Foglet.Sessions.PresenceSummaryTest do
              )
   end
 
-  test "prefers chat board activity over browsing board activity deterministically" do
+  test "prefers central activity chat over board-screen browsing deterministically" do
     assert %PresenceSummary{
-             activity: {:chatting_in_board, %{id: "b1", name: "General"}},
-             label: "Chatting in General",
+             activity: {:chatting_in_board, %{id: "b2", name: "Zed"}},
+             label: "Chatting in Zed",
              online?: true
            } =
              PresenceSummary.for_user("chat",
                sessions: OnlineSessions,
                session: FakeSession,
                boards: FakeBoards,
-               board_screen: FakeBoardScreen
+               board_screen: FakeBoardScreen,
+               activity_presence: FakeActivityPresence
              )
   end
 
-  test "reports threads tab as browsing board" do
+  test "reports central activity reading board" do
+    assert %PresenceSummary{
+             activity: {:reading_board, %{id: "b1", name: "General"}},
+             label: "Reading in General",
+             online?: true
+           } =
+             PresenceSummary.for_user("reading",
+               sessions: OnlineSessions,
+               session: FakeSession,
+               activity_presence: FakeActivityPresence
+             )
+  end
+
+  test "reports central board list activity" do
+    assert %PresenceSummary{activity: :board_list, label: "Browsing boards", online?: true} =
+             PresenceSummary.for_user("board_list",
+               sessions: OnlineSessions,
+               session: FakeSession,
+               activity_presence: FakeActivityPresence
+             )
+  end
+
+  test "falls back to board-screen threads tab as browsing board" do
     assert %PresenceSummary{
              activity: {:browsing_board, %{id: "b1", name: "General"}},
              label: "Browsing General",

@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.PubSub, as: PubSubTopics
+  alias Foglet.Sessions.ActivityPresence
   alias Foglet.Sessions.BoardScreen, as: PresenceTracker
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
@@ -87,6 +88,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
     state = %{state | thread_list: new_thread_state}
     state = ensure_tracked(state, :threads)
+    track_activity_tab(state, :threads)
     state = refresh_presence_count(state)
 
     # Pre-load chat history so the first flip to :chat is instant.
@@ -365,9 +367,19 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   defp switch_tab(%State{} = state, _context, new_tab) do
     state = %{state | current_tab: new_tab}
     state = ensure_tracked(state, new_tab)
+    track_activity_tab(state, new_tab)
     state = refresh_presence_count(state)
     {state, []}
   end
+
+  defp track_activity_tab(%State{user_id: nil}, _tab), do: :ok
+  defp track_activity_tab(%State{board: nil}, _tab), do: :ok
+
+  defp track_activity_tab(%State{user_id: user_id, board: board}, :chat),
+    do: ActivityPresence.track(user_id, {:chatting_in_board, board})
+
+  defp track_activity_tab(%State{user_id: user_id, board: board}, :threads),
+    do: ActivityPresence.track(user_id, {:browsing_board, board})
 
   defp ensure_tracked(%State{board_id: nil} = state, _tab), do: state
   defp ensure_tracked(%State{user_id: nil} = state, _tab), do: state
@@ -394,7 +406,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   defp refresh_presence_count(%State{board_id: nil} = state), do: state
 
   defp refresh_presence_count(%State{board_id: board_id} = state) do
-    %{state | presence_count: PresenceTracker.count(board_id)}
+    %{state | presence_count: PresenceTracker.chat_count(board_id)}
   end
 
   defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name

@@ -3,12 +3,12 @@ defmodule Foglet.Sessions.PresenceSummary do
   Reusable live-presence summary boundary for public profile cards.
 
   The boundary composes the one-session-per-user registry with door and
-  board-screen presence. When a live session exists but no richer source is
+  central activity presence. When a live session exists but no richer source is
   known, it returns the honest `:online` fallback.
 
-  Deterministic precedence is: door > chat board > browsing board > online > offline.
-  If multiple boards match the same precedence, board names/ids are sorted so
-  repeated renders are stable.
+  Deterministic precedence is: door > chat board > reading board > browsing
+  board/board list > online > offline. If multiple same-precedence activities
+  exist, board names/ids are sorted so repeated renders are stable.
   """
 
   alias Foglet.Sessions.Session
@@ -18,7 +18,9 @@ defmodule Foglet.Sessions.PresenceSummary do
           :offline
           | :online
           | {:playing_door, map()}
+          | {:board_list, map()}
           | {:browsing_board, map()}
+          | {:reading_board, map()}
           | {:chatting_in_board, map()}
 
   @type t :: %__MODULE__{
@@ -43,7 +45,8 @@ defmodule Foglet.Sessions.PresenceSummary do
         session_state = safe_session_state(session_mod, pid)
 
         activity =
-          door_activity_for(user_id, opts) || board_activity_for(user_id, opts) || :online
+          door_activity_for(user_id, opts) || activity_presence_for(user_id, opts) ||
+            board_activity_for(user_id, opts) || :online
 
         idle? =
           session_idle?(session_mod, session_state, Keyword.get(opts, :now, DateTime.utc_now()))
@@ -72,8 +75,13 @@ defmodule Foglet.Sessions.PresenceSummary do
   def label({:chatting_in_board, board}, idle?),
     do: annotate_idle("Chatting in #{board_name(board)}", idle?)
 
+  def label({:reading_board, board}, idle?),
+    do: annotate_idle("Reading in #{board_name(board)}", idle?)
+
   def label({:browsing_board, board}, idle?),
     do: annotate_idle("Browsing #{board_name(board)}", idle?)
+
+  def label(:board_list, idle?), do: annotate_idle("Browsing boards", idle?)
 
   defp safe_lookup_session(sessions, user_id) do
     sessions.lookup_session(user_id)
@@ -111,6 +119,19 @@ defmodule Foglet.Sessions.PresenceSummary do
 
     case door_presence.get(user_id) do
       {:ok, door} -> {:playing_door, door}
+      :error -> nil
+    end
+  rescue
+    _ -> nil
+  catch
+    :exit, _ -> nil
+  end
+
+  defp activity_presence_for(user_id, opts) do
+    activity_presence = Keyword.get(opts, :activity_presence, Foglet.Sessions.ActivityPresence)
+
+    case activity_presence.get(user_id) do
+      {:ok, activity} -> activity
       :error -> nil
     end
   rescue
