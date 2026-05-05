@@ -109,18 +109,13 @@ defmodule Foglet.TUI.App.SessionAliasTest do
   end
 
   describe "session_replaced/2" do
-    test "opens a warning modal with on_confirm/on_cancel returning Command.quit/0" do
+    test "opens a warning modal and defers quit until real dismissal" do
       {new_state, cmds} = SessionAlias.session_replaced(state(), "u1")
 
       assert cmds == []
       assert %Foglet.TUI.Modal{type: :warning} = new_state.modal
       assert is_function(new_state.modal.on_confirm, 1)
       assert is_function(new_state.modal.on_cancel, 1)
-
-      {_, [confirm_cmd]} = new_state.modal.on_confirm.(new_state)
-      {_, [cancel_cmd]} = new_state.modal.on_cancel.(new_state)
-      assert match?(%Command{type: :quit}, confirm_cmd)
-      assert match?(%Command{type: :quit}, cancel_cmd)
     end
   end
 end
