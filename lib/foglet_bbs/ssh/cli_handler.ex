@@ -308,6 +308,12 @@ defmodule Foglet.SSH.CLIHandler do
           offered_ssh_public_key = Map.get(pubkey_resolution, :offered_ssh_public_key)
           session_pid = start_session(pubkey_resolution)
 
+          # Successful BBS connect boundary: count only after connection-limit
+          # and rate-limit gates pass and the guest/member session exists. This
+          # keeps rejected attempts, later auth promotion, cleanup, resize, and
+          # old-session replacement cleanup outside the durable total-call path.
+          _new_total_call_count = Foglet.SiteCounters.increment_call_count()
+
           Logger.info(
             "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
               "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
