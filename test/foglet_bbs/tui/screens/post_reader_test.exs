@@ -901,6 +901,55 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert Keyword.get(opts, :direction) == :next
     end
 
+    test "n space and page_down do not load a phantom next page for a short final window" do
+      context = bounded_post_reader_context()
+      posts = bounded_posts(1..2)
+
+      for key_event <- [
+            %{key: :char, char: "n"},
+            %{key: :char, char: " "},
+            %{key: :page_down}
+          ] do
+        state =
+          bounded_state(
+            posts: posts,
+            selected_post_index: 0,
+            window_first_message_number: 1,
+            window_last_message_number: 2,
+            window_has_next?: true
+          )
+
+        assert {%State{} = moved, []} = PostReader.update({:key, key_event}, state, context)
+        assert moved.selected_post_index == 1
+        assert Enum.at(moved.posts, moved.selected_post_index).id == "p2"
+        refute_receive {:reader_window_requested, "t-1000", _opts}
+      end
+    end
+
+    test "short final window load clamps stale has_next state" do
+      context = bounded_post_reader_context()
+      state = bounded_state(posts: [], pending_window_direction: :next)
+
+      window = %Foglet.Posts.ReaderWindow{
+        posts: bounded_posts(51..52),
+        first_message_number: 51,
+        last_message_number: 52,
+        has_previous?: true,
+        has_next?: true,
+        direction: :next
+      }
+
+      assert {%State{} = loaded, []} =
+               PostReader.update(
+                 {:task_result, :load_posts_window, {:ok, window}},
+                 state,
+                 context
+               )
+
+      refute loaded.window_has_next?
+      assert Enum.at(loaded.posts, loaded.selected_post_index).id == "p51"
+    end
+
     test "p at the first active post requests direction: :previous and lands on previous last post" do
       context = bounded_post_reader_context()
 
@@ -1317,13 +1366,15 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
-  test "'n' advances to next post and updates pending_read_positions", %{state: state} do
+  test "'n' advances to next local visible post and updates pending_read_positions", %{
+    state: state
+  } do
     {s, _} = PostReader.load_posts(state, "t1")
     {:update, s, _} = handle_key_screen(%{key: :char, char: "n"}, s)
     ss = s.screen_state.post_reader
-    assert ss.selected_post_index == 0
-    assert ss.pending_read_positions["t1"][:last_read_post_id] == "p1"
-    assert ss.pending_read_positions["t1"][:last_read_message_number] == 1
+    assert ss.selected_post_index == 1
+    assert ss.pending_read_positions["t1"][:last_read_post_id] == "p2"
+    assert ss.pending_read_positions["t1"][:last_read_message_number] == 2
   end
 
   test "'p' decrements bounded at 0", %{state: state} do

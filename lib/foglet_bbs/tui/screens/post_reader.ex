@@ -156,7 +156,7 @@ defmodule Foglet.TUI.Screens.PostReader do
           window_first_message_number: Map.get(window, :first_message_number),
           window_last_message_number: Map.get(window, :last_message_number),
           window_has_previous?: Map.get(window, :has_previous?, false),
-          window_has_next?: Map.get(window, :has_next?, false),
+          window_has_next?: reader_window_has_next?(state, window, posts),
           pending_window_direction: nil
       }
       |> warm_selected_post(context)
@@ -612,7 +612,7 @@ defmodule Foglet.TUI.Screens.PostReader do
         window_first_message_number: Map.get(window, :first_message_number),
         window_last_message_number: Map.get(window, :last_message_number),
         window_has_previous?: Map.get(window, :has_previous?, false),
-        window_has_next?: Map.get(window, :has_next?, false)
+        window_has_next?: reader_window_has_next?(ss, window, posts)
     }
   end
 
@@ -1230,8 +1230,15 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   defp should_load_next_window?(%State{} = state, posts, delta, last_visible_idx) do
-    delta > 0 and last_visible_idx == length(posts) - 1 and state.window_has_next?
+    delta > 0 and last_visible_idx == length(posts) - 1 and state.window_has_next? and
+      length(posts) >= reader_window_limit(state)
   end
+
+  defp reader_window_has_next?(%State{} = state, window, posts) when is_list(posts) do
+    Map.get(window, :has_next?, false) and length(posts) >= reader_window_limit(state)
+  end
+
+  defp reader_window_has_next?(%State{}, _window, _posts), do: false
 
   defp should_load_previous_window?(%State{} = state, delta, current_idx) do
     delta < 0 and current_idx == 0 and state.window_has_previous?
