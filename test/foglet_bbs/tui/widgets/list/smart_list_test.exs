@@ -136,6 +136,40 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert {:item_selected, 1} = action
     end
 
+    test "FOG-764: Enter in searchable single-select returns focused filtered value" do
+      st =
+        SmartList.init(
+          options: [{"Alpha", :alpha}, {"Beta", :beta}, {"Apple", :apple}],
+          enable_search: true
+        )
+        |> activate_search()
+
+      {st, action} = SmartList.handle_event(%{key: :char, char: "b"}, st)
+      assert action == {:search_changed, "b"}
+      assert st.raxol_state.filtered_options == [{"Beta", :beta}]
+      assert st.raxol_state.focused_index == 0
+
+      {_st, action} = SmartList.handle_event(%{key: :enter}, st)
+      assert action == {:item_selected, :beta}
+    end
+
+    test "FOG-764: Enter in searchable no-match state does not select a hidden option" do
+      st =
+        SmartList.init(
+          options: [{"Alpha", :alpha}, {"Beta", :beta}],
+          enable_search: true
+        )
+        |> activate_search()
+
+      {st, action} = SmartList.handle_event(%{key: :char, char: "z"}, st)
+      assert action == {:search_changed, "z"}
+      assert st.raxol_state.filtered_options == []
+      assert st.raxol_state.focused_index == 0
+
+      {_st, action} = SmartList.handle_event(%{key: :enter}, st)
+      assert action == nil
+    end
+
     test "search buffer grows after character input when search focused" do
       st =
         SmartList.init(
@@ -307,10 +341,10 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       t = distinctive_theme()
       tree = SmartList.render(two_item_fixture(), theme: t)
 
-      assert flatten_text(tree) =~ "▌ A\n◇ B\n"
+      assert flatten_text(tree) =~ "▌ A◇ B"
       refute flatten_text(tree) =~ "> A"
-      assert_text_run(tree, "▌ A\n", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
-      assert_text_run(tree, "◇ B\n", fg: t.unselected.fg)
+      assert_text_run(tree, "▌ A", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
+      assert_text_run(tree, "◇ B", fg: t.unselected.fg)
     end
 
     test "multi-select rows render checked and unchecked semantic marks" do
@@ -324,9 +358,9 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
 
       tree = SmartList.render(state, theme: t)
 
-      assert flatten_text(tree) =~ "✓ Alpha\n◇ Beta\n"
-      assert_text_run(tree, "✓ Alpha\n", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
-      assert_text_run(tree, "◇ Beta\n", fg: t.unselected.fg)
+      assert flatten_text(tree) =~ "✓ Alpha◇ Beta"
+      assert_text_run(tree, "✓ Alpha", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
+      assert_text_run(tree, "◇ Beta", fg: t.unselected.fg)
     end
 
     test "empty and filtered-empty states are semantic and dim" do
@@ -353,13 +387,13 @@ defmodule Foglet.TUI.Widgets.List.SmartListTest do
       assert_text_run(SmartList.render(filtered, theme: t), "No matches", fg: t.dim.fg)
     end
 
-    test "selection, search, pagination, and border affordances use theme slots" do
+    test "selection, search, and pagination affordances use theme slots" do
       state = SmartList.init(options: [{"A", 1}, {"B", 2}], enable_search: true)
       tree = SmartList.render(state, theme: distinctive_theme())
       serialized = inspect(tree, printable_limit: :infinity, limit: :infinity)
       t = distinctive_theme()
 
-      assert serialized =~ t.border.fg
+      refute serialized =~ t.border.fg
       assert serialized =~ t.selected.fg
       assert serialized =~ t.selected.bg
       assert serialized =~ t.unselected.fg
