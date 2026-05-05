@@ -215,11 +215,12 @@ the wrapper you own.
 
 When `sandbox.mode` is `:restricted_user_process_group`, the helper resolves the
 configured `user`/optional `group` before launch. If the user/group is missing,
-Python/PTY support is unavailable, or the Foglet OS process lacks privileges to
-drop to that user, the door fails closed before the command starts. Foglet never
-silently falls back to app-user execution for a sandbox-required manifest. Use a
-locked-down OS account such as `foglet-door` with only the filesystem access
-needed by reviewed door assets.
+Python/PTY support is unavailable, the Foglet OS process lacks privileges to
+drop to that user, or supplementary groups cannot be set to the target user's
+intended memberships or cleared, the door fails closed before the command
+starts. Foglet never silently falls back to app-user execution for a
+sandbox-required manifest. Use a locked-down OS account such as `foglet-door`
+with only the filesystem access needed by reviewed door assets.
 
 The runner adds Foglet metadata for the external process:
 
