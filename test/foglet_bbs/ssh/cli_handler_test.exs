@@ -266,6 +266,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
     setup do
       reset_cli_counter!()
+      reset_site_call_counter!()
       start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
       :ok
     end
@@ -291,17 +292,105 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert returned_state.counter_counted?
       refute returned_state.cleanup_done?
       assert_counter!(1)
+      assert Foglet.SiteCounters.get_call_count() == 1
 
       assert {:stop, 1, after_close} =
                CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
 
       assert_counter!(0)
+      assert Foglet.SiteCounters.get_call_count() == 1
       assert after_close.cleanup_done?
       refute after_close.counter_counted?
       assert_receive {:DOWN, ^ref, :process, _, _reason}
 
       assert :ok = CLIHandler.terminate(:normal, after_close)
       assert_counter!(0)
+    end
+
+    test "accepted public-key member connection increments durable total once" do
+      warm_login_config_cache!()
+
+      user =
+        AccountsFixtures.user_fixture()
+        |> Ecto.Changeset.change(status: :active)
+        |> FogletBbs.Repo.update!()
+
+      _key = AccountsFixtures.ssh_key_fixture(user, %{public_key: @static_openssh_key})
+      peer = {{10, 0, 0, 102}, 65_004}
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+      PubkeyStash.put(peer, public_key)
+
+      assert {:ok, returned_state} = CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+
+      assert returned_state.pubkey_user.id == user.id
+      assert_counter!(1)
+      assert Foglet.SiteCounters.get_call_count() == 1
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+      assert_counter!(0)
+      assert Foglet.SiteCounters.get_call_count() == 1
+    end
+
+    test "guest promotion does not increment durable total a second time" do
+      warm_login_config_cache!()
+      peer = {{10, 0, 0, 103}, 65_005}
+
+      assert {:ok, returned_state} = CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, peer)
+      assert Foglet.SiteCounters.get_call_count() == 1
+
+      user =
+        AccountsFixtures.user_fixture()
+        |> Ecto.Changeset.change(status: :active)
+        |> FogletBbs.Repo.update!()
+
+      assert :ok =
+               Foglet.Sessions.Supervisor.promote_guest_session(returned_state.session_pid, user)
+
+      assert Foglet.SiteCounters.get_call_count() == 1
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+      assert_counter!(0)
+      assert Foglet.SiteCounters.get_call_count() == 1
+    end
+
+    test "session replacement counts only each new successful client connection" do
+      warm_login_config_cache!()
+
+      user =
+        AccountsFixtures.user_fixture()
+        |> Ecto.Changeset.change(status: :active)
+        |> FogletBbs.Repo.update!()
+
+      _key = AccountsFixtures.ssh_key_fixture(user, %{public_key: @static_openssh_key})
+      [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
+
+      first_peer = {{10, 0, 0, 104}, 65_006}
+      PubkeyStash.put(first_peer, public_key)
+
+      assert {:ok, first_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, first_peer)
+
+      first_ref = Process.monitor(first_state.session_pid)
+      assert Foglet.SiteCounters.get_call_count() == 1
+
+      second_peer = {{10, 0, 0, 105}, 65_007}
+      PubkeyStash.put(second_peer, public_key)
+
+      assert {:ok, second_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 2, nil, second_peer)
+
+      assert_receive {:DOWN, ^first_ref, :process, _, _reason}
+      assert second_state.session_pid != first_state.session_pid
+      assert_counter!(2)
+      assert Foglet.SiteCounters.get_call_count() == 2
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, first_state)
+      assert_counter!(1)
+      assert Foglet.SiteCounters.get_call_count() == 2
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 2}}, second_state)
+      assert_counter!(0)
+      assert Foglet.SiteCounters.get_call_count() == 2
     end
 
     test "normal close: :closed on counted state restores counter to 0" do
@@ -392,10 +481,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
       # Counter must not drift upward past the threshold; check_connection_limit/0
       # compensated its own increment on rejection.
       assert_counter!(@max_connections)
+      assert Foglet.SiteCounters.get_call_count() == 0
 
       # Subsequent cleanup delivery (e.g. terminate) is a no-op for rejected state.
       _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
       assert_counter!(@max_connections)
+      assert Foglet.SiteCounters.get_call_count() == 0
     end
 
     test "rate-limit reject: counter unchanged, returned state is uncounted" do
@@ -417,10 +508,12 @@ defmodule Foglet.SSH.CLIHandlerTest do
       # check_connection_limit/0 incremented; the rate-limit branch must
       # decrement immediately so the counter returns to the starting value.
       assert_counter!(starting_count)
+      assert Foglet.SiteCounters.get_call_count() == 0
 
       # Idempotent: cleanup delivery on a rejected state must not double-decrement.
       _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
       assert_counter!(starting_count)
+      assert Foglet.SiteCounters.get_call_count() == 0
     end
 
     test "crash-during-init: terminate on counted state with no lifecycle/session decrements once" do
@@ -783,6 +876,10 @@ defmodule Foglet.SSH.CLIHandlerTest do
   defp assert_counter!(expected) do
     assert [{:count, ^expected}] =
              :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
+  end
+
+  defp reset_site_call_counter! do
+    FogletBbs.Repo.delete_all(Foglet.SiteCounters.Counter)
   end
 
   defp openssh_text_for(public_key) do
