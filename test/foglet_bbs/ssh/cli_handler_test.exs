@@ -8,9 +8,28 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
   use FogletBbs.DataCase, async: false
 
+  import ExUnit.CaptureLog
+
   alias Foglet.SSH.CLIHandler
   alias Foglet.SSH.PubkeyStash
   alias FogletBbs.AccountsFixtures
+
+  defmodule DispatcherUnavailableLifecycle do
+    use GenServer
+
+    def start_link(opts \\ []) do
+      GenServer.start_link(__MODULE__, opts)
+    end
+
+    @impl true
+    def init(opts), do: {:ok, opts}
+
+    @impl true
+    def handle_call(:get_full_state, _from, state) do
+      reason = Keyword.get(state, :reason, :dispatcher_unavailable)
+      exit(reason)
+    end
+  end
 
   @static_openssh_key FogletBbs.AccountsFixtures.default_ssh_public_key()
   @terminal_takeover "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J"
@@ -189,6 +208,49 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert returned_state.cleanup_done?
       refute returned_state.counter_counted?
       assert [{:count, 0}] = :ets.lookup(Foglet.SSH.CLIHandler.Counter, :count)
+    end
+
+    test "lifecycle started but dispatcher unavailable fails PTY startup closed and logs" do
+      reset_cli_counter!()
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 1})
+
+      previous_trap_exit = Process.flag(:trap_exit, true)
+
+      {:ok, lifecycle_pid} =
+        DispatcherUnavailableLifecycle.start_link(reason: :dispatcher_missing)
+
+      state = %CLIHandler{
+        channel_id: 42,
+        connection_ref: nil,
+        peer: {{127, 0, 0, 1}, 55_555},
+        counter_counted?: true
+      }
+
+      log =
+        try do
+          capture_log(fn ->
+            assert {:stop, 42, returned_state} =
+                     CLIHandler.finish_lifecycle_start_for_test(
+                       state,
+                       nil,
+                       42,
+                       true,
+                       lifecycle_pid,
+                       80,
+                       24
+                     )
+
+            assert returned_state.lifecycle_pid == lifecycle_pid
+            assert returned_state.dispatcher_pid == nil
+            assert returned_state.cleanup_done?
+            refute returned_state.counter_counted?
+            assert_counter!(0)
+          end)
+        after
+          Process.flag(:trap_exit, previous_trap_exit)
+        end
+
+      assert log =~ "Dispatcher resolution failed during PTY startup; closing channel"
     end
 
     test "non-matching lifecycle EXIT is ignored" do
