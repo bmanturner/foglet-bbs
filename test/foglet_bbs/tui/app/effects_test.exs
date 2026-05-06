@@ -13,7 +13,7 @@ defmodule Foglet.TUI.App.EffectsTest do
 
   defmodule SampleScreen do
     defmodule State do
-      defstruct route_params: %{}, messages: [], submits: []
+      defstruct route_params: %{}, messages: [], submits: [], task_results: []
     end
 
     def init(%Context{} = context), do: %State{route_params: context.route_params}
@@ -24,6 +24,10 @@ defmodule Foglet.TUI.App.EffectsTest do
 
     def update({:modal_submit, kind, payload}, %State{} = state, %Context{}) do
       {%{state | submits: [{kind, payload} | state.submits]}, []}
+    end
+
+    def update({:task_result, op, result}, %State{} = state, %Context{}) do
+      {%{state | task_results: [{op, result} | state.task_results]}, []}
     end
 
     def update(_message, %State{} = state, %Context{}), do: {state, []}
@@ -253,6 +257,21 @@ defmodule Foglet.TUI.App.EffectsTest do
     refute log =~ secret
     refute log =~ "sysop@example.test"
     refute log =~ "super-secret"
+  end
+
+  test "command_result redispatch routes screen-scoped task results through the screen reducer" do
+    original = state()
+
+    {new_state, []} =
+      App.update(
+        {:command_result, {:screen_task_result, :sample, :load, {:ok, {:loaded, 1}}}},
+        original
+      )
+
+    assert %SampleScreen.State{task_results: [load: {:ok, {:loaded, 1}}]} =
+             Routing.screen_state_for(new_state, :sample)
+
+    assert new_state.modal == original.modal
   end
 
   test "task thrown tuple payloads are logged with low-cardinality reason class only" do

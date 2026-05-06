@@ -36,4 +36,33 @@ defmodule Foglet.TUI.CommandTest do
       assert result == 42
     end
   end
+
+  describe "screen_task/4" do
+    test "success case: wraps results for screen-scoped dispatch" do
+      cmd = TUICommand.screen_task(:sample, :load, fn -> {:loaded, 1} end)
+
+      assert %Raxol.Core.Runtime.Command{type: :task} = cmd
+      assert cmd.data.() == {:screen_task_result, :sample, :load, {:ok, {:loaded, 1}}}
+    end
+
+    test "error case: returns sanitized screen result and reports failure metadata" do
+      self = self()
+
+      cmd =
+        TUICommand.screen_task(:sample, :load, fn -> raise "secret boom" end, fn metadata ->
+          send(self, {:failure, metadata})
+        end)
+
+      assert cmd.data.() ==
+               {:screen_task_result, :sample, :load, {:error, {:task_failed, :exception}}}
+
+      assert_receive {:failure,
+                      %{
+                        screen_key: :sample,
+                        op: :load,
+                        failure_kind: :exception,
+                        reason: %RuntimeError{message: "secret boom"}
+                      }}
+    end
+  end
 end
