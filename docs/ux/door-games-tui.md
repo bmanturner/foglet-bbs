@@ -1,13 +1,13 @@
 # Door Games TUI UX Specification (FOG-480 / FOG-517)
 
-Status: design handoff for the canonical FOG-480 integration branch.
+Status: design reference for the current Door Games/dropfile compatibility integration branch.
 Owner: TUI UX Designer.
-Branch: `fog-480-door-games`.
-Baseline inspected: `3bbf60f6eed27f08f324d749204ac52949b75732`.
+Branch: `fog/1048-dropfile-compat`.
+Baseline inspected: `7d9fa9473d123e6894aad39319b00fbd45540805`.
 
 ## Source verification
 
-Committed baseline inspection found no existing Door Games terminal surface on the canonical branch. After this handoff started, the shared worktree also showed concurrent untracked Door runtime files under `lib/foglet_bbs/doors/` and `test/foglet_bbs/doors_test.exs`; those are not TUI-owned and were not modified here. Relevant current architecture:
+Current integration inspection found the Door Games terminal surface, runner handoff, and classic/dropfile manifest shape on this branch. Relevant current architecture:
 
 - `lib/foglet_bbs/tui/screens/main_menu.ex` owns the authenticated main-menu command descriptors and keyboard routing.
 - `lib/foglet_bbs/tui/app.ex` owns the known screen set, route state, modal routing, and effect interpretation.
