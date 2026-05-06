@@ -285,6 +285,25 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert String.contains?(value, "\n")
   end
 
+  test "textarea accepts terminal :space events and keeps control characters filtered" do
+    fields = [%{name: :body, type: :textarea, label: "Body", rows: 3}]
+    state = test_form(fields)
+
+    events = [
+      %{key: :char, char: "General"},
+      %{key: :space},
+      %{key: :char, char: "discussion"},
+      %{key: :char, char: <<7>>},
+      %{key: :space},
+      %{key: :char, char: "board"},
+      %{key: :char, char: "s", ctrl: true}
+    ]
+
+    send_events(state, events)
+
+    assert_receive {:submitted, %{body: "General discussion board"}}
+  end
+
   # --- REQ-4: Tab / Shift-Tab focus navigation ---
 
   test "REQ-4 Tab wrap forward: 3-field form cycles 0 -> 1 -> 2 -> 0" do
