@@ -1,5 +1,11 @@
 # Foglet BBS
 
+[![CI](https://github.com/bmanturner/foglet-bbs/actions/workflows/ci.yml/badge.svg)](https://github.com/bmanturner/foglet-bbs/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE.md)
+[![Elixir](https://img.shields.io/badge/elixir-1.19.5--otp--28-purple.svg)](.tool-versions)
+[![Erlang/OTP](https://img.shields.io/badge/erlang%2Fotp-28.3.1-red.svg)](.tool-versions)
+[![Status](https://img.shields.io/badge/status-public%20beta-orange.svg)](README.md)
+
 Foglet is a small, self-hostable bulletin board system for people who still like the feeling of dialing into a place.
 
 The main door is SSH. The interface is a terminal UI. Phoenix is present, but the web surface is a lobby, docs shelf, and operational shell — not a browser forum.
@@ -140,4 +146,4 @@ For deeper context on namespaces, persistence invariants, authorization scopes, 
 
 Copyright 2026 Brendan Turner
 
-Licensed under the Apache License, Version 2.0. See `LICENSE` for details.
+Licensed under the Apache License, Version 2.0. See `LICENSE.md` for details.

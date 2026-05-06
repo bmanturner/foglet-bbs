@@ -45,6 +45,15 @@ body {
   display: flex; justify-content: space-between; align-items: center;
   position: relative; z-index: 20;
 }
+.bar a { color: var(--fg-inverse); text-decoration: none; }
+.bar a:hover { text-decoration: underline; }
+.bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.bar-actions .sep { color: var(--fg-3); }
 .bar.bot { font-weight: 400; }
 .bar.bot b { font-weight: 700; }
 .bar .live::before {
@@ -239,6 +248,8 @@ em.amber { color: var(--accent); font-style: normal; text-shadow: var(--glow-amb
 .caret::after { content:"█"; color:var(--accent); margin-left:2px; animation: blink 1.06s steps(1,end) infinite; }
 
 @media (max-width: 760px) {
+  .bar { align-items: flex-start; gap: 8px; }
+  .bar-actions { flex-wrap: wrap; justify-content: flex-end; white-space: normal; }
   .features, .authkey .grid, .stance, .cta .row { grid-template-columns: 1fr; }
   .stance .col + .col { border-left: 0; border-top: 1px dashed var(--fg-dim); }
   .stack .row { grid-template-columns: 1fr; gap: 2px; }

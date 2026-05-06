@@ -47,6 +47,13 @@ body {
 }
 .bar a { color: var(--fg-inverse); text-decoration: none; }
 .bar a:hover { text-decoration: underline; }
+.bar-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+.bar-actions .sep { color: var(--fg-3); }
 .bar .live::before {
   content:"●"; color:var(--ansi-red); margin-right:6px;
   animation: blink 1.06s steps(1,end) infinite;
@@ -323,6 +330,8 @@ body {
 
 /* Mobile */
 @media (max-width: 860px) {
+  .bar { align-items: flex-start; gap: 8px; }
+  .bar-actions { flex-wrap: wrap; justify-content: flex-end; white-space: normal; }
   .shell {
     grid-template-columns: 1fr;
     gap: 24px;
