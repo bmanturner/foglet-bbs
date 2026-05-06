@@ -259,7 +259,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     %{
       title: "Moderation",
       mode: Presentation.mode_for!(:moderation),
-      breadcrumb_parts: ["Foglet", "Moderation"]
+      breadcrumb_parts: Foglet.AppName.breadcrumb(["Moderation"])
     }
   end
 

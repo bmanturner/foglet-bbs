@@ -96,7 +96,7 @@ defmodule Foglet.TUI.Screens.OnlineNow do
 
     ScreenFrame.render(
       frame_state(context),
-      %{breadcrumb_parts: ["Foglet", "Online Now"]},
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Online Now"])},
       content_body(state, context, theme),
       action_groups(state)
     )

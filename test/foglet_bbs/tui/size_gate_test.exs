@@ -73,7 +73,7 @@ defmodule Foglet.TUI.SizeGateTest do
       element = SizeGate.render(%{terminal_size: {40, 10}, session_context: %{}})
       serialized = inspect(element, limit: :infinity)
       assert serialized =~ "Terminal too small."
-      assert serialized =~ "Foglet BBS requires at least 64×22."
+      assert serialized =~ "Foglet requires at least 64×22."
       assert serialized =~ "Your terminal is currently: 40×10."
       assert serialized =~ "Please resize."
     end

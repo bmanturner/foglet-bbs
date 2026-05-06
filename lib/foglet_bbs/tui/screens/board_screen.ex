@@ -209,7 +209,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   def render(%State{} = state, %Context{} = context) do
     frame_state = frame_state(state, context)
     theme = Theme.from_state(frame_state)
-    chrome = %{breadcrumb_parts: ["Foglet", board_label(state)]}
+    chrome = %{breadcrumb_parts: Foglet.AppName.breadcrumb([board_label(state)])}
 
     body =
       column style: %{gap: 0} do

@@ -1443,7 +1443,7 @@ defmodule Foglet.TUI.AppTest do
 
       assert size_gate_text_contents(element) == [
                "Terminal too small.",
-               "Foglet BBS requires at least 64×22.",
+               "Foglet requires at least 64×22.",
                "Your terminal is currently: 40×30.",
                "Please resize."
              ]
@@ -1457,7 +1457,7 @@ defmodule Foglet.TUI.AppTest do
 
       assert size_gate_text_contents(element) == [
                "Terminal too small.",
-               "Foglet BBS requires at least 64×22.",
+               "Foglet requires at least 64×22.",
                "Your terminal is currently: 100×10.",
                "Please resize."
              ]
@@ -1494,7 +1494,7 @@ defmodule Foglet.TUI.AppTest do
 
       assert size_gate_text_contents(element) == [
                "Terminal too small.",
-               "Foglet BBS requires at least 64×22.",
+               "Foglet requires at least 64×22.",
                "Your terminal is currently: 40×10.",
                "Please resize."
              ]

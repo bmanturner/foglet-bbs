@@ -252,7 +252,7 @@ defmodule Foglet.TUI.Screens.BoardList do
 
     ScreenFrame.render(
       render_model,
-      %{breadcrumb_parts: ["Foglet", "Boards"]},
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Boards"])},
       render_board_content(local_state, context, theme),
       command_groups(context)
     )

@@ -35,7 +35,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     post_content = render_local_post_content(state, frame_state, theme, w, h, reply_state)
 
     chrome = %{
-      breadcrumb_parts: ["Foglet", board_label(state), thread_title_label(state)]
+      breadcrumb_parts: Foglet.AppName.breadcrumb([board_label(state), thread_title_label(state)])
     }
 
     ScreenFrame.render(frame_state, chrome, post_content, [

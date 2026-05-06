@@ -88,7 +88,7 @@ defmodule Foglet.TUI.SizeGate do
           [
             text("Terminal too small.", fg: fg),
             text(
-              "Foglet BBS requires at least #{@min_cols}×#{@min_rows}.",
+              "#{Foglet.AppName.name()} requires at least #{@min_cols}×#{@min_rows}.",
               fg: fg
             ),
             text("Your terminal is currently: #{size_text}.", fg: fg),

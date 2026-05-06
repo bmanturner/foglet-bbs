@@ -40,6 +40,8 @@ IO.puts("Seeds complete.")
 if Mix.env() == :test do
   IO.puts("  [seed] skipping dev-only fixtures (MIX_ENV=test)")
 else
+  app_name = Foglet.AppName.name()
+
   # ============================================================
   # Phase 2: Default category and board
   # ============================================================
@@ -182,14 +184,16 @@ else
     end
 
     # 1. Welcome announcement (sticky)
-    unless find_thread.("Welcome to Foglet BBS!") do
+    welcome_title = "Welcome to #{app_name}!"
+
+    unless find_thread.(welcome_title) do
       {:ok, %{thread: welcome}} =
         Threads.create_thread(general_board.id, seed_sysop.id, %{
-          title: "Welcome to Foglet BBS!",
+          title: welcome_title,
           body: """
           Welcome aboard!
 
-          Foglet BBS is a classic bulletin board system accessible over SSH.
+          #{app_name} is a classic bulletin board system accessible over SSH.
 
           **Getting started:**
           - Press `B` from the Main Menu to browse boards
@@ -201,9 +205,9 @@ else
         })
 
       Threads.sticky_thread(welcome)
-      IO.puts("  [seed] inserted thread: Welcome to Foglet BBS! (sticky)")
+      IO.puts("  [seed] inserted thread: #{welcome_title} (sticky)")
     else
-      IO.puts("  [seed] thread 'Welcome to Foglet BBS!' already present")
+      IO.puts("  [seed] thread '#{welcome_title}' already present")
     end
 
     # 2. Introduce Yourself — with a reply from the member user

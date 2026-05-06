@@ -6,7 +6,7 @@ defmodule Foglet.Doors.Dropfiles.DorinfoDef do
   @spec lines(Metadata.t()) :: [String.t()]
   def lines(%Metadata{} = metadata) do
     [
-      "Foglet BBS",
+      Foglet.AppName.name(),
       metadata.sysop_first_name,
       metadata.sysop_last_name,
       "COM0",

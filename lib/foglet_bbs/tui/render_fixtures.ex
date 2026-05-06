@@ -587,7 +587,7 @@ defmodule Foglet.TUI.RenderFixtures do
     [
       %{
         id: "ol-1",
-        body: "Welcome to Foglet BBS.",
+        body: "Welcome to #{Foglet.AppName.name()}.",
         author_handle: "sysop",
         inserted_at: ~U[2026-04-27 12:00:00Z]
       },

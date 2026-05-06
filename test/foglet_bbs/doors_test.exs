@@ -536,7 +536,7 @@ defmodule Foglet.DoorsTest do
                Doors.classic_dropfile(:dorinfo_def, %{user: user, session: session_fixture()})
 
       assert dropfile_lines(text) == [
-               "Foglet BBS",
+               "Foglet",
                "Foglet",
                "Sysop",
                "COM0",

@@ -250,7 +250,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
     %{
       title: "Account",
       mode: Presentation.mode_for!(:account),
-      breadcrumb_parts: ["Foglet", "Account"]
+      breadcrumb_parts: Foglet.AppName.breadcrumb(["Account"])
     }
   end
 

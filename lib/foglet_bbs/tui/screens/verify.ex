@@ -74,17 +74,22 @@ defmodule Foglet.TUI.Screens.Verify do
 
     content = AuthForm.centered(panel, state, theme, @auth_card_height)
 
-    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Verify"]}, content, [
-      %{
-        label: "Actions",
-        commands: [
-          %{key: "Enter", label: "Submit", priority: 30},
-          %{key: "Backspace", label: "Delete", priority: 30},
-          %{key: "Ctrl+R", label: "Resend code", priority: 30},
-          %{key: "Esc", label: "Cancel", priority: 30}
-        ]
-      }
-    ])
+    ScreenFrame.render(
+      state,
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Verify"])},
+      content,
+      [
+        %{
+          label: "Actions",
+          commands: [
+            %{key: "Enter", label: "Submit", priority: 30},
+            %{key: "Backspace", label: "Delete", priority: 30},
+            %{key: "Ctrl+R", label: "Resend code", priority: 30},
+            %{key: "Esc", label: "Cancel", priority: 30}
+          ]
+        }
+      ]
+    )
   end
 
   @impl true

@@ -67,7 +67,7 @@ defmodule Foglet.TUI.Screens.Register do
 
     ScreenFrame.render(
       state,
-      %{breadcrumb_parts: ["Foglet", "Register"]},
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Register"])},
       content,
       keys_for(reg.step)
     )
