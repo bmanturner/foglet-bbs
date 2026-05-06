@@ -95,28 +95,15 @@ defmodule Foglet.TUI.Screens.OnlineNow do
     ScreenFrame.render(
       frame_state(context),
       %{breadcrumb_parts: ["Foglet", "Online Now"]},
-      content_panel(state, context, theme),
+      content_body(state, context, theme),
       action_groups(state)
     )
   end
 
-  defp content_panel(%State{} = state, %Context{} = context, theme) do
-    %{
-      type: :panel,
-      attrs: %{
-        title: "Online Now",
-        title_attrs: %{fg: theme.title.fg},
-        border: :single,
-        border_fg: theme.border.fg,
-        width: 9999,
-        height: 9999
-      },
-      children: [
-        column style: %{gap: 0} do
-          header_rows(state, theme) ++ body_rows(state, context, theme)
-        end
-      ]
-    }
+  defp content_body(%State{} = state, %Context{} = context, theme) do
+    column style: %{gap: 0, padding: 1} do
+      header_rows(state, theme) ++ body_rows(state, context, theme)
+    end
   end
 
   defp header_rows(%State{status: :error, last_error: error}, theme) do

@@ -50,6 +50,25 @@ defmodule Foglet.TUI.Screens.OnlineNowTest do
     )
   end
 
+  defp panel_titles(view) do
+    view
+    |> flatten_nodes()
+    |> Enum.filter(&(Map.get(&1, :type) == :panel))
+    |> Enum.map(&get_in(&1, [:attrs, :title]))
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp flatten_nodes(node), do: do_flatten_nodes(node, [])
+
+  defp do_flatten_nodes(nodes, acc) when is_list(nodes),
+    do: Enum.flat_map(nodes, &do_flatten_nodes(&1, acc))
+
+  defp do_flatten_nodes(%{} = node, _acc) do
+    [node | do_flatten_nodes(Map.get(node, :children, []), [])]
+  end
+
+  defp do_flatten_nodes(_other, _acc), do: []
+
   test "route entry loads online rows through the runtime task boundary" do
     local = OnlineNow.init(context())
 
@@ -67,12 +86,14 @@ defmodule Foglet.TUI.Screens.OnlineNowTest do
     assert length(fun.()) == 3
   end
 
-  test "loaded rows render selection, role badge, presence labels, and profile affordance" do
+  test "loaded rows render selection, role badge, presence labels, and profile affordance without duplicate Online Now panel chrome" do
     local = State.from_rows(OnlineNow.init(context()), FakeOnlineNow.list())
 
-    texts = OnlineNow.render(local, context()) |> collect_text_values()
+    view = OnlineNow.render(local, context())
+    texts = collect_text_values(view)
 
     assert Enum.any?(texts, &String.contains?(&1, "Online Now"))
+    refute "Online Now" in panel_titles(view)
     assert Enum.any?(texts, &String.contains?(&1, "> @alice [SYSOP]"))
     assert Enum.any?(texts, &String.contains?(&1, "Online"))
     assert Enum.any?(texts, &String.contains?(&1, "Chatting in general"))

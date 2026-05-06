@@ -96,9 +96,12 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   end
 
   # Multi-node row composition (D-06, MENU-03):
-  # - Leading text node carries `theme.primary.fg` and includes the one-column
+  # - Leading text node carries the normal row fg and includes the one-column
   #   inner indent (D-09, MENU-04), the destination glyph, the label, and the
   #   right-align padding.
+  # - Online Now splits the label into normal chrome (`Online Now (` and `)`) and
+  #   a count-only color node so low/activity color does not wash over the full
+  #   row label.
   # - Trailing text node carries `theme.accent.fg` and renders the bracketed
   #   key token `[X]` (D-08, D-10 — color only, no style).
   # Width budget at 64x22 (inner_width = 20):
@@ -107,7 +110,6 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   defp nav_row(%{key: key, label: label, glyph: glyph} = destination, theme, inner_width) do
     indent = " "
     bracketed_key = "[" <> key <> "]"
-    prefix_fg = nav_row_fg(destination, theme)
 
     prefix_text = indent <> glyph <> " " <> label
     prefix_width = TextWidth.display_width(prefix_text)
@@ -122,16 +124,34 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     # returns a flex with `children: []` (vendor/raxol/lib/raxol/core/renderer/view.ex
     # line 87 vs. line 92).
     row [] do
-      [
-        text(prefix_text <> padding, fg: prefix_fg),
-        text(bracketed_key, fg: theme.accent.fg)
-      ]
+      nav_row_segments(destination, prefix_text, padding, bracketed_key, theme)
     end
   end
 
-  defp nav_row_fg(%{color_slot: :online_low}, theme), do: theme.error.fg
-  defp nav_row_fg(%{color_slot: :online_active}, theme), do: theme.accent.fg
-  defp nav_row_fg(_destination, theme), do: theme.primary.fg
+  defp nav_row_segments(
+         %{key: "N", online_count: count},
+         _prefix_text,
+         padding,
+         bracketed_key,
+         theme
+       ) do
+    [
+      text(" ◌ Online Now (", fg: theme.primary.fg),
+      text(to_string(count), fg: online_count_fg(count, theme)),
+      text(")" <> padding, fg: theme.primary.fg),
+      text(bracketed_key, fg: theme.accent.fg)
+    ]
+  end
+
+  defp nav_row_segments(_destination, prefix_text, padding, bracketed_key, theme) do
+    [
+      text(prefix_text <> padding, fg: theme.primary.fg),
+      text(bracketed_key, fg: theme.accent.fg)
+    ]
+  end
+
+  defp online_count_fg(count, theme) when count in [0, 1], do: theme.error.fg
+  defp online_count_fg(_count, theme), do: theme.accent.fg
 
   defp oneliners_panel(state, theme) do
     %{
