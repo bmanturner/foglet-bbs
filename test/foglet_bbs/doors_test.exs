@@ -394,6 +394,27 @@ defmodule Foglet.DoorsTest do
       assert {:working_dir, "must be an absolute path"} in error.errors
     end
 
+    test "non-regular operator manifest entries fail closed before JSON loading" do
+      dir = configured_manifest_dir!()
+
+      external_manifest =
+        Path.join(
+          System.tmp_dir!(),
+          "foglet-symlink-manifest-#{System.unique_integer([:positive])}.json"
+        )
+
+      File.write!(external_manifest, operator_classic_manifest_json())
+      on_exit(fn -> File.rm(external_manifest) end)
+
+      symlink_path = Path.join(dir, "symlinked.json")
+      assert :ok = File.ln_s(external_manifest, symlink_path)
+
+      assert Doors.list_manifests() == []
+
+      assert [%{file: ^symlink_path, errors: [file: message]}] = Doors.manifest_load_errors()
+      assert message == "must be a regular JSON file, got symlink"
+    end
+
     test "disabled or missing operator manifest directory exposes no production doors" do
       assert Doors.list_manifests() == []
       assert Doors.manifest_load_errors() == []

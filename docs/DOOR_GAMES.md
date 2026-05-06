@@ -42,7 +42,7 @@ Current demo/test manifests behind the switch are:
 - `python-context-demo`
 - `classic-dropfile-demo`
 
-The production manifest list currently also includes `usurper-reborn`.
+Production/operator doors are not hard-coded in this list. Add them through the manifest directory described below.
 
 ## Safety model
 
@@ -161,7 +161,7 @@ Unknown or malformed tokens fail the launch. User handles used in argv are norma
 
 Production Door Games are loaded from an operator-managed JSON manifest directory. Set `FOGLET_DOOR_MANIFEST_DIR` to an absolute directory path before starting Foglet, or set `config :foglet_bbs, :door_manifest_dir` in runtime config. When the setting is unset or blank, production/operator doors are disabled by default; only demo fixtures can appear, and only when `FOGLET_ENABLE_DEMO_DOORS` is explicitly truthy.
 
-A sysop adds a door by creating one reviewed `*.json` file in that directory and restarting/reloading the application according to deployment practice. Foglet scans only regular JSON files in that directory, validates each manifest with the same `Foglet.Doors` safety checks used by code/test fixtures, and fails closed per file: invalid JSON or unsafe fields are omitted from the launchable catalog. Diagnostics can call `Foglet.Doors.manifest_load_errors/0`, and runtime logs include the rejected file and field errors.
+A sysop adds a door by creating one reviewed `*.json` file in that directory and restarting/reloading the application according to deployment practice. Foglet scans only direct regular JSON files in that directory, validates each manifest with the same `Foglet.Doors` safety checks used by code/test fixtures, and fails closed per file: symlinks, device files, invalid JSON, or unsafe fields are omitted from the launchable catalog. Diagnostics can call `Foglet.Doors.manifest_load_errors/0`, and runtime logs include the rejected file and field errors.
 
 Manifest JSON uses the same field names shown below, with enum values as strings, for example `"classic_dropfile"`, `"members"`, `"site"`, and `"door32_sys"`. Do not put secrets in `env`; inherited environments are not passed through.
 

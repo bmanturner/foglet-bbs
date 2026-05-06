@@ -255,11 +255,13 @@ defmodule Foglet.Doors do
   end
 
   # sobelow: path is built by joining a sorted `*.json` filename from the
-  # configured operator manifest directory; file contents are decoded as data and
-  # revalidated by `validate_manifest/1` before any Door Games runtime sees them.
+  # configured operator manifest directory; only direct regular files are read,
+  # contents are decoded as data, and `validate_manifest/1` revalidates the
+  # manifest before any Door Games runtime sees it.
   @sobelow_skip ["Traversal.FileModule"]
   defp load_operator_manifest_file(path) do
-    with {:ok, json} <- File.read(path),
+    with :ok <- regular_operator_manifest_file(path),
+         {:ok, json} <- File.read(path),
          {:ok, attrs} <- Jason.decode(json),
          {:ok, manifest} <- validate_manifest(attrs) do
       {:ok, manifest}
@@ -272,6 +274,14 @@ defmodule Foglet.Doors do
 
       {:error, reason} ->
         {:error, %{file: path, errors: [file: inspect(reason)]}}
+    end
+  end
+
+  defp regular_operator_manifest_file(path) do
+    case File.lstat(path) do
+      {:ok, %{type: :regular}} -> :ok
+      {:ok, %{type: type}} -> {:error, [file: "must be a regular JSON file, got #{type}"]}
+      {:error, reason} -> {:error, [file: inspect(reason)]}
     end
   end
 
