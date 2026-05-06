@@ -25,7 +25,7 @@ jobs:
         env:
           POSTGRES_PASSWORD: postgres
         ports:
-          - "5433:5432"
+          - 5432/tcp
         options: >-
           --health-cmd pg_isready
           --health-interval 10s
@@ -65,7 +65,7 @@ jobs:
       - run: mix credo --strict
       - run: mix test
         env:
-          DATABASE_URL: ecto://postgres:postgres@localhost:5433/foglet_bbs_test
+          DATABASE_URL: ecto://postgres:postgres@localhost:${{ job.services.postgres.ports[5432] }}/foglet_bbs_test
 
       - name: Hex audit
         if: github.event_name != 'pull_request'
