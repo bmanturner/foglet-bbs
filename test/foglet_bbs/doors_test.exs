@@ -46,6 +46,7 @@ defmodule Foglet.DoorsTest do
       assert manifest.timeout_ms == 30_000
       assert manifest.idle_timeout_ms == 5_000
       assert manifest.visibility == :members
+      assert manifest.output_encoding == :utf8
       assert manifest.sandbox.mode == :none
     end
 
@@ -109,6 +110,20 @@ defmodule Foglet.DoorsTest do
 
       assert {:error, errors} = Doors.validate_manifest(attrs)
       assert {:sandbox_user, "is required for restricted_user_process_group"} in errors
+    end
+
+    test "rejects unsupported output encodings" do
+      attrs = Map.put(@valid_manifest, :output_encoding, :latin1)
+
+      assert {:error, errors} = Doors.validate_manifest(attrs)
+      assert {:output_encoding, "must be utf8 or cp437"} in errors
+    end
+
+    test "normalizes string output encoding values" do
+      attrs = Map.put(@valid_manifest, :output_encoding, "cp437")
+
+      assert {:ok, manifest} = Doors.validate_manifest(attrs)
+      assert manifest.output_encoding == :cp437
     end
 
     test "rejects unsafe command paths, relative working directories, and unsafe env names" do
@@ -251,6 +266,14 @@ defmodule Foglet.DoorsTest do
              ]
 
       assert usurper.working_dir == "/opt/foglet/doors/usurper"
+      assert usurper.output_encoding == :utf8
+
+      assert usurper.env == %{
+               "LANG" => "en_US.UTF-8",
+               "LC_ALL" => "en_US.UTF-8",
+               "TERM" => "xterm-256color"
+             }
+
       assert usurper.dropfile_formats == [:door32_sys]
       assert [%{filename: "DOOR32.SYS", identity: :handle, expose_path: :env}] = usurper.dropfiles
       assert usurper.sandbox.mode == :restricted_user_process_group

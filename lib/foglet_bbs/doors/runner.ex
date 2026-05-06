@@ -388,7 +388,7 @@ defmodule Foglet.Doors.Runner do
   end
 
   defp emit(%{output: output} = state, data) when is_function(output, 1) do
-    _ = output.(data)
+    _ = output.(encode_output(state, data))
     :ok
   rescue
     e ->
@@ -398,6 +398,13 @@ defmodule Foglet.Doors.Runner do
 
       :ok
   end
+
+  defp encode_output(%{manifest: %Manifest{output_encoding: encoding}}, data)
+       when is_binary(data) do
+    Foglet.Doors.OutputEncoding.to_terminal(data, encoding || :utf8)
+  end
+
+  defp encode_output(_state, data), do: data
 
   defp notify_owner(%{owner: owner}, message) when is_pid(owner), do: send(owner, message)
   defp notify_owner(_state, _message), do: :ok

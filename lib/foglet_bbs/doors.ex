@@ -22,6 +22,7 @@ defmodule Foglet.Doors do
 
   @runtime_values [:native_elixir, :external_pty, :classic_dropfile]
   @visibility_values [:members, :mods_only, :sysop_only]
+  @output_encoding_values [:utf8, :cp437]
   @sandbox_modes [:none, :restricted_user_process_group]
   @process_tree_values [:process_group]
   @safe_status_keys [:exit_status, :reason, :signal, :timed_out, :crashed, :disconnected]
@@ -164,6 +165,7 @@ defmodule Foglet.Doors do
       idle_timeout_ms: Map.get(attrs, :idle_timeout_ms),
       visibility: Map.get(attrs, :visibility, :members),
       auth_scope: Map.get(attrs, :auth_scope, :site),
+      output_encoding: normalize_output_encoding(Map.get(attrs, :output_encoding, :utf8)),
       pty?: Map.get(attrs, :pty?, true),
       sandbox: normalize_sandbox(Map.get(attrs, :sandbox, %{}))
     }
@@ -221,6 +223,12 @@ defmodule Foglet.Doors do
       idle_timeout_ms: @usurper_idle_timeout_ms,
       visibility: :members,
       auth_scope: :site,
+      output_encoding: :utf8,
+      env: %{
+        "LANG" => "en_US.UTF-8",
+        "LC_ALL" => "en_US.UTF-8",
+        "TERM" => "xterm-256color"
+      },
       sandbox: %{
         mode: :restricted_user_process_group,
         user: "foglet-door",
@@ -544,6 +552,7 @@ defmodule Foglet.Doors do
     |> validate_env_allowlist(manifest.env_allowlist)
     |> validate_timeout(:timeout_ms, manifest.timeout_ms)
     |> validate_optional_timeout(:idle_timeout_ms, manifest.idle_timeout_ms)
+    |> validate_output_encoding(manifest.output_encoding)
     |> validate_auth_scope(manifest.auth_scope)
     |> validate_sandbox(manifest.runtime, manifest.sandbox)
     |> Enum.reverse()
@@ -698,6 +707,22 @@ defmodule Foglet.Doors do
 
   defp validate_optional_timeout(errors, _field, nil), do: errors
   defp validate_optional_timeout(errors, field, value), do: validate_timeout(errors, field, value)
+
+  defp validate_output_encoding(errors, encoding) when encoding in @output_encoding_values,
+    do: errors
+
+  defp validate_output_encoding(errors, _encoding),
+    do: [{:output_encoding, "must be utf8 or cp437"} | errors]
+
+  defp normalize_output_encoding(value) when is_atom(value), do: value
+
+  defp normalize_output_encoding(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp normalize_output_encoding(value), do: value
 
   defp validate_auth_scope(errors, :site), do: errors
   defp validate_auth_scope(errors, {:board, board_id}) when is_binary(board_id), do: errors

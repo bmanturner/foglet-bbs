@@ -100,11 +100,13 @@ ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
 
 WORKDIR "/app"
-RUN mkdir -p /data/ssh \
+RUN mkdir -p /data/ssh /data/.config \
   && chown -R nobody /app /data
 
 # set runner ENV
 ENV MIX_ENV="prod"
+ENV HOME="/data"
+ENV XDG_CONFIG_HOME="/data/.config"
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/foglet_bbs ./
