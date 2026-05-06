@@ -62,8 +62,9 @@ Runtime image (`Dockerfile` final stage):
 - Locale: `en_US.UTF-8`
 - User: `nobody`
 - Door sandbox identity: `foglet-door`/`foglet-door` is present in the image as a name alias for UID/GID 65534. The release still runs as the non-root `nobody` account, so the PTY helper can resolve the production manifest's restricted user/group without granting the BEAM VM setuid privileges.
-- Volumes: `/data` for Foglet app state and `/data/usurper` for the Usurper Reborn shared SQLite database.
-- Bundled door fixture: the Dockerfile downloads the public Linux x64 Usurper Reborn release at build time, verifies its SHA256, and installs it under `/opt/foglet/doors/usurper`. The executable remains root-owned in the image; the SQLite directory is writable by the `foglet-door` sandbox identity so Usurper can create `usurper_online.db` on first launch. Usurper's own `logs/` subdirectory is also writable by the sandbox identity because the upstream executable opens that path even for `--help`.
+- Volumes: `/data` for Foglet app state, `/data/door-manifests` for the operator-managed Door Games JSON catalog, and `/data/usurper` for the Usurper Reborn shared SQLite database.
+- Door manifest catalog: the release image defaults `FOGLET_DOOR_MANIFEST_DIR=/data/door-manifests` and seeds that directory with the reviewed JSON manifests from `priv/doors/manifests/` at image build time. Container operators can disable production doors by clearing `FOGLET_DOOR_MANIFEST_DIR`, or override the catalog by bind-mounting/replacing `/data/door-manifests` with their own reviewed JSON files before startup.
+- Bundled door fixture: the Dockerfile downloads the public Linux x64 Usurper Reborn release at build time, verifies its SHA256, and installs it under `/opt/foglet/doors/usurper`. Usurper is enabled through `/data/door-manifests/usurper-reborn.json`, not hard-coded Elixir source. The executable remains root-owned in the image; the SQLite directory is writable by the `foglet-door` sandbox identity so Usurper can create `usurper_online.db` on first launch. Usurper's own `logs/` subdirectory is also writable by the sandbox identity because the upstream executable opens that path even for `--help`.
 - `CMD ["/app/bin/server"]`
 
 ### CI build / test
