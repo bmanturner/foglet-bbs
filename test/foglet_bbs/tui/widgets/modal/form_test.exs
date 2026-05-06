@@ -299,8 +299,10 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
       %{key: :char, char: "s", ctrl: true}
     ]
 
-    send_events(state, events)
+    {state, _actions} = send_events(state, events)
 
+    rendered = state |> Form.render(theme: theme()) |> flatten_text()
+    assert rendered =~ "General discussion board"
     assert_receive {:submitted, %{body: "General discussion board"}}
   end
 

@@ -755,29 +755,40 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
          event
        ) do
     # Treat char: "\n" as an enter keypress so textarea accepts newlines from
-    # String.codepoints/1 event streams (codepoint 10 is filtered by Compose.translate_key).
-    msg =
+    # String.codepoints/1 event streams (codepoint 10 is filtered by Compose.apply_key/2).
+    result =
       case event do
-        %{key: :char, char: "\n"} -> {:enter}
-        _ -> Compose.translate_key(event)
+        %{key: :char, char: "\n"} -> update_multiline_input(mli, {:enter})
+        _ -> Compose.apply_key(mli, event)
       end
 
-    case msg do
-      nil ->
+    case result do
+      :error ->
         field_state
 
-      _ ->
-        new_mli =
-          case MultiLineInput.update(msg, mli) do
-            {:noreply, new_state, _cmds} -> new_state
-            new_state -> new_state
-          end
-
+      {:ok, new_mli} ->
         # Maintain raw_value independently because MultiLineInput.value loses
-        # newlines once more characters are typed after {:enter}.
+        # newlines once more characters are typed after {:enter}. Sync the
+        # visible editor state from that mirror after each accepted event too:
+        # Raxol's word-wrap line splitter trims trailing spaces, so the next
+        # typed word otherwise starts from a line with the just-entered space
+        # missing in the live SSH/TUI render path.
         new_rv = apply_raw_edit(rv, event)
+        new_mli = sync_multiline_input_value(new_mli, new_rv)
 
         %{field_state | mli_state: new_mli, raw_value: new_rv}
+    end
+  end
+
+  defp sync_multiline_input_value(%MultiLineInput{} = mli, value) when is_binary(value) do
+    %{mli | value: value, lines: String.split(value, "\n")}
+  end
+
+  defp update_multiline_input(%MultiLineInput{} = mli, msg) do
+    case MultiLineInput.update(msg, mli) do
+      {:noreply, new_state, _cmds} -> {:ok, new_state}
+      %MultiLineInput{} = new_state -> {:ok, new_state}
+      _other -> :error
     end
   end
 
