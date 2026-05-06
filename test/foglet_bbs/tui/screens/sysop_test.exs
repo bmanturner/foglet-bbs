@@ -1861,6 +1861,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
                :name,
                :description,
                :category_id,
+               :display_order,
                :postable_by,
                :default_subscription,
                :required_subscription,
@@ -1882,6 +1883,11 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert category_field.type == :enum
       assert category_field.choices == [{"General", category.id}]
       assert category_field.value == category.id
+
+      display_order_field = Enum.find(bv.modal.fields, &(&1.name == :display_order))
+      assert display_order_field.type == :integer
+      assert display_order_field.label == "Display order"
+      assert display_order_field.value == "0"
 
       postable_field = Enum.find(bv.modal.fields, &(&1.name == :postable_by))
       assert postable_field.type == :enum
