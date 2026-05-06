@@ -33,9 +33,27 @@ import time
 
 def write_frame(kind: bytes, payload: bytes = b"") -> None:
     body = kind + payload
-    sys.stdout.buffer.write(struct.pack(">I", len(body)))
-    sys.stdout.buffer.write(body)
-    sys.stdout.buffer.flush()
+    try:
+        sys.stdout.buffer.write(struct.pack(">I", len(body)))
+        sys.stdout.buffer.write(body)
+        sys.stdout.buffer.flush()
+    except BrokenPipeError:
+        # The owning BEAM port/SSH channel has already gone away (for example,
+        # a client disconnect while the door is still emitting output). Exit
+        # quietly so disconnect cleanup does not leave scary helper tracebacks.
+        silence_stdout_for_shutdown()
+        raise SystemExit(0)
+
+
+def silence_stdout_for_shutdown() -> None:
+    try:
+        devnull_fd = os.open(os.devnull, os.O_WRONLY)
+        try:
+            os.dup2(devnull_fd, sys.stdout.fileno())
+        finally:
+            os.close(devnull_fd)
+    except (AttributeError, OSError, TypeError, ValueError):
+        sys.stdout = None
 
 
 def write_json(kind: bytes, payload: dict) -> None:

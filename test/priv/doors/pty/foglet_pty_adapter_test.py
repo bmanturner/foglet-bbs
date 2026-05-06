@@ -136,6 +136,22 @@ class DropPrivilegesTest(unittest.TestCase):
 
 
 class DirectHelperLaunchTest(unittest.TestCase):
+    def test_broken_stdout_pipe_exits_without_traceback(self):
+        helper = load_helper()
+
+        class BrokenBuffer:
+            def write(self, _data):
+                raise BrokenPipeError("closed pipe")
+
+            def flush(self):
+                raise AssertionError("flush should not be reached")
+
+        with mock.patch.object(helper.sys, "stdout", mock.Mock(buffer=BrokenBuffer())):
+            with self.assertRaises(SystemExit) as raised:
+                helper.write_frame(b"O", b"data")
+
+        self.assertEqual(raised.exception.code, 0)
+
     def test_forced_group_setup_failure_reports_error_before_stdin_eof_can_terminate_child(self):
         current_user = pwd.getpwuid(os.getuid()).pw_name
         current_group = grp.getgrgid(pwd.getpwuid(os.getuid()).pw_gid).gr_name

@@ -1,131 +1,175 @@
 # Door Games
 
-Door games let Foglet hand a caller's existing SSH terminal to a small game or external program, then bring the caller back to the BBS when the door exits.
+Door Games let Foglet hand a caller's existing SSH terminal to a native game or external program, then bring the caller back to the BBS when the door exits.
 
-This guide covers the first Door Games slice. It is for sysops and contributors adding doors to a self-hosted Foglet instance.
+This guide is for sysops and contributors adding doors to a self-hosted Foglet instance. It describes the current manifest and runner contract on the dropfile compatibility branch; it does not promise full DOS-door compatibility.
 
-## What is supported in this slice
+## Current support
 
-Foglet's first Door Games contract supports three registration styles:
+Foglet supports three door runtimes:
 
-- native Elixir doors that implement `Foglet.Doors.Door`
-- external executable doors that run through the supervised door runner
-- classic/dropfile doors that use the same external runner path plus generated classic BBS metadata
+- `:native_elixir` — first-party doors that implement `Foglet.Doors.Door` inside the BEAM.
+- `:external_pty` — external executables launched by `Foglet.Doors.Runner` through the PTY adapter.
+- `:classic_dropfile` — external executables plus generated classic BBS dropfiles.
 
-The first classic format is `CHAIN.TXT`. `DOOR.SYS` and `DORINFO.DEF` are intentionally left behind the same adapter boundary for later work.
+Classic/dropfile support currently renders these fixed filenames:
 
-For external and classic manifests with `pty?: true`, the supported backend is
-Foglet's own helper at `priv/doors/pty/foglet_pty_adapter.py`. The runner starts
-that helper through an Erlang Port; the helper opens the child PTY, launches the
-configured `command` with structured `args`, bridges input/output with framed
-messages, and applies terminal resize using `TIOCSWINSZ` on POSIX hosts. If the
-helper is unavailable, Foglet may degrade to `script(1)` when present, then to a
-plain pipe. That fallback is for demos/development only: it does not provide the
-same resize or process-group cleanup semantics.
+- `:chain_txt` -> `CHAIN.TXT`
+- `:door_sys` -> `DOOR.SYS`
+- `:door32_sys` -> `DOOR32.SYS`
+- `:dorinfo_def` -> `DORINFO.DEF`
 
-Deployment requirement: releases/Docker images that enable `external_pty` doors
-need Python 3 and `priv/doors/pty/foglet_pty_adapter.py`. The project Dockerfile
-installs Python 3 in the final runtime image and includes the helper via the
-release `priv` tree. The FOG-830 baseline adds an optional fail-closed
-restricted-user/process-group sandbox contract for helper-backed external doors.
+The renderer owns line order and CRLF endings. Manifests can declare which formats a door needs, but cannot choose arbitrary filenames or paths.
 
-Door manifests are configuration data in this slice. They are not stored in database tables yet, and there is no in-BBS catalog editor yet.
+Door manifests are configuration data in this slice. They are validated by `Foglet.Doors.validate_manifest/1`, normalized into `%Foglet.Doors.Manifest{}`, and are not stored in database tables yet. There is no in-BBS catalog editor yet.
 
 ## Built-in demo door switch
 
-Foglet ships a few first-party demo/test doors so developers and QA can verify
-the door handoff path. They are hidden by default. Enable them only for local
-development, QA, demos, and release verification:
+Foglet ships demo/test doors for local development, QA, demos, and release verification. They are hidden unless this deployment environment variable is truthy:
 
 ```sh
 FOGLET_ENABLE_DEMO_DOORS=true mix phx.server
 ```
 
-`FOGLET_ENABLE_DEMO_DOORS` is a deployment environment switch. It is read at
-runtime by `Foglet.Doors`; it is not stored in `Foglet.Config`, is not backed by
-the database, and does not appear in the Sysop SITE screen.
+Truthy values are `true`, `1`, and `yes`, after trimming whitespace and ignoring case. Absent, empty, or other values hide the demo doors.
 
-Truthy values are `true`, `1`, and `yes`. Matching is case-insensitive after
-trimming whitespace. If the variable is absent, empty, or set to anything else,
-the built-in demo/test manifests are hidden.
+This switch is not stored in `Foglet.Config`, is not backed by the database, and does not appear in the Sysop SITE screen. Do not mention it in normal caller copy.
 
-When the switch is disabled and no other doors are available, the main menu does
-not show `Door Games`. If the selector is reached after the catalog changes, it
-shows `No door games are available right now.` and only offers Back. Do not tell
-normal callers about this environment variable in product copy.
-
-Current built-in demo/test manifests behind this switch are:
+Current demo/test manifests behind the switch are:
 
 - `native-hello`
 - `external-echo`
 - `python-context-demo`
 - `classic-dropfile-demo`
 
-The switch gates only Foglet's built-in demo/test manifests. It is not a future
-policy mechanism for a persisted real door catalog. Demo manifests use a
-15-minute absolute cleanup cap plus a 5-minute idle timeout so QA/demo callers
-can read prompts and interact normally; the short five-second timeout used by
-earlier fixtures was test-policy leakage, not product behavior.
+Production/operator doors are not hard-coded in this list. Add them through the manifest directory described below.
 
 ## Safety model
 
-Treat external and classic doors as untrusted programs.
+Treat external and classic doors as untrusted programs until a sysop reviews the executable, filesystem access, persistence path, and runtime account.
 
 Foglet narrows what a door receives:
 
 - a validated manifest
-- a small set of Foglet metadata such as user id, handle, session id, and terminal size
-- explicit non-secret manifest `env` entries plus required `FOGLET_*` variables
-- a narrow default `PATH` (`/usr/bin:/bin`) when no manifest `PATH` is supplied, so `/usr/bin/env` shebangs can still find interpreters
-- a temporary JSON context file for external doors
+- user/session metadata needed by the door adapter
+- explicit non-secret manifest `env` entries
+- required `FOGLET_*` variables
+- a narrow default `PATH` (`/usr/bin:/bin`) when no manifest `PATH` is supplied
+- a temporary JSON context file
 - generated dropfiles for classic/dropfile doors
 
-External/classic launches use `env -i` across the helper-backed PTY, plain-pipe, and `script(1)` fallback paths, so the child door process does not inherit the BEAM/helper process environment. `env_allowlist` controls which manifest env names may be displayed unredacted in audit metadata; it is not a request to inherit host env.
+External/classic launches use a clean environment (`env -i`) across the helper-backed PTY, plain-pipe, and `script(1)` fallback paths. The child does not inherit the BEAM or helper process environment. `env_allowlist` only controls what manifest env names may appear unredacted in audit metadata; it does not inherit host environment variables.
 
-Foglet does not pass database credentials, app secrets, API keys, private tokens, full user structs, full session structs, or broad inherited host environments to door processes.
+Foglet does not pass database credentials, app secrets, API keys, private tokens, full user structs, full session structs, or broad host environments to door processes.
 
-This is a baseline sandbox, not full containment. Unsandboxed doors still use allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. Sandboxed helper-backed doors add fail-closed restricted OS-user execution plus process-group TERM/KILL cleanup, but they do not isolate filesystem mounts, network, seccomp, namespaces, containers, microVMs, or broad resource access. The approved stronger baseline is documented in `docs/DEPLOYMENT.md`: external/classic doors should run as a restricted OS user plus a per-door process group, and launches must fail closed when the configured restricted user cannot be applied. Docker/Fly currently diverge because the release image runs as `nobody` and cannot switch to a second door user without an approved runtime change. Treat untrusted third-party doors as unsupported on that container path until the divergence is resolved; do not run arbitrary third-party code as a door without an operator-reviewed host/container posture.
+This is a baseline sandbox, not full containment. Unsandboxed doors still use allowlisted paths, environment hygiene, timeouts, cleanup, and audit metadata. Sandboxed helper-backed doors add fail-closed restricted OS-user execution plus process-group cleanup, but they do not isolate filesystem mounts, network, seccomp, namespaces, containers, microVMs, or broad resource access.
 
-## Door manifest fields
+Docker/Fly currently diverge from the strongest host baseline because the release image runs as `nobody` and cannot switch to a second door user without an approved runtime change. Treat arbitrary third-party code as unsupported on that container path until that divergence is resolved.
 
-A door manifest is validated by `Foglet.Doors.validate_manifest/1` and normalized into `%Foglet.Doors.Manifest{}`.
+## Manifest fields
 
-Required fields:
+Required for every door:
 
-- `id` — stable internal id, for example `"native-echo"`
-- `slug` — stable URL/config-friendly name, for example `"native-echo"`
-- `display_name` — name shown to callers, for example `"Native Echo"`
-- `description` — one-sentence description for the selector
-- `runtime` — one of `:native_elixir`, `:external_pty`, or `:classic_dropfile`
-- `timeout_ms` — positive integer absolute maximum lifetime in milliseconds. This is a cleanup cap for hung/crashed/disconnected/operator-stopped doors, not an activity timer.
+- `id` — stable internal id, for example `"usurper-reborn"`
+- `slug` — stable config-friendly name, for example `"usurper-reborn"`
+- `display_name` — name shown to callers
+- `description` — one-sentence selector description
+- `runtime` — `:native_elixir`, `:external_pty`, or `:classic_dropfile`
+- `timeout_ms` — positive integer absolute lifetime cap in milliseconds
 - `visibility` — `:members`, `:mods_only`, or `:sysop_only`
 - `auth_scope` — `:site` or `{:board, board_id}`
 
-External and classic doors also require:
+Required for `:native_elixir`:
+
+- `module` — a module implementing `Foglet.Doors.Door`
+
+Required for `:external_pty` and `:classic_dropfile`:
 
 - `command` — absolute path to the executable or wrapper
-- `working_dir` — absolute working directory
+- `working_dir` — absolute working directory for the configured door assets
 
-Optional fields:
+Optional shared fields:
 
-- `module` — native Elixir module for `:native_elixir` doors
-- `args` — list of string arguments
-- `env` — explicit non-secret environment variables to pass to the door
-- `env_allowlist` — uppercase manifest `env` names safe to show unredacted in audit records
-- `idle_timeout_ms` — optional positive integer idle timeout in milliseconds
-- `pty?` — whether the external runner should request the supported helper-backed PTY path (`true`) or a plain pipe (`false`)
-- `env` — explicit string environment values to pass to the door; sensitive names are rejected
-- `sandbox` — optional `%{mode: :restricted_user_process_group, user: "foglet-door", group: "foglet-door", process_tree: :process_group, fail_closed?: true}` contract for helper-backed external doors
+- `args` — list of string arguments; no shell is inserted by Foglet
+- `env` — explicit non-secret environment values
+- `env_allowlist` — uppercase manifest env names safe to show unredacted in audit records
+- `idle_timeout_ms` — optional positive idle timeout in milliseconds
+- `pty?` — whether the runner should request the PTY adapter path (`true` by default)
+- `sandbox` — sandbox contract, for example `%{mode: :restricted_user_process_group, user: "foglet-door", group: "foglet-door", process_tree: :process_group, fail_closed?: true}`
 
-Do not put secrets in `env` or `env_allowlist`. Foglet rejects known sensitive names such as database URLs, secret key bases, tokens, and API keys.
+Optional classic/dropfile fields:
+
+- `dropfile_formats` — simple list such as `[:chain_txt, :door_sys]`
+- `dropfiles` — detailed declarations when a door needs per-format metadata
+
+Each detailed `dropfiles` entry supports:
+
+- `format` — `:chain_txt`, `:door_sys`, `:door32_sys`, or `:dorinfo_def`
+- `identity` — currently `:handle`
+- `transport` — currently `:filesystem`
+- `encoding` — `:cp437` or `:utf8`
+- `cwd` — `:door_working_dir` or `:session_working_dir`
+- `expose_path` — `:env` or `:none`
+
+Foglet rejects dropfile declarations that try to set filenames or paths. Fixed filenames come from `Foglet.Doors.Dropfiles`.
+
+Do not put secrets in `env` or `env_allowlist`. Foglet rejects known sensitive names such as database URLs, secret key bases, tokens, and API keys. Env names must be uppercase shell-style names.
+
+## Runner behavior for external and classic doors
+
+`Foglet.Doors.Runner` owns one active door session. It writes a temporary JSON context file before launch, starts the door, forwards input and resize events, watches timeout/idle timeout/disconnect/crash paths, and removes generated files during cleanup.
+
+For `pty?: true`, `Foglet.Doors.PTYAdapter` launches the configured command through `priv/doors/pty/foglet_pty_adapter.py` when available. The helper opens the child PTY, launches `command` with `args` as separate arguments, bridges input/output with framed messages, applies resize with `TIOCSWINSZ` on POSIX hosts, and supports the restricted-user/process-group sandbox contract. If the helper is unavailable and the manifest does not require sandboxing, Foglet may fall back to `script(1)` or a plain pipe; those fallbacks are development/demo paths and do not provide the same resize or cleanup semantics.
+
+The runner exposes these standard variables to external/classic doors:
+
+- `FOGLET_DOOR_ID`
+- `FOGLET_USER_ID`
+- `FOGLET_USERNAME`
+- `FOGLET_SESSION_ID`
+- `FOGLET_TERMINAL_WIDTH`
+- `FOGLET_TERMINAL_HEIGHT`
+- `FOGLET_DOOR_CONTEXT`
+- `FOGLET_DROPFILES`
+
+`FOGLET_DOOR_CONTEXT` points to the temporary JSON context file. `FOGLET_DROPFILES` is a colon-separated list of generated dropfile paths.
+
+When a dropfile declaration has `expose_path: :env`, Foglet also exposes a format-specific path:
+
+- `FOGLET_DROPFILE_CHAIN_TXT`
+- `FOGLET_DROPFILE_DOOR_SYS`
+- `FOGLET_DROPFILE_DOOR32_SYS`
+- `FOGLET_DROPFILE_DORINFO_DEF`
+- `FOGLET_DROPFILE_DIR` for the generated dropfile directory
+
+Classic doors run from a runner-owned per-launch directory after dropfiles are generated. The runner removes generated dropfiles, the per-launch dropfile directory, and the temporary context file during cleanup. Pre-existing files in the configured manifest `working_dir` are not overwritten or removed by dropfile cleanup.
+
+Manifest arg templates are resolved after dropfiles exist. Supported tokens are:
+
+- `{dropfile:door32_sys}`
+- `{dropfile:door_sys}`
+- `{dropfile:chain_txt}`
+- `{dropfile:dorinfo_def}`
+- `{dropfile_dir}`
+- `{user:handle}`
+- `{terminal:cols}`
+- `{terminal:rows}`
+
+Unknown or malformed tokens fail the launch. User handles used in argv are normalized to letters, numbers, `_`, `.`, and `-`.
+
+## Operator-managed manifest directory
+
+Production Door Games are loaded from an operator-managed JSON manifest directory. Set `FOGLET_DOOR_MANIFEST_DIR` to an absolute directory path before starting Foglet, or set `config :foglet_bbs, :door_manifest_dir` in runtime config. When the setting is unset or blank, production/operator doors are disabled by default; only demo fixtures can appear, and only when `FOGLET_ENABLE_DEMO_DOORS` is explicitly truthy.
+
+A sysop adds a door by creating one reviewed `*.json` file in that directory and restarting/reloading the application according to deployment practice. Foglet scans only direct regular JSON files in that directory, validates each manifest with the same `Foglet.Doors` safety checks used by code/test fixtures, and fails closed per file: symlinks, device files, invalid JSON, or unsafe fields are omitted from the launchable catalog. Diagnostics can call `Foglet.Doors.manifest_load_errors/0`, and runtime logs include the rejected file and field errors.
+
+Manifest JSON uses the same field names shown below, with enum values as strings, for example `"classic_dropfile"`, `"members"`, `"site"`, and `"door32_sys"`. Do not put secrets in `env`; inherited environments are not passed through.
+
+The repository includes `priv/doors/manifests/usurper-reborn.json` as a copyable sample. A deployment can copy it into the configured operator directory and adjust paths for that host without editing Elixir source.
 
 ## Add a native Elixir door
 
-Use a native Elixir door when the game is small, first-party, and comfortable running inside Foglet's OTP supervision boundary.
-
-Native doors implement `Foglet.Doors.Door`. They receive a narrow launch context and return iodata for Foglet to write back to the terminal. They should not own SSH channel state directly.
-
-Minimal native door shape:
+Use a native Elixir door when the game is small, first-party, and safe to run inside Foglet's OTP supervision boundary.
 
 ```elixir
 defmodule Foglet.Doors.Demo.NativeEcho do
@@ -142,21 +186,17 @@ defmodule Foglet.Doors.Demo.NativeEcho do
     {:stop, :normal, state, "Leaving Native Echo.\n"}
   end
 
-  def handle_input(data, state) do
-    {:ok, state, ["echo> ", data]}
-  end
+  def handle_input(data, state), do: {:ok, state, ["echo> ", data]}
 
   @impl true
-  def handle_resize(size, state) do
-    {:ok, %{state | size: size}, "resized\n"}
-  end
+  def handle_resize(size, state), do: {:ok, %{state | size: size}, "resized\n"}
 end
 ```
 
-Register it with a manifest like:
+Register and validate it with a manifest:
 
 ```elixir
-%{
+attrs = %{
   id: "native-echo",
   slug: "native-echo",
   display_name: "Native Echo",
@@ -168,11 +208,7 @@ Register it with a manifest like:
   visibility: :members,
   auth_scope: :site
 }
-```
 
-Then validate it before listing or launching:
-
-```elixir
 {:ok, manifest} = Foglet.Doors.validate_manifest(attrs)
 ```
 
@@ -180,20 +216,16 @@ Then validate it before listing or launching:
 
 Use an external executable door when the game is written outside Elixir: Python, Node, Go, Rust, C, a shell script, or another terminal program.
 
-External doors run under `Foglet.Doors.Runner`. Screen reducers do not spawn OS processes; they emit a launch effect, and the app/runtime boundary starts a supervised runner.
-
-Example manifest:
-
 ```elixir
-%{
-  id: "trade-wars-demo",
-  slug: "trade-wars-demo",
-  display_name: "Trade Wars Demo",
+attrs = %{
+  id: "external-demo",
+  slug: "external-demo",
+  display_name: "External Demo",
   description: "A small external demo door.",
   runtime: :external_pty,
-  command: "/srv/foglet/doors/trade-wars-demo/run.sh",
+  command: "/srv/foglet/doors/external-demo/run.sh",
   args: ["--ansi"],
-  working_dir: "/srv/foglet/doors/trade-wars-demo",
+  working_dir: "/srv/foglet/doors/external-demo",
   env: %{"TERM" => "xterm-256color", "LANG" => "C.UTF-8"},
   env_allowlist: ["TERM", "LANG"],
   timeout_ms: 30 * 60 * 1_000,
@@ -209,80 +241,36 @@ Example manifest:
     fail_closed?: true
   }
 }
+
+{:ok, manifest} = Foglet.Doors.validate_manifest(attrs)
 ```
 
-When `pty?: true`, Foglet passes `command` and `args` to the helper as separate
-arguments rather than building the production launch path with shell quoting.
-Wrappers can still be shell scripts, but shell interpretation is then explicit in
-the wrapper you own.
-
-When `sandbox.mode` is `:restricted_user_process_group`, the helper resolves the
-configured `user`/optional `group` before launch. If the user/group is missing,
-Python/PTY support is unavailable, the Foglet OS process lacks privileges to
-drop to that user, or supplementary groups cannot be set to the target user's
-intended memberships or cleared, the door fails closed before the command
-starts. Foglet never silently falls back to app-user execution for a
-sandbox-required manifest. Use a locked-down OS account such as `foglet-door`
-with only the filesystem access needed by reviewed door assets.
-
-The runner adds Foglet metadata for the external process:
-
-- `FOGLET_DOOR_ID`
-- `FOGLET_USER_ID`
-- `FOGLET_USERNAME`
-- `FOGLET_SESSION_ID`
-- `FOGLET_TERMINAL_WIDTH`
-- `FOGLET_TERMINAL_HEIGHT`
-- `FOGLET_DOOR_CONTEXT`
-
-`FOGLET_DOOR_CONTEXT` points to a temporary JSON file with the same narrow metadata. The runner removes that file during cleanup.
+When `sandbox.mode` is `:restricted_user_process_group`, the helper resolves the configured user and optional group before launch. If the user/group is missing, Python/PTY support is unavailable, Foglet lacks permission to drop to that user, or supplementary groups cannot be safely set or cleared, the door fails closed before the command starts.
 
 Keep wrappers boring:
 
 - use absolute paths in manifests
-- keep working directories under an operator-owned door directory
+- keep working directories under operator-owned door directories
+- pass command arguments as structured args, not shell-built strings
 - avoid shelling out to arbitrary user input
 - do not read app secrets from the environment
 - exit with status `0` for normal completion and non-zero for crashes/errors
 
 ## Add a classic/dropfile door
 
-Classic/dropfile doors are external doors with extra BBS metadata. Foglet supports
-`CHAIN.TXT`, `DOOR.SYS`, and `DORINFO.DEF` generation for these wrappers.
-
-Use `:classic_dropfile` when a wrapper needs classic BBS-style user/session fields. Foglet currently generates dropfile content through:
+Use `:classic_dropfile` when a wrapper or modern door executable needs classic BBS-style metadata files.
 
 ```elixir
-{:ok, text} = Foglet.Doors.classic_dropfile(:chain_txt, %{user: user, session: session})
-```
-
-The generated `CHAIN.TXT` lines are CRLF-terminated and ordered as:
-
-1. handle
-2. real name or display name
-3. terminal columns
-4. terminal rows
-5. role
-6. user id
-
-Example content:
-
-```text
-alice\r\nAlice Liddell\r\n132\r\n37\r\nuser\r\nuser-1\r\n
-```
-
-A classic door manifest follows the external-door shape, but uses `runtime: :classic_dropfile`:
-
-```elixir
-%{
-  id: "chain-demo",
-  slug: "chain-demo",
-  display_name: "CHAIN.TXT Demo",
-  description: "A classic door wrapper that reads CHAIN.TXT metadata.",
+attrs = %{
+  id: "classic-demo",
+  slug: "classic-demo",
+  display_name: "Classic Demo",
+  description: "A classic door wrapper that reads generated dropfiles.",
   runtime: :classic_dropfile,
-  command: "/srv/foglet/doors/chain-demo/run.sh",
-  args: [],
-  working_dir: "/srv/foglet/doors/chain-demo",
+  command: "/srv/foglet/doors/classic-demo/run.sh",
+  args: ["--dropfile-dir", "{dropfile_dir}"],
+  working_dir: "/srv/foglet/doors/classic-demo",
+  dropfile_formats: [:chain_txt, :door_sys, :door32_sys, :dorinfo_def],
   env: %{"TERM" => "xterm-256color"},
   env_allowlist: ["TERM"],
   timeout_ms: 20 * 60 * 1_000,
@@ -291,18 +279,87 @@ A classic door manifest follows the external-door shape, but uses `runtime: :cla
   auth_scope: :site,
   pty?: true
 }
+
+{:ok, manifest} = Foglet.Doors.validate_manifest(attrs)
 ```
 
-Foglet writes fixed-name dropfiles only inside a runner-owned per-launch working
-directory. The child process starts with that isolated directory as cwd, so a
-classic program can open `CHAIN.TXT`, `DOOR.SYS`, or `DORINFO.DEF` by filename.
-Wrappers can also read the explicit colon-separated paths from `FOGLET_DROPFILES`.
-Pre-existing dropfiles in the configured manifest `working_dir` are not
-overwritten or removed by runner cleanup.
+The wrapper is responsible for passing generated files to the target program in the shape that program expects. Foglet generates compatibility metadata; it does not emulate DOS, provide a FOSSIL driver, or make arbitrary historical doors work.
 
-The wrapper is responsible for passing those generated files to the target
-classic program. Do not assume every historical DOS door works yet. Treat these
-formats as a compatibility contract, not a full DOS compatibility layer.
+## Add Usurper Reborn
+
+Usurper Reborn is the current concrete production compatibility target. The branch includes a copyable JSON sample at `priv/doors/manifests/usurper-reborn.json`; when that directory or a copied manifest directory is configured, it validates to this shape:
+
+```elixir
+%{
+  id: "usurper-reborn",
+  slug: "usurper-reborn",
+  display_name: "Usurper Reborn",
+  description: "Shared-world fantasy BBS game for Foglet callers.",
+  runtime: :classic_dropfile,
+  command: "/opt/foglet/doors/usurper/UsurperReborn",
+  args: [
+    "--door32",
+    "{dropfile:door32_sys}",
+    "--db",
+    "/data/usurper/usurper_online.db",
+    "--stdio"
+  ],
+  working_dir: "/opt/foglet/doors/usurper",
+  dropfiles: [
+    %{
+      format: :door32_sys,
+      identity: :handle,
+      transport: :filesystem,
+      encoding: :cp437,
+      cwd: :door_working_dir,
+      expose_path: :env
+    }
+  ],
+  timeout_ms: 12 * 60 * 60 * 1_000,
+  idle_timeout_ms: 60 * 60 * 1_000,
+  visibility: :members,
+  auth_scope: :site,
+  output_encoding: :cp437,
+  sandbox: %{
+    mode: :restricted_user_process_group,
+    user: "foglet-door",
+    group: "foglet-door",
+    process_tree: :process_group,
+    fail_closed?: true
+  }
+}
+```
+
+Start-to-finish sysop path:
+
+1. Choose the runtime.
+   Use `"classic_dropfile"` in JSON because Usurper Reborn accepts a DOOR32-style launch file and runs as an external terminal program.
+
+2. Install the executable.
+   Put the Usurper Reborn binary and required assets under an operator-owned directory such as `/opt/foglet/doors/usurper`. The project Dockerfile downloads the public Linux x64 release at build time and installs it there.
+
+3. Choose the shared state path.
+   Use a durable SQLite database path such as `/data/usurper/usurper_online.db`. The deployment must make that directory writable by the runtime user that will actually execute the door.
+
+4. Declare one DOOR32.SYS dropfile.
+   Use `"dropfiles": [{"format": "door32_sys", ...}]`, not a hand-written filename. Foglet will write `DOOR32.SYS` into the per-launch directory and substitute its generated path into `{dropfile:door32_sys}`.
+
+5. Pass generated paths safely.
+   Prefer argv tokens such as `{dropfile:door32_sys}` over wrapper-side path guessing. With `expose_path: :env`, wrappers can also read `FOGLET_DROPFILE_DOOR32_SYS` and `FOGLET_DROPFILE_DIR`.
+
+6. Keep cwd expectations narrow.
+   The manifest's configured `working_dir` points at the installed door assets. During classic/dropfile launch, the runner switches the process working directory to the generated per-launch dropfile directory so programs can open fixed dropfile names safely. If the target executable also needs assets relative to its install directory, pass absolute asset paths or use a reviewed wrapper.
+
+7. Configure the sandbox contract.
+   Prefer `restricted_user_process_group` on host deployments that can create and use a locked-down `foglet-door` account. If that account cannot be applied, the launch should fail closed instead of running the door as the Foglet app user.
+
+8. Expose the door.
+   Copy `priv/doors/manifests/usurper-reborn.json` into the configured operator manifest directory, adjust host-specific paths if needed, set `FOGLET_DOOR_MANIFEST_DIR`, and restart/reload Foglet. The door is not hard-coded in Elixir and will not appear when the manifest directory is unset or invalid.
+
+9. Verify launch and cleanup.
+   Run focused door tests and SSH/TUI QA before enabling the door for real callers. Verify that Usurper starts with `--door32 <generated path> --db /data/usurper/usurper_online.db --stdio`, returns cleanly, and leaves no runner-owned temp context or dropfile directory behind.
+
+Residual limitation: if upstream Usurper requires a MUD relay, socket proxy, or protocol adapter for production-quality multiplayer behavior, keep that as a separate runtime/architecture issue. Do not describe the current dropfile path as a complete relay solution until implementation and QA evidence prove it.
 
 ## Door list and launch copy
 
@@ -326,16 +383,19 @@ Keep the selector simple: arrows choose a door, Enter opens confirmation, and Es
 
 ### The door is missing from the list
 
-For built-in demo/test doors, first check whether the deployment enables
-`FOGLET_ENABLE_DEMO_DOORS` with `true`, `1`, or `yes`. The default is hidden.
-
-For other doors, check that the manifest validates, the current caller is
-allowed by `visibility`, and the launch path rechecks
-`Foglet.Doors.launchable?/2` before starting the runner.
+For built-in demo/test doors, check `FOGLET_ENABLE_DEMO_DOORS`. For production doors, check `FOGLET_DOOR_MANIFEST_DIR`, `Foglet.Doors.manifest_load_errors/0`, manifest validation, caller visibility, and that the launch path rechecks `Foglet.Doors.launchable?/2` before starting the runner.
 
 ### The door launches and immediately returns
 
-Check the external command, working directory, executable permissions, and exit status. Foglet treats non-zero external exits as crashes.
+Check the external command, generated args, working directory assumptions, executable permissions, sandbox user/group, and exit status. Foglet treats non-zero external exits as crashes.
+
+### The door cannot find a dropfile
+
+Check whether the manifest declares the required format, whether the argv token matches the format name, and whether the target expects to open the file by name in cwd or receive an explicit path. Use `{dropfile:door32_sys}` or `FOGLET_DROPFILE_DOOR32_SYS` when the program accepts an explicit path.
+
+### The door needs assets and generated dropfiles
+
+Do not copy assets into the generated dropfile directory. Keep assets in the installed door directory and pass absolute paths or use a reviewed wrapper. The generated directory is per-launch state and will be removed.
 
 ### The door times out
 
@@ -354,13 +414,13 @@ Add only specific non-secret values to manifest `env`, and add the same names to
 Before shipping a new door surface or guide, verify:
 
 - callers are never asked to type slugs, ids, schema names, env var names, or magic values
-- normal caller copy does not mention `FOGLET_ENABLE_DEMO_DOORS`; that switch belongs in operator docs and QA steps
+- normal caller copy does not mention `FOGLET_ENABLE_DEMO_DOORS`
 - launch copy explains full-terminal takeover without sounding alarming
 - error copy is short and recoverable; logs carry technical detail
 - docs distinguish current support from future hardening
-- external/classic docs do not imply full sandboxing
-- examples use fake paths and fake user ids only
-- examples do not contain credentials, private tokens, or production paths
+- external/classic docs do not imply full sandboxing or full DOS compatibility
+- examples use fake paths and fake user ids unless documenting the branch's built-in Usurper paths
+- examples do not contain credentials, private tokens, or production secrets
 - TUI copy has been checked at normal and cramped terminal sizes
 
 ## Related documents

@@ -164,21 +164,30 @@ Preserved from the first Door Games slice:
 
 ### DOOR.SYS mapping
 
-Foglet writes a conservative 40-line DOOR.SYS-style file. Safe Foglet values are
-mapped where direct equivalents exist:
+Foglet writes a conservative 40-line DOOR.SYS-style file with CRLF line endings.
+The layout keeps parser-critical fields at classic/Usurper-compatible indexed
+positions and fills unsupported modem/accounting fields with explicit defaults:
 
-- BBS name: `Foglet BBS`
-- User handle and display name
-- Optional user location
-- Terminal columns/rows
-- User id
-- Foglet role
-- Session id, when available to the runner
+1. COM port: `COM0:`
+2. baud: `38400`
+4. node number, default `1`
+10. full/display name
+11. optional user location
+16. coarse role security level: user `50`, mod `90`, sysop `100`
+20. minutes remaining, default `1440`
+21. graphics mode: `GR`
+22. screen/page length from terminal rows, default `24`
+26. numeric user record number derived from the Foglet user id when possible,
+    otherwise `0`
+36. sysop name (`FOGLET_BBS_SYSOP_NAME` if present, otherwise `Foglet Sysop`)
+37. alias/handle
+40. Foglet session id when available to the runner
 
-Classic modem/security/accounting values that Foglet does not model yet use
-explicit defaults such as `COM0:`, `38400`, `GR`, `1440`, `9999`, `0`, or `N`.
-These defaults are compatibility hints, not assertions about a real modem,
-security tier, or billing state.
+Other classic modem/security/accounting values that Foglet does not model yet
+use defaults such as `8`, `Y`, `N`, blank strings, `9999`, `0`, or fixed legacy
+dates. These defaults are compatibility hints, not assertions about a real
+modem, security tier, or billing state. The demo probe now reads the DOOR.SYS
+alias from line 37 instead of the earlier loose fixture's line 5.
 
 ### DORINFO.DEF mapping
 

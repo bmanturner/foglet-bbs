@@ -450,6 +450,141 @@ defmodule Foglet.Doors.RunnerTest do
       end)
     end
 
+    test "classic runner exposes dropfile paths through env vars and safe argv tokens" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "classic-argv-env",
+          display_name: "Classic Argv Env",
+          runtime: :classic_dropfile,
+          command: "/bin/sh",
+          working_dir: System.tmp_dir!(),
+          dropfile_formats: [:chain_txt, :door_sys, :door32_sys, :dorinfo_def],
+          args: [
+            "-c",
+            "printf 'argv:%s\ndir:%s\ndoor:%s\ndoor32:%s\nhandle:%s\nterm:%s\n' \"$1\" \"$FOGLET_DROPFILE_DIR\" \"$FOGLET_DROPFILE_DOOR_SYS\" \"$FOGLET_DROPFILE_DOOR32_SYS\" \"$2\" \"$3\"",
+            "_",
+            "{dropfile:door_sys}",
+            "{user:handle}",
+            "{terminal:cols}x{terminal:rows}"
+          ],
+          timeout_ms: 5_000,
+          pty?: false
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "Alice Liddell!", user_id: "u1", role: :user, session_id: "s1"},
+          terminal_size: {132, 37},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "classic-argv-env"}
+      output = assert_door_output_contains("term:132x37")
+
+      assert output =~ ~r/argv:.*\/DOOR\.SYS/
+      assert output =~ ~r/door:.*\/DOOR\.SYS/
+      assert output =~ ~r/door32:.*\/DOOR32\.SYS/
+      assert output =~ ~r/dir:.*foglet-door-dropfiles-classic-argv-env/
+      assert output =~ "handle:Alice_Liddell_"
+
+      assert_receive {:door_exited, ^pid, "classic-argv-env", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "classic runner renders Usurper-style DOOR32 argv with a stable shared database arg" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "classic-usurper-argv",
+          display_name: "Classic Usurper Argv",
+          runtime: :classic_dropfile,
+          command: "/bin/sh",
+          working_dir: System.tmp_dir!(),
+          dropfile_formats: [:door32_sys],
+          args: [
+            "-c",
+            "printf 'args:%s|%s|%s|%s|%s\n' \"$1\" \"$2\" \"$3\" \"$4\" \"$5\"; IFS= read -r _",
+            "_",
+            "--door32",
+            "{dropfile:door32_sys}",
+            "--db",
+            "/data/usurper/usurper_online.db",
+            "--stdio"
+          ],
+          timeout_ms: 5_000,
+          pty?: false
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", role: :user, session_id: "s1"},
+          terminal_size: {132, 37},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "classic-usurper-argv"}
+      output = assert_door_output_contains("/data/usurper/usurper_online.db")
+
+      assert output =~
+               ~r/args:--door32\|.*\/DOOR32\.SYS\|--db\|\/data\/usurper\/usurper_online\.db\|--stdio/
+
+      assert %{dropfile_paths: %{door32_sys: door32_path}} = Runner.snapshot(pid)
+      assert Path.basename(door32_path) == "DOOR32.SYS"
+
+      Runner.input(pid, "\n")
+
+      assert_receive {:door_exited, ^pid, "classic-usurper-argv", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "argv token resolver fails closed for unknown malformed or missing tokens" do
+      cases = [
+        {"external-unknown-token", ["{env:DATABASE_URL}"], {:argv_template, :unknown_token}},
+        {"external-malformed-token", ["{dropfile:door_sys"], {:argv_template, :malformed_token}},
+        {"external-missing-dropfile", ["{dropfile:door_sys}"],
+         {:argv_template, {:missing_dropfile, :door_sys}}}
+      ]
+
+      for {door_id, args, expected_reason} <- cases do
+        {:ok, manifest} =
+          manifest(%{
+            id: door_id,
+            display_name: door_id,
+            runtime: :external_pty,
+            command: "/bin/true",
+            working_dir: System.tmp_dir!(),
+            args: args,
+            timeout_ms: 5_000,
+            pty?: false
+          })
+
+        log =
+          capture_log(fn ->
+            {:ok, pid} =
+              DoorSupervisor.start_runner(
+                manifest: manifest,
+                output: output_to(self()),
+                owner: self()
+              )
+
+            ref = Process.monitor(pid)
+            refute_receive {:door_started, ^pid, ^door_id}, 100
+            assert_receive {:door_exited, ^pid, ^door_id, {:error, ^expected_reason}, nil}
+            assert_receive {:DOWN, ^ref, :process, ^pid, {:door_launch_failed, ^expected_reason}}
+          end)
+
+        assert log =~ "door runtime event"
+        assert log =~ "event: :launch_failed"
+        assert log =~ "argv_template"
+        refute log =~ "DATABASE_URL"
+      end
+    end
+
     test "concurrent classic runners use separate dropfile directories and independent cleanup" do
       working_dir = Path.expand("priv/doors/demo")
 
@@ -460,7 +595,7 @@ defmodule Foglet.Doors.RunnerTest do
           runtime: :classic_dropfile,
           command: "/bin/sleep",
           working_dir: working_dir,
-          dropfile_formats: [:chain_txt, :door_sys, :dorinfo_def],
+          dropfile_formats: [:door32_sys],
           args: ["30"],
           timeout_ms: 5_000,
           pty?: false
@@ -491,10 +626,10 @@ defmodule Foglet.Doors.RunnerTest do
       %{dropfile_working_dir: bob_dir, dropfile_paths: bob_paths} = Runner.snapshot(bob_pid)
 
       assert alice_dir != bob_dir
-      assert Path.dirname(alice_paths.door_sys) == alice_dir
-      assert Path.dirname(bob_paths.door_sys) == bob_dir
-      assert File.exists?(alice_paths.door_sys)
-      assert File.exists?(bob_paths.door_sys)
+      assert Path.dirname(alice_paths.door32_sys) == alice_dir
+      assert Path.dirname(bob_paths.door32_sys) == bob_dir
+      assert File.exists?(alice_paths.door32_sys)
+      assert File.exists?(bob_paths.door32_sys)
 
       alice_ref = Process.monitor(alice_pid)
       bob_ref = Process.monitor(bob_pid)
@@ -504,9 +639,9 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:DOWN, ^alice_ref, :process, ^alice_pid, :normal}
 
       refute File.exists?(alice_dir)
-      assert File.exists?(bob_paths.door_sys)
-      assert File.read!(bob_paths.door_sys) =~ "session-bob"
-      refute File.read!(bob_paths.door_sys) =~ "session-alice"
+      assert File.exists?(bob_paths.door32_sys)
+      assert File.read!(bob_paths.door32_sys) =~ "session-bob"
+      refute File.read!(bob_paths.door32_sys) =~ "session-alice"
 
       Runner.disconnect(bob_pid)
       assert_receive {:door_exited, ^bob_pid, "classic-concurrent", :disconnect, nil}
@@ -739,6 +874,70 @@ defmodule Foglet.Doors.RunnerTest do
 
       assert_receive {:DOWN, ^ref, :process, ^pid,
                       {:door_helper_failed, {:helper, %{"reason" => "sandbox_user_not_found"}}}}
+    end
+
+    test "classic dropfile sandbox uses helper with the same restricted-user args" do
+      previous = Application.get_env(:foglet_bbs, :door_pty_helper_path)
+
+      args_path =
+        Path.join(
+          System.tmp_dir!(),
+          "foglet-classic-sandbox-args-#{System.unique_integer([:positive])}.txt"
+        )
+
+      helper = argv_recording_helper(args_path)
+      Application.put_env(:foglet_bbs, :door_pty_helper_path, helper)
+
+      on_exit(fn ->
+        File.rm(args_path)
+        File.rm(helper)
+        restore_helper_path(previous)
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: "classic-sandbox-helper-args",
+          display_name: "Classic Sandbox Helper Args",
+          runtime: :classic_dropfile,
+          command: "/usr/bin/env",
+          working_dir: "/tmp",
+          args: ["--door32", "{dropfile:door32_sys}"],
+          dropfile_formats: [:door32_sys],
+          timeout_ms: 5_000,
+          pty?: true,
+          sandbox: %{
+            mode: :restricted_user_process_group,
+            user: "foglet-door",
+            group: "foglet-door",
+            process_tree: :process_group,
+            fail_closed?: true
+          }
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "alice", user_id: "u1", session_id: "s1"},
+          terminal_size: {132, 40},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "classic-sandbox-helper-args"}
+      assert %{pty_backend: :helper} = Runner.snapshot(pid)
+
+      argv = read_recorded_argv(args_path)
+      assert ["--sandbox-mode", "restricted_user_process_group"] = Enum.slice(argv, 4, 2)
+      assert ["--run-as-user", "foglet-door"] = Enum.slice(argv, 6, 2)
+      assert ["--run-as-group", "foglet-door"] = Enum.slice(argv, 8, 2)
+      assert "--" in argv
+      assert "/usr/bin/env" in argv
+
+      assert_receive {:door_exited, ^pid, "classic-sandbox-helper-args", :crash, 0},
+                     @event_timeout
+
+      assert_receive {:DOWN, ^ref, :process, ^pid, {:door_helper_exit, 0}}, @event_timeout
     end
 
     test "helper sandbox reports group setup failure and does not execute door command" do
@@ -1266,6 +1465,43 @@ defmodule Foglet.Doors.RunnerTest do
     File.chmod!(path, 0o700)
     path
   end
+
+  defp argv_recording_helper(args_path) do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "foglet-pty-record-argv-#{System.unique_integer([:positive])}.py"
+      )
+
+    File.write!(path, """
+    #!/usr/bin/env python3
+    import sys
+
+    with open(#{inspect(args_path)}, "w", encoding="utf-8") as fh:
+        for arg in sys.argv[1:]:
+            fh.write(arg + "\\n")
+    """)
+
+    File.chmod!(path, 0o700)
+    path
+  end
+
+  defp read_recorded_argv(path, attempts \\ 50)
+
+  defp read_recorded_argv(path, attempts) when attempts > 0 do
+    case File.read(path) do
+      {:ok, contents} ->
+        String.split(contents, "\n", trim: true)
+
+      {:error, _reason} ->
+        receive do
+        after
+          20 -> read_recorded_argv(path, attempts - 1)
+        end
+    end
+  end
+
+  defp read_recorded_argv(path, 0), do: flunk("helper argv was not recorded: #{path}")
 
   defp restore_env(name, nil), do: System.delete_env(name)
   defp restore_env(name, value), do: System.put_env(name, value)

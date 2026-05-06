@@ -1,14 +1,14 @@
 # Door Games QA Strategy and Evidence Matrix (FOG-480 / FOG-518)
 
-Status: QA strategy handoff for the canonical Door Games integration branch.
+Status: QA strategy for the current Door Games/dropfile compatibility integration branch.
 Owner: QA Engineer.
-Branch: `fog-480-door-games`.
-Baseline inspected: `3bbf60f6eed27f08f324d749204ac52949b75732`.
-Parent: FOG-480.
+Branch: `fog/1048-dropfile-compat`.
+Baseline inspected: `7d9fa9473d123e6894aad39319b00fbd45540805`.
+Parent: FOG-1048.
 
 ## Source verification
 
-Current canonical branch kickoff SHA is `3bbf60f6eed27f08f324d749204ac52949b75732`. The branch is ready for specialists to land Door Games work, but QA signoff cannot run until implementation owners hand off a runnable SHA with native and external demo doors wired into the SSH/TUI flow.
+Current integration SHA inspected for this content pass is `7d9fa9473d123e6894aad39319b00fbd45540805`. The branch includes native, external, classic/dropfile, and Usurper Reborn manifests; final release QA still requires runnable SSH/TUI evidence on the PR head SHA.
 
 This strategy intentionally covers release evidence, not implementation design. It should be updated only when the shipped user path or test harness surface changes.
 
@@ -69,7 +69,7 @@ Examples:
 
 Required evidence:
 - Focused ExUnit tests for success, validation failure, authorization failure, redaction, and dropfile output.
-- `rtk mix test test/foglet_bbs/doors*_test.exs` or narrower equivalent.
+- `mix test test/foglet_bbs/doors*_test.exs` or narrower equivalent.
 - Static review confirming no secrets or broad environment passthrough.
 
 Release gate:
@@ -101,12 +101,12 @@ Examples:
 - Keyboard navigation, focus, redraw calmness, wrapping, borders, and terminal recovery.
 
 Required evidence:
-- `rtk npm run test:ssh-harness`.
-- `rtk mix test` before final QA if implementation is runnable locally.
+- `npm run test:ssh-harness`.
+- `mix test` before final QA if implementation is runnable locally.
 - TUI render evidence at 80x24 and cramped width, for example:
-  - `rtk mix foglet.tui.render main_menu --width 80 --height 24`
-  - `rtk mix foglet.tui.render door_list --width 80 --height 24`
-  - `rtk mix foglet.tui.render door_list --width 64 --height 20`
+  - `mix foglet.tui.render main_menu --width 80 --height 24`
+  - `mix foglet.tui.render door_list --width 80 --height 24`
+  - `mix foglet.tui.render door_list --width 64 --height 20`
 - SSH harness run as an end user for native/demo and external executable launch/return.
 - Visual report covering wrapping, alignment, cursor/focus stability, redraw calmness, layout anchoring, modal boundaries, keyboard usability, terminal fit, and overall composition.
 
@@ -123,7 +123,7 @@ Examples:
 Required evidence:
 - Exact PR URL and head SHA.
 - CI green, including `mix format --check-formatted`.
-- `rtk mix precommit` or documented implementation-owner precommit evidence plus final QA spot checks.
+- `mix precommit` or documented implementation-owner precommit evidence plus final QA spot checks.
 - Final branch file list reviewed for accidental artifacts: `.qa/`, scratch files, internal review docs, secrets, generated junk, and unrelated files.
 - All active blocker children resolved or explicitly deduped.
 
@@ -146,7 +146,7 @@ Release gate:
 | SSH disconnect cleanup | Long-running external door fixture | Harness/manual: launch door, disconnect session, then run observable cleanup check | Door process tree exits and next login starts in sane TUI | Pass only with cleanup command output or implementation-provided observable check | File active child for orphan process, stale session state, or broken next login |
 | Process cleanup after normal exit | Native and external demos | Focused integration tests and observable process check | Runner stops, temp context/dropfiles removed, supervisor has no active child for completed door | Pass only with explicit observable evidence | File active child for temp leak or supervised child leak |
 | Terminal recovery | Native/external normal exit, crash, timeout, disconnect | SSH harness screen snapshots after return and next login | Cursor/focus stable; no disruptive redraw; primary/cancel keys work | Pass only with user-visible sane terminal | File active child for stuck raw mode, hidden cursor in input contexts, or broken key path |
-| Main menu / selector visual gate | Render fixtures with visible and empty catalog states | `rtk mix foglet.tui.render` at 80x24, 64x20, optional 120x30; screenshot/snapshot if useful | Door Games appears only when visible; selector/modal are readable and anchored | Pass only if wrapping, alignment, boundaries, and keybar are release-quality | File active child for obvious visual/usability defects even when tests pass |
+| Main menu / selector visual gate | Render fixtures with visible and empty catalog states | `mix foglet.tui.render` at 80x24, 64x20, optional 120x30; screenshot/snapshot if useful | Door Games appears only when visible; selector/modal are readable and anchored | Pass only if wrapping, alignment, boundaries, and keybar are release-quality | File active child for obvious visual/usability defects even when tests pass |
 | PR readiness | Final canonical PR opened by Platform Lead | `gh pr view`, CI status, git diff file list, focused/full tests | One canonical PR, green checks, no accidental artifacts, all evidence linked | Pass only if release shape is clean and active blockers are resolved | Route release-shape defects to Platform Lead; implementation defects to owner/CTO |
 
 ## Required harness evidence shape

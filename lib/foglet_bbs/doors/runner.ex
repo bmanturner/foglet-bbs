@@ -388,7 +388,7 @@ defmodule Foglet.Doors.Runner do
   end
 
   defp emit(%{output: output} = state, data) when is_function(output, 1) do
-    _ = output.(data)
+    _ = output.(encode_output(state, data))
     :ok
   rescue
     e ->
@@ -398,6 +398,13 @@ defmodule Foglet.Doors.Runner do
 
       :ok
   end
+
+  defp encode_output(%{manifest: %Manifest{output_encoding: encoding}}, data)
+       when is_binary(data) do
+    Foglet.Doors.OutputEncoding.to_terminal(data, encoding || :utf8)
+  end
+
+  defp encode_output(_state, data), do: data
 
   defp notify_owner(%{owner: owner}, message) when is_pid(owner), do: send(owner, message)
   defp notify_owner(_state, _message), do: :ok
@@ -550,7 +557,7 @@ defmodule Foglet.Doors.Runner do
 
   defp close_port(port, os_pid, adapter, state) do
     _ = terminate_adapter(adapter, state)
-    _ = maybe_term_os_process(os_pid, state)
+    _ = maybe_term_os_process(os_pid, adapter, state)
     _ = close_owned_port(port, state)
     :ok
   end
@@ -576,7 +583,9 @@ defmodule Foglet.Doors.Runner do
       :ok
   end
 
-  defp maybe_term_os_process(pid, state) when is_integer(pid) and pid > 0 do
+  defp maybe_term_os_process(_pid, %PTYAdapter{backend: :helper}, _state), do: :ok
+
+  defp maybe_term_os_process(pid, _adapter, state) when is_integer(pid) and pid > 0 do
     _ = System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
     :ok
   rescue
@@ -585,7 +594,7 @@ defmodule Foglet.Doors.Runner do
       :ok
   end
 
-  defp maybe_term_os_process(_pid, _state), do: :ok
+  defp maybe_term_os_process(_pid, _adapter, _state), do: :ok
 
   # sobelow: context paths are generated under System.tmp_dir!/0 with
   # cryptographic random bytes, never from user-controlled input.
@@ -683,7 +692,8 @@ defmodule Foglet.Doors.Runner do
   defp prepare_classic_dropfiles(state) do
     attrs = %{
       user: state.session,
-      session: Map.put(state.session, :terminal_size, state.terminal_size)
+      session: Map.put(state.session, :terminal_size, state.terminal_size),
+      time_remaining_minutes: time_remaining_minutes(state.manifest.timeout_ms)
     }
 
     case make_dropfile_working_dir(state) do
@@ -729,8 +739,104 @@ defmodule Foglet.Doors.Runner do
 
   defp make_dropfile_working_dir(_state, 0), do: {:error, {:dropfile_working_dir, :eexist}}
 
+  defp time_remaining_minutes(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    timeout_ms
+    |> Kernel.+(59_999)
+    |> div(60_000)
+  end
+
+  defp time_remaining_minutes(_timeout_ms), do: 1440
+
   defp open_external_port(state) do
-    PTYAdapter.open(state.manifest, state.terminal_size, external_env(state))
+    with {:ok, args} <- resolve_manifest_args(state) do
+      manifest = %{state.manifest | args: args}
+      PTYAdapter.open(manifest, state.terminal_size, external_env(state))
+    end
+  end
+
+  defp resolve_manifest_args(state) do
+    state.manifest.args
+    |> Enum.reduce_while({:ok, []}, fn arg, {:ok, resolved} ->
+      case resolve_manifest_arg(arg, state) do
+        {:ok, arg} -> {:cont, {:ok, [arg | resolved]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, args} -> {:ok, Enum.reverse(args)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resolve_manifest_arg(arg, state) when is_binary(arg) do
+    if malformed_template?(arg) do
+      {:error, {:argv_template, :malformed_token}}
+    else
+      arg
+      |> token_names()
+      |> Enum.reduce_while({:ok, arg}, fn token, {:ok, resolved} ->
+        case resolve_manifest_token(token, state) do
+          {:ok, value} -> {:cont, {:ok, String.replace(resolved, "{" <> token <> "}", value)}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+    end
+  end
+
+  defp malformed_template?(arg) do
+    stripped =
+      ~r/\$\{[^{}]+\}/
+      |> Regex.replace(arg, "")
+      |> then(&Regex.replace(~r/(?<!\$)\{[^{}]+\}/, &1, ""))
+
+    String.contains?(stripped, "{") or String.contains?(stripped, "}")
+  end
+
+  defp token_names(arg),
+    do: Regex.scan(~r/(?<!\$)\{([^{}]+)\}/, arg, capture: :all_but_first) |> List.flatten()
+
+  defp resolve_manifest_token("dropfile:" <> format_name, state) do
+    case dropfile_token_format(format_name) do
+      {:ok, format} ->
+        case Map.fetch(state.dropfile_paths || %{}, format) do
+          {:ok, path} -> {:ok, path}
+          :error -> {:error, {:argv_template, {:missing_dropfile, format}}}
+        end
+
+      :error ->
+        {:error, {:argv_template, :unknown_token}}
+    end
+  end
+
+  defp resolve_manifest_token("dropfile_dir", state) do
+    case state.dropfile_working_dir do
+      path when is_binary(path) -> {:ok, path}
+      _other -> {:error, {:argv_template, :missing_dropfile_dir}}
+    end
+  end
+
+  defp resolve_manifest_token("user:handle", state) do
+    {:ok, normalize_argv_user_handle(Map.get(state.session, :handle))}
+  end
+
+  defp resolve_manifest_token("terminal:cols", state),
+    do: {:ok, state.terminal_size |> elem(0) |> Integer.to_string()}
+
+  defp resolve_manifest_token("terminal:rows", state),
+    do: {:ok, state.terminal_size |> elem(1) |> Integer.to_string()}
+
+  defp resolve_manifest_token(_token, _state), do: {:error, {:argv_template, :unknown_token}}
+
+  defp dropfile_token_format("door32_sys"), do: {:ok, :door32_sys}
+  defp dropfile_token_format("door_sys"), do: {:ok, :door_sys}
+  defp dropfile_token_format("chain_txt"), do: {:ok, :chain_txt}
+  defp dropfile_token_format("dorinfo_def"), do: {:ok, :dorinfo_def}
+  defp dropfile_token_format(_format), do: :error
+
+  defp normalize_argv_user_handle(value) do
+    value
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9_.-]/, "_")
   end
 
   defp external_env(state) do

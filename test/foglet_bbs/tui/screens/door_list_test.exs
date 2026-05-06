@@ -15,6 +15,13 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   alias Foglet.TUI.TextWidth
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+  @manifest_dir_env "FOGLET_DOOR_MANIFEST_DIR"
+
+  defmodule EmptyDoors do
+    @moduledoc false
+    def list_browsable(_user), do: []
+    def get_visible(_user, _door_id), do: {:error, :not_found}
+  end
 
   setup_all do
     Config.init_cache()
@@ -29,8 +36,19 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
   setup do
     original = System.get_env(@demo_doors_env)
+    original_manifest_dir = System.get_env(@manifest_dir_env)
+    original_app_manifest_dir = Application.get_env(:foglet_bbs, :door_manifest_dir)
+
     System.delete_env(@demo_doors_env)
-    on_exit(fn -> restore_env(@demo_doors_env, original) end)
+    System.delete_env(@manifest_dir_env)
+    Application.delete_env(:foglet_bbs, :door_manifest_dir)
+
+    on_exit(fn ->
+      restore_env(@demo_doors_env, original)
+      restore_env(@manifest_dir_env, original_manifest_dir)
+      restore_app_env(:door_manifest_dir, original_app_manifest_dir)
+    end)
+
     :ok
   end
 
@@ -42,12 +60,20 @@ defmodule Foglet.TUI.Screens.DoorListTest do
       session_context: %{theme: Foglet.TUI.Theme.default()},
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
       route: :door_list,
-      route_params: %{}
+      domain: Keyword.get(opts, :domain, %{})
     )
   end
 
-  test "init shows an empty catalog by default when demo doors are disabled" do
+  test "init has an empty production catalog when operator manifest directory is disabled" do
     assert %State{doors: [], selected_index: 0} = DoorList.init(context())
+  end
+
+  test "init lists configured operator manifests when the directory is enabled" do
+    configure_bundled_manifest_dir!()
+
+    assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
+    assert Enum.map(doors, & &1.id) == ["usurper-reborn"]
+    assert Enum.all?(doors, &match?(%Manifest{}, &1))
   end
 
   test "init lists launchable built-in native and external demo doors when enabled" do
@@ -77,7 +103,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
              DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 1}, ctx)
 
     assert {%State{selected_index: 3}, []} =
-             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 2}, ctx)
+             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 3}, ctx)
 
     assert {%State{selected_index: 3}, []} =
              DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 3}, ctx)
@@ -131,7 +157,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   test "door intro stays bounded and preserves controls at supported breakpoints" do
     enable_demo_doors()
 
-    for {width, height} = size <- [{64, 22}, {80, 24}, {100, 30}] do
+    for {width, height} = size <- [{64, 22}, {80, 24}, {100, 30}, {120, 36}] do
       ascii =
         :door_list
         |> RenderFixtures.state_for(size)
@@ -168,19 +194,34 @@ defmodule Foglet.TUI.Screens.DoorListTest do
              "missing command bar launch hint at #{width}x#{height}:\n#{ascii}"
 
       refute String.contains?(ascii, "then ret\n"), "warning should not be silently clipped"
+
+      forbidden = [
+        "native elixir",
+        "external pty",
+        "classic dropfile",
+        "DOOR32",
+        "SQLite",
+        "CHAIN.TXT",
+        "DOOR.SYS",
+        "DORINFO.DEF"
+      ]
+
+      for term <- forbidden do
+        refute String.contains?(ascii, term),
+               "member-facing Door Games render leaked #{inspect(term)} at #{width}x#{height}:\n#{ascii}"
+      end
     end
   end
 
   test "empty catalog fallback has no launch affordance and enter is inert" do
-    ctx = context()
+    ctx = context(domain: %{doors: EmptyDoors})
     state = DoorList.init(ctx)
 
     assert {^state, []} = DoorList.update({:key, %{key: :enter}}, state, ctx)
 
     ascii =
-      :door_list
-      |> RenderFixtures.state_for({80, 24})
-      |> App.view()
+      state
+      |> DoorList.render(ctx)
       |> AsciiRenderer.render({80, 24})
 
     assert String.contains?(ascii, "No door games are available right now.")
@@ -192,6 +233,21 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
   defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
 
+  defp configure_bundled_manifest_dir! do
+    {:ok, priv_dir} = priv_dir()
+    Application.put_env(:foglet_bbs, :door_manifest_dir, Path.join(priv_dir, "doors/manifests"))
+  end
+
+  defp priv_dir do
+    case :code.priv_dir(:foglet_bbs) do
+      path when is_list(path) -> {:ok, List.to_string(path)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp restore_env(name, nil), do: System.delete_env(name)
   defp restore_env(name, value), do: System.put_env(name, value)
+
+  defp restore_app_env(key, nil), do: Application.delete_env(:foglet_bbs, key)
+  defp restore_app_env(key, value), do: Application.put_env(:foglet_bbs, key, value)
 end

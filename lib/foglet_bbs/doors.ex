@@ -14,24 +14,30 @@ defmodule Foglet.Doors do
   Runtime ownership remains an OTP/SSH integration concern for later slices.
   """
 
+  require Logger
+
+  # @sobelow_skip is consumed by Sobelow for reviewed file-backed manifest reads.
+  Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
+
   alias Foglet.Accounts.User
-  alias Foglet.Doors.{AuditRecord, Manifest}
+  alias Foglet.Doors.{AuditRecord, Dropfiles, Manifest}
+  alias Foglet.Doors.Manifest.Dropfile
   alias Foglet.Doors.Sandbox
   alias Foglet.Sessions.Session
 
-  Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
-
   @runtime_values [:native_elixir, :external_pty, :classic_dropfile]
   @visibility_values [:members, :mods_only, :sysop_only]
+  @output_encoding_values [:utf8, :cp437]
   @sandbox_modes [:none, :restricted_user_process_group]
   @process_tree_values [:process_group]
   @safe_status_keys [:exit_status, :reason, :signal, :timed_out, :crashed, :disconnected]
-  @classic_dropfile_formats [:chain_txt, :door_sys, :dorinfo_def]
-  @dropfile_names %{
-    chain_txt: "CHAIN.TXT",
-    door_sys: "DOOR.SYS",
-    dorinfo_def: "DORINFO.DEF"
-  }
+  @classic_dropfile_formats Dropfiles.formats()
+  @dropfile_identity_values [:handle]
+  @dropfile_transport_values [:filesystem]
+  @dropfile_encoding_values [:cp437, :utf8]
+  @dropfile_cwd_values [:door_working_dir, :session_working_dir]
+  @dropfile_expose_path_values [:env, :none]
+  @unsafe_dropfile_keys [:filename, :path, :relative_path, "filename", "path", "relative_path"]
   @sensitive_env_names ~w[
     AWS_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY
@@ -44,6 +50,7 @@ defmodule Foglet.Doors do
     SECRET_KEY_BASE
   ]
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+  @operator_manifest_dir_env "FOGLET_DOOR_MANIFEST_DIR"
   @truthy_env_values ~w[1 true yes]
   @demo_timeout_ms 15 * 60 * 1_000
   @demo_idle_timeout_ms 5 * 60 * 1_000
@@ -73,18 +80,38 @@ defmodule Foglet.Doors do
   @doc """
   Returns configured door manifests available to the runtime catalog.
 
-  This branch has no persisted game catalog yet. Built-in demo/test manifests
-  are deployment/QA fixtures and are hidden unless `FOGLET_ENABLE_DEMO_DOORS`
-  is set to a documented truthy value at runtime.
+  Production/operator doors are loaded from a JSON manifest directory configured
+  with `:door_manifest_dir` or `FOGLET_DOOR_MANIFEST_DIR`. When unset, no
+  production doors are exposed. Built-in demo/test manifests remain deployment/QA
+  fixtures hidden unless `FOGLET_ENABLE_DEMO_DOORS` is set to a documented truthy
+  value at runtime.
   """
   @spec list_manifests() :: [Manifest.t()]
   def list_manifests do
-    if demo_doors_enabled?() do
-      demo_manifest_attrs()
-      |> Enum.map(&validate_manifest!/1)
-    else
-      []
-    end
+    %{manifests: operator_manifests, errors: errors} = operator_manifest_results()
+
+    log_manifest_load_errors(errors)
+
+    operator_manifests ++
+      if demo_doors_enabled?() do
+        demo_manifest_attrs()
+        |> Enum.map(&validate_manifest!/1)
+      else
+        []
+      end
+  end
+
+  @doc """
+  Returns operator manifest load errors with source file and validation fields.
+
+  The Door Games list fails closed by omitting invalid manifests. Operators can
+  use this function from diagnostics/tests to see which configured files were
+  rejected and why.
+  """
+  @spec manifest_load_errors() :: [%{file: String.t(), errors: [validation_error()]}]
+  def manifest_load_errors do
+    %{errors: errors} = operator_manifest_results()
+    errors
   end
 
   @doc "Returns true when the deployment env enables built-in demo/test doors."
@@ -105,8 +132,13 @@ defmodule Foglet.Doors do
   @doc "Returns door manifests the actor may browse in the Door Games list."
   @spec list_browsable(User.t() | nil) :: [Manifest.t()]
   def list_browsable(nil) do
-    list_manifests()
-    |> Enum.filter(&(&1.visibility == :members))
+    if demo_doors_enabled?() do
+      demo_manifest_attrs()
+      |> Enum.map(&validate_manifest!/1)
+      |> Enum.filter(&(&1.visibility == :members))
+    else
+      []
+    end
   end
 
   def list_browsable(user), do: list_visible(user)
@@ -131,25 +163,29 @@ defmodule Foglet.Doors do
   def validate_manifest(attrs) when is_map(attrs) do
     attrs = atomize_known_keys(attrs)
 
+    dropfiles =
+      normalize_dropfiles(Map.get(attrs, :dropfiles), Map.get(attrs, :dropfile_formats, []))
+
     manifest = %Manifest{
       id: Map.get(attrs, :id),
       slug: Map.get(attrs, :slug),
       display_name: Map.get(attrs, :display_name),
       description: Map.get(attrs, :description),
-      runtime: Map.get(attrs, :runtime),
+      runtime: normalize_manifest_atom(Map.get(attrs, :runtime)),
       command: Map.get(attrs, :command),
       module: Map.get(attrs, :module),
       args: Map.get(attrs, :args, []),
-      dropfile_formats:
-        Map.get(attrs, :dropfile_formats, default_dropfile_formats(Map.get(attrs, :runtime))),
+      dropfiles: dropfiles,
+      dropfile_formats: dropfile_formats(dropfiles),
       working_dir: Map.get(attrs, :working_dir),
       env: Map.get(attrs, :env, %{}),
       env_allowlist: Map.get(attrs, :env_allowlist, []),
       timeout_ms: Map.get(attrs, :timeout_ms),
       idle_timeout_ms: Map.get(attrs, :idle_timeout_ms),
-      visibility: Map.get(attrs, :visibility, :members),
-      auth_scope: Map.get(attrs, :auth_scope, :site),
-      pty?: Map.get(attrs, :pty?, true),
+      visibility: normalize_manifest_atom(Map.get(attrs, :visibility, :members)),
+      auth_scope: normalize_auth_scope(Map.get(attrs, :auth_scope, :site)),
+      output_encoding: normalize_output_encoding(Map.get(attrs, :output_encoding, :utf8)),
+      pty?: Map.get(attrs, :pty?, Map.get(attrs, :pty, true)),
       sandbox: normalize_sandbox(Map.get(attrs, :sandbox, %{}))
     }
 
@@ -167,6 +203,104 @@ defmodule Foglet.Doors do
       {:error, errors} ->
         raise ArgumentError, "invalid built-in door manifest: #{inspect(errors)}"
     end
+  end
+
+  defp operator_manifest_results do
+    case operator_manifest_dir() do
+      nil ->
+        %{manifests: [], errors: []}
+
+      dir ->
+        load_operator_manifest_dir(dir)
+    end
+  end
+
+  defp operator_manifest_dir do
+    configured =
+      Application.get_env(:foglet_bbs, :door_manifest_dir) ||
+        System.get_env(@operator_manifest_dir_env)
+
+    case configured do
+      value when is_binary(value) ->
+        value
+        |> String.trim()
+        |> case do
+          "" -> nil
+          path -> Path.expand(path)
+        end
+
+      _other ->
+        nil
+    end
+  end
+
+  defp load_operator_manifest_dir(dir) do
+    if File.dir?(dir) do
+      dir
+      |> File.ls!()
+      |> Enum.filter(&operator_manifest_file?/1)
+      |> Enum.sort()
+      |> Enum.map(&load_operator_manifest_file(Path.join(dir, &1)))
+      |> split_manifest_results()
+    else
+      %{manifests: [], errors: [%{file: dir, errors: [directory: "does not exist"]}]}
+    end
+  rescue
+    exception in File.Error ->
+      %{manifests: [], errors: [%{file: dir, errors: [directory: Exception.message(exception)]}]}
+  end
+
+  defp operator_manifest_file?(filename) do
+    String.ends_with?(filename, ".json") and not String.starts_with?(filename, ".")
+  end
+
+  # sobelow: path is built by joining a sorted `*.json` filename from the
+  # configured operator manifest directory; only direct regular files are read,
+  # contents are decoded as data, and `validate_manifest/1` revalidates the
+  # manifest before any Door Games runtime sees it.
+  @sobelow_skip ["Traversal.FileModule"]
+  defp load_operator_manifest_file(path) do
+    with :ok <- regular_operator_manifest_file(path),
+         {:ok, json} <- File.read(path),
+         {:ok, attrs} <- Jason.decode(json),
+         {:ok, manifest} <- validate_manifest(attrs) do
+      {:ok, manifest}
+    else
+      {:error, %Jason.DecodeError{} = error} ->
+        {:error, %{file: path, errors: [json: Exception.message(error)]}}
+
+      {:error, errors} when is_list(errors) ->
+        {:error, %{file: path, errors: errors}}
+
+      {:error, reason} ->
+        {:error, %{file: path, errors: [file: inspect(reason)]}}
+    end
+  end
+
+  defp regular_operator_manifest_file(path) do
+    case File.lstat(path) do
+      {:ok, %{type: :regular}} -> :ok
+      {:ok, %{type: type}} -> {:error, [file: "must be a regular JSON file, got #{type}"]}
+      {:error, reason} -> {:error, [file: inspect(reason)]}
+    end
+  end
+
+  defp split_manifest_results(results) do
+    Enum.reduce(results, %{manifests: [], errors: []}, fn
+      {:ok, manifest}, acc -> %{acc | manifests: [manifest | acc.manifests]}
+      {:error, error}, acc -> %{acc | errors: [error | acc.errors]}
+    end)
+    |> then(fn acc ->
+      %{manifests: Enum.reverse(acc.manifests), errors: Enum.reverse(acc.errors)}
+    end)
+  end
+
+  defp log_manifest_load_errors([]), do: :ok
+
+  defp log_manifest_load_errors(errors) do
+    Enum.each(errors, fn %{file: file, errors: file_errors} ->
+      Logger.warning("Door Games manifest rejected: #{file} #{inspect(file_errors)}")
+    end)
   end
 
   defp demo_manifest_attrs do
@@ -229,8 +363,8 @@ defmodule Foglet.Doors do
     %{
       id: "classic-dropfile-demo",
       slug: "classic-dropfile-demo",
-      display_name: "Classic Dropfile Demo",
-      description: "Python demo door that reads generated CHAIN.TXT, DOOR.SYS, and DORINFO.DEF.",
+      display_name: "Classic Door Demo",
+      description: "Small classic BBS door demo that opens, echoes caller details, and returns.",
       runtime: :classic_dropfile,
       command: demo_classic_path,
       working_dir: Path.dirname(demo_classic_path),
@@ -308,129 +442,21 @@ defmodule Foglet.Doors do
   @doc """
   Generate a classic BBS dropfile from safe Foglet user/session metadata.
 
-  Supported formats are `:chain_txt`, `:door_sys`, and `:dorinfo_def`. All
-  outputs are CRLF-terminated for classic door compatibility. Mapping is
-  intentionally conservative: Foglet exposes handles, display names, user ids,
-  roles, terminal size, and session ids only; unknown modem/security fields get
-  explicit harmless defaults rather than internal application state.
+  Compatibility wrapper around `Foglet.Doors.Dropfiles.render/2`.
   """
-  @spec classic_dropfile(:chain_txt | :door_sys | :dorinfo_def, %{
-          required(:user) => User.t() | map(),
-          required(:session) => Session.t() | map()
-        }) ::
+  @spec classic_dropfile(:chain_txt | :door_sys | :door32_sys | :dorinfo_def, Dropfiles.attrs()) ::
           {:ok, String.t()} | {:error, :unsupported_format}
-  def classic_dropfile(:chain_txt, %{user: user, session: session}) do
-    {cols, rows} = dropfile_terminal_size(session)
-
-    [
-      dropfile_handle(user, session),
-      dropfile_display_name(user, session),
-      to_string(cols),
-      to_string(rows),
-      user_role(user, session),
-      user_identifier(user, session)
-    ]
-    |> crlf_lines()
-  end
-
-  def classic_dropfile(:door_sys, %{user: user, session: session}) do
-    {cols, rows} = dropfile_terminal_size(session)
-
-    [
-      "COM0:",
-      "0",
-      "38400",
-      "Foglet BBS",
-      dropfile_handle(user, session),
-      dropfile_display_name(user, session),
-      dropfile_location(user),
-      "",
-      to_string(cols),
-      to_string(rows),
-      "GR",
-      "1",
-      "1",
-      "12/31/99",
-      "1440",
-      "1440",
-      "GR",
-      "9999",
-      "01/01/80",
-      user_identifier(user, session),
-      "0",
-      "N",
-      "",
-      "",
-      "N",
-      "N",
-      "N",
-      "0",
-      "0",
-      "0",
-      "9999",
-      "01/01/80",
-      user_role(user, session),
-      "",
-      "0",
-      "0",
-      "0",
-      to_string(cols),
-      to_string(rows),
-      session_identifier(session)
-    ]
-    |> crlf_lines()
-  end
-
-  def classic_dropfile(:dorinfo_def, %{user: user, session: session}) do
-    [first_name, last_name] = sysop_name_parts()
-
-    [
-      "Foglet BBS",
-      first_name,
-      last_name,
-      "COM0",
-      "38400 BAUD,N,8,1",
-      "0",
-      dropfile_handle(user, session),
-      dropfile_display_name(user, session),
-      dropfile_location(user),
-      role_security_level(user, session)
-    ]
-    |> crlf_lines()
-  end
-
-  def classic_dropfile(_format, _attrs), do: {:error, :unsupported_format}
+  def classic_dropfile(format, attrs), do: Dropfiles.render(format, attrs)
 
   @doc "Returns the fixed filename Foglet writes for a supported classic dropfile format."
   @spec dropfile_filename(atom()) :: {:ok, String.t()} | {:error, :unsupported_format}
-  def dropfile_filename(format) when format in @classic_dropfile_formats,
-    do: {:ok, Map.fetch!(@dropfile_names, format)}
-
-  def dropfile_filename(_format), do: {:error, :unsupported_format}
+  def dropfile_filename(format), do: Dropfiles.filename(format)
 
   @doc "Writes requested classic dropfiles to a working directory using fixed safe filenames."
-  @spec write_dropfiles(
-          [atom()],
-          %{required(:user) => User.t() | map(), required(:session) => Session.t() | map()},
-          String.t()
-        ) ::
+  @spec write_dropfiles([atom()], Dropfiles.attrs(), String.t()) ::
           {:ok, %{atom() => String.t()}} | {:error, term()}
-  # sobelow: format names are fixed by @dropfile_names and working_dir comes from
-  # a validated absolute manifest path, not from remote/user input.
-  @sobelow_skip ["Traversal.FileModule"]
-  def write_dropfiles(formats, attrs, working_dir)
-      when is_list(formats) and is_binary(working_dir) do
-    Enum.reduce_while(formats, {:ok, %{}}, fn format, {:ok, paths} ->
-      with {:ok, filename} <- dropfile_filename(format),
-           {:ok, text} <- classic_dropfile(format, attrs),
-           path <- Path.join(working_dir, filename),
-           :ok <- File.write(path, text) do
-        {:cont, {:ok, Map.put(paths, format, path)}}
-      else
-        {:error, reason} -> {:halt, {:error, {format, reason}}}
-      end
-    end)
-  end
+  def write_dropfiles(formats, attrs, working_dir),
+    do: Dropfiles.write(formats, attrs, working_dir)
 
   @doc "Builds the safe external-door context map exposed to wrappers and examples."
   @spec adapter_context(Manifest.t(), map(), {pos_integer(), pos_integer()}) :: map()
@@ -457,7 +483,7 @@ defmodule Foglet.Doors do
         context_path,
         dropfile_paths \\ %{}
       ) do
-    Map.merge(manifest.env, %{
+    foglet_env = %{
       "FOGLET_DOOR_ID" => manifest.id,
       "FOGLET_USER_ID" => to_env(Map.get(session, :user_id)),
       "FOGLET_USERNAME" => to_env(Map.get(session, :handle)),
@@ -466,11 +492,109 @@ defmodule Foglet.Doors do
       "FOGLET_TERMINAL_HEIGHT" => Integer.to_string(rows),
       "FOGLET_DOOR_CONTEXT" => context_path,
       "FOGLET_DROPFILES" => dropfile_paths |> Map.values() |> Enum.join(":")
-    })
+    }
+
+    manifest.env
+    |> Map.merge(foglet_env)
+    |> Map.merge(dropfile_env(manifest, dropfile_paths))
   end
 
-  defp default_dropfile_formats(:classic_dropfile), do: [:door_sys]
-  defp default_dropfile_formats(_runtime), do: []
+  defp dropfile_env(%Manifest{} = manifest, dropfile_paths) when is_map(dropfile_paths) do
+    env_exposed_paths =
+      manifest.dropfiles
+      |> Enum.filter(&(&1.expose_path == :env))
+      |> Enum.flat_map(fn dropfile ->
+        case Map.fetch(dropfile_paths, dropfile.format) do
+          {:ok, path} -> [{dropfile.format, path}]
+          :error -> []
+        end
+      end)
+
+    env_exposed_paths
+    |> Enum.reduce(%{}, fn {format, path}, env ->
+      Map.put(env, dropfile_env_name(format), path)
+    end)
+    |> maybe_put_dropfile_dir(env_exposed_paths)
+  end
+
+  defp maybe_put_dropfile_dir(env, []), do: env
+
+  defp maybe_put_dropfile_dir(env, [{_format, path} | _rest]),
+    do: Map.put(env, "FOGLET_DROPFILE_DIR", Path.dirname(path))
+
+  defp dropfile_env_name(:door32_sys), do: "FOGLET_DROPFILE_DOOR32_SYS"
+  defp dropfile_env_name(:door_sys), do: "FOGLET_DROPFILE_DOOR_SYS"
+  defp dropfile_env_name(:chain_txt), do: "FOGLET_DROPFILE_CHAIN_TXT"
+  defp dropfile_env_name(:dorinfo_def), do: "FOGLET_DROPFILE_DORINFO_DEF"
+
+  defp normalize_dropfiles(nil, formats), do: normalize_dropfiles_from_formats(formats)
+  defp normalize_dropfiles([], formats), do: normalize_dropfiles_from_formats(formats)
+
+  defp normalize_dropfiles(dropfiles, _formats) when is_list(dropfiles) do
+    Enum.map(dropfiles, &normalize_dropfile/1)
+  end
+
+  defp normalize_dropfiles(dropfiles, _formats), do: dropfiles
+
+  defp normalize_dropfiles_from_formats(formats) when is_list(formats) do
+    Enum.map(formats, fn format -> normalize_dropfile(%{format: format}) end)
+  end
+
+  defp normalize_dropfiles_from_formats(formats), do: formats
+
+  defp normalize_dropfile(%Dropfile{} = dropfile), do: dropfile
+
+  defp normalize_dropfile(attrs) when is_map(attrs) do
+    attrs = atomize_dropfile_keys(attrs)
+    format = normalize_dropfile_atom(Map.get(attrs, :format))
+
+    %Dropfile{
+      format: format,
+      filename: dropfile_name(format),
+      identity: normalize_dropfile_atom(Map.get(attrs, :identity, :handle)),
+      transport: normalize_dropfile_atom(Map.get(attrs, :transport, :filesystem)),
+      encoding: normalize_dropfile_atom(Map.get(attrs, :encoding, :cp437)),
+      cwd: normalize_dropfile_atom(Map.get(attrs, :cwd, :door_working_dir)),
+      expose_path: normalize_dropfile_atom(Map.get(attrs, :expose_path, :env)),
+      raw_keys: Map.keys(attrs)
+    }
+  end
+
+  defp normalize_dropfile(format), do: normalize_dropfile(%{format: format})
+
+  defp atomize_dropfile_keys(attrs) do
+    Map.new(attrs, fn
+      {key, value} when is_atom(key) ->
+        {key, value}
+
+      {key, value}
+      when key in ["format", "identity", "transport", "encoding", "cwd", "expose_path"] ->
+        {String.to_existing_atom(key), value}
+
+      {key, value} ->
+        {key, value}
+    end)
+  end
+
+  defp normalize_dropfile_atom(value) when is_atom(value), do: value
+
+  defp normalize_dropfile_atom(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp normalize_dropfile_atom(value), do: value
+
+  defp dropfile_name(format) do
+    case Dropfiles.filename(format) do
+      {:ok, name} -> name
+      {:error, :unsupported_format} -> nil
+    end
+  end
+
+  defp dropfile_formats(dropfiles) when is_list(dropfiles), do: Enum.map(dropfiles, & &1.format)
+  defp dropfile_formats(_dropfiles), do: []
 
   defp validate(%Manifest{} = manifest) do
     []
@@ -488,10 +612,11 @@ defmodule Foglet.Doors do
     )
     |> validate_string_list(:args, manifest.args)
     |> validate_env(manifest.env)
-    |> validate_dropfile_formats(manifest.runtime, manifest.dropfile_formats)
+    |> validate_dropfiles(manifest.runtime, manifest.dropfiles)
     |> validate_env_allowlist(manifest.env_allowlist)
     |> validate_timeout(:timeout_ms, manifest.timeout_ms)
     |> validate_optional_timeout(:idle_timeout_ms, manifest.idle_timeout_ms)
+    |> validate_output_encoding(manifest.output_encoding)
     |> validate_auth_scope(manifest.auth_scope)
     |> validate_sandbox(manifest.runtime, manifest.sandbox)
     |> Enum.reverse()
@@ -500,10 +625,15 @@ defmodule Foglet.Doors do
   defp atomize_known_keys(attrs) do
     Map.new(attrs, fn
       {key, value} when is_atom(key) -> {key, value}
-      {key, value} when is_binary(key) -> {String.to_existing_atom(key), value}
+      {"pty", value} -> {:pty, value}
+      {"pty?", value} -> {:pty?, value}
+      {key, value} when key in ~w[
+        id slug display_name description runtime command module args dropfiles dropfile_formats
+        working_dir env env_allowlist timeout_ms idle_timeout_ms visibility auth_scope
+        output_encoding sandbox
+      ] -> {String.to_existing_atom(key), value}
+      {key, value} -> {key, value}
     end)
-  rescue
-    ArgumentError -> attrs
   end
 
   defp require_binary(errors, _field, value) when is_binary(value) and value != "", do: errors
@@ -554,20 +684,81 @@ defmodule Foglet.Doors do
 
   defp validate_env(errors, _env), do: [{:env, "must be a map"} | errors]
 
-  defp validate_dropfile_formats(errors, :classic_dropfile, values) when is_list(values) do
-    unsupported = Enum.find(values, &(&1 not in @classic_dropfile_formats))
+  defp validate_dropfiles(errors, :classic_dropfile, []),
+    do: [
+      {:dropfiles, "classic_dropfile doors must declare at least one dropfile format"} | errors
+    ]
 
-    if unsupported do
-      [{:dropfile_formats, "contains unsupported format #{inspect(unsupported)}"} | errors]
+  defp validate_dropfiles(errors, :classic_dropfile, dropfiles) when is_list(dropfiles) do
+    Enum.reduce(dropfiles, errors, &validate_dropfile/2)
+  end
+
+  defp validate_dropfiles(errors, _runtime, []), do: errors
+
+  defp validate_dropfiles(errors, _runtime, dropfiles) when is_list(dropfiles),
+    do: Enum.reduce(dropfiles, errors, &validate_dropfile/2)
+
+  defp validate_dropfiles(errors, _runtime, _dropfiles),
+    do: [{:dropfiles, "must be a list"} | errors]
+
+  defp validate_dropfile(%Dropfile{} = dropfile, errors) do
+    errors
+    |> validate_dropfile_raw_keys(dropfile.raw_keys)
+    |> validate_dropfile_value(
+      :dropfiles,
+      dropfile.format,
+      @classic_dropfile_formats,
+      "contains unsupported format #{inspect(dropfile.format)}"
+    )
+    |> validate_dropfile_value(
+      :dropfile_identity,
+      dropfile.identity,
+      @dropfile_identity_values,
+      "must be handle"
+    )
+    |> validate_dropfile_value(
+      :dropfile_transport,
+      dropfile.transport,
+      @dropfile_transport_values,
+      "must be filesystem"
+    )
+    |> validate_dropfile_value(
+      :dropfile_encoding,
+      dropfile.encoding,
+      @dropfile_encoding_values,
+      "must be cp437 or utf8"
+    )
+    |> validate_dropfile_value(
+      :dropfile_cwd,
+      dropfile.cwd,
+      @dropfile_cwd_values,
+      "must be door_working_dir or session_working_dir"
+    )
+    |> validate_dropfile_value(
+      :dropfile_expose_path,
+      dropfile.expose_path,
+      @dropfile_expose_path_values,
+      "must be env or none"
+    )
+  end
+
+  defp validate_dropfile(_dropfile, errors), do: [{:dropfiles, "must contain maps"} | errors]
+
+  defp validate_dropfile_raw_keys(errors, keys) do
+    if Enum.any?(keys, &(&1 in @unsafe_dropfile_keys)) do
+      [{:dropfiles, "must not declare filenames or paths; Foglet uses fixed safe names"} | errors]
     else
       errors
     end
   end
 
-  defp validate_dropfile_formats(errors, _runtime, values) when is_list(values), do: errors
-
-  defp validate_dropfile_formats(errors, _runtime, _values),
-    do: [{:dropfile_formats, "must be a list"} | errors]
+  defp validate_dropfile_value(errors, field, value, allowed, message) do
+    if value in allowed do
+      errors
+    else
+      [{field, message} | errors]
+    end
+  end
 
   defp validate_env_allowlist(errors, values) when is_list(values) do
     case Enum.find(values, &unsupported_env_name?/1) do
@@ -586,6 +777,39 @@ defmodule Foglet.Doors do
   defp validate_optional_timeout(errors, _field, nil), do: errors
   defp validate_optional_timeout(errors, field, value), do: validate_timeout(errors, field, value)
 
+  defp validate_output_encoding(errors, encoding) when encoding in @output_encoding_values,
+    do: errors
+
+  defp validate_output_encoding(errors, _encoding),
+    do: [{:output_encoding, "must be utf8 or cp437"} | errors]
+
+  defp normalize_manifest_atom(value) when is_atom(value), do: value
+
+  defp normalize_manifest_atom(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp normalize_manifest_atom(value), do: value
+
+  defp normalize_auth_scope("site"), do: :site
+
+  defp normalize_auth_scope(%{"board" => board_id}) when is_binary(board_id),
+    do: {:board, board_id}
+
+  defp normalize_auth_scope(scope), do: scope
+
+  defp normalize_output_encoding(value) when is_atom(value), do: value
+
+  defp normalize_output_encoding(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp normalize_output_encoding(value), do: value
+
   defp validate_auth_scope(errors, :site), do: errors
   defp validate_auth_scope(errors, {:board, board_id}) when is_binary(board_id), do: errors
 
@@ -598,10 +822,10 @@ defmodule Foglet.Doors do
     attrs = atomize_sandbox_keys(attrs)
 
     %Sandbox{
-      mode: Map.get(attrs, :mode, :none),
+      mode: normalize_manifest_atom(Map.get(attrs, :mode, :none)),
       user: Map.get(attrs, :user),
       group: Map.get(attrs, :group),
-      process_tree: Map.get(attrs, :process_tree, :process_group),
+      process_tree: normalize_manifest_atom(Map.get(attrs, :process_tree, :process_group)),
       fail_closed?: Map.get(attrs, :fail_closed?, Map.get(attrs, :fail_closed, true))
     }
   end
@@ -629,7 +853,8 @@ defmodule Foglet.Doors do
 
   defp validate_sandbox(errors, _runtime, %Sandbox{mode: :none}), do: errors
 
-  defp validate_sandbox(errors, :external_pty, %Sandbox{} = sandbox) do
+  defp validate_sandbox(errors, runtime, %Sandbox{} = sandbox)
+       when runtime in [:external_pty, :classic_dropfile] do
     errors
     |> validate_sandbox_mode(sandbox.mode)
     |> validate_process_tree(sandbox.process_tree)
@@ -645,7 +870,7 @@ defmodule Foglet.Doors do
     if sandbox.mode == :none do
       errors
     else
-      [{:sandbox, "is only supported for external_pty doors"} | errors]
+      [{:sandbox, "is only supported for external_pty or classic_dropfile doors"} | errors]
     end
   end
 
@@ -717,66 +942,6 @@ defmodule Foglet.Doors do
   defp terminal_size(%Session{terminal_size: size}), do: size
   defp terminal_size(_session), do: nil
 
-  defp dropfile_terminal_size(%Session{terminal_size: {cols, rows}}), do: {cols, rows}
-  defp dropfile_terminal_size(%{terminal_size: {cols, rows}}), do: {cols, rows}
-  defp dropfile_terminal_size(_session), do: {80, 24}
-
-  defp dropfile_handle(%User{handle: handle}, _session) when is_binary(handle), do: handle
-  defp dropfile_handle(%{handle: handle}, _session) when is_binary(handle), do: handle
-  defp dropfile_handle(_user, %Session{handle: handle}) when is_binary(handle), do: handle
-  defp dropfile_handle(_user, %{handle: handle}) when is_binary(handle), do: handle
-  defp dropfile_handle(_user, _session), do: "guest"
-
-  defp dropfile_display_name(%User{real_name: real_name}, _session)
-       when is_binary(real_name) and real_name != "",
-       do: real_name
-
-  defp dropfile_display_name(%{real_name: real_name}, _session)
-       when is_binary(real_name) and real_name != "",
-       do: real_name
-
-  defp dropfile_display_name(user, session),
-    do: dropfile_handle(user, session) |> guest_titlecase()
-
-  defp dropfile_location(%User{location: location}) when is_binary(location), do: location
-  defp dropfile_location(%{location: location}) when is_binary(location), do: location
-  defp dropfile_location(_user), do: ""
-
-  defp user_role(%User{role: role}, _session) when not is_nil(role), do: to_string(role)
-  defp user_role(%{role: role}, _session) when not is_nil(role), do: to_string(role)
-  defp user_role(_user, %Session{role: role}) when not is_nil(role), do: to_string(role)
-  defp user_role(_user, %{role: role}) when not is_nil(role), do: to_string(role)
-  defp user_role(_user, _session), do: "user"
-
-  defp user_identifier(%User{id: id}, _session) when is_binary(id), do: id
-  defp user_identifier(%{id: id}, _session) when is_binary(id), do: id
-  defp user_identifier(_user, %Session{user_id: id}) when is_binary(id), do: id
-  defp user_identifier(_user, %{user_id: id}) when is_binary(id), do: id
-  defp user_identifier(_user, _session), do: "guest"
-
-  defp session_identifier(%{session_id: id}) when is_binary(id), do: id
-  defp session_identifier(_session), do: ""
-
-  defp role_security_level(user, session) do
-    case user_role(user, session) do
-      "sysop" -> "100"
-      "mod" -> "80"
-      _ -> "10"
-    end
-  end
-
-  defp sysop_name_parts do
-    case System.get_env("FOGLET_BBS_SYSOP_NAME") do
-      nil -> ["Foglet", "Sysop"]
-      name -> name |> String.split(" ", parts: 2) |> then(&(&1 ++ [""])) |> Enum.take(2)
-    end
-  end
-
-  defp crlf_lines(lines), do: {:ok, Enum.join(lines, "\r\n") <> "\r\n"}
-
   defp to_env(nil), do: ""
   defp to_env(value), do: to_string(value)
-
-  defp guest_titlecase("guest"), do: "Guest"
-  defp guest_titlecase(value), do: value
 end
