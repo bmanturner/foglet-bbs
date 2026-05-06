@@ -74,6 +74,18 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     end
   end
 
+  defmodule FakePublicProfile do
+    def load("u-bob", _opts \\ []) do
+      {:ok,
+       %Foglet.Accounts.PublicProfile{
+         user_id: "u-bob",
+         handle: "bob",
+         role: :mod,
+         karma: 5
+       }}
+    end
+  end
+
   defmodule FakeBoards do
     def advance_board_read_pointer(_user_id, _board_id, _msg_num), do: {:ok, %{}}
   end
@@ -818,12 +830,16 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
         )
 
       context =
-        Context.new(current_user: %{id: "reader", handle: "reader"}, terminal_size: {100, 40})
+        Context.new(
+          current_user: %{id: "reader", handle: "reader"},
+          terminal_size: {100, 40},
+          domain: %{public_profile: FakePublicProfile}
+        )
 
       assert {^state, [%Effect{type: :modal, payload: {:open, modal}}]} =
                PostReader.update({:key, %{key: :char, char: "v"}}, state, context)
 
-      assert %Foglet.Accounts.PublicProfile{user_id: "u-bob", handle: "bob", role: :mod} =
+      assert %Foglet.Accounts.PublicProfile{user_id: "u-bob", handle: "bob", role: :mod, karma: 5} =
                modal.message
     end
 

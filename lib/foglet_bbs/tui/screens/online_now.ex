@@ -68,12 +68,13 @@ defmodule Foglet.TUI.Screens.OnlineNow do
     {normalize_state(local_state), [Effect.navigate(:main_menu)]}
   end
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{}) when c in ["v", "V"] do
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["v", "V"] do
     state = normalize_state(local_state)
 
     case State.selected_row(state) do
       %{user: user} when is_map(user) ->
-        profile = PublicProfile.from_user(user)
+        profile = load_public_profile(user, context)
         modal = %Modal{type: :info, title: "Public Profile", message: profile}
         {state, [Effect.open_modal(modal)]}
 
@@ -185,19 +186,32 @@ defmodule Foglet.TUI.Screens.OnlineNow do
   end
 
   defp load_online_now_effect(%Context{} = context) do
-    online_now = domain_module(context, :online_now)
+    online_now_mod = domain_module(context, :online_now, Foglet.Sessions.OnlineNow)
 
     Effect.task(:load_online_now, :online_now, fn ->
-      online_now.list()
+      online_now_mod.list(current_user: context.current_user)
     end)
   end
 
-  defp domain_module(%Context{domain: domain}, key) when is_map(domain) do
-    case Map.get(domain, key) do
-      module when is_atom(module) and not is_nil(module) -> module
-      _other -> Foglet.Sessions.OnlineNow
+  defp load_public_profile(user, %Context{} = context) when is_map(user) do
+    profile_mod = domain_module(context, :public_profile, PublicProfile)
+
+    with user_id when is_binary(user_id) <- Map.get(user, :id) || Map.get(user, "id"),
+         {:ok, %PublicProfile{} = profile} <- profile_mod.load(user_id) do
+      profile
+    else
+      _ -> PublicProfile.from_user(user)
     end
   end
+
+  defp domain_module(%Context{domain: domain}, key, default) when is_map(domain) do
+    case Map.get(domain, key) do
+      module when is_atom(module) and not is_nil(module) -> module
+      _other -> default
+    end
+  end
+
+  defp domain_module(%Context{}, _key, default), do: default
 
   defp normalize_state(%State{} = state), do: state
   defp normalize_state(_other), do: State.new()

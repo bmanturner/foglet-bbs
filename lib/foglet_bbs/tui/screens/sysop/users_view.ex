@@ -147,9 +147,20 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
 
   defp open_selected_profile(%__MODULE__{} = state) do
     {_status, user} = Enum.at(state.rows, state.selection_index)
-    profile = PublicProfile.from_user(user)
+    profile = load_public_profile(user)
     modal = %Modal{type: :info, title: "Public Profile", message: profile}
     {state, [Effect.open_modal(modal)]}
+  end
+
+  defp load_public_profile(user) when is_map(user) do
+    user_id = Map.get(user, :id) || Map.get(user, "id")
+
+    with {:ok, user_id} <- Ecto.UUID.cast(user_id),
+         {:ok, %PublicProfile{} = profile} <- PublicProfile.load(user_id) do
+      profile
+    else
+      _ -> PublicProfile.from_user(user)
+    end
   end
 
   @spec render(t(), map()) :: any()
