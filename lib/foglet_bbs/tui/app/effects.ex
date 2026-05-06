@@ -150,6 +150,13 @@ defmodule Foglet.TUI.App.Effects do
     {state, [Command.quit()]}
   end
 
+  # Screen-scoped task effect contract:
+  # `%Effect{type: :task}` always returns a `Foglet.TUI.Command.screen_task/4`
+  # command. The task result is delivered back through Raxol as
+  # `{:command_result, {:screen_task_result, screen_key, op, {:ok | :error, result}}}`;
+  # `Foglet.TUI.App` re-dispatches that shape to the owning screen as
+  # `{:task_result, op, result}`. Use `Foglet.TUI.Command.task/2` directly only
+  # for app-global tasks that should hit App's `{:task_error, op, reason}` path.
   def apply_effect(%App{} = state, %Effect{
         type: :task,
         payload: %{op: op, screen_key: screen_key, fun: fun}
@@ -157,20 +164,8 @@ defmodule Foglet.TUI.App.Effects do
     user_id = current_user_id(state)
 
     task =
-      Foglet.TUI.Command.task(op, fn ->
-        try do
-          {:screen_task_result, screen_key, op, {:ok, fun.()}}
-        rescue
-          e ->
-            log_task_failure(screen_key, op, :exception, e, user_id)
-            {:screen_task_result, screen_key, op, {:error, {:task_failed, :exception}}}
-        catch
-          kind, value ->
-            log_task_failure(screen_key, op, kind, value, user_id)
-
-            {:screen_task_result, screen_key, op,
-             {:error, {:task_failed, safe_failure_kind(kind)}}}
-        end
+      Foglet.TUI.Command.screen_task(screen_key, op, fun, fn metadata ->
+        log_task_failure(metadata, user_id)
       end)
 
     {state, [task]}
@@ -185,7 +180,10 @@ defmodule Foglet.TUI.App.Effects do
     end)
   end
 
-  defp log_task_failure(screen_key, op, failure_kind, reason, user_id) do
+  defp log_task_failure(
+         %{screen_key: screen_key, op: op, failure_kind: failure_kind, reason: reason},
+         user_id
+       ) do
     Logger.error(
       [
         "tui_screen_task_failed",
