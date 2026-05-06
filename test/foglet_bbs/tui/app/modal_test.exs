@@ -99,7 +99,7 @@ defmodule Foglet.TUI.App.ModalTest do
   defp reply_context_modal do
     body =
       Enum.map_join(1..12, "\n", fn row ->
-        "Long reply-context body for scroll verification with enough words to wrap inside the modal interior while preserving chrome row #{row}."
+        "Long reply-context body for scroll verification with **bold evidence** and *italic proof* that wraps inside the modal interior while preserving chrome row #{row}."
       end)
 
     post = %{
@@ -142,6 +142,29 @@ defmodule Foglet.TUI.App.ModalTest do
     assert bad_rows == [],
            "expected every modal content row to preserve the right border; got:\n#{Enum.join(bad_rows, "\n")}"
   end
+
+  defp text_node_inspections(tree, content) do
+    tree
+    |> collect_text_nodes(content, [])
+    |> Enum.map(&inspect(&1, printable_limit: :infinity, limit: :infinity))
+  end
+
+  defp collect_text_nodes(nil, _content, acc), do: acc
+
+  defp collect_text_nodes(list, content, acc) when is_list(list) do
+    Enum.reduce(list, acc, &collect_text_nodes(&1, content, &2))
+  end
+
+  defp collect_text_nodes(%{children: children} = node, content, acc) do
+    acc = maybe_collect_text_node(node, content, acc)
+    collect_text_nodes(children, content, acc)
+  end
+
+  defp collect_text_nodes(node, content, acc), do: maybe_collect_text_node(node, content, acc)
+
+  defp maybe_collect_text_node(%{content: content} = node, content, acc), do: [node | acc]
+  defp maybe_collect_text_node(%{text: content} = node, content, acc), do: [node | acc]
+  defp maybe_collect_text_node(_node, _content, acc), do: acc
 
   describe "modal key precedence" do
     test "handle_key/2 does not route keys to the active screen reducer while a modal is open" do
@@ -205,10 +228,26 @@ defmodule Foglet.TUI.App.ModalTest do
           |> AsciiRenderer.render(size)
 
         assert_modal_boundary_survives(rendered, "Long reply-context body")
+        assert_modal_boundary_survives(rendered, "bold evidence")
         assert_modal_boundary_survives(rendered, "Lines 1-8/")
         assert_modal_boundary_survives(rendered, "[↑↓] Scroll")
         assert_modal_rows_bounded(rendered)
       end
+    end
+
+    test "reply-context body uses the normal markdown-styled post-reader path" do
+      view =
+        state(modal: reply_context_modal(), terminal_size: {80, 24})
+        |> App.view()
+
+      bold_nodes = text_node_inspections(view, "bold evidence")
+      italic_nodes = text_node_inspections(view, "italic proof")
+
+      assert Enum.any?(bold_nodes, &(&1 =~ "bold")),
+             "expected reply-context bold markdown to keep bold styling, got: #{inspect(bold_nodes)}"
+
+      assert Enum.any?(italic_nodes, &(&1 =~ "italic")),
+             "expected reply-context italic markdown to keep italic styling, got: #{inspect(italic_nodes)}"
     end
   end
 
