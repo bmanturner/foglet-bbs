@@ -12,7 +12,7 @@ defmodule Foglet.TUI.App do
   under `screen_state`, keyed by screen atom; each screen is a reducer that
   exposes `update/3` + `render/2` and an optional `subscriptions/2` callback.
   `session_context.door_active?` is runtime-only terminal handoff state: while true, Foglet
-  renders a blank frame and lets the SSH door runner own all terminal bytes.
+  suppresses Raxol rendering and lets the SSH door runner own all terminal bytes.
 
   State flow (D-16): domain → Postgres (Foglet.Boards/Threads/Posts);
   session-scoped identity → Foglet.Sessions.Session; UI shell → this model
@@ -244,7 +244,7 @@ defmodule Foglet.TUI.App do
   def view(state) do
     cond do
       door_active?(state) ->
-        text("")
+        nil
 
       SizeGate.too_small?(state) ->
         # FRAME-03 / D-04: render-time gate bypasses ScreenFrame entirely.

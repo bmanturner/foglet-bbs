@@ -175,19 +175,32 @@ class TerminalOutputSanitizer:
     (for example CSI ? 1049 l) while remaining attached to the PTY. Forwarding
     those bytes lets the child restore the client's previous Foglet frame even
     though the runner is still active, which looks like a false return and leaves
-    raw child input/output below the TUI frame. Keep normal ANSI drawing intact,
-    but strip only alternate-screen/cursor-buffer mode toggles.
+    raw child input/output below the TUI frame. Some doors also emit a full-screen
+    clear as a standalone idle repaint; forwarding that without a following draw
+    leaves a live-but-blank game screen. Keep normal ANSI drawing intact, but
+    strip only alternate-screen/cursor-buffer mode toggles and defer standalone
+    full-screen clears until repaint bytes arrive.
     """
 
     def __init__(self) -> None:
         self._pending = b""
+        self._pending_full_screen_clear = b""
 
     def filter(self, data: bytes) -> bytes:
-        if not data and not self._pending:
+        if not data and not self._pending and not self._pending_full_screen_clear:
             return data
 
         data = self._pending + data
         self._pending = b""
+
+        if self._standalone_full_screen_clear_frame(data):
+            self._pending_full_screen_clear = data
+            return b""
+
+        if self._pending_full_screen_clear:
+            data = self._pending_full_screen_clear + data
+            self._pending_full_screen_clear = b""
+
         output = bytearray()
         i = 0
 
@@ -219,30 +232,81 @@ class TerminalOutputSanitizer:
         if start + 1 >= len(data):
             return None
 
+        if data[start + 1] == ord("c"):
+            return ("strip", start + 2)
+
         if data[start + 1] != ord("["):
             return ("keep", start + 2)
 
+        sequence = self._parse_csi(data, start)
+        if sequence is None:
+            return None
+
+        params, private_marker, final, next_index = sequence
+        if private_marker == ord("?") and final in (ord("h"), ord("l")) and params:
+            modes = self._parse_modes(params)
+            if any(mode in DANGEROUS_DEC_PRIVATE_MODES for mode in modes):
+                return ("strip", next_index)
+
+        return ("keep", next_index)
+
+    def _parse_csi(self, data: bytes, start: int):
         cursor = start + 2
         if cursor >= len(data):
             return None
-        if data[cursor] != ord("?"):
-            return ("keep", start + 2)
 
-        cursor += 1
+        private_marker = None
+        if data[cursor] in (ord("?"), ord(">"), ord("!")):
+            private_marker = data[cursor]
+            cursor += 1
+
         params_start = cursor
-        while cursor < len(data) and (48 <= data[cursor] <= 57 or data[cursor] == ord(";")):
+        while cursor < len(data) and 0x30 <= data[cursor] <= 0x3F:
+            cursor += 1
+
+        while cursor < len(data) and 0x20 <= data[cursor] <= 0x2F:
             cursor += 1
 
         if cursor >= len(data):
             return None
 
         final = data[cursor]
-        if final in (ord("h"), ord("l")) and params_start < cursor:
-            modes = self._parse_modes(data[params_start:cursor])
-            if any(mode in DANGEROUS_DEC_PRIVATE_MODES for mode in modes):
-                return ("strip", cursor + 1)
+        if 0x40 <= final <= 0x7E:
+            return (data[params_start:cursor], private_marker, final, cursor + 1)
 
-        return ("keep", cursor + 1)
+        return (b"", private_marker, final, start + 2)
+
+    def _standalone_full_screen_clear_frame(self, data: bytes) -> bool:
+        saw_full_clear = False
+        i = 0
+
+        while i < len(data):
+            byte = data[i]
+            if byte == 0x1B:
+                if i + 1 >= len(data):
+                    return False
+                if data[i + 1] != ord("["):
+                    i += 2
+                    continue
+
+                sequence = self._parse_csi(data, i)
+                if sequence is None:
+                    return False
+
+                params, private_marker, final, next_index = sequence
+                if private_marker is None and final == ord("J"):
+                    modes = self._parse_modes(params or b"0")
+                    saw_full_clear = saw_full_clear or any(mode in (2, 3) for mode in modes)
+                i = next_index
+                continue
+
+            if byte in (0x00, 0x07, 0x08, 0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x20):
+                i += 1
+                continue
+
+            return False
+
+        return saw_full_clear
 
     def _parse_modes(self, payload: bytes) -> list[int]:
         modes = []

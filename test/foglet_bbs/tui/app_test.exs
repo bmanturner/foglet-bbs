@@ -392,7 +392,9 @@ defmodule Foglet.TUI.AppTest do
       assert cleared.modal == nil
     end
 
-    test "active door handoff blanks Foglet view until exit reclaims terminal", %{state: state} do
+    test "active door handoff suppresses Foglet renders until exit reclaims terminal", %{
+      state: state
+    } do
       manifest = %Foglet.Doors.Manifest{
         id: "native-hello",
         slug: "native-hello",
@@ -414,9 +416,7 @@ defmodule Foglet.TUI.AppTest do
       {handoff_state, []} = Effects.apply_effect(state, Effect.launch_door(manifest))
       assert handoff_state.session_context.door_active?
 
-      blank = Foglet.TUI.AsciiRenderer.render(App.view(handoff_state), {80, 24})
-      refute blank =~ "Foglet"
-      refute blank =~ "Door Games"
+      assert App.view(handoff_state) == nil
 
       assert_receive {:foglet_launch_door, ^manifest, _session, {80, 24}}, 250
 

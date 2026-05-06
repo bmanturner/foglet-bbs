@@ -242,13 +242,16 @@ defmodule Foglet.Doors.RunnerTest do
       ref = Process.monitor(pid)
       assert_receive {:door_started, ^pid, "external-env"}
       assert_door_output_contains("external-env:alice:132")
-      assert %{status: :running, pty_backend: :helper} = Runner.snapshot(pid)
+
+      assert %{status: :running, pty_backend: :helper, last_output_at: %DateTime{}} =
+               Runner.snapshot(pid)
 
       # SSH clients send Enter as carriage return. The helper must preserve the
       # child PTY's default CR->NL translation so shell/readline-style doors see
       # a complete line.
       Runner.input(pid, "hello\r")
       assert_door_output_contains("external> hello")
+      assert %{last_input_at: %DateTime{}, last_output_at: %DateTime{}} = Runner.snapshot(pid)
 
       Runner.input(pid, "/quit\r")
       assert_door_output_contains("Leaving External Echo.")

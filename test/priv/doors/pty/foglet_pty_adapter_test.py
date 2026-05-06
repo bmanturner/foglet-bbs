@@ -135,6 +135,42 @@ class DropPrivilegesTest(unittest.TestCase):
         self.assertNotIn(("setgroups", []), fake_os.calls)
 
 
+class TerminalOutputSanitizerTest(unittest.TestCase):
+    def setUp(self):
+        self.helper = load_helper()
+
+    def test_strips_full_terminal_reset_without_dropping_neighboring_menu_output(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(
+            sanitizer.filter(b"before\x1bcafter"),
+            b"beforeafter",
+        )
+
+    def test_strips_split_full_terminal_reset_before_following_menu_output(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(sanitizer.filter(b"before\x1b"), b"before")
+        self.assertEqual(sanitizer.filter(b"cafter"), b"after")
+
+    def test_defers_standalone_full_screen_clear_until_menu_redraw_arrives(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(sanitizer.filter(b"\x1b[2J\x1b[H"), b"")
+        self.assertEqual(
+            sanitizer.filter(b"Menu\r\nYour choice: "),
+            b"\x1b[2J\x1b[HMenu\r\nYour choice: ",
+        )
+
+    def test_keeps_full_screen_clear_when_frame_contains_redraw_output(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(
+            sanitizer.filter(b"\x1b[2J\x1b[HMenu\r\nYour choice: "),
+            b"\x1b[2J\x1b[HMenu\r\nYour choice: ",
+        )
+
+
 class DirectHelperLaunchTest(unittest.TestCase):
     def test_broken_stdout_pipe_exits_without_traceback(self):
         helper = load_helper()
