@@ -78,6 +78,7 @@ defmodule Foglet.TUI.Widgets.Compose do
   def translate_key(%{key: :backspace}), do: {:backspace}
   def translate_key(%{key: :delete}), do: {:delete}
   def translate_key(%{key: :enter}), do: {:enter}
+  def translate_key(%{key: :space}), do: {:input, ?\s}
   def translate_key(%{key: :up}), do: {:move_cursor, :up}
   def translate_key(%{key: :down}), do: {:move_cursor, :down}
   def translate_key(%{key: :left}), do: {:move_cursor, :left}

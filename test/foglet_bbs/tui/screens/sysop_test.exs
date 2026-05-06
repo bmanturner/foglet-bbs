@@ -89,6 +89,30 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end
   end
 
+  defp drive_sysop_events(state, events) do
+    Enum.reduce(events, state, fn event, acc ->
+      case handle_sysop_key(event, acc) do
+        {:update, next, _cmds} -> next
+        other -> flunk("expected #{inspect(event)} to update sysop state, got #{inspect(other)}")
+      end
+    end)
+  end
+
+  defp text_events(text) do
+    text
+    |> String.codepoints()
+    |> Enum.map(&%{key: :char, char: &1})
+  end
+
+  defp textarea_events(text) do
+    text
+    |> String.codepoints()
+    |> Enum.map(fn
+      " " -> %{key: :space}
+      ch -> %{key: :char, char: ch}
+    end)
+  end
+
   defp preserve_app_owned_loading(old_state, new_state, effects) do
     Enum.reduce(effects, new_state, fn
       %Effect{type: :task, payload: %{op: op}}, acc
@@ -2048,6 +2072,30 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       assert Enum.any?(new_bv.boards, &(&1.slug == "news")),
              "New board must appear in refreshed list"
+    end
+
+    test "new-board description accepts terminal space events and saves spaces intact", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+
+      events =
+        [%{key: :char, char: "n"}] ++
+          text_events("space-regression") ++
+          [%{key: :tab}] ++
+          text_events("Space Regression") ++
+          [%{key: :tab}] ++
+          textarea_events("General discussion board") ++
+          [%{key: :char, char: "s", ctrl: true}]
+
+      state = drive_sysop_events(state, events)
+      new_bv = current_boards_view(state)
+
+      assert new_bv.modal == nil
+      assert board = Foglet.Boards.get_board_by_slug("space-regression")
+      assert board.description == "General discussion board"
+      assert Enum.any?(new_bv.boards, &(&1.description == "General discussion board"))
     end
 
     test "invalid submit surfaces Modal.Form errors, modal stays open", %{

@@ -1179,7 +1179,16 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   # Apply key event to the raw_value string mirror. This bypasses
   # MultiLineInput's unreliable value/lines sync and gives us a clean string.
   defp apply_raw_edit(rv, %{key: :char, char: "\n"}), do: rv <> "\n"
-  defp apply_raw_edit(rv, %{key: :char, char: c}), do: rv <> c
+
+  defp apply_raw_edit(rv, %{key: :char, char: c}) when is_binary(c) do
+    c
+    |> String.to_charlist()
+    |> Enum.reject(&(&1 < 32))
+    |> List.to_string()
+    |> then(&(rv <> &1))
+  end
+
+  defp apply_raw_edit(rv, %{key: :space}), do: rv <> " "
   defp apply_raw_edit(rv, %{key: :enter}), do: rv <> "\n"
 
   defp apply_raw_edit(rv, %{key: :backspace}), do: String.slice(rv, 0..-2//1)
