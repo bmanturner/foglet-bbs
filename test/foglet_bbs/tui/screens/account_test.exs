@@ -168,7 +168,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
         real_name: "Alice Example",
         timezone: "America/Chicago",
         preferences: %{"time_format" => "24h"},
-        theme: "amber"
+        theme: "amber",
+        handle_color: "#FFFFFF"
       }
 
       ss = AccountState.new(current_user: user)
@@ -182,7 +183,8 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert ss.prefs_draft == %{
                timezone: "America/Chicago",
                time_format: "24h",
-               theme: "amber"
+               theme: "amber",
+               handle_color: "#FFFFFF"
              }
 
       assert ss.profile_focus == :location
@@ -584,7 +586,13 @@ defmodule Foglet.TUI.Screens.AccountTest do
       ss = AccountState.new(current_user: state.current_user)
 
       assert Enum.map(ss.profile_form.fields, & &1.label) == ["Location", "Tagline", "Real name"]
-      assert Enum.map(ss.prefs_form.fields, & &1.label) == ["Timezone", "Time format", "Theme"]
+
+      assert Enum.map(ss.prefs_form.fields, & &1.label) == [
+               "Timezone",
+               "Time format",
+               "Theme",
+               "Handle color"
+             ]
     end
   end
 
@@ -679,13 +687,16 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert state.screen_state.account.prefs_focus == :theme
 
       {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.prefs_focus == :handle_color
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
       assert state.screen_state.account.prefs_focus == :timezone
 
       {:update, state, []} = handle_account_key(%{key: :backtab}, state)
-      assert state.screen_state.account.prefs_focus == :theme
+      assert state.screen_state.account.prefs_focus == :handle_color
 
       {:update, state, []} = handle_account_key(%{key: :shift_tab}, state)
-      assert state.screen_state.account.prefs_focus == :time_format
+      assert state.screen_state.account.prefs_focus == :theme
     end
 
     test "FOG-999: Enter still opens the selected Profile field after row Tab", %{state: state} do
