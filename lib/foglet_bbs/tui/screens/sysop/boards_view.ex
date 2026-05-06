@@ -586,6 +586,12 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
         value: Map.get(values, :category_id, default_cat_id)
       },
       %{
+        name: :display_order,
+        type: :integer,
+        label: "Display order",
+        value: Map.get(values, :display_order, 0) |> to_string()
+      },
+      %{
         name: :postable_by,
         type: :enum,
         label: "Postable by",
@@ -682,6 +688,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       name: board.name,
       description: board.description || "",
       category_id: board.category_id,
+      display_order: board.display_order,
       postable_by: to_string(board.postable_by),
       default_subscription: board.default_subscription,
       required_subscription: board.required_subscription,
@@ -774,7 +781,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
          %{display_order: nil},
          %__MODULE__{modal_kind: kind} = state
        )
-       when kind in [:create_category, :edit_category] do
+       when kind in [:create_board, :edit_board, :create_category, :edit_category] do
     form = set_modal_errors(state.modal, %{display_order: "is invalid"})
     {%{state | modal: form}, []}
   end
