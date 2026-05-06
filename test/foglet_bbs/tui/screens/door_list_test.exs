@@ -16,6 +16,12 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
 
+  defmodule EmptyDoors do
+    @moduledoc false
+    def list_browsable(_user), do: []
+    def get_visible(_user, _door_id), do: {:error, :not_found}
+  end
+
   setup_all do
     Config.init_cache()
 
@@ -42,12 +48,14 @@ defmodule Foglet.TUI.Screens.DoorListTest do
       session_context: %{theme: Foglet.TUI.Theme.default()},
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
       route: :door_list,
-      route_params: %{}
+      domain: Keyword.get(opts, :domain, %{})
     )
   end
 
-  test "init shows an empty catalog by default when demo doors are disabled" do
-    assert %State{doors: [], selected_index: 0} = DoorList.init(context())
+  test "init lists production catalog by default when demo doors are disabled" do
+    assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
+    assert Enum.map(doors, & &1.id) == ["usurper-reborn"]
+    assert Enum.all?(doors, &match?(%Manifest{}, &1))
   end
 
   test "init lists launchable built-in native and external demo doors when enabled" do
@@ -56,6 +64,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
 
     assert Enum.map(doors, & &1.id) == [
+             "usurper-reborn",
              "native-hello",
              "external-echo",
              "python-context-demo",
@@ -76,14 +85,14 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert {%State{selected_index: 2}, []} =
              DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 1}, ctx)
 
-    assert {%State{selected_index: 3}, []} =
-             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 2}, ctx)
+    assert {%State{selected_index: 4}, []} =
+             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 4}, ctx)
+
+    assert {%State{selected_index: 4}, []} =
+             DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 4}, ctx)
 
     assert {%State{selected_index: 3}, []} =
-             DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 3}, ctx)
-
-    assert {%State{selected_index: 2}, []} =
-             DoorList.update({:key, %{key: :char, char: "k"}}, %{state | selected_index: 3}, ctx)
+             DoorList.update({:key, %{key: :char, char: "k"}}, %{state | selected_index: 4}, ctx)
 
     assert {%State{selected_index: 0}, []} = DoorList.update({:key, %{key: :up}}, state, ctx)
   end
@@ -97,7 +106,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert {^state, [%Effect{type: :modal, payload: {:open, %Modal{type: :confirm} = modal}}]} =
              DoorList.update({:key, %{key: :enter}}, state, ctx)
 
-    assert modal.message =~ "Launch Native Hello?"
+    assert modal.message =~ "Launch Usurper Reborn?"
   end
 
   test "modal submit emits explicit launch_door effect for selected visible door" do
@@ -131,7 +140,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   test "door intro stays bounded and preserves controls at supported breakpoints" do
     enable_demo_doors()
 
-    for {width, height} = size <- [{64, 22}, {80, 24}, {100, 30}] do
+    for {width, height} = size <- [{64, 22}, {80, 24}, {100, 30}, {120, 36}] do
       ascii =
         :door_list
         |> RenderFixtures.state_for(size)
@@ -145,7 +154,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
       choose_line = Enum.find_index(lines, &String.contains?(&1, "Choose a door game."))
       warning_line = Enum.find_index(lines, &String.contains?(&1, "return here."))
-      selected_line = Enum.find_index(lines, &String.contains?(&1, "> Native Hello"))
+      selected_line = Enum.find_index(lines, &String.contains?(&1, "> Usurper Reborn"))
       status_line = Enum.find_index(lines, &String.contains?(&1, "Enter Launch  Q Back"))
       command_line = Enum.find_index(lines, &String.contains?(&1, "Enter Launch"))
 
@@ -168,19 +177,34 @@ defmodule Foglet.TUI.Screens.DoorListTest do
              "missing command bar launch hint at #{width}x#{height}:\n#{ascii}"
 
       refute String.contains?(ascii, "then ret\n"), "warning should not be silently clipped"
+
+      forbidden = [
+        "native elixir",
+        "external pty",
+        "classic dropfile",
+        "DOOR32",
+        "SQLite",
+        "CHAIN.TXT",
+        "DOOR.SYS",
+        "DORINFO.DEF"
+      ]
+
+      for term <- forbidden do
+        refute String.contains?(ascii, term),
+               "member-facing Door Games render leaked #{inspect(term)} at #{width}x#{height}:\n#{ascii}"
+      end
     end
   end
 
   test "empty catalog fallback has no launch affordance and enter is inert" do
-    ctx = context()
+    ctx = context(domain: %{doors: EmptyDoors})
     state = DoorList.init(ctx)
 
     assert {^state, []} = DoorList.update({:key, %{key: :enter}}, state, ctx)
 
     ascii =
-      :door_list
-      |> RenderFixtures.state_for({80, 24})
-      |> App.view()
+      state
+      |> DoorList.render(ctx)
       |> AsciiRenderer.render({80, 24})
 
     assert String.contains?(ascii, "No door games are available right now.")

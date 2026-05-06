@@ -16,6 +16,11 @@ defmodule Foglet.TUI.Screens.DoorList do
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
+  @wide_layout_min_width 100
+  @wide_list_width 44
+  @wide_detail_width 48
+  @row_width 72
+
   defmodule State do
     @moduledoc false
     defstruct selected_index: 0, doors: [], status_message: nil
@@ -109,7 +114,7 @@ defmodule Foglet.TUI.Screens.DoorList do
       column style: %{gap: 1} do
         [
           intro_block(theme),
-          door_rows(state, theme),
+          doors_region(state, theme, context),
           status_line(state, theme)
         ]
       end
@@ -131,6 +136,31 @@ defmodule Foglet.TUI.Screens.DoorList do
     end
   end
 
+  defp doors_region(%State{doors: []} = state, theme, _context), do: door_rows(state, theme)
+
+  defp doors_region(%State{} = state, theme, %Context{terminal_size: {width, _height}})
+       when width >= @wide_layout_min_width do
+    row style: %{gap: 2} do
+      [
+        box style: %{border: :single, padding: 1, width: @wide_list_width} do
+          door_rows(state, theme, @wide_list_width - 4)
+        end,
+        box style: %{border: :single, padding: 1, width: detail_width(width)} do
+          detail_panel(selected_door(state), theme, detail_width(width) - 4)
+        end
+      ]
+    end
+  end
+
+  defp doors_region(%State{} = state, theme, _context), do: door_rows(state, theme)
+
+  defp detail_width(terminal_width) do
+    terminal_width
+    |> Kernel.-(@wide_list_width)
+    |> Kernel.-(8)
+    |> max(@wide_detail_width)
+  end
+
   defp door_rows(%State{doors: []}, theme) do
     box style: %{border: :single, padding: 1} do
       column style: %{gap: 0} do
@@ -142,18 +172,60 @@ defmodule Foglet.TUI.Screens.DoorList do
     end
   end
 
-  defp door_rows(%State{} = state, theme) do
+  defp door_rows(%State{} = state, theme), do: door_rows(state, theme, @row_width)
+
+  defp door_rows(%State{} = state, theme, width) do
     column style: %{gap: 0} do
       state.doors
       |> Enum.with_index()
       |> Enum.map(fn {%Manifest{} = manifest, index} ->
-        marker = if index == state.selected_index, do: ">", else: " "
-        runtime = manifest.runtime |> Atom.to_string() |> String.replace("_", " ")
-        label = TextWidth.slice_to_width("#{marker} #{manifest.display_name} — #{runtime}", 62)
-        text(label, fg: theme.primary.fg)
+        text(door_row_label(manifest, index == state.selected_index, width), fg: theme.primary.fg)
       end)
     end
   end
+
+  defp door_row_label(%Manifest{} = manifest, selected?, width) do
+    marker = if selected?, do: ">", else: " "
+    label = friendly_door_label(manifest)
+
+    TextWidth.slice_to_width("#{marker} #{manifest.display_name} — #{label}", width)
+  end
+
+  defp detail_panel(nil, theme, _width) do
+    text("No selection", fg: theme.dim.fg)
+  end
+
+  defp detail_panel(%Manifest{} = manifest, theme, width) do
+    description_rows =
+      "About: #{friendly_description(manifest)}"
+      |> TextWidth.wrap(width)
+      |> Enum.take(2)
+      |> Enum.map(&text(&1, fg: theme.dim.fg))
+
+    column style: %{gap: 0} do
+      [
+        text(TextWidth.slice_to_width(manifest.display_name, width), fg: theme.title.fg),
+        text("Kind: #{friendly_door_label(manifest)}", fg: theme.primary.fg),
+        text("Status: Ready to launch", fg: theme.primary.fg)
+      ] ++
+        description_rows ++
+        [text("Enter Launch", fg: theme.accent.fg)]
+    end
+  end
+
+  defp friendly_door_label(%Manifest{id: "usurper-reborn"}), do: "Game"
+  defp friendly_door_label(%Manifest{runtime: :classic_dropfile}), do: "Classic BBS door"
+  defp friendly_door_label(%Manifest{}), do: "Door"
+
+  defp friendly_description(%Manifest{id: "usurper-reborn"}) do
+    "A shared-world fantasy BBS game. Your Foglet handle is used when you play."
+  end
+
+  defp friendly_description(%Manifest{id: "classic-dropfile-demo"}) do
+    "A small classic BBS door demo for checking launch and return behavior."
+  end
+
+  defp friendly_description(%Manifest{} = manifest), do: manifest.description
 
   defp status_line(%State{doors: [], status_message: nil}, theme),
     do: text("Q Back", fg: theme.dim.fg)
