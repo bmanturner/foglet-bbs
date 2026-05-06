@@ -43,8 +43,9 @@ defmodule Foglet.SSH.CLIHandler do
   ## Connection limit
 
   Enforced here rather than via a separate GenServer. The module attribute
-  `@max_connections` is the limit. A simple `:persistent_term` counter tracks
-  active connections so we avoid a global GenServer bottleneck.
+  `@max_connections` is the limit. `Foglet.SSH.CLIHandler.ConnectionCounter`
+  tracks active connections in runtime-only ETS state so the SSH hot path avoids
+  a global GenServer bottleneck.
   """
 
   @behaviour :ssh_server_channel
