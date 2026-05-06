@@ -9,7 +9,7 @@ repository and should be read with `docs/DEPLOYMENT.md`.
 
 | Area | Canonical artifact | Operational meaning |
 | --- | --- | --- |
-| Image build | `Dockerfile` | Builds a Debian-based OTP release image, runs as `nobody`, exposes SSH `2222` and HTTP `4000`, declares `/data` as persistent storage, and packages Python 3 for the door PTY helper. It does not currently provide a distinct restricted door user inside the container. |
+| Image build | `Dockerfile` | Builds a Debian-based OTP release image, runs as `nobody`, exposes SSH `2222` and HTTP `4000`, declares `/data` as persistent Foglet storage, declares `/var/lib/foglet/usurper` as the Usurper Reborn shared SQLite volume, packages Python 3 for the door PTY helper, and installs the verified public Linux x64 Usurper Reborn release under `/opt/foglet/doors/usurper`. The executable tree is root-owned except the upstream `logs/` subdirectory, which is writable by the container user. It does not currently provide a distinct restricted door user inside the container. |
 | Local database | `docker-compose.yml` | Provides local `postgres:16` only. It is not a production app stack. |
 | Production target | `fly.toml` | Fly.io is the committed deploy target: app `foglet-bbs`, region `iad`, HTTP health on `/up`, SSH TCP service on public port `22`, and persistent `foglet_data` mounted at `/data`. |
 | Release scripts | `rel/env.sh.eex`, `rel/overlays/bin/server`, `rel/overlays/bin/migrate` | Defines release node/env behavior, starts the Phoenix server for releases, and exposes migration execution inside the release. |

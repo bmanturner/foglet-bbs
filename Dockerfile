@@ -11,6 +11,8 @@
 ARG ELIXIR_VERSION=1.19.5
 ARG OTP_VERSION=28.1.1
 ARG DEBIAN_VERSION=trixie-20260112-slim
+ARG USURPER_REBORN_VERSION=0.60.8
+ARG USURPER_REBORN_LINUX_X64_SHA256=3e7db43967540dc8a14866feae83dfd209e9cd3a138495bc3993957f8d069594
 
 ARG BUILDER_IMAGE="docker.io/hexpm/elixir:${ELIXIR_VERSION}-erlang-${OTP_VERSION}-debian-${DEBIAN_VERSION}"
 ARG RUNNER_IMAGE="docker.io/debian:${DEBIAN_VERSION}"
@@ -62,8 +64,27 @@ RUN mix release
 FROM ${RUNNER_IMAGE} AS final
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates openssh-client python3 \
+  && apt-get install -y --no-install-recommends libstdc++6 openssl libncurses6 locales ca-certificates openssh-client python3 curl unzip \
   && rm -rf /var/lib/apt/lists/*
+
+ARG USURPER_REBORN_VERSION
+ARG USURPER_REBORN_LINUX_X64_SHA256
+
+RUN set -eux; \
+  usurper_zip="UsurperReborn-v${USURPER_REBORN_VERSION}-Linux-x64.zip"; \
+  curl -fsSL -o "/tmp/${usurper_zip}" "https://github.com/binary-knight/usurper-reborn/releases/download/v${USURPER_REBORN_VERSION}/${usurper_zip}"; \
+  echo "${USURPER_REBORN_LINUX_X64_SHA256}  /tmp/${usurper_zip}" | sha256sum -c -; \
+  mkdir -p /opt/foglet/doors/usurper /var/lib/foglet/usurper; \
+  unzip -q "/tmp/${usurper_zip}" -d /opt/foglet/doors/usurper; \
+  rm "/tmp/${usurper_zip}"; \
+  chmod 0755 /opt/foglet /opt/foglet/doors /opt/foglet/doors/usurper; \
+  chmod 0755 /opt/foglet/doors/usurper/UsurperReborn; \
+  chown -R root:root /opt/foglet; \
+  mkdir -p /opt/foglet/doors/usurper/logs; \
+  chown nobody:root /opt/foglet/doors/usurper/logs; \
+  chmod 0750 /opt/foglet/doors/usurper/logs; \
+  chown -R nobody:root /var/lib/foglet; \
+  chmod 0750 /var/lib/foglet /var/lib/foglet/usurper
 
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
@@ -90,7 +111,7 @@ RUN chmod +x /app/bin/server /app/bin/migrate \
 USER nobody
 
 EXPOSE 2222 4000
-VOLUME ["/data"]
+VOLUME ["/data", "/var/lib/foglet/usurper"]
 
 # If using an environment that doesn't automatically reap zombie processes, it is
 # advised to add an init process such as tini via `apt-get install`
