@@ -256,8 +256,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
 
   defp description_for("delivery_mode", description, %__MODULE__{} = state) do
     case {Map.get(state.drafts, "delivery_mode"), state.test_email_state} do
-      {"email", :idle} -> "[E] Send test email to your account email"
-      {"email", :sending} -> "[E] Sending test email…"
+      {"email", :idle} -> "[T] Send test email to your account email"
+      {"email", :sending} -> "[T] Sending test email…"
       {"email", :sent} -> "Sent a test email to your account email."
       {"email", {:error, :missing_email}} -> "Add an email to your account before sending a test."
       {"email", {:error, :forbidden}} -> "Permission denied. You may have been demoted."
