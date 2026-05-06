@@ -112,8 +112,13 @@ defmodule Foglet.Doors do
   @doc "Returns door manifests the actor may browse in the Door Games list."
   @spec list_browsable(User.t() | nil) :: [Manifest.t()]
   def list_browsable(nil) do
-    list_manifests()
-    |> Enum.filter(&(&1.visibility == :members))
+    if demo_doors_enabled?() do
+      demo_manifest_attrs()
+      |> Enum.map(&validate_manifest!/1)
+      |> Enum.filter(&(&1.visibility == :members))
+    else
+      []
+    end
   end
 
   def list_browsable(user), do: list_visible(user)

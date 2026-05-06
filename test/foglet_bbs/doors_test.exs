@@ -309,17 +309,15 @@ defmodule Foglet.DoorsTest do
   end
 
   describe "list_browsable/1" do
-    test "derives anonymous browsing from the gated manifest list" do
+    test "keeps production member doors out of anonymous browsing while preserving demo previews" do
       assert Doors.list_visible(nil) == []
-      assert Enum.map(Doors.list_browsable(nil), & &1.id) == @production_door_ids
+      assert Doors.list_browsable(nil) == []
 
       enable_demo_doors()
 
       assert Doors.list_visible(nil) == []
 
-      assert Enum.map(Doors.list_browsable(nil), & &1.id) ==
-               @production_door_ids ++ @demo_door_ids
-
+      assert Enum.map(Doors.list_browsable(nil), & &1.id) == @demo_door_ids
       assert Enum.all?(Doors.list_browsable(nil), &(&1.visibility == :members))
     end
 
