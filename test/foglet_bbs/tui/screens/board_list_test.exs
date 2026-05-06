@@ -58,6 +58,42 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     ]
   end
 
+  def two_category_directory do
+    [
+      %{
+        category: %{id: "c1", name: "Town Square"},
+        boards: [
+          %{
+            board: %{id: "b1", name: "General", slug: "general"},
+            subscribed?: true,
+            required_subscription?: false,
+            unread_count: 0,
+            last_post_at: nil
+          },
+          %{
+            board: %{id: "b2", name: "Tech", slug: "tech"},
+            subscribed?: false,
+            required_subscription?: false,
+            unread_count: nil,
+            last_post_at: nil
+          }
+        ]
+      },
+      %{
+        category: %{id: "c2", name: "Elsewhere"},
+        boards: [
+          %{
+            board: %{id: "b4", name: "Off Topic", slug: "off-topic"},
+            subscribed?: true,
+            required_subscription?: false,
+            unread_count: 0,
+            last_post_at: nil
+          }
+        ]
+      }
+    ]
+  end
+
   def guest_visibility_directory(kind) when kind in [:guest, :member] do
     public_board = %{
       board: %{id: "public-board", name: "Public Square", slug: "public", readable_by: :public},
@@ -179,7 +215,9 @@ defmodule Foglet.TUI.Screens.BoardListTest do
              status: :loading,
              feedback: nil,
              last_op: nil,
-             last_error: nil
+             last_error: nil,
+             selected_board_id: nil,
+             expanded_category_ids: nil
            }
   end
 
@@ -252,6 +290,92 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert %{board: %{id: "b2"}} = BoardTree.focused_board_entry(state.board_tree)
     assert [%{boards: boards}] = state.directory
     assert Enum.map(boards, & &1.board.id) == ["b1", "b2", "b3"]
+  end
+
+  test "reload restores the previously selected board when it is still visible" do
+    ctx = context()
+    state = load_state(ctx) |> move_to_board(ctx, 2)
+
+    assert %{board: %{id: "b2"}} = BoardTree.focused_board_entry(state.board_tree)
+
+    {state, []} = BoardList.update({:task_result, :load_boards, {:ok, directory()}}, state, ctx)
+
+    assert state.selected_board_id == "b2"
+    assert %{board: %{id: "b2"}} = BoardTree.focused_board_entry(state.board_tree)
+  end
+
+  test "reload preserves collapsed categories during the same screen session" do
+    ctx = context()
+    state = load_state(ctx) |> focus_category(ctx)
+
+    {state, []} = BoardList.update({:key, %{key: :enter}}, state, ctx)
+    collapsed_text = BoardList.render(state, ctx) |> flatten_text()
+    assert collapsed_text =~ "▸"
+    refute collapsed_text =~ "Tech"
+
+    {state, []} = BoardList.update({:task_result, :load_boards, {:ok, directory()}}, state, ctx)
+    reloaded_text = BoardList.render(state, ctx) |> flatten_text()
+
+    assert reloaded_text =~ "▸"
+    refute reloaded_text =~ "Tech"
+  end
+
+  test "reload falls back to a visible board when previous selection is hidden by collapse" do
+    ctx = context()
+    state = BoardList.init(ctx)
+
+    {state, []} =
+      BoardList.update({:task_result, :load_boards, {:ok, two_category_directory()}}, state, ctx)
+
+    state = move_to_board(state, ctx, 2)
+
+    assert %{board: %{id: "b2"}} = BoardTree.focused_board_entry(state.board_tree)
+
+    state = focus_category(state, ctx)
+    {state, []} = BoardList.update({:key, %{key: :up}}, state, ctx)
+    {state, []} = BoardList.update({:key, %{key: :enter}}, state, ctx)
+
+    {state, []} =
+      BoardList.update({:task_result, :load_boards, {:ok, two_category_directory()}}, state, ctx)
+
+    assert state.selected_board_id == "b4"
+    assert %{board: %{id: "b4"}} = BoardTree.focused_board_entry(state.board_tree)
+  end
+
+  test "reload falls back when previous selected board is no longer present" do
+    ctx = context()
+    state = load_state(ctx) |> move_to_board(ctx, 3)
+
+    directory_without_b3 =
+      Enum.map(directory(), fn %{boards: boards} = category ->
+        %{category | boards: Enum.reject(boards, &(&1.board.id == "b3"))}
+      end)
+
+    {state, []} =
+      BoardList.update({:task_result, :load_boards, {:ok, directory_without_b3}}, state, ctx)
+
+    assert state.selected_board_id == "b1"
+    assert %{board: %{id: "b1"}} = BoardTree.focused_board_entry(state.board_tree)
+  end
+
+  test "fresh screen state does not inherit another session's selection or collapse memory" do
+    ctx = context()
+    first_session = load_state(ctx) |> move_to_board(ctx, 2)
+    {first_session, []} = BoardList.update({:key, %{key: :up}}, first_session, ctx)
+    {first_session, []} = BoardList.update({:key, %{key: :up}}, first_session, ctx)
+    {first_session, []} = BoardList.update({:key, %{key: :enter}}, first_session, ctx)
+
+    assert first_session.selected_board_id == "b1"
+    assert first_session.expanded_category_ids == MapSet.new()
+
+    second_session = load_state(ctx)
+    second_session_text = BoardList.render(second_session, ctx) |> flatten_text()
+
+    assert second_session.selected_board_id == "b1"
+    assert second_session.expanded_category_ids == MapSet.new(["c1"])
+    assert %{board: %{id: "b1"}} = BoardTree.focused_board_entry(second_session.board_tree)
+    assert second_session_text =~ "▾"
+    assert second_session_text =~ "Tech"
   end
 
   test "enter on a category parent toggles expanded state without effects" do

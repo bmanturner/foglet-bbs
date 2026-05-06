@@ -42,16 +42,19 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   def update({:task_result, :load_boards, {:ok, directory}}, local_state, %Context{})
       when is_list(directory) do
+    local_state = normalize_state(local_state)
+    board_tree = build_tree(directory, local_state)
+
     local_state =
       local_state
-      |> normalize_state()
       |> Map.merge(%{
         directory: directory,
-        board_tree: build_tree(directory),
+        board_tree: board_tree,
         status: directory_status(directory),
         last_op: nil,
         last_error: nil
       })
+      |> remember_tree_state()
 
     {local_state, []}
   end
@@ -88,7 +91,7 @@ defmodule Foglet.TUI.Screens.BoardList do
 
     with %BoardTree{} = tree <- tree_for_state(local_state),
          {%BoardTree{} = new_tree, action} <- BoardTree.handle_event(%{key: :enter}, tree) do
-      local_state = %{local_state | board_tree: new_tree}
+      local_state = %{local_state | board_tree: new_tree} |> remember_tree_state()
 
       case action do
         action when action in [:node_expanded, :node_collapsed] ->
@@ -373,7 +376,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     case tree_for_state(local_state) do
       %BoardTree{} = tree ->
         {new_tree, _action} = BoardTree.handle_event(key, tree)
-        {%{local_state | board_tree: new_tree}, []}
+        {%{local_state | board_tree: new_tree} |> remember_tree_state(), []}
 
       nil ->
         {local_state, []}
@@ -410,13 +413,32 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp tree_for_state(%State{board_tree: %BoardTree{} = tree}), do: tree
 
-  defp tree_for_state(%State{directory: directory}) when is_list(directory),
-    do: build_tree(directory)
+  defp tree_for_state(%State{directory: directory} = state) when is_list(directory),
+    do: build_tree(directory, state)
 
   defp tree_for_state(_state), do: nil
 
   defp build_tree(directory) when is_list(directory) do
     BoardTree.init(directory: directory, id: "board-directory")
+  end
+
+  defp build_tree(directory, %State{} = state) when is_list(directory) do
+    BoardTree.init(
+      directory: directory,
+      id: "board-directory",
+      selected_board_id: state.selected_board_id,
+      expanded_category_ids: state.expanded_category_ids || :all
+    )
+  end
+
+  defp remember_tree_state(%State{board_tree: %BoardTree{} = tree} = state) do
+    selected_board_id = BoardTree.focused_board_id(tree) || state.selected_board_id
+
+    %{
+      state
+      | selected_board_id: selected_board_id,
+        expanded_category_ids: BoardTree.expanded_category_ids(tree)
+    }
   end
 
   defp maybe_feedback(%State{feedback: feedback}, theme) when is_binary(feedback) do
