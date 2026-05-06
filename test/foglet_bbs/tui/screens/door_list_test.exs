@@ -64,11 +64,19 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     )
   end
 
+  test "init lists bundled production manifests by default" do
+    assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
+    assert Enum.map(doors, & &1.id) == ["usurper-reborn"]
+    assert Enum.all?(doors, &match?(%Manifest{}, &1))
+  end
+
   test "init has an empty production catalog when operator manifest directory is disabled" do
+    Application.put_env(:foglet_bbs, :door_manifest_dir, "")
+
     assert %State{doors: [], selected_index: 0} = DoorList.init(context())
   end
 
-  test "init lists configured operator manifests when the directory is enabled" do
+  test "init supports an explicitly configured operator manifest directory" do
     configure_bundled_manifest_dir!()
 
     assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
@@ -231,7 +239,10 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert String.contains?(ascii, "Q Back")
   end
 
-  defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
+  defp enable_demo_doors do
+    Application.put_env(:foglet_bbs, :door_manifest_dir, "")
+    System.put_env(@demo_doors_env, "true")
+  end
 
   defp configure_bundled_manifest_dir! do
     {:ok, priv_dir} = priv_dir()

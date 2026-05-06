@@ -159,13 +159,13 @@ Unknown or malformed tokens fail the launch. User handles used in argv are norma
 
 ## Operator-managed manifest directory
 
-Production Door Games are loaded from an operator-managed JSON manifest directory. Set `FOGLET_DOOR_MANIFEST_DIR` to an absolute directory path before starting Foglet, or set `config :foglet_bbs, :door_manifest_dir` in runtime config. When the setting is unset or blank, production/operator doors are disabled by default; only demo fixtures can appear, and only when `FOGLET_ENABLE_DEMO_DOORS` is explicitly truthy.
+Production Door Games are loaded from JSON manifests. By default, Foglet reads the reviewed catalog bundled in the release at `priv/doors/manifests`. Set `FOGLET_DOOR_MANIFEST_DIR` to an absolute directory path before starting Foglet, or set `config :foglet_bbs, :door_manifest_dir` in runtime config, to override that bundled catalog. Set the value to blank to disable production/operator doors; only demo fixtures can appear, and only when `FOGLET_ENABLE_DEMO_DOORS` is explicitly truthy.
 
 A sysop adds a door by creating one reviewed `*.json` file in that directory and restarting/reloading the application according to deployment practice. Foglet scans only direct regular JSON files in that directory, validates each manifest with the same `Foglet.Doors` safety checks used by code/test fixtures, and fails closed per file: symlinks, device files, invalid JSON, or unsafe fields are omitted from the launchable catalog. Diagnostics can call `Foglet.Doors.manifest_load_errors/0`, and runtime logs include the rejected file and field errors.
 
 Manifest JSON uses the same field names shown below, with enum values as strings, for example `"classic_dropfile"`, `"members"`, `"site"`, and `"door32_sys"`. Do not put secrets in `env`; inherited environments are not passed through.
 
-The repository includes `priv/doors/manifests/usurper-reborn.json` as a copyable sample. A deployment can copy it into the configured operator directory and adjust paths for that host without editing Elixir source.
+The repository includes `priv/doors/manifests/usurper-reborn.json` as the default bundled Usurper Reborn manifest. A deployment can copy it into a configured operator directory and adjust paths for that host without editing Elixir source.
 
 ## Add a native Elixir door
 
@@ -354,7 +354,7 @@ Start-to-finish sysop path:
    Prefer `restricted_user_process_group` on host deployments that can create and use a locked-down `foglet-door` account. If that account cannot be applied, the launch should fail closed instead of running the door as the Foglet app user.
 
 8. Expose the door.
-   Copy `priv/doors/manifests/usurper-reborn.json` into the configured operator manifest directory, adjust host-specific paths if needed, set `FOGLET_DOOR_MANIFEST_DIR`, and restart/reload Foglet. The door is not hard-coded in Elixir and will not appear when the manifest directory is unset or invalid.
+   Use the bundled `priv/doors/manifests/usurper-reborn.json` manifest as-is for the Docker/release layout, or copy it into a configured operator manifest directory and adjust host-specific paths if needed. The door is not hard-coded in Elixir and will not appear when the manifest directory is disabled or invalid.
 
 9. Verify launch and cleanup.
    Run focused door tests and SSH/TUI QA before enabling the door for real callers. Verify that Usurper starts with `--door32 <generated path> --db /data/usurper/usurper_online.db --stdio`, returns cleanly, and leaves no runner-owned temp context or dropfile directory behind.
@@ -383,7 +383,7 @@ Keep the selector simple: arrows choose a door, Enter opens confirmation, and Es
 
 ### The door is missing from the list
 
-For built-in demo/test doors, check `FOGLET_ENABLE_DEMO_DOORS`. For production doors, check `FOGLET_DOOR_MANIFEST_DIR`, `Foglet.Doors.manifest_load_errors/0`, manifest validation, caller visibility, and that the launch path rechecks `Foglet.Doors.launchable?/2` before starting the runner.
+For built-in demo/test doors, check `FOGLET_ENABLE_DEMO_DOORS`. For production doors, check the bundled `priv/doors/manifests` catalog or `FOGLET_DOOR_MANIFEST_DIR` override, `Foglet.Doors.manifest_load_errors/0`, manifest validation, caller visibility, and that the launch path rechecks `Foglet.Doors.launchable?/2` before starting the runner.
 
 ### The door launches and immediately returns
 

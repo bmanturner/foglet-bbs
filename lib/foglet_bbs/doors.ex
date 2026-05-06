@@ -81,10 +81,10 @@ defmodule Foglet.Doors do
   Returns configured door manifests available to the runtime catalog.
 
   Production/operator doors are loaded from a JSON manifest directory configured
-  with `:door_manifest_dir` or `FOGLET_DOOR_MANIFEST_DIR`. When unset, no
-  production doors are exposed. Built-in demo/test manifests remain deployment/QA
-  fixtures hidden unless `FOGLET_ENABLE_DEMO_DOORS` is set to a documented truthy
-  value at runtime.
+  with `:door_manifest_dir` or `FOGLET_DOOR_MANIFEST_DIR`, falling back to the
+  bundled `priv/doors/manifests` catalog when neither setting is present. Built-in
+  demo/test manifests remain deployment/QA fixtures hidden unless
+  `FOGLET_ENABLE_DEMO_DOORS` is set to a documented truthy value at runtime.
   """
   @spec list_manifests() :: [Manifest.t()]
   def list_manifests do
@@ -216,10 +216,19 @@ defmodule Foglet.Doors do
   end
 
   defp operator_manifest_dir do
-    configured =
-      Application.get_env(:foglet_bbs, :door_manifest_dir) ||
-        System.get_env(@operator_manifest_dir_env)
+    case Application.fetch_env(:foglet_bbs, :door_manifest_dir) do
+      {:ok, configured} ->
+        normalize_manifest_dir(configured)
 
+      :error ->
+        case System.fetch_env(@operator_manifest_dir_env) do
+          {:ok, configured} -> normalize_manifest_dir(configured)
+          :error -> bundled_manifest_dir()
+        end
+    end
+  end
+
+  defp normalize_manifest_dir(configured) do
     case configured do
       value when is_binary(value) ->
         value
@@ -233,6 +242,8 @@ defmodule Foglet.Doors do
         nil
     end
   end
+
+  defp bundled_manifest_dir, do: priv_path("doors/manifests")
 
   defp load_operator_manifest_dir(dir) do
     if File.dir?(dir) do

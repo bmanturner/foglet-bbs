@@ -7,7 +7,7 @@ defmodule Foglet.DoorsTest do
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
   @manifest_dir_env "FOGLET_DOOR_MANIFEST_DIR"
-  @production_door_ids []
+  @production_door_ids ~w[usurper-reborn]
   @demo_door_ids ~w[native-hello external-echo python-context-demo classic-dropfile-demo]
 
   setup do
@@ -262,9 +262,9 @@ defmodule Foglet.DoorsTest do
   end
 
   describe "list_manifests/0" do
-    test "loads the bundled Usurper Reborn JSON sample when configured as the manifest directory" do
+    test "loads the bundled Usurper Reborn JSON sample from the default priv manifest directory" do
       assert {:ok, priv_dir} = priv_dir()
-      Application.put_env(:foglet_bbs, :door_manifest_dir, Path.join(priv_dir, "doors/manifests"))
+      assert File.regular?(Path.join(priv_dir, "doors/manifests/usurper-reborn.json"))
 
       assert [usurper] = Doors.list_manifests()
 
@@ -415,7 +415,9 @@ defmodule Foglet.DoorsTest do
       assert message == "must be a regular JSON file, got symlink"
     end
 
-    test "disabled or missing operator manifest directory exposes no production doors" do
+    test "blank or missing operator manifest directory exposes no production doors" do
+      Application.put_env(:foglet_bbs, :door_manifest_dir, "")
+
       assert Doors.list_manifests() == []
       assert Doors.manifest_load_errors() == []
 

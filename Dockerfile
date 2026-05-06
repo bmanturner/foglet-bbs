@@ -100,18 +100,16 @@ ENV LANGUAGE=en_US:en
 ENV LC_ALL=en_US.UTF-8
 
 WORKDIR "/app"
-RUN mkdir -p /data/ssh /data/.config /data/door-manifests \
+RUN mkdir -p /data/ssh /data/.config \
   && chown -R nobody /app /data
 
 # set runner ENV
 ENV MIX_ENV="prod"
 ENV HOME="/data"
 ENV XDG_CONFIG_HOME="/data/.config"
-ENV FOGLET_DOOR_MANIFEST_DIR="/data/door-manifests"
 
 # Only copy the final release from the build stage
 COPY --from=builder --chown=nobody:root /app/_build/${MIX_ENV}/rel/foglet_bbs ./
-COPY --from=builder --chown=nobody:root /app/priv/doors/manifests/*.json /data/door-manifests/
 RUN chmod +x /app/bin/server /app/bin/migrate \
   /app/lib/foglet_bbs-*/priv/doors/demo/external_echo.sh \
   /app/lib/foglet_bbs-*/priv/doors/demo/fullscreen_probe.py \

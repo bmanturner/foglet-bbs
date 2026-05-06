@@ -59,9 +59,10 @@ config :foglet_bbs, :metrics_server,
   port: metrics_port,
   path: metrics_path
 
-# Optional operator-managed Door Games JSON manifest directory. When unset or
-# blank, production/operator door loading is disabled and only explicitly-enabled
-# demo fixtures may appear.
+# Optional operator-managed Door Games JSON manifest directory. When unset,
+# Foglet falls back to bundled priv/doors/manifests. Set blank to disable
+# production/operator door loading so only explicitly-enabled demo fixtures may
+# appear.
 if door_manifest_dir = System.get_env("FOGLET_DOOR_MANIFEST_DIR") do
   config :foglet_bbs, :door_manifest_dir, door_manifest_dir
 end
