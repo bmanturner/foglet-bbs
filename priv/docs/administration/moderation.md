@@ -4,6 +4,15 @@
 }
 ---
 
+> **Warning: tentative moderation plan**
+>
+> This page currently mixes implemented domain capabilities with planned or
+> partially wired moderation workflows. Treat it as a design/reference note, not
+> as a promise of available operator UI. In the current release, the Moderation
+> TUI is largely read-only: report queues, sanctions, warnings, mutes, bans,
+> public audit browsing, bulk tools, and several content-action workflows are
+> not fully implemented or exposed end-to-end yet.
+
 This page describes Foglet's current moderation surface. It covers what exists now and names what should not be promised yet.
 
 ## Moderation scope
