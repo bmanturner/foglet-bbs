@@ -96,10 +96,12 @@ defmodule Foglet.TUI.App.ModalTest do
     )
   end
 
-  defp reply_context_modal do
+  defp reply_context_modal(opts \\ []) do
     body =
-      Enum.map_join(1..12, "\n", fn row ->
-        "Long reply-context body for scroll verification with **bold evidence** and *italic proof* that wraps inside the modal interior while preserving chrome row #{row}."
+      Keyword.get_lazy(opts, :body, fn ->
+        Enum.map_join(1..12, "\n", fn row ->
+          "Long reply-context body for scroll verification with **bold evidence** and *italic proof* that wraps inside the modal interior while preserving chrome row #{row}."
+        end)
       end)
 
     post = %{
@@ -111,9 +113,13 @@ defmodule Foglet.TUI.App.ModalTest do
       inserted_at: ~U[2026-04-18 00:00:00Z]
     }
 
+    context_opts =
+      [upvote?: true]
+      |> Keyword.merge(Keyword.take(opts, [:visible_body_rows, :scroll_top]))
+
     %Modal{
       type: :reply_context,
-      message: ReplyContext.new(post, Foglet.Markdown.render(body), upvote?: true)
+      message: ReplyContext.new(post, Foglet.Markdown.render(body), context_opts)
     }
   end
 
@@ -196,6 +202,35 @@ defmodule Foglet.TUI.App.ModalTest do
       {up_state, up_cmds} = AppModal.handle_key(%{key: :up}, paged_state)
       assert up_cmds == []
       assert %Modal{message: %ReplyContext{scroll_top: 8}} = up_state.modal
+    end
+
+    test "reply-context scroll keys advance line range for wrapped one-paragraph bodies at 80x24" do
+      body =
+        Enum.map_join(1..14, " ", fn row ->
+          "wrapped reply-context sentence #{row} with enough words to consume another rendered row"
+        end)
+
+      state =
+        state(
+          modal: reply_context_modal(body: body, visible_body_rows: 10),
+          terminal_size: {80, 24}
+        )
+
+      before_scroll =
+        state
+        |> App.view()
+        |> AsciiRenderer.render({80, 24})
+
+      assert before_scroll =~ "Lines 1-10/"
+
+      {down_state, []} = AppModal.handle_key(%{key: :down}, state)
+
+      after_down =
+        down_state
+        |> App.view()
+        |> AsciiRenderer.render({80, 24})
+
+      assert after_down =~ "Lines 2-11/"
     end
 
     test "form select-list body stays inside modal border at cramped width" do

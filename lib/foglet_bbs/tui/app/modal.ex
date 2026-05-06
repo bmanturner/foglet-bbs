@@ -101,7 +101,7 @@ defmodule Foglet.TUI.App.Modal do
          %{key: :down},
          %App{modal: %Foglet.TUI.Modal{message: %ReplyContext{} = context}} = state
        ) do
-    update_reply_context(state, ReplyContext.scroll(context, 1))
+    scroll_reply_context(state, context, 1)
   end
 
   defp handle_modal_key(
@@ -109,7 +109,7 @@ defmodule Foglet.TUI.App.Modal do
          %{key: :up},
          %App{modal: %Foglet.TUI.Modal{message: %ReplyContext{} = context}} = state
        ) do
-    update_reply_context(state, ReplyContext.scroll(context, -1))
+    scroll_reply_context(state, context, -1)
   end
 
   defp handle_modal_key(
@@ -119,7 +119,7 @@ defmodule Foglet.TUI.App.Modal do
        )
        when key in [:page_down, :page_up] do
     delta = if key == :page_down, do: context.visible_body_rows, else: -context.visible_body_rows
-    update_reply_context(state, ReplyContext.scroll(context, delta))
+    scroll_reply_context(state, context, delta)
   end
 
   defp handle_modal_key(
@@ -184,6 +184,18 @@ defmodule Foglet.TUI.App.Modal do
   end
 
   defp handle_modal_key(_type, _key, %App{} = state), do: {state, []}
+
+  defp scroll_reply_context(%App{} = state, %ReplyContext{} = context, delta) do
+    theme = Theme.from_state(state)
+    {terminal_width, _terminal_height} = state.terminal_size
+
+    body_line_count =
+      ReplyContext.rendered_body_line_count(context, theme,
+        width: overlay_body_width(terminal_width)
+      )
+
+    update_reply_context(state, ReplyContext.scroll(context, delta, body_line_count))
+  end
 
   defp update_reply_context(%App{} = state, %ReplyContext{} = context) do
     modal = %{state.modal | message: context}

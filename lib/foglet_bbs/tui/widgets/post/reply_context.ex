@@ -6,7 +6,7 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
   colors route through `Foglet.TUI.Theme`, and screen reducers own domain work.
   """
 
-  import Raxol.Core.Renderer.View
+  import Raxol.Core.Renderer.View, except: [scroll: 2]
 
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
@@ -48,20 +48,44 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
       profile?: Keyword.get(opts, :profile?, false),
       status: Keyword.get(opts, :status)
     }
-    |> clamp_scroll()
+    |> normalize_scroll()
   end
 
   @spec replace_post(t(), map(), list()) :: t()
   def replace_post(%__MODULE__{} = context, post, body_tuples)
       when is_map(post) and is_list(body_tuples) do
     %{context | post: post, body_tuples: body_tuples}
-    |> clamp_scroll()
+    |> normalize_scroll()
   end
 
   @spec scroll(t(), integer()) :: t()
   def scroll(%__MODULE__{} = context, delta) when is_integer(delta) do
     %{context | scroll_top: context.scroll_top + delta}
-    |> clamp_scroll()
+    |> normalize_scroll()
+  end
+
+  @spec scroll(t(), integer(), non_neg_integer()) :: t()
+  def scroll(%__MODULE__{} = context, delta, body_line_count)
+      when is_integer(delta) and is_integer(body_line_count) and body_line_count >= 0 do
+    max_scroll = max(body_line_count - context.visible_body_rows, 0)
+
+    context
+    |> scroll(delta)
+    |> then(fn updated -> %{updated | scroll_top: min(updated.scroll_top, max_scroll)} end)
+  end
+
+  @spec rendered_body_line_count(t(), Theme.t(), keyword()) :: non_neg_integer()
+  def rendered_body_line_count(%__MODULE__{} = context, %Theme{} = theme, opts \\ []) do
+    width = opts |> Keyword.get(:width, 60) |> content_width()
+
+    context.post
+    |> PostCard.reader_parts(context.body_tuples, width, theme,
+      index: @modal_post_index,
+      total: @modal_post_total,
+      right_pad: 1
+    )
+    |> Map.fetch!(:body_lines)
+    |> length()
   end
 
   @spec render(t(), Theme.t(), keyword()) :: term()
@@ -77,7 +101,7 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
 
     visible_body =
       parts.body_lines
-      |> Enum.slice(context.scroll_top, context.visible_body_rows)
+      |> Enum.slice(clamped_scroll_top(context, parts.body_lines), context.visible_body_rows)
 
     column style: %{gap: 0} do
       Enum.reject(
@@ -116,18 +140,19 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
 
   defp scroll_status(%__MODULE__{} = context, body_lines, width, theme) do
     total = length(body_lines)
+    scroll_top = clamped_scroll_top(context, body_lines)
 
     label =
       cond do
         total <= context.visible_body_rows ->
           "Full post shown"
 
-        context.scroll_top + context.visible_body_rows >= total ->
+        scroll_top + context.visible_body_rows >= total ->
           "End of replied-to post"
 
         true ->
-          first = context.scroll_top + 1
-          last = min(context.scroll_top + context.visible_body_rows, total)
+          first = scroll_top + 1
+          last = min(scroll_top + context.visible_body_rows, total)
           "Lines #{first}-#{last}/#{total}"
       end
 
@@ -155,20 +180,16 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
     end
   end
 
-  defp clamp_scroll(%__MODULE__{} = context) do
-    body_count = body_line_count(context)
-    max_scroll = max(body_count - context.visible_body_rows, 0)
-    %{context | scroll_top: context.scroll_top |> max(0) |> min(max_scroll)}
+  defp normalize_scroll(%__MODULE__{} = context) do
+    %{context | scroll_top: max(context.scroll_top, 0)}
   end
 
-  defp body_line_count(%__MODULE__{} = context) do
-    body_lines =
-      context.post
-      |> Map.get(:body, "")
-      |> to_string()
-      |> String.split("\n")
-      |> length()
+  defp clamped_scroll_top(%__MODULE__{} = context, body_lines) do
+    body_count = length(body_lines)
+    max_scroll = max(body_count - context.visible_body_rows, 0)
 
-    max(length(context.body_tuples), body_lines)
+    context.scroll_top
+    |> max(0)
+    |> min(max_scroll)
   end
 end
