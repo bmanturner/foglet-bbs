@@ -164,11 +164,102 @@ def reap_child(child_pid: int):
 FINAL_DRAIN_MAX_BYTES = 64 * 1024
 FINAL_DRAIN_MAX_FRAMES = 16
 FINAL_DRAIN_MAX_SECONDS = 0.05
+DANGEROUS_DEC_PRIVATE_MODES = {47, 1047, 1048, 1049}
+
+
+class TerminalOutputSanitizer:
+    """Remove terminal-buffer ownership escapes from door output.
+
+    Foglet owns the SSH client's alternate screen for the lifetime of the TUI.
+    Classic doors may still emit smcup/rmcup style DEC private mode sequences
+    (for example CSI ? 1049 l) while remaining attached to the PTY. Forwarding
+    those bytes lets the child restore the client's previous Foglet frame even
+    though the runner is still active, which looks like a false return and leaves
+    raw child input/output below the TUI frame. Keep normal ANSI drawing intact,
+    but strip only alternate-screen/cursor-buffer mode toggles.
+    """
+
+    def __init__(self) -> None:
+        self._pending = b""
+
+    def filter(self, data: bytes) -> bytes:
+        if not data and not self._pending:
+            return data
+
+        data = self._pending + data
+        self._pending = b""
+        output = bytearray()
+        i = 0
+
+        while i < len(data):
+            if data[i] != 0x1B:
+                output.append(data[i])
+                i += 1
+                continue
+
+            decision = self._classify_escape(data, i)
+            if decision is None:
+                self._pending = data[i:]
+                break
+
+            action, next_index = decision
+            if action == "strip":
+                i = next_index
+            else:
+                output.extend(data[i:next_index])
+                i = next_index
+
+        if len(self._pending) > 64:
+            output.extend(self._pending)
+            self._pending = b""
+
+        return bytes(output)
+
+    def _classify_escape(self, data: bytes, start: int):
+        if start + 1 >= len(data):
+            return None
+
+        if data[start + 1] != ord("["):
+            return ("keep", start + 2)
+
+        cursor = start + 2
+        if cursor >= len(data):
+            return None
+        if data[cursor] != ord("?"):
+            return ("keep", start + 2)
+
+        cursor += 1
+        params_start = cursor
+        while cursor < len(data) and (48 <= data[cursor] <= 57 or data[cursor] == ord(";")):
+            cursor += 1
+
+        if cursor >= len(data):
+            return None
+
+        final = data[cursor]
+        if final in (ord("h"), ord("l")) and params_start < cursor:
+            modes = self._parse_modes(data[params_start:cursor])
+            if any(mode in DANGEROUS_DEC_PRIVATE_MODES for mode in modes):
+                return ("strip", cursor + 1)
+
+        return ("keep", cursor + 1)
+
+    def _parse_modes(self, payload: bytes) -> list[int]:
+        modes = []
+        for part in payload.split(b";"):
+            if not part:
+                continue
+            try:
+                modes.append(int(part))
+            except ValueError:
+                continue
+        return modes
 
 
 def drain_pty_output(
     master_fd: int,
     *,
+    sanitizer: TerminalOutputSanitizer | None = None,
     max_bytes: int = FINAL_DRAIN_MAX_BYTES,
     max_frames: int = FINAL_DRAIN_MAX_FRAMES,
     max_seconds: float = FINAL_DRAIN_MAX_SECONDS,
@@ -206,7 +297,11 @@ def drain_pty_output(
         if not data:
             return False
 
-        write_frame(b"O", data)
+        if sanitizer is not None:
+            data = sanitizer.filter(data)
+
+        if data:
+            write_frame(b"O", data)
         bytes_forwarded += len(data)
         frames_forwarded += 1
 
@@ -318,6 +413,7 @@ def main() -> int:
     os.set_blocking(master_fd, False)
     os.set_blocking(error_read_fd, False)
     control_buffer = b""
+    output_sanitizer = TerminalOutputSanitizer()
     running = True
     stdin_eof_pending = False
     direct_child_reaped = False
@@ -334,7 +430,7 @@ def main() -> int:
 
             if reason_bytes:
                 reason = reason_bytes.decode("utf-8", "replace")
-                drain_pty_output(master_fd)
+                drain_pty_output(master_fd, sanitizer=output_sanitizer)
                 terminate_child(child_pid)
                 write_json(b"E", {"reason": reason})
                 return 126
@@ -355,7 +451,7 @@ def main() -> int:
             # changing process groups). Do not report X(exit) to Foglet until
             # the PTY itself closes, otherwise CLIHandler will route subsequent
             # SSH bytes back to the TUI while the door is still attached.
-            drain_pty_output(master_fd)
+            drain_pty_output(master_fd, sanitizer=output_sanitizer)
 
         read_fds = [master_fd]
         if error_read_fd is not None:
@@ -375,7 +471,7 @@ def main() -> int:
                 reason_bytes = b""
                 reason = "sandbox_group_setup_failed"
             if reason:
-                drain_pty_output(master_fd)
+                drain_pty_output(master_fd, sanitizer=output_sanitizer)
                 terminate_child(child_pid)
                 write_json(b"E", {"reason": reason})
                 return 126
@@ -387,7 +483,9 @@ def main() -> int:
             try:
                 data = os.read(master_fd, 8192)
                 if data:
-                    write_frame(b"O", data)
+                    data = output_sanitizer.filter(data)
+                    if data:
+                        write_frame(b"O", data)
                 elif pending_exit_payload is not None:
                     write_json(b"X", pending_exit_payload)
                     return exit_code_from_payload(pending_exit_payload)
@@ -425,7 +523,7 @@ def main() -> int:
                 control_buffer = control_buffer[4 + frame_len:]
                 running = handle_control(frame, master_fd, child_pid) and running
                 if not running and pending_exit_payload is not None:
-                    drain_pty_output(master_fd)
+                    drain_pty_output(master_fd, sanitizer=output_sanitizer)
                     write_json(b"X", pending_exit_payload)
                     return exit_code_from_payload(pending_exit_payload)
 

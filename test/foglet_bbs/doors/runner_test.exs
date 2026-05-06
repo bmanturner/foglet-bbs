@@ -1152,6 +1152,48 @@ defmodule Foglet.Doors.RunnerTest do
       end
     end
 
+    test "helper strips child alternate-screen toggles while keeping the door attached" do
+      id = "external-alt-screen-sanitized"
+
+      command = """
+      printf 'before\\033[?1049l\\033[?47hafter\\n'
+      IFS= read -r line
+      printf 'input:%s\\n' "$line"
+      """
+
+      {:ok, manifest} =
+        manifest(%{
+          id: id,
+          display_name: id,
+          runtime: :external_pty,
+          command: "/bin/sh",
+          working_dir: "/tmp",
+          args: ["-c", command],
+          timeout_ms: 5_000,
+          pty?: true
+        })
+
+      {:ok, runner_pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^runner_pid, ^id}
+      output = assert_door_output_contains("beforeafter")
+      refute output =~ "\e[?1049l"
+      refute output =~ "\e[?47h"
+      assert %{status: :running, pty_backend: :helper} = Runner.snapshot(runner_pid)
+      refute_receive {:door_exited, ^runner_pid, ^id, :normal, 0}, 100
+
+      ref = Process.monitor(runner_pid)
+      Runner.input(runner_pid, "still-attached\r")
+      assert_door_output_contains("input:still-attached")
+      assert_receive {:door_exited, ^runner_pid, ^id, :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^runner_pid, :normal}, @event_timeout
+    end
+
     test "helper keeps routing input when the direct child exits but a PTY survivor remains" do
       id = "external-pty-survivor"
 
