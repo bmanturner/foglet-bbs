@@ -67,6 +67,7 @@ defmodule FogletBbs.MixProject do
       {:timex, "~> 3.7"},
       {:swoosh, "~> 1.25"},
       {:gen_smtp, "~> 1.3"},
+      {:certifi, "~> 2.15"},
       {:dotenvy, "~> 1.1"}
     ]
   end

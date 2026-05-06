@@ -76,15 +76,7 @@ if smtp_relay = System.get_env("FOGLET_SMTP_RELAY") || System.get_env("FOGLET_SM
     ssl: System.get_env("FOGLET_SMTP_SSL") in ~w(true 1),
     tls: String.to_atom(System.get_env("FOGLET_SMTP_TLS") || "if_available"),
     auth: String.to_atom(System.get_env("FOGLET_SMTP_AUTH") || "if_available"),
-    tls_options: [
-      verify: :verify_peer,
-      cacerts: :public_key.cacerts_get(),
-      server_name_indication: String.to_charlist(smtp_relay),
-      depth: 4,
-      customize_hostname_check: [
-        match_fun: :public_key.pkix_verify_hostname_match_fun(:https)
-      ]
-    ]
+    tls_options: Foglet.Mailer.SMTPConfig.tls_options(smtp_relay)
 end
 
 config :foglet_bbs, FogletBbsWeb.Endpoint,
