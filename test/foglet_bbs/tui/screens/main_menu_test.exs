@@ -113,6 +113,23 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   defp do_flatten_nodes(_other, _acc), do: []
 
+  defp online_now_label_nodes(text_nodes, count) do
+    prefix_index =
+      Enum.find_index(text_nodes, fn node ->
+        Map.get(node, :content) == " ◌ Online Now ("
+      end)
+
+    assert is_integer(prefix_index),
+           "expected Online Now prefix node for count=#{count}; got #{inspect(text_nodes)}"
+
+    nodes = Enum.slice(text_nodes, prefix_index, 3)
+
+    assert length(nodes) == 3,
+           "expected Online Now prefix/count/suffix text nodes for count=#{count}; got #{inspect(text_nodes)}"
+
+    List.to_tuple(nodes)
+  end
+
   defp handle_key_result(state, key) do
     MainMenu.update(
       {:key, %{key: :char, char: key}},
@@ -566,7 +583,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     for {count, label} <- [{0, "Online Now (0)"}, {1, "Online Now (1)"}, {2, "Online Now (2)"}] do
       Process.put(:fake_online_now_count, count)
       texts = rendered_text(state)
-      assert Enum.any?(texts, &String.contains?(&1, label))
+      assert texts |> Enum.join("") |> String.contains?(label)
       assert "[N]" in texts
 
       {_local, effects} = handle_key_result(state, "N")
@@ -577,24 +594,25 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     end
   end
 
-  test "Online Now count color routes through error for 0/1 and accent for 2+", %{state: state} do
+  test "Online Now count color applies only to the numeric count", %{state: state} do
     theme = Foglet.TUI.Theme.default()
 
     for {count, expected_fg} <- [{0, theme.error.fg}, {1, theme.error.fg}, {2, theme.accent.fg}] do
       Process.put(:fake_online_now_count, count)
 
-      nodes = MainMenu.render(local_from_app(state), context_from_app(state)) |> flatten_nodes()
+      text_nodes =
+        MainMenu.render(local_from_app(state), context_from_app(state))
+        |> flatten_nodes()
+        |> Enum.filter(&(Map.get(&1, :type) == :text))
 
-      label_node =
-        Enum.find(nodes, fn node ->
-          Map.get(node, :type) == :text and
-            String.contains?(Map.get(node, :content) || "", "Online Now")
-        end)
+      {prefix_node, count_node, suffix_node} = online_now_label_nodes(text_nodes, count)
 
-      assert label_node,
-             "expected Online Now label node for count=#{count}; got #{inspect(nodes)}"
-
-      assert Map.get(label_node, :fg) == expected_fg
+      assert Map.get(prefix_node, :fg) == theme.primary.fg
+      assert Map.get(prefix_node, :content) == " ◌ Online Now ("
+      assert Map.get(count_node, :content) == to_string(count)
+      assert Map.get(count_node, :fg) == expected_fg
+      assert String.starts_with?(Map.get(suffix_node, :content), ")")
+      assert Map.get(suffix_node, :fg) == theme.primary.fg
     end
   end
 

@@ -602,7 +602,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
     Enum.map(entries, fn
       %{key: "N"} = entry ->
         color_slot = if count in [0, 1], do: :online_low, else: :online_active
-        %{entry | label: "Online Now (#{count})"} |> Map.put(:color_slot, color_slot)
+
+        entry
+        |> Map.put(:label, "Online Now (#{count})")
+        |> Map.put(:online_count, count)
+        |> Map.put(:color_slot, color_slot)
 
       entry ->
         entry
