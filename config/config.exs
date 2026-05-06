@@ -69,6 +69,13 @@ config :raxol,
 config :foglet_bbs, :ssh_port, 2222
 config :foglet_bbs, :start_ssh_daemon, true
 
+# Dedicated Prometheus text listener for Fly custom metrics scraping. This is
+# intentionally separate from the Phoenix endpoint and user-facing BBS surface.
+config :foglet_bbs, :metrics_server,
+  enabled: true,
+  port: 9091,
+  path: "/metrics"
+
 # Import environment specific config. This must remain at the bottom
 # of this file so it overrides the configuration defined above.
 import_config "#{config_env()}.exs"

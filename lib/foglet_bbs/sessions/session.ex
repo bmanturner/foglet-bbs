@@ -179,6 +179,7 @@ defmodule Foglet.Sessions.Session do
     }
 
     record_last_seen(state.user_id, now)
+    :telemetry.execute([:foglet, :session, :connect], %{count: 1}, %{user_id: state.user_id})
 
     {:ok, state}
   end
@@ -233,6 +234,8 @@ defmodule Foglet.Sessions.Session do
           replacement: Map.get(audit, :replacement)
         )
 
+        :telemetry.execute([:foglet, :session, :promote], %{count: 1}, %{outcome: :success})
+
         now = DateTime.utc_now()
         record_last_seen(user.id, now)
 
@@ -263,6 +266,10 @@ defmodule Foglet.Sessions.Session do
           ssh_peer: format_ssh_peer(Map.get(audit, :ssh_peer)),
           other_pid: inspect(other_pid)
         )
+
+        :telemetry.execute([:foglet, :session, :promote], %{count: 1}, %{
+          outcome: :registry_collision
+        })
 
         # Stop loudly so the SSH channel tears down the orphan rather than
         # leaving a half-promoted session in memory.
@@ -330,6 +337,7 @@ defmodule Foglet.Sessions.Session do
   # :kill / VM / host death cannot run Elixir cleanup; the connect/promotion
   # write remains the honest last-known timestamp for those hard-kill cases.
   defp disconnect_last_seen(state) do
+    :telemetry.execute([:foglet, :session, :disconnect], %{count: 1}, %{user_id: state.user_id})
     record_last_seen(state.user_id, DateTime.utc_now())
     :ok
   end

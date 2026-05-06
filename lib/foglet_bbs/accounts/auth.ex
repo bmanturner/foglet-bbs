@@ -33,19 +33,23 @@ defmodule Foglet.Accounts.Auth do
       when is_binary(handle) and is_binary(password) do
     user = Repo.get_by(User, handle: handle)
 
-    cond do
-      user && is_nil(user.deleted_at) && Argon2.verify_pass(password, user.password_hash) ->
-        {:ok, user}
+    result =
+      cond do
+        user && is_nil(user.deleted_at) && Argon2.verify_pass(password, user.password_hash) ->
+          {:ok, user}
 
-      user ->
-        # real user, wrong password (or deleted)
-        {:error, :invalid_credentials}
+        user ->
+          # real user, wrong password (or deleted)
+          {:error, :invalid_credentials}
 
-      true ->
-        # unknown handle — still burn a hash to equalize timing
-        Argon2.no_user_verify()
-        {:error, :invalid_credentials}
-    end
+        true ->
+          # unknown handle — still burn a hash to equalize timing
+          Argon2.no_user_verify()
+          {:error, :invalid_credentials}
+      end
+
+    emit_auth_outcome(:password, result)
+    result
   end
 
   @doc """
@@ -112,13 +116,17 @@ defmodule Foglet.Accounts.Auth do
 
   @spec authenticate_by_public_key(String.t()) :: {:ok, User.t()} | {:error, :not_found}
   def authenticate_by_public_key(public_key_text) when is_binary(public_key_text) do
-    with {:ok, %{ssh_key: key, user: user}} <- lookup_by_public_key(public_key_text),
-         {:ok, :authorized, user} <- authorize_session(user),
-         :ok <- record_key_use(key) do
-      {:ok, user}
-    else
-      _ -> {:error, :not_found}
-    end
+    result =
+      with {:ok, %{ssh_key: key, user: user}} <- lookup_by_public_key(public_key_text),
+           {:ok, :authorized, user} <- authorize_session(user),
+           :ok <- record_key_use(key) do
+        {:ok, user}
+      else
+        _ -> {:error, :not_found}
+      end
+
+    emit_auth_outcome(:public_key, result)
+    result
   end
 
   defp record_key_use(%SSHKey{} = key) do
@@ -140,5 +148,16 @@ defmodule Foglet.Accounts.Auth do
         where: is_nil(u.deleted_at),
         select: {k, u}
     )
+  end
+
+  defp emit_auth_outcome(method, {:ok, _user}) do
+    :telemetry.execute([:foglet, :auth, :outcome], %{count: 1}, %{
+      method: method,
+      outcome: :success
+    })
+  end
+
+  defp emit_auth_outcome(method, {:error, reason}) when is_atom(reason) do
+    :telemetry.execute([:foglet, :auth, :outcome], %{count: 1}, %{method: method, outcome: reason})
   end
 end
