@@ -223,7 +223,7 @@ defmodule Foglet.Doors do
       idle_timeout_ms: @usurper_idle_timeout_ms,
       visibility: :members,
       auth_scope: :site,
-      output_encoding: :utf8,
+      output_encoding: :cp437,
       env: %{
         "LANG" => "en_US.UTF-8",
         "LC_ALL" => "en_US.UTF-8",

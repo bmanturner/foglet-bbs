@@ -266,7 +266,7 @@ defmodule Foglet.DoorsTest do
              ]
 
       assert usurper.working_dir == "/opt/foglet/doors/usurper"
-      assert usurper.output_encoding == :utf8
+      assert usurper.output_encoding == :cp437
 
       assert usurper.env == %{
                "LANG" => "en_US.UTF-8",

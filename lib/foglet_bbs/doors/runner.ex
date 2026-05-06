@@ -557,7 +557,7 @@ defmodule Foglet.Doors.Runner do
 
   defp close_port(port, os_pid, adapter, state) do
     _ = terminate_adapter(adapter, state)
-    _ = maybe_term_os_process(os_pid, state)
+    _ = maybe_term_os_process(os_pid, adapter, state)
     _ = close_owned_port(port, state)
     :ok
   end
@@ -583,7 +583,9 @@ defmodule Foglet.Doors.Runner do
       :ok
   end
 
-  defp maybe_term_os_process(pid, state) when is_integer(pid) and pid > 0 do
+  defp maybe_term_os_process(_pid, %PTYAdapter{backend: :helper}, _state), do: :ok
+
+  defp maybe_term_os_process(pid, _adapter, state) when is_integer(pid) and pid > 0 do
     _ = System.cmd("kill", ["-TERM", Integer.to_string(pid)], stderr_to_stdout: true)
     :ok
   rescue
@@ -592,7 +594,7 @@ defmodule Foglet.Doors.Runner do
       :ok
   end
 
-  defp maybe_term_os_process(_pid, _state), do: :ok
+  defp maybe_term_os_process(_pid, _adapter, _state), do: :ok
 
   # sobelow: context paths are generated under System.tmp_dir!/0 with
   # cryptographic random bytes, never from user-controlled input.

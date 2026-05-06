@@ -309,6 +309,7 @@ Usurper Reborn is the current concrete production compatibility target. The bran
   idle_timeout_ms: 60 * 60 * 1_000,
   visibility: :members,
   auth_scope: :site,
+  output_encoding: :cp437,
   sandbox: %{
     mode: :restricted_user_process_group,
     user: "foglet-door",
