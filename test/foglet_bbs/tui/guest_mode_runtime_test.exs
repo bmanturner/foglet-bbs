@@ -116,7 +116,7 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
       )
       |> collect_text_values()
 
-    assert "> @alice  guest-readable ro" in rendered_text
+    assert Enum.join(rendered_text, "") =~ "> @alice  guest-readable ro"
 
     refute Enum.any?(
              MainMenu.visible_actions(%{current_user: nil, recent_oneliners: [entry]}),
@@ -169,7 +169,7 @@ defmodule Foglet.TUI.GuestModeRuntimeTest do
     rendered_text = collect_text_values(view)
     serialized_output = AsciiRenderer.render(view, {80, 24})
 
-    assert Enum.any?(rendered_text, &String.contains?(&1, "@alice  safe red osc"))
+    assert Enum.join(rendered_text, "") =~ "@alice  safe red osc"
     refute unsafe_terminal_text?(Enum.join(rendered_text, ""))
     refute unsafe_terminal_text?(serialized_output)
   end

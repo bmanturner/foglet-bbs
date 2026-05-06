@@ -44,6 +44,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   alias Foglet.TimeAgo
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Display.Handle
   alias Foglet.TUI.Widgets.Post.MarkdownBody
 
   @type post_like :: %{
@@ -175,7 +176,7 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
     total = Keyword.get(opts, :total, 1)
 
     header_line_1 = text("Post #{index + 1} of #{total}", fg: theme.dim.fg)
-    header_line_2 = text(author_line(post), fg: theme.dim.fg)
+    header_line_2 = author_line_node(post, theme)
     header_divider = divider(char: "─", style: %{fg: theme.border.fg})
 
     column style: %{gap: 0} do
@@ -229,7 +230,9 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
           text(separator, fg: theme.dim.fg),
           text(upvote_label, fg: theme.badge.fg),
           text(separator, fg: theme.dim.fg),
-          text(handle_prefix <> handle, fg: theme.accent.fg),
+          Handle.render(Map.put(author_user(post), :handle, handle), theme,
+            prefix: handle_prefix
+          ),
           text(separator, fg: theme.dim.fg),
           text(age, fg: theme.dim.fg)
         ]
@@ -245,6 +248,33 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   end
 
   defp reader_progress(_width, _theme, _selected?), do: nil
+
+  defp author_line_node(post, theme) do
+    handle = get_handle(post)
+    when_str = get_time_ago(post)
+
+    case {handle, when_str} do
+      {h, nil} when is_binary(h) ->
+        row style: %{gap: 0} do
+          [text("By ", fg: theme.dim.fg), Handle.render(author_user(post), theme)]
+        end
+
+      {nil, t} when is_binary(t) ->
+        text("#{t} ago", fg: theme.dim.fg)
+
+      {h, t} when is_binary(h) and is_binary(t) ->
+        row style: %{gap: 0} do
+          [
+            text("By ", fg: theme.dim.fg),
+            Handle.render(author_user(post), theme),
+            text(" · #{t} ago", fg: theme.dim.fg)
+          ]
+        end
+
+      _ ->
+        text("(post details unavailable)", fg: theme.dim.fg)
+    end
+  end
 
   defp reader_body_lines(tuples, width, theme, left_pad, right_pad) do
     gutter = "│"
@@ -361,6 +391,9 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   @spec get_handle(post_like()) :: String.t() | nil
   def get_handle(%{user: %{handle: h}}) when is_binary(h) and h != "", do: h
   def get_handle(_), do: nil
+
+  defp author_user(%{user: user}) when is_map(user), do: user
+  defp author_user(post), do: %{handle: get_handle(post)}
 
   # Format the post's :inserted_at as a relative time string ("2h", "3d",
   # etc) via Foglet.TimeAgo. Returns nil when the field is missing or not

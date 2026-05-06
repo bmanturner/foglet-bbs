@@ -13,6 +13,7 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldList do
   alias Foglet.TUI.Input
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Display.Handle
 
   @default_width 80
   @default_height 12
@@ -85,13 +86,20 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldList do
       |> display_value()
       |> TextWidth.truncate(value_width)
 
-    row =
+    row_text =
       field
       |> Map.get(:label, "")
       |> to_string()
       |> TextWidth.truncate(label_width)
       |> TextWidth.pad_trailing(label_width)
-      |> Kernel.<>(separator <> value)
+      |> Kernel.<>(separator)
+
+    row =
+      if Handle.valid_color?(Map.get(field, :swatch_color)) do
+        %{prefix: row_text, value: value, swatch_color: Map.get(field, :swatch_color)}
+      else
+        row_text <> value
+      end
 
     descriptions =
       field
@@ -107,8 +115,22 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldList do
     style = if selected?, do: [:bold, :reverse], else: []
     fg = if selected?, do: theme.selected.fg, else: theme.unselected.fg
 
-    [text(marker <> row, fg: fg, style: style)] ++
+    [render_row(marker, row, fg, style, theme)] ++
       Enum.map(descriptions, &text(@plain_marker <> &1, fg: theme.dim.fg, style: [:dim, :italic]))
+  end
+
+  defp render_row(marker, %{prefix: prefix, value: value, swatch_color: color}, fg, style, theme) do
+    row style: %{gap: 1} do
+      [
+        text(marker <> prefix, fg: fg, style: style),
+        Handle.swatch(color, theme),
+        text(value, fg: fg, style: style)
+      ]
+    end
+  end
+
+  defp render_row(marker, row, fg, style, _theme) do
+    text(marker <> row, fg: fg, style: style)
   end
 
   defp display_value(nil), do: @empty_placeholder

@@ -10,6 +10,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Display.Handle
 
   import Raxol.Core.Renderer.View
 
@@ -185,15 +186,16 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
         |> Enum.with_index()
         |> Enum.map(fn {entry, index} ->
           marker = if index == selected_index, do: "> ", else: "  "
-          text(marker <> oneliner_row(entry), fg: theme.primary.fg)
+          oneliner_row(entry, marker, theme)
         end)
     end
   end
 
-  defp oneliner_row(entry) do
+  defp oneliner_row(entry, marker, theme) do
+    user = Map.get(entry, :user)
+
     handle =
-      entry
-      |> Map.get(:user)
+      user
       |> user_handle()
       |> TerminalText.sanitize_plain_text()
       |> single_line()
@@ -206,7 +208,12 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
       |> single_line()
       |> clip(@oneliner_body_limit)
 
-    "@#{handle}  #{body}"
+    row style: %{gap: 0} do
+      [
+        text(marker <> "@" <> handle, fg: Handle.color_for(user, theme)),
+        text("  " <> body, fg: theme.primary.fg)
+      ]
+    end
   end
 
   defp visible_oneliners(state) do

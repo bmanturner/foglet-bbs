@@ -18,6 +18,7 @@ defmodule Foglet.TUI.Screens.OnlineNow do
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
+  alias Foglet.TUI.Widgets.Display.Handle
 
   import Raxol.Core.Renderer.View
 
@@ -134,14 +135,28 @@ defmodule Foglet.TUI.Screens.OnlineNow do
 
     state
     |> State.visible_rows(visible_row_limit(context))
-    |> Enum.map(fn {row, index} ->
-      marker = if index == state.selected_index, do: "> ", else: "  "
-      fg = if index == state.selected_index, do: theme.accent.fg, else: theme.primary.fg
-      text(marker <> format_row(row, row_width), fg: fg)
+    |> Enum.map(fn {online_row, index} ->
+      selected? = index == state.selected_index
+      render_online_row(online_row, row_width, selected?, theme)
     end)
   end
 
-  defp format_row(row, row_width) do
+  defp render_online_row(online_row, row_width, selected?, theme) do
+    marker = if selected?, do: "> ", else: "  "
+    fg = if selected?, do: theme.accent.fg, else: theme.primary.fg
+
+    %{handle: handle, role: role, padding: padding, presence: presence} =
+      format_row_parts(online_row, row_width)
+
+    row style: %{gap: 0} do
+      [
+        text(marker <> "@" <> handle <> role, fg: Handle.color_for(online_row, theme)),
+        text(padding <> presence, fg: fg)
+      ]
+    end
+  end
+
+  defp format_row_parts(row, row_width) do
     handle =
       row |> Map.get(:handle, "unknown") |> sanitize() |> TextWidth.slice_to_width(@handle_limit)
 
@@ -161,7 +176,7 @@ defmodule Foglet.TUI.Screens.OnlineNow do
         max(row_width - TextWidth.display_width(left) - TextWidth.display_width(presence), 2)
       )
 
-    TextWidth.slice_to_width(left <> padding <> presence, row_width)
+    %{handle: handle, role: role, padding: padding, presence: presence}
   end
 
   defp role_badge(:sysop), do: " [SYSOP]"
