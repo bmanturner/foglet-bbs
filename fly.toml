@@ -10,6 +10,7 @@ swap_size_mb = 256
   FOGLET_SSH_PORT = "2222"
   FOGLET_DEFAULT_TIMEZONE = "America/Chicago"
   FOGLET_ENABLE_DEMO_DOORS = "true"
+  FOGLET_BBS_SYSOP_NAME = "needz"
   HOME = "/data"
   PHX_HOST = "bbs.foglet.io"
   PHX_SERVER = "true"
