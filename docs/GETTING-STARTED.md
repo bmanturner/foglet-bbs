@@ -114,13 +114,20 @@ inserts:
 
 ### Optional: verify the environment
 
-A `mix foglet.doctor` task is available to confirm Elixir/Erlang versions,
-Postgres reachability, the `citext` extension, the SSH host key, and required
+After dependencies are fetched (`mix deps.get`, or the full `mix setup` alias),
+`mix foglet.doctor` is available as a fast, repeatable local troubleshooting
+check. It confirms the pinned Elixir/Erlang versions, the configured dev
+database, the `citext` extension, SSH host-key readiness, and required
 environment variables:
 
 ```bash
 mix foglet.doctor
 ```
+
+If a fresh Paperclip worktree or clone exits before the doctor banner because a
+Mix dependency is missing, fetch dependencies first with `mix deps.get`. Doctor
+itself does not fetch packages, start containers, run migrations, or perform any
+other network/destructive setup step.
 
 ## 2. Run the application
 
@@ -240,7 +247,7 @@ key handling. Global navigation lives in `Foglet.TUI.App`.
 |---------|----------------------|
 | `mix setup` fails on `ecto.create` with a connection error | Postgres is not running or credentials in `config/dev.exs` (`postgres`/`postgres` on `localhost`) do not match your local Postgres. Start Postgres with `docker compose up -d postgres`, or set `DATABASE_URL` to your running database. |
 | `docker compose up -d postgres` fails because port `5432` is allocated | Another local database is already using the default port. Start this project's database on another host port, for example `POSTGRES_PORT=55432 docker compose up -d postgres`, then run Mix commands with `DATABASE_URL=ecto://postgres:postgres@localhost:55432/foglet_bbs_dev`. |
-| `citext extension` check fails in `mix foglet.doctor` | Connect to your Postgres as a superuser and run `CREATE EXTENSION IF NOT EXISTS citext;` against the `foglet_bbs_dev` database. |
+| `citext extension` check fails in `mix foglet.doctor` | The configured database exists but has not run the migration that creates `citext`. Run `mix ecto.migrate` (or the full `mix setup`). |
 | `ssh -p 2222 ...` hangs or refuses the connection | The SSH daemon did not start. Confirm `mix phx.server` is running, that `config :foglet_bbs, :start_ssh_daemon, true` has not been overridden, and that nothing else is bound to port `2222` (override with `FOGLET_SSH_PORT=2200`). |
 | Compiler complains about Elixir/Erlang versions | Your runtime does not match `.tool-versions` (Elixir `1.19.5-otp-28`, Erlang `28.3.1`). Install the pinned versions via `asdf install` or your version manager of choice. |
 | Seeds skip threads with "general board not found" | The Phase-2 seed (default board) failed earlier in the run. Re-run `mix ecto.reset` to drop and rebuild from scratch. |
