@@ -339,7 +339,7 @@ Start-to-finish sysop path:
    Put the Usurper Reborn binary and required assets under an operator-owned directory such as `/opt/foglet/doors/usurper`. The project Dockerfile downloads the public Linux x64 release at build time and installs it there.
 
 3. Choose the shared state path.
-   Use a durable SQLite database path such as `/data/usurper/usurper_online.db`. The deployment must make that directory writable by the runtime user that will actually execute the door.
+   Use a durable SQLite database path such as `/data/usurper/usurper_online.db`. The runtime volume must provide that directory and make it writable by the user that will actually execute the door.
 
 4. Declare one DOOR32.SYS dropfile.
    Use `"dropfiles": [{"format": "door32_sys", ...}]`, not a hand-written filename. Foglet will write `DOOR32.SYS` into the per-launch directory and substitute its generated path into `{dropfile:door32_sys}`.

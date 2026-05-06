@@ -22,8 +22,9 @@ ship a full production `docker compose up` stack for app plus database.
 
 The image also installs runtime tools needed by current features, including
 OpenSSH client utilities, Python 3, curl, unzip, and libraries required by the
-release. Door-game support uses `/data/door-manifests` for operator-managed
-manifests and `/data/usurper` for the bundled Usurper Reborn data directory.
+release. Door-game support reads bundled manifests from `priv/doors/manifests`
+by default and uses `/data/usurper` on the runtime volume for the bundled
+Usurper Reborn data directory.
 
 ## Build the image
 
@@ -73,7 +74,6 @@ That path is used for:
 
 - `/data/ssh` — SSH host keys when `SSH_HOST_KEY_DIR=/data/ssh`.
 - `/data/.config` — runtime home/config data for the non-root release user.
-- `/data/door-manifests` — door-game manifest JSON files.
 - `/data/usurper` — bundled Usurper Reborn SQLite/runtime data.
 
 The database is not stored in the Foglet container. Run Postgres separately and

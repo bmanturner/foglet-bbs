@@ -79,7 +79,7 @@ RUN set -eux; \
   usurper_zip="UsurperReborn-v${USURPER_REBORN_VERSION}-Linux-x64.zip"; \
   curl -fsSL -o "/tmp/${usurper_zip}" "https://github.com/binary-knight/usurper-reborn/releases/download/v${USURPER_REBORN_VERSION}/${usurper_zip}"; \
   echo "${USURPER_REBORN_LINUX_X64_SHA256}  /tmp/${usurper_zip}" | sha256sum -c -; \
-  mkdir -p /opt/foglet/doors/usurper /data/usurper; \
+  mkdir -p /opt/foglet/doors/usurper; \
   unzip -q "/tmp/${usurper_zip}" -d /opt/foglet/doors/usurper; \
   rm "/tmp/${usurper_zip}"; \
   chmod 0755 /opt/foglet /opt/foglet/doors /opt/foglet/doors/usurper; \
@@ -87,9 +87,7 @@ RUN set -eux; \
   chown -R root:root /opt/foglet; \
   mkdir -p /opt/foglet/doors/usurper/logs; \
   chown foglet-door:foglet-door /opt/foglet/doors/usurper/logs; \
-  chmod 0750 /opt/foglet/doors/usurper/logs; \
-  chown -R foglet-door:foglet-door /data/usurper; \
-  chmod 0750 /data/usurper
+  chmod 0750 /opt/foglet/doors/usurper/logs
 
 # Set the locale
 RUN sed -i '/en_US.UTF-8/s/^# //g' /etc/locale.gen \
