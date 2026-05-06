@@ -70,7 +70,12 @@ RUN apt-get update \
 ARG USURPER_REBORN_VERSION
 ARG USURPER_REBORN_LINUX_X64_SHA256
 
+# The release runs as Debian's non-root nobody account. Add foglet-door as
+# a named UID/GID 65534 alias so restricted_user_process_group manifests can
+# resolve their sandbox identity without making the BEAM VM run as root.
 RUN set -eux; \
+  echo 'foglet-door:x:65534:' >> /etc/group; \
+  echo 'foglet-door:x:65534:65534:Foglet door sandbox:/nonexistent:/usr/sbin/nologin' >> /etc/passwd; \
   usurper_zip="UsurperReborn-v${USURPER_REBORN_VERSION}-Linux-x64.zip"; \
   curl -fsSL -o "/tmp/${usurper_zip}" "https://github.com/binary-knight/usurper-reborn/releases/download/v${USURPER_REBORN_VERSION}/${usurper_zip}"; \
   echo "${USURPER_REBORN_LINUX_X64_SHA256}  /tmp/${usurper_zip}" | sha256sum -c -; \
@@ -81,9 +86,9 @@ RUN set -eux; \
   chmod 0755 /opt/foglet/doors/usurper/UsurperReborn; \
   chown -R root:root /opt/foglet; \
   mkdir -p /opt/foglet/doors/usurper/logs; \
-  chown nobody:root /opt/foglet/doors/usurper/logs; \
+  chown foglet-door:foglet-door /opt/foglet/doors/usurper/logs; \
   chmod 0750 /opt/foglet/doors/usurper/logs; \
-  chown -R nobody:root /var/lib/foglet; \
+  chown -R foglet-door:foglet-door /var/lib/foglet; \
   chmod 0750 /var/lib/foglet /var/lib/foglet/usurper
 
 # Set the locale

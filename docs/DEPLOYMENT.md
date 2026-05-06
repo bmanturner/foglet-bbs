@@ -61,8 +61,9 @@ Runtime image (`Dockerfile` final stage):
 - Installed: `libstdc++6 openssl libncurses6 locales ca-certificates openssh-client python3 curl unzip`
 - Locale: `en_US.UTF-8`
 - User: `nobody`
+- Door sandbox identity: `foglet-door`/`foglet-door` is present in the image as a name alias for UID/GID 65534. The release still runs as the non-root `nobody` account, so the PTY helper can resolve the production manifest's restricted user/group without granting the BEAM VM setuid privileges.
 - Volumes: `/data` for Foglet app state and `/var/lib/foglet/usurper` for the Usurper Reborn shared SQLite database.
-- Bundled door fixture: the Dockerfile downloads the public Linux x64 Usurper Reborn release at build time, verifies its SHA256, and installs it under `/opt/foglet/doors/usurper`. The executable remains root-owned in the image; the SQLite directory is writable by the container user so Usurper can create `usurper_online.db` on first launch. Usurper's own `logs/` subdirectory is also writable by the container user because the upstream executable opens that path even for `--help`.
+- Bundled door fixture: the Dockerfile downloads the public Linux x64 Usurper Reborn release at build time, verifies its SHA256, and installs it under `/opt/foglet/doors/usurper`. The executable remains root-owned in the image; the SQLite directory is writable by the `foglet-door` sandbox identity so Usurper can create `usurper_online.db` on first launch. Usurper's own `logs/` subdirectory is also writable by the sandbox identity because the upstream executable opens that path even for `--help`.
 - `CMD ["/app/bin/server"]`
 
 ### CI build / test
