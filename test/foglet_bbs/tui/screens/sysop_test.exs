@@ -2208,6 +2208,82 @@ defmodule Foglet.TUI.Screens.SysopTest do
       refute Enum.any?(new_bv.boards, &(&1.slug == "required-only"))
     end
 
+    for char <- ["q", "Q"] do
+      @char char
+      test "FOG-1147 #{char} stays in create-board text field while modal is active", %{
+        state: state,
+        sysop: sysop
+      } do
+        state = activate_boards_tab(state, sysop)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: @char}, state)
+
+        bv = current_boards_view(state)
+        assert state.current_screen == :sysop
+        assert %ModalForm{} = bv.modal
+        assert ModalForm.field_value(bv.modal, :slug) == @char
+      end
+
+      test "FOG-1147 #{char} stays in edit-board text field while modal is active", %{
+        state: state,
+        sysop: sysop
+      } do
+        state = activate_boards_tab(state, sysop)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: "e"}, state)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: @char}, state)
+
+        bv = current_boards_view(state)
+        assert state.current_screen == :sysop
+        assert %ModalForm{} = bv.modal
+        assert ModalForm.field_value(bv.modal, :slug) == "chat" <> @char
+      end
+
+      test "FOG-1147 #{char} stays in create-category text field while modal is active", %{
+        state: state,
+        sysop: sysop
+      } do
+        state = activate_boards_tab(state, sysop)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: "N"}, state)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: @char}, state)
+
+        bv = current_boards_view(state)
+        assert state.current_screen == :sysop
+        assert %ModalForm{} = bv.modal
+        assert ModalForm.field_value(bv.modal, :name) == @char
+      end
+
+      test "FOG-1147 #{char} stays in edit-category textarea while modal is active", %{
+        state: state,
+        sysop: sysop
+      } do
+        state = activate_boards_tab(state, sysop)
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: "E"}, state)
+        bv = current_boards_view(state)
+        description_idx = Enum.find_index(bv.modal.fields, &(&1.name == :description))
+        state = put_boards_view(state, %{bv | modal: %{bv.modal | focus_index: description_idx}})
+
+        {:update, state, _} = handle_sysop_key(%{key: :char, char: @char}, state)
+
+        bv = current_boards_view(state)
+        assert state.current_screen == :sysop
+        assert %ModalForm{} = bv.modal
+        assert ModalForm.field_value(bv.modal, :description) == @char
+      end
+    end
+
+    test "FOG-1147 Esc cancels active board form without saving", %{state: state, sysop: sysop} do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "q"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :escape}, state)
+
+      bv = current_boards_view(state)
+      assert state.current_screen == :sysop
+      assert bv.modal == nil
+      refute Foglet.Boards.get_board_by_slug("q")
+    end
+
     test "Pitfall 5 — j/k navigation no-op while modal open", %{state: state, sysop: sysop} do
       state = activate_boards_tab(state, sysop)
       {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
