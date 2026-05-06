@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
   alias Foglet.TUI.TextWidth
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+  @manifest_dir_env "FOGLET_DOOR_MANIFEST_DIR"
 
   defmodule EmptyDoors do
     @moduledoc false
@@ -35,8 +36,19 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
   setup do
     original = System.get_env(@demo_doors_env)
+    original_manifest_dir = System.get_env(@manifest_dir_env)
+    original_app_manifest_dir = Application.get_env(:foglet_bbs, :door_manifest_dir)
+
     System.delete_env(@demo_doors_env)
-    on_exit(fn -> restore_env(@demo_doors_env, original) end)
+    System.delete_env(@manifest_dir_env)
+    Application.delete_env(:foglet_bbs, :door_manifest_dir)
+
+    on_exit(fn ->
+      restore_env(@demo_doors_env, original)
+      restore_env(@manifest_dir_env, original_manifest_dir)
+      restore_app_env(:door_manifest_dir, original_app_manifest_dir)
+    end)
+
     :ok
   end
 
@@ -52,7 +64,13 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     )
   end
 
-  test "init lists production catalog by default when demo doors are disabled" do
+  test "init has an empty production catalog when operator manifest directory is disabled" do
+    assert %State{doors: [], selected_index: 0} = DoorList.init(context())
+  end
+
+  test "init lists configured operator manifests when the directory is enabled" do
+    configure_bundled_manifest_dir!()
+
     assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
     assert Enum.map(doors, & &1.id) == ["usurper-reborn"]
     assert Enum.all?(doors, &match?(%Manifest{}, &1))
@@ -64,7 +82,6 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert %State{doors: doors, selected_index: 0} = DoorList.init(context())
 
     assert Enum.map(doors, & &1.id) == [
-             "usurper-reborn",
              "native-hello",
              "external-echo",
              "python-context-demo",
@@ -85,14 +102,14 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert {%State{selected_index: 2}, []} =
              DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 1}, ctx)
 
-    assert {%State{selected_index: 4}, []} =
-             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 4}, ctx)
-
-    assert {%State{selected_index: 4}, []} =
-             DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 4}, ctx)
+    assert {%State{selected_index: 3}, []} =
+             DoorList.update({:key, %{key: :down}}, %{state | selected_index: 3}, ctx)
 
     assert {%State{selected_index: 3}, []} =
-             DoorList.update({:key, %{key: :char, char: "k"}}, %{state | selected_index: 4}, ctx)
+             DoorList.update({:key, %{key: :char, char: "j"}}, %{state | selected_index: 3}, ctx)
+
+    assert {%State{selected_index: 2}, []} =
+             DoorList.update({:key, %{key: :char, char: "k"}}, %{state | selected_index: 3}, ctx)
 
     assert {%State{selected_index: 0}, []} = DoorList.update({:key, %{key: :up}}, state, ctx)
   end
@@ -106,7 +123,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     assert {^state, [%Effect{type: :modal, payload: {:open, %Modal{type: :confirm} = modal}}]} =
              DoorList.update({:key, %{key: :enter}}, state, ctx)
 
-    assert modal.message =~ "Launch Usurper Reborn?"
+    assert modal.message =~ "Launch Native Hello?"
   end
 
   test "modal submit emits explicit launch_door effect for selected visible door" do
@@ -154,7 +171,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
       choose_line = Enum.find_index(lines, &String.contains?(&1, "Choose a door game."))
       warning_line = Enum.find_index(lines, &String.contains?(&1, "return here."))
-      selected_line = Enum.find_index(lines, &String.contains?(&1, "> Usurper Reborn"))
+      selected_line = Enum.find_index(lines, &String.contains?(&1, "> Native Hello"))
       status_line = Enum.find_index(lines, &String.contains?(&1, "Enter Launch  Q Back"))
       command_line = Enum.find_index(lines, &String.contains?(&1, "Enter Launch"))
 
@@ -216,6 +233,21 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
   defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
 
+  defp configure_bundled_manifest_dir! do
+    {:ok, priv_dir} = priv_dir()
+    Application.put_env(:foglet_bbs, :door_manifest_dir, Path.join(priv_dir, "doors/manifests"))
+  end
+
+  defp priv_dir do
+    case :code.priv_dir(:foglet_bbs) do
+      path when is_list(path) -> {:ok, List.to_string(path)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
   defp restore_env(name, nil), do: System.delete_env(name)
   defp restore_env(name, value), do: System.put_env(name, value)
+
+  defp restore_app_env(key, nil), do: Application.delete_env(:foglet_bbs, key)
+  defp restore_app_env(key, value), do: Application.put_env(:foglet_bbs, key, value)
 end

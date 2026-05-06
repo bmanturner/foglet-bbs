@@ -14,6 +14,11 @@ defmodule Foglet.Doors do
   Runtime ownership remains an OTP/SSH integration concern for later slices.
   """
 
+  require Logger
+
+  # @sobelow_skip is consumed by Sobelow for reviewed file-backed manifest reads.
+  Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
+
   alias Foglet.Accounts.User
   alias Foglet.Doors.{AuditRecord, Dropfiles, Manifest}
   alias Foglet.Doors.Manifest.Dropfile
@@ -45,6 +50,7 @@ defmodule Foglet.Doors do
     SECRET_KEY_BASE
   ]
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+  @operator_manifest_dir_env "FOGLET_DOOR_MANIFEST_DIR"
   @truthy_env_values ~w[1 true yes]
   @demo_timeout_ms 15 * 60 * 1_000
   @demo_idle_timeout_ms 5 * 60 * 1_000
@@ -68,31 +74,44 @@ defmodule Foglet.Doors do
   @python_context_relative_path "doors/demo/python_context_demo.py"
   @classic_dropfile_relative_path "doors/demo/classic_dropfile_demo.py"
 
-  @usurper_command "/opt/foglet/doors/usurper/UsurperReborn"
-  @usurper_working_dir "/opt/foglet/doors/usurper"
-  @usurper_database_path "/data/usurper/usurper_online.db"
-  @usurper_timeout_ms 12 * 60 * 60 * 1_000
-  @usurper_idle_timeout_ms 60 * 60 * 1_000
-
   @type manifest_attrs :: map()
   @type validation_error :: {atom(), String.t()}
 
   @doc """
   Returns configured door manifests available to the runtime catalog.
 
-  This branch has no persisted game catalog yet. Built-in demo/test manifests
-  are deployment/QA fixtures and are hidden unless `FOGLET_ENABLE_DEMO_DOORS`
-  is set to a documented truthy value at runtime.
+  Production/operator doors are loaded from a JSON manifest directory configured
+  with `:door_manifest_dir` or `FOGLET_DOOR_MANIFEST_DIR`. When unset, no
+  production doors are exposed. Built-in demo/test manifests remain deployment/QA
+  fixtures hidden unless `FOGLET_ENABLE_DEMO_DOORS` is set to a documented truthy
+  value at runtime.
   """
   @spec list_manifests() :: [Manifest.t()]
   def list_manifests do
-    production_manifest_attrs() ++
+    %{manifests: operator_manifests, errors: errors} = operator_manifest_results()
+
+    log_manifest_load_errors(errors)
+
+    operator_manifests ++
       if demo_doors_enabled?() do
         demo_manifest_attrs()
         |> Enum.map(&validate_manifest!/1)
       else
         []
       end
+  end
+
+  @doc """
+  Returns operator manifest load errors with source file and validation fields.
+
+  The Door Games list fails closed by omitting invalid manifests. Operators can
+  use this function from diagnostics/tests to see which configured files were
+  rejected and why.
+  """
+  @spec manifest_load_errors() :: [%{file: String.t(), errors: [validation_error()]}]
+  def manifest_load_errors do
+    %{errors: errors} = operator_manifest_results()
+    errors
   end
 
   @doc "Returns true when the deployment env enables built-in demo/test doors."
@@ -152,7 +171,7 @@ defmodule Foglet.Doors do
       slug: Map.get(attrs, :slug),
       display_name: Map.get(attrs, :display_name),
       description: Map.get(attrs, :description),
-      runtime: Map.get(attrs, :runtime),
+      runtime: normalize_manifest_atom(Map.get(attrs, :runtime)),
       command: Map.get(attrs, :command),
       module: Map.get(attrs, :module),
       args: Map.get(attrs, :args, []),
@@ -163,10 +182,10 @@ defmodule Foglet.Doors do
       env_allowlist: Map.get(attrs, :env_allowlist, []),
       timeout_ms: Map.get(attrs, :timeout_ms),
       idle_timeout_ms: Map.get(attrs, :idle_timeout_ms),
-      visibility: Map.get(attrs, :visibility, :members),
-      auth_scope: Map.get(attrs, :auth_scope, :site),
+      visibility: normalize_manifest_atom(Map.get(attrs, :visibility, :members)),
+      auth_scope: normalize_auth_scope(Map.get(attrs, :auth_scope, :site)),
       output_encoding: normalize_output_encoding(Map.get(attrs, :output_encoding, :utf8)),
-      pty?: Map.get(attrs, :pty?, true),
+      pty?: Map.get(attrs, :pty?, Map.get(attrs, :pty, true)),
       sandbox: normalize_sandbox(Map.get(attrs, :sandbox, %{}))
     }
 
@@ -186,57 +205,92 @@ defmodule Foglet.Doors do
     end
   end
 
-  defp production_manifest_attrs do
-    [
-      usurper_reborn_manifest_attrs()
-      |> validate_manifest!()
-    ]
+  defp operator_manifest_results do
+    case operator_manifest_dir() do
+      nil ->
+        %{manifests: [], errors: []}
+
+      dir ->
+        load_operator_manifest_dir(dir)
+    end
   end
 
-  defp usurper_reborn_manifest_attrs do
-    %{
-      id: "usurper-reborn",
-      slug: "usurper-reborn",
-      display_name: "Usurper Reborn",
-      description: "Shared-world fantasy BBS game for Foglet callers.",
-      runtime: :classic_dropfile,
-      command: @usurper_command,
-      args: [
-        "--door32",
-        "{dropfile:door32_sys}",
-        "--db",
-        @usurper_database_path,
-        "--stdio"
-      ],
-      working_dir: @usurper_working_dir,
-      dropfiles: [
-        %{
-          format: :door32_sys,
-          identity: :handle,
-          transport: :filesystem,
-          encoding: :cp437,
-          cwd: :door_working_dir,
-          expose_path: :env
-        }
-      ],
-      timeout_ms: @usurper_timeout_ms,
-      idle_timeout_ms: @usurper_idle_timeout_ms,
-      visibility: :members,
-      auth_scope: :site,
-      output_encoding: :cp437,
-      env: %{
-        "LANG" => "en_US.UTF-8",
-        "LC_ALL" => "en_US.UTF-8",
-        "TERM" => "xterm-256color"
-      },
-      sandbox: %{
-        mode: :restricted_user_process_group,
-        user: "foglet-door",
-        group: "foglet-door",
-        process_tree: :process_group,
-        fail_closed?: true
-      }
-    }
+  defp operator_manifest_dir do
+    configured =
+      Application.get_env(:foglet_bbs, :door_manifest_dir) ||
+        System.get_env(@operator_manifest_dir_env)
+
+    case configured do
+      value when is_binary(value) ->
+        value
+        |> String.trim()
+        |> case do
+          "" -> nil
+          path -> Path.expand(path)
+        end
+
+      _other ->
+        nil
+    end
+  end
+
+  defp load_operator_manifest_dir(dir) do
+    if File.dir?(dir) do
+      dir
+      |> File.ls!()
+      |> Enum.filter(&operator_manifest_file?/1)
+      |> Enum.sort()
+      |> Enum.map(&load_operator_manifest_file(Path.join(dir, &1)))
+      |> split_manifest_results()
+    else
+      %{manifests: [], errors: [%{file: dir, errors: [directory: "does not exist"]}]}
+    end
+  rescue
+    exception in File.Error ->
+      %{manifests: [], errors: [%{file: dir, errors: [directory: Exception.message(exception)]}]}
+  end
+
+  defp operator_manifest_file?(filename) do
+    String.ends_with?(filename, ".json") and not String.starts_with?(filename, ".")
+  end
+
+  # sobelow: path is built by joining a sorted `*.json` filename from the
+  # configured operator manifest directory; file contents are decoded as data and
+  # revalidated by `validate_manifest/1` before any Door Games runtime sees them.
+  @sobelow_skip ["Traversal.FileModule"]
+  defp load_operator_manifest_file(path) do
+    with {:ok, json} <- File.read(path),
+         {:ok, attrs} <- Jason.decode(json),
+         {:ok, manifest} <- validate_manifest(attrs) do
+      {:ok, manifest}
+    else
+      {:error, %Jason.DecodeError{} = error} ->
+        {:error, %{file: path, errors: [json: Exception.message(error)]}}
+
+      {:error, errors} when is_list(errors) ->
+        {:error, %{file: path, errors: errors}}
+
+      {:error, reason} ->
+        {:error, %{file: path, errors: [file: inspect(reason)]}}
+    end
+  end
+
+  defp split_manifest_results(results) do
+    Enum.reduce(results, %{manifests: [], errors: []}, fn
+      {:ok, manifest}, acc -> %{acc | manifests: [manifest | acc.manifests]}
+      {:error, error}, acc -> %{acc | errors: [error | acc.errors]}
+    end)
+    |> then(fn acc ->
+      %{manifests: Enum.reverse(acc.manifests), errors: Enum.reverse(acc.errors)}
+    end)
+  end
+
+  defp log_manifest_load_errors([]), do: :ok
+
+  defp log_manifest_load_errors(errors) do
+    Enum.each(errors, fn %{file: file, errors: file_errors} ->
+      Logger.warning("Door Games manifest rejected: #{file} #{inspect(file_errors)}")
+    end)
   end
 
   defp demo_manifest_attrs do
@@ -561,10 +615,15 @@ defmodule Foglet.Doors do
   defp atomize_known_keys(attrs) do
     Map.new(attrs, fn
       {key, value} when is_atom(key) -> {key, value}
-      {key, value} when is_binary(key) -> {String.to_existing_atom(key), value}
+      {"pty", value} -> {:pty, value}
+      {"pty?", value} -> {:pty?, value}
+      {key, value} when key in ~w[
+        id slug display_name description runtime command module args dropfiles dropfile_formats
+        working_dir env env_allowlist timeout_ms idle_timeout_ms visibility auth_scope
+        output_encoding sandbox
+      ] -> {String.to_existing_atom(key), value}
+      {key, value} -> {key, value}
     end)
-  rescue
-    ArgumentError -> attrs
   end
 
   defp require_binary(errors, _field, value) when is_binary(value) and value != "", do: errors
@@ -714,6 +773,23 @@ defmodule Foglet.Doors do
   defp validate_output_encoding(errors, _encoding),
     do: [{:output_encoding, "must be utf8 or cp437"} | errors]
 
+  defp normalize_manifest_atom(value) when is_atom(value), do: value
+
+  defp normalize_manifest_atom(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp normalize_manifest_atom(value), do: value
+
+  defp normalize_auth_scope("site"), do: :site
+
+  defp normalize_auth_scope(%{"board" => board_id}) when is_binary(board_id),
+    do: {:board, board_id}
+
+  defp normalize_auth_scope(scope), do: scope
+
   defp normalize_output_encoding(value) when is_atom(value), do: value
 
   defp normalize_output_encoding(value) when is_binary(value) do
@@ -736,10 +812,10 @@ defmodule Foglet.Doors do
     attrs = atomize_sandbox_keys(attrs)
 
     %Sandbox{
-      mode: Map.get(attrs, :mode, :none),
+      mode: normalize_manifest_atom(Map.get(attrs, :mode, :none)),
       user: Map.get(attrs, :user),
       group: Map.get(attrs, :group),
-      process_tree: Map.get(attrs, :process_tree, :process_group),
+      process_tree: normalize_manifest_atom(Map.get(attrs, :process_tree, :process_group)),
       fail_closed?: Map.get(attrs, :fail_closed?, Map.get(attrs, :fail_closed, true))
     }
   end

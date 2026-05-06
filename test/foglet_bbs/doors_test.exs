@@ -6,13 +6,25 @@ defmodule Foglet.DoorsTest do
   alias Foglet.Sessions.Session
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
-  @production_door_ids ~w[usurper-reborn]
+  @manifest_dir_env "FOGLET_DOOR_MANIFEST_DIR"
+  @production_door_ids []
   @demo_door_ids ~w[native-hello external-echo python-context-demo classic-dropfile-demo]
 
   setup do
     original = System.get_env(@demo_doors_env)
+    original_manifest_dir = System.get_env(@manifest_dir_env)
+    original_app_manifest_dir = Application.get_env(:foglet_bbs, :door_manifest_dir)
+
     System.delete_env(@demo_doors_env)
-    on_exit(fn -> restore_env(@demo_doors_env, original) end)
+    System.delete_env(@manifest_dir_env)
+    Application.delete_env(:foglet_bbs, :door_manifest_dir)
+
+    on_exit(fn ->
+      restore_env(@demo_doors_env, original)
+      restore_env(@manifest_dir_env, original_manifest_dir)
+      restore_app_env(:door_manifest_dir, original_app_manifest_dir)
+    end)
+
     :ok
   end
 
@@ -250,7 +262,10 @@ defmodule Foglet.DoorsTest do
   end
 
   describe "list_manifests/0" do
-    test "includes the production Usurper Reborn DOOR32 manifest without enabling demos" do
+    test "loads the bundled Usurper Reborn JSON sample when configured as the manifest directory" do
+      assert {:ok, priv_dir} = priv_dir()
+      Application.put_env(:foglet_bbs, :door_manifest_dir, Path.join(priv_dir, "doors/manifests"))
+
       assert [usurper] = Doors.list_manifests()
 
       assert usurper.id == "usurper-reborn"
@@ -328,6 +343,73 @@ defmodule Foglet.DoorsTest do
       assert external_echo.working_dir == Path.join(priv_dir, "doors/demo")
       assert File.regular?(external_echo.command)
       assert executable?(external_echo.command)
+    end
+
+    test "loads operator-managed JSON manifests from the configured directory" do
+      dir = configured_manifest_dir!()
+      write_manifest!(dir, "trade-wars.json", operator_classic_manifest_json())
+
+      assert [manifest] = Doors.list_manifests()
+      assert manifest.id == "operator-trade-wars"
+      assert manifest.runtime == :classic_dropfile
+      assert manifest.command == "/srv/foglet/doors/tradewars/run.sh"
+      assert manifest.args == ["--door", "{dropfile:door_sys}"]
+      assert manifest.working_dir == "/srv/foglet/doors/tradewars"
+      assert manifest.visibility == :members
+      assert manifest.auth_scope == :site
+      assert manifest.output_encoding == :cp437
+      assert manifest.dropfile_formats == [:door_sys]
+      assert [%{filename: "DOOR.SYS", expose_path: :env}] = manifest.dropfiles
+      assert manifest.sandbox.mode == :restricted_user_process_group
+      assert manifest.sandbox.user == "foglet-door"
+      assert manifest.sandbox.fail_closed? == true
+      assert Doors.manifest_load_errors() == []
+    end
+
+    test "invalid operator manifest files fail closed with file and field errors" do
+      dir = configured_manifest_dir!()
+      write_manifest!(dir, "valid.json", operator_classic_manifest_json())
+
+      write_manifest!(
+        dir,
+        "unsafe.json",
+        Jason.encode!(%{
+          id: "unsafe",
+          slug: "unsafe",
+          display_name: "Unsafe Door",
+          description: "Should not load",
+          runtime: "classic_dropfile",
+          command: "bin/run.sh",
+          working_dir: "relative",
+          dropfile_formats: ["door_sys"],
+          timeout_ms: 30_000
+        })
+      )
+
+      assert Enum.map(Doors.list_manifests(), & &1.id) == ["operator-trade-wars"]
+
+      assert [error] = Doors.manifest_load_errors()
+      assert String.ends_with?(error.file, "unsafe.json")
+      assert {:command, "must be an absolute path"} in error.errors
+      assert {:working_dir, "must be an absolute path"} in error.errors
+    end
+
+    test "disabled or missing operator manifest directory exposes no production doors" do
+      assert Doors.list_manifests() == []
+      assert Doors.manifest_load_errors() == []
+
+      Application.put_env(
+        :foglet_bbs,
+        :door_manifest_dir,
+        Path.join(System.tmp_dir!(), "missing-foglet-manifests")
+      )
+
+      assert Doors.list_manifests() == []
+
+      assert [%{file: missing_dir, errors: [directory: "does not exist"]}] =
+               Doors.manifest_load_errors()
+
+      assert String.ends_with?(missing_dir, "missing-foglet-manifests")
     end
   end
 
@@ -569,8 +651,62 @@ defmodule Foglet.DoorsTest do
 
   defp enable_demo_doors, do: System.put_env(@demo_doors_env, "true")
 
+  defp configured_manifest_dir! do
+    dir =
+      Path.join(System.tmp_dir!(), "foglet-manifest-dir-#{System.unique_integer([:positive])}")
+
+    File.mkdir_p!(dir)
+    Application.put_env(:foglet_bbs, :door_manifest_dir, dir)
+    on_exit(fn -> File.rm_rf!(dir) end)
+    dir
+  end
+
+  defp write_manifest!(dir, filename, contents) do
+    Path.join(dir, filename)
+    |> File.write!(contents)
+  end
+
+  defp operator_classic_manifest_json do
+    Jason.encode!(%{
+      id: "operator-trade-wars",
+      slug: "operator-trade-wars",
+      display_name: "Operator Trade Wars",
+      description: "Configured by a sysop without editing Elixir.",
+      runtime: "classic_dropfile",
+      command: "/srv/foglet/doors/tradewars/run.sh",
+      args: ["--door", "{dropfile:door_sys}"],
+      working_dir: "/srv/foglet/doors/tradewars",
+      dropfiles: [
+        %{
+          format: "door_sys",
+          identity: "handle",
+          transport: "filesystem",
+          encoding: "cp437",
+          cwd: "door_working_dir",
+          expose_path: "env"
+        }
+      ],
+      timeout_ms: 30_000,
+      idle_timeout_ms: 5_000,
+      visibility: "members",
+      auth_scope: "site",
+      output_encoding: "cp437",
+      env: %{"TERM" => "xterm-256color"},
+      sandbox: %{
+        mode: "restricted_user_process_group",
+        user: "foglet-door",
+        group: "foglet-door",
+        process_tree: "process_group",
+        fail_closed: true
+      }
+    })
+  end
+
   defp restore_env(name, nil), do: System.delete_env(name)
   defp restore_env(name, value), do: System.put_env(name, value)
+
+  defp restore_app_env(key, nil), do: Application.delete_env(:foglet_bbs, key)
+  defp restore_app_env(key, value), do: Application.put_env(:foglet_bbs, key, value)
 
   defp executable?(path) do
     case File.stat(path) do

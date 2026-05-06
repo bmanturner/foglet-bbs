@@ -38,6 +38,13 @@ if ssh_port = System.get_env("FOGLET_SSH_PORT") do
   config :foglet_bbs, :ssh_port, String.to_integer(ssh_port)
 end
 
+# Optional operator-managed Door Games JSON manifest directory. When unset or
+# blank, production/operator door loading is disabled and only explicitly-enabled
+# demo fixtures may appear.
+if door_manifest_dir = System.get_env("FOGLET_DOOR_MANIFEST_DIR") do
+  config :foglet_bbs, :door_manifest_dir, door_manifest_dir
+end
+
 # System-wide default timezone for new user registrations and unauthenticated
 # sessions. Must be a valid IANA timezone name (e.g. "America/New_York").
 # When unset, falls back to OS-detected timezone, then "Etc/UTC".

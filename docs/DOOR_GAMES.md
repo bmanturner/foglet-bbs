@@ -157,6 +157,16 @@ Manifest arg templates are resolved after dropfiles exist. Supported tokens are:
 
 Unknown or malformed tokens fail the launch. User handles used in argv are normalized to letters, numbers, `_`, `.`, and `-`.
 
+## Operator-managed manifest directory
+
+Production Door Games are loaded from an operator-managed JSON manifest directory. Set `FOGLET_DOOR_MANIFEST_DIR` to an absolute directory path before starting Foglet, or set `config :foglet_bbs, :door_manifest_dir` in runtime config. When the setting is unset or blank, production/operator doors are disabled by default; only demo fixtures can appear, and only when `FOGLET_ENABLE_DEMO_DOORS` is explicitly truthy.
+
+A sysop adds a door by creating one reviewed `*.json` file in that directory and restarting/reloading the application according to deployment practice. Foglet scans only regular JSON files in that directory, validates each manifest with the same `Foglet.Doors` safety checks used by code/test fixtures, and fails closed per file: invalid JSON or unsafe fields are omitted from the launchable catalog. Diagnostics can call `Foglet.Doors.manifest_load_errors/0`, and runtime logs include the rejected file and field errors.
+
+Manifest JSON uses the same field names shown below, with enum values as strings, for example `"classic_dropfile"`, `"members"`, `"site"`, and `"door32_sys"`. Do not put secrets in `env`; inherited environments are not passed through.
+
+The repository includes `priv/doors/manifests/usurper-reborn.json` as a copyable sample. A deployment can copy it into the configured operator directory and adjust paths for that host without editing Elixir source.
+
 ## Add a native Elixir door
 
 Use a native Elixir door when the game is small, first-party, and safe to run inside Foglet's OTP supervision boundary.
@@ -277,7 +287,7 @@ The wrapper is responsible for passing generated files to the target program in 
 
 ## Add Usurper Reborn
 
-Usurper Reborn is the current concrete production compatibility target. The branch includes a built-in manifest shaped like this:
+Usurper Reborn is the current concrete production compatibility target. The branch includes a copyable JSON sample at `priv/doors/manifests/usurper-reborn.json`; when that directory or a copied manifest directory is configured, it validates to this shape:
 
 ```elixir
 %{
@@ -323,7 +333,7 @@ Usurper Reborn is the current concrete production compatibility target. The bran
 Start-to-finish sysop path:
 
 1. Choose the runtime.
-   Use `:classic_dropfile` because Usurper Reborn accepts a DOOR32-style launch file and runs as an external terminal program.
+   Use `"classic_dropfile"` in JSON because Usurper Reborn accepts a DOOR32-style launch file and runs as an external terminal program.
 
 2. Install the executable.
    Put the Usurper Reborn binary and required assets under an operator-owned directory such as `/opt/foglet/doors/usurper`. The project Dockerfile downloads the public Linux x64 release at build time and installs it there.
@@ -332,7 +342,7 @@ Start-to-finish sysop path:
    Use a durable SQLite database path such as `/data/usurper/usurper_online.db`. The deployment must make that directory writable by the runtime user that will actually execute the door.
 
 4. Declare one DOOR32.SYS dropfile.
-   Use `dropfiles: [%{format: :door32_sys, ...}]`, not a hand-written filename. Foglet will write `DOOR32.SYS` into the per-launch directory and substitute its generated path into `{dropfile:door32_sys}`.
+   Use `"dropfiles": [{"format": "door32_sys", ...}]`, not a hand-written filename. Foglet will write `DOOR32.SYS` into the per-launch directory and substitute its generated path into `{dropfile:door32_sys}`.
 
 5. Pass generated paths safely.
    Prefer argv tokens such as `{dropfile:door32_sys}` over wrapper-side path guessing. With `expose_path: :env`, wrappers can also read `FOGLET_DROPFILE_DOOR32_SYS` and `FOGLET_DROPFILE_DIR`.
@@ -344,7 +354,7 @@ Start-to-finish sysop path:
    Prefer `restricted_user_process_group` on host deployments that can create and use a locked-down `foglet-door` account. If that account cannot be applied, the launch should fail closed instead of running the door as the Foglet app user.
 
 8. Expose the door.
-   In this branch, Usurper Reborn is already part of `production_manifest_attrs/0`. A future persisted catalog should store equivalent manifest data rather than hard-coding it.
+   Copy `priv/doors/manifests/usurper-reborn.json` into the configured operator manifest directory, adjust host-specific paths if needed, set `FOGLET_DOOR_MANIFEST_DIR`, and restart/reload Foglet. The door is not hard-coded in Elixir and will not appear when the manifest directory is unset or invalid.
 
 9. Verify launch and cleanup.
    Run focused door tests and SSH/TUI QA before enabling the door for real callers. Verify that Usurper starts with `--door32 <generated path> --db /data/usurper/usurper_online.db --stdio`, returns cleanly, and leaves no runner-owned temp context or dropfile directory behind.
@@ -373,7 +383,7 @@ Keep the selector simple: arrows choose a door, Enter opens confirmation, and Es
 
 ### The door is missing from the list
 
-For built-in demo/test doors, check `FOGLET_ENABLE_DEMO_DOORS`. For production doors, check that the manifest validates, the current caller is allowed by `visibility`, and the launch path rechecks `Foglet.Doors.launchable?/2` before starting the runner.
+For built-in demo/test doors, check `FOGLET_ENABLE_DEMO_DOORS`. For production doors, check `FOGLET_DOOR_MANIFEST_DIR`, `Foglet.Doors.manifest_load_errors/0`, manifest validation, caller visibility, and that the launch path rechecks `Foglet.Doors.launchable?/2` before starting the runner.
 
 ### The door launches and immediately returns
 
