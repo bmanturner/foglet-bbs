@@ -49,7 +49,7 @@ swap_size_mb = 256
   destination = "/data"
 
 [vm]
-  memory = "512mb"
+  memory = "1gb"
   cpu_kind = "shared"
   cpus = 1
   swap_size_mb = 256
