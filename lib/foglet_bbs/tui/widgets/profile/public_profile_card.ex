@@ -59,6 +59,7 @@ defmodule Foglet.TUI.Widgets.Profile.PublicProfileCard do
   defp detail_lines(%PublicProfile{} = profile) do
     base = [
       {"Posts", Integer.to_string(profile.post_count || 0)},
+      {"Karma", Integer.to_string(profile.karma || 0)},
       {"Joined", date_label(profile.joined_at)},
       {"Presence", profile.presence.label}
     ]
