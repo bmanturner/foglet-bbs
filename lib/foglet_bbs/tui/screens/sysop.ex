@@ -121,9 +121,15 @@ defmodule Foglet.TUI.Screens.Sysop do
     end
   end
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+  def update({:key, %{key: :char, char: c} = event}, local_state, %Context{} = context)
       when c in ["q", "Q"] do
-    {normalize_state(local_state, context), [Effect.navigate(:main_menu, %{})]}
+    ss = normalize_state(local_state, context)
+
+    if active_boards_modal?(ss) do
+      handle_update_key(event, ss, context)
+    else
+      {ss, [Effect.navigate(:main_menu, %{})]}
+    end
   end
 
   def update({:key, %{key: :enter} = event}, local_state, %Context{} = context) do
@@ -291,6 +297,13 @@ defmodule Foglet.TUI.Screens.Sysop do
 
       true ->
         route_through_tabs(event, ss, context)
+    end
+  end
+
+  defp active_boards_modal?(%State{} = ss) do
+    case {Enum.at(State.tab_labels(ss), ss.active_tab), ss.boards_view} do
+      {"BOARDS", {:loaded, %BoardsView{} = boards_view}} -> BoardsView.modal_active?(boards_view)
+      _other -> false
     end
   end
 
