@@ -23,6 +23,8 @@ defmodule Foglet.Accounts.User do
   @default_timezone "Etc/UTC"
   @default_time_format "12h"
   @default_theme_id "gray"
+  @default_handle_color "#FFFFFF"
+  @handle_color_format ~r/\A#[0-9A-Fa-f]{6}\z/
 
   schema "users" do
     field :handle, :string
@@ -43,6 +45,7 @@ defmodule Foglet.Accounts.User do
 
     field :timezone, :string, default: @default_timezone
     field :theme, :string, default: @default_theme_id
+    field :handle_color, :string, default: @default_handle_color
     field :show_in_last_callers, :boolean, default: true
     field :email_digest, Ecto.Enum, values: @valid_email_digests, default: :off
     field :preferences, :map, default: %{}
@@ -101,16 +104,21 @@ defmodule Foglet.Accounts.User do
   @doc "Profile edit changeset. Never touches handle/email/password."
   def profile_changeset(user, attrs) do
     user
-    |> cast(attrs, [
-      :location,
-      :tagline,
-      :real_name,
-      :theme,
-      :preferences,
-      :show_in_last_callers,
-      :email_digest,
-      :timezone
-    ])
+    |> cast(
+      attrs,
+      [
+        :location,
+        :tagline,
+        :real_name,
+        :theme,
+        :handle_color,
+        :preferences,
+        :show_in_last_callers,
+        :email_digest,
+        :timezone
+      ],
+      empty_values: []
+    )
     |> normalize_private_profile_fields()
     |> merge_preferences(user.preferences)
     |> validate_length(:location, max: 80)
@@ -120,6 +128,8 @@ defmodule Foglet.Accounts.User do
     |> validate_timezone()
     |> validate_time_format()
     |> validate_theme()
+    |> normalize_handle_color()
+    |> validate_handle_color()
   end
 
   @doc """
@@ -202,6 +212,7 @@ defmodule Foglet.Accounts.User do
     changeset
     |> put_change(:timezone, default_timezone())
     |> put_change(:theme, @default_theme_id)
+    |> put_change(:handle_color, @default_handle_color)
     |> put_change(:preferences, default_preferences())
   end
 
@@ -293,6 +304,26 @@ defmodule Foglet.Accounts.User do
         []
       else
         [theme: "is not a registered theme"]
+      end
+    end)
+  end
+
+  defp normalize_handle_color(changeset) do
+    update_change(changeset, :handle_color, fn
+      value when is_binary(value) ->
+        if String.trim(value) == "", do: nil, else: value
+
+      value ->
+        value
+    end)
+  end
+
+  defp validate_handle_color(changeset) do
+    validate_change(changeset, :handle_color, fn :handle_color, handle_color ->
+      cond do
+        is_nil(handle_color) -> []
+        is_binary(handle_color) and Regex.match?(@handle_color_format, handle_color) -> []
+        true -> [handle_color: "must be a #RRGGBB hex color"]
       end
     end)
   end

@@ -19,7 +19,8 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
       status: :active,
       timezone: "America/Chicago",
       preferences: %{"time_format" => "12h"},
-      theme: "gray"
+      theme: "gray",
+      handle_color: "#FFFFFF"
     }
   end
 
@@ -31,7 +32,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
     assert Form.field_value(state.prefs_form, :timezone) == "America/Chicago"
 
     assert {:ok, state, []} = PrefsForm.handle_key(%{key: :end}, state, user())
-    assert state.prefs_focus == :theme
+    assert state.prefs_focus == :handle_color
 
     assert {:ok, state, []} = PrefsForm.handle_key(%{key: :home}, state, user())
     assert state.prefs_focus == :timezone
@@ -64,7 +65,8 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
     assert attrs == %{
              timezone: "America/Chicago",
              preferences: %{"time_format" => "24h"},
-             theme: "gray"
+             theme: "gray",
+             handle_color: "#FFFFFF"
            }
   end
 
@@ -192,7 +194,13 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
     {_cancelled_form, action} = Form.handle_event(%{key: :escape}, edited_form)
 
     assert action == :cancelled
-    assert state.prefs_draft == %{timezone: "America/Chicago", time_format: "12h", theme: "gray"}
+
+    assert state.prefs_draft == %{
+             timezone: "America/Chicago",
+             time_format: "12h",
+             theme: "gray",
+             handle_color: "#FFFFFF"
+           }
   end
 
   test "failed prefs save reopens the selected field overlay with validation errors" do

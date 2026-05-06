@@ -22,8 +22,11 @@ defmodule Foglet.TUI.Screens.Account.State do
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Display.Handle
   alias Foglet.TUI.Widgets.Input.Tabs
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
+
+  import Raxol.Core.Renderer.View
 
   @base_tabs ["PROFILE", "PREFS", "SSH KEYS"]
   @invites_tab "INVITES"
@@ -186,7 +189,8 @@ defmodule Foglet.TUI.Screens.Account.State do
       timezone: user_value(user, :timezone, "Etc/UTC") || "Etc/UTC",
       time_format:
         Map.get(preferences, "time_format") || Map.get(preferences, :time_format) || "12h",
-      theme: user_value(user, :theme, "gray") || "gray"
+      theme: user_value(user, :theme, "gray") || "gray",
+      handle_color: user_value(user, :handle_color, "#FFFFFF")
     }
   end
 
@@ -246,6 +250,16 @@ defmodule Foglet.TUI.Screens.Account.State do
         choices: theme_ids,
         description: "Preview changes here; save to keep them.",
         value: draft.theme || "gray"
+      },
+      %{
+        name: :handle_color,
+        type: :text,
+        label: "Handle color",
+        description: "Type a six-digit hex color. Examples: #ff8800, #66ccff.",
+        value: draft.handle_color || "",
+        max_length: 7,
+        swatch_color: draft.handle_color,
+        preview: &handle_color_preview/2
       }
     ]
   end
@@ -302,4 +316,19 @@ defmodule Foglet.TUI.Screens.Account.State do
   end
 
   defp theme_id_strings, do: Enum.map(Theme.ids(), &Atom.to_string/1)
+
+  defp handle_color_preview(value, %Theme{} = theme) do
+    preview_user = %{handle: "you", handle_color: value}
+
+    [
+      row style: %{gap: 1} do
+        [
+          text("  Preview", fg: theme.dim.fg),
+          Handle.swatch(value, theme),
+          Handle.render(preview_user, theme)
+        ]
+      end,
+      text("  Blank uses the normal handle color.", fg: theme.dim.fg)
+    ]
+  end
 end

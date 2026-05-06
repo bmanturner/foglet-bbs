@@ -488,7 +488,12 @@ defmodule Foglet.TUI.Screens.Account do
   defp save_failure_message(:prefs), do: "Preferences were not saved."
 
   @profile_labels %{location: "Location", tagline: "Tagline", real_name: "Real name"}
-  @prefs_labels %{timezone: "Timezone", time_format: "Time format", theme: "Theme"}
+  @prefs_labels %{
+    timezone: "Timezone",
+    time_format: "Time format",
+    theme: "Theme",
+    handle_color: "Handle color"
+  }
 
   defp profile_modal_errors(errors), do: modal_errors(errors, Map.keys(@profile_labels))
   defp prefs_modal_errors(errors), do: modal_errors(errors, Map.keys(@prefs_labels))
@@ -594,6 +599,9 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp friendly_error(:theme, _msg, _labels), do: "Theme is not available."
+
+  defp friendly_error(:handle_color, _msg, _labels),
+    do: "Use #RRGGBB: # plus six hex digits, 0-9 or A-F."
 
   defp friendly_error(field, message, labels) do
     label = Map.get(labels, field, to_string(field))

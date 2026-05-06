@@ -1685,8 +1685,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     assert Enum.any?(texts, &(&1 == "[Q]")),
            "expected '[Q]' bracketed-key segment, got: #{inspect(texts)}"
 
-    # Existing oneliner row format unchanged.
-    assert Enum.any?(texts, &String.contains?(&1, "@alice  hello")),
+    # FOG-1096: oneliner handles and bodies are separate text segments so the
+    # handle can carry a custom color without recoloring the body.
+    rows = text_rows(elements)
+
+    assert Enum.any?(rows, fn {_y, row} -> String.contains?(row, "@alice  hello") end),
            "expected '@alice  hello' row, got: #{inspect(texts)}"
 
     ys = elements |> Enum.map(& &1.y) |> Enum.uniq()
@@ -1712,15 +1715,22 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     tree = render_main_menu(state)
     positioned = layout(tree)
 
-    row =
-      positioned
-      |> text_elements()
-      |> Enum.map(& &1.text)
-      |> Enum.find(&String.contains?(&1, "@漢字"))
+    elements = text_elements(positioned)
 
-    assert row, "expected Unicode oneliner row in positioned text"
-    assert row =~ "●"
-    assert TextWidth.display_width(row) <= 39
+    handle_element = Enum.find(elements, &String.contains?(&1.text, "@漢字"))
+
+    assert handle_element, "expected Unicode oneliner handle segment in positioned text"
+
+    body_element =
+      Enum.find(elements, fn element ->
+        element.y == handle_element.y and element.x > handle_element.x and
+          String.contains?(element.text, "●")
+      end)
+
+    assert body_element, "expected Unicode oneliner body segment beside handle"
+
+    oneliner_text = handle_element.text <> body_element.text
+    assert TextWidth.display_width(oneliner_text) <= 39
   end
 
   # ---------------------------------------------------------------------------

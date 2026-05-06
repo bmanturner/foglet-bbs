@@ -50,6 +50,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Display.Handle
 
   import Raxol.Core.Renderer.View
 
@@ -309,7 +310,8 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   end
 
   defp transcript_rows(msg, %State{} = state, theme, width, row_limit) do
-    handle = handle_for(state, msg) |> TextWidth.truncate(min(20, max(div(width, 3), 1)))
+    user = user_for_message(state, msg)
+    handle = user |> Handle.handle_text() |> TextWidth.truncate(min(20, max(div(width, 3), 1)))
     body = Map.get(msg, :body, "")
     when_label = relative_time(msg)
     prefix = handle <> " • "
@@ -325,17 +327,23 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     [first_body | rest] = body_lines
 
     [
-      transcript_first_row(handle, first_body, when_label, first_body_width, theme)
+      transcript_first_row(
+        %{user | handle: handle},
+        first_body,
+        when_label,
+        first_body_width,
+        theme
+      )
       | Enum.map(rest, fn line ->
           transcript_continuation_row(prefix, line, continuation_body_width, theme)
         end)
     ]
   end
 
-  defp transcript_first_row(handle, body, when_label, body_width, theme) do
+  defp transcript_first_row(user, body, when_label, body_width, theme) do
     row style: %{gap: 0} do
       [
-        text(handle, fg: theme.accent.fg, style: [:bold]),
+        Handle.render(user, theme, prefix: ""),
         text(" • ", fg: theme.dim.fg),
         text(TextWidth.pad_trailing(body, body_width), fg: theme.primary.fg),
         text("  ", fg: theme.dim.fg),
@@ -394,10 +402,11 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
   defp sidebar_entries(%State{} = state, theme) do
     Enum.map(state.online, fn entry ->
-      handle = handle_for_user(state, entry.user_id)
+      user = user_for_id(state, entry.user_id)
+      handle = Handle.handle_text(user)
       label = if entry.user_id == state.user_id, do: "#{handle} (you)", else: handle
 
-      text("• " <> label, fg: theme.primary.fg)
+      text("• " <> label, fg: Handle.color_for(user, theme))
     end)
   end
 
@@ -634,20 +643,23 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     else
       additions =
         needed
-        |> Enum.map(fn id -> {id, fetch_handle(accounts_mod, id)} end)
+        |> Enum.map(fn id -> {id, fetch_user(accounts_mod, id)} end)
         |> Map.new()
 
       %{state | handles: Map.merge(state.handles, additions)}
     end
   end
 
-  defp fetch_handle(nil, _id), do: nil
+  defp fetch_user(nil, _id), do: nil
 
-  defp fetch_handle(mod, id) do
+  defp fetch_user(mod, id) do
     if function_exported?(mod, :get_user, 1) do
       case mod.get_user(id) do
-        %{handle: h} when is_binary(h) -> h
-        _ -> nil
+        %{handle: h} = user when is_binary(h) ->
+          %{handle: h, handle_color: Map.get(user, :handle_color)}
+
+        _ ->
+          nil
       end
     end
   rescue
@@ -661,16 +673,17 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     end
   end
 
-  defp handle_for(state, msg) do
-    handle_for_user(state, Map.get(msg, :user_id))
+  defp user_for_message(state, msg) do
+    user_for_id(state, Map.get(msg, :user_id))
   end
 
-  defp handle_for_user(_state, nil), do: "unknown"
+  defp user_for_id(_state, nil), do: %{handle: "unknown"}
 
-  defp handle_for_user(%State{handles: handles}, user_id) do
+  defp user_for_id(%State{handles: handles}, user_id) do
     case Map.get(handles, user_id) do
-      h when is_binary(h) and h != "" -> h
-      _ -> "user-" <> String.slice(user_id, 0, 6)
+      %{handle: h} = user when is_binary(h) and h != "" -> user
+      h when is_binary(h) and h != "" -> %{handle: h}
+      _ -> %{handle: "user-" <> String.slice(user_id, 0, 6)}
     end
   end
 

@@ -45,6 +45,40 @@ defmodule Foglet.Accounts.UserTest do
 
       assert "has already been taken" in errors_on(changeset).email
     end
+
+    test "persists the saved default handle color" do
+      changeset = User.registration_changeset(%User{}, AccountsFixtures.valid_user_attributes())
+
+      assert changeset.valid?
+      assert get_field(changeset, :handle_color) == "#FFFFFF"
+    end
+  end
+
+  describe "profile_changeset/2 handle_color" do
+    test "accepts #RRGGBB case-insensitively" do
+      for color <- ["#FFFFFF", "#ff8800", "#AaBbCc"] do
+        changeset = User.profile_changeset(%User{}, %{handle_color: color})
+
+        assert changeset.valid?, "expected #{inspect(color)} to be accepted"
+        assert get_field(changeset, :handle_color) == color
+      end
+    end
+
+    test "rejects invalid colors" do
+      for bad <- ["red", "#12", "#12345g", "#1234567", "#12 345", "#123456\n"] do
+        changeset = User.profile_changeset(%User{}, %{handle_color: bad})
+
+        refute changeset.valid?, "expected #{inspect(bad)} to be rejected"
+        assert %{handle_color: [_message]} = errors_on(changeset)
+      end
+    end
+
+    test "normalizes blank handle color to nil for theme/default styling" do
+      changeset = User.profile_changeset(%User{handle_color: "#ff8800"}, %{handle_color: "  "})
+
+      assert changeset.valid?
+      assert get_field(changeset, :handle_color) == nil
+    end
   end
 
   describe "handle uniqueness and validation (IDNT-03)" do

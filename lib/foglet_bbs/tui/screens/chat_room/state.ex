@@ -22,7 +22,7 @@ defmodule Foglet.TUI.Screens.ChatRoom.State do
           board_id: String.t() | nil,
           user_id: String.t() | nil,
           messages: [message()],
-          handles: %{optional(binary()) => String.t()},
+          handles: %{optional(binary()) => map() | String.t()},
           online: [online_entry()],
           composer: String.t(),
           status: :idle | :loading | :sending,

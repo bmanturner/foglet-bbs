@@ -62,6 +62,7 @@ schema "users" do
 
   # Preferences
   field :theme, :string, default: "default"
+  field :handle_color, :string, default: "#FFFFFF"
   field :show_in_last_callers, :boolean, default: true
   field :email_digest, Ecto.Enum, values: [:off, :daily, :weekly], default: :off
   field :timezone, :string, default: "Etc/UTC"
@@ -90,12 +91,13 @@ end
 - `status` is a string-backed `Ecto.Enum`, not a Postgres enum, with lifecycle values `:active`, `:pending`, `:rejected`, and `:suspended`.
 - Partial index on `last_seen_at` for "who's been around recently" queries: `WHERE deleted_at IS NULL`.
 - A tombstone user row is inserted in seeds — id fixed, handle like `[deleted]`. Post anonymization rewrites `user_id` to this row.
+- `handle_color` is a typed account preference column. New rows default to `#FFFFFF`; the feature migration backfills null existing rows to `#FFFFFF` and leaves already-valid custom values untouched on rerun. The column may be `NULL` only when a user intentionally clears the preference so renderers can fall back to normal theme/default handle styling. Non-null values must match `#RRGGBB` case-insensitively.
 - Rejected users remain non-deleted rows. A rejected registration reserves its handle and email and is distinct from soft deletion.
 
 **Changesets:**
 
 - `registration_changeset/2` — handle, email, password. Validates handle format (length, allowed characters — alphanumeric + `_`/`-`, classic BBS feel), hashes password with Argon2.
-- `profile_changeset/2` — location, tagline, real_name, theme, preferences. Never touches handle or email.
+- `profile_changeset/2` — location, tagline, real_name, theme, handle_color, preferences. Never touches handle or email.
 - `password_changeset/2` — separate, requires current password re-entry.
 - `role_changeset/2` — sysop-only pathway.
 

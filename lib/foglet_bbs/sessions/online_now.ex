@@ -14,6 +14,7 @@ defmodule Foglet.Sessions.OnlineNow do
   @type row :: %{
           user_id: String.t(),
           handle: String.t(),
+          handle_color: String.t() | nil,
           role: atom(),
           presence: PresenceSummary.t(),
           presence_label: String.t(),
@@ -62,6 +63,7 @@ defmodule Foglet.Sessions.OnlineNow do
           %{
             user_id: user_id,
             handle: handle(user),
+            handle_color: handle_color(user),
             role: role(user),
             presence: summary,
             presence_label: presence_label(summary),
@@ -84,6 +86,7 @@ defmodule Foglet.Sessions.OnlineNow do
   defp role_rank(_role), do: 2
 
   defp handle(user), do: Map.get(user, :handle) || Map.get(user, "handle") || "unknown"
+  defp handle_color(user), do: Map.get(user, :handle_color) || Map.get(user, "handle_color")
   defp role(user), do: Map.get(user, :role) || Map.get(user, "role") || :user
   defp presence_label(%{label: label}) when is_binary(label), do: label
   defp presence_label(_summary), do: "Online"

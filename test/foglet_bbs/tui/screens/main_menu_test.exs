@@ -102,6 +102,13 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     MainMenu.render(local_from_app(state), context_from_app(state)) |> collect_text_values()
   end
 
+  defp assert_oneliner_text(texts, marker, handle, body) do
+    segments = Enum.chunk_every(texts, 2, 1, :discard)
+
+    assert [marker <> "@" <> handle, "  " <> body] in segments,
+           "expected adjacent colored-handle/body oneliner segments, got: #{inspect(texts)}"
+  end
+
   defp flatten_nodes(node), do: do_flatten_nodes(node, [])
 
   defp do_flatten_nodes(nodes, acc) when is_list(nodes),
@@ -220,9 +227,9 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         |> with_oneliners([oneliner("alice", "hello", %{inserted_at: ~U[2026-04-24 12:00:00Z]})])
         |> rendered_text()
 
-      assert "> @alice  hello" in texts
+      assert_oneliner_text(texts, "> ", "alice", "hello")
 
-      row = Enum.find(texts, &String.contains?(&1, "@alice  hello"))
+      row = Enum.find(texts, &String.contains?(&1, "hello"))
       refute row =~ "2026-"
       refute row =~ "AM"
       refute row =~ "PM"
@@ -238,11 +245,14 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         state
         |> with_oneliners(entries)
         |> rendered_text()
-        |> Enum.filter(&String.contains?(&1, "@user"))
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.filter(fn [handle, body] ->
+          String.contains?(handle, "@user") and String.starts_with?(body, "  line ")
+        end)
 
       assert length(rows) == 5
-      assert "> @user1  line 1" in rows
-      refute Enum.any?(rows, &String.contains?(&1, "line 6"))
+      assert ["> @user1", "  line 1"] in rows
+      refute Enum.any?(rows, fn [_handle, body] -> String.contains?(body, "line 6") end)
     end
 
     test "long handle and body are clipped to one presentation row", %{state: state} do
@@ -313,8 +323,8 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
           |> with_selected_oneliner(0)
           |> rendered_text()
 
-        assert "> @alice  selected" in texts
-        assert "  @bob  not selected" in texts
+        assert_oneliner_text(texts, "> ", "alice", "selected")
+        assert_oneliner_text(texts, "  ", "bob", "not selected")
       end
     end
 

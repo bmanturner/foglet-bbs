@@ -102,6 +102,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Compose
+  alias Foglet.TUI.Widgets.Display.Handle
   alias Foglet.TUI.Widgets.Input.{Checkbox, RadioGroup, TextInput}
   alias Raxol.UI.Components.Input.MultiLineInput
   alias Raxol.UI.Components.Input.SelectList
@@ -908,6 +909,8 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
 
     widget_row = render_widget(spec, field_state, focused?, theme, width)
 
+    preview_rows = render_preview_rows(spec, field_state, theme)
+
     description_rows =
       if spec.type == :select_list do
         []
@@ -921,8 +924,23 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
         msg -> [text(msg, fg: theme.error.fg)]
       end
 
-    [label_row, widget_row] ++ description_rows ++ error_rows
+    [label_row, widget_row] ++ preview_rows ++ description_rows ++ error_rows
   end
+
+  defp render_preview_rows(%{preview: preview} = spec, field_state, %Theme{} = theme)
+       when is_function(preview, 2) do
+    spec
+    |> coerce(field_state)
+    |> preview.(theme)
+    |> List.wrap()
+  end
+
+  defp render_preview_rows(%{swatch_color: color}, _field_state, %Theme{} = theme)
+       when is_binary(color) do
+    [Handle.swatch(color, theme)]
+  end
+
+  defp render_preview_rows(_spec, _field_state, _theme), do: []
 
   defp render_description_rows(nil, _theme, _width), do: []
   defp render_description_rows("", _theme, _width), do: []

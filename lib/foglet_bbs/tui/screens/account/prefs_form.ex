@@ -10,7 +10,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   alias Foglet.TUI.Widgets.List.SelectableFieldList
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
-  @fields [:timezone, :time_format, :theme]
+  @fields [:timezone, :time_format, :theme, :handle_color]
 
   @spec render(State.t(), Theme.t(), keyword()) :: any()
   def render(%State{} = state, %Theme{} = theme, opts \\ []) do
@@ -60,7 +60,8 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
     attrs = %{
       timezone: Map.get(draft, :timezone, "Etc/UTC"),
       preferences: %{"time_format" => Map.get(draft, :time_format, "12h")},
-      theme: Map.get(draft, :theme, "gray")
+      theme: Map.get(draft, :theme, "gray"),
+      handle_color: Map.get(draft, :handle_color)
     }
 
     {%{
@@ -76,6 +77,10 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   @spec preview_field_change(State.t(), ModalForm.t()) :: State.t()
   def preview_field_change(%State{prefs_editing_field: :theme} = state, %ModalForm{} = form) do
     %{state | candidate_theme_id: ModalForm.field_value(form, :theme), status_message: nil}
+  end
+
+  def preview_field_change(%State{prefs_editing_field: :handle_color} = state, %ModalForm{}) do
+    %{state | candidate_theme_id: nil, status_message: nil}
   end
 
   def preview_field_change(%State{} = state, %ModalForm{}), do: %{state | candidate_theme_id: nil}
@@ -134,6 +139,16 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
   defp friendly_value(%{name: :theme, value: value} = field),
     do: %{field | value: String.capitalize(to_string(value))}
+
+  defp friendly_value(%{name: :handle_color, value: value} = field) do
+    display = if value in [nil, ""], do: "BBS default", else: value
+
+    Map.merge(field, %{
+      value: display,
+      swatch_color: value,
+      description: "Use #RRGGBB, like #ff8800. Blank uses the BBS default."
+    })
+  end
 
   defp friendly_value(field), do: field
 end
