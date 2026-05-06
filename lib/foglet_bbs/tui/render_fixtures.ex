@@ -31,6 +31,7 @@ defmodule Foglet.TUI.RenderFixtures do
     MainMenu,
     Moderation,
     NewThread,
+    OnlineNow,
     PostComposer,
     PostReader,
     Register,
@@ -42,7 +43,7 @@ defmodule Foglet.TUI.RenderFixtures do
   alias Foglet.Threads.ThreadEntry
 
   @screens ~w(
-    login register verify main_menu board_list thread_list
+    login register verify main_menu online_now board_list thread_list
     post_reader post_composer new_thread door_list account moderation sysop
   )a
 
@@ -63,6 +64,7 @@ defmodule Foglet.TUI.RenderFixtures do
           | :register
           | :verify
           | :main_menu
+          | :online_now
           | :board_list
           | :thread_list
           | :post_reader
@@ -598,6 +600,25 @@ defmodule Foglet.TUI.RenderFixtures do
     ]
   end
 
+  defp synthetic_online_now_rows do
+    [
+      online_now_row(%{id: "u-alice", handle: "alice", role: :sysop}, "Online"),
+      online_now_row(%{id: "u-mod", handle: "mod", role: :mod}, "Chatting in general"),
+      online_now_row(%{id: "u-foglet", handle: "foglet", role: :user}, "Browsing boards")
+    ]
+  end
+
+  defp online_now_row(user, presence_label) do
+    %{
+      user_id: user.id,
+      handle: user.handle,
+      role: user.role,
+      presence_label: presence_label,
+      presence: %Foglet.Sessions.PresenceSummary{label: presence_label, online?: true},
+      user: user
+    }
+  end
+
   # --- per-screen population -----------------------------------------------
 
   defp populate(:login, state, _size) do
@@ -620,6 +641,16 @@ defmodule Foglet.TUI.RenderFixtures do
       |> MainMenu.State.from_entries(synthetic_oneliners())
 
     App.put_screen_state(state, :main_menu, local_state)
+  end
+
+  defp populate(:online_now, state, _size) do
+    local_state =
+      state
+      |> App.build_context()
+      |> OnlineNow.init()
+      |> OnlineNow.State.from_rows(synthetic_online_now_rows())
+
+    App.put_screen_state(state, :online_now, local_state)
   end
 
   defp populate(:board_list, state, _size) do

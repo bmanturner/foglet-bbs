@@ -62,6 +62,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @main_menu_commands [
     %{key: "B", label: "Boards", glyph: "●", kind: :destination, visibility: :always},
     %{key: "C", label: "Compose", glyph: "✎", kind: :destination, visibility: :always},
+    %{key: "N", label: "Online Now", glyph: "◌", kind: :destination, visibility: :always},
     %{key: "D", label: "Door Games", glyph: "▸", kind: :destination, visibility: :doors},
     %{key: "A", label: "Account", glyph: "◇", kind: :destination, visibility: :account},
     %{key: "M", label: "Moderation", glyph: "⚑", kind: :destination, visibility: :moderation},
@@ -132,6 +133,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
     else
       {local_state, [Effect.navigate(:new_thread, %{origin: :main_menu})]}
     end
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["n", "N"] do
+    {normalize_state(local_state, context), [Effect.navigate(:online_now)]}
   end
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
@@ -530,6 +536,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
   defp default_domain_module(:boards), do: Foglet.Boards
+  defp default_domain_module(:online_now), do: Foglet.Sessions.OnlineNow
 
   defp modal_submit_effect(kind, payload), do: Effect.modal_submit(:main_menu, kind, payload)
 
@@ -573,10 +580,43 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   @doc false
-  @spec visible_destination_entries(map() | nil) :: [map()]
+  @spec visible_destination_entries(map() | Context.t() | nil) :: [map()]
+  def visible_destination_entries(%Context{} = context) do
+    context.current_user
+    |> destination_entries()
+    |> with_online_now_count(online_now_count(context))
+  end
+
   def visible_destination_entries(user) do
+    user
+    |> destination_entries()
+    |> with_online_now_count(0)
+  end
+
+  defp destination_entries(user) do
     @main_menu_commands
     |> Enum.filter(&(&1.kind == :destination and destination_visible?(&1.visibility, user)))
+  end
+
+  defp with_online_now_count(entries, count) do
+    Enum.map(entries, fn
+      %{key: "N"} = entry ->
+        color_slot = if count in [0, 1], do: :online_low, else: :online_active
+        %{entry | label: "Online Now (#{count})"} |> Map.put(:color_slot, color_slot)
+
+      entry ->
+        entry
+    end)
+  end
+
+  defp online_now_count(%Context{} = context) do
+    context
+    |> domain_module(:online_now)
+    |> then(& &1.count())
+  rescue
+    _ -> 0
+  catch
+    :exit, _ -> 0
   end
 
   @spec destination_visible?(atom(), map() | nil) :: boolean()

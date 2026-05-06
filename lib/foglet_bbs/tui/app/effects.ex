@@ -294,8 +294,9 @@ defmodule Foglet.TUI.App.Effects do
     end
   end
 
-  defp route_activity(screen, _params) when screen in [:main_menu, :account, :door_list],
-    do: :clear
+  defp route_activity(screen, _params)
+       when screen in [:main_menu, :online_now, :account, :door_list],
+       do: :clear
 
   defp route_activity(_screen, _params), do: :clear
 

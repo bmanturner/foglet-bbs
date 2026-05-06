@@ -60,6 +60,7 @@ defmodule Foglet.TUI.Presentation do
     :register,
     :verify,
     :main_menu,
+    :online_now,
     :board_list,
     :thread_list,
     :post_reader,

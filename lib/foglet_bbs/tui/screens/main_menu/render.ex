@@ -24,10 +24,9 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   @spec render(State.t(), Context.t()) :: any()
   def render(%State{} = local_state, %Context{} = context) do
     state = frame_state(local_state, context)
-    user = state.current_user
     theme = Theme.from_state(state)
 
-    destinations = MainMenu.visible_destination_entries(user)
+    destinations = MainMenu.visible_destination_entries(context)
     actions = MainMenu.visible_actions(state)
 
     inner_width = MainMenu.__nav_panel_inner_width__(state)
@@ -105,9 +104,10 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   # Width budget at 64x22 (inner_width = 20):
   #   indent(1) + glyph(1) + space(1) + "Moderation"(10) + "[M]"(3) = 16,
   #   leaving 4 cols of trailing padding.
-  defp nav_row(%{key: key, label: label, glyph: glyph}, theme, inner_width) do
+  defp nav_row(%{key: key, label: label, glyph: glyph} = destination, theme, inner_width) do
     indent = " "
     bracketed_key = "[" <> key <> "]"
+    prefix_fg = nav_row_fg(destination, theme)
 
     prefix_text = indent <> glyph <> " " <> label
     prefix_width = TextWidth.display_width(prefix_text)
@@ -123,11 +123,15 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     # line 87 vs. line 92).
     row [] do
       [
-        text(prefix_text <> padding, fg: theme.primary.fg),
+        text(prefix_text <> padding, fg: prefix_fg),
         text(bracketed_key, fg: theme.accent.fg)
       ]
     end
   end
+
+  defp nav_row_fg(%{color_slot: :online_low}, theme), do: theme.error.fg
+  defp nav_row_fg(%{color_slot: :online_active}, theme), do: theme.accent.fg
+  defp nav_row_fg(_destination, theme), do: theme.primary.fg
 
   defp oneliners_panel(state, theme) do
     %{

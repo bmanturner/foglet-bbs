@@ -149,6 +149,12 @@ defmodule Foglet.Sessions.Supervisor do
     end
   end
 
+  @doc "Returns authenticated user ids with live registered sessions."
+  @spec online_user_ids() :: [String.t()]
+  def online_user_ids do
+    Registry.select(@registry, [{{:"$1", :_, :_}, [], [:"$1"]}])
+  end
+
   # --- Private ---
 
   defp replace_then_promote(old_pid, guest_pid, user, audit) do
