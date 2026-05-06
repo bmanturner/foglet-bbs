@@ -11,6 +11,8 @@ defmodule Foglet.SSH.CLIHandlerTest do
   import ExUnit.CaptureLog
 
   alias Foglet.SSH.CLIHandler
+  alias Foglet.SSH.CLIHandler.Cleanup
+  alias Foglet.SSH.CLIHandler.ConnectionCounter
   alias Foglet.SSH.PubkeyStash
   alias FogletBbs.AccountsFixtures
 
@@ -298,6 +300,43 @@ defmodule Foglet.SSH.CLIHandlerTest do
       reset_site_call_counter!()
       start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
       :ok
+    end
+
+    test "connection counter helper owns admission and compensation" do
+      assert :ok = ConnectionCounter.init()
+      assert :ok = ConnectionCounter.check_in(1)
+      assert_counter!(1)
+
+      assert :over_limit = ConnectionCounter.check_in(1)
+      assert_counter!(1)
+
+      assert 0 = ConnectionCounter.decrement()
+      assert_counter!(0)
+      assert 0 = ConnectionCounter.decrement()
+      assert_counter!(0)
+    end
+
+    test "cleanup helper is idempotent and releases counted state once" do
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, 1})
+      {:ok, session_pid} = Foglet.Sessions.Supervisor.start_guest_session()
+      ref = Process.monitor(session_pid)
+
+      state = %CLIHandler{
+        channel_id: 19,
+        connection_ref: nil,
+        session_pid: session_pid,
+        counter_counted?: true
+      }
+
+      after_cleanup = Cleanup.cleanup(state, close_channel: false)
+
+      assert after_cleanup.cleanup_done?
+      refute after_cleanup.counter_counted?
+      assert_counter!(0)
+      assert_receive {:DOWN, ^ref, :process, ^session_pid, _reason}
+
+      assert ^after_cleanup = Cleanup.cleanup(after_cleanup, close_channel: true)
+      assert_counter!(0)
     end
 
     test "init_counter is idempotent and preserves active count" do
