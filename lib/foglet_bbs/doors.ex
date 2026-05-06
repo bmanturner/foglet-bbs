@@ -67,6 +67,12 @@ defmodule Foglet.Doors do
   @python_context_relative_path "doors/demo/python_context_demo.py"
   @classic_dropfile_relative_path "doors/demo/classic_dropfile_demo.py"
 
+  @usurper_command "/opt/foglet/doors/usurper/UsurperReborn"
+  @usurper_working_dir "/opt/foglet/doors/usurper"
+  @usurper_database_path "/var/lib/foglet/usurper/usurper_online.db"
+  @usurper_timeout_ms 12 * 60 * 60 * 1_000
+  @usurper_idle_timeout_ms 60 * 60 * 1_000
+
   @type manifest_attrs :: map()
   @type validation_error :: {atom(), String.t()}
 
@@ -79,12 +85,13 @@ defmodule Foglet.Doors do
   """
   @spec list_manifests() :: [Manifest.t()]
   def list_manifests do
-    if demo_doors_enabled?() do
-      demo_manifest_attrs()
-      |> Enum.map(&validate_manifest!/1)
-    else
-      []
-    end
+    production_manifest_attrs() ++
+      if demo_doors_enabled?() do
+        demo_manifest_attrs()
+        |> Enum.map(&validate_manifest!/1)
+      else
+        []
+      end
   end
 
   @doc "Returns true when the deployment env enables built-in demo/test doors."
@@ -172,6 +179,46 @@ defmodule Foglet.Doors do
     end
   end
 
+  defp production_manifest_attrs do
+    [
+      usurper_reborn_manifest_attrs()
+      |> validate_manifest!()
+    ]
+  end
+
+  defp usurper_reborn_manifest_attrs do
+    %{
+      id: "usurper-reborn",
+      slug: "usurper-reborn",
+      display_name: "Usurper Reborn",
+      description: "Shared-world fantasy BBS game for Foglet callers.",
+      runtime: :classic_dropfile,
+      command: @usurper_command,
+      args: [
+        "--door32",
+        "{dropfile:door32_sys}",
+        "--db",
+        @usurper_database_path,
+        "--stdio"
+      ],
+      working_dir: @usurper_working_dir,
+      dropfiles: [
+        %{
+          format: :door32_sys,
+          identity: :handle,
+          transport: :filesystem,
+          encoding: :cp437,
+          cwd: :door_working_dir,
+          expose_path: :env
+        }
+      ],
+      timeout_ms: @usurper_timeout_ms,
+      idle_timeout_ms: @usurper_idle_timeout_ms,
+      visibility: :members,
+      auth_scope: :site
+    }
+  end
+
   defp demo_manifest_attrs do
     @default_manifest_attrs ++
       [
@@ -232,8 +279,8 @@ defmodule Foglet.Doors do
     %{
       id: "classic-dropfile-demo",
       slug: "classic-dropfile-demo",
-      display_name: "Classic Dropfile Demo",
-      description: "Python demo door that reads generated CHAIN.TXT, DOOR.SYS, and DORINFO.DEF.",
+      display_name: "Classic Door Demo",
+      description: "Small classic BBS door demo that opens, echoes caller details, and returns.",
       runtime: :classic_dropfile,
       command: demo_classic_path,
       working_dir: Path.dirname(demo_classic_path),
@@ -683,7 +730,8 @@ defmodule Foglet.Doors do
 
   defp validate_sandbox(errors, _runtime, %Sandbox{mode: :none}), do: errors
 
-  defp validate_sandbox(errors, :external_pty, %Sandbox{} = sandbox) do
+  defp validate_sandbox(errors, runtime, %Sandbox{} = sandbox)
+       when runtime in [:external_pty, :classic_dropfile] do
     errors
     |> validate_sandbox_mode(sandbox.mode)
     |> validate_process_tree(sandbox.process_tree)
@@ -699,7 +747,7 @@ defmodule Foglet.Doors do
     if sandbox.mode == :none do
       errors
     else
-      [{:sandbox, "is only supported for external_pty doors"} | errors]
+      [{:sandbox, "is only supported for external_pty or classic_dropfile doors"} | errors]
     end
   end
 

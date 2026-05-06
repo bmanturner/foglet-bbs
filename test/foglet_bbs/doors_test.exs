@@ -6,6 +6,7 @@ defmodule Foglet.DoorsTest do
   alias Foglet.Sessions.Session
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
+  @production_door_ids ~w[usurper-reborn]
   @demo_door_ids ~w[native-hello external-echo python-context-demo classic-dropfile-demo]
 
   setup do
@@ -64,6 +65,50 @@ defmodule Foglet.DoorsTest do
       assert manifest.sandbox.group == "foglet-door"
       assert manifest.sandbox.process_tree == :process_group
       assert manifest.sandbox.fail_closed? == true
+    end
+
+    test "accepts restricted sandbox on classic dropfile manifests" do
+      attrs =
+        @valid_manifest
+        |> Map.merge(%{
+          runtime: :classic_dropfile,
+          dropfile_formats: [:door32_sys],
+          args: ["--door32", "{dropfile:door32_sys}"],
+          sandbox: %{
+            mode: :restricted_user_process_group,
+            user: "foglet-door",
+            group: "foglet-door",
+            process_tree: :process_group,
+            fail_closed?: true
+          }
+        })
+
+      assert {:ok, manifest} = Doors.validate_manifest(attrs)
+      assert manifest.runtime == :classic_dropfile
+      assert manifest.dropfile_formats == [:door32_sys]
+      assert manifest.sandbox.mode == :restricted_user_process_group
+      assert manifest.sandbox.user == "foglet-door"
+      assert manifest.sandbox.group == "foglet-door"
+      assert manifest.sandbox.process_tree == :process_group
+      assert manifest.sandbox.fail_closed? == true
+    end
+
+    test "rejects restricted classic dropfile sandbox without a run-as user" do
+      attrs =
+        @valid_manifest
+        |> Map.merge(%{
+          runtime: :classic_dropfile,
+          dropfile_formats: [:door32_sys],
+          sandbox: %{
+            mode: :restricted_user_process_group,
+            group: "foglet-door",
+            process_tree: :process_group,
+            fail_closed?: true
+          }
+        })
+
+      assert {:error, errors} = Doors.validate_manifest(attrs)
+      assert {:sandbox_user, "is required for restricted_user_process_group"} in errors
     end
 
     test "rejects unsafe command paths, relative working directories, and unsafe env names" do
@@ -190,19 +235,39 @@ defmodule Foglet.DoorsTest do
   end
 
   describe "list_manifests/0" do
+    test "includes the production Usurper Reborn DOOR32 manifest without enabling demos" do
+      assert [usurper] = Doors.list_manifests()
+
+      assert usurper.id == "usurper-reborn"
+      assert usurper.runtime == :classic_dropfile
+      assert usurper.command == "/opt/foglet/doors/usurper/UsurperReborn"
+
+      assert usurper.args == [
+               "--door32",
+               "{dropfile:door32_sys}",
+               "--db",
+               "/var/lib/foglet/usurper/usurper_online.db",
+               "--stdio"
+             ]
+
+      assert usurper.working_dir == "/opt/foglet/doors/usurper"
+      assert usurper.dropfile_formats == [:door32_sys]
+      assert [%{filename: "DOOR32.SYS", identity: :handle, expose_path: :env}] = usurper.dropfiles
+    end
+
     test "hides built-in demo manifests when the env var is absent or empty" do
-      assert Doors.list_manifests() == []
+      assert Enum.map(Doors.list_manifests(), & &1.id) == @production_door_ids
 
       System.put_env(@demo_doors_env, "")
 
-      assert Doors.list_manifests() == []
+      assert Enum.map(Doors.list_manifests(), & &1.id) == @production_door_ids
     end
 
     test "hides built-in demo manifests for false-like env values" do
       for value <- ["0", "false", "no", "off", "random"] do
         System.put_env(@demo_doors_env, value)
 
-        assert Doors.list_manifests() == []
+        assert Enum.map(Doors.list_manifests(), & &1.id) == @production_door_ids
       end
     end
 
@@ -210,14 +275,16 @@ defmodule Foglet.DoorsTest do
       for value <- ["true", "1", "yes", " TRUE ", "Yes"] do
         System.put_env(@demo_doors_env, value)
 
-        assert Enum.map(Doors.list_manifests(), & &1.id) == @demo_door_ids
+        assert Enum.map(Doors.list_manifests(), & &1.id) == @production_door_ids ++ @demo_door_ids
       end
     end
 
     test "uses playable demo timeouts instead of the former five-second cutoff" do
       enable_demo_doors()
 
-      for manifest <- Doors.list_manifests() do
+      demo_ids = MapSet.new(@demo_door_ids)
+
+      for manifest <- Doors.list_manifests(), manifest.id in demo_ids do
         assert manifest.timeout_ms == 15 * 60 * 1_000
         assert manifest.idle_timeout_ms == 5 * 60 * 1_000
       end
@@ -239,12 +306,15 @@ defmodule Foglet.DoorsTest do
   describe "list_browsable/1" do
     test "derives anonymous browsing from the gated manifest list" do
       assert Doors.list_visible(nil) == []
-      assert Doors.list_browsable(nil) == []
+      assert Enum.map(Doors.list_browsable(nil), & &1.id) == @production_door_ids
 
       enable_demo_doors()
 
       assert Doors.list_visible(nil) == []
-      assert [_ | _] = Doors.list_browsable(nil)
+
+      assert Enum.map(Doors.list_browsable(nil), & &1.id) ==
+               @production_door_ids ++ @demo_door_ids
+
       assert Enum.all?(Doors.list_browsable(nil), &(&1.visibility == :members))
     end
 
