@@ -409,33 +409,33 @@ defmodule Foglet.TUI.App do
     {%{state | modal: modal}, []}
   end
 
-  defp do_update({:door_exited, door_id, {:error, _reason}, _status}, state) do
+  defp do_update({:door_exited, door_id, {:error, _reason}, _status} = event, state) do
     modal = %Foglet.TUI.Modal{
       type: :error,
       message:
         "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
     }
 
-    {%{state | session_context: mark_door_active(state.session_context, false), modal: modal}, []}
+    mark_door_returned(state, modal, event)
   end
 
-  defp do_update({:door_exited, door_id, reason, _status}, state) do
+  defp do_update({:door_exited, door_id, reason, _status} = event, state) do
     modal = %Foglet.TUI.Modal{
       type: door_exit_modal_type(reason),
       message: door_exit_message(door_id, reason)
     }
 
-    {%{state | session_context: mark_door_active(state.session_context, false), modal: modal}, []}
+    mark_door_returned(state, modal, event)
   end
 
-  defp do_update({:door_launch_failed, door_id, _reason}, state) do
+  defp do_update({:door_launch_failed, door_id, _reason} = event, state) do
     modal = %Foglet.TUI.Modal{
       type: :error,
       message:
         "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
     }
 
-    {%{state | session_context: mark_door_active(state.session_context, false), modal: modal}, []}
+    mark_door_returned(state, modal, event)
   end
 
   defp do_update(:heartbeat_tick, state), do: SessionAlias.heartbeat(state)
@@ -542,6 +542,18 @@ defmodule Foglet.TUI.App do
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")
+  end
+
+  defp mark_door_returned(state, modal, event) do
+    state = %{
+      state
+      | session_context: mark_door_active(state.session_context, false),
+        modal: modal
+    }
+
+    active_screen = Routing.screen_key(Routing.current_route(state))
+    {routed_state, cmds} = Routing.route_screen_update(state, active_screen, event)
+    {%{routed_state | modal: modal}, cmds}
   end
 
   defp door_exit_modal_type(reason) when reason in [:timeout, :idle_timeout], do: :warning

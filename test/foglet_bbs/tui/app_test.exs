@@ -7,6 +7,7 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.BoardList.State, as: BoardListState
+  alias Foglet.TUI.Screens.DoorList.State, as: DoorListState
   alias Foglet.TUI.Screens.MainMenu.State, as: MainMenuState
   alias Foglet.TUI.Screens.NewThread.State, as: NewThreadState
   alias Foglet.TUI.Screens.PostComposer.State, as: PostComposerState
@@ -431,6 +432,46 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.modal.message =~ "External Echo"
       assert new_state.modal.message =~ "could not start"
       refute new_state.modal.message =~ ":enoent"
+    end
+
+    test "door launch failure updates selector state after terminal is reclaimed", %{state: state} do
+      with_public_app_name("Misty Pines")
+
+      manifest = %Foglet.Doors.Manifest{
+        id: "usurper-reborn",
+        slug: "usurper-reborn",
+        display_name: "Usurper Reborn",
+        runtime: :classic_dropfile,
+        command: ["missing-usurper"],
+        timeout_ms: 5_000,
+        visibility: :members,
+        auth_scope: :site
+      }
+
+      stale_status = "Launching Usurper Reborn. The door has the terminal until it exits."
+
+      state = %{
+        state
+        | current_screen: :door_list,
+          session_context: %{door_active?: true},
+          screen_state: %{
+            door_list: %DoorListState{
+              doors: [manifest],
+              selected_index: 0,
+              status_message: stale_status
+            }
+          }
+      }
+
+      {new_state, []} =
+        App.update({:door_exited, "usurper-reborn", {:error, :enoent}, nil}, state)
+
+      refute new_state.session_context.door_active?
+
+      assert new_state.screen_state.door_list.status_message ==
+               "Usurper Reborn did not start. Back in Misty Pines."
+
+      assert String.length(new_state.screen_state.door_list.status_message) <= 64
     end
 
     test "door launch failure event keeps recoverable copy without raw atoms", %{state: state} do

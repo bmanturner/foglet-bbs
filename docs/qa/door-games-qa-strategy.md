@@ -20,6 +20,93 @@ variable set to `true`, `1`, or `yes`, the bundled demo/test doors are available
 for launch-path verification. This is not a Sysop SITE setting and is not stored
 in `Foglet.Config`.
 
+## Sandbox-capable Usurper Reborn QA launch (FOG-1167)
+
+For Usurper Reborn runtime QA that must exercise the checked-in production
+`classic_dropfile` manifest, use the release image rather than a host `mix
+phx.server` process. The Dockerfile installs the Usurper binary, creates a
+`foglet-door` passwd/group entry that aliases the release runtime UID/GID
+(65534), and runs the BEAM release as `nobody`. In that image the PTY helper can
+resolve the `restricted_user_process_group` manifest and pass its fail-closed
+identity check without requiring the developer's unprivileged host user to
+switch accounts.
+
+Run from the issue/integration worktree under test:
+
+```sh
+# Start or reuse the local Postgres service. Keep this on a disposable QA DB.
+rtk docker compose up -d postgres
+
+# Seed dev fixtures in the DB so SSH harness users such as sysop exist.
+rtk mix ecto.setup
+
+# Build the branch release image with the bundled Usurper fixture.
+rtk docker build -t foglet-bbs:usurper-qa .
+
+# Run release-safe migrations/config seeds against the same local DB.
+rtk docker run --rm \
+  --add-host=host.docker.internal:host-gateway \
+  -e DATABASE_URL=ecto://postgres:postgres@host.docker.internal:5432/foglet_bbs_dev \
+  -e SECRET_KEY_BASE=0000000000000000000000000000000000000000000000000000000000000000 \
+  foglet-bbs:usurper-qa \
+  /app/bin/foglet_bbs eval 'FogletBbs.Release.seed()'
+
+# Launch the sandbox-capable QA server. Use a throwaway /data volume so SSH host
+# keys and Usurper runtime data do not write into the source tree.
+rtk docker volume create foglet-usurper-qa-data
+rtk docker run --rm --name foglet-usurper-qa \
+  --add-host=host.docker.internal:host-gateway \
+  -p 127.0.0.1:2234:2222 \
+  -p 127.0.0.1:4000:4000 \
+  -p 127.0.0.1:9091:9091 \
+  -v foglet-usurper-qa-data:/data \
+  -e DATABASE_URL=ecto://postgres:postgres@host.docker.internal:5432/foglet_bbs_dev \
+  -e SECRET_KEY_BASE=0000000000000000000000000000000000000000000000000000000000000000 \
+  -e PHX_HOST=127.0.0.1 \
+  -e FOGLET_SSH_PORT=2222 \
+  -e PORT=4000 \
+  -e FOGLET_METRICS_ENABLED=true \
+  -e FOGLET_METRICS_PORT=9091 \
+  foglet-bbs:usurper-qa
+```
+
+Then run the SSH harness from the same worktree in a second shell, using only
+seed fixture credentials and scripts with no private keys or secrets:
+
+```sh
+rtk npm run ssh:harness -- \
+  --host 127.0.0.1 --port 2234 \
+  --user sysop --password 'seedpassword123!' \
+  --width 80 --height 24 \
+  --script /path/to/usurper-runtime-qa.script
+```
+
+Required evidence to hand back to QA:
+
+- `rtk docker inspect foglet-usurper-qa --format '{{.Config.User}}'` returns the
+  image runtime user (`nobody`) while `/etc/passwd` in the image maps both
+  `nobody` and `foglet-door` to UID 65534.
+- Server logs show `door_id=usurper-reborn` launch without
+  `sandbox_privileges_insufficient`, and record `door_exited` only for the
+  observed genuine exit/timeout/crash path.
+- Metrics/log baseline includes `foglet_door_launches_total` and
+  `foglet_door_runtime_seconds_*` from `http://127.0.0.1:9091/metrics` when the
+  metrics listener is enabled.
+- SSH/TUI harness captures the >1 minute runtime check, post-exit alphanumeric
+  input recovery, Enter behavior, and terminal stability.
+
+Limitations and risks:
+
+- This is a release-image QA fixture, not a destructive production action and
+  not a waiver of production runtime verification. It proves the branch's
+  checked-in image can satisfy the restricted-user manifest contract; it does
+  not prove a bare-metal/systemd deployment unless that host has its own
+  distinct `foglet-door` setup.
+- Use a disposable DB/volume. Do not run `mix ecto.setup` or dev fixture seeds
+  against production or shared infrastructure.
+- Keep external alerting/exporter choices out of this QA fixture; the repo only
+  supplies logs and the optional Prometheus text listener.
+
 ## Acceptance criteria used
 
 FOG-518 is considered complete when this strategy exists and the issue comment records:

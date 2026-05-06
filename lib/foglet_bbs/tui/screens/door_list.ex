@@ -103,6 +103,35 @@ defmodule Foglet.TUI.Screens.DoorList do
     end
   end
 
+  def update(
+        {:door_exited, door_id, {:error, _reason}, _status},
+        local_state,
+        %Context{} = context
+      ) do
+    state = normalize_state(local_state, context)
+
+    {%{
+       state
+       | status_message: "#{door_name(state, door_id)} did not start. Back in #{AppName.name()}."
+     }, []}
+  end
+
+  def update({:door_launch_failed, door_id, _reason}, local_state, %Context{} = context) do
+    state = normalize_state(local_state, context)
+
+    {%{
+       state
+       | status_message: "#{door_name(state, door_id)} did not start. Back in #{AppName.name()}."
+     }, []}
+  end
+
+  def update({:door_exited, door_id, _reason, _status}, local_state, %Context{} = context) do
+    state = normalize_state(local_state, context)
+
+    {%{state | status_message: "#{door_name(state, door_id)} closed. Back in #{AppName.name()}."},
+     []}
+  end
+
   def update(_message, local_state, %Context{} = context),
     do: {normalize_state(local_state, context), []}
 
@@ -217,6 +246,22 @@ defmodule Foglet.TUI.Screens.DoorList do
   defp friendly_door_label(%Manifest{id: "usurper-reborn"}), do: "Game"
   defp friendly_door_label(%Manifest{runtime: :classic_dropfile}), do: "Classic BBS door"
   defp friendly_door_label(%Manifest{}), do: "Door"
+
+  defp door_name(%State{} = state, door_id) do
+    state.doors
+    |> Enum.find(&(&1.id == door_id))
+    |> case do
+      %Manifest{display_name: display_name} -> display_name
+      nil -> humanize_door_id(door_id)
+    end
+  end
+
+  defp humanize_door_id(door_id) when is_binary(door_id) do
+    door_id
+    |> String.replace(["-", "_"], " ")
+    |> String.split(" ", trim: true)
+    |> Enum.map_join(" ", &String.capitalize/1)
+  end
 
   defp friendly_description(%Manifest{id: "usurper-reborn"}) do
     "A shared-world fantasy BBS game. Your #{AppName.name()} handle is used when you play."
