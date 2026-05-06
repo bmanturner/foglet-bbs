@@ -450,6 +450,93 @@ defmodule Foglet.Doors.RunnerTest do
       end)
     end
 
+    test "classic runner exposes dropfile paths through env vars and safe argv tokens" do
+      {:ok, manifest} =
+        manifest(%{
+          id: "classic-argv-env",
+          display_name: "Classic Argv Env",
+          runtime: :classic_dropfile,
+          command: "/bin/sh",
+          working_dir: System.tmp_dir!(),
+          dropfile_formats: [:chain_txt, :door_sys, :door32_sys, :dorinfo_def],
+          args: [
+            "-c",
+            "printf 'argv:%s\ndir:%s\ndoor:%s\ndoor32:%s\nhandle:%s\nterm:%s\n' \"$1\" \"$FOGLET_DROPFILE_DIR\" \"$FOGLET_DROPFILE_DOOR_SYS\" \"$FOGLET_DROPFILE_DOOR32_SYS\" \"$2\" \"$3\"",
+            "_",
+            "{dropfile:door_sys}",
+            "{user:handle}",
+            "{terminal:cols}x{terminal:rows}"
+          ],
+          timeout_ms: 5_000,
+          pty?: false
+        })
+
+      {:ok, pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          session: %{handle: "Alice Liddell!", user_id: "u1", role: :user, session_id: "s1"},
+          terminal_size: {132, 37},
+          output: output_to(self()),
+          owner: self()
+        )
+
+      ref = Process.monitor(pid)
+      assert_receive {:door_started, ^pid, "classic-argv-env"}
+      output = assert_door_output_contains("term:132x37")
+
+      assert output =~ ~r/argv:.*\/DOOR\.SYS/
+      assert output =~ ~r/door:.*\/DOOR\.SYS/
+      assert output =~ ~r/door32:.*\/DOOR32\.SYS/
+      assert output =~ ~r/dir:.*foglet-door-dropfiles-classic-argv-env/
+      assert output =~ "handle:Alice_Liddell_"
+
+      assert_receive {:door_exited, ^pid, "classic-argv-env", :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
+    end
+
+    test "argv token resolver fails closed for unknown malformed or missing tokens" do
+      cases = [
+        {"external-unknown-token", ["{env:DATABASE_URL}"], {:argv_template, :unknown_token}},
+        {"external-malformed-token", ["{dropfile:door_sys"], {:argv_template, :malformed_token}},
+        {"external-missing-dropfile", ["{dropfile:door_sys}"],
+         {:argv_template, {:missing_dropfile, :door_sys}}}
+      ]
+
+      for {door_id, args, expected_reason} <- cases do
+        {:ok, manifest} =
+          manifest(%{
+            id: door_id,
+            display_name: door_id,
+            runtime: :external_pty,
+            command: "/bin/true",
+            working_dir: System.tmp_dir!(),
+            args: args,
+            timeout_ms: 5_000,
+            pty?: false
+          })
+
+        log =
+          capture_log(fn ->
+            {:ok, pid} =
+              DoorSupervisor.start_runner(
+                manifest: manifest,
+                output: output_to(self()),
+                owner: self()
+              )
+
+            ref = Process.monitor(pid)
+            refute_receive {:door_started, ^pid, ^door_id}, 100
+            assert_receive {:door_exited, ^pid, ^door_id, {:error, ^expected_reason}, nil}
+            assert_receive {:DOWN, ^ref, :process, ^pid, {:door_launch_failed, ^expected_reason}}
+          end)
+
+        assert log =~ "door runtime event"
+        assert log =~ "event: :launch_failed"
+        assert log =~ "argv_template"
+        refute log =~ "DATABASE_URL"
+      end
+    end
+
     test "concurrent classic runners use separate dropfile directories and independent cleanup" do
       working_dir = Path.expand("priv/doors/demo")
 

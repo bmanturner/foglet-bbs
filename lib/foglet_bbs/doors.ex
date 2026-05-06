@@ -352,7 +352,7 @@ defmodule Foglet.Doors do
         context_path,
         dropfile_paths \\ %{}
       ) do
-    Map.merge(manifest.env, %{
+    foglet_env = %{
       "FOGLET_DOOR_ID" => manifest.id,
       "FOGLET_USER_ID" => to_env(Map.get(session, :user_id)),
       "FOGLET_USERNAME" => to_env(Map.get(session, :handle)),
@@ -361,8 +361,40 @@ defmodule Foglet.Doors do
       "FOGLET_TERMINAL_HEIGHT" => Integer.to_string(rows),
       "FOGLET_DOOR_CONTEXT" => context_path,
       "FOGLET_DROPFILES" => dropfile_paths |> Map.values() |> Enum.join(":")
-    })
+    }
+
+    manifest.env
+    |> Map.merge(foglet_env)
+    |> Map.merge(dropfile_env(manifest, dropfile_paths))
   end
+
+  defp dropfile_env(%Manifest{} = manifest, dropfile_paths) when is_map(dropfile_paths) do
+    env_exposed_paths =
+      manifest.dropfiles
+      |> Enum.filter(&(&1.expose_path == :env))
+      |> Enum.flat_map(fn dropfile ->
+        case Map.fetch(dropfile_paths, dropfile.format) do
+          {:ok, path} -> [{dropfile.format, path}]
+          :error -> []
+        end
+      end)
+
+    env_exposed_paths
+    |> Enum.reduce(%{}, fn {format, path}, env ->
+      Map.put(env, dropfile_env_name(format), path)
+    end)
+    |> maybe_put_dropfile_dir(env_exposed_paths)
+  end
+
+  defp maybe_put_dropfile_dir(env, []), do: env
+
+  defp maybe_put_dropfile_dir(env, [{_format, path} | _rest]),
+    do: Map.put(env, "FOGLET_DROPFILE_DIR", Path.dirname(path))
+
+  defp dropfile_env_name(:door32_sys), do: "FOGLET_DROPFILE_DOOR32_SYS"
+  defp dropfile_env_name(:door_sys), do: "FOGLET_DROPFILE_DOOR_SYS"
+  defp dropfile_env_name(:chain_txt), do: "FOGLET_DROPFILE_CHAIN_TXT"
+  defp dropfile_env_name(:dorinfo_def), do: "FOGLET_DROPFILE_DORINFO_DEF"
 
   defp normalize_dropfiles(nil, formats), do: normalize_dropfiles_from_formats(formats)
   defp normalize_dropfiles([], formats), do: normalize_dropfiles_from_formats(formats)

@@ -413,6 +413,16 @@ defmodule Foglet.DoorsTest do
       assert paths.chain_txt == Path.join(tmp, "CHAIN.TXT")
       assert paths.door_sys == Path.join(tmp, "DOOR.SYS")
       assert paths.dorinfo_def == Path.join(tmp, "DORINFO.DEF")
+
+      env = Doors.adapter_env(manifest, session_map(), {100, 30}, "/tmp/context.json", paths)
+
+      assert env["FOGLET_DROPFILES"] == Enum.join(Map.values(paths), ":")
+      assert env["FOGLET_DROPFILE_DIR"] == tmp
+      assert env["FOGLET_DROPFILE_CHAIN_TXT"] == paths.chain_txt
+      assert env["FOGLET_DROPFILE_DOOR_SYS"] == paths.door_sys
+      assert env["FOGLET_DROPFILE_DORINFO_DEF"] == paths.dorinfo_def
+      refute Map.has_key?(env, "FOGLET_DROPFILE_DOOR32_SYS")
+
       assert File.read!(paths.chain_txt) =~ "alice\r\nAlice Liddell\r\n100\r\n30"
     end
   end

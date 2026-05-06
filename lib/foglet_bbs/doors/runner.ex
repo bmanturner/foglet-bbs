@@ -739,7 +739,95 @@ defmodule Foglet.Doors.Runner do
   defp time_remaining_minutes(_timeout_ms), do: 1440
 
   defp open_external_port(state) do
-    PTYAdapter.open(state.manifest, state.terminal_size, external_env(state))
+    with {:ok, args} <- resolve_manifest_args(state) do
+      manifest = %{state.manifest | args: args}
+      PTYAdapter.open(manifest, state.terminal_size, external_env(state))
+    end
+  end
+
+  defp resolve_manifest_args(state) do
+    state.manifest.args
+    |> Enum.reduce_while({:ok, []}, fn arg, {:ok, resolved} ->
+      case resolve_manifest_arg(arg, state) do
+        {:ok, arg} -> {:cont, {:ok, [arg | resolved]}}
+        {:error, reason} -> {:halt, {:error, reason}}
+      end
+    end)
+    |> case do
+      {:ok, args} -> {:ok, Enum.reverse(args)}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp resolve_manifest_arg(arg, state) when is_binary(arg) do
+    if malformed_template?(arg) do
+      {:error, {:argv_template, :malformed_token}}
+    else
+      arg
+      |> token_names()
+      |> Enum.reduce_while({:ok, arg}, fn token, {:ok, resolved} ->
+        case resolve_manifest_token(token, state) do
+          {:ok, value} -> {:cont, {:ok, String.replace(resolved, "{" <> token <> "}", value)}}
+          {:error, reason} -> {:halt, {:error, reason}}
+        end
+      end)
+    end
+  end
+
+  defp malformed_template?(arg) do
+    stripped =
+      ~r/\$\{[^{}]+\}/
+      |> Regex.replace(arg, "")
+      |> then(&Regex.replace(~r/(?<!\$)\{[^{}]+\}/, &1, ""))
+
+    String.contains?(stripped, "{") or String.contains?(stripped, "}")
+  end
+
+  defp token_names(arg),
+    do: Regex.scan(~r/(?<!\$)\{([^{}]+)\}/, arg, capture: :all_but_first) |> List.flatten()
+
+  defp resolve_manifest_token("dropfile:" <> format_name, state) do
+    case dropfile_token_format(format_name) do
+      {:ok, format} ->
+        case Map.fetch(state.dropfile_paths || %{}, format) do
+          {:ok, path} -> {:ok, path}
+          :error -> {:error, {:argv_template, {:missing_dropfile, format}}}
+        end
+
+      :error ->
+        {:error, {:argv_template, :unknown_token}}
+    end
+  end
+
+  defp resolve_manifest_token("dropfile_dir", state) do
+    case state.dropfile_working_dir do
+      path when is_binary(path) -> {:ok, path}
+      _other -> {:error, {:argv_template, :missing_dropfile_dir}}
+    end
+  end
+
+  defp resolve_manifest_token("user:handle", state) do
+    {:ok, normalize_argv_user_handle(Map.get(state.session, :handle))}
+  end
+
+  defp resolve_manifest_token("terminal:cols", state),
+    do: {:ok, state.terminal_size |> elem(0) |> Integer.to_string()}
+
+  defp resolve_manifest_token("terminal:rows", state),
+    do: {:ok, state.terminal_size |> elem(1) |> Integer.to_string()}
+
+  defp resolve_manifest_token(_token, _state), do: {:error, {:argv_template, :unknown_token}}
+
+  defp dropfile_token_format("door32_sys"), do: {:ok, :door32_sys}
+  defp dropfile_token_format("door_sys"), do: {:ok, :door_sys}
+  defp dropfile_token_format("chain_txt"), do: {:ok, :chain_txt}
+  defp dropfile_token_format("dorinfo_def"), do: {:ok, :dorinfo_def}
+  defp dropfile_token_format(_format), do: :error
+
+  defp normalize_argv_user_handle(value) do
+    value
+    |> to_string()
+    |> String.replace(~r/[^A-Za-z0-9_.-]/, "_")
   end
 
   defp external_env(state) do
