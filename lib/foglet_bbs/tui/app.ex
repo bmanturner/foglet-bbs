@@ -21,6 +21,7 @@ defmodule Foglet.TUI.App do
   use Raxol.Core.Runtime.Application
 
   alias Foglet.Accounts
+  alias Foglet.AppName
   alias Foglet.TUI.App.Effects
   alias Foglet.TUI.App.Modal, as: AppModal
   alias Foglet.TUI.App.Routing
@@ -397,7 +398,7 @@ defmodule Foglet.TUI.App do
     modal = %Foglet.TUI.Modal{
       type: :error,
       message:
-        "#{door_display_name(door_id)} could not start. You are still connected and back in Foglet. Check server logs for launch details."
+        "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
     }
 
     {%{state | modal: modal}, []}
@@ -416,7 +417,7 @@ defmodule Foglet.TUI.App do
     modal = %Foglet.TUI.Modal{
       type: :error,
       message:
-        "#{door_display_name(door_id)} could not start. You are still connected and back in Foglet. Check server logs for launch details."
+        "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
     }
 
     {%{state | modal: modal}, []}
@@ -532,19 +533,19 @@ defmodule Foglet.TUI.App do
   defp door_exit_modal_type(_reason), do: :info
 
   defp door_exit_message(door_id, :normal) do
-    "#{door_display_name(door_id)} has closed. You are back in Foglet."
+    "#{door_display_name(door_id)} has closed. You are back in #{AppName.name()}."
   end
 
   defp door_exit_message(door_id, :timeout) do
-    "#{door_display_name(door_id)} reached its maximum play time and was closed. You are back in Foglet."
+    "#{door_display_name(door_id)} reached its maximum play time and was closed. You are back in #{AppName.name()}."
   end
 
   defp door_exit_message(door_id, :idle_timeout) do
-    "#{door_display_name(door_id)} was idle too long and was closed. You are back in Foglet."
+    "#{door_display_name(door_id)} was idle too long and was closed. You are back in #{AppName.name()}."
   end
 
   defp door_exit_message(door_id, _reason) do
-    "#{door_display_name(door_id)} closed unexpectedly. You are back in Foglet. Check server logs for details."
+    "#{door_display_name(door_id)} closed unexpectedly. You are back in #{AppName.name()}. Check server logs for details."
   end
 
   defp door_display_name(door_id) when is_binary(door_id) do

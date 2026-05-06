@@ -155,7 +155,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
     frame_state = frame_state(state, context)
     theme = Theme.from_state(frame_state)
     thread_content = render_thread_content(state, context, theme)
-    chrome = %{breadcrumb_parts: ["Foglet", board_label(state)]}
+    chrome = %{breadcrumb_parts: Foglet.AppName.breadcrumb([board_label(state)])}
 
     ScreenFrame.render(frame_state, chrome, thread_content, keybar_groups(state, context))
   end

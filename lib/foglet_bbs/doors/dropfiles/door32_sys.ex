@@ -9,7 +9,7 @@ defmodule Foglet.Doors.Dropfiles.Door32Sys do
       "0",
       "0",
       "38400",
-      "Foglet BBS",
+      Foglet.AppName.name(),
       metadata.user_id,
       metadata.display_name,
       metadata.handle,

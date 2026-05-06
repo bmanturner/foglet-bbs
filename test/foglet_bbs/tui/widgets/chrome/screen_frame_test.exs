@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Raxol.Core.Renderer.View
 
@@ -27,10 +27,35 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
   end
 
   describe "render/4" do
+    test "uses the configured public app name for fallback breadcrumbs" do
+      original = Application.get_env(:foglet_bbs, :app_name)
+
+      on_exit(fn ->
+        case original do
+          nil -> Application.delete_env(:foglet_bbs, :app_name)
+          value -> Application.put_env(:foglet_bbs, :app_name, value)
+        end
+      end)
+
+      Application.put_env(:foglet_bbs, :app_name, "Foglet BBS")
+
+      texts =
+        state()
+        |> ScreenFrame.render(%{}, content(), [])
+        |> apply_layout()
+        |> collect_positioned_text_elements()
+
+      rows = text_rows(texts)
+      top_border = Map.fetch!(rows, 0)
+
+      assert top_border =~ "Foglet BBS"
+      refute top_border =~ "Foglet ▸"
+    end
+
     test "renders Chrome V2 breadcrumb, status atoms, and command groups" do
       # Phase 39 R3 / D-12: callers supply breadcrumb_parts explicitly via
       # the chrome map. Legacy title strings no longer derive breadcrumb
-      # segments — they fall back to ["Foglet"].
+      # segments — they fall back to the configured public app name.
       chrome = %{breadcrumb_parts: ["Foglet", "Boards"]}
 
       texts =

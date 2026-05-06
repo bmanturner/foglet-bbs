@@ -165,7 +165,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   end
 
   defp new_thread_chrome(ss) do
-    %{breadcrumb_parts: ["Foglet", board_label(ss), "New Thread"]}
+    %{breadcrumb_parts: Foglet.AppName.breadcrumb([board_label(ss), "New Thread"])}
   end
 
   defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name

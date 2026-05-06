@@ -889,7 +889,7 @@ defmodule Foglet.AccountsTest do
 
       assert %Swoosh.Email{} = email
       assert email.to == [{"mailuser", "mailuser@example.test"}]
-      assert email.from == {"Foglet BBS", "no-reply@localhost"}
+      assert email.from == {"Foglet", "no-reply@localhost"}
       assert email.subject == "Your Foglet verification code"
       assert email.text_body =~ "ABC123"
     end
@@ -901,7 +901,7 @@ defmodule Foglet.AccountsTest do
 
       assert %Swoosh.Email{} = email
       assert email.to == [{"resetter", "resetter@example.test"}]
-      assert email.from == {"Foglet BBS", "no-reply@localhost"}
+      assert email.from == {"Foglet", "no-reply@localhost"}
       assert email.subject == "Foglet password reset instructions"
       assert email.text_body =~ "RESET-TOKEN"
       assert email.text_body =~ "SSH terminal"
@@ -921,11 +921,11 @@ defmodule Foglet.AccountsTest do
       rejection = Foglet.Accounts.Email.rejection_notification(rejected)
 
       assert approval.to == [{"approvedmail", "approved@example.test"}]
-      assert approval.from == {"Foglet BBS", "no-reply@localhost"}
+      assert approval.from == {"Foglet", "no-reply@localhost"}
       assert approval.subject == "Your Foglet account was approved"
 
       assert rejection.to == [{"rejectedmail", "rejected@example.test"}]
-      assert rejection.from == {"Foglet BBS", "no-reply@localhost"}
+      assert rejection.from == {"Foglet", "no-reply@localhost"}
       assert rejection.subject == "Your Foglet registration was rejected"
     end
   end

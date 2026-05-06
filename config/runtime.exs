@@ -90,6 +90,10 @@ if guest_mode_enabled = System.get_env("FOGLET_GUEST_MODE_ENABLED") do
   config :foglet_bbs, :guest_mode_enabled, guest_mode_enabled
 end
 
+if app_name = System.get_env("FOGLET_APP_NAME") do
+  config :foglet_bbs, :app_name, app_name
+end
+
 if mail_from = System.get_env("FOGLET_MAIL_FROM") do
   config :foglet_bbs, :mail_from, mail_from
 end

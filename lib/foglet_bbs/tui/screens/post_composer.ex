@@ -137,12 +137,12 @@ defmodule Foglet.TUI.Screens.PostComposer do
       )
 
     chrome = %{
-      breadcrumb_parts: [
-        "Foglet",
-        board_label(state),
-        thread_title_label(state),
-        "Reply"
-      ]
+      breadcrumb_parts:
+        Foglet.AppName.breadcrumb([
+          board_label(state),
+          thread_title_label(state),
+          "Reply"
+        ])
     }
 
     ScreenFrame.render(frame_state, chrome, content, [

@@ -11,6 +11,7 @@ defmodule Foglet.TUI.Screens.DoorList do
 
   import Raxol.Core.Renderer.View
 
+  alias Foglet.AppName
   alias Foglet.Doors.Manifest
   alias Foglet.TUI.{Context, Effect, Modal, ScrollKeys, TextWidth, Theme}
   alias Foglet.TUI.Guest
@@ -121,7 +122,7 @@ defmodule Foglet.TUI.Screens.DoorList do
 
     ScreenFrame.render(
       frame_state,
-      %{breadcrumb_parts: ["Foglet", "Door Games"]},
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Door Games"])},
       body,
       commands_for(state)
     )
@@ -218,7 +219,7 @@ defmodule Foglet.TUI.Screens.DoorList do
   defp friendly_door_label(%Manifest{}), do: "Door"
 
   defp friendly_description(%Manifest{id: "usurper-reborn"}) do
-    "A shared-world fantasy BBS game. Your Foglet handle is used when you play."
+    "A shared-world fantasy BBS game. Your #{AppName.name()} handle is used when you play."
   end
 
   defp friendly_description(%Manifest{id: "classic-dropfile-demo"}) do

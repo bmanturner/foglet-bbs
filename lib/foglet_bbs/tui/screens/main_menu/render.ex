@@ -52,7 +52,12 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
         children: [menu_panel, oneliners_panel_widget]
       )
 
-    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Home"]}, content, actions)
+    ScreenFrame.render(
+      state,
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Home"])},
+      content,
+      actions
+    )
   end
 
   defp frame_state(%State{} = local_state, %Context{} = context) do

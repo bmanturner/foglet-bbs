@@ -47,13 +47,13 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
         [text("Sysop tools are not available for this account.", fg: theme.warning.fg)]
       end
 
-    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Sysop"]}, empty, [
+    ScreenFrame.render(state, %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Sysop"])}, empty, [
       %{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]}
     ])
   end
 
   defp chrome_model(_ss) do
-    %{breadcrumb_parts: ["Foglet", "Sysop"]}
+    %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Sysop"])}
   end
 
   defp sysop_commands(ss, jump_hint) do

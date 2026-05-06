@@ -50,7 +50,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
     ScreenFrame.render(
       state,
-      %{breadcrumb_parts: ["Foglet", "Login"]},
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Login"])},
       content,
       keys_for(sub, mode, state)
     )

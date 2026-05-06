@@ -6,6 +6,7 @@ swap_size_mb = 256
 
 [env]
   ECTO_IPV6 = "true"
+  FOGLET_APP_NAME = "Foglet BBS"
   FOGLET_MAIL_FROM = "no-reply@foglet.io"
   FOGLET_SSH_PORT = "2222"
   FOGLET_DEFAULT_TIMEZONE = "America/Chicago"

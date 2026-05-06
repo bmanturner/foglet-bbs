@@ -19,6 +19,7 @@ defmodule Foglet.TUI.Screens.Verify do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Accounts.Verification
+  alias Foglet.AppName
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
@@ -74,17 +75,22 @@ defmodule Foglet.TUI.Screens.Verify do
 
     content = AuthForm.centered(panel, state, theme, @auth_card_height)
 
-    ScreenFrame.render(state, %{breadcrumb_parts: ["Foglet", "Verify"]}, content, [
-      %{
-        label: "Actions",
-        commands: [
-          %{key: "Enter", label: "Submit", priority: 30},
-          %{key: "Backspace", label: "Delete", priority: 30},
-          %{key: "Ctrl+R", label: "Resend code", priority: 30},
-          %{key: "Esc", label: "Cancel", priority: 30}
-        ]
-      }
-    ])
+    ScreenFrame.render(
+      state,
+      %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Verify"])},
+      content,
+      [
+        %{
+          label: "Actions",
+          commands: [
+            %{key: "Enter", label: "Submit", priority: 30},
+            %{key: "Backspace", label: "Delete", priority: 30},
+            %{key: "Ctrl+R", label: "Resend code", priority: 30},
+            %{key: "Esc", label: "Cancel", priority: 30}
+          ]
+        }
+      ]
+    )
   end
 
   @impl true
@@ -298,7 +304,7 @@ defmodule Foglet.TUI.Screens.Verify do
     modal = %Foglet.TUI.Modal{
       type: :error,
       message:
-        "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
+        "#{AppName.name()} has email turned off, so we can't send a verification code. Ask the sysop."
     }
 
     {clear_optimistic_resend_cooldown(vs), [Effect.open_modal(modal)]}
@@ -363,12 +369,12 @@ defmodule Foglet.TUI.Screens.Verify do
   defp resend_sent_message(%{resend_cooldown_until: %DateTime{} = until}) do
     remaining = max(DateTime.diff(until, DateTime.utc_now(), :second), 0)
 
-    "If email is set up on this Foglet, a new code is on its way." <>
+    "If email is set up for #{AppName.name()}, a new code is on its way." <>
       " You can request another in #{remaining}s."
   end
 
   defp resend_sent_message(_vs) do
-    "If email is set up on this Foglet, a new code is on its way."
+    "If email is set up for #{AppName.name()}, a new code is on its way."
   end
 
   # Drop the optimistic dispatch-time cooldown when delivery fails so the

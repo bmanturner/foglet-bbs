@@ -66,7 +66,7 @@ defmodule Foglet.Doors.DropfilesTest do
                "0\r\n" <>
                  "0\r\n" <>
                  "38400\r\n" <>
-                 "Foglet BBS\r\n" <>
+                 "Foglet\r\n" <>
                  "user-1\r\n" <>
                  "Alice Liddell\r\n" <>
                  "alice\r\n" <>
@@ -79,7 +79,7 @@ defmodule Foglet.Doors.DropfilesTest do
                "0",
                "0",
                "38400",
-               "Foglet BBS",
+               "Foglet",
                "user-1",
                "Alice Liddell",
                "alice",
@@ -126,7 +126,7 @@ defmodule Foglet.Doors.DropfilesTest do
       assert {:ok, text} = Dropfiles.render(:dorinfo_def, @attrs)
 
       assert text ==
-               "Foglet BBS\r\n" <>
+               "Foglet\r\n" <>
                  "Ada\r\n" <>
                  "Lovelace\r\n" <>
                  "COM0\r\n" <>

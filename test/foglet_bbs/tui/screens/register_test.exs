@@ -9,6 +9,19 @@ defmodule Foglet.TUI.Screens.RegisterTest do
   alias Foglet.TUI.Widgets.Auth.AuthForm
   alias Foglet.TUI.Widgets.Input.TextInput
 
+  defp with_public_app_name(name) do
+    previous = Application.get_env(:foglet_bbs, :app_name)
+    Application.put_env(:foglet_bbs, :app_name, name)
+
+    on_exit(fn ->
+      if is_nil(previous) do
+        Application.delete_env(:foglet_bbs, :app_name)
+      else
+        Application.put_env(:foglet_bbs, :app_name, previous)
+      end
+    end)
+  end
+
   defmodule AccountsRecorder do
     def register_user(attrs), do: {:ok, %{id: "user", handle: attrs.handle, attrs: attrs}}
     def register_pending_user(attrs), do: {:ok, %{id: "pending-user", attrs: attrs}}
@@ -499,6 +512,8 @@ defmodule Foglet.TUI.Screens.RegisterTest do
     end
 
     test "no-email verification delivery failure opens honest error modal" do
+      with_public_app_name("Misty Pines")
+
       Config.put!("registration_mode", "open")
       Config.put!("delivery_mode", "no_email")
       Config.put!("require_email_verification", true)
@@ -524,7 +539,7 @@ defmodule Foglet.TUI.Screens.RegisterTest do
       assert modal.type == :error
 
       assert modal.message ==
-               "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
+               "Misty Pines has email turned off, so we can't send a verification code. Ask the sysop."
 
       refute_email_sent()
     end

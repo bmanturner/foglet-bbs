@@ -7,18 +7,19 @@ defmodule Foglet.Accounts.Email do
 
   alias Foglet.Accounts.User
 
-  @from_name "Foglet BBS"
   @default_from_address "no-reply@localhost"
 
   @doc "Build an email verification-code message."
   @spec verification_code(User.t(), String.t()) :: Swoosh.Email.t()
   def verification_code(%User{} = user, code) when is_binary(code) do
+    app_name = Foglet.AppName.name()
+
     new()
     |> to({user.handle, user.email})
     |> from(from_mailbox())
-    |> subject("Your Foglet verification code")
+    |> subject("Your #{app_name} verification code")
     |> text_body("""
-    Your Foglet verification code is:
+    Your #{app_name} verification code is:
 
     #{code}
 
@@ -29,12 +30,14 @@ defmodule Foglet.Accounts.Email do
   @doc "Build terminal-native password reset instructions."
   @spec password_reset(User.t(), String.t()) :: Swoosh.Email.t()
   def password_reset(%User{} = user, reset_token) when is_binary(reset_token) do
+    app_name = Foglet.AppName.name()
+
     new()
     |> to({user.handle, user.email})
     |> from(from_mailbox())
-    |> subject("Foglet password reset instructions")
+    |> subject("#{app_name} password reset instructions")
     |> text_body("""
-    A password reset was requested for your Foglet account.
+    A password reset was requested for your #{app_name} account.
 
     Reset token:
 
@@ -49,12 +52,14 @@ defmodule Foglet.Accounts.Email do
   @doc "Build an account approval notification."
   @spec approval_notification(User.t()) :: Swoosh.Email.t()
   def approval_notification(%User{} = user) do
+    app_name = Foglet.AppName.name()
+
     new()
     |> to({user.handle, user.email})
     |> from(from_mailbox())
-    |> subject("Your Foglet account was approved")
+    |> subject("Your #{app_name} account was approved")
     |> text_body("""
-    Your Foglet account was approved.
+    Your #{app_name} account was approved.
 
     You can now return to your SSH terminal and log in.
     """)
@@ -63,12 +68,14 @@ defmodule Foglet.Accounts.Email do
   @doc "Build a registration rejection notification."
   @spec rejection_notification(User.t()) :: Swoosh.Email.t()
   def rejection_notification(%User{} = user) do
+    app_name = Foglet.AppName.name()
+
     new()
     |> to({user.handle, user.email})
     |> from(from_mailbox())
-    |> subject("Your Foglet registration was rejected")
+    |> subject("Your #{app_name} registration was rejected")
     |> text_body("""
-    Your Foglet registration was rejected.
+    Your #{app_name} registration was rejected.
 
     Contact the sysop if you believe this was a mistake.
     """)
@@ -83,12 +90,14 @@ defmodule Foglet.Accounts.Email do
   """
   @spec test_email(User.t()) :: Swoosh.Email.t()
   def test_email(%User{} = sysop) do
+    app_name = Foglet.AppName.name()
+
     new()
     |> to({sysop.handle, sysop.email})
     |> from(from_mailbox())
-    |> subject("Foglet test email")
+    |> subject("#{app_name} test email")
     |> text_body("""
-    This is a Foglet test email.
+    This is a #{app_name} test email.
 
     A sysop triggered this delivery from the SITE configuration screen to
     confirm that transactional email is reaching this address. No action is
@@ -101,12 +110,14 @@ defmodule Foglet.Accounts.Email do
   @doc "Build a sysop notification for a pending registration."
   @spec pending_approval_notification(User.t(), User.t()) :: Swoosh.Email.t()
   def pending_approval_notification(%User{} = sysop, %User{} = pending_user) do
+    app_name = Foglet.AppName.name()
+
     new()
     |> to({sysop.handle, sysop.email})
     |> from(from_mailbox())
-    |> subject("Foglet account awaiting approval")
+    |> subject("#{app_name} account awaiting approval")
     |> text_body("""
-    A new Foglet account is awaiting sysop approval.
+    A new #{app_name} account is awaiting sysop approval.
 
     Handle: #{pending_user.handle}
     Email: #{pending_user.email}
@@ -116,6 +127,6 @@ defmodule Foglet.Accounts.Email do
   end
 
   defp from_mailbox do
-    {@from_name, Application.get_env(:foglet_bbs, :mail_from, @default_from_address)}
+    {Foglet.AppName.name(), Application.get_env(:foglet_bbs, :mail_from, @default_from_address)}
   end
 end
