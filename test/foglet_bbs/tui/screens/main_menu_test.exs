@@ -10,6 +10,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
 
+  defmodule FakeOnlineNow do
+    def count, do: Process.get(:fake_online_now_count, 0)
+  end
+
   setup do
     original = System.get_env(@demo_doors_env)
     System.delete_env(@demo_doors_env)
@@ -78,7 +82,11 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       terminal_size: state.terminal_size,
       route: state.current_screen,
       route_params: Map.get(state, :route_params, %{}),
-      domain: Map.get(state.session_context || %{}, :domain, %{})
+      domain:
+        Map.merge(
+          %{online_now: FakeOnlineNow},
+          Map.get(state.session_context || %{}, :domain, %{})
+        )
     )
   end
 
@@ -93,6 +101,17 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   defp rendered_text(state) do
     MainMenu.render(local_from_app(state), context_from_app(state)) |> collect_text_values()
   end
+
+  defp flatten_nodes(node), do: do_flatten_nodes(node, [])
+
+  defp do_flatten_nodes(nodes, acc) when is_list(nodes),
+    do: Enum.flat_map(nodes, &do_flatten_nodes(&1, acc))
+
+  defp do_flatten_nodes(%{} = node, _acc) do
+    [node | do_flatten_nodes(Map.get(node, :children, []), [])]
+  end
+
+  defp do_flatten_nodes(_other, _acc), do: []
 
   defp handle_key_result(state, key) do
     MainMenu.update(
@@ -540,6 +559,45 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     assert_board_list_load_task(effects)
   end
 
+  test "Online Now destination shows authenticated count and routes through canonical menu entry",
+       %{
+         state: state
+       } do
+    for {count, label} <- [{0, "Online Now (0)"}, {1, "Online Now (1)"}, {2, "Online Now (2)"}] do
+      Process.put(:fake_online_now_count, count)
+      texts = rendered_text(state)
+      assert Enum.any?(texts, &String.contains?(&1, label))
+      assert "[N]" in texts
+
+      {_local, effects} = handle_key_result(state, "N")
+      assert_navigate_effect(effects, :online_now)
+
+      {_local, effects} = handle_key_result(state, "n")
+      assert_navigate_effect(effects, :online_now)
+    end
+  end
+
+  test "Online Now count color routes through error for 0/1 and accent for 2+", %{state: state} do
+    theme = Foglet.TUI.Theme.default()
+
+    for {count, expected_fg} <- [{0, theme.error.fg}, {1, theme.error.fg}, {2, theme.accent.fg}] do
+      Process.put(:fake_online_now_count, count)
+
+      nodes = MainMenu.render(local_from_app(state), context_from_app(state)) |> flatten_nodes()
+
+      label_node =
+        Enum.find(nodes, fn node ->
+          Map.get(node, :type) == :text and
+            String.contains?(Map.get(node, :content) || "", "Online Now")
+        end)
+
+      assert label_node,
+             "expected Online Now label node for count=#{count}; got #{inspect(nodes)}"
+
+      assert Map.get(label_node, :fg) == expected_fg
+    end
+  end
+
   test "'C'/'c' navigates to :new_thread and lets route entry load boards", %{state: state} do
     {_local, effects} = handle_key_result(state, "C")
     assert_navigate_effect(effects, :new_thread)
@@ -743,7 +801,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
           nav_leading_rows =
             texts
             |> Enum.filter(fn row ->
-              Enum.any?(["●", "✎", "◇", "⚑", "▣", "↯"], &String.contains?(row, &1))
+              Enum.any?(["●", "✎", "◌", "◇", "⚑", "▣", "↯"], &String.contains?(row, &1))
             end)
 
           bracketed_keys = Enum.filter(texts, &(&1 =~ ~r/^\[[A-Z]\]$/))
@@ -775,6 +833,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert MainMenu.visible_destinations(nil) == [
                {"B", "Boards"},
                {"C", "Compose"},
+               {"N", "Online Now (0)"},
                {"Q", "Logout"}
              ]
     end
@@ -791,6 +850,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert MainMenu.visible_destinations(nil) == [
                {"B", "Boards"},
                {"C", "Compose"},
+               {"N", "Online Now (0)"},
                {"D", "Door Games"},
                {"Q", "Logout"}
              ]
@@ -802,6 +862,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert MainMenu.visible_destinations(user) == [
                {"B", "Boards"},
                {"C", "Compose"},
+               {"N", "Online Now (0)"},
                {"A", "Account"},
                {"Q", "Logout"}
              ]
@@ -814,6 +875,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                [
                  {"B", "Boards"},
                  {"C", "Compose"},
+                 {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
                  {"Q", "Logout"}
@@ -827,6 +889,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                [
                  {"B", "Boards"},
                  {"C", "Compose"},
+                 {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
                  {"S", "Sysop"},
@@ -905,7 +968,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
             |> Enum.flat_map(& &1.commands)
             |> Enum.map(& &1.key)
 
-          for forbidden <- ["B", "C", "A", "M", "S", "Q"] do
+          for forbidden <- ["B", "C", "N", "A", "M", "S", "Q"] do
             refute forbidden in keys,
                    "destination key #{forbidden} leaked into command bar for role=#{role}, oneliners=#{length(oneliners)}"
           end

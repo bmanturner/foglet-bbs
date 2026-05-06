@@ -246,6 +246,7 @@ defmodule Foglet.TUI.App.Routing do
       :register,
       :verify,
       :main_menu,
+      :online_now,
       :board_list,
       :thread_list,
       :post_reader,
@@ -262,6 +263,7 @@ defmodule Foglet.TUI.App.Routing do
   defp built_in_screen_module_for(:register), do: Screens.Register
   defp built_in_screen_module_for(:verify), do: Screens.Verify
   defp built_in_screen_module_for(:main_menu), do: Screens.MainMenu
+  defp built_in_screen_module_for(:online_now), do: Screens.OnlineNow
   defp built_in_screen_module_for(:board_list), do: Screens.BoardList
   defp built_in_screen_module_for(:thread_list), do: Screens.BoardScreen
   defp built_in_screen_module_for(:post_reader), do: Screens.PostReader
