@@ -114,24 +114,35 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldList do
     marker = if selected?, do: @selected_marker, else: @plain_marker
     style = if selected?, do: [:bold, :reverse], else: []
     fg = if selected?, do: theme.selected.fg, else: theme.unselected.fg
+    bg = if selected?, do: theme.selected.bg, else: nil
 
-    [render_row(marker, row, fg, style, theme)] ++
+    [render_row(marker, row, fg, bg, style, theme)] ++
       Enum.map(descriptions, &text(@plain_marker <> &1, fg: theme.dim.fg, style: [:dim, :italic]))
   end
 
-  defp render_row(marker, %{prefix: prefix, value: value, swatch_color: color}, fg, style, theme) do
+  defp render_row(
+         marker,
+         %{prefix: prefix, value: value, swatch_color: color},
+         fg,
+         bg,
+         style,
+         theme
+       ) do
     row style: %{gap: 1} do
       [
-        text(marker <> prefix, fg: fg, style: style),
+        text(marker <> prefix, row_attrs(fg, bg, style)),
         Handle.swatch(color, theme),
-        text(value, fg: fg, style: style)
+        text(value, row_attrs(fg, bg, style))
       ]
     end
   end
 
-  defp render_row(marker, row, fg, style, _theme) do
-    text(marker <> row, fg: fg, style: style)
+  defp render_row(marker, row, fg, bg, style, _theme) do
+    text(marker <> row, row_attrs(fg, bg, style))
   end
+
+  defp row_attrs(fg, nil, style), do: [fg: fg, style: style]
+  defp row_attrs(fg, bg, style), do: [fg: fg, bg: bg, style: style]
 
   defp display_value(nil), do: @empty_placeholder
   defp display_value(""), do: @empty_placeholder

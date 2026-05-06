@@ -45,6 +45,7 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldListTest do
   test "render marks selected row, uses empty placeholder, and includes descriptions" do
     texts = render_texts(fields(), 2, width: 64, height: 8)
     rendered = Enum.map_join(texts, "\n", & &1.text)
+    theme = Theme.default()
 
     assert rendered =~ "▸ Real name"
     assert rendered =~ "—"
@@ -53,6 +54,10 @@ defmodule Foglet.TUI.Widgets.List.SelectableFieldListTest do
     selected = Enum.find(texts, &String.starts_with?(&1.text, "▸ Real name"))
     assert selected.style.reverse
     assert selected.style.bold
+    assert selected.bg == theme.selected.bg
+
+    unselected = Enum.find(texts, &String.starts_with?(&1.text, "  Location"))
+    refute unselected.bg == theme.selected.bg
   end
 
   test "render windows cramped lists so the selected primary row remains visible" do

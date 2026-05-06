@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroup do
     * D-16     — no state struct (purely stateless)
 
   Visual contract:
-    semantic selected option:   "● {label}", fg: theme.selected.fg
+    semantic selected option:   "● {label}", fg: theme.selected.fg, bg: theme.selected.bg
     semantic unselected option: "◇ {label}", fg: theme.unselected.fg
     disabled option:            fg: theme.dim.fg, style: [:dim]
     ASCII compatibility:        "> (o) {label}" / "  ( ) {label}"
@@ -54,8 +54,8 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroup do
       |> Enum.map(fn {opt, idx} ->
         selected? = idx == selected_index
         disabled? = MapSet.member?(disabled_indices, idx)
-        {content, fg, style} = row_contract(opt, selected?, disabled?, marker_style, theme)
-        text(content, fg: fg, style: style)
+        {content, attrs} = row_contract(opt, selected?, disabled?, marker_style, theme)
+        text(content, attrs)
       end)
 
     column style: %{gap: 0} do
@@ -79,9 +79,9 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroup do
     content = row_content(label, selected?, marker_style)
 
     cond do
-      disabled? -> {content, theme.dim.fg, [:dim]}
-      selected? -> {content, theme.selected.fg, [:bold]}
-      true -> {content, theme.unselected.fg, []}
+      disabled? -> {content, [fg: theme.dim.fg, style: [:dim]]}
+      selected? -> {content, [fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold]]}
+      true -> {content, [fg: theme.unselected.fg]}
     end
   end
 

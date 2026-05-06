@@ -2,12 +2,28 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
   use ExUnit.Case, async: true
 
   import Foglet.TUI.WidgetHelpers,
-    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0]
+    only: [flatten_text: 1, color_atom_leaked?: 2, color_names: 0, assert_text_run: 3]
 
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form
 
   defp theme, do: Theme.default()
+
+  defp distinctive_theme do
+    %{
+      Theme.default()
+      | border: %{fg: "#form-border-fg"},
+        dim: %{fg: "#form-dim"},
+        error: %{fg: "#form-error"},
+        info: %{fg: "#form-info"},
+        primary: %{fg: "#form-primary"},
+        selected: %{fg: "#form-selected", bg: "#form-selected-bg"},
+        success: %{fg: "#form-success"},
+        title: %{fg: "#form-title"},
+        unselected: %{fg: "#form-unselected"},
+        warning: %{fg: "#form-warning"}
+    }
+  end
 
   defp default_fields do
     [
@@ -265,6 +281,29 @@ defmodule Foglet.TUI.Widgets.Modal.FormTest do
     assert flat =~ "Type to filter"
     assert flat =~ "America/Chicago"
     refute flat =~ "‹ America/Chicago ›"
+  end
+
+  test "select_list focused option carries selected background and non-focused options do not" do
+    fields = [
+      %{
+        name: :timezone,
+        type: :select_list,
+        label: "Timezone",
+        choices: ["Etc/UTC", "America/Chicago", "America/New_York"],
+        value: "Etc/UTC"
+      }
+    ]
+
+    theme = distinctive_theme()
+    tree = fields |> test_form() |> Form.render(theme: theme)
+
+    assert_text_run(tree, "✓ Etc/UTC",
+      fg: theme.selected.fg,
+      bg: theme.selected.bg,
+      style: [:bold]
+    )
+
+    assert_text_run(tree, "  America/Chicago", fg: theme.primary.fg)
   end
 
   test "typed coercion (textarea): multi-line content submits as string with newline" do

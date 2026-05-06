@@ -12,7 +12,7 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroupTest do
 
   defp distinctive_theme do
     %Theme{
-      selected: %{fg: "#radio-selected"},
+      selected: %{fg: "#radio-selected", bg: "#radio-selected-bg"},
       unselected: %{fg: "#radio-unselected"},
       dim: %{fg: "#radio-dim"}
     }
@@ -83,7 +83,7 @@ defmodule Foglet.TUI.Widgets.Input.RadioGroupTest do
         )
 
       assert flatten_text(tree) == "● Alpha◇ Beta◇ Gamma"
-      assert_text_run(tree, "● Alpha", fg: t.selected.fg, style: [:bold])
+      assert_text_run(tree, "● Alpha", fg: t.selected.fg, bg: t.selected.bg, style: [:bold])
       assert_text_run(tree, "◇ Beta", fg: t.unselected.fg)
       assert_text_run(tree, "◇ Gamma", fg: t.dim.fg, style: [:dim])
     end
