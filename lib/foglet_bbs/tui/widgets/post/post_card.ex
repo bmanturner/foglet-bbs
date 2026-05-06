@@ -93,7 +93,8 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
   Render reader-oriented post parts from pre-parsed markdown tuples.
 
   Returns separate non-scrolling `:header` and `:progress` elements plus
-  guttered `:body_lines` suitable for `Viewport.children`.
+  guttered `:body_lines` suitable for `Viewport.children`. `:right_pad` can be
+  used by bounded overlays to leave chrome-safe space after exact-fit body rows.
   """
   @spec reader_parts(
           post_like(),
@@ -113,11 +114,12 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
 
     selected? = Keyword.get(opts, :action_target?, false)
     left_pad = Keyword.get(opts, :left_pad, 0)
+    right_pad = Keyword.get(opts, :right_pad, 0)
 
     %{
       header: reader_header(post, index, total, width, theme, selected?, left_pad),
       progress: reader_progress(width, theme, selected?),
-      body_lines: reader_body_lines(tuples, width, theme, left_pad)
+      body_lines: reader_body_lines(tuples, width, theme, left_pad, right_pad)
     }
   end
 
@@ -244,10 +246,17 @@ defmodule Foglet.TUI.Widgets.Post.PostCard do
 
   defp reader_progress(_width, _theme, _selected?), do: nil
 
-  defp reader_body_lines(tuples, width, theme, left_pad) do
+  defp reader_body_lines(tuples, width, theme, left_pad, right_pad) do
     gutter = "│"
     gutter_gap = 1
-    body_width = max(reader_text_width(width) - TextWidth.display_width(gutter) - gutter_gap, 1)
+
+    body_width =
+      width
+      |> reader_text_width()
+      |> Kernel.-(TextWidth.display_width(gutter))
+      |> Kernel.-(gutter_gap)
+      |> Kernel.-(max(right_pad, 0))
+      |> max(1)
 
     tuples
     |> MarkdownBody.render_tuples_as_lines(body_width, theme, wrap: true)

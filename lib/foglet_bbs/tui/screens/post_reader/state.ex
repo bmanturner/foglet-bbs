@@ -33,6 +33,7 @@ defmodule Foglet.TUI.Screens.PostReader.State do
           viewport: map(),
           render_cache: map(),
           partial_scroll_tops: %{optional(String.t()) => non_neg_integer()},
+          reply_context: Foglet.TUI.Widgets.Post.ReplyContext.t() | nil,
           last_op: atom() | nil,
           last_error: term() | nil,
           load_intent: term()
@@ -56,6 +57,7 @@ defmodule Foglet.TUI.Screens.PostReader.State do
             viewport: nil,
             render_cache: %{},
             partial_scroll_tops: %{},
+            reply_context: nil,
             last_op: nil,
             last_error: nil,
             load_intent: nil
@@ -85,6 +87,7 @@ defmodule Foglet.TUI.Screens.PostReader.State do
       viewport: Keyword.get(opts, :viewport) || default_viewport(),
       render_cache: Keyword.get(opts, :render_cache) || %{},
       partial_scroll_tops: Keyword.get(opts, :partial_scroll_tops) || %{},
+      reply_context: Keyword.get(opts, :reply_context),
       last_op: Keyword.get(opts, :last_op),
       last_error: Keyword.get(opts, :last_error),
       load_intent: Keyword.get(opts, :load_intent)

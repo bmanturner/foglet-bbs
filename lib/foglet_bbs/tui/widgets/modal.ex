@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Widgets.Modal do
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Modal.Form
+  alias Foglet.TUI.Widgets.Post.ReplyContext
   alias Foglet.TUI.Widgets.Profile.PublicProfileCard
 
   @type modal_spec :: %{
@@ -48,6 +49,10 @@ defmodule Foglet.TUI.Widgets.Modal do
 
   def render(%Foglet.TUI.Modal{type: :form, message: %Form{} = form}, %Theme{} = theme, opts) do
     Form.render(form, Keyword.put(opts, :theme, theme))
+  end
+
+  def render(%Foglet.TUI.Modal{message: %ReplyContext{} = context}, %Theme{} = theme, opts) do
+    ReplyContext.render(context, theme, opts)
   end
 
   def render(

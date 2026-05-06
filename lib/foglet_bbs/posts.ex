@@ -101,6 +101,26 @@ defmodule Foglet.Posts do
   end
 
   @doc """
+  Actor-aware upvote boundary for reader surfaces.
+
+  The actor must be an active, non-deleted user and the target post must be
+  readable through the same board-visibility gate used for reply-context fetches.
+  Own-post attempts remain silent no-ops via `toggle_upvote/2`.
+  """
+  @spec toggle_readable_upvote(Foglet.Accounts.User.t() | nil, String.t()) ::
+          {:ok, Post.t()} | {:error, term()}
+  def toggle_readable_upvote(
+        %User{status: :active, deleted_at: nil, id: user_id} = actor,
+        post_id
+      ) do
+    with {:ok, %Post{id: readable_post_id}} <- fetch_readable_post(actor, post_id) do
+      toggle_upvote(user_id, readable_post_id)
+    end
+  end
+
+  def toggle_readable_upvote(_actor, _post_id), do: {:error, :forbidden}
+
+  @doc """
   Toggles `user_id`'s upvote on `post_id` and returns the refreshed post.
 
   Own-post attempts are silent no-ops. The post row is locked while the upvote

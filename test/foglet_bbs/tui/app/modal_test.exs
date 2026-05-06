@@ -9,6 +9,7 @@ defmodule Foglet.TUI.App.ModalTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Widgets.Modal.Form
+  alias Foglet.TUI.Widgets.Post.ReplyContext
   alias Raxol.Core.Runtime.Command
 
   defmodule SampleScreen do
@@ -95,6 +96,33 @@ defmodule Foglet.TUI.App.ModalTest do
     )
   end
 
+  defp reply_context_modal(opts \\ []) do
+    body =
+      Keyword.get_lazy(opts, :body, fn ->
+        Enum.map_join(1..12, "\n", fn row ->
+          "Long reply-context body for scroll verification with **bold evidence** and *italic proof* that wraps inside the modal interior while preserving chrome row #{row}."
+        end)
+      end)
+
+    post = %{
+      id: "p1",
+      message_number: 1,
+      body: body,
+      upvote_count: 2,
+      user: %{handle: "bob"},
+      inserted_at: ~U[2026-04-18 00:00:00Z]
+    }
+
+    context_opts =
+      [upvote?: true]
+      |> Keyword.merge(Keyword.take(opts, [:visible_body_rows, :scroll_top]))
+
+    %Modal{
+      type: :reply_context,
+      message: ReplyContext.new(post, Foglet.Markdown.render(body), context_opts)
+    }
+  end
+
   defp row_containing(rendered, needle) do
     rendered
     |> String.split("\n")
@@ -111,6 +139,39 @@ defmodule Foglet.TUI.App.ModalTest do
            "expected modal right boundary to survive on #{inspect(needle)} row; got #{inspect(row)}"
   end
 
+  defp assert_modal_rows_bounded(rendered) do
+    bad_rows =
+      rendered
+      |> String.split("\n")
+      |> Enum.filter(&(String.contains?(&1, "║") and not String.ends_with?(&1, "║")))
+
+    assert bad_rows == [],
+           "expected every modal content row to preserve the right border; got:\n#{Enum.join(bad_rows, "\n")}"
+  end
+
+  defp text_node_inspections(tree, content) do
+    tree
+    |> collect_text_nodes(content, [])
+    |> Enum.map(&inspect(&1, printable_limit: :infinity, limit: :infinity))
+  end
+
+  defp collect_text_nodes(nil, _content, acc), do: acc
+
+  defp collect_text_nodes(list, content, acc) when is_list(list) do
+    Enum.reduce(list, acc, &collect_text_nodes(&1, content, &2))
+  end
+
+  defp collect_text_nodes(%{children: children} = node, content, acc) do
+    acc = maybe_collect_text_node(node, content, acc)
+    collect_text_nodes(children, content, acc)
+  end
+
+  defp collect_text_nodes(node, content, acc), do: maybe_collect_text_node(node, content, acc)
+
+  defp maybe_collect_text_node(%{content: content} = node, content, acc), do: [node | acc]
+  defp maybe_collect_text_node(%{text: content} = node, content, acc), do: [node | acc]
+  defp maybe_collect_text_node(_node, _content, acc), do: acc
+
   describe "modal key precedence" do
     test "handle_key/2 does not route keys to the active screen reducer while a modal is open" do
       modal = %Modal{type: :info, message: "pause"}
@@ -125,6 +186,53 @@ defmodule Foglet.TUI.App.ModalTest do
   end
 
   describe "modal overlay rendering" do
+    test "reply-context scroll keys update the active modal without routing the screen" do
+      state = state(modal: reply_context_modal())
+
+      {down_state, down_cmds} = AppModal.handle_key(%{key: :down}, state)
+      assert down_cmds == []
+      assert %Modal{message: %ReplyContext{scroll_top: 1}} = down_state.modal
+      assert %SampleScreen.State{keys: []} = Routing.screen_state_for(down_state, :source)
+
+      {paged_state, page_cmds} = AppModal.handle_key(%{key: :page_down}, down_state)
+      assert page_cmds == []
+      assert %Modal{message: %ReplyContext{scroll_top: 9}} = paged_state.modal
+      assert %SampleScreen.State{keys: []} = Routing.screen_state_for(paged_state, :source)
+
+      {up_state, up_cmds} = AppModal.handle_key(%{key: :up}, paged_state)
+      assert up_cmds == []
+      assert %Modal{message: %ReplyContext{scroll_top: 8}} = up_state.modal
+    end
+
+    test "reply-context scroll keys advance line range for wrapped one-paragraph bodies at 80x24" do
+      body =
+        Enum.map_join(1..14, " ", fn row ->
+          "wrapped reply-context sentence #{row} with enough words to consume another rendered row"
+        end)
+
+      state =
+        state(
+          modal: reply_context_modal(body: body, visible_body_rows: 10),
+          terminal_size: {80, 24}
+        )
+
+      before_scroll =
+        state
+        |> App.view()
+        |> AsciiRenderer.render({80, 24})
+
+      assert before_scroll =~ "Lines 1-10/"
+
+      {down_state, []} = AppModal.handle_key(%{key: :down}, state)
+
+      after_down =
+        down_state
+        |> App.view()
+        |> AsciiRenderer.render({80, 24})
+
+      assert after_down =~ "Lines 2-11/"
+    end
+
     test "form select-list body stays inside modal border at cramped width" do
       modal = %Modal{type: :form, message: timezone_form()}
 
@@ -145,6 +253,36 @@ defmodule Foglet.TUI.App.ModalTest do
 
       assert_modal_boundary_survives(baseline, "selected Etc/UTC")
       assert_modal_boundary_survives(baseline, "[Enter] Select   [Ctrl+S] Save   [Esc] Cancel")
+    end
+
+    test "reply-context body, scroll status, and keybar stay inside modal border" do
+      for size <- [{64, 22}, {80, 24}] do
+        rendered =
+          state(modal: reply_context_modal(), terminal_size: size)
+          |> App.view()
+          |> AsciiRenderer.render(size)
+
+        assert_modal_boundary_survives(rendered, "Long reply-context body")
+        assert_modal_boundary_survives(rendered, "bold evidence")
+        assert_modal_boundary_survives(rendered, "Lines 1-8/")
+        assert_modal_boundary_survives(rendered, "[↑↓] Scroll")
+        assert_modal_rows_bounded(rendered)
+      end
+    end
+
+    test "reply-context body uses the normal markdown-styled post-reader path" do
+      view =
+        state(modal: reply_context_modal(), terminal_size: {80, 24})
+        |> App.view()
+
+      bold_nodes = text_node_inspections(view, "bold evidence")
+      italic_nodes = text_node_inspections(view, "italic proof")
+
+      assert Enum.any?(bold_nodes, &(&1 =~ "bold")),
+             "expected reply-context bold markdown to keep bold styling, got: #{inspect(bold_nodes)}"
+
+      assert Enum.any?(italic_nodes, &(&1 =~ "italic")),
+             "expected reply-context italic markdown to keep italic styling, got: #{inspect(italic_nodes)}"
     end
   end
 

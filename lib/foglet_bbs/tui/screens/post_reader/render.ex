@@ -45,7 +45,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       },
       %{
         label: "Actions",
-        commands: action_commands(reply_state, context)
+        commands: action_commands(state, reply_state, context)
       },
       %{
         label: "System",
@@ -91,10 +91,20 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     end
   end
 
-  defp action_commands(reply_state, %Context{} = context) do
+  defp action_commands(%State{} = state, reply_state, %Context{} = context) do
+    reply_context_commands = reply_context_commands(state)
+
     if Guest.guest?(context),
-      do: [],
-      else: [profile_command(), upvote_command(), reply_command(reply_state)]
+      do: reply_context_commands,
+      else:
+        reply_context_commands ++
+          [profile_command(), upvote_command(), reply_command(reply_state)]
+  end
+
+  defp reply_context_commands(%State{} = state) do
+    if PostReader.reply_context_available?(PostReader.selected_action_post(state)),
+      do: [%{key: "C", label: "Context", priority: 6}],
+      else: []
   end
 
   defp profile_command, do: %{key: "V", label: "Profile", priority: 7}
