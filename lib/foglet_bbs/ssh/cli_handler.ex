@@ -51,9 +51,11 @@ defmodule Foglet.SSH.CLIHandler do
 
   require Logger
 
-  alias Foglet.Accounts.Auth
   alias Foglet.Sessions
   alias Foglet.Sessions.Preferences
+  alias Foglet.SSH.CLIHandler.Cleanup
+  alias Foglet.SSH.CLIHandler.ConnectionCounter
+  alias Foglet.SSH.CLIHandler.PubkeyIdentity
   alias Raxol.SSH.IOAdapter
 
   @max_connections 500
@@ -102,7 +104,7 @@ defmodule Foglet.SSH.CLIHandler do
     # leave first (so iTerm2 restores the primary buffer before teardown),
     # then stops session, optionally closes the channel, and decrements the
     # counter exactly once for accepted connections.
-    new_state = cleanup(state, close_channel: true)
+    new_state = Cleanup.cleanup(state, close_channel: true)
     {:stop, new_state.channel_id || 0, new_state}
   end
 
@@ -158,7 +160,7 @@ defmodule Foglet.SSH.CLIHandler do
 
     # Take over the terminal immediately on PTY allocation, before Raxol
     # initialization or the first render can write to the primary buffer.
-    send_alt_screen_enter(state)
+    Cleanup.send_alt_screen_enter(state)
 
     {:ok, lifecycle_pid} =
       start_lifecycle(
@@ -221,7 +223,7 @@ defmodule Foglet.SSH.CLIHandler do
     # alt-screen LEAVE escape here so iTerm2 restores the primary buffer
     # before `{:closed}` arrives and the channel tears down. Without this,
     # the TUI's final frame lingers in the user's scrollback post-disconnect.
-    send_alt_screen_leave(state)
+    Cleanup.send_alt_screen_leave(state)
     {:ok, state}
   end
 
@@ -230,7 +232,7 @@ defmodule Foglet.SSH.CLIHandler do
     # Belt-and-suspenders: if the client dropped without sending EOF
     # (e.g. window closed abruptly), the cleanup helper sends LEAVE anyway.
     # The channel may already be fully closed, in which case the send no-ops.
-    new_state = cleanup(state, close_channel: false)
+    new_state = Cleanup.cleanup(state, close_channel: false)
     {:stop, new_state.channel_id || 0, new_state}
   end
 
@@ -257,7 +259,7 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   defp terminate_cleanup(state) do
-    _ = cleanup(state, close_channel: false)
+    _ = Cleanup.cleanup(state, close_channel: false)
     :ok
   end
 
@@ -270,7 +272,7 @@ defmodule Foglet.SSH.CLIHandler do
   # focused unit tests can drive the over-limit and rate-limit branches with a
   # specified peer rather than depending on a real SSH connection_info lookup.
   defp do_channel_up(%__MODULE__{} = state, channel_id, connection_ref, peer) do
-    case check_connection_limit() do
+    case ConnectionCounter.check_in(@max_connections) do
       :over_limit ->
         _ =
           safe_ssh_send(
@@ -302,11 +304,11 @@ defmodule Foglet.SSH.CLIHandler do
         if Foglet.SSH.RateLimiter.allow?(peer) do
           # check_connection_limit/0 already incremented the counter; the
           # accepted path now owns one decrement, tracked via counter_counted?.
-          pubkey_resolution = resolve_pubkey_identity(peer)
+          pubkey_resolution = PubkeyIdentity.resolve(peer)
           pubkey_user = Map.get(pubkey_resolution, :user)
           pubkey_gate = Map.get(pubkey_resolution, :gate)
           offered_ssh_public_key = Map.get(pubkey_resolution, :offered_ssh_public_key)
-          session_pid = start_session(pubkey_resolution)
+          session_pid = PubkeyIdentity.start_session(pubkey_resolution)
 
           # Successful BBS connect boundary: count only after connection-limit
           # and rate-limit gates pass and the guest/member session exists. This
@@ -340,7 +342,7 @@ defmodule Foglet.SSH.CLIHandler do
           # undo it so rate-limited connections don't drift the count upward.
           # After this immediate compensation the counter is balanced, so the
           # rejected state owes no further decrement.
-          _ = decrement_connection_count()
+          _ = ConnectionCounter.decrement()
 
           _ =
             safe_ssh_send(
@@ -394,33 +396,6 @@ defmodule Foglet.SSH.CLIHandler do
     finish_lifecycle_start(state, conn, ch, want_reply, lifecycle_pid, width, height)
   end
 
-  # Clear the primary screen + scrollback, enter alt-screen, then clear the alt
-  # buffer. `CSI 3 J` is what prevents scroll-up from revealing the caller's
-  # pre-SSH shell history while the TUI is active.
-  defp send_alt_screen_enter(%{connection_ref: ref, channel_id: ch})
-       when not is_nil(ref) and not is_nil(ch) do
-    _ = :ssh_connection.send(ref, ch, "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J")
-    :ok
-  rescue
-    _ -> :ok
-  end
-
-  defp send_alt_screen_enter(_state), do: :ok
-
-  # Emit the alt-screen LEAVE escape (DECRST 1049) directly to the SSH channel
-  # so the client's terminal restores the primary screen buffer on disconnect.
-  # Safe to call when the channel is already closed — `:ssh_connection.send/3`
-  # just returns an error we ignore.
-  defp send_alt_screen_leave(%{connection_ref: ref, channel_id: ch})
-       when not is_nil(ref) and not is_nil(ch) do
-    _ = :ssh_connection.send(ref, ch, "\e[?1049l")
-    :ok
-  rescue
-    _ -> :ok
-  end
-
-  defp send_alt_screen_leave(_state), do: :ok
-
   # --- Private helpers ---
 
   # Wrap IOAdapter.make_writer so bare LF rendered by Raxol.Terminal.Renderer
@@ -462,68 +437,6 @@ defmodule Foglet.SSH.CLIHandler do
     do: {ip, port}
 
   defp peer_from_connection_info(_info), do: :unknown
-
-  defp resolve_pubkey_identity(peer) do
-    case Foglet.SSH.PubkeyStash.pop_offer(peer) do
-      {:ok, %{openssh_text: openssh_text}} when is_binary(openssh_text) ->
-        case Auth.lookup_by_public_key(openssh_text) do
-          {:ok, %{user: user}} ->
-            resolve_matched_pubkey_identity(user, openssh_text)
-
-          {:error, :not_found} ->
-            %{user: nil, offered_ssh_public_key: openssh_text}
-        end
-
-      :miss ->
-        %{user: nil, offered_ssh_public_key: nil}
-    end
-  end
-
-  defp resolve_matched_pubkey_identity(user, openssh_text) do
-    case Auth.authorize_session(user) do
-      {:ok, :authorized, _authorized_user} ->
-        case Auth.authenticate_by_public_key(openssh_text) do
-          {:ok, user} ->
-            %{kind: :authorized, user: user, gate: nil, offered_ssh_public_key: nil}
-
-          {:error, :not_found} ->
-            %{kind: :guest, user: nil, gate: nil, offered_ssh_public_key: nil}
-        end
-
-      {:ok, :verify, user} ->
-        %{kind: :gated, user: user, gate: :verify, offered_ssh_public_key: nil}
-
-      {:error, gate} ->
-        %{kind: :gated, user: user, gate: gate, offered_ssh_public_key: nil}
-    end
-  end
-
-  defp start_session(%{kind: :authorized, user: user}), do: start_authenticated_session(user)
-
-  defp start_session(_pubkey_resolution) do
-    # Guest session — no user_id yet; will be promoted on TUI login.
-    case Sessions.Supervisor.start_guest_session() do
-      {:ok, pid} -> pid
-      _ -> nil
-    end
-  end
-
-  defp start_authenticated_session(user) do
-    preferences = Preferences.from_user(user)
-
-    case Sessions.Supervisor.start_session(
-           user_id: user.id,
-           handle: user.handle,
-           role: user.role,
-           timezone: preferences.timezone,
-           time_format: preferences.time_format,
-           theme_id: preferences.theme_id,
-           theme: preferences.theme
-         ) do
-      {:ok, pid} -> pid
-      _ -> nil
-    end
-  end
 
   # Build the context map that reaches Foglet.TUI.App.init/1.
   # The Lifecycle passes `%{width:, height:, options: [all_lifecycle_opts]}` to
@@ -623,7 +536,7 @@ defmodule Foglet.SSH.CLIHandler do
           reason: sanitize_reason(reason)
         )
 
-        new_state = cleanup(failed_state, close_channel: true)
+        new_state = Cleanup.cleanup(failed_state, close_channel: true)
         {:stop, ch || 0, new_state}
     end
   end
@@ -664,41 +577,6 @@ defmodule Foglet.SSH.CLIHandler do
     :exit, reason -> {:error, {:lifecycle_unreachable, reason}}
   end
 
-  defp stop_lifecycle(nil), do: :ok
-
-  defp stop_lifecycle(pid) do
-    if Process.alive?(pid), do: Raxol.Core.Runtime.Lifecycle.stop(pid)
-  rescue
-    _ -> :ok
-  end
-
-  defp stop_door_runner(nil), do: :ok
-
-  defp stop_door_runner(pid) when is_pid(pid) do
-    if Process.alive?(pid), do: Foglet.Doors.Runner.disconnect(pid)
-  rescue
-    _ -> :ok
-  end
-
-  defp stop_session(nil), do: :ok
-
-  defp stop_session(pid) do
-    if Process.alive?(pid) do
-      DynamicSupervisor.terminate_child(Sessions.Supervisor, pid)
-    end
-  rescue
-    _ -> :ok
-  end
-
-  defp maybe_close_channel(%{connection_ref: ref, channel_id: ch})
-       when not is_nil(ref) and not is_nil(ch) do
-    :ssh_connection.close(ref, ch)
-  rescue
-    _ -> :ok
-  end
-
-  defp maybe_close_channel(_state), do: :ok
-
   # Wrappers that tolerate a nil or test-only connection ref/channel without
   # raising. The rejection paths drive these directly with the values stashed
   # on state during channel-up.
@@ -722,48 +600,6 @@ defmodule Foglet.SSH.CLIHandler do
     _ -> :ok
   catch
     _, _ -> :ok
-  end
-
-  # Single cleanup helper invoked by every termination-sensitive callback.
-  # Order is intentional:
-  #   1. Send the alt-screen LEAVE escape while the channel is still open so
-  #      the client's primary screen buffer is restored before teardown.
-  #   2. Stop the Raxol Lifecycle (idempotent, tolerates already-stopped pid).
-  #   3. Stop the Sessions.Session (idempotent, tolerates already-stopped pid).
-  #   4. Optionally close the SSH channel — only the lifecycle-EXIT path needs
-  #      to actively close; `:closed` and `terminate` are already triggered by
-  #      a closed channel.
-  #   5. Decrement the global connection counter exactly once, gated by
-  #      counter_counted?, so EOF→closed→terminate ordering does not
-  #      double-decrement.
-  # The helper is idempotent: if cleanup_done? is true it returns the state
-  # unchanged. The returned state has cleanup_done?: true and
-  # counter_counted?: false so subsequent invocations no-op.
-  defp cleanup(%__MODULE__{cleanup_done?: true} = state, _opts), do: state
-
-  defp cleanup(%__MODULE__{} = state, opts) do
-    Foglet.Sessions.DoorPresence.untrack_runner(state.door_runner_pid)
-    stop_door_runner(state.door_runner_pid)
-    send_alt_screen_leave(state)
-    stop_lifecycle(state.lifecycle_pid)
-    _ = stop_session(state.session_pid)
-
-    if Keyword.get(opts, :close_channel, false) do
-      maybe_close_channel(state)
-    end
-
-    _ =
-      if state.counter_counted? do
-        _ = decrement_connection_count()
-      end
-
-    %__MODULE__{
-      state
-      | cleanup_done?: true,
-        counter_counted?: false,
-        door_runner_pid: nil,
-        active_door_manifest: nil
-    }
   end
 
   defp launch_door_runner(%__MODULE__{door_runner_pid: pid} = state, _manifest, _session, _size)
@@ -830,10 +666,6 @@ defmodule Foglet.SSH.CLIHandler do
   defp exit_status_suffix(nil), do: ""
   defp exit_status_suffix(status), do: ", status #{status}"
 
-  # --- Connection limit via ETS atomic counter ---
-
-  @counter_table __MODULE__.Counter
-
   @doc """
   Initializes the ETS counter table for tracking active SSH connections.
 
@@ -842,46 +674,5 @@ defmodule Foglet.SSH.CLIHandler do
   idempotent: if a live table already exists, preserve its current count rather
   than resetting active-connection accounting during an SSH supervisor restart.
   """
-  def init_counter do
-    case :ets.info(@counter_table) do
-      :undefined ->
-        create_counter_table()
-
-      _info ->
-        ensure_counter_row()
-    end
-
-    :ok
-  end
-
-  defp create_counter_table do
-    _ = :ets.new(@counter_table, [:named_table, :public, :set])
-    ensure_counter_row()
-  rescue
-    ArgumentError ->
-      # Another init path created the named table between :ets.info/1 and
-      # :ets.new/2. Treat it like an existing restart table and preserve count.
-      ensure_counter_row()
-  end
-
-  defp ensure_counter_row do
-    _ = :ets.insert_new(@counter_table, {:count, 0})
-    :ok
-  end
-
-  defp check_connection_limit do
-    # Atomically increment; if the result exceeds the limit, decrement and reject.
-    new_count = :ets.update_counter(@counter_table, :count, {2, 1})
-
-    if new_count > @max_connections do
-      _ = :ets.update_counter(@counter_table, :count, {2, -1, 0, 0})
-      :over_limit
-    else
-      :ok
-    end
-  end
-
-  defp decrement_connection_count do
-    :ets.update_counter(@counter_table, :count, {2, -1, 0, 0})
-  end
+  def init_counter, do: ConnectionCounter.init()
 end
