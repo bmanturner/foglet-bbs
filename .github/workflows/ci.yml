@@ -52,6 +52,13 @@ jobs:
           path: _build
           key: ${{ runner.os }}-build-${{ hashFiles('mix.lock') }}
 
+      - name: Cache dialyzer PLTs
+        if: github.event_name != 'pull_request'
+        uses: actions/cache@v4
+        with:
+          path: _build/dev/*.plt*
+          key: ${{ runner.os }}-plt-${{ hashFiles('mix.lock') }}
+
       - run: mix deps.get
       - run: mix format --check-formatted
       - run: mix compile --warnings-as-errors
@@ -60,38 +67,14 @@ jobs:
         env:
           DATABASE_URL: ecto://postgres:postgres@localhost/foglet_bbs_test
 
-  expensive_checks:
-    name: Expensive checks
-    if: github.event_name != 'pull_request'
-    runs-on: ubuntu-latest
+      - name: Hex audit
+        if: github.event_name != 'pull_request'
+        run: mix hex.audit
 
-    steps:
-      - uses: actions/checkout@v4
+      - name: Sobelow
+        if: github.event_name != 'pull_request'
+        run: mix sobelow --exit Low
 
-      - uses: erlef/setup-beam@v1
-        with:
-          version-file: .tool-versions
-          version-type: strict
-
-      - name: Cache deps
-        uses: actions/cache@v4
-        with:
-          path: deps
-          key: ${{ runner.os }}-deps-${{ hashFiles('mix.lock') }}
-
-      - name: Cache build
-        uses: actions/cache@v4
-        with:
-          path: _build
-          key: ${{ runner.os }}-build-${{ hashFiles('mix.lock') }}
-
-      - name: Cache dialyzer PLTs
-        uses: actions/cache@v4
-        with:
-          path: _build/dev/*.plt*
-          key: ${{ runner.os }}-plt-${{ hashFiles('mix.lock') }}
-
-      - run: mix deps.get
-      - run: mix hex.audit
-      - run: mix sobelow --exit Low
-      - run: mix dialyzer
+      - name: Dialyzer
+        if: github.event_name != 'pull_request'
+        run: mix dialyzer
