@@ -74,7 +74,7 @@ FOGLET_SSH_PORT=2200 mix phx.server
 In another terminal, connect with a normal SSH client:
 
 ```bash
-ssh USERNAME@localhost -p 2222
+ssh localhost -p 2222
 ```
 
 Use the handle you want to register or sign in with. Foglet's TUI owns the

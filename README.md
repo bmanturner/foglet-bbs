@@ -16,8 +16,6 @@ Source: <https://github.com/bmanturner/foglet-bbs>
 
 Foglet is an SSH-first BBS built with Elixir/OTP, Phoenix, Postgres, and a modern terminal UI. It is meant to feel old-network without pretending to be old software: small communities, named boards, readable threads, a sysop in charge, and enough modern plumbing to keep the place reliable.
 
-Foglet is not trying to be Discord, a social network, a web forum, or a hosted SaaS product. You run it yourself. Your users connect over SSH. The BBS lives in the terminal.
-
 ## What exists today
 
 Current Foglet builds include:
@@ -48,7 +46,7 @@ ssh bbs.foglet.io
 For local development, start the app and connect to the development SSH port:
 
 ```bash
-ssh USERNAME@localhost -p 2222
+ssh localhost -p 2222
 ```
 
 Foglet also supports SSH public-key login after an account has a public key on file. Your ssh-agent can knock on a bulletin board.
@@ -68,7 +66,7 @@ mix phx.server
 Then connect:
 
 ```bash
-ssh USERNAME@localhost -p 2222
+ssh localhost -p 2222
 ```
 
 The repo's `.tool-versions` file is the source of truth for Elixir and Erlang/OTP versions. `mix setup` installs dependencies, prepares the database, runs seeds, and configures the project's git hooks path.
@@ -110,22 +108,6 @@ Foglet's detailed operator guidance lives in the docs linked above. Keep secrets
 
 Useful task families live under `lib/mix/tasks/` and are documented in the Mix tasks page. Examples include user creation and status changes, invite creation and inspection, verification-code inspection, reset-token inspection and expiry, board subscription management, board-chat inspection, TUI rendering, QA mode, and `foglet.doctor`.
 
-## What is intentionally not present yet
-
-Do not operate Foglet as though these exist today:
-
-- No end-user web forum UI.
-- No browser admin console.
-- No hosted service or managed Foglet cloud.
-- No federation.
-- No mobile app.
-- No direct messages or private mail system.
-- No @mention notification system.
-- No email digests.
-- No webhook notifications.
-- No full case-management moderation suite.
-- No delivery retry queues or outbound delivery logs.
-
 ## Repository layout
 
 - `lib/foglet_bbs/` — `Foglet.*` domain code and `FogletBbs.*` Phoenix infrastructure. The boundary is by module name, not by path.
@@ -153,8 +135,6 @@ mix test
 ```
 
 For deeper context on namespaces, persistence invariants, authorization scopes, SSH/TUI ownership, and workflow conventions, read [`priv/docs/advanced/development.md`](priv/docs/advanced/development.md) and `docs/DEVELOPMENT.md` before non-trivial changes.
-
-For user-facing words, read `docs/VOICE_AND_TONE.md`. It defines Foglet's vocabulary, denial style, Guest Mode copy source, and contributor copy checklist.
 
 ## License
 
