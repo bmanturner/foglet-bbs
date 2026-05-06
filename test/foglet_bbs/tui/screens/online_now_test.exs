@@ -40,13 +40,25 @@ defmodule Foglet.TUI.Screens.OnlineNowTest do
     end
   end
 
+  defmodule FakePublicProfile do
+    def load("u-mod", _opts \\ []) do
+      {:ok,
+       %Foglet.Accounts.PublicProfile{
+         user_id: "u-mod",
+         handle: "moddy",
+         role: :mod,
+         karma: 7
+       }}
+    end
+  end
+
   defp context(opts \\ []) do
     Context.new(
       current_user:
         Keyword.get(opts, :current_user, %{id: "viewer", handle: "viewer", role: :user}),
       route: :online_now,
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
-      domain: %{online_now: FakeOnlineNow}
+      domain: %{online_now: FakeOnlineNow, public_profile: FakePublicProfile}
     )
   end
 
@@ -154,7 +166,9 @@ defmodule Foglet.TUI.Screens.OnlineNowTest do
              }
            ] = effects
 
-    assert %Foglet.Accounts.PublicProfile{user_id: "u-mod", handle: "moddy", role: :mod} = profile
+    assert %Foglet.Accounts.PublicProfile{user_id: "u-mod", handle: "moddy", role: :mod, karma: 7} =
+             profile
+
     refute Map.has_key?(profile, :email)
   end
 

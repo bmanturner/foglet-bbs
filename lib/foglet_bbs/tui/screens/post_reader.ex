@@ -1187,6 +1187,17 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp selected_action_post_index(%State{selected_post_index: idx}), do: idx
 
+  defp load_public_profile(user, %Context{} = context) when is_map(user) do
+    profile_mod = resolve_domain_module(context, :public_profile, PublicProfile)
+
+    with user_id when is_binary(user_id) <- Map.get(user, :id) || Map.get(user, "id"),
+         {:ok, %PublicProfile{} = profile} <- profile_mod.load(user_id) do
+      profile
+    else
+      _ -> PublicProfile.from_user(user)
+    end
+  end
+
   defp toggle_selected_post_upvote(%State{} = state, %Context{} = context) do
     with %{id: user_id} when is_binary(user_id) <- context.current_user,
          %{id: post_id} when is_binary(post_id) <- selected_action_post(state) do
@@ -1207,7 +1218,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     with false <- Guest.guest?(context),
          %{user: user} when is_map(user) <- selected_action_post(state),
          user_id when is_binary(user_id) <- Map.get(user, :id) || Map.get(user, "id") do
-      profile = PublicProfile.from_user(user)
+      profile = load_public_profile(user, context)
       modal = %Foglet.TUI.Modal{type: :info, title: "Public Profile", message: profile}
       {state, [Effect.open_modal(modal)]}
     else
