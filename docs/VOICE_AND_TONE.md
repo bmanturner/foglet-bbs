@@ -83,6 +83,40 @@ Length notes:
 - Modal body copy should be one or two short sentences.
 - Prefer "member account" over "authenticated user" in user-facing UI.
 
+## Handle color copy source
+
+Account PREFS lets members choose the color used for their handle in ordinary
+content and presence surfaces. The copy should make the accepted value obvious
+without turning validation into a regex lesson.
+
+Proposed terminal copy:
+
+| Surface | Copy |
+|---|---|
+| PREFS field label | `Handle color` |
+| PREFS field description | `Use #RRGGBB, like #ff8800. Blank uses the BBS default.` |
+| Edit modal title | `Edit preferences: Handle color` |
+| Edit field help | `Type a six-digit hex color. Examples: #ff8800, #66ccff.` |
+| Blank/default hint | `Blank uses the normal handle color.` |
+| Invalid-value feedback | `Use #RRGGBB: # plus six hex digits, 0-9 or A-F.` |
+| Saved-state value when blank | `BBS default` |
+
+Validation notes:
+
+- Accept `#RRGGBB` case-insensitively unless implementation tests explicitly
+  add another format.
+- Reject free-form color names such as `red`; the UI should not suggest them.
+- Reject short, long, non-hex, whitespace, and control-character values with the
+  same plain feedback: `Use #RRGGBB: # plus six hex digits, 0-9 or A-F.`
+- Do not expose regex syntax or schema names in the error.
+- If the implementation persists `#FFFFFF` as the new-user default, the UI may
+  show `#FFFFFF` as a saved value. Only use `BBS default` for an intentional
+  blank/default state.
+
+UX checkpoint: if a user has to memorize color values to succeed, copy is doing
+too much work. Prefer a preview swatch and, if the flow grows later, a small
+terminal-native chooser over longer instructions.
+
 ## Contributor copy checklist
 
 Before merging a user-facing flow, check:
