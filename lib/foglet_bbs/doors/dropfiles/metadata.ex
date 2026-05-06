@@ -14,6 +14,8 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
     :terminal_cols,
     :terminal_rows,
     :security_level,
+    :time_remaining_minutes,
+    :node_number,
     :sysop_first_name,
     :sysop_last_name
   ]
@@ -24,6 +26,8 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
           required(:user) => User.t() | map(),
           required(:session) => Session.t() | map(),
           optional(:sysop_name) => String.t(),
+          optional(:time_remaining_minutes) => pos_integer() | String.t(),
+          optional(:node_number) => pos_integer() | String.t(),
           optional(atom()) => term()
         }
 
@@ -43,6 +47,8 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
       terminal_cols: cols,
       terminal_rows: rows,
       security_level: security_level(role),
+      time_remaining_minutes: time_remaining_minutes(attrs),
+      node_number: node_number(attrs, session),
       sysop_first_name: sysop_first_name,
       sysop_last_name: sysop_last_name
     }
@@ -88,8 +94,34 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
   defp session_identifier(_session), do: ""
 
   defp security_level("sysop"), do: "100"
-  defp security_level("mod"), do: "80"
-  defp security_level(_role), do: "10"
+  defp security_level("mod"), do: "90"
+  defp security_level(_role), do: "50"
+
+  defp time_remaining_minutes(attrs) do
+    attrs
+    |> Map.get(:time_remaining_minutes, 1440)
+    |> positive_integer_string(1440)
+  end
+
+  defp node_number(attrs, session) do
+    value =
+      Map.get(attrs, :node_number) || Map.get(session, :node_number) || Map.get(session, :node) ||
+        1
+
+    positive_integer_string(value, 1)
+  end
+
+  defp positive_integer_string(value, _default) when is_integer(value) and value > 0,
+    do: Integer.to_string(value)
+
+  defp positive_integer_string(value, default) when is_binary(value) do
+    case Integer.parse(value) do
+      {int, ""} when int > 0 -> Integer.to_string(int)
+      _invalid -> Integer.to_string(default)
+    end
+  end
+
+  defp positive_integer_string(_value, default), do: Integer.to_string(default)
 
   defp sysop_name_parts(name) when is_binary(name) do
     name

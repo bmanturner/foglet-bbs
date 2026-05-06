@@ -683,7 +683,8 @@ defmodule Foglet.Doors.Runner do
   defp prepare_classic_dropfiles(state) do
     attrs = %{
       user: state.session,
-      session: Map.put(state.session, :terminal_size, state.terminal_size)
+      session: Map.put(state.session, :terminal_size, state.terminal_size),
+      time_remaining_minutes: time_remaining_minutes(state.manifest.timeout_ms)
     }
 
     case make_dropfile_working_dir(state) do
@@ -728,6 +729,14 @@ defmodule Foglet.Doors.Runner do
   end
 
   defp make_dropfile_working_dir(_state, 0), do: {:error, {:dropfile_working_dir, :eexist}}
+
+  defp time_remaining_minutes(timeout_ms) when is_integer(timeout_ms) and timeout_ms > 0 do
+    timeout_ms
+    |> Kernel.+(59_999)
+    |> div(60_000)
+  end
+
+  defp time_remaining_minutes(_timeout_ms), do: 1440
 
   defp open_external_port(state) do
     PTYAdapter.open(state.manifest, state.terminal_size, external_env(state))

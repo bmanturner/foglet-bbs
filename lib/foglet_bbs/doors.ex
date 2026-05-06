@@ -313,10 +313,7 @@ defmodule Foglet.Doors do
 
   Compatibility wrapper around `Foglet.Doors.Dropfiles.render/2`.
   """
-  @spec classic_dropfile(:chain_txt | :door_sys | :door32_sys | :dorinfo_def, %{
-          required(:user) => User.t() | map(),
-          required(:session) => Session.t() | map()
-        }) ::
+  @spec classic_dropfile(:chain_txt | :door_sys | :door32_sys | :dorinfo_def, Dropfiles.attrs()) ::
           {:ok, String.t()} | {:error, :unsupported_format}
   def classic_dropfile(format, attrs), do: Dropfiles.render(format, attrs)
 
@@ -325,11 +322,7 @@ defmodule Foglet.Doors do
   def dropfile_filename(format), do: Dropfiles.filename(format)
 
   @doc "Writes requested classic dropfiles to a working directory using fixed safe filenames."
-  @spec write_dropfiles(
-          [atom()],
-          %{required(:user) => User.t() | map(), required(:session) => Session.t() | map()},
-          String.t()
-        ) ::
+  @spec write_dropfiles([atom()], Dropfiles.attrs(), String.t()) ::
           {:ok, %{atom() => String.t()}} | {:error, term()}
   def write_dropfiles(formats, attrs, working_dir),
     do: Dropfiles.write(formats, attrs, working_dir)

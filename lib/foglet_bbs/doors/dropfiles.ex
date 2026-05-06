@@ -31,7 +31,9 @@ defmodule Foglet.Doors.Dropfiles do
   @type attrs :: %{
           required(:user) => User.t() | map(),
           required(:session) => Session.t() | map(),
-          optional(:sysop_name) => String.t()
+          optional(:sysop_name) => String.t(),
+          optional(:time_remaining_minutes) => pos_integer() | String.t(),
+          optional(:node_number) => pos_integer() | String.t()
         }
 
   @doc "Returns all dropfile formats Foglet can render."

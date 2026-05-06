@@ -14,8 +14,8 @@ defmodule Foglet.Doors.Dropfiles.Door32Sys do
       metadata.display_name,
       metadata.handle,
       metadata.security_level,
-      "1440",
-      "1",
+      metadata.time_remaining_minutes,
+      metadata.node_number,
       metadata.session_id
     ]
   end
