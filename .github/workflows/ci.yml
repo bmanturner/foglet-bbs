@@ -52,14 +52,14 @@ jobs:
         uses: actions/cache@v4
         with:
           path: _build
-          key: ${{ runner.os }}-build-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ runner.name }}-build-${{ hashFiles('mix.lock') }}
 
       - name: Cache dialyzer PLTs
         if: github.event_name != 'pull_request'
         uses: actions/cache@v4
         with:
           path: _build/dev/*.plt*
-          key: ${{ runner.os }}-plt-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ runner.name }}-plt-${{ hashFiles('mix.lock') }}
 
       - run: mix deps.get
       - run: mix format --check-formatted
