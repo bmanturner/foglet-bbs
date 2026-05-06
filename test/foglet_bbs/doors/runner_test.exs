@@ -1152,6 +1152,48 @@ defmodule Foglet.Doors.RunnerTest do
       end
     end
 
+    test "helper keeps routing input when the direct child exits but a PTY survivor remains" do
+      id = "external-pty-survivor"
+
+      previous = Application.get_env(:foglet_bbs, :door_pty_helper_path)
+      helper = premature_exit_helper()
+      Application.put_env(:foglet_bbs, :door_pty_helper_path, helper)
+
+      on_exit(fn ->
+        File.rm(helper)
+        restore_helper_path(previous)
+      end)
+
+      {:ok, manifest} =
+        manifest(%{
+          id: id,
+          display_name: id,
+          runtime: :external_pty,
+          command: "/bin/true",
+          working_dir: "/tmp",
+          args: [],
+          timeout_ms: 5_000,
+          pty?: true
+        })
+
+      {:ok, runner_pid} =
+        DoorSupervisor.start_runner(
+          manifest: manifest,
+          output: output_to(self()),
+          owner: self()
+        )
+
+      assert_receive {:door_started, ^runner_pid, ^id}
+      assert_door_output_contains("survivor-ready")
+      refute_receive {:door_exited, ^runner_pid, ^id, :normal, 0}, 250
+
+      ref = Process.monitor(runner_pid)
+      Runner.input(runner_pid, "still-attached\r")
+      assert_door_output_contains("survivor-input:still-attached")
+      assert_receive {:door_exited, ^runner_pid, ^id, :normal, 0}, @event_timeout
+      assert_receive {:DOWN, ^ref, :process, ^runner_pid, :normal}, @event_timeout
+    end
+
     test "helper exit cleanup is bounded when a grandchild keeps writing to the PTY" do
       id = "external-tree-exit-writer"
       pidfile = Path.join(System.tmp_dir!(), "#{id}-#{System.unique_integer([:positive])}.pid")
@@ -1476,6 +1518,52 @@ defmodule Foglet.Doors.RunnerTest do
     os.setuid = lambda uid: None
 
     runpy.run_path(#{inspect(helper_path)}, run_name="__main__")
+    """)
+
+    File.chmod!(path, 0o700)
+    path
+  end
+
+  defp premature_exit_helper do
+    path =
+      Path.join(
+        System.tmp_dir!(),
+        "foglet-pty-premature-exit-#{System.unique_integer([:positive])}.py"
+      )
+
+    File.write!(path, """
+    #!/usr/bin/env python3
+    import json
+    import struct
+    import sys
+
+    def frame(kind, payload=b""):
+        body = kind + payload
+        sys.stdout.buffer.write(struct.pack(">I", len(body)))
+        sys.stdout.buffer.write(body)
+        sys.stdout.buffer.flush()
+
+    frame(b"O", b"survivor-ready\\r\\n")
+    frame(b"X", json.dumps({"status": 0, "signal": None}).encode("utf-8"))
+
+    buf = b""
+    while True:
+        chunk = sys.stdin.buffer.read(4)
+        if not chunk:
+            break
+        while len(chunk) < 4:
+            more = sys.stdin.buffer.read(4 - len(chunk))
+            if not more:
+                raise SystemExit(0)
+            chunk += more
+        size = struct.unpack(">I", chunk)[0]
+        payload = sys.stdin.buffer.read(size)
+        if payload.startswith(b"D"):
+            text = payload[1:].decode("utf-8", "replace").strip()
+            frame(b"O", ("survivor-input:" + text + "\\r\\n").encode("utf-8"))
+            raise SystemExit(0)
+        if payload.startswith(b"T"):
+            raise SystemExit(0)
     """)
 
     File.chmod!(path, 0o700)

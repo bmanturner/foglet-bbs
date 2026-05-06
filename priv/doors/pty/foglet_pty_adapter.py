@@ -213,6 +213,10 @@ def drain_pty_output(
     return True
 
 
+def exit_code_from_payload(payload: dict) -> int:
+    return payload["status"] if payload["status"] is not None else 128 + int(payload.get("signal") or 0)
+
+
 def write_sandbox_error(error_fd: int | None, reason: str) -> None:
     if error_fd is None:
         return
@@ -316,6 +320,8 @@ def main() -> int:
     control_buffer = b""
     running = True
     stdin_eof_pending = False
+    direct_child_reaped = False
+    pending_exit_payload = None
 
     while True:
         if error_read_fd is not None:
@@ -338,13 +344,18 @@ def main() -> int:
                 if stdin_eof_pending:
                     terminate_child(child_pid)
 
-        exit_payload = reap_child(child_pid)
-        if exit_payload is not None:
+        if not direct_child_reaped:
+            exit_payload = reap_child(child_pid)
+            if exit_payload is not None:
+                direct_child_reaped = True
+                pending_exit_payload = exit_payload
+        if pending_exit_payload is not None:
+            # A Door32/stdio launcher can exit while the real interactive door
+            # keeps the inherited PTY fds open (for example after forking or
+            # changing process groups). Do not report X(exit) to Foglet until
+            # the PTY itself closes, otherwise CLIHandler will route subsequent
+            # SSH bytes back to the TUI while the door is still attached.
             drain_pty_output(master_fd)
-            terminate_child(child_pid)
-            drain_pty_output(master_fd)
-            write_json(b"X", exit_payload)
-            return exit_payload["status"] if exit_payload["status"] is not None else 128 + int(exit_payload.get("signal") or 0)
 
         read_fds = [master_fd]
         if error_read_fd is not None:
@@ -377,7 +388,13 @@ def main() -> int:
                 data = os.read(master_fd, 8192)
                 if data:
                     write_frame(b"O", data)
+                elif pending_exit_payload is not None:
+                    write_json(b"X", pending_exit_payload)
+                    return exit_code_from_payload(pending_exit_payload)
             except OSError as exc:
+                if exc.errno in (errno.EIO, errno.EBADF) and pending_exit_payload is not None:
+                    write_json(b"X", pending_exit_payload)
+                    return exit_code_from_payload(pending_exit_payload)
                 if exc.errno not in (errno.EIO, errno.EBADF):
                     write_json(b"E", {"reason": "pty_read_failed", "detail": repr(exc)})
                 terminate_child(child_pid)
@@ -407,6 +424,10 @@ def main() -> int:
                 frame = control_buffer[4:4 + frame_len]
                 control_buffer = control_buffer[4 + frame_len:]
                 running = handle_control(frame, master_fd, child_pid) and running
+                if not running and pending_exit_payload is not None:
+                    drain_pty_output(master_fd)
+                    write_json(b"X", pending_exit_payload)
+                    return exit_code_from_payload(pending_exit_payload)
 
 
 if __name__ == "__main__":
