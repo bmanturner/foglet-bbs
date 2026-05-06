@@ -16,8 +16,10 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
     :security_level,
     :time_remaining_minutes,
     :node_number,
+    :user_record_number,
     :sysop_first_name,
-    :sysop_last_name
+    :sysop_last_name,
+    :sysop_name
   ]
 
   @type t :: %__MODULE__{}
@@ -49,8 +51,10 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
       security_level: security_level(role),
       time_remaining_minutes: time_remaining_minutes(attrs),
       node_number: node_number(attrs, session),
+      user_record_number: user_record_number(user, session),
       sysop_first_name: sysop_first_name,
-      sysop_last_name: sysop_last_name
+      sysop_last_name: sysop_last_name,
+      sysop_name: Enum.join([sysop_first_name, sysop_last_name], " ") |> String.trim()
     }
   end
 
@@ -89,6 +93,19 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
   defp user_identifier(_user, %Session{user_id: id}) when is_binary(id), do: id
   defp user_identifier(_user, %{user_id: id}) when is_binary(id), do: id
   defp user_identifier(_user, _session), do: "guest"
+
+  defp user_record_number(user, session) do
+    user
+    |> user_identifier(session)
+    |> numeric_identifier()
+  end
+
+  defp numeric_identifier(value) when is_binary(value) do
+    case Regex.run(~r/\d+$/, value) do
+      [digits] -> positive_integer_string(digits, 0)
+      nil -> "0"
+    end
+  end
 
   defp session_identifier(%{session_id: id}) when is_binary(id), do: id
   defp session_identifier(_session), do: ""

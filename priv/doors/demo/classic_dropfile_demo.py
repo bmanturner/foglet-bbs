@@ -19,7 +19,7 @@ def first_existing_dropfile():
 
 def main():
     name, lines = first_existing_dropfile()
-    handle = lines[4] if name == "DOOR.SYS" and len(lines) > 4 else None
+    handle = lines[36] if name == "DOOR.SYS" and len(lines) > 36 else None
     handle = handle or (lines[6] if name == "DORINFO.DEF" and len(lines) > 6 else None)
     handle = handle or (lines[0] if lines else "guest")
 

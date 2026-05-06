@@ -293,7 +293,7 @@ defmodule Foglet.DoorsTest do
       assert_crlf_terminated(text)
     end
 
-    test "generates DOOR.SYS with safe Foglet metadata and conservative defaults" do
+    test "generates DOOR.SYS with exact parser-critical classic positions" do
       user = %User{
         id: "user-1",
         handle: "alice",
@@ -303,20 +303,29 @@ defmodule Foglet.DoorsTest do
       }
 
       assert {:ok, text} =
-               Doors.classic_dropfile(:door_sys, %{user: user, session: session_map()})
+               Doors.classic_dropfile(:door_sys, %{
+                 user: user,
+                 session: session_map(),
+                 sysop_name: "Ada Lovelace",
+                 time_remaining_minutes: 42,
+                 node_number: 7
+               })
 
       lines = dropfile_lines(text)
 
       assert length(lines) == 40
       assert Enum.at(lines, 0) == "COM0:"
-      assert Enum.at(lines, 3) == "Foglet BBS"
-      assert Enum.at(lines, 4) == "alice"
-      assert Enum.at(lines, 5) == "Alice Liddell"
-      assert Enum.at(lines, 6) == "Wonderland"
-      assert Enum.at(lines, 8) == "100"
-      assert Enum.at(lines, 9) == "30"
-      assert Enum.at(lines, 19) == "user-1"
-      assert Enum.at(lines, 32) == "mod"
+      assert Enum.at(lines, 1) == "38400"
+      assert Enum.at(lines, 3) == "7"
+      assert Enum.at(lines, 9) == "Alice Liddell"
+      assert Enum.at(lines, 10) == "Wonderland"
+      assert Enum.at(lines, 15) == "90"
+      assert Enum.at(lines, 19) == "42"
+      assert Enum.at(lines, 20) == "GR"
+      assert Enum.at(lines, 21) == "30"
+      assert Enum.at(lines, 25) == "1"
+      assert Enum.at(lines, 35) == "Ada Lovelace"
+      assert Enum.at(lines, 36) == "alice"
       assert Enum.at(lines, 39) == "session-1"
       assert_crlf_terminated(text)
     end
@@ -351,10 +360,11 @@ defmodule Foglet.DoorsTest do
                })
 
       lines = dropfile_lines(text)
-      assert Enum.at(lines, 4) == "guest"
-      assert Enum.at(lines, 5) == "Guest"
-      assert Enum.at(lines, 8) == "80"
-      assert Enum.at(lines, 9) == "24"
+      assert Enum.at(lines, 9) == "Guest"
+      assert Enum.at(lines, 15) == "50"
+      assert Enum.at(lines, 21) == "24"
+      assert Enum.at(lines, 25) == "2"
+      assert Enum.at(lines, 36) == "guest"
       refute text =~ "DATABASE_URL"
       refute text =~ "SECRET"
     end

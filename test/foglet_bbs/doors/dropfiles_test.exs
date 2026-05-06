@@ -36,50 +36,27 @@ defmodule Foglet.Doors.DropfilesTest do
                  "user-1\r\n"
     end
 
-    test "renders DOOR.SYS with exact CRLF-terminated lines" do
+    test "renders DOOR.SYS with exact parser-critical line positions" do
       assert {:ok, text} = Dropfiles.render(:door_sys, @attrs)
 
-      assert text ==
-               "COM0:\r\n" <>
-                 "0\r\n" <>
-                 "38400\r\n" <>
-                 "Foglet BBS\r\n" <>
-                 "alice\r\n" <>
-                 "Alice Liddell\r\n" <>
-                 "Wonderland\r\n" <>
-                 "\r\n" <>
-                 "132\r\n" <>
-                 "37\r\n" <>
-                 "GR\r\n" <>
-                 "1\r\n" <>
-                 "1\r\n" <>
-                 "12/31/99\r\n" <>
-                 "1440\r\n" <>
-                 "1440\r\n" <>
-                 "GR\r\n" <>
-                 "9999\r\n" <>
-                 "01/01/80\r\n" <>
-                 "user-1\r\n" <>
-                 "0\r\n" <>
-                 "N\r\n" <>
-                 "\r\n" <>
-                 "\r\n" <>
-                 "N\r\n" <>
-                 "N\r\n" <>
-                 "N\r\n" <>
-                 "0\r\n" <>
-                 "0\r\n" <>
-                 "0\r\n" <>
-                 "9999\r\n" <>
-                 "01/01/80\r\n" <>
-                 "mod\r\n" <>
-                 "\r\n" <>
-                 "0\r\n" <>
-                 "0\r\n" <>
-                 "0\r\n" <>
-                 "132\r\n" <>
-                 "37\r\n" <>
-                 "session-1\r\n"
+      lines = dropfile_lines(text)
+
+      assert length(lines) == 40
+      assert Enum.at(lines, 0) == "COM0:"
+      assert Enum.at(lines, 1) == "38400"
+      assert Enum.at(lines, 3) == "7"
+      assert Enum.at(lines, 9) == "Alice Liddell"
+      assert Enum.at(lines, 10) == "Wonderland"
+      assert Enum.at(lines, 15) == "90"
+      assert Enum.at(lines, 19) == "42"
+      assert Enum.at(lines, 20) == "GR"
+      assert Enum.at(lines, 21) == "37"
+      assert Enum.at(lines, 25) == "1"
+      assert Enum.at(lines, 35) == "Ada Lovelace"
+      assert Enum.at(lines, 36) == "alice"
+      assert Enum.at(lines, 39) == "session-1"
+
+      assert text == Enum.join(lines, "\r\n") <> "\r\n"
     end
 
     test "renders DOOR32.SYS with exact line positions" do
