@@ -2978,7 +2978,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   end
 
   describe "load_posts/2 — read-on-entry seeding (LIST-01 D-05)" do
-    test "seeds pending_read_positions[thread_id] with post 0's id and message_number on load" do
+    test "seeds pending_read_positions[thread_id] through the visible screenful on load" do
       s =
         p2_state(%{
           current_thread: %{id: "t1", title: "test"},
@@ -2991,8 +2991,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       rp = s_after.screen_state.post_reader.pending_read_positions["t1"]
       assert rp, "Expected pending_read_positions[\"t1\"] to be seeded"
-      assert rp.last_read_post_id == "p1"
-      assert rp.last_read_message_number == 5
+      assert rp.last_read_post_id == "p2"
+      assert rp.last_read_message_number == 6
     end
 
     test "does NOT touch other threads' pending_read_positions entries" do
@@ -3027,7 +3027,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert s_after.screen_state.post_reader.pending_read_positions == %{}
     end
 
-    test "Q immediately after load produces a flush command with post 0's message_number (integration)" do
+    test "Q immediately after load produces a flush command with the visible screenful tail" do
       s =
         p2_state(%{
           current_thread: %{id: "t1", title: "test"},
@@ -3050,8 +3050,8 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
       assert flush, "Expected a :flush_read_pointers command after Q, got: #{inspect(cmds)}"
 
       {:flush_read_pointers, ctx} = flush
-      assert ctx[:last_read_message_number] == 5
-      assert ctx[:last_read_post_id] == "p1"
+      assert ctx[:last_read_message_number] == 6
+      assert ctx[:last_read_post_id] == "p2"
       assert ctx[:thread_id] == "t1"
       assert ctx[:board_id] == "b1"
     end

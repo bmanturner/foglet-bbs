@@ -582,21 +582,21 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   @doc """
-  Called by App.update/2 on {:load_posts, thread_id}.
+  Legacy/direct-invocation load seam for tests and callers outside the screen reducer.
 
-  Seeds the screen-owned `pending_read_positions[thread_id]` slot with post 0's
-  `{last_read_post_id, last_read_message_number}` tuple immediately on
-  entry (LIST-01 D-05). This means pressing Q right after opening a
-  thread still advances the board read pointer past the first post on
-  flush — "if you saw it, you read it."
+  Seeds the screen-owned `pending_read_positions[thread_id]` slot through the
+  visible reader screenful immediately on entry (LIST-01 D-05). For packed
+  multi-post pages this means pressing Q right after opening a thread advances
+  board/thread read pointers through the last fully visible post; a trailing
+  partial long post is only marked read once it has been scrolled to bottom.
 
   **Dead-code audit (READER-02, D-03, D-04):** This public callback is
-  intentional contract surface. Production orchestration is owned by
-  `Foglet.TUI.App.do_update({:load_posts, thread_id, opts}, state)`, which
-  runs the real load off-process via `Command.task`. This function exists as
-  a stable screen-level test seam (verified in `post_reader_test.exs`) and
-  as the callable entry point should direct invocation be needed. Do not
-  delete or privatize without a corresponding context decision update.
+  intentional contract surface. Production orchestration is owned by the
+  screen reducer's `:load` / `:load_posts_window` task path. This function
+  exists as a stable screen-level test seam (verified in
+  `post_reader_test.exs`) and as the callable entry point should direct
+  invocation be needed. Do not delete or privatize without a corresponding
+  context decision update.
   """
   @spec load_posts(map(), String.t()) :: {map(), list()}
   def load_posts(state, thread_id) do
@@ -618,6 +618,7 @@ defmodule Foglet.TUI.Screens.PostReader do
           |> apply_window_to_screen_state(window, posts, thread_id)
           |> place_selection_after_load(window, posts, read_pointer_msg_no)
           |> warm_selected_post_artifacts(state, posts, w)
+          |> seed_pending_read_position_through_visible(context_from_legacy_state(state))
 
         {:error, reason} ->
           reader_window_error_state(ss_before, reason)
@@ -872,6 +873,17 @@ defmodule Foglet.TUI.Screens.PostReader do
   # `:current_thread`, `:current_board`) is gone alongside those fields.
   defp get_screen_state(%{screen_state: %{post_reader: %State{} = ss}}), do: ss
   defp get_screen_state(_state), do: State.new()
+
+  defp context_from_legacy_state(state) when is_map(state) do
+    Context.new(
+      current_user: Map.get(state, :current_user),
+      session_context: Map.get(state, :session_context) || %{},
+      session_pid: Map.get(state, :session_pid),
+      terminal_size: Map.get(state, :terminal_size) || @default_terminal_size,
+      route: :post_reader,
+      route_params: Map.get(state, :route_params) || %{}
+    )
+  end
 
   # Parses the post body via Foglet.Markdown.render/1. Returns the
   # rendered tuple list but does NOT write to render_cache — it is a
