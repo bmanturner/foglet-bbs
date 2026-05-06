@@ -16,6 +16,7 @@ defmodule Foglet.Doors do
 
   alias Foglet.Accounts.User
   alias Foglet.Doors.{AuditRecord, Manifest}
+  alias Foglet.Doors.Manifest.Dropfile
   alias Foglet.Doors.Sandbox
   alias Foglet.Sessions.Session
 
@@ -26,12 +27,19 @@ defmodule Foglet.Doors do
   @sandbox_modes [:none, :restricted_user_process_group]
   @process_tree_values [:process_group]
   @safe_status_keys [:exit_status, :reason, :signal, :timed_out, :crashed, :disconnected]
-  @classic_dropfile_formats [:chain_txt, :door_sys, :dorinfo_def]
+  @classic_dropfile_formats [:chain_txt, :door_sys, :door32_sys, :dorinfo_def]
   @dropfile_names %{
     chain_txt: "CHAIN.TXT",
     door_sys: "DOOR.SYS",
+    door32_sys: "DOOR32.SYS",
     dorinfo_def: "DORINFO.DEF"
   }
+  @dropfile_identity_values [:handle]
+  @dropfile_transport_values [:filesystem]
+  @dropfile_encoding_values [:cp437, :utf8]
+  @dropfile_cwd_values [:door_working_dir, :session_working_dir]
+  @dropfile_expose_path_values [:env, :none]
+  @unsafe_dropfile_keys [:filename, :path, :relative_path, "filename", "path", "relative_path"]
   @sensitive_env_names ~w[
     AWS_ACCESS_KEY_ID
     AWS_SECRET_ACCESS_KEY
@@ -131,6 +139,9 @@ defmodule Foglet.Doors do
   def validate_manifest(attrs) when is_map(attrs) do
     attrs = atomize_known_keys(attrs)
 
+    dropfiles =
+      normalize_dropfiles(Map.get(attrs, :dropfiles), Map.get(attrs, :dropfile_formats, []))
+
     manifest = %Manifest{
       id: Map.get(attrs, :id),
       slug: Map.get(attrs, :slug),
@@ -140,8 +151,8 @@ defmodule Foglet.Doors do
       command: Map.get(attrs, :command),
       module: Map.get(attrs, :module),
       args: Map.get(attrs, :args, []),
-      dropfile_formats:
-        Map.get(attrs, :dropfile_formats, default_dropfile_formats(Map.get(attrs, :runtime))),
+      dropfiles: dropfiles,
+      dropfile_formats: dropfile_formats(dropfiles),
       working_dir: Map.get(attrs, :working_dir),
       env: Map.get(attrs, :env, %{}),
       env_allowlist: Map.get(attrs, :env_allowlist, []),
@@ -308,13 +319,14 @@ defmodule Foglet.Doors do
   @doc """
   Generate a classic BBS dropfile from safe Foglet user/session metadata.
 
-  Supported formats are `:chain_txt`, `:door_sys`, and `:dorinfo_def`. All
-  outputs are CRLF-terminated for classic door compatibility. Mapping is
-  intentionally conservative: Foglet exposes handles, display names, user ids,
-  roles, terminal size, and session ids only; unknown modem/security fields get
-  explicit harmless defaults rather than internal application state.
+  Supported formats are `:chain_txt`, `:door_sys`, `:door32_sys`, and
+  `:dorinfo_def`. All outputs are CRLF-terminated for classic door
+  compatibility. Mapping is intentionally conservative: Foglet exposes handles,
+  display names, user ids, roles, terminal size, and session ids only; unknown
+  modem/security fields get explicit harmless defaults rather than internal
+  application state.
   """
-  @spec classic_dropfile(:chain_txt | :door_sys | :dorinfo_def, %{
+  @spec classic_dropfile(:chain_txt | :door_sys | :door32_sys | :dorinfo_def, %{
           required(:user) => User.t() | map(),
           required(:session) => Session.t() | map()
         }) ::
@@ -376,6 +388,23 @@ defmodule Foglet.Doors do
       "0",
       to_string(cols),
       to_string(rows),
+      session_identifier(session)
+    ]
+    |> crlf_lines()
+  end
+
+  def classic_dropfile(:door32_sys, %{user: user, session: session}) do
+    [
+      "0",
+      "0",
+      "38400",
+      "Foglet BBS",
+      user_identifier(user, session),
+      dropfile_display_name(user, session),
+      dropfile_handle(user, session),
+      role_security_level(user, session),
+      "1440",
+      "1",
       session_identifier(session)
     ]
     |> crlf_lines()
@@ -469,8 +498,72 @@ defmodule Foglet.Doors do
     })
   end
 
-  defp default_dropfile_formats(:classic_dropfile), do: [:door_sys]
-  defp default_dropfile_formats(_runtime), do: []
+  defp normalize_dropfiles(nil, formats), do: normalize_dropfiles_from_formats(formats)
+  defp normalize_dropfiles([], formats), do: normalize_dropfiles_from_formats(formats)
+
+  defp normalize_dropfiles(dropfiles, _formats) when is_list(dropfiles) do
+    Enum.map(dropfiles, &normalize_dropfile/1)
+  end
+
+  defp normalize_dropfiles(dropfiles, _formats), do: dropfiles
+
+  defp normalize_dropfiles_from_formats(formats) when is_list(formats) do
+    Enum.map(formats, fn format -> normalize_dropfile(%{format: format}) end)
+  end
+
+  defp normalize_dropfiles_from_formats(formats), do: formats
+
+  defp normalize_dropfile(%Dropfile{} = dropfile), do: dropfile
+
+  defp normalize_dropfile(attrs) when is_map(attrs) do
+    attrs = atomize_dropfile_keys(attrs)
+    format = normalize_dropfile_atom(Map.get(attrs, :format))
+
+    %Dropfile{
+      format: format,
+      filename: dropfile_name(format),
+      identity: normalize_dropfile_atom(Map.get(attrs, :identity, :handle)),
+      transport: normalize_dropfile_atom(Map.get(attrs, :transport, :filesystem)),
+      encoding: normalize_dropfile_atom(Map.get(attrs, :encoding, :cp437)),
+      cwd: normalize_dropfile_atom(Map.get(attrs, :cwd, :door_working_dir)),
+      expose_path: normalize_dropfile_atom(Map.get(attrs, :expose_path, :env)),
+      raw_keys: Map.keys(attrs)
+    }
+  end
+
+  defp normalize_dropfile(format), do: normalize_dropfile(%{format: format})
+
+  defp atomize_dropfile_keys(attrs) do
+    Map.new(attrs, fn
+      {key, value} when is_atom(key) ->
+        {key, value}
+
+      {key, value}
+      when key in ["format", "identity", "transport", "encoding", "cwd", "expose_path"] ->
+        {String.to_existing_atom(key), value}
+
+      {key, value} ->
+        {key, value}
+    end)
+  end
+
+  defp normalize_dropfile_atom(value) when is_atom(value), do: value
+
+  defp normalize_dropfile_atom(value) when is_binary(value) do
+    String.to_existing_atom(value)
+  rescue
+    ArgumentError -> value
+  end
+
+  defp normalize_dropfile_atom(value), do: value
+
+  defp dropfile_name(format) when format in @classic_dropfile_formats,
+    do: Map.fetch!(@dropfile_names, format)
+
+  defp dropfile_name(_format), do: nil
+
+  defp dropfile_formats(dropfiles) when is_list(dropfiles), do: Enum.map(dropfiles, & &1.format)
+  defp dropfile_formats(_dropfiles), do: []
 
   defp validate(%Manifest{} = manifest) do
     []
@@ -488,7 +581,7 @@ defmodule Foglet.Doors do
     )
     |> validate_string_list(:args, manifest.args)
     |> validate_env(manifest.env)
-    |> validate_dropfile_formats(manifest.runtime, manifest.dropfile_formats)
+    |> validate_dropfiles(manifest.runtime, manifest.dropfiles)
     |> validate_env_allowlist(manifest.env_allowlist)
     |> validate_timeout(:timeout_ms, manifest.timeout_ms)
     |> validate_optional_timeout(:idle_timeout_ms, manifest.idle_timeout_ms)
@@ -554,20 +647,81 @@ defmodule Foglet.Doors do
 
   defp validate_env(errors, _env), do: [{:env, "must be a map"} | errors]
 
-  defp validate_dropfile_formats(errors, :classic_dropfile, values) when is_list(values) do
-    unsupported = Enum.find(values, &(&1 not in @classic_dropfile_formats))
+  defp validate_dropfiles(errors, :classic_dropfile, []),
+    do: [
+      {:dropfiles, "classic_dropfile doors must declare at least one dropfile format"} | errors
+    ]
 
-    if unsupported do
-      [{:dropfile_formats, "contains unsupported format #{inspect(unsupported)}"} | errors]
+  defp validate_dropfiles(errors, :classic_dropfile, dropfiles) when is_list(dropfiles) do
+    Enum.reduce(dropfiles, errors, &validate_dropfile/2)
+  end
+
+  defp validate_dropfiles(errors, _runtime, []), do: errors
+
+  defp validate_dropfiles(errors, _runtime, dropfiles) when is_list(dropfiles),
+    do: Enum.reduce(dropfiles, errors, &validate_dropfile/2)
+
+  defp validate_dropfiles(errors, _runtime, _dropfiles),
+    do: [{:dropfiles, "must be a list"} | errors]
+
+  defp validate_dropfile(%Dropfile{} = dropfile, errors) do
+    errors
+    |> validate_dropfile_raw_keys(dropfile.raw_keys)
+    |> validate_dropfile_value(
+      :dropfiles,
+      dropfile.format,
+      @classic_dropfile_formats,
+      "contains unsupported format #{inspect(dropfile.format)}"
+    )
+    |> validate_dropfile_value(
+      :dropfile_identity,
+      dropfile.identity,
+      @dropfile_identity_values,
+      "must be handle"
+    )
+    |> validate_dropfile_value(
+      :dropfile_transport,
+      dropfile.transport,
+      @dropfile_transport_values,
+      "must be filesystem"
+    )
+    |> validate_dropfile_value(
+      :dropfile_encoding,
+      dropfile.encoding,
+      @dropfile_encoding_values,
+      "must be cp437 or utf8"
+    )
+    |> validate_dropfile_value(
+      :dropfile_cwd,
+      dropfile.cwd,
+      @dropfile_cwd_values,
+      "must be door_working_dir or session_working_dir"
+    )
+    |> validate_dropfile_value(
+      :dropfile_expose_path,
+      dropfile.expose_path,
+      @dropfile_expose_path_values,
+      "must be env or none"
+    )
+  end
+
+  defp validate_dropfile(_dropfile, errors), do: [{:dropfiles, "must contain maps"} | errors]
+
+  defp validate_dropfile_raw_keys(errors, keys) do
+    if Enum.any?(keys, &(&1 in @unsafe_dropfile_keys)) do
+      [{:dropfiles, "must not declare filenames or paths; Foglet uses fixed safe names"} | errors]
     else
       errors
     end
   end
 
-  defp validate_dropfile_formats(errors, _runtime, values) when is_list(values), do: errors
-
-  defp validate_dropfile_formats(errors, _runtime, _values),
-    do: [{:dropfile_formats, "must be a list"} | errors]
+  defp validate_dropfile_value(errors, field, value, allowed, message) do
+    if value in allowed do
+      errors
+    else
+      [{field, message} | errors]
+    end
+  end
 
   defp validate_env_allowlist(errors, values) when is_list(values) do
     case Enum.find(values, &unsupported_env_name?/1) do

@@ -100,6 +100,87 @@ defmodule Foglet.DoorsTest do
       assert {:env, "contains non-string value for TERM"} in errors
     end
 
+    test "normalizes explicit classic dropfile declarations with safe fixed filenames and metadata" do
+      attrs =
+        Map.merge(@valid_manifest, %{
+          runtime: :classic_dropfile,
+          dropfiles: [
+            %{
+              format: :chain_txt,
+              identity: :handle,
+              transport: :filesystem,
+              encoding: :cp437,
+              cwd: :door_working_dir,
+              expose_path: :env
+            },
+            %{"format" => "door32_sys"}
+          ]
+        })
+
+      assert {:ok, manifest} = Doors.validate_manifest(attrs)
+
+      assert manifest.dropfile_formats == [:chain_txt, :door32_sys]
+
+      assert [chain_txt, door32_sys] = manifest.dropfiles
+      assert chain_txt.format == :chain_txt
+      assert chain_txt.filename == "CHAIN.TXT"
+      assert chain_txt.identity == :handle
+      assert chain_txt.transport == :filesystem
+      assert chain_txt.encoding == :cp437
+      assert chain_txt.cwd == :door_working_dir
+      assert chain_txt.expose_path == :env
+
+      assert door32_sys.format == :door32_sys
+      assert door32_sys.filename == "DOOR32.SYS"
+      assert door32_sys.identity == :handle
+      assert door32_sys.transport == :filesystem
+      assert door32_sys.encoding == :cp437
+      assert door32_sys.cwd == :door_working_dir
+      assert door32_sys.expose_path == :env
+    end
+
+    test "normalizes legacy dropfile_formats into explicit declarations" do
+      attrs =
+        Map.merge(@valid_manifest, %{
+          runtime: :classic_dropfile,
+          dropfile_formats: [:chain_txt, :door_sys, :door32_sys, :dorinfo_def]
+        })
+
+      assert {:ok, manifest} = Doors.validate_manifest(attrs)
+
+      assert Enum.map(manifest.dropfiles, & &1.filename) == [
+               "CHAIN.TXT",
+               "DOOR.SYS",
+               "DOOR32.SYS",
+               "DORINFO.DEF"
+             ]
+
+      assert manifest.dropfile_formats == [:chain_txt, :door_sys, :door32_sys, :dorinfo_def]
+    end
+
+    test "requires classic dropfile manifests to declare at least one format" do
+      attrs = Map.put(@valid_manifest, :runtime, :classic_dropfile)
+
+      assert {:error, errors} = Doors.validate_manifest(attrs)
+
+      assert {:dropfiles, "classic_dropfile doors must declare at least one dropfile format"} in errors
+    end
+
+    test "rejects unsafe dropfile paths and filenames from manifests" do
+      attrs =
+        Map.merge(@valid_manifest, %{
+          runtime: :classic_dropfile,
+          dropfiles: [
+            %{format: :door_sys, filename: "../DOOR.SYS"},
+            %{format: :chain_txt, path: "/tmp/CHAIN.TXT"}
+          ]
+        })
+
+      assert {:error, errors} = Doors.validate_manifest(attrs)
+
+      assert {:dropfiles, "must not declare filenames or paths; Foglet uses fixed safe names"} in errors
+    end
+
     test "denies launch for inactive actors even when the manifest is visible" do
       {:ok, manifest} = Doors.validate_manifest(@valid_manifest)
       suspended = %User{role: :user, status: :suspended, deleted_at: nil}
