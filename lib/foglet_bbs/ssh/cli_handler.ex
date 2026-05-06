@@ -72,6 +72,7 @@ defmodule Foglet.SSH.CLIHandler do
     :dispatcher_pid,
     :door_runner_pid,
     :active_door_manifest,
+    :active_door_started_at,
     :offered_ssh_public_key,
     :width,
     :height,
@@ -117,6 +118,12 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_msg({:door_started, pid, door_id}, %{door_runner_pid: pid} = state) do
     track_door_presence(state, pid, door_id)
+
+    :telemetry.execute([:foglet, :door, :launch], %{count: 1}, %{
+      runtime: door_runtime(state),
+      outcome: :success
+    })
+
     _ = safe_ssh_send(state.connection_ref, state.channel_id, "\r\n[Door #{door_id} started]\r\n")
     {:ok, state}
   end
@@ -124,11 +131,27 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_msg({:door_exited, pid, door_id, reason, status}, %{door_runner_pid: pid} = state) do
     Foglet.Sessions.DoorPresence.untrack_runner(pid)
+
+    :telemetry.execute([:foglet, :door, :exit], %{count: 1}, %{
+      runtime: door_runtime(state),
+      outcome: door_exit_outcome(reason, status)
+    })
+
+    if is_integer(state.active_door_started_at) do
+      :telemetry.execute(
+        [:foglet, :door, :duration],
+        %{
+          duration: System.monotonic_time() - state.active_door_started_at
+        },
+        %{runtime: door_runtime(state)}
+      )
+    end
+
     message = "\r\n[Door #{door_id} exited: #{inspect(reason)}#{exit_status_suffix(status)}]\r\n"
     _ = safe_ssh_send(state.connection_ref, state.channel_id, message)
     dispatch_current_window(state)
     dispatch_raw(state.dispatcher_pid, {:door_exited, door_id, reason, status})
-    {:ok, %{state | door_runner_pid: nil, active_door_manifest: nil}}
+    {:ok, %{state | door_runner_pid: nil, active_door_manifest: nil, active_door_started_at: nil}}
   end
 
   @impl true
@@ -623,9 +646,19 @@ defmodule Foglet.SSH.CLIHandler do
            owner: self()
          ) do
       {:ok, pid} ->
-        %{state | door_runner_pid: pid, active_door_manifest: manifest}
+        %{
+          state
+          | door_runner_pid: pid,
+            active_door_manifest: manifest,
+            active_door_started_at: System.monotonic_time()
+        }
 
       {:error, reason} ->
+        :telemetry.execute([:foglet, :door, :launch], %{count: 1}, %{
+          runtime: Map.get(manifest, :runtime, :unknown),
+          outcome: :error
+        })
+
         _ =
           safe_ssh_send(
             state.connection_ref,
@@ -666,6 +699,14 @@ defmodule Foglet.SSH.CLIHandler do
 
   defp exit_status_suffix(nil), do: ""
   defp exit_status_suffix(status), do: ", status #{status}"
+
+  defp door_runtime(%{active_door_manifest: %{runtime: runtime}}), do: runtime
+  defp door_runtime(_state), do: :unknown
+
+  defp door_exit_outcome(:normal, status) when status in [nil, 0], do: :success
+  defp door_exit_outcome(:normal, _status), do: :nonzero_exit
+  defp door_exit_outcome(:timeout, _status), do: :timeout
+  defp door_exit_outcome(_reason, _status), do: :error
 
   @doc """
   Initializes the ETS counter table for tracking active SSH connections.

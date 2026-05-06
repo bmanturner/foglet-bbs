@@ -11,6 +11,7 @@ swap_size_mb = 256
   FOGLET_DEFAULT_TIMEZONE = "America/Chicago"
   FOGLET_ENABLE_DEMO_DOORS = "true"
   FOGLET_BBS_SYSOP_NAME = "needz"
+  FOGLET_METRICS_PORT = "9091"
   HOME = "/data"
   PHX_HOST = "bbs.foglet.io"
   PHX_SERVER = "true"
@@ -34,6 +35,10 @@ swap_size_mb = 256
 
 [deploy]
   release_command = "/app/bin/foglet_bbs eval FogletBbs.Release.seed"
+
+[metrics]
+  port = 9091
+  path = "/metrics"
 
 [[services]]
   internal_port = 2222

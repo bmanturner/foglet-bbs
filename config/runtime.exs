@@ -38,6 +38,15 @@ if ssh_port = System.get_env("FOGLET_SSH_PORT") do
   config :foglet_bbs, :ssh_port, String.to_integer(ssh_port)
 end
 
+metrics_enabled? = System.get_env("FOGLET_METRICS_ENABLED", "true") not in ~w(false 0)
+metrics_port = String.to_integer(System.get_env("FOGLET_METRICS_PORT") || "9091")
+metrics_path = System.get_env("FOGLET_METRICS_PATH") || "/metrics"
+
+config :foglet_bbs, :metrics_server,
+  enabled: metrics_enabled?,
+  port: metrics_port,
+  path: metrics_path
+
 # Optional operator-managed Door Games JSON manifest directory. When unset or
 # blank, production/operator door loading is disabled and only explicitly-enabled
 # demo fixtures may appear.

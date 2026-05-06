@@ -120,6 +120,10 @@ defmodule Foglet.Sessions.Supervisor do
 
       [{old_pid, _}] ->
         # Different session holds the slot — replace it, then promote.
+        :telemetry.execute([:foglet, :session, :replacement], %{count: 1}, %{
+          path: :guest_promotion
+        })
+
         replace_then_promote(
           old_pid,
           guest_pid,
@@ -198,6 +202,10 @@ defmodule Foglet.Sessions.Supervisor do
   end
 
   defp replace(old_pid, opts) do
+    :telemetry.execute([:foglet, :session, :replacement], %{count: 1}, %{
+      path: :authenticated_start
+    })
+
     ref = Process.monitor(old_pid)
 
     # Notify first so the old Session can do graceful TUI cleanup, then stop.

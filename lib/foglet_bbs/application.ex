@@ -36,6 +36,7 @@ defmodule FogletBbs.Application do
   defp base_children do
     [
       FogletBbsWeb.Telemetry,
+      Foglet.Metrics.Store,
       FogletBbs.Repo,
       {DNSCluster, query: Application.get_env(:foglet_bbs, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: FogletBbs.PubSub},
@@ -50,15 +51,34 @@ defmodule FogletBbs.Application do
       Foglet.Sessions.BoardScreen,
       Foglet.Sessions.DoorPresence,
       {Registry, keys: :unique, name: Foglet.BoardChat.Ephemeral.Registry},
-      Foglet.BoardChat.Ephemeral.Supervisor,
-      # Start to serve requests, typically the last entry
-      FogletBbsWeb.Endpoint
-    ]
+      Foglet.BoardChat.Ephemeral.Supervisor
+    ] ++
+      metrics_children() ++
+      [
+        # Start to serve requests, typically the last entry
+        FogletBbsWeb.Endpoint
+      ]
   end
 
   defp ssh_children do
     if Application.get_env(:foglet_bbs, :start_ssh_daemon, true) do
       [Foglet.SSH.Supervisor]
+    else
+      []
+    end
+  end
+
+  defp metrics_children do
+    metrics_config = Application.get_env(:foglet_bbs, :metrics_server, [])
+
+    if Keyword.get(metrics_config, :enabled, true) do
+      [
+        {Bandit,
+         plug: Foglet.Metrics.Plug,
+         scheme: :http,
+         ip: {0, 0, 0, 0},
+         port: Keyword.get(metrics_config, :port, 9091)}
+      ]
     else
       []
     end
