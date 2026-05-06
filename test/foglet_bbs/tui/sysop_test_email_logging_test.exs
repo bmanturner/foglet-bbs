@@ -68,6 +68,8 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
       end)
 
     assert log =~ "transactional_email_delivery_failed"
+    assert log =~ "sysop_test_email_delivery_failed"
+    assert log =~ "operation=send_test_email"
     assert log =~ "mail_type=sysop_test_email"
     assert log =~ "delivery_mode=email"
     assert log =~ "recipient_user_id=#{sysop.id}"
@@ -108,7 +110,7 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
     refute feedback =~ sysop.handle
   end
 
-  test "Sysop SITE test-email task exception logs privacy-safe task-boundary event and generic state",
+  test "Sysop SITE test-email provider exception logs privacy-safe domain event and generic state",
        %{
          sysop: sysop
        } do
@@ -125,15 +127,15 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
 
     assert_received {:task_result,
                      {:screen_task_result, :sysop, :sysop_send_test_email,
-                      {:error, {:task_failed, :exception}}}}
+                      {:ok, {:error, {:delivery_exception, RuntimeError}}}}}
 
-    assert result =~ "tui_screen_task_failed"
-    assert result =~ "screen=sysop"
-    assert result =~ "operation=sysop_send_test_email"
-    assert result =~ "failure_kind=exception"
-    assert result =~ "reason_class=Elixir.RuntimeError"
-    assert result =~ "user_id=#{sysop.id}"
+    assert result =~ "sysop_test_email_delivery_failed"
+    assert result =~ "operation=send_test_email"
+    assert result =~ "mail_type=sysop_test_email"
+    assert result =~ "recipient_user_id=#{sysop.id}"
     assert result =~ "delivery_mode=email"
+    assert result =~ "reason={:delivery_exception, RuntimeError}"
+    refute result =~ "tui_screen_task_failed"
     refute result =~ "transactional_email_delivery_failed"
     refute result =~ sysop.email
     refute result =~ sysop.handle
@@ -146,7 +148,7 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
           {:after_exception_update,
            App.update(
              {:screen_task_result, :sysop, :sysop_send_test_email,
-              {:error, {:task_failed, :exception}}},
+              {:ok, {:error, {:delivery_exception, RuntimeError}}}},
              sending_state
            )}
         )
@@ -158,13 +160,13 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
     assert result_log =~ "operation=sysop_send_test_email"
     assert result_log =~ "delivery_mode=email"
     assert result_log =~ "user_id=#{sysop.id}"
-    assert result_log =~ "reason={:task_failed, :exception}"
+    assert result_log =~ "reason={:delivery_exception, RuntimeError}"
     refute result_log =~ sysop.email
     refute result_log =~ sysop.handle
     refute result_log =~ "raw-secret"
 
     assert after_state.screen_state.sysop.site_form.test_email_state ==
-             {:error, {:task_failed, :exception}}
+             {:error, {:delivery_exception, RuntimeError}}
 
     state_dump = inspect(after_state.screen_state.sysop.site_form.test_email_state)
     refute state_dump =~ sysop.email

@@ -24,7 +24,7 @@ defmodule Foglet.SiteOps do
     * `{:error, :missing_email}` — sysop has no account email; no delivery
       attempted.
     * `{:error, term()}` — provider/transport failure surfaced from the
-      mailer; already logged via the privacy-safe transactional pattern.
+      mailer; logged with privacy-safe test-email context.
   """
   @type send_test_email_result ::
           {:ok, term()}
@@ -42,20 +42,58 @@ defmodule Foglet.SiteOps do
     with :ok <- Bodyguard.permit(Authorization, :send_test_email, actor, :site),
          :ok <- check_delivery_mode(),
          {:ok, sysop} <- check_recipient_email(actor) do
-      case Mailer.deliver_transactional(Email.test_email(sysop),
-             mail_type: :sysop_test_email,
-             recipient_user_id: sysop.id
-           ) do
-        {:ok, _delivery} = ok ->
-          ok
-
-        {:error, _reason} = error ->
-          # Mailer.deliver_transactional already logs failure with safe
-          # context; nothing extra to add here.
-          error
-      end
+      deliver_test_email(sysop)
     end
   end
+
+  defp deliver_test_email(%User{} = sysop) do
+    Mailer.deliver_transactional(Email.test_email(sysop),
+      mail_type: :sysop_test_email,
+      recipient_user_id: sysop.id
+    )
+  rescue
+    exception ->
+      reason = {:delivery_exception, exception.__struct__}
+      log_test_email_failure(reason, sysop)
+      {:error, reason}
+  catch
+    kind, value ->
+      reason = {:delivery_failed, kind, safe_reason_class(value)}
+      log_test_email_failure(reason, sysop)
+      {:error, reason}
+  else
+    {:ok, _delivery} = ok ->
+      ok
+
+    {:error, reason} = error ->
+      log_test_email_failure(reason, sysop)
+      error
+  end
+
+  defp log_test_email_failure(reason, %User{} = sysop) do
+    Logger.error(
+      [
+        "sysop_test_email_delivery_failed",
+        "operation=send_test_email",
+        "mail_type=sysop_test_email",
+        "delivery_mode=#{Config.delivery_mode()}",
+        "recipient_user_id=#{safe_value(sysop.id)}",
+        "reason=#{inspect(reason)}"
+      ]
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.join(" ")
+    )
+  end
+
+  defp safe_reason_class(%module{}) when is_atom(module), do: module
+  defp safe_reason_class(value) when is_atom(value), do: value
+  defp safe_reason_class(value) when is_tuple(value), do: elem(value, 0)
+  defp safe_reason_class(value) when is_binary(value), do: :binary
+  defp safe_reason_class(_value), do: :unknown
+
+  defp safe_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp safe_value(value) when is_binary(value), do: value
+  defp safe_value(value), do: inspect(value)
 
   defp check_delivery_mode do
     case Config.delivery_mode() do

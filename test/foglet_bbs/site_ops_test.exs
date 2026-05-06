@@ -3,6 +3,14 @@ defmodule FogletBbs.SiteOpsTest.FailingMailerAdapter do
   def deliver(_email, _config), do: {:error, :forced_failure}
 end
 
+defmodule FogletBbs.SiteOpsTest.RaisingMailerAdapter do
+  def validate_config(_config), do: :ok
+
+  def deliver(email, _config) do
+    raise "provider exploded for #{inspect(email.to)} token=raw-secret"
+  end
+end
+
 defmodule Foglet.SiteOpsTest do
   use FogletBbs.DataCase, async: false
 
@@ -137,12 +145,46 @@ defmodule Foglet.SiteOpsTest do
         end)
 
       assert log =~ "transactional_email_delivery_failed"
+      assert log =~ "sysop_test_email_delivery_failed"
+      assert log =~ "operation=send_test_email"
       assert log =~ "mail_type=sysop_test_email"
       assert log =~ "delivery_mode=email"
       assert log =~ "recipient_user_id=#{sysop.id}"
       assert log =~ "reason=:forced_failure"
       refute log =~ sysop.email
       refute log =~ sysop.handle
+    end
+
+    test "mailer exceptions are logged with safe test-email context and returned generically" do
+      Config.put!("delivery_mode", "email")
+
+      original_mailer_config = Application.fetch_env!(:foglet_bbs, Foglet.Mailer)
+
+      on_exit(fn ->
+        Application.put_env(:foglet_bbs, Foglet.Mailer, original_mailer_config)
+      end)
+
+      Application.put_env(:foglet_bbs, Foglet.Mailer,
+        adapter: FogletBbs.SiteOpsTest.RaisingMailerAdapter
+      )
+
+      sysop = sysop_fixture(%{handle: "sysopraise", email: "sysopraise@example.test"})
+
+      log =
+        capture_log(fn ->
+          assert {:error, {:delivery_exception, RuntimeError}} = SiteOps.send_test_email(sysop)
+        end)
+
+      assert log =~ "sysop_test_email_delivery_failed"
+      assert log =~ "operation=send_test_email"
+      assert log =~ "mail_type=sysop_test_email"
+      assert log =~ "delivery_mode=email"
+      assert log =~ "recipient_user_id=#{sysop.id}"
+      assert log =~ "reason={:delivery_exception, RuntimeError}"
+      refute log =~ "transactional_email_delivery_failed"
+      refute log =~ sysop.email
+      refute log =~ sysop.handle
+      refute log =~ "raw-secret"
     end
   end
 end
