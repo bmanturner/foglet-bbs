@@ -215,7 +215,14 @@ defmodule Foglet.Doors do
       timeout_ms: @usurper_timeout_ms,
       idle_timeout_ms: @usurper_idle_timeout_ms,
       visibility: :members,
-      auth_scope: :site
+      auth_scope: :site,
+      sandbox: %{
+        mode: :restricted_user_process_group,
+        user: "foglet-door",
+        group: "foglet-door",
+        process_tree: :process_group,
+        fail_closed?: true
+      }
     }
   end
 

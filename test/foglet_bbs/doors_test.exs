@@ -253,6 +253,11 @@ defmodule Foglet.DoorsTest do
       assert usurper.working_dir == "/opt/foglet/doors/usurper"
       assert usurper.dropfile_formats == [:door32_sys]
       assert [%{filename: "DOOR32.SYS", identity: :handle, expose_path: :env}] = usurper.dropfiles
+      assert usurper.sandbox.mode == :restricted_user_process_group
+      assert usurper.sandbox.user == "foglet-door"
+      assert usurper.sandbox.group == "foglet-door"
+      assert usurper.sandbox.process_tree == :process_group
+      assert usurper.sandbox.fail_closed? == true
     end
 
     test "hides built-in demo manifests when the env var is absent or empty" do
