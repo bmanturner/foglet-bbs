@@ -51,8 +51,31 @@ defmodule Foglet.Mailer.Doctor do
   end
 
   defp start_app! do
-    {:ok, _} = Application.ensure_all_started(:foglet_bbs)
+    start_minimal_runtime!()
+    Foglet.Config.init_cache()
+    start_repo!()
     :ok
+  end
+
+  defp start_minimal_runtime! do
+    # Do not start :foglet_bbs here. In OTP releases this diagnostic is often
+    # run through `/app/bin/foglet_bbs eval` on a machine where the real app is
+    # already running. Starting the full supervision tree would collide with
+    # listeners such as Phoenix, SSH, and the metrics endpoint.
+    for app <- [:ssl, :postgrex, :ecto_sql, :swoosh, :gen_smtp] do
+      {:ok, _started} = Application.ensure_all_started(app)
+    end
+  end
+
+  defp start_repo! do
+    case Process.whereis(FogletBbs.Repo) do
+      nil ->
+        {:ok, _pid} = FogletBbs.Repo.start_link()
+        :ok
+
+      _pid ->
+        :ok
+    end
   end
 
   defp print_header do

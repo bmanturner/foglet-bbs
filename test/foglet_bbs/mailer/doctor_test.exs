@@ -57,6 +57,18 @@ defmodule Foglet.Mailer.DoctorTest do
     assert output =~ "No --to recipient supplied"
   end
 
+  test "default runtime bootstrap supports dry run without caller starting full app" do
+    Config.put!("delivery_mode", "email", nil)
+
+    output =
+      capture_io(fn ->
+        assert {:ok, :dry_run} = Doctor.run()
+      end)
+
+    assert output =~ "Foglet mailer doctor"
+    assert output =~ "No --to recipient supplied"
+  end
+
   test "delivery_mode no_email skips requested send" do
     Config.put!("delivery_mode", "no_email", nil)
 
