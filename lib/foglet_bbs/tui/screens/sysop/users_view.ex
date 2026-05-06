@@ -153,7 +153,9 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   end
 
   defp load_public_profile(user) when is_map(user) do
-    with user_id when is_binary(user_id) <- Map.get(user, :id) || Map.get(user, "id"),
+    user_id = Map.get(user, :id) || Map.get(user, "id")
+
+    with {:ok, user_id} <- Ecto.UUID.cast(user_id),
          {:ok, %PublicProfile{} = profile} <- PublicProfile.load(user_id) do
       profile
     else
