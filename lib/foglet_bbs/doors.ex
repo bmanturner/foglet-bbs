@@ -70,7 +70,7 @@ defmodule Foglet.Doors do
 
   @usurper_command "/opt/foglet/doors/usurper/UsurperReborn"
   @usurper_working_dir "/opt/foglet/doors/usurper"
-  @usurper_database_path "/var/lib/foglet/usurper/usurper_online.db"
+  @usurper_database_path "/data/usurper/usurper_online.db"
   @usurper_timeout_ms 12 * 60 * 60 * 1_000
   @usurper_idle_timeout_ms 60 * 60 * 1_000
 

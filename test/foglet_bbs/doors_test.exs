@@ -261,7 +261,7 @@ defmodule Foglet.DoorsTest do
                "--door32",
                "{dropfile:door32_sys}",
                "--db",
-               "/var/lib/foglet/usurper/usurper_online.db",
+               "/data/usurper/usurper_online.db",
                "--stdio"
              ]
 

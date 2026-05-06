@@ -510,7 +510,7 @@ defmodule Foglet.Doors.RunnerTest do
             "--door32",
             "{dropfile:door32_sys}",
             "--db",
-            "/var/lib/foglet/usurper/usurper_online.db",
+            "/data/usurper/usurper_online.db",
             "--stdio"
           ],
           timeout_ms: 5_000,
@@ -528,10 +528,10 @@ defmodule Foglet.Doors.RunnerTest do
 
       ref = Process.monitor(pid)
       assert_receive {:door_started, ^pid, "classic-usurper-argv"}
-      output = assert_door_output_contains("/var/lib/foglet/usurper/usurper_online.db")
+      output = assert_door_output_contains("/data/usurper/usurper_online.db")
 
       assert output =~
-               ~r/args:--door32\|.*\/DOOR32\.SYS\|--db\|\/var\/lib\/foglet\/usurper\/usurper_online\.db\|--stdio/
+               ~r/args:--door32\|.*\/DOOR32\.SYS\|--db\|\/data\/usurper\/usurper_online\.db\|--stdio/
 
       assert %{dropfile_paths: %{door32_sys: door32_path}} = Runner.snapshot(pid)
       assert Path.basename(door32_path) == "DOOR32.SYS"

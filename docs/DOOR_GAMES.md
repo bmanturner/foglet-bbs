@@ -291,7 +291,7 @@ Usurper Reborn is the current concrete production compatibility target. The bran
     "--door32",
     "{dropfile:door32_sys}",
     "--db",
-    "/var/lib/foglet/usurper/usurper_online.db",
+    "/data/usurper/usurper_online.db",
     "--stdio"
   ],
   working_dir: "/opt/foglet/doors/usurper",
@@ -329,7 +329,7 @@ Start-to-finish sysop path:
    Put the Usurper Reborn binary and required assets under an operator-owned directory such as `/opt/foglet/doors/usurper`. The project Dockerfile downloads the public Linux x64 release at build time and installs it there.
 
 3. Choose the shared state path.
-   Use a durable SQLite database path such as `/var/lib/foglet/usurper/usurper_online.db`. The deployment must make that directory writable by the runtime user that will actually execute the door.
+   Use a durable SQLite database path such as `/data/usurper/usurper_online.db`. The deployment must make that directory writable by the runtime user that will actually execute the door.
 
 4. Declare one DOOR32.SYS dropfile.
    Use `dropfiles: [%{format: :door32_sys, ...}]`, not a hand-written filename. Foglet will write `DOOR32.SYS` into the per-launch directory and substitute its generated path into `{dropfile:door32_sys}`.
@@ -347,7 +347,7 @@ Start-to-finish sysop path:
    In this branch, Usurper Reborn is already part of `production_manifest_attrs/0`. A future persisted catalog should store equivalent manifest data rather than hard-coding it.
 
 9. Verify launch and cleanup.
-   Run focused door tests and SSH/TUI QA before enabling the door for real callers. Verify that Usurper starts with `--door32 <generated path> --db /var/lib/foglet/usurper/usurper_online.db --stdio`, returns cleanly, and leaves no runner-owned temp context or dropfile directory behind.
+   Run focused door tests and SSH/TUI QA before enabling the door for real callers. Verify that Usurper starts with `--door32 <generated path> --db /data/usurper/usurper_online.db --stdio`, returns cleanly, and leaves no runner-owned temp context or dropfile directory behind.
 
 Residual limitation: if upstream Usurper requires a MUD relay, socket proxy, or protocol adapter for production-quality multiplayer behavior, keep that as a separate runtime/architecture issue. Do not describe the current dropfile path as a complete relay solution until implementation and QA evidence prove it.
 
