@@ -11,6 +11,19 @@ defmodule Foglet.Doors.RunnerTest do
   alias Foglet.Doors.Runner
   alias Foglet.Doors.Supervisor, as: DoorSupervisor
 
+  defp with_public_app_name(name) do
+    previous = Application.get_env(:foglet_bbs, :app_name)
+    Application.put_env(:foglet_bbs, :app_name, name)
+
+    on_exit(fn ->
+      if is_nil(previous) do
+        Application.delete_env(:foglet_bbs, :app_name)
+      else
+        Application.put_env(:foglet_bbs, :app_name, previous)
+      end
+    end)
+  end
+
   defmodule CrashingDoor do
     @behaviour Foglet.Doors.Door
 
@@ -57,6 +70,8 @@ defmodule Foglet.Doors.RunnerTest do
     end
 
     test "built-in Native Hello remains attached until user exit input" do
+      with_public_app_name("Misty Pines")
+
       {:ok, manifest} =
         manifest(%{
           id: "native-hello",
@@ -79,6 +94,7 @@ defmodule Foglet.Doors.RunnerTest do
       assert_receive {:door_started, ^pid, "native-hello"}
       assert_receive {:door_output, output}
       assert IO.iodata_to_binary(output) =~ "Native Hello welcomes alice (100x30)"
+      assert IO.iodata_to_binary(output) =~ "Press Enter to return to Misty Pines."
       assert %{status: :running} = Runner.snapshot(pid)
 
       ref = Process.monitor(pid)

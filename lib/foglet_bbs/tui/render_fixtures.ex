@@ -16,6 +16,7 @@ defmodule Foglet.TUI.RenderFixtures do
   """
 
   alias Foglet.Accounts.User
+  alias Foglet.AppName
   alias Foglet.TUI.App
   alias Foglet.TUI.Modal
   alias Foglet.TUI.SessionContext
@@ -587,7 +588,7 @@ defmodule Foglet.TUI.RenderFixtures do
     [
       %{
         id: "ol-1",
-        body: "Welcome to #{Foglet.AppName.name()}.",
+        body: "Welcome to #{AppName.name()}.",
         author_handle: "sysop",
         inserted_at: ~U[2026-04-27 12:00:00Z]
       },

@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.AppTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   alias Foglet.Config
   alias Foglet.Sessions.Session
@@ -19,6 +19,19 @@ defmodule Foglet.TUI.AppTest do
   alias Foglet.TUI.SizeGate
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.Modal.Form
+
+  defp with_public_app_name(name) do
+    previous = Application.get_env(:foglet_bbs, :app_name)
+    Application.put_env(:foglet_bbs, :app_name, name)
+
+    on_exit(fn ->
+      if is_nil(previous) do
+        Application.delete_env(:foglet_bbs, :app_name)
+      else
+        Application.put_env(:foglet_bbs, :app_name, previous)
+      end
+    end)
+  end
 
   defmodule FakeThreads do
     def list_threads("b1", _user_id) do
@@ -388,25 +401,29 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "door launch failure event keeps recoverable copy without raw atoms", %{state: state} do
+      with_public_app_name("Misty Pines")
+
       {new_state, []} = App.update({:door_launch_failed, "external-echo", :enoent}, state)
 
       assert new_state.modal.type == :error
 
       assert new_state.modal.message ==
-               "External Echo could not start. You are still connected and back in Foglet. Check server logs for launch details."
+               "External Echo could not start. You are still connected and back in Misty Pines. Check server logs for launch details."
 
       refute new_state.modal.message =~ ":enoent"
     end
 
     test "door exit reasons are mapped to caller-safe modal copy", %{state: state} do
+      with_public_app_name("Misty Pines")
+
       cases = [
-        {:normal, :info, "Native Hello has closed. You are back in Foglet."},
+        {:normal, :info, "Native Hello has closed. You are back in Misty Pines."},
         {:timeout, :warning,
-         "Native Hello reached its maximum play time and was closed. You are back in Foglet."},
+         "Native Hello reached its maximum play time and was closed. You are back in Misty Pines."},
         {:idle_timeout, :warning,
-         "Native Hello was idle too long and was closed. You are back in Foglet."},
+         "Native Hello was idle too long and was closed. You are back in Misty Pines."},
         {:shutdown, :info,
-         "Native Hello closed unexpectedly. You are back in Foglet. Check server logs for details."}
+         "Native Hello closed unexpectedly. You are back in Misty Pines. Check server logs for details."}
       ]
 
       for {reason, type, expected_message} <- cases do
@@ -425,7 +442,7 @@ defmodule Foglet.TUI.AppTest do
       assert String.length(new_state.modal.message) <= 120
 
       assert new_state.modal.message ==
-               "Classic Dropfile Demo reached its maximum play time and was closed. You are back in Foglet."
+               "Classic Dropfile Demo reached its maximum play time and was closed. You are back in #{Foglet.AppName.name()}."
     end
 
     test "form modal submit effect routes through App to target screen update", %{state: state} do

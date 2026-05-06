@@ -24,7 +24,7 @@ defmodule Foglet.TUI.Screens.Register do
   through `init/1`, `update/3`, and `render/2`.
   """
 
-  alias Foglet.{Accounts, Config}
+  alias Foglet.{Accounts, AppName, Config}
   alias Foglet.Accounts.{Invites, SSHKey, Verification}
   alias Foglet.TUI.{Context, Effect, Input, TextWidth}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
@@ -389,7 +389,7 @@ defmodule Foglet.TUI.Screens.Register do
       AuthForm.render(
         "Choose your handle",
         AuthForm.helper_text(
-          "Pick the name and email this Foglet will know you by.",
+          "Pick the name and email #{AppName.name()} will know you by.",
           theme,
           @auth_card_inner_width
         ) ++ [text("")] ++ rows ++ error_items,
@@ -625,7 +625,7 @@ defmodule Foglet.TUI.Screens.Register do
     modal = %Foglet.TUI.Modal{
       type: :error,
       message:
-        "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
+        "#{AppName.name()} has email turned off, so we can't send a verification code. Ask the sysop."
     }
 
     {state, [Effect.open_modal(modal)]}

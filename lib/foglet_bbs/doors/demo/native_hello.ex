@@ -7,6 +7,8 @@ defmodule Foglet.Doors.Demo.NativeHello do
 
   @behaviour Foglet.Doors.Door
 
+  alias Foglet.AppName
+
   @impl true
   def init(%{session: session, terminal_size: {cols, rows}}) do
     handle = Map.get(session, :handle) || "guest"
@@ -20,7 +22,9 @@ defmodule Foglet.Doors.Demo.NativeHello do
        "x",
        to_string(rows),
        ")\n",
-       "Press Enter to return to Foglet.\n"
+       "Press Enter to return to ",
+       AppName.name(),
+       ".\n"
      ]}
   end
 

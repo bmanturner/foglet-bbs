@@ -3086,7 +3086,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         |> Map.put(:identifier_input, TextInput.init(value: "person@example.test"))
         |> Map.put(
           :message,
-          "This Foglet has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it."
+          "Foglet has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it."
         )
         |> Map.put(:message_category, :no_email)
 
@@ -3236,9 +3236,9 @@ defmodule Foglet.TUI.LayoutSmokeTest do
           |> recovery_request_feedback_state_at()
           |> ascii_login(size)
 
-        assert_no_recovery_border_feedback_collision(ascii, "This Foglet")
+        assert_no_recovery_border_feedback_collision(ascii, "Foglet has")
 
-        assert length(String.split(ascii, "This Foglet")) - 1 == 1,
+        assert length(String.split(ascii, "Foglet has")) - 1 == 1,
                "request feedback should render once in the active pane at #{inspect(size)}:\n#{ascii}"
       end
     end

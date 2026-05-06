@@ -745,7 +745,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       login_state = %{
         Foglet.TUI.Screens.Login.State.reset_recovery(:request)
         | message:
-            "This Foglet has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it.",
+            "Foglet has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it.",
           message_category: :no_email_operator_assisted
       }
 
@@ -1605,7 +1605,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
       assert %{type: :error, message: msg} = modal_effect(effects)
 
       assert msg ==
-               "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
+               "Foglet has email turned off, so we can't send a verification code. Ask the sysop."
 
       refute FogletBbs.Repo.exists?(
                from t in Foglet.Accounts.UserToken,

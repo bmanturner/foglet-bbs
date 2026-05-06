@@ -14,6 +14,7 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
   """
 
   alias Foglet.Accounts.Verification
+  alias Foglet.AppName
   alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -26,8 +27,6 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
 
   @reset_email_dispatched_message "If that email is on file, reset instructions are on the way. Already have a reset token from the sysop? Press Esc, then [T] to enter it."
   @reset_invalid_email_message "That doesn't look like an email address. Try one shaped like name@example.test."
-  @reset_no_email_intro "This Foglet has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it."
-  @reset_no_email_no_sysops_fallback "No sysop contact is listed on this Foglet. Reach them through whoever sent your invite."
 
   @spec handle_key(map(), map()) ::
           :no_match | {:update, map(), [Effect.t()]} | {map(), [Effect.t()]}
@@ -169,12 +168,20 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
   defp no_email_operator_message(sysops) do
     sysop_line =
       case sysops do
-        [] -> @reset_no_email_no_sysops_fallback
+        [] -> reset_no_email_no_sysops_fallback()
         [email] -> "Sysop: " <> email <> "."
         emails -> "Sysops: " <> Enum.join(emails, ", ") <> "."
       end
 
-    @reset_no_email_intro <> "\n\n" <> sysop_line
+    reset_no_email_intro() <> "\n\n" <> sysop_line
+  end
+
+  defp reset_no_email_intro do
+    "#{AppName.name()} has email turned off. Ask the sysop for a reset token, then press Esc and [T] to enter it."
+  end
+
+  defp reset_no_email_no_sysops_fallback do
+    "No sysop contact is listed on #{AppName.name()}. Reach them through whoever sent your invite."
   end
 
   # --- Domain-module resolution (duplicated from Login per Phase 47 plan 05 D-14) ---

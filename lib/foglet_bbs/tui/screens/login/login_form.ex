@@ -13,6 +13,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.{Auth, Verification}
+  alias Foglet.AppName
   alias Foglet.TUI.{Context, Effect, Input}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
@@ -235,7 +236,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   defp handle_login_result(state, {:ok, _user, :verify, :unavailable}) do
     login_error_modal(
       state,
-      "This Foglet has email turned off, so we can't send a verification code. Ask the sysop."
+      "#{AppName.name()} has email turned off, so we can't send a verification code. Ask the sysop."
     )
   end
 
