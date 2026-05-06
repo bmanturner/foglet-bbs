@@ -9,8 +9,8 @@ defmodule Foglet.Sessions.OnlineNowTest do
   end
 
   defmodule FakeAccounts do
-    def get_user("u1"), do: %{id: "u1", handle: "alice", role: :user}
-    def get_user("u2"), do: %{id: "u2", handle: "zoe", role: :mod}
+    def get_user("u1"), do: %{id: "u1", handle: "alice", handle_color: "#ff8800", role: :user}
+    def get_user("u2"), do: %{id: "u2", handle: "zoe", handle_color: "#AaBbCc", role: :mod}
     def get_user("guestless"), do: nil
   end
 
@@ -37,12 +37,14 @@ defmodule Foglet.Sessions.OnlineNowTest do
     assert zoe.user_id == "u2"
     assert zoe.handle == "zoe"
     assert zoe.role == :mod
+    assert zoe.handle_color == "#AaBbCc"
     assert zoe.presence_label == "Browsing general"
-    assert zoe.user == %{id: "u2", handle: "zoe", role: :mod}
+    assert zoe.user == %{id: "u2", handle: "zoe", handle_color: "#AaBbCc", role: :mod}
 
     assert alice.user_id == "u1"
     assert alice.handle == "alice"
     assert alice.role == :user
+    assert alice.handle_color == "#ff8800"
     assert alice.presence_label == "Online"
   end
 end

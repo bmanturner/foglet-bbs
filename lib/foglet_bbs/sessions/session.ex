@@ -27,6 +27,7 @@ defmodule Foglet.Sessions.Session do
   @type t :: %__MODULE__{
           user_id: String.t() | nil,
           handle: String.t() | nil,
+          handle_color: String.t() | nil,
           role: atom(),
           terminal_size: {pos_integer(), pos_integer()},
           connected_at: DateTime.t(),
@@ -42,6 +43,7 @@ defmodule Foglet.Sessions.Session do
   defstruct [
     :user_id,
     :handle,
+    :handle_color,
     :role,
     :terminal_size,
     :connected_at,
@@ -163,6 +165,7 @@ defmodule Foglet.Sessions.Session do
     state = %__MODULE__{
       user_id: Keyword.get(opts, :user_id),
       handle: Keyword.get(opts, :handle),
+      handle_color: Keyword.get(opts, :handle_color),
       role: Keyword.get(opts, :role, :user),
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
       connected_at: now,
@@ -238,6 +241,7 @@ defmodule Foglet.Sessions.Session do
           |> Map.merge(%{
             user_id: user.id,
             handle: user.handle,
+            handle_color: user.handle_color,
             role: user.role,
             last_seen_at: now,
             last_action_at: now

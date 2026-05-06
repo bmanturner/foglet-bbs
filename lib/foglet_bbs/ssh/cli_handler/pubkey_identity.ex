@@ -74,6 +74,7 @@ defmodule Foglet.SSH.CLIHandler.PubkeyIdentity do
     case Sessions.Supervisor.start_session(
            user_id: user.id,
            handle: user.handle,
+           handle_color: user.handle_color,
            role: user.role,
            timezone: preferences.timezone,
            time_format: preferences.time_format,

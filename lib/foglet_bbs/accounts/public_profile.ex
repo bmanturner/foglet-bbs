@@ -19,6 +19,7 @@ defmodule Foglet.Accounts.PublicProfile do
   @type t :: %__MODULE__{
           user_id: String.t() | nil,
           handle: String.t() | nil,
+          handle_color: String.t() | nil,
           role: atom() | nil,
           tagline: String.t() | nil,
           location: String.t() | nil,
@@ -32,6 +33,7 @@ defmodule Foglet.Accounts.PublicProfile do
   defstruct [
     :user_id,
     :handle,
+    :handle_color,
     :role,
     :tagline,
     :location,
@@ -59,6 +61,7 @@ defmodule Foglet.Accounts.PublicProfile do
     %__MODULE__{
       user_id: user_id,
       handle: public_field(user, :handle),
+      handle_color: public_field(user, :handle_color),
       role: public_field(user, :role),
       tagline: blank_to_nil(public_field(user, :tagline)),
       location: blank_to_nil(public_field(user, :location)),

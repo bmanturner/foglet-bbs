@@ -139,6 +139,7 @@ defmodule Foglet.AccountsTest do
       assert reloaded.timezone != ""
       assert reloaded.preferences["time_format"] == "12h"
       assert reloaded.theme == "gray"
+      assert reloaded.handle_color == "#FFFFFF"
     end
 
     test "returns {:error, changeset} on invalid attrs" do
@@ -606,6 +607,7 @@ defmodule Foglet.AccountsTest do
                  real_name: "Brendan Turner",
                  timezone: "America/Chicago",
                  theme: "green",
+                 handle_color: "#ff8800",
                  preferences: %{"time_format" => "24h"}
                })
 
@@ -614,7 +616,31 @@ defmodule Foglet.AccountsTest do
       assert updated.real_name == "Brendan Turner"
       assert updated.timezone == "America/Chicago"
       assert updated.theme == "green"
+      assert updated.handle_color == "#ff8800"
       assert updated.preferences["time_format"] == "24h"
+    end
+
+    test "rejects invalid handle color and leaves the persisted row unchanged" do
+      user = AccountsFixtures.user_fixture()
+      assert {:ok, user} = Accounts.update_profile(user, %{handle_color: "#AaBbCc"})
+
+      for bad <- ["red", "#12", "#12345g", "#1234567", "#12 345", "#123456\n"] do
+        assert {:error, changeset} = Accounts.update_profile(user, %{handle_color: bad})
+
+        refute changeset.valid?, "expected #{inspect(bad)} to be rejected"
+        assert %{handle_color: [_message]} = errors_on(changeset)
+        assert Accounts.get_user!(user.id).handle_color == "#AaBbCc"
+      end
+    end
+
+    test "blank handle color clears custom color for theme/default styling" do
+      user = AccountsFixtures.user_fixture()
+      assert {:ok, user} = Accounts.update_profile(user, %{handle_color: "#AaBbCc"})
+
+      assert {:ok, updated} = Accounts.update_profile(user, %{handle_color: ""})
+
+      assert updated.handle_color == nil
+      assert Accounts.get_user!(user.id).handle_color == nil
     end
 
     test "rejects invalid timezone and leaves the persisted row unchanged" do

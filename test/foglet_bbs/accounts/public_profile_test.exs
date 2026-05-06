@@ -36,6 +36,7 @@ defmodule Foglet.Accounts.PublicProfileTest do
     user = %{
       id: "u1",
       handle: "alice",
+      handle_color: "#ff8800",
       role: :sysop,
       tagline: "Terminal local",
       location: "The Grid",
@@ -54,6 +55,7 @@ defmodule Foglet.Accounts.PublicProfileTest do
     assert %PublicProfile{
              user_id: "u1",
              handle: "alice",
+             handle_color: "#ff8800",
              role: :sysop,
              tagline: "Terminal local",
              location: "The Grid",
