@@ -50,7 +50,7 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
     {:ok, sysop: sysop_fixture(%{handle: "sysoptest", email: "sysoptest@example.test"})}
   end
 
-  test "Sysop SITE test-email provider failure logs once at mailer boundary and keeps feedback safe",
+  test "Sysop SITE test-email provider failure logs at the task and UI result boundaries",
        %{
          sysop: sysop
        } do
@@ -76,16 +76,33 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
     refute log =~ sysop.email
     refute log =~ sysop.handle
 
-    {after_state, []} =
-      App.update(
-        {:screen_task_result, :sysop, :sysop_send_test_email, {:ok, {:error, :forced_failure}}},
-        sending_state
-      )
+    result_log =
+      capture_log(fn ->
+        send(
+          self(),
+          {:after_update,
+           App.update(
+             {:screen_task_result, :sysop, :sysop_send_test_email,
+              {:ok, {:error, :forced_failure}}},
+             sending_state
+           )}
+        )
+      end)
+
+    assert_received {:after_update, {after_state, []}}
+    assert result_log =~ "sysop_test_email_result_failed"
+    assert result_log =~ "screen=sysop"
+    assert result_log =~ "operation=sysop_send_test_email"
+    assert result_log =~ "delivery_mode=email"
+    assert result_log =~ "user_id=#{sysop.id}"
+    assert result_log =~ "reason=:forced_failure"
+    refute result_log =~ sysop.email
+    refute result_log =~ sysop.handle
 
     assert after_state.screen_state.sysop.site_form.test_email_state == {:error, :forced_failure}
 
     feedback = render_site_form_text(after_state)
-    assert feedback =~ "Test email could not be sent. Check operator logs."
+    assert feedback =~ "Test email could not be sent. Check server logs."
     refute feedback =~ "forced_failure"
     refute feedback =~ sysop.email
     refute feedback =~ sysop.handle
@@ -122,12 +139,29 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
     refute result =~ sysop.handle
     refute result =~ "raw-secret"
 
-    {after_state, []} =
-      App.update(
-        {:screen_task_result, :sysop, :sysop_send_test_email,
-         {:error, {:task_failed, :exception}}},
-        sending_state
-      )
+    result_log =
+      capture_log(fn ->
+        send(
+          self(),
+          {:after_exception_update,
+           App.update(
+             {:screen_task_result, :sysop, :sysop_send_test_email,
+              {:error, {:task_failed, :exception}}},
+             sending_state
+           )}
+        )
+      end)
+
+    assert_received {:after_exception_update, {after_state, []}}
+    assert result_log =~ "sysop_test_email_result_failed"
+    assert result_log =~ "screen=sysop"
+    assert result_log =~ "operation=sysop_send_test_email"
+    assert result_log =~ "delivery_mode=email"
+    assert result_log =~ "user_id=#{sysop.id}"
+    assert result_log =~ "reason={:task_failed, :exception}"
+    refute result_log =~ sysop.email
+    refute result_log =~ sysop.handle
+    refute result_log =~ "raw-secret"
 
     assert after_state.screen_state.sysop.site_form.test_email_state ==
              {:error, {:task_failed, :exception}}
@@ -138,7 +172,7 @@ defmodule FogletBbs.TUI.SysopTestEmailLoggingTest do
     refute state_dump =~ "raw-secret"
 
     feedback = render_site_form_text(after_state)
-    assert feedback =~ "Test email could not be sent. Check operator logs."
+    assert feedback =~ "Test email could not be sent. Check server logs."
     refute feedback =~ sysop.email
     refute feedback =~ sysop.handle
     refute feedback =~ "raw-secret"

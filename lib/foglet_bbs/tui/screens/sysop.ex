@@ -23,6 +23,8 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   @behaviour Foglet.TUI.Screen
 
+  require Logger
+
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Input
@@ -72,6 +74,7 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   def update({:task_result, :sysop_send_test_email, result}, local_state, %Context{} = context) do
     ss = normalize_state(local_state, context) |> maybe_init_site_form(context)
+    log_test_email_result_failure(result, context)
     site_form = SiteForm.handle_test_email_result(ss.site_form, result)
     {%{ss | site_form: site_form}, []}
   end
@@ -207,6 +210,36 @@ defmodule Foglet.TUI.Screens.Sysop do
 
   def render(local_state, %Context{} = context),
     do: render(normalize_state(local_state, context), context)
+
+  defp log_test_email_result_failure(result, %Context{} = context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, _delivery} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.error(
+          [
+            "sysop_test_email_result_failed",
+            "screen=sysop",
+            "operation=sysop_send_test_email",
+            "delivery_mode=#{safe_log_value(Foglet.Config.delivery_mode())}",
+            "user_id=#{safe_log_value(current_user_id(context))}",
+            "reason=#{inspect(reason)}"
+          ]
+          |> Enum.reject(&(&1 in [nil, ""]))
+          |> Enum.join(" ")
+        )
+    end
+  end
+
+  defp current_user_id(%Context{current_user: %{id: id}}), do: id
+  defp current_user_id(%Context{session_context: %{user_id: id}}), do: id
+  defp current_user_id(_context), do: nil
+
+  defp safe_log_value(nil), do: "nil"
+  defp safe_log_value(value) when is_atom(value), do: Atom.to_string(value)
+  defp safe_log_value(value) when is_binary(value), do: value
+  defp safe_log_value(value), do: inspect(value)
 
   defp slot_for("BOARDS"), do: :boards_view
   defp slot_for("LIMITS"), do: :limits_form

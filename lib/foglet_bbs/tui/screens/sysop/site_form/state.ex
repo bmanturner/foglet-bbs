@@ -261,7 +261,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
       {"email", :sent} -> "Sent a test email to your account email."
       {"email", {:error, :missing_email}} -> "Add an email to your account before sending a test."
       {"email", {:error, :forbidden}} -> "Permission denied. You may have been demoted."
-      {"email", {:error, _reason}} -> "Test email could not be sent. Check operator logs."
+      {"email", {:error, _reason}} -> "Test email could not be sent. Check server logs."
       {"no_email", {:error, :no_email_mode}} -> "Test email unavailable in no-email mode."
       _ -> description
     end
