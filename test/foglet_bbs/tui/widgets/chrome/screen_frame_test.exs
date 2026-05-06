@@ -1,5 +1,5 @@
 defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
-  use ExUnit.Case, async: true
+  use ExUnit.Case, async: false
 
   import Raxol.Core.Renderer.View
 
