@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
   @default_visible_body_rows 8
   @modal_post_index 0
   @modal_post_total 1
+  @overlay_chrome_reserved_columns 34
 
   defstruct post: nil,
             body_tuples: [],
@@ -65,12 +66,13 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
 
   @spec render(t(), Theme.t(), keyword()) :: term()
   def render(%__MODULE__{} = context, %Theme{} = theme, opts \\ []) do
-    width = opts |> Keyword.get(:width, 60) |> max(28)
+    width = opts |> Keyword.get(:width, 60) |> content_width()
 
     parts =
       PostCard.reader_parts(context.post, context.body_tuples, width, theme,
         index: @modal_post_index,
-        total: @modal_post_total
+        total: @modal_post_total,
+        right_pad: 1
       )
 
     visible_body =
@@ -98,6 +100,19 @@ defmodule Foglet.TUI.Widgets.Post.ReplyContext do
       ]
     end
   end
+
+  # `width` arrives from the app-shell overlay budget. Reply-context content
+  # adds reader gutters inside a padded modal box, so keep the post-card body
+  # narrower than the overlay budget. Otherwise exact-fit wrapped body rows can
+  # overwrite the modal's right border in the ASCII renderer and live SSH/TUI at
+  # 64x22 and 80x24.
+  defp content_width(width) when is_integer(width) do
+    width
+    |> Kernel.-(@overlay_chrome_reserved_columns)
+    |> max(28)
+  end
+
+  defp content_width(_width), do: content_width(60)
 
   defp scroll_status(%__MODULE__{} = context, body_lines, width, theme) do
     total = length(body_lines)

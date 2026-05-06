@@ -9,6 +9,7 @@ defmodule Foglet.TUI.App.ModalTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Widgets.Modal.Form
+  alias Foglet.TUI.Widgets.Post.ReplyContext
   alias Raxol.Core.Runtime.Command
 
   defmodule SampleScreen do
@@ -95,6 +96,27 @@ defmodule Foglet.TUI.App.ModalTest do
     )
   end
 
+  defp reply_context_modal do
+    body =
+      Enum.map_join(1..12, "\n", fn row ->
+        "Long reply-context body for scroll verification with enough words to wrap inside the modal interior while preserving chrome row #{row}."
+      end)
+
+    post = %{
+      id: "p1",
+      message_number: 1,
+      body: body,
+      upvote_count: 2,
+      user: %{handle: "bob"},
+      inserted_at: ~U[2026-04-18 00:00:00Z]
+    }
+
+    %Modal{
+      type: :reply_context,
+      message: ReplyContext.new(post, Foglet.Markdown.render(body), upvote?: true)
+    }
+  end
+
   defp row_containing(rendered, needle) do
     rendered
     |> String.split("\n")
@@ -111,6 +133,16 @@ defmodule Foglet.TUI.App.ModalTest do
            "expected modal right boundary to survive on #{inspect(needle)} row; got #{inspect(row)}"
   end
 
+  defp assert_modal_rows_bounded(rendered) do
+    bad_rows =
+      rendered
+      |> String.split("\n")
+      |> Enum.filter(&(String.contains?(&1, "║") and not String.ends_with?(&1, "║")))
+
+    assert bad_rows == [],
+           "expected every modal content row to preserve the right border; got:\n#{Enum.join(bad_rows, "\n")}"
+  end
+
   describe "modal key precedence" do
     test "handle_key/2 does not route keys to the active screen reducer while a modal is open" do
       modal = %Modal{type: :info, message: "pause"}
@@ -125,6 +157,24 @@ defmodule Foglet.TUI.App.ModalTest do
   end
 
   describe "modal overlay rendering" do
+    test "reply-context scroll keys update the active modal without routing the screen" do
+      state = state(modal: reply_context_modal())
+
+      {down_state, down_cmds} = AppModal.handle_key(%{key: :down}, state)
+      assert down_cmds == []
+      assert %Modal{message: %ReplyContext{scroll_top: 1}} = down_state.modal
+      assert %SampleScreen.State{keys: []} = Routing.screen_state_for(down_state, :source)
+
+      {paged_state, page_cmds} = AppModal.handle_key(%{key: :page_down}, down_state)
+      assert page_cmds == []
+      assert %Modal{message: %ReplyContext{scroll_top: 9}} = paged_state.modal
+      assert %SampleScreen.State{keys: []} = Routing.screen_state_for(paged_state, :source)
+
+      {up_state, up_cmds} = AppModal.handle_key(%{key: :up}, paged_state)
+      assert up_cmds == []
+      assert %Modal{message: %ReplyContext{scroll_top: 8}} = up_state.modal
+    end
+
     test "form select-list body stays inside modal border at cramped width" do
       modal = %Modal{type: :form, message: timezone_form()}
 
@@ -145,6 +195,20 @@ defmodule Foglet.TUI.App.ModalTest do
 
       assert_modal_boundary_survives(baseline, "selected Etc/UTC")
       assert_modal_boundary_survives(baseline, "[Enter] Select   [Ctrl+S] Save   [Esc] Cancel")
+    end
+
+    test "reply-context body, scroll status, and keybar stay inside modal border" do
+      for size <- [{64, 22}, {80, 24}] do
+        rendered =
+          state(modal: reply_context_modal(), terminal_size: size)
+          |> App.view()
+          |> AsciiRenderer.render(size)
+
+        assert_modal_boundary_survives(rendered, "Long reply-context body")
+        assert_modal_boundary_survives(rendered, "Lines 1-8/")
+        assert_modal_boundary_survives(rendered, "[↑↓] Scroll")
+        assert_modal_rows_bounded(rendered)
+      end
     end
   end
 
