@@ -505,7 +505,7 @@ defmodule Foglet.Doors.RunnerTest do
           dropfile_formats: [:door32_sys],
           args: [
             "-c",
-            "printf 'args:%s|%s|%s|%s|%s\n' \"$1\" \"$2\" \"$3\" \"$4\" \"$5\"",
+            "printf 'args:%s|%s|%s|%s|%s\n' \"$1\" \"$2\" \"$3\" \"$4\" \"$5\"; IFS= read -r _",
             "_",
             "--door32",
             "{dropfile:door32_sys}",
@@ -535,6 +535,8 @@ defmodule Foglet.Doors.RunnerTest do
 
       assert %{dropfile_paths: %{door32_sys: door32_path}} = Runner.snapshot(pid)
       assert Path.basename(door32_path) == "DOOR32.SYS"
+
+      Runner.input(pid, "\n")
 
       assert_receive {:door_exited, ^pid, "classic-usurper-argv", :normal, 0}, @event_timeout
       assert_receive {:DOWN, ^ref, :process, ^pid, :normal}, @event_timeout
