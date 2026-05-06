@@ -112,36 +112,116 @@ defmodule Foglet.TUI.Widgets.List.BoardTree do
   def init(opts) when is_list(opts) do
     directory = Keyword.fetch!(opts, :directory)
     id = Keyword.get(opts, :id, "board-tree-#{:erlang.unique_integer([:positive])}")
+    selected_board_id = Keyword.get(opts, :selected_board_id)
 
     nodes = directory_to_nodes(directory)
     tree = Tree.init(id: id, nodes: nodes)
 
-    expanded =
-      nodes
-      |> Enum.map(& &1.id)
-      |> MapSet.new()
-
+    expanded_ids = expanded_node_ids(nodes, Keyword.get(opts, :expanded_category_ids, :all))
+    expanded = MapSet.new(expanded_ids)
     tree = put_in(tree.raxol_state.expanded, expanded)
 
-    # FOG-105: park the initial cursor on the first board (leaf) so the
-    # selection marker is visible on first entry and Enter on the first
-    # frame opens that board deterministically. Raxol's default lands the
-    # cursor on the first category, which renders without a `▌` marker
-    # and binds Enter to expand/collapse rather than open.
+    # FOG-105: park the initial cursor on a board (leaf) so the selection
+    # marker is visible on first entry and Enter opens deterministically.
+    # FOG-1063: when rebuilding from session-local state, prefer the last
+    # selected board only if it is still visible under the restored collapse
+    # state; otherwise fall back to the nearest visible board.
     tree =
-      case first_board_id(nodes) do
+      case initial_cursor(nodes, expanded_ids, selected_board_id) do
         nil -> tree
-        board_id -> put_in(tree.raxol_state.cursor, board_id)
+        cursor -> put_in(tree.raxol_state.cursor, cursor)
       end
 
     %__MODULE__{tree: tree, directory: directory, last_action: nil}
   end
 
-  @spec first_board_id([Tree.tree_node()]) :: term() | nil
-  defp first_board_id(nodes) do
-    Enum.find_value(nodes, fn
-      %{children: [first | _]} -> first.id
-      _ -> nil
+  @spec expanded_category_ids(t()) :: MapSet.t()
+  def expanded_category_ids(%__MODULE__{tree: %Tree{raxol_state: %{expanded: expanded}}}) do
+    expanded
+    |> Enum.flat_map(fn
+      {:category, category_id} -> [category_id]
+      _other -> []
+    end)
+    |> MapSet.new()
+  end
+
+  @spec focused_board_id(t()) :: term() | nil
+  def focused_board_id(%__MODULE__{} = tree) do
+    case focused_board_entry(tree) do
+      %{board: %{id: id}} -> id
+      _other -> nil
+    end
+  end
+
+  defp expanded_node_ids(nodes, :all), do: Enum.map(nodes, & &1.id)
+  defp expanded_node_ids(_nodes, nil), do: []
+
+  defp expanded_node_ids(_nodes, category_ids) do
+    Enum.map(category_ids, &{:category, &1})
+  end
+
+  defp initial_cursor(nodes, expanded, nil), do: first_visible_board_id(nodes, expanded)
+
+  defp initial_cursor(nodes, expanded, selected_board_id) do
+    all_board_ids = board_ids(nodes)
+    visible_board_ids = visible_board_ids(nodes, expanded)
+    preferred = {:board, selected_board_id}
+
+    cond do
+      preferred in visible_board_ids ->
+        preferred
+
+      visible_board_ids == [] ->
+        nil
+
+      true ->
+        nearest_visible_board_id(all_board_ids, visible_board_ids, preferred)
+    end
+  end
+
+  defp first_visible_board_id(nodes, expanded) do
+    nodes
+    |> visible_board_ids(expanded)
+    |> List.first()
+  end
+
+  defp nearest_visible_board_id(all_board_ids, visible_board_ids, preferred) do
+    preferred_index = Enum.find_index(all_board_ids, &(&1 == preferred)) || 0
+
+    Enum.min_by(visible_board_ids, fn board_id ->
+      visible_index = Enum.find_index(all_board_ids, &(&1 == board_id)) || 0
+      {abs(visible_index - preferred_index), visible_index}
+    end)
+  end
+
+  defp visible_board_ids(nodes, expanded) do
+    nodes
+    |> visible_nodes(expanded)
+    |> Enum.flat_map(fn
+      %{id: {:board, _id} = board_id} -> [board_id]
+      _other -> []
+    end)
+  end
+
+  defp visible_nodes(nodes, expanded) do
+    Enum.flat_map(nodes, fn node ->
+      children =
+        if node.id in expanded do
+          visible_nodes(Map.get(node, :children, []), expanded)
+        else
+          []
+        end
+
+      [node | children]
+    end)
+  end
+
+  @spec board_ids([Tree.tree_node()]) :: [term()]
+  defp board_ids(nodes) do
+    Enum.flat_map(nodes, fn
+      %{id: {:board, _id} = board_id} -> [board_id]
+      %{children: children} -> board_ids(children)
+      _other -> []
     end)
   end
 

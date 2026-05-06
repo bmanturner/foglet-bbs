@@ -14,7 +14,9 @@ defmodule Foglet.TUI.Screens.BoardList.State do
           status: :loading | :loaded | :empty | {:error, term()},
           feedback: String.t() | nil,
           last_op: atom() | nil,
-          last_error: term() | nil
+          last_error: term() | nil,
+          selected_board_id: term() | nil,
+          expanded_category_ids: MapSet.t() | nil
         }
 
   defstruct directory: nil,
@@ -22,7 +24,9 @@ defmodule Foglet.TUI.Screens.BoardList.State do
             status: :loading,
             feedback: nil,
             last_op: nil,
-            last_error: nil
+            last_error: nil,
+            selected_board_id: nil,
+            expanded_category_ids: nil
 
   @spec new(keyword()) :: t()
   def new(opts \\ []) do
@@ -32,7 +36,9 @@ defmodule Foglet.TUI.Screens.BoardList.State do
       status: Keyword.get(opts, :status, :loading),
       feedback: Keyword.get(opts, :feedback),
       last_op: Keyword.get(opts, :last_op),
-      last_error: Keyword.get(opts, :last_error)
+      last_error: Keyword.get(opts, :last_error),
+      selected_board_id: Keyword.get(opts, :selected_board_id),
+      expanded_category_ids: Keyword.get(opts, :expanded_category_ids)
     }
   end
 end
