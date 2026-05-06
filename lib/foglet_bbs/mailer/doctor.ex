@@ -62,9 +62,9 @@ defmodule Foglet.Mailer.Doctor do
     # run through `/app/bin/foglet_bbs eval` on a machine where the real app is
     # already running. Starting the full supervision tree would collide with
     # listeners such as Phoenix, SSH, and the metrics endpoint.
-    for app <- [:ssl, :postgrex, :ecto_sql, :swoosh, :gen_smtp] do
+    Enum.each([:ssl, :postgrex, :ecto_sql, :swoosh, :gen_smtp], fn app ->
       {:ok, _started} = Application.ensure_all_started(app)
-    end
+    end)
   end
 
   defp start_repo! do

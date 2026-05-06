@@ -7,10 +7,12 @@ defmodule Foglet.TUI.App do
   shell — an 8-field struct (`current_screen`, `current_user`,
   `session_context`, `session_pid`, `terminal_size`, `route_params`,
   `modal`, `screen_state`) — while `Foglet.TUI.App.{Routing, Modal, Effects,
-  Subscriptions, ScreenStates, SessionAlias}` own the extracted runtime
-  details. Per-screen state lives in screen-owned `%State{}` structs stored
+  Subscriptions, ScreenStates, SessionAlias}` own the extracted
+  runtime details. Per-screen state lives in screen-owned `%State{}` structs stored
   under `screen_state`, keyed by screen atom; each screen is a reducer that
   exposes `update/3` + `render/2` and an optional `subscriptions/2` callback.
+  `session_context.door_active?` is runtime-only terminal handoff state: while true, Foglet
+  renders a blank frame and lets the SSH door runner own all terminal bytes.
 
   State flow (D-16): domain → Postgres (Foglet.Boards/Threads/Posts);
   session-scoped identity → Foglet.Sessions.Session; UI shell → this model
@@ -241,6 +243,9 @@ defmodule Foglet.TUI.App do
   @impl true
   def view(state) do
     cond do
+      door_active?(state) ->
+        text("")
+
       SizeGate.too_small?(state) ->
         # FRAME-03 / D-04: render-time gate bypasses ScreenFrame entirely.
         # No outer border, no StatusBar, no KeyBar on the too-small screen.
@@ -255,6 +260,16 @@ defmodule Foglet.TUI.App do
         Routing.render_screen(state)
     end
   end
+
+  defp door_active?(%{session_context: session_context}) when is_map(session_context),
+    do: Map.get(session_context, :door_active?, false)
+
+  defp door_active?(_state), do: false
+
+  defp mark_door_active(session_context, active?) when is_map(session_context),
+    do: Map.put(session_context, :door_active?, active?)
+
+  defp mark_door_active(_session_context, active?), do: %{door_active?: active?}
 
   @impl true
   def subscribe(state) do
@@ -401,7 +416,7 @@ defmodule Foglet.TUI.App do
         "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
     }
 
-    {%{state | modal: modal}, []}
+    {%{state | session_context: mark_door_active(state.session_context, false), modal: modal}, []}
   end
 
   defp do_update({:door_exited, door_id, reason, _status}, state) do
@@ -410,7 +425,7 @@ defmodule Foglet.TUI.App do
       message: door_exit_message(door_id, reason)
     }
 
-    {%{state | modal: modal}, []}
+    {%{state | session_context: mark_door_active(state.session_context, false), modal: modal}, []}
   end
 
   defp do_update({:door_launch_failed, door_id, _reason}, state) do
@@ -420,7 +435,7 @@ defmodule Foglet.TUI.App do
         "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
     }
 
-    {%{state | modal: modal}, []}
+    {%{state | session_context: mark_door_active(state.session_context, false), modal: modal}, []}
   end
 
   defp do_update(:heartbeat_tick, state), do: SessionAlias.heartbeat(state)

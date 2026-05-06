@@ -379,12 +379,17 @@ defmodule Foglet.TUI.App.Effects do
           100
         )
 
-        {state, []}
+        {%{state | session_context: mark_door_active(state.session_context, true)}, []}
 
       _other ->
         start_detached_runner(state, manifest, session, output)
     end
   end
+
+  defp mark_door_active(session_context, active?) when is_map(session_context),
+    do: Map.put(session_context, :door_active?, active?)
+
+  defp mark_door_active(_session_context, active?), do: %{door_active?: active?}
 
   defp start_detached_runner(state, manifest, session, output) do
     case Foglet.Doors.Supervisor.start_runner(
