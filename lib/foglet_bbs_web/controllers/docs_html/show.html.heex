@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{@page.title} · foglet docs</title>
+    <link rel="stylesheet" href="/assets/docs.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="bar">
+        <span>foglet · ssh-first terminal bbs · /docs/{@page.category}/{@page.id}</span>
+        <span>
+          <span class="live">PRE-ALPHA</span>
+          <span style="color:#555; padding: 0 8px">│</span>
+          <a href="/">← landing</a>
+        </span>
+      </div>
+
+      <div class="shell">
+        <.sidebar groups={@groups} active={{@page.category, @page.id}} />
+
+        <main class="article">
+          <p class="crumbs">
+            <a href="/docs">Docs</a>
+            <span class="sep">/</span>
+            <span>{@page.category_title}</span>
+            <span class="sep">/</span>
+            <span>{@page.title}</span>
+          </p>
+
+          <h1>{@page.title}</h1>
+          <p :if={@page.description != ""} class="lede">{@page.description}</p>
+
+          <article class="prose">
+            {Phoenix.HTML.raw(@page.body)}
+          </article>
+
+          <div class="footer">
+            <a href="/docs">← all docs</a>
+            <span>foglet bbs · /{@page.category}/{@page.id}</span>
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>

@@ -9,7 +9,7 @@ This document describes the shape of the system: the major components, how they 
 Foglet is a single OTP application (`:foglet`) running on the BEAM. It exposes two network-facing interfaces:
 
 1. **SSH server** — the primary user interface. Each connection drives a TUI.
-2. **Phoenix endpoint** — serves Phoenix Channels (for the future Go CLI client) and LiveDashboard (sysop-only observability). Not used for an end-user web UI.
+2. **Phoenix endpoint** — serves Phoenix Channels (for the future Go CLI client), LiveDashboard (sysop-only observability), and a small read-only public surface for project documentation (`/docs`, compiled from `priv/docs/*.md` via NimblePublisher). Not used for an end-user product UI — the BBS itself remains SSH-first.
 
 Both interfaces terminate into the same domain core: boards, threads, posts, sessions, presence, chat, moderation. There is one source of truth for domain state (Postgres) and one source of truth for ephemeral state (ETS, via Phoenix Presence and local tables).
 
@@ -279,6 +279,8 @@ Sysops and moderators are users with elevated roles. Admin affordances live in t
 - **Mix tasks on the server** — `mix foglet.user.create`, `mix foglet.user.promote`, `mix foglet.user.status`, `mix foglet.users.approve`, `mix foglet.users.reject`, `mix foglet.user.reset_password`, `mix foglet.reset_token.inspect`, `mix foglet.reset_token.expire`, `mix foglet.user.verification_code`, `mix foglet.verification.inspect`, `mix foglet.invites.create`, `mix foglet.invites.list`, `mix foglet.invites.inspect`, `mix foglet.invites.revoke`, `mix foglet.qa.mode`, `mix foglet.board_subscriptions`, `mix foglet.doctor`. For install, bootstrap, QA, and break-glass scenarios. (Future: a `mix foglet.config.set` for runtime config edits and a `mix foglet.archive` read-only mode are tracked in the roadmap but not yet implemented.)
 
 Phoenix LiveDashboard is exposed on the Phoenix endpoint, guarded by an admin-only plug. It's for observing the running system (process counts, ETS table sizes, request telemetry), not for operating the BBS.
+
+A read-only documentation surface is mounted on the Phoenix endpoint at `/docs`. It is compiled at build time from `priv/docs/*.md` via [NimblePublisher](https://github.com/dashbitco/nimble_publisher) and rendered to HTML through `MDEx`. It serves project documentation only — there is no auth, no form input, and no domain mutation. End-user product flows remain SSH-first; this is an intentional, scoped exception on the same plane as LiveDashboard.
 
 ---
 

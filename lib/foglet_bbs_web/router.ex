@@ -25,6 +25,9 @@ defmodule FogletBbsWeb.Router do
     pipe_through :browser
 
     get "/", PageController, :home
+
+    get "/docs", DocsController, :index
+    get "/docs/:category/:id", DocsController, :show
   end
 
   scope "/" do

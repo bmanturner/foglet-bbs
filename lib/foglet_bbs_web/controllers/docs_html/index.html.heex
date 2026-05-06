@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>foglet · docs</title>
+    <link rel="stylesheet" href="/assets/docs.css" />
+  </head>
+  <body>
+    <div class="page">
+      <div class="bar">
+        <span>foglet · ssh-first terminal bbs · /docs</span>
+        <span>
+          <span class="live">PRE-ALPHA</span>
+          <span style="color:#555; padding: 0 8px">│</span>
+          <a href="/">← landing</a>
+        </span>
+      </div>
+
+      <div class="shell">
+        <.sidebar groups={@groups} active={nil} />
+
+        <main class="article">
+          <div class="index-hero">
+            <h1>Documentation</h1>
+            <p>Reference material for running, contributing to, and understanding Foglet BBS.</p>
+          </div>
+
+          <div :for={{title, pages} <- @groups} class="index-group">
+            <h2>{title}</h2>
+            <ul class="index-list">
+              <li :for={page <- pages}>
+                <a href={"/docs/#{page.category}/#{page.id}"}>
+                  {page.title}
+                  <span :if={page.description != ""} class="desc">{page.description}</span>
+                </a>
+              </li>
+            </ul>
+          </div>
+        </main>
+      </div>
+    </div>
+  </body>
+</html>
