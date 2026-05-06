@@ -14,17 +14,6 @@ defmodule FogletBbsWeb.DocsHTML do
         <small>ssh-first bbs · docs</small>
       </a>
 
-      <div class="group">
-        <p class="group-title">§ overview</p>
-        <ul>
-          <li>
-            <a href="/docs" class={if @active == nil, do: "active", else: ""}>
-              All docs
-            </a>
-          </li>
-        </ul>
-      </div>
-
       <div :for={{title, pages} <- @groups} class="group">
         <p class="group-title">§ {title}</p>
         <ul>

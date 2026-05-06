@@ -2,24 +2,9 @@ defmodule FogletBbsWeb.DocsControllerTest do
   use FogletBbsWeb.ConnCase, async: true
 
   describe "GET /docs" do
-    test "renders categorized index of compiled pages", %{conn: conn} do
+    test "redirects to the start-here overview", %{conn: conn} do
       conn = get(conn, ~p"/docs")
-      body = html_response(conn, 200)
-
-      # Categories appear as group headings
-      assert body =~ "Getting Started"
-      assert body =~ "Architecture"
-
-      # Pages link to /docs/<category>/<id>
-      assert body =~ ~s(href="/docs/getting-started/hello")
-      assert body =~ ~s(href="/docs/getting-started/connect")
-      assert body =~ ~s(href="/docs/architecture/overview")
-
-      # Sidebar links to landing page
-      assert body =~ ~s(href="/")
-
-      # Loads the docs stylesheet
-      assert body =~ ~s(href="/assets/docs.css")
+      assert redirected_to(conn) == ~p"/docs/start-here/overview"
     end
 
     test "/assets/docs.css is served by the endpoint", %{conn: conn} do
@@ -30,14 +15,12 @@ defmodule FogletBbsWeb.DocsControllerTest do
 
   describe "GET /docs/:category/:id" do
     test "renders the page body as HTML with breadcrumbs", %{conn: conn} do
-      conn = get(conn, ~p"/docs/getting-started/hello")
+      conn = get(conn, ~p"/docs/start-here/overview")
       body = html_response(conn, 200)
 
-      assert body =~ "Hello, Foglet"
-      # Markdown was rendered to HTML
-      assert body =~ "<code>"
+      assert body =~ "Overview"
       # Breadcrumbs include humanized category title
-      assert body =~ "Getting Started"
+      assert body =~ "Start Here"
       # Sidebar marks the active page
       assert body =~ ~s(class="active")
     end
@@ -47,18 +30,55 @@ defmodule FogletBbsWeb.DocsControllerTest do
     end
 
     test "raises NotFoundError for unknown id", %{conn: conn} do
-      assert_error_sent(404, fn -> get(conn, ~p"/docs/getting-started/missing") end)
+      assert_error_sent(404, fn -> get(conn, ~p"/docs/start-here/missing") end)
     end
   end
 
   describe "FogletBbsWeb.Docs ordering" do
+    test "categories follow the public docs outline order" do
+      titles =
+        FogletBbsWeb.Docs.grouped_pages()
+        |> Enum.map(fn {title, _pages} -> title end)
+
+      assert titles == [
+               "Start Here",
+               "Installation",
+               "Deployment",
+               "Configuration",
+               "Administration",
+               "User Guide",
+               "Door Games",
+               "Operations",
+               "Concepts",
+               "Advanced"
+             ]
+    end
+
     test "pages within a category are sorted by weight ascending" do
       [{_title, pages} | _] =
         FogletBbsWeb.Docs.grouped_pages()
-        |> Enum.filter(fn {title, _} -> title == "Getting Started" end)
+        |> Enum.filter(fn {title, _} -> title == "Door Games" end)
 
       ids = Enum.map(pages, & &1.id)
-      assert ids == ["hello", "connect"]
+
+      assert ids == [
+               "overview",
+               "support-status",
+               "operator-setup",
+               "demo-doors",
+               "manifest-reference",
+               "visibility-and-launch-policy",
+               "native-elixir-doors",
+               "external-pty-doors",
+               "classic-dropfile-doors",
+               "adapter-contract",
+               "security-and-sandboxing",
+               "deployment-profiles",
+               "runtime-boundary",
+               "tui-flow",
+               "troubleshooting",
+               "qa-and-release-checks"
+             ]
     end
   end
 end

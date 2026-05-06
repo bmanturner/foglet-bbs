@@ -18,7 +18,27 @@ defmodule FogletBbsWeb.Docs do
     as: :pages,
     html_converter: FogletBbsWeb.Docs.MarkdownConverter
 
-  @pages Enum.sort_by(@pages, &{&1.category, &1.weight, &1.title})
+  @category_order [
+    "start-here",
+    "installation",
+    "deployment",
+    "configuration",
+    "administration",
+    "user-guide",
+    "door-games",
+    "operations",
+    "concepts",
+    "advanced"
+  ]
+
+  @category_rank @category_order
+                 |> Enum.with_index()
+                 |> Map.new()
+
+  @pages Enum.sort_by(
+           @pages,
+           &{Map.get(@category_rank, &1.category, 10_000), &1.category, &1.weight, &1.title}
+         )
   @categories @pages |> Enum.map(&{&1.category, &1.category_title}) |> Enum.uniq()
 
   @doc "All pages, sorted by category → weight → title."
