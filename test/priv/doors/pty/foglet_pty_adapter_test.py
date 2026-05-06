@@ -135,6 +135,25 @@ class DropPrivilegesTest(unittest.TestCase):
         self.assertNotIn(("setgroups", []), fake_os.calls)
 
 
+class TerminalOutputSanitizerTest(unittest.TestCase):
+    def setUp(self):
+        self.helper = load_helper()
+
+    def test_strips_full_terminal_reset_without_dropping_neighboring_menu_output(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(
+            sanitizer.filter(b"before\x1bcafter"),
+            b"beforeafter",
+        )
+
+    def test_strips_split_full_terminal_reset_before_following_menu_output(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(sanitizer.filter(b"before\x1b"), b"before")
+        self.assertEqual(sanitizer.filter(b"cafter"), b"after")
+
+
 class DirectHelperLaunchTest(unittest.TestCase):
     def test_broken_stdout_pipe_exits_without_traceback(self):
         helper = load_helper()

@@ -219,6 +219,9 @@ class TerminalOutputSanitizer:
         if start + 1 >= len(data):
             return None
 
+        if data[start + 1] == ord("c"):
+            return ("strip", start + 2)
+
         if data[start + 1] != ord("["):
             return ("keep", start + 2)
 

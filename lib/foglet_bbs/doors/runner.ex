@@ -42,6 +42,8 @@ defmodule Foglet.Doors.Runner do
     :idle_timeout_ref,
     :started_at,
     :ended_at,
+    :last_input_at,
+    :last_output_at,
     :last_resize,
     :pending_helper_exit_reason,
     :pending_helper_exit_status,
@@ -115,6 +117,10 @@ defmodule Foglet.Doors.Runner do
         :exit_status,
         :os_pid,
         :last_resize,
+        :last_input_at,
+        :last_output_at,
+        :pending_helper_exit_reason,
+        :pending_helper_exit_status,
         :dropfile_paths,
         :dropfile_working_dir
       ])
@@ -125,17 +131,22 @@ defmodule Foglet.Doors.Runner do
 
   @impl true
   def handle_cast({:input, data}, %{manifest: %{runtime: :native_elixir}} = state) do
+    state = mark_input(state)
     module = state.manifest.module
 
     if function_exported?(module, :handle_input, 2) do
       case module.handle_input(data, state.native_state) do
         {:ok, native_state, output} ->
           emit(state, output)
-          {:noreply, %{state | native_state: native_state} |> refresh_idle_timeout()}
+
+          {:noreply,
+           %{state | native_state: native_state} |> mark_output() |> refresh_idle_timeout()}
 
         {:stop, reason, native_state, output} ->
           emit(state, output)
-          {:stop, :normal, complete(%{state | native_state: native_state}, reason, nil)}
+
+          {:stop, :normal,
+           complete(%{state | native_state: native_state} |> mark_output(), reason, nil)}
       end
     else
       {:noreply, refresh_idle_timeout(state)}
@@ -154,7 +165,7 @@ defmodule Foglet.Doors.Runner do
         log_privacy_safe(:error, state, :door_input_failed, %{reason_class: reason_class(reason)})
     end
 
-    {:noreply, refresh_idle_timeout(state)}
+    {:noreply, state |> mark_input() |> refresh_idle_timeout()}
   end
 
   def handle_cast({:input, data}, %{port: port} = state) when not is_nil(port) do
@@ -166,7 +177,7 @@ defmodule Foglet.Doors.Runner do
         log_privacy_safe(:error, state, :door_input_failed, %{reason_class: reason_class(reason)})
     end
 
-    {:noreply, refresh_idle_timeout(state)}
+    {:noreply, state |> mark_input() |> refresh_idle_timeout()}
   end
 
   def handle_cast({:input, _data}, state), do: {:noreply, state}
@@ -302,7 +313,7 @@ defmodule Foglet.Doors.Runner do
     case PTYAdapter.decode_frame(data) do
       {:output, output} ->
         emit(state, output)
-        {:noreply, refresh_idle_timeout(state)}
+        {:noreply, state |> mark_output() |> refresh_idle_timeout()}
 
       {:exit, status} ->
         reason = if status == 0, do: :normal, else: :crash
@@ -328,7 +339,7 @@ defmodule Foglet.Doors.Runner do
 
   def handle_info({_port, {:data, data}}, state) do
     emit(state, data)
-    {:noreply, refresh_idle_timeout(state)}
+    {:noreply, state |> mark_output() |> refresh_idle_timeout()}
   end
 
   def handle_info(
@@ -422,6 +433,9 @@ defmodule Foglet.Doors.Runner do
   end
 
   defp encode_output(_state, data), do: data
+
+  defp mark_input(state), do: %{state | last_input_at: DateTime.utc_now()}
+  defp mark_output(state), do: %{state | last_output_at: DateTime.utc_now()}
 
   defp notify_owner(%{owner: owner}, message) when is_pid(owner), do: send(owner, message)
   defp notify_owner(_state, _message), do: :ok
