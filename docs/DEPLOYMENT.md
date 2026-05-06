@@ -267,20 +267,43 @@ Observability baseline for the sandbox path:
 
 ## Telemetry & Monitoring
 
-Wired up in this repo (`lib/foglet_bbs_web/telemetry.ex`):
+Wired up in this repo (`lib/foglet_bbs_web/telemetry.ex` and
+`Foglet.Metrics.Store`):
 
 - `:telemetry_poller` runs periodic measurements every 10s.
-- Metric definitions exist for Phoenix endpoint/router/socket/channel
-  events, Ecto repo query timings, and BEAM VM (memory, run queues).
-- **No reporter is attached.** The metrics are defined but not exported
-  to any backend — `Telemetry.Metrics.ConsoleReporter` is commented out,
-  and there is no Prometheus, StatsD, or vendor reporter configured.
+- A dedicated Prometheus text listener is supervised separately from the
+  Phoenix endpoint. Defaults are `0.0.0.0:9091` and `/metrics`; override with
+  `FOGLET_METRICS_ENABLED`, `FOGLET_METRICS_PORT`, and `FOGLET_METRICS_PATH`.
+- `fly.toml` includes Fly custom metrics scrape wiring:
+  `[metrics] port = 9091, path = "/metrics"`.
+- Exported application metrics include active SSH/TUI sessions, session
+  connect/disconnect counters, auth/promotion outcomes, one-session replacement
+  count, door launch/exit counters, door runtime summaries, selected Phoenix
+  request counters/timings, selected Ecto query timings, and BEAM VM memory/run
+  queue gauges.
+- The metrics listener intentionally binds `0.0.0.0` for Fly scraping but is not
+  listed under `[http_service]` or `[[services.ports]]`; it is not intended as an
+  end-user HTTP surface. Residual risk: metrics are reachable to anything with
+  internal app-network access to the Machine and should not contain secrets or
+  high-cardinality user/resource identifiers.
+
+Useful Fly Grafana PromQL/MetricsQL examples:
+
+```promql
+foglet_ssh_sessions_active{kind="total"}
+rate(foglet_ssh_auth_outcomes_total{outcome!="success"}[5m])
+rate(foglet_ssh_session_replacements_total[5m])
+rate(foglet_door_launches_total{outcome!="success"}[5m])
+foglet_door_runtime_seconds_sum / foglet_door_runtime_seconds_count
+rate(foglet_bbs_repo_query_duration_seconds_sum{phase="query_time"}[5m]) /
+  rate(foglet_bbs_repo_query_duration_seconds_count{phase="query_time"}[5m])
+```
 
 There is **no Sentry / error-tracking dependency** in `mix.exs` and no
 `Sentry` references in `lib/` or `config/`. `docs/ARCHITECTURE.md` mentions
 Sentry as optional; nothing is wired up today.
 
-LiveDashboard is mounted by `FogletBbsWeb.Endpoint` and is the primary
+LiveDashboard is mounted by `FogletBbsWeb.Endpoint` and remains the primary
 in-process observability surface for sysops.
 
 <!-- VERIFY: external monitoring/alerting (PagerDuty, Grafana, Datadog, log aggregator) integration — not configured in the repo -->
