@@ -43,6 +43,8 @@ defmodule Foglet.Doors.Runner do
     :started_at,
     :ended_at,
     :last_resize,
+    :pending_helper_exit_reason,
+    :pending_helper_exit_status,
     status: :starting,
     exit_reason: nil,
     exit_status: nil,
@@ -304,7 +306,9 @@ defmodule Foglet.Doors.Runner do
 
       {:exit, status} ->
         reason = if status == 0, do: :normal, else: :crash
-        {:stop, :normal, complete(state, reason, status)}
+
+        {:noreply,
+         %{state | pending_helper_exit_reason: reason, pending_helper_exit_status: status}}
 
       {:error, {:bad_exit_frame, reason}} ->
         log_bad_exit_frame(state, data, reason)
@@ -325,6 +329,19 @@ defmodule Foglet.Doors.Runner do
   def handle_info({_port, {:data, data}}, state) do
     emit(state, data)
     {:noreply, refresh_idle_timeout(state)}
+  end
+
+  def handle_info(
+        {port, {:exit_status, _status}},
+        %{
+          port: port,
+          pty_adapter: %PTYAdapter{backend: :helper},
+          pending_helper_exit_reason: reason,
+          pending_helper_exit_status: exit_status
+        } = state
+      )
+      when not is_nil(reason) do
+    {:stop, :normal, complete(state, reason, exit_status)}
   end
 
   def handle_info(

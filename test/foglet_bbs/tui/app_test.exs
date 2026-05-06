@@ -391,6 +391,39 @@ defmodule Foglet.TUI.AppTest do
       assert cleared.modal == nil
     end
 
+    test "active door handoff blanks Foglet view until exit reclaims terminal", %{state: state} do
+      manifest = %Foglet.Doors.Manifest{
+        id: "native-hello",
+        slug: "native-hello",
+        display_name: "Native Hello",
+        runtime: :native_elixir,
+        module: Foglet.Doors.Demo.NativeHello,
+        timeout_ms: 5_000,
+        visibility: :members,
+        auth_scope: :site
+      }
+
+      state = %{
+        state
+        | current_user: %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user},
+          current_screen: :door_list,
+          session_context: %{door_handler_pid: self()}
+      }
+
+      {handoff_state, []} = Effects.apply_effect(state, Effect.launch_door(manifest))
+      assert handoff_state.session_context.door_active?
+
+      blank = Foglet.TUI.AsciiRenderer.render(App.view(handoff_state), {80, 24})
+      refute blank =~ "Foglet"
+      refute blank =~ "Door Games"
+
+      assert_receive {:foglet_launch_door, ^manifest, _session, {80, 24}}, 250
+
+      {returned_state, []} = App.update({:door_exited, "native-hello", :normal, 0}, handoff_state)
+      refute returned_state.session_context.door_active?
+      assert returned_state.modal.message =~ "Native Hello has closed"
+    end
+
     test "external door launch failure is shown as a friendly recoverable error", %{state: state} do
       {new_state, []} = App.update({:door_exited, "external-echo", {:error, :enoent}, nil}, state)
 
