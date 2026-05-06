@@ -153,6 +153,23 @@ class TerminalOutputSanitizerTest(unittest.TestCase):
         self.assertEqual(sanitizer.filter(b"before\x1b"), b"before")
         self.assertEqual(sanitizer.filter(b"cafter"), b"after")
 
+    def test_defers_standalone_full_screen_clear_until_menu_redraw_arrives(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(sanitizer.filter(b"\x1b[2J\x1b[H"), b"")
+        self.assertEqual(
+            sanitizer.filter(b"Menu\r\nYour choice: "),
+            b"\x1b[2J\x1b[HMenu\r\nYour choice: ",
+        )
+
+    def test_keeps_full_screen_clear_when_frame_contains_redraw_output(self):
+        sanitizer = self.helper.TerminalOutputSanitizer()
+
+        self.assertEqual(
+            sanitizer.filter(b"\x1b[2J\x1b[HMenu\r\nYour choice: "),
+            b"\x1b[2J\x1b[HMenu\r\nYour choice: ",
+        )
+
 
 class DirectHelperLaunchTest(unittest.TestCase):
     def test_broken_stdout_pipe_exits_without_traceback(self):
