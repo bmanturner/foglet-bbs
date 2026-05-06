@@ -10,7 +10,7 @@ defmodule Foglet.TUI.Widgets.List.SelectionListTest do
   defp distinctive_theme do
     %Theme{
       dim: %{fg: "#selection-dim"},
-      selected: %{fg: "#selection-selected"},
+      selected: %{fg: "#selection-selected", bg: "#selection-selected-bg"},
       unselected: %{fg: "#selection-unselected"}
     }
   end
@@ -22,7 +22,13 @@ defmodule Foglet.TUI.Widgets.List.SelectionListTest do
       tree = SelectionList.render(["Boards", "Account"], 0, theme: theme)
 
       assert flatten_text(tree) == "▌ Boards  Account"
-      assert_text_run(tree, "▌ Boards", fg: theme.selected.fg, style: [:bold])
+
+      assert_text_run(tree, "▌ Boards",
+        fg: theme.selected.fg,
+        bg: theme.selected.bg,
+        style: [:bold]
+      )
+
       assert_text_run(tree, "  Account", fg: theme.unselected.fg)
     end
 

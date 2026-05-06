@@ -97,7 +97,7 @@ defmodule Foglet.TUI.Widgets.List.SelectionList do
         text("  #{label}", fg: theme.dim.fg, style: [:dim])
 
       selected? ->
-        text("▌ #{label}", fg: theme.selected.fg, style: [:bold])
+        text("▌ #{label}", fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold])
 
       true ->
         text("  #{label}", fg: theme.unselected.fg)

@@ -1080,10 +1080,7 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
       ] ++
         scroll_above_rows(window_start, inner_width, theme) ++
         Enum.map(option_rows, fn row ->
-          text(bounded_select_content(row, inner_width),
-            fg: select_option_row_fg(row, theme),
-            style: select_option_row_style(row)
-          )
+          text(bounded_select_content(row, inner_width), select_option_row_attrs(row, theme))
         end) ++
         scroll_below_rows(window_start, length(visible_options), total, inner_width, theme)
 
@@ -1161,13 +1158,13 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     "#{select_option_marker(selected?, cursor?)} #{label}"
   end
 
-  defp select_option_row_fg(<<"✓", _rest::binary>>, %Theme{} = theme), do: theme.selected.fg
-  defp select_option_row_fg(<<"›", _rest::binary>>, %Theme{} = theme), do: theme.selected.fg
-  defp select_option_row_fg(_row, %Theme{} = theme), do: theme.primary.fg
+  defp select_option_row_attrs(<<"✓", _rest::binary>>, %Theme{} = theme),
+    do: [fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold]]
 
-  defp select_option_row_style(<<"✓", _rest::binary>>), do: [:bold]
-  defp select_option_row_style(<<"›", _rest::binary>>), do: [:bold]
-  defp select_option_row_style(_row), do: []
+  defp select_option_row_attrs(<<"›", _rest::binary>>, %Theme{} = theme),
+    do: [fg: theme.selected.fg, bg: theme.selected.bg, style: [:bold]]
+
+  defp select_option_row_attrs(_row, %Theme{} = theme), do: [fg: theme.primary.fg]
 
   defp select_option_marker(true, _cursor?), do: "✓"
   defp select_option_marker(false, true), do: "›"
@@ -1198,7 +1195,12 @@ defmodule Foglet.TUI.Widgets.Modal.Form do
     n = length(choices)
     safe_idx = idx |> max(0) |> min(n - 1)
     value = Enum.at(choices, safe_idx)
-    text("‹ #{value} › (#{safe_idx + 1}/#{n})", fg: theme.selected.fg, style: [:bold])
+
+    text("‹ #{value} › (#{safe_idx + 1}/#{n})",
+      fg: theme.selected.fg,
+      bg: theme.selected.bg,
+      style: [:bold]
+    )
   end
 
   # ---------------------------------------------------------------------------
