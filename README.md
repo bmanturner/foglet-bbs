@@ -26,6 +26,8 @@ Current Foglet builds include:
 - Password authentication and SSH public-key authentication.
 - In-TUI SSH key management, including adding and removing public keys from an account.
 - Boards, threads, posts, replies, edits, soft deletion, read pointers, board subscriptions, and per-board message numbering.
+- Board-scoped chat rooms where the sysop enables them, with ephemeral or permanent storage backends.
+- Door games through native Elixir, external PTY, and classic dropfile manifests.
 - Oneliners for short public notes.
 - Moderation and sysop workflows for users, boards, configuration, subscriptions, invites, verification, reset tokens, and oneliners where implemented.
 - One active session per user: a new login promotes the new connection and closes the older session.
