@@ -6,13 +6,15 @@ defmodule Foglet.TUI.App do
   `widgets/*` are the instruments. This module holds the canonical UI
   shell — an 8-field struct (`current_screen`, `current_user`,
   `session_context`, `session_pid`, `terminal_size`, `route_params`,
-  `modal`, `screen_state`) — while `Foglet.TUI.App.{Routing, Modal, Effects,
-  Subscriptions, ScreenStates, SessionAlias}` own the extracted
-  runtime details. Per-screen state lives in screen-owned `%State{}` structs stored
-  under `screen_state`, keyed by screen atom; each screen is a reducer that
-  exposes `update/3` + `render/2` and an optional `subscriptions/2` callback.
-  `session_context.door_active?` is runtime-only terminal handoff state: while true, Foglet
-  suppresses Raxol rendering and lets the SSH door runner own all terminal bytes.
+  `modal`, `screen_state`) — while `Foglet.TUI.App.{Bootstrap, Door,
+  MessageNormalizer, PubSubRouter, Routing, Modal, Effects, Subscriptions,
+  ScreenStates, SessionAlias, Tasks}` own the extracted runtime details. Per-screen state lives in screen-owned `%State{}`
+  structs stored under `screen_state`, keyed by screen atom; each screen is a
+  reducer that exposes `update/3` + `render/2` and an optional
+  `subscriptions/2` callback. Terminal handoff to external door programs is
+  owned by `Foglet.TUI.App.Door`: while a door is active, `view/1` returns nil
+  so the SSH door runner can write directly to the PTY without Raxol fighting
+  it for bytes.
 
   State flow (D-16): domain → Postgres (Foglet.Boards/Threads/Posts);
   session-scoped identity → Foglet.Sessions.Session; UI shell → this model
@@ -22,18 +24,23 @@ defmodule Foglet.TUI.App do
 
   use Raxol.Core.Runtime.Application
 
-  alias Foglet.Accounts
-  alias Foglet.AppName
+  alias Foglet.TUI.App.Bootstrap
+  alias Foglet.TUI.App.Door
   alias Foglet.TUI.App.Effects
+  alias Foglet.TUI.App.MessageNormalizer
   alias Foglet.TUI.App.Modal, as: AppModal
+  alias Foglet.TUI.App.PubSubRouter
   alias Foglet.TUI.App.Routing
   alias Foglet.TUI.App.ScreenStates
   alias Foglet.TUI.App.SessionAlias
   alias Foglet.TUI.App.Subscriptions
+  alias Foglet.TUI.App.Tasks, as: AppTasks
   alias Foglet.TUI.Context
   alias Foglet.TUI.Guest
   alias Foglet.TUI.SizeGate
   alias Raxol.Core.Runtime.Command
+
+  require PubSubRouter
 
   @type screen ::
           :login
@@ -109,141 +116,19 @@ defmodule Foglet.TUI.App do
   # --- Raxol callbacks ---
 
   @impl true
-  def init(context) do
-    # When started via Raxol.Core.Runtime.Lifecycle.start_link/2, the map
-    # passed to init/1 is %{width:, height:, options: [all_lifecycle_opts]}.
-    # Our custom context is stored under the :context key in those options.
-    # When called directly in tests, context may carry :session_context at the
-    # top level — we support both to keep tests working unchanged.
-    {session_context, terminal_size} = extract_context(context)
-
-    user = Map.get(session_context, :user)
-    session_pid = Map.get(session_context, :session_pid)
-
-    # Register TUI pid with the Session so it can receive replace/heartbeat msgs.
-    if is_pid(session_pid) do
-      Foglet.Sessions.Session.set_tui_pid(session_pid, self())
-    end
-
-    screen = initial_screen(user, session_context)
-
-    state =
-      %__MODULE__{
-        current_screen: screen,
-        current_user: user,
-        session_context: session_context,
-        session_pid: session_pid,
-        terminal_size: terminal_size
-      }
-      |> maybe_put_account_gate_modal(user)
-      |> maybe_init_initial_screen_state()
-
-    {:ok, state}
-  end
-
-  defp initial_screen(nil, session_context) do
-    if Guest.guest?(session_context), do: :main_menu, else: :login
-  end
-
-  defp initial_screen(%{status: status}, _session_context)
-       when status in [:pending, :rejected, :suspended],
-       do: :login
-
-  defp initial_screen(%{status: :active, confirmed_at: nil} = user, _session_context),
-    do: Accounts.post_login_screen(user)
-
-  defp initial_screen(user, _session_context), do: Accounts.post_login_screen(user)
-
-  defp maybe_put_account_gate_modal(state, %{status: status})
-       when status in [:pending, :rejected, :suspended] do
-    %{state | modal: account_gate_modal(status)}
-  end
-
-  defp maybe_put_account_gate_modal(state, _user), do: state
-
-  defp account_gate_modal(:pending) do
-    %Foglet.TUI.Modal{
-      type: :error,
-      message: "Your account is waiting for sysop approval. Try again once you've heard back."
-    }
-  end
-
-  defp account_gate_modal(:rejected) do
-    %Foglet.TUI.Modal{
-      type: :error,
-      message: "Your registration was turned down. Reach the sysop if you think that's a mistake."
-    }
-  end
-
-  defp account_gate_modal(:suspended) do
-    %Foglet.TUI.Modal{
-      type: :error,
-      message: "Your account is suspended. Reach the sysop to ask why."
-    }
-  end
-
-  # Extract session_context + terminal_size from either:
-  #   (a) Lifecycle-produced map: %{width:, height:, options: [context: %{...}]}
-  #   (b) Direct test call: %{session_context: %SessionContext{} | %{...}, terminal_size: {w, h}}
-  #
-  # The session_context value may be a `%Foglet.TUI.SessionContext{}` struct
-  # (the production path via SSH.CLIHandler) or a plain map (tests and legacy
-  # callers). Both are accepted so that test helpers can pass partial maps
-  # without constructing a full struct.
-  defp extract_context(context) do
-    if is_map(context) and is_list(Map.get(context, :options)) do
-      # Lifecycle path — context is in options[:context]
-      opts = Map.get(context, :options, [])
-      nested = Keyword.get(opts, :context, %{})
-      session_context = Map.get(nested, :session_context, %Foglet.TUI.SessionContext{})
-      w = Map.get(context, :width, 80)
-      h = Map.get(context, :height, 24)
-      terminal_size = Map.get(nested, :terminal_size, {w, h})
-      {session_context, terminal_size}
-    else
-      # Direct/test path — session_context at top level
-      session_context = Map.get(context, :session_context, %Foglet.TUI.SessionContext{})
-      terminal_size = Map.get(context, :terminal_size, {80, 24})
-      {session_context, terminal_size}
-    end
-  end
+  defdelegate init(context), to: Bootstrap
 
   @impl true
   def update(message, state) do
-    {new_state, commands} = do_update(normalize_message(message), state)
+    {new_state, commands} = do_update(MessageNormalizer.normalize(message), state)
     _ = Subscriptions.refresh_dynamic(state, new_state)
     {new_state, commands}
   end
 
-  # Pass Raxol %Event{} key structs through as {:key, event_data_map} so that
-  # screens can pattern-match directly on the Raxol-native data shape.
-  # Window and resize events are still unpacked into a plain
-  # {width, height} tuple.
-  defp normalize_message(%Raxol.Core.Events.Event{type: :key, data: data}) do
-    {:key, data}
-  end
-
-  defp normalize_message(%Raxol.Core.Events.Event{type: :window, data: %{width: w, height: h}}) do
-    {:window_change, w, h}
-  end
-
-  defp normalize_message(%Raxol.Core.Events.Event{type: :resize, data: %{width: w, height: h}}) do
-    {:window_change, w, h}
-  end
-
-  defp normalize_message(%Raxol.Core.Events.Event{
-         type: :foglet_runtime,
-         data: %{message: message}
-       }) do
-    message
-  end
-
-  defp normalize_message(other), do: other
-
   @impl true
   def view(state) do
     cond do
-      door_active?(state) ->
+      Door.suppress_render?(state) ->
         nil
 
       SizeGate.too_small?(state) ->
@@ -260,16 +145,6 @@ defmodule Foglet.TUI.App do
         Routing.render_screen(state)
     end
   end
-
-  defp door_active?(%{session_context: session_context}) when is_map(session_context),
-    do: Map.get(session_context, :door_active?, false)
-
-  defp door_active?(_state), do: false
-
-  defp mark_door_active(session_context, active?) when is_map(session_context),
-    do: Map.put(session_context, :door_active?, active?)
-
-  defp mark_door_active(_session_context, active?), do: %{door_active?: active?}
 
   @impl true
   def subscribe(state) do
@@ -366,37 +241,14 @@ defmodule Foglet.TUI.App do
     end
   end
 
-  # PubSub message handlers (Audit #12).
-  # These messages arrive via PubSubForwarder → {:subscription, msg} → Dispatcher
-  # → update/2. Phase 2 may not yet emit all of these; the handlers are wired now
-  # so real-time updates work as soon as Phase 2 starts broadcasting.
-
-  # PubSub broadcast routing (Phase 39 D-13, R8): forward {:board_activity, …}
-  # and {:thread_activity, …} to the active screen via the generic update path.
-  # Screens that care (BoardList for :board_activity, PostReader for
-  # :thread_activity) handle the message in their update/3; screens that don't
-  # hit their update(_message, …) catch-all and no-op.
-  defp do_update({:board_activity, _board_id, _event} = msg, state) do
-    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
-  end
-
-  defp do_update({:thread_activity, _thread_id, _event} = msg, state) do
-    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
-  end
-
-  # FOG-253: forward board-screen presence broadcasts (FOG-250) to the active
-  # screen so `BoardScreen` can re-render its `2 CHAT (#)` counter.
-  defp do_update({:board_screen, _event, _payload} = msg, state) do
-    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
-  end
-
-  # FOG-284: forward live chat broadcasts (FOG-254/256) to the active screen so
-  # `BoardScreen` can append `{:board_chat, :new_message, _}` events into the
-  # chat tab transcript. Without this clause the catch-all silently drops the
-  # message and the sender's own session never sees its post — which made
-  # C8 scenario 7/8 fail on chat-enabled (esp. ephemeral) boards.
-  defp do_update({:board_chat, _event, _payload} = msg, state) do
-    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
+  # PubSub broadcast routing (Audit #12, Phase 39 D-13/R8, FOG-253, FOG-284).
+  # Live broadcasts arrive via PubSubForwarder → {:subscription, msg} →
+  # Dispatcher → update/2 and are forwarded to the active screen reducer.
+  # Screens that care match the message in their own update/3; screens that
+  # don't hit their catch-all and no-op. See `PubSubRouter` for the topic
+  # list and rationale per topic.
+  defp do_update(msg, state) when PubSubRouter.is_routable(msg) do
+    PubSubRouter.forward(state, msg)
   end
 
   # User-level notifications — show a modal badge.
@@ -409,34 +261,11 @@ defmodule Foglet.TUI.App do
     {%{state | modal: modal}, []}
   end
 
-  defp do_update({:door_exited, door_id, {:error, _reason}, _status} = event, state) do
-    modal = %Foglet.TUI.Modal{
-      type: :error,
-      message:
-        "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
-    }
+  defp do_update({:door_exited, _door_id, _reason, _status} = event, state),
+    do: Door.handle(event, state)
 
-    mark_door_returned(state, modal, event)
-  end
-
-  defp do_update({:door_exited, door_id, reason, _status} = event, state) do
-    modal = %Foglet.TUI.Modal{
-      type: door_exit_modal_type(reason),
-      message: door_exit_message(door_id, reason)
-    }
-
-    mark_door_returned(state, modal, event)
-  end
-
-  defp do_update({:door_launch_failed, door_id, _reason} = event, state) do
-    modal = %Foglet.TUI.Modal{
-      type: :error,
-      message:
-        "#{door_display_name(door_id)} could not start. You are still connected and back in #{AppName.name()}. Check server logs for launch details."
-    }
-
-    mark_door_returned(state, modal, event)
-  end
+  defp do_update({:door_launch_failed, _door_id, _reason} = event, state),
+    do: Door.handle(event, state)
 
   defp do_update(:heartbeat_tick, state), do: SessionAlias.heartbeat(state)
 
@@ -478,17 +307,17 @@ defmodule Foglet.TUI.App do
 
   defp do_update({:promote_session, user}, state), do: SessionAlias.promote_session(state, user)
 
-  defp do_update({:command_result, inner}, state) do
+  defp do_update({:command_result, _inner} = msg, state) do
     # Raxol's Command.task runtime wraps every task return value in
-    # {:command_result, inner} before delivering to update/2 (Audit #11 follow-up).
-    # Re-dispatch so all existing result handlers (:boards_loaded, :threads_loaded,
-    # :posts_loaded, :read_pointers_flushed, etc.) fire correctly.
-    do_update(inner, state)
+    # {:command_result, inner} before delivering to update/2 (Audit #11
+    # follow-up). Re-dispatch the unwrapped message so existing handlers
+    # (:boards_loaded, :threads_loaded, :posts_loaded, :read_pointers_flushed,
+    # etc.) fire correctly.
+    do_update(AppTasks.unwrap(msg), state)
   end
 
-  defp do_update({:screen_task_result, key, op, result}, state) do
-    Routing.route_screen_update(state, key, {:task_result, op, result})
-  end
+  defp do_update({:screen_task_result, _key, _op, _result} = msg, state),
+    do: AppTasks.handle(msg, state)
 
   # After the user dismisses the pending-approval modal, quit the session so the
   # pending user cannot continue navigating the BBS. The modal is already set
@@ -513,73 +342,12 @@ defmodule Foglet.TUI.App do
     {%{state | modal: modal}, []}
   end
 
-  defp do_update({:task_error, op, reason}, state) do
-    require Logger
-    Logger.error("[TUI.App] task #{inspect(op)} failed: #{reason}")
-
-    modal = %Foglet.TUI.Modal{
-      type: :error,
-      message: "Something went wrong while trying to #{humanize_op(op)}. Please try again."
-    }
-
-    {%{state | modal: modal}, []}
-  end
+  defp do_update({:task_error, _op, _reason} = msg, state),
+    do: AppTasks.handle(msg, state)
 
   defp do_update(_other, state) do
     # Unknown messages pass through unchanged.
     {state, []}
-  end
-
-  # Generic initial-screen-state seeding (Phase 39 D-15, R4):
-  # init_route_screen_state/3 already covers MainMenu via the
-  # function_exported?(module, :init, 1) branch. The MainMenu
-  # `oneliner_status: :idle` shim is no longer needed — MainMenu's
-  # :on_route_enter clause (Plan 39-04) sets :loading before the load task
-  # fires.
-  defp maybe_init_initial_screen_state(%__MODULE__{} = state) do
-    Routing.init_route_screen_state(state, state.current_screen, state.route_params)
-  end
-
-  defp humanize_op(op) when is_atom(op) do
-    op |> to_string() |> String.replace("_", " ")
-  end
-
-  defp mark_door_returned(state, modal, event) do
-    state = %{
-      state
-      | session_context: mark_door_active(state.session_context, false),
-        modal: modal
-    }
-
-    active_screen = Routing.screen_key(Routing.current_route(state))
-    {routed_state, cmds} = Routing.route_screen_update(state, active_screen, event)
-    {%{routed_state | modal: modal}, cmds}
-  end
-
-  defp door_exit_modal_type(reason) when reason in [:timeout, :idle_timeout], do: :warning
-  defp door_exit_modal_type(_reason), do: :info
-
-  defp door_exit_message(door_id, :normal) do
-    "#{door_display_name(door_id)} has closed. You are back in #{AppName.name()}."
-  end
-
-  defp door_exit_message(door_id, :timeout) do
-    "#{door_display_name(door_id)} reached its maximum play time and was closed. You are back in #{AppName.name()}."
-  end
-
-  defp door_exit_message(door_id, :idle_timeout) do
-    "#{door_display_name(door_id)} was idle too long and was closed. You are back in #{AppName.name()}."
-  end
-
-  defp door_exit_message(door_id, _reason) do
-    "#{door_display_name(door_id)} closed unexpectedly. You are back in #{AppName.name()}. Check server logs for details."
-  end
-
-  defp door_display_name(door_id) when is_binary(door_id) do
-    door_id
-    |> String.replace(["-", "_"], " ")
-    |> String.split(" ", trim: true)
-    |> Enum.map_join(" ", &String.capitalize/1)
   end
 
   defp format_notification(:dm, %{body: body}), do: "New message: #{body}"
