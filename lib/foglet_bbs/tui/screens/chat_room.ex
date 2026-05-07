@@ -620,11 +620,19 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
   defp refresh_online(%State{board_id: board_id}) do
     PresenceTracker.list(board_id)
-    |> Enum.filter(&(Map.get(&1, :tab) == :chat))
+    |> unique_online_users()
   rescue
     _ -> []
   catch
     :exit, _ -> []
+  end
+
+  defp unique_online_users(entries) do
+    entries
+    |> Enum.sort_by(fn entry ->
+      {Map.get(entry, :user_id), if(Map.get(entry, :tab) == :chat, do: 0, else: 1)}
+    end)
+    |> Enum.uniq_by(&Map.get(&1, :user_id))
   end
 
   defp resolve_handles(%State{} = state, %Context{} = context) do

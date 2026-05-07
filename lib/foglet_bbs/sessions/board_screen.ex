@@ -84,7 +84,8 @@ defmodule Foglet.Sessions.BoardScreen do
   end
 
   @doc """
-  Number of unique `user_id`s currently on the board's chat tab.
+  Number of unique `user_id`s currently present on the board screen and
+  therefore visible in the board chat roster/count.
   """
   @spec chat_count(binary()) :: non_neg_integer()
   def chat_count(board_id) do
@@ -175,12 +176,7 @@ defmodule Foglet.Sessions.BoardScreen do
 
     count =
       refs
-      |> Enum.flat_map(fn ref ->
-        case Map.fetch!(state.entries, ref) do
-          {_board_id, user_id, :chat, _pid} -> [user_id]
-          _entry -> []
-        end
-      end)
+      |> Enum.map(fn ref -> elem(Map.fetch!(state.entries, ref), 1) end)
       |> MapSet.new()
       |> MapSet.size()
 
