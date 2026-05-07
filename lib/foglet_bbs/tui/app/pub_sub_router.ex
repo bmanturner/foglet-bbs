@@ -31,6 +31,8 @@ defmodule Foglet.TUI.App.PubSubRouter do
 
   alias Foglet.TUI.App.Routing
 
+  @type topic :: :board_activity | :thread_activity | :board_screen | :board_chat
+
   @routable_topics [:board_activity, :thread_activity, :board_screen, :board_chat]
 
   @doc """
@@ -42,7 +44,7 @@ defmodule Foglet.TUI.App.PubSubRouter do
                   elem(msg, 0) in @routable_topics
 
   @doc "Returns the canonical list of routable broadcast topics."
-  @spec topics() :: [atom()]
+  @spec topics() :: nonempty_list(topic())
   def topics, do: @routable_topics
 
   @doc """
