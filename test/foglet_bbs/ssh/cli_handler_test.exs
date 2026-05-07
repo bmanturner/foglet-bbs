@@ -88,6 +88,60 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert event
     end
 
+    test ":data during an active door records authenticated session action before shared runner input" do
+      user = AccountsFixtures.user_fixture()
+
+      {:ok, session_pid} =
+        start_supervised(
+          {Foglet.Sessions.Session, [user_id: user.id, handle: user.handle, role: user.role]}
+        )
+
+      old_action_at = ~U[2026-05-05 12:00:00Z]
+
+      :sys.replace_state(session_pid, fn state ->
+        %{state | last_action_at: old_action_at}
+      end)
+
+      state = %CLIHandler{
+        dispatcher_pid: self(),
+        door_runner_pid: self(),
+        session_pid: session_pid
+      }
+
+      assert {:ok, ^state} =
+               CLIHandler.handle_ssh_msg(
+                 {:ssh_cm, make_ref(), {:data, 1, 0, "input is forwarded only"}},
+                 state
+               )
+
+      assert_received {:"$gen_cast", {:input, "input is forwarded only"}}
+      refute_received {:"$gen_cast", {:dispatch, _event}}
+
+      _ = :sys.get_state(session_pid)
+      after_input = Foglet.Sessions.Session.get_state(session_pid)
+      assert DateTime.compare(after_input.last_action_at, old_action_at) == :gt
+    end
+
+    test ":data during an active door leaves guest sessions unauthenticated while forwarding input" do
+      {:ok, session_pid} = start_supervised({Foglet.Sessions.Session, [user_id: nil]})
+
+      state = %CLIHandler{
+        dispatcher_pid: self(),
+        door_runner_pid: self(),
+        session_pid: session_pid
+      }
+
+      assert {:ok, ^state} =
+               CLIHandler.handle_ssh_msg(
+                 {:ssh_cm, make_ref(), {:data, 1, 0, "guest input"}},
+                 state
+               )
+
+      assert_received {:"$gen_cast", {:input, "guest input"}}
+      _ = :sys.get_state(session_pid)
+      assert Foglet.Sessions.Session.get_state(session_pid).last_action_at == nil
+    end
+
     test ":window_change updates returned state and dispatches resize+window events" do
       # IN-01 (Phase 45): Session.set_terminal_size/2 is now driven by
       # Foglet.TUI.App's do_update({:window_change, …}, …) handler in response
