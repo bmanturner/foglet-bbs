@@ -549,7 +549,7 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
     test "sidebar lists online users with (you) label for current user" do
       b = board()
       ctx = context(b)
-      :ok = PresenceTracker.track(b.id, "u1", :chat)
+      :ok = PresenceTracker.track(b.id, "u1", :threads)
 
       task =
         Task.async(fn ->
@@ -560,8 +560,19 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
           end
         end)
 
+      duplicate_user_task =
+        Task.async(fn ->
+          :ok = PresenceTracker.track(b.id, "u1", :chat)
+
+          receive do
+            :stop -> :ok
+          end
+        end)
+
       Stream.repeatedly(fn ->
-        if PresenceTracker.chat_count(b.id) >= 2, do: :ok, else: :wait
+        if length(PresenceTracker.list(b.id)) >= 3 and PresenceTracker.chat_count(b.id) == 2,
+          do: :ok,
+          else: :wait
       end)
       |> Stream.take_while(&(&1 == :wait))
       |> Stream.run()
@@ -569,13 +580,17 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       state = ChatRoom.init(ctx)
       {state, _} = ChatRoom.load_effects(state, ctx)
 
+      assert Enum.map(state.online, & &1.user_id) == ["u1", "u2"]
+
       text = ChatRoom.render(state, ctx) |> flatten_text()
 
       assert text =~ "alice (you)"
       assert text =~ "bob"
 
       send(task.pid, :stop)
+      send(duplicate_user_task.pid, :stop)
       Task.await(task)
+      Task.await(duplicate_user_task)
       :ok = PresenceTracker.untrack(b.id, "u1")
     end
   end
