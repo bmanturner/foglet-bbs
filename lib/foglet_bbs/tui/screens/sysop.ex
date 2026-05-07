@@ -318,10 +318,25 @@ defmodule Foglet.TUI.Screens.Sysop do
   # tabs component (vendor/raxol/lib/raxol/ui/components/input/tabs.ex)
   # consumes 1–9 unconditionally, so we filter at this routing seam (the
   # pitfall called out in the Tabs widget moduledoc).
+  #
+  # FOG-1187: BOARDS create/edit form modals use `Modal.Form` for typed board
+  # fields, including the integer Display order field. While that form owns
+  # focus, digit events are field input, not sysop tab shortcuts. Confirm
+  # modals intentionally do not consume digits here because they have no
+  # editable fields.
   defp digit_consumed_by_active_tab?(event, %State{} = ss) do
-    case Enum.at(State.tab_labels(ss), ss.active_tab) do
-      "LIMITS" -> plain_digit_event?(event)
-      _ -> false
+    plain_digit_event?(event) and
+      case Enum.at(State.tab_labels(ss), ss.active_tab) do
+        "LIMITS" -> true
+        "BOARDS" -> active_boards_form_modal?(ss)
+        _ -> false
+      end
+  end
+
+  defp active_boards_form_modal?(%State{} = ss) do
+    case ss.boards_view do
+      {:loaded, %BoardsView{} = boards_view} -> BoardsView.modal_mode(boards_view) == :form
+      _other -> false
     end
   end
 

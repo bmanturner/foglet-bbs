@@ -31,6 +31,8 @@ defmodule Foglet.TUI.App.PubSubRouter do
 
   alias Foglet.TUI.App.Routing
 
+  @type topic :: :board_activity | :thread_activity | :board_screen | :board_chat
+
   @routable_topics [:board_activity, :thread_activity, :board_screen, :board_chat]
 
   @doc """

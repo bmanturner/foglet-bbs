@@ -1821,6 +1821,57 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert String.contains?(cramped_flat, "Cancel")
     end
 
+    test "FOG-1187 digit edits create-board Display order without switching tabs", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "n"}, state)
+
+      bv = current_boards_view(state)
+      display_order_idx = Enum.find_index(bv.modal.fields, &(&1.name == :display_order))
+      state = put_boards_view(state, %{bv | modal: %{bv.modal | focus_index: display_order_idx}})
+
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "3"}, state)
+
+      bv = current_boards_view(state)
+      assert state.screen_state.sysop.active_tab == 1
+      assert %ModalForm{} = bv.modal
+      assert ModalForm.field_value(bv.modal, :display_order) == 3
+    end
+
+    test "FOG-1187 digit edits edit-board Display order without switching tabs", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "j"}, state)
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "e"}, state)
+
+      bv = current_boards_view(state)
+      display_order_idx = Enum.find_index(bv.modal.fields, &(&1.name == :display_order))
+      state = put_boards_view(state, %{bv | modal: %{bv.modal | focus_index: display_order_idx}})
+
+      {:update, state, _} = handle_sysop_key(%{key: :char, char: "4"}, state)
+
+      bv = current_boards_view(state)
+      assert state.screen_state.sysop.active_tab == 1
+      assert %ModalForm{} = bv.modal
+      assert ModalForm.field_value(bv.modal, :display_order) == 4
+    end
+
+    test "FOG-1187 numeric tab shortcut still works on BOARDS list without a modal", %{
+      state: state,
+      sysop: sysop
+    } do
+      state = activate_boards_tab(state, sysop)
+
+      {:update, state, cmds} = handle_sysop_key(%{key: :char, char: "3"}, state)
+
+      assert state.screen_state.sysop.active_tab == 2
+      assert {:load_sysop_limits} in cmds
+    end
+
     test "FOG-670 archive-confirm modal advertises Y/N in screen footer", %{
       state: state,
       sysop: sysop
