@@ -378,6 +378,15 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end
   end
 
+  def update({:online_presence, _event, _payload}, local_state, %Context{} = context) do
+    local_state =
+      local_state
+      |> normalize_state(context)
+      |> State.bump_presence_refresh()
+
+    {local_state, []}
+  end
+
   def update(_message, local_state, %Context{} = context) do
     {normalize_state(local_state, context), []}
   end

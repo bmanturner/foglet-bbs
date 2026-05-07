@@ -31,23 +31,27 @@ defmodule Foglet.TUI.OnlinePresenceRefreshTest do
            ] = effects
   end
 
-  test "Main Menu accepts presence events without changing screen-local state" do
+  test "Main Menu presence events bump screen state so focused Raxol model refreshes" do
     state = MainMenu.init(context())
 
-    assert {^state, []} =
+    assert {new_state, []} =
              MainMenu.update(
                {:online_presence, :session_connected, %{user_id: "u1"}},
                state,
                context()
              )
+
+    assert new_state != state
+    assert Map.get(new_state, :presence_refresh_revision) == 1
   end
 
   defp context do
-    %Context{
-      current_user: %{id: "viewer", handle: "viewer", role: :user},
+    Context.new(
+      current_user: %Foglet.Accounts.User{id: "viewer", handle: "viewer", role: :user},
       terminal_size: {80, 24},
+      route: :main_menu,
       domain: %{online_now: FakeOnlineNow}
-    }
+    )
   end
 
   defp online_row(handle, presence_label) do
@@ -60,6 +64,7 @@ defmodule Foglet.TUI.OnlinePresenceRefreshTest do
   end
 
   defmodule FakeOnlineNow do
+    def count, do: Process.get(:fake_online_now_count, 0)
     def list(_opts), do: []
   end
 end
