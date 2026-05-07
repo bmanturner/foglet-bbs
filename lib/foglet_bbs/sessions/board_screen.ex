@@ -38,6 +38,8 @@ defmodule Foglet.Sessions.BoardScreen do
 
   require Logger
 
+  alias Foglet.Sessions.OnlinePresence
+
   @valid_tabs [:threads, :chat]
 
   # --- Public API ---
@@ -127,6 +129,8 @@ defmodule Foglet.Sessions.BoardScreen do
       %{board_id: board_id, user_id: user_id, tab: tab}
     )
 
+    broadcast_activity_changed(board_id, user_id, tab)
+
     {:reply, :ok, state}
   end
 
@@ -139,6 +143,8 @@ defmodule Foglet.Sessions.BoardScreen do
       %{board_id: board_id, user_id: user_id, tab: tab}
     )
 
+    broadcast_activity_changed(board_id, user_id, tab)
+
     {:reply, :ok, state}
   end
 
@@ -147,6 +153,7 @@ defmodule Foglet.Sessions.BoardScreen do
 
     if removed_user? do
       broadcast(board_id, :leave, %{board_id: board_id, user_id: user_id})
+      broadcast_activity_changed(board_id, user_id, nil)
     end
 
     {:reply, :ok, state}
@@ -200,6 +207,7 @@ defmodule Foglet.Sessions.BoardScreen do
 
         unless user_still_present?(state, board_id, user_id) do
           broadcast(board_id, :leave, %{board_id: board_id, user_id: user_id})
+          broadcast_activity_changed(board_id, user_id, nil)
         end
 
         {:noreply, state}
@@ -285,4 +293,13 @@ defmodule Foglet.Sessions.BoardScreen do
 
     :ok
   end
+
+  defp broadcast_activity_changed(board_id, user_id, tab) when is_binary(user_id) do
+    payload = %{source: :board_screen, board_id: board_id, user_id: user_id}
+    payload = if is_nil(tab), do: payload, else: Map.put(payload, :tab, tab)
+
+    OnlinePresence.broadcast(:activity_changed, payload)
+  end
+
+  defp broadcast_activity_changed(_board_id, _user_id, _tab), do: :ok
 end

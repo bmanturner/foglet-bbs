@@ -22,6 +22,7 @@ defmodule Foglet.Sessions.Session do
   require Logger
 
   alias Foglet.Accounts
+  alias Foglet.Sessions.OnlinePresence
   alias Foglet.Sessions.Preferences
 
   @type t :: %__MODULE__{
@@ -180,6 +181,7 @@ defmodule Foglet.Sessions.Session do
 
     record_last_seen(state.user_id, now)
     :telemetry.execute([:foglet, :session, :connect], %{count: 1}, %{user_id: state.user_id})
+    OnlinePresence.broadcast(:session_connected, %{user_id: state.user_id})
 
     {:ok, state}
   end
@@ -251,6 +253,8 @@ defmodule Foglet.Sessions.Session do
           })
           |> merge_preferences(Preferences.from_user(user))
 
+        OnlinePresence.broadcast(:session_promoted, %{user_id: user.id})
+
         {:noreply, state}
 
       {:error, {:already_registered, other_pid}} ->
@@ -303,6 +307,7 @@ defmodule Foglet.Sessions.Session do
   @impl true
   def handle_info(:replaced_by_new_session, state) do
     Logger.info("Session for user_id=#{state.user_id} replaced by new connection (SSH-05 / D-25)")
+    OnlinePresence.broadcast(:session_replaced, %{user_id: state.user_id})
 
     if is_pid(state.tui_pid) and Process.alive?(state.tui_pid) do
       send(state.tui_pid, {:session_replaced, state.user_id})
@@ -339,6 +344,7 @@ defmodule Foglet.Sessions.Session do
   defp disconnect_last_seen(state) do
     :telemetry.execute([:foglet, :session, :disconnect], %{count: 1}, %{user_id: state.user_id})
     record_last_seen(state.user_id, DateTime.utc_now())
+    OnlinePresence.broadcast(:session_disconnected, %{user_id: state.user_id})
     :ok
   end
 

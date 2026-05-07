@@ -1952,8 +1952,10 @@ defmodule Foglet.TUI.AppTest do
       {_new_state, _cmds} = App.update({:set_user, user}, state)
 
       clock_topic = Foglet.PubSub.tui_clock_topic()
+      presence_topic = Foglet.PubSub.online_presence_topic()
 
-      assert_receive {:pubsub_forwarder, {:refresh_topics, [^clock_topic, "user:u-dynamic"]}}
+      assert_receive {:pubsub_forwarder,
+                      {:refresh_topics, [^clock_topic, "user:u-dynamic", ^presence_topic]}}
     end
 
     test "board_list screen adds 'boards' topic" do
@@ -2038,7 +2040,7 @@ defmodule Foglet.TUI.AppTest do
       assert "thread:t-state" in pubsub_sub.data.args.topics
     end
 
-    test "main_menu (stateless authenticated screen) produces clock topic plus user topic (Phase 39 D-18)" do
+    test "main_menu (stateless authenticated screen) produces clock, user, and online presence topics (Phase 39 D-18)" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
 
       {:ok, state} =
@@ -2049,7 +2051,12 @@ defmodule Foglet.TUI.AppTest do
 
       pubsub_sub = Enum.find(subs, &match?(%Raxol.Core.Runtime.Subscription{type: :custom}, &1))
       assert pubsub_sub != nil
-      assert pubsub_sub.data.args.topics == [Foglet.PubSub.tui_clock_topic(), "user:u1"]
+
+      assert pubsub_sub.data.args.topics == [
+               Foglet.PubSub.tui_clock_topic(),
+               "user:u1",
+               Foglet.PubSub.online_presence_topic()
+             ]
     end
   end
 

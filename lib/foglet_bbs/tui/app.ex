@@ -251,6 +251,10 @@ defmodule Foglet.TUI.App do
     PubSubRouter.forward(state, msg)
   end
 
+  defp do_update({:online_presence, _event, _payload} = msg, state) do
+    Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
+  end
+
   # User-level notifications — show a modal badge.
   defp do_update({:notification, _user_id, kind, payload}, state) do
     modal = %Foglet.TUI.Modal{

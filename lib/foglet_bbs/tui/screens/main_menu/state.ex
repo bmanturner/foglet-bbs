@@ -13,6 +13,8 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
     * `pending_hide_oneliner_id` — target carried from hide request to submit.
     * `oneliner_status` — load/create/hide lifecycle state.
     * `oneliner_errors` — reducer-visible form and task errors.
+    * `presence_refresh_revision` — monotonic dirty marker for exogenous
+      presence events whose source-of-truth count is recomputed during render.
   """
 
   alias Foglet.TUI.Context
@@ -24,14 +26,16 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
           selected_oneliner_index: non_neg_integer(),
           pending_hide_oneliner_id: String.t() | nil,
           oneliner_status: :idle | :loading | :submitting | :hiding | {:error, term()},
-          oneliner_errors: errors()
+          oneliner_errors: errors(),
+          presence_refresh_revision: non_neg_integer()
         }
 
   defstruct recent_oneliners: [],
             selected_oneliner_index: 0,
             pending_hide_oneliner_id: nil,
             oneliner_status: :idle,
-            oneliner_errors: %{}
+            oneliner_errors: %{},
+            presence_refresh_revision: 0
 
   @doc "Builds the default MainMenu state from screen context."
   @spec new(Context.t() | map() | nil) :: t()
@@ -75,6 +79,12 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
   @doc "Clears reducer-visible form or lifecycle errors."
   @spec clear_errors(t()) :: t()
   def clear_errors(%__MODULE__{} = state), do: %{state | oneliner_errors: %{}}
+
+  @doc "Bumps the refresh revision so exogenous presence events trigger a focused redraw."
+  @spec bump_presence_refresh(t()) :: t()
+  def bump_presence_refresh(%__MODULE__{} = state) do
+    %{state | presence_refresh_revision: state.presence_refresh_revision + 1}
+  end
 
   @doc "Clamps the selected row against the current oneliner list."
   @spec clamp_selection(t()) :: t()

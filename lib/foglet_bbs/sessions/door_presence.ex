@@ -12,6 +12,7 @@ defmodule Foglet.Sessions.DoorPresence do
   use GenServer
 
   alias Foglet.Doors.Manifest
+  alias Foglet.Sessions.OnlinePresence
 
   @type door :: %{id: binary(), name: binary()}
   @type entry :: %{
@@ -91,15 +92,23 @@ defmodule Foglet.Sessions.DoorPresence do
       |> drop_user_owner(user_id, owner_pid)
       |> put_entry(user_id, door, owner_pid, runner_pid)
 
+    broadcast_activity_changed(user_id)
+
     {:reply, :ok, state}
   end
 
   def handle_call({:untrack_owner, user_id, owner_pid}, _from, state) do
-    {:reply, :ok, drop_user_owner(state, user_id, owner_pid)}
+    state = drop_user_owner(state, user_id, owner_pid)
+    broadcast_activity_changed(user_id)
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:untrack_runner, runner_pid}, _from, state) do
-    {:reply, :ok, drop_runner(state, runner_pid)}
+    {state, user_id} = drop_runner_with_user(state, runner_pid)
+    broadcast_activity_changed(user_id)
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:get, user_id}, _from, state) do
@@ -129,7 +138,10 @@ defmodule Foglet.Sessions.DoorPresence do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    {:noreply, drop_ref(state, ref)}
+    {state, user_id} = drop_ref_with_user(state, ref)
+    broadcast_activity_changed(user_id)
+
+    {:noreply, state}
   end
 
   defp put_entry(state, user_id, door, owner_pid, runner_pid) do
@@ -165,19 +177,29 @@ defmodule Foglet.Sessions.DoorPresence do
     end)
   end
 
-  defp drop_runner(state, runner_pid) do
+  defp drop_runner_with_user(state, runner_pid) do
     Enum.find_value(state.entries, state, fn
-      {_ref, %{runner_pid: ^runner_pid} = entry} -> drop_entry(state, entry)
+      {_ref, %{runner_pid: ^runner_pid} = entry} -> {drop_entry(state, entry), entry.user_id}
       _ -> false
     end)
-  end
-
-  defp drop_ref(state, ref) do
-    case Map.fetch(state.entries, ref) do
-      {:ok, entry} -> drop_entry(state, entry)
-      :error -> state
+    |> case do
+      {state, user_id} -> {state, user_id}
+      state -> {state, nil}
     end
   end
+
+  defp drop_ref_with_user(state, ref) do
+    case Map.fetch(state.entries, ref) do
+      {:ok, entry} -> {drop_entry(state, entry), entry.user_id}
+      :error -> {state, nil}
+    end
+  end
+
+  defp broadcast_activity_changed(user_id) when is_binary(user_id) do
+    OnlinePresence.broadcast(:activity_changed, %{source: :door_presence, user_id: user_id})
+  end
+
+  defp broadcast_activity_changed(_user_id), do: :ok
 
   defp drop_entry(state, entry) do
     Process.demonitor(entry.owner_ref, [:flush])

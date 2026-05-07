@@ -12,6 +12,8 @@ defmodule Foglet.Sessions.ActivityPresence do
 
   use GenServer
 
+  alias Foglet.Sessions.OnlinePresence
+
   @type board :: map()
   @type activity ::
           :board_list
@@ -65,11 +67,16 @@ defmodule Foglet.Sessions.ActivityPresence do
       |> drop_pid_entry(user_id, pid)
       |> put_entry(user_id, activity, pid)
 
+    broadcast_activity_changed(user_id)
+
     {:reply, :ok, state}
   end
 
   def handle_call({:clear, user_id, pid}, _from, state) do
-    {:reply, :ok, drop_pid_entry(state, user_id, pid)}
+    state = drop_pid_entry(state, user_id, pid)
+    broadcast_activity_changed(user_id)
+
+    {:reply, :ok, state}
   end
 
   def handle_call({:get, user_id}, _from, state) do
@@ -95,7 +102,10 @@ defmodule Foglet.Sessions.ActivityPresence do
 
   @impl true
   def handle_info({:DOWN, ref, :process, _pid, _reason}, state) do
-    {:noreply, drop_ref(state, ref)}
+    {state, user_id} = drop_ref_with_user(state, ref)
+    broadcast_activity_changed(user_id)
+
+    {:noreply, state}
   end
 
   defp put_entry(state, user_id, activity, pid) do
@@ -124,15 +134,26 @@ defmodule Foglet.Sessions.ActivityPresence do
   end
 
   defp drop_ref(state, ref) do
+    {state, _user_id} = drop_ref_with_user(state, ref)
+    state
+  end
+
+  defp drop_ref_with_user(state, ref) do
     case Map.pop(state.entries, ref) do
       {nil, _entries} ->
-        state
+        {state, nil}
 
       {{user_id, _activity, _pid}, entries} ->
         by_user = remove_ref_from_user(state.by_user, user_id, ref)
-        %{state | entries: entries, by_user: by_user}
+        {%{state | entries: entries, by_user: by_user}, user_id}
     end
   end
+
+  defp broadcast_activity_changed(user_id) when is_binary(user_id) do
+    OnlinePresence.broadcast(:activity_changed, %{source: :activity_presence, user_id: user_id})
+  end
+
+  defp broadcast_activity_changed(_user_id), do: :ok
 
   defp remove_ref_from_user(by_user, user_id, ref) do
     case Map.get(by_user, user_id) do
