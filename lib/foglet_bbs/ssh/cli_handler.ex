@@ -200,6 +200,7 @@ defmodule Foglet.SSH.CLIHandler do
   @impl true
   def handle_ssh_msg({:ssh_cm, _conn, {:data, _ch, _type, data}}, state) do
     if active_door?(state) do
+      record_active_door_input(state)
       Foglet.Doors.Runner.input(state.door_runner_pid, data)
     else
       events = IOAdapter.parse_input(data)
@@ -673,6 +674,12 @@ defmodule Foglet.SSH.CLIHandler do
 
   defp active_door?(%__MODULE__{door_runner_pid: pid}) when is_pid(pid), do: Process.alive?(pid)
   defp active_door?(_state), do: false
+
+  defp record_active_door_input(%__MODULE__{session_pid: session_pid}) when is_pid(session_pid) do
+    Sessions.Session.record_user_action(session_pid)
+  end
+
+  defp record_active_door_input(%__MODULE__{}), do: :ok
 
   defp track_door_presence(%__MODULE__{} = state, runner_pid, door_id) do
     with user_id when is_binary(user_id) <- current_user_id(state),
