@@ -21,6 +21,9 @@ defmodule Foglet.PubSub do
   @spec tui_clock_topic() :: String.t()
   def tui_clock_topic, do: "tui:clock:minute"
 
+  @spec online_presence_topic() :: String.t()
+  def online_presence_topic, do: "online_presence"
+
   @spec board_chat_topic(binary()) :: String.t()
   def board_chat_topic(board_id), do: "board_chat:" <> board_id
 

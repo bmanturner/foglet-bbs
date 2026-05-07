@@ -31,6 +31,10 @@ defmodule Foglet.TUI.Screens.OnlineNow do
   def init(%Context{}), do: State.new()
 
   @impl true
+  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  def subscriptions(_local_state, %Context{}), do: [Foglet.PubSub.online_presence_topic()]
+
+  @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
   def update(:on_route_enter, local_state, %Context{} = context) do
     state = normalize_state(local_state)
@@ -44,6 +48,11 @@ defmodule Foglet.TUI.Screens.OnlineNow do
 
   def update({:task_result, :load_online_now, {:error, reason}}, local_state, %Context{}) do
     {State.set_error(normalize_state(local_state), reason), []}
+  end
+
+  def update({:online_presence, _event, _payload}, local_state, %Context{} = context) do
+    state = normalize_state(local_state)
+    {%{state | status: :loading}, [load_online_now_effect(context)]}
   end
 
   def update({:key, %{key: key}}, local_state, %Context{} = context)

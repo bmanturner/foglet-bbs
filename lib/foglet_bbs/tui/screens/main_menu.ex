@@ -83,6 +83,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
     do: Render.render(normalize_state(local_state, context), context)
 
   @impl true
+  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  def subscriptions(_local_state, %Context{}), do: [Foglet.PubSub.online_presence_topic()]
+
+  @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
   def update({:key, %{key: key} = event}, local_state, %Context{} = context)
       when key in [:up, :down] do
