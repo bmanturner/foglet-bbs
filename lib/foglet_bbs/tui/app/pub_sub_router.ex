@@ -41,8 +41,10 @@ defmodule Foglet.TUI.App.PubSubRouter do
            when is_tuple(msg) and tuple_size(msg) == 3 and
                   elem(msg, 0) in @routable_topics
 
+  @type topic :: :board_activity | :thread_activity | :board_screen | :board_chat
+
   @doc "Returns the canonical list of routable broadcast topics."
-  @spec topics() :: [atom()]
+  @spec topics() :: nonempty_list(topic())
   def topics, do: @routable_topics
 
   @doc """
