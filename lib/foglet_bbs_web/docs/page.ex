@@ -59,7 +59,7 @@ defmodule FogletBbsWeb.Docs.MarkdownConverter do
   @moduledoc false
 
   def convert(_extname, body, _attrs, _opts) do
-    MDEx.to_html!(body)
+    MDEx.to_html!(body, extension: [table: true])
   end
 end
 

@@ -34,6 +34,36 @@ defmodule FogletBbsWeb.DocsControllerTest do
     end
   end
 
+  describe "FogletBbsWeb.Docs.MarkdownConverter" do
+    test "renders pipe tables as semantic HTML tables" do
+      html =
+        FogletBbsWeb.Docs.MarkdownConverter.convert(
+          ".md",
+          "| Setting | Default |\n| --- | --- |\n| site.name | Foglet |\n",
+          %{},
+          []
+        )
+
+      assert html =~ "<table>"
+      assert html =~ "<thead>"
+      assert html =~ "<tbody>"
+      assert html =~ "<th>Setting</th>"
+      assert html =~ "<td>site.name</td>"
+      refute html =~ "<p>| Setting | Default |"
+    end
+  end
+
+  describe "FogletBbsWeb.Docs published pages" do
+    test "site settings page body includes semantic tables" do
+      page = FogletBbsWeb.Docs.get_page!("configuration", "site-settings")
+
+      assert page.body =~ "<table>"
+      assert page.body =~ "<th>Setting</th>"
+      assert page.body =~ "<th>Stored key</th>"
+      refute page.body =~ "<p>| Key |"
+    end
+  end
+
   describe "FogletBbsWeb.Docs ordering" do
     test "categories follow the public docs outline order" do
       titles =
