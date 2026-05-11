@@ -113,6 +113,12 @@ defmodule Foglet.TUI.Screens.SysopTest do
     end)
   end
 
+  defp ssh_key_event!(bytes) do
+    [%Raxol.Core.Events.Event{} = event] = Raxol.SSH.IOAdapter.parse_input(bytes)
+    {:key, key_event} = Foglet.TUI.App.MessageNormalizer.normalize(event)
+    key_event
+  end
+
   defp preserve_app_owned_loading(old_state, new_state, effects) do
     Enum.reduce(effects, new_state, fn
       %Effect{type: :task, payload: %{op: op}}, acc
@@ -627,6 +633,61 @@ defmodule Foglet.TUI.Screens.SysopTest do
       {:update, state, []} = handle_sysop_key(%{key: :backtab}, state)
       assert {:loaded, limits} = state.screen_state.sysop.limits_form
       assert limits.focused == 2
+    end
+
+    test "FOG-1186: SSH parser-shaped Right/Left switch from every visible Sysop tab", %{
+      state: state
+    } do
+      state = with_invite_policy(state, "sysop_only")
+      right_key = ssh_key_event!("\e[C")
+      left_key = ssh_key_event!("\e[D")
+
+      for start_idx <- 0..5 do
+        state =
+          put_in(
+            state,
+            [:screen_state, :sysop],
+            SysopState.new(active: start_idx, invites_visible?: true)
+          )
+
+        {:update, right_state, _cmds} = handle_sysop_key(right_key, state)
+        assert right_state.screen_state.sysop.active_tab == rem(start_idx + 1, 6)
+
+        {:update, left_state, _cmds} = handle_sysop_key(left_key, right_state)
+        assert left_state.screen_state.sysop.active_tab == start_idx
+      end
+    end
+
+    test "FOG-1186: LIMITS keeps digit entry and Tab/Shift-Tab after arrow-tab navigation", %{
+      state: state
+    } do
+      limits = Foglet.TUI.Screens.Sysop.LimitsForm.init(current_user: state.current_user)
+      first_key = hd(Foglet.TUI.Screens.Sysop.LimitsForm.limits_keys())
+
+      state =
+        put_in(state, [:screen_state, :sysop], %{
+          SysopState.new(active: 2)
+          | limits_form: {:loaded, limits}
+        })
+
+      {:update, state, []} = handle_sysop_key(%{key: :char, char: "7"}, state)
+      assert {:loaded, limits} = state.screen_state.sysop.limits_form
+      assert to_string(limits.drafts[first_key]) =~ "7"
+      assert state.screen_state.sysop.active_tab == 2
+
+      {:update, state, []} = handle_sysop_key(%{key: :tab}, state)
+      assert {:loaded, limits} = state.screen_state.sysop.limits_form
+      assert limits.focused == 1
+
+      {:update, state, []} = handle_sysop_key(%{key: :backtab}, state)
+      assert {:loaded, limits} = state.screen_state.sysop.limits_form
+      assert limits.focused == 0
+
+      {:update, state, _cmds} = handle_sysop_key(ssh_key_event!("\e[C"), state)
+      assert state.screen_state.sysop.active_tab == 3
+
+      {:update, state, _cmds} = handle_sysop_key(ssh_key_event!("\e[D"), state)
+      assert state.screen_state.sysop.active_tab == 2
     end
 
     test "switching to SYSTEM emits {:load_sysop_system}", %{state: state} do

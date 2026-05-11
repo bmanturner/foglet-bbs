@@ -341,8 +341,8 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("INVITES", ss, theme, _width, _height),
-    do: InvitesSurface.render(ss.invites, theme)
+  defp render_tab_body("INVITES", ss, theme, width, height),
+    do: InvitesSurface.render(ss.invites, theme, width: width, height: max(height - 2, 1))
 
   # Lifecycle panels (D-08, D-11, D-12). Pattern-match order in
   # `render_tab_body/3` MUST keep `{:error, :forbidden}` BEFORE

@@ -46,18 +46,21 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   def visible?(%{role: :user}, "any_user", "invite_only"), do: true
   def visible?(_, _, _), do: false
 
-  @spec render(map(), Theme.t()) :: any()
-  def render(%InvitesState{mode: :confirm_revoke} = state, %Theme{} = theme),
+  @spec render(map(), Theme.t(), keyword()) :: any()
+  def render(state, theme, opts \\ [])
+
+  def render(%InvitesState{mode: :confirm_revoke} = state, %Theme{} = theme, _opts),
     do: render_confirm_revoke(state, theme)
 
-  def render(%{items: nil, frame: frame}, %Theme{} = theme) when is_integer(frame),
+  def render(%{items: nil, frame: frame}, %Theme{} = theme, _opts) when is_integer(frame),
     do: render_loading(frame, theme)
 
-  def render(%{items: nil}, %Theme{} = theme), do: render_loading(current_frame(), theme)
+  def render(%{items: nil}, %Theme{} = theme, _opts), do: render_loading(current_frame(), theme)
 
-  def render(%{items: []} = state, %Theme{} = theme), do: render_items(state, theme)
+  def render(%{items: []} = state, %Theme{} = theme, opts), do: render_items(state, theme, opts)
 
-  def render(%{items: [_ | _]} = state, %Theme{} = theme), do: render_items(state, theme)
+  def render(%{items: [_ | _]} = state, %Theme{} = theme, opts),
+    do: render_items(state, theme, opts)
 
   # FOG-164: destructive confirmation for revoking an invite (Moderation+Account).
   defp render_confirm_revoke(%InvitesState{confirm_target: target}, theme) do
@@ -99,7 +102,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   # styling at 80×24 SSH; the upstream Raxol Table widget flattens cell
   # styles into `style: [...]` rather than the top-level `:fg`/`:bg`, which
   # is not visibly distinct on the ANSI-stripped renderer.
-  defp render_items(%InvitesState{items: []} = state, theme) do
+  defp render_items(%InvitesState{items: []} = state, theme, _opts) do
     last_generated_code = state.last_generated_code
     error = state.error
     table = state.table || InvitesState.build_table([])
@@ -115,18 +118,20 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
     end
   end
 
-  defp render_items(%InvitesState{items: items, selected_index: selected_index} = state, theme)
+  defp render_items(
+         %InvitesState{items: items, selected_index: selected_index} = state,
+         theme,
+         opts
+       )
        when is_list(items) do
     last_generated_code = state.last_generated_code
     error = state.error
-
-    table = state.table || InvitesState.build_table(items)
 
     column style: %{gap: 1} do
       [
         maybe_banner(last_generated_code, theme),
         maybe_error(error, theme),
-        ConsoleTable.render(table, theme: theme),
+        render_boxed_table(items, theme, opts),
         focused_invite_indicator(items, selected_index, theme),
         text(@key_hints, fg: theme.dim.fg)
       ]
@@ -136,7 +141,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   # Legacy raw-map path — preserves SelectionList+ListRow rendering for backward
   # compatibility with callers and tests that pass plain maps (D-19).
-  defp render_items(%{items: items} = state, theme) when is_list(items) do
+  defp render_items(%{items: items} = state, theme, _opts) when is_list(items) do
     selected_index = Map.get(state, :selected_index, 0)
     last_generated_code = Map.get(state, :last_generated_code)
     error = Map.get(state, :error)
@@ -265,5 +270,61 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
 
   defp maybe_error(error, theme) when is_binary(error) do
     text(error, fg: theme.error.fg)
+  end
+
+  defp render_boxed_table(items, theme, opts) do
+    width = Keyword.get(opts, :width, 72)
+    visible_items = Enum.take(items, visible_row_capacity(opts))
+
+    header =
+      [
+        pad_cell("Code", 26),
+        pad_cell("Status", 10),
+        pad_cell("Issued", 10),
+        pad_cell("Used by", max(width - 46, 0))
+      ]
+      |> Enum.join()
+
+    rows = Enum.map(visible_items, &table_row_line(&1, width))
+
+    box style: %{border_fg: theme.border.fg, padding: 0} do
+      column style: %{gap: 0} do
+        [text(header, fg: theme.title.fg) | Enum.map(rows, &text(&1, fg: theme.primary.fg))]
+      end
+    end
+  end
+
+  defp table_row_line(item, width) do
+    [
+      pad_cell(field(item, :code), 26),
+      pad_cell(field(item, :status), 10),
+      pad_cell(short_timestamp_field(item, :inserted_at), 10),
+      pad_cell(field(item, :consumed_by_user_id), max(width - 46, 0))
+    ]
+    |> Enum.join()
+  end
+
+  defp pad_cell(value, width) when width > 0 do
+    value
+    |> to_string()
+    |> String.slice(0, width)
+    |> String.pad_trailing(width)
+  end
+
+  defp pad_cell(_value, _width), do: ""
+
+  defp visible_row_capacity(opts) do
+    case Keyword.get(opts, :height) do
+      height when is_integer(height) and height > 3 -> max(height - 3, 1)
+      _ -> 10
+    end
+  end
+
+  defp short_timestamp_field(item, key) do
+    case Map.get(item, key) do
+      %DateTime{} = timestamp -> Calendar.strftime(timestamp, "%Y-%m-%d")
+      nil -> ""
+      other -> to_string(other)
+    end
   end
 end
