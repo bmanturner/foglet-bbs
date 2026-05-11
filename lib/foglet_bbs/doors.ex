@@ -20,7 +20,7 @@ defmodule Foglet.Doors do
   Module.register_attribute(__MODULE__, :sobelow_skip, accumulate: true, persist: true)
 
   alias Foglet.Accounts.User
-  alias Foglet.Doors.{AuditRecord, Dropfiles, Manifest}
+  alias Foglet.Doors.{AuditRecord, Dropfiles, Manifest, SecurityLevel}
   alias Foglet.Doors.Manifest.Dropfile
   alias Foglet.Doors.Sandbox
   alias Foglet.Sessions.Session
@@ -472,11 +472,14 @@ defmodule Foglet.Doors do
   @doc "Builds the safe external-door context map exposed to wrappers and examples."
   @spec adapter_context(Manifest.t(), map(), {pos_integer(), pos_integer()}) :: map()
   def adapter_context(%Manifest{} = manifest, session, {cols, rows}) do
+    role = Map.get(session, :role)
+
     %{
       door_id: manifest.id,
       user_id: Map.get(session, :user_id),
       handle: Map.get(session, :handle),
-      role: Map.get(session, :role),
+      role: role,
+      security_level: SecurityLevel.for_role(role),
       session_id: Map.get(session, :session_id),
       terminal_width: cols,
       terminal_height: rows
@@ -498,6 +501,7 @@ defmodule Foglet.Doors do
       "FOGLET_DOOR_ID" => manifest.id,
       "FOGLET_USER_ID" => to_env(Map.get(session, :user_id)),
       "FOGLET_USERNAME" => to_env(Map.get(session, :handle)),
+      "FOGLET_SECURITY_LEVEL" => SecurityLevel.for_role_string(Map.get(session, :role)),
       "FOGLET_SESSION_ID" => to_env(Map.get(session, :session_id)),
       "FOGLET_TERMINAL_WIDTH" => Integer.to_string(cols),
       "FOGLET_TERMINAL_HEIGHT" => Integer.to_string(rows),
