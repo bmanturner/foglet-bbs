@@ -99,12 +99,21 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
            )
   end
 
-  test "render shows the inbox destination with its unread count badge" do
+  test "render shows the inbox destination with a distinct unread badge" do
     view = MainMenu.render(local_state(%{unread_notifications_count: 12}), context())
     texts = collect_text_values(view)
 
-    assert Enum.any?(texts, &String.contains?(&1, "✉ Inbox ("))
-    assert "12" in texts
+    assert Enum.any?(texts, &String.contains?(&1, "✉ Inbox"))
+    assert "[12]" in texts
     assert "[I]" in texts
+  end
+
+  test "render hides the inbox badge at zero unread" do
+    view = MainMenu.render(local_state(%{unread_notifications_count: 0}), context())
+    texts = collect_text_values(view)
+
+    assert Enum.any?(texts, &String.contains?(&1, "✉ Inbox"))
+    refute "[0]" in texts
+    refute Enum.any?(texts, &String.contains?(&1, "Inbox (0)"))
   end
 end

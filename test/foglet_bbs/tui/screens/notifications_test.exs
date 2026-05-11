@@ -85,7 +85,7 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     assert topics == [Foglet.PubSub.notifications_topic("viewer")]
   end
 
-  test "loaded rows render unread marker, actor, summary, and actions" do
+  test "loaded rows render kind, source, summary, and actions" do
     local =
       State.from_rows(
         Notifications.init(context()),
@@ -94,11 +94,29 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
 
     texts = Notifications.render(local, context()) |> collect_text_values()
 
-    assert Enum.any?(texts, &String.contains?(&1, "Unread notifications: 1"))
-    assert Enum.any?(texts, &String.contains?(&1, "> * @alice"))
+    assert Enum.any?(texts, &String.contains?(&1, "Inbox"))
+    assert Enum.any?(texts, &String.contains?(&1, "[mention]"))
+    assert Enum.any?(texts, &String.contains?(&1, "from @alice"))
     assert Enum.any?(texts, &String.contains?(&1, "Check this thread"))
     assert Enum.any?(texts, &String.contains?(&1, "Mark read"))
     assert Enum.any?(texts, &String.contains?(&1, "Mark all read"))
+  end
+
+  test "wide layouts render a selected-item detail panel" do
+    local =
+      State.from_rows(
+        Notifications.init(context(terminal_size: {100, 30})),
+        FakeNotifications.list_recent(%{id: "viewer"})
+      )
+
+    texts =
+      Notifications.render(local, context(terminal_size: {100, 30}))
+      |> collect_text_values()
+
+    assert Enum.any?(texts, &String.contains?(&1, "Kind          Mention"))
+    assert Enum.any?(texts, &String.contains?(&1, "Source        from @alice"))
+    assert Enum.any?(texts, &String.contains?(&1, "Read state"))
+    assert Enum.any?(texts, &String.contains?(&1, "from @alice"))
   end
 
   test "mark read key calls the notifications context through a task effect" do

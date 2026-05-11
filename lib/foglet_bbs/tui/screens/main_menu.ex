@@ -794,7 +794,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     Enum.map(entries, fn
       %{key: "I"} = entry ->
         entry
-        |> Map.put(:label, "Inbox (#{count})")
+        |> Map.put(:label, "Inbox")
         |> Map.put(:unread_count, count)
 
       entry ->

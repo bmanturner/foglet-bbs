@@ -137,17 +137,32 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
 
   defp nav_row_segments(
          %{key: "I", unread_count: count},
-         _prefix_text,
+         prefix_text,
          padding,
          bracketed_key,
          theme
        ) do
-    [
-      text(" ✉ Inbox (", fg: theme.primary.fg),
-      text(to_string(count), fg: inbox_count_fg(count, theme)),
-      text(")" <> padding, fg: theme.primary.fg),
-      text(bracketed_key, fg: theme.accent.fg)
-    ]
+    badge = inbox_badge_text(count)
+
+    if badge == nil do
+      [
+        text(prefix_text <> padding, fg: theme.primary.fg),
+        text(bracketed_key, fg: theme.accent.fg)
+      ]
+    else
+      badge_width = TextWidth.display_width(badge)
+
+      row_padding =
+        TextWidth.pad_trailing("", max(TextWidth.display_width(padding) - badge_width - 1, 1))
+
+      [
+        text(prefix_text, fg: theme.primary.fg),
+        text(row_padding, fg: theme.primary.fg),
+        text(badge, fg: inbox_count_fg(count, theme)),
+        text(" ", fg: theme.primary.fg),
+        text(bracketed_key, fg: theme.accent.fg)
+      ]
+    end
   end
 
   defp nav_row_segments(
@@ -174,6 +189,13 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
 
   defp inbox_count_fg(0, theme), do: theme.dim.fg
   defp inbox_count_fg(_count, theme), do: theme.accent.fg
+
+  defp inbox_badge_text(count) when is_integer(count) and count > 0 do
+    display = if count > 99, do: "99+", else: Integer.to_string(count)
+    "[#{display}]"
+  end
+
+  defp inbox_badge_text(_count), do: nil
 
   defp online_count_fg(count, theme) when count in [0, 1], do: theme.error.fg
   defp online_count_fg(_count, theme), do: theme.accent.fg
