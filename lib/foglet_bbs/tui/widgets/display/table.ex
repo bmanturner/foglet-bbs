@@ -141,10 +141,14 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   @spec render(t(), keyword()) :: any()
   def render(%__MODULE__{raxol_state: rs, available_width: available_width}, opts) do
     %Theme{} = theme = Keyword.fetch!(opts, :theme)
+    available_height = Keyword.get(opts, :height)
     rs_with_theme = prepare_render_state(rs, theme)
 
     box style: %{border_fg: theme.border.fg, padding: 0} do
-      RaxolTable.render(rs_with_theme, %{available_width: available_width})
+      RaxolTable.render(rs_with_theme, %{
+        available_width: available_width,
+        available_height: available_height
+      })
     end
   end
 
