@@ -27,6 +27,8 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
           pending_hide_oneliner_id: String.t() | nil,
           oneliner_status: :idle | :loading | :submitting | :hiding | {:error, term()},
           oneliner_errors: errors(),
+          unread_notifications_count: non_neg_integer(),
+          notifications_status: :idle | :loading | {:error, term()},
           presence_refresh_revision: non_neg_integer()
         }
 
@@ -35,6 +37,8 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
             pending_hide_oneliner_id: nil,
             oneliner_status: :idle,
             oneliner_errors: %{},
+            unread_notifications_count: 0,
+            notifications_status: :idle,
             presence_refresh_revision: 0
 
   @doc "Builds the default MainMenu state from screen context."

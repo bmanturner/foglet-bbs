@@ -25,6 +25,7 @@ defmodule Foglet.Accounts do
 
   alias Foglet.Accounts.{Email, Invite, RedemptionThrottle, SSHKey, User, UserToken}
   alias Foglet.{Config, Mailer}
+  alias Foglet.Notifications.Notification
   alias Foglet.Posts.Post
   alias FogletBbs.Repo
 
@@ -553,6 +554,7 @@ defmodule Foglet.Accounts do
     Repo.transact(fn ->
       delete_user_tokens_for_cleanup(user, :all, "user_delete_token_cleanup_failed")
       Repo.delete_all(from(k in SSHKey, where: k.user_id == ^user.id))
+      Repo.delete_all(from(n in Notification, where: n.user_id == ^user.id))
 
       # Bump `updated_at` on every rewritten post so audit trails / change
       # detection (moderation log, future ETL, post-edit-detection UI) can

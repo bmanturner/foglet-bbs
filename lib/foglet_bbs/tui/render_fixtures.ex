@@ -32,6 +32,7 @@ defmodule Foglet.TUI.RenderFixtures do
     MainMenu,
     Moderation,
     NewThread,
+    Notifications,
     OnlineNow,
     PostComposer,
     PostReader,
@@ -44,7 +45,7 @@ defmodule Foglet.TUI.RenderFixtures do
   alias Foglet.Threads.ThreadEntry
 
   @screens ~w(
-    login register verify main_menu online_now board_list thread_list
+    login register verify main_menu notifications online_now board_list thread_list
     post_reader post_composer new_thread door_list account moderation sysop
   )a
 
@@ -65,6 +66,7 @@ defmodule Foglet.TUI.RenderFixtures do
           | :register
           | :verify
           | :main_menu
+          | :notifications
           | :online_now
           | :board_list
           | :thread_list
@@ -609,6 +611,32 @@ defmodule Foglet.TUI.RenderFixtures do
     ]
   end
 
+  defp synthetic_notifications do
+    [
+      %{
+        id: "notif-1",
+        kind: :mention,
+        read_at: nil,
+        inserted_at: ~U[2026-05-11 21:30:00Z],
+        actor: %{id: "u-alice", handle: "alice", role: :sysop},
+        payload: %{
+          "snippet" => "Check the new welcome thread.",
+          "thread_id" => "t1",
+          "board_id" => "b1",
+          "post_id" => "p1"
+        }
+      },
+      %{
+        id: "notif-2",
+        kind: :dm,
+        read_at: ~U[2026-05-11 21:31:00Z],
+        inserted_at: ~U[2026-05-11 21:31:00Z],
+        actor: %{id: "u-mod", handle: "mod", role: :mod},
+        payload: %{"preview" => "See the moderator notes.", "message_id" => "m1"}
+      }
+    ]
+  end
+
   defp online_now_row(user, presence_label) do
     %{
       user_id: user.id,
@@ -640,8 +668,19 @@ defmodule Foglet.TUI.RenderFixtures do
       |> App.build_context()
       |> MainMenu.init()
       |> MainMenu.State.from_entries(synthetic_oneliners())
+      |> Map.put(:unread_notifications_count, 3)
 
     App.put_screen_state(state, :main_menu, local_state)
+  end
+
+  defp populate(:notifications, state, _size) do
+    local_state =
+      state
+      |> App.build_context()
+      |> Notifications.init()
+      |> Notifications.State.from_rows(synthetic_notifications())
+
+    App.put_screen_state(state, :notifications, local_state)
   end
 
   defp populate(:online_now, state, _size) do
