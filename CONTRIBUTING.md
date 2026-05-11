@@ -29,9 +29,9 @@ want to solve and the rough approach you are considering.
 Install the toolchain from `.tool-versions`, then prepare the app:
 
 ```bash
-rtk docker compose up -d postgres
-rtk mix setup
-rtk mix phx.server
+docker compose up -d postgres
+mix setup
+mix phx.server
 ```
 
 Then connect to the local SSH service:
@@ -56,13 +56,13 @@ screen modules, and reusable display in widgets.
 Run focused tests while developing:
 
 ```bash
-rtk mix test
+mix test
 ```
 
 Before opening a PR, run the full finish line:
 
 ```bash
-rtk mix precommit
+mix precommit
 ```
 
 `precommit` compiles with warnings as errors, checks formatting, runs Credo,
@@ -72,9 +72,9 @@ for review.
 For TUI work, include render or harness evidence when useful:
 
 ```bash
-rtk mix foglet.tui.render main_menu
-rtk mix foglet.tui.render board_list --width 132 --height 50
-rtk npm run ssh:harness -- --user sysop --password 'seedpassword123!'
+mix foglet.tui.render main_menu
+mix foglet.tui.render board_list --width 132 --height 50
+npm run ssh:harness -- --user sysop --password 'seedpassword123!'
 ```
 
 The seed password is a local development fixture only. Do not use seed data or
@@ -82,16 +82,31 @@ development host keys in production.
 
 ## Pull Request Expectations
 
-Open a PR only after there is an issue for the work. In the PR description,
-include:
+Open a PR only after there is an issue for the work. Keep GitHub-facing metadata clean and keep private coordination in Paperclip or the issue thread, not in branch names or commit/PR text.
 
-- the issue it addresses
+Before pushing or opening a PR, you can run the same metadata guard locally:
+
+```bash
+mix foglet.github_hygiene \
+  --branch "$(git branch --show-current)" \
+  --commit-subject "$(git log -1 --format=%s)" \
+  --pr-title "ci: add metadata hygiene workflow" \
+  --pr-body "Short summary without private tracker IDs"
+```
+
+Rules enforced by CI:
+
+- branch names must not include Paperclip identifiers like `FOG-123`
+- commit subjects must use Conventional Commit style and must not include Paperclip identifiers
+- PR titles must use Conventional Commit style and must not include Paperclip identifiers
+- PR descriptions must not include Paperclip identifiers unless you intentionally pass `--allow-paperclip-ids-in-pr-body` for an explicit exception
+
+In the PR description, include:
+
 - a short summary of the change
 - tests or checks run
 - screenshots, text renders, or harness notes for meaningful TUI changes
 - any known limitations or follow-up work
-
-There is no required commit-message format.
 
 ## Security
 

@@ -337,8 +337,8 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("INVITES", ss, theme, _width, _height, _user, _timezone) do
-    InvitesSurface.render(ss.invites, theme)
+  defp render_tab_body("INVITES", ss, theme, width, height, _user, _timezone) do
+    InvitesSurface.render(ss.invites, theme, width: width, height: max(height - 2, 1))
   end
 
   defp render_tab_body(_label, _ss, theme, _width, _height, _user, _timezone) do
