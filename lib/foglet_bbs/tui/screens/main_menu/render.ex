@@ -27,7 +27,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     state = frame_state(local_state, context)
     theme = Theme.from_state(state)
 
-    destinations = MainMenu.visible_destination_entries(context)
+    destinations = MainMenu.visible_destination_entries(state)
     actions = MainMenu.visible_actions(state)
 
     inner_width = MainMenu.__nav_panel_inner_width__(state)
@@ -65,6 +65,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
       current_screen: :main_menu,
       current_user: context.current_user,
       session_context: context.session_context,
+      domain: context.domain,
       session_pid: context.session_pid,
       terminal_size: context.terminal_size || @default_terminal_size,
       route_params: context.route_params || %{},
@@ -135,6 +136,21 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   end
 
   defp nav_row_segments(
+         %{key: "I", unread_count: count},
+         _prefix_text,
+         padding,
+         bracketed_key,
+         theme
+       ) do
+    [
+      text(" ✉ Inbox (", fg: theme.primary.fg),
+      text(to_string(count), fg: inbox_count_fg(count, theme)),
+      text(")" <> padding, fg: theme.primary.fg),
+      text(bracketed_key, fg: theme.accent.fg)
+    ]
+  end
+
+  defp nav_row_segments(
          %{key: "N", online_count: count},
          _prefix_text,
          padding,
@@ -155,6 +171,9 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
       text(bracketed_key, fg: theme.accent.fg)
     ]
   end
+
+  defp inbox_count_fg(0, theme), do: theme.dim.fg
+  defp inbox_count_fg(_count, theme), do: theme.accent.fg
 
   defp online_count_fg(count, theme) when count in [0, 1], do: theme.error.fg
   defp online_count_fg(_count, theme), do: theme.accent.fg

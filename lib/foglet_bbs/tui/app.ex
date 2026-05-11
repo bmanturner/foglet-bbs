@@ -40,6 +40,7 @@ defmodule Foglet.TUI.App do
           | :register
           | :verify
           | :main_menu
+          | :notifications
           | :online_now
           | :board_list
           | :thread_list

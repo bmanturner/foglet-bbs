@@ -63,6 +63,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @main_menu_commands [
     %{key: "B", label: "Boards", glyph: "●", kind: :destination, visibility: :always},
     %{key: "C", label: "Compose", glyph: "✎", kind: :destination, visibility: :always},
+    %{key: "I", label: "Inbox", glyph: "✉", kind: :destination, visibility: :authenticated},
     %{key: "N", label: "Online Now", glyph: "◌", kind: :destination, visibility: :always},
     %{key: "D", label: "Door Games", glyph: "▸", kind: :destination, visibility: :doors},
     %{key: "A", label: "Account", glyph: "◇", kind: :destination, visibility: :account},
@@ -86,6 +87,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   @impl true
   @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  def subscriptions(_local_state, %Context{current_user: %{id: user_id}}) do
+    [Foglet.PubSub.online_presence_topic(), Foglet.PubSub.notifications_topic(user_id)]
+  end
+
   def subscriptions(_local_state, %Context{}), do: [Foglet.PubSub.online_presence_topic()]
 
   @impl true
@@ -112,10 +117,19 @@ defmodule Foglet.TUI.Screens.MainMenu do
   # 39-05 will collapse the App-side per-screen clauses into a single generic
   # dispatch, relying on this screen-side clause to decide what to load.
   def update(:on_route_enter, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
     if context.current_user || Guest.guest?(context) do
-      update(:load_oneliners, local_state, context)
+      {
+        %{
+          local_state
+          | oneliner_status: :loading,
+            notifications_status: notifications_status(context)
+        },
+        load_home_shell_effects(context)
+      }
     else
-      {normalize_state(local_state, context), []}
+      {local_state, []}
     end
   end
 
@@ -138,6 +152,17 @@ defmodule Foglet.TUI.Screens.MainMenu do
       {local_state, [Effect.open_modal(Guest.denial_modal(:compose))]}
     else
       {local_state, [Effect.navigate(:new_thread, %{origin: :main_menu})]}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["i", "I"] do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {local_state, [Effect.navigate(:notifications)]}
+    else
+      {local_state, []}
     end
   end
 
@@ -264,6 +289,36 @@ defmodule Foglet.TUI.Screens.MainMenu do
       |> State.put_errors(%{base: "Unable to load oneliners: #{inspect(reason)}"})
 
     {local_state, []}
+  end
+
+  def update(
+        {:task_result, :load_unread_notifications_count, {:ok, count}},
+        local_state,
+        %Context{} = context
+      )
+      when is_integer(count) and count >= 0 do
+    local_state = normalize_state(local_state, context)
+    {%{local_state | unread_notifications_count: count, notifications_status: :idle}, []}
+  end
+
+  def update(
+        {:task_result, :load_unread_notifications_count, {:error, reason}},
+        local_state,
+        %Context{} = context
+      ) do
+    local_state = normalize_state(local_state, context)
+    {%{local_state | notifications_status: {:error, reason}}, []}
+  end
+
+  def update({:notifications, _event, _payload}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {%{local_state | notifications_status: :loading},
+       [load_unread_notifications_count_task_effect(context)]}
+    else
+      {local_state, []}
+    end
   end
 
   def update(
@@ -632,6 +687,27 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end)
   end
 
+  defp load_unread_notifications_count_task_effect(%Context{} = context) do
+    notifications_mod = domain_module(context, :notifications)
+    current_user = context.current_user
+
+    Effect.task(:load_unread_notifications_count, :main_menu, fn ->
+      {:ok, notifications_mod.unread_count(current_user)}
+    end)
+  end
+
+  defp load_home_shell_effects(%Context{} = context) do
+    [load_oneliners_task_effect(context)] ++
+      if context.current_user do
+        [load_unread_notifications_count_task_effect(context)]
+      else
+        []
+      end
+  end
+
+  defp notifications_status(%Context{current_user: nil}), do: :idle
+  defp notifications_status(%Context{}), do: :loading
+
   defp domain_module(%Context{domain: domain}, key) when is_map(domain) do
     case Map.get(domain, key) do
       module when is_atom(module) and not is_nil(module) -> module
@@ -643,6 +719,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp default_domain_module(:boards), do: Foglet.Boards
   defp default_domain_module(:online_now), do: Foglet.Sessions.OnlineNow
   defp default_domain_module(:moderation), do: Foglet.Moderation
+  defp default_domain_module(:notifications), do: Foglet.Notifications
 
   defp modal_submit_effect(kind, payload), do: Effect.modal_submit(:main_menu, kind, payload)
 
@@ -690,18 +767,39 @@ defmodule Foglet.TUI.Screens.MainMenu do
   def visible_destination_entries(%Context{} = context) do
     context.current_user
     |> destination_entries()
+    |> with_inbox_count(0)
     |> with_online_now_count(online_now_count(context))
+  end
+
+  def visible_destination_entries(%{current_user: user} = state) do
+    user
+    |> destination_entries()
+    |> with_inbox_count(unread_notifications_count(state))
+    |> with_online_now_count(online_now_count_from_state(state))
   end
 
   def visible_destination_entries(user) do
     user
     |> destination_entries()
+    |> with_inbox_count(0)
     |> with_online_now_count(0)
   end
 
   defp destination_entries(user) do
     @main_menu_commands
     |> Enum.filter(&(&1.kind == :destination and destination_visible?(&1.visibility, user)))
+  end
+
+  defp with_inbox_count(entries, count) do
+    Enum.map(entries, fn
+      %{key: "I"} = entry ->
+        entry
+        |> Map.put(:label, "Inbox (#{count})")
+        |> Map.put(:unread_count, count)
+
+      entry ->
+        entry
+    end)
   end
 
   defp with_online_now_count(entries, count) do
@@ -719,6 +817,21 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end)
   end
 
+  defp unread_notifications_count(%{screen_state: %{main_menu: %State{} = local_state}}),
+    do: local_state.unread_notifications_count
+
+  defp unread_notifications_count(_state), do: 0
+
+  defp online_now_count_from_state(%{session_context: session_context} = state) do
+    %Context{
+      current_user: Map.get(state, :current_user),
+      session_context: session_context,
+      route_params: Map.get(state, :route_params, %{}),
+      domain: Map.get(state, :domain) || get_in(session_context || %{}, [:domain]) || %{}
+    }
+    |> online_now_count()
+  end
+
   defp online_now_count(%Context{} = context) do
     context
     |> domain_module(:online_now)
@@ -731,6 +844,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   @spec destination_visible?(atom(), map() | nil) :: boolean()
   defp destination_visible?(:always, _user), do: true
+  defp destination_visible?(:authenticated, user), do: not is_nil(user)
   defp destination_visible?(:doors, user), do: Foglet.Doors.list_browsable(user) != []
   defp destination_visible?(:account, user), do: ShellVisibility.account_visible?(user)
   defp destination_visible?(:moderation, user), do: ShellVisibility.moderation_visible?(user)

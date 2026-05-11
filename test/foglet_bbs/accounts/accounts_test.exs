@@ -14,6 +14,7 @@ defmodule Foglet.AccountsTest do
   alias Foglet.Accounts.{SSHKey, User, UserToken}
   alias Foglet.Boards.{Board, Category}
   alias Foglet.Config
+  alias Foglet.Notifications.Notification
   alias Foglet.Posts.Post
   alias Foglet.Threads.Thread
   alias FogletBbs.AccountsFixtures
@@ -970,20 +971,51 @@ defmodule Foglet.AccountsTest do
       assert Repo.get(User, user.id)
     end
 
-    test "deletes all ssh_keys and user_tokens for the deleted user" do
+    test "deletes all ssh_keys, user_tokens, and recipient notifications for the deleted user" do
       user = AccountsFixtures.user_fixture()
+      actor = AccountsFixtures.user_fixture()
       _ = AccountsFixtures.ssh_key_fixture(user)
 
       {_raw, _} = AccountsFixtures.user_token_fixture(user, "confirm")
       {_raw, _} = AccountsFixtures.user_token_fixture(user, "reset_password")
 
+      recipient_notification =
+        %Notification{user_id: user.id, actor_id: actor.id}
+        |> Notification.changeset(%{
+          kind: :reply,
+          payload: %{
+            board_id: Ecto.UUID.generate(),
+            thread_id: Ecto.UUID.generate(),
+            post_id: Ecto.UUID.generate(),
+            snippet: "cleanup"
+          }
+        })
+        |> Repo.insert!()
+
+      actor_notification =
+        %Notification{user_id: actor.id, actor_id: user.id}
+        |> Notification.changeset(%{
+          kind: :reply,
+          payload: %{
+            board_id: Ecto.UUID.generate(),
+            thread_id: Ecto.UUID.generate(),
+            post_id: Ecto.UUID.generate(),
+            snippet: "actor side"
+          }
+        })
+        |> Repo.insert!()
+
       assert Repo.aggregate(from(k in SSHKey, where: k.user_id == ^user.id), :count) == 1
       assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id), :count) == 2
+      assert Repo.aggregate(from(n in Notification, where: n.user_id == ^user.id), :count) == 1
 
       {:ok, _} = Accounts.delete_user(user)
 
       assert Repo.aggregate(from(k in SSHKey, where: k.user_id == ^user.id), :count) == 0
       assert Repo.aggregate(from(t in UserToken, where: t.user_id == ^user.id), :count) == 0
+      assert Repo.aggregate(from(n in Notification, where: n.user_id == ^user.id), :count) == 0
+      assert Repo.get!(Notification, actor_notification.id).actor_id == user.id
+      refute Repo.get(Notification, recipient_notification.id)
     end
 
     test "logs non-sensitive user-delete token cleanup failures" do
