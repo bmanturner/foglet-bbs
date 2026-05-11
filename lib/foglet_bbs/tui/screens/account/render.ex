@@ -267,8 +267,8 @@ defmodule Foglet.TUI.Screens.Account.Render do
   defp render_tab_body("SSH KEYS", ss, theme, width, _height),
     do: SSHKeysSurface.render(ss.ssh_keys, theme, width)
 
-  defp render_tab_body("INVITES", ss, theme, _width, _height) do
-    InvitesSurface.render(ss.invites, theme)
+  defp render_tab_body("INVITES", ss, theme, width, height) do
+    InvitesSurface.render(ss.invites, theme, width: width, height: max(height - 2, 1))
   end
 
   defp render_tab_body(_unknown, _ss, theme, _width, _height) do

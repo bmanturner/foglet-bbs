@@ -2647,6 +2647,92 @@ defmodule Foglet.TUI.LayoutSmokeTest do
            "sysop shell: total height #{max_y} exceeds 24 rows"
   end
 
+  test "sysop invites table keeps all invite rows above the bottom border at 80x24 and 120x36" do
+    user = %{
+      id: "u4",
+      handle: "alice",
+      role: :sysop,
+      status: :active,
+      timezone: "Etc/UTC",
+      preferences: %{"time_format" => "24h"}
+    }
+
+    items = [
+      %{
+        code: "1BYagK",
+        status: :available,
+        issuer_id: "sysop",
+        inserted_at: ~U[2026-05-11 00:00:00Z],
+        consumed_at: nil,
+        consumed_by_user_id: nil,
+        revoked_at: nil
+      },
+      %{
+        code: "Zs3Xmi",
+        status: :available,
+        issuer_id: "sysop",
+        inserted_at: ~U[2026-05-04 00:00:00Z],
+        consumed_at: nil,
+        consumed_by_user_id: nil,
+        revoked_at: nil
+      }
+    ]
+
+    invites = Foglet.TUI.Screens.Shared.InvitesState.new(items: items, selected_index: 0)
+
+    for size <- [{80, 24}, {120, 36}] do
+      state = %App{
+        current_screen: :sysop,
+        current_user: user,
+        session_context: %{registration_mode: "invite_only", invite_code_generators: "sysop_only"},
+        screen_state: %{
+          sysop:
+            Sysop.State.new(
+              current_user: user,
+              invites_visible?: true,
+              active: 5,
+              invites: invites
+            )
+        },
+        terminal_size: size
+      }
+
+      ascii =
+        state
+        |> App.view()
+        |> AsciiRenderer.render(size)
+
+      lines = String.split(ascii, "\n", trim: true)
+
+      for code <- ["1BYagK", "Zs3Xmi"] do
+        invite_line_index = Enum.find_index(lines, &String.contains?(&1, code))
+
+        assert is_integer(invite_line_index),
+               "expected invite row #{code} in #{inspect(size)}, got: #{inspect(lines)}"
+
+        invite_line = Enum.at(lines, invite_line_index)
+
+        assert String.starts_with?(String.trim_leading(invite_line), "│"),
+               "expected boxed invite row #{code} in #{inspect(size)}, got line: #{inspect(invite_line)}"
+
+        refute String.contains?(invite_line, "└"),
+               "expected invite row #{code} to stay above the table bottom border in #{inspect(size)}, got line: #{inspect(invite_line)}"
+
+        bottom_border_index =
+          lines
+          |> Enum.with_index()
+          |> Enum.find_value(fn {line, idx} ->
+            if idx > invite_line_index and String.starts_with?(String.trim_leading(line), "└") do
+              idx
+            end
+          end)
+
+        assert is_integer(bottom_border_index) and invite_line_index < bottom_border_index,
+               "expected invite row #{code} above bottom border in #{inspect(size)}, got lines: #{inspect(lines)}"
+      end
+    end
+  end
+
   test "new_thread compose step with title_input='Hello' and body — both appear in positioned text" do
     {:ok, body_input_st} =
       MultiLineInput.init(%{

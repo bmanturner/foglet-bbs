@@ -5,9 +5,7 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
     only: [
       flatten_text: 1,
       color_atom_leaked?: 2,
-      color_names: 0,
-      assert_text_run: 3,
-      text_runs: 1
+      color_names: 0
     ]
 
   alias Foglet.TUI.TextWidth
@@ -107,6 +105,29 @@ defmodule Foglet.TUI.Widgets.Input.TabsTest do
       state = tabs_state()
       {_new_state, action} = Tabs.handle_event(%{key: :right}, state)
       assert action == {:tab_changed, 1}
+    end
+
+    test "FOG-1186 — SSH parser-shaped Left/Right arrows change tabs" do
+      right_event =
+        "\e[C"
+        |> Raxol.SSH.IOAdapter.parse_input()
+        |> List.first()
+        |> Foglet.TUI.App.MessageNormalizer.normalize()
+
+      left_event =
+        "\e[D"
+        |> Raxol.SSH.IOAdapter.parse_input()
+        |> List.first()
+        |> Foglet.TUI.App.MessageNormalizer.normalize()
+
+      assert {:key, %{key: :right} = right_key} = right_event
+      assert {:key, %{key: :left} = left_key} = left_event
+
+      {state, action} = Tabs.handle_event(right_key, tabs_state())
+      assert action == {:tab_changed, 1}
+
+      {_state, action} = Tabs.handle_event(left_key, state)
+      assert action == {:tab_changed, 0}
     end
 
     test "test 5 — digit key '2' jumps to index 1" do
