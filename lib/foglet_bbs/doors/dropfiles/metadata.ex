@@ -2,6 +2,7 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
   @moduledoc false
 
   alias Foglet.Accounts.User
+  alias Foglet.Doors.SecurityLevel
   alias Foglet.Sessions.Session
 
   defstruct [
@@ -48,7 +49,7 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
       session_id: session_identifier(session),
       terminal_cols: cols,
       terminal_rows: rows,
-      security_level: security_level(role),
+      security_level: SecurityLevel.for_role_string(role),
       time_remaining_minutes: time_remaining_minutes(attrs),
       node_number: node_number(attrs, session),
       user_record_number: user_record_number(user, session),
@@ -109,10 +110,6 @@ defmodule Foglet.Doors.Dropfiles.Metadata do
 
   defp session_identifier(%{session_id: id}) when is_binary(id), do: id
   defp session_identifier(_session), do: ""
-
-  defp security_level("sysop"), do: "100"
-  defp security_level("mod"), do: "90"
-  defp security_level(_role), do: "50"
 
   defp time_remaining_minutes(attrs) do
     attrs

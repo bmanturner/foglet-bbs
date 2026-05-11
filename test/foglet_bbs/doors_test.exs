@@ -569,6 +569,23 @@ defmodule Foglet.DoorsTest do
       refute text =~ "DATABASE_URL"
       refute text =~ "SECRET"
     end
+
+    test "classic dropfiles normalize mixed-case roles for security level" do
+      assert {:ok, sysop_text} =
+               Doors.classic_dropfile(:door_sys, %{
+                 user: %{id: "user-3", handle: "casey", role: "SYSOP"},
+                 session: session_map()
+               })
+
+      assert {:ok, mod_text} =
+               Doors.classic_dropfile(:door_sys, %{
+                 user: %{id: "user-4", handle: "morgan", role: "Mod"},
+                 session: session_map()
+               })
+
+      assert Enum.at(dropfile_lines(sysop_text), 15) == "100"
+      assert Enum.at(dropfile_lines(mod_text), 15) == "90"
+    end
   end
 
   describe "adapter context/env/dropfile helpers" do
@@ -589,6 +606,7 @@ defmodule Foglet.DoorsTest do
                user_id: "user-1",
                handle: "alice",
                role: :user,
+               security_level: 50,
                session_id: "session-1",
                terminal_width: 100,
                terminal_height: 30
@@ -596,6 +614,7 @@ defmodule Foglet.DoorsTest do
 
       assert env["FOGLET_DOOR_CONTEXT"] == "/tmp/context.json"
       assert env["FOGLET_USERNAME"] == "alice"
+      assert env["FOGLET_SECURITY_LEVEL"] == "50"
       refute Map.has_key?(env, "DATABASE_URL")
 
       tmp =
@@ -625,6 +644,30 @@ defmodule Foglet.DoorsTest do
       refute Map.has_key?(env, "FOGLET_DROPFILE_DOOR32_SYS")
 
       assert File.read!(paths.chain_txt) =~ "alice\r\nAlice Liddell\r\n100\r\n30"
+    end
+
+    test "maps roles to advisory security levels in adapter context and env" do
+      {:ok, manifest} = Doors.validate_manifest(@valid_manifest)
+
+      cases = [
+        {:sysop, 100},
+        {:mod, 90},
+        {:user, 50},
+        {nil, 50},
+        {:unknown, 50},
+        {"SYSOP", 100},
+        {"Mod", 90}
+      ]
+
+      for {role, level} <- cases do
+        session = Map.put(session_map(), :role, role)
+
+        assert %{security_level: ^level} = Doors.adapter_context(manifest, session, {100, 30})
+
+        assert Doors.adapter_env(manifest, session, {100, 30}, "/tmp/context.json")[
+                 "FOGLET_SECURITY_LEVEL"
+               ] == Integer.to_string(level)
+      end
     end
   end
 
