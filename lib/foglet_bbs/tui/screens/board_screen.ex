@@ -45,6 +45,8 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   @tabs [{:threads, "THREADS"}, {:chat, "CHAT"}]
   @screen_frame_rows 2
   @tab_strip_rows 1
+  @chat_flash_interval_ms 750
+  @chat_flash_tick :board_chat_flash_tick
 
   @impl true
   @spec init(Context.t()) :: ThreadList.State.t() | State.t()
@@ -151,8 +153,25 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   # back from threads.
   def update({:board_chat, _event, _payload} = msg, %State{} = state, %Context{} = context) do
     {chat_state, chat_effects} = ChatRoom.update(msg, state.chat_room, context)
-    {%{state | chat_room: chat_state}, chat_effects}
+    state = %{state | chat_room: chat_state} |> maybe_start_chat_alert(msg)
+    {state, chat_effects}
   end
+
+  def update(
+        @chat_flash_tick,
+        %State{chat_alert?: true, chat_flash_phase: :on} = state,
+        %Context{}
+      ),
+      do: {%{state | chat_flash_phase: :off}, []}
+
+  def update(
+        @chat_flash_tick,
+        %State{chat_alert?: true, chat_flash_phase: :off} = state,
+        %Context{}
+      ),
+      do: {%{state | chat_flash_phase: :on}, []}
+
+  def update(@chat_flash_tick, %State{} = state, %Context{}), do: {state, []}
 
   # Chat history / send results are routed by op so the right reducer owns
   # the result regardless of which tab is currently active.
@@ -222,7 +241,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     ScreenFrame.render(frame_state, chrome, body, keybar_groups(state, context))
   end
 
-  defp render_tab_strip(%State{current_tab: current_tab, presence_count: count}, theme) do
+  defp render_tab_strip(%State{current_tab: current_tab, presence_count: count} = state, theme) do
     parts =
       Enum.flat_map(@tabs, fn {tab, base_label} ->
         label = if tab == :chat, do: "#{base_label} (#{count})", else: base_label
@@ -234,7 +253,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
             text("   ", fg: theme.border.fg)
           ]
         else
-          [text(label, fg: theme.dim.fg), text("   ", fg: theme.border.fg)]
+          [render_inactive_tab_label(tab, label, state, theme), text("   ", fg: theme.border.fg)]
         end
       end)
 
@@ -309,10 +328,13 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   def subscriptions(%State{board_id: board_id} = state, context) when is_binary(board_id) do
     thread_topics = ThreadList.subscriptions(state.thread_list, context)
 
-    [
-      PubSubTopics.board_screen_topic(board_id),
-      PubSubTopics.board_chat_topic(board_id) | thread_topics
-    ]
+    %{
+      topics: [
+        PubSubTopics.board_screen_topic(board_id),
+        PubSubTopics.board_chat_topic(board_id) | thread_topics
+      ],
+      intervals: [{@chat_flash_interval_ms, @chat_flash_tick}]
+    }
   end
 
   def subscriptions(_state, %Context{route_params: params} = context) do
@@ -322,10 +344,13 @@ defmodule Foglet.TUI.Screens.BoardScreen do
       base = ThreadList.subscriptions(nil, context)
 
       if is_binary(board_id) do
-        [
-          PubSubTopics.board_screen_topic(board_id),
-          PubSubTopics.board_chat_topic(board_id) | base
-        ]
+        %{
+          topics: [
+            PubSubTopics.board_screen_topic(board_id),
+            PubSubTopics.board_chat_topic(board_id) | base
+          ],
+          intervals: [{@chat_flash_interval_ms, @chat_flash_tick}]
+        }
       else
         base
       end
@@ -342,6 +367,23 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   end
 
   defp content_context(%Context{} = context), do: context
+
+  defp render_inactive_tab_label(
+         :chat,
+         label,
+         %State{chat_alert?: true, chat_flash_phase: :on},
+         theme
+       ) do
+    selected = theme.selected
+
+    text(label,
+      fg: Map.get(selected, :fg, theme.primary.fg),
+      bg: Map.get(selected, :bg),
+      style: Map.get(selected, :style, [:bold])
+    )
+  end
+
+  defp render_inactive_tab_label(_tab, label, _state, theme), do: text(label, fg: theme.dim.fg)
 
   defp chat_enabled?(params) when is_map(params) do
     case Map.get(params, :board) || Map.get(params, "board") do
@@ -366,6 +408,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   defp switch_tab(%State{} = state, _context, new_tab) do
     state = %{state | current_tab: new_tab}
+    state = if new_tab == :chat, do: clear_chat_alert(state), else: state
     state = ensure_tracked(state, new_tab)
     track_activity_tab(state, new_tab)
     state = refresh_presence_count(state)
@@ -400,8 +443,33 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   defp untrack_presence(%State{board_id: board_id, user_id: user_id} = state) do
     :ok = PresenceTracker.untrack(board_id, user_id)
-    %{state | presence_tracked?: false, presence_count: 0}
+    %{state | presence_tracked?: false, presence_count: 0} |> clear_chat_alert()
   end
+
+  defp maybe_start_chat_alert(%State{} = state, {:board_chat, :new_message, msg}) do
+    if starts_chat_alert?(state, msg) do
+      %{state | chat_alert?: true, chat_flash_phase: :on}
+    else
+      state
+    end
+  end
+
+  defp maybe_start_chat_alert(%State{} = state, _msg), do: state
+
+  defp starts_chat_alert?(%State{current_tab: :threads} = state, msg) do
+    message_board_id(msg) == state.board_id and message_user_id(msg) != state.user_id
+  end
+
+  defp starts_chat_alert?(_state, _msg), do: false
+
+  defp message_board_id(msg), do: message_field(msg, :board_id)
+  defp message_user_id(msg), do: message_field(msg, :user_id)
+
+  defp message_field(msg, key) when is_map(msg),
+    do: Map.get(msg, key) || Map.get(msg, Atom.to_string(key))
+
+  defp clear_chat_alert(%State{} = state),
+    do: %{state | chat_alert?: false, chat_flash_phase: :off}
 
   defp refresh_presence_count(%State{board_id: nil} = state), do: state
 

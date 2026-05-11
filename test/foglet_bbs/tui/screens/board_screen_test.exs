@@ -83,11 +83,11 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
     Enum.find(elements, &(&1.text == text))
   end
 
-  defp chat_message(index, board_id) do
+  defp chat_message(index, board_id, user_id \\ "u1") do
     %{
       id: "m#{index}",
       board_id: board_id,
-      user_id: "u1",
+      user_id: user_id,
       body: "transcript row #{index} " <> String.duplicate("wrap ", 8),
       inserted_at: nil
     }
@@ -154,7 +154,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       ctx = context(b)
       state = BoardScreen.init(ctx)
 
-      topics = BoardScreen.subscriptions(state, ctx)
+      %{topics: topics} = BoardScreen.subscriptions(state, ctx)
 
       assert Topics.board_screen_topic(b.id) in topics
       assert Topics.board_topic(b.id) in topics
@@ -439,6 +439,124 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       end
 
       :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+  end
+
+  describe "off-tab chat flash" do
+    test "same-board non-self chat received on THREADS starts and ticks CHAT flash without dropping transcript delivery" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} =
+        BoardScreen.update(
+          {:board_chat, :new_message, chat_message(1, b.id, "remote-1")},
+          state,
+          ctx
+        )
+
+      assert state.current_tab == :threads
+      assert state.chat_alert? == true
+      assert state.chat_flash_phase == :on
+      assert Enum.map(state.chat_room.messages, & &1.id) == ["m1"]
+
+      chat_label =
+        state
+        |> BoardScreen.render(ctx)
+        |> positioned_text_elements()
+        |> text_element("CHAT (1)")
+
+      assert %{bg: bg, style: style} = chat_label
+      assert is_binary(bg)
+      assert style.bold == true
+
+      {state, []} = BoardScreen.update(:board_chat_flash_tick, state, ctx)
+
+      assert state.chat_alert? == true
+      assert state.chat_flash_phase == :off
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "switching to CHAT clears an active off-tab flash" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} =
+        BoardScreen.update(
+          {:board_chat, :new_message, chat_message(1, b.id, "remote-1")},
+          state,
+          ctx
+        )
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+
+      assert state.current_tab == :chat
+      assert state.chat_alert? == false
+      assert state.chat_flash_phase == :off
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "leaving from THREADS clears an active off-tab flash before handoff to navigation" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} =
+        BoardScreen.update(
+          {:board_chat, :new_message, chat_message(1, b.id, "remote-1")},
+          state,
+          ctx
+        )
+
+      {state, effects} = BoardScreen.update({:key, %{key: :char, char: "Q"}}, state, ctx)
+
+      assert state.chat_alert? == false
+      assert state.chat_flash_phase == :off
+
+      assert Enum.any?(effects, fn
+               %Effect{type: :navigate, payload: %{screen: :board_list}} -> true
+               _ -> false
+             end)
+    end
+
+    test "self-sent and other-board chat messages do not start the off-tab flash" do
+      b = board(chat_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} =
+        BoardScreen.update({:board_chat, :new_message, chat_message(1, b.id, "u1")}, state, ctx)
+
+      refute state.chat_alert?
+
+      {state, []} =
+        BoardScreen.update(
+          {:board_chat, :new_message, chat_message(2, "other-board", "remote-1")},
+          state,
+          ctx
+        )
+
+      refute state.chat_alert?
+      assert Enum.map(state.chat_room.messages, & &1.id) == ["m1", "m2"]
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "chat-enabled board screen declares the flash tick interval at 64x22" do
+      b = board(chat_enabled: true)
+      ctx = context(b, size: {64, 22})
+      state = BoardScreen.init(ctx)
+
+      assert %{topics: topics, intervals: intervals} = BoardScreen.subscriptions(state, ctx)
+      assert Topics.board_chat_topic(b.id) in topics
+      assert {750, :board_chat_flash_tick} in intervals
     end
   end
 
