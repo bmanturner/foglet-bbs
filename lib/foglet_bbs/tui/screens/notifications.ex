@@ -209,12 +209,19 @@ defmodule Foglet.TUI.Screens.Notifications do
         )
 
       medium_layout?(context) ->
-        column style: %{gap: 1} do
-          [
+        split_pane(
+          direction: :vertical,
+          ratio: {2, 3},
+          min_size: 7,
+          divider_char: " ",
+          children: [
             list_panel(state, context, theme, narrow_list_width(context)),
-            detail_panel(state, context, theme, narrow_list_width(context), title: "Selected")
+            detail_panel(state, context, theme, narrow_list_width(context),
+              title: "Selected",
+              compact?: true
+            )
           ]
-        end
+        )
 
       true ->
         list_panel(state, context, theme, narrow_list_width(context))
@@ -242,6 +249,7 @@ defmodule Foglet.TUI.Screens.Notifications do
 
   defp detail_panel(%State{} = state, _context, theme, width, opts \\ []) do
     title = Keyword.get(opts, :title, "Selected")
+    compact? = Keyword.get(opts, :compact?, false)
 
     %{
       type: :panel,
@@ -255,7 +263,7 @@ defmodule Foglet.TUI.Screens.Notifications do
       },
       children: [
         column style: %{gap: 0} do
-          detail_rows(state, theme, width)
+          detail_rows(state, theme, width, compact?: compact?)
         end
       ]
     }
@@ -281,7 +289,9 @@ defmodule Foglet.TUI.Screens.Notifications do
     end)
   end
 
-  defp detail_rows(%State{} = state, theme, width) do
+  defp detail_rows(%State{} = state, theme, width, opts) do
+    compact? = Keyword.get(opts, :compact?, false)
+
     case State.selected_row(state) do
       nil ->
         [text("No selection", fg: theme.dim.fg)]
@@ -294,24 +304,55 @@ defmodule Foglet.TUI.Screens.Notifications do
           |> format_summary()
           |> maybe_expand_summary(width)
 
-        [
-          text(kind_title(notification),
-            fg: detail_title_fg(notification, theme),
-            style: [:bold]
-          ),
-          text("", fg: theme.dim.fg),
-          column style: %{gap: 0} do
-            KvGrid.render(details,
-              theme: theme,
-              width: max(width - 4, 24),
-              label_width: 12,
-              gap: 2
-            )
-          end,
-          text("", fg: theme.dim.fg),
-          text("Summary", fg: theme.title.fg),
-          text(summary, fg: detail_summary_fg(notification, theme))
-        ]
+        summary_rows =
+          if compact? do
+            [
+              text("Summary", fg: theme.title.fg),
+              text(summary, fg: detail_summary_fg(notification, theme))
+            ]
+          else
+            [
+              text("", fg: theme.dim.fg),
+              text("Summary", fg: theme.title.fg),
+              text(summary, fg: detail_summary_fg(notification, theme))
+            ]
+          end
+
+        title_and_grid_rows =
+          if compact? do
+            [
+              text(kind_title(notification),
+                fg: detail_title_fg(notification, theme),
+                style: [:bold]
+              ),
+              column style: %{gap: 0} do
+                KvGrid.render(details,
+                  theme: theme,
+                  width: max(width - 4, 24),
+                  label_width: 12,
+                  gap: 2
+                )
+              end
+            ]
+          else
+            [
+              text(kind_title(notification),
+                fg: detail_title_fg(notification, theme),
+                style: [:bold]
+              ),
+              text("", fg: theme.dim.fg),
+              column style: %{gap: 0} do
+                KvGrid.render(details,
+                  theme: theme,
+                  width: max(width - 4, 24),
+                  label_width: 12,
+                  gap: 2
+                )
+              end
+            ]
+          end
+
+        title_and_grid_rows ++ summary_rows
     end
   end
 

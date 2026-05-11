@@ -102,6 +102,21 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     assert Enum.any?(texts, &String.contains?(&1, "Mark all read"))
   end
 
+  test "80x24 layout keeps the selected summary visible in the detail panel" do
+    local =
+      State.from_rows(
+        Notifications.init(context(terminal_size: {80, 24})),
+        FakeNotifications.list_recent(%{id: "viewer"})
+      )
+
+    texts =
+      Notifications.render(local, context(terminal_size: {80, 24}))
+      |> collect_text_values()
+
+    assert Enum.any?(texts, &String.contains?(&1, "Summary"))
+    assert Enum.any?(texts, &String.contains?(&1, "Check this thread"))
+  end
+
   test "wide layouts render a selected-item detail panel" do
     local =
       State.from_rows(
