@@ -50,7 +50,7 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
     oneliner_task = task_effect!(effects, :load_oneliners)
     unread_task = task_effect!(effects, :load_unread_notifications_count)
 
-    assert {:ok, 3} = unread_task.payload.fun.()
+    assert 3 = unread_task.payload.fun.()
     assert Process.get(:fake_notifications_unread_count_called) == true
     assert is_function(oneliner_task.payload.fun, 0)
   end

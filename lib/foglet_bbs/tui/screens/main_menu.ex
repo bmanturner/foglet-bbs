@@ -600,7 +600,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     current_user = context.current_user
 
     Effect.task(:load_unread_notifications_count, :main_menu, fn ->
-      {:ok, notifications_mod.unread_count(current_user)}
+      notifications_mod.unread_count(current_user)
     end)
   end
 

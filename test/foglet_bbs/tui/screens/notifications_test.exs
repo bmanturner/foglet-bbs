@@ -102,6 +102,28 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     assert Enum.any?(texts, &String.contains?(&1, "Mark all read"))
   end
 
+  test "system notifications without an actor render as system sourced rows" do
+    row = %{
+      id: "n-system",
+      kind: :mod_action,
+      read_at: nil,
+      inserted_at: ~U[2026-05-11 21:30:00Z],
+      actor: nil,
+      payload: %{
+        "action_id" => "a1",
+        "action_kind" => "system",
+        "reason" => "Maintenance window scheduled"
+      }
+    }
+
+    local = State.from_rows(Notifications.init(context()), [row])
+
+    texts = Notifications.render(local, context()) |> collect_text_values()
+
+    assert Enum.any?(texts, &String.contains?(&1, "from system"))
+    assert Enum.any?(texts, &String.contains?(&1, "Maintenance window scheduled"))
+  end
+
   test "80x24 layout keeps the selected summary visible in the detail panel" do
     local =
       State.from_rows(

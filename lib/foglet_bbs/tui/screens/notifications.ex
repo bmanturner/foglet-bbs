@@ -574,16 +574,26 @@ defmodule Foglet.TUI.Screens.Notifications do
 
   defp source_label(notification) do
     notification
-    |> Map.get(:actor, %{})
-    |> Map.get(:handle, "system")
+    |> actor_from_notification()
+    |> actor_handle()
     |> TerminalText.sanitize_plain_text()
     |> String.replace(~r/\s+/, " ")
     |> String.trim()
     |> case do
       "" -> "system"
+      "system" -> "system"
       handle -> "@" <> TextWidth.slice_to_width(handle, 20)
     end
   end
+
+  defp actor_from_notification(notification) do
+    Map.get(notification, :actor) || Map.get(notification, "actor") || %{}
+  end
+
+  defp actor_handle(%{} = actor),
+    do: Map.get(actor, :handle) || Map.get(actor, "handle") || "system"
+
+  defp actor_handle(_actor), do: "system"
 
   defp format_summary(notification) do
     notification
