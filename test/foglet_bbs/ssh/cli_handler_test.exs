@@ -35,9 +35,11 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
   @static_openssh_key FogletBbs.AccountsFixtures.default_ssh_public_key()
   @alternate_openssh_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
-  @terminal_takeover "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J"
+  @terminal_takeover "\e[?25l\e[H\e[2J\e[3J\e[?1049h\e[?25l\e[H\e[2J\e[3J"
   @alt_screen_enter "\e[?1049h"
   @alt_screen_leave "\e[?1049l"
+  @cursor_hide "\e[?25l"
+  @cursor_show "\e[?25h"
   @ssh_timeout 5_000
 
   describe "real SSH channel startup" do
@@ -48,6 +50,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
       bytes = collect_channel_bytes(conn, channel_id, &String.contains?(&1, @alt_screen_enter))
 
       assert String.starts_with?(bytes, @terminal_takeover)
+      assert bytes =~ @cursor_hide
     end
 
     test "initial terminal output is CRLF-normalized" do
@@ -70,6 +73,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
       bytes = collect_channel_bytes(conn, channel_id, &String.contains?(&1, @alt_screen_leave))
 
       assert bytes =~ @alt_screen_leave
+      assert bytes =~ @cursor_show
     end
   end
 
