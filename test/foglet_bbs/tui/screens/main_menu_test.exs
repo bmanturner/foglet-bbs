@@ -890,7 +890,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert MainMenu.visible_destinations(user) == [
                {"B", "Boards"},
                {"C", "Compose"},
-               {"I", "Inbox (0)"},
+               {"I", "Inbox"},
                {"N", "Online Now (0)"},
                {"A", "Account"},
                {"Q", "Logout"}
@@ -904,7 +904,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                [
                  {"B", "Boards"},
                  {"C", "Compose"},
-                 {"I", "Inbox (0)"},
+                 {"I", "Inbox"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
@@ -919,7 +919,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                [
                  {"B", "Boards"},
                  {"C", "Compose"},
-                 {"I", "Inbox (0)"},
+                 {"I", "Inbox"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
