@@ -45,6 +45,7 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.Display.KvGrid
   alias Foglet.TUI.Widgets.Input.Tabs
+  alias Foglet.TUI.Widgets.Workspace.Inspector
 
   @text_limit 48
 
@@ -92,12 +93,14 @@ defmodule Foglet.TUI.Screens.Moderation do
     case unwrap_task_result(result) do
       {:ok, snapshot} when is_map(snapshot) ->
         queue = Map.get(snapshot, :queue, [])
+        queue_selected_index = clamp_queue_selected_index(ss.queue_selected_index, queue)
 
         {%{
            ss
            | scopes: Map.get(snapshot, :scopes, []),
              queue: queue,
-             queue_selected_index: clamp_queue_selected_index(ss.queue_selected_index, queue),
+             queue_selected_index: queue_selected_index,
+             queue_table: State.build_queue_table(queue, queue_selected_index),
              mod_log: Map.get(snapshot, :log, []),
              users: Map.get(snapshot, :users, []),
              boards: Map.get(snapshot, :boards, []),
@@ -161,11 +164,13 @@ defmodule Foglet.TUI.Screens.Moderation do
     case unwrap_task_result(result) do
       {:ok, report} ->
         queue = remove_report_from_queue(ss.queue, report)
+        queue_selected_index = clamp_queue_selected_index(ss.queue_selected_index, queue)
 
         {%{
            ss
            | queue: queue,
-             queue_selected_index: clamp_queue_selected_index(ss.queue_selected_index, queue)
+             queue_selected_index: queue_selected_index,
+             queue_table: State.build_queue_table(queue, queue_selected_index)
          },
          [
            Effect.open_modal(
@@ -311,14 +316,14 @@ defmodule Foglet.TUI.Screens.Moderation do
       []
     else
       [
-        %{label: "Queue", commands: [%{key: "J/K", label: "Select", priority: 20}]},
+        %{label: "Queue", commands: [%{key: "↑/↓", label: "Select", priority: 20}]},
         %{
           label: "Actions",
           commands: [
             %{key: "V", label: "View target", priority: 35},
-            %{key: "R", label: "Resolve", priority: 30},
+            %{key: "E", label: "Resolve", priority: 30},
             %{key: "D", label: "Dismiss", priority: 30},
-            %{key: "F", label: "Refresh", priority: 25}
+            %{key: "R", label: "Refresh", priority: 25}
           ]
         }
       ]
@@ -390,20 +395,10 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp render_tab_body("QUEUE", ss, theme, width, height, _user, _timezone) do
     selected = selected_report(ss)
 
-    if width >= 80 and selected do
+    if width >= 100 do
       render_queue_workspace(ss, selected, theme, width, height)
     else
-      rows =
-        [
-          status_line(ss, theme),
-          text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg)
-        ] ++
-          queue_rows(ss, theme) ++
-          selected_report_rows(selected, theme)
-
-      column style: %{gap: 0} do
-        Enum.reject(rows, &is_nil/1)
-      end
+      render_queue_stack(ss, selected, theme, width, height)
     end
   end
 
@@ -598,10 +593,10 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp handle_queue_update(event, %State{} = ss, %Context{} = context) do
     case key_for_queue(event) do
       :next ->
-        {move_queue_selection(ss, 1), []}
+        {move_queue_selection(ss, %{key: :down}), []}
 
       :prev ->
-        {move_queue_selection(ss, -1), []}
+        {move_queue_selection(ss, %{key: :up}), []}
 
       :view ->
         open_queue_target(ss)
@@ -672,25 +667,6 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp queue_action_op(:resolve), do: :resolve_report
   defp queue_action_op(:dismiss), do: :dismiss_report
 
-  defp queue_rows(%State{queue: []}, theme) do
-    [text("No open reports.", fg: theme.dim.fg)]
-  end
-
-  defp queue_rows(%State{queue: queue, queue_selected_index: selected_index}, theme) do
-    [text("", fg: theme.dim.fg)] ++
-      (Enum.with_index(queue)
-       |> Enum.map(fn {report, index} ->
-         prefix = if index == selected_index, do: ">", else: " "
-         reporter = report |> Map.get(:reporter) |> Map.get(:handle, "unknown")
-
-         label =
-           "#{prefix} #{report_reason(report)} · #{report_target_kind(report)} · @#{reporter}"
-
-         color = if index == selected_index, do: theme.primary.fg, else: theme.unselected.fg
-         text(label, fg: color)
-       end))
-  end
-
   defp selected_report_rows(nil, _theme), do: []
 
   defp selected_report_rows(report, theme) do
@@ -709,12 +685,24 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp move_queue_selection(%State{} = ss, delta) do
+  defp move_queue_selection(%State{} = ss, event) do
+    table = fresh_queue_table(ss)
+    {new_table, _action} = ConsoleTable.handle_event(event, table)
+    selected_index = queue_table_selected_index(new_table, ss.queue)
+
     %{
       ss
-      | queue_selected_index:
-          clamp_queue_selected_index(ss.queue_selected_index + delta, ss.queue)
+      | queue_selected_index: selected_index,
+        queue_table: State.build_queue_table(ss.queue, selected_index)
     }
+  end
+
+  defp queue_table_selected_index(_table, []), do: 0
+
+  defp queue_table_selected_index(%ConsoleTable{table: table}, queue) do
+    table.raxol_state
+    |> Map.get(:selected_row, 0)
+    |> clamp_queue_selected_index(queue)
   end
 
   defp clamp_queue_selected_index(_index, []), do: 0
@@ -735,27 +723,77 @@ defmodule Foglet.TUI.Screens.Moderation do
     )
   end
 
-  defp render_queue_workspace(ss, selected, theme, _width, height) do
+  defp render_queue_workspace(ss, selected, theme, width, height) do
+    table = fresh_queue_table(ss, width, height)
+    inspector = queue_inspector(selected)
+
     queue_column =
       column style: %{gap: 0} do
-        ([status_line(ss, theme), text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg)] ++
-           queue_rows(ss, theme))
+        [
+          status_line(ss, theme),
+          text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg),
+          ConsoleTable.render(table, theme: theme)
+        ]
         |> Enum.reject(&is_nil/1)
       end
 
     inspector_column =
       column style: %{gap: 0} do
-        selected_report_rows(selected, theme)
+        [Inspector.render(inspector, theme: theme, width: width, min_width: 100)]
       end
 
     split_pane(
       direction: :horizontal,
       ratio: {2, 3},
-      min_size: 24,
+      min_size: 30,
       divider_char: " ",
       children: [queue_column, inspector_column],
       height: max(height - 2, 1)
     )
+  end
+
+  defp render_queue_stack(ss, selected, theme, width, height) do
+    table = fresh_queue_table(ss, width, height)
+
+    column style: %{gap: 0} do
+      ([
+         status_line(ss, theme),
+         text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg),
+         ConsoleTable.render(table, theme: theme)
+       ] ++
+         selected_report_rows(selected, theme))
+      |> Enum.reject(&is_nil/1)
+    end
+  end
+
+  defp fresh_queue_table(%State{} = ss, width \\ nil, height \\ nil) do
+    State.build_queue_table(ss.queue, ss.queue_selected_index,
+      width: width,
+      page_size: page_size(height || 14)
+    )
+  end
+
+  defp queue_inspector(nil), do: nil
+
+  defp queue_inspector(report) do
+    %{
+      title: "Selected report",
+      details: [
+        %{label: "Target", value: report_target_label(report)},
+        %{label: "Reason", value: report_reason(report)},
+        %{
+          label: "Reported by",
+          value: "@#{report |> Map.get(:reporter) |> Map.get(:handle, "unknown")}"
+        },
+        %{label: "Notes", value: report_notes(report)}
+      ],
+      actions: [
+        %{key: "V", label: "View target"},
+        %{key: "E", label: "Resolve", role: :primary},
+        %{key: "D", label: "Dismiss", role: :destructive},
+        %{key: "R", label: "Refresh"}
+      ]
+    }
   end
 
   defp selected_report_summary_lines(report) do
@@ -792,8 +830,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp key_for_queue(%{key: :char, char: char}) when char in ["j", "J"], do: :next
   defp key_for_queue(%{key: :char, char: char}) when char in ["k", "K"], do: :prev
   defp key_for_queue(%{key: :char, char: char}) when char in ["v", "V"], do: :view
-  defp key_for_queue(%{key: :char, char: char}) when char in ["f", "F"], do: :refresh
-  defp key_for_queue(%{key: :char, char: char}) when char in ["r", "R"], do: :resolve
+  defp key_for_queue(%{key: :char, char: char}) when char in ["r", "R"], do: :refresh
+  defp key_for_queue(%{key: :char, char: char}) when char in ["e", "E"], do: :resolve
   defp key_for_queue(%{key: :char, char: char}) when char in ["d", "D"], do: :dismiss
   defp key_for_queue(_event), do: :no_match
 

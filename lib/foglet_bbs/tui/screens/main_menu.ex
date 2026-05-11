@@ -70,7 +70,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     %{key: "S", label: "Sysop", glyph: "▣", kind: :destination, visibility: :sysop},
     %{key: "Q", label: "Logout", glyph: "↯", kind: :destination, visibility: :always},
     %{key: "O", label: "Oneliner", kind: :action, visibility: :authenticated},
-    %{key: "R", label: "Report", kind: :action, visibility: :report_oneliner_policy},
+    %{key: "!", label: "Report", kind: :action, visibility: :report_oneliner_policy},
     %{key: "H", label: "Hide oneliner", kind: :action, visibility: :hide_oneliner_policy},
     %{key: "↑/↓", label: "Select", kind: :action, visibility: :oneliners_present}
   ]
@@ -168,8 +168,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end
   end
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["r", "R"] do
+  def update({:key, %{key: :char, char: "!"}}, local_state, %Context{} = context) do
     local_state = normalize_state(local_state, context)
     app_state = app_state_from_local(local_state, context)
 
@@ -523,7 +522,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
       |> Enum.filter(&(&1.kind == :action and action_visible?(&1.visibility, user, state)))
 
     hide_oneliner = Enum.filter(visible, &(&1.key == "H")) |> Enum.map(&{&1.key, &1.label})
-    report_oneliner = Enum.filter(visible, &(&1.key == "R")) |> Enum.map(&{&1.key, &1.label})
+    report_oneliner = Enum.filter(visible, &(&1.key == "!")) |> Enum.map(&{&1.key, &1.label})
     oneliner_post = Enum.filter(visible, &(&1.key == "O")) |> Enum.map(&{&1.key, &1.label})
     select_oneliner = Enum.filter(visible, &(&1.key == "↑/↓")) |> Enum.map(&{&1.key, &1.label})
 
@@ -763,7 +762,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   defp command_priority("H"), do: -10
-  defp command_priority("R"), do: -5
+  defp command_priority("!"), do: -5
   defp command_priority("O"), do: 30
   defp command_priority(_key), do: 20
 

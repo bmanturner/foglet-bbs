@@ -126,7 +126,7 @@ defmodule Foglet.TUI.Screens.Shared.Reporting do
   end
 
   defp field_value(values, key) do
-    Map.get(values, key) || Map.get(values, Atom.to_string(key))
+    Map.get(values, key) || Map.get(values, Atom.to_string(key)) || ""
   end
 
   defp form_modal_message(%ModalForm{} = form, []), do: form

@@ -495,7 +495,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       refute joined =~ "2026-04-24"
     end
 
-    test "QUEUE renders split queue workspace with command hints and selected report details", %{
+    test "QUEUE renders wide table + inspector workspace with approved action copy", %{
       state: state
     } do
       report =
@@ -513,13 +513,39 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       joined = Enum.join(flat, "\n")
 
       assert joined =~ "Open reports"
+      assert joined =~ "Target"
+      assert joined =~ "Reason"
+      assert joined =~ "Reporter"
       assert joined =~ "Selected report"
       assert joined =~ "post #42 in general"
       assert joined =~ "needs review"
-      assert joined =~ "View target"
-      assert joined =~ "Resolve"
-      assert joined =~ "Dismiss"
-      assert joined =~ "Refresh"
+      assert joined =~ "V View target"
+      assert joined =~ "E Resolve"
+      assert joined =~ "D Dismiss"
+      assert joined =~ "R Refresh"
+    end
+
+    test "QUEUE stacks table and selected report details below the wide breakpoint", %{
+      state: state
+    } do
+      report =
+        report_row(%{id: "rep-1", target_kind: :post, reason: "spam", notes: "needs review"})
+        |> Map.from_struct()
+        |> Map.put(:target_label, "post #42 in general")
+
+      flat =
+        state
+        |> Map.put(:terminal_size, {90, 24})
+        |> put_moderation_state(0, queue: [report])
+        |> render_moderation()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+
+      assert joined =~ "Open reports"
+      assert joined =~ "Selected report"
+      assert joined =~ "post #42 in general"
+      assert joined =~ "needs review"
     end
 
     test "USERS renders read-only user rows without mutation commands", %{state: state} do
@@ -670,7 +696,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert state.screen_state.moderation.queue_selected_index == 0
     end
 
-    test "QUEUE R opens a resolution modal with report summary context" do
+    test "QUEUE E opens a resolution modal with report summary context" do
       user = %User{id: "u1", handle: "mod", role: :mod}
 
       context =
@@ -689,7 +715,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
           ]
         )
 
-      {state, effects} = Moderation.update({:key, %{key: :char, char: "r"}}, state, context)
+      {state, effects} = Moderation.update({:key, %{key: :char, char: "e"}}, state, context)
 
       assert state.queue_selected_index == 0
 
