@@ -143,6 +143,28 @@ defmodule Foglet.TUI.App.Modal do
   defp handle_modal_key(:reply_context, %{key: :enter}, %App{} = state), do: dismiss(state)
 
   defp handle_modal_key(
+         :public_profile,
+         %{key: :char, char: "!"},
+         %App{modal: %Foglet.TUI.Modal{message: %{report_target: target}}} = state
+       )
+       when is_map(target) do
+    route_modal_submit(
+      state,
+      Effect.modal_submit(
+        Map.get(target, :screen_key),
+        Map.get(target, :kind),
+        Map.get(target, :payload)
+      )
+    )
+  end
+
+  defp handle_modal_key(:public_profile, %{key: :escape}, %App{} = state), do: dismiss(state)
+  defp handle_modal_key(:public_profile, %{key: :enter}, %App{} = state), do: dismiss(state)
+
+  defp handle_modal_key(:public_profile, %{key: :char, char: " "}, %App{} = state),
+    do: dismiss(state)
+
+  defp handle_modal_key(
          :form,
          key,
          %App{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state

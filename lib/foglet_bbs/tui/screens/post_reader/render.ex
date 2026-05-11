@@ -98,7 +98,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
       do: reply_context_commands,
       else:
         reply_context_commands ++
-          [profile_command(), upvote_command(), reply_command(reply_state)]
+          [profile_command(), report_command(), upvote_command(), reply_command(reply_state)]
   end
 
   defp reply_context_commands(%State{} = state) do
@@ -108,6 +108,8 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   defp profile_command, do: %{key: "V", label: "Profile", priority: 7}
+
+  defp report_command, do: %{key: "!", label: "Report", priority: 7}
 
   defp upvote_command, do: %{key: "U", label: "Upvote", priority: 8}
 

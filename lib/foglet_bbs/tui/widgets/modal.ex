@@ -56,6 +56,17 @@ defmodule Foglet.TUI.Widgets.Modal do
   end
 
   def render(
+        %Foglet.TUI.Modal{
+          type: :public_profile,
+          message: %{profile: %Foglet.Accounts.PublicProfile{} = profile} = payload
+        },
+        %Theme{} = theme,
+        _opts
+      ) do
+    PublicProfileCard.render(profile, theme, footer_hint: Map.get(payload, :footer_hint))
+  end
+
+  def render(
         %Foglet.TUI.Modal{message: %Foglet.Accounts.PublicProfile{} = profile},
         %Theme{} = theme,
         _opts

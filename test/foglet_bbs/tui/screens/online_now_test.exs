@@ -162,14 +162,19 @@ defmodule Foglet.TUI.Screens.OnlineNowTest do
     assert [
              %Effect{
                type: :modal,
-               payload: {:open, %Foglet.TUI.Modal{title: "Public Profile", message: profile}}
+               payload: {:open, %Foglet.TUI.Modal{title: "Public Profile", message: message}}
              }
            ] = effects
 
     assert %Foglet.Accounts.PublicProfile{user_id: "u-mod", handle: "moddy", role: :mod, karma: 7} =
-             profile
+             message.profile
 
-    refute Map.has_key?(profile, :email)
+    assert message.footer_hint == "[!] report user"
+    assert message.report_target.screen_key == :online_now
+    assert message.report_target.kind == :report_selected_user
+    assert message.report_target.payload.target_user.id == "u-mod"
+
+    refute Map.has_key?(message.profile, :email)
   end
 
   test "back keys route to the main menu" do

@@ -30,6 +30,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.MainMenu.Render
   alias Foglet.TUI.Screens.{MainMenu.State, ShellVisibility}
+  alias Foglet.TUI.Screens.Shared.Reporting
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
   @default_terminal_size {80, 24}
@@ -69,6 +70,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     %{key: "S", label: "Sysop", glyph: "▣", kind: :destination, visibility: :sysop},
     %{key: "Q", label: "Logout", glyph: "↯", kind: :destination, visibility: :always},
     %{key: "O", label: "Oneliner", kind: :action, visibility: :authenticated},
+    %{key: "R", label: "Report", kind: :action, visibility: :report_oneliner_policy},
     %{key: "H", label: "Hide oneliner", kind: :action, visibility: :hide_oneliner_policy},
     %{key: "↑/↓", label: "Select", kind: :action, visibility: :oneliners_present}
   ]
@@ -163,6 +165,32 @@ defmodule Foglet.TUI.Screens.MainMenu do
       {State.clear_errors(local_state), [Effect.open_modal(oneliner_composer_modal())]}
     else
       {local_state, []}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["r", "R"] do
+    local_state = normalize_state(local_state, context)
+    app_state = app_state_from_local(local_state, context)
+
+    case selected_reportable_oneliner(app_state) do
+      %{id: id} = entry when is_binary(id) and id != "" ->
+        modal =
+          Reporting.report_modal(
+            :main_menu,
+            :submit_oneliner_report,
+            %{
+              target_kind: :oneliner,
+              target_id: id,
+              target_label: "oneliner by @#{oneliner_handle(entry)}"
+            },
+            title: "Report Oneliner"
+          )
+
+        {State.clear_errors(local_state), [Effect.open_modal(modal)]}
+
+      _other ->
+        {local_state, []}
     end
   end
 
@@ -320,6 +348,70 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {local_state, [Effect.open_modal(hide_oneliner_modal(errors))]}
   end
 
+  def update({:modal_submit, :submit_oneliner_report, payload}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+    moderation_mod = domain_module(context, :moderation)
+
+    effect =
+      Effect.task(:submit_oneliner_report, :main_menu, fn ->
+        moderation_mod.create_report(context.current_user, %{
+          target_kind: Map.get(payload, :target_kind),
+          target_id: Map.get(payload, :target_id),
+          reason: Map.get(payload, :reason),
+          notes: Map.get(payload, :notes)
+        })
+      end)
+
+    {local_state, [effect]}
+  end
+
+  def update({:task_result, :submit_oneliner_report, result}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    case unwrap_task_result(result) do
+      {:ok, _report} ->
+        {State.clear_errors(local_state),
+         [Effect.open_modal(Reporting.success_modal("Report submitted."))]}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        errors = Reporting.changeset_errors(changeset)
+
+        modal =
+          Reporting.report_modal(
+            :main_menu,
+            :submit_oneliner_report,
+            %{
+              target_kind: :oneliner,
+              target_id:
+                Map.get(changeset.changes, :target_id) || Map.get(changeset.data, :target_id),
+              target_label: "selected oneliner"
+            },
+            title: "Report Oneliner",
+            values: %{
+              reason: Map.get(changeset.changes, :reason) || Map.get(changeset.data, :reason),
+              notes: Map.get(changeset.changes, :notes) || Map.get(changeset.data, :notes)
+            },
+            errors: errors
+          )
+
+        {State.put_errors(local_state, errors), [Effect.open_modal(modal)]}
+
+      {:error, reason} ->
+        errors = %{base: "Unable to submit report: #{inspect(reason)}"}
+
+        modal =
+          Reporting.report_modal(
+            :main_menu,
+            :submit_oneliner_report,
+            %{target_kind: :oneliner, target_id: nil, target_label: "selected oneliner"},
+            title: "Report Oneliner",
+            errors: errors
+          )
+
+        {State.put_errors(local_state, errors), [Effect.open_modal(modal)]}
+    end
+  end
+
   def update({:task_result, :submit_oneliner, result}, local_state, %Context{} = context) do
     local_state = normalize_state(local_state, context)
 
@@ -431,11 +523,12 @@ defmodule Foglet.TUI.Screens.MainMenu do
       |> Enum.filter(&(&1.kind == :action and action_visible?(&1.visibility, user, state)))
 
     hide_oneliner = Enum.filter(visible, &(&1.key == "H")) |> Enum.map(&{&1.key, &1.label})
+    report_oneliner = Enum.filter(visible, &(&1.key == "R")) |> Enum.map(&{&1.key, &1.label})
     oneliner_post = Enum.filter(visible, &(&1.key == "O")) |> Enum.map(&{&1.key, &1.label})
     select_oneliner = Enum.filter(visible, &(&1.key == "↑/↓")) |> Enum.map(&{&1.key, &1.label})
 
     [
-      command_group("Actions", hide_oneliner ++ oneliner_post),
+      command_group("Actions", hide_oneliner ++ report_oneliner ++ oneliner_post),
       command_group("Select", select_oneliner)
     ]
     |> Enum.reject(&(&1.commands == []))
@@ -550,6 +643,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp default_domain_module(:oneliners), do: Foglet.Oneliners
   defp default_domain_module(:boards), do: Foglet.Boards
   defp default_domain_module(:online_now), do: Foglet.Sessions.OnlineNow
+  defp default_domain_module(:moderation), do: Foglet.Moderation
 
   defp modal_submit_effect(kind, payload), do: Effect.modal_submit(:main_menu, kind, payload)
 
@@ -650,6 +744,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
     not is_nil(selected_hideable_oneliner(state))
   end
 
+  defp action_visible?(:report_oneliner_policy, user, state) do
+    not is_nil(user) and not is_nil(selected_reportable_oneliner(state))
+  end
+
   defp action_visible?(:oneliners_present, _user, state) do
     visible_oneliners(state) != []
   end
@@ -665,6 +763,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   end
 
   defp command_priority("H"), do: -10
+  defp command_priority("R"), do: -5
   defp command_priority("O"), do: 30
   defp command_priority(_key), do: 20
 
@@ -692,17 +791,35 @@ defmodule Foglet.TUI.Screens.MainMenu do
     if hideable_oneliner?(state.current_user, entry), do: entry
   end
 
+  defp selected_reportable_oneliner(state) do
+    entries = visible_oneliners(state)
+    entry = Enum.at(entries, selected_oneliner_index(state, entries))
+
+    if reportable_oneliner?(state.current_user, entry), do: entry
+  end
+
   defp hideable_oneliner?(user, %{id: id}) when is_binary(id) and id != "" do
     Bodyguard.permit?(Authorization, :hide_oneliner, user, :site)
   end
 
   defp hideable_oneliner?(_user, _entry), do: false
 
+  defp reportable_oneliner?(user, %{id: id}) when is_binary(id) and id != "" do
+    not is_nil(user)
+  end
+
+  defp reportable_oneliner?(_user, _entry), do: false
+
   defp visible_oneliners(state) do
     state
     |> Map.get(:recent_oneliners, [])
     |> Kernel.||([])
     |> Enum.take(@oneliner_display_limit)
+  end
+
+  defp oneliner_handle(entry) when is_map(entry) do
+    user = Map.get(entry, :user) || Map.get(entry, "user") || %{}
+    Map.get(user, :handle) || Map.get(user, "handle") || "unknown"
   end
 
   defp selected_oneliner_index(_state, []), do: 0

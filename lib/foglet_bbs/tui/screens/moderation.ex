@@ -37,6 +37,7 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Screens.Moderation.State
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesSurface
+  alias Foglet.TUI.Screens.Shared.Reporting
   alias Foglet.TUI.Screens.ShellVisibility
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -89,10 +90,13 @@ defmodule Foglet.TUI.Screens.Moderation do
 
     case unwrap_task_result(result) do
       {:ok, snapshot} when is_map(snapshot) ->
+        queue = Map.get(snapshot, :queue, [])
+
         {%{
            ss
            | scopes: Map.get(snapshot, :scopes, []),
-             queue: Map.get(snapshot, :queue, []),
+             queue: queue,
+             queue_selected_index: clamp_queue_selected_index(ss.queue_selected_index, queue),
              mod_log: Map.get(snapshot, :log, []),
              users: Map.get(snapshot, :users, []),
              boards: Map.get(snapshot, :boards, []),
@@ -123,6 +127,82 @@ defmodule Foglet.TUI.Screens.Moderation do
            | invites:
                Foglet.TUI.Screens.Shared.InvitesState.with_error(ss.invites, to_string(reason))
          }, []}
+    end
+  end
+
+  def update({:modal_submit, op, payload}, local_state, %Context{} = context)
+      when op in [:resolve_report, :dismiss_report] do
+    ss = normalize_state(local_state, context)
+    moderation_mod = domain_module(context, :moderation, Foglet.Moderation)
+
+    effect =
+      Effect.task(op, :moderation, fn ->
+        case op do
+          :resolve_report ->
+            moderation_mod.resolve_report(context.current_user, Map.get(payload, :report_id), %{
+              resolution_note: Map.get(payload, :resolution_note)
+            })
+
+          :dismiss_report ->
+            moderation_mod.dismiss_report(context.current_user, Map.get(payload, :report_id), %{
+              resolution_note: Map.get(payload, :resolution_note)
+            })
+        end
+      end)
+
+    {ss, [effect]}
+  end
+
+  def update({:task_result, op, result}, local_state, %Context{} = context)
+      when op in [:resolve_report, :dismiss_report] do
+    ss = normalize_state(local_state, context)
+
+    case unwrap_task_result(result) do
+      {:ok, report} ->
+        queue = remove_report_from_queue(ss.queue, report)
+
+        {%{
+           ss
+           | queue: queue,
+             queue_selected_index: clamp_queue_selected_index(ss.queue_selected_index, queue)
+         },
+         [
+           Effect.open_modal(
+             Reporting.success_modal(
+               if(op == :resolve_report, do: "Report resolved.", else: "Report dismissed.")
+             )
+           ),
+           load_workspace_effect(context)
+         ]}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        title = if(op == :resolve_report, do: "Resolve Report", else: "Dismiss Report")
+
+        modal =
+          Reporting.resolution_modal(
+            :moderation,
+            op,
+            %{report_id: Map.get(changeset.data, :id)},
+            title: title,
+            values: %{resolution_note: Map.get(changeset.changes, :resolution_note) || ""},
+            errors: Reporting.changeset_errors(changeset)
+          )
+
+        {ss, [Effect.open_modal(modal)]}
+
+      {:error, reason} ->
+        title = if(op == :resolve_report, do: "Resolve Report", else: "Dismiss Report")
+
+        modal =
+          Reporting.resolution_modal(
+            :moderation,
+            op,
+            %{report_id: selected_report_id(ss)},
+            title: title,
+            errors: %{base: "Unable to update report: #{inspect(reason)}"}
+          )
+
+        {ss, [Effect.open_modal(modal)]}
     end
   end
 
@@ -225,6 +305,23 @@ defmodule Foglet.TUI.Screens.Moderation do
   # FOG-164: ScreenFrame keybar is active-tab aware on INVITES so revoke /
   # generate / refresh hints are first-class command-bar entries (not body-only).
   # Mirrors `Foglet.TUI.Screens.Account.Render.middle_groups/2`.
+  defp middle_groups("QUEUE", %State{queue: queue}) do
+    if queue == [] do
+      []
+    else
+      [
+        %{label: "Queue", commands: [%{key: "J/K", label: "Select", priority: 20}]},
+        %{
+          label: "Actions",
+          commands: [
+            %{key: "R", label: "Resolve", priority: 30},
+            %{key: "D", label: "Dismiss", priority: 30}
+          ]
+        }
+      ]
+    end
+  end
+
   defp middle_groups("INVITES", %State{invites: %{mode: invites_mode}}) do
     case invites_mode do
       :confirm_revoke ->
@@ -288,12 +385,18 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("QUEUE", ss, theme, _width, _height, _user, _timezone) do
-    column style: %{gap: 0} do
+    selected = selected_report(ss)
+
+    rows =
       [
         status_line(ss, theme),
-        text("Report queue is not available yet.", fg: theme.dim.fg)
-      ]
-      |> Enum.reject(&is_nil/1)
+        text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg)
+      ] ++
+        queue_rows(ss, theme) ++
+        selected_report_rows(selected, theme)
+
+    column style: %{gap: 0} do
+      Enum.reject(rows, &is_nil/1)
     end
   end
 
@@ -438,23 +541,14 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp handle_active_key(event, %State{} = ss, %Context{} = context) do
     case Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab) do
+      "QUEUE" ->
+        handle_queue_update(event, ss, context)
+
       "INVITES" ->
         handle_invites_update(event, ss, context)
 
-      "LOG" ->
-        table = ss.log_table || State.build_log_table(ss.mod_log)
-        {new_table, _action} = ConsoleTable.handle_event(event, table)
-        {%{ss | log_table: new_table}, []}
-
-      "USERS" ->
-        table = ss.users_table || State.build_users_table(ss.users)
-        {new_table, _action} = ConsoleTable.handle_event(event, table)
-        {%{ss | users_table: new_table}, []}
-
-      "BOARDS" ->
-        table = ss.boards_table || State.build_boards_table(ss.boards)
-        {new_table, _action} = ConsoleTable.handle_event(event, table)
-        {%{ss | boards_table: new_table}, []}
+      label when label in ["LOG", "USERS", "BOARDS"] ->
+        handle_read_only_table_key(label, event, ss)
 
       _other ->
         {ss, []}
@@ -494,6 +588,22 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
+  defp handle_queue_update(event, %State{} = ss, %Context{} = _context) do
+    case key_for_queue(event) do
+      :next ->
+        {move_queue_selection(ss, 1), []}
+
+      :prev ->
+        {move_queue_selection(ss, -1), []}
+
+      action when action in [:resolve, :dismiss] ->
+        open_queue_resolution(action, ss)
+
+      _ ->
+        {ss, []}
+    end
+  end
+
   defp maybe_request_invites(%State{} = ss, %Context{} = context) do
     case {Enum.at(tab_labels_from_tabs(ss.tabs), ss.active_tab), ss.invites.items} do
       {"INVITES", items} when not is_list(items) ->
@@ -503,6 +613,126 @@ defmodule Foglet.TUI.Screens.Moderation do
         {ss, []}
     end
   end
+
+  defp handle_read_only_table_key("LOG", event, %State{} = ss) do
+    table = ss.log_table || State.build_log_table(ss.mod_log)
+    {new_table, _action} = ConsoleTable.handle_event(event, table)
+    {%{ss | log_table: new_table}, []}
+  end
+
+  defp handle_read_only_table_key("USERS", event, %State{} = ss) do
+    table = ss.users_table || State.build_users_table(ss.users)
+    {new_table, _action} = ConsoleTable.handle_event(event, table)
+    {%{ss | users_table: new_table}, []}
+  end
+
+  defp handle_read_only_table_key("BOARDS", event, %State{} = ss) do
+    table = ss.boards_table || State.build_boards_table(ss.boards)
+    {new_table, _action} = ConsoleTable.handle_event(event, table)
+    {%{ss | boards_table: new_table}, []}
+  end
+
+  defp open_queue_resolution(action, %State{} = ss) do
+    case selected_report(ss) do
+      nil -> {ss, []}
+      report -> {ss, [Effect.open_modal(queue_resolution_modal(queue_action_op(action), report))]}
+    end
+  end
+
+  defp queue_action_op(:resolve), do: :resolve_report
+  defp queue_action_op(:dismiss), do: :dismiss_report
+
+  defp queue_rows(%State{queue: []}, theme) do
+    [text("No open reports.", fg: theme.dim.fg)]
+  end
+
+  defp queue_rows(%State{queue: queue, queue_selected_index: selected_index}, theme) do
+    [text("", fg: theme.dim.fg)] ++
+      (Enum.with_index(queue)
+       |> Enum.map(fn {report, index} ->
+         prefix = if index == selected_index, do: ">", else: " "
+         reporter = report |> Map.get(:reporter) |> Map.get(:handle, "unknown")
+
+         label =
+           "#{prefix} #{report_reason(report)} · #{report_target_kind(report)} · @#{reporter}"
+
+         color = if index == selected_index, do: theme.primary.fg, else: theme.unselected.fg
+         text(label, fg: color)
+       end))
+  end
+
+  defp selected_report_rows(nil, _theme), do: []
+
+  defp selected_report_rows(report, theme) do
+    [
+      text("", fg: theme.dim.fg),
+      text("Selected report", fg: theme.primary.fg),
+      text("Target: #{report_target_kind(report)}", fg: theme.unselected.fg),
+      text("Reason: #{report_reason(report)}", fg: theme.unselected.fg),
+      text("Reported by: @#{report |> Map.get(:reporter) |> Map.get(:handle, "unknown")}",
+        fg: theme.unselected.fg
+      ),
+      text("Notes: #{report_notes(report)}", fg: theme.unselected.fg)
+    ]
+  end
+
+  defp selected_report(%State{} = ss) do
+    Enum.at(ss.queue, clamp_queue_selected_index(ss.queue_selected_index, ss.queue))
+  end
+
+  defp selected_report_id(%State{} = ss) do
+    case selected_report(ss) do
+      %{id: id} -> id
+      _ -> nil
+    end
+  end
+
+  defp move_queue_selection(%State{} = ss, delta) do
+    %{
+      ss
+      | queue_selected_index:
+          clamp_queue_selected_index(ss.queue_selected_index + delta, ss.queue)
+    }
+  end
+
+  defp clamp_queue_selected_index(_index, []), do: 0
+
+  defp clamp_queue_selected_index(index, queue) do
+    index
+    |> max(0)
+    |> min(length(queue) - 1)
+  end
+
+  defp queue_resolution_modal(op, report) do
+    title = if(op == :resolve_report, do: "Resolve Report", else: "Dismiss Report")
+
+    Reporting.resolution_modal(:moderation, op, %{report_id: Map.get(report, :id)},
+      title: title,
+      values: %{resolution_note: ""}
+    )
+  end
+
+  defp remove_report_from_queue(queue, %{id: report_id}) do
+    Enum.reject(queue, &(Map.get(&1, :id) == report_id))
+  end
+
+  defp report_target_kind(report), do: report |> Map.get(:target_kind, "unknown") |> to_string()
+  defp report_reason(report), do: report |> Map.get(:reason, "unspecified") |> to_string()
+
+  defp report_notes(report) do
+    case Map.get(report, :notes) do
+      value when is_binary(value) and value != "" -> value
+      _ -> "—"
+    end
+  end
+
+  defp key_for_queue(%{key: :down}), do: :next
+  defp key_for_queue(%{key: :up}), do: :prev
+  defp key_for_queue(%{key: :char, char: char}) when char in ["j", "J"], do: :next
+  defp key_for_queue(%{key: :char, char: char}) when char in ["k", "K"], do: :prev
+  defp key_for_queue(%{key: :char, char: char}) when char in ["r", "R"], do: :resolve
+  defp key_for_queue(%{key: :char, char: char}) when char in ["d", "D"], do: :dismiss
+  defp key_for_queue(_event), do: :no_match
 
   defp load_workspace_effect(%Context{} = context) do
     moderation_mod = domain_module(context, :moderation, Foglet.Moderation)

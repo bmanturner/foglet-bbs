@@ -6,7 +6,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Accounts
   alias Foglet.Accounts.{Invites, User}
   alias Foglet.Config
-  alias Foglet.Moderation.Action
+  alias Foglet.Moderation.{Action, Report}
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
@@ -114,6 +114,30 @@ defmodule Foglet.TUI.Screens.ModerationTest do
          log: [],
          users: [%{handle: "alice", role: :user, status: :active}],
          boards: [%{name: "General", category_name: "Main", state: :active}]
+       }}
+    end
+
+    def resolve_report(_user, report_id, attrs) do
+      {:ok,
+       %Report{
+         id: report_id,
+         status: :resolved,
+         resolution_note: Map.get(attrs, :resolution_note),
+         target_kind: :post,
+         target_id: Ecto.UUID.generate(),
+         reason: "spam"
+       }}
+    end
+
+    def dismiss_report(_user, report_id, attrs) do
+      {:ok,
+       %Report{
+         id: report_id,
+         status: :dismissed,
+         resolution_note: Map.get(attrs, :resolution_note),
+         target_kind: :post,
+         target_id: Ecto.UUID.generate(),
+         reason: "spam"
        }}
     end
   end
@@ -470,19 +494,23 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       refute joined =~ "2026-04-24"
     end
 
-    test "QUEUE renders honest report workflow unavailable state and no work items", %{
-      state: state
-    } do
+    test "QUEUE renders report rows and selected report details", %{state: state} do
+      report =
+        report_row(%{id: "rep-1", target_kind: :post, reason: "spam", notes: "needs review"})
+
       flat =
         state
-        |> put_moderation_state(0, queue: [%{body: "fake report"}])
+        |> put_moderation_state(0, queue: [report])
         |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
-      assert joined =~ "Report queue is not available"
-      refute joined =~ "fake report"
-      refute joined =~ "Approve"
+
+      assert joined =~ "Open reports"
+      assert joined =~ "spam"
+      assert joined =~ "needs review"
+      assert joined =~ "Target"
+      assert joined =~ "post"
     end
 
     test "USERS renders read-only user rows without mutation commands", %{state: state} do
@@ -616,6 +644,57 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
     test "unknown key returns :no_match", %{state: state} do
       assert :no_match = handle_moderation_key(%{key: :char, char: "z"}, state)
+    end
+
+    test "QUEUE j/k changes the selected report", %{state: state} do
+      reports = [
+        report_row(%{id: "rep-1", reason: "spam"}),
+        report_row(%{id: "rep-2", reason: "abuse"})
+      ]
+
+      state = put_moderation_state(state, 0, queue: reports)
+
+      {:update, state, _} = handle_moderation_key(%{key: :char, char: "j"}, state)
+      assert state.screen_state.moderation.queue_selected_index == 1
+
+      {:update, state, _} = handle_moderation_key(%{key: :char, char: "k"}, state)
+      assert state.screen_state.moderation.queue_selected_index == 0
+    end
+
+    test "QUEUE R opens a resolution modal for the selected report" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      state = ModerationState.new(queue: [report_row(%{id: "rep-1", reason: "spam"})])
+
+      {state, effects} = Moderation.update({:key, %{key: :char, char: "r"}}, state, context)
+
+      assert state.queue_selected_index == 0
+
+      assert [%Effect{type: :modal, payload: {:open, %{title: "Resolve Report"}}}] = effects
+    end
+
+    test "QUEUE D opens a dismissal modal for the selected report" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      state = ModerationState.new(queue: [report_row(%{id: "rep-1", reason: "spam"})])
+
+      {_state, effects} = Moderation.update({:key, %{key: :char, char: "d"}}, state, context)
+
+      assert [%Effect{type: :modal, payload: {:open, %{title: "Dismiss Report"}}}] = effects
     end
 
     test "Moderation screen does NOT dispatch fake moderation commands", %{state: state} do
@@ -776,6 +855,31 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
   end
 
+  describe "queue moderation actions" do
+    test "modal submit resolve_report dispatches moderation task" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      state = ModerationState.new(queue: [report_row(%{id: "rep-1", reason: "spam"})])
+
+      {_state, effects} =
+        Moderation.update(
+          {:modal_submit, :resolve_report, %{report_id: "rep-1", resolution_note: "handled"}},
+          state,
+          context
+        )
+
+      assert [%Effect{type: :task, payload: %{op: :resolve_report, screen_key: :moderation}}] =
+               effects
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Phase 25 Plan 05 — Per-tab theme hygiene (D-12)
   # ---------------------------------------------------------------------------
@@ -862,6 +966,21 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       mod: %User{handle: handle},
       inserted_at: inserted_at
     }
+  end
+
+  defp report_row(attrs) do
+    defaults = %{
+      id: Ecto.UUID.generate(),
+      target_kind: :post,
+      target_id: Ecto.UUID.generate(),
+      reason: "spam",
+      notes: "needs review",
+      status: :open,
+      reporter: %User{handle: "reporter"},
+      inserted_at: ~U[2026-04-24 13:00:00Z]
+    }
+
+    struct!(Report, Map.merge(defaults, attrs))
   end
 
   defp text_index(flat, needle) do

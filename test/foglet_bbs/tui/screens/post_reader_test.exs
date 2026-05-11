@@ -840,7 +840,12 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
                PostReader.update({:key, %{key: :char, char: "v"}}, state, context)
 
       assert %Foglet.Accounts.PublicProfile{user_id: "u-bob", handle: "bob", role: :mod, karma: 5} =
-               modal.message
+               modal.message.profile
+
+      assert modal.message.footer_hint == "[!] report user"
+      assert modal.message.report_target.screen_key == :post_reader
+      assert modal.message.report_target.kind == :report_selected_user
+      assert modal.message.report_target.payload.target_user.id == "u-bob"
     end
 
     test "V no-ops for guests and missing author targets" do
