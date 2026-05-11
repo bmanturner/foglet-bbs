@@ -33,6 +33,7 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Modal
   alias Foglet.TUI.Presentation
   alias Foglet.TUI.Screens.Moderation.State
   alias Foglet.TUI.Screens.Shared.InvitesActions
@@ -314,8 +315,10 @@ defmodule Foglet.TUI.Screens.Moderation do
         %{
           label: "Actions",
           commands: [
+            %{key: "V", label: "View target", priority: 35},
             %{key: "R", label: "Resolve", priority: 30},
-            %{key: "D", label: "Dismiss", priority: 30}
+            %{key: "D", label: "Dismiss", priority: 30},
+            %{key: "F", label: "Refresh", priority: 25}
           ]
         }
       ]
@@ -384,19 +387,23 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp render_tab_body("QUEUE", ss, theme, _width, _height, _user, _timezone) do
+  defp render_tab_body("QUEUE", ss, theme, width, height, _user, _timezone) do
     selected = selected_report(ss)
 
-    rows =
-      [
-        status_line(ss, theme),
-        text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg)
-      ] ++
-        queue_rows(ss, theme) ++
-        selected_report_rows(selected, theme)
+    if width >= 80 and selected do
+      render_queue_workspace(ss, selected, theme, width, height)
+    else
+      rows =
+        [
+          status_line(ss, theme),
+          text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg)
+        ] ++
+          queue_rows(ss, theme) ++
+          selected_report_rows(selected, theme)
 
-    column style: %{gap: 0} do
-      Enum.reject(rows, &is_nil/1)
+      column style: %{gap: 0} do
+        Enum.reject(rows, &is_nil/1)
+      end
     end
   end
 
@@ -588,13 +595,19 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
-  defp handle_queue_update(event, %State{} = ss, %Context{} = _context) do
+  defp handle_queue_update(event, %State{} = ss, %Context{} = context) do
     case key_for_queue(event) do
       :next ->
         {move_queue_selection(ss, 1), []}
 
       :prev ->
         {move_queue_selection(ss, -1), []}
+
+      :view ->
+        open_queue_target(ss)
+
+      :refresh ->
+        {ss, [load_workspace_effect(context)]}
 
       action when action in [:resolve, :dismiss] ->
         open_queue_resolution(action, ss)
@@ -639,6 +652,23 @@ defmodule Foglet.TUI.Screens.Moderation do
     end
   end
 
+  defp open_queue_target(%State{} = ss) do
+    case selected_report(ss) do
+      nil ->
+        {ss, []}
+
+      report ->
+        modal =
+          %Modal{
+            type: :info,
+            title: "Reported Target",
+            message: Enum.join(selected_report_summary_lines(report), "\n")
+          }
+
+        {ss, [Effect.open_modal(modal)]}
+    end
+  end
+
   defp queue_action_op(:resolve), do: :resolve_report
   defp queue_action_op(:dismiss), do: :dismiss_report
 
@@ -664,16 +694,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp selected_report_rows(nil, _theme), do: []
 
   defp selected_report_rows(report, theme) do
-    [
-      text("", fg: theme.dim.fg),
-      text("Selected report", fg: theme.primary.fg),
-      text("Target: #{report_target_kind(report)}", fg: theme.unselected.fg),
-      text("Reason: #{report_reason(report)}", fg: theme.unselected.fg),
-      text("Reported by: @#{report |> Map.get(:reporter) |> Map.get(:handle, "unknown")}",
-        fg: theme.unselected.fg
-      ),
-      text("Notes: #{report_notes(report)}", fg: theme.unselected.fg)
-    ]
+    [text("", fg: theme.dim.fg), text("Selected report", fg: theme.primary.fg)] ++
+      Enum.map(selected_report_summary_lines(report), &text(&1, fg: theme.unselected.fg))
   end
 
   defp selected_report(%State{} = ss) do
@@ -708,8 +730,41 @@ defmodule Foglet.TUI.Screens.Moderation do
 
     Reporting.resolution_modal(:moderation, op, %{report_id: Map.get(report, :id)},
       title: title,
-      values: %{resolution_note: ""}
+      values: %{resolution_note: ""},
+      summary_lines: selected_report_summary_lines(report)
     )
+  end
+
+  defp render_queue_workspace(ss, selected, theme, _width, height) do
+    queue_column =
+      column style: %{gap: 0} do
+        ([status_line(ss, theme), text("Open reports: #{length(ss.queue)}", fg: theme.dim.fg)] ++
+           queue_rows(ss, theme))
+        |> Enum.reject(&is_nil/1)
+      end
+
+    inspector_column =
+      column style: %{gap: 0} do
+        selected_report_rows(selected, theme)
+      end
+
+    split_pane(
+      direction: :horizontal,
+      ratio: {2, 3},
+      min_size: 24,
+      divider_char: " ",
+      children: [queue_column, inspector_column],
+      height: max(height - 2, 1)
+    )
+  end
+
+  defp selected_report_summary_lines(report) do
+    [
+      "Target: #{report_target_label(report)}",
+      "Reason: #{report_reason(report)}",
+      "Reported by: @#{report |> Map.get(:reporter) |> Map.get(:handle, "unknown")}",
+      "Notes: #{report_notes(report)}"
+    ]
   end
 
   defp remove_report_from_queue(queue, %{id: report_id}) do
@@ -717,6 +772,12 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp report_target_kind(report), do: report |> Map.get(:target_kind, "unknown") |> to_string()
+
+  defp report_target_label(report) do
+    Map.get(report, :target_label) || Map.get(report, "target_label") ||
+      report_target_kind(report)
+  end
+
   defp report_reason(report), do: report |> Map.get(:reason, "unspecified") |> to_string()
 
   defp report_notes(report) do
@@ -730,6 +791,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp key_for_queue(%{key: :up}), do: :prev
   defp key_for_queue(%{key: :char, char: char}) when char in ["j", "J"], do: :next
   defp key_for_queue(%{key: :char, char: char}) when char in ["k", "K"], do: :prev
+  defp key_for_queue(%{key: :char, char: char}) when char in ["v", "V"], do: :view
+  defp key_for_queue(%{key: :char, char: char}) when char in ["f", "F"], do: :refresh
   defp key_for_queue(%{key: :char, char: char}) when char in ["r", "R"], do: :resolve
   defp key_for_queue(%{key: :char, char: char}) when char in ["d", "D"], do: :dismiss
   defp key_for_queue(_event), do: :no_match

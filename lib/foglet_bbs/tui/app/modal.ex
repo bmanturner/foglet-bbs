@@ -167,6 +167,32 @@ defmodule Foglet.TUI.App.Modal do
   defp handle_modal_key(
          :form,
          key,
+         %App{modal: %Foglet.TUI.Modal{message: %{form: %ModalForm{} = form} = message}} = state
+       ) do
+    {new_form, action} = ModalForm.handle_event(key, form)
+    state = %{state | modal: %{state.modal | message: %{message | form: new_form}}}
+
+    case action do
+      {:submitted, %Effect{type: :modal_submit} = effect} ->
+        route_modal_submit(state, effect)
+
+      :submitted ->
+        submit_error(state)
+
+      {:submitted, _other} ->
+        submit_error(state)
+
+      :cancelled ->
+        cancel_form_change(state)
+
+      _other ->
+        route_form_change(state)
+    end
+  end
+
+  defp handle_modal_key(
+         :form,
+         key,
          %App{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
        ) do
     {new_form, action} = ModalForm.handle_event(key, form)
@@ -239,6 +265,13 @@ defmodule Foglet.TUI.App.Modal do
   end
 
   defp route_modal_submit(%App{} = state, %Effect{}), do: submit_error(state)
+
+  defp route_form_change(
+         %App{modal: %{change_target: {screen_key, kind}, message: %{form: form}}} = state
+       )
+       when is_atom(screen_key) and is_atom(kind) do
+    Routing.route_screen_update(state, screen_key, {:modal_change, kind, form})
+  end
 
   defp route_form_change(%App{modal: %{change_target: {screen_key, kind}, message: form}} = state)
        when is_atom(screen_key) and is_atom(kind) do

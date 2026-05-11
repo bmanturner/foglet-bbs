@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.ConsoleTable
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
   alias FogletBbs.AccountsFixtures
 
   defp build_state(role, user \\ nil) do
@@ -494,12 +495,17 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       refute joined =~ "2026-04-24"
     end
 
-    test "QUEUE renders report rows and selected report details", %{state: state} do
+    test "QUEUE renders split queue workspace with command hints and selected report details", %{
+      state: state
+    } do
       report =
         report_row(%{id: "rep-1", target_kind: :post, reason: "spam", notes: "needs review"})
+        |> Map.from_struct()
+        |> Map.put(:target_label, "post #42 in general")
 
       flat =
         state
+        |> Map.put(:terminal_size, {120, 30})
         |> put_moderation_state(0, queue: [report])
         |> render_moderation()
         |> collect_text_values()
@@ -507,10 +513,13 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       joined = Enum.join(flat, "\n")
 
       assert joined =~ "Open reports"
-      assert joined =~ "spam"
+      assert joined =~ "Selected report"
+      assert joined =~ "post #42 in general"
       assert joined =~ "needs review"
-      assert joined =~ "Target"
-      assert joined =~ "post"
+      assert joined =~ "View target"
+      assert joined =~ "Resolve"
+      assert joined =~ "Dismiss"
+      assert joined =~ "Refresh"
     end
 
     test "USERS renders read-only user rows without mutation commands", %{state: state} do
@@ -661,7 +670,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert state.screen_state.moderation.queue_selected_index == 0
     end
 
-    test "QUEUE R opens a resolution modal for the selected report" do
+    test "QUEUE R opens a resolution modal with report summary context" do
       user = %User{id: "u1", handle: "mod", role: :mod}
 
       context =
@@ -671,13 +680,33 @@ defmodule Foglet.TUI.Screens.ModerationTest do
           domain: %{moderation: FakeModeration}
         )
 
-      state = ModerationState.new(queue: [report_row(%{id: "rep-1", reason: "spam"})])
+      state =
+        ModerationState.new(
+          queue: [
+            report_row(%{id: "rep-1", reason: "spam"})
+            |> Map.from_struct()
+            |> Map.put(:target_label, "post #42 in general")
+          ]
+        )
 
       {state, effects} = Moderation.update({:key, %{key: :char, char: "r"}}, state, context)
 
       assert state.queue_selected_index == 0
 
-      assert [%Effect{type: :modal, payload: {:open, %{title: "Resolve Report"}}}] = effects
+      assert [
+               %Effect{
+                 type: :modal,
+                 payload:
+                   {:open,
+                    %Foglet.TUI.Modal{
+                      title: "Resolve Report",
+                      message: %{form: %ModalForm{}, summary_lines: summary_lines}
+                    }}
+               }
+             ] = effects
+
+      assert Enum.any?(summary_lines, &String.contains?(&1, "post #42 in general"))
+      assert Enum.any?(summary_lines, &String.contains?(&1, "spam"))
     end
 
     test "QUEUE D opens a dismissal modal for the selected report" do

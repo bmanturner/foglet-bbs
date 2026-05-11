@@ -47,6 +47,14 @@ defmodule Foglet.TUI.Widgets.Modal do
   @spec render(Foglet.TUI.Modal.t(), Theme.t(), keyword()) :: any()
   def render(modal, theme, opts \\ [])
 
+  def render(
+        %Foglet.TUI.Modal{type: :form, message: %{form: %Form{} = form} = payload},
+        %Theme{} = theme,
+        opts
+      ) do
+    render_form_with_summary(form, Map.get(payload, :summary_lines, []), theme, opts)
+  end
+
   def render(%Foglet.TUI.Modal{type: :form, message: %Form{} = form}, %Theme{} = theme, opts) do
     Form.render(form, Keyword.put(opts, :theme, theme))
   end
@@ -139,6 +147,27 @@ defmodule Foglet.TUI.Widgets.Modal do
   defp footer_label_color(:warning, theme), do: theme.warning.fg
   defp footer_label_color(:success, theme), do: theme.success.fg
   defp footer_label_color(_type, theme), do: theme.dim.fg
+
+  defp render_form_with_summary(%Form{} = form, summary_lines, %Theme{} = theme, opts) do
+    summary_nodes =
+      summary_lines
+      |> Enum.reject(&(&1 in [nil, ""]))
+      |> Enum.map(&text(&1, fg: theme.dim.fg))
+
+    form_node = Form.render(form, Keyword.put(opts, :theme, theme))
+
+    column style: %{gap: 1} do
+      if summary_nodes == [] do
+        [form_node]
+      else
+        [
+          column(style: %{gap: 0}, do: summary_nodes),
+          text(String.duplicate("─", @wrap_width), fg: theme.border.fg),
+          form_node
+        ]
+      end
+    end
+  end
 
   # Wrap a string to <= max_width columns, preserving whitespace word breaks
   # while chunking oversized tokens so modal bodies cannot overflow.

@@ -7,11 +7,14 @@ defmodule Foglet.TUI.Screens.Shared.Reporting do
 
   @report_reason_choices [
     {"Spam / scam", "spam"},
-    {"Harassment", "harassment"},
-    {"Hate speech", "hate_speech"},
-    {"Sexual content", "sexual_content"},
-    {"Violence / threats", "violence_threats"},
-    {"Self-harm risk", "self_harm"},
+    {"Harassment or dogpiling", "harassment"},
+    {"Hate speech or slurs", "hate_speech"},
+    {"Sexual or obscene content", "sexual_content"},
+    {"Violence, threats, or intimidation", "violence_threats"},
+    {"Self-harm or crisis risk", "self_harm"},
+    {"Impersonation or deceptive identity", "impersonation"},
+    {"Illegal or prohibited activity", "illegal_activity"},
+    {"Privacy or doxxing", "privacy_doxxing"},
     {"Other", "other"}
   ]
 
@@ -48,13 +51,18 @@ defmodule Foglet.TUI.Screens.Shared.Reporting do
       )
       |> maybe_set_form_errors(errors)
 
-    %Modal{type: :form, title: title, message: form}
+    %Modal{
+      type: :form,
+      title: title,
+      message: form_modal_message(form, report_summary_lines(target))
+    }
   end
 
   def resolution_modal(screen_key, kind, payload, opts \\ []) do
     title = Keyword.get(opts, :title, "Moderate Report")
     values = Keyword.get(opts, :values, %{})
     errors = Keyword.get(opts, :errors, %{})
+    summary_lines = Keyword.get(opts, :summary_lines, [])
 
     form =
       ModalForm.init(
@@ -77,7 +85,7 @@ defmodule Foglet.TUI.Screens.Shared.Reporting do
       )
       |> maybe_set_form_errors(errors)
 
-    %Modal{type: :form, title: title, message: form}
+    %Modal{type: :form, title: title, message: form_modal_message(form, summary_lines)}
   end
 
   def success_modal(message) do
@@ -119,5 +127,27 @@ defmodule Foglet.TUI.Screens.Shared.Reporting do
 
   defp field_value(values, key) do
     Map.get(values, key) || Map.get(values, Atom.to_string(key))
+  end
+
+  defp form_modal_message(%ModalForm{} = form, []), do: form
+
+  defp form_modal_message(%ModalForm{} = form, summary_lines) when is_list(summary_lines) do
+    %{form: form, summary_lines: Enum.reject(summary_lines, &(&1 in [nil, ""]))}
+  end
+
+  defp report_summary_lines(target) when is_map(target) do
+    [
+      "Target: #{Map.get(target, :target_label) || Map.get(target, "target_label") || generic_target_label(target)}"
+    ]
+  end
+
+  defp generic_target_label(target) do
+    kind = Map.get(target, :target_kind) || Map.get(target, "target_kind") || "item"
+    id = Map.get(target, :target_id) || Map.get(target, "target_id")
+
+    case id do
+      value when is_binary(value) and value != "" -> "#{kind} #{value}"
+      _ -> to_string(kind)
+    end
   end
 end
