@@ -49,10 +49,11 @@ jobs:
           key: ${{ runner.os }}-deps-${{ hashFiles('mix.lock') }}
 
       - name: Cache build
+        if: github.event_name != 'pull_request'
         uses: actions/cache@v4
         with:
           path: _build
-          key: ${{ runner.os }}-${{ runner.name }}-build-${{ hashFiles('mix.lock') }}
+          key: ${{ runner.os }}-${{ runner.name }}-build-${{ hashFiles('mix.lock', '.tool-versions', 'mix.exs', 'config/*.exs', 'lib/**/*.ex', 'test/**/*.exs') }}
 
       - name: Cache dialyzer PLTs
         if: github.event_name != 'pull_request'
