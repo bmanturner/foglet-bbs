@@ -45,7 +45,6 @@ defmodule Foglet.TUI.Screens.Moderation do
   alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.Display.KvGrid
   alias Foglet.TUI.Widgets.Input.Tabs
-  alias Foglet.TUI.Widgets.Workspace.Inspector
 
   @text_limit 48
 
@@ -738,10 +737,7 @@ defmodule Foglet.TUI.Screens.Moderation do
         |> Enum.reject(&is_nil/1)
       end
 
-    inspector_column =
-      column style: %{gap: 0} do
-        [Inspector.render(inspector, theme: theme, width: inspector_width, min_width: 40)]
-      end
+    inspector_column = render_queue_inspector(inspector, theme, inspector_width)
 
     split_pane(
       direction: :horizontal,
@@ -759,6 +755,34 @@ defmodule Foglet.TUI.Screens.Moderation do
     inspector_width = max(available - queue_width, 30)
 
     {queue_width, inspector_width}
+  end
+
+  defp render_queue_inspector(nil, theme, _width) do
+    column style: %{gap: 0} do
+      [text("No report selected.", fg: theme.dim.fg)]
+    end
+  end
+
+  defp render_queue_inspector(inspector, theme, width) do
+    details = Map.get(inspector, :details, [])
+    actions = Map.get(inspector, :actions, [])
+
+    action_text =
+      Enum.map_join(actions, "  ", fn action ->
+        "#{Map.get(action, :key)} #{Map.get(action, :label)}"
+      end)
+
+    kv_rows = KvGrid.render(details, theme: theme, width: width, label_width: 10, gap: 1)
+
+    column style: %{gap: 0} do
+      ([
+         text(Map.get(inspector, :title, "Selected report"), fg: theme.accent.fg),
+         text("─", fg: theme.dim.fg)
+       ] ++
+         kv_rows ++
+         [text(action_text, fg: theme.dim.fg)])
+      |> Enum.reject(&is_nil/1)
+    end
   end
 
   defp render_queue_stack(ss, selected, theme, width, height) do
