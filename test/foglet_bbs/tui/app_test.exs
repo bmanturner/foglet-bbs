@@ -2262,6 +2262,82 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
+    test "{:notifications, event, payload} on :main_menu triggers unread count refresh", %{
+      state: state
+    } do
+      state = %{state | current_screen: :main_menu}
+
+      {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               task.()
+
+      assert_received :unread_count
+    end
+
+    test "{:subscription, {:notifications, event, payload}} on :main_menu triggers unread count refresh",
+         %{
+           state: state
+         } do
+      state = %{state | current_screen: :main_menu}
+
+      {new_state, cmds} =
+        App.update({:subscription, {:notifications, :created, %{user_id: "u1"}}}, state)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               task.()
+
+      assert_received :unread_count
+    end
+
+    test "{:notifications, event, payload} on :notifications triggers inbox reload", %{
+      state: state
+    } do
+      Process.put(:fake_notifications_rows, [%{id: "n-1"}])
+
+      state = %{state | current_screen: :notifications}
+
+      {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
+
+      assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
+               task.()
+
+      assert_received {:list_recent_notifications, 50}
+    end
+
+    test "{:subscription, {:notifications, event, payload}} on :notifications triggers inbox reload",
+         %{
+           state: state
+         } do
+      Process.put(:fake_notifications_rows, [%{id: "n-1"}])
+
+      state = %{state | current_screen: :notifications}
+
+      {new_state, cmds} =
+        App.update({:subscription, {:notifications, :created, %{user_id: "u1"}}}, state)
+
+      assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
+               task.()
+
+      assert_received {:list_recent_notifications, 50}
+    end
+
     test "{:notification, user_id, kind, payload} shows a modal", %{state: state} do
       {new_state, []} = App.update({:notification, "u1", :dm, %{body: "hey!"}}, state)
       assert new_state.modal != nil
