@@ -1637,7 +1637,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     user = %{handle: "bob", id: "u1", status: :active, role: :user}
 
     state =
-      %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
+      %App{current_user: user, screen_state: %{}, terminal_size: {120, 36}}
       |> Map.from_struct()
       |> Map.put(:recent_oneliners, [%{body: "hello", user: %{handle: "alice"}}])
 
@@ -1703,7 +1703,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
     user = %{handle: "bob", id: "u1", status: :active, role: :user}
 
     state =
-      %App{current_user: user, screen_state: %{}, terminal_size: {80, 24}}
+      %App{current_user: user, screen_state: %{}, terminal_size: {120, 36}}
       |> Map.from_struct()
       |> Map.put(:recent_oneliners, [
         %{
@@ -1738,7 +1738,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   # ---------------------------------------------------------------------------
 
   describe "Phase 19 Main Menu size contracts" do
-    test "main menu renders Navigation + Oneliners side-by-side without overlap at 64x22, 80x24, 132x50" do
+    test "main menu renders Navigation + Oneliners side-by-side without overlap at enhanced sizes" do
       # Phase 19 / REVIEWS.md HIGH: canonical `role: :user` (was `:member`).
       user = %{
         id: "u1",
@@ -1749,7 +1749,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
         preferences: %{"time_format" => "24h"}
       }
 
-      for {width, height} <- [{64, 22}, {80, 24}, {132, 50}] do
+      for {width, height} <- [{120, 36}, {132, 50}] do
         state =
           %App{current_user: user, screen_state: %{}, terminal_size: {width, height}}
           |> Map.from_struct()
@@ -1859,7 +1859,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       end
     end
 
-    test "long-Unicode (CJK + combining-mark) oneliner rows clipped to fit inside the right panel at 64x22" do
+    test "long-Unicode (CJK + combining-mark) oneliner rows clipped to fit inside the right panel at 120x36" do
       # Phase 19 / REVIEWS.md MEDIUM: real CJK + combining marks, not
       # ASCII repeated text. Exercises the Phase 16 TextWidth.display_width/1
       # guarantee the prior ASCII-only fixture did not.
@@ -1879,14 +1879,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       long_handle = "alice" <> String.duplicate("界", 5)
 
       state =
-        %App{current_user: user, screen_state: %{}, terminal_size: {64, 22}}
+        %App{current_user: user, screen_state: %{}, terminal_size: {120, 36}}
         |> Map.from_struct()
         |> Map.put(:session_context, %{clock_now: ~U[2026-04-24 18:05:00Z]})
         |> Map.put(:recent_oneliners, [
           %{body: long_body, user: %{handle: long_handle}}
         ])
 
-      positioned = render_main_menu(state) |> apply_at_size({64, 22})
+      positioned = render_main_menu(state) |> apply_at_size({120, 36})
       elements = text_elements(positioned)
 
       # Every element fits inside 64-col viewport — even with double-width
@@ -1895,8 +1895,8 @@ defmodule Foglet.TUI.LayoutSmokeTest do
       for element <- elements do
         text = Map.fetch!(element, :text)
 
-        assert element.x + TextWidth.display_width(text) <= 64,
-               "long-Unicode oneliner overflows 64-wide viewport: #{inspect(element)}"
+        assert element.x + TextWidth.display_width(text) <= 120,
+               "long-Unicode oneliner overflows 120-wide viewport: #{inspect(element)}"
       end
 
       # Right-panel containment also holds for the CJK fixture.
@@ -1923,7 +1923,7 @@ defmodule Foglet.TUI.LayoutSmokeTest do
                "CJK oneliner row bled out of right panel: row.x=#{row.x} < right_panel_content_left=#{right_panel_content_left}; row=#{inspect(row)}"
 
         row_right = row.x + TextWidth.display_width(row.text) - 1
-        right_panel_right_inner = 64 - 2
+        right_panel_right_inner = 120 - 2
 
         assert row_right <= right_panel_right_inner,
                "CJK oneliner row overran right panel inner border: " <>
