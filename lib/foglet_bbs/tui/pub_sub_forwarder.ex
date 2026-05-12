@@ -104,7 +104,8 @@ defmodule Foglet.TUI.PubSubForwarder do
        dispatcher_pid: dispatcher_pid,
        control_topic: control_topic,
        topics: topics,
-       pubsub: pubsub
+       pubsub: pubsub,
+       last_forwarded: nil
      }}
   end
 
@@ -124,11 +125,15 @@ defmodule Foglet.TUI.PubSubForwarder do
   end
 
   @impl GenServer
+  def handle_info(msg, %{last_forwarded: msg} = state) do
+    {:noreply, state}
+  end
+
   def handle_info(msg, state) do
     # Forward every arriving message to the Dispatcher as a subscription message
     # so that Raxol routes it through the app's update/2.
     send(state.dispatcher_pid, {:subscription, msg})
-    {:noreply, state}
+    {:noreply, %{state | last_forwarded: msg}}
   end
 
   @impl GenServer

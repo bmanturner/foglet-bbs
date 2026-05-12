@@ -15,6 +15,7 @@ defmodule Foglet.NotificationsTest do
       actor = AccountsFixtures.user_fixture()
 
       :ok = Phoenix.PubSub.subscribe(FogletBbs.PubSub, Topics.notifications_topic(recipient.id))
+      :ok = Phoenix.PubSub.subscribe(FogletBbs.PubSub, Topics.user_topic(recipient.id))
 
       assert {:ok, %Notification{} = notification} =
                Notifications.create_notification(%{
@@ -37,6 +38,10 @@ defmodule Foglet.NotificationsTest do
 
       assert notification.payload["snippet"] == "hello world"
       assert Notifications.unread_count(recipient) == 1
+
+      assert_receive {:notifications, :created,
+                      %Notification{id: ^notification_id, user_id: ^recipient_id}},
+                     500
 
       assert_receive {:notifications, :created,
                       %Notification{id: ^notification_id, user_id: ^recipient_id}},

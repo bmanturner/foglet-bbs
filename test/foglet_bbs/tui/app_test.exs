@@ -2029,6 +2029,34 @@ defmodule Foglet.TUI.AppTest do
       assert_receive {:subscription, ^notification}
     end
 
+    test "PubSub forwarder coalesces duplicate notification broadcasts from compatibility topics" do
+      user = %Foglet.Accounts.User{id: "u-forwarder-dedupe", handle: "alice"}
+      notification = {:notifications, :created, %{user_id: user.id}}
+      dispatcher_pid = self()
+
+      {:ok, _forwarder} =
+        Foglet.TUI.PubSubForwarder.start_link(
+          %{
+            topics: [
+              Foglet.PubSub.user_topic(user.id),
+              Foglet.PubSub.notifications_topic(user.id)
+            ]
+          },
+          %{pid: dispatcher_pid}
+        )
+
+      Phoenix.PubSub.broadcast(
+        FogletBbs.PubSub,
+        Foglet.PubSub.notifications_topic(user.id),
+        notification
+      )
+
+      Phoenix.PubSub.broadcast(FogletBbs.PubSub, Foglet.PubSub.user_topic(user.id), notification)
+
+      assert_receive {:subscription, ^notification}
+      refute_receive {:subscription, ^notification}, 100
+    end
+
     test "board_list screen adds 'boards' topic" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
 
