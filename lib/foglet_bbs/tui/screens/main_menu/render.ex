@@ -27,7 +27,11 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     state = frame_state(local_state, context)
     theme = Theme.from_state(state)
 
-    destinations = MainMenu.visible_destination_entries(state)
+    destinations =
+      state
+      |> Map.put(:unread_notifications_count, local_state.unread_notifications_count)
+      |> MainMenu.visible_destination_entries()
+
     actions = MainMenu.visible_actions(state)
 
     inner_width = MainMenu.__nav_panel_inner_width__(state)
