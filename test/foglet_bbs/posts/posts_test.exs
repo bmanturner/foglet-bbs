@@ -215,6 +215,163 @@ defmodule Foglet.PostsTest do
     )
   end
 
+  describe "create_reply/4 reply notifications" do
+    test "replying to another user's post creates one unread reply notification" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      replier = active_user_fixture()
+      {thread, root} = setup_thread(board, author)
+
+      assert {:ok, reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{
+                 body: "  hello\n\nfrom the other side  ",
+                 reply_to_id: root.id
+               })
+
+      assert [notification] = Repo.all(Notification)
+      assert notification.kind == :reply
+      assert notification.user_id == author.id
+      assert notification.actor_id == replier.id
+      assert is_nil(notification.read_at)
+      assert notification.dedupe_key == "reply:#{reply.id}:#{author.id}"
+
+      assert notification.payload == %{
+               "board_id" => board.id,
+               "thread_id" => thread.id,
+               "post_id" => reply.id,
+               "snippet" => "hello from the other side"
+             }
+    end
+
+    test "replying to your own post does not create a notification" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      {thread, root} = setup_thread(board, author)
+
+      assert {:ok, _reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, author.id, %{
+                 body: "self follow-up",
+                 reply_to_id: root.id
+               })
+
+      assert Repo.aggregate(Notification, :count) == 0
+    end
+
+    test "plain replies and deleted parents do not create notifications" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      replier = active_user_fixture()
+      {thread, root} = setup_thread(board, author)
+
+      assert {:ok, _plain_reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{body: "plain reply"})
+
+      assert {:ok, deleted_root} = Foglet.Posts.delete_post(root)
+
+      assert {:ok, _reply_to_deleted} =
+               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{
+                 body: "reply to deleted",
+                 reply_to_id: deleted_root.id
+               })
+
+      assert Repo.aggregate(Notification, :count) == 0
+    end
+
+    test "missing parent references fail without notifications or counter drift" do
+      {board, pid} = setup_board_with_server_and_pid()
+      author = active_user_fixture()
+      replier = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+
+      before_posts = Repo.aggregate(Foglet.Posts.Post, :count)
+      before_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      before_replier = Repo.get!(Foglet.Accounts.User, replier.id)
+      before_board = Repo.get!(Foglet.Boards.Board, board.id)
+      before_next_number = :sys.get_state(pid).next_number
+
+      assert {:error, %Ecto.Changeset{}} =
+               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{
+                 body: "reply to missing parent",
+                 reply_to_id: Ecto.UUID.generate()
+               })
+
+      after_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      after_replier = Repo.get!(Foglet.Accounts.User, replier.id)
+      after_board = Repo.get!(Foglet.Boards.Board, board.id)
+
+      assert Repo.aggregate(Notification, :count) == 0
+      assert Repo.aggregate(Foglet.Posts.Post, :count) == before_posts
+      assert after_thread.post_count == before_thread.post_count
+      assert after_thread.last_post_at == before_thread.last_post_at
+      assert after_replier.post_count == before_replier.post_count
+      assert after_board.next_message_number == before_board.next_message_number
+      assert :sys.get_state(pid).next_number == before_next_number
+    end
+
+    test "missing and deleted actors are rejected before notification emission" do
+      {board, pid} = setup_board_with_server_and_pid()
+      author = active_user_fixture()
+      deleted_actor = active_user_fixture(%{deleted_at: DateTime.utc_now()})
+      {thread, root} = setup_thread(board, author)
+
+      before_posts = Repo.aggregate(Foglet.Posts.Post, :count)
+      before_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      before_deleted_actor = Repo.get!(Foglet.Accounts.User, deleted_actor.id)
+      before_board = Repo.get!(Foglet.Boards.Board, board.id)
+      before_next_number = :sys.get_state(pid).next_number
+
+      for actor_id <- [Ecto.UUID.generate(), deleted_actor.id] do
+        assert {:error, :posting_not_allowed} =
+                 Foglet.Posts.create_reply(thread.id, board.id, actor_id, %{
+                   body: "unsafe actor reply",
+                   reply_to_id: root.id
+                 })
+      end
+
+      after_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      after_deleted_actor = Repo.get!(Foglet.Accounts.User, deleted_actor.id)
+      after_board = Repo.get!(Foglet.Boards.Board, board.id)
+
+      assert Repo.aggregate(Notification, :count) == 0
+      assert Repo.aggregate(Foglet.Posts.Post, :count) == before_posts
+      assert after_thread.post_count == before_thread.post_count
+      assert after_thread.last_post_at == before_thread.last_post_at
+      assert after_deleted_actor.post_count == before_deleted_actor.post_count
+      assert after_board.next_message_number == before_board.next_message_number
+      assert :sys.get_state(pid).next_number == before_next_number
+    end
+
+    test "dedupes duplicate reply notification attempts for one created post" do
+      board = setup_board_with_server()
+      author = active_user_fixture()
+      replier = active_user_fixture()
+      {thread, root} = setup_thread(board, author)
+
+      assert {:ok, reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{
+                 body: "dedupe me",
+                 reply_to_id: root.id
+               })
+
+      assert {:ok, duplicate} =
+               Foglet.Notifications.create_notification(%{
+                 user_id: author.id,
+                 actor_id: replier.id,
+                 kind: :reply,
+                 dedupe_key: "reply:#{reply.id}:#{author.id}",
+                 payload: %{
+                   board_id: board.id,
+                   thread_id: thread.id,
+                   post_id: reply.id,
+                   snippet: "dedupe me"
+                 }
+               })
+
+      assert [notification] = Repo.all(Notification)
+      assert duplicate.id == notification.id
+    end
+  end
+
   describe "create_reply/4 posting policy and locks (POST-02, POST-03)" do
     test "matches the board postable_by role matrix for replies" do
       cases = [
