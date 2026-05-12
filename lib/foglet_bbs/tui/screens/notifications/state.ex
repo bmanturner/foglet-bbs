@@ -9,23 +9,60 @@ defmodule Foglet.TUI.Screens.Notifications.State do
           selected_index: non_neg_integer(),
           scroll_offset: non_neg_integer(),
           status: :idle | :loading | :loaded | :error | :marking_read | :marking_all_read,
-          last_error: String.t() | nil
+          last_error: String.t() | nil,
+          pending_created_ids: %{optional(term()) => true}
         }
 
   defstruct rows: [],
             selected_index: 0,
             scroll_offset: 0,
             status: :idle,
-            last_error: nil
+            last_error: nil,
+            pending_created_ids: %{}
 
   def new, do: %__MODULE__{}
 
   @spec from_rows(t(), [row()]) :: t()
   def from_rows(%__MODULE__{} = state, rows) when is_list(rows) do
+    loaded_ids = row_ids(rows)
+    rows = preserve_pending_created_rows(state, rows)
     selected_id = selected_row_id(state)
     selected_index = find_selected_index(rows, selected_id)
+    pending_created_ids = Map.drop(state.pending_created_ids, loaded_ids)
 
-    %{state | rows: rows, selected_index: selected_index, status: :loaded, last_error: nil}
+    %{
+      state
+      | rows: rows,
+        selected_index: selected_index,
+        status: :loaded,
+        last_error: nil,
+        pending_created_ids: pending_created_ids
+    }
+    |> clamp_selection()
+    |> ensure_selected_visible()
+  end
+
+  @spec prepend_or_replace(t(), row()) :: t()
+  def prepend_or_replace(%__MODULE__{} = state, %{} = row) do
+    row_id = row_id(row)
+
+    rows =
+      state.rows
+      |> Enum.reject(&(not is_nil(row_id) and row_id(&1) == row_id))
+      |> then(&[row | &1])
+
+    pending_created_ids =
+      if is_nil(row_id),
+        do: state.pending_created_ids,
+        else: Map.put(state.pending_created_ids, row_id, true)
+
+    %{
+      state
+      | rows: rows,
+        selected_index: 0,
+        last_error: nil,
+        pending_created_ids: pending_created_ids
+    }
     |> clamp_selection()
     |> ensure_selected_visible()
   end
@@ -99,6 +136,29 @@ defmodule Foglet.TUI.Screens.Notifications.State do
   defp find_selected_index(rows, selected_id) do
     Enum.find_index(rows, &(row_id(&1) == selected_id)) || 0
   end
+
+  defp preserve_pending_created_rows(%__MODULE__{} = state, rows) do
+    loaded_ids = row_ids(rows)
+
+    pending_rows =
+      state.rows
+      |> Enum.filter(fn row ->
+        row_id = row_id(row)
+
+        not is_nil(row_id) and Map.has_key?(state.pending_created_ids, row_id) and
+          row_id not in loaded_ids and unread?(row)
+      end)
+
+    pending_rows ++ rows
+  end
+
+  defp row_ids(rows) do
+    rows
+    |> Enum.map(&row_id/1)
+    |> Enum.reject(&is_nil/1)
+  end
+
+  defp unread?(%{} = row), do: is_nil(Map.get(row, :read_at) || Map.get(row, "read_at"))
 
   defp row_id(%{} = row), do: Map.get(row, :id) || Map.get(row, "id")
   defp row_id(_row), do: nil
