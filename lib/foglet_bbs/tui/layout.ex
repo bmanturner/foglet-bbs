@@ -18,7 +18,7 @@ defmodule Foglet.TUI.Layout do
 
   @type size ::
           {pos_integer(), pos_integer()}
-          | %{optional(:terminal_size) => {pos_integer(), pos_integer()}}
+          | %{optional(:terminal_size) => term()}
   @type tier :: :minimum | :standard | :enhanced | :spacious
 
   @minimum_size {64, 22}

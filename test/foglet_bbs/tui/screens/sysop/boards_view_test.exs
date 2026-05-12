@@ -6,11 +6,33 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsViewTest do
   alias Foglet.Accounts.User
   alias Foglet.Boards.Board
   alias Foglet.TUI.Screens.Sysop.BoardsView
+  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Input.TextInput
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
   alias FogletBbs.Repo
 
   defp sysop_actor, do: %User{role: :sysop, status: :active, deleted_at: nil}
+
+  describe "enhanced-width board workspace" do
+    test "uses a board list plus selected settings inspector at 120 columns" do
+      category = category_fixture(%{name: "General"})
+      board = board_fixture(category, %{slug: "general", name: "General", postable_by: :members})
+
+      state =
+        BoardsView.init(current_user: sysop_actor())
+        |> select_board(board.id)
+
+      flat =
+        state
+        |> BoardsView.render(Theme.default(), width: 116, visible_height: 32)
+        |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+      assert flat =~ "Selected board settings"
+      assert flat =~ "Slug"
+      assert flat =~ "general"
+      assert flat =~ "Actions"
+    end
+  end
 
   describe "board display_order form payloads" do
     test "new board form defaults display_order to zero and persists submitted value" do

@@ -259,10 +259,20 @@ defmodule Foglet.TUI.Screens.Account.Render do
   end
 
   defp render_tab_body("PROFILE", ss, theme, width, height),
-    do: ProfileForm.render(ss, theme, width: width, height: max(height - 2, 1))
+    do:
+      ProfileForm.render(ss, theme,
+        width: width,
+        height: max(height - 2, 1),
+        terminal_size: {width + 4, height}
+      )
 
   defp render_tab_body("PREFS", ss, theme, width, height),
-    do: PrefsForm.render(ss, theme, width: width, height: max(height - 2, 1))
+    do:
+      PrefsForm.render(ss, theme,
+        width: width,
+        height: max(height - 2, 1),
+        terminal_size: {width + 4, height}
+      )
 
   defp render_tab_body("SSH KEYS", ss, theme, width, _height),
     do: SSHKeysSurface.render(ss.ssh_keys, theme, width)

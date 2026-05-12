@@ -208,6 +208,17 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     next
   end
 
+  defp find_type(%{type: type} = node, type), do: node
+
+  defp find_type(%{children: children}, type) when is_list(children) do
+    Enum.find_value(children, &find_type(&1, type))
+  end
+
+  defp find_type(children, type) when is_list(children),
+    do: Enum.find_value(children, &find_type(&1, type))
+
+  defp find_type(_node, _type), do: nil
+
   test "BoardList.State.new/0 returns directory-owner defaults" do
     assert BoardList.State.new() == %BoardList.State{
              directory: nil,
@@ -237,6 +248,32 @@ defmodule Foglet.TUI.Screens.BoardListTest do
     assert_task(effect, :load_boards)
     assert [%{category: %{name: "Town Square"}, boards: boards}] = run_task(effect)
     assert Enum.map(boards, & &1.board.name) == ["General", "Tech", "Announcements"]
+  end
+
+  test "render/2 switches board directory to structural list and inspector split at enhanced size" do
+    ctx = context(terminal_size: {120, 36})
+    state = load_state(ctx)
+
+    split = BoardList.render(state, ctx) |> find_type(:split_pane)
+
+    assert %{
+             attrs: %{direction: :horizontal, ratio: {7, 5}},
+             children: [_list_panel, _inspector_panel]
+           } =
+             split
+
+    rendered_text = BoardList.render(state, ctx) |> flatten_text()
+
+    assert rendered_text =~ "Town Square"
+    assert rendered_text =~ "Selected board"
+    assert rendered_text =~ "Enter opens the thread list."
+  end
+
+  test "render/2 preserves compact detail strip below enhanced size" do
+    ctx = context(terminal_size: {80, 24})
+    state = load_state(ctx)
+
+    refute BoardList.render(state, ctx) |> find_type(:split_pane)
   end
 
   test "load success stores directory and initializes tree" do

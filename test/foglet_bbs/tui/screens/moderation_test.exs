@@ -152,6 +152,32 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   end
 
   describe "new screen contract" do
+    test "LOG tab uses enhanced width for operator context next to the event table" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+      context = Context.new(current_user: user, route: :moderation, terminal_size: {120, 36})
+
+      state =
+        ModerationState.new(
+          active: 1,
+          scopes: [:site],
+          mod_log: [
+            %{
+              kind: :resolved,
+              reason: "spam",
+              metadata: %{body: "Removed obvious spam"},
+              mod: %{handle: "alice"},
+              inserted_at: DateTime.utc_now()
+            }
+          ]
+        )
+
+      flat = Moderation.render(state, context) |> Foglet.TUI.WidgetHelpers.flatten_text()
+
+      assert flat =~ "Operator context"
+      assert flat =~ "Events"
+      assert flat =~ "Rows are read-only"
+    end
+
     test "Moderation.update(:load) emits a workspace task effect" do
       user = %User{id: "u1", handle: "mod", role: :mod}
 

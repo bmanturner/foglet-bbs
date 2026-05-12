@@ -12,6 +12,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Guest
+  alias Foglet.TUI.Layout
   alias Foglet.TUI.Screens.BoardList.State
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.ScrollKeys
@@ -316,15 +317,39 @@ defmodule Foglet.TUI.Screens.BoardList do
 
     visible_height = visible_tree_rows(max(height - reserved_rows, 3))
 
-    column style: %{gap: 0} do
-      [
-        maybe_feedback(state, theme),
-        maybe_archived_note(archived_note?, theme),
-        BoardTree.render(board_tree, theme: theme, width: width, visible_height: visible_height),
-        if(detail?, do: details_strip(board_tree, directory, theme, width))
-      ]
-      |> List.flatten()
-      |> Enum.reject(&is_nil/1)
+    tree_panel =
+      column style: %{gap: 0} do
+        [
+          maybe_feedback(state, theme),
+          maybe_archived_note(archived_note?, theme),
+          BoardTree.render(board_tree,
+            theme: theme,
+            width: list_width(context),
+            visible_height: visible_height
+          ),
+          if(detail? and not Layout.enhanced?(context.terminal_size),
+            do: details_strip(board_tree, directory, theme, width)
+          )
+        ]
+        |> List.flatten()
+        |> Enum.reject(&is_nil/1)
+      end
+
+    if Layout.enhanced?(context.terminal_size) do
+      list_box =
+        box style: %{border: :single, padding: 1} do
+          tree_panel
+        end
+
+      Layout.left_heavy_split(
+        list_box,
+        selected_board_inspector(board_tree, directory, theme),
+        terminal_size: context.terminal_size,
+        ratio: {7, 5},
+        min_size: 28
+      )
+    else
+      tree_panel
     end
   end
 
@@ -464,6 +489,74 @@ defmodule Foglet.TUI.Screens.BoardList do
     text(line, fg: theme.dim.fg)
   end
 
+  defp selected_board_inspector(board_tree, directory, theme) do
+    entry = BoardTree.focused_entry(board_tree)
+
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        inspector_lines(entry, directory || [], theme)
+      end
+    end
+  end
+
+  defp inspector_lines(%{kind: :board, board: board} = entry, _directory, theme) do
+    description =
+      board |> Map.get(:description, "No board description yet.") |> normalize_description()
+
+    description = description || "No board description yet."
+
+    [
+      text("Selected board", fg: theme.dim.fg, style: [:bold]),
+      text(Map.get(board, :name, "Board"), fg: theme.primary.fg, style: [:bold]),
+      text(description, fg: theme.unselected.fg),
+      text(""),
+      inspector_kv("State", subscription_label(entry), theme),
+      inspector_kv("Unread", unread_label(entry.unread_count) || "unknown", theme),
+      inspector_kv("Posting", posting_label(entry), theme),
+      inspector_kv("Latest", age_label(entry.last_post_at), theme),
+      text(""),
+      text("Enter opens the thread list.", fg: theme.dim.fg),
+      text("S/U changes subscription when allowed.", fg: theme.dim.fg)
+    ]
+  end
+
+  defp inspector_lines(%{kind: :category, category: category}, directory, theme) do
+    [
+      text("Selected category", fg: theme.dim.fg, style: [:bold]),
+      text(Map.get(category, :name, "Category"), fg: theme.primary.fg, style: [:bold]),
+      text(detail_text(%{kind: :category, category: category}, directory),
+        fg: theme.unselected.fg
+      ),
+      text(""),
+      text("Use ←/→ to collapse or expand.", fg: theme.dim.fg)
+    ]
+  end
+
+  defp inspector_lines(_entry, _directory, theme),
+    do: [text("No board selected.", fg: theme.dim.fg)]
+
+  defp inspector_kv(label, value, theme) do
+    text(String.pad_trailing(label, 10) <> value, fg: theme.unselected.fg)
+  end
+
+  defp normalize_description(description) when is_binary(description) do
+    description
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+    |> case do
+      "" -> nil
+      value -> value
+    end
+  end
+
+  defp normalize_description(_description), do: nil
+
+  defp posting_label(%{board: %{archived?: true}}), do: "archived read-only"
+  defp posting_label(%{board: %{archived: true}}), do: "archived read-only"
+  defp posting_label(%{board: %{postable_by: :mods_only}}), do: "moderators only"
+  defp posting_label(%{board: %{postable_by: "mods_only"}}), do: "moderators only"
+  defp posting_label(_entry), do: "members can post"
+
   defp detail_text(%{kind: :board} = entry, _directory) do
     [
       entry.board.name,
@@ -512,6 +605,10 @@ defmodule Foglet.TUI.Screens.BoardList do
     do: cols - 4
 
   defp row_width(_context), do: 80
+
+  defp list_width(%Context{terminal_size: size}) do
+    if Layout.enhanced?(size), do: 60, else: row_width(%Context{terminal_size: size})
+  end
 
   defp body_height(%Context{terminal_size: {_cols, rows}}) when is_integer(rows),
     do: max(rows - 4, 0)

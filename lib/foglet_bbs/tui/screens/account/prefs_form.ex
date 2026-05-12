@@ -3,7 +3,10 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   PREFS tab selectable read-mode field list plus one-field edit overlay launcher.
   """
 
+  import Raxol.Core.Renderer.View
+
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Layout
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Account.State
   alias Foglet.TUI.Theme
@@ -16,11 +19,24 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   def render(%State{} = state, %Theme{} = theme, opts \\ []) do
     fields = State.prefs_fields(state.prefs_draft) |> Enum.map(&friendly_value/1)
     selected = selected_index(state.prefs_focus)
+    width = Keyword.get(opts, :width, 80)
+    height = Keyword.get(opts, :height, 12)
+    terminal_size = Keyword.get(opts, :terminal_size, {width, height})
 
-    SelectableFieldList.render(fields, selected,
-      theme: theme,
-      width: Keyword.get(opts, :width, 80),
-      height: Keyword.get(opts, :height, 12)
+    list =
+      SelectableFieldList.render(fields, selected,
+        theme: theme,
+        width: list_width(width, terminal_size),
+        height: height
+      )
+
+    detail = inspector(fields, selected, theme)
+
+    Layout.left_heavy_split(list, detail,
+      terminal_size: terminal_size,
+      ratio: {3, 2},
+      min_size: 28,
+      divider_char: "  "
     )
   end
 
@@ -151,4 +167,47 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   end
 
   defp friendly_value(field), do: field
+
+  defp list_width(width, terminal_size) do
+    if Layout.enhanced?(terminal_size), do: max(div(width * 3, 5) - 2, 40), else: width
+  end
+
+  defp inspector(fields, selected, %Theme{} = theme) do
+    field = Enum.at(fields, selected) || hd(fields)
+    label = Map.get(field, :label, "Field")
+    value = display_value(Map.get(field, :value))
+    description = Map.get(field, :description) || prefs_help(Map.fetch!(field, :name))
+
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 1} do
+        [
+          text("PREFERENCE PREVIEW", fg: theme.dim.fg, style: [:bold]),
+          text(label, fg: theme.primary.fg, style: [:bold]),
+          text(value, fg: theme.selected.fg),
+          divider(char: "─", style: %{fg: theme.border.fg}),
+          text(description, fg: theme.unselected.fg),
+          text(preview_note(Map.fetch!(field, :name)), fg: theme.dim.fg)
+        ]
+      end
+    end
+  end
+
+  defp prefs_help(:timezone), do: "Controls how timestamps are localized around the BBS."
+  defp prefs_help(:time_format), do: "Choose the clock style used in chrome and message metadata."
+
+  defp prefs_help(:theme),
+    do: "Preview a different terminal palette before saving it to your account."
+
+  defp prefs_help(:handle_color),
+    do: "Personalizes your handle color where member identity is rendered."
+
+  defp prefs_help(_field), do: "Review this preference before editing."
+
+  defp preview_note(:theme), do: "Opening this field previews candidate themes live."
+  defp preview_note(:handle_color), do: "Use #RRGGBB; blank falls back to the BBS default."
+  defp preview_note(_field), do: "Press E or Enter to edit this preference."
+
+  defp display_value(nil), do: "—"
+  defp display_value(""), do: "—"
+  defp display_value(value), do: to_string(value)
 end
