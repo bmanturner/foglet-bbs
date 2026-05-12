@@ -24,6 +24,9 @@ defmodule Foglet.PubSub do
   @spec online_presence_topic() :: String.t()
   def online_presence_topic, do: "online_presence"
 
+  @spec notifications_topic(binary()) :: String.t()
+  def notifications_topic(user_id), do: "notifications:" <> user_id
+
   @spec board_chat_topic(binary()) :: String.t()
   def board_chat_topic(board_id), do: "board_chat:" <> board_id
 

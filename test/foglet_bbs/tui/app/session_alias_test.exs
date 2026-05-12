@@ -56,7 +56,7 @@ defmodule Foglet.TUI.App.SessionAliasTest do
       {new_state, cmds} = SessionAlias.promote_session(state(), user)
       assert new_state.current_user == user
       assert new_state.current_screen == :main_menu
-      assert [%Command{type: :task}] = cmds
+      assert Enum.any?(cmds, &match?(%Command{type: :task}, &1))
     end
 
     test "calls Sessions.Supervisor.promote_guest_session when session_pid is a pid" do
@@ -68,7 +68,7 @@ defmodule Foglet.TUI.App.SessionAliasTest do
       # reached is observable by it not raising for any other reason.
       {new_state, cmds} = SessionAlias.promote_session(state_with_pid, user)
       assert new_state.current_user == user
-      assert [%Command{type: :task}] = cmds
+      assert Enum.any?(cmds, &match?(%Command{type: :task}, &1))
     end
 
     test "updates session_context.user and session_context.user_id" do

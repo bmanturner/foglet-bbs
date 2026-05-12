@@ -133,8 +133,27 @@ defmodule Foglet.TUI.AppTest do
     def update(_message, state, _context), do: {state || %{}, []}
   end
 
+  defmodule FakeNotifications do
+    def unread_count(_user) do
+      send(test_owner(), :unread_count)
+      Process.get(:fake_notifications_unread_count, 0)
+    end
+
+    def list_recent(_user, limit) do
+      send(test_owner(), {:list_recent_notifications, limit})
+      Process.get(:fake_notifications_rows, [])
+    end
+
+    defp test_owner do
+      Process.get(:fake_notifications_owner, self())
+    end
+  end
+
   defp fake_oneliners_context(extra) do
-    Map.merge(%{domain: %{oneliners: Foglet.TUI.FakeOneliners}}, extra)
+    Map.merge(
+      %{domain: %{oneliners: Foglet.TUI.FakeOneliners, notifications: FakeNotifications}},
+      extra
+    )
   end
 
   defp fake_moderation_context(extra) do
@@ -231,12 +250,16 @@ defmodule Foglet.TUI.AppTest do
       assert %MainMenuState{oneliner_status: :loading} =
                App.screen_state_for(state, :main_menu)
 
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+      results =
+        Enum.map(cmds, fn %Raxol.Core.Runtime.Command{type: :task, data: task} -> task.() end)
 
-      assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} =
-               task.()
+      assert {:screen_task_result, :main_menu, :load_oneliners,
+              {:ok, [%{id: "ol1", body: "hello"}]}} in results
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} in results
 
       assert_received {:list_recent_visible, 5}
+      assert_received :unread_count
     end
 
     test "pubkey-authenticated unconfirmed users route to verification when required" do
@@ -277,12 +300,17 @@ defmodule Foglet.TUI.AppTest do
       assert state.current_screen == :main_menu
       {state, cmds} = App.update({:navigate, :main_menu}, %{state | current_screen: :board_list})
       assert state.current_screen == :main_menu
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
-      assert {:screen_task_result, :main_menu, :load_oneliners, {:ok, [%{id: "ol1"}]}} =
-               task.()
+      results =
+        Enum.map(cmds, fn %Raxol.Core.Runtime.Command{type: :task, data: task} -> task.() end)
+
+      assert {:screen_task_result, :main_menu, :load_oneliners,
+              {:ok, [%{id: "ol1", body: "hello"}]}} in results
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} in results
 
       assert_received {:list_recent_visible, 5}
+      assert_received :unread_count
     end
 
     test "uses terminal_size from context when provided" do
@@ -349,13 +377,17 @@ defmodule Foglet.TUI.AppTest do
       state = %{
         state
         | current_user: user,
-          session_context: %{domain: %{oneliners: Foglet.TUI.FakeOneliners}}
+          session_context: fake_oneliners_context(%{})
       }
 
       {new_state, cmds} = App.update({:navigate, :main_menu}, state)
 
       assert new_state.current_screen == :main_menu
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task}
+             ] = cmds
     end
 
     test ":navigate clears an active modal", %{state: state} do
@@ -374,13 +406,14 @@ defmodule Foglet.TUI.AppTest do
     test ":set_user queues oneliner load command", %{state: state} do
       user = %Foglet.Accounts.User{id: "u2", handle: "bob"}
 
-      state = %{
-        state
-        | session_context: %{domain: %{oneliners: Foglet.TUI.FakeOneliners}}
-      }
+      state = %{state | session_context: fake_oneliners_context(%{})}
 
       {_new_state, cmds} = App.update({:set_user, user}, state)
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task}
+             ] = cmds
     end
 
     test ":show_modal sets modal, :dismiss_modal clears it", %{state: state} do
@@ -1179,7 +1212,11 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:promote_session, user}, state_with_session)
       assert new_state.current_user == user
       assert new_state.current_screen == :main_menu
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task}
+             ] = cmds
     end
 
     test "{:promote_session, user} is safe when session_pid is nil", %{state: state} do
@@ -1187,7 +1224,11 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:promote_session, user}, state)
       assert new_state.current_user == user
       assert new_state.current_screen == :main_menu
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task}
+             ] = cmds
     end
   end
 
@@ -1955,7 +1996,13 @@ defmodule Foglet.TUI.AppTest do
       presence_topic = Foglet.PubSub.online_presence_topic()
 
       assert_receive {:pubsub_forwarder,
-                      {:refresh_topics, [^clock_topic, "user:u-dynamic", ^presence_topic]}}
+                      {:refresh_topics,
+                       [
+                         ^clock_topic,
+                         "user:u-dynamic",
+                         ^presence_topic,
+                         "notifications:u-dynamic"
+                       ]}}
     end
 
     test "board_list screen adds 'boards' topic" do
@@ -2055,7 +2102,8 @@ defmodule Foglet.TUI.AppTest do
       assert pubsub_sub.data.args.topics == [
                Foglet.PubSub.tui_clock_topic(),
                "user:u1",
-               Foglet.PubSub.online_presence_topic()
+               Foglet.PubSub.online_presence_topic(),
+               "notifications:u1"
              ]
     end
   end
@@ -2212,6 +2260,182 @@ defmodule Foglet.TUI.AppTest do
 
       assert App.screen_state_for(new_state, :post_reader) == local_state
       assert cmds == []
+    end
+
+    test "{:notifications, event, payload} on :main_menu triggers unread count refresh", %{
+      state: state
+    } do
+      state = %{state | current_screen: :main_menu}
+
+      {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               task.()
+
+      assert_received :unread_count
+    end
+
+    test "{:subscription, {:notifications, event, payload}} on :main_menu triggers unread count refresh",
+         %{
+           state: state
+         } do
+      state = %{state | current_screen: :main_menu}
+
+      {new_state, cmds} =
+        App.update({:subscription, {:notifications, :created, %{user_id: "u1"}}}, state)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               task.()
+
+      assert_received :unread_count
+    end
+
+    test "{:notifications, event, payload} on :notifications refreshes inbox and cached main menu",
+         %{
+           state: state
+         } do
+      Process.put(:fake_notifications_rows, [%{id: "n-1"}])
+
+      state = %{state | current_screen: :notifications}
+
+      {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
+
+      assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task, data: unread_task},
+               %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
+             ] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               unread_task.()
+
+      assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
+               inbox_task.()
+
+      assert_received :unread_count
+      assert_received {:list_recent_notifications, 50}
+    end
+
+    test "{:subscription, {:notifications, event, payload}} on :notifications refreshes inbox and cached main menu",
+         %{
+           state: state
+         } do
+      Process.put(:fake_notifications_rows, [%{id: "n-1"}])
+
+      state = %{state | current_screen: :notifications}
+
+      {new_state, cmds} =
+        App.update({:subscription, {:notifications, :created, %{user_id: "u1"}}}, state)
+
+      assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task, data: unread_task},
+               %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
+             ] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               unread_task.()
+
+      assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
+               inbox_task.()
+
+      assert_received :unread_count
+      assert_received {:list_recent_notifications, 50}
+    end
+
+    test "{:notifications, :created, notification} immediately inserts the row while Inbox is focused",
+         %{
+           state: state
+         } do
+      notification = %{
+        id: "n-live",
+        kind: :reply,
+        actor: %{handle: "bob"},
+        payload: %{"snippet" => "live notification"},
+        read_at: nil,
+        inserted_at: ~U[2026-05-12 02:40:00Z]
+      }
+
+      state = %{
+        state
+        | current_screen: :notifications,
+          screen_state: %{
+            main_menu: %MainMenuState{},
+            notifications:
+              Foglet.TUI.Screens.Notifications.State.from_rows(
+                Foglet.TUI.Screens.Notifications.State.new(),
+                []
+              )
+          }
+      }
+
+      {new_state, cmds} = App.update({:notifications, :created, notification}, state)
+
+      assert %{rows: [%{id: "n-live"}], status: :loading} =
+               App.screen_state_for(new_state, :notifications)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task}
+             ] = cmds
+    end
+
+    test "stale Inbox load results do not remove a just-broadcast unread row", %{
+      state: state
+    } do
+      live_notification = %{
+        id: "n-live",
+        kind: :reply,
+        actor: %{handle: "bob"},
+        payload: %{"snippet" => "live notification"},
+        read_at: nil,
+        inserted_at: ~U[2026-05-12 02:40:00Z]
+      }
+
+      state = %{
+        state
+        | current_screen: :notifications,
+          screen_state: %{
+            notifications:
+              Foglet.TUI.Screens.Notifications.State.new()
+              |> Foglet.TUI.Screens.Notifications.State.prepend_or_replace(live_notification)
+          }
+      }
+
+      {new_state, []} =
+        App.update({:screen_task_result, :notifications, :load_notifications, {:ok, []}}, state)
+
+      assert %{rows: [%{id: "n-live"}]} = App.screen_state_for(new_state, :notifications)
+
+      {still_fresh_state, []} =
+        App.update(
+          {:screen_task_result, :notifications, :load_notifications, {:ok, []}},
+          new_state
+        )
+
+      assert %{rows: [%{id: "n-live"}]} =
+               App.screen_state_for(still_fresh_state, :notifications)
     end
 
     test "{:notification, user_id, kind, payload} shows a modal", %{state: state} do

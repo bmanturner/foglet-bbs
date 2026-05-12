@@ -35,5 +35,7 @@ defmodule Foglet.TUI.App.MessageNormalizer do
     message
   end
 
+  def normalize({:subscription, message}), do: normalize(message)
+
   def normalize(other), do: other
 end

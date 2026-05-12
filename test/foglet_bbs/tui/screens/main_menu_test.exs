@@ -936,6 +936,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert MainMenu.visible_destinations(user) == [
                {"B", "Boards"},
                {"C", "Compose"},
+               {"I", "Inbox"},
                {"N", "Online Now (0)"},
                {"A", "Account"},
                {"Q", "Logout"}
@@ -949,6 +950,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                [
                  {"B", "Boards"},
                  {"C", "Compose"},
+                 {"I", "Inbox"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
@@ -963,6 +965,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                [
                  {"B", "Boards"},
                  {"C", "Compose"},
+                 {"I", "Inbox"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
@@ -1109,7 +1112,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     # no-op. Plan 39-05 will collapse the App-side per-screen clauses into a
     # single generic dispatch, relying on these screen-side clauses.
 
-    test "with current_user set delegates to :load_oneliners (loads + emits task effect)" do
+    test "with current_user set loads oneliners and unread notifications through task effects" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}
 
       context =
@@ -1127,15 +1130,29 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       {state_via_load, effects_via_load} =
         MainMenu.update(:load_oneliners, local, context)
 
-      assert state_via_on_enter == state_via_load
+      assert state_via_load.oneliner_status == :loading
+      assert state_via_load.notifications_status == :idle
+
       assert state_via_on_enter.oneliner_status == :loading
+      assert state_via_on_enter.notifications_status == :loading
 
       assert Enum.any?(
                effects_via_on_enter,
                &match?(%Effect{type: :task, payload: %{op: :load_oneliners}}, &1)
              )
 
-      assert effects_via_on_enter == effects_via_load
+      assert Enum.any?(
+               effects_via_on_enter,
+               &match?(%Effect{type: :task, payload: %{op: :load_unread_notifications_count}}, &1)
+             )
+
+      assert Enum.any?(
+               effects_via_load,
+               &match?(
+                 %Effect{type: :task, payload: %{op: :load_oneliners, screen_key: :main_menu}},
+                 &1
+               )
+             )
     end
 
     test "with no current_user no-ops (no effects, normalized state)" do

@@ -7,7 +7,7 @@ defmodule Foglet.TUI.OnlinePresenceRefreshTest do
   alias Foglet.TUI.Screens.OnlineNow.State, as: OnlineNowState
 
   test "Main Menu subscribes to global online presence events" do
-    assert MainMenu.subscriptions(nil, context()) == [Foglet.PubSub.online_presence_topic()]
+    assert Foglet.PubSub.online_presence_topic() in MainMenu.subscriptions(nil, context())
   end
 
   test "Online Now subscribes to global online presence events" do
