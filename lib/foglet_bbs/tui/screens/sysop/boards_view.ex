@@ -228,6 +228,36 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   defp render_list(%__MODULE__{rows: rows, selection_index: idx} = state, theme, opts) do
     width = Keyword.get(opts, :width, 76)
     visible_height = Keyword.get(opts, :visible_height, 12)
+    selected = selected_row(state)
+
+    if width >= 116 do
+      {list_width, inspector_width} = board_workspace_widths(width)
+
+      list =
+        render_board_list_body(state, rows, idx, theme,
+          width: list_width,
+          visible_height: visible_height
+        )
+
+      split_pane(
+        direction: :horizontal,
+        ratio: {3, 2},
+        min_size: 28,
+        divider_char: " ",
+        children: [list, board_inspector(selected, state, theme, inspector_width)],
+        height: max(visible_height, 1)
+      )
+    else
+      render_board_list_body(state, rows, idx, theme,
+        width: width,
+        visible_height: visible_height
+      )
+    end
+  end
+
+  defp render_board_list_body(%__MODULE__{} = state, rows, idx, theme, opts) do
+    width = Keyword.fetch!(opts, :width)
+    visible_height = Keyword.fetch!(opts, :visible_height)
 
     children =
       rows
@@ -265,6 +295,91 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
       [body] ++ hint
     end
   end
+
+  defp board_workspace_widths(width) do
+    available = max(width - 1, 0)
+    list_width = max(div(available * 3, 5), 54)
+    inspector_width = max(available - list_width, 36)
+
+    {list_width, inspector_width}
+  end
+
+  defp board_inspector(nil, _state, theme, _width) do
+    column style: %{gap: 0} do
+      [text("No board selected.", fg: theme.dim.fg)]
+    end
+  end
+
+  defp board_inspector({:category, category}, state, theme, width) do
+    board_count =
+      state.boards
+      |> Enum.count(&(&1.category_id == category_id(category)))
+      |> Integer.to_string()
+
+    rows = [
+      {"Name", category.name},
+      {"Boards", board_count},
+      {"Order", Map.get(category, :display_order, 0)},
+      {"State", archived_label(category)}
+    ]
+
+    inspector_panel(
+      "Selected category settings",
+      rows,
+      "N new cat  E edit cat  D archive",
+      theme,
+      width
+    )
+  end
+
+  defp board_inspector({:board, board}, state, theme, width) do
+    category = Enum.find(state.categories, &(&1.id == board.category_id))
+
+    rows = [
+      {"Slug", board.slug},
+      {"Name", board.name},
+      {"Category", category && category.name},
+      {"Posting", Map.get(board, :postable_by, :members)},
+      {"Subscription", subscription_label(board)},
+      {"Chat", chat_label(board)},
+      {"State", archived_label(board)}
+    ]
+
+    inspector_panel(
+      "Selected board settings",
+      rows,
+      "n new board  e edit board  D archive",
+      theme,
+      width
+    )
+  end
+
+  defp inspector_panel(title, rows, actions, theme, width) do
+    detail_lines =
+      Enum.map(rows, fn {label, value} ->
+        label = String.pad_trailing(to_string(label), 12)
+        text(TextWidth.truncate("#{label} #{value || "—"}", width), fg: theme.unselected.fg)
+      end)
+
+    column style: %{gap: 0} do
+      [
+        text(title, fg: theme.accent.fg),
+        text("Actions", fg: theme.primary.fg),
+        text(TextWidth.truncate(actions, width), fg: theme.dim.fg)
+      ] ++ detail_lines
+    end
+  end
+
+  defp subscription_label(%{required_subscription: true}), do: "required"
+  defp subscription_label(%{default_subscription: true}), do: "default"
+  defp subscription_label(_board), do: "optional"
+
+  defp chat_label(%{chat_enabled: true}), do: "enabled"
+  defp chat_label(_board), do: "disabled"
+
+  defp archived_label(%{archived_at: nil}), do: "active"
+  defp archived_label(%{archived_at: _}), do: "archived"
+  defp archived_label(_), do: "active"
 
   defp render_row({:category, cat}, selected?, theme, state, width) do
     marker = if MapSet.member?(state.collapsed_category_ids, category_id(cat)), do: "▸", else: "▾"

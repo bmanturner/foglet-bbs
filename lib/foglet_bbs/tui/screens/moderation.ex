@@ -404,10 +404,22 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp render_tab_body("LOG", ss, theme, width, height, user, timezone) do
     log_table = fresh_log_table(ss, width, height, user, timezone)
     log_summary = State.build_log_summary(ss.scopes, ss.error, ss.mod_log)
-    children = compact_table_children(log_summary, log_table, theme, width, height)
 
-    column style: %{gap: 1} do
-      children
+    if width >= 100 do
+      render_read_only_workspace(log_summary, log_table, theme, width, height,
+        title: "Operator context",
+        lines: [
+          "Rows are read-only.",
+          "Use ←/→ to switch workspaces.",
+          "Queue actions live on QUEUE."
+        ]
+      )
+    else
+      children = compact_table_children(log_summary, log_table, theme, width, height)
+
+      column style: %{gap: 1} do
+        children
+      end
     end
   end
 
@@ -434,10 +446,22 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp render_tab_body("BOARDS", ss, theme, width, height, _user, _timezone) do
     boards_table = fresh_boards_table(ss, width, height)
     boards_summary = State.build_boards_summary(ss.scopes, ss.boards, ss.error)
-    children = compact_table_children(boards_summary, boards_table, theme, width, height)
 
-    column style: %{gap: 1} do
-      children
+    if width >= 100 do
+      render_read_only_workspace(boards_summary, boards_table, theme, width, height,
+        title: "Board scope context",
+        lines: [
+          "Moderation board view is read-only.",
+          "Use Sysop BOARDS for settings.",
+          "Archived and scoped rows stay visible here."
+        ]
+      )
+    else
+      children = compact_table_children(boards_summary, boards_table, theme, width, height)
+
+      column style: %{gap: 1} do
+        children
+      end
     end
   end
 
@@ -798,6 +822,33 @@ defmodule Foglet.TUI.Screens.Moderation do
          selected_report_rows(selected, theme))
       |> Enum.reject(&is_nil/1)
     end
+  end
+
+  defp render_read_only_workspace(summary, table, theme, width, height, opts) do
+    {table_width, inspector_width} = queue_workspace_pane_widths(width)
+    title = Keyword.fetch!(opts, :title)
+    lines = Keyword.get(opts, :lines, [])
+
+    table_column =
+      column style: %{gap: 1} do
+        compact_table_children(summary, table, theme, table_width, height)
+      end
+
+    inspector =
+      column style: %{gap: 0} do
+        [text(title, fg: theme.accent.fg)] ++
+          KvGrid.render(summary, theme: theme, width: inspector_width, label_width: 10, gap: 1) ++
+          Enum.map(lines, &text(&1, fg: theme.dim.fg))
+      end
+
+    split_pane(
+      direction: :horizontal,
+      ratio: {3, 2},
+      min_size: 30,
+      divider_char: " ",
+      children: [table_column, inspector],
+      height: max(height - 2, 1)
+    )
   end
 
   defp fresh_queue_table(%State{} = ss, width \\ nil, height \\ nil) do
