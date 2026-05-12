@@ -82,6 +82,15 @@ defmodule Foglet.TUI.Screens.Notifications do
      ), []}
   end
 
+  def update({:notifications, :created, %{} = notification}, local_state, %Context{} = context) do
+    state =
+      local_state
+      |> normalize_state()
+      |> State.prepend_or_replace(notification)
+
+    {%{state | status: :loading}, [load_notifications_effect(context)]}
+  end
+
   def update({:notifications, _event, _payload}, local_state, %Context{} = context) do
     state = normalize_state(local_state)
     {%{state | status: :loading}, [load_notifications_effect(context)]}

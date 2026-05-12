@@ -2361,6 +2361,83 @@ defmodule Foglet.TUI.AppTest do
       assert_received {:list_recent_notifications, 50}
     end
 
+    test "{:notifications, :created, notification} immediately inserts the row while Inbox is focused",
+         %{
+           state: state
+         } do
+      notification = %{
+        id: "n-live",
+        kind: :reply,
+        actor: %{handle: "bob"},
+        payload: %{"snippet" => "live notification"},
+        read_at: nil,
+        inserted_at: ~U[2026-05-12 02:40:00Z]
+      }
+
+      state = %{
+        state
+        | current_screen: :notifications,
+          screen_state: %{
+            main_menu: %MainMenuState{},
+            notifications:
+              Foglet.TUI.Screens.Notifications.State.from_rows(
+                Foglet.TUI.Screens.Notifications.State.new(),
+                []
+              )
+          }
+      }
+
+      {new_state, cmds} = App.update({:notifications, :created, notification}, state)
+
+      assert %{rows: [%{id: "n-live"}], status: :loading} =
+               App.screen_state_for(new_state, :notifications)
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task}
+             ] = cmds
+    end
+
+    test "stale Inbox load results do not remove a just-broadcast unread row", %{
+      state: state
+    } do
+      live_notification = %{
+        id: "n-live",
+        kind: :reply,
+        actor: %{handle: "bob"},
+        payload: %{"snippet" => "live notification"},
+        read_at: nil,
+        inserted_at: ~U[2026-05-12 02:40:00Z]
+      }
+
+      state = %{
+        state
+        | current_screen: :notifications,
+          screen_state: %{
+            notifications:
+              Foglet.TUI.Screens.Notifications.State.new()
+              |> Foglet.TUI.Screens.Notifications.State.prepend_or_replace(live_notification)
+          }
+      }
+
+      {new_state, []} =
+        App.update({:screen_task_result, :notifications, :load_notifications, {:ok, []}}, state)
+
+      assert %{rows: [%{id: "n-live"}]} = App.screen_state_for(new_state, :notifications)
+
+      {still_fresh_state, []} =
+        App.update(
+          {:screen_task_result, :notifications, :load_notifications, {:ok, []}},
+          new_state
+        )
+
+      assert %{rows: [%{id: "n-live"}]} =
+               App.screen_state_for(still_fresh_state, :notifications)
+    end
+
     test "{:notification, user_id, kind, payload} shows a modal", %{state: state} do
       {new_state, []} = App.update({:notification, "u1", :dm, %{body: "hey!"}}, state)
       assert new_state.modal != nil
