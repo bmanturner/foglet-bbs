@@ -27,13 +27,19 @@ defmodule Foglet.TUI.App.PubSubRouter do
     * `:board_chat` — FOG-284 / FOG-254/256: BoardScreen appends live chat
       messages to the chat tab transcript. Without this clause the sender's
       own session never sees its post.
+    * `:notifications` — durable inbox/Main Menu unread-refresh broadcasts.
   """
 
   alias Foglet.TUI.App.Routing
 
-  @type topic :: :board_activity | :thread_activity | :board_screen | :board_chat
+  @type topic ::
+          :board_activity
+          | :thread_activity
+          | :board_screen
+          | :board_chat
+          | :notifications
 
-  @routable_topics [:board_activity, :thread_activity, :board_screen, :board_chat]
+  @routable_topics [:board_activity, :thread_activity, :board_screen, :board_chat, :notifications]
 
   @doc """
   Guard-safe predicate for "is this a 3-tuple broadcast we forward to the
