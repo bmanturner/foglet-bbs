@@ -35,10 +35,22 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
   @static_openssh_key FogletBbs.AccountsFixtures.default_ssh_public_key()
   @alternate_openssh_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBp8Yt7rf3YpZ8eR+3KEBLQnUlsMHfK4VwCaZJmjs4Cq other@example"
-  @terminal_takeover "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J"
+  @terminal_takeover "\e[?25l\e[H\e[2J\e[3J\e[?1049h\e[?25l\e[H\e[2J\e[3J"
   @alt_screen_enter "\e[?1049h"
   @alt_screen_leave "\e[?1049l"
+  @cursor_hide "\e[?25l"
+  @cursor_show "\e[?25h"
   @ssh_timeout 5_000
+  @test_private_key """
+  -----BEGIN OPENSSH PRIVATE KEY-----
+  b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+  QyNTUxOQAAACChom3TFVpZJX8cT4byrGg77Kh+9WG4BsRzgVNUIeBmOAAAAJBimGJVYphi
+  VQAAAAtzc2gtZWQyNTUxOQAAACChom3TFVpZJX8cT4byrGg77Kh+9WG4BsRzgVNUIeBmOA
+  AAAEATvl6XQUV24+P9aLitvu76bLyuCGe+JJYkkr3dx4LSUaGibdMVWlklfxxPhvKsaDvs
+  qH71YbgGxHOBU1Qh4GY4AAAAC2ZvZ2xldC10ZXN0AQI=
+  -----END OPENSSH PRIVATE KEY-----
+  """
+  @test_public_key "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKGibdMVWlklfxxPhvKsaDvsqH71YbgGxHOBU1Qh4GY4 foglet-test\n"
 
   describe "real SSH channel startup" do
     test "PTY allocation clears scrollback and enters alternate screen before terminal output" do
@@ -48,6 +60,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
       bytes = collect_channel_bytes(conn, channel_id, &String.contains?(&1, @alt_screen_enter))
 
       assert String.starts_with?(bytes, @terminal_takeover)
+      assert bytes =~ @cursor_hide
     end
 
     test "initial terminal output is CRLF-normalized" do
@@ -70,6 +83,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
       bytes = collect_channel_bytes(conn, channel_id, &String.contains?(&1, @alt_screen_leave))
 
       assert bytes =~ @alt_screen_leave
+      assert bytes =~ @cursor_show
     end
   end
 
@@ -483,6 +497,8 @@ defmodule Foglet.SSH.CLIHandlerTest do
         |> Ecto.Changeset.change(status: :active)
         |> FogletBbs.Repo.update!()
 
+      {:ok, user} = Foglet.Accounts.confirm_user(user)
+
       _key = AccountsFixtures.ssh_key_fixture(user, %{public_key: @static_openssh_key})
       [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
 
@@ -889,6 +905,8 @@ defmodule Foglet.SSH.CLIHandlerTest do
         |> Ecto.Changeset.change(status: :active)
         |> FogletBbs.Repo.update!()
 
+      {:ok, user} = Foglet.Accounts.confirm_user(user)
+
       _key = AccountsFixtures.ssh_key_fixture(user, %{public_key: @static_openssh_key})
       peer = {{10, 0, 0, 10}, 10_010}
       [{public_key, _}] = :ssh_file.decode(@static_openssh_key, :public_key)
@@ -943,20 +961,17 @@ defmodule Foglet.SSH.CLIHandlerTest do
     key_path = Path.join(dir, "ssh_host_ed25519_key")
     client_key_path = Path.join(dir, "id_ed25519")
 
-    {_, 0} =
-      System.cmd("ssh-keygen", ["-t", "ed25519", "-f", key_path, "-N", ""],
-        stderr_to_stdout: true
-      )
-
-    {_, 0} =
-      System.cmd(
-        "ssh-keygen",
-        ["-t", "ed25519", "-f", client_key_path, "-N", ""],
-        stderr_to_stdout: true
-      )
+    write_test_key!(key_path)
+    write_test_key!(client_key_path)
 
     on_exit(fn -> File.rm_rf!(dir) end)
     dir
+  end
+
+  defp write_test_key!(path) do
+    File.write!(path, @test_private_key)
+    File.chmod!(path, 0o600)
+    File.write!(path <> ".pub", @test_public_key)
   end
 
   defp start_test_daemon! do
