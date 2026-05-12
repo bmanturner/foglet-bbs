@@ -933,20 +933,55 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp compact_table_children(summary, table, theme, width, height) do
     table_node = ConsoleTable.render(table, theme: theme)
 
-    if height <= 18 do
-      [table_node]
-    else
-      # FOG-177: KvGrid.render/2 now returns one layout element per entry
-      # (badge entries pre-wrapped in `row`), so the outer column receives
-      # homogeneous map children with no embedded newline text nodes.
-      kv_rows = KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
+    cond do
+      height <= 18 ->
+        [table_node]
 
-      kv_column =
-        column style: %{gap: 0} do
-          kv_rows
-        end
+      width >= 100 ->
+        table_width = max(div(width * 3, 5) - 1, 48)
+        context_width = max(width - table_width - 1, 32)
 
-      [kv_column, table_node]
+        context = operator_context_panel(summary, theme, context_width)
+
+        [
+          split_pane(
+            direction: :horizontal,
+            ratio: {3, 2},
+            min_size: 30,
+            divider_char: " ",
+            children: [table_node, context],
+            height: max(height - 2, 1)
+          )
+        ]
+
+      true ->
+        # FOG-177: KvGrid.render/2 now returns one layout element per entry
+        # (badge entries pre-wrapped in `row`), so the outer column receives
+        # homogeneous map children with no embedded newline text nodes.
+        kv_rows = KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
+
+        kv_column =
+          column style: %{gap: 0} do
+            kv_rows
+          end
+
+        [kv_column, table_node]
+    end
+  end
+
+  defp operator_context_panel(summary, theme, width) do
+    kv_rows = KvGrid.render(summary, theme: theme, width: width, label_width: 16, gap: 2)
+
+    column style: %{gap: 0, width: width} do
+      [
+        text("Operator context", fg: theme.accent.fg, style: [:bold]),
+        text("─", fg: theme.dim.fg)
+      ] ++
+        kv_rows ++
+        [
+          text("", fg: theme.dim.fg),
+          text("Rows are read-only", fg: theme.dim.fg)
+        ]
     end
   end
 

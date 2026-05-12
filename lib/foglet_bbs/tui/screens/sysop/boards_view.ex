@@ -153,7 +153,12 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   def render(%__MODULE__{} = state, theme, opts) do
     width = Keyword.get(opts, :width, 76)
     visible_height = Keyword.get(opts, :visible_height, 12)
-    render_list(state, theme, width: width, visible_height: visible_height)
+
+    if width >= 100 do
+      render_workspace(state, theme, width: width, visible_height: visible_height)
+    else
+      render_list(state, theme, width: width, visible_height: visible_height)
+    end
   end
 
   @doc """
@@ -263,6 +268,76 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
     column style: %{gap: 0} do
       [body] ++ hint
+    end
+  end
+
+  defp render_workspace(%__MODULE__{} = state, theme, opts) do
+    width = Keyword.get(opts, :width, 116)
+    visible_height = Keyword.get(opts, :visible_height, 12)
+    list_width = max(div(width * 3, 5) - 1, 44)
+    inspector_width = max(width - list_width - 1, 32)
+
+    list = render_list(state, theme, width: list_width, visible_height: visible_height)
+    inspector = render_selected_inspector(selected_row(state), theme, inspector_width)
+
+    split_pane(
+      direction: :horizontal,
+      ratio: {3, 2},
+      min_size: 30,
+      divider_char: " ",
+      children: [list, inspector],
+      height: max(visible_height, 1)
+    )
+  end
+
+  defp render_selected_inspector({:board, board}, theme, width) do
+    rows = [
+      {"Slug", Map.get(board, :slug, "—")},
+      {"Name", Map.get(board, :name, "—")},
+      {"Posting", board |> Map.get(:postable_by, :members) |> to_string()},
+      {"Status", if(Map.get(board, :archived_at), do: "archived", else: "active")}
+    ]
+
+    column style: %{gap: 0, width: width} do
+      [
+        text("Selected board settings", fg: theme.accent.fg, style: [:bold]),
+        text("─", fg: theme.dim.fg)
+      ] ++
+        Enum.map(rows, fn {label, value} ->
+          text(TextWidth.truncate(String.pad_trailing(label, 10) <> to_string(value), width),
+            fg: theme.unselected.fg
+          )
+        end) ++
+        [
+          text("", fg: theme.dim.fg),
+          text("Actions", fg: theme.primary.fg),
+          text(TextWidth.truncate("e Edit board  D Archive board  n New board", width),
+            fg: theme.dim.fg
+          )
+        ]
+    end
+  end
+
+  defp render_selected_inspector({:category, category}, theme, width) do
+    column style: %{gap: 0, width: width} do
+      [
+        text("Selected category", fg: theme.accent.fg, style: [:bold]),
+        text("─", fg: theme.dim.fg),
+        text(TextWidth.truncate("Name      #{Map.get(category, :name, "—")}", width),
+          fg: theme.unselected.fg
+        ),
+        text("", fg: theme.dim.fg),
+        text("Actions", fg: theme.primary.fg),
+        text(TextWidth.truncate("E Edit category  D Archive category  n New board", width),
+          fg: theme.dim.fg
+        )
+      ]
+    end
+  end
+
+  defp render_selected_inspector(nil, theme, _width) do
+    column style: %{gap: 0} do
+      [text("No board selected.", fg: theme.dim.fg)]
     end
   end
 
