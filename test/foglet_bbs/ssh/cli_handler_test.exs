@@ -940,20 +940,14 @@ defmodule Foglet.SSH.CLIHandlerTest do
       )
 
     File.mkdir_p!(dir)
-    key_path = Path.join(dir, "ssh_host_ed25519_key")
-    client_key_path = Path.join(dir, "id_ed25519")
 
-    {_, 0} =
-      System.cmd("ssh-keygen", ["-t", "ed25519", "-f", key_path, "-N", ""],
-        stderr_to_stdout: true
-      )
+    key_path = Path.join(dir, "ssh_host_rsa_key")
 
-    {_, 0} =
-      System.cmd(
-        "ssh-keygen",
-        ["-t", "ed25519", "-f", client_key_path, "-N", ""],
-        stderr_to_stdout: true
-      )
+    key = :public_key.generate_key({:rsa, 2048, 65_537})
+    pem = :public_key.pem_encode([:public_key.pem_entry_encode(:RSAPrivateKey, key)])
+
+    File.write!(key_path, pem)
+    File.chmod!(key_path, 0o600)
 
     on_exit(fn -> File.rm_rf!(dir) end)
     dir
