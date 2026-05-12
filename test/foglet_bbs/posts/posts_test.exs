@@ -2,7 +2,10 @@ defmodule Foglet.PostsTest do
   use FogletBbs.DataCase, async: false
   import FogletBbs.BoardsFixtures
 
+  import Ecto.Query
+
   alias Ecto.Adapters.SQL.Sandbox
+  alias Foglet.Notifications.Notification
   alias FogletBbs.Repo
 
   # Board Server is started by Foglet.Boards.create_board/2 via BoardSupervisor.
@@ -130,6 +133,86 @@ defmodule Foglet.PostsTest do
       # message_number still sequentially assigned
       assert reply.message_number == root.message_number + 1
     end
+  end
+
+  describe "create_reply/4 mention notifications" do
+    test "emits one mention notification per active non-actor recipient" do
+      board = setup_board_with_server()
+      actor = user_fixture(%{handle: "poster"})
+      alice = user_fixture(%{handle: "Alice"})
+      bob = user_fixture(%{handle: "bob_2"})
+      {thread, _root} = setup_thread(board, actor)
+
+      assert {:ok, post} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{
+                 body: "Ping @alice and @BOB_2 and again @Alice"
+               })
+
+      notifications = mention_notifications_for_post(post.id)
+      assert Enum.map(notifications, & &1.user_id) |> Enum.sort() == Enum.sort([alice.id, bob.id])
+      assert Enum.all?(notifications, &(&1.kind == :mention))
+      assert Enum.all?(notifications, &(&1.actor_id == actor.id))
+      assert Enum.all?(notifications, &(&1.payload["thread_id"] == thread.id))
+      assert Enum.all?(notifications, &(&1.payload["board_id"] == board.id))
+    end
+
+    test "ignores unknown, suspended, deleted, and self mentions without failing post creation" do
+      board = setup_board_with_server()
+      actor = user_fixture(%{handle: "self"})
+      active = user_fixture(%{handle: "active"})
+      suspended = active_user_fixture(%{handle: "suspended", status: :suspended})
+      deleted = user_fixture(%{handle: "deleted"})
+      {:ok, _deleted} = Foglet.Accounts.delete_user(deleted)
+      {thread, _root} = setup_thread(board, actor)
+
+      assert {:ok, post} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{
+                 body: "@active @suspended @deleted @self @nobody"
+               })
+
+      notifications = mention_notifications_for_post(post.id)
+      assert Enum.map(notifications, & &1.user_id) == [active.id]
+      refute Enum.any?(notifications, &(&1.user_id in [suspended.id, deleted.id, actor.id]))
+    end
+
+    test "uses mention dedupe so repeated emission and future reply duplicate paths keep one mention" do
+      board = setup_board_with_server()
+      actor = user_fixture(%{handle: "poster"})
+      recipient = user_fixture(%{handle: "recipient"})
+      {thread, _root} = setup_thread(board, actor)
+
+      assert {:ok, post} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{body: "hi @recipient"})
+
+      dedupe_key = "post:#{post.id}:user:#{recipient.id}"
+
+      assert {:ok, existing} =
+               Foglet.Notifications.create_notification(%{
+                 user_id: recipient.id,
+                 actor_id: actor.id,
+                 kind: :reply,
+                 dedupe_key: dedupe_key,
+                 payload: %{
+                   board_id: board.id,
+                   thread_id: thread.id,
+                   post_id: post.id,
+                   snippet: "reply duplicate"
+                 }
+               })
+
+      [notification] = mention_notifications_for_post(post.id)
+      assert notification.id == existing.id
+      assert notification.kind == :mention
+      assert notification.dedupe_key == dedupe_key
+    end
+  end
+
+  defp mention_notifications_for_post(post_id) do
+    Repo.all(
+      from n in Notification,
+        where: n.payload["post_id"] == ^post_id,
+        order_by: [asc: n.inserted_at, asc: n.id]
+    )
   end
 
   describe "create_reply/4 posting policy and locks (POST-02, POST-03)" do
