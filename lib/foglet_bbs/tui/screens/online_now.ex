@@ -336,6 +336,7 @@ defmodule Foglet.TUI.Screens.OnlineNow do
     %{
       current_screen: :online_now,
       current_user: context.current_user,
+      unread_count: context.unread_count,
       session_context: context.session_context,
       session_pid: context.session_pid,
       terminal_size: context.terminal_size || @default_terminal_size,

@@ -67,6 +67,7 @@ defmodule Foglet.TUI.App.Routing do
       terminal_size: state.terminal_size,
       route: state.current_screen,
       route_params: route_params,
+      unread_count: state.unread_count,
       domain: domain_from_session_context(state.session_context)
     )
   end

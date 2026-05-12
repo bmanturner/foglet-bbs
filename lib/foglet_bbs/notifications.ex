@@ -151,10 +151,13 @@ defmodule Foglet.Notifications do
   end
 
   defp broadcast(user_id, message) do
-    Phoenix.PubSub.broadcast(
-      FogletBbs.PubSub,
-      Foglet.PubSub.notifications_topic(user_id),
-      message
-    )
+    with :ok <-
+           Phoenix.PubSub.broadcast(
+             FogletBbs.PubSub,
+             Foglet.PubSub.notifications_topic(user_id),
+             message
+           ) do
+      Phoenix.PubSub.broadcast(FogletBbs.PubSub, Foglet.PubSub.user_topic(user_id), message)
+    end
   end
 end

@@ -25,7 +25,14 @@ defmodule Foglet.TUI.App.Subscriptions do
       end
 
     screen_intervals = screen_declared_intervals(state)
-    pubsub = [Subscription.custom(PubSubForwarder, %{topics: topics(state)})]
+    pubsub_topics = topics(state)
+
+    # Do not call PubSubForwarder.ensure_refreshed/1 from the subscription
+    # callback. Raxol may evaluate subscriptions outside the Dispatcher process,
+    # and the forwarder must always target the Dispatcher pid supplied to the
+    # custom subscription's start_link/2 context. Dynamic route/login updates are
+    # refreshed from App.update/2 where self() is the Dispatcher.
+    pubsub = [Subscription.custom(PubSubForwarder, %{topics: pubsub_topics})]
     initial_route = [Subscription.custom(InitialRouteEnterForwarder, %{})]
 
     heartbeat ++ screen_intervals ++ pubsub ++ initial_route
@@ -41,9 +48,17 @@ defmodule Foglet.TUI.App.Subscriptions do
         []
       end
 
+    notification_topics =
+      if state.current_user do
+        [PubSub.notifications_topic(state.current_user.id)]
+      else
+        []
+      end
+
     clock_topics = [PubSub.tui_clock_topic()]
 
-    clock_topics ++ user_topics ++ screen_declared_topics(state)
+    (clock_topics ++ user_topics ++ screen_declared_topics(state) ++ notification_topics)
+    |> Enum.uniq()
   end
 
   @doc "Returns topics from the active screen's optional `subscriptions/2` callback."
@@ -82,7 +97,7 @@ defmodule Foglet.TUI.App.Subscriptions do
     new_topics = topics(new_state)
 
     if old_topics != new_topics do
-      PubSubForwarder.refresh(new_topics)
+      PubSubForwarder.ensure_refreshed(new_topics)
     end
   end
 

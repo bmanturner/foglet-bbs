@@ -158,6 +158,25 @@ function openShell(conn, opts, term) {
   });
 }
 
+export function createTerminalWriter(term) {
+  let pending = Promise.resolve();
+
+  const write = data => {
+    const text = data.toString('utf8');
+
+    pending = pending.then(
+      () =>
+        new Promise(resolve => {
+          term.write(text, resolve);
+        })
+    );
+
+    return pending;
+  };
+
+  return { write, flush: () => pending };
+}
+
 function screenText(term) {
   const lines = [];
 
@@ -203,6 +222,7 @@ async function runCommand(command, context) {
   }
 
   if (trimmed === 'screen') {
+    await context.flushTerminal();
     console.log('--- screen ---');
     console.log(screenText(context.term));
     console.log('--- end screen ---');
@@ -212,12 +232,14 @@ async function runCommand(command, context) {
   if (trimmed.startsWith('key ')) {
     context.stream.write(keyBytes(trimmed.slice(4)));
     await sleep(context.readyMs);
+    await context.flushTerminal();
     return true;
   }
 
   if (trimmed.startsWith('type ')) {
     context.stream.write(trimmed.slice(5));
     await sleep(context.readyMs);
+    await context.flushTerminal();
     return true;
   }
 
@@ -233,12 +255,14 @@ async function runCommand(command, context) {
     context.term.resize(cols, rows);
     context.stream.setWindow(rows, cols, rows * 16, cols * 8);
     await sleep(context.readyMs);
+    await context.flushTerminal();
     return true;
   }
 
   if (trimmed.startsWith('wait ')) {
     const ms = Number.parseInt(trimmed.slice(5), 10);
     await sleep(ms);
+    await context.flushTerminal();
     return true;
   }
 
@@ -297,12 +321,14 @@ async function main() {
     rows: opts.height,
     allowProposedApi: true
   });
+  const terminalWriter = createTerminalWriter(term);
 
   const conn = await connect(opts);
-  const stream = await openShell(conn, opts, term);
-  const context = { conn, stream, term, readyMs: opts.readyMs };
+  const stream = await openShell(conn, opts, { write: terminalWriter.write });
+  const context = { conn, stream, term, readyMs: opts.readyMs, flushTerminal: terminalWriter.flush };
 
   await sleep(opts.readyMs);
+  await context.flushTerminal();
 
   try {
     if (opts.script) {

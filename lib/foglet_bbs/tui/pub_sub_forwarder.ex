@@ -42,12 +42,35 @@ defmodule Foglet.TUI.PubSubForwarder do
 
   @control_topic_prefix "tui:pubsub_forwarder:"
 
+  @doc "Ensures a dispatcher-owned forwarder exists, then refreshes its topics."
+  def ensure_refreshed(dispatcher_pid \\ self(), topics)
+      when is_pid(dispatcher_pid) and is_list(topics) do
+    case :global.whereis_name(registry_name(dispatcher_pid)) do
+      pid when is_pid(pid) ->
+        refresh(dispatcher_pid, topics)
+
+      :undefined ->
+        case start(%{topics: topics}, %{pid: dispatcher_pid}) do
+          {:ok, _pid} -> refresh(dispatcher_pid, topics)
+          {:error, {:already_started, _pid}} -> refresh(dispatcher_pid, topics)
+          {:error, _reason} = error -> error
+        end
+    end
+  end
+
   @doc "Broadcasts a topic refresh to the forwarder owned by `dispatcher_pid`."
   def refresh(dispatcher_pid \\ self(), topics) when is_pid(dispatcher_pid) and is_list(topics) do
+    message = {:pubsub_forwarder, {:refresh_topics, normalize_topics(topics)}}
+
+    case :global.whereis_name(registry_name(dispatcher_pid)) do
+      pid when is_pid(pid) -> send(pid, message)
+      :undefined -> :ok
+    end
+
     Phoenix.PubSub.broadcast(
       FogletBbs.PubSub,
       control_topic(dispatcher_pid),
-      {:pubsub_forwarder, {:refresh_topics, normalize_topics(topics)}}
+      message
     )
   end
 
@@ -66,6 +89,11 @@ defmodule Foglet.TUI.PubSubForwarder do
     GenServer.start_link(__MODULE__, {args, context})
   end
 
+  @doc "Starts an unlinked dispatcher-owned forwarder for dynamic login/topic refreshes."
+  def start(args, context) do
+    GenServer.start(__MODULE__, {args, context})
+  end
+
   @impl GenServer
   def init({%{topics: topics}, %{pid: dispatcher_pid}}) do
     pubsub = FogletBbs.PubSub
@@ -73,15 +101,24 @@ defmodule Foglet.TUI.PubSubForwarder do
     control_topic = control_topic(dispatcher_pid)
 
     :ok = Phoenix.PubSub.subscribe(pubsub, control_topic)
+    dispatcher_ref = Process.monitor(dispatcher_pid)
+    _ = :global.register_name(registry_name(dispatcher_pid), self())
     subscribe_topics(pubsub, topics)
 
     {:ok,
      %{
        dispatcher_pid: dispatcher_pid,
+       dispatcher_ref: dispatcher_ref,
        control_topic: control_topic,
        topics: topics,
-       pubsub: pubsub
+       pubsub: pubsub,
+       last_forwarded: nil
      }}
+  end
+
+  @impl GenServer
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{dispatcher_ref: ref} = state) do
+    {:stop, :normal, state}
   end
 
   @impl GenServer
@@ -100,11 +137,21 @@ defmodule Foglet.TUI.PubSubForwarder do
   end
 
   @impl GenServer
+  def handle_info(msg, %{last_forwarded: msg} = state) do
+    {:noreply, state}
+  end
+
   def handle_info(msg, state) do
     # Forward every arriving message to the Dispatcher as a subscription message
     # so that Raxol routes it through the app's update/2.
     send(state.dispatcher_pid, {:subscription, msg})
-    {:noreply, state}
+    {:noreply, %{state | last_forwarded: msg}}
+  end
+
+  @impl GenServer
+  def terminate(_reason, state) do
+    :global.unregister_name(registry_name(state.dispatcher_pid))
+    :ok
   end
 
   defp normalize_topics(topics) do
@@ -112,6 +159,8 @@ defmodule Foglet.TUI.PubSubForwarder do
     |> Enum.filter(&is_binary/1)
     |> Enum.uniq()
   end
+
+  defp registry_name(dispatcher_pid), do: {__MODULE__, dispatcher_pid}
 
   defp subscribe_topics(pubsub, topics) do
     Enum.each(topics, &Phoenix.PubSub.subscribe(pubsub, &1))

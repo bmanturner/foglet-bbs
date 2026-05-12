@@ -202,6 +202,7 @@ defmodule Foglet.TUI.Screens.Account do
   defp render_model(%Context{} = context, %State{} = local_state) do
     %{
       current_user: context.current_user,
+      unread_count: context.unread_count,
       session_context: context.session_context,
       terminal_size: context.terminal_size,
       current_screen: :account,

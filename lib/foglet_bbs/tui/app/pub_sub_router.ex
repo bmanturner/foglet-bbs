@@ -67,7 +67,8 @@ defmodule Foglet.TUI.App.PubSubRouter do
   module cannot reference `App.t/0` in its specs).
   """
   @spec forward(struct(), tuple()) :: {struct(), [Raxol.Core.Runtime.Command.t()]}
-  def forward(state, {:notifications, _event, _payload} = msg) do
+  def forward(state, {:notifications, event, payload} = msg) do
+    state = store_live_unread_count(state, event, payload)
     current_key = Routing.screen_key(Routing.current_route(state))
 
     [:main_menu, current_key]
@@ -81,4 +82,26 @@ defmodule Foglet.TUI.App.PubSubRouter do
   def forward(state, msg) when is_routable(msg) do
     Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
+
+  defp store_live_unread_count(state, :created, payload) do
+    if unread_created_payload?(payload) do
+      Map.update(state, :unread_count, 1, &(&1 + 1))
+    else
+      state
+    end
+  end
+
+  defp store_live_unread_count(state, :read, _payload) do
+    Map.update(state, :unread_count, 0, &max(&1 - 1, 0))
+  end
+
+  defp store_live_unread_count(state, :all_read, _payload) do
+    Map.put(state, :unread_count, 0)
+  end
+
+  defp store_live_unread_count(state, _event, _payload), do: state
+
+  defp unread_created_payload?(%{read_at: nil}), do: true
+  defp unread_created_payload?(%{read_at: %DateTime{}}), do: false
+  defp unread_created_payload?(_payload), do: true
 end

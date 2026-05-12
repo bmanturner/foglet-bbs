@@ -4,7 +4,7 @@ defmodule Foglet.TUI.AppStructTest do
   alias Foglet.TUI.App
 
   describe "struct shape (Phase 39 R1, D-19)" do
-    test "%App{} contains exactly the eight runtime-shell fields" do
+    test "%App{} contains exactly the nine runtime-shell fields" do
       keys = App.__struct__() |> Map.keys() |> Enum.sort()
 
       assert keys == [
@@ -16,7 +16,8 @@ defmodule Foglet.TUI.AppStructTest do
                :screen_state,
                :session_context,
                :session_pid,
-               :terminal_size
+               :terminal_size,
+               :unread_count
              ]
     end
 

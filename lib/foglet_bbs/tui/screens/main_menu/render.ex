@@ -64,6 +64,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     %{
       current_screen: :main_menu,
       current_user: context.current_user,
+      unread_count: context.unread_count,
       session_context: context.session_context,
       domain: context.domain,
       session_pid: context.session_pid,

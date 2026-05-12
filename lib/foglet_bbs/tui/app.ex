@@ -6,7 +6,7 @@ defmodule Foglet.TUI.App do
   `widgets/*` are the instruments. This module holds the canonical UI
   shell — an 8-field struct (`current_screen`, `current_user`,
   `session_context`, `session_pid`, `terminal_size`, `route_params`,
-  `modal`, `screen_state`) — while `Foglet.TUI.App.{Bootstrap, Door,
+  `modal`, `screen_state`, `unread_count`) — while `Foglet.TUI.App.{Bootstrap, Door,
   MessageNormalizer, PubSubRouter, Routing, Modal, Effects, Subscriptions,
   ScreenStates, SessionAlias, Tasks}` own the extracted runtime details. Per-screen state lives in screen-owned `%State{}`
   structs stored under `screen_state`, keyed by screen atom; each screen is a
@@ -60,7 +60,8 @@ defmodule Foglet.TUI.App do
           terminal_size: {pos_integer(), pos_integer()},
           route_params: map(),
           modal: Foglet.TUI.Modal.t() | nil,
-          screen_state: map()
+          screen_state: map(),
+          unread_count: non_neg_integer()
         }
 
   defstruct current_screen: :login,
@@ -70,7 +71,8 @@ defmodule Foglet.TUI.App do
             terminal_size: {80, 24},
             route_params: %{},
             modal: nil,
-            screen_state: %{}
+            screen_state: %{},
+            unread_count: 0
 
   # Public delegators kept on App as stable public boundaries for render
   # fixtures, smoke helpers, and screen tests that construct App state outside
@@ -142,6 +144,11 @@ defmodule Foglet.TUI.App do
 
   @impl true
   def subscribe(state) do
+    Subscriptions.subscribe(state)
+  end
+
+  @impl true
+  def subscriptions(state) do
     Subscriptions.subscribe(state)
   end
 
