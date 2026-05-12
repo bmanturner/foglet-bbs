@@ -41,9 +41,17 @@ defmodule Foglet.TUI.App.Subscriptions do
         []
       end
 
+    notification_topics =
+      if state.current_user do
+        [PubSub.notifications_topic(state.current_user.id)]
+      else
+        []
+      end
+
     clock_topics = [PubSub.tui_clock_topic()]
 
-    clock_topics ++ user_topics ++ screen_declared_topics(state)
+    (clock_topics ++ user_topics ++ screen_declared_topics(state) ++ notification_topics)
+    |> Enum.uniq()
   end
 
   @doc "Returns topics from the active screen's optional `subscriptions/2` callback."

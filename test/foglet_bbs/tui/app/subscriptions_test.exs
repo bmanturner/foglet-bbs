@@ -124,7 +124,7 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
            } = custom_subscription(subscriptions, Foglet.TUI.PubSubForwarder)
   end
 
-  test "PubSubForwarder subscription combines user and active screen topics" do
+  test "PubSubForwarder subscription combines user, notification, and active screen topics" do
     user = %Foglet.Accounts.User{id: "u-subscriptions", handle: "alice"}
     clock_topic = Foglet.PubSub.tui_clock_topic()
 
@@ -137,7 +137,8 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
                    ^clock_topic,
                    "user:u-subscriptions",
                    "sample:state",
-                   "sample:route"
+                   "sample:route",
+                   "notifications:u-subscriptions"
                  ]
                }
              }
@@ -189,7 +190,8 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
                        ^clock_topic,
                        "user:u-refresh",
                        "sample:state",
-                       "sample:route"
+                       "sample:route",
+                       "notifications:u-refresh"
                      ]}}
   end
 end
