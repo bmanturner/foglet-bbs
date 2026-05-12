@@ -1,12 +1,16 @@
 defmodule Foglet.ModerationTest do
   use FogletBbs.DataCase, async: false
 
+  import Ecto.Query, warn: false
+
   alias Foglet.Accounts
   alias Foglet.Moderation
   alias Foglet.Moderation.{Action, Report}
+  alias Foglet.Notifications.Notification
   alias Foglet.Oneliners
   alias FogletBbs.AccountsFixtures
   alias FogletBbs.BoardsFixtures
+  alias FogletBbs.Repo
 
   describe "record_hide_oneliner!/4" do
     test "inserts a durable hide-oneliner audit action" do
@@ -192,6 +196,74 @@ defmodule Foglet.ModerationTest do
       assert dismissed.resolved_by_id == moderator.id
       assert dismissed.resolution_note == "not actionable"
       assert %DateTime{} = dismissed.resolved_at
+    end
+
+    test "resolving a report notifies only the reporter with a privacy-safe deduped summary" do
+      moderator = moderator_fixture()
+      reporter = AccountsFixtures.user_fixture()
+      unrelated = AccountsFixtures.user_fixture()
+
+      report =
+        report_fixture(moderator, reporter, %{
+          reason: "spam",
+          notes: "private reporter notes with @#{unrelated.handle}"
+        })
+
+      assert {:ok, %Report{} = resolved} =
+               Moderation.resolve_report(moderator, report, %{
+                 resolution_note: "private moderator note"
+               })
+
+      [notification] = Repo.all(Notification)
+      assert notification.user_id == reporter.id
+      assert notification.actor_id == moderator.id
+      assert notification.kind == :mod_action
+      assert notification.dedupe_key == "mod_action:report:#{report.id}:resolved"
+
+      assert notification.payload == %{
+               "action_id" => report.id,
+               "action_kind" => "resolve_report",
+               "reason" => "Your report was resolved."
+             }
+
+      assert Repo.aggregate(Notification, :count) == 1
+      refute Repo.exists?(from n in Notification, where: n.user_id == ^unrelated.id)
+
+      payload_text = inspect(notification.payload)
+      refute payload_text =~ report.notes
+      refute payload_text =~ resolved.resolution_note
+      refute payload_text =~ unrelated.handle
+    end
+
+    test "dismissing a report notifies the reporter once and preserves audit-free report workflow" do
+      moderator = moderator_fixture()
+      reporter = AccountsFixtures.user_fixture()
+      report = report_fixture(moderator, reporter, %{notes: "do not leak this"})
+
+      assert {:ok, %Report{} = dismissed} =
+               Moderation.dismiss_report(moderator, report, %{
+                 resolution_note: "private moderator dismissal note"
+               })
+
+      assert dismissed.status == :dismissed
+      assert Repo.aggregate(Action, :count) == 0
+
+      assert [%Notification{} = notification] = Repo.all(Notification)
+      assert notification.user_id == reporter.id
+      assert notification.dedupe_key == "mod_action:report:#{report.id}:dismissed"
+
+      assert notification.payload == %{
+               "action_id" => report.id,
+               "action_kind" => "dismiss_report",
+               "reason" => "Your report was dismissed."
+             }
+
+      assert {:error, :not_open} =
+               Moderation.dismiss_report(moderator, dismissed, %{
+                 resolution_note: "second pass"
+               })
+
+      assert Repo.aggregate(Notification, :count) == 1
     end
   end
 

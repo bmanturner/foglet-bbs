@@ -11,6 +11,7 @@ defmodule Foglet.Oneliners do
   alias Foglet.Accounts.User
   alias Foglet.Authorization
   alias Foglet.Moderation
+  alias Foglet.Notifications
   alias Foglet.Oneliners.Entry
   alias FogletBbs.Repo
 
@@ -77,7 +78,7 @@ defmodule Foglet.Oneliners do
         with {:ok, hidden_entry} <- Repo.update(changeset) do
           hidden_entry = Repo.preload(hidden_entry, :user)
 
-          _action =
+          action =
             Moderation.record_hide_oneliner!(
               actor,
               hidden_entry,
@@ -85,7 +86,9 @@ defmodule Foglet.Oneliners do
               oneliner_metadata(hidden_entry)
             )
 
-          {:ok, hidden_entry}
+          with :ok <- maybe_emit_hide_notification(actor, hidden_entry, action) do
+            {:ok, hidden_entry}
+          end
         end
       end)
     end
@@ -159,5 +162,25 @@ defmodule Foglet.Oneliners do
       "body" => entry.body,
       "author_handle" => entry.user.handle
     }
+  end
+
+  defp maybe_emit_hide_notification(%User{id: actor_id}, %Entry{user_id: actor_id}, _action),
+    do: :ok
+
+  defp maybe_emit_hide_notification(%User{} = actor, %Entry{} = entry, action) do
+    with {:ok, _notification} <-
+           Notifications.create_notification(%{
+             user_id: entry.user_id,
+             actor_id: actor.id,
+             kind: :mod_action,
+             dedupe_key: "mod_action:oneliner:#{entry.id}:hidden",
+             payload: %{
+               action_id: action.id,
+               action_kind: "hide_oneliner",
+               reason: "Your oneliner was hidden."
+             }
+           }) do
+      :ok
+    end
   end
 end

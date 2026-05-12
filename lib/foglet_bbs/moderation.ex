@@ -11,6 +11,7 @@ defmodule Foglet.Moderation do
   alias Foglet.Boards
   alias Foglet.Boards.Board
   alias Foglet.Moderation.{Action, Report}
+  alias Foglet.Notifications
   alias Foglet.Oneliners.Entry
   alias Foglet.Posts.Post
   alias Foglet.QueryHelpers
@@ -295,14 +296,43 @@ defmodule Foglet.Moderation do
   end
 
   defp persist_report_status(%Report{} = report, attrs, status, resolver_id) do
-    report
-    |> Report.resolution_changeset(attrs, status, resolver_id)
-    |> Repo.update()
-    |> case do
-      {:ok, updated} -> {:ok, Repo.preload(updated, [:reporter, :resolved_by])}
-      {:error, %Changeset{} = changeset} -> {:error, changeset}
-    end
+    Repo.transact(fn ->
+      report
+      |> Report.resolution_changeset(attrs, status, resolver_id)
+      |> Repo.update()
+      |> case do
+        {:ok, updated} ->
+          updated = Repo.preload(updated, [:reporter, :resolved_by])
+
+          with {:ok, _notification} <- emit_report_outcome_notification(updated) do
+            {:ok, updated}
+          end
+
+        {:error, %Changeset{} = changeset} ->
+          {:error, changeset}
+      end
+    end)
   end
+
+  defp emit_report_outcome_notification(%Report{} = report) do
+    Notifications.create_notification(%{
+      user_id: report.reporter_id,
+      actor_id: report.resolved_by_id,
+      kind: :mod_action,
+      dedupe_key: "mod_action:report:#{report.id}:#{report.status}",
+      payload: %{
+        action_id: report.id,
+        action_kind: report_notification_action_kind(report.status),
+        reason: report_notification_reason(report.status)
+      }
+    })
+  end
+
+  defp report_notification_action_kind(:resolved), do: "resolve_report"
+  defp report_notification_action_kind(:dismissed), do: "dismiss_report"
+
+  defp report_notification_reason(:resolved), do: "Your report was resolved."
+  defp report_notification_reason(:dismissed), do: "Your report was dismissed."
 
   defp fetch_report(%Report{} = report),
     do: {:ok, report |> Repo.preload([:reporter, :resolved_by]) |> with_target_summary()}

@@ -4,6 +4,7 @@ defmodule Foglet.OnelinersTest do
   import Ecto.Query, warn: false
 
   alias Foglet.Moderation.Action
+  alias Foglet.Notifications.Notification
   alias Foglet.Oneliners
   alias Foglet.Oneliners.Entry
   alias FogletBbs.AccountsFixtures
@@ -221,6 +222,32 @@ defmodule Foglet.OnelinersTest do
       assert action.reason == "abuse"
       assert action.mod_id == actor.id
       assert action.metadata == %{"body" => "metadata body", "author_handle" => author.handle}
+
+      assert [%Notification{} = notification] = Repo.all(Notification)
+      assert notification.user_id == author.id
+      assert notification.actor_id == actor.id
+      assert notification.kind == :mod_action
+      assert notification.dedupe_key == "mod_action:oneliner:#{hidden_entry.id}:hidden"
+
+      assert notification.payload == %{
+               "action_id" => action.id,
+               "action_kind" => "hide_oneliner",
+               "reason" => "Your oneliner was hidden."
+             }
+
+      payload_text = inspect(notification.payload)
+      refute payload_text =~ "metadata body"
+      refute payload_text =~ author.handle
+    end
+
+    test "self-owned moderator hide keeps audit but does not notify the content owner" do
+      actor = operator_fixture(:mod)
+      {:ok, entry} = Oneliners.create_entry(actor, %{body: "self-owned"})
+
+      assert {:ok, %Entry{}} = Oneliners.hide_entry(actor, entry.id, "cleanup")
+
+      assert Repo.aggregate(Action, :count) == 1
+      assert Repo.aggregate(Notification, :count) == 0
     end
 
     test "already-hidden entries cannot be hidden again or re-audited" do
