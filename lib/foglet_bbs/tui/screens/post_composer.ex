@@ -23,7 +23,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Config
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, Layout}
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostComposer.State
   alias Foglet.TUI.TextWidth
@@ -123,18 +123,24 @@ defmodule Foglet.TUI.Screens.PostComposer do
     {width, height} = context.terminal_size || @default_terminal_size
     max = max_len(context)
 
-    content =
+    editor =
       EditorFrame.render(
         mode: state.mode,
         focused?: state.mode == :edit,
-        context: reply_context(state.reply_to, width, theme),
+        context:
+          if(enhanced_edit?(state.mode, {width, height}),
+            do: nil,
+            else: reply_context(state.reply_to, width, theme)
+          ),
         body: composer_body(state.mode, input_st, draft, frame_state, theme, width),
         budgets: [%{label: "Body", count: String.length(draft), limit: max}],
         error: state.error,
-        width: max(width - 4, 20),
+        width: editor_width(state.mode, {width, height}),
         height: max(height - 6, 10),
         theme: theme
       )
+
+    content = enhanced_compose_workspace(editor, state, draft, max, theme, {width, height})
 
     chrome = %{
       breadcrumb_parts:
@@ -237,6 +243,69 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
       {:error, :not_configured} ->
         MarkdownBody.render(draft, body_width, theme, wrap: true)
+    end
+  end
+
+  defp enhanced_edit?(:edit, size), do: Layout.enhanced?(size)
+  defp enhanced_edit?(_mode, _size), do: false
+
+  defp editor_width(:edit, {width, _height} = size) do
+    if Layout.enhanced?(size), do: max(width - 34, 60), else: max(width - 4, 20)
+  end
+
+  defp editor_width(_mode, {width, _height}), do: max(width - 4, 20)
+
+  defp enhanced_compose_workspace(editor, %State{mode: :edit} = state, draft, max, theme, size) do
+    if Layout.enhanced?(size) do
+      Layout.left_heavy_split(editor, writing_support_panel(state, draft, max, theme, size),
+        terminal_size: size,
+        ratio: {4, 1},
+        min_size: 20
+      )
+    else
+      editor
+    end
+  end
+
+  defp enhanced_compose_workspace(editor, _state, _draft, _max, _theme, _size), do: editor
+
+  defp writing_support_panel(%State{} = state, draft, max, theme, {width, height}) do
+    rail_width = min(30, max(width - editor_width(:edit, {width, height}) - 6, 20))
+    remaining = max - String.length(draft)
+    status = if String.trim(draft) == "", do: "Needs body", else: "Ready to post"
+
+    box style: %{
+          border: :single,
+          padding: 1,
+          width: rail_width,
+          height: max(height - 6, 10),
+          fg: theme.dim.fg
+        } do
+      column style: %{gap: 0} do
+        [
+          text("Reply context", fg: theme.accent.fg, style: [:bold]),
+          text("Thread", fg: theme.dim.fg),
+          text(TextWidth.truncate(thread_title_label(state), max(rail_width - 4, 10)),
+            fg: theme.primary.fg
+          ),
+          text("Board", fg: theme.dim.fg),
+          text(TextWidth.truncate(board_label(state), max(rail_width - 4, 10)),
+            fg: theme.primary.fg
+          ),
+          text(" ", fg: theme.dim.fg),
+          text("Quoted post", fg: theme.accent.fg, style: [:bold])
+        ] ++
+          List.wrap(reply_context(state.reply_to, rail_width, theme)) ++
+          [
+            text(" ", fg: theme.dim.fg),
+            text("Writing", fg: theme.accent.fg, style: [:bold]),
+            text("#{String.length(draft)} / #{max} chars", fg: theme.dim.fg),
+            text("#{max(remaining, 0)} remaining", fg: theme.dim.fg),
+            text(status, fg: theme.primary.fg),
+            text(" ", fg: theme.dim.fg),
+            text("Tab previews · Ctrl+S posts", fg: theme.dim.fg)
+          ]
+      end
     end
   end
 

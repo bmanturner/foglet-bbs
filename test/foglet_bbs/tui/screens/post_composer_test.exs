@@ -83,6 +83,15 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
   defp render_screen(local_state, %Context{} = context),
     do: PostComposer.render(local_state, context)
 
+  defp contains_type?(rendered, type) when is_map(rendered) do
+    Map.get(rendered, :type) == type or Enum.any?(Map.values(rendered), &contains_type?(&1, type))
+  end
+
+  defp contains_type?(rendered, type) when is_list(rendered),
+    do: Enum.any?(rendered, &contains_type?(&1, type))
+
+  defp contains_type?(_rendered, _type), do: false
+
   defp render_screen(state) do
     render_screen(composer_ss(state), composer_context_from_state(state))
   end
@@ -964,6 +973,29 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       state = State.new(thread_id: "t1", board_id: "b1", value: "# hi", mode: :preview)
 
       assert _rendered = render_screen(state, context)
+    end
+
+    test "PostComposer.render/2 uses enhanced split workspace at 120x36" do
+      context = composer_context(terminal_size: {120, 36})
+
+      state =
+        State.new(
+          thread_id: "t1",
+          board_id: "b1",
+          thread: %{id: "t1", title: "Welcome thread", board_id: "b1"},
+          board: %{id: "b1", name: "general"},
+          reply_to: %{id: "p1", body: "Original post body", user: %{handle: "sysop"}},
+          value: "draft body"
+        )
+
+      assert render_screen(state, context) |> contains_type?(:split_pane)
+    end
+
+    test "PostComposer.render/2 keeps preview as one readable pane at enhanced width" do
+      context = composer_context(terminal_size: {120, 36})
+      state = State.new(thread_id: "t1", board_id: "b1", value: "# hi", mode: :preview)
+
+      refute render_screen(state, context) |> contains_type?(:split_pane)
     end
   end
 

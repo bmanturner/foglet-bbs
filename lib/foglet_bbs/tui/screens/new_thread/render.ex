@@ -9,6 +9,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   """
 
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Layout
   alias Foglet.TUI.Screens.NewThread.State
   alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.TextWidth
@@ -132,11 +133,15 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
     title_value = ss.title_input_state.raxol_state.value
     body_value = ss.body_input_state.value
 
-    content =
+    editor =
       EditorFrame.render(
         mode: ss.mode,
         focused?: ss.focused == :body and ss.mode == :edit,
-        context: compose_context(ss, width, theme),
+        context:
+          if(enhanced_edit?(ss, {width, height}),
+            do: nil,
+            else: compose_context(ss, width, theme)
+          ),
         title: render_title_input(ss, theme),
         body: render_body_section(state, ss, theme),
         budgets: [
@@ -144,9 +149,20 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
           %{label: "Body", count: String.length(body_value), limit: max_body_length(ss, state)}
         ],
         error: ss.error,
-        width: max(width - 4, 20),
+        width: editor_width(ss, {width, height}),
         height: max(height - 6, 10),
         theme: theme
+      )
+
+    content =
+      enhanced_compose_workspace(
+        editor,
+        state,
+        ss,
+        title_value,
+        body_value,
+        theme,
+        {width, height}
       )
 
     ScreenFrame.render(state, new_thread_chrome(ss), content, [
@@ -188,6 +204,82 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   defp compose_tab_hint(%{focused: :body, mode: :edit}), do: "Preview"
   defp compose_tab_hint(%{focused: :body, mode: :preview}), do: "Edit"
   defp compose_tab_hint(_ss), do: "To body"
+
+  defp enhanced_edit?(%State{mode: :edit}, size), do: Layout.enhanced?(size)
+  defp enhanced_edit?(_ss, _size), do: false
+
+  defp editor_width(%State{mode: :edit}, {width, _height} = size) do
+    if Layout.enhanced?(size), do: max(width - 34, 60), else: max(width - 4, 20)
+  end
+
+  defp editor_width(_ss, {width, _height}), do: max(width - 4, 20)
+
+  defp enhanced_compose_workspace(
+         editor,
+         state,
+         %State{mode: :edit} = ss,
+         title,
+         body,
+         theme,
+         size
+       ) do
+    if Layout.enhanced?(size) do
+      Layout.left_heavy_split(editor, thread_support_panel(state, ss, title, body, theme, size),
+        terminal_size: size,
+        ratio: {4, 1},
+        min_size: 20
+      )
+    else
+      editor
+    end
+  end
+
+  defp enhanced_compose_workspace(editor, _state, _ss, _title, _body, _theme, _size), do: editor
+
+  defp thread_support_panel(state, ss, title, body, theme, {width, height}) do
+    rail_width = min(30, max(width - editor_width(ss, {width, height}) - 6, 20))
+    body_max = max_body_length(ss, state)
+    remaining = body_max - String.length(body)
+
+    status =
+      if String.trim(title) == "" or String.trim(body) == "",
+        do: "Needs title/body",
+        else: "Ready to post"
+
+    box style: %{
+          border: :single,
+          padding: 1,
+          width: rail_width,
+          height: max(height - 6, 10),
+          fg: theme.dim.fg
+        } do
+      column style: %{gap: 0} do
+        [
+          text("Thread context", fg: theme.accent.fg, style: [:bold]),
+          text("Board", fg: theme.dim.fg),
+          text(TextWidth.truncate(board_label(ss), max(rail_width - 4, 10)),
+            fg: theme.primary.fg
+          ),
+          text("Title", fg: theme.dim.fg),
+          text(TextWidth.truncate(blank_label(title), max(rail_width - 4, 10)),
+            fg: theme.primary.fg
+          ),
+          text(" ", fg: theme.dim.fg),
+          text("Writing", fg: theme.accent.fg, style: [:bold]),
+          text("#{String.length(body)} / #{body_max} chars", fg: theme.dim.fg),
+          text("#{max(remaining, 0)} remaining", fg: theme.dim.fg),
+          text(status, fg: theme.primary.fg),
+          text(" ", fg: theme.dim.fg),
+          text("Tab moves title/body/preview", fg: theme.dim.fg),
+          text("Ctrl+S posts when ready", fg: theme.dim.fg)
+        ]
+      end
+    end
+  end
+
+  defp blank_label(value) when is_binary(value) do
+    if String.trim(value) == "", do: "—", else: value
+  end
 
   # FOG-712: drop the redundant `Draft <title>` row. The Title input itself
   # plus the breadcrumb (`Foglet ▸ <board> ▸ New Thread`) and this Board row
