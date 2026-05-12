@@ -15,6 +15,8 @@ defmodule Foglet.Posts do
   alias Foglet.Accounts.User
   alias Foglet.Boards
   alias Foglet.Boards.Board
+  alias Foglet.Notifications
+  alias Foglet.Notifications.Mentions
   alias Foglet.PostingPolicy
   alias Foglet.Posts.{Edit, Post, ReaderWindow, Upvote}
   alias Foglet.Threads.Thread
@@ -65,9 +67,59 @@ defmodule Foglet.Posts do
         {:error, :thread_locked}
 
       true ->
-        Boards.Server.create_post(board_id, thread_id, user_id, attrs)
+        with {:ok, post} <- Boards.Server.create_post(board_id, thread_id, user_id, attrs) do
+          emit_mention_notifications(post, attrs)
+          {:ok, post}
+        end
     end
   end
+
+  defp emit_mention_notifications(%Post{} = post, attrs) do
+    attrs
+    |> post_body()
+    |> Mentions.extract_handles()
+    |> active_mentioned_users(post.user_id)
+    |> Enum.each(&create_mention_notification(&1, post))
+  end
+
+  defp post_body(attrs), do: Map.get(attrs, :body, Map.get(attrs, "body", ""))
+
+  defp active_mentioned_users([], _actor_id), do: []
+
+  defp active_mentioned_users(handles, actor_id) do
+    normalized_handles = Enum.map(handles, &String.downcase/1)
+
+    User
+    |> where([user], user.status == :active)
+    |> where([user], is_nil(user.deleted_at))
+    |> where([user], user.id != ^actor_id)
+    |> where([user], fragment("lower(?)", user.handle) in ^normalized_handles)
+    |> Repo.all()
+  end
+
+  defp create_mention_notification(%User{} = recipient, %Post{} = post) do
+    case Notifications.create_notification(%{
+           user_id: recipient.id,
+           actor_id: post.user_id,
+           kind: :mention,
+           dedupe_key: post_recipient_dedupe_key(post.id, recipient.id),
+           payload: %{
+             board_id: post.board_id,
+             thread_id: post.thread_id,
+             post_id: post.id,
+             snippet: post.body
+           }
+         }) do
+      {:ok, _notification} ->
+        :ok
+
+      {:error, reason} ->
+        Logger.warning("mention notification emission skipped: #{inspect(reason)}")
+    end
+  end
+
+  defp post_recipient_dedupe_key(post_id, recipient_id),
+    do: "post:#{post_id}:user:#{recipient_id}"
 
   defp safe_get(schema, id) when is_binary(id) do
     case Ecto.UUID.cast(id) do
