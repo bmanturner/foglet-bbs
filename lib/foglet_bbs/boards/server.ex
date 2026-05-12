@@ -50,6 +50,7 @@ defmodule Foglet.Boards.Server do
   alias Ecto.Multi
   alias Foglet.Accounts.User
   alias Foglet.Boards.Board
+  alias Foglet.Notifications
   alias Foglet.Posts.Post
   alias Foglet.Threads.Thread
   alias FogletBbs.Repo
@@ -102,6 +103,7 @@ defmodule Foglet.Boards.Server do
 
     case result do
       {:ok, %{post: post}} ->
+        _ = maybe_emit_reply_notification(post)
         {:reply, {:ok, post}, %{state | next_number: n + 1}}
 
       {:error, _op, reason, _changes} ->
@@ -191,6 +193,37 @@ defmodule Foglet.Boards.Server do
     end)
     # Multi step labels :post / :thread_update are load-bearing — see @moduledoc
     |> Repo.transaction()
+  end
+
+  defp maybe_emit_reply_notification(%Post{reply_to_id: nil}), do: :ok
+
+  defp maybe_emit_reply_notification(%Post{} = reply) do
+    case Repo.get(Post, reply.reply_to_id) do
+      %Post{deleted_at: nil, user_id: recipient_id}
+      when not is_nil(recipient_id) and recipient_id != reply.user_id ->
+        create_reply_notification(reply, recipient_id)
+
+      _parent_missing_deleted_or_self ->
+        :ok
+    end
+  end
+
+  defp create_reply_notification(%Post{} = reply, recipient_id) do
+    case Notifications.create_notification(%{
+           user_id: recipient_id,
+           actor_id: reply.user_id,
+           kind: :reply,
+           dedupe_key: "reply:#{reply.id}:#{recipient_id}",
+           payload: %{
+             board_id: reply.board_id,
+             thread_id: reply.thread_id,
+             post_id: reply.id,
+             snippet: reply.body
+           }
+         }) do
+      {:ok, _notification} -> :ok
+      {:error, _changeset} -> :ok
+    end
   end
 
   defp run_thread_create_multi(board_id, user_id, attrs, message_number) do
