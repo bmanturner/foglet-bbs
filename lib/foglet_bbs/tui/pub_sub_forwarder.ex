@@ -42,12 +42,35 @@ defmodule Foglet.TUI.PubSubForwarder do
 
   @control_topic_prefix "tui:pubsub_forwarder:"
 
+  @doc "Ensures a dispatcher-owned forwarder exists, then refreshes its topics."
+  def ensure_refreshed(dispatcher_pid \\ self(), topics)
+      when is_pid(dispatcher_pid) and is_list(topics) do
+    case :global.whereis_name(registry_name(dispatcher_pid)) do
+      pid when is_pid(pid) ->
+        refresh(dispatcher_pid, topics)
+
+      :undefined ->
+        case start_link(%{topics: topics}, %{pid: dispatcher_pid}) do
+          {:ok, _pid} -> refresh(dispatcher_pid, topics)
+          {:error, {:already_started, _pid}} -> refresh(dispatcher_pid, topics)
+          {:error, _reason} = error -> error
+        end
+    end
+  end
+
   @doc "Broadcasts a topic refresh to the forwarder owned by `dispatcher_pid`."
   def refresh(dispatcher_pid \\ self(), topics) when is_pid(dispatcher_pid) and is_list(topics) do
+    message = {:pubsub_forwarder, {:refresh_topics, normalize_topics(topics)}}
+
+    case :global.whereis_name(registry_name(dispatcher_pid)) do
+      pid when is_pid(pid) -> send(pid, message)
+      :undefined -> :ok
+    end
+
     Phoenix.PubSub.broadcast(
       FogletBbs.PubSub,
       control_topic(dispatcher_pid),
-      {:pubsub_forwarder, {:refresh_topics, normalize_topics(topics)}}
+      message
     )
   end
 
@@ -73,6 +96,7 @@ defmodule Foglet.TUI.PubSubForwarder do
     control_topic = control_topic(dispatcher_pid)
 
     :ok = Phoenix.PubSub.subscribe(pubsub, control_topic)
+    _ = :global.register_name(registry_name(dispatcher_pid), self())
     subscribe_topics(pubsub, topics)
 
     {:ok,
@@ -107,11 +131,19 @@ defmodule Foglet.TUI.PubSubForwarder do
     {:noreply, state}
   end
 
+  @impl GenServer
+  def terminate(_reason, state) do
+    :global.unregister_name(registry_name(state.dispatcher_pid))
+    :ok
+  end
+
   defp normalize_topics(topics) do
     topics
     |> Enum.filter(&is_binary/1)
     |> Enum.uniq()
   end
+
+  defp registry_name(dispatcher_pid), do: {__MODULE__, dispatcher_pid}
 
   defp subscribe_topics(pubsub, topics) do
     Enum.each(topics, &Phoenix.PubSub.subscribe(pubsub, &1))

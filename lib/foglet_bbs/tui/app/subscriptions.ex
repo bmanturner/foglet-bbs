@@ -90,7 +90,7 @@ defmodule Foglet.TUI.App.Subscriptions do
     new_topics = topics(new_state)
 
     if old_topics != new_topics do
-      PubSubForwarder.refresh(new_topics)
+      PubSubForwarder.ensure_refreshed(new_topics)
     end
   end
 

@@ -2006,7 +2006,8 @@ defmodule Foglet.TUI.AppTest do
                        ]}}
     end
 
-    test "refreshed PubSub forwarder delivers notification broadcasts after login" do
+    test "login refresh updates the live PubSub forwarder subscription" do
+      {:ok, state} = App.init(%{})
       user = %Foglet.Accounts.User{id: "u-live-forwarder", handle: "alice"}
       notification = {:notifications, :created, %{user_id: user.id}}
       dispatcher_pid = self()
@@ -2014,11 +2015,10 @@ defmodule Foglet.TUI.AppTest do
       {:ok, forwarder} =
         Foglet.TUI.PubSubForwarder.start_link(%{topics: []}, %{pid: dispatcher_pid})
 
-      Foglet.TUI.PubSubForwarder.refresh(dispatcher_pid, [
-        Foglet.PubSub.notifications_topic(user.id)
-      ])
+      {_new_state, _cmds} = App.update({:set_user, user}, state)
+      forwarder_state = :sys.get_state(forwarder)
 
-      :sys.get_state(forwarder)
+      assert Foglet.PubSub.notifications_topic(user.id) in forwarder_state.topics
 
       Phoenix.PubSub.broadcast(
         FogletBbs.PubSub,
