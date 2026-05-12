@@ -724,7 +724,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_queue_workspace(ss, selected, theme, width, height) do
-    table = fresh_queue_table(ss, width, height)
+    {queue_width, inspector_width} = queue_workspace_pane_widths(width)
+    table = fresh_queue_table(ss, queue_width, height)
     inspector = queue_inspector(selected)
 
     queue_column =
@@ -739,17 +740,25 @@ defmodule Foglet.TUI.Screens.Moderation do
 
     inspector_column =
       column style: %{gap: 0} do
-        [Inspector.render(inspector, theme: theme, width: width, min_width: 100)]
+        [Inspector.render(inspector, theme: theme, width: inspector_width, min_width: 40)]
       end
 
     split_pane(
       direction: :horizontal,
-      ratio: {2, 3},
+      ratio: {3, 2},
       min_size: 30,
       divider_char: " ",
       children: [queue_column, inspector_column],
       height: max(height - 2, 1)
     )
+  end
+
+  defp queue_workspace_pane_widths(width) do
+    available = max(width - 1, 0)
+    queue_width = max(div(available * 3, 5), 30)
+    inspector_width = max(available - queue_width, 30)
+
+    {queue_width, inspector_width}
   end
 
   defp render_queue_stack(ss, selected, theme, width, height) do
