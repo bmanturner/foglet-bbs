@@ -2300,9 +2300,10 @@ defmodule Foglet.TUI.AppTest do
       assert_received :unread_count
     end
 
-    test "{:notifications, event, payload} on :notifications triggers inbox reload", %{
-      state: state
-    } do
+    test "{:notifications, event, payload} on :notifications refreshes inbox and cached main menu",
+         %{
+           state: state
+         } do
       Process.put(:fake_notifications_rows, [%{id: "n-1"}])
 
       state = %{state | current_screen: :notifications}
@@ -2310,15 +2311,26 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
 
       assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task, data: unread_task},
+               %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
+             ] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               unread_task.()
 
       assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
-               task.()
+               inbox_task.()
 
+      assert_received :unread_count
       assert_received {:list_recent_notifications, 50}
     end
 
-    test "{:subscription, {:notifications, event, payload}} on :notifications triggers inbox reload",
+    test "{:subscription, {:notifications, event, payload}} on :notifications refreshes inbox and cached main menu",
          %{
            state: state
          } do
@@ -2330,11 +2342,22 @@ defmodule Foglet.TUI.AppTest do
         App.update({:subscription, {:notifications, :created, %{user_id: "u1"}}}, state)
 
       assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+
+      assert %MainMenuState{notifications_status: :loading} =
+               App.screen_state_for(new_state, :main_menu)
+
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task, data: unread_task},
+               %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
+             ] = cmds
+
+      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
+               unread_task.()
 
       assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
-               task.()
+               inbox_task.()
 
+      assert_received :unread_count
       assert_received {:list_recent_notifications, 50}
     end
 

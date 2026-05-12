@@ -54,7 +54,12 @@ defmodule Foglet.TUI.App.PubSubRouter do
   def topics, do: @routable_topics
 
   @doc """
-  Forwards a broadcast to the active screen via `Routing.route_screen_update/3`.
+  Forwards a broadcast to interested screen reducers.
+
+  Most PubSub broadcasts are active-screen concerns. Notification broadcasts are
+  different: the focused Inbox must reload its list, while the cached Main Menu
+  state must also refresh its unread badge so returning home does not depend on
+  navigation-time reloads.
 
   Caller is `Foglet.TUI.App.do_update/2`, which only invokes us under the
   `is_routable/1` guard; we don't reassert the App struct here to avoid a
@@ -62,6 +67,17 @@ defmodule Foglet.TUI.App.PubSubRouter do
   module cannot reference `App.t/0` in its specs).
   """
   @spec forward(struct(), tuple()) :: {struct(), [Raxol.Core.Runtime.Command.t()]}
+  def forward(state, {:notifications, _event, _payload} = msg) do
+    current_key = Routing.screen_key(Routing.current_route(state))
+
+    [:main_menu, current_key]
+    |> Enum.uniq()
+    |> Enum.reduce({state, []}, fn key, {acc_state, acc_commands} ->
+      {next_state, commands} = Routing.route_screen_update(acc_state, key, msg)
+      {next_state, acc_commands ++ commands}
+    end)
+  end
+
   def forward(state, msg) when is_routable(msg) do
     Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
