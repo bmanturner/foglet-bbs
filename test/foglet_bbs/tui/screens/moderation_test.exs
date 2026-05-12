@@ -525,6 +525,23 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert joined =~ "R Refresh"
     end
 
+    test "QUEUE wide render tree survives Raxol preparer at 120x36", %{
+      state: state
+    } do
+      report =
+        report_row(%{id: "rep-1", target_kind: :post, reason: "spam", notes: "needs review"})
+        |> Map.from_struct()
+        |> Map.put(:target_label, "post #42 in general")
+
+      tree =
+        state
+        |> Map.put(:terminal_size, {120, 36})
+        |> put_moderation_state(0, queue: [report])
+        |> render_moderation()
+
+      assert %{} = Raxol.UI.Layout.Preparer.prepare(tree)
+    end
+
     test "QUEUE stacks table and selected report details below the wide breakpoint", %{
       state: state
     } do
