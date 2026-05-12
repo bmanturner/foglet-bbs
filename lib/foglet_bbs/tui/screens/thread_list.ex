@@ -16,7 +16,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.PostingPolicy
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
-  alias Foglet.TUI.{Context, Effect, ScrollKeys, TextWidth}
+  alias Foglet.TUI.{Context, Effect, Layout, ScrollKeys, TextWidth}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.ThreadList.State
@@ -262,13 +262,33 @@ defmodule Foglet.TUI.Screens.ThreadList do
     {width, _h} = context.terminal_size || {80, 24}
     inner_width = max(width - 4, 40)
 
+    list_width = if Layout.enhanced?(context.terminal_size), do: 60, else: inner_width
+
     list =
       SelectionList.render(sorted, state.selected_index, fn {thread, _idx, selected} ->
-        render_thread_row(thread, selected, inner_width, theme)
+        render_thread_row(thread, selected, list_width, theme)
       end)
 
-    column style: %{gap: 0} do
-      header_nodes(state, context, theme) ++ [list]
+    list_panel =
+      column style: %{gap: 0} do
+        header_nodes(state, context, theme) ++ [list]
+      end
+
+    if Layout.enhanced?(context.terminal_size) do
+      list_box =
+        box style: %{border: :single, padding: 1} do
+          list_panel
+        end
+
+      Layout.left_heavy_split(
+        list_box,
+        selected_thread_preview(state, theme),
+        terminal_size: context.terminal_size,
+        ratio: {7, 5},
+        min_size: 28
+      )
+    else
+      list_panel
     end
   end
 
@@ -388,6 +408,48 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   defp posting_disabled?(%State{} = state, current_user) do
     not is_nil(board_state_banner(state, current_user))
+  end
+
+  defp selected_thread_preview(%State{} = state, theme) do
+    thread = selected_thread(state)
+
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        thread_preview_lines(thread, state, theme)
+      end
+    end
+  end
+
+  defp thread_preview_lines(nil, _state, theme),
+    do: [text("No thread selected.", fg: theme.dim.fg)]
+
+  defp thread_preview_lines(thread, %State{} = state, theme) do
+    [
+      text("Preview", fg: theme.dim.fg, style: [:bold]),
+      text(Map.get(thread, :title, "Untitled thread"), fg: theme.primary.fg, style: [:bold]),
+      text(thread_metadata(thread), fg: theme.unselected.fg),
+      text("Unread for you: " <> if(Map.get(thread, :has_unread, false), do: "yes", else: "no"),
+        fg: theme.unselected.fg
+      ),
+      text(""),
+      text(thread_excerpt(thread), fg: theme.unselected.fg),
+      text(""),
+      text(compose_hint(state), fg: theme.dim.fg)
+    ]
+  end
+
+  defp thread_excerpt(%{excerpt: excerpt}) when is_binary(excerpt) do
+    excerpt |> normalize_description() |> Kernel.||("No preview text is available yet.")
+  end
+
+  defp thread_excerpt(%{body: body}) when is_binary(body) do
+    body |> normalize_description() |> Kernel.||("No preview text is available yet.")
+  end
+
+  defp thread_excerpt(_thread), do: "No preview text is available yet."
+
+  defp compose_hint(%State{} = state) do
+    if archived?(state.board), do: "This board is archived.", else: "C starts a new thread here."
   end
 
   defp render_thread_row(thread, selected, width, theme) do

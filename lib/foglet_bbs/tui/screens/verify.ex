@@ -20,7 +20,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
   alias Foglet.Accounts.Verification
   alias Foglet.AppName
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, Layout}
   alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Theme
@@ -73,7 +73,34 @@ defmodule Foglet.TUI.Screens.Verify do
         height: @auth_card_height
       )
 
-    content = AuthForm.centered(panel, state, theme, @auth_card_height)
+    support_panel =
+      AuthForm.render(
+        "Verification notes",
+        [
+          text("Codes are 6 characters.", fg: theme.primary.fg),
+          text("They may contain letters and numbers.", fg: theme.dim.fg),
+          text(""),
+          text("Ctrl+R can send a fresh code.", fg: theme.dim.fg),
+          text("Esc returns to login.", fg: theme.dim.fg)
+        ],
+        theme,
+        width: 42,
+        height: @auth_card_height
+      )
+
+    content =
+      if Layout.enhanced?(Map.get(state, :terminal_size)) do
+        AuthForm.centered(
+          row style: %{gap: 2, align_items: :start} do
+            [panel, support_panel]
+          end,
+          state,
+          theme,
+          @auth_card_height
+        )
+      else
+        AuthForm.centered(panel, state, theme, @auth_card_height)
+      end
 
     ScreenFrame.render(
       state,

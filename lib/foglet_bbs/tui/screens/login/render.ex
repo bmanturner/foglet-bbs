@@ -3,7 +3,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
   Pure render entry point for the Login screen.
   """
 
-  alias Foglet.TUI.Context
+  alias Foglet.TUI.{Context, Layout}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Login.{MenuScramble, State}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
@@ -155,7 +155,15 @@ defmodule Foglet.TUI.Screens.Login.Render do
 
   defp session_ctx(state), do: Map.get(state, :session_context) || %{}
 
-  defp render_menu(_mode, theme, state) do
+  defp render_menu(mode, theme, state) do
+    if Layout.enhanced?(Map.get(state, :terminal_size)) do
+      render_enhanced_menu(mode, theme, state)
+    else
+      render_standard_menu(theme, state)
+    end
+  end
+
+  defp render_standard_menu(theme, state) do
     {_, terminal_height} = Map.get(state, :terminal_size, {80, 24})
     # WR-05: floor `available` at 2 so `available - top_padding - 2`
     # cannot underflow (top_padding == div(available, 2) ≤ available/2,
@@ -172,6 +180,51 @@ defmodule Foglet.TUI.Screens.Login.Render do
       List.duplicate(pad, top_padding) ++
         MenuScramble.render(State.get(state), theme) ++
         List.duplicate(pad, bottom_padding)
+    end
+  end
+
+  defp render_enhanced_menu(mode, theme, state) do
+    options =
+      mode
+      |> menu_keys(state)
+      |> Enum.map(fn {key, label} -> text("#{key}  #{label}", fg: theme.primary.fg) end)
+
+    welcome =
+      AuthForm.render(
+        "Welcome",
+        AuthForm.helper_text(
+          "A personal SSH bulletin board. Human-scale, terminal-native, and quick to re-enter.",
+          theme,
+          38
+        ) ++
+          [
+            text(""),
+            text("What you will find", fg: theme.title.fg, style: [:bold]),
+            text("- Local conversations", fg: theme.dim.fg),
+            text("- Human-scale boards", fg: theme.dim.fg),
+            text("- SSH-first access", fg: theme.dim.fg)
+          ],
+        theme,
+        width: 42,
+        height: 14
+      )
+
+    enter =
+      AuthForm.render(
+        "Enter Foglet",
+        options ++
+          [
+            text(""),
+            text("Use the single-key shortcuts below to continue.", fg: theme.dim.fg),
+            text("Registration may require email verification.", fg: theme.dim.fg)
+          ],
+        theme,
+        width: 50,
+        height: 14
+      )
+
+    row style: %{gap: 2, align_items: :start} do
+      [welcome, enter]
     end
   end
 
