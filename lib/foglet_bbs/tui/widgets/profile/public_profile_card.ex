@@ -16,9 +16,10 @@ defmodule Foglet.TUI.Widgets.Profile.PublicProfileCard do
 
   @divider_width 44
 
-  @spec render(PublicProfile.t(), Theme.t()) :: term()
-  def render(%PublicProfile{} = profile, %Theme{} = theme) do
+  @spec render(PublicProfile.t(), Theme.t(), keyword()) :: term()
+  def render(%PublicProfile{} = profile, %Theme{} = theme, opts \\ []) do
     lines = detail_lines(profile)
+    footer_hint = Keyword.get(opts, :footer_hint)
 
     header_rows =
       [
@@ -32,7 +33,7 @@ defmodule Foglet.TUI.Widgets.Profile.PublicProfileCard do
       header_rows ++
         public_copy_rows(profile, theme) ++
         Enum.map(lines, &detail_row(&1, theme)) ++
-        [text(""), text("[Enter/Esc] close", fg: theme.dim.fg)]
+        [text(""), footer_row(theme, footer_hint)]
     end
   end
 
@@ -78,6 +79,12 @@ defmodule Foglet.TUI.Widgets.Profile.PublicProfileCard do
         text(safe_one_line(value), fg: theme.primary.fg)
       ]
     end
+  end
+
+  defp footer_row(theme, nil), do: text("[Enter/Esc] close", fg: theme.dim.fg)
+
+  defp footer_row(theme, footer_hint) do
+    text("[Enter/Esc] close   #{footer_hint}", fg: theme.dim.fg)
   end
 
   defp last_seen_line(nil), do: []

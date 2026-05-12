@@ -344,6 +344,52 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert local_state == local_from_app(state)
     end
 
+    test "authenticated users get a single visible ! Report affordance for selected oneliners" do
+      for role <- [:user, :mod, :sysop] do
+        state =
+          role
+          |> build_state()
+          |> with_oneliners([oneliner("alice", "reportable", %{id: "ol1"})])
+          |> with_selected_oneliner(0)
+
+        keys =
+          state
+          |> MainMenu.visible_actions()
+          |> Enum.flat_map(& &1.commands)
+          |> Enum.map(& &1.key)
+
+        assert "!" in keys
+        refute "R" in keys
+
+        {_local_state, effects} = handle_key_result(state, "!")
+
+        assert [
+                 %Effect{
+                   type: :modal,
+                   payload: {:open, %Foglet.TUI.Modal{title: "Report Oneliner"}}
+                 }
+               ] = effects
+
+        {local_state, []} = handle_key_result(state, "R")
+        assert local_state == local_from_app(state)
+      end
+    end
+
+    test "guests do not get the ! Report affordance" do
+      state =
+        build_state(nil)
+        |> with_oneliners([oneliner("alice", "reportable", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      keys =
+        state
+        |> MainMenu.visible_actions()
+        |> Enum.flat_map(& &1.commands)
+        |> Enum.map(& &1.key)
+
+      refute "!" in keys
+    end
+
     test "mods and sysops see Hide oneliner only for authorized selected rows with ids" do
       for role <- [:mod, :sysop] do
         hideable_state =

@@ -44,22 +44,21 @@ defmodule Foglet.TUI.Widgets.Workspace.Inspector do
     actions = Keyword.get(opts, :actions, Map.get(selection, :actions, []))
     detail_width = max(width - @detail_margin, 0)
 
-    [
-      text(title, fg: theme.title.fg, style: theme.title[:style]),
-      text("\n"),
-      KvGrid.render(details, theme: theme, width: detail_width),
-      actions_block(actions, theme)
-    ]
+    detail_rows = KvGrid.render(details, theme: theme, width: detail_width)
+    children = [text(title, fg: theme.title.fg, style: theme.title[:style])] ++ detail_rows
+
+    column style: %{gap: 1} do
+      children ++ actions_block(actions, theme)
+    end
   end
 
   defp actions_block([], _theme), do: []
 
   defp actions_block(actions, %Theme{} = theme) do
     [
-      text("\n"),
-      actions
-      |> Enum.map(&action_text(&1, theme))
-      |> Enum.intersperse(text("  ", fg: theme.dim.fg))
+      row style: %{gap: 2} do
+        Enum.map(actions, &action_text(&1, theme))
+      end
     ]
   end
 

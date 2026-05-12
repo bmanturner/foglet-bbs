@@ -34,6 +34,10 @@ defmodule Foglet.Authorization do
     :delete_post,
     :edit_post_as_mod,
     :hide_oneliner,
+    :create_report,
+    :list_reports,
+    :resolve_report,
+    :dismiss_report,
     :create_board,
     :update_board,
     :archive_board,
@@ -57,6 +61,9 @@ defmodule Foglet.Authorization do
     :delete_post,
     :edit_post_as_mod,
     :hide_oneliner,
+    :list_reports,
+    :resolve_report,
+    :dismiss_report,
     :generate_invite,
     :revoke_invite
   ]
@@ -77,15 +84,8 @@ defmodule Foglet.Authorization do
   @type action :: atom()
   @type scope :: :site | {:board, Ecto.UUID.t()}
 
-  # ---------- Bodyguard.Policy callback ----------
-  #
-  # We always return :ok or {:error, :forbidden} explicitly (never bare :error)
-  # so Bodyguard.permit/4's coercion preserves the reason unchanged (D-14).
-
   @impl Bodyguard.Policy
   @spec authorize(action(), actor(), scope()) :: :ok | {:error, :forbidden}
-
-  # Invalid actor guards (D-24) — checked before any role or action dispatch.
   def authorize(_action, nil, _scope), do: {:error, :forbidden}
 
   def authorize(_action, %User{deleted_at: d}, _scope) when not is_nil(d),
@@ -95,7 +95,6 @@ defmodule Foglet.Authorization do
   def authorize(_action, %User{status: :pending}, _scope), do: {:error, :forbidden}
   def authorize(_action, %User{status: :rejected}, _scope), do: {:error, :forbidden}
 
-  # Unknown action (D-13) — safe default, warning, no raise.
   def authorize(action, _actor, _scope) when action not in @valid_actions do
     Logger.warning(
       "[Foglet.Authorization] Unknown action atom: #{inspect(action)} — returning forbidden"
@@ -104,29 +103,20 @@ defmodule Foglet.Authorization do
     {:error, :forbidden}
   end
 
-  # Sysop: permitted for all valid actions at any scope.
   def authorize(_action, %User{role: :sysop}, _scope), do: :ok
 
-  # Mod: sysop-only actions — explicit deny BEFORE the mod-site allowlist (ordering matters).
   def authorize(:edit_config, %User{role: :mod}, _scope), do: {:error, :forbidden}
 
-  # Mod: site-scope moderation actions.
   def authorize(action, %User{role: :mod}, :site) when action in @mod_site_actions, do: :ok
 
-  # Mod: board-scope moderation actions (subset — no board lifecycle ops).
   def authorize(action, %User{role: :mod}, {:board, _board_id})
       when action in @mod_board_actions,
       do: :ok
 
-  # Regular users may pass the coarse authorization gate for invite generation.
-  # Runtime configuration in Accounts.create_invite/1 still decides whether
-  # "any_user" generation is enabled and applies user caps.
+  def authorize(:create_report, %User{role: :user}, :site), do: :ok
   def authorize(:generate_invite, %User{role: :user}, :site), do: :ok
 
-  # Safe default deny (D-13 catch-all; mirrors InvitesSurface.visible?/3 final clause).
   def authorize(_action, _actor, _scope), do: {:error, :forbidden}
-
-  # ---------- Public helpers (non-Bodyguard) ----------
 
   @doc """
   Returns the list of scopes an actor is authorized to operate over for a given
