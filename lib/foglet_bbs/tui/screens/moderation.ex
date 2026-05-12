@@ -320,10 +320,10 @@ defmodule Foglet.TUI.Screens.Moderation do
         %{
           label: "Actions",
           commands: [
-            %{key: "V", label: "View target", priority: 35},
-            %{key: "E", label: "Resolve", priority: 30},
-            %{key: "D", label: "Dismiss", priority: 30},
-            %{key: "R", label: "Refresh", priority: 25}
+            %{key: "V", label: "View", priority: 5},
+            %{key: "E", label: "Resolve", priority: 5},
+            %{key: "D", label: "Dismiss", priority: 5},
+            %{key: "R", label: "Refresh", priority: 5}
           ]
         }
       ]
@@ -789,6 +789,7 @@ defmodule Foglet.TUI.Screens.Moderation do
       title: "Selected report",
       details: [
         %{label: "Target", value: report_target_label(report)},
+        %{label: "Source", value: report_target_source(report)},
         %{label: "Reason", value: report_reason(report)},
         %{
           label: "Reported by",
@@ -808,9 +809,11 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp selected_report_summary_lines(report) do
     [
       "Target: #{report_target_label(report)}",
+      "Source: #{report_target_source(report)}",
       "Reason: #{report_reason(report)}",
       "Reported by: @#{report |> Map.get(:reporter) |> Map.get(:handle, "unknown")}",
-      "Notes: #{report_notes(report)}"
+      "Notes: #{report_notes(report)}",
+      "Actions: [V] View  [E] Resolve  [D] Dismiss  [R] Refresh"
     ]
   end
 
@@ -823,6 +826,13 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp report_target_label(report) do
     Map.get(report, :target_label) || Map.get(report, "target_label") ||
       report_target_kind(report)
+  end
+
+  defp report_target_source(report) do
+    case Map.get(report, :target_source) || Map.get(report, "target_source") do
+      value when is_binary(value) and value != "" -> value
+      _ -> report_target_label(report)
+    end
   end
 
   defp report_reason(report), do: report |> Map.get(:reason, "unspecified") |> to_string()

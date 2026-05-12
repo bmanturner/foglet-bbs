@@ -18,6 +18,8 @@ defmodule Foglet.Moderation.Report do
     field :status, Ecto.Enum, values: @statuses, default: :open
     field :resolved_at, :utc_datetime_usec
     field :resolution_note, :string
+    field :target_label, :string, virtual: true
+    field :target_source, :string, virtual: true
 
     belongs_to :reporter, Foglet.Accounts.User
     belongs_to :resolved_by, Foglet.Accounts.User

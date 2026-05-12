@@ -276,6 +276,7 @@ defmodule Foglet.Moderation do
           limit: ^limit,
           preload: [:reporter, :resolved_by]
       )
+      |> Enum.map(&with_target_summary/1)
     else
       []
     end
@@ -304,12 +305,12 @@ defmodule Foglet.Moderation do
   end
 
   defp fetch_report(%Report{} = report),
-    do: {:ok, Repo.preload(report, [:reporter, :resolved_by])}
+    do: {:ok, report |> Repo.preload([:reporter, :resolved_by]) |> with_target_summary()}
 
   defp fetch_report(report_id) when is_binary(report_id) do
     case Repo.get(Report, report_id) do
       nil -> {:error, :not_found}
-      report -> {:ok, Repo.preload(report, [:reporter, :resolved_by])}
+      report -> {:ok, report |> Repo.preload([:reporter, :resolved_by]) |> with_target_summary()}
     end
   end
 
@@ -327,6 +328,66 @@ defmodule Foglet.Moderation do
       category_name: board.category.name,
       scope: Boards.scope_for(board)
     }
+  end
+
+  defp with_target_summary(%Report{target_kind: :oneliner, target_id: target_id} = report) do
+    entry = Repo.one(from entry in Entry, where: entry.id == ^target_id, preload: [:user])
+
+    case entry do
+      %Entry{} = entry ->
+        label = "oneliner by @#{entry.user.handle}: #{truncate_target(entry.body, 52)}"
+        %{report | target_label: label, target_source: entry.body}
+
+      _ ->
+        report
+    end
+  end
+
+  defp with_target_summary(%Report{target_kind: :user, target_id: target_id} = report) do
+    case Repo.get(User, target_id) do
+      %User{} = user ->
+        %{report | target_label: "user @#{user.handle}", target_source: user.handle}
+
+      _ ->
+        report
+    end
+  end
+
+  defp with_target_summary(%Report{target_kind: :post, target_id: target_id} = report) do
+    post =
+      Repo.one(
+        from post in Post,
+          where: post.id == ^target_id,
+          preload: [:user, :board]
+      )
+
+    case post do
+      %Post{} = post ->
+        board =
+          if Ecto.assoc_loaded?(post.board) and post.board, do: post.board.slug, else: "unknown"
+
+        user =
+          if Ecto.assoc_loaded?(post.user) and post.user, do: post.user.handle, else: "unknown"
+
+        body = truncate_target(post.body || "", 40)
+        label = "post ##{post.message_number || "?"} in #{board} by @#{user}: #{body}"
+        %{report | target_label: label, target_source: post.body}
+
+      _ ->
+        report
+    end
+  end
+
+  defp with_target_summary(%Report{} = report), do: report
+
+  defp truncate_target(value, limit) do
+    value = to_string(value || "")
+
+    if String.length(value) > limit do
+      String.slice(value, 0, max(limit - 1, 0)) <> "…"
+    else
+      value
+    end
   end
 
   defp normalize_metadata(metadata) when is_map(metadata) do
