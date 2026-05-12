@@ -2006,6 +2006,29 @@ defmodule Foglet.TUI.AppTest do
                        ]}}
     end
 
+    test "refreshed PubSub forwarder delivers notification broadcasts after login" do
+      user = %Foglet.Accounts.User{id: "u-live-forwarder", handle: "alice"}
+      notification = {:notifications, :created, %{user_id: user.id}}
+      dispatcher_pid = self()
+
+      {:ok, forwarder} =
+        Foglet.TUI.PubSubForwarder.start_link(%{topics: []}, %{pid: dispatcher_pid})
+
+      Foglet.TUI.PubSubForwarder.refresh(dispatcher_pid, [
+        Foglet.PubSub.notifications_topic(user.id)
+      ])
+
+      :sys.get_state(forwarder)
+
+      Phoenix.PubSub.broadcast(
+        FogletBbs.PubSub,
+        Foglet.PubSub.notifications_topic(user.id),
+        notification
+      )
+
+      assert_receive {:subscription, ^notification}
+    end
+
     test "board_list screen adds 'boards' topic" do
       user = %Foglet.Accounts.User{id: "u1", handle: "alice"}
 
@@ -2268,14 +2291,14 @@ defmodule Foglet.TUI.AppTest do
            state: state
          } do
       Process.put(:fake_notifications_unread_count, 3)
-      state = %{state | current_screen: :main_menu, unread_count: 1}
+      state = %{state | current_screen: :main_menu, unread_count: 2}
 
       {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
 
       assert %MainMenuState{notifications_status: :loading} =
                App.screen_state_for(new_state, :main_menu)
 
-      assert new_state.unread_count == 1
+      assert new_state.unread_count == 3
 
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
@@ -2312,7 +2335,9 @@ defmodule Foglet.TUI.AppTest do
                App.screen_state_for(new_state, :main_menu)
 
       assert new_state.current_screen == :board_list
-      assert new_state.unread_count == 0
+      assert new_state.unread_count == 1
+      assert "unread 1" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(new_state)
+      assert new_state |> App.view() |> AsciiRenderer.render({64, 22}) =~ "unread 1"
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
       assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 2}} =

@@ -314,8 +314,11 @@ defmodule Foglet.TUI.Screens.MainMenu do
     local_state = normalize_state(local_state, context)
 
     if context.current_user do
-      {%{local_state | notifications_status: :loading},
-       [load_unread_notifications_count_task_effect(context)]}
+      {%{
+         local_state
+         | unread_notifications_count: context.unread_count,
+           notifications_status: :loading
+       }, [load_unread_notifications_count_task_effect(context)]}
     else
       {local_state, []}
     end
