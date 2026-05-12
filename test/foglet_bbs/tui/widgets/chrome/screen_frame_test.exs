@@ -8,18 +8,24 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
 
   @fixed_clock ~U[2026-04-24 18:05:00Z]
 
-  defp state do
-    %{
-      current_screen: :board_list,
-      current_user: %{
-        id: "u1",
-        handle: "alice",
-        timezone: "America/Chicago",
-        preferences: %{"time_format" => "24h"}
+  defp state(attrs \\ %{}) do
+    attrs = Map.new(attrs)
+
+    Map.merge(
+      %{
+        current_screen: :board_list,
+        current_user: %{
+          id: "u1",
+          handle: "alice",
+          timezone: "America/Chicago",
+          preferences: %{"time_format" => "24h"}
+        },
+        terminal_size: {80, 24},
+        session_context: %{clock_now: @fixed_clock},
+        unread_notifications_count: 0
       },
-      terminal_size: {80, 24},
-      session_context: %{clock_now: @fixed_clock}
-    }
+      attrs
+    )
   end
 
   defp content do
@@ -118,15 +124,66 @@ defmodule Foglet.TUI.Widgets.Chrome.ScreenFrameTest do
       assert content.x > 0
       assert content.x + String.length(content.text) < 80
     end
+
+    test "renders notification token only for positive authenticated counts" do
+      zero_top =
+        state(unread_notifications_count: 0)
+        |> render_top_border(width: 80)
+
+      one_top =
+        state(unread_notifications_count: 1)
+        |> render_top_border(width: 80)
+
+      many_top =
+        state(unread_notifications_count: 12)
+        |> render_top_border(width: 80)
+
+      guest_top =
+        state(current_user: nil, unread_notifications_count: 12)
+        |> render_top_border(width: 80)
+
+      refute zero_top =~ "N 0"
+      refute zero_top =~ "N "
+      assert one_top =~ "@alice | N 1 | 13:05"
+      assert many_top =~ "@alice | N 12 | 13:05"
+      refute guest_top =~ "N 12"
+    end
+
+    test "preserves handle, notification token, and clock at the 64-column breakpoint" do
+      top_border =
+        state(terminal_size: {64, 22}, unread_notifications_count: 12)
+        |> render_top_border(width: 64, height: 22)
+
+      assert String.ends_with?(top_border, "┐")
+      assert top_border =~ "@alice | N 12 | 13:05"
+      assert String.length(top_border) <= 64
+    end
   end
 
-  defp apply_layout(tree), do: Engine.apply_layout(tree, %{width: 80, height: 24})
+  defp apply_layout(tree, width \\ 80, height \\ 24),
+    do: Engine.apply_layout(tree, %{width: width, height: height})
 
   defp collect_positioned_text_elements(positioned) do
     positioned
     |> List.flatten()
     |> Enum.filter(&(&1.type == :text))
     |> Enum.sort_by(&{&1.y, &1.x})
+  end
+
+  defp render_top_border(state, opts) do
+    width = Keyword.fetch!(opts, :width)
+    height = Keyword.get(opts, :height, 24)
+
+    state
+    |> ScreenFrame.render(
+      %{breadcrumb_parts: ["Foglet", "Boards", "Thread Archive"]},
+      content(),
+      []
+    )
+    |> apply_layout(width, height)
+    |> collect_positioned_text_elements()
+    |> text_rows()
+    |> Map.fetch!(0)
   end
 
   defp text_rows(elements) do

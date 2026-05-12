@@ -204,6 +204,15 @@ defmodule Foglet.TUI.App.RuntimeMessagesTest do
           end
         },
         %{
+          name: :main_menu_unread_notification_result,
+          state: state(current_screen: :board_list, unread_notifications_count: 0),
+          message: {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 12}},
+          assert: fn new_state, cmds ->
+            assert cmds == []
+            assert new_state.unread_notifications_count == 12
+          end
+        },
+        %{
           name: :command_result,
           state: state(),
           message:

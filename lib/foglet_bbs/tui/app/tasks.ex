@@ -35,6 +35,21 @@ defmodule Foglet.TUI.App.Tasks do
       using a humanized op name (e.g., `:load_boards` → "load boards").
   """
   @spec handle(tuple(), struct()) :: {struct(), [Raxol.Core.Runtime.Command.t()]}
+  def handle(
+        {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, count}},
+        state
+      )
+      when is_integer(count) and count >= 0 do
+    state
+    |> Routing.route_screen_update(
+      :main_menu,
+      {:task_result, :load_unread_notifications_count, {:ok, count}}
+    )
+    |> then(fn {new_state, commands} ->
+      {%{new_state | unread_notifications_count: count}, commands}
+    end)
+  end
+
   def handle({:screen_task_result, key, op, result}, state) do
     Routing.route_screen_update(state, key, {:task_result, op, result})
   end

@@ -115,8 +115,8 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBar do
 
   defp user_atom(%{handle: handle}), do: "@#{handle}"
 
-  defp unread_atom(%{unread_count: count}) when is_integer(count) and count > 0,
-    do: "unread #{count}"
+  defp unread_atom(%{unread_notifications_count: count}) when is_integer(count) and count > 0,
+    do: "N #{count}"
 
   defp unread_atom(_state), do: nil
 

@@ -18,7 +18,8 @@ defmodule Foglet.TUI.App do
 
   State flow (D-16): domain → Postgres (Foglet.Boards/Threads/Posts);
   session-scoped identity → Foglet.Sessions.Session; UI shell → this model
-  (%__MODULE__{}); per-screen UI state → screen-owned %State{} under
+  (%__MODULE__{}); app-level notification count → `unread_notifications_count`;
+  per-screen UI state → screen-owned %State{} under
   `screen_state[key]`. See docs/ARCHITECTURE.md §4 and CONTEXT 03 D-13..D-21.
   """
 
@@ -60,6 +61,7 @@ defmodule Foglet.TUI.App do
           terminal_size: {pos_integer(), pos_integer()},
           route_params: map(),
           modal: Foglet.TUI.Modal.t() | nil,
+          unread_notifications_count: non_neg_integer(),
           screen_state: map()
         }
 
@@ -70,6 +72,7 @@ defmodule Foglet.TUI.App do
             terminal_size: {80, 24},
             route_params: %{},
             modal: nil,
+            unread_notifications_count: 0,
             screen_state: %{}
 
   # Public delegators kept on App as stable public boundaries for render

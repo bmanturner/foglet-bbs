@@ -817,6 +817,10 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end)
   end
 
+  defp unread_notifications_count(%{unread_notifications_count: count})
+       when is_integer(count) and count >= 0,
+       do: count
+
   defp unread_notifications_count(%{screen_state: %{main_menu: %State{} = local_state}}),
     do: local_state.unread_notifications_count
 

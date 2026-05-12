@@ -67,16 +67,16 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
   end
 
   describe "StatusBar.status_atoms/1" do
-    test "BBS mode includes handle, positive unread, activity, and clock" do
+    test "BBS mode includes handle, positive notification count, activity, and clock" do
       state = %{
         current_screen: :main_menu,
-        unread_count: 3,
+        unread_notifications_count: 3,
         activity_label: "fresh posts",
         session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
         current_user: user(timezone: "America/Chicago", preferences: %{"time_format" => "24h"})
       }
 
-      assert StatusBar.status_atoms(state) == ["@alice", "unread 3", "fresh posts", "13:05"]
+      assert StatusBar.status_atoms(state) == ["@alice", "N 3", "fresh posts", "13:05"]
     end
 
     test "BBS mode omits absent or non-positive optional atoms" do
@@ -125,7 +125,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
     test "accepts breadcrumb parts while preserving status atoms" do
       state = %{
         current_screen: :main_menu,
-        unread_count: 3,
+        unread_notifications_count: 3,
         session_context: %{clock_now: ~U[2026-04-24 18:05:00Z]},
         current_user: user(timezone: "America/Chicago", preferences: %{"time_format" => "24h"})
       }
@@ -134,7 +134,7 @@ defmodule Foglet.TUI.Widgets.Chrome.StatusBarTest do
       rendered = Enum.join(texts, " ")
 
       assert rendered =~ "Foglet ▸ Home"
-      assert rendered =~ "@alice | unread 3 | 13:05"
+      assert rendered =~ "@alice | N 3 | 13:05"
     end
   end
 end
