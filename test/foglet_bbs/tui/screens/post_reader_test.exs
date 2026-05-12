@@ -1350,7 +1350,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     refute Map.has_key?(prepared.render_cache, {"p-wide", 120})
   end
 
-  test "FOG-842 wide render centers a bounded whole-reader column" do
+  test "FOG-842 wide render centers a bounded whole-reader column below enhanced height" do
     posts = FakePosts.list_reader_window("t1", []).posts
 
     local_state =
@@ -1366,7 +1366,7 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     context =
       Context.new(
         current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
-        terminal_size: {120, 36},
+        terminal_size: {120, 35},
         route: :post_reader,
         session_context: %{domain: %{markdown: FakeMarkdown}}
       )
@@ -1374,6 +1374,37 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     tree = render_screen(local_state, context)
 
     assert find_node(tree, &bounded_centered_reader?(&1, 92))
+  end
+
+  test "enhanced post reader composes a bounded reading lane with selected-post context rail" do
+    posts = FakePosts.list_reader_window("t1", []).posts
+
+    local_state =
+      State.new(
+        board: %{id: "b1", name: "General"},
+        board_id: "b1",
+        thread: %{id: "t1", title: "Hello"},
+        thread_id: "t1",
+        posts: posts,
+        selected_post_index: 1,
+        selected_action_post_index: 1,
+        status: :loaded
+      )
+
+    context =
+      Context.new(
+        current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+        terminal_size: {120, 36},
+        route: :post_reader,
+        session_context: %{domain: %{markdown: FakeMarkdown}}
+      )
+
+    tree = render_screen(local_state, context)
+    split = find_node(tree, &match?(%{type: :split_pane}, &1))
+
+    assert split.attrs.direction == :horizontal
+    refute find_node(tree, &bounded_centered_reader?(&1, 92))
+    assert flatten_text(Enum.at(split.children, 1)) =~ "Selected #2"
   end
 
   test "render/1 delegates breadcrumb formatting to shared chrome", %{state: state} do

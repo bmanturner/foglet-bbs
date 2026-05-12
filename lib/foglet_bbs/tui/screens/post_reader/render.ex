@@ -7,7 +7,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   flushing, and render-cache mutation.
   """
 
-  alias Foglet.TUI.{Context, Guest, ScrollKeys}
+  alias Foglet.TUI.{Context, Guest, Layout, ScrollKeys}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.TextWidth
@@ -20,6 +20,8 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   import Raxol.Core.Renderer.View
 
   @reader_max_width 92
+  @enhanced_reader_width 76
+  @enhanced_rail_min_width 30
 
   @doc false
   @spec reader_width(pos_integer()) :: pos_integer()
@@ -369,8 +371,75 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
           end
       end
 
-    centered_reader(content, w, reader_w)
+    if enhanced_reader_with_rail?(w, h) do
+      lane_w = min(reader_w, @enhanced_reader_width)
+      lane = centered_reader(content, lane_w, lane_w)
+      rail = render_context_rail(state, theme, reply_state)
+
+      Layout.left_heavy_split(lane, rail,
+        terminal_size: {w, h},
+        ratio: {2, 1},
+        min_size: @enhanced_rail_min_width
+      )
+    else
+      centered_reader(content, w, reader_w)
+    end
   end
+
+  defp enhanced_reader_with_rail?(w, h) do
+    Layout.enhanced?({w, h}) and w - @enhanced_reader_width >= @enhanced_rail_min_width
+  end
+
+  defp render_context_rail(%State{} = state, theme, reply_state) do
+    selected_index = Map.get(state, :selected_action_post_index, state.selected_post_index) || 0
+    selected = Enum.at(state.posts || [], selected_index)
+    total = length(state.posts || [])
+
+    box style: %{border: :single, padding: 1} do
+      column style: %{gap: 0} do
+        [
+          text("Selected ##{selected_index + 1}", fg: theme.accent.fg),
+          text("Post #{selected_index + 1} of #{max(total, 1)}", fg: theme.dim.fg),
+          text(post_map_line(selected_index, total), fg: theme.dim.fg),
+          text(""),
+          text("Author", fg: theme.dim.fg),
+          text(author_label(selected), fg: theme.primary.fg),
+          text(""),
+          text("Actions", fg: theme.dim.fg),
+          text(reply_context_label(selected), fg: theme.primary.fg),
+          text(reply_status_label(reply_state), fg: reply_status_color(reply_state, theme)),
+          text("V profile • U upvote", fg: theme.dim.fg),
+          text("! report", fg: theme.dim.fg)
+        ]
+      end
+    end
+  end
+
+  defp post_map_line(_selected_index, 0), do: "Map: empty"
+
+  defp post_map_line(selected_index, total) do
+    markers =
+      Enum.map_join(0..(total - 1), "", fn idx -> if idx == selected_index, do: "▶", else: "·" end)
+
+    "Map: " <> TextWidth.truncate(markers, 24)
+  end
+
+  defp author_label(%{user: %{handle: handle}}) when is_binary(handle), do: "@#{handle}"
+  defp author_label(%{user: %{"handle" => handle}}) when is_binary(handle), do: "@#{handle}"
+  defp author_label(_post), do: "@unknown"
+
+  defp reply_context_label(post) do
+    if PostReader.reply_context_available?(post),
+      do: "C context available",
+      else: "C no parent context"
+  end
+
+  defp reply_status_label(:locked), do: "Reply locked"
+  defp reply_status_label(:archived), do: "Reply archived"
+  defp reply_status_label(:open), do: "R reply"
+
+  defp reply_status_color(:open, theme), do: theme.primary.fg
+  defp reply_status_color(_closed, theme), do: theme.warning.fg
 
   defp reply_notice(_theme, :open), do: nil
 
