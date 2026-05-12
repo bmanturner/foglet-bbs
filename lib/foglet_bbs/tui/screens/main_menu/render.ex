@@ -5,6 +5,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
 
   alias Foglet.TerminalText
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Layout
   alias Foglet.TUI.Screens.MainMenu
   alias Foglet.TUI.Screens.MainMenu.State
   alias Foglet.TUI.TextWidth
@@ -44,12 +45,13 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     # passing a space here is the screen-level half of the fix and makes the
     # divider effectively transparent so panel borders supply the visual gap.
     content =
-      split_pane(
-        direction: :horizontal,
+      Layout.left_heavy_split(
+        menu_panel,
+        oneliners_panel_widget,
+        terminal_size: state.terminal_size,
         ratio: {2, 3},
         min_size: 18,
-        divider_char: " ",
-        children: [menu_panel, oneliners_panel_widget]
+        divider_char: " "
       )
 
     ScreenFrame.render(
