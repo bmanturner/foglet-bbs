@@ -50,7 +50,7 @@ defmodule Foglet.TUI.PubSubForwarder do
         refresh(dispatcher_pid, topics)
 
       :undefined ->
-        case start_link(%{topics: topics}, %{pid: dispatcher_pid}) do
+        case start(%{topics: topics}, %{pid: dispatcher_pid}) do
           {:ok, _pid} -> refresh(dispatcher_pid, topics)
           {:error, {:already_started, _pid}} -> refresh(dispatcher_pid, topics)
           {:error, _reason} = error -> error
@@ -89,6 +89,11 @@ defmodule Foglet.TUI.PubSubForwarder do
     GenServer.start_link(__MODULE__, {args, context})
   end
 
+  @doc "Starts an unlinked dispatcher-owned forwarder for dynamic login/topic refreshes."
+  def start(args, context) do
+    GenServer.start(__MODULE__, {args, context})
+  end
+
   @impl GenServer
   def init({%{topics: topics}, %{pid: dispatcher_pid}}) do
     pubsub = FogletBbs.PubSub
@@ -96,17 +101,24 @@ defmodule Foglet.TUI.PubSubForwarder do
     control_topic = control_topic(dispatcher_pid)
 
     :ok = Phoenix.PubSub.subscribe(pubsub, control_topic)
+    dispatcher_ref = Process.monitor(dispatcher_pid)
     _ = :global.register_name(registry_name(dispatcher_pid), self())
     subscribe_topics(pubsub, topics)
 
     {:ok,
      %{
        dispatcher_pid: dispatcher_pid,
+       dispatcher_ref: dispatcher_ref,
        control_topic: control_topic,
        topics: topics,
        pubsub: pubsub,
        last_forwarded: nil
      }}
+  end
+
+  @impl GenServer
+  def handle_info({:DOWN, ref, :process, _pid, _reason}, %{dispatcher_ref: ref} = state) do
+    {:stop, :normal, state}
   end
 
   @impl GenServer

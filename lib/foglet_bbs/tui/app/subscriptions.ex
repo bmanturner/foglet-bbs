@@ -25,7 +25,9 @@ defmodule Foglet.TUI.App.Subscriptions do
       end
 
     screen_intervals = screen_declared_intervals(state)
-    pubsub = [Subscription.custom(PubSubForwarder, %{topics: topics(state)})]
+    pubsub_topics = topics(state)
+    _ = PubSubForwarder.ensure_refreshed(pubsub_topics)
+    pubsub = [Subscription.custom(PubSubForwarder, %{topics: pubsub_topics})]
     initial_route = [Subscription.custom(InitialRouteEnterForwarder, %{})]
 
     heartbeat ++ screen_intervals ++ pubsub ++ initial_route

@@ -147,6 +147,11 @@ defmodule Foglet.TUI.App do
     Subscriptions.subscribe(state)
   end
 
+  @impl true
+  def subscriptions(state) do
+    Subscriptions.subscribe(state)
+  end
+
   # --- Private: update/2 dispatch ---
 
   # WR-02: `:set_user`, `:promote_session`, navigation effects, and
