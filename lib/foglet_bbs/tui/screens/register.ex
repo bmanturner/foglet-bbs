@@ -26,7 +26,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.{Accounts, AppName, Config}
   alias Foglet.Accounts.{Invites, SSHKey, Verification}
-  alias Foglet.TUI.{Context, Effect, Input, TextWidth}
+  alias Foglet.TUI.{Context, Effect, Input, Layout, TextWidth}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Theme
@@ -398,7 +398,37 @@ defmodule Foglet.TUI.Screens.Register do
         height: panel_height
       )
 
-    AuthForm.centered(panel, state, theme, panel_height)
+    if Layout.enhanced?(Map.get(state, :terminal_size)) do
+      enhanced_auth_pair(panel, registration_support_panel(theme), state, theme, panel_height)
+    else
+      AuthForm.centered(panel, state, theme, panel_height)
+    end
+  end
+
+  defp registration_support_panel(theme) do
+    AuthForm.render(
+      "What happens next",
+      [
+        text("1. Create account", fg: theme.primary.fg),
+        text("2. Verify email", fg: theme.primary.fg),
+        text("3. Enter Foglet", fg: theme.primary.fg),
+        text(""),
+        text("Handles are public and durable.", fg: theme.dim.fg),
+        text("Use an email you can reach.", fg: theme.dim.fg)
+      ],
+      theme,
+      width: 42,
+      height: 12
+    )
+  end
+
+  defp enhanced_auth_pair(form_panel, support_panel, state, theme, panel_height) do
+    content =
+      row style: %{gap: 2, align_items: :start} do
+        [form_panel, support_panel]
+      end
+
+    AuthForm.centered(content, state, theme, panel_height)
   end
 
   defp ssh_key_opt_in_rows(_reg, _focused, nil, _theme), do: []
