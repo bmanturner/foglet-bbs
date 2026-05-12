@@ -44,6 +44,25 @@ function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function createTerminalWriter(term) {
+  let pending = Promise.resolve();
+
+  const write = data => {
+    const text = data.toString('utf8');
+
+    pending = pending.then(
+      () =>
+        new Promise(resolve => {
+          term.write(text, resolve);
+        })
+    );
+
+    return pending;
+  };
+
+  return { write, flush: () => pending };
+}
+
 export class Session {
   constructor({ name, host = '127.0.0.1', port = 2222, username, password, width = 100, height = 30, readyMs = 350 }) {
     this.name = name || username || 'session';
@@ -55,6 +74,7 @@ export class Session {
     this.height = height;
     this.readyMs = readyMs;
     this.term = new Terminal({ cols: width, rows: height, allowProposedApi: true });
+    this.terminalWriter = createTerminalWriter(this.term);
     this.conn = null;
     this.stream = null;
   }
@@ -88,34 +108,43 @@ export class Session {
     this.stream = await new Promise((resolve, reject) => {
       this.conn.shell({ term: 'xterm-256color', cols: this.width, rows: this.height }, (err, stream) => {
         if (err) return reject(err);
-        stream.on('data', data => this.term.write(data.toString('utf8')));
-        stream.stderr.on('data', data => this.term.write(data.toString('utf8')));
+        stream.on('data', data => this.terminalWriter.write(data));
+        stream.stderr.on('data', data => this.terminalWriter.write(data));
         resolve(stream);
       });
     });
 
     await sleep(this.readyMs);
+    await this.flush();
     return this;
+  }
+
+  async flush() {
+    await this.terminalWriter.flush();
   }
 
   async key(name) {
     this.stream.write(keyBytes(name));
     await sleep(this.readyMs);
+    await this.flush();
   }
 
   async type(text) {
     this.stream.write(text);
     await sleep(this.readyMs);
+    await this.flush();
   }
 
   async wait(ms) {
     await sleep(ms);
+    await this.flush();
   }
 
   async resize(cols, rows) {
     this.term.resize(cols, rows);
     this.stream.setWindow(rows, cols, rows * 16, cols * 8);
     await sleep(this.readyMs);
+    await this.flush();
   }
 
   screen() {
@@ -132,10 +161,12 @@ export class Session {
   async waitFor(predicate, { timeoutMs = 4000, pollMs = 150 } = {}) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
+      await this.flush();
       const s = this.screen();
       if (predicate(s)) return s;
       await sleep(pollMs);
     }
+    await this.flush();
     throw new Error(`waitFor timed out after ${timeoutMs}ms\n--- last screen (${this.name}) ---\n${this.screen()}`);
   }
 

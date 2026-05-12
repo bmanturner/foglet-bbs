@@ -2343,7 +2343,7 @@ defmodule Foglet.TUI.AppTest do
                App.screen_state_for(refreshed_state, :main_menu)
 
       assert refreshed_state.unread_count == 3
-      assert "unread 3" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(refreshed_state)
+      assert "N 3" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(refreshed_state)
       assert_received :unread_count
     end
 
@@ -2364,8 +2364,8 @@ defmodule Foglet.TUI.AppTest do
 
       assert new_state.current_screen == :board_list
       assert new_state.unread_count == 1
-      assert "unread 1" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(new_state)
-      assert new_state |> App.view() |> AsciiRenderer.render({64, 22}) =~ "unread 1"
+      assert "N 1" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(new_state)
+      assert new_state |> App.view() |> AsciiRenderer.render({64, 22}) =~ "N 1"
       assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
 
       assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 2}} =
@@ -2379,16 +2379,16 @@ defmodule Foglet.TUI.AppTest do
 
       assert refreshed_state.current_screen == :board_list
       assert refreshed_state.unread_count == 2
-      assert "unread 2" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(refreshed_state)
+      assert "N 2" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(refreshed_state)
 
       rendered = refreshed_state |> App.view() |> AsciiRenderer.render({64, 22})
-      assert rendered =~ "unread 2"
+      assert rendered =~ "N 2"
 
       eighty_col_state = %{refreshed_state | terminal_size: {80, 24}}
-      assert "unread 2" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(eighty_col_state)
+      assert "N 2" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(eighty_col_state)
 
       rendered = eighty_col_state |> App.view() |> AsciiRenderer.render({80, 24})
-      assert rendered =~ "unread 2"
+      assert rendered =~ "N 2"
     end
 
     test "mark-all-read task result clears chrome unread token while staying on framed screen", %{
@@ -2407,7 +2407,7 @@ defmodule Foglet.TUI.AppTest do
 
       refute Enum.any?(
                Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(refreshed_state),
-               &String.starts_with?(&1, "unread ")
+               &String.starts_with?(&1, "N ")
              )
     end
 
