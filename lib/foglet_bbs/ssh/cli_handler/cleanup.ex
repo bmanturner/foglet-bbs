@@ -7,7 +7,7 @@ defmodule Foglet.SSH.CLIHandler.Cleanup do
   same failure-path guarantees:
 
   1. untrack/disconnect door runner,
-  2. leave alternate screen while the channel may still be writable,
+  2. restore terminal cursor / leave alternate screen while the channel may still be writable,
   3. stop the Raxol lifecycle,
   4. terminate the Foglet session,
   5. optionally close the SSH channel,
@@ -52,7 +52,7 @@ defmodule Foglet.SSH.CLIHandler.Cleanup do
   """
   def send_alt_screen_enter(%{connection_ref: ref, channel_id: ch})
       when not is_nil(ref) and not is_nil(ch) do
-    _ = :ssh_connection.send(ref, ch, "\e[H\e[2J\e[3J\e[?1049h\e[H\e[2J\e[3J")
+    _ = :ssh_connection.send(ref, ch, "\e[?25l\e[H\e[2J\e[3J\e[?1049h\e[?25l\e[H\e[2J\e[3J")
     :ok
   rescue
     _ -> :ok
@@ -65,7 +65,7 @@ defmodule Foglet.SSH.CLIHandler.Cleanup do
   """
   def send_alt_screen_leave(%{connection_ref: ref, channel_id: ch})
       when not is_nil(ref) and not is_nil(ch) do
-    _ = :ssh_connection.send(ref, ch, "\e[?1049l")
+    _ = :ssh_connection.send(ref, ch, "\e[?25h\e[?1049l\e[?25h")
     :ok
   rescue
     _ -> :ok
