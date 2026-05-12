@@ -36,6 +36,7 @@ defmodule Foglet.TUI.App.Tasks do
   """
   @spec handle(tuple(), struct()) :: {struct(), [Raxol.Core.Runtime.Command.t()]}
   def handle({:screen_task_result, key, op, result}, state) do
+    state = maybe_store_unread_count(state, key, op, result)
     Routing.route_screen_update(state, key, {:task_result, op, result})
   end
 
@@ -49,6 +50,13 @@ defmodule Foglet.TUI.App.Tasks do
 
     {%{state | modal: modal}, []}
   end
+
+  defp maybe_store_unread_count(state, :main_menu, :load_unread_notifications_count, {:ok, count})
+       when is_integer(count) and count >= 0 do
+    Map.put(state, :unread_count, count)
+  end
+
+  defp maybe_store_unread_count(state, _key, _op, _result), do: state
 
   defp humanize_op(op) when is_atom(op) do
     op |> to_string() |> String.replace("_", " ")

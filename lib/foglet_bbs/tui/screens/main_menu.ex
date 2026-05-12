@@ -601,6 +601,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     %{
       current_screen: :main_menu,
       current_user: context.current_user,
+      unread_count: context.unread_count,
       session_context: context.session_context,
       session_pid: context.session_pid,
       terminal_size: context.terminal_size || @default_terminal_size,

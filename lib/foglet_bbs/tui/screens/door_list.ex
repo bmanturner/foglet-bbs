@@ -347,6 +347,7 @@ defmodule Foglet.TUI.Screens.DoorList do
     %{
       current_screen: :door_list,
       current_user: context.current_user,
+      unread_count: context.unread_count,
       session_context: context.session_context,
       session_pid: context.session_pid,
       terminal_size: context.terminal_size || {80, 24},

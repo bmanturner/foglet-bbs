@@ -16,6 +16,7 @@ defmodule Foglet.TUI.Context do
     :terminal_size,
     :route,
     :route_params,
+    :unread_count,
     :domain
   ]
 
@@ -29,6 +30,7 @@ defmodule Foglet.TUI.Context do
           terminal_size: {pos_integer(), pos_integer()},
           route: route(),
           route_params: route_params(),
+          unread_count: non_neg_integer(),
           domain: map()
         }
 
@@ -38,6 +40,7 @@ defmodule Foglet.TUI.Context do
             terminal_size: {80, 24},
             route: :login,
             route_params: %{},
+            unread_count: 0,
             domain: %{}
 
   @doc """
@@ -66,6 +69,7 @@ defmodule Foglet.TUI.Context do
       terminal_size: {80, 24},
       route: :login,
       route_params: %{},
+      unread_count: 0,
       domain: domain_from_session_context(session_context)
     }
 

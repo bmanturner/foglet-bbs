@@ -454,6 +454,7 @@ defmodule Foglet.TUI.Screens.Notifications do
       session_pid: context.session_pid,
       terminal_size: context.terminal_size || @default_terminal_size,
       route_params: context.route_params || %{},
+      unread_count: context.unread_count,
       screen_state: %{}
     }
   end

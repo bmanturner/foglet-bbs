@@ -528,6 +528,7 @@ defmodule Foglet.TUI.Screens.BoardList do
       route_params: context.route_params,
       session_context: context.session_context,
       terminal_size: context.terminal_size,
+      unread_count: context.unread_count,
       screen_state: %{board_list: state}
     }
   end

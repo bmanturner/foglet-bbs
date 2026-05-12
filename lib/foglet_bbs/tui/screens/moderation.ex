@@ -500,6 +500,7 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp render_model(%Context{} = context, %State{} = state) do
     %{
       current_user: context.current_user,
+      unread_count: context.unread_count,
       session_context: context.session_context,
       terminal_size: context.terminal_size,
       current_screen: :moderation,
