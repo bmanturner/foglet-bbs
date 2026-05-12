@@ -128,6 +128,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
     # (`grep` for legacy app-shape dot-access) clean.
     %{
       current_user: context.current_user,
+      unread_notifications_count: context.unread_notifications_count,
       current_screen: :post_reader,
       posts: Map.get(state, :posts),
       session_context: context.session_context,

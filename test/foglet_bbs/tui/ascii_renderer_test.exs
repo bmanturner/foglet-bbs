@@ -64,6 +64,25 @@ defmodule Foglet.TUI.AsciiRendererTest do
       end
     end
 
+    test "renders app-level unread notification chrome on main menu and board list" do
+      for {screen, size} <- [
+            {:main_menu, {64, 22}},
+            {:main_menu, @size},
+            {:board_list, {64, 22}},
+            {:board_list, @size}
+          ] do
+        state =
+          screen
+          |> RenderFixtures.state_for(size)
+          |> Map.put(:unread_notifications_count, 12)
+
+        ascii = state |> App.view() |> AsciiRenderer.render(size)
+
+        assert ascii =~ "@alice | N 12 |",
+               "expected unread notification chrome for #{inspect(screen)} at #{inspect(size)}:\n#{ascii}"
+      end
+    end
+
     test "account preferences select-list does not overlap following fields at 80x24" do
       state =
         RenderFixtures.state_for(:account, @size,

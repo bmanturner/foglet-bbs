@@ -379,6 +379,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
     %{
       current_screen: :post_composer,
       current_user: context.current_user,
+      unread_notifications_count: context.unread_notifications_count,
       session_context: context.session_context,
       terminal_size: context.terminal_size || @default_terminal_size,
       route_params: context.route_params || %{},

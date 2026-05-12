@@ -525,6 +525,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     %{
       current_screen: :board_list,
       current_user: context.current_user,
+      unread_notifications_count: context.unread_notifications_count,
       route_params: context.route_params,
       session_context: context.session_context,
       terminal_size: context.terminal_size,

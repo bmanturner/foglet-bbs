@@ -16,7 +16,8 @@ defmodule Foglet.TUI.Context do
     :terminal_size,
     :route,
     :route_params,
-    :domain
+    :domain,
+    :unread_notifications_count
   ]
 
   @type route :: atom() | {atom(), map()}
@@ -29,7 +30,8 @@ defmodule Foglet.TUI.Context do
           terminal_size: {pos_integer(), pos_integer()},
           route: route(),
           route_params: route_params(),
-          domain: map()
+          domain: map(),
+          unread_notifications_count: non_neg_integer()
         }
 
   defstruct current_user: nil,
@@ -38,7 +40,8 @@ defmodule Foglet.TUI.Context do
             terminal_size: {80, 24},
             route: :login,
             route_params: %{},
-            domain: %{}
+            domain: %{},
+            unread_notifications_count: 0
 
   @doc """
   Builds a screen context from keyword or map attributes.

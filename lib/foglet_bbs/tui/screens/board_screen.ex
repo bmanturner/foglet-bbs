@@ -484,6 +484,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     %{
       current_screen: :thread_list,
       current_user: context.current_user,
+      unread_notifications_count: context.unread_notifications_count,
       session_context: context.session_context,
       terminal_size: context.terminal_size,
       route: context.route,

@@ -241,6 +241,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
     %{
       current_screen: :new_thread,
       current_user: context.current_user,
+      unread_notifications_count: context.unread_notifications_count,
       session_context: context.session_context,
       terminal_size: context.terminal_size,
       route: context.route,
