@@ -277,6 +277,70 @@ defmodule Foglet.PostsTest do
       assert Repo.aggregate(Notification, :count) == 0
     end
 
+    test "missing parent references fail without notifications or counter drift" do
+      {board, pid} = setup_board_with_server_and_pid()
+      author = active_user_fixture()
+      replier = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+
+      before_posts = Repo.aggregate(Foglet.Posts.Post, :count)
+      before_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      before_replier = Repo.get!(Foglet.Accounts.User, replier.id)
+      before_board = Repo.get!(Foglet.Boards.Board, board.id)
+      before_next_number = :sys.get_state(pid).next_number
+
+      assert {:error, %Ecto.Changeset{}} =
+               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{
+                 body: "reply to missing parent",
+                 reply_to_id: Ecto.UUID.generate()
+               })
+
+      after_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      after_replier = Repo.get!(Foglet.Accounts.User, replier.id)
+      after_board = Repo.get!(Foglet.Boards.Board, board.id)
+
+      assert Repo.aggregate(Notification, :count) == 0
+      assert Repo.aggregate(Foglet.Posts.Post, :count) == before_posts
+      assert after_thread.post_count == before_thread.post_count
+      assert after_thread.last_post_at == before_thread.last_post_at
+      assert after_replier.post_count == before_replier.post_count
+      assert after_board.next_message_number == before_board.next_message_number
+      assert :sys.get_state(pid).next_number == before_next_number
+    end
+
+    test "missing and deleted actors are rejected before notification emission" do
+      {board, pid} = setup_board_with_server_and_pid()
+      author = active_user_fixture()
+      deleted_actor = active_user_fixture(%{deleted_at: DateTime.utc_now()})
+      {thread, root} = setup_thread(board, author)
+
+      before_posts = Repo.aggregate(Foglet.Posts.Post, :count)
+      before_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      before_deleted_actor = Repo.get!(Foglet.Accounts.User, deleted_actor.id)
+      before_board = Repo.get!(Foglet.Boards.Board, board.id)
+      before_next_number = :sys.get_state(pid).next_number
+
+      for actor_id <- [Ecto.UUID.generate(), deleted_actor.id] do
+        assert {:error, :posting_not_allowed} =
+                 Foglet.Posts.create_reply(thread.id, board.id, actor_id, %{
+                   body: "unsafe actor reply",
+                   reply_to_id: root.id
+                 })
+      end
+
+      after_thread = Repo.get!(Foglet.Threads.Thread, thread.id)
+      after_deleted_actor = Repo.get!(Foglet.Accounts.User, deleted_actor.id)
+      after_board = Repo.get!(Foglet.Boards.Board, board.id)
+
+      assert Repo.aggregate(Notification, :count) == 0
+      assert Repo.aggregate(Foglet.Posts.Post, :count) == before_posts
+      assert after_thread.post_count == before_thread.post_count
+      assert after_thread.last_post_at == before_thread.last_post_at
+      assert after_deleted_actor.post_count == before_deleted_actor.post_count
+      assert after_board.next_message_number == before_board.next_message_number
+      assert :sys.get_state(pid).next_number == before_next_number
+    end
+
     test "dedupes duplicate reply notification attempts for one created post" do
       board = setup_board_with_server()
       author = active_user_fixture()
