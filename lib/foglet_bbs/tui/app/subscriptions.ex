@@ -26,7 +26,12 @@ defmodule Foglet.TUI.App.Subscriptions do
 
     screen_intervals = screen_declared_intervals(state)
     pubsub_topics = topics(state)
-    _ = PubSubForwarder.ensure_refreshed(pubsub_topics)
+
+    # Do not call PubSubForwarder.ensure_refreshed/1 from the subscription
+    # callback. Raxol may evaluate subscriptions outside the Dispatcher process,
+    # and the forwarder must always target the Dispatcher pid supplied to the
+    # custom subscription's start_link/2 context. Dynamic route/login updates are
+    # refreshed from App.update/2 where self() is the Dispatcher.
     pubsub = [Subscription.custom(PubSubForwarder, %{topics: pubsub_topics})]
     initial_route = [Subscription.custom(InitialRouteEnterForwarder, %{})]
 

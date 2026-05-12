@@ -124,6 +124,16 @@ defmodule Foglet.TUI.App.SubscriptionsTest do
            } = custom_subscription(subscriptions, Foglet.TUI.PubSubForwarder)
   end
 
+  test "subscribe builds PubSubForwarder spec without starting a process for the caller" do
+    before = :global.whereis_name({Foglet.TUI.PubSubForwarder, self()})
+
+    subscriptions = Subscriptions.subscribe(state())
+
+    assert custom_subscription(subscriptions, Foglet.TUI.PubSubForwarder)
+    assert before == :undefined
+    assert :global.whereis_name({Foglet.TUI.PubSubForwarder, self()}) == :undefined
+  end
+
   test "PubSubForwarder subscription combines user, notification, and active screen topics" do
     user = %Foglet.Accounts.User{id: "u-subscriptions", handle: "alice"}
     clock_topic = Foglet.PubSub.tui_clock_topic()
