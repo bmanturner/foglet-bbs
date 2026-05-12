@@ -57,10 +57,11 @@ defmodule Foglet.Posts do
 
       # IN-02: this clause intentionally folds three failure modes —
       # (a) thread does not exist (`safe_get` returned nil), (b) thread
-      # belongs to a different board, (c) `thread` is not a `%Thread{}` —
+      # belongs to a different board, (c) thread is soft-deleted,
+      # (d) `thread` is not a `%Thread{}` —
       # into a single `:posting_not_allowed` error so callers without
       # post-creation permission cannot probe thread existence.
-      not match?(%Thread{board_id: ^board_id}, thread) ->
+      not match?(%Thread{board_id: ^board_id, deleted_at: nil}, thread) ->
         {:error, :posting_not_allowed}
 
       thread.locked and not PostingPolicy.can_bypass_thread_lock?(user, board_id) ->
@@ -148,9 +149,6 @@ defmodule Foglet.Posts do
         Logger.warning("#{kind} notification emission skipped: #{inspect(reason)}")
     end
   end
-
-  defp post_event_payload(:thread_update, %Post{} = post),
-    do: %{thread_id: post.thread_id, new_post_ids: [post.id]}
 
   defp post_event_payload(_kind, %Post{} = post),
     do: %{
