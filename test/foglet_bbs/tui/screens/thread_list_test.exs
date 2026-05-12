@@ -146,6 +146,17 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
   defp maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
   defp maybe_add_content(_node, acc), do: acc
 
+  defp find_type(%{type: type} = node, type), do: node
+
+  defp find_type(%{children: children}, type) when is_list(children) do
+    Enum.find_value(children, &find_type(&1, type))
+  end
+
+  defp find_type(children, type) when is_list(children),
+    do: Enum.find_value(children, &find_type(&1, type))
+
+  defp find_type(_node, _type), do: nil
+
   defp leading_cluster_for(flat, title) do
     case String.split(flat, title, parts: 2) do
       [before_title, _rest] ->
@@ -207,6 +218,32 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
 
     assert {%State{status: {:error, :missing_board}, last_error: :missing_board}, []} =
              ThreadList.update(:load, state, ctx)
+  end
+
+  test "render/2 switches thread list to a structural list and preview split at enhanced size" do
+    ctx = context(terminal_size: {120, 36})
+    state = load_state(ctx)
+
+    split = ThreadList.render(state, ctx) |> find_type(:split_pane)
+
+    assert %{
+             attrs: %{direction: :horizontal, ratio: {7, 5}},
+             children: [_list_panel, _preview_panel]
+           } =
+             split
+
+    rendered_text = ThreadList.render(state, ctx) |> flatten_text()
+
+    assert rendered_text =~ "Old but sticky"
+    assert rendered_text =~ "Preview"
+    assert rendered_text =~ "Unread for you: yes"
+  end
+
+  test "render/2 preserves single-pane thread list below enhanced size" do
+    ctx = context(terminal_size: {80, 24})
+    state = load_state(ctx)
+
+    refute ThreadList.render(state, ctx) |> find_type(:split_pane)
   end
 
   test "load task execution with FakeThreads stores 3 sorted rows" do

@@ -102,6 +102,18 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     MainMenu.render(local_from_app(state), context_from_app(state)) |> collect_text_values()
   end
 
+  defp rendered_nodes(state) do
+    MainMenu.render(local_from_app(state), context_from_app(state)) |> flatten_nodes()
+  end
+
+  defp with_terminal_size(state, terminal_size), do: Map.put(state, :terminal_size, terminal_size)
+
+  defp panel_titles(nodes) do
+    nodes
+    |> Enum.filter(&(Map.get(&1, :type) == :panel))
+    |> Enum.map(&get_in(&1, [:attrs, :title]))
+  end
+
   defp assert_oneliner_text(texts, marker, handle, body) do
     segments = Enum.chunk_every(texts, 2, 1, :discard)
 
@@ -176,6 +188,40 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "MainMenu.Render is the sibling render entry point" do
       assert Code.ensure_loaded?(MainMenu.Render)
       assert function_exported?(MainMenu.Render, :render, 2)
+    end
+
+    test "enhanced and spacious terminal tiers compose earned dashboard regions", %{state: state} do
+      standard_titles =
+        state
+        |> with_terminal_size({80, 24})
+        |> rendered_nodes()
+        |> panel_titles()
+
+      enhanced_titles =
+        state
+        |> with_terminal_size({120, 36})
+        |> rendered_nodes()
+        |> panel_titles()
+
+      spacious_titles =
+        state
+        |> with_terminal_size({132, 50})
+        |> rendered_nodes()
+        |> panel_titles()
+
+      assert Enum.count(standard_titles, &(&1 == "Navigation")) == 1
+      assert "Continue" not in standard_titles
+      assert "Utility" not in standard_titles
+
+      assert "Navigation" in enhanced_titles
+      assert "Board activity" in enhanced_titles
+      assert "Continue" in enhanced_titles
+      assert "Utility" not in enhanced_titles
+
+      assert "Navigation" in spacious_titles
+      assert "Board activity" in spacious_titles
+      assert "Continue" in spacious_titles
+      assert "Utility" in spacious_titles
     end
 
     test "render-facing destination descriptors preserve visible_destinations/1 ordering" do
