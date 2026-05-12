@@ -58,6 +58,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostReader.Render
   alias Foglet.TUI.Screens.PostReader.State
+  alias Foglet.TUI.Screens.Shared.Reporting
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Post.PostCard
   alias Foglet.TUI.Widgets.Post.ReplyContext
@@ -364,6 +365,11 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
+      when c in ["!"] do
+    open_selected_post_report(state, context)
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
       when c in ["c", "C"] do
     open_selected_reply_context(state, context)
   end
@@ -402,6 +408,72 @@ defmodule Foglet.TUI.Screens.PostReader do
       end
 
     {state, effects}
+  end
+
+  def update(
+        {:modal_submit, :report_selected_user, %{target_user: user}},
+        %State{} = state,
+        %Context{}
+      )
+      when is_map(user) do
+    modal =
+      Reporting.report_modal(
+        :post_reader,
+        :submit_user_report,
+        %{
+          target_kind: :user,
+          target_id: Map.get(user, :id) || Map.get(user, "id"),
+          target_label: "@#{Map.get(user, :handle) || Map.get(user, "handle") || "unknown"}"
+        },
+        title: "Report User"
+      )
+
+    {state, [Effect.open_modal(modal)]}
+  end
+
+  def update(
+        {:modal_submit, :submit_user_report, payload},
+        %State{} = state,
+        %Context{} = context
+      ) do
+    moderation_mod = resolve_domain_module(context, :moderation, Foglet.Moderation)
+
+    effect =
+      Effect.task(:submit_user_report, :post_reader, fn ->
+        moderation_mod.create_report(context.current_user, %{
+          target_kind: Map.get(payload, :target_kind),
+          target_id: Map.get(payload, :target_id),
+          reason: Map.get(payload, :reason),
+          notes: Map.get(payload, :notes)
+        })
+      end)
+
+    {state, [effect]}
+  end
+
+  def update(
+        {:modal_submit, :submit_post_report, payload},
+        %State{} = state,
+        %Context{} = context
+      ) do
+    moderation_mod = resolve_domain_module(context, :moderation, Foglet.Moderation)
+
+    effect =
+      Effect.task(:submit_post_report, :post_reader, fn ->
+        moderation_mod.create_report(context.current_user, %{
+          target_kind: Map.get(payload, :target_kind),
+          target_id: Map.get(payload, :target_id),
+          reason: Map.get(payload, :reason),
+          notes: Map.get(payload, :notes)
+        })
+      end)
+
+    {state, [effect]}
+  end
+
+  def update({:task_result, op, result}, %State{} = state, %Context{})
+      when op in [:submit_user_report, :submit_post_report] do
+    handle_report_submission_result(op, result, state)
   end
 
   def update(_message, %State{} = state, %Context{}), do: {state, []}
@@ -1231,7 +1303,36 @@ defmodule Foglet.TUI.Screens.PostReader do
          %{user: user} when is_map(user) <- selected_action_post(state),
          user_id when is_binary(user_id) <- Map.get(user, :id) || Map.get(user, "id") do
       profile = load_public_profile(user, context)
-      modal = %Foglet.TUI.Modal{type: :info, title: "Public Profile", message: profile}
+
+      modal =
+        Reporting.public_profile_modal(
+          :post_reader,
+          :report_selected_user,
+          profile,
+          %{target_user: user}
+        )
+
+      {state, [Effect.open_modal(modal)]}
+    else
+      _ -> {state, []}
+    end
+  end
+
+  defp open_selected_post_report(%State{} = state, %Context{} = context) do
+    with false <- Guest.guest?(context),
+         %{id: post_id} = post when is_binary(post_id) <- selected_action_post(state) do
+      modal =
+        Reporting.report_modal(
+          :post_reader,
+          :submit_post_report,
+          %{
+            target_kind: :post,
+            target_id: post_id,
+            target_label: "post ##{Map.get(post, :message_number) || "?"}"
+          },
+          title: "Report Post"
+        )
+
       {state, [Effect.open_modal(modal)]}
     else
       _ -> {state, []}
@@ -1790,6 +1891,50 @@ defmodule Foglet.TUI.Screens.PostReader do
 
   defp clear_pending_read_position(%State{} = state, thread_id) do
     %{state | pending_read_positions: Map.delete(state.pending_read_positions, thread_id)}
+  end
+
+  defp handle_report_submission_result(op, result, %State{} = state) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, _report} ->
+        {state, [Effect.open_modal(Reporting.success_modal("Report submitted."))]}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        {state, [Effect.open_modal(report_submission_error_modal(op, changeset))]}
+
+      {:error, reason} ->
+        {state,
+         [
+           Effect.open_modal(%Foglet.TUI.Modal{
+             type: :error,
+             title: "Error",
+             message: "Unable to submit report: #{inspect(reason)}"
+           })
+         ]}
+    end
+  end
+
+  defp report_submission_error_modal(_op, %Ecto.Changeset{} = changeset) do
+    target_kind =
+      Map.get(changeset.changes, :target_kind) || Map.get(changeset.data, :target_kind)
+
+    op = if(target_kind == :user, do: :submit_user_report, else: :submit_post_report)
+    title = if(target_kind == :user, do: "Report User", else: "Report Post")
+
+    Reporting.report_modal(
+      :post_reader,
+      op,
+      %{
+        target_kind: target_kind,
+        target_id: Map.get(changeset.changes, :target_id) || Map.get(changeset.data, :target_id),
+        target_label: "selected target"
+      },
+      title: title,
+      values: %{
+        reason: Map.get(changeset.changes, :reason) || Map.get(changeset.data, :reason),
+        notes: Map.get(changeset.changes, :notes) || Map.get(changeset.data, :notes)
+      },
+      errors: Reporting.changeset_errors(changeset)
+    )
   end
 
   defp resolve_domain_module(%Context{domain: domain} = context, key, fallback)

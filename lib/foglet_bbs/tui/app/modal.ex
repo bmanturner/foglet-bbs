@@ -143,6 +143,54 @@ defmodule Foglet.TUI.App.Modal do
   defp handle_modal_key(:reply_context, %{key: :enter}, %App{} = state), do: dismiss(state)
 
   defp handle_modal_key(
+         :public_profile,
+         %{key: :char, char: "!"},
+         %App{modal: %Foglet.TUI.Modal{message: %{report_target: target}}} = state
+       )
+       when is_map(target) do
+    route_modal_submit(
+      state,
+      Effect.modal_submit(
+        Map.get(target, :screen_key),
+        Map.get(target, :kind),
+        Map.get(target, :payload)
+      )
+    )
+  end
+
+  defp handle_modal_key(:public_profile, %{key: :escape}, %App{} = state), do: dismiss(state)
+  defp handle_modal_key(:public_profile, %{key: :enter}, %App{} = state), do: dismiss(state)
+
+  defp handle_modal_key(:public_profile, %{key: :char, char: " "}, %App{} = state),
+    do: dismiss(state)
+
+  defp handle_modal_key(
+         :form,
+         key,
+         %App{modal: %Foglet.TUI.Modal{message: %{form: %ModalForm{} = form} = message}} = state
+       ) do
+    {new_form, action} = ModalForm.handle_event(key, form)
+    state = %{state | modal: %{state.modal | message: %{message | form: new_form}}}
+
+    case action do
+      {:submitted, %Effect{type: :modal_submit} = effect} ->
+        route_modal_submit(state, effect)
+
+      :submitted ->
+        submit_error(state)
+
+      {:submitted, _other} ->
+        submit_error(state)
+
+      :cancelled ->
+        cancel_form_change(state)
+
+      _other ->
+        route_form_change(state)
+    end
+  end
+
+  defp handle_modal_key(
          :form,
          key,
          %App{modal: %Foglet.TUI.Modal{message: %ModalForm{} = form}} = state
@@ -217,6 +265,13 @@ defmodule Foglet.TUI.App.Modal do
   end
 
   defp route_modal_submit(%App{} = state, %Effect{}), do: submit_error(state)
+
+  defp route_form_change(
+         %App{modal: %{change_target: {screen_key, kind}, message: %{form: form}}} = state
+       )
+       when is_atom(screen_key) and is_atom(kind) do
+    Routing.route_screen_update(state, screen_key, {:modal_change, kind, form})
+  end
 
   defp route_form_change(%App{modal: %{change_target: {screen_key, kind}, message: form}} = state)
        when is_atom(screen_key) and is_atom(kind) do

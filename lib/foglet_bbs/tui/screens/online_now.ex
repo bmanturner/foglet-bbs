@@ -13,8 +13,9 @@ defmodule Foglet.TUI.Screens.OnlineNow do
 
   alias Foglet.Accounts.PublicProfile
   alias Foglet.TerminalText
-  alias Foglet.TUI.{Context, Effect, Modal}
+  alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.OnlineNow.State
+  alias Foglet.TUI.Screens.Shared.Reporting
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -85,11 +86,101 @@ defmodule Foglet.TUI.Screens.OnlineNow do
     case State.selected_row(state) do
       %{user: user} when is_map(user) ->
         profile = load_public_profile(user, context)
-        modal = %Modal{type: :info, title: "Public Profile", message: profile}
+
+        modal =
+          Reporting.public_profile_modal(
+            :online_now,
+            :report_selected_user,
+            profile,
+            %{target_user: user}
+          )
+
         {state, [Effect.open_modal(modal)]}
 
       _other ->
         {state, []}
+    end
+  end
+
+  def update(
+        {:modal_submit, :report_selected_user, %{target_user: user}},
+        local_state,
+        %Context{}
+      )
+      when is_map(user) do
+    state = normalize_state(local_state)
+
+    modal =
+      Reporting.report_modal(
+        :online_now,
+        :submit_user_report,
+        %{
+          target_kind: :user,
+          target_id: Map.get(user, :id) || Map.get(user, "id"),
+          target_label: "@#{Map.get(user, :handle) || Map.get(user, "handle") || "unknown"}"
+        },
+        title: "Report User"
+      )
+
+    {state, [Effect.open_modal(modal)]}
+  end
+
+  def update({:modal_submit, :submit_user_report, payload}, local_state, %Context{} = context) do
+    state = normalize_state(local_state)
+    moderation_mod = domain_module(context, :moderation, Foglet.Moderation)
+
+    effect =
+      Effect.task(:submit_user_report, :online_now, fn ->
+        moderation_mod.create_report(context.current_user, %{
+          target_kind: Map.get(payload, :target_kind),
+          target_id: Map.get(payload, :target_id),
+          reason: Map.get(payload, :reason),
+          notes: Map.get(payload, :notes)
+        })
+      end)
+
+    {state, [effect]}
+  end
+
+  def update({:task_result, :submit_user_report, result}, local_state, %Context{} = _context) do
+    state = normalize_state(local_state)
+
+    case Effect.unwrap_task_result(result) do
+      {:ok, _report} ->
+        {state, [Effect.open_modal(Reporting.success_modal("Report submitted."))]}
+
+      {:error, %Ecto.Changeset{} = changeset} ->
+        modal =
+          Reporting.report_modal(
+            :online_now,
+            :submit_user_report,
+            %{
+              target_kind: :user,
+              target_id:
+                Map.get(changeset.changes, :target_id) || Map.get(changeset.data, :target_id),
+              target_label: "selected user"
+            },
+            title: "Report User",
+            values: %{
+              reason: Map.get(changeset.changes, :reason) || Map.get(changeset.data, :reason),
+              notes: Map.get(changeset.changes, :notes) || Map.get(changeset.data, :notes)
+            },
+            errors: Reporting.changeset_errors(changeset)
+          )
+
+        {state, [Effect.open_modal(modal)]}
+
+      {:error, reason} ->
+        modal =
+          Reporting.report_modal(
+            :online_now,
+            :submit_user_report,
+            %{target_kind: :user, target_id: nil, target_label: "selected user"},
+            title: "Report User",
+            errors: %{base: "Unable to submit report: #{inspect(reason)}"}
+          )
+
+        {state, [Effect.open_modal(modal)]}
     end
   end
 
@@ -203,6 +294,7 @@ defmodule Foglet.TUI.Screens.OnlineNow do
         label: "Actions",
         commands: [
           %{key: "V", label: "Profile", priority: 5},
+          %{key: "!", label: "Report", priority: 6},
           %{key: "↑/↓", label: "Select", priority: 10}
         ]
       }

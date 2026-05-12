@@ -41,6 +41,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
           invites: InvitesState.t(),
           scopes: list(),
           queue: list(),
+          queue_selected_index: non_neg_integer(),
+          queue_table: ConsoleTable.t(),
           mod_log: list(),
           users: list(),
           boards: list(),
@@ -61,6 +63,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     invites: nil,
     scopes: [],
     queue: [],
+    queue_selected_index: 0,
+    queue_table: nil,
     mod_log: [],
     users: [],
     boards: [],
@@ -73,6 +77,41 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     users_summary: [],
     boards_summary: []
   ]
+
+  @doc """
+  Builds the ConsoleTable for the QUEUE tab. Selectable — row focus drives
+  the wide inspector and triage actions.
+  """
+  @spec build_queue_table([map()], non_neg_integer(), keyword()) :: ConsoleTable.t()
+  def build_queue_table(rows, selected_index \\ 0, opts \\ []) do
+    items =
+      Enum.map(rows, fn row ->
+        reporter = row |> Map.get(:reporter) |> field(:handle, "unknown")
+
+        %{
+          target: truncate(report_target_label(row), 28),
+          reason: truncate(field(row, :reason, "unspecified"), 12),
+          reporter: "@" <> truncate(reporter, 10),
+          reported: format_report_timestamp(Map.get(row, :inserted_at))
+        }
+      end)
+
+    [
+      columns: [
+        %{key: :target, label: "Target", width: 24, grow: 3, priority: 100, demand: :content},
+        %{key: :reason, label: "Reason", width: 12, grow: 1, priority: 70, demand: :content},
+        %{key: :reporter, label: "Reporter", width: 12, priority: 60, demand: :content},
+        %{key: :reported, label: "Reported", width: 14, priority: 50, demand: :content}
+      ],
+      rows: items,
+      selectable: true,
+      width: Keyword.get(opts, :width),
+      empty_state: "No open reports."
+    ]
+    |> maybe_put_page_size(opts)
+    |> ConsoleTable.init()
+    |> put_selected_row(selected_index)
+  end
 
   @doc """
   Builds the ConsoleTable for the LOG tab. Always `selectable: false` (Pitfall 7 — read-only).
@@ -267,6 +306,8 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     labels = tab_labels(invites?)
     active = min(active, length(labels) - 1)
 
+    queue = Keyword.get(opts, :queue, [])
+    queue_selected_index = Keyword.get(opts, :queue_selected_index, 0)
     mod_log = Keyword.get(opts, :mod_log, [])
     users = Keyword.get(opts, :users, [])
     boards = Keyword.get(opts, :boards, [])
@@ -279,7 +320,9 @@ defmodule Foglet.TUI.Screens.Moderation.State do
       tab_labels: labels,
       invites: InvitesSurface.default_state(),
       scopes: scopes,
-      queue: Keyword.get(opts, :queue, []),
+      queue: queue,
+      queue_selected_index: queue_selected_index,
+      queue_table: build_queue_table(queue, queue_selected_index),
       mod_log: mod_log,
       users: users,
       boards: boards,
@@ -354,6 +397,19 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
   defp log_timezone(%{timezone: timezone}, _fallback), do: valid_timezone(timezone)
   defp log_timezone(_user, fallback), do: valid_timezone(fallback)
+
+  defp report_target_label(report) do
+    Map.get(report, :target_label) || Map.get(report, "target_label") ||
+      report |> Map.get(:target_kind, "unknown") |> to_string()
+  end
+
+  defp format_report_timestamp(%DateTime{} = dt), do: Calendar.strftime(dt, "%m-%d %H:%M")
+  defp format_report_timestamp(_other), do: ""
+
+  defp put_selected_row(%ConsoleTable{} = table, selected_index)
+       when is_integer(selected_index) do
+    put_in(table.table.raxol_state[:selected_row], selected_index)
+  end
 
   defp truncate(value, limit) do
     value = to_string(value)

@@ -6,7 +6,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Accounts
   alias Foglet.Accounts.{Invites, User}
   alias Foglet.Config
-  alias Foglet.Moderation.Action
+  alias Foglet.Moderation.{Action, Report}
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.ConsoleTable
+  alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
   alias FogletBbs.AccountsFixtures
 
   defp build_state(role, user \\ nil) do
@@ -114,6 +115,30 @@ defmodule Foglet.TUI.Screens.ModerationTest do
          log: [],
          users: [%{handle: "alice", role: :user, status: :active}],
          boards: [%{name: "General", category_name: "Main", state: :active}]
+       }}
+    end
+
+    def resolve_report(_user, report_id, attrs) do
+      {:ok,
+       %Report{
+         id: report_id,
+         status: :resolved,
+         resolution_note: Map.get(attrs, :resolution_note),
+         target_kind: :post,
+         target_id: Ecto.UUID.generate(),
+         reason: "spam"
+       }}
+    end
+
+    def dismiss_report(_user, report_id, attrs) do
+      {:ok,
+       %Report{
+         id: report_id,
+         status: :dismissed,
+         resolution_note: Map.get(attrs, :resolution_note),
+         target_kind: :post,
+         target_id: Ecto.UUID.generate(),
+         reason: "spam"
        }}
     end
   end
@@ -470,19 +495,74 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       refute joined =~ "2026-04-24"
     end
 
-    test "QUEUE renders honest report workflow unavailable state and no work items", %{
+    test "QUEUE renders wide table + inspector workspace with approved action copy", %{
       state: state
     } do
+      report =
+        report_row(%{id: "rep-1", target_kind: :post, reason: "spam", notes: "needs review"})
+        |> Map.from_struct()
+        |> Map.put(:target_label, "post #42 in general")
+
       flat =
         state
-        |> put_moderation_state(0, queue: [%{body: "fake report"}])
+        |> Map.put(:terminal_size, {120, 30})
+        |> put_moderation_state(0, queue: [report])
         |> render_moderation()
         |> collect_text_values()
 
       joined = Enum.join(flat, "\n")
-      assert joined =~ "Report queue is not available"
-      refute joined =~ "fake report"
-      refute joined =~ "Approve"
+
+      assert joined =~ "Open reports"
+      assert joined =~ "Target"
+      assert joined =~ "Reason"
+      assert joined =~ "Reporter"
+      assert joined =~ "Selected report"
+      assert joined =~ "post #42 in general"
+      assert joined =~ "needs review"
+      assert joined =~ "V View target"
+      assert joined =~ "E Resolve"
+      assert joined =~ "D Dismiss"
+      assert joined =~ "R Refresh"
+    end
+
+    test "QUEUE wide render tree survives Raxol preparer at 120x36", %{
+      state: state
+    } do
+      report =
+        report_row(%{id: "rep-1", target_kind: :post, reason: "spam", notes: "needs review"})
+        |> Map.from_struct()
+        |> Map.put(:target_label, "post #42 in general")
+
+      tree =
+        state
+        |> Map.put(:terminal_size, {120, 36})
+        |> put_moderation_state(0, queue: [report])
+        |> render_moderation()
+
+      assert %{} = Raxol.UI.Layout.Preparer.prepare(tree)
+    end
+
+    test "QUEUE stacks table and selected report details below the wide breakpoint", %{
+      state: state
+    } do
+      report =
+        report_row(%{id: "rep-1", target_kind: :post, reason: "spam", notes: "needs review"})
+        |> Map.from_struct()
+        |> Map.put(:target_label, "post #42 in general")
+
+      flat =
+        state
+        |> Map.put(:terminal_size, {90, 24})
+        |> put_moderation_state(0, queue: [report])
+        |> render_moderation()
+        |> collect_text_values()
+
+      joined = Enum.join(flat, "\n")
+
+      assert joined =~ "Open reports"
+      assert joined =~ "Selected report"
+      assert joined =~ "post #42 in general"
+      assert joined =~ "needs review"
     end
 
     test "USERS renders read-only user rows without mutation commands", %{state: state} do
@@ -616,6 +696,77 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
     test "unknown key returns :no_match", %{state: state} do
       assert :no_match = handle_moderation_key(%{key: :char, char: "z"}, state)
+    end
+
+    test "QUEUE j/k changes the selected report", %{state: state} do
+      reports = [
+        report_row(%{id: "rep-1", reason: "spam"}),
+        report_row(%{id: "rep-2", reason: "abuse"})
+      ]
+
+      state = put_moderation_state(state, 0, queue: reports)
+
+      {:update, state, _} = handle_moderation_key(%{key: :char, char: "j"}, state)
+      assert state.screen_state.moderation.queue_selected_index == 1
+
+      {:update, state, _} = handle_moderation_key(%{key: :char, char: "k"}, state)
+      assert state.screen_state.moderation.queue_selected_index == 0
+    end
+
+    test "QUEUE E opens a resolution modal with report summary context" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      state =
+        ModerationState.new(
+          queue: [
+            report_row(%{id: "rep-1", reason: "spam"})
+            |> Map.from_struct()
+            |> Map.put(:target_label, "post #42 in general")
+          ]
+        )
+
+      {state, effects} = Moderation.update({:key, %{key: :char, char: "e"}}, state, context)
+
+      assert state.queue_selected_index == 0
+
+      assert [
+               %Effect{
+                 type: :modal,
+                 payload:
+                   {:open,
+                    %Foglet.TUI.Modal{
+                      title: "Resolve Report",
+                      message: %{form: %ModalForm{}, summary_lines: summary_lines}
+                    }}
+               }
+             ] = effects
+
+      assert Enum.any?(summary_lines, &String.contains?(&1, "post #42 in general"))
+      assert Enum.any?(summary_lines, &String.contains?(&1, "spam"))
+    end
+
+    test "QUEUE D opens a dismissal modal for the selected report" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      state = ModerationState.new(queue: [report_row(%{id: "rep-1", reason: "spam"})])
+
+      {_state, effects} = Moderation.update({:key, %{key: :char, char: "d"}}, state, context)
+
+      assert [%Effect{type: :modal, payload: {:open, %{title: "Dismiss Report"}}}] = effects
     end
 
     test "Moderation screen does NOT dispatch fake moderation commands", %{state: state} do
@@ -776,6 +927,31 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     end
   end
 
+  describe "queue moderation actions" do
+    test "modal submit resolve_report dispatches moderation task" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+
+      context =
+        Context.new(
+          current_user: user,
+          route: :moderation,
+          domain: %{moderation: FakeModeration}
+        )
+
+      state = ModerationState.new(queue: [report_row(%{id: "rep-1", reason: "spam"})])
+
+      {_state, effects} =
+        Moderation.update(
+          {:modal_submit, :resolve_report, %{report_id: "rep-1", resolution_note: "handled"}},
+          state,
+          context
+        )
+
+      assert [%Effect{type: :task, payload: %{op: :resolve_report, screen_key: :moderation}}] =
+               effects
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Phase 25 Plan 05 — Per-tab theme hygiene (D-12)
   # ---------------------------------------------------------------------------
@@ -862,6 +1038,21 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       mod: %User{handle: handle},
       inserted_at: inserted_at
     }
+  end
+
+  defp report_row(attrs) do
+    defaults = %{
+      id: Ecto.UUID.generate(),
+      target_kind: :post,
+      target_id: Ecto.UUID.generate(),
+      reason: "spam",
+      notes: "needs review",
+      status: :open,
+      reporter: %User{handle: "reporter"},
+      inserted_at: ~U[2026-04-24 13:00:00Z]
+    }
+
+    struct!(Report, Map.merge(defaults, attrs))
   end
 
   defp text_index(flat, needle) do
