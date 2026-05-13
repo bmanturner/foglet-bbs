@@ -56,6 +56,21 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
   end
 
   describe "form key handling" do
+    test "q is entered as normal reason metadata while the form owns focus" do
+      state = %AccessRulesView{
+        form_mode: :create_allow,
+        form_field: :reason,
+        draft: %{"address" => "198.51.100.73", "reason" => "", "comment" => ""}
+      }
+
+      {state, effects} = AccessRulesView.handle_key(%{key: :char, char: "q"}, state)
+
+      assert effects == []
+      assert state.form_mode == :create_allow
+      assert state.form_field == :reason
+      assert state.draft["reason"] == "q"
+    end
+
     test "Ctrl+S submits the access-rule form like the advertised command bar" do
       state = %AccessRulesView{
         form_mode: :create_deny,

@@ -127,7 +127,7 @@ defmodule Foglet.TUI.Screens.Sysop do
       when c in ["q", "Q"] do
     ss = normalize_state(local_state, context)
 
-    if active_boards_modal?(ss) do
+    if active_boards_modal?(ss) or active_access_form?(ss) do
       handle_update_key(event, ss, context)
     else
       {ss, [Effect.navigate(:main_menu, %{})]}

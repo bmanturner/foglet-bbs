@@ -12,6 +12,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Sysop
+  alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SiteFormState
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
   alias Foglet.TUI.Screens.Sysop.UsersView
@@ -260,6 +261,37 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = Sysop.init(context)
 
       assert _node = Sysop.render(state, context)
+    end
+
+    test "ACCESS form consumes q as field text instead of global Back" do
+      user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "alice",
+        role: :sysop,
+        status: :active
+      }
+
+      context = Context.new(current_user: user, route: :sysop, terminal_size: {80, 24})
+
+      state =
+        Sysop.init(context)
+        |> Map.put(:active_tab, 5)
+        |> Map.put(:access_rules_view, {
+          :loaded,
+          %AccessRulesView{
+            current_user: user,
+            form_mode: :create_allow,
+            form_field: :reason,
+            draft: %{"address" => "198.51.100.73", "reason" => "", "comment" => ""}
+          }
+        })
+
+      {new_state, effects} = Sysop.update({:key, %{key: :char, char: "q"}}, state, context)
+
+      assert effects == []
+      assert {:loaded, %AccessRulesView{} = access_state} = new_state.access_rules_view
+      assert access_state.form_mode == :create_allow
+      assert access_state.draft["reason"] == "q"
     end
 
     test "tab entry sets lifecycle slot to loading and emits a task effect" do
