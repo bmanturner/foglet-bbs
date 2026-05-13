@@ -187,7 +187,7 @@ defmodule Foglet.TUI.App.RuntimeMessages do
         |> Map.put(:command_entry, entry)
         |> Foglet.TUI.App.Effects.apply_effects(effects)
 
-      CommandEntry.open_key?(key_event, state.current_screen) ->
+      command_entry_open_key?(key_event, state) ->
         {%{state | command_entry: CommandEntry.open()}, []}
 
       true ->
@@ -197,6 +197,17 @@ defmodule Foglet.TUI.App.RuntimeMessages do
           {:key, key_event}
         )
     end
+  end
+
+  defp command_entry_open_key?(%{key: :char, char: "/"}, %App{
+         current_screen: :thread_list,
+         screen_state: %{thread_list: %Foglet.TUI.Screens.BoardScreen.State{current_tab: :chat}}
+       }) do
+    false
+  end
+
+  defp command_entry_open_key?(key_event, %App{} = state) do
+    CommandEntry.open_key?(key_event, state.current_screen)
   end
 
   defp handle_presence({:online_presence, _event, _payload} = msg, %App{} = state) do

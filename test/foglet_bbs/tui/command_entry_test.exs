@@ -3,6 +3,8 @@ defmodule Foglet.TUI.CommandEntryTest do
 
   alias Foglet.TUI.App
   alias Foglet.TUI.CommandEntry
+  alias Foglet.TUI.Screens.BoardScreen.State, as: BoardScreenState
+  alias Foglet.TUI.Screens.ChatRoom.State, as: ChatRoomState
   alias Foglet.TUI.Screens.NewThread.State, as: NewThreadState
 
   defmodule FakePosts do
@@ -54,6 +56,31 @@ defmodule Foglet.TUI.CommandEntryTest do
 
     {updated, []} = App.update({:key, %{key: :char, char: "/"}}, state)
     assert updated.command_entry == nil
+  end
+
+  test "printable slash reaches the board chat composer instead of global command entry" do
+    board_state = %BoardScreenState{
+      current_tab: :chat,
+      board: %{id: "b1", chat_enabled: true, chat_storage_mode: :permanent},
+      chat_room: %ChatRoomState{
+        board: %{id: "b1", chat_enabled: true, chat_storage_mode: :permanent},
+        board_id: "b1",
+        user_id: "u1"
+      }
+    }
+
+    state = %App{
+      current_screen: :thread_list,
+      current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+      route_params: %{board: board_state.board, board_id: "b1"},
+      screen_state: %{thread_list: board_state},
+      session_context: %{domain: %{posts: FakePosts}}
+    }
+
+    {updated, []} = App.update({:key, %{key: :char, char: "/"}}, state)
+
+    assert updated.command_entry == nil
+    assert updated.screen_state.thread_list.chat_room.composer == "/"
   end
 
   test "plain search returns selectable results and selection navigates to target post" do

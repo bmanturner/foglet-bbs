@@ -52,10 +52,32 @@ defmodule Foglet.BoardChat.PermanentTest do
     test "writes a message and returns it", %{board: board, user: user} do
       assert {:ok, %Message{} = message} = Permanent.insert(board, user, "hello world")
       assert message.body == "hello world"
+      assert message.kind == :text
+      assert message.metadata == %{}
       assert message.board_id == board.id
       assert message.user_id == user.id
       refute is_nil(message.id)
       refute is_nil(message.inserted_at)
+    end
+
+    test "stores action messages with structured kind and metadata", %{board: board, user: user} do
+      assert {:ok, %Message{} = message} = BoardChat.post(board, user, " /ME waves ")
+      assert message.body == "waves"
+      assert message.kind == :action
+      assert message.metadata == %{"command" => "me"}
+    end
+
+    test "rejects empty action commands before storing or broadcasting", %{
+      board: board,
+      user: user
+    } do
+      :ok = Phoenix.PubSub.subscribe(FogletBbs.PubSub, Topics.board_chat_topic(board.id))
+
+      assert {:error, {:command_validation, "Add an action after /me, e.g. /me waves."}} =
+               BoardChat.post(board, user, "/me   ")
+
+      assert [] = Permanent.recent(board.id)
+      refute_receive {:board_chat, :new_message, _}, 100
     end
 
     test "trims whitespace and rejects blank bodies", %{board: board, user: user} do

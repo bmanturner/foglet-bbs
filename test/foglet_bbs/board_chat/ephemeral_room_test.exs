@@ -42,6 +42,30 @@ defmodule Foglet.BoardChat.Ephemeral.RoomTest do
       {:ok, m2} = Room.post(board_id, user_id, "second")
 
       assert [^m1, ^m2] = Room.recent(board_id)
+      assert m1.kind == :text
+      assert m1.metadata == %{}
+    end
+
+    test "appends action messages with the same consumer-visible shape", %{
+      board_id: board_id,
+      user_id: user_id
+    } do
+      start_room!(board_id, [])
+
+      Phoenix.PubSub.subscribe(FogletBbs.PubSub, Foglet.PubSub.board_chat_topic(board_id))
+
+      assert {:ok, msg} =
+               Room.post(board_id, user_id, %{
+                 kind: :action,
+                 body: "waves",
+                 metadata: %{"command" => "me"}
+               })
+
+      assert msg.body == "waves"
+      assert msg.kind == :action
+      assert msg.metadata == %{"command" => "me"}
+      assert [^msg] = Room.recent(board_id)
+      assert_receive {:board_chat, :new_message, ^msg}, 500
     end
 
     test "broadcasts on the board chat topic", %{board_id: board_id, user_id: user_id} do
