@@ -34,6 +34,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
   @default_terminal_size {80, 24}
+  @enhanced_oneliner_detail_size {120, 36}
   @oneliner_display_limit 5
 
   # Minimum Navigation panel inner width budget — the FLOOR for the
@@ -858,16 +859,25 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp action_visible?(:authenticated, user, _state), do: not is_nil(user)
 
   defp action_visible?(:hide_oneliner_policy, _user, state) do
-    not is_nil(selected_hideable_oneliner(state))
+    oneliner_detail_visible?(state) and not is_nil(selected_hideable_oneliner(state))
   end
 
   defp action_visible?(:report_oneliner_policy, user, state) do
-    not is_nil(user) and not is_nil(selected_reportable_oneliner(state))
+    oneliner_detail_visible?(state) and not is_nil(user) and
+      not is_nil(selected_reportable_oneliner(state))
   end
 
   defp action_visible?(:oneliners_present, _user, state) do
-    visible_oneliners(state) != []
+    oneliner_detail_visible?(state) and visible_oneliners(state) != []
   end
+
+  defp oneliner_detail_visible?(%{terminal_size: {cols, rows}})
+       when is_integer(cols) and is_integer(rows) do
+    {min_cols, min_rows} = @enhanced_oneliner_detail_size
+    cols >= min_cols and rows >= min_rows
+  end
+
+  defp oneliner_detail_visible?(_state), do: false
 
   defp command_group(label, keys) do
     %{
