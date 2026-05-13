@@ -70,6 +70,13 @@ defmodule Foglet.PostsTest do
     |> Repo.update!()
   end
 
+  defp notifications_for(user) do
+    Notification
+    |> where([notification], notification.user_id == ^user.id)
+    |> order_by([notification], asc: notification.inserted_at, asc: notification.id)
+    |> Repo.all()
+  end
+
   describe "create_reply/4 (BOARD-03)" do
     test "creates a post with message_number from Board Server" do
       board = setup_board_with_server()
@@ -282,11 +289,14 @@ defmodule Foglet.PostsTest do
       assert notification.user_id == author.id
 
       assert notification.payload == %{
+               "board_id" => board.id,
                "thread_id" => thread.id,
-               "new_post_ids" => [reply_to_deleted.id]
+               "post_id" => reply_to_deleted.id,
+               "snippet" => "reply to deleted"
              }
 
       refute notification.user_id == other_post.user_id
+      assert Repo.aggregate(from(n in Notification, where: n.kind == :reply), :count) == 0
     end
 
     test "missing parent references fail without notifications or counter drift" do
@@ -469,7 +479,13 @@ defmodule Foglet.PostsTest do
       assert notification.user_id == creator.id
       assert notification.actor_id == actor.id
       assert notification.dedupe_key == "post:#{reply.id}:user:#{creator.id}"
-      assert notification.payload == %{"thread_id" => thread.id, "new_post_ids" => [reply.id]}
+
+      assert notification.payload == %{
+               "board_id" => board.id,
+               "thread_id" => thread.id,
+               "post_id" => reply.id,
+               "snippet" => "new update"
+             }
     end
   end
 
@@ -701,6 +717,99 @@ defmodule Foglet.PostsTest do
       assert {:ok, %{upvote_count: 1}} = Foglet.Posts.toggle_readable_upvote(voter, post.id)
       assert {:error, :forbidden} = Foglet.Posts.toggle_readable_upvote(nil, post.id)
       assert Repo.get!(Foglet.Posts.Post, post.id).upvote_count == 1
+    end
+  end
+
+  describe "thread creator notifications" do
+    test "notifies a thread creator when another user posts in their thread" do
+      board = setup_board_with_server()
+      creator = active_user_fixture(%{handle: "creator"})
+      poster = active_user_fixture(%{handle: "poster"})
+      {thread, _root} = setup_thread(board, creator)
+
+      assert {:ok, post} =
+               Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{
+                 body: "  thread update\n\nsummary  "
+               })
+
+      assert [notification] = notifications_for(creator)
+      assert notification.kind == :thread_update
+      assert notification.actor_id == poster.id
+      assert notification.read_at == nil
+      assert notification.dedupe_key == "post:#{post.id}:user:#{creator.id}"
+      assert notification.payload["board_id"] == board.id
+      assert notification.payload["thread_id"] == thread.id
+      assert notification.payload["post_id"] == post.id
+      assert notification.payload["snippet"] == "thread update summary"
+    end
+
+    test "does not notify the creator for their own post" do
+      board = setup_board_with_server()
+      creator = active_user_fixture()
+      {thread, _root} = setup_thread(board, creator)
+
+      assert {:ok, _post} =
+               Foglet.Posts.create_reply(thread.id, board.id, creator.id, %{body: "self update"})
+
+      assert notifications_for(creator) == []
+    end
+
+    test "prefers reply notification when the new post replies to the creator" do
+      board = setup_board_with_server()
+      creator = active_user_fixture()
+      poster = active_user_fixture()
+      {thread, root} = setup_thread(board, creator)
+
+      assert {:ok, post} =
+               Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{
+                 body: "quoted reply",
+                 reply_to_id: root.id
+               })
+
+      assert [notification] = notifications_for(creator)
+      assert notification.kind == :reply
+      assert notification.dedupe_key == "post:#{post.id}:user:#{creator.id}"
+      assert notification.payload["post_id"] == post.id
+    end
+
+    test "prefers mention notification when the new post mentions the creator" do
+      board = setup_board_with_server()
+      creator = active_user_fixture(%{handle: "threadmaker"})
+      poster = active_user_fixture()
+      {thread, _root} = setup_thread(board, creator)
+
+      assert {:ok, post} =
+               Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{
+                 body: "hi @threadmaker, see this"
+               })
+
+      assert [notification] = notifications_for(creator)
+      assert notification.kind == :mention
+      assert notification.dedupe_key == "post:#{post.id}:user:#{creator.id}"
+      assert notification.payload["post_id"] == post.id
+    end
+
+    test "missing and deleted threads are rejected before board-server mutation" do
+      board = setup_board_with_server()
+      creator = active_user_fixture()
+      poster = active_user_fixture()
+      missing_thread_id = Ecto.UUID.generate()
+
+      assert {:error, :posting_not_allowed} =
+               Foglet.Posts.create_reply(missing_thread_id, board.id, poster.id, %{body: "orphan"})
+
+      {thread, _root} = setup_thread(board, creator)
+      {:ok, _deleted_thread} = Foglet.Threads.delete_thread(thread)
+      before_board = Repo.get!(Foglet.Boards.Board, board.id)
+      before_posts = Repo.aggregate(Foglet.Posts.Post, :count)
+
+      assert {:error, :posting_not_allowed} =
+               Foglet.Posts.create_reply(thread.id, board.id, poster.id, %{body: "deleted thread"})
+
+      assert Repo.get!(Foglet.Boards.Board, board.id).next_message_number ==
+               before_board.next_message_number
+
+      assert Repo.aggregate(Foglet.Posts.Post, :count) == before_posts
     end
   end
 

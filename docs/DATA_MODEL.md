@@ -513,7 +513,7 @@ end
 - `:reply` — same shape; distinguished only by kind
 - `:dm` — `%{message_id: "...", preview: "..."}`
 - `:mod_action` — `%{action_id: "...", action_kind: "warn" | ..., reason: "..."}`
-- `:thread_update` — `%{thread_id: "...", new_post_ids: [...]}`
+- `:thread_update` — same post-target shape; emitted to the thread creator for a new post when no more-specific `:reply` or `:mention` notification already owns the same post/recipient dedupe key
 
 **Migration notes:**
 

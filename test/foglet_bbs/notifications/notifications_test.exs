@@ -103,8 +103,10 @@ defmodule Foglet.NotificationsTest do
                  user_id: recipient.id,
                  kind: :thread_update,
                  payload: %{
+                   board_id: Ecto.UUID.generate(),
                    thread_id: Ecto.UUID.generate(),
-                   new_post_ids: [Ecto.UUID.generate()]
+                   post_id: Ecto.UUID.generate(),
+                   snippet: "thread changed"
                  }
                })
 
