@@ -208,10 +208,19 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     case Effect.unwrap_task_result(result) do
       {:ok, _msg} ->
         # Live message arrives via PubSub; just clear the sending status.
-        {%{state | status: :idle, last_error: nil}, []}
+        {%{state | status: :idle, last_error: nil, pending_composer: nil}, []}
+
+      {:error, {:command_validation, _message} = reason} ->
+        {%{
+           state
+           | status: :idle,
+             composer: state.pending_composer || state.composer,
+             pending_composer: nil,
+             last_error: reason
+         }, []}
 
       {:error, reason} ->
-        {%{state | status: :idle, last_error: reason}, []}
+        {%{state | status: :idle, last_error: reason, pending_composer: nil}, []}
     end
   end
 
@@ -314,6 +323,15 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     handle = user |> Handle.handle_text() |> TextWidth.truncate(min(20, max(div(width, 3), 1)))
     body = Map.get(msg, :body, "")
     when_label = relative_time(msg)
+
+    if action_message?(msg) do
+      action_transcript_rows(user, handle, body, when_label, theme, width, row_limit)
+    else
+      text_transcript_rows(user, handle, body, when_label, theme, width, row_limit)
+    end
+  end
+
+  defp text_transcript_rows(user, handle, body, when_label, theme, width, row_limit) do
     prefix = handle <> " • "
     suffix = "  " <> when_label
 
@@ -321,7 +339,6 @@ defmodule Foglet.TUI.Screens.ChatRoom do
       max(width - TextWidth.display_width(prefix) - TextWidth.display_width(suffix), 1)
 
     continuation_body_width = max(width - TextWidth.display_width(prefix), 1)
-
     body_lines = bounded_body_lines(body, first_body_width, continuation_body_width, row_limit)
 
     [first_body | rest] = body_lines
@@ -340,12 +357,48 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     ]
   end
 
+  defp action_transcript_rows(_user, handle, body, when_label, theme, width, row_limit) do
+    action_prefix = "*#{handle}* "
+    action_body = action_prefix <> body
+    suffix = "  " <> when_label
+    first_body_width = max(width - TextWidth.display_width(suffix), 1)
+    continuation_indent = TextWidth.display_width(action_prefix)
+    continuation_body_width = max(width - continuation_indent, 1)
+
+    body_lines =
+      bounded_body_lines(action_body, first_body_width, continuation_body_width, row_limit)
+
+    [first_body | rest] = body_lines
+
+    [
+      transcript_action_first_row(first_body, when_label, first_body_width, theme)
+      | Enum.map(rest, fn line ->
+          transcript_action_continuation_row(
+            continuation_indent,
+            line,
+            continuation_body_width,
+            theme
+          )
+        end)
+    ]
+  end
+
   defp transcript_first_row(user, body, when_label, body_width, theme) do
     row style: %{gap: 0} do
       [
         Handle.render(user, theme, prefix: ""),
         text(" • ", fg: theme.dim.fg),
         text(TextWidth.pad_trailing(body, body_width), fg: theme.primary.fg),
+        text("  ", fg: theme.dim.fg),
+        text(when_label, fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  defp transcript_action_first_row(body, when_label, body_width, theme) do
+    row style: %{gap: 0} do
+      [
+        text(TextWidth.pad_trailing(body, body_width), fg: theme.primary.fg, style: [:italic]),
         text("  ", fg: theme.dim.fg),
         text(when_label, fg: theme.dim.fg)
       ]
@@ -386,6 +439,17 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     end
   end
 
+  defp transcript_action_continuation_row(indent, body, body_width, theme) do
+    row style: %{gap: 0} do
+      [
+        text(TextWidth.pad_trailing("", indent), fg: theme.dim.fg),
+        text(TextWidth.pad_trailing(body, body_width), fg: theme.primary.fg, style: [:italic])
+      ]
+    end
+  end
+
+  defp action_message?(msg), do: Map.get(msg, :kind) in [:action, "action"]
+
   defp sidebar_pane(%State{} = state, theme, width) do
     rows = sidebar_entries(state, theme)
 
@@ -421,9 +485,17 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
       error_line =
         case state.last_error do
-          nil -> text("")
-          :message_too_long -> text("  " <> @message_too_long, fg: theme.error.fg)
-          _ -> text("  " <> @send_failure_message, fg: theme.error.fg)
+          nil ->
+            text("")
+
+          :message_too_long ->
+            text("  " <> @message_too_long, fg: theme.error.fg)
+
+          {:command_validation, message} when is_binary(message) ->
+            text("  " <> message, fg: theme.error.fg)
+
+          _ ->
+            text("  " <> @send_failure_message, fg: theme.error.fg)
         end
 
       column style: %{gap: 0} do
@@ -545,7 +617,13 @@ defmodule Foglet.TUI.Screens.ChatRoom do
             BoardChat.post(board, user, body)
           end)
 
-        {%{state | composer: "", status: :sending, last_error: nil}, [effect]}
+        {%{
+           state
+           | composer: "",
+             pending_composer: state.composer,
+             status: :sending,
+             last_error: nil
+         }, [effect]}
     end
   end
 
