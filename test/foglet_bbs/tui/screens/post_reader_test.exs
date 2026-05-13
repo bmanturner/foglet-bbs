@@ -1402,9 +1402,13 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     tree = render_screen(local_state, context)
     split = find_node(tree, &match?(%{type: :split_pane}, &1))
 
+    rows = rendered_rows(tree, {120, 36})
+    first_post_row = Enum.find(rows, &String.contains?(&1, "▶ Post 2 of 2"))
+
     assert split.attrs.direction == :horizontal
     refute find_node(tree, &bounded_centered_reader?(&1, 92))
     assert flatten_text(Enum.at(split.children, 1)) =~ "Selected #2"
+    assert first_post_row =~ ~r/^│▶ Post 2 of 2/
   end
 
   test "render/1 delegates breadcrumb formatting to shared chrome", %{state: state} do

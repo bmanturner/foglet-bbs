@@ -357,32 +357,35 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   end
 
   defp render_local_post_content(%State{} = state, frame_state, theme, w, h, reply_state) do
-    reader_w = reader_width(w)
-    body = render_post_content(frame_state, state, theme, w, h)
-
-    content =
-      case reply_notice(theme, reply_state) do
-        nil ->
-          body
-
-        notice ->
-          column style: %{gap: 0} do
-            [notice, body]
-          end
-      end
-
     if enhanced_reader_with_rail?(w, h) do
-      lane_w = min(reader_w, @enhanced_reader_width)
-      lane = centered_reader(content, lane_w, lane_w)
+      lane_w = @enhanced_reader_width
+      content = reader_content(frame_state, state, theme, lane_w, h, reply_state)
       rail = render_context_rail(state, theme, reply_state)
 
-      Layout.left_heavy_split(lane, rail,
+      Layout.left_heavy_split(content, rail,
         terminal_size: {w, h},
         ratio: {2, 1},
         min_size: @enhanced_rail_min_width
       )
     else
+      reader_w = reader_width(w)
+      content = reader_content(frame_state, state, theme, w, h, reply_state)
+
       centered_reader(content, w, reader_w)
+    end
+  end
+
+  defp reader_content(frame_state, state, theme, w, h, reply_state) do
+    body = render_post_content(frame_state, state, theme, w, h)
+
+    case reply_notice(theme, reply_state) do
+      nil ->
+        body
+
+      notice ->
+        column style: %{gap: 0} do
+          [notice, body]
+        end
     end
   end
 
