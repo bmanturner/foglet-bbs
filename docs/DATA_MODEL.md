@@ -104,7 +104,7 @@ end
 **Anonymization flow** (on account deletion):
 
 1. Rewrite `user_id` on all `posts`, `direct_messages` authored by the user to the tombstone user.
-2. Delete `ssh_keys`, `board_subscriptions`, `board_read_pointers`, `thread_read_pointers`, `notifications`, `oneliners`, `upvotes`, `last_callers`, unread DMs to the user.
+2. Delete `ssh_keys`, `board_subscriptions`, `board_read_pointers`, `thread_read_pointers`, `notifications`, `oneliners`, `upvotes`, unread DMs to the user; detach/anonymize `last_callers.user_id` and clear public caller visibility while retaining audit rows until retention cleanup.
 3. Zero the user row: clear profile fields, set `deleted_at`, randomize email to prevent re-registration conflicts.
 4. Keep the row (rather than hard-deleting) so foreign key references remain valid.
 
@@ -639,18 +639,26 @@ end
 
 ---
 
-## 10. Last callers
+## 10. Last callers and SSH access rules
 
-### `Foglet.Presence.LastCaller`
+### `Foglet.SSH.LastCaller`
 
 Table: `last_callers`
-
 ```elixir
 schema "last_callers" do
-  field :connected_at, :utc_datetime_usec
-  field :disconnected_at, :utc_datetime_usec
   field :interface, Ecto.Enum, values: [:ssh, :cli, :telnet]
-  field :visible, :boolean, default: true   # snapshot of user's preference at connection time
+  field :peer_ip, :string              # raw IPv4/IPv6, operator-only, retention-bounded
+  field :peer_port, :integer
+  field :outcome, Ecto.Enum, values: [
+    :accepted, :denied, :rate_limited, :over_global_limit, :auth_gate_denied, :failed
+  ]
+  field :reason, :string               # terse operator-safe reason, no exception payloads
+  field :policy_key, :string
+  field :session_id, :string
+  field :public_visible, :boolean, default: false
+  field :occurred_at, :utc_datetime_usec
+  field :disconnected_at, :utc_datetime_usec
+  field :metadata, :map, default: %{}
 
   belongs_to :user, Foglet.Accounts.User
 
@@ -660,9 +668,30 @@ end
 
 **Migration notes:**
 
-- Index on `(connected_at DESC) WHERE visible = true` — the login-sequence "last callers" list hits this.
-- `visible` is captured at connection time from `users.show_in_last_callers`. Later toggles don't retroactively change history (a user can't make past visible sessions invisible without a deliberate mod action).
-- Retention: keep N most recent per user, or N days of history, sysop-configurable.
+- Index on `(occurred_at DESC) WHERE public_visible = true AND outcome = 'accepted'` — the login-sequence "last callers" list hits this.
+- `public_visible` is captured from `users.show_in_last_callers` for accepted user calls. It controls classic public caller-history display only; operator/security audit rows remain durable until retention cleanup.
+- Raw `peer_ip`/`peer_port` are retained for a code-defined default 90 days and then redacted by the owning context cleanup API. Rows may remain for aggregate/history purposes after raw IP redaction.
+- Account deletion/anonymization detaches `user_id` and clears public visibility for this user's caller rows rather than deleting the operator/security audit record immediately.
+- Never store raw passwords, public-key material, invite/reset/verification tokens, post/chat content, or raw exception payloads in `last_callers` fields or metadata.
+
+### `Foglet.SSH.AccessRule`
+
+Table: `ssh_access_rules`
+```elixir
+schema "ssh_access_rules" do
+  field :mode, Ecto.Enum, values: [:allow, :deny]
+  field :address, :string             # exact IPv4/IPv6 or CIDR
+  field :enabled, :boolean, default: true
+  field :reason, :string
+  field :comment, :string
+
+  belongs_to :created_by, Foglet.Accounts.User
+
+  timestamps()
+end
+```
+
+Rules are operator-managed allow/deny entries. Deny rules win over allow rules. When allowlist mode is enabled by the SSH hot path, a source must match an enabled `:allow` rule and must not match an enabled `:deny` rule; allowlisted sources still do not bypass per-IP throttles or global active-connection caps.
 
 ---
 
@@ -818,7 +847,10 @@ Critical indexes to create explicitly (beyond those implied by unique constraint
 | `reports` | `(inserted_at) WHERE status = 'open'` | mod queue |
 | `mod_actions` | `(inserted_at DESC)` | audit log |
 | `user_sanctions` | `(user_id) WHERE lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())` | active sanction check |
-| `last_callers` | `(connected_at DESC) WHERE visible = true` | login sequence |
+| `last_callers` | `(occurred_at DESC) WHERE public_visible = true AND outcome = 'accepted'` | login sequence |
+| `last_callers` | `(user_id, occurred_at DESC)` | operator user/IP audit |
+| `last_callers` | `(outcome, occurred_at DESC)` | operator security audit |
+| `ssh_access_rules` | `(enabled, mode)` | SSH policy evaluation |
 | `site_counters` | unique `name` | atomic upsert target for durable site counters |
 | `configuration` | unique `key` | config lookup |
 
