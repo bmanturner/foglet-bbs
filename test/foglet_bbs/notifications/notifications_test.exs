@@ -199,6 +199,34 @@ defmodule Foglet.NotificationsTest do
     end
   end
 
+  describe "cleanup_read_notifications/2" do
+    test "deletes only read notifications older than the retention window" do
+      recipient = AccountsFixtures.user_fixture()
+      now = ~U[2026-05-13 00:00:00.000000Z]
+
+      old_read = notification_fixture!(recipient, %{read_at: ~U[2026-04-12 23:59:59.999999Z]})
+
+      boundary_read =
+        notification_fixture!(recipient, %{read_at: ~U[2026-04-13 00:00:00.000000Z]})
+
+      recent_read = notification_fixture!(recipient, %{read_at: ~U[2026-04-13 00:00:00.000001Z]})
+      unread = notification_fixture!(recipient)
+      set_inserted_at!(unread, ~U[2026-04-01 00:00:00.000000Z])
+
+      assert {:ok, 1} = Notifications.cleanup_read_notifications(30, now: now)
+
+      refute Repo.get(Notification, old_read.id)
+      assert Repo.get(Notification, boundary_read.id)
+      assert Repo.get(Notification, recent_read.id)
+      assert Repo.get(Notification, unread.id)
+    end
+
+    test "rejects non-positive retention windows" do
+      assert {:error, :invalid_retention_days} = Notifications.cleanup_read_notifications(0)
+      assert {:error, :invalid_retention_days} = Notifications.cleanup_read_notifications(-1)
+    end
+  end
+
   describe "Foglet.PubSub topic helpers" do
     test "notifications_topic/1 produces a stable user-scoped topic" do
       assert Topics.notifications_topic("abc") == "notifications:abc"

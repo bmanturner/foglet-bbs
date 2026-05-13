@@ -519,7 +519,7 @@ end
 
 - Partial index on `(user_id, inserted_at DESC) WHERE read_at IS NULL` — unread count is a hot query.
 - Index on `(user_id, inserted_at DESC)` for the full inbox view.
-- Retention: a cleanup job deletes read notifications older than N days.
+- Retention: `mix foglet.notifications.cleanup --days N` deletes read notifications whose `read_at` is older than the explicit retention window. Unread notifications are never deleted by this cleanup path.
 
 ---
 

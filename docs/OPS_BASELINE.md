@@ -122,6 +122,20 @@ Rollback / incident notes:
 - Destructive cleanup on shared hosts requires explicit incident approval; use
   targeted restricted-user/process-group cleanup only.
 
+## Retention Tasks
+
+Durable notifications are intentionally retained while unread. Operators can prune
+read notification rows with an explicit retention window:
+
+```bash
+mix foglet.notifications.cleanup --days 30
+```
+
+The task deletes only rows whose `read_at` is older than the requested number of
+days and leaves unread notifications untouched, regardless of `inserted_at`.
+Schedule it from the deployment platform if notification volume warrants routine
+cleanup.
+
 ## Smoke Checks
 
 Minimum release smoke evidence:

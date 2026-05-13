@@ -109,6 +109,34 @@ defmodule Foglet.Notifications do
     {:ok, count}
   end
 
+  @doc """
+  Deletes read notifications older than `retention_days`.
+
+  The retention boundary is based on `read_at`: notifications read strictly
+  before `now - retention_days` are deleted. Unread notifications are never
+  deleted by this cleanup path, even if their `inserted_at` is old.
+  """
+  @spec cleanup_read_notifications(pos_integer(), keyword()) ::
+          {:ok, non_neg_integer()} | {:error, :invalid_retention_days}
+  def cleanup_read_notifications(retention_days, opts \\ [])
+
+  def cleanup_read_notifications(retention_days, opts)
+      when is_integer(retention_days) and retention_days > 0 do
+    now = Keyword.get_lazy(opts, :now, fn -> DateTime.utc_now() end)
+    cutoff = DateTime.add(now, -retention_days * 86_400, :second)
+
+    {count, _} =
+      Repo.delete_all(
+        from(notification in Notification,
+          where: not is_nil(notification.read_at) and notification.read_at < ^cutoff
+        )
+      )
+
+    {:ok, count}
+  end
+
+  def cleanup_read_notifications(_retention_days, _opts), do: {:error, :invalid_retention_days}
+
   defp maybe_return_existing_notification(user_id, dedupe_key, changeset)
        when is_binary(user_id) and is_binary(dedupe_key) do
     case Repo.get_by(Notification, user_id: user_id, dedupe_key: String.trim(dedupe_key)) do
