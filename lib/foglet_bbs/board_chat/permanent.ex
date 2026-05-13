@@ -41,15 +41,19 @@ defmodule Foglet.BoardChat.Permanent do
     * `{:error, :not_permanent}` if the board's `chat_storage_mode` is
       not `:permanent`
   """
-  @spec insert(Board.t(), User.t(), String.t()) ::
+  @spec insert(Board.t(), User.t(), String.t() | map()) ::
           {:ok, Message.t()}
           | {:error, Changeset.t()}
           | {:error, :chat_disabled | :not_permanent}
-  def insert(%Board{} = board, %User{} = user, body) do
+  def insert(%Board{} = board, %User{} = user, body) when is_binary(body) do
+    insert(board, user, %{kind: :text, body: body, metadata: %{}})
+  end
+
+  def insert(%Board{} = board, %User{} = user, %{body: _body} = attrs) do
     with :ok <- ensure_chat_enabled(board),
          :ok <- ensure_permanent(board) do
       %Message{board_id: board.id, user_id: user.id}
-      |> Message.insert_changeset(%{body: body})
+      |> Message.insert_changeset(normalize_attrs(attrs))
       |> Repo.insert()
       |> case do
         {:ok, message} ->
@@ -60,6 +64,13 @@ defmodule Foglet.BoardChat.Permanent do
           err
       end
     end
+  end
+
+  defp normalize_attrs(attrs) do
+    attrs
+    |> Map.take([:body, :kind, :metadata])
+    |> Map.put_new(:kind, :text)
+    |> Map.put_new(:metadata, %{})
   end
 
   @doc """

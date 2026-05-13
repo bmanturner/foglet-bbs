@@ -890,3 +890,21 @@ Flagging for later decision, not blocking on today:
 - **Retention window for `post_edits`.** Unbounded is simple; if storage ever matters, we can age out old revisions. Probably fine forever at hobby scale.
 - **Polymorphic `target_id` in `reports` and `mod_actions`.** Works fine without a database-level constraint, but foreign key integrity is lost. Acceptable tradeoff for v1; revisit if it causes pain.
 - **Full-text search language.** Hardcoded `'english'` in the generated tsvector column. If the sysop wants a different language, this becomes a migration. Probably fine to defer until someone asks.
+
+## Board Chat Messages
+
+Table: `board_chat_messages`
+```elixir
+schema "board_chat_messages" do
+  field :body, :string
+  field :kind, Ecto.Enum, values: [:text, :action], default: :text
+  field :metadata, :map, default: %{}
+
+  belongs_to :board, Foglet.Boards.Board
+  belongs_to :user, Foglet.Accounts.User
+
+  timestamps()
+end
+```
+
+`kind` distinguishes normal text from structured action messages. Existing rows default to `:text` with empty metadata. `/me` action rows store the action text in `body`, `kind: :action`, and command provenance in metadata; renderers derive actor identity from `user_id`, not from the body.
