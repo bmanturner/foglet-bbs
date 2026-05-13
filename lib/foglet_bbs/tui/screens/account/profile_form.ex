@@ -9,6 +9,7 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
   alias Foglet.TUI.Layout
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Account.State
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.List.SelectableFieldList
 
@@ -29,7 +30,8 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
         height: height
       )
 
-    detail = inspector(fields, selected, theme, :profile)
+    detail =
+      inspector(fields, selected, theme, inspector_content_width(width, terminal_size), :profile)
 
     Layout.left_heavy_split(list, detail,
       terminal_size: terminal_size,
@@ -130,22 +132,41 @@ defmodule Foglet.TUI.Screens.Account.ProfileForm do
     if Layout.enhanced?(terminal_size), do: max(div(width * 3, 5) - 2, 40), else: width
   end
 
-  defp inspector(fields, selected, %Theme{} = theme, :profile) do
+  defp inspector(fields, selected, %Theme{} = theme, content_width, :profile) do
     field = Enum.at(fields, selected) || hd(fields)
     label = Map.get(field, :label, "Field")
     value = display_value(Map.get(field, :value))
     description = Map.get(field, :description) || profile_help(Map.fetch!(field, :name))
 
     column style: %{gap: 1, padding: 1} do
-      [
+      List.flatten([
         text("FIELD GUIDE", fg: theme.dim.fg, style: [:bold]),
         text(label, fg: theme.primary.fg, style: [:bold]),
         text(value, fg: theme.selected.fg),
         divider(char: "─", style: %{fg: theme.border.fg}),
-        text(description, fg: theme.unselected.fg),
-        text("Press E or Enter to edit this row.", fg: theme.dim.fg)
-      ]
+        wrapped_text(description, content_width, fg: theme.unselected.fg),
+        wrapped_text("Press E or Enter to edit this row.", content_width, fg: theme.dim.fg)
+      ])
     end
+  end
+
+  defp inspector_content_width(width, terminal_size) do
+    if Layout.enhanced?(terminal_size) do
+      width
+      |> detail_width()
+      |> Kernel.-(2)
+      |> max(1)
+    else
+      width
+    end
+  end
+
+  defp detail_width(width), do: max(div(width * 2, 5) - 2, 28)
+
+  defp wrapped_text(value, width, opts) do
+    value
+    |> TextWidth.wrap(width)
+    |> Enum.map(&text(&1, opts))
   end
 
   defp profile_help(:location), do: "Shown on your local profile."

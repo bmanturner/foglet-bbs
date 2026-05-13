@@ -9,6 +9,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   alias Foglet.TUI.Layout
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.Account.State
+  alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.List.SelectableFieldList
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
@@ -30,7 +31,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
         height: height
       )
 
-    detail = inspector(fields, selected, theme)
+    detail = inspector(fields, selected, theme, inspector_content_width(width, terminal_size))
 
     Layout.left_heavy_split(list, detail,
       terminal_size: terminal_size,
@@ -172,22 +173,41 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
     if Layout.enhanced?(terminal_size), do: max(div(width * 3, 5) - 2, 40), else: width
   end
 
-  defp inspector(fields, selected, %Theme{} = theme) do
+  defp inspector(fields, selected, %Theme{} = theme, content_width) do
     field = Enum.at(fields, selected) || hd(fields)
     label = Map.get(field, :label, "Field")
     value = display_value(Map.get(field, :value))
     description = Map.get(field, :description) || prefs_help(Map.fetch!(field, :name))
 
     column style: %{gap: 1, padding: 1} do
-      [
+      List.flatten([
         text("PREFERENCE PREVIEW", fg: theme.dim.fg, style: [:bold]),
         text(label, fg: theme.primary.fg, style: [:bold]),
         text(value, fg: theme.selected.fg),
         divider(char: "─", style: %{fg: theme.border.fg}),
-        text(description, fg: theme.unselected.fg),
-        text(preview_note(Map.fetch!(field, :name)), fg: theme.dim.fg)
-      ]
+        wrapped_text(description, content_width, fg: theme.unselected.fg),
+        wrapped_text(preview_note(Map.fetch!(field, :name)), content_width, fg: theme.dim.fg)
+      ])
     end
+  end
+
+  defp inspector_content_width(width, terminal_size) do
+    if Layout.enhanced?(terminal_size) do
+      width
+      |> detail_width()
+      |> Kernel.-(2)
+      |> max(1)
+    else
+      width
+    end
+  end
+
+  defp detail_width(width), do: max(div(width * 2, 5) - 2, 28)
+
+  defp wrapped_text(value, width, opts) do
+    value
+    |> TextWidth.wrap(width)
+    |> Enum.map(&text(&1, opts))
   end
 
   defp prefs_help(:timezone), do: "Controls how timestamps are localized around the BBS."
