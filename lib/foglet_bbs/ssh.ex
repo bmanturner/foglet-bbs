@@ -2,6 +2,8 @@ defmodule Foglet.SSH do
   @moduledoc "Domain boundary for SSH access rules and connection audit/caller history."
   import Ecto.Query
 
+  alias Foglet.Accounts.User
+  alias Foglet.Authorization
   alias Foglet.SSH.{AccessRule, LastCaller}
   alias FogletBbs.Repo
 
@@ -13,7 +15,21 @@ defmodule Foglet.SSH do
     Repo.all(from r in AccessRule, order_by: [desc: r.inserted_at])
   end
 
-  def create_access_rule(attrs, actor \\ nil) do
+  def list_access_rules(actor) do
+    with :ok <- permit_access_rule_management(actor) do
+      {:ok, list_access_rules()}
+    end
+  end
+
+  def create_access_rule(attrs, actor \\ nil)
+
+  def create_access_rule(%User{} = actor, attrs) when is_map(attrs) do
+    with :ok <- permit_access_rule_management(actor) do
+      create_access_rule(attrs, actor)
+    end
+  end
+
+  def create_access_rule(attrs, actor) when is_map(attrs) do
     %AccessRule{}
     |> AccessRule.changeset(attrs)
     |> AccessRule.put_created_by(actor)
@@ -21,8 +37,28 @@ defmodule Foglet.SSH do
   end
 
   def remove_access_rule(id), do: AccessRule |> Repo.get(id) |> delete_found()
+
+  def remove_access_rule(actor, id) do
+    with :ok <- permit_access_rule_management(actor) do
+      remove_access_rule(id)
+    end
+  end
+
   def enable_access_rule(id), do: set_access_rule_enabled(id, true)
+
+  def enable_access_rule(actor, id) do
+    with :ok <- permit_access_rule_management(actor) do
+      enable_access_rule(id)
+    end
+  end
+
   def disable_access_rule(id), do: set_access_rule_enabled(id, false)
+
+  def disable_access_rule(actor, id) do
+    with :ok <- permit_access_rule_management(actor) do
+      disable_access_rule(id)
+    end
+  end
 
   def evaluate_access(ip, opts \\ []) do
     rules =
@@ -79,6 +115,10 @@ defmodule Foglet.SSH do
       nil -> {:error, :not_found}
       rule -> rule |> Ecto.Changeset.change(enabled: enabled) |> Repo.update()
     end
+  end
+
+  defp permit_access_rule_management(actor) do
+    Bodyguard.permit(Authorization, :manage_ssh_access_rules, actor, :site)
   end
 
   defp delete_found(nil), do: {:error, :not_found}

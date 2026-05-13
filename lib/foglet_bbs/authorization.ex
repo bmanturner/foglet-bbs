@@ -46,6 +46,7 @@ defmodule Foglet.Authorization do
     :archive_category,
     :edit_config,
     :manage_user_status,
+    :manage_ssh_access_rules,
     :generate_invite,
     :revoke_invite,
     :send_test_email

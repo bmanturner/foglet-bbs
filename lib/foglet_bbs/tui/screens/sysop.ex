@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.Render
@@ -88,6 +89,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   def update({:task_result, op, result}, local_state, %Context{} = context)
       when op in [
              :sysop_load_boards,
+             :sysop_load_access_rules,
              :sysop_load_limits,
              :sysop_load_system,
              :sysop_load_users
@@ -248,6 +250,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp safe_log_value(value), do: inspect(value)
 
   defp slot_for("BOARDS"), do: :boards_view
+  defp slot_for("ACCESS"), do: :access_rules_view
   defp slot_for("LIMITS"), do: :limits_form
   defp slot_for("SYSTEM"), do: :system_snapshot
   defp slot_for("USERS"), do: :users_view
@@ -375,6 +378,9 @@ defmodule Foglet.TUI.Screens.Sysop do
     case Enum.at(State.tab_labels(ss), ss.active_tab) do
       "SITE" ->
         delegate_update_to_submodule(event, ss, :site_form, SiteForm, context)
+
+      "ACCESS" ->
+        delegate_update_to_submodule(event, ss, :access_rules_view, AccessRulesView, context)
 
       "LIMITS" ->
         delegate_update_to_submodule(event, ss, :limits_form, LimitsForm, context)
@@ -543,6 +549,9 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp load_effect_for_label("BOARDS", context),
     do: lifecycle_effect(:sysop_load_boards, context)
 
+  defp load_effect_for_label("ACCESS", context),
+    do: lifecycle_effect(:sysop_load_access_rules, context)
+
   defp load_effect_for_label("LIMITS", context),
     do: lifecycle_effect(:sysop_load_limits, context)
 
@@ -556,6 +565,10 @@ defmodule Foglet.TUI.Screens.Sysop do
     Effect.task(:sysop_load_boards, :sysop, fn ->
       BoardsView.init(current_user: context.current_user)
     end)
+  end
+
+  defp lifecycle_effect(:sysop_load_access_rules, %Context{} = context) do
+    AccessRulesView.load_effect(context.current_user)
   end
 
   defp lifecycle_effect(:sysop_load_limits, %Context{} = context) do
@@ -590,6 +603,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp slot_for_op(:sysop_load_boards), do: :boards_view
+  defp slot_for_op(:sysop_load_access_rules), do: :access_rules_view
   defp slot_for_op(:sysop_load_limits), do: :limits_form
   defp slot_for_op(:sysop_load_system), do: :system_snapshot
   defp slot_for_op(:sysop_load_users), do: :users_view

@@ -7,6 +7,29 @@ defmodule Foglet.SSH.AccessRulesTest do
   import FogletBbs.AccountsFixtures
 
   describe "access rules" do
+    test "actor-aware management denies non-sysops at the domain boundary" do
+      sysop = user_fixture() |> Ecto.Changeset.change(role: :sysop) |> Repo.update!()
+      member = user_fixture(%{role: :user})
+
+      assert {:error, :forbidden} = SSH.list_access_rules(member)
+
+      assert {:error, :forbidden} =
+               SSH.create_access_rule(member, %{
+                 mode: :deny,
+                 address: "192.0.2.8",
+                 reason: "abuse"
+               })
+
+      assert {:ok, rule} =
+               SSH.create_access_rule(sysop, %{mode: :deny, address: "192.0.2.8", reason: "abuse"})
+
+      assert {:ok, rules} = SSH.list_access_rules(sysop)
+      assert Enum.any?(rules, &(&1.id == rule.id))
+      assert {:error, :forbidden} = SSH.disable_access_rule(member, rule.id)
+      assert {:error, :forbidden} = SSH.enable_access_rule(member, rule.id)
+      assert {:error, :forbidden} = SSH.remove_access_rule(member, rule.id)
+    end
+
     test "validates IPv4, IPv6, and CIDR entries and rejects malformed input" do
       assert %{valid?: true} =
                AccessRule.changeset(%AccessRule{}, %{
