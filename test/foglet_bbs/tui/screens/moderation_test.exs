@@ -7,6 +7,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Accounts.{Invites, User}
   alias Foglet.Config
   alias Foglet.Moderation.{Action, Report}
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Presentation
@@ -152,7 +153,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   end
 
   describe "new screen contract" do
-    test "LOG tab uses enhanced width for operator context next to the event table" do
+    test "LOG enhanced workspace keeps read-only guidance legible beside populated table" do
       user = %User{id: "u1", handle: "mod", role: :mod}
       context = Context.new(current_user: user, route: :moderation, terminal_size: {120, 36})
 
@@ -164,18 +165,21 @@ defmodule Foglet.TUI.Screens.ModerationTest do
             %{
               kind: :resolved,
               reason: "spam",
-              metadata: %{body: "Removed obvious spam"},
+              metadata: %{body: "Removed obvious spam from public board"},
               mod: %{handle: "alice"},
-              inserted_at: DateTime.utc_now()
+              inserted_at: ~U[2026-05-13 16:00:00Z]
             }
           ]
         )
 
-      flat = Moderation.render(state, context) |> Foglet.TUI.WidgetHelpers.flatten_text()
+      ascii =
+        state
+        |> Moderation.render(context)
+        |> AsciiRenderer.render({120, 36})
 
-      assert flat =~ "Operator context"
-      assert flat =~ "Events"
-      assert flat =~ "Rows are read-only"
+      assert ascii =~ "Rows are read-only."
+      assert ascii =~ "←/→ changes workspaces."
+      assert ascii =~ "Queue actions stay on QUEUE."
     end
 
     test "Moderation.update(:load) emits a workspace task effect" do

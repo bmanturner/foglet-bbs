@@ -402,10 +402,12 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("LOG", ss, theme, width, height, user, timezone) do
-    log_table = fresh_log_table(ss, width, height, user, timezone)
     log_summary = State.build_log_summary(ss.scopes, ss.error, ss.mod_log)
 
     if width >= 100 do
+      {table_width, _inspector_width} = queue_workspace_pane_widths(width)
+      log_table = fresh_log_table(ss, table_width, height, user, timezone)
+
       render_read_only_workspace(log_summary, log_table, theme, width, height,
         title: "Operator context",
         lines: [
@@ -415,6 +417,7 @@ defmodule Foglet.TUI.Screens.Moderation do
         ]
       )
     else
+      log_table = fresh_log_table(ss, width, height, user, timezone)
       children = compact_table_children(log_summary, log_table, theme, width, height)
 
       column style: %{gap: 1} do
@@ -444,10 +447,12 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("BOARDS", ss, theme, width, height, _user, _timezone) do
-    boards_table = fresh_boards_table(ss, width, height)
     boards_summary = State.build_boards_summary(ss.scopes, ss.boards, ss.error)
 
     if width >= 100 do
+      {table_width, _inspector_width} = queue_workspace_pane_widths(width)
+      boards_table = fresh_boards_table(ss, table_width, height)
+
       render_read_only_workspace(boards_summary, boards_table, theme, width, height,
         title: "Board scope context",
         lines: [
@@ -457,6 +462,7 @@ defmodule Foglet.TUI.Screens.Moderation do
         ]
       )
     else
+      boards_table = fresh_boards_table(ss, width, height)
       children = compact_table_children(boards_summary, boards_table, theme, width, height)
 
       column style: %{gap: 1} do
