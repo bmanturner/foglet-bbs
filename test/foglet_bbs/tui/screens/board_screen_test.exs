@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
   alias Raxol.UI.Layout.Engine
 
   @user %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user, status: :active}
+  @sysop %Foglet.Accounts.User{id: "u2", handle: "root", role: :sysop, status: :active}
 
   defp board(opts) do
     %{
@@ -34,15 +35,16 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       archived: false,
       postable_by: :members,
       chat_enabled: Keyword.get(opts, :chat_enabled, false),
-      description: Keyword.get(opts, :description)
+      description: Keyword.get(opts, :description),
+      news_enabled: Keyword.get(opts, :news_enabled, false)
     }
   end
 
   defp context(b, opts \\ []) do
     Context.new(
-      current_user: @user,
+      current_user: Keyword.get(opts, :user, @user),
       route: :thread_list,
-      route_params: %{board: b, board_id: b.id},
+      route_params: %{board: b, board_id: b.id, news_enabled: b.news_enabled},
       terminal_size: Keyword.get(opts, :size, {80, 24}),
       session_context: %{domain: %{threads: FakeThreads, boards: FakeBoards}}
     )
@@ -134,6 +136,50 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
   end
 
   describe "init/1 — chat enabled" do
+    test "wraps no-chat boards when NEWS is enabled" do
+      b = board(chat_enabled: false, news_enabled: true)
+      ctx = context(b)
+
+      assert %WrapperState{tabs: [:threads, :news], current_tab: :threads} = BoardScreen.init(ctx)
+    end
+
+    test "operator CONFIG appears after typical THREADS CHAT NEWS order" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+
+      state = BoardScreen.init(ctx)
+
+      assert %WrapperState{tabs: [:threads, :chat, :news, :config]} = state
+      text = BoardScreen.render(state, ctx) |> flatten_text()
+      assert text =~ "THREADS"
+      assert text =~ "CHAT (0)"
+      assert text =~ "NEWS"
+      assert text =~ "CONFIG"
+    end
+
+    test "regular user does not see CONFIG" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b)
+
+      assert %WrapperState{tabs: [:threads, :chat, :news]} = BoardScreen.init(ctx)
+    end
+
+    test "route-enter child load tasks target the mounted thread_list screen key" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+      state = BoardScreen.init(ctx)
+
+      {_state, effects} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      task_keys =
+        effects
+        |> Enum.filter(&match?(%Effect{type: :task}, &1))
+        |> Enum.map(& &1.payload.screen_key)
+
+      assert :thread_list in task_keys
+      refute Enum.any?(task_keys, &match?({_, _}, &1))
+    end
+
     test "returns a wrapper state with current_tab :threads" do
       b = board(chat_enabled: true)
       ctx = context(b)
@@ -361,6 +407,121 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       assert state.chat_room.composer == "hi 123"
 
       :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "digits in CONFIG add form are typed, not consumed as tab switches" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "4"}}, state, ctx)
+      assert state.current_tab == :config
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "A"}}, state, ctx)
+
+      state =
+        Enum.reduce(String.graphemes("https://example.com/feed123.xml"), state, fn char, acc ->
+          {next, []} = BoardScreen.update({:key, %{key: :char, char: char}}, acc, ctx)
+          next
+        end)
+
+      assert state.current_tab == :config
+      assert state.config.input == "https://example.com/feed123.xml"
+
+      :ok = PresenceTracker.untrack(b.id, "u2")
+    end
+
+    test "NEWS Enter opens detail and Esc returns to list" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "3"}}, state, ctx)
+      assert state.current_tab == :news
+
+      items = [
+        %{feed: %{title: "Source"}, title: "Item", summary: "Summary", url: "https://example.com"}
+      ]
+
+      state = %{state | news: %{state.news | status: :loaded, items: items}}
+      {state, []} = BoardScreen.update({:key, %{key: :enter}}, state, ctx)
+      assert state.news.view == :detail
+
+      {state, []} = BoardScreen.update({:key, %{key: :escape}}, state, ctx)
+      assert state.news.view == :list
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "NEWS task results unwrap BoardFeeds context return tuples before render" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "3"}}, state, ctx)
+      assert state.current_tab == :news
+
+      feeds = [
+        %{title: "Example Feed", url: "https://example.com/feed.xml", last_success_at: nil}
+      ]
+
+      items = [
+        %{
+          feed: %{title: "Example Feed"},
+          title: "Cached Item",
+          summary: "Summary",
+          url: "https://example.com/item"
+        }
+      ]
+
+      {state, []} =
+        BoardScreen.update(
+          {:task_result, :load_board_news, {:ok, {{:ok, feeds}, {:ok, items}}}},
+          state,
+          ctx
+        )
+
+      assert state.news.feeds == feeds
+      assert state.news.items == items
+
+      rendered = flatten_text(BoardScreen.render(state, ctx))
+      assert rendered =~ "Cached board news"
+      assert rendered =~ "Example Feed"
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "CONFIG task results unwrap BoardFeeds context return tuples before render" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "4"}}, state, ctx)
+      assert state.current_tab == :config
+
+      feeds = [
+        %{
+          id: "feed-1",
+          title: "Example Feed",
+          url: "https://example.com/feed.xml",
+          cache_ttl_seconds: 3600
+        }
+      ]
+
+      {state, []} =
+        BoardScreen.update({:task_result, :load_board_feed_config, {:ok, feeds}}, state, ctx)
+
+      assert state.config.feeds == feeds
+
+      rendered = flatten_text(BoardScreen.render(state, ctx))
+      assert rendered =~ "Feed CONFIG"
+      assert rendered =~ "Example Feed"
+
+      :ok = PresenceTracker.untrack(b.id, "u2")
     end
 
     test "right/left arrows cycle between threads and chat" do

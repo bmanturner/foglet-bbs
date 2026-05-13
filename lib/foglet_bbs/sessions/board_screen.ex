@@ -40,7 +40,7 @@ defmodule Foglet.Sessions.BoardScreen do
 
   alias Foglet.Sessions.OnlinePresence
 
-  @valid_tabs [:threads, :chat]
+  @valid_tabs [:threads, :chat, :news, :config]
 
   # --- Public API ---
 
