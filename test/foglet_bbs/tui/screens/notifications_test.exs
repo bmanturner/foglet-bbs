@@ -231,7 +231,7 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     refute Process.get(:fake_notifications_mark_read)
   end
 
-  test "successful open target result navigates to post reader around the resolved post" do
+  test "successful open target result navigates to post reader and marks the selected row read" do
     local =
       State.from_rows(
         Notifications.init(context()),
@@ -273,8 +273,16 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
                    screen: :post_reader,
                    params: %{board_id: "b1", thread_id: "t1", load_intent: {:around, 7}}
                  }
+               },
+               %Effect{
+                 type: :task,
+                 payload: %{op: :mark_notification_read, screen_key: :notifications, fun: fun}
                }
              ] = effects
+
+      assert {:ok, %{id: "n-1"}} = fun.()
+      assert Process.get(:fake_notifications_mark_read) == "n-1"
+      Process.delete(:fake_notifications_mark_read)
     end
   end
 

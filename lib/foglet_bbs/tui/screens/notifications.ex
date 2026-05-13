@@ -82,7 +82,7 @@ defmodule Foglet.TUI.Screens.Notifications do
      ), []}
   end
 
-  def update({:task_result, :open_notification_target, result}, local_state, %Context{}) do
+  def update({:task_result, :open_notification_target, result}, local_state, %Context{} = context) do
     case Effect.unwrap_task_result(result) do
       {:ok, target} ->
         params = %{
@@ -91,8 +91,11 @@ defmodule Foglet.TUI.Screens.Notifications do
           load_intent: {:around, target.message_number}
         }
 
-        {%{normalize_state(local_state) | status: :loaded},
-         [Effect.navigate(:post_reader, params)]}
+        effects =
+          [Effect.navigate(:post_reader, params)] ++
+            mark_read_after_open_effects(context, target)
+
+        {%{normalize_state(local_state) | status: :loaded}, effects}
 
       {:error, reason} ->
         message = open_target_error_message(reason)
@@ -457,13 +460,25 @@ defmodule Foglet.TUI.Screens.Notifications do
   end
 
   defp mark_read_effect(%Context{} = context, notification) do
+    notification_id = notification_id(notification)
+
+    mark_read_id_effect(context, notification_id)
+  end
+
+  defp mark_read_id_effect(%Context{} = context, notification_id) do
     notifications_mod = domain_module(context)
-    notification_id = Map.get(notification, :id) || Map.get(notification, "id")
 
     Effect.task(:mark_notification_read, :notifications, fn ->
       notifications_mod.mark_read(context.current_user, notification_id)
     end)
   end
+
+  defp mark_read_after_open_effects(%Context{} = context, %{notification_id: notification_id})
+       when not is_nil(notification_id) do
+    [mark_read_id_effect(context, notification_id)]
+  end
+
+  defp mark_read_after_open_effects(%Context{}, _target), do: []
 
   defp mark_all_read_effect(%Context{} = context) do
     notifications_mod = domain_module(context)
