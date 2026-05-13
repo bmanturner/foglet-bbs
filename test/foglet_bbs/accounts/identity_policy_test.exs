@@ -3,6 +3,7 @@ defmodule Foglet.Accounts.IdentityPolicyTest do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.IdentityPolicy
+  alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias FogletBbs.AccountsFixtures
 
   describe "registration identity policy" do
@@ -87,6 +88,52 @@ defmodule Foglet.Accounts.IdentityPolicyTest do
   end
 
   describe "rule management" do
+    test "actor-aware public boundary forbids non-sysops from mutating identity rules" do
+      actor = AccountsFixtures.user_fixture(%{handle: "regular", email: "regular@example.com"})
+
+      assert {:error, :forbidden} =
+               Accounts.create_identity_rule(actor, %{
+                 kind: :banned_email_domain,
+                 value: "blocked.example",
+                 reason: "qa"
+               })
+
+      assert [] = IdentityPolicy.list_rules()
+
+      {:ok, rule} =
+        IdentityPolicy.create_rule(%{
+          kind: :banned_email_domain,
+          value: "existing.example",
+          reason: "trusted setup"
+        })
+
+      assert {:error, :forbidden} = Accounts.disable_identity_rule(actor, rule.id)
+      assert {:error, :forbidden} = Accounts.enable_identity_rule(actor, rule.id)
+      assert {:error, :forbidden} = Accounts.remove_identity_rule(actor, rule.id)
+      assert [%{id: id, enabled: true}] = IdentityPolicy.list_rules()
+      assert id == rule.id
+    end
+
+    test "ACCESS TUI identity mutations use actor-aware authorization" do
+      actor = AccountsFixtures.user_fixture(%{handle: "tuiuser", email: "tuiuser@example.com"})
+
+      state = %AccessRulesView{
+        current_user: actor,
+        section: :identity,
+        identity_form_mode: :banned_email_domain,
+        identity_draft: %{
+          "value" => "tui-bypass.example",
+          "reason" => "qa",
+          "comment" => ""
+        }
+      }
+
+      {_state, [effect]} = AccessRulesView.handle_key(%{key: :enter}, state)
+
+      assert {:error, :forbidden} = effect.payload.fun.()
+      assert [] = IdentityPolicy.list_rules()
+    end
+
     test "normalizes values and rejects malformed domains" do
       assert {:ok, rule} =
                IdentityPolicy.create_rule(%{

@@ -3,6 +3,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   ACCESS tab submodule for sysop network/IP and identity policy management.
   """
 
+  alias Foglet.Accounts
   alias Foglet.Accounts.IdentityPolicy
   alias Foglet.Config
   alias Foglet.SSH
@@ -179,9 +180,9 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   def load_effect(actor) do
     Effect.task(:sysop_load_access_rules, :sysop, fn ->
-      with {:ok, rules} <- SSH.list_access_rules(actor) do
-        {:ok,
-         from_rules(rules, IdentityPolicy.list_rules(), actor, Config.ssh_ip_allowlist_enabled?())}
+      with {:ok, rules} <- SSH.list_access_rules(actor),
+           {:ok, identity_rules} <- Accounts.list_identity_rules(actor) do
+        {:ok, from_rules(rules, identity_rules, actor, Config.ssh_ip_allowlist_enabled?())}
       end
     end)
   end
@@ -340,7 +341,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
     }
 
     {state,
-     [identity_task(state, fn -> IdentityPolicy.create_rule(attrs, state.current_user) end)]}
+     [identity_task(state, fn -> Accounts.create_identity_rule(state.current_user, attrs) end)]}
   end
 
   defp confirm_or_update_selected(%__MODULE__{section: :network, rules: []} = state, _op),
@@ -407,12 +408,12 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
          case op do
            :toggle ->
              if(rule.enabled,
-               do: IdentityPolicy.disable_rule(rule.id, state.current_user),
-               else: IdentityPolicy.enable_rule(rule.id, state.current_user)
+               do: Accounts.disable_identity_rule(state.current_user, rule.id),
+               else: Accounts.enable_identity_rule(state.current_user, rule.id)
              )
 
            :remove ->
-             IdentityPolicy.remove_rule(rule.id)
+             Accounts.remove_identity_rule(state.current_user, rule.id)
          end
        end)
      ]}
@@ -421,11 +422,12 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   defp network_task(state, action_fun) do
     Effect.task(:sysop_load_access_rules, :sysop, fn ->
       with {:ok, _} <- action_fun.(),
-           {:ok, rules} <- SSH.list_access_rules(state.current_user) do
+           {:ok, rules} <- SSH.list_access_rules(state.current_user),
+           {:ok, identity_rules} <- Accounts.list_identity_rules(state.current_user) do
         {:ok,
          from_rules(
            rules,
-           IdentityPolicy.list_rules(),
+           identity_rules,
            state.current_user,
            Config.ssh_ip_allowlist_enabled?()
          )}
@@ -435,14 +437,15 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   defp identity_task(state, action_fun) do
     Effect.task(:sysop_load_access_rules, :sysop, fn ->
-      with {:ok, rule} <- action_fun.(),
-           {:ok, rules} <- SSH.list_access_rules(state.current_user) do
+      with {:ok, rule} <- normalize_identity_result(action_fun.()),
+           {:ok, rules} <- SSH.list_access_rules(state.current_user),
+           {:ok, identity_rules} <- Accounts.list_identity_rules(state.current_user) do
         message = identity_success_message(rule)
 
         {:ok,
          from_rules(
            rules,
-           IdentityPolicy.list_rules(),
+           identity_rules,
            state.current_user,
            Config.ssh_ip_allowlist_enabled?()
          )
@@ -451,6 +454,9 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       end
     end)
   end
+
+  defp normalize_identity_result({:ok, rule, _conflicts}), do: {:ok, rule}
+  defp normalize_identity_result(result), do: result
 
   defp identity_success_message(rule) do
     conflicts = IdentityPolicy.conflicts_for_rule(rule)
