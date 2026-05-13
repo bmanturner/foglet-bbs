@@ -20,7 +20,7 @@ defmodule Foglet.SSH do
     |> Repo.insert()
   end
 
-  def remove_access_rule(id), do: id |> Repo.get(AccessRule) |> delete_found()
+  def remove_access_rule(id), do: AccessRule |> Repo.get(id) |> delete_found()
   def enable_access_rule(id), do: set_access_rule_enabled(id, true)
   def disable_access_rule(id), do: set_access_rule_enabled(id, false)
 

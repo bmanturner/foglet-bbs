@@ -57,6 +57,15 @@ defmodule Foglet.SSH.AccessRulesTest do
       {:ok, _} = SSH.disable_access_rule(rule.id)
       assert {:allow, %{reason: "default_allow"}} = SSH.evaluate_access({203, 0, 113, 7})
     end
+
+    test "removes rules by id and reports missing rules" do
+      {:ok, rule} = SSH.create_access_rule(%{mode: :deny, address: "198.51.100.7", reason: "old"})
+
+      assert {:ok, %AccessRule{id: removed_id}} = SSH.remove_access_rule(rule.id)
+      assert removed_id == rule.id
+      assert Repo.get(AccessRule, rule.id) == nil
+      assert {:error, :not_found} = SSH.remove_access_rule(rule.id)
+    end
   end
 
   describe "last callers audit" do
