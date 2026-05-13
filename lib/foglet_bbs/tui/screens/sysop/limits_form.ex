@@ -21,7 +21,9 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
   @limits_keys [
     "max_post_length",
     "max_thread_title_length",
-    "email_verify_resend_cooldown_seconds"
+    "email_verify_resend_cooldown_seconds",
+    "ssh_rate_limit_max",
+    "ssh_rate_limit_window_ms"
   ]
 
   # FOG-154 polish: human labels and helper sentences per the FOG-153 content
