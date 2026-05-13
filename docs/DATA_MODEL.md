@@ -200,6 +200,7 @@ schema "boards" do
   has_many :threads, Foglet.Threads.Thread
   has_many :posts, Foglet.Posts.Post
   has_many :subscriptions, Foglet.Boards.Subscription
+  has_many :feeds, Foglet.BoardFeeds.Feed
 
   timestamps()
 end
@@ -253,7 +254,73 @@ Unique index on `(user_id, board_id)`. Updated with upserts — `INSERT ... ON C
 
 ---
 
-## 3. Threads and Posts
+## 3. Board Feeds
+
+### `Foglet.BoardFeeds.Feed`
+
+Table: `board_feeds`
+
+```elixir
+schema "board_feeds" do
+  field :url, :string
+  field :title, :string
+  field :enabled, :boolean, default: true
+  field :display_order, :integer, default: 0
+  field :cache_ttl_seconds, :integer, default: 3600
+  field :last_fetched_at, :utc_datetime_usec
+  field :last_success_at, :utc_datetime_usec
+  field :last_error, :string
+
+  belongs_to :board, Foglet.Boards.Board
+  has_many :items, Foglet.BoardFeeds.Item, foreign_key: :board_feed_id
+
+  timestamps()
+end
+```
+
+**Migration notes:**
+
+- `board_id` cascades deletes from boards; feeds are board-local configuration.
+- Unique index on `(board_id, url)` prevents duplicate source feeds on a board.
+- Index on `(board_id, enabled)` supports NEWS tab capability checks and CONFIG lists.
+- `cache_ttl_seconds` is constrained to 300..86400 seconds. Refresh paths skip network fetches until TTL expiry unless an operator explicitly forces validation/refresh.
+- `last_fetched_at`, `last_success_at`, and `last_error` preserve stale-cache-on-failure state; failed refreshes update error metadata but do not delete existing items.
+- Feed URLs are bounded to 2048 bytes and must pass context-level safe-fetch validation before insertion: http/https only, no credentials, no localhost/private/link-local/metadata hosts after DNS resolution, bounded redirects/timeouts/response size.
+
+### `Foglet.BoardFeeds.Item`
+
+Table: `board_feed_items`
+
+```elixir
+schema "board_feed_items" do
+  field :external_id, :string
+  field :title, :string
+  field :url, :string
+  field :author, :string
+  field :summary, :string
+  field :published_at, :utc_datetime_usec
+  field :fetched_at, :utc_datetime_usec
+  field :metadata, :map, default: %{}
+
+  belongs_to :feed, Foglet.BoardFeeds.Feed, foreign_key: :board_feed_id
+  belongs_to :board, Foglet.Boards.Board
+
+  timestamps()
+end
+```
+
+**Migration notes and invariants:**
+
+- `board_id` is denormalized from the parent feed for fast board NEWS queries.
+- Unique index on `(board_feed_id, external_id)` deduplicates feed items by GUID/id, canonical link, or stable content hash fallback.
+- Index on `(board_id, published_at)` supports merged chronological NEWS lists across all enabled feeds for a board.
+- Stored display fields are normalized terminal-safe text: raw HTML tags and terminal control sequences are stripped, titles/summaries/authors/URLs are length-bounded, and raw feed bodies are never stored.
+- Item refresh uses upsert semantics so repeated refreshes update cached normalized fields without duplicating rows.
+- Retention is capped in the context after refresh (`@retention_per_feed`) so feeds cannot grow item rows without bound.
+
+---
+
+## 4. Threads and Posts
 
 ### `Foglet.Threads.Thread`
 
