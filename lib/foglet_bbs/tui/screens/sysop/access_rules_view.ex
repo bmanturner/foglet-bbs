@@ -21,10 +21,11 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   ]
 
   @identity_columns [
-    %{key: :kind, label: "Kind", width: 18, priority: 40, demand: :content},
+    %{key: :kind, label: "Kind", width: 17, priority: 40, demand: :content},
     %{key: :enabled, label: "On", width: 4, priority: 20, demand: :content},
-    %{key: :value, label: "Value", width: 24, grow: 1, priority: 100, demand: :content},
-    %{key: :reason, label: "Reason", width: 18, grow: 1, priority: 60, demand: :content}
+    %{key: :value, label: "Value", width: 20, grow: 1, priority: 100, demand: :content},
+    %{key: :conflicts, label: "Conflicts", width: 10, priority: 90, demand: :content},
+    %{key: :reason, label: "Reason", width: 16, grow: 1, priority: 60, demand: :content}
   ]
 
   @identity_kinds [:reserved_handle, :banned_handle, :banned_email, :banned_email_domain]
@@ -92,7 +93,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   def handle_key(event, %__MODULE__{identity_form_mode: mode} = state) when not is_nil(mode),
     do: handle_identity_form_key(event, state)
 
-  def handle_key(%{key: :tab}, state), do: {switch_section(state), []}
+  def handle_key(%{key: key}, state) when key in [:tab, :left, :right],
+    do: {switch_section(state), []}
 
   def handle_key(%{key: key} = event, state) when key in [:up, :down],
     do: {move(state, ScrollKeys.vertical_delta(event)), []}
@@ -123,14 +125,21 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   def handle_key(_event, state), do: {state, []}
 
-  @spec render(t(), map()) :: any()
-  def render(%__MODULE__{} = state, theme) do
+  @spec render(t(), map(), keyword()) :: any()
+  def render(%__MODULE__{} = state, theme, opts \\ []) do
+    width = Keyword.get(opts, :width, 76)
+    visible_height = Keyword.get(opts, :visible_height, Keyword.get(opts, :height, 20))
+
     column style: %{gap: 0} do
       [text("ACCESS policies", fg: theme.title.fg, style: [:bold]), text("")] ++
         section_lines(state, theme) ++
-        policy_lines(state, theme) ++
+        policy_lines(state, theme, width, visible_height) ++
         message_lines(state, theme) ++
-        [render_body(state, theme), text(""), text(footer(state), fg: theme.dim.fg)]
+        [
+          render_body(state, theme, width, visible_height),
+          text(""),
+          text(footer(state), fg: theme.dim.fg)
+        ]
     end
   end
 
@@ -139,7 +148,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       %{
         label: "Access: Network/IP",
         commands: [
-          %{key: "Tab", label: "Identity", priority: 0},
+          %{key: "←/→", label: "Identity", priority: 0},
+          %{key: "Tab", label: "Identity", priority: 15},
           %{key: "A", label: "Allow", priority: 5},
           %{key: "D", label: "Deny", priority: 5},
           %{key: "E", label: "Enable/disable", priority: 10},
@@ -155,7 +165,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       %{
         label: "Access: Identity",
         commands: [
-          %{key: "Tab", label: "Network/IP", priority: 0},
+          %{key: "←/→", label: "Network/IP", priority: 0},
+          %{key: "Tab", label: "Network/IP", priority: 15},
           %{key: "A", label: "Add", priority: 5},
           %{key: "E", label: "Enable/disable", priority: 10},
           %{key: "X", label: "Remove", priority: 10},
@@ -189,13 +200,15 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   defp render_body(
          %__MODULE__{form_mode: nil, identity_form_mode: nil, section: :network} = state,
-         theme
+         theme,
+         width,
+         _visible_height
        ) do
     table =
       ConsoleTable.init(
         columns: @network_columns,
         rows: Enum.map(state.rules, &network_row_map/1),
-        width: 60,
+        width: table_width(width),
         selectable: true,
         empty_state: "No IP access rules configured."
       )
@@ -209,13 +222,15 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   defp render_body(
          %__MODULE__{form_mode: nil, identity_form_mode: nil, section: :identity} = state,
-         theme
+         theme,
+         width,
+         visible_height
        ) do
     table =
       ConsoleTable.init(
         columns: @identity_columns,
         rows: Enum.map(state.identity_rules, &identity_row_map/1),
-        width: 60,
+        width: table_width(width),
         selectable: true,
         empty_state: "No identity policy rules configured."
       )
@@ -225,17 +240,13 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       )
 
     column style: %{gap: 0} do
-      [
-        ConsoleTable.render(table, theme: theme),
-        text(""),
-        text("Conflict warnings are shown only here to sysops; registration denials stay terse.",
-          fg: theme.dim.fg
-        )
-      ]
+      [ConsoleTable.render(table, theme: theme)] ++
+        conflict_guidance(theme, width, visible_height)
     end
   end
 
-  defp render_body(%__MODULE__{form_mode: mode} = state, theme) when not is_nil(mode) do
+  defp render_body(%__MODULE__{form_mode: mode} = state, theme, width, visible_height)
+       when not is_nil(mode) do
     column style: %{gap: 0} do
       [
         text(network_form_title(state.form_mode), fg: theme.accent.fg, style: [:bold]),
@@ -245,16 +256,13 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
         text(""),
         text("Allowlist mode: #{allowlist_label(state.allowlist_enabled?)}",
           fg: allowlist_color(state, theme)
-        ),
-        text(
-          "CIDR and exact IPv4/IPv6 entries are accepted. Save only after checking lockout risk.",
-          fg: theme.warning.fg
         )
-      ]
+      ] ++ network_form_guidance(theme, width, visible_height)
     end
   end
 
-  defp render_body(%__MODULE__{identity_form_mode: mode} = state, theme) when not is_nil(mode) do
+  defp render_body(%__MODULE__{identity_form_mode: mode} = state, theme, width, visible_height)
+       when not is_nil(mode) do
     column style: %{gap: 0} do
       [
         text("New identity rule", fg: theme.accent.fg, style: [:bold]),
@@ -266,15 +274,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
         text(identity_field_line(state, :comment),
           fg: identity_field_color(state, :comment, theme)
         ),
-        text(""),
-        text("Kinds: reserved_handle, banned_handle, banned_email, banned_email_domain",
-          fg: theme.dim.fg
-        ),
-        text(
-          "Adding matching rules reports existing-user conflicts here; it does not mutate users.",
-          fg: theme.warning.fg
-        )
-      ]
+        text("")
+      ] ++ identity_form_guidance(theme, width, visible_height)
     end
   end
 
@@ -563,6 +564,49 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
     %{state | identity_form_mode: Enum.at(@identity_kinds, next)}
   end
 
+  defp table_width(width), do: width |> max(48) |> min(96)
+
+  defp conflict_guidance(_theme, width, visible_height) when width < 72 or visible_height < 22,
+    do: []
+
+  defp conflict_guidance(theme, _width, _visible_height) do
+    [
+      text(""),
+      text("Conflict counts are sysop-only review warnings; denials stay terse.",
+        fg: theme.dim.fg
+      )
+    ]
+  end
+
+  defp network_form_guidance(_theme, _width, visible_height) when visible_height < 22, do: []
+
+  defp network_form_guidance(theme, width, _visible_height) do
+    [
+      text(
+        if(width < 72,
+          do: "Check lockout risk before save.",
+          else:
+            "CIDR and exact IPv4/IPv6 entries are accepted. Save only after checking lockout risk."
+        ),
+        fg: theme.warning.fg
+      )
+    ]
+  end
+
+  defp identity_form_guidance(_theme, _width, visible_height) when visible_height < 22, do: []
+
+  defp identity_form_guidance(theme, width, _visible_height) do
+    kinds =
+      if width < 72,
+        do: "Kinds: handle, email, domain",
+        else: "Kinds: reserved_handle, banned_handle, banned_email, banned_email_domain"
+
+    [
+      text(kinds, fg: theme.dim.fg),
+      text("Conflicts are reported for review; users are not mutated.", fg: theme.warning.fg)
+    ]
+  end
+
   defp network_row_map(rule),
     do: %{
       mode: String.upcase(to_string(rule.mode)),
@@ -575,9 +619,36 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
     do: %{
       kind: kind_label(rule.kind),
       enabled: if(rule.enabled, do: "yes", else: "no"),
-      value: rule.value,
+      value: display_identity_value(rule),
+      conflicts: conflict_status(rule),
       reason: rule.reason || "—"
     }
+
+  defp display_identity_value(%{kind: :banned_email, value: value}), do: mask_email(value)
+  defp display_identity_value(%{value: value}), do: value
+
+  defp mask_email(value) when is_binary(value) do
+    case String.split(value, "@", parts: 2) do
+      [local, domain] when local != "" and domain != "" ->
+        first = String.first(local) || "*"
+        "#{first}***@#{domain}"
+
+      _ ->
+        "***"
+    end
+  end
+
+  defp mask_email(_), do: "***"
+
+  defp conflict_status(rule) do
+    case IdentityPolicy.conflicts_for_rule(rule) do
+      [] -> "0"
+      conflicts when is_list(conflicts) -> "#{length(conflicts)} review"
+      _ -> "check failed"
+    end
+  rescue
+    _ -> "check failed"
+  end
 
   defp message_lines(%{message: nil}, _theme), do: []
   defp message_lines(%{message: msg}, theme), do: [text(msg, fg: theme.warning.fg), text("")]
@@ -590,12 +661,15 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       text("#{network_marker} Network/IP rules    #{identity_marker} Identity rules",
         fg: theme.accent.fg
       ),
-      text("Use Tab to move between ACCESS policy sections."),
+      text("Use Left/Right or Tab to move between ACCESS policy sections."),
       text("")
     ]
   end
 
-  defp policy_lines(%{section: :identity}, theme) do
+  defp policy_lines(_state, _theme, width, visible_height) when width < 72 or visible_height < 22,
+    do: []
+
+  defp policy_lines(%{section: :identity}, theme, _width, _visible_height) do
     [
       text("Identity rules cover reserved/banned handles and banned email/domain values.",
         fg: theme.dim.fg
@@ -605,7 +679,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
     ]
   end
 
-  defp policy_lines(%{allowlist_enabled?: true}, theme) do
+  defp policy_lines(%{allowlist_enabled?: true}, theme, _width, _visible_height) do
     [
       text("Allowlist mode: ON — only enabled ALLOW rules may connect.", fg: theme.warning.fg),
       text("Toggle/remove can lock out operators; press the action key twice to confirm."),
@@ -613,7 +687,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
     ]
   end
 
-  defp policy_lines(_state, theme) do
+  defp policy_lines(_state, theme, _width, _visible_height) do
     [
       text("Allowlist mode: OFF — DENY rules block matching sources.", fg: theme.dim.fg),
       text("Toggle/remove requires a second keypress to confirm lockout-prone changes."),
@@ -623,10 +697,10 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   defp footer(%{form_mode: nil, identity_form_mode: nil, section: :network}),
     do:
-      "[Tab] Identity  [↑/↓] Move  [A] Allow  [D] Deny  [E] Enable/disable*  [X] Remove*  [R] Reload"
+      "[←/→] Identity  [↑/↓] Move  [A] Allow  [D] Deny  [E] Enable/disable*  [X] Remove*  [R] Reload"
 
   defp footer(%{form_mode: nil, identity_form_mode: nil, section: :identity}),
-    do: "[Tab] Network/IP  [↑/↓] Move  [A] Add rule  [E] Enable/disable*  [X] Remove*  [R] Reload"
+    do: "[←/→] Network/IP  [↑/↓] Move  [A] Add rule  [E] Enable/disable*  [X] Remove*  [R] Reload"
 
   defp footer(_), do: "[Tab] Fields  [Enter/Ctrl+S] Save  [Esc] Cancel"
 

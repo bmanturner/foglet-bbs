@@ -3,6 +3,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
 
   alias Foglet.Accounts.IdentityRule
   alias Foglet.SSH.AccessRule
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Theme
@@ -50,6 +51,56 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
 
       assert AccessRulesView.render(state, Theme.default())
     end
+
+    test "identity list masks exact banned email values and shows conflict status" do
+      state = %AccessRulesView{
+        section: :identity,
+        identity_rules: [
+          %IdentityRule{
+            id: 13,
+            kind: :banned_email,
+            enabled: true,
+            value: "abuse@example.com",
+            reason: "spam"
+          }
+        ]
+      }
+
+      rendered =
+        state
+        |> AccessRulesView.render(Theme.default(), width: 96, visible_height: 28)
+        |> AsciiRenderer.render({100, 30})
+
+      assert rendered =~ "Conflicts"
+      assert rendered =~ "a***@example.com"
+      assert rendered =~ "check failed"
+      refute rendered =~ "abuse@example.com"
+    end
+
+    test "cramped identity list preserves active policy table and drops explanatory paragraphs" do
+      state = %AccessRulesView{
+        section: :identity,
+        identity_rules: [
+          %IdentityRule{
+            id: 14,
+            kind: :banned_email_domain,
+            enabled: true,
+            value: "example.com",
+            reason: "abuse"
+          }
+        ]
+      }
+
+      rendered =
+        state
+        |> AccessRulesView.render(Theme.default(), width: 60, visible_height: 18)
+        |> AsciiRenderer.render({64, 22})
+
+      assert rendered =~ "Identity rules"
+      assert rendered =~ "example.com"
+      refute rendered =~ "Identity rules cover"
+      refute rendered =~ "Conflict counts are sysop-only"
+    end
   end
 
   describe "list key handling" do
@@ -60,6 +111,19 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
 
       assert effects == []
       assert state.section == :identity
+    end
+
+    test "left and right switch list-mode ACCESS policy sections" do
+      network_state = %AccessRulesView{section: :network}
+      identity_state = %AccessRulesView{section: :identity}
+
+      {state, effects} = AccessRulesView.handle_key(%{key: :right}, network_state)
+      assert effects == []
+      assert state.section == :identity
+
+      {state, effects} = AccessRulesView.handle_key(%{key: :left}, identity_state)
+      assert effects == []
+      assert state.section == :network
     end
 
     test "toggle and remove require a second confirming keypress for network rules" do
@@ -117,6 +181,30 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
       assert state.form_mode == :create_allow
       assert state.form_field == :reason
       assert state.draft["reason"] == "q"
+    end
+
+    test "identity add form supports tab fields, kind arrows, cancel, and submit" do
+      {form, effects} =
+        AccessRulesView.handle_key(%{key: :char, char: "a"}, %AccessRulesView{section: :identity})
+
+      assert effects == []
+      assert form.identity_form_mode == :reserved_handle
+      assert form.identity_form_field == :kind
+
+      {form, []} = AccessRulesView.handle_key(%{key: :right}, form)
+      assert form.identity_form_mode == :banned_handle
+
+      {form, []} = AccessRulesView.handle_key(%{key: :tab}, form)
+      assert form.identity_form_field == :value
+
+      {form, []} = AccessRulesView.handle_key(%{key: :char, char: "b"}, form)
+      assert form.identity_draft["value"] == "b"
+
+      {cancelled, []} = AccessRulesView.handle_key(%{key: :escape}, form)
+      assert cancelled.identity_form_mode == nil
+
+      {_state, effects} = AccessRulesView.handle_key(%{key: :enter}, form)
+      assert [%Effect{type: :task, payload: %{op: :sysop_load_access_rules}}] = effects
     end
 
     test "Ctrl+S submits the network access-rule form like the advertised command bar" do
