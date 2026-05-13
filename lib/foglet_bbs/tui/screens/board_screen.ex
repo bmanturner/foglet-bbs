@@ -196,10 +196,11 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   end
 
   def update(
-        {:task_result, :load_board_feed_config, _result} = msg,
+        {:task_result, op, _result} = msg,
         %State{} = state,
         %Context{} = context
-      ) do
+      )
+      when op in [:load_board_feed_config, :add_board_feed, :refresh_board_feeds] do
     {config_state, effects} = BoardConfig.update(msg, state.config, context)
     {%{state | config: config_state}, effects}
   end

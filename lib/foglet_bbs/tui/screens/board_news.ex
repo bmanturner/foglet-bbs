@@ -12,9 +12,10 @@ defmodule Foglet.TUI.Screens.BoardNews do
             items: list(),
             feeds: list(),
             selected_index: non_neg_integer(),
+            view: :list | :detail,
             message: String.t() | nil
           }
-    defstruct status: :idle, items: [], feeds: [], selected_index: 0, message: nil
+    defstruct status: :idle, items: [], feeds: [], selected_index: 0, view: :list, message: nil
   end
 
   def init(_context), do: %State{}
@@ -45,6 +46,12 @@ defmodule Foglet.TUI.Screens.BoardNews do
   def update({:key, %{key: :up}}, %State{} = state, _context),
     do: {%{state | selected_index: max(state.selected_index - 1, 0)}, []}
 
+  def update({:key, %{key: :enter}}, %State{items: [_ | _]} = state, _context),
+    do: {%{state | view: :detail}, []}
+
+  def update({:key, %{key: :escape}}, %State{} = state, _context),
+    do: {%{state | view: :list}, []}
+
   def update(_msg, %State{} = state, _context), do: {state, []}
 
   def render(%State{status: :loading}, _context, theme),
@@ -58,7 +65,49 @@ defmodule Foglet.TUI.Screens.BoardNews do
     end
   end
 
+  def render(%State{view: :detail} = state, _context, theme) do
+    item = Enum.at(state.items, state.selected_index) || hd(state.items)
+    feed = (item.feed && item.feed.title) || "feed"
+
+    column style: %{gap: 1} do
+      [
+        text("NEWS detail", fg: theme.accent.fg, style: [:bold]),
+        text(feed <> " — " <> (Map.get(item, :title) || "Untitled"), fg: theme.primary.fg),
+        text(Map.get(item, :summary) || "No summary cached.", fg: theme.dim.fg),
+        text(Map.get(item, :url) || "", fg: theme.dim.fg),
+        text("Esc returns to list.", fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  def render(%State{} = state, %Context{terminal_size: {width, _height}}, theme)
+      when width >= 110 do
+    selected = Enum.at(state.items, state.selected_index) || hd(state.items)
+
+    row style: %{gap: 2} do
+      [
+        box style: %{border: :single, padding: 1, width: 44} do
+          column style: %{gap: 0} do
+            [
+              text("Cached board news", fg: theme.accent.fg, style: [:bold])
+              | list_rows(state, theme)
+            ]
+          end
+        end,
+        box style: %{border: :single, padding: 1, flex: 1} do
+          detail_lines(selected, theme, "Selected entry")
+        end
+      ]
+    end
+  end
+
   def render(%State{} = state, _context, theme) do
+    column style: %{gap: 0} do
+      [text("Cached board news", fg: theme.accent.fg, style: [:bold]) | list_rows(state, theme)]
+    end
+  end
+
+  defp list_rows(%State{} = state, theme) do
     rows =
       state.items
       |> Enum.take(8)
@@ -81,13 +130,33 @@ defmodule Foglet.TUI.Screens.BoardNews do
         ]
       end)
 
-    column style: %{gap: 0} do
-      [text("Cached board news", fg: theme.accent.fg, style: [:bold]) | rows]
-    end
+    rows ++ [text(feed_status(state.feeds), fg: theme.dim.fg)]
   end
 
   def keybar_groups(_state, _context),
-    do: [%{label: "News", commands: [%{key: "↑/↓", label: "Select", priority: 12}]}]
+    do: [
+      %{
+        label: "News",
+        commands: [
+          %{key: "↑/↓", label: "Select", priority: 12},
+          %{key: "Enter", label: "Detail", priority: 13},
+          %{key: "Esc", label: "List", priority: 14}
+        ]
+      }
+    ]
+
+  defp detail_lines(item, theme, heading) do
+    feed = (item.feed && item.feed.title) || "feed"
+
+    column style: %{gap: 1} do
+      [
+        text(heading, fg: theme.accent.fg, style: [:bold]),
+        text(feed <> " — " <> (Map.get(item, :title) || "Untitled"), fg: theme.primary.fg),
+        text(Map.get(item, :summary) || "No summary cached.", fg: theme.dim.fg),
+        text(Map.get(item, :url) || "", fg: theme.dim.fg)
+      ]
+    end
+  end
 
   defp feed_status([]), do: "No enabled feeds are cached for this board."
 

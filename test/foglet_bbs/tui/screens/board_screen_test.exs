@@ -393,6 +393,52 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       :ok = PresenceTracker.untrack(b.id, "u1")
     end
 
+    test "digits in CONFIG add form are typed, not consumed as tab switches" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "4"}}, state, ctx)
+      assert state.current_tab == :config
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "A"}}, state, ctx)
+
+      state =
+        Enum.reduce(String.graphemes("https://example.com/feed123.xml"), state, fn char, acc ->
+          {next, []} = BoardScreen.update({:key, %{key: :char, char: char}}, acc, ctx)
+          next
+        end)
+
+      assert state.current_tab == :config
+      assert state.config.input == "https://example.com/feed123.xml"
+
+      :ok = PresenceTracker.untrack(b.id, "u2")
+    end
+
+    test "NEWS Enter opens detail and Esc returns to list" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "3"}}, state, ctx)
+      assert state.current_tab == :news
+
+      items = [
+        %{feed: %{title: "Source"}, title: "Item", summary: "Summary", url: "https://example.com"}
+      ]
+
+      state = %{state | news: %{state.news | status: :loaded, items: items}}
+      {state, []} = BoardScreen.update({:key, %{key: :enter}}, state, ctx)
+      assert state.news.view == :detail
+
+      {state, []} = BoardScreen.update({:key, %{key: :escape}}, state, ctx)
+      assert state.news.view == :list
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
     test "right/left arrows cycle between threads and chat" do
       b = board(chat_enabled: true)
       ctx = context(b)
