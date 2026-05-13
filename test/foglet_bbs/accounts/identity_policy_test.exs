@@ -3,8 +3,16 @@ defmodule Foglet.Accounts.IdentityPolicyTest do
 
   alias Foglet.Accounts
   alias Foglet.Accounts.IdentityPolicy
+  alias Foglet.Config
   alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias FogletBbs.AccountsFixtures
+
+  setup do
+    Config.put!("registration_mode", "open", nil)
+    on_exit(fn -> Config.invalidate("registration_mode") end)
+
+    :ok
+  end
 
   describe "registration identity policy" do
     test "blocks reserved and banned handles case-insensitively with terse errors" do
