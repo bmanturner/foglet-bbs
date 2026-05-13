@@ -60,12 +60,17 @@ defmodule Foglet.Moderation do
 
   @doc """
   Creates a moderation report for a post, oneliner, or user.
+
+  To keep the moderation queue usable, a reporter may have only one open report
+  for a specific target. Once moderators resolve or dismiss that report, the
+  same reporter may submit a new report for the same target if needed.
   """
   @spec create_report(User.t() | nil, map()) :: {:ok, Report.t()} | {:error, term()}
   def create_report(actor, attrs) do
     with :ok <- Bodyguard.permit(Foglet.Authorization, :create_report, actor, :site),
          %User{} = reporter <- actor,
          {:ok, changeset} <- build_report_changeset(reporter, attrs),
+         {:ok, changeset} <- validate_no_duplicate_open_report(changeset),
          {:ok, report} <- Repo.insert(changeset) do
       {:ok, Repo.preload(report, [:reporter, :resolved_by])}
     end
@@ -226,6 +231,24 @@ defmodule Foglet.Moderation do
          :target_id,
          "does not reference an existing reportable target"
        )}
+    end
+  end
+
+  defp validate_no_duplicate_open_report(%Changeset{} = changeset) do
+    reporter_id = Changeset.get_field(changeset, :reporter_id)
+    target_kind = Changeset.get_field(changeset, :target_kind)
+    target_id = Changeset.get_field(changeset, :target_id)
+
+    duplicate_query =
+      from report in Report,
+        where:
+          report.reporter_id == ^reporter_id and report.target_kind == ^target_kind and
+            report.target_id == ^target_id and report.status == :open
+
+    if Repo.exists?(duplicate_query) do
+      {:error, Changeset.add_error(changeset, :target_id, "already has an open report from you")}
+    else
+      {:ok, changeset}
     end
   end
 
