@@ -309,6 +309,75 @@ in-process observability surface for sysops.
 <!-- VERIFY: external monitoring/alerting (PagerDuty, Grafana, Datadog, log aggregator) integration — not configured in the repo -->
 <!-- VERIFY: log shipping target — Fly's built-in log stream is implicit; any aggregator beyond that is environment-specific -->
 
+### Source IP and IP policy operations
+
+Foglet reads the SSH caller address from the Erlang SSH connection peer via
+`:ssh.connection_info(connection_ref, [:peer])` in `Foglet.SSH.CLIHandler`.
+That is the immediate TCP peer seen by the BEAM listener, not an HTTP header and
+not a separate application-level trust chain.
+
+Current Fly.io reality:
+
+- `fly.toml` exposes SSH as a raw TCP service on public port `22` forwarded to
+  internal port `2222` with no `handlers` entry.
+- Fly's documented proxy behavior is that TCP without handlers is forwarded
+  unchanged from Fly Proxy to the application; to receive the original client
+  address through Fly Proxy, an app must opt into the `proxy_proto` handler and
+  parse PROXY protocol before handing the connection to the application
+  protocol.
+- Therefore production SSH currently should be assumed to see the Fly
+  proxy/worker/private-network peer address, not the user's public source IP.
+  Any IP allowlist/denylist policy enforced in Foglet would not be meaningful
+  for public caller IPs on Fly until the deployment path changes.
+
+Do **not** add `handlers = ["proxy_proto"]` to the Fly SSH service as a blind
+configuration-only change. Erlang `:ssh.daemon/2` expects the SSH banner as the
+first bytes on the socket; a leading PROXY protocol header will break the SSH
+handshake unless a compatible listener shim terminates PROXY protocol, validates
+that it came from Fly Proxy, preserves the real client address in a trusted
+field, and only then passes a clean SSH stream to Erlang `:ssh`.
+
+Required production path before source-IP policies are enabled on Fly:
+
+1. Add and review a PROXY-protocol-aware TCP shim/adapter in front of Erlang
+   `:ssh` or replace the listener path with one that natively accepts PROXY
+   protocol.
+2. Restrict shim trust to Fly Proxy/private-network peers; never accept
+   untrusted client-supplied PROXY headers directly from the Internet.
+3. Plumb the parsed source IP into Foglet's SSH session context without using
+   raw IP or user IDs as metrics labels.
+4. Change `fly.toml` to add `handlers = ["proxy_proto"]` only after the shim is
+   deployed and verified in staging.
+5. Verify with a controlled SSH connection that logs/debug output show the
+   expected sanitized source-IP classification, not a Fly private address.
+
+Safe defaults until that work exists:
+
+- Treat source-IP policy features as disabled or advisory-only on Fly.
+- Prefer account-, role-, invite-, and SSH-key-based controls for production
+  access decisions.
+- Log only privacy-safe summaries: policy decision, source category/CIDR class,
+  and reason code. Do not emit raw IP addresses, user IDs, credentials, public
+  keys, or high-cardinality labels into metrics.
+
+Lockout recovery for IP policy mistakes must not depend on TUI access. Use one
+of these operator paths instead:
+
+```sh
+# Fly app console: inspect or repair runtime DB-backed configuration in-place.
+fly ssh console --app foglet-bbs -C \
+  '/app/bin/foglet_bbs eval "IO.inspect(Foglet.Config.fetch(\"security.ip_policies.enabled\"))"'
+
+# Emergency disable example once the canonical key exists in Foglet.Config.Schema:
+fly ssh console --app foglet-bbs -C \
+  '/app/bin/foglet_bbs eval "Foglet.Config.put!(\"security.ip_policies.enabled\", false, system: true)"'
+```
+
+If a bad deploy/config change prevents console repair, roll back the application
+release using the application rollback procedure below, then repair the persisted
+configuration before redeploying. If the problem is only DB-backed config, prefer
+console/config repair over image rollback so the fix survives restarts.
+
 ## Rollback Procedure
 
 ### Application rollback
