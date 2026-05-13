@@ -1407,7 +1407,11 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
     assert split.attrs.direction == :horizontal
     refute find_node(tree, &bounded_centered_reader?(&1, 92))
-    assert flatten_text(Enum.at(split.children, 1)) =~ "Selected #2"
+    rail_text = flatten_text(Enum.at(split.children, 1))
+
+    assert rail_text =~ "Selected #2"
+    assert rail_text =~ "No parent context"
+    refute rail_text =~ "C no parent context"
     assert first_post_row =~ ~r/^│▶ Post 2 of 2/
   end
 

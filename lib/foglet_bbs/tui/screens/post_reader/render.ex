@@ -434,7 +434,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   defp reply_context_label(post) do
     if PostReader.reply_context_available?(post),
       do: "C context available",
-      else: "C no parent context"
+      else: "No parent context"
   end
 
   defp reply_status_label(:locked), do: "Reply locked"
