@@ -88,6 +88,15 @@ navigation, and larger numbers for secondary hints that may drop first.
 | `Display.Progress`     | [`display/progress.ex`](display/progress.ex)           | Animated progress bar (stateless) |
 | `Display.ScrambleText` | [`display/scramble_text.ex`](display/scramble_text.ex) | Deterministic frame-index-driven scramble-text reveal |
 
+## Layout shell primitives
+
+`Foglet.TUI.Layout` owns shared terminal tiers and large-screen shell helpers. Use
+`Layout.tier/1`, `Layout.enhanced?/1`, and `Layout.spacious?/1` instead of
+screen-local breakpoint literals. Enhanced two-pane shells start at `120x36`; the
+optional spacious utility rail starts at `132x43`. `Layout.left_heavy_split/3`
+keeps narrow/standard terminals single-pane, and `Layout.spacious_rail/3` omits
+rails below spacious widths.
+
 ## Workspace (Phase 24)
 
 | Module | File | Description |

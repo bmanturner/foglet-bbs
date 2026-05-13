@@ -1782,26 +1782,29 @@ defmodule Foglet.TUI.LayoutSmokeTest do
                  "element overflows width at #{inspect({width, height})}: #{inspect(element)}"
         end
 
-        # ── Both panels present (split_pane has NOT collapsed/stacked). ─────
+        # ── Peer panel present (split_pane has NOT collapsed/stacked). ───────
         # Phase 32 / MENU-01: panel titles are embedded in the box top border
-        # via Raxol's `:panel` element type. Panels.process emits the title as
-        # a positioned :text element with text " Navigation " / " Oneliners "
-        # (with surrounding spaces, per panels.ex create_title_element).
+        # via Raxol's `:panel` element type. Enhanced Home replaces the
+        # standard Oneliners peer panel with a Board activity dashboard panel at
+        # spacious widths while keeping oneliner rows inside that dashboard.
         nav_header =
           Enum.find(elements, fn element -> element.text == " Navigation " end)
 
-        oneliners_header =
-          Enum.find(elements, fn element -> element.text == " Oneliners " end)
+        expected_peer_title =
+          if width >= 120 and height >= 36, do: " Board activity ", else: " Oneliners "
+
+        peer_header =
+          Enum.find(elements, fn element -> element.text == expected_peer_title end)
 
         assert nav_header,
                "expected ' Navigation ' embedded title at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
 
-        assert oneliners_header,
-               "expected ' Oneliners ' embedded title at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
+        assert peer_header,
+               "expected #{inspect(expected_peer_title)} embedded title at #{inspect({width, height})}; got: #{inspect(Enum.map(elements, & &1.text))}"
 
-        # ── Side-by-side: Navigation header LEFT of Oneliners header. ───────
-        assert nav_header.x < oneliners_header.x,
-               "expected Navigation.x (#{nav_header.x}) < Oneliners.x (#{oneliners_header.x}) at #{inspect({width, height})}"
+        # ── Side-by-side: Navigation header LEFT of the peer dashboard/header.
+        assert nav_header.x < peer_header.x,
+               "expected Navigation.x (#{nav_header.x}) < peer_header.x (#{peer_header.x}) at #{inspect({width, height})}"
 
         # ── Range overlap: per-y, sorted-by-x adjacent pairs do not overlap.
         #    REPLACES the prior identical-`{x, y}` check, which only caught
@@ -1836,13 +1839,14 @@ defmodule Foglet.TUI.LayoutSmokeTest do
             String.starts_with?(element.text, "> @")
           end)
 
-        # Phase 32 / MENU-01: the embedded title " Oneliners " sits at
+        # Phase 32 / MENU-01: the embedded panel title sits at
         # x = panel_content_x + 1 (the title overlay is offset one column from
         # the panel's content-area left edge, see vendor/raxol panels.ex
         # create_title_element). Body-row content starts at panel_content_x,
-        # which is `oneliners_header.x - 1`. We use that as the containment
-        # lower bound.
-        right_panel_content_left = oneliners_header.x - 1
+        # which is `peer_header.x - 1`. We use that as the containment lower
+        # bound for both the standard Oneliners panel and the enhanced Board
+        # activity dashboard panel.
+        right_panel_content_left = peer_header.x - 1
 
         for row <- oneliner_rows do
           assert row.x >= right_panel_content_left,

@@ -5,6 +5,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
 
   alias Foglet.TerminalText
   alias Foglet.TUI.Context
+  alias Foglet.TUI.Layout
   alias Foglet.TUI.Screens.MainMenu
   alias Foglet.TUI.Screens.MainMenu.State
   alias Foglet.TUI.TextWidth
@@ -30,33 +31,76 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     destinations = MainMenu.visible_destination_entries(state)
     actions = MainMenu.visible_actions(state)
 
-    inner_width = MainMenu.__nav_panel_inner_width__(state)
+    inner_width = nav_inner_width(state)
     menu_panel = nav_panel(destinations, theme, inner_width)
-    oneliners_panel_widget = oneliners_panel(state, theme)
-
-    # `divider_char: " "` (space) — both panels render their own `│` borders, so
-    # a visible split-pane divider would visually collide with them (`│ │ │`).
-    # Without this, the split_pane divider's character (default `"|"`) would
-    # appear at column `split_x` on every row and clobber the right panel's
-    # `┌─ Oneliners ─` top-border title segment (Phase 32 MENU-02). The fix
-    # for the painter orientation lives in
-    # `vendor/raxol/lib/raxol/ui/layout/split_pane.ex`'s `build_divider/6`;
-    # passing a space here is the screen-level half of the fix and makes the
-    # divider effectively transparent so panel borders supply the visual gap.
-    content =
-      split_pane(
-        direction: :horizontal,
-        ratio: {2, 3},
-        min_size: 18,
-        divider_char: " ",
-        children: [menu_panel, oneliners_panel_widget]
-      )
+    content = dashboard_content(state, theme, menu_panel)
 
     ScreenFrame.render(
       state,
       %{breadcrumb_parts: Foglet.AppName.breadcrumb(["Home"])},
       content,
       actions
+    )
+  end
+
+  defp nav_inner_width(state) do
+    cond do
+      Layout.spacious?(state.terminal_size) -> 32
+      Layout.enhanced?(state.terminal_size) -> 42
+      true -> MainMenu.__nav_panel_inner_width__(state)
+    end
+  end
+
+  defp dashboard_content(state, theme, menu_panel) do
+    activity_panel = board_activity_panel(state, theme)
+
+    cond do
+      Layout.spacious?(state.terminal_size) ->
+        primary = enhanced_dashboard(menu_panel, activity_panel, continue_panel(state, theme))
+
+        Layout.spacious_rail(primary, utility_panel(state, theme),
+          terminal_size: state.terminal_size,
+          ratio: {5, 1}
+        )
+
+      Layout.enhanced?(state.terminal_size) ->
+        enhanced_dashboard(menu_panel, activity_panel, continue_panel(state, theme))
+
+      true ->
+        standard_dashboard(menu_panel, oneliners_panel(state, theme))
+    end
+  end
+
+  # Keep the legacy 80x24 Home contract as a compact navigation + oneliner split.
+  # `Layout.left_heavy_split/3` intentionally omits detail below 120x36 for new
+  # list/detail screens, so Home owns this standard-tier two-column fallback.
+  defp standard_dashboard(menu_panel, oneliners_panel_widget) do
+    split_pane(
+      direction: :horizontal,
+      ratio: {2, 3},
+      min_size: 18,
+      divider_char: " ",
+      children: [menu_panel, oneliners_panel_widget]
+    )
+  end
+
+  defp enhanced_dashboard(menu_panel, activity_panel, continue_panel_widget) do
+    right_stack =
+      split_pane(
+        direction: :vertical,
+        ratio: {2, 1},
+        min_size: 8,
+        divider_char: " ",
+        children: [activity_panel, continue_panel_widget]
+      )
+
+    Layout.left_heavy_split(
+      menu_panel,
+      right_stack,
+      terminal_size: {120, 36},
+      ratio: {2, 3},
+      min_size: 18,
+      divider_char: " "
     )
   end
 
@@ -218,6 +262,118 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
         end
       ]
     }
+  end
+
+  defp board_activity_panel(state, theme) do
+    %{
+      type: :panel,
+      attrs: panel_attrs("Board activity", theme),
+      children: [
+        column style: %{gap: 0} do
+          board_activity_rows(state, theme) ++
+            [text(""), text("Oneliners", fg: theme.title.fg)] ++
+            oneliner_rows(state, theme)
+        end
+      ]
+    }
+  end
+
+  defp continue_panel(state, theme) do
+    inbox_count = Map.get(state, :unread_count, 0) || 0
+    online_count = safe_online_now_count(state)
+
+    rows = [
+      {"Last board", "/general"},
+      {"Last thread", "Welcome — read me first"},
+      {"Unread waiting", "#{inbox_count} inbox • board posts"},
+      {"Next likely", "B Boards • I Inbox"},
+      {"Online", "#{online_count} callers visible"}
+    ]
+
+    %{
+      type: :panel,
+      attrs: panel_attrs("Continue", theme),
+      children: [
+        column style: %{gap: 0} do
+          Enum.map(rows, fn {label, value} ->
+            row [] do
+              [
+                text(TextWidth.pad_trailing(label, 15), fg: theme.dim.fg),
+                text(value, fg: theme.primary.fg)
+              ]
+            end
+          end)
+        end
+      ]
+    }
+  end
+
+  defp utility_panel(state, theme) do
+    count = safe_online_now_count(state)
+
+    %{
+      type: :panel,
+      attrs: panel_attrs("Utility", theme),
+      children: [
+        column style: %{gap: 0} do
+          [
+            text("Boards     B", fg: theme.primary.fg),
+            text("Inbox      I", fg: theme.primary.fg),
+            text("Compose    C", fg: theme.primary.fg),
+            text("Online  #{count}", fg: theme.primary.fg),
+            text(""),
+            text("Recent", fg: theme.title.fg),
+            text("/general", fg: theme.dim.fg),
+            text("/lounge", fg: theme.dim.fg)
+          ]
+        end
+      ]
+    }
+  end
+
+  defp panel_attrs(title, theme) do
+    %{
+      title: title,
+      title_attrs: %{fg: theme.title.fg},
+      border: :single,
+      border_fg: theme.border.fg,
+      width: 9999,
+      height: 9999
+    }
+  end
+
+  defp board_activity_rows(state, theme) do
+    inbox_count = Map.get(state, :unread_count, 0) || 0
+
+    [
+      activity_row("> /general", "Welcome — read me first", unread_label(inbox_count), theme),
+      activity_row("  /lounge", "What is everyone working on?", "1 unread", theme),
+      activity_row("  /tech", "Thread renderer ASCII tool", "all read", theme)
+    ]
+  end
+
+  defp activity_row(board, title, status, theme) do
+    row [] do
+      [
+        text(TextWidth.pad_trailing(board, 12), fg: theme.accent.fg),
+        text(TextWidth.pad_trailing(title, 32), fg: theme.primary.fg),
+        text(status, fg: theme.dim.fg)
+      ]
+    end
+  end
+
+  defp unread_label(count) when is_integer(count) and count > 0, do: "#{count} unread"
+  defp unread_label(_count), do: "all read"
+
+  defp safe_online_now_count(state) do
+    state
+    |> Map.get(:domain, %{})
+    |> Map.get(:online_now, Foglet.Sessions.OnlineNow)
+    |> then(& &1.count())
+  rescue
+    _ -> 0
+  catch
+    :exit, _ -> 0
   end
 
   defp oneliner_rows(state, theme) do
