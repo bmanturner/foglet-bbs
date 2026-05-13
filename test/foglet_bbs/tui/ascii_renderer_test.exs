@@ -78,6 +78,26 @@ defmodule Foglet.TUI.AsciiRendererTest do
       assert ascii =~ "Time format"
     end
 
+    test "login enhanced menu helper copy stays inside Enter Foglet card border" do
+      for size <- [{120, 36}, {132, 50}] do
+        view = App.view(RenderFixtures.state_for(:login, size))
+        ascii = AsciiRenderer.render(view, size)
+
+        helper_row =
+          ascii
+          |> String.split("\n")
+          |> Enum.find(&String.contains?(&1, "Single-key shortcuts continue."))
+
+        assert helper_row,
+               "expected helper row in login render at #{inspect(size)}:\n#{ascii}"
+
+        assert String.length(helper_row) <= elem(size, 0)
+
+        assert helper_row |> String.graphemes() |> Enum.count(&(&1 == "│")) == 6,
+               "expected outer frame plus both card borders to remain intact at #{inspect(size)}:\n#{helper_row}"
+      end
+    end
+
     test "respects custom width and height" do
       view = App.view(RenderFixtures.state_for(:login, {120, 30}))
       ascii = AsciiRenderer.render(view, {120, 30})

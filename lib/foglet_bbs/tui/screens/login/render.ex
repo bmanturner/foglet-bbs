@@ -216,8 +216,8 @@ defmodule Foglet.TUI.Screens.Login.Render do
         options ++
           [
             text(""),
-            text("Use the single-key shortcuts below to continue.", fg: theme.dim.fg),
-            text("Registration may require email verification.", fg: theme.dim.fg)
+            text("Single-key shortcuts continue.", fg: theme.dim.fg),
+            text("Email verification may be required.", fg: theme.dim.fg)
           ],
         theme,
         width: 50,
