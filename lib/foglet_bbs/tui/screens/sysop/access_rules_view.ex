@@ -125,8 +125,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   end
 
   defp render_body(%__MODULE__{form_mode: nil} = state, %ConsoleTable{} = table, theme) do
-    selected_table = put_in(table.table.raxol_state[:selected_row], state.selection_index)
-    rendered = ConsoleTable.render(%{table | table: selected_table}, theme: theme)
+    table = put_in(table.table.raxol_state[:selected_row], state.selection_index)
+    rendered = ConsoleTable.render(table, theme: theme)
 
     column style: %{gap: 0} do
       [rendered]
@@ -152,6 +152,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   defp handle_form_key(%{key: :escape}, state), do: {%{state | form_mode: nil}, []}
   defp handle_form_key(%{key: :tab}, state), do: {next_field(state), []}
   defp handle_form_key(%{key: :enter}, state), do: submit_form(state)
+  defp handle_form_key(%{key: :char, char: "s", ctrl: true}, state), do: submit_form(state)
   defp handle_form_key(%{key: :char, char: <<127>>}, state), do: {backspace(state), []}
   defp handle_form_key(%{key: :backspace}, state), do: {backspace(state), []}
 
