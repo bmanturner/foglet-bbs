@@ -164,6 +164,22 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       assert %WrapperState{tabs: [:threads, :chat, :news]} = BoardScreen.init(ctx)
     end
 
+    test "route-enter child load tasks target the mounted thread_list screen key" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+      state = BoardScreen.init(ctx)
+
+      {_state, effects} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      task_keys =
+        effects
+        |> Enum.filter(&match?(%Effect{type: :task}, &1))
+        |> Enum.map(& &1.payload.screen_key)
+
+      assert :thread_list in task_keys
+      refute Enum.any?(task_keys, &match?({_, _}, &1))
+    end
+
     test "returns a wrapper state with current_tab :threads" do
       b = board(chat_enabled: true)
       ctx = context(b)

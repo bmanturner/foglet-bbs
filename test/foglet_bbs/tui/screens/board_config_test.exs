@@ -54,7 +54,7 @@ defmodule Foglet.TUI.Screens.BoardConfigTest do
        [
          %Effect{
            type: :task,
-           payload: %{op: :update_feed_ttl, screen_key: {:board_config_ttl, "feed-1"}}
+           payload: %{op: :update_feed_ttl, screen_key: :thread_list}
          }
        ]} =
         BoardConfig.update({:key, %{key: :enter}}, state, context())
