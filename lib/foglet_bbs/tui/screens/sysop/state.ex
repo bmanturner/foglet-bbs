@@ -15,13 +15,14 @@ defmodule Foglet.TUI.Screens.Sysop.State do
 
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.SystemSnapshot
   alias Foglet.TUI.Screens.Sysop.UsersView
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @base_tabs ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS"]
+  @base_tabs ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS", "ACCESS"]
 
   @typedoc """
   Tagged lifecycle enum for Sysop tab body slots (Phase 29 D-07, D-10).
@@ -47,6 +48,7 @@ defmodule Foglet.TUI.Screens.Sysop.State do
           tab_labels: [String.t()],
           invites: InvitesState.t(),
           site_form: term() | nil,
+          access_rules_view: lifecycle(AccessRulesView.t()),
           limits_form: lifecycle(LimitsForm.t()),
           boards_view: lifecycle(BoardsView.t()),
           system_snapshot: lifecycle(SystemSnapshot.t()),
@@ -60,6 +62,7 @@ defmodule Foglet.TUI.Screens.Sysop.State do
     tab_labels: @base_tabs,
     invites: InvitesState.new(),
     site_form: nil,
+    access_rules_view: :not_loaded,
     limits_form: :not_loaded,
     boards_view: :not_loaded,
     system_snapshot: :not_loaded,
@@ -127,7 +130,9 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   end
 
   def tab_labels(invites_visible?) when is_boolean(invites_visible?) do
-    if invites_visible?, do: @base_tabs ++ ["INVITES"], else: @base_tabs
+    if invites_visible?,
+      do: ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS", "INVITES", "ACCESS"],
+      else: @base_tabs
   end
 
   @spec refresh_tabs(t(), keyword()) :: t()

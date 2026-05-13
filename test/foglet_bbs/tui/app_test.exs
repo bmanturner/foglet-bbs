@@ -2705,7 +2705,9 @@ defmodule Foglet.TUI.AppTest do
   end
 
   describe "Phase 0 screen routing" do
-    setup do
+    setup tags do
+      FogletBbs.DataCase.setup_sandbox(tags)
+
       user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}
 
       {:ok, state} =
@@ -2895,7 +2897,9 @@ defmodule Foglet.TUI.AppTest do
       )
     end
 
-    setup do
+    setup tags do
+      FogletBbs.DataCase.setup_sandbox(tags)
+
       Process.put(:fake_oneliners_owner, self())
       Process.put(:fake_oneliners_entries, [])
       Process.put(:fake_accounts_owner, self())

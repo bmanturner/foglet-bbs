@@ -12,6 +12,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Sysop
+  alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Screens.Sysop.SiteForm.State, as: SiteFormState
   alias Foglet.TUI.Screens.Sysop.State, as: SysopState
   alias Foglet.TUI.Screens.Sysop.UsersView
@@ -260,6 +261,37 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = Sysop.init(context)
 
       assert _node = Sysop.render(state, context)
+    end
+
+    test "ACCESS form consumes q as field text instead of global Back" do
+      user = %Foglet.Accounts.User{
+        id: Ecto.UUID.generate(),
+        handle: "alice",
+        role: :sysop,
+        status: :active
+      }
+
+      context = Context.new(current_user: user, route: :sysop, terminal_size: {80, 24})
+
+      state =
+        Sysop.init(context)
+        |> Map.put(:active_tab, 5)
+        |> Map.put(:access_rules_view, {
+          :loaded,
+          %AccessRulesView{
+            current_user: user,
+            form_mode: :create_allow,
+            form_field: :reason,
+            draft: %{"address" => "198.51.100.73", "reason" => "", "comment" => ""}
+          }
+        })
+
+      {new_state, effects} = Sysop.update({:key, %{key: :char, char: "q"}}, state, context)
+
+      assert effects == []
+      assert {:loaded, %AccessRulesView{} = access_state} = new_state.access_rules_view
+      assert access_state.form_mode == :create_allow
+      assert access_state.draft["reason"] == "q"
     end
 
     test "tab entry sets lifecycle slot to loading and emits a task effect" do
@@ -632,7 +664,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       {:update, state, []} = handle_sysop_key(%{key: :backtab}, state)
       assert {:loaded, limits} = state.screen_state.sysop.limits_form
-      assert limits.focused == 2
+      assert limits.focused == length(Foglet.TUI.Screens.Sysop.LimitsForm.limits_keys()) - 1
     end
 
     test "FOG-1186: SSH parser-shaped Right/Left switch from every visible Sysop tab", %{
@@ -641,8 +673,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = with_invite_policy(state, "sysop_only")
       right_key = ssh_key_event!("\e[C")
       left_key = ssh_key_event!("\e[D")
+      tab_count = SysopState.tab_labels(invites_visible?: true) |> length()
 
-      for start_idx <- 0..5 do
+      for start_idx <- 0..(tab_count - 1) do
         state =
           put_in(
             state,
@@ -651,7 +684,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
           )
 
         {:update, right_state, _cmds} = handle_sysop_key(right_key, state)
-        assert right_state.screen_state.sysop.active_tab == rem(start_idx + 1, 6)
+        assert right_state.screen_state.sysop.active_tab == rem(start_idx + 1, tab_count)
 
         {:update, left_state, _cmds} = handle_sysop_key(left_key, right_state)
         assert left_state.screen_state.sysop.active_tab == start_idx
@@ -941,7 +974,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
                  "LIMITS",
                  "SYSTEM",
                  "USERS",
-                 "INVITES"
+                 "INVITES",
+                 "ACCESS"
                ]
 
         flat =

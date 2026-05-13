@@ -6,6 +6,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.Shared.InvitesSurface
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.SiteForm
@@ -133,6 +134,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     base
     |> maybe_add_site_actions(ss)
     |> maybe_add_boards_actions(ss)
+    |> maybe_add_access_actions(ss)
     |> maybe_add_retry(ss)
     |> maybe_add_revoke(ss)
   end
@@ -207,6 +209,18 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
+  defp maybe_add_access_actions(groups, ss) do
+    active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
+
+    case {active_label, ss.access_rules_view} do
+      {"ACCESS", {:loaded, %AccessRulesView{} = access_state}} ->
+        groups ++ AccessRulesView.keybar_groups(access_state)
+
+      _ ->
+        groups
+    end
+  end
+
   defp boards_modal_mode(ss) do
     active_label = Enum.at(State.tab_labels(ss), ss.active_tab)
 
@@ -259,6 +273,7 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
   end
 
   defp slot_for("BOARDS"), do: :boards_view
+  defp slot_for("ACCESS"), do: :access_rules_view
   defp slot_for("LIMITS"), do: :limits_form
   defp slot_for("SYSTEM"), do: :system_snapshot
   defp slot_for("USERS"), do: :users_view
@@ -308,6 +323,16 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
       {:loaded, sub} -> BoardsView.render(sub, theme, width: width, visible_height: height)
       {:error, :forbidden} -> forbidden_panel(theme)
       {:error, _other} -> error_panel("boards", theme)
+    end
+  end
+
+  defp render_tab_body("ACCESS", ss, theme, _width, _height) do
+    case ss.access_rules_view do
+      :not_loaded -> loading_panel(theme)
+      :loading -> loading_panel(theme)
+      {:loaded, sub} -> AccessRulesView.render(sub, theme)
+      {:error, :forbidden} -> forbidden_panel(theme)
+      {:error, _other} -> error_panel("access", theme)
     end
   end
 

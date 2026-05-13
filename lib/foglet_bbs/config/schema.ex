@@ -127,6 +127,33 @@ defmodule Foglet.Config.Schema do
       enum: nil,
       min: 0,
       max: nil
+    },
+    %{
+      key: "ssh_ip_allowlist_enabled",
+      type: :boolean,
+      default: false,
+      description: "Require an explicit enabled SSH allow rule before a source IP may connect.",
+      enum: nil,
+      min: nil,
+      max: nil
+    },
+    %{
+      key: "ssh_rate_limit_max",
+      type: :integer,
+      default: 10,
+      description: "Maximum SSH channel startups per source IP within the configured window.",
+      enum: nil,
+      min: 1,
+      max: nil
+    },
+    %{
+      key: "ssh_rate_limit_window_ms",
+      type: :integer,
+      default: 60_000,
+      description: "SSH per-IP rate limit window in milliseconds.",
+      enum: nil,
+      min: 1,
+      max: nil
     }
   ]
 

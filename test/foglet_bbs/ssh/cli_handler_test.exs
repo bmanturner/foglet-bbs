@@ -13,6 +13,7 @@ defmodule Foglet.SSH.CLIHandlerTest do
   alias Foglet.SSH.CLIHandler
   alias Foglet.SSH.CLIHandler.Cleanup
   alias Foglet.SSH.CLIHandler.ConnectionCounter
+  alias Foglet.SSH.LastCaller
   alias Foglet.SSH.PubkeyStash
   alias FogletBbs.AccountsFixtures
 
@@ -366,6 +367,9 @@ defmodule Foglet.SSH.CLIHandlerTest do
     setup do
       reset_cli_counter!()
       reset_site_call_counter!()
+      Application.delete_env(:foglet_bbs, :ssh_ip_allowlist_enabled)
+      Application.delete_env(:foglet_bbs, :ssh_rate_limit_max)
+      Application.delete_env(:foglet_bbs, :ssh_rate_limit_window_ms)
       start_supervised!({Foglet.SSH.RateLimiter, clean_period: :timer.minutes(10)})
       :ok
     end
@@ -429,6 +433,9 @@ defmodule Foglet.SSH.CLIHandlerTest do
       refute returned_state.cleanup_done?
       assert_counter!(1)
       assert Foglet.SiteCounters.get_call_count() == 1
+
+      assert %LastCaller{outcome: :accepted, peer_ip: "10.0.0.101", peer_port: 65_003} =
+               latest_last_caller()
 
       assert {:stop, 1, after_close} =
                CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
@@ -621,6 +628,9 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert_counter!(@max_connections)
       assert Foglet.SiteCounters.get_call_count() == 0
 
+      assert %LastCaller{outcome: :over_global_limit, peer_ip: "10.0.0.99", peer_port: 65_001} =
+               latest_last_caller()
+
       # Subsequent cleanup delivery (e.g. terminate) is a no-op for rejected state.
       _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
       assert_counter!(@max_connections)
@@ -648,10 +658,103 @@ defmodule Foglet.SSH.CLIHandlerTest do
       assert_counter!(starting_count)
       assert Foglet.SiteCounters.get_call_count() == 0
 
+      assert %LastCaller{outcome: :rate_limited, peer_ip: "10.0.0.100", peer_port: 65_002} =
+               latest_last_caller()
+
       # Idempotent: cleanup delivery on a rejected state must not double-decrement.
       _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
       assert_counter!(starting_count)
       assert Foglet.SiteCounters.get_call_count() == 0
+    end
+
+    test "deny rule rejects before session creation without durable call increment" do
+      warm_login_config_cache!()
+
+      {:ok, _rule} =
+        Foglet.SSH.create_access_rule(%{mode: :deny, address: "10.0.0.106", reason: "abuse"})
+
+      starting_count = 2
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, starting_count})
+
+      assert {:ok, returned_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, {{10, 0, 0, 106}, 65_008})
+
+      assert returned_state.over_limit
+      assert returned_state.session_pid == nil
+      assert_counter!(starting_count)
+      assert Foglet.SiteCounters.get_call_count() == 0
+
+      assert %LastCaller{outcome: :denied, peer_ip: "10.0.0.106", reason: "abuse"} =
+               latest_last_caller()
+    end
+
+    test "allowlist mode denies unmatched IP and still rate-limits matched allow rules" do
+      Application.put_env(:foglet_bbs, :ssh_ip_allowlist_enabled, true)
+      Application.put_env(:foglet_bbs, :ssh_rate_limit_max, 1)
+
+      on_exit(fn ->
+        Application.delete_env(:foglet_bbs, :ssh_ip_allowlist_enabled)
+        Application.delete_env(:foglet_bbs, :ssh_rate_limit_max)
+      end)
+
+      {:ok, _rule} =
+        Foglet.SSH.create_access_rule(%{mode: :allow, address: "2001:db8::/64", reason: "office"})
+
+      assert {:ok, denied_state} =
+               CLIHandler.channel_up_for_test(
+                 %CLIHandler{},
+                 1,
+                 nil,
+                 {{0x2001, 0xDB8, 1, 0, 0, 0, 0, 1}, 65_009}
+               )
+
+      assert denied_state.session_pid == nil
+      assert Foglet.SiteCounters.get_call_count() == 0
+
+      assert %LastCaller{outcome: :denied, peer_ip: "2001:db8:1::1", reason: "not_allowlisted"} =
+               latest_last_caller()
+
+      allowed_peer = {{0x2001, 0xDB8, 0, 0, 0, 0, 0, 1}, 65_010}
+
+      assert {:ok, accepted_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 2, nil, allowed_peer)
+
+      assert is_pid(accepted_state.session_pid)
+      assert Foglet.SiteCounters.get_call_count() == 1
+
+      assert {:ok, throttled_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 3, nil, allowed_peer)
+
+      assert throttled_state.session_pid == nil
+      assert Foglet.SiteCounters.get_call_count() == 1
+      assert %LastCaller{outcome: :rate_limited, peer_ip: "2001:db8::1"} = latest_last_caller()
+
+      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 2}}, accepted_state)
+    end
+
+    test "unknown peer fails closed in allowlist mode and records audit without raw IP" do
+      Application.put_env(:foglet_bbs, :ssh_ip_allowlist_enabled, true)
+      on_exit(fn -> Application.delete_env(:foglet_bbs, :ssh_ip_allowlist_enabled) end)
+      warm_login_config_cache!()
+
+      starting_count = 2
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, starting_count})
+
+      assert {:ok, returned_state} =
+               CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, :unknown)
+
+      assert returned_state.over_limit
+      assert returned_state.session_pid == nil
+      assert_counter!(starting_count)
+      assert Foglet.SiteCounters.get_call_count() == 0
+
+      assert %LastCaller{
+               outcome: :denied,
+               peer_ip: nil,
+               peer_port: nil,
+               reason: "not_allowlisted"
+             } =
+               latest_last_caller()
     end
 
     test "crash-during-init: terminate on counted state with no lifecycle/session decrements once" do
@@ -1043,6 +1146,14 @@ defmodule Foglet.SSH.CLIHandlerTest do
 
   defp reset_site_call_counter! do
     FogletBbs.Repo.delete_all(Foglet.SiteCounters.Counter)
+  end
+
+  defp latest_last_caller do
+    import Ecto.Query
+
+    FogletBbs.Repo.one(
+      from c in LastCaller, order_by: [desc: c.occurred_at, desc: c.inserted_at], limit: 1
+    )
   end
 
   defp openssh_text_for(public_key) do

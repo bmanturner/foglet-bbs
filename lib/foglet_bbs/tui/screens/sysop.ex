@@ -32,6 +32,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   alias Foglet.TUI.Screens.Shared.InvitesActions
   alias Foglet.TUI.Screens.Shared.InvitesState
   alias Foglet.TUI.Screens.ShellVisibility
+  alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Screens.Sysop.BoardsView
   alias Foglet.TUI.Screens.Sysop.LimitsForm
   alias Foglet.TUI.Screens.Sysop.Render
@@ -88,6 +89,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   def update({:task_result, op, result}, local_state, %Context{} = context)
       when op in [
              :sysop_load_boards,
+             :sysop_load_access_rules,
              :sysop_load_limits,
              :sysop_load_system,
              :sysop_load_users
@@ -125,7 +127,7 @@ defmodule Foglet.TUI.Screens.Sysop do
       when c in ["q", "Q"] do
     ss = normalize_state(local_state, context)
 
-    if active_boards_modal?(ss) do
+    if active_boards_modal?(ss) or active_access_form?(ss) do
       handle_update_key(event, ss, context)
     else
       {ss, [Effect.navigate(:main_menu, %{})]}
@@ -248,6 +250,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp safe_log_value(value), do: inspect(value)
 
   defp slot_for("BOARDS"), do: :boards_view
+  defp slot_for("ACCESS"), do: :access_rules_view
   defp slot_for("LIMITS"), do: :limits_form
   defp slot_for("SYSTEM"), do: :system_snapshot
   defp slot_for("USERS"), do: :users_view
@@ -329,9 +332,17 @@ defmodule Foglet.TUI.Screens.Sysop do
     plain_digit_event?(event) and
       case Enum.at(State.tab_labels(ss), ss.active_tab) do
         "LIMITS" -> true
+        "ACCESS" -> active_access_form?(ss)
         "BOARDS" -> active_boards_form_modal?(ss)
         _ -> false
       end
+  end
+
+  defp active_access_form?(%State{} = ss) do
+    case ss.access_rules_view do
+      {:loaded, %AccessRulesView{form_mode: mode}} when not is_nil(mode) -> true
+      _other -> false
+    end
   end
 
   defp active_boards_form_modal?(%State{} = ss) do
@@ -357,6 +368,14 @@ defmodule Foglet.TUI.Screens.Sysop do
   # and drop INVITES G/D the same way Moderation did pre-FOG-173. Active-tab
   # changes only happen on `{:tab_changed, _}`.
   defp route_through_tabs(event, %State{} = ss, %Context{} = context) do
+    if active_access_form?(ss) do
+      delegate_update_to_active_tab(event, ss, context)
+    else
+      route_through_tabs_unless_access_form(event, ss, context)
+    end
+  end
+
+  defp route_through_tabs_unless_access_form(event, %State{} = ss, %Context{} = context) do
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
     case action do
@@ -375,6 +394,9 @@ defmodule Foglet.TUI.Screens.Sysop do
     case Enum.at(State.tab_labels(ss), ss.active_tab) do
       "SITE" ->
         delegate_update_to_submodule(event, ss, :site_form, SiteForm, context)
+
+      "ACCESS" ->
+        delegate_update_to_submodule(event, ss, :access_rules_view, AccessRulesView, context)
 
       "LIMITS" ->
         delegate_update_to_submodule(event, ss, :limits_form, LimitsForm, context)
@@ -543,6 +565,9 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp load_effect_for_label("BOARDS", context),
     do: lifecycle_effect(:sysop_load_boards, context)
 
+  defp load_effect_for_label("ACCESS", context),
+    do: lifecycle_effect(:sysop_load_access_rules, context)
+
   defp load_effect_for_label("LIMITS", context),
     do: lifecycle_effect(:sysop_load_limits, context)
 
@@ -556,6 +581,10 @@ defmodule Foglet.TUI.Screens.Sysop do
     Effect.task(:sysop_load_boards, :sysop, fn ->
       BoardsView.init(current_user: context.current_user)
     end)
+  end
+
+  defp lifecycle_effect(:sysop_load_access_rules, %Context{} = context) do
+    AccessRulesView.load_effect(context.current_user)
   end
 
   defp lifecycle_effect(:sysop_load_limits, %Context{} = context) do
@@ -590,6 +619,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp slot_for_op(:sysop_load_boards), do: :boards_view
+  defp slot_for_op(:sysop_load_access_rules), do: :access_rules_view
   defp slot_for_op(:sysop_load_limits), do: :limits_form
   defp slot_for_op(:sysop_load_system), do: :system_snapshot
   defp slot_for_op(:sysop_load_users), do: :users_view
