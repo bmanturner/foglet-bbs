@@ -37,7 +37,21 @@ defmodule Foglet.TUI.Screens.BoardNews do
     {state, effects}
   end
 
-  def update({:task_result, :load_board_news, {feeds, items}}, %State{} = state, _context) do
+  def update(
+        {:task_result, :load_board_news, {:ok, {feeds_result, items_result}}},
+        state,
+        context
+      ),
+      do: update({:task_result, :load_board_news, {feeds_result, items_result}}, state, context)
+
+  def update(
+        {:task_result, :load_board_news, {feeds_result, items_result}},
+        %State{} = state,
+        _context
+      ) do
+    feeds = unwrap_list_result(feeds_result)
+    items = unwrap_list_result(items_result)
+
     {%{state | status: :loaded, feeds: feeds, items: items, message: nil}, []}
   end
 
@@ -193,6 +207,10 @@ defmodule Foglet.TUI.Screens.BoardNews do
       String.slice(value, 0, max(max_width - 1, 0)) <> "…"
     end
   end
+
+  defp unwrap_list_result({:ok, values}) when is_list(values), do: values
+  defp unwrap_list_result(values) when is_list(values), do: values
+  defp unwrap_list_result(_other), do: []
 
   defp format_time(%DateTime{} = datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%MZ")
   defp format_time(%NaiveDateTime{} = datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M")

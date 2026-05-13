@@ -455,6 +455,75 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       :ok = PresenceTracker.untrack(b.id, "u1")
     end
 
+    test "NEWS task results unwrap BoardFeeds context return tuples before render" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "3"}}, state, ctx)
+      assert state.current_tab == :news
+
+      feeds = [
+        %{title: "Example Feed", url: "https://example.com/feed.xml", last_success_at: nil}
+      ]
+
+      items = [
+        %{
+          feed: %{title: "Example Feed"},
+          title: "Cached Item",
+          summary: "Summary",
+          url: "https://example.com/item"
+        }
+      ]
+
+      {state, []} =
+        BoardScreen.update(
+          {:task_result, :load_board_news, {:ok, {{:ok, feeds}, {:ok, items}}}},
+          state,
+          ctx
+        )
+
+      assert state.news.feeds == feeds
+      assert state.news.items == items
+
+      rendered = flatten_text(BoardScreen.render(state, ctx))
+      assert rendered =~ "Cached board news"
+      assert rendered =~ "Example Feed"
+
+      :ok = PresenceTracker.untrack(b.id, "u1")
+    end
+
+    test "CONFIG task results unwrap BoardFeeds context return tuples before render" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+      state = BoardScreen.init(ctx)
+      {state, _} = BoardScreen.update(:on_route_enter, state, ctx)
+
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "4"}}, state, ctx)
+      assert state.current_tab == :config
+
+      feeds = [
+        %{
+          id: "feed-1",
+          title: "Example Feed",
+          url: "https://example.com/feed.xml",
+          cache_ttl_seconds: 3600
+        }
+      ]
+
+      {state, []} =
+        BoardScreen.update({:task_result, :load_board_feed_config, {:ok, feeds}}, state, ctx)
+
+      assert state.config.feeds == feeds
+
+      rendered = flatten_text(BoardScreen.render(state, ctx))
+      assert rendered =~ "Feed CONFIG"
+      assert rendered =~ "Example Feed"
+
+      :ok = PresenceTracker.untrack(b.id, "u2")
+    end
+
     test "right/left arrows cycle between threads and chat" do
       b = board(chat_enabled: true)
       ctx = context(b)

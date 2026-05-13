@@ -39,8 +39,8 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     {%{state | status: :loading}, [effect]}
   end
 
-  def update({:task_result, :load_board_feed_config, feeds}, %State{} = state, _context),
-    do: {%{state | status: :loaded, feeds: feeds}, []}
+  def update({:task_result, :load_board_feed_config, feeds_result}, %State{} = state, _context),
+    do: {%{state | status: :loaded, feeds: unwrap_list_result(feeds_result)}, []}
 
   def update({:task_result, :add_board_feed, {:ok, _feed}}, %State{} = state, context) do
     state = %{state | mode: :list, input: "", message: "Feed validated and added."}
@@ -248,6 +248,10 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     title = Map.get(feed || %{}, :title) || Map.get(feed || %{}, :url) || "selected feed"
     "TTL seconds for #{title}:"
   end
+
+  defp unwrap_list_result({:ok, values}) when is_list(values), do: values
+  defp unwrap_list_result(values) when is_list(values), do: values
+  defp unwrap_list_result(_other), do: []
 
   defp board_id(%Context{route_params: params}),
     do:
