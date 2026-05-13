@@ -82,6 +82,27 @@ defmodule Foglet.TUI.Screens.Notifications do
      ), []}
   end
 
+  def update({:task_result, :open_notification_target, result}, local_state, %Context{} = context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, target} ->
+        params = %{
+          board_id: target.board_id,
+          thread_id: target.thread_id,
+          load_intent: {:around, target.message_number}
+        }
+
+        effects =
+          [Effect.navigate(:post_reader, params)] ++
+            mark_read_after_open_effects(context, target)
+
+        {%{normalize_state(local_state) | status: :loaded}, effects}
+
+      {:error, reason} ->
+        message = open_target_error_message(reason)
+        {set_open_target_error(normalize_state(local_state), reason, message), []}
+    end
+  end
+
   def update({:notifications, :created, %{} = notification}, local_state, %Context{} = context) do
     state =
       local_state
@@ -134,6 +155,23 @@ defmodule Foglet.TUI.Screens.Notifications do
     else
       {state, []}
     end
+  end
+
+  def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
+    state = normalize_state(local_state)
+
+    case State.selected_row(state) do
+      nil ->
+        {state, []}
+
+      notification ->
+        {%{state | status: :opening_target}, [open_target_effect(context, notification)]}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["o", "O"] do
+    update({:key, %{key: :enter}}, local_state, context)
   end
 
   def update({:key, %{key: :char, char: c}}, local_state, %Context{})
@@ -404,8 +442,9 @@ defmodule Foglet.TUI.Screens.Notifications do
       %{
         label: "Actions",
         commands: [
-          %{key: "R", label: "Mark read", priority: 5},
-          %{key: "A", label: "Mark all read", priority: 10},
+          %{key: "Enter", label: "Open", priority: 3},
+          %{key: "R", label: "Read", priority: 5},
+          %{key: "A", label: "All read", priority: 10},
           %{key: "↑/↓", label: "Select", priority: 20}
         ]
       }
@@ -421,13 +460,25 @@ defmodule Foglet.TUI.Screens.Notifications do
   end
 
   defp mark_read_effect(%Context{} = context, notification) do
+    notification_id = notification_id(notification)
+
+    mark_read_id_effect(context, notification_id)
+  end
+
+  defp mark_read_id_effect(%Context{} = context, notification_id) do
     notifications_mod = domain_module(context)
-    notification_id = Map.get(notification, :id) || Map.get(notification, "id")
 
     Effect.task(:mark_notification_read, :notifications, fn ->
       notifications_mod.mark_read(context.current_user, notification_id)
     end)
   end
+
+  defp mark_read_after_open_effects(%Context{} = context, %{notification_id: notification_id})
+       when not is_nil(notification_id) do
+    [mark_read_id_effect(context, notification_id)]
+  end
+
+  defp mark_read_after_open_effects(%Context{}, _target), do: []
 
   defp mark_all_read_effect(%Context{} = context) do
     notifications_mod = domain_module(context)
@@ -437,6 +488,20 @@ defmodule Foglet.TUI.Screens.Notifications do
     end)
   end
 
+  defp open_target_effect(%Context{} = context, notification) do
+    notifications_mod = domain_module(context)
+
+    Effect.task(:open_notification_target, :notifications, fn ->
+      with {:ok, target} <-
+             notifications_mod.resolve_open_target(context.current_user, notification) do
+        {:ok, Map.put(target, :notification_id, notification_id(notification))}
+      end
+    end)
+  end
+
+  defp notification_id(notification),
+    do: Map.get(notification, :id) || Map.get(notification, "id")
+
   defp domain_module(%Context{domain: domain}) when is_map(domain) do
     Map.get(domain, :notifications, Foglet.Notifications)
   end
@@ -445,6 +510,10 @@ defmodule Foglet.TUI.Screens.Notifications do
 
   defp normalize_state(%State{} = state), do: state
   defp normalize_state(_other), do: State.new()
+
+  defp set_open_target_error(%State{} = state, _reason, message) do
+    %{state | status: :error, last_error: message}
+  end
 
   defp frame_state(%Context{} = context) do
     %{
@@ -516,6 +585,13 @@ defmodule Foglet.TUI.Screens.Notifications do
 
   defp read_state_label(notification),
     do: if(unread?(notification), do: "Needs review", else: "Already read")
+
+  defp open_target_error_message(:not_openable), do: "This notification cannot be opened."
+  defp open_target_error_message(:target_missing), do: "Target is no longer available."
+  defp open_target_error_message(:not_found), do: "Target is no longer available."
+  defp open_target_error_message(:unauthorized), do: "You do not have access to that target."
+  defp open_target_error_message(:board_archived), do: "You do not have access to that target."
+  defp open_target_error_message(_reason), do: "This notification cannot be opened."
 
   defp header_helper_fg(%State{status: :error}, theme), do: theme.error.fg
   defp header_helper_fg(%State{rows: []}, theme), do: theme.primary.fg

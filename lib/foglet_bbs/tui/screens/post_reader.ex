@@ -708,6 +708,14 @@ defmodule Foglet.TUI.Screens.PostReader do
   # The read-pointer lookup stays where it already lives — the screen-owned
   # `pending_read_positions` map (D-03 forbids calling Threads here, and D-03
   # forbids adding a new :read_pointer direction — :around is the primitive).
+  defp load_window_opts(_msg_no, {:around, message_number}) when is_integer(message_number) do
+    [direction: :around, around_message_number: message_number]
+  end
+
+  defp load_window_opts(_msg_no, %{"around" => message_number}) when is_integer(message_number) do
+    [direction: :around, around_message_number: message_number]
+  end
+
   defp load_window_opts(message_number, _load_intent) when is_integer(message_number) do
     [direction: :around, around_message_number: message_number]
   end
