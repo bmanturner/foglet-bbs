@@ -5,6 +5,9 @@ defmodule Foglet.TUI.Screens.BoardNews do
   alias Foglet.TUI.Context
   import Raxol.Core.Renderer.View
 
+  @wide_list_text_width 38
+  @wide_status_width 38
+
   defmodule State do
     @moduledoc false
     @type t :: %__MODULE__{
@@ -121,16 +124,16 @@ defmodule Foglet.TUI.Screens.BoardNews do
         summary = Map.get(item, :summary) || ""
 
         [
-          text(prefix <> feed <> " — " <> title,
+          text(truncate(prefix <> feed <> " — " <> title, @wide_list_text_width),
             fg: if(selected?, do: theme.accent.fg, else: theme.primary.fg),
             style: if(selected?, do: [:bold], else: [])
           ),
-          text("  " <> summary, fg: theme.dim.fg),
-          text("  " <> url, fg: theme.dim.fg)
+          text(truncate("  " <> summary, @wide_list_text_width), fg: theme.dim.fg),
+          text(truncate("  " <> url, @wide_list_text_width), fg: theme.dim.fg)
         ]
       end)
 
-    rows ++ [text(feed_status(state.feeds), fg: theme.dim.fg)]
+    rows ++ [text(truncate(feed_status(state.feeds), @wide_status_width), fg: theme.dim.fg)]
   end
 
   def keybar_groups(_state, _context),
@@ -160,10 +163,40 @@ defmodule Foglet.TUI.Screens.BoardNews do
 
   defp feed_status([]), do: "No enabled feeds are cached for this board."
 
-  defp feed_status(feeds),
-    do:
-      "Feeds: " <>
-        Enum.map_join(feeds, ", ", &(Map.get(&1, :title) || Map.get(&1, :url) || "feed"))
+  defp feed_status(feeds) do
+    feed_names = Enum.map_join(feeds, ", ", &(Map.get(&1, :title) || Map.get(&1, :url) || "feed"))
+
+    errors =
+      feeds
+      |> Enum.filter(&Map.get(&1, :last_error))
+      |> Enum.map_join("; ", fn feed ->
+        name = Map.get(feed, :title) || Map.get(feed, :url) || "feed"
+        "#{name} error: #{Map.get(feed, :last_error)}"
+      end)
+
+    last_success =
+      feeds
+      |> Enum.map(&Map.get(&1, :last_success_at))
+      |> Enum.reject(&is_nil/1)
+      |> Enum.max(DateTime, fn -> nil end)
+
+    success_text = if last_success, do: " last success: #{format_time(last_success)}", else: ""
+    error_text = if errors == "", do: "", else: " stale; #{errors}"
+
+    "Feeds: #{feed_names}#{error_text}#{success_text}"
+  end
+
+  defp truncate(value, max_width) when is_binary(value) do
+    if String.length(value) <= max_width do
+      value
+    else
+      String.slice(value, 0, max(max_width - 1, 0)) <> "…"
+    end
+  end
+
+  defp format_time(%DateTime{} = datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%MZ")
+  defp format_time(%NaiveDateTime{} = datetime), do: Calendar.strftime(datetime, "%Y-%m-%d %H:%M")
+  defp format_time(other), do: to_string(other)
 
   defp board_id(%Context{route_params: params}),
     do:

@@ -66,6 +66,17 @@ defmodule Foglet.BoardFeeds do
     end
   end
 
+  def update_feed_ttl(actor, feed_id, ttl_seconds) when is_integer(ttl_seconds) do
+    feed = Repo.get!(Feed, feed_id)
+
+    with :ok <-
+           Bodyguard.permit(@authorization, :manage_board_feeds, actor, {:board, feed.board_id}) do
+      feed
+      |> Feed.changeset(%{cache_ttl_seconds: ttl_seconds})
+      |> Repo.update()
+    end
+  end
+
   def list_cached_items(actor, board_id, opts \\ []) do
     if can_read_board?(actor, board_id) do
       limit = Keyword.get(opts, :limit, 50)

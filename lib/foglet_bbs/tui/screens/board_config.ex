@@ -55,6 +55,14 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     load_effects(state, context)
   end
 
+  def update({:task_result, :update_feed_ttl, {:ok, _feed}}, %State{} = state, context) do
+    state = %{state | mode: :list, message: "TTL saved for selected feed."}
+    load_effects(state, context)
+  end
+
+  def update({:task_result, :update_feed_ttl, {:error, reason}}, %State{} = state, _context),
+    do: {%{state | message: "TTL rejected: #{inspect(reason)}"}, []}
+
   def update({:key, %{key: :char, char: c}}, %State{mode: :add} = state, _context)
       when byte_size(c) == 1 do
     {%{state | input: state.input <> c}, []}
@@ -87,8 +95,31 @@ defmodule Foglet.TUI.Screens.BoardConfig do
   def update({:key, %{key: :backspace}}, %State{mode: :ttl} = state, _context),
     do: {%{state | ttl_input: drop_last(state.ttl_input)}, []}
 
-  def update({:key, %{key: :enter}}, %State{mode: :ttl} = state, _context),
-    do: {%{state | mode: :list, message: "TTL set for next added feed: #{parse_ttl(state)}s"}, []}
+  def update({:key, %{key: :enter}}, %State{mode: :ttl, feeds: []} = state, _context),
+    do:
+      {%{state | mode: :list, message: "Default TTL for next feed set to #{parse_ttl(state)}s"},
+       []}
+
+  def update({:key, %{key: :enter}}, %State{mode: :ttl} = state, context) do
+    actor = context.current_user
+    ttl = parse_ttl(state)
+    feed = selected_feed(state)
+
+    effect =
+      Foglet.TUI.Effect.task(:update_feed_ttl, {:board_config_ttl, Map.get(feed, :id)}, fn ->
+        BoardFeeds.update_feed_ttl(actor, Map.fetch!(feed, :id), ttl)
+      end)
+
+    {%{state | message: "Saving TTL for selected feed…"}, [effect]}
+  end
+
+  def update({:key, %{key: :down}}, %State{mode: :list} = state, _context),
+    do:
+      {%{state | selected_index: min(state.selected_index + 1, max(length(state.feeds) - 1, 0))},
+       []}
+
+  def update({:key, %{key: :up}}, %State{mode: :list} = state, _context),
+    do: {%{state | selected_index: max(state.selected_index - 1, 0)}, []}
 
   def update({:key, %{key: :char, char: c}}, %State{mode: :list} = state, _context)
       when c in ["a", "A"] do
@@ -105,8 +136,8 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     {%{
        state
        | mode: :ttl,
-         ttl_input: Integer.to_string(parse_ttl(state)),
-         message: "Enter TTL seconds."
+         ttl_input: Integer.to_string(selected_ttl(state)),
+         message: ttl_prompt(state)
      }, []}
   end
 
@@ -143,13 +174,17 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     end
   end
 
+  def keybar_groups(%State{mode: :add}, _context), do: input_keybar("Add feed", "Save/validate")
+  def keybar_groups(%State{mode: :ttl}, _context), do: input_keybar("TTL", "Save")
+
   def keybar_groups(_state, _context),
     do: [
       %{
         label: "Config",
         commands: [
+          %{key: "↑/↓", label: "Select", priority: 9},
           %{key: "A", label: "Add feed", priority: 10},
-          %{key: "T", label: "TTL", priority: 11},
+          %{key: "T", label: "Edit selected TTL", priority: 11},
           %{key: "R", label: "Refresh", priority: 12},
           %{key: "Esc", label: "Cancel", priority: 20}
         ]
@@ -160,7 +195,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     do: text("URL: " <> state.input <> "▌", fg: theme.primary.fg)
 
   defp render_mode(%State{mode: :ttl} = state, theme),
-    do: text("TTL seconds: " <> state.ttl_input <> "▌", fg: theme.primary.fg)
+    do: text(ttl_prompt(state) <> " " <> state.ttl_input <> "▌", fg: theme.primary.fg)
 
   defp render_mode(%State{message: message}, theme) when is_binary(message),
     do: text(message, fg: theme.dim.fg)
@@ -170,13 +205,48 @@ defmodule Foglet.TUI.Screens.BoardConfig do
   defp feed_rows(%State{feeds: []}, theme),
     do: [text("No feeds configured. Press A to add and validate a feed URL.", fg: theme.dim.fg)]
 
-  defp feed_rows(%State{} = state, theme), do: Enum.map(state.feeds, &feed_row(&1, theme))
+  defp feed_rows(%State{} = state, theme) do
+    state.feeds
+    |> Enum.with_index()
+    |> Enum.map(fn {feed, index} -> feed_row(feed, index == state.selected_index, theme) end)
+  end
 
-  defp feed_row(feed, theme) do
+  defp feed_row(feed, selected?, theme) do
     title = Map.get(feed, :title) || Map.get(feed, :url) || "feed"
     ttl = Map.get(feed, :cache_ttl_seconds) || 0
     status = if Map.get(feed, :last_error), do: "error", else: "ok"
-    text("• #{title}  ttl=#{ttl}s  #{status}", fg: theme.primary.fg)
+    marker = if selected?, do: "▌", else: "•"
+    text("#{marker} #{title}  ttl=#{ttl}s  #{status}", fg: theme.primary.fg)
+  end
+
+  defp input_keybar(label, enter_label),
+    do: [
+      %{
+        label: label,
+        commands: [
+          %{key: "Enter", label: enter_label, priority: 5},
+          %{key: "Backspace", label: "Delete", priority: 6},
+          %{key: "Esc", label: "Cancel", priority: 7}
+        ]
+      }
+    ]
+
+  defp selected_feed(%State{feeds: []}), do: nil
+
+  defp selected_feed(%State{} = state),
+    do: Enum.at(state.feeds, state.selected_index) || List.first(state.feeds)
+
+  defp selected_ttl(%State{feeds: []} = state), do: parse_ttl(state)
+
+  defp selected_ttl(%State{} = state),
+    do: Map.get(selected_feed(state), :cache_ttl_seconds) || parse_ttl(state)
+
+  defp ttl_prompt(%State{feeds: []}), do: "Default TTL seconds for next feed:"
+
+  defp ttl_prompt(%State{} = state) do
+    feed = selected_feed(state)
+    title = Map.get(feed || %{}, :title) || Map.get(feed || %{}, :url) || "selected feed"
+    "TTL seconds for #{title}:"
   end
 
   defp board_id(%Context{route_params: params}),
