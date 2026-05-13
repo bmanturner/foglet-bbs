@@ -5,6 +5,10 @@ defmodule Foglet.Notifications.Notification do
   `user_id` is the recipient. `actor_id` is optional for system-originated
   events. Payloads are stored as sanitized string-keyed maps so future emitters
   can jump directly to board/thread/post targets without re-parsing text.
+
+  Thread updates are post-target notifications for the thread creator. They use
+  the same per-post/recipient dedupe key as reply and mention notifications so
+  the more-specific reply/mention kind wins for the same post event.
   """
 
   use Foglet.Schema
@@ -84,7 +88,7 @@ defmodule Foglet.Notifications.Notification do
   end
 
   defp valid_thread_update_payload?(payload) do
-    uuid_string?(payload["thread_id"]) and uuid_list?(payload["new_post_ids"])
+    valid_post_payload?(payload)
   end
 
   defp normalize_payload(payload) when is_map(payload) do
@@ -128,11 +132,6 @@ defmodule Foglet.Notifications.Notification do
   defp normalize_dedupe_key(value), do: value
 
   defp present_string?(value), do: is_binary(value) and value != ""
-
-  defp uuid_list?(values) when is_list(values),
-    do: values != [] and Enum.all?(values, &uuid_string?/1)
-
-  defp uuid_list?(_values), do: false
 
   defp uuid_string?(value) when is_binary(value), do: match?({:ok, _}, Ecto.UUID.cast(value))
   defp uuid_string?(_value), do: false

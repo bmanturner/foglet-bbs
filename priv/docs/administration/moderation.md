@@ -4,14 +4,11 @@
 }
 ---
 
-> **Warning: tentative moderation plan**
+> **Warning: narrow moderation surface**
 >
-> This page currently mixes implemented domain capabilities with planned or
-> partially wired moderation workflows. Treat it as a design/reference note, not
-> as a promise of available operator UI. In the current release, the Moderation
-> TUI is largely read-only: report queues, sanctions, warnings, mutes, bans,
-> public audit browsing, bulk tools, and several content-action workflows are
-> not fully implemented or exposed end-to-end yet.
+> Foglet now has a TUI report queue, but it is not a full case-management
+> system. Sanctions, warnings, mutes, bans, public audit browsing, and bulk
+> tools are not complete operator workflows in the current release.
 
 This page describes Foglet's current moderation surface. It covers what exists now and names what should not be promised yet.
 
@@ -35,9 +32,12 @@ The implemented moderation surface centers on message-area maintenance:
 | Delete post | Soft-deletes a post and may store a reason. |
 | Delete thread | Soft-deletes a thread. |
 | Hide oneliner | Hides a one-line wall entry while preserving moderation context. |
+| Create report | Lets a signed-in caller report a supported user, post, thread, or oneliner target. |
+| Review report queue | Lets mods and sysops list open reports visible to their scope. |
+| Resolve or dismiss report | Closes an open report with moderator notes. |
 | User status changes | Sysops can approve, reject, suspend, and reactivate users. |
 
-The data model also includes audit-oriented moderation tables for reports, actions, and sanctions. Do not assume every table has a complete public TUI workflow in the current release.
+The data model also includes audit-oriented moderation action and sanction tables. Do not assume every table has a complete public TUI workflow in the current release.
 
 ## What moderators can see and do
 
@@ -65,14 +65,12 @@ Foglet preserves history by default:
 - message numbers are not reused
 - oneliners are hidden, not erased, where moderation uses the hide path
 
-Moderation action/report/sanction tables are designed as append-heavy records. Public operator docs should treat full report queues, warnings, mutes, temporary bans, and permanent bans as not yet supported unless the current release exposes them.
+Moderation action/report/sanction tables are designed as append-heavy records. Public operator docs should treat warnings, mutes, temporary bans, and permanent bans as not yet supported unless the current release exposes them.
 
 ## Not currently promised
 
 Do not promise these as available moderation features unless you verify them in the running release:
 
-- user reports from the TUI
-- a complete moderation queue
 - automated sanctions
 - warning/mute/ban workflows
 - public audit-log browsing
