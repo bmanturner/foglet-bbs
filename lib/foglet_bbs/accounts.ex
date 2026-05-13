@@ -23,7 +23,16 @@ defmodule Foglet.Accounts do
 
   alias Foglet.QueryHelpers
 
-  alias Foglet.Accounts.{Email, Invite, RedemptionThrottle, SSHKey, User, UserToken}
+  alias Foglet.Accounts.{
+    Email,
+    IdentityPolicy,
+    Invite,
+    RedemptionThrottle,
+    SSHKey,
+    User,
+    UserToken
+  }
+
   alias Foglet.{Config, Mailer}
   alias Foglet.Notifications.Notification
   alias Foglet.Posts.Post
@@ -72,6 +81,39 @@ defmodule Foglet.Accounts do
     end
   end
 
+  def list_identity_rules(actor) do
+    with :ok <- permit_identity_rule_management(actor) do
+      {:ok, IdentityPolicy.list_rules()}
+    end
+  end
+
+  def create_identity_rule(actor, attrs) do
+    with :ok <- permit_identity_rule_management(actor),
+         {:ok, rule} <- IdentityPolicy.create_rule(attrs, actor) do
+      {:ok, rule, IdentityPolicy.conflicts_for_rule(rule)}
+    end
+  end
+
+  def enable_identity_rule(actor, id) do
+    with :ok <- permit_identity_rule_management(actor), do: IdentityPolicy.enable_rule(id, actor)
+  end
+
+  def disable_identity_rule(actor, id) do
+    with :ok <- permit_identity_rule_management(actor), do: IdentityPolicy.disable_rule(id, actor)
+  end
+
+  def remove_identity_rule(actor, id) do
+    with :ok <- permit_identity_rule_management(actor), do: IdentityPolicy.remove_rule(id)
+  end
+
+  def check_identity_handle(handle), do: IdentityPolicy.check_handle(handle)
+  def check_identity_email(email), do: IdentityPolicy.check_email(email)
+  def identity_handle_blocked?(handle), do: match?({:blocked, _}, check_identity_handle(handle))
+
+  defp permit_identity_rule_management(actor) do
+    Bodyguard.permit(Foglet.Authorization, :manage_identity_rules, actor, :site)
+  end
+
   defp register_open_user(attrs) do
     {attrs, offered_ssh_public_key} = pop_offered_ssh_public_key(attrs)
 
@@ -95,7 +137,7 @@ defmodule Foglet.Accounts do
     {attrs, offered_ssh_public_key} = pop_offered_ssh_public_key(attrs)
     attrs = Map.new(attrs)
     invite_code = attrs[:invite_code] || attrs["invite_code"]
-    user_changeset = User.registration_changeset(%User{}, attrs)
+    user_changeset = %User{} |> User.registration_changeset(attrs)
 
     cond do
       blank_invite_code?(invite_code) ->

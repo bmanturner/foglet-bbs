@@ -326,11 +326,11 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
     end
   end
 
-  defp render_tab_body("ACCESS", ss, theme, _width, _height) do
+  defp render_tab_body("ACCESS", ss, theme, width, height) do
     case ss.access_rules_view do
       :not_loaded -> loading_panel(theme)
       :loading -> loading_panel(theme)
-      {:loaded, sub} -> AccessRulesView.render(sub, theme)
+      {:loaded, sub} -> AccessRulesView.render(sub, theme, width: width, visible_height: height)
       {:error, :forbidden} -> forbidden_panel(theme)
       {:error, _other} -> error_panel("access", theme)
     end

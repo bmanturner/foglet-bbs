@@ -67,10 +67,12 @@ defmodule Foglet.Accounts.User do
   def registration_changeset(user \\ %__MODULE__{}, attrs) do
     user
     |> cast(attrs, [:handle, :email, :password])
+    |> normalize_identity_fields()
     |> validate_required([:handle, :email, :password])
     |> validate_handle()
     |> validate_email()
     |> validate_password()
+    |> Foglet.Accounts.IdentityPolicy.validate_registration_changeset()
     |> put_account_defaults()
     |> put_password_hash()
     |> unsafe_validate_unique(:handle, FogletBbs.Repo)
@@ -174,7 +176,11 @@ defmodule Foglet.Accounts.User do
   @doc "Public accessor for valid roles (used in Mix tasks and tests)."
   def valid_roles, do: @valid_roles
 
-  # ---------- Private ----------
+  defp normalize_identity_fields(changeset) do
+    changeset
+    |> update_change(:handle, &String.trim/1)
+    |> update_change(:email, &String.trim/1)
+  end
 
   defp validate_handle(changeset) do
     changeset
