@@ -24,7 +24,10 @@ defmodule Foglet.SSH.RateLimiterTest do
   setup do
     reset_bucket("ssh:127.0.0.1")
     reset_bucket("ssh:10.0.0.1")
+    reset_bucket("ssh:2001:db8::1")
     reset_bucket("ssh:unknown")
+    Application.delete_env(:foglet_bbs, :ssh_rate_limit_max)
+    Application.delete_env(:foglet_bbs, :ssh_rate_limit_window_ms)
     :ok
   end
 
@@ -54,5 +57,18 @@ defmodule Foglet.SSH.RateLimiterTest do
     for _ <- 1..11 do
       assert RateLimiter.allow?(:unknown) == true
     end
+  end
+
+  test "uses runtime-configurable max/window and supports IPv6 buckets" do
+    Application.put_env(:foglet_bbs, :ssh_rate_limit_max, 2)
+    Application.put_env(:foglet_bbs, :ssh_rate_limit_window_ms, 60_000)
+
+    ipv6_peer = {{0x2001, 0xDB8, 0, 0, 0, 0, 0, 1}, 54_323}
+
+    assert RateLimiter.rate_limit_max() == 2
+    assert RateLimiter.rate_limit_window_ms() == 60_000
+    assert RateLimiter.allow?(ipv6_peer)
+    assert RateLimiter.allow?(ipv6_peer)
+    refute RateLimiter.allow?(ipv6_peer)
   end
 end

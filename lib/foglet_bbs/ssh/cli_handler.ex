@@ -306,6 +306,7 @@ defmodule Foglet.SSH.CLIHandler do
             "Connection limit reached. Try again later.\r\n"
           )
 
+        _ = record_connection_audit(peer, :over_global_limit, %{reason: "over_global_limit"})
         _ = safe_ssh_close(connection_ref, channel_id)
 
         # Over-limit reject is a fully-rejected state. check_connection_limit/0
@@ -326,70 +327,105 @@ defmodule Foglet.SSH.CLIHandler do
         {:ok, new_state}
 
       :ok ->
-        if Foglet.SSH.RateLimiter.allow?(peer) do
-          # check_connection_limit/0 already incremented the counter; the
-          # accepted path now owns one decrement, tracked via counter_counted?.
-          pubkey_resolution = PubkeyIdentity.resolve(peer)
-          pubkey_user = Map.get(pubkey_resolution, :user)
-          pubkey_gate = Map.get(pubkey_resolution, :gate)
-          offered_ssh_public_key = Map.get(pubkey_resolution, :offered_ssh_public_key)
-          session_pid = PubkeyIdentity.start_session(pubkey_resolution)
+        case Foglet.SSH.AccessPolicy.evaluate(peer) do
+          {:allow, access_meta} ->
+            continue_channel_up(state, channel_id, connection_ref, peer, access_meta)
 
-          # Successful BBS connect boundary: count only after connection-limit
-          # and rate-limit gates pass and the guest/member session exists. This
-          # keeps rejected attempts, later auth promotion, cleanup, resize, and
-          # old-session replacement cleanup outside the durable total-call path.
-          _new_total_call_count = Foglet.SiteCounters.increment_call_count()
-
-          Logger.info(
-            "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
-              "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
-              "pubkey_gate=#{inspect(pubkey_gate)} " <>
-              "session_pid=#{inspect(session_pid)}"
-          )
-
-          new_state = %__MODULE__{
-            state
-            | channel_id: channel_id,
-              connection_ref: connection_ref,
-              peer: peer,
-              pubkey_user: pubkey_user,
-              pubkey_gate: pubkey_gate,
-              session_pid: session_pid,
-              offered_ssh_public_key: offered_ssh_public_key,
-              counter_counted?: true,
-              cleanup_done?: false
-          }
-
-          {:ok, new_state}
-        else
-          # check_connection_limit/0 incremented the counter before we got here;
-          # undo it so rate-limited connections don't drift the count upward.
-          # After this immediate compensation the counter is balanced, so the
-          # rejected state owes no further decrement.
-          _ = ConnectionCounter.decrement()
-
-          _ =
-            safe_ssh_send(
-              connection_ref,
+          {:deny, access_meta} ->
+            reject_channel_up(
+              state,
               channel_id,
-              "Rate limit exceeded. Try again later.\r\n"
+              connection_ref,
+              peer,
+              :denied,
+              access_meta,
+              "Connection refused.\r\n"
             )
-
-          _ = safe_ssh_close(connection_ref, channel_id)
-
-          new_state = %__MODULE__{
-            state
-            | over_limit: true,
-              channel_id: channel_id,
-              connection_ref: connection_ref,
-              cleanup_done?: true,
-              counter_counted?: false
-          }
-
-          {:ok, new_state}
         end
     end
+  end
+
+  defp continue_channel_up(%__MODULE__{} = state, channel_id, connection_ref, peer, access_meta) do
+    if Foglet.SSH.RateLimiter.allow?(peer) do
+      # check_connection_limit/0 already incremented the counter; the
+      # accepted path now owns one decrement, tracked via counter_counted?.
+      pubkey_resolution = PubkeyIdentity.resolve(peer)
+      pubkey_user = Map.get(pubkey_resolution, :user)
+      pubkey_gate = Map.get(pubkey_resolution, :gate)
+      offered_ssh_public_key = Map.get(pubkey_resolution, :offered_ssh_public_key)
+      session_pid = PubkeyIdentity.start_session(pubkey_resolution)
+      outcome = if pubkey_gate, do: :auth_gate_denied, else: :accepted
+
+      _ = record_connection_audit(peer, outcome, access_meta, pubkey_user)
+
+      # Successful BBS connect boundary: count only after connection-limit
+      # and rate-limit gates pass and the guest/member session exists. This
+      # keeps rejected attempts, later auth promotion, cleanup, resize, and
+      # old-session replacement cleanup outside the durable total-call path.
+      _new_total_call_count = Foglet.SiteCounters.increment_call_count()
+
+      Logger.info(
+        "[SSH.CLIHandler] Channel up — peer=#{inspect(peer)} " <>
+          "user=#{inspect(pubkey_user && pubkey_user.handle)} " <>
+          "pubkey_gate=#{inspect(pubkey_gate)} " <>
+          "session_pid=#{inspect(session_pid)}"
+      )
+
+      new_state = %__MODULE__{
+        state
+        | channel_id: channel_id,
+          connection_ref: connection_ref,
+          peer: peer,
+          pubkey_user: pubkey_user,
+          pubkey_gate: pubkey_gate,
+          session_pid: session_pid,
+          offered_ssh_public_key: offered_ssh_public_key,
+          counter_counted?: true,
+          cleanup_done?: false
+      }
+
+      {:ok, new_state}
+    else
+      reject_channel_up(
+        state,
+        channel_id,
+        connection_ref,
+        peer,
+        :rate_limited,
+        %{reason: "rate_limited"},
+        "Rate limit exceeded. Try again later.\r\n"
+      )
+    end
+  end
+
+  defp reject_channel_up(
+         %__MODULE__{} = state,
+         channel_id,
+         connection_ref,
+         peer,
+         outcome,
+         meta,
+         message
+       ) do
+    # check_connection_limit/0 incremented the counter before we got here;
+    # undo it so rejected connections don't drift the count upward. After this
+    # immediate compensation the rejected state owes no further decrement.
+    _ = ConnectionCounter.decrement()
+    _ = record_connection_audit(peer, outcome, meta)
+    _ = safe_ssh_send(connection_ref, channel_id, message)
+    _ = safe_ssh_close(connection_ref, channel_id)
+
+    new_state = %__MODULE__{
+      state
+      | over_limit: true,
+        channel_id: channel_id,
+        connection_ref: connection_ref,
+        peer: peer,
+        cleanup_done?: true,
+        counter_counted?: false
+    }
+
+    {:ok, new_state}
   end
 
   @doc false
@@ -462,6 +498,41 @@ defmodule Foglet.SSH.CLIHandler do
     do: {ip, port}
 
   defp peer_from_connection_info(_info), do: :unknown
+
+  defp record_connection_audit(peer, outcome, meta, user \\ nil) do
+    {peer_ip, peer_port} = audit_peer(peer)
+    rule = Map.get(meta, :rule)
+
+    Foglet.SSH.record_last_caller(%{
+      interface: :ssh,
+      peer_ip: peer_ip,
+      peer_port: peer_port,
+      user: user,
+      outcome: outcome,
+      reason: audit_reason(meta),
+      policy_key: rule && to_string(rule.id),
+      public_visible: outcome == :accepted and public_last_caller_visible?(user),
+      metadata: %{}
+    })
+  rescue
+    error ->
+      Logger.warning("[SSH.CLIHandler] Connection audit write failed for outcome=#{outcome}",
+        event: :ssh_connection_audit_failed,
+        reason: sanitize_reason(error)
+      )
+
+      {:error, :audit_failed}
+  end
+
+  defp audit_peer({ip, port}) when is_tuple(ip) and is_integer(port), do: {ip, port}
+  defp audit_peer(_peer), do: {nil, nil}
+
+  defp audit_reason(%{reason: reason}) when is_binary(reason), do: reason
+  defp audit_reason(%{reason: reason}) when is_atom(reason), do: Atom.to_string(reason)
+  defp audit_reason(_meta), do: nil
+
+  defp public_last_caller_visible?(%{show_in_last_callers: visible}), do: visible
+  defp public_last_caller_visible?(_user), do: false
 
   # Build the context map that reaches Foglet.TUI.App.init/1.
   # The Lifecycle passes `%{width:, height:, options: [all_lifecycle_opts]}` to
