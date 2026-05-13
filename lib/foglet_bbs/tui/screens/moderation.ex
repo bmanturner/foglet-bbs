@@ -410,8 +410,8 @@ defmodule Foglet.TUI.Screens.Moderation do
         title: "Operator context",
         lines: [
           "Rows are read-only.",
-          "Use ←/→ to switch workspaces.",
-          "Queue actions live on QUEUE."
+          "←/→ changes workspaces.",
+          "Queue actions stay on QUEUE."
         ]
       )
     else
@@ -451,9 +451,9 @@ defmodule Foglet.TUI.Screens.Moderation do
       render_read_only_workspace(boards_summary, boards_table, theme, width, height,
         title: "Board scope context",
         lines: [
-          "Moderation board view is read-only.",
+          "Board view is read-only.",
           "Use Sysop BOARDS for settings.",
-          "Archived and scoped rows stay visible here."
+          "Archived/scoped rows stay visible."
         ]
       )
     else
