@@ -7,6 +7,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.Sysop.AccessRulesView
   alias Foglet.TUI.Theme
+  alias Foglet.TUI.Widgets.Chrome.CommandBar
 
   describe "render/2" do
     test "renders loaded network and identity rules in one ACCESS policy surface" do
@@ -100,6 +101,21 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
       assert rendered =~ "example.com"
       refute rendered =~ "Identity rules cover"
       refute rendered =~ "Conflict counts are sysop-only"
+    end
+
+    test "cramped identity list command bar keeps Remove before section switching" do
+      groups = [
+        %{label: "System", commands: [%{key: "Q", label: "Back", priority: 0}]},
+        %{label: "Tabs", commands: [%{key: "←/→", label: "Tabs", priority: 10}]}
+        | AccessRulesView.keybar_groups(%AccessRulesView{section: :identity})
+      ]
+
+      keybar = CommandBar.render_text(groups, width: 60)
+
+      assert keybar =~ "A Add"
+      assert keybar =~ "E Enable/disable"
+      assert keybar =~ "X Remove"
+      refute keybar =~ "Network/IP"
     end
   end
 

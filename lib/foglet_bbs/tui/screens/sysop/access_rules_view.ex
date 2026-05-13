@@ -148,13 +148,13 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       %{
         label: "Access: Network/IP",
         commands: [
-          %{key: "←/→", label: "Identity", priority: 0},
-          %{key: "Tab", label: "Identity", priority: 15},
+          %{key: "←/→", label: "Identity", priority: 20},
+          %{key: "Tab", label: "Identity", priority: 25},
           %{key: "A", label: "Allow", priority: 5},
           %{key: "D", label: "Deny", priority: 5},
-          %{key: "E", label: "Enable/disable", priority: 10},
-          %{key: "X", label: "Remove", priority: 10},
-          %{key: "R", label: "Reload", priority: 20}
+          %{key: "E", label: "Enable/disable", priority: 5},
+          %{key: "X", label: "Remove", priority: 5},
+          %{key: "R", label: "Reload", priority: 15}
         ]
       }
     ]
@@ -165,12 +165,12 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       %{
         label: "Access: Identity",
         commands: [
-          %{key: "←/→", label: "Network/IP", priority: 0},
-          %{key: "Tab", label: "Network/IP", priority: 15},
+          %{key: "←/→", label: "Network/IP", priority: 20},
+          %{key: "Tab", label: "Network/IP", priority: 25},
           %{key: "A", label: "Add", priority: 5},
-          %{key: "E", label: "Enable/disable", priority: 10},
-          %{key: "X", label: "Remove", priority: 10},
-          %{key: "R", label: "Reload", priority: 20}
+          %{key: "E", label: "Enable/disable", priority: 5},
+          %{key: "X", label: "Remove", priority: 5},
+          %{key: "R", label: "Reload", priority: 15}
         ]
       }
     ]
@@ -697,10 +697,10 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   defp footer(%{form_mode: nil, identity_form_mode: nil, section: :network}),
     do:
-      "[←/→] Identity  [↑/↓] Move  [A] Allow  [D] Deny  [E] Enable/disable*  [X] Remove*  [R] Reload"
+      "[A] Allow  [D] Deny  [E] Enable/disable*  [X] Remove*  [R] Reload  [←/→] Identity  [↑/↓] Move"
 
   defp footer(%{form_mode: nil, identity_form_mode: nil, section: :identity}),
-    do: "[←/→] Network/IP  [↑/↓] Move  [A] Add rule  [E] Enable/disable*  [X] Remove*  [R] Reload"
+    do: "[A] Add rule  [E] Enable/disable*  [X] Remove*  [R] Reload  [←/→] Network/IP  [↑/↓] Move"
 
   defp footer(_), do: "[Tab] Fields  [Enter/Ctrl+S] Save  [Esc] Cancel"
 
