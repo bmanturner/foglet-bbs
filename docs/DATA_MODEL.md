@@ -760,6 +760,40 @@ end
 
 Rules are operator-managed allow/deny entries. Deny rules win over allow rules. When allowlist mode is enabled by the SSH hot path, a source must match an enabled `:allow` rule and must not match an enabled `:deny` rule; allowlisted sources still do not bypass per-IP throttles or global active-connection caps.
 
+### `Foglet.Accounts.IdentityRule`
+
+Table: `identity_policy_rules`
+```elixir
+schema "identity_policy_rules" do
+  field :kind, Ecto.Enum, values: [:reserved_handle, :banned_handle, :banned_email, :banned_email_domain]
+  field :value, :string             # operator-entered value, trimmed for display
+  field :normalized_value, :string  # canonical comparison key
+  field :enabled, :boolean, default: true
+  field :reason, :string
+  field :comment, :string
+
+  belongs_to :created_by, Foglet.Accounts.User
+  belongs_to :updated_by, Foglet.Accounts.User
+
+  timestamps()
+end
+```
+
+Identity rules are the account-identity counterpart to SSH IP access rules and are surfaced to operators in the same ACCESS policy neighborhood. They are enforced by `Foglet.Accounts.IdentityPolicy` at registration/account identity mutation boundaries; anonymous denial copy is intentionally terse and does not expose policy contents.
+
+Normalization and matching contract:
+
+- `reserved_handle` and `banned_handle` trim input and compare with Foglet's handle format/case rules (`[A-Za-z0-9_-]`, length/format validation remains on `Foglet.Accounts.User`). Case variants compare equal via lowercase `normalized_value`.
+- `banned_email` trims input and compares exact normalized email address case-insensitively.
+- `banned_email_domain` trims an optional leading `@`, lowercases the domain, and blocks both the exact domain and subdomains. `example.com` blocks `user@example.com` and `user@mail.example.com`; it does not block `user@badexample.com` because matching is exact or dot-boundary suffix only.
+- Creating a rule reports matching existing non-deleted users for sysop review but does not mutate, suspend, lock, rename, or delete those users.
+
+**Migration notes:**
+
+- Check constraint on `kind` for the four supported rule types.
+- Unique index on `(kind, normalized_value)` prevents duplicate active/inactive rows with the same canonical rule identity.
+- Index on `(enabled, kind)` supports registration enforcement without exposing full lists to anonymous callers.
+
 ---
 
 ## 11. Site counters

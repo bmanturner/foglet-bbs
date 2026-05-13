@@ -341,6 +341,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   defp active_access_form?(%State{} = ss) do
     case ss.access_rules_view do
       {:loaded, %AccessRulesView{form_mode: mode}} when not is_nil(mode) -> true
+      {:loaded, %AccessRulesView{identity_form_mode: mode}} when not is_nil(mode) -> true
       _other -> false
     end
   end
