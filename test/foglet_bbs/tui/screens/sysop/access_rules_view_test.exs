@@ -10,13 +10,48 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesViewTest do
     test "renders loaded access rules without corrupting the console table state" do
       state = %AccessRulesView{
         rules: [
-          %AccessRule{mode: :deny, enabled: true, address: "192.0.2.0/24", reason: "spam"},
-          %AccessRule{mode: :allow, enabled: false, address: "2001:db8::/32", reason: "ops"}
+          %AccessRule{id: 1, mode: :deny, enabled: true, address: "192.0.2.0/24", reason: "spam"},
+          %AccessRule{
+            id: 2,
+            mode: :allow,
+            enabled: false,
+            address: "2001:db8::/32",
+            reason: "ops"
+          }
         ],
-        selection_index: 1
+        selection_index: 1,
+        allowlist_enabled?: true
       }
 
       assert AccessRulesView.render(state, Theme.default())
+    end
+
+    test "renders the create form with allowlist-mode lockout guidance" do
+      state = %AccessRulesView{
+        form_mode: :create_allow,
+        allowlist_enabled?: true,
+        draft: %{"address" => "", "reason" => "", "comment" => ""}
+      }
+
+      assert AccessRulesView.render(state, Theme.default())
+    end
+  end
+
+  describe "list key handling" do
+    test "toggle and remove require a second confirming keypress" do
+      state = %AccessRulesView{
+        rules: [
+          %AccessRule{id: 7, mode: :allow, enabled: true, address: "192.0.2.44", reason: "ops"}
+        ],
+        allowlist_enabled?: true
+      }
+
+      {warned, effects} = AccessRulesView.handle_key(%{key: :char, char: "e"}, state)
+      assert effects == []
+      assert warned.pending_action == {:toggle, 7}
+
+      {_confirmed, effects} = AccessRulesView.handle_key(%{key: :char, char: "e"}, warned)
+      assert [%Effect{type: :task, payload: %{op: :sysop_load_access_rules}}] = effects
     end
   end
 

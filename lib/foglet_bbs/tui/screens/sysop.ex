@@ -332,9 +332,17 @@ defmodule Foglet.TUI.Screens.Sysop do
     plain_digit_event?(event) and
       case Enum.at(State.tab_labels(ss), ss.active_tab) do
         "LIMITS" -> true
+        "ACCESS" -> active_access_form?(ss)
         "BOARDS" -> active_boards_form_modal?(ss)
         _ -> false
       end
+  end
+
+  defp active_access_form?(%State{} = ss) do
+    case ss.access_rules_view do
+      {:loaded, %AccessRulesView{form_mode: mode}} when not is_nil(mode) -> true
+      _other -> false
+    end
   end
 
   defp active_boards_form_modal?(%State{} = ss) do
@@ -360,6 +368,14 @@ defmodule Foglet.TUI.Screens.Sysop do
   # and drop INVITES G/D the same way Moderation did pre-FOG-173. Active-tab
   # changes only happen on `{:tab_changed, _}`.
   defp route_through_tabs(event, %State{} = ss, %Context{} = context) do
+    if active_access_form?(ss) do
+      delegate_update_to_active_tab(event, ss, context)
+    else
+      route_through_tabs_unless_access_form(event, ss, context)
+    end
+  end
+
+  defp route_through_tabs_unless_access_form(event, %State{} = ss, %Context{} = context) do
     {new_tabs, action} = Tabs.handle_event(event, ss.tabs)
 
     case action do

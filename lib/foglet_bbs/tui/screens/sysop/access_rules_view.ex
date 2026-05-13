@@ -3,6 +3,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   ACCESS tab submodule for sysop SSH IP access policy management.
   """
 
+  alias Foglet.Config
   alias Foglet.SSH
   alias Foglet.TUI.Effect
   alias Foglet.TUI.ScrollKeys
@@ -12,8 +13,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
   @columns [
     %{key: :mode, label: "Mode", width: 6, priority: 20, demand: :content},
-    %{key: :enabled, label: "On", width: 3, priority: 20, demand: :content},
-    %{key: :address, label: "Address/CIDR", width: 24, grow: 1, priority: 100, demand: :content},
+    %{key: :enabled, label: "On", width: 4, priority: 20, demand: :content},
+    %{key: :address, label: "Address/CIDR", width: 28, grow: 1, priority: 100, demand: :content},
     %{key: :reason, label: "Reason", width: 18, grow: 1, priority: 60, demand: :content}
   ]
 
@@ -23,6 +24,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
           rules: [struct()],
           selection_index: non_neg_integer(),
           message: String.t() | nil,
+          allowlist_enabled?: boolean(),
+          pending_action: {:toggle | :remove, pos_integer()} | nil,
           form_mode: form_mode(),
           form_field: :address | :reason | :comment,
           draft: map()
@@ -32,13 +35,17 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
             rules: [],
             selection_index: 0,
             message: nil,
+            allowlist_enabled?: false,
+            pending_action: nil,
             form_mode: nil,
             form_field: :address,
             draft: %{"address" => "", "reason" => "", "comment" => ""}
 
   @spec from_rules([struct()], Foglet.Accounts.User.t() | nil) :: t()
-  def from_rules(rules, current_user) when is_list(rules) do
-    %__MODULE__{current_user: current_user, rules: rules}
+  def from_rules(rules, current_user, allowlist_enabled? \\ Config.ssh_ip_allowlist_enabled?())
+
+  def from_rules(rules, current_user, allowlist_enabled?) when is_list(rules) do
+    %__MODULE__{current_user: current_user, rules: rules, allowlist_enabled?: allowlist_enabled?}
   end
 
   @spec handle_key(map(), t()) :: {t(), [Effect.t()]}
@@ -61,10 +68,10 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
     do: {start_form(state, :create_allow), []}
 
   def handle_key(%{key: :char, char: c}, state) when c in ["e", "E"],
-    do: update_selected(state, :toggle)
+    do: confirm_or_update_selected(state, :toggle)
 
   def handle_key(%{key: :char, char: c}, state) when c in ["x", "X"],
-    do: update_selected(state, :remove)
+    do: confirm_or_update_selected(state, :remove)
 
   def handle_key(_event, state), do: {state, []}
 
@@ -76,12 +83,14 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       ConsoleTable.init(
         columns: @columns,
         rows: rows,
+        width: 60,
         selectable: true,
         empty_state: "No IP access rules configured."
       )
 
     column style: %{gap: 0} do
       [text("SSH IP access policies", fg: theme.title.fg, style: [:bold]), text("")] ++
+        policy_lines(state, theme) ++
         message_lines(state, theme) ++
         [render_body(state, table, theme), text(""), text(footer(state), fg: theme.dim.fg)]
     end
@@ -118,7 +127,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   def load_effect(actor) do
     Effect.task(:sysop_load_access_rules, :sysop, fn ->
       case SSH.list_access_rules(actor) do
-        {:ok, rules} -> {:ok, from_rules(rules, actor)}
+        {:ok, rules} -> {:ok, from_rules(rules, actor, Config.ssh_ip_allowlist_enabled?())}
         {:error, reason} -> {:error, reason}
       end
     end)
@@ -141,8 +150,11 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
         text(field_line(state, :reason), fg: field_color(state, :reason, theme)),
         text(field_line(state, :comment), fg: field_color(state, :comment, theme)),
         text(""),
+        text("Allowlist mode: #{allowlist_label(state.allowlist_enabled?)}",
+          fg: allowlist_color(state, theme)
+        ),
         text(
-          "CIDR and exact IPv4/IPv6 entries are accepted. Be careful with allowlist-mode lockouts.",
+          "CIDR and exact IPv4/IPv6 entries are accepted. Save only after checking lockout risk.",
           fg: theme.warning.fg
         )
       ]
@@ -174,7 +186,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
        Effect.task(:sysop_load_access_rules, :sysop, fn ->
          with {:ok, _rule} <- SSH.create_access_rule(state.current_user, attrs),
               {:ok, rules} <- SSH.list_access_rules(state.current_user) do
-           {:ok, from_rules(rules, state.current_user)}
+           {:ok, from_rules(rules, state.current_user, Config.ssh_ip_allowlist_enabled?())}
          end
        end)
      ]}
@@ -202,10 +214,27 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
 
          with {:ok, _} <- result,
               {:ok, rules} <- SSH.list_access_rules(state.current_user) do
-           {:ok, from_rules(rules, state.current_user)}
+           {:ok, from_rules(rules, state.current_user, Config.ssh_ip_allowlist_enabled?())}
          end
        end)
      ]}
+  end
+
+  defp confirm_or_update_selected(%__MODULE__{rules: []} = state, _op), do: {state, []}
+
+  defp confirm_or_update_selected(%__MODULE__{} = state, op) do
+    rule = Enum.at(state.rules, state.selection_index)
+    pending = {op, rule.id}
+
+    if state.pending_action == pending do
+      update_selected(%{state | pending_action: nil, message: nil}, op)
+    else
+      {%{
+         state
+         | pending_action: pending,
+           message: confirmation_message(op, rule, state.allowlist_enabled?)
+       }, []}
+    end
   end
 
   defp start_form(state, mode),
@@ -213,6 +242,8 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
       state
       | form_mode: mode,
         form_field: :address,
+        pending_action: nil,
+        message: nil,
         draft: %{"address" => "", "reason" => "", "comment" => ""}
     }
 
@@ -243,10 +274,26 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   defp message_lines(%{message: nil}, _theme), do: []
   defp message_lines(%{message: msg}, theme), do: [text(msg, fg: theme.warning.fg), text("")]
 
-  defp footer(%{form_mode: nil}),
-    do: "[↑/↓] Move  [A] Allow  [D] Deny  [E] Enable/disable  [X] Remove  [R] Reload"
+  defp policy_lines(%{allowlist_enabled?: true}, theme) do
+    [
+      text("Allowlist mode: ON — only enabled ALLOW rules may connect.", fg: theme.warning.fg),
+      text("Toggle/remove can lock out operators; press the action key twice to confirm."),
+      text("")
+    ]
+  end
 
-  defp footer(_), do: "[Tab] Fields  [Enter] Save  [Esc] Cancel"
+  defp policy_lines(_state, theme) do
+    [
+      text("Allowlist mode: OFF — DENY rules block matching sources.", fg: theme.dim.fg),
+      text("Toggle/remove requires a second keypress to confirm lockout-prone changes."),
+      text("")
+    ]
+  end
+
+  defp footer(%{form_mode: nil}),
+    do: "[↑/↓] Move  [A] Allow  [D] Deny  [E] Enable/disable*  [X] Remove*  [R] Reload"
+
+  defp footer(_), do: "[Tab] Fields  [Enter/Ctrl+S] Save  [Esc] Cancel"
   defp form_title(:create_allow), do: "New allow rule"
   defp form_title(:create_deny), do: "New deny rule"
 
@@ -259,5 +306,22 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   defp marker(%{form_field: field}, field), do: "> "
   defp marker(_, _), do: "  "
   defp field_color(%{form_field: field}, field, theme), do: theme.accent.fg
-  defp field_color(_, _, theme), do: theme.text.fg
+  defp field_color(_, _, theme), do: theme.primary.fg
+
+  defp allowlist_label(true), do: "ON — only enabled ALLOW rules may connect"
+  defp allowlist_label(false), do: "OFF — DENY rules block matching sources"
+  defp allowlist_color(%{allowlist_enabled?: true}, theme), do: theme.warning.fg
+  defp allowlist_color(_state, theme), do: theme.dim.fg
+
+  defp confirmation_message(:remove, rule, true),
+    do: "Press X again to remove #{rule.address}; removing allow rules may lock out operators."
+
+  defp confirmation_message(:remove, rule, false),
+    do: "Press X again to remove #{rule.address}."
+
+  defp confirmation_message(:toggle, rule, true),
+    do: "Press E again to toggle #{rule.address}; disabling allow rules may lock out operators."
+
+  defp confirmation_message(:toggle, rule, false),
+    do: "Press E again to toggle #{rule.address}."
 end
