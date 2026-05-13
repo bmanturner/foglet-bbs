@@ -479,16 +479,10 @@ defmodule Foglet.TUI.Screens.Notifications do
 
     Effect.task(:open_notification_target, :notifications, fn ->
       with {:ok, target} <-
-             notifications_mod.resolve_open_target(context.current_user, notification),
-           {:ok, _notification} <-
-             mark_selected_read_for_open(notifications_mod, context, notification) do
+             notifications_mod.resolve_open_target(context.current_user, notification) do
         {:ok, Map.put(target, :notification_id, notification_id(notification))}
       end
     end)
-  end
-
-  defp mark_selected_read_for_open(notifications_mod, %Context{} = context, notification) do
-    notifications_mod.mark_read(context.current_user, notification_id(notification))
   end
 
   defp notification_id(notification),

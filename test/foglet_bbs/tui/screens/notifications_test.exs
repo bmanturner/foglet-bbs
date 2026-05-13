@@ -228,7 +228,7 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
             }} = fun.()
 
     assert Process.get(:fake_notifications_resolve_open_target) == "n-1"
-    assert Process.get(:fake_notifications_mark_read) == "n-1"
+    refute Process.get(:fake_notifications_mark_read)
   end
 
   test "successful open target result navigates to post reader around the resolved post" do
