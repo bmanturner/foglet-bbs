@@ -28,6 +28,7 @@ Foglet fits when you want:
 - password login and SSH public-key login after a user has a key on file;
 - operator-owned registration, invites, account status, roles, boards, runtime
   settings, and moderation flows where those features are implemented;
+- an in-TUI inbox for durable notifications such as replies and @mentions;
 - door games that hand off the caller's terminal session and return to the BBS
   when the door exits.
 
@@ -45,7 +46,6 @@ Do not run Foglet as though these exist today:
 - federation;
 - a mobile app;
 - direct messages or private mail;
-- @mention notifications;
 - email digests;
 - webhook notifications;
 - a full case-management moderation suite.
