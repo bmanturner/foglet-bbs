@@ -20,6 +20,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
   @menu_keys_no_register [{"L", "Login"}]
   @login_panel_width AuthForm.default_width()
   @login_panel_height 9
+  @enhanced_menu_card_height 14
   @auth_card_inner_width @login_panel_width - 4
   @login_input_display_width 25
   @recovery_pane_width 46
@@ -206,7 +207,7 @@ defmodule Foglet.TUI.Screens.Login.Render do
           ],
         theme,
         width: 42,
-        height: 14
+        height: @enhanced_menu_card_height
       )
 
     enter =
@@ -220,11 +221,23 @@ defmodule Foglet.TUI.Screens.Login.Render do
           ],
         theme,
         width: 50,
-        height: 14
+        height: @enhanced_menu_card_height
       )
 
-    row style: %{gap: 2, align_items: :start} do
-      [welcome, enter]
+    {_, terminal_height} = Map.get(state, :terminal_size, {120, 36})
+    body_height = max(terminal_height - 2, @enhanced_menu_card_height)
+    top_padding = div(max(body_height - @enhanced_menu_card_height, 0), 2)
+    bottom_padding = max(body_height - @enhanced_menu_card_height - top_padding, 0)
+    pad = text(" ", fg: theme.primary.fg)
+
+    column style: %{gap: 0, align_items: :center} do
+      List.duplicate(pad, top_padding) ++
+        [
+          row style: %{gap: 2, align_items: :start} do
+            [welcome, enter]
+          end
+        ] ++
+        List.duplicate(pad, bottom_padding)
     end
   end
 
