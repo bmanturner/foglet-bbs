@@ -17,6 +17,7 @@ defmodule Foglet.TUI.App.RuntimeMessages do
   alias Foglet.TUI.App.ScreenStates
   alias Foglet.TUI.App.SessionAlias
   alias Foglet.TUI.App.Tasks, as: AppTasks
+  alias Foglet.TUI.CommandEntry
   alias Foglet.TUI.Guest
   alias Foglet.TUI.SizeGate
   alias Raxol.Core.Runtime.Command
@@ -178,6 +179,16 @@ defmodule Foglet.TUI.App.RuntimeMessages do
 
       state.modal != nil ->
         AppModal.handle_key(key_event, state)
+
+      state.command_entry != nil ->
+        {entry, effects} = CommandEntry.handle_key(state.command_entry, key_event, state)
+
+        state
+        |> Map.put(:command_entry, entry)
+        |> Foglet.TUI.App.Effects.apply_effects(effects)
+
+      CommandEntry.open_key?(key_event, state.current_screen) ->
+        {%{state | command_entry: CommandEntry.open()}, []}
 
       true ->
         Routing.route_screen_update(

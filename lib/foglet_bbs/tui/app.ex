@@ -4,9 +4,9 @@ defmodule Foglet.TUI.App do
 
   Metaphor (D-15): `app.ex` is the conductor; `screens/*` are the scores;
   `widgets/*` are the instruments. This module holds the canonical UI
-  shell — an 8-field struct (`current_screen`, `current_user`,
+  shell — an app-shell struct (`current_screen`, `current_user`,
   `session_context`, `session_pid`, `terminal_size`, `route_params`,
-  `modal`, `screen_state`, `unread_count`) — while `Foglet.TUI.App.{Bootstrap, Door,
+  `modal`, `command_entry`, `screen_state`, `unread_count`) — while `Foglet.TUI.App.{Bootstrap, Door,
   MessageNormalizer, PubSubRouter, Routing, Modal, Effects, Subscriptions,
   ScreenStates, SessionAlias, Tasks}` own the extracted runtime details. Per-screen state lives in screen-owned `%State{}`
   structs stored under `screen_state`, keyed by screen atom; each screen is a
@@ -32,6 +32,7 @@ defmodule Foglet.TUI.App do
   alias Foglet.TUI.App.RuntimeMessages
   alias Foglet.TUI.App.ScreenStates
   alias Foglet.TUI.App.Subscriptions
+  alias Foglet.TUI.CommandEntry
   alias Foglet.TUI.Context
   alias Foglet.TUI.SizeGate
 
@@ -60,6 +61,7 @@ defmodule Foglet.TUI.App do
           terminal_size: {pos_integer(), pos_integer()},
           route_params: map(),
           modal: Foglet.TUI.Modal.t() | nil,
+          command_entry: CommandEntry.t() | nil,
           screen_state: map(),
           unread_count: non_neg_integer()
         }
@@ -71,6 +73,7 @@ defmodule Foglet.TUI.App do
             terminal_size: {80, 24},
             route_params: %{},
             modal: nil,
+            command_entry: nil,
             screen_state: %{},
             unread_count: 0
 
@@ -136,6 +139,9 @@ defmodule Foglet.TUI.App do
 
       state.modal ->
         AppModal.render_overlay(state.modal, state)
+
+      state.command_entry ->
+        CommandEntry.render(state.command_entry, state)
 
       true ->
         Routing.render_screen(state)
