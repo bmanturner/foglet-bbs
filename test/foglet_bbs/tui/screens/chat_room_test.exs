@@ -115,6 +115,12 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
     end
   end
 
+  defp first_nonblank_column(line) when is_binary(line) do
+    line
+    |> String.graphemes()
+    |> Enum.find_index(&(&1 != " "))
+  end
+
   defp sidebar_columns_for_body(body, size) do
     b = board()
     {state, ctx} = init_state(b, size: size)
@@ -305,18 +311,18 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
 
       tree = ChatRoom.render(state, ctx)
       rendered = AsciiRenderer.render(tree, size)
-      action_line = first_line_containing(rendered, "*bob* waves from the doorway")
+      action_line = first_line_containing(rendered, "* @bob waves from the doorway")
       plain_line = first_line_containing(rendered, "plain text with /me later")
 
       assert action_line
       assert plain_line
       assert column_of(action_line, "?") == column_of(plain_line, "?")
-      refute plain_line =~ "*bob* plain text with /me later"
+      refute plain_line =~ "* @bob plain text with /me later"
 
       action_node =
         tree
         |> text_nodes()
-        |> Enum.find(fn node -> node_text(node) =~ "*bob* waves from the doorway" end)
+        |> Enum.find(fn node -> node_text(node) =~ "* @bob waves from the doorway" end)
 
       assert action_node
       assert :italic in List.wrap(Map.get(action_node, :style))
@@ -340,13 +346,13 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       {state, []} = ChatRoom.update({:task_result, :load_chat_history, {:ok, [msg]}}, state, ctx)
 
       rendered = render_chat_text(state, ctx, size)
-      first = first_line_containing(rendered, "*bob*")
+      first = first_line_containing(rendered, "* @bob")
       continuation = first_line_containing(rendered, "stack of old disks")
 
       assert first
       assert continuation
       refute continuation =~ "bob •"
-      assert column_of(continuation, "stack") > column_of(first, "*bob*")
+      assert first_nonblank_column(continuation) == column_of(first, "* @bob") + 2
     end
   end
 

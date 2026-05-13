@@ -358,8 +358,8 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   end
 
   defp action_transcript_rows(_user, handle, body, when_label, theme, width, row_limit) do
-    action_prefix = "*#{handle}* "
-    action_body = action_prefix <> body
+    action_prefix = "* "
+    action_body = action_prefix <> action_handle(handle) <> " " <> body
     suffix = "  " <> when_label
     first_body_width = max(width - TextWidth.display_width(suffix), 1)
     continuation_indent = TextWidth.display_width(action_prefix)
@@ -382,6 +382,9 @@ defmodule Foglet.TUI.Screens.ChatRoom do
         end)
     ]
   end
+
+  defp action_handle("@" <> _rest = handle), do: handle
+  defp action_handle(handle), do: "@" <> handle
 
   defp transcript_first_row(user, body, when_label, body_width, theme) do
     row style: %{gap: 0} do
