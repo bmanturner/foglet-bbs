@@ -82,23 +82,22 @@ defmodule Foglet.TUI.Screens.Notifications do
      ), []}
   end
 
-  def update(
-        {:task_result, :open_notification_target, {:ok, target}},
-        local_state,
-        %Context{}
-      ) do
-    params = %{
-      board_id: target.board_id,
-      thread_id: target.thread_id,
-      load_intent: {:around, target.message_number}
-    }
+  def update({:task_result, :open_notification_target, result}, local_state, %Context{}) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, target} ->
+        params = %{
+          board_id: target.board_id,
+          thread_id: target.thread_id,
+          load_intent: {:around, target.message_number}
+        }
 
-    {%{normalize_state(local_state) | status: :loaded}, [Effect.navigate(:post_reader, params)]}
-  end
+        {%{normalize_state(local_state) | status: :loaded},
+         [Effect.navigate(:post_reader, params)]}
 
-  def update({:task_result, :open_notification_target, {:error, reason}}, local_state, %Context{}) do
-    message = open_target_error_message(reason)
-    {set_open_target_error(normalize_state(local_state), reason, message), []}
+      {:error, reason} ->
+        message = open_target_error_message(reason)
+        {set_open_target_error(normalize_state(local_state), reason, message), []}
+    end
   end
 
   def update({:notifications, :created, %{} = notification}, local_state, %Context{} = context) do

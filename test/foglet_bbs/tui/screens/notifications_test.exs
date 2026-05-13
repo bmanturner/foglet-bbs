@@ -238,32 +238,44 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
         FakeNotifications.list_recent(%{id: "viewer"})
       )
 
-    {state, effects} =
-      Notifications.update(
-        {:task_result, :open_notification_target,
-         {:ok,
-          %{
-            board_id: "b1",
-            thread_id: "t1",
-            post_id: "p1",
-            message_number: 7,
-            notification_id: "n-1"
-          }}},
-        local,
-        context()
-      )
+    for result <- [
+          {:ok,
+           %{
+             board_id: "b1",
+             thread_id: "t1",
+             post_id: "p1",
+             message_number: 7,
+             notification_id: "n-1"
+           }},
+          {:ok,
+           {:ok,
+            %{
+              board_id: "b1",
+              thread_id: "t1",
+              post_id: "p1",
+              message_number: 7,
+              notification_id: "n-1"
+            }}}
+        ] do
+      {state, effects} =
+        Notifications.update(
+          {:task_result, :open_notification_target, result},
+          local,
+          context()
+        )
 
-    assert state.status == :loaded
+      assert state.status == :loaded
 
-    assert [
-             %Effect{
-               type: :navigate,
-               payload: %{
-                 screen: :post_reader,
-                 params: %{board_id: "b1", thread_id: "t1", load_intent: {:around, 7}}
+      assert [
+               %Effect{
+                 type: :navigate,
+                 payload: %{
+                   screen: :post_reader,
+                   params: %{board_id: "b1", thread_id: "t1", load_intent: {:around, 7}}
+                 }
                }
-             }
-           ] = effects
+             ] = effects
+    end
   end
 
   test "missing open target leaves selection in inbox and does not mark read" do
@@ -284,16 +296,18 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     assert {:error, :target_missing} = fun.()
     refute Process.get(:fake_notifications_mark_read)
 
-    {state, effects} =
-      Notifications.update(
-        {:task_result, :open_notification_target, {:error, :target_missing}},
-        local,
-        context()
-      )
+    for result <- [{:error, :target_missing}, {:ok, {:error, :target_missing}}] do
+      {state, effects} =
+        Notifications.update(
+          {:task_result, :open_notification_target, result},
+          local,
+          context()
+        )
 
-    assert effects == []
-    assert state.selected_index == 0
-    assert state.last_error == "Target is no longer available."
+      assert effects == []
+      assert state.selected_index == 0
+      assert state.last_error == "Target is no longer available."
+    end
   end
 
   test "notification PubSub events trigger a focused inbox reload" do
