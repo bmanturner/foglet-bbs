@@ -732,19 +732,29 @@ defmodule Foglet.SSH.CLIHandlerTest do
       _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 2}}, accepted_state)
     end
 
-    test "unknown peer bypasses IP policy and rate limit but records audit without raw IP" do
+    test "unknown peer fails closed in allowlist mode and records audit without raw IP" do
       Application.put_env(:foglet_bbs, :ssh_ip_allowlist_enabled, true)
       on_exit(fn -> Application.delete_env(:foglet_bbs, :ssh_ip_allowlist_enabled) end)
       warm_login_config_cache!()
 
+      starting_count = 2
+      :ets.insert(Foglet.SSH.CLIHandler.Counter, {:count, starting_count})
+
       assert {:ok, returned_state} =
                CLIHandler.channel_up_for_test(%CLIHandler{}, 1, nil, :unknown)
 
-      assert is_pid(returned_state.session_pid)
-      assert Foglet.SiteCounters.get_call_count() == 1
-      assert %LastCaller{outcome: :accepted, peer_ip: nil, peer_port: nil} = latest_last_caller()
+      assert returned_state.over_limit
+      assert returned_state.session_pid == nil
+      assert_counter!(starting_count)
+      assert Foglet.SiteCounters.get_call_count() == 0
 
-      _ = CLIHandler.handle_ssh_msg({:ssh_cm, make_ref(), {:closed, 1}}, returned_state)
+      assert %LastCaller{
+               outcome: :denied,
+               peer_ip: nil,
+               peer_port: nil,
+               reason: "not_allowlisted"
+             } =
+               latest_last_caller()
     end
 
     test "crash-during-init: terminate on counted state with no lifecycle/session decrements once" do
