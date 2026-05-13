@@ -44,6 +44,16 @@ defmodule Foglet.TUI.Screens.Sysop.LimitsForm do
       label: "Verification resend wait",
       helper: "Minimum time between resend-code requests, in seconds.",
       min_unit: " second"
+    },
+    "ssh_rate_limit_max" => %{
+      label: "SSH attempts limit",
+      helper: "Accepted SSH connection attempts per source IP in the throttle window.",
+      min_unit: ""
+    },
+    "ssh_rate_limit_window_ms" => %{
+      label: "SSH throttle window",
+      helper: "Per-source SSH throttle window, in milliseconds.",
+      min_unit: " ms"
     }
   }
 

@@ -33,7 +33,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteFormTest do
              "delivery_mode",
              "require_email_verification",
              "guest_mode_enabled",
-             "invite_generation_per_user_limit"
+             "invite_generation_per_user_limit",
+             "ssh_ip_allowlist_enabled"
            ]
   end
 

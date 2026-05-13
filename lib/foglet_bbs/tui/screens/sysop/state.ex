@@ -22,7 +22,7 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   alias Foglet.TUI.Screens.Sysop.UsersView
   alias Foglet.TUI.Widgets.Input.Tabs
 
-  @base_tabs ["SITE", "BOARDS", "ACCESS", "LIMITS", "SYSTEM", "USERS"]
+  @base_tabs ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS", "ACCESS"]
 
   @typedoc """
   Tagged lifecycle enum for Sysop tab body slots (Phase 29 D-07, D-10).
@@ -130,7 +130,9 @@ defmodule Foglet.TUI.Screens.Sysop.State do
   end
 
   def tab_labels(invites_visible?) when is_boolean(invites_visible?) do
-    if invites_visible?, do: @base_tabs ++ ["INVITES"], else: @base_tabs
+    if invites_visible?,
+      do: ["SITE", "BOARDS", "LIMITS", "SYSTEM", "USERS", "INVITES", "ACCESS"],
+      else: @base_tabs
   end
 
   @spec refresh_tabs(t(), keyword()) :: t()

@@ -632,7 +632,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
 
       {:update, state, []} = handle_sysop_key(%{key: :backtab}, state)
       assert {:loaded, limits} = state.screen_state.sysop.limits_form
-      assert limits.focused == 2
+      assert limits.focused == length(Foglet.TUI.Screens.Sysop.LimitsForm.limits_keys()) - 1
     end
 
     test "FOG-1186: SSH parser-shaped Right/Left switch from every visible Sysop tab", %{
@@ -641,8 +641,9 @@ defmodule Foglet.TUI.Screens.SysopTest do
       state = with_invite_policy(state, "sysop_only")
       right_key = ssh_key_event!("\e[C")
       left_key = ssh_key_event!("\e[D")
+      tab_count = SysopState.tab_labels(invites_visible?: true) |> length()
 
-      for start_idx <- 0..5 do
+      for start_idx <- 0..(tab_count - 1) do
         state =
           put_in(
             state,
@@ -651,7 +652,7 @@ defmodule Foglet.TUI.Screens.SysopTest do
           )
 
         {:update, right_state, _cmds} = handle_sysop_key(right_key, state)
-        assert right_state.screen_state.sysop.active_tab == rem(start_idx + 1, 6)
+        assert right_state.screen_state.sysop.active_tab == rem(start_idx + 1, tab_count)
 
         {:update, left_state, _cmds} = handle_sysop_key(left_key, right_state)
         assert left_state.screen_state.sysop.active_tab == start_idx
@@ -941,7 +942,8 @@ defmodule Foglet.TUI.Screens.SysopTest do
                  "LIMITS",
                  "SYSTEM",
                  "USERS",
-                 "INVITES"
+                 "INVITES",
+                 "ACCESS"
                ]
 
         flat =
