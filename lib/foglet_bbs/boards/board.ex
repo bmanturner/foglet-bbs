@@ -29,6 +29,7 @@ defmodule Foglet.Boards.Board do
     has_many :threads, Foglet.Threads.Thread
     has_many :posts, Foglet.Posts.Post
     has_many :subscriptions, Foglet.Boards.Subscription
+    has_many :feeds, Foglet.BoardFeeds.Feed
 
     field :unread_count, :integer, virtual: true, default: 0
 

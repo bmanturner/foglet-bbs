@@ -29,11 +29,14 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   @behaviour Foglet.TUI.Screen
 
+  alias Foglet.BoardFeeds
   alias Foglet.PubSub, as: PubSubTopics
   alias Foglet.Sessions.ActivityPresence
   alias Foglet.Sessions.BoardScreen, as: PresenceTracker
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.Screens.BoardConfig
+  alias Foglet.TUI.Screens.BoardNews
   alias Foglet.TUI.Screens.BoardScreen.State
   alias Foglet.TUI.Screens.ChatRoom
   alias Foglet.TUI.Screens.ThreadList
@@ -42,7 +45,7 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   import Raxol.Core.Renderer.View
 
-  @tabs [{:threads, "THREADS"}, {:chat, "CHAT"}]
+  @tab_labels %{threads: "THREADS", chat: "CHAT", news: "NEWS", config: "CONFIG"}
   @screen_frame_rows 2
   @tab_strip_rows 1
   @chat_flash_interval_ms 750
@@ -50,13 +53,19 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   @impl true
   @spec init(Context.t()) :: ThreadList.State.t() | State.t()
-  def init(%Context{route_params: params} = context) do
-    if chat_enabled?(params) do
-      thread_state = ThreadList.init(context)
+  def init(%Context{} = context) do
+    thread_state = ThreadList.init(context)
+    tabs = tabs_for(context, thread_state.board_id)
 
+    if tabs == [:threads] do
+      thread_state
+    else
       %State{
         thread_list: thread_state,
-        chat_room: ChatRoom.init(context),
+        chat_room: if(:chat in tabs, do: ChatRoom.init(context), else: nil),
+        news: if(:news in tabs, do: BoardNews.init(context), else: nil),
+        config: if(:config in tabs, do: BoardConfig.init(context), else: nil),
+        tabs: tabs,
         current_tab: :threads,
         presence_count: 0,
         presence_tracked?: false,
@@ -64,8 +73,6 @@ defmodule Foglet.TUI.Screens.BoardScreen do
         board_id: thread_state.board_id,
         user_id: context.current_user && context.current_user.id
       }
-    else
-      ThreadList.init(context)
     end
   end
 
@@ -93,35 +100,33 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     track_activity_tab(state, :threads)
     state = refresh_presence_count(state)
 
-    # Pre-load chat history so the first flip to :chat is instant.
-    {chat_state, chat_effects} = ChatRoom.load_effects(state.chat_room, context)
-    state = %{state | chat_room: chat_state}
+    {state, child_effects} = load_visible_children(state, context)
 
-    {state, effects ++ chat_effects}
+    {state, effects ++ child_effects}
   end
 
   # Tab-switch keys: digit shortcuts are gated to the :threads tab so they do
-  # not steal characters from the chat composer (FOG-282). Left / Right cycle
-  # is unconditional and is the documented back-nav from chat → threads.
+  # not steal characters from the chat composer or CONFIG fields. Left / Right
+  # cycle across the visible tabs from any tab.
   def update(
-        {:key, %{key: :char, char: "1"}},
+        {:key, %{key: :char, char: <<digit::binary-size(1)>>}},
         %State{current_tab: :threads} = state,
         %Context{} = context
-      ),
-      do: switch_tab(state, context, :threads)
+      )
+      when digit in ["1", "2", "3", "4", "5", "6", "7", "8", "9"] do
+    index = String.to_integer(digit) - 1
 
-  def update(
-        {:key, %{key: :char, char: "2"}},
-        %State{current_tab: :threads} = state,
-        %Context{} = context
-      ),
-      do: switch_tab(state, context, :chat)
+    case Enum.at(state.tabs, index) do
+      nil -> {state, []}
+      tab -> switch_tab(state, context, tab)
+    end
+  end
 
-  def update({:key, %{key: :left}}, %State{current_tab: :chat} = state, %Context{} = context),
-    do: switch_tab(state, context, :threads)
+  def update({:key, %{key: :left}}, %State{} = state, %Context{} = context),
+    do: switch_tab(state, context, adjacent_tab(state, -1))
 
-  def update({:key, %{key: :right}}, %State{current_tab: :threads} = state, %Context{} = context),
-    do: switch_tab(state, context, :chat)
+  def update({:key, %{key: :right}}, %State{} = state, %Context{} = context),
+    do: switch_tab(state, context, adjacent_tab(state, 1))
 
   # Q from the threads tab: untrack presence before delegating ThreadList's
   # back-nav. ThreadList still owns the navigate-to-board_list effect, so the
@@ -181,6 +186,30 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     {%{state | chat_room: chat_state}, chat_effects}
   end
 
+  def update(
+        {:task_result, :load_board_news, _result} = msg,
+        %State{} = state,
+        %Context{} = context
+      ) do
+    {news_state, effects} = BoardNews.update(msg, state.news, context)
+    {%{state | news: news_state}, effects}
+  end
+
+  def update(
+        {:task_result, op, _result} = msg,
+        %State{} = state,
+        %Context{} = context
+      )
+      when op in [
+             :load_board_feed_config,
+             :add_board_feed,
+             :refresh_board_feeds,
+             :update_feed_ttl
+           ] do
+    {config_state, effects} = BoardConfig.update(msg, state.config, context)
+    {%{state | config: config_state}, effects}
+  end
+
   # Threads tab is active: delegate every other message to ThreadList.
   def update(message, %State{current_tab: :threads} = state, %Context{} = context) do
     {new_thread_state, effects} = ThreadList.update(message, state.thread_list, context)
@@ -202,6 +231,16 @@ defmodule Foglet.TUI.Screens.BoardScreen do
       ) do
     {new_thread_state, effects} = ThreadList.update(msg, state.thread_list, context)
     {%{state | thread_list: new_thread_state}, effects}
+  end
+
+  def update({:key, _ev} = msg, %State{current_tab: :news} = state, %Context{} = context) do
+    {news_state, effects} = BoardNews.update(msg, state.news, context)
+    {%{state | news: news_state}, effects}
+  end
+
+  def update({:key, _ev} = msg, %State{current_tab: :config} = state, %Context{} = context) do
+    {config_state, effects} = BoardConfig.update(msg, state.config, context)
+    {%{state | config: config_state}, effects}
   end
 
   def update(
@@ -243,7 +282,8 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   defp render_tab_strip(%State{current_tab: current_tab, presence_count: count} = state, theme) do
     parts =
-      Enum.flat_map(@tabs, fn {tab, base_label} ->
+      Enum.flat_map(state.tabs, fn tab ->
+        base_label = Map.fetch!(@tab_labels, tab)
         label = if tab == :chat, do: "#{base_label} (#{count})", else: base_label
 
         if tab == current_tab do
@@ -270,53 +310,52 @@ defmodule Foglet.TUI.Screens.BoardScreen do
     ChatRoom.render(state.chat_room, content_context(context))
   end
 
+  defp render_active_tab(%State{current_tab: :news} = state, context, theme) do
+    BoardNews.render(state.news, content_context(context), theme)
+  end
+
+  defp render_active_tab(%State{current_tab: :config} = state, context, theme) do
+    BoardConfig.render(state.config, content_context(context), theme)
+  end
+
   defp keybar_groups(%State{current_tab: current_tab} = state, context) do
-    threads_group = ThreadList.keybar_groups(state.thread_list, context)
+    tab_group = %{
+      label: "Tabs",
+      commands:
+        state.tabs
+        |> Enum.with_index(1)
+        |> Enum.map(fn {tab, idx} ->
+          %{
+            key: Integer.to_string(idx),
+            label: tab_command_label(tab, current_tab, state.presence_count),
+            priority: 9
+          }
+        end)
+    }
 
     case current_tab do
       :threads ->
-        # Digit shortcuts switch tabs from threads. '1' is also a no-op
-        # (already on threads) but advertised for symmetry with '2'.
-        tab_group = %{
-          label: "Tabs",
-          commands: [
-            %{key: "1", label: tab_command_label(:threads, current_tab), priority: 9},
-            %{
-              key: "2",
-              label: tab_command_label(:chat, current_tab, state.presence_count),
-              priority: 9
-            }
-          ]
-        }
-
-        [tab_group | threads_group]
+        [tab_group | ThreadList.keybar_groups(state.thread_list, context)]
 
       :chat ->
-        # Digit shortcuts are intentionally absent here (FOG-282): they fall
-        # through to the chat composer so messages containing '1' or '2' are
-        # not truncated. ←/→ is the back-nav to threads.
-        tab_group = %{
-          label: "Tabs",
-          commands: [
-            %{key: "←", label: tab_command_label(:threads, current_tab), priority: 9}
-          ]
-        }
+        [%{tab_group | commands: [%{key: "←", label: "Threads", priority: 9}]}] ++
+          ChatRoom.keybar_groups(state.chat_room, context)
 
-        # When the chat tab is active, suppress threads-only actions
-        # (j/k/Enter/C/Q) — they belong to the threads body. Chat keeps q/Q
-        # as composer input, so the only advertised tab back-nav here is
-        # ← Threads. ChatRoom contributes its Send / Sidebar commands.
-        chat_groups = ChatRoom.keybar_groups(state.chat_room, context)
-        [tab_group] ++ chat_groups
+      :news ->
+        [%{tab_group | commands: [%{key: "←/→", label: "Switch tab", priority: 9}]}] ++
+          BoardNews.keybar_groups(state.news, context)
+
+      :config ->
+        [%{tab_group | commands: [%{key: "←/→", label: "Switch tab", priority: 9}]}] ++
+          BoardConfig.keybar_groups(state.config, context)
     end
   end
 
-  defp tab_command_label(:threads, :threads), do: "Threads*"
-  defp tab_command_label(:threads, _), do: "Threads"
-  # FOG-282: the chat keybar omits a "Chat" digit-shortcut entry because '2'
-  # falls through to the composer, so the active-chat (`Chat (n)*`) variant is
-  # never rendered — only the threads tab still advertises a `Chat (n)` jump.
+  defp tab_command_label(tab, tab, count), do: tab_command_label(tab, nil, count) <> "*"
+  defp tab_command_label(:threads, _, _count), do: "Threads"
   defp tab_command_label(:chat, _, count), do: "Chat (#{count})"
+  defp tab_command_label(:news, _, _count), do: "News"
+  defp tab_command_label(:config, _, _count), do: "Config"
 
   # --- subscriptions ------------------------------------------------------
 
@@ -338,24 +377,19 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   end
 
   def subscriptions(_state, %Context{route_params: params} = context) do
-    if chat_enabled?(params) do
-      board_id = board_id_from_params(params)
+    board_id = board_id_from_params(params)
+    tabs = tabs_for(context, board_id)
+    base = ThreadList.subscriptions(nil, context)
 
-      base = ThreadList.subscriptions(nil, context)
+    if tabs != [:threads] and is_binary(board_id) do
+      chat_topics = if :chat in tabs, do: [PubSubTopics.board_chat_topic(board_id)], else: []
 
-      if is_binary(board_id) do
-        %{
-          topics: [
-            PubSubTopics.board_screen_topic(board_id),
-            PubSubTopics.board_chat_topic(board_id) | base
-          ],
-          intervals: [{@chat_flash_interval_ms, @chat_flash_tick}]
-        }
-      else
-        base
-      end
+      %{
+        topics: [PubSubTopics.board_screen_topic(board_id) | chat_topics ++ base],
+        intervals: [{@chat_flash_interval_ms, @chat_flash_tick}]
+      }
     else
-      ThreadList.subscriptions(nil, context)
+      base
     end
   end
 
@@ -424,6 +458,10 @@ defmodule Foglet.TUI.Screens.BoardScreen do
   defp track_activity_tab(%State{user_id: user_id, board: board}, :threads),
     do: ActivityPresence.track(user_id, {:browsing_board, board})
 
+  defp track_activity_tab(%State{user_id: user_id, board: board}, tab)
+       when tab in [:news, :config],
+       do: ActivityPresence.track(user_id, {:browsing_board, board})
+
   defp ensure_tracked(%State{board_id: nil} = state, _tab), do: state
   defp ensure_tracked(%State{user_id: nil} = state, _tab), do: state
 
@@ -479,6 +517,63 @@ defmodule Foglet.TUI.Screens.BoardScreen do
 
   defp board_label(%State{board: %{name: name}}) when is_binary(name), do: name
   defp board_label(%State{}), do: "Boards"
+
+  defp tabs_for(%Context{route_params: params, current_user: actor}, board_id) do
+    board_id = board_id || board_id_from_params(params)
+    tabs = [:threads]
+    tabs = if chat_enabled?(params), do: tabs ++ [:chat], else: tabs
+    tabs = if news_enabled?(params, actor, board_id), do: tabs ++ [:news], else: tabs
+    tabs = if config_visible?(actor, board_id), do: tabs ++ [:config], else: tabs
+    tabs
+  end
+
+  defp news_enabled?(params, _actor, board_id) do
+    route_flag = Map.get(params, :news_enabled) || Map.get(params, "news_enabled")
+
+    cond do
+      route_flag == true -> true
+      is_binary(board_id) -> BoardFeeds.enabled_feed_count(board_id) > 0
+      true -> false
+    end
+  rescue
+    _ -> false
+  end
+
+  defp config_visible?(nil, _board_id), do: false
+  defp config_visible?(_actor, nil), do: false
+
+  defp config_visible?(actor, board_id),
+    do: Bodyguard.permit?(Foglet.Authorization, :manage_board_feeds, actor, {:board, board_id})
+
+  defp adjacent_tab(%State{tabs: tabs, current_tab: current}, delta) do
+    index = Enum.find_index(tabs, &(&1 == current)) || 0
+    Enum.at(tabs, rem(index + delta + length(tabs), length(tabs)))
+  end
+
+  defp load_visible_children(%State{} = state, context) do
+    {state, effects} =
+      if :chat in state.tabs do
+        {chat_state, chat_effects} = ChatRoom.load_effects(state.chat_room, context)
+        {%{state | chat_room: chat_state}, chat_effects}
+      else
+        {state, []}
+      end
+
+    {state, effects} =
+      if :news in state.tabs do
+        {news_state, news_effects} = BoardNews.load_effects(state.news, context)
+        {%{state | news: news_state}, effects ++ news_effects}
+      else
+        {state, effects}
+      end
+
+    if :config in state.tabs do
+      {config_state, config_effects} = BoardConfig.load_effects(state.config, context)
+      {%{state | config: config_state}, effects ++ config_effects}
+    else
+      {state, effects}
+    end
+  end
 
   defp frame_state(%State{} = _state, %Context{} = context) do
     %{
