@@ -390,11 +390,59 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       assert local_state == local_from_app(state)
     end
 
+    test "standard fallback command bar omits selected-row oneliner affordances" do
+      state =
+        :sysop
+        |> build_state()
+        |> Map.put(:terminal_size, {80, 24})
+        |> with_oneliners([oneliner("alice", "reportable", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      keys =
+        state
+        |> MainMenu.visible_actions()
+        |> Enum.flat_map(& &1.commands)
+        |> Enum.map(& &1.key)
+
+      assert "O" in keys
+      refute "!" in keys
+      refute "H" in keys
+      refute "↑/↓" in keys
+
+      texts = rendered_text(state)
+
+      assert Enum.any?(texts, &String.contains?(&1, "Oneliner"))
+      refute Enum.any?(texts, &String.contains?(&1, "Report"))
+      refute Enum.any?(texts, &String.contains?(&1, "Hide oneliner"))
+      refute Enum.any?(texts, &String.contains?(&1, "Select"))
+    end
+
+    test "enhanced command bar keeps selected-row oneliner affordances visible" do
+      state =
+        :sysop
+        |> build_state()
+        |> Map.put(:terminal_size, {120, 36})
+        |> with_oneliners([oneliner("alice", "reportable", %{id: "ol1"})])
+        |> with_selected_oneliner(0)
+
+      keys =
+        state
+        |> MainMenu.visible_actions()
+        |> Enum.flat_map(& &1.commands)
+        |> Enum.map(& &1.key)
+
+      assert "O" in keys
+      assert "!" in keys
+      assert "H" in keys
+      assert "↑/↓" in keys
+    end
+
     test "authenticated users get a single visible ! Report affordance for selected oneliners" do
       for role <- [:user, :mod, :sysop] do
         state =
           role
           |> build_state()
+          |> Map.put(:terminal_size, {120, 36})
           |> with_oneliners([oneliner("alice", "reportable", %{id: "ol1"})])
           |> with_selected_oneliner(0)
 
@@ -441,6 +489,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
         hideable_state =
           role
           |> build_state()
+          |> Map.put(:terminal_size, {120, 36})
           |> with_oneliners([oneliner("alice", "hideable", %{id: "ol1"})])
           |> with_selected_oneliner(0)
 
@@ -1032,6 +1081,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "visible_actions/1 with oneliners surfaces ↑/↓ Select for any user" do
       state =
         build_state(:user)
+        |> Map.put(:terminal_size, {120, 36})
         |> with_oneliners([oneliner("alice", "hi")])
         |> with_selected_oneliner(0)
 
@@ -1046,6 +1096,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "visible_actions/1 surfaces H for :mod with hideable oneliner selected" do
       state =
         build_state(:mod)
+        |> Map.put(:terminal_size, {120, 36})
         |> with_oneliners([oneliner("alice", "hi", %{id: "ol1"})])
         |> with_selected_oneliner(0)
 
@@ -1059,6 +1110,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "visible_actions/1 surfaces H for :sysop with hideable oneliner selected" do
       state =
         build_state(:sysop)
+        |> Map.put(:terminal_size, {120, 36})
         |> with_oneliners([oneliner("alice", "hi", %{id: "ol1"})])
         |> with_selected_oneliner(0)
 
@@ -1071,6 +1123,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     test "visible_actions/1 hides H for :user even with hideable oneliner selected" do
       state =
         build_state(:user)
+        |> Map.put(:terminal_size, {120, 36})
         |> with_oneliners([oneliner("alice", "hi", %{id: "ol1"})])
         |> with_selected_oneliner(0)
 

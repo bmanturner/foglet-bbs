@@ -25,7 +25,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Authorization
-  alias Foglet.TUI.{Context, Effect, ScrollKeys}
+  alias Foglet.TUI.{Context, Effect, Layout, ScrollKeys}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.MainMenu.Render
@@ -858,16 +858,19 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp action_visible?(:authenticated, user, _state), do: not is_nil(user)
 
   defp action_visible?(:hide_oneliner_policy, _user, state) do
-    not is_nil(selected_hideable_oneliner(state))
+    oneliner_detail_visible?(state) and not is_nil(selected_hideable_oneliner(state))
   end
 
   defp action_visible?(:report_oneliner_policy, user, state) do
-    not is_nil(user) and not is_nil(selected_reportable_oneliner(state))
+    oneliner_detail_visible?(state) and not is_nil(user) and
+      not is_nil(selected_reportable_oneliner(state))
   end
 
   defp action_visible?(:oneliners_present, _user, state) do
-    visible_oneliners(state) != []
+    oneliner_detail_visible?(state) and visible_oneliners(state) != []
   end
+
+  defp oneliner_detail_visible?(state), do: Layout.enhanced?(Map.get(state, :terminal_size))
 
   defp command_group(label, keys) do
     %{
