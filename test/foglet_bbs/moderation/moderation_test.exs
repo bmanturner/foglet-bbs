@@ -122,6 +122,53 @@ defmodule Foglet.ModerationTest do
       assert user_report.target_id == reported_user.id
     end
 
+    test "rejects duplicate open reports from the same reporter for the same target" do
+      reporter = AccountsFixtures.user_fixture()
+      post = post_fixture()
+      other_post = post_fixture()
+
+      attrs = %{
+        target_kind: :post,
+        target_id: post.id,
+        reason: "spam",
+        notes: "first report"
+      }
+
+      assert {:ok, %Report{} = first_report} = Moderation.create_report(reporter, attrs)
+
+      assert {:error, changeset} =
+               Moderation.create_report(reporter, %{attrs | notes: "trying again"})
+
+      assert %{target_id: ["already has an open report from you"]} = errors_on(changeset)
+      assert Repo.aggregate(Report, :count) == 1
+
+      assert {:ok, %Report{} = different_target_report} =
+               Moderation.create_report(reporter, %{attrs | target_id: other_post.id})
+
+      assert different_target_report.id != first_report.id
+    end
+
+    test "allows another same-target report after prior report is closed" do
+      moderator = moderator_fixture()
+      reporter = AccountsFixtures.user_fixture()
+      post = post_fixture()
+
+      attrs = %{
+        target_kind: :post,
+        target_id: post.id,
+        reason: "spam"
+      }
+
+      assert {:ok, %Report{} = first_report} = Moderation.create_report(reporter, attrs)
+
+      assert {:ok, %Report{} = resolved} =
+               Moderation.resolve_report(moderator, first_report, %{resolution_note: "handled"})
+
+      assert resolved.status == :resolved
+      assert {:ok, %Report{} = second_report} = Moderation.create_report(reporter, attrs)
+      assert second_report.id != first_report.id
+    end
+
     test "rejects unsupported target kinds and missing targets" do
       reporter = AccountsFixtures.user_fixture()
 
