@@ -99,6 +99,20 @@ defmodule Foglet.BoardFeedsTest do
              )
   end
 
+  test "rejects fetches that resolve through a private redirect target" do
+    board = board!()
+    actor = actor!(:sysop)
+
+    redirecting_fetcher = fn "https://example.com/feed" ->
+      {:ok, %FetchResult{url: "http://127.0.0.1/private-feed", body: rss_body()}}
+    end
+
+    assert {:error, :unsafe_url} =
+             BoardFeeds.create_feed(actor, board.id, %{url: "https://example.com/feed"},
+               fetcher: redirecting_fetcher
+             )
+  end
+
   test "ttl skips unexpired refreshes and refreshes expired feeds" do
     board = board!()
     actor = actor!(:sysop)
@@ -153,5 +167,39 @@ defmodule Foglet.BoardFeedsTest do
 
     assert {:error, :forbidden} =
              BoardFeeds.create_feed(actor!(:user), board.id, %{url: "https://example.com/feed"})
+  end
+
+  test "reader feed lists follow board readability including guests and inactive users" do
+    category = category_fixture()
+    public_board = board_fixture(category, %{readable_by: :public})
+    members_board = board_fixture(category, %{readable_by: :members})
+    actor = actor!(:sysop)
+
+    fetcher = fn _ ->
+      {:ok, %FetchResult{url: "https://example.com/feed", body: rss_body()}}
+    end
+
+    assert {:ok, _feed} =
+             BoardFeeds.create_feed(actor, public_board.id, %{url: "https://example.com/feed"},
+               fetcher: fetcher
+             )
+
+    assert {:ok, _feed} =
+             BoardFeeds.create_feed(actor, members_board.id, %{url: "https://example.com/feed"},
+               fetcher: fetcher
+             )
+
+    assert [_] = BoardFeeds.list_feeds(nil, public_board.id)
+    assert [_] = BoardFeeds.list_cached_items(nil, public_board.id)
+    assert [] = BoardFeeds.list_feeds(nil, members_board.id)
+    assert [] = BoardFeeds.list_cached_items(nil, members_board.id)
+
+    inactive_user =
+      actor!(:user)
+      |> Ecto.Changeset.change(status: :suspended)
+      |> Repo.update!()
+
+    assert [] = BoardFeeds.list_feeds(inactive_user, members_board.id)
+    assert [] = BoardFeeds.list_cached_items(inactive_user, members_board.id)
   end
 end

@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
   alias Raxol.UI.Layout.Engine
 
   @user %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user, status: :active}
+  @sysop %Foglet.Accounts.User{id: "u2", handle: "root", role: :sysop, status: :active}
 
   defp board(opts) do
     %{
@@ -34,15 +35,16 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       archived: false,
       postable_by: :members,
       chat_enabled: Keyword.get(opts, :chat_enabled, false),
-      description: Keyword.get(opts, :description)
+      description: Keyword.get(opts, :description),
+      news_enabled: Keyword.get(opts, :news_enabled, false)
     }
   end
 
   defp context(b, opts \\ []) do
     Context.new(
-      current_user: @user,
+      current_user: Keyword.get(opts, :user, @user),
       route: :thread_list,
-      route_params: %{board: b, board_id: b.id},
+      route_params: %{board: b, board_id: b.id, news_enabled: b.news_enabled},
       terminal_size: Keyword.get(opts, :size, {80, 24}),
       session_context: %{domain: %{threads: FakeThreads, boards: FakeBoards}}
     )
@@ -134,6 +136,34 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
   end
 
   describe "init/1 — chat enabled" do
+    test "wraps no-chat boards when NEWS is enabled" do
+      b = board(chat_enabled: false, news_enabled: true)
+      ctx = context(b)
+
+      assert %WrapperState{tabs: [:threads, :news], current_tab: :threads} = BoardScreen.init(ctx)
+    end
+
+    test "operator CONFIG appears after typical THREADS CHAT NEWS order" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b, user: @sysop)
+
+      state = BoardScreen.init(ctx)
+
+      assert %WrapperState{tabs: [:threads, :chat, :news, :config]} = state
+      text = BoardScreen.render(state, ctx) |> flatten_text()
+      assert text =~ "THREADS"
+      assert text =~ "CHAT (0)"
+      assert text =~ "NEWS"
+      assert text =~ "CONFIG"
+    end
+
+    test "regular user does not see CONFIG" do
+      b = board(chat_enabled: true, news_enabled: true)
+      ctx = context(b)
+
+      assert %WrapperState{tabs: [:threads, :chat, :news]} = BoardScreen.init(ctx)
+    end
+
     test "returns a wrapper state with current_tab :threads" do
       b = board(chat_enabled: true)
       ctx = context(b)

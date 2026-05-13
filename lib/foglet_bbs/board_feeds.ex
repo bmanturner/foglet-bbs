@@ -10,6 +10,7 @@ defmodule Foglet.BoardFeeds do
   import Ecto.Query, except: [first: 2]
 
   alias Foglet.BoardFeeds.{Feed, Item}
+  alias Foglet.Boards
   alias FogletBbs.Repo
 
   @authorization Foglet.Authorization
@@ -44,7 +45,7 @@ defmodule Foglet.BoardFeeds do
 
         case %Feed{} |> Feed.changeset(feed_attrs) |> Repo.insert() do
           {:ok, feed} ->
-            upsert_items(feed, parsed.items, now)
+            _ = upsert_items(feed, parsed.items, now)
             {:ok, Repo.preload(feed, :items)}
 
           {:error, changeset} ->
@@ -164,7 +165,7 @@ defmodule Foglet.BoardFeeds do
           })
           |> Repo.update()
 
-        upsert_items(feed, parsed.items, now)
+        _ = upsert_items(feed, parsed.items, now)
         trim_items(feed.id)
         {:ok, :refreshed}
       end)
@@ -193,12 +194,16 @@ defmodule Foglet.BoardFeeds do
     end
   end
 
-  defp default_fetcher(url) do
-    :inets.start()
-    :ssl.start()
+  defp default_fetcher(url), do: default_fetcher(url, 3)
+
+  defp default_fetcher(_url, 0), do: {:error, :too_many_redirects}
+
+  defp default_fetcher(url, redirects_remaining) do
+    _ = :inets.start()
+    _ = :ssl.start()
 
     request = {String.to_charlist(url), []}
-    http_opts = [timeout: 5_000, connect_timeout: 3_000, autoredirect: true, max_redirect: 3]
+    http_opts = [timeout: 5_000, connect_timeout: 3_000, autoredirect: false]
     opts = [body_format: :binary]
 
     case :httpc.request(:get, request, http_opts, opts) do
@@ -208,6 +213,13 @@ defmodule Foglet.BoardFeeds do
            url: url,
            body: binary_part(body, 0, min(byte_size(body), @max_response_bytes + 1))
          }}
+
+      {:ok, {{_, status, _}, headers, _body}} when status in [301, 302, 303, 307, 308] ->
+        with {:ok, location} <- redirect_location(headers),
+             {:ok, next_url} <- redirect_url(url, location),
+             {:ok, safe_next_url} <- safe_url(next_url) do
+          default_fetcher(safe_next_url, redirects_remaining - 1)
+        end
 
       {:ok, {{_, status, _}, _headers, _body}} ->
         {:error, {:http_status, status}}
@@ -349,10 +361,25 @@ defmodule Foglet.BoardFeeds do
     DateTime.compare(DateTime.add(last, ttl, :second), now()) == :gt
   end
 
-  defp can_read_board?(%{role: role, status: :active, deleted_at: nil}, _board_id)
-       when role in [:user, :mod, :sysop], do: true
+  defp can_read_board?(actor, board_id) do
+    match?({:ok, _board}, Boards.fetch_readable_board(actor, board_id))
+  end
 
-  defp can_read_board?(_, _), do: false
+  defp redirect_location(headers) do
+    case Enum.find(headers, fn {name, _value} ->
+           name |> to_string() |> String.downcase() == "location"
+         end) do
+      {_name, value} -> {:ok, to_string(value)}
+      nil -> {:error, :missing_redirect_location}
+    end
+  end
+
+  defp redirect_url(current_url, location) do
+    next_url = current_url |> URI.parse() |> URI.merge(location) |> URI.to_string()
+    {:ok, next_url}
+  rescue
+    _ -> {:error, :unsafe_url}
+  end
 
   defp unsafe_host?(host) do
     down = String.downcase(host)
