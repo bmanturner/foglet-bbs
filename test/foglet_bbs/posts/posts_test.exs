@@ -233,7 +233,7 @@ defmodule Foglet.PostsTest do
       assert notification.user_id == author.id
       assert notification.actor_id == replier.id
       assert is_nil(notification.read_at)
-      assert notification.dedupe_key == "reply:#{reply.id}:#{author.id}"
+      assert notification.dedupe_key == "post:#{reply.id}:user:#{author.id}"
 
       assert notification.payload == %{
                "board_id" => board.id,
@@ -257,24 +257,36 @@ defmodule Foglet.PostsTest do
       assert Repo.aggregate(Notification, :count) == 0
     end
 
-    test "plain replies and deleted parents do not create notifications" do
+    test "deleted parents do not create reply notifications" do
       board = setup_board_with_server()
       author = active_user_fixture()
       replier = active_user_fixture()
+      other = active_user_fixture()
       {thread, root} = setup_thread(board, author)
 
-      assert {:ok, _plain_reply} =
-               Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{body: "plain reply"})
+      {:ok, other_post} =
+        Foglet.Posts.create_reply(thread.id, board.id, other.id, %{body: "other"})
+
+      Repo.delete_all(Notification)
 
       assert {:ok, deleted_root} = Foglet.Posts.delete_post(root)
 
-      assert {:ok, _reply_to_deleted} =
+      assert {:ok, reply_to_deleted} =
                Foglet.Posts.create_reply(thread.id, board.id, replier.id, %{
                  body: "reply to deleted",
                  reply_to_id: deleted_root.id
                })
 
-      assert Repo.aggregate(Notification, :count) == 0
+      assert [notification] = Repo.all(Notification)
+      assert notification.kind == :thread_update
+      assert notification.user_id == author.id
+
+      assert notification.payload == %{
+               "thread_id" => thread.id,
+               "new_post_ids" => [reply_to_deleted.id]
+             }
+
+      refute notification.user_id == other_post.user_id
     end
 
     test "missing parent references fail without notifications or counter drift" do
@@ -358,7 +370,7 @@ defmodule Foglet.PostsTest do
                  user_id: author.id,
                  actor_id: replier.id,
                  kind: :reply,
-                 dedupe_key: "reply:#{reply.id}:#{author.id}",
+                 dedupe_key: "post:#{reply.id}:user:#{author.id}",
                  payload: %{
                    board_id: board.id,
                    thread_id: thread.id,
@@ -369,6 +381,95 @@ defmodule Foglet.PostsTest do
 
       assert [notification] = Repo.all(Notification)
       assert duplicate.id == notification.id
+    end
+  end
+
+  describe "create_reply/4 post-event notification hierarchy" do
+    test "mention wins over reply for the same recipient and post" do
+      board = setup_board_with_server()
+      recipient = active_user_fixture(%{handle: "recipient"})
+      actor = active_user_fixture(%{handle: "actor"})
+      {thread, root} = setup_thread(board, recipient)
+
+      assert {:ok, reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{
+                 body: "replying to @recipient",
+                 reply_to_id: root.id
+               })
+
+      assert [%Notification{} = notification] = Repo.all(Notification)
+      assert notification.kind == :mention
+      assert notification.user_id == recipient.id
+      assert notification.dedupe_key == "post:#{reply.id}:user:#{recipient.id}"
+      assert notification.payload["post_id"] == reply.id
+    end
+
+    test "mention wins over thread creator fallback for the same recipient and post" do
+      board = setup_board_with_server()
+      creator = active_user_fixture(%{handle: "creator"})
+      actor = active_user_fixture(%{handle: "actor"})
+      {thread, _root} = setup_thread(board, creator)
+
+      assert {:ok, reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{body: "ping @creator"})
+
+      assert [%Notification{} = notification] = Repo.all(Notification)
+      assert notification.kind == :mention
+      assert notification.user_id == creator.id
+      assert notification.dedupe_key == "post:#{reply.id}:user:#{creator.id}"
+    end
+
+    test "reply wins over thread creator fallback for the same recipient and post" do
+      board = setup_board_with_server()
+      creator = active_user_fixture(%{handle: "creator"})
+      actor = active_user_fixture(%{handle: "actor"})
+      {thread, root} = setup_thread(board, creator)
+
+      assert {:ok, reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{
+                 body: "quoted reply",
+                 reply_to_id: root.id
+               })
+
+      assert [%Notification{} = notification] = Repo.all(Notification)
+      assert notification.kind == :reply
+      assert notification.user_id == creator.id
+      assert notification.dedupe_key == "post:#{reply.id}:user:#{creator.id}"
+    end
+
+    test "mention wins when mention, reply, and thread creator all overlap" do
+      board = setup_board_with_server()
+      creator = active_user_fixture(%{handle: "creator"})
+      actor = active_user_fixture(%{handle: "actor"})
+      {thread, root} = setup_thread(board, creator)
+
+      assert {:ok, reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{
+                 body: "quoted reply for @creator",
+                 reply_to_id: root.id
+               })
+
+      assert [%Notification{} = notification] = Repo.all(Notification)
+      assert notification.kind == :mention
+      assert notification.user_id == creator.id
+      assert notification.dedupe_key == "post:#{reply.id}:user:#{creator.id}"
+    end
+
+    test "thread creator fallback emits when there is no mention or reply overlap" do
+      board = setup_board_with_server()
+      creator = active_user_fixture(%{handle: "creator"})
+      actor = active_user_fixture(%{handle: "actor"})
+      {thread, _root} = setup_thread(board, creator)
+
+      assert {:ok, reply} =
+               Foglet.Posts.create_reply(thread.id, board.id, actor.id, %{body: "new update"})
+
+      assert [%Notification{} = notification] = Repo.all(Notification)
+      assert notification.kind == :thread_update
+      assert notification.user_id == creator.id
+      assert notification.actor_id == actor.id
+      assert notification.dedupe_key == "post:#{reply.id}:user:#{creator.id}"
+      assert notification.payload == %{"thread_id" => thread.id, "new_post_ids" => [reply.id]}
     end
   end
 

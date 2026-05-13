@@ -68,18 +68,38 @@ defmodule Foglet.Posts do
 
       true ->
         with {:ok, post} <- Boards.Server.create_post(board_id, thread_id, user_id, attrs) do
-          emit_mention_notifications(post, attrs)
+          emit_post_event_notifications(post, thread, attrs)
           {:ok, post}
         end
     end
   end
 
-  defp emit_mention_notifications(%Post{} = post, attrs) do
-    attrs
-    |> post_body()
-    |> Mentions.extract_handles()
-    |> active_mentioned_users(post.user_id)
-    |> Enum.each(&create_mention_notification(&1, post))
+  defp emit_post_event_notifications(%Post{} = post, %Thread{} = thread, attrs) do
+    mentioned_users =
+      attrs
+      |> post_body()
+      |> Mentions.extract_handles()
+      |> active_mentioned_users(post.user_id)
+
+    mentioned_ids = MapSet.new(mentioned_users, & &1.id)
+
+    mentioned_users
+    |> Enum.each(&create_post_event_notification(:mention, &1.id, post))
+
+    reply_recipient_id = reply_recipient_id(post)
+
+    if reply_recipient_id && not MapSet.member?(mentioned_ids, reply_recipient_id) do
+      create_post_event_notification(:reply, reply_recipient_id, post)
+    end
+
+    notified_ids =
+      mentioned_ids
+      |> maybe_put(reply_recipient_id)
+
+    if thread.created_by_id != post.user_id and
+         not MapSet.member?(notified_ids, thread.created_by_id) do
+      create_post_event_notification(:thread_update, thread.created_by_id, post)
+    end
   end
 
   defp post_body(attrs), do: Map.get(attrs, :body, Map.get(attrs, "body", ""))
@@ -97,26 +117,48 @@ defmodule Foglet.Posts do
     |> Repo.all()
   end
 
-  defp create_mention_notification(%User{} = recipient, %Post{} = post) do
+  defp reply_recipient_id(%Post{reply_to_id: nil}), do: nil
+
+  defp reply_recipient_id(%Post{} = reply) do
+    case Repo.get(Post, reply.reply_to_id) do
+      %Post{deleted_at: nil, user_id: recipient_id}
+      when not is_nil(recipient_id) and recipient_id != reply.user_id ->
+        recipient_id
+
+      _parent_missing_deleted_or_self ->
+        nil
+    end
+  end
+
+  defp maybe_put(set, nil), do: set
+  defp maybe_put(set, value), do: MapSet.put(set, value)
+
+  defp create_post_event_notification(kind, recipient_id, %Post{} = post) do
     case Notifications.create_notification(%{
-           user_id: recipient.id,
+           user_id: recipient_id,
            actor_id: post.user_id,
-           kind: :mention,
-           dedupe_key: post_recipient_dedupe_key(post.id, recipient.id),
-           payload: %{
-             board_id: post.board_id,
-             thread_id: post.thread_id,
-             post_id: post.id,
-             snippet: post.body
-           }
+           kind: kind,
+           dedupe_key: post_recipient_dedupe_key(post.id, recipient_id),
+           payload: post_event_payload(kind, post)
          }) do
       {:ok, _notification} ->
         :ok
 
       {:error, reason} ->
-        Logger.warning("mention notification emission skipped: #{inspect(reason)}")
+        Logger.warning("#{kind} notification emission skipped: #{inspect(reason)}")
     end
   end
+
+  defp post_event_payload(:thread_update, %Post{} = post),
+    do: %{thread_id: post.thread_id, new_post_ids: [post.id]}
+
+  defp post_event_payload(_kind, %Post{} = post),
+    do: %{
+      board_id: post.board_id,
+      thread_id: post.thread_id,
+      post_id: post.id,
+      snippet: post.body
+    }
 
   defp post_recipient_dedupe_key(post_id, recipient_id),
     do: "post:#{post_id}:user:#{recipient_id}"
