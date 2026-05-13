@@ -712,6 +712,11 @@ defmodule Foglet.TUI.Screens.PostReader do
     [direction: :around, around_message_number: message_number]
   end
 
+  defp load_window_opts(_msg_no, {:around_message_number, message_number})
+       when is_integer(message_number) and message_number > 0 do
+    [direction: :around, around_message_number: message_number]
+  end
+
   defp load_window_opts(_msg_no, intent) when intent in [:jump_last, "jump_last"] do
     [direction: :last]
   end
@@ -1194,6 +1199,14 @@ defmodule Foglet.TUI.Screens.PostReader do
   defp selected_index_after_window_load(%State{load_intent: intent}, _window, posts)
        when intent in [:jump_last, "jump_last"] do
     max(length(posts) - 1, 0)
+  end
+
+  defp selected_index_after_window_load(
+         %State{load_intent: {:around_message_number, message_number}},
+         _window,
+         posts
+       ) do
+    index_of_message_number(posts, message_number) || 0
   end
 
   defp selected_index_after_window_load(%State{} = state, window, posts) do
