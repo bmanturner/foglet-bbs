@@ -402,7 +402,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("LOG", ss, theme, width, height, user, timezone) do
-    log_table = fresh_log_table(ss, width, height, user, timezone)
+    table_width = compact_table_width(width, height)
+    log_table = fresh_log_table(ss, table_width, height, user, timezone)
     log_summary = State.build_log_summary(ss.scopes, ss.error, ss.mod_log)
     children = compact_table_children(log_summary, log_table, theme, width, height)
 
@@ -412,7 +413,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("USERS", ss, theme, width, height, _user, _timezone) do
-    users_table = fresh_users_table(ss, width, height)
+    table_width = compact_table_width(width, height)
+    users_table = fresh_users_table(ss, table_width, height)
     users_summary = State.build_users_summary(ss.users, ss.error)
     children = compact_table_children(users_summary, users_table, theme, width, height)
 
@@ -432,7 +434,8 @@ defmodule Foglet.TUI.Screens.Moderation do
   end
 
   defp render_tab_body("BOARDS", ss, theme, width, height, _user, _timezone) do
-    boards_table = fresh_boards_table(ss, width, height)
+    table_width = compact_table_width(width, height)
+    boards_table = fresh_boards_table(ss, table_width, height)
     boards_summary = State.build_boards_summary(ss.scopes, ss.boards, ss.error)
     children = compact_table_children(boards_summary, boards_table, theme, width, height)
 
@@ -930,6 +933,14 @@ defmodule Foglet.TUI.Screens.Moderation do
 
   defp session_context_domain(_context, _key, default), do: default
 
+  defp compact_table_width(width, height) do
+    if height > 18 and width >= 100 do
+      max(div(width * 11, 20) - 1, 48)
+    else
+      width
+    end
+  end
+
   defp compact_table_children(summary, table, theme, width, height) do
     table_node = ConsoleTable.render(table, theme: theme)
 
@@ -938,7 +949,7 @@ defmodule Foglet.TUI.Screens.Moderation do
         [table_node]
 
       width >= 100 ->
-        table_width = max(div(width * 3, 5) - 1, 48)
+        table_width = compact_table_width(width, height)
         context_width = max(width - table_width - 1, 32)
 
         context = operator_context_panel(summary, theme, context_width)

@@ -7,16 +7,14 @@ defmodule Foglet.TUI.Screens.ModerationTest do
   alias Foglet.Accounts.{Invites, User}
   alias Foglet.Config
   alias Foglet.Moderation.{Action, Report}
-  alias Foglet.TUI.Context
-  alias Foglet.TUI.Effect
-  alias Foglet.TUI.Presentation
+  alias Foglet.TUI.{Context, Effect, Presentation, TextWidth, Theme}
   alias Foglet.TUI.Screens.Moderation
   alias Foglet.TUI.Screens.Moderation.State, as: ModerationState
   alias Foglet.TUI.Screens.Shared.InvitesState
-  alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Display.ConsoleTable
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
   alias FogletBbs.AccountsFixtures
+  alias Raxol.UI.Layout.Engine
 
   defp build_state(role, user \\ nil) do
     %Foglet.TUI.App{
@@ -58,6 +56,22 @@ defmodule Foglet.TUI.Screens.ModerationTest do
     local_state = get_in(state, [:screen_state, :moderation]) || Moderation.init(context)
 
     Moderation.render(local_state, context)
+  end
+
+  defp assert_positioned_text_fits(view, {width, height}) do
+    view
+    |> Engine.apply_layout(%{width: width, height: height})
+    |> List.flatten()
+    |> Enum.filter(&(&1.type == :text and is_binary(Map.get(&1, :text))))
+    |> Enum.each(fn element ->
+      right_edge = element.x + TextWidth.display_width(element.text)
+
+      assert right_edge <= width,
+             "text element exceeded #{width} columns at y=#{element.y}: #{inspect(element.text)}"
+
+      assert element.y < height,
+             "text element exceeded #{height} rows: #{inspect(element.text)}"
+    end)
   end
 
   defp handle_moderation_key(event, state) do
@@ -178,6 +192,39 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert flat =~ "Rows are read-only"
     end
 
+    test "LOG and BOARDS enhanced panes keep positioned text inside the terminal" do
+      user = %User{id: "u1", handle: "mod", role: :mod}
+      sizes = [{120, 36}, {132, 50}]
+
+      for {active_tab, rows} <- [
+            {1,
+             [
+               mod_log: [
+                 %{
+                   kind: :resolved,
+                   reason: "spam",
+                   metadata: %{body: "Removed obvious spam"},
+                   mod: %{handle: "alice"},
+                   inserted_at: DateTime.utc_now()
+                 }
+               ]
+             ]},
+            {4, [boards: [%{name: "General", category_name: "Main", state: :active}]]}
+          ],
+          size <- sizes do
+        context = Context.new(current_user: user, route: :moderation, terminal_size: size)
+
+        state =
+          rows
+          |> Keyword.merge(active: active_tab, scopes: [:site])
+          |> ModerationState.new()
+
+        state
+        |> Moderation.render(context)
+        |> assert_positioned_text_fits(size)
+      end
+    end
+
     test "Moderation.update(:load) emits a workspace task effect" do
       user = %User{id: "u1", handle: "mod", role: :mod}
 
@@ -233,7 +280,7 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       {state, effects} = Moderation.update({:key, %{key: :down}}, state, context)
 
-      assert %ModerationState{} = state
+      assert state.__struct__ == ModerationState
       assert effects == []
     end
 
