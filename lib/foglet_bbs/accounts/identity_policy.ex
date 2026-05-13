@@ -117,9 +117,10 @@ defmodule Foglet.Accounts.IdentityPolicy do
         changeset
 
       handle ->
-        if check_handle(handle) == :ok,
-          do: changeset,
-          else: Changeset.add_error(changeset, :handle, @anonymous_error)
+        case check_handle(handle) do
+          {:blocked, _} -> Changeset.add_error(changeset, :handle, @anonymous_error)
+          _ -> changeset
+        end
     end
   end
 
@@ -129,9 +130,10 @@ defmodule Foglet.Accounts.IdentityPolicy do
         changeset
 
       email ->
-        if check_email(email) == :ok,
-          do: changeset,
-          else: Changeset.add_error(changeset, :email, @anonymous_error)
+        case check_email(email) do
+          {:blocked, _} -> Changeset.add_error(changeset, :email, @anonymous_error)
+          _ -> changeset
+        end
     end
   end
 
