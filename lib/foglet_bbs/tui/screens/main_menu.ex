@@ -103,7 +103,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   def update({:key, key_event}, local_state, %Context{} = context) do
     case KeyBinding.vertical_delta(key_event) do
       nil -> handle_key_command(key_event, local_state, context)
-      delta -> {State.select_delta(normalize_state(local_state, context), delta), []}
+      delta -> select_destination(local_state, context, delta)
     end
   end
 
@@ -416,9 +416,31 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
   defp handle_key_command(key_event, local_state, %Context{} = context) do
     if KeyBinding.submit?(key_event) do
-      {normalize_state(local_state, context), []}
+      activate_selected_destination(local_state, context)
     else
       handle_command_key(key_event, local_state, context)
+    end
+  end
+
+  defp select_destination(local_state, %Context{} = context, delta) do
+    local_state = normalize_state(local_state, context)
+    destination_count = visible_destination_entries(context.current_user) |> length()
+
+    {State.select_destination_delta(local_state, delta, destination_count), []}
+  end
+
+  defp activate_selected_destination(local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    case Enum.at(
+           visible_destination_entries(context.current_user),
+           local_state.selected_destination_index
+         ) do
+      %{key: key} when is_binary(key) ->
+        handle_command_key(%{key: :char, char: key}, local_state, context)
+
+      _other ->
+        {local_state, []}
     end
   end
 
@@ -641,6 +663,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
       route_params: context.route_params || %{},
       screen_state: %{main_menu: local_state},
       recent_oneliners: local_state.recent_oneliners,
+      selected_destination_index: local_state.selected_destination_index,
       selected_oneliner_index: local_state.selected_oneliner_index,
       pending_hide_oneliner_id: local_state.pending_hide_oneliner_id
     }

@@ -42,7 +42,7 @@ defmodule Foglet.TUI.BufferSnapshotTest do
     assert_screen(render_fixture(:main_menu, fixture_opts()), ~B"""
     ┌ Foglet ▸ Home ─────────────────────────────── @alice | 11:43 ┐
     │┌─ Navigation ─────────┐ ┌─ Oneliners ───────────────────────┐│
-    ││ ● Boards          [B]│ │> @unknown  Welcome to Foglet      ││
+    ││>● Boards          [B]│ │> @unknown  Welcome to Foglet      ││
     ││ ✎ Compose         [C]│ │  @unknown  New thread in /ge      ││
     ││ ✉ Inbox       [3] [I]│ │                                   ││
     ││ ✉ BBS Mail        [L]│ │                                   ││
