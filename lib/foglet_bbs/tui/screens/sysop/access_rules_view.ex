@@ -8,7 +8,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   alias Foglet.Config
   alias Foglet.SSH
   alias Foglet.TUI.Effect
-  alias Foglet.TUI.ScrollKeys
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   import Raxol.Core.Renderer.View
@@ -96,34 +96,35 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   def handle_key(%{key: key}, state) when key in [:tab, :left, :right],
     do: {switch_section(state), []}
 
-  def handle_key(%{key: key} = event, state) when key in [:up, :down],
-    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+  def handle_key(event, state) do
+    case KeyBinding.vertical_delta(event) do
+      nil -> handle_command_key(event, state)
+      delta -> {move(state, delta), []}
+    end
+  end
 
-  def handle_key(%{key: :char, char: char} = event, state) when char in ["j", "k"],
-    do: {move(state, ScrollKeys.vertical_delta(event)), []}
-
-  def handle_key(%{key: :char, char: c}, state) when c in ["r", "R"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["r", "R"],
     do: {state, [load_effect(state.current_user)]}
 
-  def handle_key(%{key: :char, char: c}, %__MODULE__{section: :network} = state)
-      when c in ["d", "D"],
-      do: {start_network_form(state, :create_deny), []}
+  defp handle_command_key(%{key: :char, char: c}, %__MODULE__{section: :network} = state)
+       when c in ["d", "D"],
+       do: {start_network_form(state, :create_deny), []}
 
-  def handle_key(%{key: :char, char: c}, %__MODULE__{section: :network} = state)
-      when c in ["a", "A"],
-      do: {start_network_form(state, :create_allow), []}
+  defp handle_command_key(%{key: :char, char: c}, %__MODULE__{section: :network} = state)
+       when c in ["a", "A"],
+       do: {start_network_form(state, :create_allow), []}
 
-  def handle_key(%{key: :char, char: c}, %__MODULE__{section: :identity} = state)
-      when c in ["a", "A"],
-      do: {start_identity_form(state, :reserved_handle), []}
+  defp handle_command_key(%{key: :char, char: c}, %__MODULE__{section: :identity} = state)
+       when c in ["a", "A"],
+       do: {start_identity_form(state, :reserved_handle), []}
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["e", "E"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["e", "E"],
     do: confirm_or_update_selected(state, :toggle)
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["x", "X"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["x", "X"],
     do: confirm_or_update_selected(state, :remove)
 
-  def handle_key(_event, state), do: {state, []}
+  defp handle_command_key(_event, state), do: {state, []}
 
   @spec render(t(), map(), keyword()) :: any()
   def render(%__MODULE__{} = state, theme, opts \\ []) do
@@ -190,7 +191,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   end
 
   def load_effect(actor) do
-    Effect.task(:sysop_load_access_rules, :sysop, fn ->
+    Effect.task(:sysop_load_access_rules, fn ->
       with {:ok, rules} <- SSH.list_access_rules(actor),
            {:ok, identity_rules} <- Accounts.list_identity_rules(actor) do
         {:ok, from_rules(rules, identity_rules, actor, Config.ssh_ip_allowlist_enabled?())}
@@ -415,7 +416,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   end
 
   defp network_task(state, action_fun) do
-    Effect.task(:sysop_load_access_rules, :sysop, fn ->
+    Effect.task(:sysop_load_access_rules, fn ->
       with {:ok, _} <- action_fun.(),
            {:ok, rules} <- SSH.list_access_rules(state.current_user),
            {:ok, identity_rules} <- Accounts.list_identity_rules(state.current_user) do
@@ -431,7 +432,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
   end
 
   defp identity_task(state, action_fun) do
-    Effect.task(:sysop_load_access_rules, :sysop, fn ->
+    Effect.task(:sysop_load_access_rules, fn ->
       with {:ok, rule} <- normalize_identity_result(action_fun.()),
            {:ok, rules} <- SSH.list_access_rules(state.current_user),
            {:ok, identity_rules} <- Accounts.list_identity_rules(state.current_user) do

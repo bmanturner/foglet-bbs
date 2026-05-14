@@ -365,33 +365,33 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp save_profile_effect(%Context{current_user: nil}, _attrs) do
-    Effect.task(:account_save_profile, :account, fn -> {:error, :missing_user} end)
+    Effect.task(:account_save_profile, fn -> {:error, :missing_user} end)
   end
 
   defp save_profile_effect(%Context{} = context, attrs) do
     accounts_mod = domain_module(context, :accounts, Foglet.Accounts)
     attrs = Map.take(attrs, [:location, :tagline, :real_name])
 
-    Effect.task(:account_save_profile, :account, fn ->
+    Effect.task(:account_save_profile, fn ->
       accounts_mod.update_profile(context.current_user, attrs)
     end)
   end
 
   defp save_prefs_effect(%Context{current_user: nil}, _attrs) do
-    Effect.task(:account_save_prefs, :account, fn -> {:error, :missing_user} end)
+    Effect.task(:account_save_prefs, fn -> {:error, :missing_user} end)
   end
 
   defp save_prefs_effect(%Context{} = context, attrs) do
     accounts_mod = domain_module(context, :accounts, Foglet.Accounts)
     attrs = normalize_account_preferences(attrs)
 
-    Effect.task(:account_save_prefs, :account, fn ->
+    Effect.task(:account_save_prefs, fn ->
       accounts_mod.update_profile(context.current_user, attrs)
     end)
   end
 
   defp ssh_keys_effect(op, %Context{} = context, ssh_keys) do
-    Effect.task(op, :account, fn ->
+    Effect.task(op, fn ->
       case op do
         :account_load_ssh_keys -> SSHKeysActions.load(context.current_user, ssh_keys)
         :account_add_ssh_key -> SSHKeysActions.add(context.current_user, ssh_keys, ssh_keys.form)
@@ -401,7 +401,7 @@ defmodule Foglet.TUI.Screens.Account do
   end
 
   defp invites_effect(op, %Context{} = context, invites) do
-    Effect.task(op, :account, fn ->
+    Effect.task(op, fn ->
       case op do
         :account_load_invites -> InvitesActions.load(context.current_user, invites)
         :account_generate_invite -> InvitesActions.generate(context.current_user, invites)

@@ -28,8 +28,8 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   alias Foglet.Boards
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.Modal
-  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Widgets.List.ListRow
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
@@ -188,7 +188,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   def keybar_groups(%__MODULE__{} = state) do
     list_group = %{
       label: "List",
-      commands: [%{key: ScrollKeys.commandbar_key(), label: "Move", priority: 10}]
+      commands: [%{key: KeyBinding.commandbar_key(), label: "Move", priority: 10}]
     }
 
     action_commands =
@@ -332,31 +332,34 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
 
   def handle_key(%{key: :escape}, state), do: {state, []}
 
-  def handle_key(%{key: key} = event, state) when key in [:up, :down],
-    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+  def handle_key(event, state) do
+    case KeyBinding.vertical_delta(event) do
+      nil -> handle_command_key(event, state)
+      delta -> {move(state, delta), []}
+    end
+  end
 
-  def handle_key(%{key: :char, char: char} = event, state) when char in ["j", "k"],
-    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+  defp handle_command_key(%{key: :enter}, state), do: {toggle_selected_category(state), []}
 
-  def handle_key(%{key: :enter}, state), do: {toggle_selected_category(state), []}
-  def handle_key(%{key: :char, char: " "}, state), do: {toggle_selected_category(state), []}
+  defp handle_command_key(%{key: :char, char: " "}, state),
+    do: {toggle_selected_category(state), []}
 
   # Create board (lowercase n)
-  def handle_key(%{key: :char, char: "n"} = e, state) do
+  defp handle_command_key(%{key: :char, char: "n"} = e, state) do
     if modifier?(e), do: {state, []}, else: {open_create_board(state), []}
   end
 
   # Create category (uppercase N — no ctrl/meta)
-  def handle_key(%{key: :char, char: "N"} = e, state) do
+  defp handle_command_key(%{key: :char, char: "N"} = e, state) do
     if modifier?(e), do: {state, []}, else: {open_create_category(state), []}
   end
 
   # Edit (lowercase e = board, uppercase E = category)
-  def handle_key(%{key: :char, char: "e"} = e, state) do
+  defp handle_command_key(%{key: :char, char: "e"} = e, state) do
     if modifier?(e), do: {state, []}, else: {open_edit_board(state), []}
   end
 
-  def handle_key(%{key: :char, char: "E"} = e, state) do
+  defp handle_command_key(%{key: :char, char: "E"} = e, state) do
     if modifier?(e), do: {state, []}, else: {open_edit_category(state), []}
   end
 
@@ -367,7 +370,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
   # char combination for archive-category; for now, we disambiguate by
   # checking whether a board or category is highlighted. The plan's explicit
   # "Shift+D" for category archive is realised as "D on a category row".
-  def handle_key(%{key: :char, char: "D"} = e, state) do
+  defp handle_command_key(%{key: :char, char: "D"} = e, state) do
     if modifier?(e) do
       {state, []}
     else
@@ -379,7 +382,7 @@ defmodule Foglet.TUI.Screens.Sysop.BoardsView do
     end
   end
 
-  def handle_key(_event, state), do: {state, []}
+  defp handle_command_key(_event, state), do: {state, []}
 
   defp modifier?(event), do: Map.get(event, :ctrl) || Map.get(event, :meta)
 

@@ -139,7 +139,7 @@ defmodule Foglet.TUI.Screens.Moderation do
     moderation_mod = domain_module(context, :moderation, Foglet.Moderation)
 
     effect =
-      Effect.task(op, :moderation, fn ->
+      Effect.task(op, fn ->
         case op do
           :resolve_report ->
             moderation_mod.resolve_report(context.current_user, Map.get(payload, :report_id), %{
@@ -876,13 +876,13 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp load_workspace_effect(%Context{} = context) do
     moderation_mod = domain_module(context, :moderation, Foglet.Moderation)
 
-    Effect.task(:load_moderation_workspace, :moderation, fn ->
+    Effect.task(:load_moderation_workspace, fn ->
       moderation_mod.workspace_snapshot(context.current_user)
     end)
   end
 
   defp invites_effect(op, %Context{} = context, invites) do
-    Effect.task(op, :moderation, fn ->
+    Effect.task(op, fn ->
       case op do
         :moderation_load_invites -> InvitesActions.load(context.current_user, invites)
         :moderation_generate_invite -> InvitesActions.generate(context.current_user, invites)

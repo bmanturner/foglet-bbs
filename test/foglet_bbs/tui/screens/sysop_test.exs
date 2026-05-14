@@ -315,8 +315,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert state.active_tab == 4
       assert state.users_view == :loading
 
-      assert [%Effect{type: :task, payload: %{op: :sysop_load_users, screen_key: :sysop}}] =
+      assert [%Effect{type: :task, payload: %{op: :sysop_load_users, screen_key: screen_key}}] =
                effects
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     test "tab load with struct session_context does not raise on Access lookup" do
@@ -345,8 +347,10 @@ defmodule Foglet.TUI.Screens.SysopTest do
       assert jump_state.active_tab == 4
       assert jump_state.users_view == :loading
 
-      assert [%Effect{type: :task, payload: %{op: :sysop_load_users, screen_key: :sysop}}] =
+      assert [%Effect{type: :task, payload: %{op: :sysop_load_users, screen_key: screen_key}}] =
                jump_effects
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     test "task result stores loaded sysop submodule state" do
