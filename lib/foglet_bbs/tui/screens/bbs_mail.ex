@@ -241,9 +241,8 @@ defmodule Foglet.TUI.Screens.BBSMail do
         text("Hide this message from your view? The other participant will keep their copy.",
           style: %{fg: theme.warning.fg}
         ),
-        text("Y confirm   N cancel", style: %{fg: theme.dim.fg}),
-        status_lines(state, theme)
-      ]
+        text("Y confirm   N cancel", style: %{fg: theme.dim.fg})
+      ] ++ status_lines(state, theme)
     end
   end
 

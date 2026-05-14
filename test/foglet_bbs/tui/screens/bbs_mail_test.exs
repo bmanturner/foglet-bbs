@@ -78,6 +78,25 @@ defmodule Foglet.TUI.Screens.BBSMailTest do
       assert state.body == "li"
     end
 
+    test "pending delete confirmation render tree is valid for Raxol layout" do
+      sender = user_fixture(%{handle: "sender#{System.unique_integer([:positive])}"})
+      recipient = user_fixture(%{handle: "recipient#{System.unique_integer([:positive])}"})
+      {:ok, message} = DMs.send_message(sender, recipient, %{body: "hide me"})
+
+      tree =
+        BBSMail.render(
+          %State{
+            mode: :conversation,
+            participant: sender,
+            messages: [message],
+            pending_delete_id: message.id
+          },
+          Context.new(current_user: recipient, route: :bbs_mail, terminal_size: {100, 30})
+        )
+
+      assert %{} = Raxol.UI.Layout.Preparer.prepare(tree)
+    end
+
     test "send result reload scrolls conversation to show appended reply" do
       sender = user_fixture(%{handle: "sender#{System.unique_integer([:positive])}"})
       recipient = user_fixture(%{handle: "recipient#{System.unique_integer([:positive])}"})
