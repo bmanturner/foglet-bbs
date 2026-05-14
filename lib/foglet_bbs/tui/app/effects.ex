@@ -170,6 +170,7 @@ defmodule Foglet.TUI.App.Effects do
         type: :task,
         payload: %{op: op, screen_key: screen_key, fun: fun}
       }) do
+    screen_key = resolve_task_screen_key(state, screen_key)
     user_id = current_user_id(state)
 
     task =
@@ -187,6 +188,14 @@ defmodule Foglet.TUI.App.Effects do
       {next_state, cmds} = apply_effect(acc_state, effect)
       {next_state, acc_cmds ++ cmds}
     end)
+  end
+
+  defp resolve_task_screen_key(%App{} = state, screen_key) do
+    if screen_key == Effect.current_screen_key() do
+      Routing.screen_key(Routing.current_route(state))
+    else
+      screen_key
+    end
   end
 
   defp log_task_failure(

@@ -29,7 +29,7 @@ defmodule Foglet.TUI.Screens.BoardNews do
     state = %{state | status: :loading}
 
     effects = [
-      Foglet.TUI.Effect.task(:load_board_news, :thread_list, fn ->
+      Foglet.TUI.Effect.task(:load_board_news, fn ->
         {BoardFeeds.list_feeds(actor, board_id), BoardFeeds.list_cached_items(actor, board_id)}
       end)
     ]

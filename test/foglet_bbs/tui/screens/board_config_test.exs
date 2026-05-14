@@ -54,11 +54,12 @@ defmodule Foglet.TUI.Screens.BoardConfigTest do
        [
          %Effect{
            type: :task,
-           payload: %{op: :update_feed_ttl, screen_key: :thread_list}
+           payload: %{op: :update_feed_ttl, screen_key: screen_key}
          }
        ]} =
         BoardConfig.update({:key, %{key: :enter}}, state, context())
 
+      assert screen_key == Effect.current_screen_key()
       assert new_state.message == "Saving TTL for selected feed…"
     end
   end

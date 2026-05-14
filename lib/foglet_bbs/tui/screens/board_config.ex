@@ -32,7 +32,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     actor = context.current_user
 
     effect =
-      Foglet.TUI.Effect.task(:load_board_feed_config, :thread_list, fn ->
+      Foglet.TUI.Effect.task(:load_board_feed_config, fn ->
         BoardFeeds.list_feeds(actor, board_id)
       end)
 
@@ -77,7 +77,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     url = String.trim(state.input)
 
     effect =
-      Foglet.TUI.Effect.task(:add_board_feed, :thread_list, fn ->
+      Foglet.TUI.Effect.task(:add_board_feed, fn ->
         BoardFeeds.create_feed(actor, board_id, %{url: url, cache_ttl_seconds: parse_ttl(state)})
       end)
 
@@ -106,7 +106,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     feed = selected_feed(state)
 
     effect =
-      Foglet.TUI.Effect.task(:update_feed_ttl, :thread_list, fn ->
+      Foglet.TUI.Effect.task(:update_feed_ttl, fn ->
         BoardFeeds.update_feed_ttl(actor, Map.fetch!(feed, :id), ttl)
       end)
 
@@ -147,7 +147,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     actor = context.current_user
 
     effect =
-      Foglet.TUI.Effect.task(:refresh_board_feeds, :thread_list, fn ->
+      Foglet.TUI.Effect.task(:refresh_board_feeds, fn ->
         BoardFeeds.refresh_board(actor, board_id, force: true)
       end)
 

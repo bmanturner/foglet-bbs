@@ -120,7 +120,7 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
     {loading_state, [%Effect{type: :task, payload: payload} = effect]} =
       ThreadList.update(:load, state, ctx)
 
-    assert effect == Effect.task(:load_threads, :thread_list, payload.fun)
+    assert effect == Effect.task(:load_threads, payload.fun)
     rows = payload.fun.()
 
     {loaded_state, []} =
@@ -193,11 +193,12 @@ defmodule Foglet.TUI.Screens.ThreadListTest do
             [
               %Effect{
                 type: :task,
-                payload: %{op: :load_threads, screen_key: :thread_list, fun: fun}
+                payload: %{op: :load_threads, screen_key: screen_key, fun: fun}
               }
             ]} =
              ThreadList.update(:load, state, ctx)
 
+    assert screen_key == Effect.current_screen_key()
     assert is_function(fun, 0)
   end
 

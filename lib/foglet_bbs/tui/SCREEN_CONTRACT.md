@@ -159,8 +159,11 @@ Use `route_params` for route-owned identity such as `board_id`, `thread_id`, or
 
 - `Effect.navigate(screen, params)` changes route and dispatches
   `:on_route_enter`.
-- `Effect.task(op, screen_key, fun)` runs work through App and returns a
-  `{:task_result, op, result}` message.
+- `Effect.task(op, fun)` runs work through App for the active screen and
+  returns a `{:task_result, op, result}` message.
+- `Effect.task(op, screen_key, fun)` is the explicit-screen variant for work
+  that intentionally routes to another screen, such as a task queued after a
+  preceding navigation effect.
 - `Effect.open_modal(modal)` and `Effect.dismiss_modal()` control App-owned
   modal state.
 - `Effect.modal_submit(screen_key, kind, payload)` routes a form submit payload
@@ -183,7 +186,7 @@ end
 
 def update({:modal_submit, :new_item, payload}, state, context) do
   effect =
-    Effect.task(:create_item, :example, fn ->
+    Effect.task(:create_item, fn ->
       Foglet.Items.create_item(context.current_user, payload)
     end)
 
@@ -255,8 +258,10 @@ Current Phase 43 examples are PostReader, Sysop, Login, MainMenu, NewThread, and
 - [ ] Use `Foglet.TUI.Context` for session, route, terminal, and dependency
       override data.
 - [ ] Emit `Foglet.TUI.Effect` values for runtime work.
-- [ ] Use `Effect.task/3` for domain reads/writes and handle
+- [ ] Use `Effect.task/2` for active-screen domain reads/writes and handle
       `{:task_result, op, result}` in `update/3`.
+- [ ] Use `Effect.task/3` only when routing a task result to an explicit
+      non-active screen key is intentional.
 - [ ] Keep authorization and durable mutations inside the owning context.
 - [ ] Pass explicit chrome and breadcrumb data.
 - [ ] Handle form submit payloads at the reducer boundary.

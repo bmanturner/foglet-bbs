@@ -51,7 +51,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
       new_state = %{state | status: :loading, last_op: :load_threads, last_error: nil}
 
       effect =
-        Effect.task(:load_threads, :thread_list, fn ->
+        Effect.task(:load_threads, fn ->
           dispatch_thread_load(threads_mod, board_id, user_id)
         end)
 
