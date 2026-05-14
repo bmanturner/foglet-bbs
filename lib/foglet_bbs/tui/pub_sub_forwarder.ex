@@ -115,7 +115,8 @@ defmodule Foglet.TUI.PubSubForwarder do
        topics: topics,
        pubsub: pubsub,
        last_forwarded: nil,
-       last_unread_count: nil
+       last_unread_count: nil,
+       last_dm_unread_count: nil
      }}
   end
 
@@ -181,19 +182,25 @@ defmodule Foglet.TUI.PubSubForwarder do
         %{state | last_unread_count: nil}
 
       user_id ->
-        count = Foglet.Notifications.unread_count(user_id)
+        notification_count = Foglet.Notifications.unread_count(user_id)
+        dm_count = Foglet.DMs.unread_count(user_id)
+        notifications_changed? = notification_count != state.last_unread_count
+        dms_changed? = dm_count != state.last_dm_unread_count
 
-        if count != state.last_unread_count do
+        if notifications_changed? do
           send(
             state.dispatcher_pid,
             {:subscription,
-             {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, count}}}
+             {:screen_task_result, :main_menu, :load_unread_notifications_count,
+              {:ok, notification_count}}}
           )
+        end
 
+        if notifications_changed? or dms_changed? do
           send(state.dispatcher_pid, {:subscription, :refresh_mail})
         end
 
-        %{state | last_unread_count: count}
+        %{state | last_unread_count: notification_count, last_dm_unread_count: dm_count}
     end
   end
 
