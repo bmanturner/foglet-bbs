@@ -2327,7 +2327,7 @@ defmodule Foglet.TUI.AppTest do
 
       assert new_state.unread_count == 3
       assert "N 3" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(new_state)
-      assert cmds == []
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
       refute_received :unread_count
     end
 
@@ -2348,7 +2348,7 @@ defmodule Foglet.TUI.AppTest do
       assert new_state.unread_count == 1
       assert "N 1" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(new_state)
       assert new_state |> App.view() |> AsciiRenderer.render({64, 22}) =~ "N 1"
-      assert cmds == []
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
       refute_received :unread_count
 
       eighty_col_state = %{new_state | terminal_size: {80, 24}}
@@ -2390,7 +2390,7 @@ defmodule Foglet.TUI.AppTest do
       assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
-      assert cmds == []
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
       refute_received :unread_count
     end
 
@@ -2409,7 +2409,10 @@ defmodule Foglet.TUI.AppTest do
       assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: inbox_task}] = cmds
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
+             ] = cmds
 
       assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
                inbox_task.()
@@ -2434,7 +2437,10 @@ defmodule Foglet.TUI.AppTest do
       assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: inbox_task}] = cmds
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
+             ] = cmds
 
       assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
                inbox_task.()
@@ -2477,7 +2483,10 @@ defmodule Foglet.TUI.AppTest do
       assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
-      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+      assert [
+               %Raxol.Core.Runtime.Command{type: :task},
+               %Raxol.Core.Runtime.Command{type: :task}
+             ] = cmds
     end
 
     test "stale Inbox load results do not remove a just-broadcast unread row", %{

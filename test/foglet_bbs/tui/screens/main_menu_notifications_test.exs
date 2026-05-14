@@ -77,7 +77,7 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
     assert updated.notifications_status == :idle
   end
 
-  test "notification PubSub events apply the app-shell unread count without a stale reload" do
+  test "notification PubSub events apply the app-shell unread count and request authoritative reload" do
     {updated, effects} =
       MainMenu.update(
         {:notifications, :created, %{user_id: "viewer"}},
@@ -87,7 +87,7 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
 
     assert updated.notifications_status == :idle
     assert updated.unread_notifications_count == 4
-    assert effects == []
+    assert [%Effect{type: :task, payload: %{op: :load_unread_notifications_count}}] = effects
   end
 
   test "inbox key routes to the notifications screen" do

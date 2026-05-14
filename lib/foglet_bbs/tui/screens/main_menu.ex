@@ -330,7 +330,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
          local_state
          | unread_notifications_count: context.unread_count,
            notifications_status: :idle
-       }, []}
+       }, [load_unread_notifications_count_task_effect(context)]}
     else
       {local_state, []}
     end
