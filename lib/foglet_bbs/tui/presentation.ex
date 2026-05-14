@@ -61,6 +61,7 @@ defmodule Foglet.TUI.Presentation do
     :verify,
     :main_menu,
     :notifications,
+    :bbs_mail,
     :online_now,
     :board_list,
     :thread_list,

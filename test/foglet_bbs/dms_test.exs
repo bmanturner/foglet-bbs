@@ -30,6 +30,11 @@ defmodule Foglet.DMsTest do
       assert notification.payload["message_id"] == message.id
       assert notification.payload["preview"] == "hello **there**"
       assert Notifications.list_recent(sender) == []
+
+      assert {:ok, target} = Notifications.resolve_open_target(recipient, notification)
+      assert target.kind == :dm
+      assert target.message_id == message.id
+      assert target.participant_id == sender.id
     end
 
     test "rejects self-DMs and blank bodies" do
@@ -74,6 +79,23 @@ defmodule Foglet.DMsTest do
                second.id,
                third.id
              ]
+    end
+
+    test "summarizes visible conversations for inbox and sent views" do
+      alice = user_fixture(%{handle: "alice#{System.unique_integer([:positive])}"})
+      bob = user_fixture(%{handle: "bob#{System.unique_integer([:positive])}"})
+      carol = user_fixture(%{handle: "carol#{System.unique_integer([:positive])}"})
+
+      {:ok, _bob_to_alice} = DMs.send_message(bob, alice, %{body: "bob ping"})
+      {:ok, _alice_to_bob} = DMs.send_message(alice, bob, %{body: "alice reply"})
+      {:ok, _carol_to_alice} = DMs.send_message(carol, alice, %{body: "carol ping"})
+
+      inbox = DMs.list_conversations(alice, :inbox)
+      sent = DMs.list_conversations(alice, :sent)
+
+      assert Enum.map(inbox, & &1.participant.id) |> Enum.sort() == Enum.sort([bob.id, carol.id])
+      assert Enum.map(sent, & &1.participant.id) == [bob.id]
+      assert Enum.find(inbox, &(&1.participant.id == carol.id)).unread_count == 1
     end
 
     test "marks only visible recipient messages read and tracks unread counts by conversation" do

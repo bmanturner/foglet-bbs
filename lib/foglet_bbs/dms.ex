@@ -49,6 +49,60 @@ defmodule Foglet.DMs do
     |> Repo.all()
   end
 
+  @type conversation_summary :: %{
+          participant: User.t(),
+          last_message: Message.t(),
+          last_at: DateTime.t(),
+          preview: String.t(),
+          unread_count: non_neg_integer()
+        }
+
+  @spec get_visible_message(user_ref(), Ecto.UUID.t()) ::
+          {:ok, Message.t()} | {:error, :not_found}
+  def get_visible_message(user, message_id) when is_binary(message_id) do
+    user_id = user_id!(user)
+
+    case Message
+         |> visible_to(user_id)
+         |> preload([:sender, :recipient])
+         |> Repo.get(message_id) do
+      nil -> {:error, :not_found}
+      %Message{} = message -> {:ok, message}
+    end
+  end
+
+  @spec list_conversations(user_ref(), :inbox | :sent) :: [conversation_summary()]
+  def list_conversations(user, mode \\ :inbox) when mode in [:inbox, :sent] do
+    user_id = user_id!(user)
+    unread_counts = conversation_unread_counts(user_id)
+
+    Message
+    |> visible_to(user_id)
+    |> preload([:sender, :recipient])
+    |> order_by([message], desc: message.inserted_at, desc: message.id)
+    |> Repo.all()
+    |> Enum.reduce(%{}, fn message, acc ->
+      participant = if message.sender_id == user_id, do: message.recipient, else: message.sender
+      participant_id = participant.id
+
+      if Map.has_key?(acc, participant_id) do
+        acc
+      else
+        Map.put(acc, participant_id, %{
+          participant: participant,
+          last_message: message,
+          last_at: message.inserted_at,
+          preview: preview(message.body),
+          unread_count: Map.get(unread_counts, participant_id, 0),
+          sent?: message.sender_id == user_id
+        })
+      end
+    end)
+    |> Map.values()
+    |> Enum.filter(fn summary -> mode == :inbox or summary.sent? end)
+    |> Enum.sort_by(& &1.last_at, {:desc, DateTime})
+  end
+
   @spec unread_count(user_ref()) :: non_neg_integer()
   def unread_count(user) do
     user_id = user_id!(user)

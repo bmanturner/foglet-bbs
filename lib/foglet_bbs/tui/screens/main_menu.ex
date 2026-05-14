@@ -64,6 +64,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     %{key: "B", label: "Boards", glyph: "●", kind: :destination, visibility: :always},
     %{key: "C", label: "Compose", glyph: "✎", kind: :destination, visibility: :always},
     %{key: "I", label: "Inbox", glyph: "✉", kind: :destination, visibility: :authenticated},
+    %{key: "L", label: "BBS Mail", glyph: "✉", kind: :destination, visibility: :authenticated},
     %{key: "N", label: "Online Now", glyph: "◌", kind: :destination, visibility: :always},
     %{key: "D", label: "Door Games", glyph: "▸", kind: :destination, visibility: :doors},
     %{key: "A", label: "Account", glyph: "◇", kind: :destination, visibility: :account},
@@ -161,6 +162,17 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
     if context.current_user do
       {local_state, [Effect.navigate(:notifications)]}
+    else
+      {local_state, []}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["l", "L"] do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {local_state, [Effect.navigate(:bbs_mail)]}
     else
       {local_state, []}
     end

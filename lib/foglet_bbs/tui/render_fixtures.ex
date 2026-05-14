@@ -26,6 +26,7 @@ defmodule Foglet.TUI.RenderFixtures do
 
   alias Foglet.TUI.Screens.{
     Account,
+    BBSMail,
     BoardConfig,
     BoardList,
     BoardNews,
@@ -48,7 +49,7 @@ defmodule Foglet.TUI.RenderFixtures do
   alias Foglet.Threads.ThreadEntry
 
   @screens ~w(
-    login register verify main_menu notifications online_now board_list thread_list board_screen
+    login register verify main_menu notifications bbs_mail online_now board_list thread_list board_screen
     post_reader post_composer new_thread door_list account moderation sysop
   )a
 
@@ -72,6 +73,7 @@ defmodule Foglet.TUI.RenderFixtures do
           | :verify
           | :main_menu
           | :notifications
+          | :bbs_mail
           | :online_now
           | :board_list
           | :thread_list
@@ -673,6 +675,56 @@ defmodule Foglet.TUI.RenderFixtures do
 
   # --- per-screen population -----------------------------------------------
 
+  defp synthetic_mail_conversations do
+    bob = synthetic_user(%{id: "00000000-0000-0000-0000-000000000002", handle: "bob"})
+
+    [
+      %{
+        participant: bob,
+        last_at: ~U[2026-05-13 22:00:00.000000Z],
+        preview: "**Markdown** meetup notes and a `code` sample",
+        unread_count: 3,
+        sent?: false
+      }
+    ]
+  end
+
+  defp synthetic_mail_messages do
+    alice = synthetic_user()
+    bob = synthetic_user(%{id: "00000000-0000-0000-0000-000000000002", handle: "bob"})
+
+    [
+      %Foglet.DMs.Message{
+        id: "10000000-0000-0000-0000-000000000001",
+        sender_id: bob.id,
+        recipient_id: alice.id,
+        sender: bob,
+        recipient: alice,
+        body: "# Hello\nThis **BBS Mail** thread uses Markdown.",
+        inserted_at: ~U[2026-05-13 21:00:00.000000Z]
+      },
+      %Foglet.DMs.Message{
+        id: "10000000-0000-0000-0000-000000000002",
+        sender_id: alice.id,
+        recipient_id: bob.id,
+        sender: alice,
+        recipient: bob,
+        body: "Thanks -- `rendered` and wrapped like posts.",
+        inserted_at: ~U[2026-05-13 21:10:00.000000Z]
+      },
+      %Foglet.DMs.Message{
+        id: "10000000-0000-0000-0000-000000000003",
+        sender_id: bob.id,
+        recipient_id: alice.id,
+        sender: bob,
+        recipient: alice,
+        body:
+          "Unread reply with enough text to prove wrapping at supported terminal sizes without hiding the notice.",
+        inserted_at: ~U[2026-05-13 22:00:00.000000Z]
+      }
+    ]
+  end
+
   defp populate(:login, state, _size) do
     App.put_screen_state(state, :login, init_screen(Login, state))
   end
@@ -704,6 +756,19 @@ defmodule Foglet.TUI.RenderFixtures do
       |> Notifications.State.from_rows(synthetic_notifications())
 
     App.put_screen_state(state, :notifications, local_state)
+  end
+
+  defp populate(:bbs_mail, state, _size) do
+    local_state = %BBSMail.State{
+      mode: :conversation,
+      status: :loaded,
+      participant: synthetic_user(%{id: "00000000-0000-0000-0000-000000000002", handle: "bob"}),
+      conversations: synthetic_mail_conversations(),
+      messages: synthetic_mail_messages(),
+      info: "3 unread"
+    }
+
+    App.put_screen_state(state, :bbs_mail, local_state)
   end
 
   defp populate(:online_now, state, _size) do
