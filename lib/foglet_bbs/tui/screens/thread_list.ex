@@ -16,7 +16,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
   alias Foglet.PostingPolicy
   alias Foglet.Threads.ThreadEntry
   alias Foglet.TimeAgo
-  alias Foglet.TUI.{Context, Effect, ScrollKeys, TextWidth}
+  alias Foglet.TUI.{Context, Effect, KeyBinding, TextWidth}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.ThreadList.State
@@ -94,29 +94,16 @@ defmodule Foglet.TUI.Screens.ThreadList do
 
   def update({:key, %{key: key} = event}, %State{} = state, %Context{})
       when key in [:down, :up] do
-    {move_selection(state, ScrollKeys.vertical_delta(event)), []}
+    {move_selection(state, KeyBinding.vertical_delta(event)), []}
   end
 
   def update({:key, %{key: :char, char: c} = event}, %State{} = state, %Context{})
       when c in ["j", "k"] do
-    {move_selection(state, ScrollKeys.vertical_delta(event)), []}
+    {move_selection(state, KeyBinding.vertical_delta(event)), []}
   end
 
-  def update({:key, %{key: :enter}}, %State{} = state, %Context{}) do
-    case selected_thread(state) do
-      nil ->
-        {state, []}
-
-      thread ->
-        params = %{
-          board: state.board,
-          board_id: state.board_id,
-          thread: thread,
-          thread_id: Map.get(thread, :id)
-        }
-
-        {state, [Effect.navigate(:post_reader, params)]}
-    end
+  def update({:key, %{key: :enter} = event}, %State{} = state, %Context{}) do
+    if KeyBinding.submit?(event), do: open_selected_thread(state), else: {state, []}
   end
 
   def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
@@ -148,6 +135,23 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   def update(_message, %State{} = state, %Context{}), do: {state, []}
+
+  defp open_selected_thread(%State{} = state) do
+    case selected_thread(state) do
+      nil ->
+        {state, []}
+
+      thread ->
+        params = %{
+          board: state.board,
+          board_id: state.board_id,
+          thread: thread,
+          thread_id: Map.get(thread, :id)
+        }
+
+        {state, [Effect.navigate(:post_reader, params)]}
+    end
+  end
 
   @impl true
   @spec render(State.t(), Context.t()) :: any()
@@ -192,7 +196,7 @@ defmodule Foglet.TUI.Screens.ThreadList do
       %{
         label: "Navigate",
         commands: [
-          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
+          %{key: KeyBinding.commandbar_key(), label: "Select", priority: 10},
           %{key: "Enter", label: "Open", priority: 10}
         ]
       },
@@ -548,8 +552,12 @@ defmodule Foglet.TUI.Screens.ThreadList do
   end
 
   defp move_selection(%State{} = state, delta) do
-    threads = sort_threads(state.threads || [])
-    select_index(state, state.selected_index + delta, threads)
+    if delta in [-1, 1] do
+      threads = sort_threads(state.threads || [])
+      select_index(state, state.selected_index + delta, threads)
+    else
+      state
+    end
   end
 
   defp clamp_selection(%State{} = state) do

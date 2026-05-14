@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Screens.DoorList do
 
   alias Foglet.AppName
   alias Foglet.Doors.Manifest
-  alias Foglet.TUI.{Context, Effect, Layout, Modal, ScrollKeys, TextWidth, Theme}
+  alias Foglet.TUI.{Context, Effect, KeyBinding, Layout, Modal, TextWidth, Theme}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Text, as: StyledText
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -39,39 +39,31 @@ defmodule Foglet.TUI.Screens.DoorList do
 
   def update({:key, %{key: key} = event}, local_state, %Context{} = context)
       when key in [:up, :down] do
-    state = normalize_state(local_state, context)
-
-    {%{
-       state
-       | selected_index:
-           clamp(state.selected_index + ScrollKeys.vertical_delta(event), state.doors)
-     }, []}
+    move_selection(event, local_state, context)
   end
 
   def update({:key, %{key: :char, char: c} = event}, local_state, %Context{} = context)
       when c in ["j", "k"] do
-    state = normalize_state(local_state, context)
-
-    {%{
-       state
-       | selected_index:
-           clamp(state.selected_index + ScrollKeys.vertical_delta(event), state.doors)
-     }, []}
+    move_selection(event, local_state, context)
   end
 
-  def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
+  def update({:key, %{key: :enter} = event}, local_state, %Context{} = context) do
     state = normalize_state(local_state, context)
 
-    case selected_door(state) do
-      %Manifest{} = manifest ->
-        if Guest.guest?(context) do
-          {state, [Effect.open_modal(Guest.denial_modal(:door))]}
-        else
-          {state, [Effect.open_modal(confirm_modal(manifest))]}
-        end
+    if KeyBinding.submit?(event) do
+      case selected_door(state) do
+        %Manifest{} = manifest ->
+          if Guest.guest?(context) do
+            {state, [Effect.open_modal(Guest.denial_modal(:door))]}
+          else
+            {state, [Effect.open_modal(confirm_modal(manifest))]}
+          end
 
-      nil ->
-        {state, []}
+        nil ->
+          {state, []}
+      end
+    else
+      {state, []}
     end
   end
 
@@ -188,6 +180,18 @@ defmodule Foglet.TUI.Screens.DoorList do
   end
 
   defp doors_region(%State{} = state, theme, _context), do: door_rows(state, theme)
+
+  defp move_selection(event, local_state, %Context{} = context) do
+    state = normalize_state(local_state, context)
+
+    case KeyBinding.vertical_delta(event) do
+      delta when delta in [-1, 1] ->
+        {%{state | selected_index: clamp(state.selected_index + delta, state.doors)}, []}
+
+      nil ->
+        {state, []}
+    end
+  end
 
   defp wide_panel_widths(terminal_width) do
     [list, _gap, detail] =
@@ -314,7 +318,7 @@ defmodule Foglet.TUI.Screens.DoorList do
       %{
         label: "Nav",
         commands: [
-          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
+          %{key: KeyBinding.commandbar_key(), label: "Select", priority: 10},
           %{key: "Q", label: "Back", priority: 0}
         ]
       }

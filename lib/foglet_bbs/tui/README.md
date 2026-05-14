@@ -98,3 +98,17 @@ Use direct Raxol `text/2` calls when rendering one simple node is clearer.
 Prefer theme slot atoms with `Foglet.TUI.Text`; raw terminal color atoms are not
 accepted, and raw color values should stay limited to widgets that already
 document that contract.
+
+## Key Bindings
+
+Use `Foglet.TUI.KeyBinding` for common non-text-entry key predicates:
+scrolling, paging, home/end, submit, cancel, and help. It wraps
+`Foglet.TUI.ScrollKeys`, so the vertical movement convention remains
+`↑`/`k` for previous and `↓`/`j` for next.
+
+Do not use the `j`/`k` movement predicates while focus is inside text input,
+composer body text, or search/filter fields. In those contexts, character keys
+must remain typed input. Full-screen composers that follow the documented
+cancel fallback can call `KeyBinding.cancel?(event, composer?: true)` to treat
+`Ctrl+C` as the same reducer path as `Esc`; other surfaces should use plain
+`Esc` cancellation only.
