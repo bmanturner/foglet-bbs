@@ -9,7 +9,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
 
   alias Foglet.{Accounts, DMs, Moderation, TimeAgo}
   alias Foglet.DMs.Message
-  alias Foglet.TUI.{Context, Effect, Theme}
+  alias Foglet.TUI.{Context, Effect, KeyBinding, Theme}
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.MarkdownBody
 
@@ -162,8 +162,15 @@ defmodule Foglet.TUI.Screens.BBSMail do
     {%{state | compose_focus: :body, error: nil}, []}
   end
 
-  def update({:key, %{key: :char, char: c}}, state, context) when c in ["j", "k"],
-    do: update({:key, %{key: if(c == "k", do: :up, else: :down)}}, state, context)
+  def update({:key, %{key: :char, char: c} = event}, state, context) when c in ["j", "k"] do
+    state = normalize(state, context)
+    delta = KeyBinding.vertical_delta(event) || 0
+
+    case state.mode do
+      :conversation -> {%{state | scroll: max(state.scroll + delta, 0)}, []}
+      _ -> {select_delta(state, delta), []}
+    end
+  end
 
   def update({:key, %{key: :enter}}, state, context),
     do: open_selected(normalize(state, context), context)
@@ -212,7 +219,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
       do:
         {%{state | status: :deleting},
          [
-           Effect.task(:delete_mail, :bbs_mail, fn ->
+           Effect.task(:delete_mail, fn ->
              DMs.delete_from_my_view(context.current_user, state.pending_delete_id)
            end)
          ]},
@@ -246,6 +253,21 @@ defmodule Foglet.TUI.Screens.BBSMail do
       :compose -> {%{state | mode: :inbox}, []}
       :reply -> {%{state | mode: :conversation}, []}
       _ -> {state, [Effect.navigate(:main_menu)]}
+    end
+  end
+
+  def update({:key, event}, state, _context) when is_map(event) do
+    state = normalize(state)
+
+    if KeyBinding.cancel?(event) do
+      case state.mode do
+        :conversation -> {%{state | mode: :inbox, participant: nil, messages: []}, []}
+        :compose -> {%{state | mode: :inbox}, []}
+        :reply -> {%{state | mode: :conversation}, []}
+        _ -> {state, [Effect.navigate(:main_menu)]}
+      end
+    else
+      {state, []}
     end
   end
 
@@ -426,7 +448,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
     do:
       {%{state | status: :loading},
        [
-         Effect.task(:load_mail, :bbs_mail, fn ->
+         Effect.task(:load_mail, fn ->
            {:ok, DMs.list_conversations(context.current_user, state.mode)}
          end)
        ]}
@@ -449,7 +471,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
 
     {%{state | status: :loading},
      [
-       Effect.task(:load_conversation, :bbs_mail, fn ->
+       Effect.task(:load_conversation, fn ->
          _ = DMs.mark_conversation_read(context.current_user, participant)
          {:ok, DMs.list_conversation(context.current_user, participant)}
        end)
@@ -475,7 +497,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
          body when body != "" <- String.trim(state.body) do
       {%{state | status: :sending},
        [
-         Effect.task(:send_mail, :bbs_mail, fn ->
+         Effect.task(:send_mail, fn ->
            DMs.send_message(context.current_user, recipient, %{body: body})
          end)
        ]}
@@ -494,7 +516,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
       else:
         {%{state | status: :sending},
          [
-           Effect.task(:send_mail, :bbs_mail, fn ->
+           Effect.task(:send_mail, fn ->
              DMs.send_message(context.current_user, recipient, %{body: body})
            end)
          ]}
@@ -507,7 +529,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
       %Message{id: message_id} ->
         {%{state | status: :reporting, error: nil},
          [
-           Effect.task(:report_mail, :bbs_mail, fn ->
+           Effect.task(:report_mail, fn ->
              Moderation.create_report(context.current_user, %{
                target_kind: :dm,
                target_id: message_id,

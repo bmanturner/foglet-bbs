@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Screens.OnlineNow do
 
   alias Foglet.Accounts.PublicProfile
   alias Foglet.TerminalText
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, KeyBinding}
   alias Foglet.TUI.Screens.OnlineNow.State
   alias Foglet.TUI.Screens.Shared.Reporting
   alias Foglet.TUI.TextWidth
@@ -56,48 +56,20 @@ defmodule Foglet.TUI.Screens.OnlineNow do
     {%{state | status: :loading}, [load_online_now_effect(context)]}
   end
 
-  def update({:key, %{key: key}}, local_state, %Context{} = context)
-      when key in [:up, :down] do
-    state = normalize_state(local_state)
-    delta = if key == :up, do: -1, else: 1
-    {State.select_delta(state, delta, visible_row_limit(context)), []}
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["j", "k"] do
-    state = normalize_state(local_state)
-    delta = if c == "k", do: -1, else: 1
-    {State.select_delta(state, delta, visible_row_limit(context)), []}
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{})
-      when c in ["q", "Q", "b", "B"] do
-    {normalize_state(local_state), [Effect.navigate(:main_menu)]}
-  end
-
-  def update({:key, %{key: :escape}}, local_state, %Context{}) do
-    {normalize_state(local_state), [Effect.navigate(:main_menu)]}
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["v", "V"] do
+  def update({:key, event}, local_state, %Context{} = context) when is_map(event) do
     state = normalize_state(local_state)
 
-    case State.selected_row(state) do
-      %{user: user} when is_map(user) ->
-        profile = load_public_profile(user, context)
+    cond do
+      delta = KeyBinding.vertical_delta(event) ->
+        {State.select_delta(state, delta, visible_row_limit(context)), []}
 
-        modal =
-          Reporting.public_profile_modal(
-            :online_now,
-            :report_selected_user,
-            profile,
-            %{target_user: user}
-          )
+      back_key?(event) ->
+        {state, [Effect.navigate(:main_menu)]}
 
-        {state, [Effect.open_modal(modal)]}
+      plain_char?(event, ["v", "V"]) ->
+        open_selected_profile(state, context)
 
-      _other ->
+      true ->
         {state, []}
     end
   end
@@ -130,7 +102,7 @@ defmodule Foglet.TUI.Screens.OnlineNow do
     moderation_mod = domain_module(context, :moderation, Foglet.Moderation)
 
     effect =
-      Effect.task(:submit_user_report, :online_now, fn ->
+      Effect.task(:submit_user_report, fn ->
         moderation_mod.create_report(context.current_user, %{
           target_kind: Map.get(payload, :target_kind),
           target_id: Map.get(payload, :target_id),
@@ -185,6 +157,23 @@ defmodule Foglet.TUI.Screens.OnlineNow do
   end
 
   def update(_message, local_state, %Context{}), do: {normalize_state(local_state), []}
+
+  defp open_selected_profile(%State{} = state, %Context{} = context) do
+    case State.selected_row(state) do
+      %{user: user} when is_map(user) ->
+        profile = load_public_profile(user, context)
+
+        modal =
+          Reporting.public_profile_modal(:online_now, :report_selected_user, profile, %{
+            target_user: user
+          })
+
+        {state, [Effect.open_modal(modal)]}
+
+      _other ->
+        {state, []}
+    end
+  end
 
   @impl true
   @spec render(State.t() | nil, Context.t()) :: term()
@@ -304,10 +293,23 @@ defmodule Foglet.TUI.Screens.OnlineNow do
   defp load_online_now_effect(%Context{} = context) do
     online_now_mod = domain_module(context, :online_now, Foglet.Sessions.OnlineNow)
 
-    Effect.task(:load_online_now, :online_now, fn ->
+    Effect.task(:load_online_now, fn ->
       online_now_mod.list(current_user: context.current_user)
     end)
   end
+
+  defp back_key?(event),
+    do: KeyBinding.cancel?(event) or plain_char?(event, ["q", "Q", "b", "B"])
+
+  defp plain_char?(%{key: :char, char: char} = event, chars) when is_list(chars) do
+    char in chars and
+      Enum.all?(
+        [:ctrl, :control, :alt, :meta, :shift],
+        &(Map.get(event, &1, false) in [false, nil])
+      )
+  end
+
+  defp plain_char?(_event, _chars), do: false
 
   defp load_public_profile(user, %Context{} = context) when is_map(user) do
     profile_mod = domain_module(context, :public_profile, PublicProfile)

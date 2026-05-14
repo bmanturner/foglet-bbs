@@ -92,6 +92,87 @@ defmodule Foglet.TUI.BufferSnapshotTest do
     """)
   end
 
+  test "online now default fixture matches the full buffer snapshot" do
+    assert_screen(render_fixture(:online_now, fixture_opts()), ~B"""
+    ┌ Foglet ▸ Online Now ───────────────────────── @alice | 11:43 ┐
+    │                                                              │
+    │ 3 authenticated users online                                 │
+    │                                                              │
+    │ > @alice [SYSOP]                                    Online   │
+    │   @mod [MOD]                           Chatting in general   │
+    │   @foglet                                  Browsing boards   │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    └ Q Back   V Profile  ! Report  ↑/↓ Select ────────────────────┘
+    """)
+  end
+
+  test "notifications default fixture matches the full buffer snapshot" do
+    assert_screen(render_fixture(:notifications, fixture_opts()), ~B"""
+    ┌ Foglet ▸ Inbox ────────────────────────────── @alice | 11:43 ┐
+    │                                                              │
+    │ Inbox                                                        │
+    │ Inbox • 1 unread                                             │
+    │                                                              │
+    │ ┌─ Notifications ──────────────────────────────────────────┐ │
+    │ │> ● [mention] from @alice                 2d ago          │ │
+    │ │    Check the new welcome thread.                         │ │
+    │ │  · [dm] from @mod                        2d ago          │ │
+    │ │      See the moderator notes.                            │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ │                                                          │ │
+    │ └──────────────────────────────────────────────────────────┘ │
+    └ Q Back   Enter Open  R Read  A All read  ↑/↓ Select ─────────┘
+    """)
+  end
+
+  test "bbs mail default fixture matches the full buffer snapshot" do
+    assert_screen(render_fixture(:bbs_mail, fixture_opts()), ~B"""
+    ┌ Foglet ▸ BBS Mail - @bob ──────────────────── @alice | 11:43 ┐
+    │                                                              │
+    │ Foglet > BBS Mail > @bob                                     │
+    │                                                              │
+    │ Private to participants in normal UI. Not encrypted at rest; │
+    │                                                              │
+    │ may be visible to sysops/moderation/retention by policy.     │
+    │                                                              │
+    │ 3 unread                                                     │
+    │                                                              │
+    │ @bob  21h                                                    │
+    │                                                              │
+    │ HELLO                                                        │
+    │                                                              │
+    │ This BBS Mail thread uses Markdown.                          │
+    │                                                              │
+    │ @alice  20h                                                  │
+    │                                                              │
+    │ Thanks -- rendered and wrapped like posts.                   │
+    │                                                              │
+    │ @bob  20h                                                    │
+    └──────────────────────────────────────────────────────────────┘
+    """)
+  end
+
   defp fixture_opts do
     Keyword.merge(@size, seed_state: %{"session_context" => %{"clock_now" => @clock}})
   end

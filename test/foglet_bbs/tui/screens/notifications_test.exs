@@ -88,11 +88,12 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     {loading, effects} = Notifications.update(:on_route_enter, local, context())
 
     assert loading.status == :loading
+    active_screen_key = Effect.current_screen_key()
 
     assert [
              %Effect{
                type: :task,
-               payload: %{op: :load_notifications, screen_key: :notifications, fun: fun}
+               payload: %{op: :load_notifications, screen_key: ^active_screen_key, fun: fun}
              }
            ] = effects
 
@@ -188,11 +189,12 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     {marking, effects} = Notifications.update({:key, %{key: :char, char: "r"}}, local, context())
 
     assert marking.status == :marking_read
+    active_screen_key = Effect.current_screen_key()
 
     assert [
              %Effect{
                type: :task,
-               payload: %{op: :mark_notification_read, screen_key: :notifications, fun: fun}
+               payload: %{op: :mark_notification_read, screen_key: ^active_screen_key, fun: fun}
              }
            ] = effects
 
@@ -210,11 +212,12 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
     {opening, effects} = Notifications.update({:key, %{key: :enter}}, local, context())
 
     assert opening.status == :opening_target
+    active_screen_key = Effect.current_screen_key()
 
     assert [
              %Effect{
                type: :task,
-               payload: %{op: :open_notification_target, screen_key: :notifications, fun: fun}
+               payload: %{op: :open_notification_target, screen_key: ^active_screen_key, fun: fun}
              }
            ] = effects
 
@@ -265,6 +268,7 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
         )
 
       assert state.status == :loaded
+      active_screen_key = Effect.current_screen_key()
 
       assert [
                %Effect{
@@ -276,7 +280,11 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
                },
                %Effect{
                  type: :task,
-                 payload: %{op: :mark_notification_read, screen_key: :notifications, fun: fun}
+                 payload: %{
+                   op: :mark_notification_read,
+                   screen_key: ^active_screen_key,
+                   fun: fun
+                 }
                }
              ] = effects
 
@@ -325,9 +333,13 @@ defmodule Foglet.TUI.Screens.NotificationsTest do
       Notifications.update({:notifications, :created, %{user_id: "viewer"}}, local, context())
 
     assert loading.status == :loading
+    active_screen_key = Effect.current_screen_key()
 
     assert [
-             %Effect{type: :task, payload: %{op: :load_notifications, screen_key: :notifications}}
+             %Effect{
+               type: :task,
+               payload: %{op: :load_notifications, screen_key: ^active_screen_key}
+             }
            ] = effects
   end
 
