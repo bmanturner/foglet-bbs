@@ -1,6 +1,9 @@
 defmodule Foglet.TUI.Screens.PostReaderTest do
   use ExUnit.Case, async: true
 
+  import Foglet.TUI.Test, only: [assert_screen: 2, sigil_B: 2]
+
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.{Context, Effect}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
@@ -400,6 +403,30 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
     PostReader.render(local_state, context)
   end
 
+  defp render_buffer(%State{} = local_state, %Context{terminal_size: size} = context) do
+    local_state
+    |> PostReader.render(context)
+    |> AsciiRenderer.render(size)
+  end
+
+  defp snapshot_context(%State{} = state) do
+    Context.new(
+      current_user: %Foglet.Accounts.User{id: "u1", handle: "alice"},
+      terminal_size: {64, 22},
+      route: :post_reader,
+      route_params: %{
+        board: state.board,
+        board_id: state.board_id,
+        thread: state.thread,
+        thread_id: state.thread_id
+      },
+      session_context: %{
+        clock_now: ~U[2026-01-01 17:43:00Z],
+        domain: %{markdown: FakeMarkdown}
+      }
+    )
+  end
+
   defp handle_key_screen(key_event, state) do
     context = reader_context_from_state(state)
     local_state = reader_ss(state)
@@ -469,6 +496,90 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   # as the explicit dead-code audit evidence (AUDIT-12) proving both functions
   # are called and tested, not dead code.
   # ===========================================================================
+
+  describe "buffer snapshots" do
+    @snapshot_size {64, 22}
+
+    test "renders loaded thread content as a whole buffer" do
+      state =
+        State.new(
+          board: %{id: "b1", name: "General"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello"},
+          thread_id: "t1",
+          posts: FakePosts.list_reader_window("t1", []).posts,
+          status: :loaded,
+          selected_post_index: 0,
+          selected_action_post_index: 0
+        )
+
+      context = snapshot_context(state)
+      app_state = app_for_reader(state, terminal_size: @snapshot_size)
+      warmed = PostReader.prepare_after_load(app_state, state.posts, 0)
+
+      assert_screen(render_buffer(warmed, context), ~B"""
+      ┌ Foglet ▸ General ▸ Hello ───────────────── @alice | 05:43 PM ┐
+      │▶ Post 1 of 2 • #1 • ▲0 • @alice • 3w ago                     │
+      ││ MD[first]                                                   │
+      │──────────────────────────────────────────────────────────────│
+      │Post 2 of 2 • #2 • ▲0 • @bob • 3w ago                         │
+      ││ MD[second]                                                  │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      └ Q Back   R Reply  V Profile  ! Report  U Upvote   ↑/↓ Select ┘
+      """)
+    end
+
+    test "renders load errors as a whole buffer" do
+      state =
+        State.new(
+          board: %{id: "b1", name: "General"},
+          board_id: "b1",
+          thread: %{id: "t1", title: "Hello"},
+          thread_id: "t1",
+          status: {:error, :not_found},
+          posts: []
+        )
+
+      assert_screen(render_buffer(state, snapshot_context(state)), ~B"""
+      ┌ Foglet ▸ General ▸ Hello ───────────────── @alice | 05:43 PM ┐
+      │Couldn't load posts. Press Q to back out and try again.       │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      └ Q Back   R Reply  V Profile  ! Report  U Upvote   N Next ────┘
+      """)
+    end
+  end
 
   test "load_posts/2 populates state.screen_state[:post_reader].posts", %{state: state} do
     # load_posts/2 intentional callback surface (READER-02, D-03, D-04)
@@ -568,8 +679,12 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       context = reader_context_from_state(app_for_reader(state))
       {new_state, effects} = PostReader.update({:key, %{key: :char, char: "C"}}, state, context)
+      active_screen_key = Effect.current_screen_key()
 
-      assert %Effect{type: :task, payload: %{op: :load_reply_context, screen_key: :post_reader}} =
+      assert %Effect{
+               type: :task,
+               payload: %{op: :load_reply_context, screen_key: ^active_screen_key}
+             } =
                List.first(effects)
 
       assert new_state.last_op == :load_reply_context
@@ -885,12 +1000,17 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "PostReader.update(:load, state, context) emits bounded load_posts_window task" do
     context = post_reader_context()
     state = PostReader.State.from_context(context)
+    active_screen_key = Effect.current_screen_key()
 
     assert {%State{status: :loading, last_op: :load_posts_window, last_error: nil},
             [
               %Effect{
                 type: :task,
-                payload: %{op: :load_posts_window, screen_key: :post_reader, fun: fun}
+                payload: %{
+                  op: :load_posts_window,
+                  screen_key: ^active_screen_key,
+                  fun: fun
+                }
               }
             ]} = PostReader.update(:load, state, context)
 
@@ -920,12 +1040,17 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "PostReader.update/3 reloads matching active thread activity through reader window" do
     context = post_reader_context()
     state = PostReader.State.from_context(context)
+    active_screen_key = Effect.current_screen_key()
 
     assert {%State{last_op: :load_posts_window},
             [
               %Effect{
                 type: :task,
-                payload: %{op: :load_posts_window, screen_key: :post_reader, fun: fun}
+                payload: %{
+                  op: :load_posts_window,
+                  screen_key: ^active_screen_key,
+                  fun: fun
+                }
               }
             ]} = PostReader.update({:thread_activity, "t1", :new_post}, state, context)
 

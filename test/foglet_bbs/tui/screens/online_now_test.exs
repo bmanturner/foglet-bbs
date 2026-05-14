@@ -87,11 +87,12 @@ defmodule Foglet.TUI.Screens.OnlineNowTest do
     {loading, effects} = OnlineNow.update(:on_route_enter, local, context())
 
     assert loading.status == :loading
+    active_screen_key = Effect.current_screen_key()
 
     assert [
              %Effect{
                type: :task,
-               payload: %{op: :load_online_now, screen_key: :online_now, fun: fun}
+               payload: %{op: :load_online_now, screen_key: ^active_screen_key, fun: fun}
              }
            ] = effects
 

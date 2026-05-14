@@ -18,9 +18,9 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   alias Foglet.Accounts.PublicProfile
   alias Foglet.Accounts.User
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.Modal
   alias Foglet.TUI.RoleBadge
-  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.Widgets.Display.ConsoleTable
 
   import Raxol.Core.Renderer.View
@@ -101,13 +101,14 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   end
 
   @spec handle_key(map(), t()) :: {t(), list()}
-  def handle_key(%{key: key} = event, state) when key in [:up, :down],
-    do: {move(state, ScrollKeys.vertical_delta(event)), []}
+  def handle_key(event, state) do
+    case KeyBinding.vertical_delta(event) do
+      nil -> handle_command_key(event, state)
+      delta -> {move(state, delta), []}
+    end
+  end
 
-  def handle_key(%{key: :char, char: char} = event, state) when char in ["j", "k"],
-    do: {move(state, ScrollKeys.vertical_delta(event)), []}
-
-  def handle_key(%{key: :char, char: c}, state) when c in ["V", "v"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["V", "v"],
     do: open_selected_profile(state)
 
   # Phase 29 D-15 + A2 disambiguation: each transition keybind is gated by
@@ -115,19 +116,19 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   # target :active but disambiguate on source — [A] only when source is
   # :pending; [U] only when source is :suspended. Pressing a non-advertised
   # key is a no-op (no boundary call, no status_message change).
-  def handle_key(%{key: :char, char: c}, state) when c in ["A", "a"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["A", "a"],
     do: maybe_transition(state, :pending, :active)
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["R", "r"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["R", "r"],
     do: maybe_transition(state, :pending, :rejected)
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["S", "s"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["S", "s"],
     do: maybe_transition(state, :active, :suspended)
 
-  def handle_key(%{key: :char, char: c}, state) when c in ["U", "u"],
+  defp handle_command_key(%{key: :char, char: c}, state) when c in ["U", "u"],
     do: maybe_transition(state, :suspended, :active)
 
-  def handle_key(_event, state), do: {state, []}
+  defp handle_command_key(_event, state), do: {state, []}
 
   defp maybe_transition(%__MODULE__{rows: []} = state, _required_from, _target),
     do: {state, []}
@@ -191,14 +192,14 @@ defmodule Foglet.TUI.Screens.Sysop.UsersView do
   # is in `Accounts.valid_status_transitions/1` for the focused row's source
   # status are advertised. A2 disambiguation: [A] Approve targets :active
   # from :pending only; [U] Reactivate targets :active from :suspended only.
-  defp footer_text(%__MODULE__{rows: []}), do: "[#{ScrollKeys.commandbar_key()}] Move"
+  defp footer_text(%__MODULE__{rows: []}), do: "[#{KeyBinding.commandbar_key()}] Move"
 
   defp footer_text(%__MODULE__{rows: rows, selection_index: idx}) do
     {focused_status, _user} = Enum.at(rows, idx)
     allowed = Accounts.valid_status_transitions(focused_status)
 
     [
-      "[#{ScrollKeys.commandbar_key()}] Move",
+      "[#{KeyBinding.commandbar_key()}] Move",
       "[V] Profile",
       if(focused_status == :pending and :active in allowed, do: "[A] Approve"),
       if(focused_status == :pending and :rejected in allowed, do: "[R] Reject"),

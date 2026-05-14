@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.Login.ResetConsume do
   """
 
   alias Foglet.Accounts.Verification
-  alias Foglet.TUI.{Context, Effect, Input}
+  alias Foglet.TUI.{Context, Effect, Input, KeyBinding}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.FocusInput
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -40,6 +40,12 @@ defmodule Foglet.TUI.Screens.Login.ResetConsume do
       Input.forward_tab?(event) ->
         move_focus(state, :next)
 
+      KeyBinding.submit?(event) ->
+        submit_reset_consume(state)
+
+      KeyBinding.cancel?(event) ->
+        {:update, LoginState.put(state, LoginState.default()), []}
+
       true ->
         handle_input_key(event, state)
     end
@@ -55,13 +61,6 @@ defmodule Foglet.TUI.Screens.Login.ResetConsume do
     login_ss = LoginState.get(state)
     prev_focus = LoginState.prev_reset_consume_focus(login_ss.focused_field)
     {:update, LoginState.put(state, %{login_ss | focused_field: prev_focus}), []}
-  end
-
-  defp handle_input_key(%{key: :enter}, state), do: submit_reset_consume(state)
-
-  defp handle_input_key(%{key: :escape}, state) do
-    # D-07: Escape clears token/password fields and returns to the menu.
-    {:update, LoginState.put(state, LoginState.default()), []}
   end
 
   defp handle_input_key(event, state) do
@@ -139,7 +138,7 @@ defmodule Foglet.TUI.Screens.Login.ResetConsume do
       submitting_state = LoginState.put(state, %{login_ss | error: nil})
 
       effect =
-        Effect.task(:reset_token, :login, fn ->
+        Effect.task(:reset_token, fn ->
           verification_mod.consume_reset_token(raw_token, %{password: new_password})
         end)
 

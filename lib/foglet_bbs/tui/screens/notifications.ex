@@ -9,7 +9,7 @@ defmodule Foglet.TUI.Screens.Notifications do
 
   alias Foglet.TerminalText
   alias Foglet.TimeAgo
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, KeyBinding}
   alias Foglet.TUI.Screens.Notifications.State
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
@@ -124,23 +124,33 @@ defmodule Foglet.TUI.Screens.Notifications do
     {%{state | status: :loading}, [load_notifications_effect(context)]}
   end
 
-  def update({:key, %{key: key}}, local_state, %Context{} = context) when key in [:up, :down] do
+  def update({:key, event}, local_state, %Context{} = context) when is_map(event) do
     state = normalize_state(local_state)
-    delta = if key == :up, do: -1, else: 1
-    {State.select_delta(state, delta, visible_row_limit(context)), []}
+
+    cond do
+      delta = KeyBinding.vertical_delta(event) ->
+        {State.select_delta(state, delta, visible_row_limit(context)), []}
+
+      plain_char?(event, ["r", "R"]) ->
+        mark_selected_read(state, context)
+
+      plain_char?(event, ["a", "A"]) ->
+        mark_all_read(state, context)
+
+      KeyBinding.submit?(event) or plain_char?(event, ["o", "O"]) ->
+        open_selected_notification(state, context)
+
+      back_key?(event) ->
+        {state, [Effect.navigate(:main_menu)]}
+
+      true ->
+        {state, []}
+    end
   end
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["j", "k"] do
-    state = normalize_state(local_state)
-    delta = if c == "k", do: -1, else: 1
-    {State.select_delta(state, delta, visible_row_limit(context)), []}
-  end
+  def update(_message, local_state, %Context{}), do: {normalize_state(local_state), []}
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["r", "R"] do
-    state = normalize_state(local_state)
-
+  defp mark_selected_read(%State{} = state, %Context{} = context) do
     case State.selected_row(state) do
       %{read_at: nil} = notification ->
         {%{state | status: :marking_read}, [mark_read_effect(context, notification)]}
@@ -153,10 +163,7 @@ defmodule Foglet.TUI.Screens.Notifications do
     end
   end
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["a", "A"] do
-    state = normalize_state(local_state)
-
+  defp mark_all_read(%State{} = state, %Context{} = context) do
     if State.unread_count(state) > 0 do
       {%{state | status: :marking_all_read}, [mark_all_read_effect(context)]}
     else
@@ -164,9 +171,7 @@ defmodule Foglet.TUI.Screens.Notifications do
     end
   end
 
-  def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
-    state = normalize_state(local_state)
-
+  defp open_selected_notification(%State{} = state, %Context{} = context) do
     case State.selected_row(state) do
       nil ->
         {state, []}
@@ -175,22 +180,6 @@ defmodule Foglet.TUI.Screens.Notifications do
         {%{state | status: :opening_target}, [open_target_effect(context, notification)]}
     end
   end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["o", "O"] do
-    update({:key, %{key: :enter}}, local_state, context)
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{})
-      when c in ["q", "Q", "b", "B"] do
-    {normalize_state(local_state), [Effect.navigate(:main_menu)]}
-  end
-
-  def update({:key, %{key: :escape}}, local_state, %Context{}) do
-    {normalize_state(local_state), [Effect.navigate(:main_menu)]}
-  end
-
-  def update(_message, local_state, %Context{}), do: {normalize_state(local_state), []}
 
   @impl true
   def render(local_state, %Context{} = context) do
@@ -461,7 +450,7 @@ defmodule Foglet.TUI.Screens.Notifications do
   defp load_notifications_effect(%Context{} = context) do
     notifications_mod = domain_module(context)
 
-    Effect.task(:load_notifications, :notifications, fn ->
+    Effect.task(:load_notifications, fn ->
       notifications_mod.list_recent(context.current_user, @recent_limit)
     end)
   end
@@ -475,7 +464,7 @@ defmodule Foglet.TUI.Screens.Notifications do
   defp mark_read_id_effect(%Context{} = context, notification_id) do
     notifications_mod = domain_module(context)
 
-    Effect.task(:mark_notification_read, :notifications, fn ->
+    Effect.task(:mark_notification_read, fn ->
       notifications_mod.mark_read(context.current_user, notification_id)
     end)
   end
@@ -490,7 +479,7 @@ defmodule Foglet.TUI.Screens.Notifications do
   defp mark_all_read_effect(%Context{} = context) do
     notifications_mod = domain_module(context)
 
-    Effect.task(:mark_all_notifications_read, :notifications, fn ->
+    Effect.task(:mark_all_notifications_read, fn ->
       notifications_mod.mark_all_read(context.current_user)
     end)
   end
@@ -498,7 +487,7 @@ defmodule Foglet.TUI.Screens.Notifications do
   defp open_target_effect(%Context{} = context, notification) do
     notifications_mod = domain_module(context)
 
-    Effect.task(:open_notification_target, :notifications, fn ->
+    Effect.task(:open_notification_target, fn ->
       with {:ok, target} <-
              notifications_mod.resolve_open_target(context.current_user, notification) do
         {:ok, Map.put(target, :notification_id, notification_id(notification))}
@@ -746,4 +735,17 @@ defmodule Foglet.TUI.Screens.Notifications do
       _ -> nil
     end
   end
+
+  defp back_key?(event),
+    do: KeyBinding.cancel?(event) or plain_char?(event, ["q", "Q", "b", "B"])
+
+  defp plain_char?(%{key: :char, char: char} = event, chars) when is_list(chars) do
+    char in chars and
+      Enum.all?(
+        [:ctrl, :control, :alt, :meta, :shift],
+        &(Map.get(event, &1, false) in [false, nil])
+      )
+  end
+
+  defp plain_char?(_event, _chars), do: false
 end

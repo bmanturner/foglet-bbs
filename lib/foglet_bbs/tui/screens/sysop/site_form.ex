@@ -149,7 +149,7 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm do
       actor = state.current_user
 
       {%{state | test_email_state: :sending},
-       [Effect.task(:sysop_send_test_email, :sysop, fn -> SiteOps.send_test_email(actor) end)]}
+       [Effect.task(:sysop_send_test_email, fn -> SiteOps.send_test_email(actor) end)]}
     else
       {%{state | test_email_state: {:error, :no_email_mode}}, []}
     end

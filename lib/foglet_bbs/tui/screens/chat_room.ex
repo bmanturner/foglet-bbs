@@ -46,6 +46,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Guest
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.Screens.ChatRoom.State
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.TextWidth
@@ -93,10 +94,9 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
   def load_effects(%State{} = state, %Context{} = context) do
     board = to_board_struct(state.board)
-    screen_key = task_screen_key(context)
 
     history_effect =
-      Effect.task(:load_chat_history, screen_key, fn ->
+      Effect.task(:load_chat_history, fn ->
         BoardChat.recent(board)
       end)
 
@@ -121,51 +121,10 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
   # Transcript viewport navigation. These keys are reserved for history
   # browsing and must not leak into the composer buffer.
-  def update({:key, %{key: key}}, %State{} = state, %Context{} = context)
-      when key in [:up, :down, :page_up, :page_down, :pageup, :pagedown, :home, :end] do
-    {scroll_transcript(state, key, context), []}
-  end
-
-  # Submit composer.
-  def update({:key, %{key: :enter}}, %State{} = state, %Context{} = context) do
-    if Guest.guest?(context),
-      do: {state, [Effect.open_modal(Guest.denial_modal(:chat))]},
-      else: submit_composer(state, context)
-  end
-
-  # Backspace.
-  def update({:key, %{key: :backspace}}, %State{composer: ""} = state, %Context{}) do
-    {state, []}
-  end
-
-  def update({:key, %{key: :backspace}}, %State{} = state, %Context{} = context) do
-    if Guest.guest?(context),
-      do: {state, []},
-      else: {%{state | composer: String.slice(state.composer, 0..-2//1)}, []}
-  end
-
-  # Printable char into composer. Ignore ctrl/alt-modified chars we did not
-  # explicitly bind above so they don't leak into the buffer.
-  def update(
-        {:key, %{key: :char, char: <<c::utf8>>} = ev},
-        %State{} = state,
-        %Context{} = context
-      ) do
-    cond do
-      Guest.guest?(context) ->
-        {state, []}
-
-      Map.get(ev, :ctrl, false) ->
-        {state, []}
-
-      Map.get(ev, :alt, false) ->
-        {state, []}
-
-      String.length(state.composer) >= @chat_body_max ->
-        {%{state | last_error: :message_too_long}, []}
-
-      true ->
-        {%{state | composer: state.composer <> <<c::utf8>>, last_error: nil}, []}
+  def update({:key, event}, %State{} = state, %Context{} = context) when is_map(event) do
+    case transcript_scroll_key(event) do
+      nil -> handle_composer_key(event, state, context)
+      key -> {scroll_transcript(state, key, context), []}
     end
   end
 
@@ -225,6 +184,57 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   end
 
   def update(_msg, %State{} = state, %Context{}), do: {state, []}
+
+  defp handle_composer_key(%{key: :enter} = event, %State{} = state, %Context{} = context) do
+    if KeyBinding.submit?(event) do
+      if Guest.guest?(context),
+        do: {state, [Effect.open_modal(Guest.denial_modal(:chat))]},
+        else: submit_composer(state, context)
+    else
+      {state, []}
+    end
+  end
+
+  defp handle_composer_key(%{key: :backspace}, %State{composer: ""} = state, %Context{}) do
+    {state, []}
+  end
+
+  defp handle_composer_key(%{key: :backspace}, %State{} = state, %Context{} = context) do
+    if Guest.guest?(context),
+      do: {state, []},
+      else: {%{state | composer: String.slice(state.composer, 0..-2//1)}, []}
+  end
+
+  defp handle_composer_key(
+         %{key: :char, char: <<c::utf8>>} = event,
+         %State{} = state,
+         %Context{} = context
+       ) do
+    append_composer_char(event, c, state, context)
+  end
+
+  defp handle_composer_key(_event, %State{} = state, %Context{}), do: {state, []}
+
+  # Printable char into composer. Ignore ctrl/alt-modified chars we did not
+  # explicitly bind above so they don't leak into the buffer.
+  defp append_composer_char(event, c, %State{} = state, %Context{} = context) do
+    cond do
+      Guest.guest?(context) ->
+        {state, []}
+
+      Map.get(event, :ctrl, false) ->
+        {state, []}
+
+      Map.get(event, :alt, false) ->
+        {state, []}
+
+      String.length(state.composer) >= @chat_body_max ->
+        {%{state | last_error: :message_too_long}, []}
+
+      true ->
+        {%{state | composer: state.composer <> <<c::utf8>>, last_error: nil}, []}
+    end
+  end
 
   # ---------------------------------------------------------------------------
   # render
@@ -601,7 +611,7 @@ defmodule Foglet.TUI.Screens.ChatRoom do
     {%{state | last_error: :not_authenticated}, []}
   end
 
-  defp submit_composer(%State{} = state, %Context{current_user: user} = context) do
+  defp submit_composer(%State{} = state, %Context{current_user: user}) do
     body = String.trim(state.composer)
 
     cond do
@@ -613,10 +623,9 @@ defmodule Foglet.TUI.Screens.ChatRoom do
 
       true ->
         board = to_board_struct(state.board)
-        screen_key = task_screen_key(context)
 
         effect =
-          Effect.task(:send_chat, screen_key, fn ->
+          Effect.task(:send_chat, fn ->
             BoardChat.post(board, user, body)
           end)
 
@@ -629,16 +638,6 @@ defmodule Foglet.TUI.Screens.ChatRoom do
          }, [effect]}
     end
   end
-
-  # ChatRoom is embedded inside `BoardScreen` at the `:thread_list` route key —
-  # there is no top-level `:chat_room` screen. Tasks must be dispatched with the
-  # active route's key so `Foglet.TUI.App.Routing.route_screen_update/3` can find
-  # the screen module (`BoardScreen`) and forward the `{:task_result, ...}` to
-  # this reducer. Falls back to `:thread_list` when context.route is missing.
-  defp task_screen_key(%Context{route: route}) when is_atom(route) and not is_nil(route),
-    do: route
-
-  defp task_screen_key(_context), do: :thread_list
 
   # Route params land here as a plain map (see BoardList.board_identity/1) but
   # `Foglet.BoardChat` dispatches on `%Board{}` field guards. Coerce so the task
@@ -674,6 +673,29 @@ defmodule Foglet.TUI.Screens.ChatRoom do
   defp scroll_step(:up, _height), do: 1
   defp scroll_step(:down, _height), do: -1
   defp scroll_step(_key, _height), do: 0
+
+  defp transcript_scroll_key(%{key: :up} = event),
+    do: if(plain_event?(event), do: :up)
+
+  defp transcript_scroll_key(%{key: :down} = event),
+    do: if(plain_event?(event), do: :down)
+
+  defp transcript_scroll_key(event) do
+    cond do
+      KeyBinding.page_up?(event) -> :page_up
+      KeyBinding.page_down?(event) -> :page_down
+      KeyBinding.home?(event) -> :home
+      KeyBinding.end?(event) -> :end
+      true -> nil
+    end
+  end
+
+  defp plain_event?(event) do
+    Enum.all?(
+      [:ctrl, :control, :alt, :meta, :shift],
+      &(Map.get(event, &1, false) in [false, nil])
+    )
+  end
 
   defp max_scroll_offset(%State{messages: messages}, height) do
     messages

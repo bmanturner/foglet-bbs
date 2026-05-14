@@ -681,7 +681,7 @@ defmodule Foglet.TUI.RenderFixtures do
     [
       %{
         participant: bob,
-        last_at: ~U[2026-05-13 22:00:00.000000Z],
+        last_at: ~U[2025-12-31 19:00:00.000000Z],
         preview: "**Markdown** meetup notes and a `code` sample",
         unread_count: 3,
         sent?: false
@@ -701,7 +701,7 @@ defmodule Foglet.TUI.RenderFixtures do
         sender: bob,
         recipient: alice,
         body: "# Hello\nThis **BBS Mail** thread uses Markdown.",
-        inserted_at: ~U[2026-05-13 21:00:00.000000Z]
+        inserted_at: ~U[2025-12-31 21:00:00.000000Z]
       },
       %Foglet.DMs.Message{
         id: "10000000-0000-0000-0000-000000000002",
@@ -710,7 +710,7 @@ defmodule Foglet.TUI.RenderFixtures do
         sender: alice,
         recipient: bob,
         body: "Thanks -- `rendered` and wrapped like posts.",
-        inserted_at: ~U[2026-05-13 21:10:00.000000Z]
+        inserted_at: ~U[2025-12-31 21:10:00.000000Z]
       },
       %Foglet.DMs.Message{
         id: "10000000-0000-0000-0000-000000000003",
@@ -720,7 +720,7 @@ defmodule Foglet.TUI.RenderFixtures do
         recipient: alice,
         body:
           "Unread reply with enough text to prove wrapping at supported terminal sizes without hiding the notice.",
-        inserted_at: ~U[2026-05-13 22:00:00.000000Z]
+        inserted_at: ~U[2025-12-31 21:00:00.000000Z]
       }
     ]
   end

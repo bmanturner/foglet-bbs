@@ -429,6 +429,14 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
     assert input_value(s2) == "hi"
   end
 
+  test "navigation and help characters are forwarded to MultiLineInput", %{state: state} do
+    {:update, s1, _} = handle_key_screen(%{key: :char, char: "j"}, state)
+    {:update, s2, _} = handle_key_screen(%{key: :char, char: "k"}, s1)
+    {:update, s3, _} = handle_key_screen(%{key: :char, char: "?"}, s2)
+
+    assert input_value(s3) == "jk?"
+  end
+
   test "spacebar appends a space (no special-casing — native :char shape)", %{state: state} do
     {:update, s1, _} = handle_key_screen(%{key: :char, char: "h"}, state)
     {:update, s2, _} = handle_key_screen(%{key: :char, char: " "}, s1)
@@ -845,7 +853,7 @@ defmodule Foglet.TUI.Screens.PostComposerTest do
       assert state.submission_status == :submitting
       assert %Foglet.TUI.Effect{type: :task} = effect
       assert effect.payload.op == :submit_reply
-      assert effect.payload.screen_key == :post_composer
+      assert effect.payload.screen_key == Foglet.TUI.Effect.current_screen_key()
 
       assert {:ok, %{id: "new-post", body: "hi", reply_to_id: "p1"}} = effect.payload.fun.()
 

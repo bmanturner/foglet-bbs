@@ -15,7 +15,7 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
 
   alias Foglet.Accounts.Verification
   alias Foglet.AppName
-  alias Foglet.TUI.{Context, Effect, Input}
+  alias Foglet.TUI.{Context, Effect, Input, KeyBinding}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Widgets.Input.TextInput
 
@@ -30,17 +30,19 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
 
   @spec handle_key(map(), map()) ::
           :no_match | {:update, map(), [Effect.t()]} | {map(), [Effect.t()]}
-  def handle_key(%{key: :enter}, state), do: submit_reset_request(state)
-
-  def handle_key(%{key: :escape}, state) do
-    {:update, LoginState.put(state, LoginState.default()), []}
-  end
-
   def handle_key(event, state) do
-    if Input.backward_tab?(event) or Input.forward_tab?(event) do
-      {:update, state, []}
-    else
-      handle_identifier_key(event, state)
+    cond do
+      KeyBinding.submit?(event) ->
+        submit_reset_request(state)
+
+      KeyBinding.cancel?(event) ->
+        {:update, LoginState.put(state, LoginState.default()), []}
+
+      Input.backward_tab?(event) or Input.forward_tab?(event) ->
+        {:update, state, []}
+
+      true ->
+        handle_identifier_key(event, state)
     end
   end
 
@@ -129,7 +131,7 @@ defmodule Foglet.TUI.Screens.Login.ResetRequest do
     submitting_state = LoginState.put(state, %{login_ss | error: nil, message: nil})
 
     effect =
-      Effect.task(:reset_request, :login, fn ->
+      Effect.task(:reset_request, fn ->
         case Foglet.Config.delivery_mode() do
           "email" ->
             # Discard return value: the boundary is generic by contract.

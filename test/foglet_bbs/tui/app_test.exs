@@ -342,6 +342,19 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "effect interpretation" do
+    test "active-screen task effects route results to the current screen" do
+      {:ok, state} = App.init(%{})
+      state = %{state | current_screen: :thread_list}
+
+      {_state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+        Effects.apply_effect(state, Effect.task(:load_threads, fn -> [%{id: "t1"}] end))
+
+      assert {:screen_task_result, :thread_list, :load_threads, {:ok, [%{id: "t1"}]}} =
+               task.()
+    end
+  end
+
   describe "update/2 (SSH-06, SSH-08)" do
     setup do
       {:ok, state} = App.init(%{})

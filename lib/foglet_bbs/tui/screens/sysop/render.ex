@@ -399,13 +399,19 @@ defmodule Foglet.TUI.Screens.Sysop.Render do
         _ ->
           State.render_fallback(
             current_user: state.current_user,
-            session_context: state.session_context
+            session_context: state.session_context,
+            invites_visible?:
+              ShellVisibility.invites_visible_from_context?(
+                state.current_user,
+                state.session_context
+              )
           )
       end
 
     State.refresh_tabs(ss,
       invites_visible?:
-        ShellVisibility.invites_visible?(state.current_user, state.session_context)
+        ShellVisibility.invites_visible_from_context?(state.current_user, state.session_context) ||
+          Map.get(ss, :invites_visible?, false)
     )
   end
 end

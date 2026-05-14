@@ -408,8 +408,10 @@ defmodule Foglet.TUI.Screens.RegisterTest do
 
       {_local_state, effects} = Register.update({:key, %{key: :enter}}, state, context())
 
-      assert %Effect{type: :task, payload: %{op: :register, screen_key: :register}} =
+      assert %Effect{type: :task, payload: %{op: :register, screen_key: screen_key}} =
                task_effect(effects, :register)
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     test "offered SSH key is included in open registration payload only when checked" do

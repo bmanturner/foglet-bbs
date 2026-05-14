@@ -579,7 +579,7 @@ defmodule Foglet.TUI.Screens.Sysop do
     do: lifecycle_effect(:sysop_load_users, context)
 
   defp lifecycle_effect(:sysop_load_boards, %Context{} = context) do
-    Effect.task(:sysop_load_boards, :sysop, fn ->
+    Effect.task(:sysop_load_boards, fn ->
       BoardsView.init(current_user: context.current_user)
     end)
   end
@@ -589,19 +589,19 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp lifecycle_effect(:sysop_load_limits, %Context{} = context) do
-    Effect.task(:sysop_load_limits, :sysop, fn ->
+    Effect.task(:sysop_load_limits, fn ->
       LimitsForm.init(current_user: context.current_user)
     end)
   end
 
   defp lifecycle_effect(:sysop_load_system, %Context{}) do
-    Effect.task(:sysop_load_system, :sysop, fn -> SystemSnapshot.init([]) end)
+    Effect.task(:sysop_load_system, fn -> SystemSnapshot.init([]) end)
   end
 
   defp lifecycle_effect(:sysop_load_users, %Context{} = context) do
     accounts_mod = domain_module(context, :accounts, Foglet.Accounts)
 
-    Effect.task(:sysop_load_users, :sysop, fn ->
+    Effect.task(:sysop_load_users, fn ->
       case accounts_mod.list_user_status_admin_targets(context.current_user) do
         {:ok, groups} -> {:ok, UsersView.from_groups(groups, context.current_user)}
         {:error, reason} -> {:error, reason}
@@ -610,7 +610,7 @@ defmodule Foglet.TUI.Screens.Sysop do
   end
 
   defp invites_effect(op, %Context{} = context, invites) do
-    Effect.task(op, :sysop, fn ->
+    Effect.task(op, fn ->
       case op do
         :sysop_load_invites -> InvitesActions.load(context.current_user, invites)
         :sysop_generate_invite -> InvitesActions.generate(context.current_user, invites)

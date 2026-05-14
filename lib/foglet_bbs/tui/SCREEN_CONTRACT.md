@@ -105,6 +105,15 @@ end
 Render code must not query the database, mutate state, subscribe to topics, or
 start tasks.
 
+Render purity is enforced by `test/foglet_bbs/tui/render_purity_test.exs` as a
+practical guardrail. It scans render entry points, `render_*` helpers, and
+dedicated render/surface files for obvious runtime side effects such as Repo
+calls, Config persistence reads/writes, PubSub calls, task effects, process
+spawning, direct sends, `System` calls, and common durable context mutations.
+When a render needs cache-backed or expensive data, compute it in `init/1`,
+`update/3`, a task effect, or screen state before rendering. Pure derived render
+models and formatting over already-loaded state are fine.
+
 ## `subscriptions/2`
 
 Screens that need focused PubSub topics or screen-owned runtime intervals
@@ -159,8 +168,11 @@ Use `route_params` for route-owned identity such as `board_id`, `thread_id`, or
 
 - `Effect.navigate(screen, params)` changes route and dispatches
   `:on_route_enter`.
-- `Effect.task(op, screen_key, fun)` runs work through App and returns a
-  `{:task_result, op, result}` message.
+- `Effect.task(op, fun)` runs work through App for the active screen and
+  returns a `{:task_result, op, result}` message.
+- `Effect.task(op, screen_key, fun)` is the explicit-screen variant for work
+  that intentionally routes to another screen, such as a task queued after a
+  preceding navigation effect.
 - `Effect.open_modal(modal)` and `Effect.dismiss_modal()` control App-owned
   modal state.
 - `Effect.modal_submit(screen_key, kind, payload)` routes a form submit payload
@@ -170,10 +182,15 @@ Use `route_params` for route-owned identity such as `board_id`, `thread_id`, or
 - `Effect.terminal_size(size)` requests a terminal size update.
 - `Effect.quit()` requests runtime termination.
 
-## Modal Forms
+## Modal Ownership
 
-Screens open form modals with `Effect.open_modal/1`. App owns the overlay and
-routes submit payloads back to the target screen as
+Foglet supports two modal ownership patterns.
+
+App-owned modals are for global runtime overlays: guest denial, task failures,
+public profiles, report forms shared across screens, reply-context previews,
+and simple confirmations whose key handling should take precedence over the
+active screen. Screens open these with `Effect.open_modal/1`. App owns the
+overlay chrome and routes submit payloads back to the target screen as
 `{:modal_submit, kind, payload}`.
 
 ```elixir
@@ -183,7 +200,7 @@ end
 
 def update({:modal_submit, :new_item, payload}, state, context) do
   effect =
-    Effect.task(:create_item, :example, fn ->
+    Effect.task(:create_item, fn ->
       Foglet.Items.create_item(context.current_user, payload)
     end)
 
@@ -193,6 +210,19 @@ end
 
 Keep failed-submit recovery in the screen reducer by preserving or rebuilding
 the form state with an error.
+
+Screen-owned modals are for local forms or confirmations that are part of a
+screen's own editing surface. Store the modal or form widget in screen-local
+state, route keys through the screen reducer, and have the modal/widget return
+semantic actions. The screen decides which `Foglet.TUI.Effect` values to emit.
+`Foglet.TUI.Screens.Sysop.BoardsView` is the current concrete example: it owns
+`modal` and `modal_kind`, handles `Modal.Form` and confirm keys in
+`handle_key/2`, preserves validation errors in the form, and renders its own
+overlay inside the BOARDS tab.
+
+Use App-owned modals when the overlay is global, reusable across screens, or
+must block screen key handling. Use screen-owned modals when App routing adds
+ceremony and the interaction is local to the active screen's state machine.
 
 ## Cancel Keys
 
@@ -255,11 +285,15 @@ Current Phase 43 examples are PostReader, Sysop, Login, MainMenu, NewThread, and
 - [ ] Use `Foglet.TUI.Context` for session, route, terminal, and dependency
       override data.
 - [ ] Emit `Foglet.TUI.Effect` values for runtime work.
-- [ ] Use `Effect.task/3` for domain reads/writes and handle
+- [ ] Use `Effect.task/2` for active-screen domain reads/writes and handle
       `{:task_result, op, result}` in `update/3`.
+- [ ] Use `Effect.task/3` only when routing a task result to an explicit
+      non-active screen key is intentional.
 - [ ] Keep authorization and durable mutations inside the owning context.
 - [ ] Pass explicit chrome and breadcrumb data.
 - [ ] Handle form submit payloads at the reducer boundary.
+- [ ] Choose App-owned or screen-owned modal ownership deliberately; keep
+      global/reusable overlays App-owned and local editing flows screen-owned.
 - [ ] Add reducer/effect tests for key handling, task results, route entry,
       subscriptions, and modal submit handling where applicable.
 - [ ] Add or update render fixture support when CLI rendering should inspect

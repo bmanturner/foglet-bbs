@@ -14,7 +14,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   alias Foglet.Accounts
   alias Foglet.Accounts.{Auth, Verification}
   alias Foglet.AppName
-  alias Foglet.TUI.{Context, Effect, Input}
+  alias Foglet.TUI.{Context, Effect, Input, KeyBinding}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Widgets.Input.TextInput
@@ -95,7 +95,21 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
   end
 
   # Enter: submit if focused on password; advance focus if on handle
-  defp handle_unlocked_input_key(%{key: :enter}, state) do
+  defp handle_unlocked_input_key(event, state) do
+    cond do
+      KeyBinding.submit?(event) ->
+        handle_submit_key(state)
+
+      KeyBinding.cancel?(event) ->
+        {:update, LoginState.put(state, LoginState.default()), []}
+
+      true ->
+        {new_input, _action} = TextInput.handle_event(event, focused_input(state))
+        {:update, update_focused_input(state, new_input), []}
+    end
+  end
+
+  defp handle_submit_key(state) do
     login_ss = LoginState.get(state)
 
     if login_ss.focused_field == :password do
@@ -104,17 +118,6 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
       new_login_ss = %{login_ss | focused_field: :password}
       {:update, LoginState.put(state, new_login_ss), []}
     end
-  end
-
-  # Escape: return to menu sub, clear form state
-  defp handle_unlocked_input_key(%{key: :escape}, state) do
-    {:update, LoginState.put(state, LoginState.default()), []}
-  end
-
-  # Everything else — delegate to focused TextInput
-  defp handle_unlocked_input_key(event, state) do
-    {new_input, _action} = TextInput.handle_event(event, focused_input(state))
-    {:update, update_focused_input(state, new_input), []}
   end
 
   defp focused_input(state) do
@@ -143,7 +146,7 @@ defmodule Foglet.TUI.Screens.Login.LoginForm do
     submitting_state = LoginState.put(state, submitting_ss)
 
     effect =
-      Effect.task(:login, :login, fn ->
+      Effect.task(:login, fn ->
         authenticate_login(
           accounts_mod,
           auth_mod,

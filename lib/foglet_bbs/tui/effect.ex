@@ -77,6 +77,8 @@ defmodule Foglet.TUI.Effect do
 
   defstruct [:type, :payload]
 
+  @current_screen_key :__current_screen__
+
   @doc "Requests navigation to `screen` with route params."
   @spec navigate(atom(), map()) :: navigate()
   def navigate(screen, params \\ %{}) do
@@ -84,15 +86,31 @@ defmodule Foglet.TUI.Effect do
   end
 
   @doc """
-  Requests a zero-arity task for `screen_key`.
+  Requests a zero-arity task for the active screen.
 
   The function is stored, not executed, so App can dispatch it through
   `Foglet.TUI.Command.task/2`.
+  """
+  @spec task(atom(), (-> term())) :: task()
+  def task(op, fun) when is_atom(op) and is_function(fun, 0) do
+    task(op, @current_screen_key, fun)
+  end
+
+  @doc """
+  Requests a zero-arity task for an explicit `screen_key`.
+
+  Prefer `task/2` for tasks that should route back to the active screen. Use
+  `task/3` when a screen intentionally queues work for another screen or for a
+  route that will become active after a preceding navigation effect.
   """
   @spec task(atom(), term(), (-> term())) :: task()
   def task(op, screen_key, fun) when is_atom(op) and is_function(fun, 0) do
     %__MODULE__{type: :task, payload: %{op: op, screen_key: screen_key, fun: fun}}
   end
+
+  @doc false
+  @spec current_screen_key() :: :__current_screen__
+  def current_screen_key, do: @current_screen_key
 
   @doc "Requests opening a modal."
   @spec open_modal(term()) :: modal_open()

@@ -23,6 +23,7 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
 
   @type t :: %__MODULE__{
           recent_oneliners: list(),
+          selected_destination_index: non_neg_integer(),
           selected_oneliner_index: non_neg_integer(),
           pending_hide_oneliner_id: String.t() | nil,
           oneliner_status: :idle | :loading | :submitting | :hiding | {:error, term()},
@@ -33,6 +34,7 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
         }
 
   defstruct recent_oneliners: [],
+            selected_destination_index: 0,
             selected_oneliner_index: 0,
             pending_hide_oneliner_id: nil,
             oneliner_status: :idle,
@@ -52,13 +54,30 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
     |> clamp_selection()
   end
 
-  @doc "Moves selection by delta while staying inside loaded rows."
+  @doc "Moves the selected navigation destination by delta while staying inside visible rows."
+  @spec select_destination_delta(t(), integer(), non_neg_integer()) :: t()
+  def select_destination_delta(%__MODULE__{} = state, delta, destination_count)
+      when is_integer(delta) and is_integer(destination_count) do
+    select_destination_index(state, state.selected_destination_index + delta, destination_count)
+  end
+
+  @doc "Selects a specific navigation destination, clamped to the visible destination range."
+  @spec select_destination_index(t(), integer() | nil, non_neg_integer()) :: t()
+  def select_destination_index(%__MODULE__{} = state, index, destination_count)
+      when is_integer(index) and is_integer(destination_count) do
+    %{state | selected_destination_index: clamp_count(index, destination_count)}
+  end
+
+  def select_destination_index(%__MODULE__{} = state, _index, destination_count),
+    do: select_destination_index(state, 0, destination_count)
+
+  @doc "Moves oneliner selection by delta while staying inside loaded rows."
   @spec select_delta(t(), integer()) :: t()
   def select_delta(%__MODULE__{} = state, delta) when is_integer(delta) do
     select_index(state, state.selected_oneliner_index + delta)
   end
 
-  @doc "Selects a specific row index, clamped to the loaded row range."
+  @doc "Selects a specific oneliner row index, clamped to the loaded row range."
   @spec select_index(t(), integer() | nil) :: t()
   def select_index(%__MODULE__{} = state, index) when is_integer(index) do
     %{state | selected_oneliner_index: clamp(index, state.recent_oneliners)}
@@ -108,4 +127,12 @@ defmodule Foglet.TUI.Screens.MainMenu.State do
   end
 
   defp clamp(_index, entries), do: clamp(0, entries)
+
+  defp clamp_count(_index, count) when count <= 0, do: 0
+
+  defp clamp_count(index, count) do
+    index
+    |> max(0)
+    |> min(count - 1)
+  end
 end

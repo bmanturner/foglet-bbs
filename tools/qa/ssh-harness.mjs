@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import fs from 'node:fs';
+import { generateKeyPairSync } from 'node:crypto';
 import { createInterface } from 'node:readline/promises';
 import { stdin as input, stdout as output } from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -84,6 +85,8 @@ Options:
   --port PORT          SSH port, default 2222
   --user HANDLE        SSH username/handle, default qa
   --password PASSWORD  Optional password for servers requiring password auth
+                       (Foglet accepts any public key; the harness generates an
+                       ephemeral key automatically when --private-key is omitted)
   --private-key PATH   Optional private key path
   --width COLS         PTY width, default 100
   --height ROWS        PTY height, default 30
@@ -100,8 +103,22 @@ Commands:
 `;
 }
 
-function connect(opts) {
+export function ensurePrivateKey(opts) {
+  if (opts.privateKey) {
+    return opts;
+  }
+
+  const { privateKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs1', format: 'pem' }
+  });
+
+  return { ...opts, privateKey };
+}
+
+function connect(rawOpts) {
   const conn = new Client();
+  const opts = ensurePrivateKey(rawOpts);
 
   return new Promise((resolve, reject) => {
     conn.once('ready', () => resolve(conn));

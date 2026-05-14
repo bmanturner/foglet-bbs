@@ -2,7 +2,7 @@ defmodule Foglet.TUI.Screens.BoardNews do
   @moduledoc "Read-only board NEWS tab over cached RSS/Atom items."
 
   alias Foglet.BoardFeeds
-  alias Foglet.TUI.Context
+  alias Foglet.TUI.{Context, KeyBinding}
   import Raxol.Core.Renderer.View
 
   @wide_list_text_width 38
@@ -29,7 +29,7 @@ defmodule Foglet.TUI.Screens.BoardNews do
     state = %{state | status: :loading}
 
     effects = [
-      Foglet.TUI.Effect.task(:load_board_news, :thread_list, fn ->
+      Foglet.TUI.Effect.task(:load_board_news, fn ->
         {BoardFeeds.list_feeds(actor, board_id), BoardFeeds.list_cached_items(actor, board_id)}
       end)
     ]
@@ -55,19 +55,27 @@ defmodule Foglet.TUI.Screens.BoardNews do
     {%{state | status: :loaded, feeds: feeds, items: items, message: nil}, []}
   end
 
-  def update({:key, %{key: :down}}, %State{} = state, _context),
-    do:
-      {%{state | selected_index: min(state.selected_index + 1, max(length(state.items) - 1, 0))},
-       []}
+  def update({:key, event}, %State{} = state, _context) when is_map(event) do
+    cond do
+      KeyBinding.scroll_down?(event) ->
+        {%{
+           state
+           | selected_index: min(state.selected_index + 1, max(length(state.items) - 1, 0))
+         }, []}
 
-  def update({:key, %{key: :up}}, %State{} = state, _context),
-    do: {%{state | selected_index: max(state.selected_index - 1, 0)}, []}
+      KeyBinding.scroll_up?(event) ->
+        {%{state | selected_index: max(state.selected_index - 1, 0)}, []}
 
-  def update({:key, %{key: :enter}}, %State{items: [_ | _]} = state, _context),
-    do: {%{state | view: :detail}, []}
+      KeyBinding.submit?(event) and state.items != [] ->
+        {%{state | view: :detail}, []}
 
-  def update({:key, %{key: :escape}}, %State{} = state, _context),
-    do: {%{state | view: :list}, []}
+      KeyBinding.cancel?(event) ->
+        {%{state | view: :list}, []}
+
+      true ->
+        {state, []}
+    end
+  end
 
   def update(_msg, %State{} = state, _context), do: {state, []}
 

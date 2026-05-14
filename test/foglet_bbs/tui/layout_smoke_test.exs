@@ -11,6 +11,11 @@ defmodule Foglet.TUI.LayoutSmokeTest do
   %{type: :box} elements processed by process_element/3 in engine.ex lines
   253-281, which stacked all children at the same y (last child overwrote
   all previous ones). These tests would have failed on that old code.
+
+  Keep this file for broad layout-engine and screen-shell contracts. New TUI
+  behavior should usually land in reducer, widget, or buffer snapshot tests
+  first; extend this smoke suite only when a cross-screen sizing invariant is
+  easier to protect here.
   """
 
   use FogletBbs.DataCase, async: false

@@ -672,11 +672,10 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
                "Unknown chat command: /shrug. Supported: /me."
     end
 
-    # FOG-277 regression — task results were dropped at routing because
-    # ChatRoom dispatched with screen_key `:chat_room`, which is not a
-    # known top-level screen. The task's screen_key must be the active
-    # route so BoardScreen forwards `{:task_result, ...}` to ChatRoom.
-    test "send_chat task uses the active route key, not :chat_room" do
+    # FOG-277 regression — task results were dropped at routing when ChatRoom
+    # dispatched to a non-mounted screen key. Embedded chat now uses the active
+    # screen sentinel so BoardScreen forwards `{:task_result, ...}` to ChatRoom.
+    test "send_chat task uses the active screen key, not :chat_room" do
       b = board()
       {state, ctx} = init_state(b)
       state = %{state | composer: "hello"}
@@ -684,7 +683,7 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       {_state, [%Effect{type: :task, payload: %{op: :send_chat, screen_key: key}}]} =
         ChatRoom.update({:key, %{key: :enter}}, state, ctx)
 
-      assert key == :thread_list
+      assert key == Effect.current_screen_key()
     end
   end
 
@@ -784,14 +783,14 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
     end
 
     # FOG-277 regression — see send_chat task screen_key test above.
-    test "load_chat_history task uses the active route key, not :chat_room" do
+    test "load_chat_history task uses the active screen key, not :chat_room" do
       b = board()
       {state, ctx} = init_state(b)
 
       {_state, [%Effect{type: :task, payload: %{op: :load_chat_history, screen_key: key}}]} =
         ChatRoom.load_effects(state, ctx)
 
-      assert key == :thread_list
+      assert key == Effect.current_screen_key()
     end
 
     # FOG-277 regression — the route param is a plain map (BoardList

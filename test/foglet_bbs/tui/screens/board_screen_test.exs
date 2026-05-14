@@ -12,8 +12,11 @@ end
 defmodule Foglet.TUI.Screens.BoardScreenTest do
   use ExUnit.Case, async: false
 
+  import Foglet.TUI.Test, only: [assert_screen: 2, sigil_B: 2]
+
   alias Foglet.PubSub, as: Topics
   alias Foglet.Sessions.BoardScreen, as: PresenceTracker
+  alias Foglet.TUI.AsciiRenderer
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Screens.BoardScreen
@@ -46,8 +49,17 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       route: :thread_list,
       route_params: %{board: b, board_id: b.id, news_enabled: b.news_enabled},
       terminal_size: Keyword.get(opts, :size, {80, 24}),
-      session_context: %{domain: %{threads: FakeThreads, boards: FakeBoards}}
+      session_context: %{
+        clock_now: ~U[2026-01-01 17:43:00Z],
+        domain: %{threads: FakeThreads, boards: FakeBoards}
+      }
     )
+  end
+
+  defp render_buffer(state, ctx, {width, height} = size) do
+    state
+    |> BoardScreen.render(%{ctx | terminal_size: size})
+    |> AsciiRenderer.render({width, height})
   end
 
   defp flatten_text(tree), do: tree |> collect_text([]) |> Enum.reverse() |> Enum.join("")
@@ -164,7 +176,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
       assert %WrapperState{tabs: [:threads, :chat, :news]} = BoardScreen.init(ctx)
     end
 
-    test "route-enter child load tasks target the mounted thread_list screen key" do
+    test "route-enter child load tasks target the active board screen" do
       b = board(chat_enabled: true, news_enabled: true)
       ctx = context(b, user: @sysop)
       state = BoardScreen.init(ctx)
@@ -176,7 +188,7 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
         |> Enum.filter(&match?(%Effect{type: :task}, &1))
         |> Enum.map(& &1.payload.screen_key)
 
-      assert :thread_list in task_keys
+      assert Effect.current_screen_key() in task_keys
       refute Enum.any?(task_keys, &match?({_, _}, &1))
     end
 
@@ -208,6 +220,69 @@ defmodule Foglet.TUI.Screens.BoardScreenTest do
   end
 
   describe "render/2 — chat enabled" do
+    test "threads tab default shell matches a full buffer snapshot" do
+      b = board(id: "b-snapshot", chat_enabled: true)
+      ctx = context(b, size: {64, 22})
+      state = BoardScreen.init(ctx)
+
+      assert_screen(render_buffer(state, ctx, {64, 22}), ~B"""
+      ┌ Foglet ▸ General ───────────────────────── @alice | 05:43 PM ┐
+      │▌ THREADS   CHAT (0)                                          │
+      │⠋ Loading…                                                    │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      └ Q Back   C Compose   1 Threads*  2 Chat (0)   ↑/↓ Select ────┘
+      """)
+    end
+
+    test "chat tab empty child surface matches a full buffer snapshot" do
+      b = board(id: "b-snapshot", chat_enabled: true)
+      ctx = context(b, size: {64, 22})
+      state = BoardScreen.init(ctx)
+      {state, []} = BoardScreen.update({:key, %{key: :char, char: "2"}}, state, ctx)
+
+      assert_screen(render_buffer(state, ctx, {64, 22}), ~B"""
+      ┌ Foglet ▸ General ───────────────────────── @alice | 05:43 PM ┐
+      │THREADS   ▌ CHAT (1)                                          │
+      │                                                              │
+      │  No messages yet. Be the first to say hello.                 │
+      │> ▎                                                           │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      │                                                              │
+      └ ← Threads   Ctrl+B Show sidebar  Enter Send ─────────────────┘
+      """)
+    end
+
     test "renders a tab strip with THREADS + CHAT (#)" do
       b = board(chat_enabled: true)
       ctx = context(b)

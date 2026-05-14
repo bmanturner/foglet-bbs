@@ -131,6 +131,24 @@ defmodule Foglet.TUI.Widgets.List.BoardTreeTest do
     end
   end
 
+  describe "state ownership contract" do
+    test "handle_event/2 returns semantic expand/collapse actions", %{theme: _theme} do
+      dir = directory_with_one_board(%{})
+      state = BoardTree.init(directory: dir, id: "bt-actions")
+      {at_category, _action} = BoardTree.handle_event(%{key: :up}, state)
+      {collapsed, :node_collapsed} = BoardTree.handle_event(%{key: :left}, at_category)
+      {_expanded, :node_expanded} = BoardTree.handle_event(%{key: :right}, collapsed)
+    end
+
+    test "render/2 is idempotent for the same state and input", %{theme: theme} do
+      dir = directory_with_one_board(%{})
+      state = BoardTree.init(directory: dir, id: "bt-render-idempotent")
+
+      assert BoardTree.render(state, theme: theme, width: 60) ==
+               BoardTree.render(state, theme: theme, width: 60)
+    end
+  end
+
   describe "render/2 - category rows (BOARDS-01)" do
     test "expanded category row contains ▾ glyph and category name", %{theme: theme} do
       dir = directory_with_one_board(%{}, "Town Square")
