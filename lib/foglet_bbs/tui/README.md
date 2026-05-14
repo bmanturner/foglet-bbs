@@ -112,3 +112,16 @@ must remain typed input. Full-screen composers that follow the documented
 cancel fallback can call `KeyBinding.cancel?(event, composer?: true)` to treat
 `Ctrl+C` as the same reducer path as `Esc`; other surfaces should use plain
 `Esc` cancellation only.
+
+## Modal Ownership
+
+Use App-owned modals for global or reusable overlays: guest denial, task
+failures, report forms, public profiles, reply-context previews, and simple
+confirmations that should block active-screen keys. Those flow through
+`Effect.open_modal/1` and, for forms, `Effect.modal_submit/3`.
+
+Use screen-owned modals for local editing surfaces where the screen already
+owns the surrounding state machine. Store the modal/form in screen state, feed
+keys through the reducer, keep validation errors in the widget state, and emit
+effects only after the screen has interpreted the semantic action. See
+`Foglet.TUI.Screens.Sysop.BoardsView` for the current pattern.

@@ -182,10 +182,15 @@ Use `route_params` for route-owned identity such as `board_id`, `thread_id`, or
 - `Effect.terminal_size(size)` requests a terminal size update.
 - `Effect.quit()` requests runtime termination.
 
-## Modal Forms
+## Modal Ownership
 
-Screens open form modals with `Effect.open_modal/1`. App owns the overlay and
-routes submit payloads back to the target screen as
+Foglet supports two modal ownership patterns.
+
+App-owned modals are for global runtime overlays: guest denial, task failures,
+public profiles, report forms shared across screens, reply-context previews,
+and simple confirmations whose key handling should take precedence over the
+active screen. Screens open these with `Effect.open_modal/1`. App owns the
+overlay chrome and routes submit payloads back to the target screen as
 `{:modal_submit, kind, payload}`.
 
 ```elixir
@@ -205,6 +210,19 @@ end
 
 Keep failed-submit recovery in the screen reducer by preserving or rebuilding
 the form state with an error.
+
+Screen-owned modals are for local forms or confirmations that are part of a
+screen's own editing surface. Store the modal or form widget in screen-local
+state, route keys through the screen reducer, and have the modal/widget return
+semantic actions. The screen decides which `Foglet.TUI.Effect` values to emit.
+`Foglet.TUI.Screens.Sysop.BoardsView` is the current concrete example: it owns
+`modal` and `modal_kind`, handles `Modal.Form` and confirm keys in
+`handle_key/2`, preserves validation errors in the form, and renders its own
+overlay inside the BOARDS tab.
+
+Use App-owned modals when the overlay is global, reusable across screens, or
+must block screen key handling. Use screen-owned modals when App routing adds
+ceremony and the interaction is local to the active screen's state machine.
 
 ## Cancel Keys
 
@@ -274,6 +292,8 @@ Current Phase 43 examples are PostReader, Sysop, Login, MainMenu, NewThread, and
 - [ ] Keep authorization and durable mutations inside the owning context.
 - [ ] Pass explicit chrome and breadcrumb data.
 - [ ] Handle form submit payloads at the reducer boundary.
+- [ ] Choose App-owned or screen-owned modal ownership deliberately; keep
+      global/reusable overlays App-owned and local editing flows screen-owned.
 - [ ] Add reducer/effect tests for key handling, task results, route entry,
       subscriptions, and modal submit handling where applicable.
 - [ ] Add or update render fixture support when CLI rendering should inspect
