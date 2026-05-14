@@ -189,6 +189,8 @@ defmodule Foglet.TUI.PubSubForwarder do
             {:subscription,
              {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, count}}}
           )
+
+          send(state.dispatcher_pid, {:subscription, :refresh_mail})
         end
 
         %{state | last_unread_count: count}

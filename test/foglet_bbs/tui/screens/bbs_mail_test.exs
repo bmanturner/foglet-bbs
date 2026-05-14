@@ -168,5 +168,48 @@ defmodule Foglet.TUI.Screens.BBSMailTest do
       assert sent_state.status == :loading
       assert [%Foglet.TUI.Effect{type: :task, payload: %{op: :load_mail}}] = effects
     end
+
+    test "dm notification refreshes the active conversation instead of loading inbox rows" do
+      sender = user_fixture(%{handle: "sender#{System.unique_integer([:positive])}"})
+      recipient = user_fixture(%{handle: "recipient#{System.unique_integer([:positive])}"})
+      {:ok, message} = DMs.send_message(sender, recipient, %{body: "live refresh"})
+
+      context = Context.new(current_user: recipient, route: :bbs_mail)
+      state = %State{mode: :conversation, participant: sender, messages: [message]}
+
+      {refreshing_state, effects} =
+        BBSMail.update({:notifications, :created, %{kind: :dm}}, state, context)
+
+      assert refreshing_state.mode == :conversation
+      assert refreshing_state.participant.id == sender.id
+      assert [%Foglet.TUI.Effect{type: :task, payload: %{op: :load_conversation}}] = effects
+    end
+
+    test "bang reports the selected direct message from a conversation" do
+      sender = user_fixture(%{handle: "sender#{System.unique_integer([:positive])}"})
+      recipient = user_fixture(%{handle: "recipient#{System.unique_integer([:positive])}"})
+      {:ok, message} = DMs.send_message(sender, recipient, %{body: "report this dm"})
+
+      context = Context.new(current_user: recipient, route: :bbs_mail)
+      state = %State{mode: :conversation, participant: sender, messages: [message], scroll: 0}
+
+      {reporting_state, effects} =
+        BBSMail.update({:key, %{key: :char, char: "!"}}, state, context)
+
+      assert reporting_state.status == :reporting
+      assert [%Foglet.TUI.Effect{type: :task, payload: %{op: :report_mail, fun: fun}}] = effects
+      assert {:ok, %{target_kind: :dm, target_id: message_id, reporter_id: reporter_id}} = fun.()
+      assert message_id == message.id
+      assert reporter_id == recipient.id
+
+      {reported_state, []} =
+        BBSMail.update(
+          {:task_result, :report_mail, {:ok, {:ok, %{id: "report"}}}},
+          reporting_state,
+          context
+        )
+
+      assert reported_state.info == "Report submitted."
+    end
   end
 end

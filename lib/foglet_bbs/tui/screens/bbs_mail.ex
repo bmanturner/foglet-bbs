@@ -7,13 +7,14 @@ defmodule Foglet.TUI.Screens.BBSMail do
 
   import Raxol.Core.Renderer.View
 
-  alias Foglet.{Accounts, DMs, TimeAgo}
+  alias Foglet.{Accounts, DMs, Moderation, TimeAgo}
   alias Foglet.DMs.Message
   alias Foglet.TUI.{Context, Effect, Theme}
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
   alias Foglet.TUI.Widgets.Post.MarkdownBody
 
   @default_terminal_size {80, 24}
+  @live_refresh_ms 2_000
 
   defmodule State do
     @moduledoc false
@@ -42,7 +43,10 @@ defmodule Foglet.TUI.Screens.BBSMail do
 
   @impl true
   def subscriptions(_state, %Context{current_user: %{id: id}}),
-    do: [Foglet.PubSub.notifications_topic(id)]
+    do: %{
+      topics: [Foglet.PubSub.notifications_topic(id)],
+      intervals: [{@live_refresh_ms, :refresh_mail}]
+    }
 
   def subscriptions(_state, _context), do: []
 
@@ -113,13 +117,22 @@ defmodule Foglet.TUI.Screens.BBSMail do
     end
   end
 
+  def update({:task_result, :report_mail, result}, state, _context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, _report} -> {%{normalize(state) | info: "Report submitted.", error: nil}, []}
+      {:error, reason} -> task_error(state, reason)
+    end
+  end
+
   def update({:notifications, :created, %{kind: :dm}}, state, context),
-    do: load_conversations(normalize(state), context)
+    do: refresh_for_dm_event(state, context)
 
   def update({:notifications, :created, %{"kind" => "dm"}}, state, context),
-    do: load_conversations(normalize(state), context)
+    do: refresh_for_dm_event(state, context)
 
   def update({:notifications, _event, _payload}, state, _context), do: {normalize(state), []}
+
+  def update(:refresh_mail, state, context), do: refresh_for_dm_event(state, context)
 
   def update({:key, %{key: key}}, state, %Context{} = context) when key in [:up, :down] do
     state = normalize(state, context)
@@ -188,6 +201,9 @@ defmodule Foglet.TUI.Screens.BBSMail do
     message = selected_message(state)
     if message, do: {%{state | pending_delete_id: message.id}, []}, else: {state, []}
   end
+
+  def update({:key, %{key: :char, char: "!"}}, state, context),
+    do: report_selected_message(normalize(state, context), context)
 
   def update({:key, %{key: :char, char: c}}, state, context) when c in ["y", "Y"] do
     state = normalize(state, context)
@@ -371,6 +387,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
   defp commands_for(%State{mode: :conversation}),
     do: [
       %{key: "R", label: "Reply", priority: 5},
+      %{key: "!", label: "Report", priority: 10},
       %{key: "D", label: "Hide from my view", priority: 10},
       %{key: "B", label: "Back", priority: 20}
     ]
@@ -413,6 +430,16 @@ defmodule Foglet.TUI.Screens.BBSMail do
            {:ok, DMs.list_conversations(context.current_user, state.mode)}
          end)
        ]}
+
+  defp refresh_for_dm_event(state, context) do
+    state = normalize(state, context)
+
+    case state.mode do
+      :conversation -> load_conversation(state, context)
+      mode when mode in [:compose, :reply] -> {state, []}
+      _ -> load_conversations(state, context)
+    end
+  end
 
   defp load_conversation(%State{participant: nil} = state, _context),
     do: {%{state | status: :loaded}, []}
@@ -474,6 +501,25 @@ defmodule Foglet.TUI.Screens.BBSMail do
   end
 
   defp send_current(state, _context), do: {state, []}
+
+  defp report_selected_message(state, context) do
+    case selected_message(state) do
+      %Message{id: message_id} ->
+        {%{state | status: :reporting, error: nil},
+         [
+           Effect.task(:report_mail, :bbs_mail, fn ->
+             Moderation.create_report(context.current_user, %{
+               target_kind: :dm,
+               target_id: message_id,
+               reason: "Reported from BBS Mail conversation"
+             })
+           end)
+         ]}
+
+      nil ->
+        {state, []}
+    end
+  end
 
   defp selected_message(%State{mode: :conversation, messages: messages, scroll: scroll}),
     do: Enum.at(messages, scroll)

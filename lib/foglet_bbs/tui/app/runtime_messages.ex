@@ -60,6 +60,7 @@ defmodule Foglet.TUI.App.RuntimeMessages do
   def concern({:tui_clock, :minute_tick, %DateTime{}}), do: :clock
   def concern(:main_menu_clock_tick), do: :clock
   def concern(:refresh_unread_notifications_count), do: :routing
+  def concern(:refresh_mail), do: :routing
   def concern(:login_menu_scramble_tick), do: :routing
   def concern(:initial_route_enter), do: :routing
   def concern({:session_replaced, _payload}), do: :session
@@ -124,6 +125,14 @@ defmodule Foglet.TUI.App.RuntimeMessages do
       state,
       Routing.screen_key(Routing.current_route(state)),
       :refresh_unread_notifications_count
+    )
+  end
+
+  defp handle_routing(:refresh_mail, %App{} = state) do
+    Routing.route_screen_update(
+      state,
+      Routing.screen_key(Routing.current_route(state)),
+      :refresh_mail
     )
   end
 
