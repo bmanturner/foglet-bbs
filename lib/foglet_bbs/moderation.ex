@@ -10,6 +10,7 @@ defmodule Foglet.Moderation do
   alias Foglet.Authorization
   alias Foglet.Boards
   alias Foglet.Boards.Board
+  alias Foglet.DMs.Message
   alias Foglet.Moderation.{Action, Report}
   alias Foglet.Notifications
   alias Foglet.Oneliners.Entry
@@ -59,7 +60,7 @@ defmodule Foglet.Moderation do
   end
 
   @doc """
-  Creates a moderation report for a post, oneliner, or user.
+  Creates a moderation report for a post, direct message, oneliner, or user.
 
   To keep the moderation queue usable, a reporter may have only one open report
   for a specific target. Once moderators resolve or dismiss that report, the
@@ -256,6 +257,21 @@ defmodule Foglet.Moderation do
     case Ecto.UUID.cast(target_id) do
       {:ok, uuid} ->
         Repo.exists?(from post in Post, where: post.id == ^uuid and is_nil(post.deleted_at))
+
+      :error ->
+        false
+    end
+  end
+
+  defp report_target_exists?(:dm, target_id) do
+    case Ecto.UUID.cast(target_id) do
+      {:ok, uuid} ->
+        Repo.exists?(
+          from message in Message,
+            where:
+              message.id == ^uuid and is_nil(message.deleted_by_sender_at) and
+                is_nil(message.deleted_by_recipient_at)
+        )
 
       :error ->
         false

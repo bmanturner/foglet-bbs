@@ -34,6 +34,7 @@ defmodule Foglet.Accounts do
   }
 
   alias Foglet.{Config, Mailer}
+  alias Foglet.DMs.Message
   alias Foglet.Notifications.Notification
   alias Foglet.Posts.Post
   alias FogletBbs.Repo
@@ -588,7 +589,10 @@ defmodule Foglet.Accounts do
 
   The tombstone user is seeded, not created here. If matching posts exist
   and the seed row is missing, the foreign key fails the transaction.
-  Phase 6+ will add direct_messages handling.
+  Direct messages sent by the user are anonymized to the tombstone user;
+  unread DMs addressed to the deleted user are removed along with their DM
+  notifications. Already-read received DMs remain until the recipient-side
+  retention/deletion policy sweeps them.
   The user row is preserved so FK references (future) remain valid.
   """
   @spec delete_user(User.t()) :: {:ok, User.t()} | {:error, Ecto.Changeset.t()}
@@ -603,13 +607,39 @@ defmodule Foglet.Accounts do
       # distinguish "post body edited" from "author rewritten by tombstone
       # flow". Repo.update_all/3 does NOT touch timestamps automatically.
       now = DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      ensure_tombstone_user!()
 
       Repo.update_all(from(p in Post, where: p.user_id == ^user.id),
         set: [user_id: tombstone_user_id(), updated_at: now]
       )
 
+      Repo.update_all(from(message in Message, where: message.sender_id == ^user.id),
+        set: [sender_id: tombstone_user_id(), updated_at: now]
+      )
+
+      Repo.delete_all(
+        from(message in Message,
+          where: message.recipient_id == ^user.id and is_nil(message.read_at)
+        )
+      )
+
       user |> User.deletion_changeset() |> Repo.update()
     end)
+  end
+
+  defp ensure_tombstone_user! do
+    Repo.insert!(
+      %User{
+        id: tombstone_user_id(),
+        handle: "[deleted]",
+        email: "deleted@localhost",
+        password_hash: "invalid-deleted",
+        status: :active,
+        deleted_at: DateTime.utc_now() |> DateTime.truncate(:microsecond)
+      },
+      on_conflict: :nothing,
+      conflict_target: :id
+    )
   end
 
   defp pop_offered_ssh_public_key(attrs) when is_map(attrs) do

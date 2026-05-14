@@ -1,13 +1,13 @@
 defmodule Foglet.Moderation.Report do
   @moduledoc """
-  Durable moderation report for posts, oneliners, and users.
+  Durable moderation report for posts, direct messages, oneliners, and users.
   """
 
   use Foglet.Schema
 
   @type t :: %__MODULE__{}
 
-  @target_kinds [:post, :oneliner, :user]
+  @target_kinds [:post, :dm, :oneliner, :user]
   @statuses [:open, :resolved, :dismissed]
 
   schema "reports" do
