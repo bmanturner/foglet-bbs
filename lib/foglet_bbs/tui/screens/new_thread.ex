@@ -19,7 +19,7 @@ defmodule Foglet.TUI.Screens.NewThread do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Config
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, KeyBinding}
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.NewThread.Render
   alias Foglet.TUI.Screens.NewThread.State
@@ -47,7 +47,7 @@ defmodule Foglet.TUI.Screens.NewThread do
     new_state = %{state | load_status: :loading, error: nil}
 
     effect =
-      Effect.task(:load_boards_for_new_thread, :new_thread, fn ->
+      Effect.task(:load_boards_for_new_thread, fn ->
         directory = boards_mod.board_directory_for(current_user)
         {subscribed_boards(directory), active_board_count(directory)}
       end)
@@ -115,23 +115,37 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   # Key handler
   # ---------------------------------------------------------------------------
-  defp handle_board_key_event(%{key: :escape}, %State{} = state) do
-    {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
+  defp handle_board_key_event(event, %State{} = state) when is_map(event) do
+    if KeyBinding.cancel?(event) do
+      {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
+    else
+      handle_board_picker_key_event(event, state)
+    end
   end
 
-  defp handle_board_key_event(_event, %State{board_picker: nil} = state), do: {state, []}
+  defp handle_board_key_event(_event, %State{} = state), do: {state, []}
 
-  defp handle_board_key_event(%{key: :enter}, %State{board_picker: picker} = state) do
+  defp handle_board_picker_key_event(_event, %State{board_picker: nil} = state), do: {state, []}
+
+  defp handle_board_picker_key_event(event, %State{board_picker: picker} = state) do
+    if KeyBinding.submit?(event) do
+      select_focused_board(state, picker)
+    else
+      {new_picker, _action} = SmartList.handle_event(event, picker)
+      new_idx = Map.get(new_picker.raxol_state, :focused_index, 0)
+      {%{state | board_picker: new_picker, selected_board_index: new_idx}, []}
+    end
+  end
+
+  defp select_focused_board(%State{} = state, %SmartList{} = picker) do
     case picker_focused_board(picker) do
       nil -> {state, []}
       board -> {%{state | step: :compose, board: board}, []}
     end
   end
 
-  defp handle_board_key_event(event, %State{board_picker: picker} = state) do
-    {new_picker, _action} = SmartList.handle_event(event, picker)
-    new_idx = Map.get(new_picker.raxol_state, :focused_index, 0)
-    {%{state | board_picker: new_picker, selected_board_index: new_idx}, []}
+  defp cancel_compose(%State{} = state) do
+    {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
   end
 
   defp picker_focused_board(%SmartList{raxol_state: rs}) do
@@ -146,19 +160,21 @@ defmodule Foglet.TUI.Screens.NewThread do
 
   defp picker_focused_board(_picker), do: nil
 
-  defp handle_compose_key_event(
-         %{key: :char, char: "c", ctrl: true},
-         %State{} = state,
-         %Context{}
-       ) do
-    {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
+  defp handle_compose_key_event(event, %State{} = state, %Context{} = context)
+       when is_map(event) do
+    if KeyBinding.cancel?(event, composer?: true) do
+      cancel_compose(state)
+    else
+      case handle_compose_active_key_event(event, state) do
+        {:submit, submit_state} -> submit_from_state(submit_state, context)
+        result -> result
+      end
+    end
   end
 
-  defp handle_compose_key_event(%{key: :escape}, %State{} = state, %Context{}) do
-    {state, [Effect.navigate(origin_for(state), cancel_params(state))]}
-  end
+  defp handle_compose_key_event(_event, %State{} = state, %Context{}), do: {state, []}
 
-  defp handle_compose_key_event(%{key: :tab}, %State{} = state, %Context{}) do
+  defp handle_compose_active_key_event(%{key: :tab}, %State{} = state) do
     if state.focused == :body do
       new_mode = if state.mode == :edit, do: :preview, else: :edit
       {%{state | mode: new_mode}, []}
@@ -167,15 +183,14 @@ defmodule Foglet.TUI.Screens.NewThread do
     end
   end
 
-  defp handle_compose_key_event(
+  defp handle_compose_active_key_event(
          %{key: :char, char: "s", ctrl: true},
-         %State{} = state,
-         %Context{} = context
+         %State{} = state
        ) do
-    submit_from_state(state, context)
+    {:submit, state}
   end
 
-  defp handle_compose_key_event(key_event, %State{focused: :title} = state, %Context{}) do
+  defp handle_compose_active_key_event(key_event, %State{focused: :title} = state) do
     before = state.title_input_state.raxol_state.value
     {new_input, _action} = TextInput.handle_event(key_event, state.title_input_state)
     after_value = new_input.raxol_state.value
@@ -192,7 +207,7 @@ defmodule Foglet.TUI.Screens.NewThread do
     end
   end
 
-  defp handle_compose_key_event(key_event, %State{focused: :body} = state, %Context{}) do
+  defp handle_compose_active_key_event(key_event, %State{focused: :body} = state) do
     case Compose.apply_key(state.body_input_state, key_event) do
       {:ok, new_input_st} -> {%{state | body_input_state: new_input_st}, []}
       :error -> {state, []}
@@ -227,7 +242,7 @@ defmodule Foglet.TUI.Screens.NewThread do
         attrs = %{title: title, body: body}
 
         effect =
-          Effect.task(:create_thread, :new_thread, fn ->
+          Effect.task(:create_thread, fn ->
             threads_mod.create_thread(board.id, user_id, attrs)
           end)
 

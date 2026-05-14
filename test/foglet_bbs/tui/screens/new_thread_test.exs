@@ -153,10 +153,15 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert [
              %Foglet.TUI.Effect{
                type: :task,
-               payload: %{op: :load_boards_for_new_thread, screen_key: :new_thread, fun: fun}
+               payload: %{
+                 op: :load_boards_for_new_thread,
+                 screen_key: screen_key,
+                 fun: fun
+               }
              }
            ] = effects
 
+    assert screen_key == Foglet.TUI.Effect.current_screen_key()
     assert {[%{id: "b1"}, %{id: "b2"}], 3} = fun.()
   end
 
@@ -377,10 +382,15 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
             [
               %Foglet.TUI.Effect{
                 type: :task,
-                payload: %{op: :load_boards_for_new_thread, screen_key: :new_thread, fun: fun}
+                payload: %{
+                  op: :load_boards_for_new_thread,
+                  screen_key: screen_key,
+                  fun: fun
+                }
               }
             ]} = NewThread.update(:load, state, ctx)
 
+    assert screen_key == Foglet.TUI.Effect.current_screen_key()
     assert is_function(fun, 0)
     assert {boards, 3} = fun.()
     assert Enum.map(boards, & &1.id) == ["b1", "b2"]
@@ -571,6 +581,21 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
     assert state.body_input_state.value == "i"
   end
 
+  test "NewThread.update/3 keeps navigation and help characters as typed composer input" do
+    state = State.new(step: :compose, board: %{id: "b1"})
+
+    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "k"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "?"}}, state, context())
+    assert state.title_input_state.raxol_state.value == "jk?"
+
+    {state, []} = NewThread.update({:key, %{key: :tab}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "j"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "k"}}, state, context())
+    {state, []} = NewThread.update({:key, %{key: :char, char: "?"}}, state, context())
+    assert state.body_input_state.value == "jk?"
+  end
+
   test "NewThread.update/3 emits create_thread task for valid submit" do
     state =
       State.new(
@@ -585,11 +610,12 @@ defmodule Foglet.TUI.Screens.NewThreadTest do
             [
               %Foglet.TUI.Effect{
                 type: :task,
-                payload: %{op: :create_thread, screen_key: :new_thread, fun: fun}
+                payload: %{op: :create_thread, screen_key: screen_key, fun: fun}
               }
             ]} =
              NewThread.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context())
 
+    assert screen_key == Foglet.TUI.Effect.current_screen_key()
     assert {:ok, %{thread: %{id: "t-new"}}} = fun.()
     assert Process.get(:new_thread_last_attrs) == %{title: "Task Title", body: "Task body"}
   end
