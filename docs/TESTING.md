@@ -156,6 +156,43 @@ Avoid single-fragment text-presence tests for visual behavior. Prefer reducer
 assertions for behavior, widget assertions for reusable primitives, or
 whole-buffer snapshots when exact layout and chrome are the thing being pinned.
 
+### Buffer snapshot conventions
+
+Use buffer snapshots for stable, user-visible screen states, not for every render
+branch. Name snapshot tests after the state they freeze, for example
+`"renders empty catalog"` or `"renders launch confirmation modal"`, and keep them
+near the behavior tests for the same screen. New screen snapshots should import
+`Foglet.TUI.Test` and render either a focused screen state with `render_screen/3`
+or one of the synthetic manual-inspection fixtures with `render_fixture/2`.
+
+When a snapshot includes chrome, freeze every clock-sensitive input in the
+context. Set `session_context.clock_now` to a fixed `DateTime`, and set the
+user's time-format preference fields that the chrome or screen reads. This keeps
+snapshots from changing with wall-clock time or local preference defaults. Use
+the smallest terminal size that proves the layout, usually `80x24`, and add a
+second wider snapshot only when the responsive behavior is the invariant.
+
+Update snapshots intentionally. First run `rtk mix foglet.tui.render <screen>`
+for quick visual inspection when the fixture exists, then update the `~B`
+expected buffer only after confirming the visual change is intended. Prefer a
+new snapshot for a meaningfully different state over widening one expected
+buffer until it becomes hard to read.
+
+### Layout smoke coverage
+
+`test/foglet_bbs/tui/layout_smoke_test.exs` is broad integration coverage for
+the Raxol layout engine and the highest-risk screen shells. It is intentionally
+not the default pattern for new screen work. Add focused reducer, widget, or
+buffer snapshot tests first; extend the smoke test only when the change touches
+cross-screen layout contracts, chrome placement, or size behavior that is
+awkward to express as one exact buffer.
+
+When the smoke file grows, keep related helper code in
+`test/support/foglet/tui/layout_smoke/` and add comments to new sections that
+explain the layout invariant being protected. If a new screen needs several
+fixtures or tab states, prefer a per-screen support helper over another large
+inline setup block.
+
 ## Ecto sandbox
 
 `FogletBbs.DataCase.setup_sandbox/1` is the single sandbox entry point used by both
