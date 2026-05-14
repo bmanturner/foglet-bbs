@@ -65,7 +65,9 @@ defmodule Foglet.TUI.Screens.BBSMail do
   def update({:task_result, :load_conversation, result}, state, _context) do
     case Effect.unwrap_task_result(result) do
       {:ok, messages} ->
-        {%{normalize(state) | status: :loaded, messages: messages, error: nil}, []}
+        loaded = %{normalize(state) | status: :loaded, messages: messages, error: nil}
+        loaded = if state.info == "Message sent.", do: scroll_to_latest(loaded), else: loaded
+        {loaded, []}
 
       {:error, reason} ->
         task_error(state, reason)
@@ -126,6 +128,19 @@ defmodule Foglet.TUI.Screens.BBSMail do
       :conversation -> {%{state | scroll: max(state.scroll + delta, 0)}, []}
       _ -> {select_delta(state, delta), []}
     end
+  end
+
+  def update({:key, %{key: :char, char: c, ctrl: true}}, state, context) when c in ["s", "S"],
+    do: send_current(normalize(state, context), context)
+
+  def update({:key, %{key: :char, char: c}}, %State{mode: mode} = state, _context)
+      when mode in [:compose, :reply] and is_binary(c) do
+    {%{state | body: state.body <> c, error: nil}, []}
+  end
+
+  def update({:key, %{key: :backspace}}, %State{mode: mode} = state, _context)
+      when mode in [:compose, :reply] do
+    {%{state | body: trim_last_grapheme(state.body), error: nil}, []}
   end
 
   def update({:key, %{key: :char, char: c}}, state, context) when c in ["j", "k"],
@@ -456,6 +471,18 @@ defmodule Foglet.TUI.Screens.BBSMail do
     }
 
   defp clamp(value, min, max), do: value |> Kernel.max(min) |> Kernel.min(max)
+
+  defp trim_last_grapheme(""), do: ""
+
+  defp trim_last_grapheme(value) when is_binary(value) do
+    value
+    |> String.graphemes()
+    |> Enum.drop(-1)
+    |> Enum.join()
+  end
+
+  defp scroll_to_latest(%State{messages: messages} = state),
+    do: %{state | scroll: max(length(messages) - 4, 0)}
 
   defp apply_route_params(state, %{"participant_id" => id}),
     do: %{state | mode: :conversation, participant: %{id: id}}
