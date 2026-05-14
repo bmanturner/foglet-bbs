@@ -495,6 +495,25 @@ end
 - Dual soft-delete — each side can remove a DM from their own view without affecting the other party. Hard delete only when both sides have removed it (a background job can sweep these if desired, or just let them accumulate).
 - Full-text search on `body` if DM search is ever added (currently out of scope per 9.2).
 
+**Privacy, operator access, and retention policy:**
+
+- Direct messages are private to the two participants in normal member UI, but
+  are application data in Postgres and are not encrypted at rest by Foglet.
+- Every conversation/read screen must show the required notice and placement
+  guidance from `docs/ux/bbs-mail-policy-copy.md` before message history.
+- Sysops may inspect direct messages for reports, moderation, legal/compliance
+  handling, retention cleanup, and system repair. Moderators should not receive
+  broad DM browsing by default; expose DM content to mods only through a
+  report/review workflow or explicit scoped operator permission.
+- Delete-from-my-view hides a message for one participant only. It does not
+  remove the other participant's copy or erase retained operator/report records.
+- Account deletion/anonymization rewrites authored DMs to the tombstone user,
+  removes unread DMs addressed to the deleted user, and leaves visible
+  received/sent history governed by the per-participant delete and
+  operator-retention rules above.
+- Do not document automatic DM expiry until a retention job and configuration
+  key exist.
+
 ---
 
 ## 6. Chat
