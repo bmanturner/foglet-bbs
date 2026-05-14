@@ -120,7 +120,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     new_state = %{state | status: :loading, last_op: :load_posts_window, last_error: nil}
 
     effect =
-      Effect.task(:load_posts_window, :post_reader, fn ->
+      Effect.task(:load_posts_window, fn ->
         load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
@@ -204,7 +204,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     opts = thread_activity_window_opts(state)
 
     effect =
-      Effect.task(:load_posts_window, :post_reader, fn ->
+      Effect.task(:load_posts_window, fn ->
         load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
@@ -298,7 +298,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       state = update_reply_context_scroll(state, scroll_top)
 
       effect =
-        Effect.task(:toggle_reply_context_upvote, :post_reader, fn ->
+        Effect.task(:toggle_reply_context_upvote, fn ->
           posts_mod.toggle_upvote(user_id, post_id)
         end)
 
@@ -339,7 +339,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     moderation_mod = resolve_domain_module(context, :moderation, Foglet.Moderation)
 
     effect =
-      Effect.task(:submit_user_report, :post_reader, fn ->
+      Effect.task(:submit_user_report, fn ->
         moderation_mod.create_report(context.current_user, %{
           target_kind: Map.get(payload, :target_kind),
           target_id: Map.get(payload, :target_id),
@@ -359,7 +359,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     moderation_mod = resolve_domain_module(context, :moderation, Foglet.Moderation)
 
     effect =
-      Effect.task(:submit_post_report, :post_reader, fn ->
+      Effect.task(:submit_post_report, fn ->
         moderation_mod.create_report(context.current_user, %{
           target_kind: Map.get(payload, :target_kind),
           target_id: Map.get(payload, :target_id),
@@ -1350,7 +1350,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
 
       effect =
-        Effect.task(:toggle_upvote, :post_reader, fn ->
+        Effect.task(:toggle_upvote, fn ->
           posts_mod.toggle_upvote(user_id, post_id)
         end)
 
@@ -1407,7 +1407,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
 
       effect =
-        Effect.task(:load_reply_context, :post_reader, fn ->
+        Effect.task(:load_reply_context, fn ->
           posts_mod.fetch_readable_post(context.current_user, reply_to_id)
         end)
 
@@ -1583,7 +1583,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     opts = adjacent_window_opts(state, direction)
 
     effect =
-      Effect.task(:load_posts_window, :post_reader, fn ->
+      Effect.task(:load_posts_window, fn ->
         load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
@@ -1913,7 +1913,7 @@ defmodule Foglet.TUI.Screens.PostReader do
           last_read_message_number: pos.last_read_message_number
         }
 
-        Effect.task(:flush_read_pointers, :post_reader, fn ->
+        Effect.task(:flush_read_pointers, fn ->
           with :ok <- flush_local_board_pointer(boards_mod, flush_ctx),
                :ok <- flush_local_thread_pointer(threads_mod, flush_ctx) do
             {:read_pointers_flushed, thread_id}

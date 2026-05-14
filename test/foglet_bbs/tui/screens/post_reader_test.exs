@@ -679,8 +679,12 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
 
       context = reader_context_from_state(app_for_reader(state))
       {new_state, effects} = PostReader.update({:key, %{key: :char, char: "C"}}, state, context)
+      active_screen_key = Effect.current_screen_key()
 
-      assert %Effect{type: :task, payload: %{op: :load_reply_context, screen_key: :post_reader}} =
+      assert %Effect{
+               type: :task,
+               payload: %{op: :load_reply_context, screen_key: ^active_screen_key}
+             } =
                List.first(effects)
 
       assert new_state.last_op == :load_reply_context
@@ -996,12 +1000,17 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "PostReader.update(:load, state, context) emits bounded load_posts_window task" do
     context = post_reader_context()
     state = PostReader.State.from_context(context)
+    active_screen_key = Effect.current_screen_key()
 
     assert {%State{status: :loading, last_op: :load_posts_window, last_error: nil},
             [
               %Effect{
                 type: :task,
-                payload: %{op: :load_posts_window, screen_key: :post_reader, fun: fun}
+                payload: %{
+                  op: :load_posts_window,
+                  screen_key: ^active_screen_key,
+                  fun: fun
+                }
               }
             ]} = PostReader.update(:load, state, context)
 
@@ -1031,12 +1040,17 @@ defmodule Foglet.TUI.Screens.PostReaderTest do
   test "PostReader.update/3 reloads matching active thread activity through reader window" do
     context = post_reader_context()
     state = PostReader.State.from_context(context)
+    active_screen_key = Effect.current_screen_key()
 
     assert {%State{last_op: :load_posts_window},
             [
               %Effect{
                 type: :task,
-                payload: %{op: :load_posts_window, screen_key: :post_reader, fun: fun}
+                payload: %{
+                  op: :load_posts_window,
+                  screen_key: ^active_screen_key,
+                  fun: fun
+                }
               }
             ]} = PostReader.update({:thread_activity, "t1", :new_post}, state, context)
 

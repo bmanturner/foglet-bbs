@@ -128,19 +128,30 @@ effects only after the screen has interpreted the semantic action. See
 
 ## Screen Rollout Audit
 
-Goal 11 audit status for top-level screens:
+Current audit status for top-level screens:
 
 | Screen | Status | Notes |
 |---|---|---|
 | `door_list` | Converted | Pilot screen for layout, text, key binding, and buffer snapshots. |
 | `board_list` | Converted | Uses `KeyBinding`, active-screen task effects, `BoardTree`, render-purity guard, and existing visual coverage. |
 | `thread_list` | Converted | Uses `KeyBinding`, active-screen task effects, and `SelectionList`/row widgets. |
-| `post_reader` | Partially converted | Decomposed render/state modules and render-purity covered; defer broader key/text/layout churn because it is the highest-risk reader surface. |
-| `main_menu` | Partially converted | Decomposed state/render and modal tests exist; oneliner modal flows remain App-owned/reusable. |
-| `login`, `register`, `verify` | Partially converted | Auth flows use dedicated state/render helpers; defer churn around delivery/config gates and recovery copy. |
-| `account` | Partially converted | Decomposed state/render plus profile/prefs/SSH-key helpers; local form widgets already own their state. |
-| `moderation` | Partially converted | Operator tabs use table/widget helpers; defer broad key/layout changes because queue workflows are high-risk. |
-| `sysop` | Partially converted | BOARDS is the screen-owned modal exemplar; other tabs already use state/render helpers. |
-| `online_now`, `notifications`, `bbs_mail` | Deferred | Smaller list/message surfaces; convert with focused behavior and snapshot tests when those flows are next touched. |
-| `board_screen`, `chat_room`, `board_news`, `board_config` | Deferred | Tabbed board route and child surfaces already use explicit state modules/effects; convert cautiously with board-tab integration tests. |
-| `new_thread`, `post_composer` | Deferred | Composer-style flows already own drafts and cancel behavior; avoid helper churn until composer UX changes are planned. |
+| `post_reader` | Converted | Uses shared key binding helpers for reader commands while preserving reader-specific scroll behavior, active-screen task effects where appropriate, render-purity guard, and buffer coverage for loaded/error states. |
+| `main_menu` | Converted | Uses `KeyBinding` for common selection, active-screen task effects for oneliner/notification/report work, and keeps shared App-owned modal flows explicit. |
+| `login`, `register`, `verify` | Converted | Auth flows keep form-local typing in state helpers, use shared command key predicates outside text entry, and use active-screen task effects for auth/recovery/verification work. |
+| `account` | Converted | Decomposed state/render plus profile/prefs/SSH-key helpers; local forms own edit state and account-owned tasks use active-screen effects. |
+| `moderation` | Converted | Operator tabs use table/widget helpers, active-screen effects, shared invite/report surfaces, and queue workflows remain covered by reducer tests. |
+| `sysop` | Converted | BOARDS remains the screen-owned modal exemplar; list subviews use `KeyBinding`, form subviews keep local text handling, and sysop-owned tasks use active-screen effects. |
+| `online_now`, `notifications`, `bbs_mail` | Converted | Smaller list/message surfaces use shared key binding and active-screen task effects, with stable loaded-state buffer coverage. |
+| `board_screen`, `chat_room`, `board_news`, `board_config` | Converted | Tabbed board route and child surfaces preserve text-entry behavior, use active-screen effects for active child work, and have board-shell/child visual coverage. |
+| `new_thread`, `post_composer` | Converted | Composer flows map command versus text-entry contexts explicitly, keep drafts in screen/widget state, and preserve typed `j`/`k`/`?` behavior. |
+
+Compatibility notes:
+
+- `Foglet.TUI.ScrollKeys` remains as the low-level compatibility primitive used
+  by `Foglet.TUI.KeyBinding` and its direct compatibility tests. New screen and
+  widget code should prefer `KeyBinding`.
+- Explicit task screen keys remain intentional when a screen starts work for a
+  different destination screen after navigation, such as Main Menu loading
+  board data for `:board_list` and Thread List refreshing `:board_list`.
+- Explicit modal-submit screen keys remain the modal routing contract for
+  App-owned forms and screen-owned modal exemplars.
