@@ -7,7 +7,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   flushing, and render-cache mutation.
   """
 
-  alias Foglet.TUI.{Context, Guest, ScrollKeys}
+  alias Foglet.TUI.{Context, Guest, KeyBinding}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.TextWidth
@@ -66,18 +66,18 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
     case PostReader.visible_screenful(state, context) do
       %{mode: :packed_partial, indexes: indexes, partial: partial} = sf ->
-        cmds = [%{key: ScrollKeys.commandbar_key(), label: "Select", priority: 6} | base_commands]
+        cmds = [%{key: KeyBinding.commandbar_key(), label: "Select", priority: 6} | base_commands]
 
         # FOG-714: commandbar advertises arrows only. j/k still works as the
         # unadvertised long-post scroll fallback for users who expect it.
         if length(indexes) > 1 and action_index(state, sf) == partial.index do
-          cmds ++ [%{key: ScrollKeys.commandbar_key(), label: "Scroll", priority: 8}]
+          cmds ++ [%{key: KeyBinding.commandbar_key(), label: "Scroll", priority: 8}]
         else
           cmds
         end
 
       %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
-        [%{key: ScrollKeys.commandbar_key(), label: "Select", priority: 6} | base_commands]
+        [%{key: KeyBinding.commandbar_key(), label: "Select", priority: 6} | base_commands]
 
       %{mode: :packed} ->
         # FOG-694: at the cramped FOG-651 negative threshold the screenful
@@ -87,7 +87,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         base_commands
 
       _long ->
-        base_commands ++ [%{key: ScrollKeys.commandbar_key(), label: "Scroll", priority: 10}]
+        base_commands ++ [%{key: KeyBinding.commandbar_key(), label: "Scroll", priority: 10}]
     end
   end
 
@@ -270,7 +270,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   defp partial_progress_label(_index, _total, partial, true) do
     cond do
       partial.total_body_rows <= 0 ->
-        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll"
+        "▶ Selected — #{KeyBinding.commandbar_key()} scroll"
 
       PostReader.partial_at_bottom?(partial) ->
         "▶ Selected — end of post"
@@ -282,7 +282,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
           (partial.scroll_top + partial.body_visible_rows)
           |> min(partial.total_body_rows)
 
-        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
+        "▶ Selected — #{KeyBinding.commandbar_key()} scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
     end
   end
 
