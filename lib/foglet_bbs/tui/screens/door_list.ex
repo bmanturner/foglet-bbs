@@ -15,6 +15,7 @@ defmodule Foglet.TUI.Screens.DoorList do
   alias Foglet.Doors.Manifest
   alias Foglet.TUI.{Context, Effect, Layout, Modal, ScrollKeys, TextWidth, Theme}
   alias Foglet.TUI.Guest
+  alias Foglet.TUI.Text, as: StyledText
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
   @wide_layout_min_width 100
@@ -160,8 +161,10 @@ defmodule Foglet.TUI.Screens.DoorList do
   defp intro_block(theme) do
     column style: %{gap: 0} do
       [
-        text("Choose a door game.", fg: theme.primary.fg),
-        text("Doors may take over the terminal, then return here.", fg: theme.primary.fg)
+        StyledText.Span.new("Choose a door game.", fg: :primary)
+        |> StyledText.to_raxol(theme),
+        StyledText.Span.new("Doors may take over the terminal, then return here.", fg: :primary)
+        |> StyledText.to_raxol(theme)
       ]
     end
   end

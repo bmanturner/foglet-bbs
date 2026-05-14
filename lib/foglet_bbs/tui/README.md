@@ -74,3 +74,27 @@ parent = %{x: 0, y: 0, width: terminal_width, height: body_height}
 Prefer this helper for header/body/footer and sidebar/content splits. Keep
 using Raxol `column`, `row`, `box`, and `spacer` directly when the built-in view
 tree already expresses the layout clearly.
+
+## Styled Text Helpers
+
+Use `Foglet.TUI.Text` when a screen or widget needs to compose styled runs
+before converting them to the current Raxol view tree. The helper is useful for
+multi-run rows such as command hints, labels with badges, and small render
+helpers that would otherwise pass repeated `fg: theme.slot.fg` options around.
+
+```elixir
+alias Foglet.TUI.Text
+
+hint =
+  Text.Line.new([
+    Text.Span.new("[Enter]", fg: :accent) |> Text.Span.bold(),
+    Text.Span.new(" Launch", fg: :primary)
+  ])
+
+Text.to_raxol(hint, theme)
+```
+
+Use direct Raxol `text/2` calls when rendering one simple node is clearer.
+Prefer theme slot atoms with `Foglet.TUI.Text`; raw terminal color atoms are not
+accepted, and raw color values should stay limited to widgets that already
+document that contract.
