@@ -169,8 +169,10 @@ defmodule Foglet.TUI.Screens.VerifyTest do
 
       assert state.buffer == "ABC123"
 
-      assert %Effect{type: :task, payload: %{op: :verify_submit, screen_key: :verify}} =
+      assert %Effect{type: :task, payload: %{op: :verify_submit, screen_key: screen_key}} =
                task_effect(effects, :verify_submit)
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     test "correct code promotes the verified user through a session effect", %{
@@ -281,8 +283,10 @@ defmodule Foglet.TUI.Screens.VerifyTest do
       assert state.attempts == 0
       assert %DateTime{} = state.resend_cooldown_until
 
-      assert %Effect{type: :task, payload: %{op: :verify_resend, screen_key: :verify}} =
+      assert %Effect{type: :task, payload: %{op: :verify_resend, screen_key: screen_key}} =
                task_effect(effects, :verify_resend)
+
+      assert screen_key == Effect.current_screen_key()
 
       {state, []} = Verify.update({:key, %{key: :char, char: "r"}}, verify_state(), context(user))
       assert state.buffer == "R"

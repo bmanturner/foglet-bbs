@@ -26,7 +26,7 @@ defmodule Foglet.TUI.Screens.Register do
 
   alias Foglet.{Accounts, AppName, Config}
   alias Foglet.Accounts.{Invites, SSHKey, Verification}
-  alias Foglet.TUI.{Context, Effect, Input, TextWidth}
+  alias Foglet.TUI.{Context, Effect, Input, KeyBinding, TextWidth}
   alias Foglet.TUI.Screens.Register.State, as: RegisterState
   alias Foglet.TUI.Screens.Shared.{AppStateBridge, FocusInput}
   alias Foglet.TUI.Theme
@@ -75,15 +75,15 @@ defmodule Foglet.TUI.Screens.Register do
 
   @impl true
   @spec update(term(), map() | nil, Context.t()) :: {map(), [Effect.t()]}
-  def update({:key, %{key: :escape}}, local_state, %Context{} = context) do
-    {local_state || init(context), [Effect.navigate(:login, %{})]}
-  end
-
   def update({:key, key_event}, local_state, %Context{} = context) do
-    local_state
-    |> app_state_from_local(context)
-    |> reduce_key(key_event)
-    |> local_result(local_state || init(context))
+    if KeyBinding.cancel?(key_event) do
+      {local_state || init(context), [Effect.navigate(:login, %{})]}
+    else
+      local_state
+      |> app_state_from_local(context)
+      |> reduce_key(key_event)
+      |> local_result(local_state || init(context))
+    end
   end
 
   def update({:wizard, {:cancel}}, local_state, %Context{} = context) do
@@ -154,18 +154,23 @@ defmodule Foglet.TUI.Screens.Register do
 
   # --- :invite_code step key handlers ---
 
-  defp handle_invite_key(%{key: :enter}, state) do
+  defp handle_invite_key(event, state) do
+    cond do
+      KeyBinding.submit?(event) ->
+        handle_invite_submit_key(state)
+
+      Input.backward_tab?(event) or Input.forward_tab?(event) ->
+        {:update, state, []}
+
+      true ->
+        handle_invite_input_key(event, state)
+    end
+  end
+
+  defp handle_invite_submit_key(state) do
     reg = get_register_ss(state)
     value = reg.invite_code_input.raxol_state.value
     handle_invite_submission(value, state)
-  end
-
-  defp handle_invite_key(event, state) do
-    if Input.backward_tab?(event) or Input.forward_tab?(event) do
-      {:update, state, []}
-    else
-      handle_invite_input_key(event, state)
-    end
   end
 
   defp handle_invite_input_key(event, state) do
@@ -216,7 +221,15 @@ defmodule Foglet.TUI.Screens.Register do
     {:update, RegisterState.put(state, new_reg), []}
   end
 
-  defp handle_combined_input_key(%{key: :enter}, state) do
+  defp handle_combined_input_key(event, state) do
+    if KeyBinding.submit?(event) do
+      handle_combined_submit_key(state)
+    else
+      handle_combined_text_or_toggle_key(event, state)
+    end
+  end
+
+  defp handle_combined_submit_key(state) do
     reg = get_register_ss(state)
     has_offered_key? = offered_ssh_key?(state)
 
@@ -243,9 +256,9 @@ defmodule Foglet.TUI.Screens.Register do
     end
   end
 
-  defp handle_combined_input_key(%{key: :space}, state), do: toggle_ssh_key_opt_in(state)
+  defp handle_combined_text_or_toggle_key(%{key: :space}, state), do: toggle_ssh_key_opt_in(state)
 
-  defp handle_combined_input_key(%{key: :char, char: " "}, state) do
+  defp handle_combined_text_or_toggle_key(%{key: :char, char: " "}, state) do
     reg = get_register_ss(state)
 
     if reg.focused_field == :ssh_key_opt_in do
@@ -255,7 +268,7 @@ defmodule Foglet.TUI.Screens.Register do
     end
   end
 
-  defp handle_combined_input_key(event, state) do
+  defp handle_combined_text_or_toggle_key(event, state) do
     reg = get_register_ss(state)
 
     if reg.focused_field == :ssh_key_opt_in do
@@ -518,7 +531,7 @@ defmodule Foglet.TUI.Screens.Register do
     submitting_state = RegisterState.put(state, %{reg | error: nil})
 
     effect =
-      Effect.task(:register, :register, fn ->
+      Effect.task(:register, fn ->
         case accounts_mod.register_pending_user(data) do
           {:ok, user} -> {:ok, :pending_approval, user}
           {:error, changeset} -> {:error, changeset}
@@ -543,7 +556,7 @@ defmodule Foglet.TUI.Screens.Register do
     submitting_state = RegisterState.put(state, %{reg | error: nil})
 
     effect =
-      Effect.task(:register, :register, fn ->
+      Effect.task(:register, fn ->
         register_user(accounts_mod, verification_mod, data)
       end)
 

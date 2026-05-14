@@ -8,6 +8,7 @@ defmodule Foglet.TUI.Screens.Login.ResetRecovery do
   """
 
   alias Foglet.TUI.Effect
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.Screens.Login.{ResetConsume, ResetRequest}
   alias Foglet.TUI.Screens.Login.State, as: LoginState
   alias Foglet.TUI.Screens.Shared.FocusInput
@@ -15,10 +16,6 @@ defmodule Foglet.TUI.Screens.Login.ResetRecovery do
 
   @spec handle_key(map(), map()) ::
           :no_match | {:update, map(), [Effect.t()]} | {map(), [Effect.t()]}
-  def handle_key(%{key: :escape}, state) do
-    {:update, LoginState.put(state, LoginState.default()), []}
-  end
-
   def handle_key(%{key: :right} = event, state) do
     if switch_right?(state), do: switch_pane(state, :token), else: delegate_active(event, state)
   end
@@ -27,7 +24,13 @@ defmodule Foglet.TUI.Screens.Login.ResetRecovery do
     if switch_left?(state), do: switch_pane(state, :request), else: delegate_active(event, state)
   end
 
-  def handle_key(event, state), do: delegate_active(event, state)
+  def handle_key(event, state) do
+    if KeyBinding.cancel?(event) do
+      {:update, LoginState.put(state, LoginState.default()), []}
+    else
+      delegate_active(event, state)
+    end
+  end
 
   defp delegate_active(event, state) do
     case active_pane(LoginState.get(state)) do

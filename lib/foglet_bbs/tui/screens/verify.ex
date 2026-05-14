@@ -20,7 +20,7 @@ defmodule Foglet.TUI.Screens.Verify do
 
   alias Foglet.Accounts.Verification
   alias Foglet.AppName
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, KeyBinding}
   alias Foglet.TUI.Screens.Shared.AppStateBridge
   alias Foglet.TUI.Screens.Verify.State, as: VerifyState
   alias Foglet.TUI.Theme
@@ -95,10 +95,6 @@ defmodule Foglet.TUI.Screens.Verify do
 
   @impl true
   @spec update(term(), map() | nil, Context.t()) :: {map(), [Effect.t()]}
-  def update({:key, %{key: :escape}}, local_state, %Context{} = context) do
-    {local_state || init(context), [Effect.navigate(:login, %{})]}
-  end
-
   def update({:key, %{key: :backspace}}, local_state, %Context{} = context) do
     vs = local_state || init(context)
     new_len = max(String.length(vs.buffer) - 1, 0)
@@ -106,29 +102,28 @@ defmodule Foglet.TUI.Screens.Verify do
     {new_vs, []}
   end
 
-  def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
-    submit(local_state || init(context), context)
-  end
-
   def update({:key, %{key: :char, char: c, ctrl: true}}, local_state, %Context{} = context)
       when c in ["R", "r"],
       do: resend_code(local_state || init(context), context)
 
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context) do
+  def update({:key, key_event}, local_state, %Context{} = context)
+      when is_map(key_event) do
     vs = local_state || init(context)
-    new_char = String.upcase(c)
 
     cond do
-      VerifyState.cooldown?(vs) ->
-        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many tries."))]}
+      KeyBinding.cancel?(key_event) ->
+        {vs, [Effect.navigate(:login, %{})]}
 
-      String.match?(new_char, ~r/\A[A-Z0-9]\z/) and String.length(vs.buffer) < @code_length ->
-        {%{vs | buffer: vs.buffer <> new_char}, []}
+      KeyBinding.submit?(key_event) ->
+        submit(vs, context)
 
       true ->
-        {vs, []}
+        handle_code_input_key(key_event, vs)
     end
   end
+
+  def update({:key, _key_event}, local_state, %Context{} = context),
+    do: {local_state || init(context), []}
 
   def update({:verify, {:set_buffer, code}}, local_state, %Context{} = context) do
     {%{(local_state || init(context)) | buffer: code}, []}
@@ -170,6 +165,23 @@ defmodule Foglet.TUI.Screens.Verify do
 
   def update(_message, local_state, %Context{} = context), do: {local_state || init(context), []}
 
+  defp handle_code_input_key(%{key: :char, char: c}, vs) do
+    new_char = String.upcase(c)
+
+    cond do
+      VerifyState.cooldown?(vs) ->
+        {vs, [Effect.open_modal(cooldown_modal(vs.cooldown_until, "Too many tries."))]}
+
+      String.match?(new_char, ~r/\A[A-Z0-9]\z/) and String.length(vs.buffer) < @code_length ->
+        {%{vs | buffer: vs.buffer <> new_char}, []}
+
+      true ->
+        {vs, []}
+    end
+  end
+
+  defp handle_code_input_key(_event, vs), do: {vs, []}
+
   defp submit(_vs, %Context{current_user: nil}) do
     modal = %Foglet.TUI.Modal{
       type: :error,
@@ -209,7 +221,7 @@ defmodule Foglet.TUI.Screens.Verify do
     verification_mod = domain_module(context, :verification)
 
     effect =
-      Effect.task(:verify_resend, :verify, fn ->
+      Effect.task(:verify_resend, fn ->
         verification_mod.deliver_verification_code(user)
       end)
 
@@ -227,7 +239,7 @@ defmodule Foglet.TUI.Screens.Verify do
     verification_mod = domain_module(context, :verification)
 
     effect =
-      Effect.task(:verify_submit, :verify, fn ->
+      Effect.task(:verify_submit, fn ->
         verification_mod.verify_email_code(user, code)
       end)
 
