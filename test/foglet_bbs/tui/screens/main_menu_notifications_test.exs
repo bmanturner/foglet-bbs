@@ -26,6 +26,7 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
       current_user: user,
       route: :main_menu,
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
+      unread_count: Keyword.get(opts, :unread_count, 0),
       domain: %{online_now: FakeOnlineNow, notifications: FakeNotifications}
     )
   end
@@ -55,13 +56,15 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
     assert is_function(oneliner_task.payload.fun, 0)
   end
 
-  test "screen subscribes to online presence and the current user's notifications topic" do
-    topics = MainMenu.subscriptions(local_state(), context())
+  test "screen subscribes to notification topics and polls unread count while active" do
+    subscriptions = MainMenu.subscriptions(local_state(), context())
 
-    assert topics == [
+    assert subscriptions.topics == [
              Foglet.PubSub.online_presence_topic(),
              Foglet.PubSub.notifications_topic("viewer")
            ]
+
+    assert subscriptions.intervals == [{2_000, :refresh_unread_notifications_count}]
   end
 
   test "unread count task result updates local state for render" do
@@ -76,17 +79,17 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
     assert updated.notifications_status == :idle
   end
 
-  test "notification PubSub events refresh the unread count" do
-    {loading, effects} =
-      MainMenu.update({:notifications, :created, %{user_id: "viewer"}}, local_state(), context())
+  test "notification PubSub events apply the app-shell unread count and request authoritative reload" do
+    {updated, effects} =
+      MainMenu.update(
+        {:notifications, :created, %{user_id: "viewer"}},
+        local_state(),
+        context(unread_count: 4)
+      )
 
-    assert loading.notifications_status == :loading
-
-    assert %Effect{
-             type: :task,
-             payload: %{op: :load_unread_notifications_count, screen_key: :main_menu}
-           } =
-             task_effect!(effects, :load_unread_notifications_count)
+    assert updated.notifications_status == :idle
+    assert updated.unread_notifications_count == 4
+    assert [%Effect{type: :task, payload: %{op: :load_unread_notifications_count}}] = effects
   end
 
   test "inbox key routes to the notifications screen" do

@@ -136,10 +136,10 @@ defmodule Foglet.ModerationTest do
 
       assert {:ok, %Report{} = first_report} = Moderation.create_report(reporter, attrs)
 
-      assert {:error, changeset} =
+      assert {:ok, %Report{} = duplicate_report} =
                Moderation.create_report(reporter, %{attrs | notes: "trying again"})
 
-      assert %{target_id: ["already has an open report from you"]} = errors_on(changeset)
+      assert duplicate_report.id == first_report.id
       assert Repo.aggregate(Report, :count) == 1
 
       assert {:ok, %Report{} = different_target_report} =

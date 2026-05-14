@@ -84,6 +84,13 @@ defmodule Foglet.TUI.Screens.Notifications do
 
   def update({:task_result, :open_notification_target, result}, local_state, %Context{} = context) do
     case Effect.unwrap_task_result(result) do
+      {:ok, %{kind: :dm, participant_id: participant_id} = target} ->
+        effects =
+          [Effect.navigate(:bbs_mail, %{participant_id: participant_id})] ++
+            mark_read_after_open_effects(context, target)
+
+        {%{normalize_state(local_state) | status: :loaded}, effects}
+
       {:ok, target} ->
         params = %{
           board_id: target.board_id,

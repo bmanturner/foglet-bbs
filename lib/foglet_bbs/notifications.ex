@@ -122,6 +122,19 @@ defmodule Foglet.Notifications do
     kind = Map.get(notification, :kind) || Map.get(notification, "kind")
     payload = Map.get(notification, :payload) || Map.get(notification, "payload") || %{}
 
+    with true <- kind in [:dm, "dm"],
+         message_id when is_binary(message_id) <- payload["message_id"] || payload[:message_id],
+         {:ok, message} <- Foglet.DMs.get_visible_message(user, message_id) do
+      participant_id =
+        if message.sender_id == user_id!(user), do: message.recipient_id, else: message.sender_id
+
+      {:ok, %{kind: :dm, participant_id: participant_id, message_id: message.id}}
+    else
+      _ -> resolve_post_open_target(user, kind, payload)
+    end
+  end
+
+  defp resolve_post_open_target(user, kind, payload) do
     with true <- kind in [:mention, :reply, "mention", "reply"],
          post_id when is_binary(post_id) <- payload["post_id"] || payload[:post_id],
          thread_id when is_binary(thread_id) <- payload["thread_id"] || payload[:thread_id],

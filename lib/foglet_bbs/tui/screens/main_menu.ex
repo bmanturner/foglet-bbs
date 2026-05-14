@@ -64,6 +64,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     %{key: "B", label: "Boards", glyph: "●", kind: :destination, visibility: :always},
     %{key: "C", label: "Compose", glyph: "✎", kind: :destination, visibility: :always},
     %{key: "I", label: "Inbox", glyph: "✉", kind: :destination, visibility: :authenticated},
+    %{key: "L", label: "BBS Mail", glyph: "✉", kind: :destination, visibility: :authenticated},
     %{key: "N", label: "Online Now", glyph: "◌", kind: :destination, visibility: :always},
     %{key: "D", label: "Door Games", glyph: "▸", kind: :destination, visibility: :doors},
     %{key: "A", label: "Account", glyph: "◇", kind: :destination, visibility: :account},
@@ -86,9 +87,13 @@ defmodule Foglet.TUI.Screens.MainMenu do
     do: Render.render(normalize_state(local_state, context), context)
 
   @impl true
-  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  @spec subscriptions(State.t() | nil, Context.t()) ::
+          [String.t()] | %{topics: [String.t()], intervals: [{pos_integer(), term()}]}
   def subscriptions(_local_state, %Context{current_user: %{id: user_id}}) do
-    [Foglet.PubSub.online_presence_topic(), Foglet.PubSub.notifications_topic(user_id)]
+    %{
+      topics: [Foglet.PubSub.online_presence_topic(), Foglet.PubSub.notifications_topic(user_id)],
+      intervals: [{2_000, :refresh_unread_notifications_count}]
+    }
   end
 
   def subscriptions(_local_state, %Context{}), do: [Foglet.PubSub.online_presence_topic()]
@@ -133,6 +138,17 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end
   end
 
+  def update(:refresh_unread_notifications_count, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {%{local_state | notifications_status: :loading},
+       [load_unread_notifications_count_task_effect(context)]}
+    else
+      {local_state, []}
+    end
+  end
+
   def update(:load_oneliners, local_state, %Context{} = context) do
     local_state = normalize_state(local_state, context)
     {%{local_state | oneliner_status: :loading}, [load_oneliners_task_effect(context)]}
@@ -161,6 +177,17 @@ defmodule Foglet.TUI.Screens.MainMenu do
 
     if context.current_user do
       {local_state, [Effect.navigate(:notifications)]}
+    else
+      {local_state, []}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
+      when c in ["l", "L"] do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {local_state, [Effect.navigate(:bbs_mail)]}
     else
       {local_state, []}
     end
@@ -317,7 +344,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
       {%{
          local_state
          | unread_notifications_count: context.unread_count,
-           notifications_status: :loading
+           notifications_status: :idle
        }, [load_unread_notifications_count_task_effect(context)]}
     else
       {local_state, []}
