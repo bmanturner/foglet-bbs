@@ -937,6 +937,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                {"B", "Boards"},
                {"C", "Compose"},
                {"I", "Inbox"},
+               {"L", "BBS Mail"},
                {"N", "Online Now (0)"},
                {"A", "Account"},
                {"Q", "Logout"}
@@ -951,6 +952,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                  {"B", "Boards"},
                  {"C", "Compose"},
                  {"I", "Inbox"},
+                 {"L", "BBS Mail"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
@@ -966,6 +968,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                  {"B", "Boards"},
                  {"C", "Compose"},
                  {"I", "Inbox"},
+                 {"L", "BBS Mail"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
