@@ -46,7 +46,8 @@ defmodule Foglet.TUI.Effect do
 
   @type terminal :: %__MODULE__{
           type: :terminal,
-          payload: {:size, {pos_integer(), pos_integer()}}
+          payload:
+            {:size, {pos_integer(), pos_integer()}} | {:alert, Foglet.TUI.TerminalAlert.mode()}
         }
 
   @type door :: %__MODULE__{
@@ -130,6 +131,12 @@ defmodule Foglet.TUI.Effect do
   @spec terminal_size({pos_integer(), pos_integer()}) :: terminal()
   def terminal_size(size) do
     %__MODULE__{type: :terminal, payload: {:size, size}}
+  end
+
+  @doc "Requests a raw terminal notification alert for the current session only."
+  @spec terminal_alert(Foglet.TUI.TerminalAlert.mode()) :: terminal()
+  def terminal_alert(mode) do
+    %__MODULE__{type: :terminal, payload: {:alert, mode}}
   end
 
   @doc "Requests a supervised door launch through the app runtime boundary."

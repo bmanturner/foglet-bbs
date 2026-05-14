@@ -160,6 +160,25 @@ defmodule Foglet.TUI.Screens.Account.Render do
   # compaction so they survive 80-column compaction. CommandBar treats lower
   # priority numbers as higher retention, so Save/Cancel use priority 0 to
   # stay visible at 80x24 even when Field nav and Tabs are dropped.
+  defp form_middle_groups(%State{prefs_focus: :notification_alert}, :prefs) do
+    [
+      %{
+        label: "List",
+        commands: [
+          %{key: "Tab/Shift+Tab", label: "Rows", priority: 10},
+          %{key: "↑/↓", label: "Select", priority: 20}
+        ]
+      },
+      %{
+        label: "Actions",
+        commands: [
+          %{key: "T", label: "Test alert", priority: 0},
+          %{key: "E", label: "Edit", priority: 1}
+        ]
+      }
+    ]
+  end
+
   defp form_middle_groups(%State{}, _section) do
     [
       %{

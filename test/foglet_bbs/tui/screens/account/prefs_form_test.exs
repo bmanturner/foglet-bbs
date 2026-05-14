@@ -64,7 +64,10 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
 
     assert attrs == %{
              timezone: "America/Chicago",
-             preferences: %{"time_format" => "24h"},
+             preferences: %{
+               "notification_alert" => "terminal_bell",
+               "time_format" => "24h"
+             },
              theme: "gray",
              handle_color: "#FFFFFF"
            }
@@ -198,6 +201,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsFormTest do
     assert state.prefs_draft == %{
              timezone: "America/Chicago",
              time_format: "12h",
+             notification_alert: "terminal_bell",
              theme: "gray",
              handle_color: "#FFFFFF"
            }

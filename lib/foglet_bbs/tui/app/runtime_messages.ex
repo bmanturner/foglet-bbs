@@ -20,6 +20,7 @@ defmodule Foglet.TUI.App.RuntimeMessages do
   alias Foglet.TUI.CommandEntry
   alias Foglet.TUI.Guest
   alias Foglet.TUI.SizeGate
+  alias Foglet.TUI.TerminalAlert
   alias Raxol.Core.Runtime.Command
 
   require PubSubRouter
@@ -232,9 +233,37 @@ defmodule Foglet.TUI.App.RuntimeMessages do
     Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
 
-  defp handle_notification({:notification, _user_id, kind, payload}, %App{} = state) do
+  defp handle_notification({:notification, user_id, kind, payload}, %App{} = state) do
     modal = %Foglet.TUI.Modal{type: :info, message: format_notification(kind, payload)}
-    {%{state | modal: modal}, []}
+    state = %{state | modal: modal}
+
+    if recipient?(state, user_id) do
+      alert_for_notification(state, payload)
+    else
+      {state, []}
+    end
+  end
+
+  defp recipient?(%App{current_user: %{id: id}}, id), do: true
+  defp recipient?(_state, _user_id), do: false
+
+  defp alert_for_notification(%App{} = state, payload) do
+    mode = TerminalAlert.mode_from_user(state.current_user)
+    now_ms = System.monotonic_time(:millisecond)
+    alert_state = Map.get(state.session_context || %{}, :terminal_alert, %{})
+
+    case {TerminalAlert.sequence(mode, payload),
+          TerminalAlert.check_rate_limit(alert_state, now_ms)} do
+      {nil, _rate} ->
+        {state, []}
+
+      {_sequence, {:suppress, _alert_state}} ->
+        {state, []}
+
+      {_sequence, {:emit, next_alert_state}} ->
+        session_context = Map.put(state.session_context || %{}, :terminal_alert, next_alert_state)
+        {%{state | session_context: session_context}, [Foglet.TUI.Effect.terminal_alert(mode)]}
+    end
   end
 
   defp handle_clock({:tui_clock, :minute_tick, %DateTime{} = now}, %App{} = state) do
