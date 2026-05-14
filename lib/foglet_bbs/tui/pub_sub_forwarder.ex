@@ -41,6 +41,7 @@ defmodule Foglet.TUI.PubSubForwarder do
   use GenServer
 
   @control_topic_prefix "tui:pubsub_forwarder:"
+  @unread_poll_ms 2_000
 
   @doc "Ensures a dispatcher-owned forwarder exists, then refreshes its topics."
   def ensure_refreshed(dispatcher_pid \\ self(), topics)
@@ -104,6 +105,7 @@ defmodule Foglet.TUI.PubSubForwarder do
     dispatcher_ref = Process.monitor(dispatcher_pid)
     _ = :global.register_name(registry_name(dispatcher_pid), self())
     subscribe_topics(pubsub, topics)
+    schedule_unread_poll()
 
     {:ok,
      %{
@@ -112,7 +114,8 @@ defmodule Foglet.TUI.PubSubForwarder do
        control_topic: control_topic,
        topics: topics,
        pubsub: pubsub,
-       last_forwarded: nil
+       last_forwarded: nil,
+       last_unread_count: nil
      }}
   end
 
@@ -134,6 +137,12 @@ defmodule Foglet.TUI.PubSubForwarder do
     |> subscribe_topics(MapSet.difference(next, current))
 
     {:noreply, %{state | topics: topics}}
+  end
+
+  def handle_info(:poll_unread_count, state) do
+    state = poll_unread_count(state)
+    schedule_unread_poll()
+    {:noreply, state}
   end
 
   @impl GenServer
@@ -161,6 +170,37 @@ defmodule Foglet.TUI.PubSubForwarder do
   end
 
   defp registry_name(dispatcher_pid), do: {__MODULE__, dispatcher_pid}
+
+  defp schedule_unread_poll do
+    Process.send_after(self(), :poll_unread_count, @unread_poll_ms)
+  end
+
+  defp poll_unread_count(state) do
+    case notification_user_id(state.topics) do
+      nil ->
+        %{state | last_unread_count: nil}
+
+      user_id ->
+        count = Foglet.Notifications.unread_count(user_id)
+
+        if count != state.last_unread_count do
+          send(
+            state.dispatcher_pid,
+            {:subscription,
+             {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, count}}}
+          )
+        end
+
+        %{state | last_unread_count: count}
+    end
+  end
+
+  defp notification_user_id(topics) do
+    Enum.find_value(topics, fn
+      "notifications:" <> user_id -> user_id
+      _other -> nil
+    end)
+  end
 
   defp subscribe_topics(pubsub, topics) do
     Enum.each(topics, &Phoenix.PubSub.subscribe(pubsub, &1))

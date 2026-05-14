@@ -56,13 +56,15 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
     assert is_function(oneliner_task.payload.fun, 0)
   end
 
-  test "screen subscribes to online presence and the current user's notifications topic" do
-    topics = MainMenu.subscriptions(local_state(), context())
+  test "screen subscribes to notification topics and polls unread count while active" do
+    subscriptions = MainMenu.subscriptions(local_state(), context())
 
-    assert topics == [
+    assert subscriptions.topics == [
              Foglet.PubSub.online_presence_topic(),
              Foglet.PubSub.notifications_topic("viewer")
            ]
+
+    assert subscriptions.intervals == [{2_000, :refresh_unread_notifications_count}]
   end
 
   test "unread count task result updates local state for render" do

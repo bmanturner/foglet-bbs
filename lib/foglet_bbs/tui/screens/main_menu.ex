@@ -87,9 +87,13 @@ defmodule Foglet.TUI.Screens.MainMenu do
     do: Render.render(normalize_state(local_state, context), context)
 
   @impl true
-  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  @spec subscriptions(State.t() | nil, Context.t()) ::
+          [String.t()] | %{topics: [String.t()], intervals: [{pos_integer(), term()}]}
   def subscriptions(_local_state, %Context{current_user: %{id: user_id}}) do
-    [Foglet.PubSub.online_presence_topic(), Foglet.PubSub.notifications_topic(user_id)]
+    %{
+      topics: [Foglet.PubSub.online_presence_topic(), Foglet.PubSub.notifications_topic(user_id)],
+      intervals: [{2_000, :refresh_unread_notifications_count}]
+    }
   end
 
   def subscriptions(_local_state, %Context{}), do: [Foglet.PubSub.online_presence_topic()]
@@ -129,6 +133,17 @@ defmodule Foglet.TUI.Screens.MainMenu do
         },
         load_home_shell_effects(context)
       }
+    else
+      {local_state, []}
+    end
+  end
+
+  def update(:refresh_unread_notifications_count, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {%{local_state | notifications_status: :loading},
+       [load_unread_notifications_count_task_effect(context)]}
     else
       {local_state, []}
     end
