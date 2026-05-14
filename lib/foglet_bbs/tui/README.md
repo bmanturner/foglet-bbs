@@ -125,3 +125,22 @@ owns the surrounding state machine. Store the modal/form in screen state, feed
 keys through the reducer, keep validation errors in the widget state, and emit
 effects only after the screen has interpreted the semantic action. See
 `Foglet.TUI.Screens.Sysop.BoardsView` for the current pattern.
+
+## Screen Rollout Audit
+
+Goal 11 audit status for top-level screens:
+
+| Screen | Status | Notes |
+|---|---|---|
+| `door_list` | Converted | Pilot screen for layout, text, key binding, and buffer snapshots. |
+| `board_list` | Converted | Uses `KeyBinding`, active-screen task effects, `BoardTree`, render-purity guard, and existing visual coverage. |
+| `thread_list` | Converted | Uses `KeyBinding`, active-screen task effects, and `SelectionList`/row widgets. |
+| `post_reader` | Partially converted | Decomposed render/state modules and render-purity covered; defer broader key/text/layout churn because it is the highest-risk reader surface. |
+| `main_menu` | Partially converted | Decomposed state/render and modal tests exist; oneliner modal flows remain App-owned/reusable. |
+| `login`, `register`, `verify` | Partially converted | Auth flows use dedicated state/render helpers; defer churn around delivery/config gates and recovery copy. |
+| `account` | Partially converted | Decomposed state/render plus profile/prefs/SSH-key helpers; local form widgets already own their state. |
+| `moderation` | Partially converted | Operator tabs use table/widget helpers; defer broad key/layout changes because queue workflows are high-risk. |
+| `sysop` | Partially converted | BOARDS is the screen-owned modal exemplar; other tabs already use state/render helpers. |
+| `online_now`, `notifications`, `bbs_mail` | Deferred | Smaller list/message surfaces; convert with focused behavior and snapshot tests when those flows are next touched. |
+| `board_screen`, `chat_room`, `board_news`, `board_config` | Deferred | Tabbed board route and child surfaces already use explicit state modules/effects; convert cautiously with board-tab integration tests. |
+| `new_thread`, `post_composer` | Deferred | Composer-style flows already own drafts and cancel behavior; avoid helper churn until composer UX changes are planned. |

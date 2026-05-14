@@ -179,7 +179,7 @@ defmodule Foglet.TUI.Screens.BoardListTest do
 
   defp assert_task(%Effect{type: :task, payload: payload}, op) do
     assert payload.op == op
-    assert payload.screen_key == :board_list
+    assert payload.screen_key == Effect.current_screen_key()
     assert is_function(payload.fun, 0)
   end
 

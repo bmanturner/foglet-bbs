@@ -12,9 +12,9 @@ defmodule Foglet.TUI.Screens.BoardList do
   alias Foglet.TUI.Context
   alias Foglet.TUI.Effect
   alias Foglet.TUI.Guest
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.Screens.BoardList.State
   alias Foglet.TUI.Screens.Domain
-  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -68,56 +68,29 @@ defmodule Foglet.TUI.Screens.BoardList do
     {local_state, []}
   end
 
-  def update({:key, %{key: :char, char: "j"}}, local_state, %Context{}),
-    do: update_tree(%{key: :down}, local_state)
+  def update({:key, %{key: key} = event}, local_state, %Context{})
+      when key in [:up, :down] do
+    update_tree(%{key: key}, local_state, KeyBinding.vertical_delta(event))
+  end
 
-  def update({:key, %{key: :down}}, local_state, %Context{}),
-    do: update_tree(%{key: :down}, local_state)
-
-  def update({:key, %{key: :char, char: "k"}}, local_state, %Context{}),
-    do: update_tree(%{key: :up}, local_state)
-
-  def update({:key, %{key: :up}}, local_state, %Context{}),
-    do: update_tree(%{key: :up}, local_state)
+  def update({:key, %{key: :char, char: c} = event}, local_state, %Context{})
+      when c in ["j", "k"] do
+    update_tree(vertical_tree_event(event), local_state, KeyBinding.vertical_delta(event))
+  end
 
   def update({:key, %{key: :left}}, local_state, %Context{}),
-    do: update_tree(%{key: :left}, local_state)
+    do: update_tree(%{key: :left}, local_state, 0)
 
   def update({:key, %{key: :right}}, local_state, %Context{}),
-    do: update_tree(%{key: :right}, local_state)
+    do: update_tree(%{key: :right}, local_state, 0)
 
-  def update({:key, %{key: :enter}}, local_state, %Context{}) do
+  def update({:key, %{key: :enter} = event}, local_state, %Context{}) do
     local_state = normalize_state(local_state)
 
-    with %BoardTree{} = tree <- tree_for_state(local_state),
-         {%BoardTree{} = new_tree, action} <- BoardTree.handle_event(%{key: :enter}, tree) do
-      local_state = %{local_state | board_tree: new_tree} |> remember_tree_state()
-
-      case action do
-        action when action in [:node_expanded, :node_collapsed] ->
-          {local_state, []}
-
-        :node_activated ->
-          case BoardTree.focused_board_entry(new_tree) do
-            %{board: board} = entry ->
-              {local_state,
-               [
-                 Effect.navigate(:thread_list, %{
-                   board: board_identity(board),
-                   board_id: Map.get(board, :id),
-                   subscribed?: Map.get(entry, :subscribed?, true)
-                 })
-               ]}
-
-            _other ->
-              {local_state, []}
-          end
-
-        _other ->
-          {local_state, []}
-      end
+    if KeyBinding.submit?(event) do
+      open_or_toggle_tree(local_state)
     else
-      _other -> {local_state, []}
+      {local_state, []}
     end
   end
 
@@ -332,7 +305,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     navigate = %{
       label: "Navigate",
       commands: [
-        %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 10},
+        %{key: KeyBinding.commandbar_key(), label: "Select", priority: 10},
         %{key: "←/→", label: "Collapse/Expand", priority: 20},
         %{key: "Enter", label: "Open", priority: 5}
       ]
@@ -370,7 +343,9 @@ defmodule Foglet.TUI.Screens.BoardList do
 
   defp maybe_archived_note(false, _theme), do: nil
 
-  defp update_tree(key, local_state) do
+  defp update_tree(_key, local_state, nil), do: {normalize_state(local_state), []}
+
+  defp update_tree(key, local_state, _delta) do
     local_state = normalize_state(local_state)
 
     case tree_for_state(local_state) do
@@ -387,7 +362,7 @@ defmodule Foglet.TUI.Screens.BoardList do
     user = context.current_user
     boards_mod = domain_module(context, :boards)
 
-    Effect.task(:load_boards, :board_list, fn ->
+    Effect.task(:load_boards, fn ->
       boards_mod.board_directory_for(user)
     end)
   end
@@ -397,12 +372,53 @@ defmodule Foglet.TUI.Screens.BoardList do
     board_id = Map.get(board, :id)
     boards_mod = domain_module(context, :boards)
 
-    Effect.task(op, :board_list, fn ->
+    Effect.task(op, fn ->
       case op do
         :subscribe_to_board -> boards_mod.subscribe_user_to_board(user, board_id)
         :unsubscribe_from_board -> boards_mod.unsubscribe_user_from_board(user, board_id)
       end
     end)
+  end
+
+  defp vertical_tree_event(event) do
+    case KeyBinding.vertical_delta(event) do
+      1 -> %{key: :down}
+      -1 -> %{key: :up}
+      _other -> event
+    end
+  end
+
+  defp open_or_toggle_tree(local_state) do
+    with %BoardTree{} = tree <- tree_for_state(local_state),
+         {%BoardTree{} = new_tree, action} <- BoardTree.handle_event(%{key: :enter}, tree) do
+      local_state = %{local_state | board_tree: new_tree} |> remember_tree_state()
+
+      case action do
+        action when action in [:node_expanded, :node_collapsed] ->
+          {local_state, []}
+
+        :node_activated ->
+          case BoardTree.focused_board_entry(new_tree) do
+            %{board: board} = entry ->
+              {local_state,
+               [
+                 Effect.navigate(:thread_list, %{
+                   board: board_identity(board),
+                   board_id: Map.get(board, :id),
+                   subscribed?: Map.get(entry, :subscribed?, true)
+                 })
+               ]}
+
+            _other ->
+              {local_state, []}
+          end
+
+        _other ->
+          {local_state, []}
+      end
+    else
+      _other -> {local_state, []}
+    end
   end
 
   defp normalize_state(%State{} = state), do: state
