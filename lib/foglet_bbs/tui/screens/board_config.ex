@@ -2,7 +2,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
   @moduledoc "Operator-only board feed CONFIG tab."
 
   alias Foglet.BoardFeeds
-  alias Foglet.TUI.Context
+  alias Foglet.TUI.{Context, KeyBinding}
   import Raxol.Core.Renderer.View
 
   defmodule State do
@@ -71,7 +71,88 @@ defmodule Foglet.TUI.Screens.BoardConfig do
   def update({:key, %{key: :backspace}}, %State{mode: :add} = state, _context),
     do: {%{state | input: drop_last(state.input)}, []}
 
-  def update({:key, %{key: :enter}}, %State{mode: :add} = state, context) do
+  def update({:key, event}, %State{mode: :add} = state, context) when is_map(event) do
+    cond do
+      KeyBinding.submit?(event) ->
+        add_feed(state, context)
+
+      KeyBinding.cancel?(event) ->
+        {%{state | mode: :list, message: nil}, []}
+
+      true ->
+        {state, []}
+    end
+  end
+
+  def update({:key, %{key: :char, char: c}}, %State{mode: :ttl} = state, _context)
+      when c in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] do
+    {%{state | ttl_input: state.ttl_input <> c}, []}
+  end
+
+  def update({:key, %{key: :backspace}}, %State{mode: :ttl} = state, _context),
+    do: {%{state | ttl_input: drop_last(state.ttl_input)}, []}
+
+  def update({:key, event}, %State{mode: :ttl} = state, context) when is_map(event) do
+    cond do
+      KeyBinding.submit?(event) and state.feeds == [] ->
+        {%{
+           state
+           | mode: :list,
+             message: "Default TTL for next feed set to #{parse_ttl(state)}s"
+         }, []}
+
+      KeyBinding.submit?(event) ->
+        update_selected_feed_ttl(state, context)
+
+      KeyBinding.cancel?(event) ->
+        {%{state | mode: :list, message: nil}, []}
+
+      true ->
+        {state, []}
+    end
+  end
+
+  def update({:key, event}, %State{mode: :list} = state, context) when is_map(event) do
+    cond do
+      KeyBinding.scroll_down?(event) ->
+        {%{
+           state
+           | selected_index: min(state.selected_index + 1, max(length(state.feeds) - 1, 0))
+         }, []}
+
+      KeyBinding.scroll_up?(event) ->
+        {%{state | selected_index: max(state.selected_index - 1, 0)}, []}
+
+      KeyBinding.cancel?(event) ->
+        {%{state | mode: :list, message: nil}, []}
+
+      plain_char?(event, ["a", "A"]) ->
+        {%{
+           state
+           | mode: :add,
+             input: "",
+             message: "Enter RSS/Atom URL, Enter to validate/save, Esc to cancel."
+         }, []}
+
+      plain_char?(event, ["t", "T"]) ->
+        {%{
+           state
+           | mode: :ttl,
+             ttl_input: Integer.to_string(selected_ttl(state)),
+             message: ttl_prompt(state)
+         }, []}
+
+      plain_char?(event, ["r", "R"]) ->
+        refresh_feeds(state, context)
+
+      true ->
+        {state, []}
+    end
+  end
+
+  def update(_msg, %State{} = state, _context), do: {state, []}
+
+  defp add_feed(%State{} = state, context) do
     board_id = board_id(context)
     actor = context.current_user
     url = String.trim(state.input)
@@ -84,23 +165,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     {%{state | message: "Validating feed…"}, [effect]}
   end
 
-  def update({:key, %{key: :escape}}, %State{} = state, _context),
-    do: {%{state | mode: :list, message: nil}, []}
-
-  def update({:key, %{key: :char, char: c}}, %State{mode: :ttl} = state, _context)
-      when c in ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"] do
-    {%{state | ttl_input: state.ttl_input <> c}, []}
-  end
-
-  def update({:key, %{key: :backspace}}, %State{mode: :ttl} = state, _context),
-    do: {%{state | ttl_input: drop_last(state.ttl_input)}, []}
-
-  def update({:key, %{key: :enter}}, %State{mode: :ttl, feeds: []} = state, _context),
-    do:
-      {%{state | mode: :list, message: "Default TTL for next feed set to #{parse_ttl(state)}s"},
-       []}
-
-  def update({:key, %{key: :enter}}, %State{mode: :ttl} = state, context) do
+  defp update_selected_feed_ttl(%State{} = state, context) do
     actor = context.current_user
     ttl = parse_ttl(state)
     feed = selected_feed(state)
@@ -113,36 +178,7 @@ defmodule Foglet.TUI.Screens.BoardConfig do
     {%{state | message: "Saving TTL for selected feed…"}, [effect]}
   end
 
-  def update({:key, %{key: :down}}, %State{mode: :list} = state, _context),
-    do:
-      {%{state | selected_index: min(state.selected_index + 1, max(length(state.feeds) - 1, 0))},
-       []}
-
-  def update({:key, %{key: :up}}, %State{mode: :list} = state, _context),
-    do: {%{state | selected_index: max(state.selected_index - 1, 0)}, []}
-
-  def update({:key, %{key: :char, char: c}}, %State{mode: :list} = state, _context)
-      when c in ["a", "A"] do
-    {%{
-       state
-       | mode: :add,
-         input: "",
-         message: "Enter RSS/Atom URL, Enter to validate/save, Esc to cancel."
-     }, []}
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{mode: :list} = state, _context)
-      when c in ["t", "T"] do
-    {%{
-       state
-       | mode: :ttl,
-         ttl_input: Integer.to_string(selected_ttl(state)),
-         message: ttl_prompt(state)
-     }, []}
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{mode: :list} = state, context)
-      when c in ["r", "R"] do
+  defp refresh_feeds(%State{} = state, context) do
     board_id = board_id(context)
     actor = context.current_user
 
@@ -153,8 +189,6 @@ defmodule Foglet.TUI.Screens.BoardConfig do
 
     {%{state | message: "Refreshing enabled feeds…"}, [effect]}
   end
-
-  def update(_msg, %State{} = state, _context), do: {state, []}
 
   def render(%State{status: :loading}, _context, theme),
     do: text("Loading feed CONFIG…", fg: theme.dim.fg)
@@ -260,6 +294,16 @@ defmodule Foglet.TUI.Screens.BoardConfig do
 
   defp drop_last(""), do: ""
   defp drop_last(value), do: String.slice(value, 0, max(String.length(value) - 1, 0))
+
+  defp plain_char?(%{key: :char, char: char} = event, chars) when is_list(chars) do
+    char in chars and
+      Enum.all?(
+        [:ctrl, :control, :alt, :meta, :shift],
+        &(Map.get(event, &1, false) in [false, nil])
+      )
+  end
+
+  defp plain_char?(_event, _chars), do: false
 
   defp parse_ttl(%State{ttl_input: value}) do
     case Integer.parse(value || "") do
