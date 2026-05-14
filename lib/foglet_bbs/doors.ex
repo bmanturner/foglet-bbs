@@ -172,12 +172,12 @@ defmodule Foglet.Doors do
       display_name: Map.get(attrs, :display_name),
       description: Map.get(attrs, :description),
       runtime: normalize_manifest_atom(Map.get(attrs, :runtime)),
-      command: Map.get(attrs, :command),
+      command: normalize_manifest_path(Map.get(attrs, :command)),
       module: Map.get(attrs, :module),
       args: Map.get(attrs, :args, []),
       dropfiles: dropfiles,
       dropfile_formats: dropfile_formats(dropfiles),
-      working_dir: Map.get(attrs, :working_dir),
+      working_dir: normalize_manifest_path(Map.get(attrs, :working_dir)),
       env: Map.get(attrs, :env, %{}),
       env_allowlist: Map.get(attrs, :env_allowlist, []),
       timeout_ms: Map.get(attrs, :timeout_ms),
@@ -396,6 +396,15 @@ defmodule Foglet.Doors do
         Path.expand(Path.join("priv", relative_path))
     end
   end
+
+  defp normalize_manifest_path("{priv:" <> rest) do
+    case String.split(rest, "}", parts: 2) do
+      [relative_path, ""] -> priv_path(relative_path)
+      _other -> "{priv:" <> rest
+    end
+  end
+
+  defp normalize_manifest_path(path), do: path
 
   @doc """
   Actor-aware launch gate for a validated manifest.

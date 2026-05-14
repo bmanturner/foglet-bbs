@@ -28,7 +28,7 @@ def main():
 
     for line in sys.stdin:
         text = line.strip()
-        if text == "/quit":
+        if text in {"/quit", "q", "Q"}:
             print("Leaving Classic Dropfile Demo.", flush=True)
             return 0
         print(f"classic> {text}", flush=True)
