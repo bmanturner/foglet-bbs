@@ -211,5 +211,29 @@ defmodule Foglet.TUI.Screens.BBSMailTest do
 
       assert reported_state.info == "Report submitted."
     end
+
+    test "bang treats an already-open report as submitted instead of surfacing a save error" do
+      sender = user_fixture(%{handle: "sender#{System.unique_integer([:positive])}"})
+      recipient = user_fixture(%{handle: "recipient#{System.unique_integer([:positive])}"})
+      {:ok, message} = DMs.send_message(sender, recipient, %{body: "report this dm once"})
+
+      {:ok, _report} =
+        Foglet.Moderation.create_report(recipient, %{
+          target_kind: :dm,
+          target_id: message.id,
+          reason: "Existing report from BBS Mail conversation"
+        })
+
+      context = Context.new(current_user: recipient, route: :bbs_mail)
+      state = %State{mode: :conversation, participant: sender, messages: [message], scroll: 0}
+
+      {_reporting_state, effects} =
+        BBSMail.update({:key, %{key: :char, char: "!"}}, state, context)
+
+      assert [%Foglet.TUI.Effect{type: :task, payload: %{op: :report_mail, fun: fun}}] = effects
+      assert {:ok, %{target_kind: :dm, target_id: message_id, reporter_id: reporter_id}} = fun.()
+      assert message_id == message.id
+      assert reporter_id == recipient.id
+    end
   end
 end

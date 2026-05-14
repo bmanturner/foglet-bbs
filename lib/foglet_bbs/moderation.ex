@@ -74,6 +74,9 @@ defmodule Foglet.Moderation do
          {:ok, changeset} <- validate_no_duplicate_open_report(changeset),
          {:ok, report} <- Repo.insert(changeset) do
       {:ok, Repo.preload(report, [:reporter, :resolved_by])}
+    else
+      {:duplicate, %Report{} = report} -> {:ok, Repo.preload(report, [:reporter, :resolved_by])}
+      other -> other
     end
   end
 
@@ -246,10 +249,9 @@ defmodule Foglet.Moderation do
           report.reporter_id == ^reporter_id and report.target_kind == ^target_kind and
             report.target_id == ^target_id and report.status == :open
 
-    if Repo.exists?(duplicate_query) do
-      {:error, Changeset.add_error(changeset, :target_id, "already has an open report from you")}
-    else
-      {:ok, changeset}
+    case Repo.one(duplicate_query) do
+      %Report{} = report -> {:duplicate, report}
+      nil -> {:ok, changeset}
     end
   end
 
