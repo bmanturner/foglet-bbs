@@ -78,6 +78,41 @@ defmodule Foglet.TUI.Screens.BBSMailTest do
       assert state.body == "li"
     end
 
+    test "compose captures recipient before body and sends to that handle" do
+      sender = user_fixture(%{handle: "sender#{System.unique_integer([:positive])}"})
+      recipient = user_fixture(%{handle: "recipient#{System.unique_integer([:positive])}"})
+      context = Context.new(current_user: sender, route: :bbs_mail)
+      state = %State{mode: :compose}
+
+      state =
+        recipient.handle
+        |> String.graphemes()
+        |> Enum.reduce(state, fn char, state ->
+          {state, []} = BBSMail.update({:key, %{key: :char, char: char}}, state, context)
+          state
+        end)
+
+      {state, []} = BBSMail.update({:key, %{key: :tab}}, state, context)
+
+      state =
+        "hello"
+        |> String.graphemes()
+        |> Enum.reduce(state, fn char, state ->
+          {state, []} = BBSMail.update({:key, %{key: :char, char: char}}, state, context)
+          state
+        end)
+
+      {sending_state, effects} =
+        BBSMail.update({:key, %{key: :char, char: "s", ctrl: true}}, state, context)
+
+      assert sending_state.status == :sending
+      assert sending_state.recipient == recipient.handle
+      assert sending_state.body == "hello"
+      assert [%Foglet.TUI.Effect{type: :task, payload: %{op: :send_mail, fun: fun}}] = effects
+      assert {:ok, %Foglet.DMs.Message{recipient_id: recipient_id}} = fun.()
+      assert recipient_id == recipient.id
+    end
+
     test "pending delete confirmation render tree is valid for Raxol layout" do
       sender = user_fixture(%{handle: "sender#{System.unique_integer([:positive])}"})
       recipient = user_fixture(%{handle: "recipient#{System.unique_integer([:positive])}"})

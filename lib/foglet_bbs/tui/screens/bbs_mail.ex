@@ -25,6 +25,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
               messages: [],
               body: "",
               recipient: "",
+              compose_focus: :recipient,
               error: nil,
               info: nil,
               scroll: 0,
@@ -135,12 +136,17 @@ defmodule Foglet.TUI.Screens.BBSMail do
 
   def update({:key, %{key: :char, char: c}}, %State{mode: mode} = state, _context)
       when mode in [:compose, :reply] and is_binary(c) do
-    {%{state | body: state.body <> c, error: nil}, []}
+    {append_draft_char(state, c), []}
   end
 
   def update({:key, %{key: :backspace}}, %State{mode: mode} = state, _context)
       when mode in [:compose, :reply] do
-    {%{state | body: trim_last_grapheme(state.body), error: nil}, []}
+    {delete_draft_char(state), []}
+  end
+
+  def update({:key, %{key: key}}, %State{mode: :compose} = state, _context)
+      when key in [:tab, :enter] do
+    {%{state | compose_focus: :body, error: nil}, []}
   end
 
   def update({:key, %{key: :char, char: c}}, state, context) when c in ["j", "k"],
@@ -159,7 +165,15 @@ defmodule Foglet.TUI.Screens.BBSMail do
     do: load_conversations(%{normalize(state) | mode: :sent, selected_index: 0}, context)
 
   def update({:key, %{key: :char, char: c}}, state, _context) when c in ["c", "C"],
-    do: {%{normalize(state) | mode: :compose, body: "", recipient: "", error: nil}, []}
+    do:
+      {%{
+         normalize(state)
+         | mode: :compose,
+           body: "",
+           recipient: "",
+           compose_focus: :recipient,
+           error: nil
+       }, []}
 
   def update({:key, %{key: :char, char: c}}, state, _context) when c in ["r", "R"] do
     state = normalize(state)
@@ -199,7 +213,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
     state = normalize(state)
 
     case state.mode do
-      :compose -> {%{state | body: value}, []}
+      :compose -> {put_compose_input(state, value), []}
       :reply -> {%{state | body: value}, []}
       _ -> {state, []}
     end
@@ -288,8 +302,12 @@ defmodule Foglet.TUI.Screens.BBSMail do
     column style: %{gap: 1, padding: 1} do
       [
         text("Foglet > BBS Mail > Compose", style: %{fg: theme.dim.fg}),
-        text("Recipient: #{empty_marker(state.recipient)}", style: %{fg: theme.primary.fg}),
-        text("Body: #{empty_marker(state.body)}", style: %{fg: theme.primary.fg})
+        text("Recipient#{focus_marker(state, :recipient)}: #{empty_marker(state.recipient)}",
+          style: %{fg: theme.primary.fg}
+        ),
+        text("Body#{focus_marker(state, :body)}: #{empty_marker(state.body)}",
+          style: %{fg: theme.primary.fg}
+        )
       ] ++ status_lines(state, theme)
     end
   end
@@ -479,6 +497,25 @@ defmodule Foglet.TUI.Screens.BBSMail do
     |> Enum.drop(-1)
     |> Enum.join()
   end
+
+  defp append_draft_char(%State{mode: :compose, compose_focus: :recipient} = state, c),
+    do: %{state | recipient: state.recipient <> c, error: nil}
+
+  defp append_draft_char(%State{} = state, c), do: %{state | body: state.body <> c, error: nil}
+
+  defp delete_draft_char(%State{mode: :compose, compose_focus: :recipient} = state),
+    do: %{state | recipient: trim_last_grapheme(state.recipient), error: nil}
+
+  defp delete_draft_char(%State{} = state),
+    do: %{state | body: trim_last_grapheme(state.body), error: nil}
+
+  defp put_compose_input(%State{compose_focus: :recipient} = state, value),
+    do: %{state | recipient: value, error: nil}
+
+  defp put_compose_input(%State{} = state, value), do: %{state | body: value, error: nil}
+
+  defp focus_marker(%State{compose_focus: field}, field), do: " *"
+  defp focus_marker(%State{}, _field), do: ""
 
   defp scroll_to_latest(%State{messages: messages} = state),
     do: %{state | scroll: max(length(messages) - 4, 0)}
