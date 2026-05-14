@@ -21,12 +21,20 @@ defmodule Foglet.TimeAgo do
   """
   @spec format(DateTime.t() | nil | any()) :: String.t()
   def format(%DateTime{} = dt) do
-    seconds = DateTime.diff(DateTime.utc_now(), dt, :second)
-    format_seconds(max(seconds, 0))
+    format(dt, DateTime.utc_now())
   end
 
   def format(nil), do: "?"
   def format(_), do: "?"
+
+  @spec format(DateTime.t() | nil | any(), DateTime.t()) :: String.t()
+  def format(%DateTime{} = dt, %DateTime{} = now) do
+    seconds = DateTime.diff(now, dt, :second)
+    format_seconds(max(seconds, 0))
+  end
+
+  def format(nil, %DateTime{}), do: "?"
+  def format(_, %DateTime{}), do: "?"
 
   @spec format_seconds(non_neg_integer()) :: String.t()
   defp format_seconds(s) when s < 60, do: "#{s}s"

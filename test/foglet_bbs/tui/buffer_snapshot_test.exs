@@ -158,7 +158,7 @@ defmodule Foglet.TUI.BufferSnapshotTest do
     │                                                              │
     │ 3 unread                                                     │
     │                                                              │
-    │ @bob  21h                                                    │
+    │ @bob  20h                                                    │
     │                                                              │
     │ HELLO                                                        │
     │                                                              │

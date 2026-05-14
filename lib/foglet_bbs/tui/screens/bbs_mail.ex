@@ -278,16 +278,17 @@ defmodule Foglet.TUI.Screens.BBSMail do
     state = normalize(state, context)
     theme = Theme.from_state(frame_state(context))
     {width, _height} = context.terminal_size || @default_terminal_size
+    now = render_clock(context)
 
     ScreenFrame.render(
       frame_state(context),
       %{breadcrumb_parts: Foglet.AppName.breadcrumb([title_for(state)])},
-      body_for(state, theme, width),
+      body_for(state, theme, width, now),
       commands_for(state)
     )
   end
 
-  defp body_for(%State{pending_delete_id: id} = state, theme, _width) when is_binary(id) do
+  defp body_for(%State{pending_delete_id: id} = state, theme, _width, _now) when is_binary(id) do
     column style: %{gap: 1, padding: 1} do
       [
         text("Hide this message from your view? The other participant will keep their copy.",
@@ -298,7 +299,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
     end
   end
 
-  defp body_for(%State{mode: mode} = state, theme, width) when mode in [:inbox, :sent] do
+  defp body_for(%State{mode: mode} = state, theme, width, now) when mode in [:inbox, :sent] do
     rows = Enum.with_index(state.conversations)
     unread = Enum.reduce(state.conversations, 0, &(&1.unread_count + &2))
 
@@ -307,7 +308,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
         do: [text("No BBS Mail conversations yet.", style: %{fg: theme.dim.fg})],
         else:
           Enum.map(rows, fn {row, idx} ->
-            conversation_row(row, idx == state.selected_index, theme, width)
+            conversation_row(row, idx == state.selected_index, theme, width, now)
           end)
 
     column style: %{gap: 1, padding: 1} do
@@ -320,10 +321,11 @@ defmodule Foglet.TUI.Screens.BBSMail do
     end
   end
 
-  defp body_for(%State{mode: mode} = state, theme, width) when mode in [:conversation, :reply] do
+  defp body_for(%State{mode: mode} = state, theme, width, now)
+       when mode in [:conversation, :reply] do
     participant = handle(state.participant)
     messages = state.messages |> Enum.drop(state.scroll) |> Enum.take(8)
-    rendered = Enum.flat_map(messages, &message_card(&1, theme, max(width - 8, 20)))
+    rendered = Enum.flat_map(messages, &message_card(&1, theme, max(width - 8, 20), now))
 
     reply =
       if mode == :reply,
@@ -336,7 +338,7 @@ defmodule Foglet.TUI.Screens.BBSMail do
     end
   end
 
-  defp body_for(%State{mode: :compose} = state, theme, _width) do
+  defp body_for(%State{mode: :compose} = state, theme, _width, _now) do
     column style: %{gap: 1, padding: 1} do
       [
         text("Foglet > BBS Mail > Compose", style: %{fg: theme.dim.fg}),
@@ -350,28 +352,31 @@ defmodule Foglet.TUI.Screens.BBSMail do
     end
   end
 
-  defp conversation_row(row, selected?, theme, width) do
+  defp conversation_row(row, selected?, theme, width, now) do
     marker = if selected?, do: ">", else: " "
     unread = if row.unread_count > 0, do: "* [#{row.unread_count}]", else: "  "
     preview = String.slice(row.preview || "", 0, max(width - 35, 10))
 
     text(
-      "#{marker} #{unread} @#{handle(row.participant)}  #{TimeAgo.format(row.last_at)}  #{preview}",
+      "#{marker} #{unread} @#{handle(row.participant)}  #{TimeAgo.format(row.last_at, now)}  #{preview}",
       style: %{fg: if(selected?, do: theme.accent.fg, else: theme.primary.fg)}
     )
   end
 
-  defp message_card(message, theme, width) do
+  defp message_card(message, theme, width, now) do
     who =
       if message.sender && message.sender_id == message.sender.id,
         do: handle(message.sender),
         else: handle(message.sender)
 
     [
-      text("@#{who}  #{TimeAgo.format(message.inserted_at)}", style: %{fg: theme.accent.fg}),
+      text("@#{who}  #{TimeAgo.format(message.inserted_at, now)}", style: %{fg: theme.accent.fg}),
       MarkdownBody.render(message.body || "", width, theme, wrap: true, max_lines: 4)
     ]
   end
+
+  defp render_clock(%Context{session_context: %{clock_now: %DateTime{} = now}}), do: now
+  defp render_clock(%Context{}), do: DateTime.utc_now()
 
   defp status_lines(state, theme) do
     [
