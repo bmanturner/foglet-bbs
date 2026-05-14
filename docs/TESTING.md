@@ -129,6 +129,33 @@ Two `ExUnit.CaseTemplate` modules cover most tests:
 Tests that do not touch the Repo (most TUI widget tests) use plain
 `use ExUnit.Case, async: true`.
 
+## TUI behavior, buffer, and inspection tests
+
+Use the narrowest TUI test that protects the behavior:
+
+- Reducer and context tests should call `init/1`, `update/3`, and focused state
+  helpers directly when the invariant is about behavior, effects, authorization
+  routing, validation, or state transitions.
+- Widget unit tests should call the widget `render/*` or
+  `init/1` + `handle_event/2` + `render/2` contract directly when the invariant
+  belongs to a reusable widget.
+- Buffer snapshot tests can import `Foglet.TUI.Test` and use
+  `render_screen/3`, `render_fixture/2`, `assert_screen/2`, and `~B` when the
+  invariant is the whole rendered buffer at a known terminal size. `~B` removes
+  heredoc indentation and one surrounding newline, but it does not trim trailing
+  row whitespace.
+- Layout smoke tests remain for broad cross-screen size contracts and layout
+  engine regressions that are easier to express structurally than as snapshots.
+- Manual inspection with `rtk mix foglet.tui.render <screen>` is the fastest way
+  to review layout while developing; it is evidence for humans, not a
+  regression assertion by itself.
+- SSH harness QA is for live terminal workflows, authentication/session
+  behavior, and permission gates that need a running Foglet instance.
+
+Avoid single-fragment text-presence tests for visual behavior. Prefer reducer
+assertions for behavior, widget assertions for reusable primitives, or
+whole-buffer snapshots when exact layout and chrome are the thing being pinned.
+
 ## Ecto sandbox
 
 `FogletBbs.DataCase.setup_sandbox/1` is the single sandbox entry point used by both
