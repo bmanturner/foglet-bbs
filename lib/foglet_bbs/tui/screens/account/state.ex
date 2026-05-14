@@ -189,6 +189,9 @@ defmodule Foglet.TUI.Screens.Account.State do
       timezone: user_value(user, :timezone, "Etc/UTC") || "Etc/UTC",
       time_format:
         Map.get(preferences, "time_format") || Map.get(preferences, :time_format) || "12h",
+      notification_alert:
+        Map.get(preferences, "notification_alert") || Map.get(preferences, :notification_alert) ||
+          "terminal_bell",
       theme: user_value(user, :theme, "gray") || "gray",
       handle_color: user_value(user, :handle_color, "#FFFFFF")
     }
@@ -242,6 +245,15 @@ defmodule Foglet.TUI.Screens.Account.State do
         label: "Time format",
         choices: ["12h", "24h"],
         value: draft.time_format || "12h"
+      },
+      %{
+        name: :notification_alert,
+        type: :enum,
+        label: "Notification alert",
+        choices: ["off", "terminal_bell", "desktop_osc_best_effort"],
+        description:
+          "Terminal bell may sound, flash, or do nothing. Use Test alert to check this terminal.",
+        value: draft.notification_alert || "terminal_bell"
       },
       %{
         name: :theme,

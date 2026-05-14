@@ -111,6 +111,12 @@ defmodule Foglet.SSH.CLIHandler do
   end
 
   @impl true
+  def handle_msg({:foglet_terminal_alert, sequence}, state) when is_binary(sequence) do
+    _ = safe_ssh_send(state.connection_ref, state.channel_id, sequence)
+    {:ok, state}
+  end
+
+  @impl true
   def handle_msg({:foglet_launch_door, manifest, session, terminal_size}, state) do
     {:ok, launch_door_runner(state, manifest, session, terminal_size)}
   end

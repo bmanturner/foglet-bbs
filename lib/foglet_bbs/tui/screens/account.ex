@@ -473,7 +473,17 @@ defmodule Foglet.TUI.Screens.Account do
   defp normalize_account_preferences(%{preferences: preferences} = attrs)
        when is_map(preferences) do
     time_format = Map.get(preferences, "time_format") || Map.get(preferences, :time_format)
-    %{attrs | preferences: %{"time_format" => time_format}}
+
+    notification_alert =
+      preferences
+      |> Map.get("notification_alert", Map.get(preferences, :notification_alert))
+      |> Foglet.TUI.TerminalAlert.normalize_mode()
+      |> Atom.to_string()
+
+    %{
+      attrs
+      | preferences: %{"time_format" => time_format, "notification_alert" => notification_alert}
+    }
   end
 
   defp normalize_account_preferences(attrs), do: attrs
@@ -492,6 +502,7 @@ defmodule Foglet.TUI.Screens.Account do
   @prefs_labels %{
     timezone: "Timezone",
     time_format: "Time format",
+    notification_alert: "Notification alert",
     theme: "Theme",
     handle_color: "Handle color"
   }

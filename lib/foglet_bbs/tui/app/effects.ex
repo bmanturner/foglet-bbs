@@ -113,6 +113,15 @@ defmodule Foglet.TUI.App.Effects do
     App.update({:window_change, cols, rows}, state)
   end
 
+  def apply_effect(%App{} = state, %Effect{type: :terminal, payload: {:alert, mode}}) do
+    case Foglet.TUI.TerminalAlert.sequence(mode) do
+      nil -> :ok
+      sequence -> send_terminal_alert(state, sequence)
+    end
+
+    {state, []}
+  end
+
   def apply_effect(%App{} = state, %Effect{
         type: :publish,
         payload: %{topic: topic, message: message}
@@ -238,6 +247,13 @@ defmodule Foglet.TUI.App.Effects do
 
   defp publish_message_kind(message) when is_atom(message), do: message
   defp publish_message_kind(_message), do: :unknown
+
+  defp send_terminal_alert(%App{session_context: session_context}, sequence) do
+    case Map.get(session_context || %{}, :door_handler_pid) do
+      pid when is_pid(pid) -> send(pid, {:foglet_terminal_alert, sequence})
+      _ -> :ok
+    end
+  end
 
   # Test seam (FOG-675): swappable via Application env so a stub broadcast
   # implementation can return `{:error, _}` and exercise the warning path.
