@@ -110,7 +110,7 @@ defmodule Foglet.TUI.Screens.Moderation.State do
     ]
     |> maybe_put_page_size(opts)
     |> ConsoleTable.init()
-    |> put_selected_row(selected_index)
+    |> ConsoleTable.put_selected_index(selected_index)
   end
 
   @doc """
@@ -405,11 +405,6 @@ defmodule Foglet.TUI.Screens.Moderation.State do
 
   defp format_report_timestamp(%DateTime{} = dt), do: Calendar.strftime(dt, "%m-%d %H:%M")
   defp format_report_timestamp(_other), do: ""
-
-  defp put_selected_row(%ConsoleTable{} = table, selected_index)
-       when is_integer(selected_index) do
-    put_in(table.table.raxol_state[:selected_row], selected_index)
-  end
 
   defp truncate(value, limit) do
     value = to_string(value)

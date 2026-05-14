@@ -16,6 +16,62 @@ New widgets should:
   top of the file (D-08).
 - Ship with a D-18 test (theme hygiene + smoke render) in `test/foglet_bbs/tui/widgets/<bucket>/`.
 
+## State Ownership Contract
+
+Foglet widgets are plain modules over Raxol view trees. They do not own
+processes, subscribe to PubSub, query persistence, or emit `Foglet.TUI.Effect`
+values directly.
+
+Render-only widgets:
+
+- Accept caller data plus a required `theme:` keyword option.
+- Return a Raxol view tree from `render/*`.
+- Keep cursor, selection, and loaded data in the owning screen.
+
+Example:
+
+```elixir
+SelectionList.render(rows,
+  selected_index: state.selected_index,
+  theme: theme
+)
+```
+
+Stateful widgets:
+
+- Expose a public state struct from `init/1`.
+- Are stored as fields inside the owning screen state.
+- Handle input with pure `handle_event(event, widget_state) ->
+  {widget_state, semantic_action}`.
+- Return semantic actions such as `{:row_selected, row}` or
+  `:node_collapsed`; the screen decides which `Foglet.TUI.Effect` values to
+  emit.
+- Hide Raxol component state behind accessors when screens need selected rows,
+  selected indexes, expanded ids, or responsive rebuilds.
+
+Example:
+
+```elixir
+table = ConsoleTable.init(columns: columns, rows: rows, selectable: true)
+{table, action} = ConsoleTable.handle_event(event, table)
+
+case action do
+  {:row_selected, row} -> open_row(row)
+  nil -> {:noreply, %{state | table: table}}
+end
+```
+
+Audited stateful widgets:
+
+- `List.BoardTree` owns a `Display.Tree` internally and exposes
+  `focused_board_entry/1`, `focused_entry/1`, `focused_board_id/1`, and
+  `expanded_category_ids/1` so screens do not pattern-match on Raxol tree
+  state.
+- `Display.ConsoleTable` owns a `Display.Table` internally and exposes
+  `selected_index/2`, `selected_row/1`, `put_selected_index/2`, and
+  `with_width/2` so screens do not reach into
+  `table.raxol_state.selected_row` or rebuild responsive tables by hand.
+
 ## Chrome (Phase 1, unchanged)
 
 | Module | File | Description |

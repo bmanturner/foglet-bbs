@@ -184,7 +184,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   @spec select_next(t()) :: t()
   def select_next(%__MODULE__{} = state) do
     {new_table, _action} = ConsoleTable.handle_event(%{key: :down}, state.table)
-    new_idx = cursor_index(new_table)
+    new_idx = ConsoleTable.selected_index(new_table, 0)
     sync_table_cursor(%{state | table: new_table, selected_index: new_idx})
   end
 
@@ -192,12 +192,8 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
   @spec select_prev(t()) :: t()
   def select_prev(%__MODULE__{} = state) do
     {new_table, _action} = ConsoleTable.handle_event(%{key: :up}, state.table)
-    new_idx = cursor_index(new_table)
+    new_idx = ConsoleTable.selected_index(new_table, 0)
     sync_table_cursor(%{state | table: new_table, selected_index: new_idx})
-  end
-
-  defp cursor_index(%ConsoleTable{table: table}) do
-    Map.get(table.raxol_state, :selected_row, 0) || 0
   end
 
   # ---------------------------------------------------------------------------
@@ -211,7 +207,7 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
       selectable: true,
       empty_state: @empty_state
     )
-    |> put_selected_row(selected_index)
+    |> ConsoleTable.put_selected_index(selected_index)
   end
 
   defp to_rows(items, selected_index) do
@@ -244,11 +240,6 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysState do
     do: min(idx, count - 1)
 
   defp clamp_index(_idx, _count), do: 0
-
-  defp put_selected_row(%ConsoleTable{} = table, selected_index)
-       when is_integer(selected_index) do
-    put_in(table.table.raxol_state[:selected_row], selected_index)
-  end
 
   defp format_added(nil), do: ""
 

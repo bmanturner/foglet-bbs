@@ -212,10 +212,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
         selectable: true,
         empty_state: "No IP access rules configured."
       )
-      |> put_in(
-        [Access.key(:table), Access.key(:raxol_state), :selected_row],
-        state.selection_index
-      )
+      |> ConsoleTable.put_selected_index(state.selection_index)
 
     ConsoleTable.render(table, theme: theme)
   end
@@ -234,10 +231,7 @@ defmodule Foglet.TUI.Screens.Sysop.AccessRulesView do
         selectable: true,
         empty_state: "No identity policy rules configured."
       )
-      |> put_in(
-        [Access.key(:table), Access.key(:raxol_state), :selected_row],
-        state.identity_selection_index
-      )
+      |> ConsoleTable.put_selected_index(state.identity_selection_index)
 
     column style: %{gap: 0} do
       [ConsoleTable.render(table, theme: theme)] ++

@@ -688,21 +688,15 @@ defmodule Foglet.TUI.Screens.Moderation do
   defp move_queue_selection(%State{} = ss, event) do
     table = fresh_queue_table(ss)
     {new_table, _action} = ConsoleTable.handle_event(event, table)
-    selected_index = queue_table_selected_index(new_table, ss.queue)
+
+    selected_index =
+      new_table |> ConsoleTable.selected_index(0) |> clamp_queue_selected_index(ss.queue)
 
     %{
       ss
       | queue_selected_index: selected_index,
         queue_table: State.build_queue_table(ss.queue, selected_index)
     }
-  end
-
-  defp queue_table_selected_index(_table, []), do: 0
-
-  defp queue_table_selected_index(%ConsoleTable{table: table}, queue) do
-    table.raxol_state
-    |> Map.get(:selected_row, 0)
-    |> clamp_queue_selected_index(queue)
   end
 
   defp clamp_queue_selected_index(_index, []), do: 0
