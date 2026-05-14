@@ -55,38 +55,60 @@ defmodule Foglet.TUI.Screens.BBSMail do
     end
   end
 
-  def update({:task_result, :load_mail, {:ok, rows}}, state, _context),
-    do: {%{normalize(state) | status: :loaded, conversations: rows, error: nil}, []}
-
-  def update({:task_result, :load_conversation, {:ok, messages}}, state, _context),
-    do: {%{normalize(state) | status: :loaded, messages: messages, error: nil}, []}
-
-  def update({:task_result, :send_mail, {:ok, %Message{} = message}}, state, context) do
-    participant =
-      if message.sender_id == context.current_user.id, do: message.recipient, else: message.sender
-
-    new_state = %{
-      normalize(state)
-      | mode: :conversation,
-        participant: participant,
-        body: "",
-        recipient: "",
-        info: "Message sent."
-    }
-
-    load_conversation(new_state, context)
+  def update({:task_result, :load_mail, result}, state, _context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, rows} -> {%{normalize(state) | status: :loaded, conversations: rows, error: nil}, []}
+      {:error, reason} -> task_error(state, reason)
+    end
   end
 
-  def update({:task_result, :delete_mail, {:ok, _message}}, state, context) do
-    state = %{normalize(state) | pending_delete_id: nil, info: "Hidden from your view."}
+  def update({:task_result, :load_conversation, result}, state, _context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, messages} ->
+        {%{normalize(state) | status: :loaded, messages: messages, error: nil}, []}
 
-    if state.mode == :conversation,
-      do: load_conversation(state, context),
-      else: load_conversations(state, context)
+      {:error, reason} ->
+        task_error(state, reason)
+    end
   end
 
-  def update({:task_result, _op, {:error, reason}}, state, _context),
-    do: {%{normalize(state) | status: :loaded, error: error_text(reason)}, []}
+  def update({:task_result, :send_mail, result}, state, context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, %Message{} = message} ->
+        participant =
+          if message.sender_id == context.current_user.id,
+            do: message.recipient,
+            else: message.sender
+
+        new_state = %{
+          normalize(state)
+          | mode: :conversation,
+            participant: participant,
+            body: "",
+            recipient: "",
+            info: "Message sent."
+        }
+
+        load_conversation(new_state, context)
+
+      {:error, reason} ->
+        task_error(state, reason)
+    end
+  end
+
+  def update({:task_result, :delete_mail, result}, state, context) do
+    case Effect.unwrap_task_result(result) do
+      {:ok, _message} ->
+        state = %{normalize(state) | pending_delete_id: nil, info: "Hidden from your view."}
+
+        if state.mode == :conversation,
+          do: load_conversation(state, context),
+          else: load_conversations(state, context)
+
+      {:error, reason} ->
+        task_error(state, reason)
+    end
+  end
 
   def update({:notifications, :created, %{kind: :dm}}, state, context),
     do: load_conversations(normalize(state), context)
@@ -455,6 +477,10 @@ defmodule Foglet.TUI.Screens.BBSMail do
   defp handle(nil), do: "unknown"
   defp empty_marker(""), do: "<empty>"
   defp empty_marker(value), do: value
+
+  defp task_error(state, reason),
+    do: {%{normalize(state) | status: :loaded, error: error_text(reason)}, []}
+
   defp error_text(%Ecto.Changeset{}), do: "Message could not be saved."
   defp error_text(reason), do: inspect(reason)
 end
