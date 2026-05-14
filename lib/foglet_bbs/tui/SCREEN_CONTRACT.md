@@ -105,6 +105,15 @@ end
 Render code must not query the database, mutate state, subscribe to topics, or
 start tasks.
 
+Render purity is enforced by `test/foglet_bbs/tui/render_purity_test.exs` as a
+practical guardrail. It scans render entry points, `render_*` helpers, and
+dedicated render/surface files for obvious runtime side effects such as Repo
+calls, Config persistence reads/writes, PubSub calls, task effects, process
+spawning, direct sends, `System` calls, and common durable context mutations.
+When a render needs cache-backed or expensive data, compute it in `init/1`,
+`update/3`, a task effect, or screen state before rendering. Pure derived render
+models and formatting over already-loaded state are fine.
+
 ## `subscriptions/2`
 
 Screens that need focused PubSub topics or screen-owned runtime intervals

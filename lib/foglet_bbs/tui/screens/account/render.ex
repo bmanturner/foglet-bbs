@@ -213,16 +213,15 @@ defmodule Foglet.TUI.Screens.Account.Render do
   end
 
   defp synced_screen_state(state) do
-    state
-    |> get_screen_state()
-    |> State.ensure_visibility(invites_visible?(state))
+    screen_state = get_screen_state(state)
+    State.ensure_visibility(screen_state, invites_visible?(state, screen_state))
   end
 
-  defp invites_visible?(state) do
-    ShellVisibility.invites_visible?(
+  defp invites_visible?(state, screen_state) do
+    ShellVisibility.invites_visible_from_context?(
       Map.get(state, :current_user),
       Map.get(state, :session_context)
-    )
+    ) || Map.get(screen_state, :invites_visible?, false)
   end
 
   defp get_screen_state(state) do
@@ -235,7 +234,7 @@ defmodule Foglet.TUI.Screens.Account.Render do
   defp init_opts_from_state(state) do
     [
       invites_visible?:
-        ShellVisibility.invites_visible?(
+        ShellVisibility.invites_visible_from_context?(
           Map.get(state, :current_user),
           Map.get(state, :session_context)
         ),

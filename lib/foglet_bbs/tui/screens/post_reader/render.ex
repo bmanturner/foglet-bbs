@@ -144,9 +144,9 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   defp thread_title_label(%State{thread: %{title: title}}) when is_binary(title), do: title
   defp thread_title_label(%State{}), do: "Thread"
 
-  defp render_post_content(%{posts: posts}, _ss, theme, _w, _h)
+  defp render_post_content(%{posts: posts} = frame_view, _ss, theme, _w, _h)
        when posts in [[], nil] do
-    render_loading(theme)
+    render_loading(theme, Map.get(frame_view, :frame, 0))
   end
 
   defp render_post_content(frame_view, ss, theme, w, h) do
@@ -321,7 +321,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
          _h,
          _reply_state
        ),
-       do: render_loading(theme)
+       do: render_loading(theme, 0)
 
   defp render_local_post_content(%State{status: :empty}, _frame_state, theme, _w, _h, reply_state) do
     column style: %{gap: 0} do
@@ -399,9 +399,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   # (post_reader was opened but {:posts_loaded, posts} hasn't landed yet).
   # One-row composition: gap-1 row with spinner glyph + label text.
   # Row count is identical to the old plain-text path — no visible row growth (D-05, D-06).
-  defp render_loading(theme) do
-    frame = System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
-
+  defp render_loading(theme, frame) do
     column style: %{gap: 0} do
       [
         row style: %{gap: 1} do

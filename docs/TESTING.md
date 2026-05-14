@@ -324,9 +324,6 @@ inspecting the returned tree.
 Screen tests live in `test/foglet_bbs/tui/screens/` and the App-level test in
 `test/foglet_bbs/tui/app_test.exs`. They typically:
 
-- Seed the `Foglet.Config` ETS cache up-front so render paths that call `Config.get/2`
-  do not require a DB checkout. `Foglet.TUI.AppTest` calls `Config.init_cache/0` and
-  inserts known keys via `:ets.insert/2` in `setup`.
 - Inject **fakes** for domain modules by passing a `domain:` map in context, e.g.
   `%{domain: %{oneliners: Foglet.TUI.FakeOneliners, moderation: Foglet.TUI.FakeModeration}}`.
   The fakes (`test/support/fake_oneliners.ex`, `test/support/fake_moderation.ex`) send
@@ -334,6 +331,11 @@ Screen tests live in `test/foglet_bbs/tui/screens/` and the App-level test in
   called.
 - Use `Foglet.TUI.RenderHelpers.collect_text_values/1` to assert both presence and
   ordering of labels in the DFS-walked render tree.
+- Keep render pure. `test/foglet_bbs/tui/render_purity_test.exs` scans render
+  entry points and render/surface modules for obvious side effects. Seed
+  `Foglet.Config` only for reducer/task tests that intentionally exercise
+  config-backed behavior; render paths should receive already-loaded config
+  decisions through screen state or `session_context`.
 
 ## Mix task tests
 

@@ -277,7 +277,7 @@ defmodule Foglet.TUI.Screens.BoardList do
   end
 
   defp render_board_content(%State{status: :loading} = state, _context, theme) do
-    frame = System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
+    frame = Map.get(state, :frame, 0)
 
     column style: %{gap: 0} do
       maybe_feedback(state, theme) ++
