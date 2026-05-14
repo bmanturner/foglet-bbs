@@ -51,3 +51,26 @@ chrome, and width-sensitive review.
 Use reducer, widget, buffer, and layout smoke tests for regressions. Manual
 render output is useful evidence while developing, but a checked-in behavior or
 buffer test should carry any invariant that must keep passing.
+
+## Layout Helpers
+
+Use `Foglet.TUI.Layout` when a screen or widget needs deterministic cell math
+that should be easy to test outside Raxol. It returns plain rect structs that
+can drive style widths, heights, and assertions.
+
+```elixir
+alias Foglet.TUI.Layout
+
+parent = %{x: 0, y: 0, width: terminal_width, height: body_height}
+
+[header, body, footer] =
+  Layout.vertical(parent, [
+    {:length, 3},
+    {:fill, 1},
+    {:length, 1}
+  ])
+```
+
+Prefer this helper for header/body/footer and sidebar/content splits. Keep
+using Raxol `column`, `row`, `box`, and `spacer` directly when the built-in view
+tree already expresses the layout clearly.

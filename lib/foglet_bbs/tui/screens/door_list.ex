@@ -13,7 +13,7 @@ defmodule Foglet.TUI.Screens.DoorList do
 
   alias Foglet.AppName
   alias Foglet.Doors.Manifest
-  alias Foglet.TUI.{Context, Effect, Modal, ScrollKeys, TextWidth, Theme}
+  alias Foglet.TUI.{Context, Effect, Layout, Modal, ScrollKeys, TextWidth, Theme}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
 
@@ -170,19 +170,31 @@ defmodule Foglet.TUI.Screens.DoorList do
 
   defp doors_region(%State{} = state, theme, %Context{terminal_size: {width, _height}})
        when width >= @wide_layout_min_width do
+    {list_width, detail_width} = wide_panel_widths(width)
+
     row style: %{gap: 2} do
       [
-        box style: %{border: :single, padding: 1, width: @wide_list_width} do
-          door_rows(state, theme, @wide_list_width - 4)
+        box style: %{border: :single, padding: 1, width: list_width} do
+          door_rows(state, theme, list_width - 4)
         end,
-        box style: %{border: :single, padding: 1, width: detail_width(width)} do
-          detail_panel(selected_door(state), theme, detail_width(width) - 4)
+        box style: %{border: :single, padding: 1, width: detail_width} do
+          detail_panel(selected_door(state), theme, detail_width - 4)
         end
       ]
     end
   end
 
   defp doors_region(%State{} = state, theme, _context), do: door_rows(state, theme)
+
+  defp wide_panel_widths(terminal_width) do
+    [list, _gap, detail] =
+      Layout.horizontal(
+        %{x: 0, y: 0, width: terminal_width, height: 1},
+        [{:length, @wide_list_width}, {:length, 2}, {:max, detail_width(terminal_width)}]
+      )
+
+    {list.width, detail.width}
+  end
 
   defp detail_width(terminal_width) do
     terminal_width
