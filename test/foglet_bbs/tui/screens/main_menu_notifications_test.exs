@@ -37,8 +37,11 @@ defmodule Foglet.TUI.Screens.MainMenuNotificationsTest do
 
   defp task_effect!(effects, op) do
     Enum.find(effects, fn
-      %Effect{type: :task, payload: %{op: ^op, screen_key: :main_menu}} -> true
-      _ -> false
+      %Effect{type: :task, payload: %{op: ^op, screen_key: screen_key}} ->
+        screen_key == Effect.current_screen_key()
+
+      _ ->
+        false
     end) || flunk("expected task effect #{inspect(op)}, got #{inspect(effects)}")
   end
 

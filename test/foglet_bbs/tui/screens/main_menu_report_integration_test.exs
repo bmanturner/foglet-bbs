@@ -43,10 +43,15 @@ defmodule Foglet.TUI.Screens.MainMenuReportIntegrationTest do
     assert [
              %Effect{
                type: :task,
-               payload: %{op: :submit_oneliner_report, screen_key: :main_menu, fun: task_fun}
+               payload: %{
+                 op: :submit_oneliner_report,
+                 screen_key: screen_key,
+                 fun: task_fun
+               }
              }
            ] = effects
 
+    assert screen_key == Effect.current_screen_key()
     assert {:ok, %Report{} = report} = task_fun.()
     assert report.target_kind == :oneliner
     assert report.target_id == entry.id

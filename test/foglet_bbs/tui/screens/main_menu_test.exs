@@ -164,7 +164,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   defp only_task_fun(effects, op) do
-    assert [%Effect{type: :task, payload: %{op: ^op, screen_key: :main_menu, fun: fun}}] = effects
+    assert [%Effect{type: :task, payload: %{op: ^op, screen_key: screen_key, fun: fun}}] =
+             effects
+
+    assert screen_key == Effect.current_screen_key()
     fun
   end
 
@@ -1151,10 +1154,16 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
       assert Enum.any?(
                effects_via_load,
-               &match?(
-                 %Effect{type: :task, payload: %{op: :load_oneliners, screen_key: :main_menu}},
-                 &1
-               )
+               fn
+                 %Effect{
+                   type: :task,
+                   payload: %{op: :load_oneliners, screen_key: screen_key}
+                 } ->
+                   screen_key == Effect.current_screen_key()
+
+                 _effect ->
+                   false
+               end
              )
     end
 
