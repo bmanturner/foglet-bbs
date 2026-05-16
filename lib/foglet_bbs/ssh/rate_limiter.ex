@@ -17,8 +17,8 @@ defmodule Foglet.SSH.RateLimiter do
 
   use Hammer, backend: :ets
 
-  @rate_limit_max 10
-  @rate_limit_window_ms 60_000
+  @default_rate_limit_max 10
+  @default_rate_limit_window_ms 60_000
 
   @spec allow?(peer :: {:inet.ip_address(), :inet.port_number()} | :unknown) :: boolean()
   # Fail open when peer address is unresolvable — no address to gate on.
@@ -27,7 +27,7 @@ defmodule Foglet.SSH.RateLimiter do
   def allow?(peer) do
     key = ip_key(peer)
 
-    case hit(key, @rate_limit_window_ms, @rate_limit_max) do
+    case hit(key, rate_limit_window_ms(), rate_limit_max()) do
       {:allow, _count} -> true
       {:deny, _retry_after_ms} -> false
     end
@@ -36,8 +36,29 @@ defmodule Foglet.SSH.RateLimiter do
     _ -> true
   end
 
+  def rate_limit_max do
+    runtime_value(:ssh_rate_limit_max, "ssh_rate_limit_max", @default_rate_limit_max)
+  end
+
+  def rate_limit_window_ms do
+    runtime_value(
+      :ssh_rate_limit_window_ms,
+      "ssh_rate_limit_window_ms",
+      @default_rate_limit_window_ms
+    )
+  end
+
   @spec ip_key(peer :: {:inet.ip_address(), :inet.port_number()}) :: String.t()
   defp ip_key({ip_tuple, _port}) when is_tuple(ip_tuple) do
     "ssh:" <> (ip_tuple |> :inet.ntoa() |> to_string())
+  end
+
+  defp runtime_value(env_key, config_key, default) do
+    case Application.fetch_env(:foglet_bbs, env_key) do
+      {:ok, value} when is_integer(value) -> value
+      _ -> Foglet.Config.get(config_key, default)
+    end
+  rescue
+    _ -> default
   end
 end

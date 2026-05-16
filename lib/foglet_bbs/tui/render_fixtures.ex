@@ -26,7 +26,11 @@ defmodule Foglet.TUI.RenderFixtures do
 
   alias Foglet.TUI.Screens.{
     Account,
+    BBSMail,
+    BoardConfig,
     BoardList,
+    BoardNews,
+    BoardScreen,
     DoorList,
     Login,
     MainMenu,
@@ -45,7 +49,7 @@ defmodule Foglet.TUI.RenderFixtures do
   alias Foglet.Threads.ThreadEntry
 
   @screens ~w(
-    login register verify main_menu notifications online_now board_list thread_list
+    login register verify main_menu notifications bbs_mail online_now board_list thread_list board_screen
     post_reader post_composer new_thread door_list account moderation sysop
   )a
 
@@ -55,6 +59,8 @@ defmodule Foglet.TUI.RenderFixtures do
     verify: ~w(resend_cooldown unverified)a,
     main_menu: ~w(suspended rejected pending unverified)a,
     thread_list: ~w(archived)a,
+    board_screen:
+      ~w(threads_chat_news operator_config config_add config_ttl news_empty news_error news_detail)a,
     post_reader: ~w(archived)a
   }
 
@@ -67,6 +73,7 @@ defmodule Foglet.TUI.RenderFixtures do
           | :verify
           | :main_menu
           | :notifications
+          | :bbs_mail
           | :online_now
           | :board_list
           | :thread_list
@@ -374,6 +381,24 @@ defmodule Foglet.TUI.RenderFixtures do
     |> App.put_screen_state(:thread_list, ss)
   end
 
+  defp seed_substate(state, :board_screen, :threads_chat_news),
+    do: seed_board_screen(state, :news)
+
+  defp seed_substate(state, :board_screen, :operator_config),
+    do: seed_board_screen(state, :config)
+
+  defp seed_substate(state, :board_screen, :config_add),
+    do: seed_board_screen(state, {:config, :add})
+
+  defp seed_substate(state, :board_screen, :config_ttl),
+    do: seed_board_screen(state, {:config, :ttl})
+
+  defp seed_substate(state, :board_screen, :news_empty), do: seed_board_screen(state, :news_empty)
+  defp seed_substate(state, :board_screen, :news_error), do: seed_board_screen(state, :news_error)
+
+  defp seed_substate(state, :board_screen, :news_detail),
+    do: seed_board_screen(state, :news_detail)
+
   defp seed_substate(state, :post_reader, :archived) do
     ss = App.screen_state_for(state, :post_reader)
     board = Map.merge(ss.board, %{archived: true})
@@ -650,6 +675,56 @@ defmodule Foglet.TUI.RenderFixtures do
 
   # --- per-screen population -----------------------------------------------
 
+  defp synthetic_mail_conversations do
+    bob = synthetic_user(%{id: "00000000-0000-0000-0000-000000000002", handle: "bob"})
+
+    [
+      %{
+        participant: bob,
+        last_at: ~U[2025-12-31 19:00:00.000000Z],
+        preview: "**Markdown** meetup notes and a `code` sample",
+        unread_count: 3,
+        sent?: false
+      }
+    ]
+  end
+
+  defp synthetic_mail_messages do
+    alice = synthetic_user()
+    bob = synthetic_user(%{id: "00000000-0000-0000-0000-000000000002", handle: "bob"})
+
+    [
+      %Foglet.DMs.Message{
+        id: "10000000-0000-0000-0000-000000000001",
+        sender_id: bob.id,
+        recipient_id: alice.id,
+        sender: bob,
+        recipient: alice,
+        body: "# Hello\nThis **BBS Mail** thread uses Markdown.",
+        inserted_at: ~U[2025-12-31 21:00:00.000000Z]
+      },
+      %Foglet.DMs.Message{
+        id: "10000000-0000-0000-0000-000000000002",
+        sender_id: alice.id,
+        recipient_id: bob.id,
+        sender: alice,
+        recipient: bob,
+        body: "Thanks -- `rendered` and wrapped like posts.",
+        inserted_at: ~U[2025-12-31 21:10:00.000000Z]
+      },
+      %Foglet.DMs.Message{
+        id: "10000000-0000-0000-0000-000000000003",
+        sender_id: bob.id,
+        recipient_id: alice.id,
+        sender: bob,
+        recipient: alice,
+        body:
+          "Unread reply with enough text to prove wrapping at supported terminal sizes without hiding the notice.",
+        inserted_at: ~U[2025-12-31 21:00:00.000000Z]
+      }
+    ]
+  end
+
   defp populate(:login, state, _size) do
     App.put_screen_state(state, :login, init_screen(Login, state))
   end
@@ -681,6 +756,19 @@ defmodule Foglet.TUI.RenderFixtures do
       |> Notifications.State.from_rows(synthetic_notifications())
 
     App.put_screen_state(state, :notifications, local_state)
+  end
+
+  defp populate(:bbs_mail, state, _size) do
+    local_state = %BBSMail.State{
+      mode: :conversation,
+      status: :loaded,
+      participant: synthetic_user(%{id: "00000000-0000-0000-0000-000000000002", handle: "bob"}),
+      conversations: synthetic_mail_conversations(),
+      messages: synthetic_mail_messages(),
+      info: "3 unread"
+    }
+
+    App.put_screen_state(state, :bbs_mail, local_state)
   end
 
   defp populate(:online_now, state, _size) do
@@ -725,6 +813,8 @@ defmodule Foglet.TUI.RenderFixtures do
       )
     )
   end
+
+  defp populate(:board_screen, state, _size), do: seed_board_screen(state, :news)
 
   defp populate(:post_reader, state, _size) do
     board = hd(synthetic_boards())
@@ -816,6 +906,59 @@ defmodule Foglet.TUI.RenderFixtures do
     App.put_screen_state(state, :sysop, init_screen(Sysop, state))
   end
 
+  defp seed_board_screen(state, variant) do
+    board = hd(synthetic_boards()) |> Map.put(:chat_enabled, true)
+    threads = synthetic_threads(board)
+    feeds = synthetic_feeds(variant)
+    items = synthetic_feed_items(variant)
+
+    thread_state =
+      ThreadList.State.new(
+        board: board,
+        board_id: board.id,
+        threads: threads,
+        selected_index: 0,
+        status: :loaded
+      )
+
+    news_state = %BoardNews.State{
+      status: :loaded,
+      feeds: feeds,
+      items: items,
+      selected_index: 0,
+      view: if(variant == :news_detail, do: :detail, else: :list)
+    }
+
+    config_state = %BoardConfig.State{
+      status: :loaded,
+      feeds: feeds,
+      mode: config_mode(variant),
+      input: if(variant == {:config, :add}, do: "https://example.com/feed.xml", else: ""),
+      ttl_input: "3600",
+      message: config_message(variant)
+    }
+
+    screen_state = %BoardScreen.State{
+      thread_list: thread_state,
+      chat_room: nil,
+      news: news_state,
+      config: config_state,
+      tabs: [:threads, :chat, :news, :config],
+      current_tab: current_board_tab(variant),
+      presence_count: 2,
+      board: board,
+      board_id: board.id,
+      user_id: state.current_user && state.current_user.id
+    }
+
+    %{
+      state
+      | current_screen: :thread_list,
+        route_params: %{board: board, board_id: board.id, news_enabled: true}
+    }
+    |> App.put_screen_state(:thread_list, screen_state)
+  end
+
   defp init_screen(screen_mod, %App{} = state) do
     state
     |> App.build_context()
@@ -881,6 +1024,75 @@ defmodule Foglet.TUI.RenderFixtures do
         archived: false,
         thread_count: 4,
         unread_count: 1
+      }
+    ]
+  end
+
+  defp current_board_tab({:config, _}), do: :config
+  defp current_board_tab(:config), do: :config
+  defp current_board_tab(_), do: :news
+
+  defp config_mode({:config, mode}), do: mode
+  defp config_mode(_), do: :list
+
+  defp config_message({:config, :add}),
+    do: "Enter RSS/Atom URL, Enter to validate/save, Esc to cancel."
+
+  defp config_message({:config, :ttl}), do: "Enter TTL seconds."
+  defp config_message(_), do: nil
+
+  defp synthetic_feeds(:news_empty), do: []
+
+  defp synthetic_feeds(:news_error) do
+    [
+      %{
+        id: "feed-1",
+        title: "Foglet Dispatch",
+        url: "https://example.com/rss.xml",
+        cache_ttl_seconds: 3600,
+        last_error: "timeout",
+        last_fetched_at: ~U[2026-05-13 09:00:00Z],
+        last_success_at: ~U[2026-05-12 09:00:00Z]
+      }
+    ]
+  end
+
+  defp synthetic_feeds(_variant) do
+    [
+      %{
+        id: "feed-1",
+        title: "Foglet Dispatch",
+        url: "https://example.com/rss.xml",
+        cache_ttl_seconds: 3600,
+        last_error: nil,
+        last_fetched_at: ~U[2026-05-13 09:00:00Z],
+        last_success_at: ~U[2026-05-13 09:00:00Z]
+      }
+    ]
+  end
+
+  defp synthetic_feed_items(variant) when variant in [:news_empty], do: []
+
+  defp synthetic_feed_items(variant) do
+    feed = hd(synthetic_feeds(variant))
+
+    [
+      %{
+        id: "item-1",
+        feed: feed,
+        title: "Small terminal networks are back",
+        summary:
+          "Cached RSS text is sanitized, bounded, and rendered without a browser dependency.",
+        url: "https://example.com/posts/terminal-networks",
+        published_at: ~U[2026-05-13 08:30:00Z]
+      },
+      %{
+        id: "item-2",
+        feed: feed,
+        title: "Atom feed fixtures cover wide layouts",
+        summary: "The board renderer can now show NEWS and CONFIG substates directly.",
+        url: "https://example.com/posts/atom-fixtures",
+        published_at: ~U[2026-05-13 07:45:00Z]
       }
     ]
   end

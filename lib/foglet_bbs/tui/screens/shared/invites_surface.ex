@@ -55,7 +55,7 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
   def render(%{items: nil, frame: frame}, %Theme{} = theme, _opts) when is_integer(frame),
     do: render_loading(frame, theme)
 
-  def render(%{items: nil}, %Theme{} = theme, _opts), do: render_loading(current_frame(), theme)
+  def render(%{items: nil}, %Theme{} = theme, _opts), do: render_loading(0, theme)
 
   def render(%{items: []} = state, %Theme{} = theme, opts), do: render_items(state, theme, opts)
 
@@ -76,11 +76,6 @@ defmodule Foglet.TUI.Screens.Shared.InvitesSurface do
         text("Enter Revoke invite   Esc Keep invite", fg: theme.dim.fg)
       ]
     end
-  end
-
-  # Monotonic-clock fallback frame when the caller does not supply one.
-  defp current_frame do
-    System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
   end
 
   defp render_loading(frame, theme) when is_integer(frame) do

@@ -48,6 +48,7 @@ defmodule Foglet.TUI.PresentationTest do
                  :post_reader,
                  :new_thread,
                  :post_composer,
+                 :bbs_mail,
                  :door_list,
                  :account,
                  :moderation,

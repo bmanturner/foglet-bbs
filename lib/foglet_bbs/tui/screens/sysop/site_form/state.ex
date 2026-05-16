@@ -36,7 +36,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     "delivery_mode",
     "require_email_verification",
     "guest_mode_enabled",
-    "invite_generation_per_user_limit"
+    "invite_generation_per_user_limit",
+    "ssh_ip_allowlist_enabled"
   ]
 
   # Operator-facing field labels for enum SITE keys (FOG-342 / FOG-344).
@@ -77,7 +78,8 @@ defmodule Foglet.TUI.Screens.Sysop.SiteForm.State do
     :delivery_mode,
     :require_email_verification,
     :guest_mode_enabled,
-    :invite_generation_per_user_limit
+    :invite_generation_per_user_limit,
+    :ssh_ip_allowlist_enabled
   ]
   @doc false
   def __site_keys_atoms__, do: @site_keys_atoms

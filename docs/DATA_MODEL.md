@@ -104,7 +104,7 @@ end
 **Anonymization flow** (on account deletion):
 
 1. Rewrite `user_id` on all `posts`, `direct_messages` authored by the user to the tombstone user.
-2. Delete `ssh_keys`, `board_subscriptions`, `board_read_pointers`, `thread_read_pointers`, `notifications`, `oneliners`, `upvotes`, `last_callers`, unread DMs to the user.
+2. Delete `ssh_keys`, `board_subscriptions`, `board_read_pointers`, `thread_read_pointers`, `notifications`, `oneliners`, `upvotes`, unread DMs to the user; detach/anonymize `last_callers.user_id` and clear public caller visibility while retaining audit rows until retention cleanup.
 3. Zero the user row: clear profile fields, set `deleted_at`, randomize email to prevent re-registration conflicts.
 4. Keep the row (rather than hard-deleting) so foreign key references remain valid.
 
@@ -200,6 +200,7 @@ schema "boards" do
   has_many :threads, Foglet.Threads.Thread
   has_many :posts, Foglet.Posts.Post
   has_many :subscriptions, Foglet.Boards.Subscription
+  has_many :feeds, Foglet.BoardFeeds.Feed
 
   timestamps()
 end
@@ -253,7 +254,73 @@ Unique index on `(user_id, board_id)`. Updated with upserts — `INSERT ... ON C
 
 ---
 
-## 3. Threads and Posts
+## 3. Board Feeds
+
+### `Foglet.BoardFeeds.Feed`
+
+Table: `board_feeds`
+
+```elixir
+schema "board_feeds" do
+  field :url, :string
+  field :title, :string
+  field :enabled, :boolean, default: true
+  field :display_order, :integer, default: 0
+  field :cache_ttl_seconds, :integer, default: 3600
+  field :last_fetched_at, :utc_datetime_usec
+  field :last_success_at, :utc_datetime_usec
+  field :last_error, :string
+
+  belongs_to :board, Foglet.Boards.Board
+  has_many :items, Foglet.BoardFeeds.Item, foreign_key: :board_feed_id
+
+  timestamps()
+end
+```
+
+**Migration notes:**
+
+- `board_id` cascades deletes from boards; feeds are board-local configuration.
+- Unique index on `(board_id, url)` prevents duplicate source feeds on a board.
+- Index on `(board_id, enabled)` supports NEWS tab capability checks and CONFIG lists.
+- `cache_ttl_seconds` is constrained to 300..86400 seconds. Refresh paths skip network fetches until TTL expiry unless an operator explicitly forces validation/refresh.
+- `last_fetched_at`, `last_success_at`, and `last_error` preserve stale-cache-on-failure state; failed refreshes update error metadata but do not delete existing items.
+- Feed URLs are bounded to 2048 bytes and must pass context-level safe-fetch validation before insertion: http/https only, no credentials, no localhost/private/link-local/metadata hosts after DNS resolution, bounded redirects/timeouts/response size.
+
+### `Foglet.BoardFeeds.Item`
+
+Table: `board_feed_items`
+
+```elixir
+schema "board_feed_items" do
+  field :external_id, :string
+  field :title, :string
+  field :url, :string
+  field :author, :string
+  field :summary, :string
+  field :published_at, :utc_datetime_usec
+  field :fetched_at, :utc_datetime_usec
+  field :metadata, :map, default: %{}
+
+  belongs_to :feed, Foglet.BoardFeeds.Feed, foreign_key: :board_feed_id
+  belongs_to :board, Foglet.Boards.Board
+
+  timestamps()
+end
+```
+
+**Migration notes and invariants:**
+
+- `board_id` is denormalized from the parent feed for fast board NEWS queries.
+- Unique index on `(board_feed_id, external_id)` deduplicates feed items by GUID/id, canonical link, or stable content hash fallback.
+- Index on `(board_id, published_at)` supports merged chronological NEWS lists across all enabled feeds for a board.
+- Stored display fields are normalized terminal-safe text: raw HTML tags and terminal control sequences are stripped, titles/summaries/authors/URLs are length-bounded, and raw feed bodies are never stored.
+- Item refresh uses upsert semantics so repeated refreshes update cached normalized fields without duplicating rows.
+- Retention is capped in the context after refresh (`@retention_per_feed`) so feeds cannot grow item rows without bound.
+
+---
+
+## 4. Threads and Posts
 
 ### `Foglet.Threads.Thread`
 
@@ -427,6 +494,25 @@ end
 - Partial index on unread: `(recipient_id) WHERE read_at IS NULL AND deleted_by_recipient_at IS NULL`.
 - Dual soft-delete — each side can remove a DM from their own view without affecting the other party. Hard delete only when both sides have removed it (a background job can sweep these if desired, or just let them accumulate).
 - Full-text search on `body` if DM search is ever added (currently out of scope per 9.2).
+
+**Privacy, operator access, and retention policy:**
+
+- Direct messages are private to the two participants in normal member UI, but
+  are application data in Postgres and are not encrypted at rest by Foglet.
+- Every conversation/read screen must show the required notice and placement
+  guidance from `docs/ux/bbs-mail-policy-copy.md` before message history.
+- Sysops may inspect direct messages for reports, moderation, legal/compliance
+  handling, retention cleanup, and system repair. Moderators should not receive
+  broad DM browsing by default; expose DM content to mods only through a
+  report/review workflow or explicit scoped operator permission.
+- Delete-from-my-view hides a message for one participant only. It does not
+  remove the other participant's copy or erase retained operator/report records.
+- Account deletion/anonymization rewrites authored DMs to the tombstone user,
+  removes unread DMs addressed to the deleted user, and leaves visible
+  received/sent history governed by the per-participant delete and
+  operator-retention rules above.
+- Do not document automatic DM expiry until a retention job and configuration
+  key exist.
 
 ---
 
@@ -639,18 +725,26 @@ end
 
 ---
 
-## 10. Last callers
+## 10. Last callers and SSH access rules
 
-### `Foglet.Presence.LastCaller`
+### `Foglet.SSH.LastCaller`
 
 Table: `last_callers`
-
 ```elixir
 schema "last_callers" do
-  field :connected_at, :utc_datetime_usec
-  field :disconnected_at, :utc_datetime_usec
   field :interface, Ecto.Enum, values: [:ssh, :cli, :telnet]
-  field :visible, :boolean, default: true   # snapshot of user's preference at connection time
+  field :peer_ip, :string              # raw IPv4/IPv6, operator-only, retention-bounded
+  field :peer_port, :integer
+  field :outcome, Ecto.Enum, values: [
+    :accepted, :denied, :rate_limited, :over_global_limit, :auth_gate_denied, :failed
+  ]
+  field :reason, :string               # terse operator-safe reason, no exception payloads
+  field :policy_key, :string
+  field :session_id, :string
+  field :public_visible, :boolean, default: false
+  field :occurred_at, :utc_datetime_usec
+  field :disconnected_at, :utc_datetime_usec
+  field :metadata, :map, default: %{}
 
   belongs_to :user, Foglet.Accounts.User
 
@@ -660,9 +754,64 @@ end
 
 **Migration notes:**
 
-- Index on `(connected_at DESC) WHERE visible = true` — the login-sequence "last callers" list hits this.
-- `visible` is captured at connection time from `users.show_in_last_callers`. Later toggles don't retroactively change history (a user can't make past visible sessions invisible without a deliberate mod action).
-- Retention: keep N most recent per user, or N days of history, sysop-configurable.
+- Index on `(occurred_at DESC) WHERE public_visible = true AND outcome = 'accepted'` — the login-sequence "last callers" list hits this.
+- `public_visible` is captured from `users.show_in_last_callers` for accepted user calls. It controls classic public caller-history display only; operator/security audit rows remain durable until retention cleanup.
+- Raw `peer_ip`/`peer_port` are retained for a code-defined default 90 days and then redacted by the owning context cleanup API. Rows may remain for aggregate/history purposes after raw IP redaction.
+- Account deletion/anonymization detaches `user_id` and clears public visibility for this user's caller rows rather than deleting the operator/security audit record immediately.
+- Never store raw passwords, public-key material, invite/reset/verification tokens, post/chat content, or raw exception payloads in `last_callers` fields or metadata.
+
+### `Foglet.SSH.AccessRule`
+
+Table: `ssh_access_rules`
+```elixir
+schema "ssh_access_rules" do
+  field :mode, Ecto.Enum, values: [:allow, :deny]
+  field :address, :string             # exact IPv4/IPv6 or CIDR
+  field :enabled, :boolean, default: true
+  field :reason, :string
+  field :comment, :string
+
+  belongs_to :created_by, Foglet.Accounts.User
+
+  timestamps()
+end
+```
+
+Rules are operator-managed allow/deny entries. Deny rules win over allow rules. When allowlist mode is enabled by the SSH hot path, a source must match an enabled `:allow` rule and must not match an enabled `:deny` rule; allowlisted sources still do not bypass per-IP throttles or global active-connection caps.
+
+### `Foglet.Accounts.IdentityRule`
+
+Table: `identity_policy_rules`
+```elixir
+schema "identity_policy_rules" do
+  field :kind, Ecto.Enum, values: [:reserved_handle, :banned_handle, :banned_email, :banned_email_domain]
+  field :value, :string             # operator-entered value, trimmed for display
+  field :normalized_value, :string  # canonical comparison key
+  field :enabled, :boolean, default: true
+  field :reason, :string
+  field :comment, :string
+
+  belongs_to :created_by, Foglet.Accounts.User
+  belongs_to :updated_by, Foglet.Accounts.User
+
+  timestamps()
+end
+```
+
+Identity rules are the account-identity counterpart to SSH IP access rules and are surfaced to operators in the same ACCESS policy neighborhood. They are enforced by `Foglet.Accounts.IdentityPolicy` at registration/account identity mutation boundaries; anonymous denial copy is intentionally terse and does not expose policy contents.
+
+Normalization and matching contract:
+
+- `reserved_handle` and `banned_handle` trim input and compare with Foglet's handle format/case rules (`[A-Za-z0-9_-]`, length/format validation remains on `Foglet.Accounts.User`). Case variants compare equal via lowercase `normalized_value`.
+- `banned_email` trims input and compares exact normalized email address case-insensitively.
+- `banned_email_domain` trims an optional leading `@`, lowercases the domain, and blocks both the exact domain and subdomains. `example.com` blocks `user@example.com` and `user@mail.example.com`; it does not block `user@badexample.com` because matching is exact or dot-boundary suffix only.
+- Creating a rule reports matching existing non-deleted users for sysop review but does not mutate, suspend, lock, rename, or delete those users.
+
+**Migration notes:**
+
+- Check constraint on `kind` for the four supported rule types.
+- Unique index on `(kind, normalized_value)` prevents duplicate active/inactive rows with the same canonical rule identity.
+- Index on `(enabled, kind)` supports registration enforcement without exposing full lists to anonymous callers.
 
 ---
 
@@ -818,7 +967,10 @@ Critical indexes to create explicitly (beyond those implied by unique constraint
 | `reports` | `(inserted_at) WHERE status = 'open'` | mod queue |
 | `mod_actions` | `(inserted_at DESC)` | audit log |
 | `user_sanctions` | `(user_id) WHERE lifted_at IS NULL AND (expires_at IS NULL OR expires_at > now())` | active sanction check |
-| `last_callers` | `(connected_at DESC) WHERE visible = true` | login sequence |
+| `last_callers` | `(occurred_at DESC) WHERE public_visible = true AND outcome = 'accepted'` | login sequence |
+| `last_callers` | `(user_id, occurred_at DESC)` | operator user/IP audit |
+| `last_callers` | `(outcome, occurred_at DESC)` | operator security audit |
+| `ssh_access_rules` | `(enabled, mode)` | SSH policy evaluation |
 | `site_counters` | unique `name` | atomic upsert target for durable site counters |
 | `configuration` | unique `key` | config lookup |
 
@@ -858,3 +1010,21 @@ Flagging for later decision, not blocking on today:
 - **Retention window for `post_edits`.** Unbounded is simple; if storage ever matters, we can age out old revisions. Probably fine forever at hobby scale.
 - **Polymorphic `target_id` in `reports` and `mod_actions`.** Works fine without a database-level constraint, but foreign key integrity is lost. Acceptable tradeoff for v1; revisit if it causes pain.
 - **Full-text search language.** Hardcoded `'english'` in the generated tsvector column. If the sysop wants a different language, this becomes a migration. Probably fine to defer until someone asks.
+
+## Board Chat Messages
+
+Table: `board_chat_messages`
+```elixir
+schema "board_chat_messages" do
+  field :body, :string
+  field :kind, Ecto.Enum, values: [:text, :action], default: :text
+  field :metadata, :map, default: %{}
+
+  belongs_to :board, Foglet.Boards.Board
+  belongs_to :user, Foglet.Accounts.User
+
+  timestamps()
+end
+```
+
+`kind` distinguishes normal text from structured action messages. Existing rows default to `:text` with empty metadata. `/me` action rows store the action text in `body`, `kind: :action`, and command provenance in metadata; renderers derive actor identity from `user_id`, not from the body.

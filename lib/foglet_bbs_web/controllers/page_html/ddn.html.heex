@@ -1,0 +1,763 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DROP DEAD NEBULA — a BBS door game on foglet</title>
+    <link rel="stylesheet" href="/assets/ddn.css" />
+    <script defer src="/assets/ddn.js">
+    </script>
+  </head>
+  <body>
+    <div class="bar-top">
+      <div class="nodes">
+        <span>FOGLET BBS</span>
+        <span>doors/drop-dead-nebula</span>
+        <span>v0.1 · season 1</span>
+      </div>
+      <div>guest · <span id="clk">--:--</span></div>
+    </div>
+
+    <div class="bar-bot">
+      <div class="keys">
+        <span><b>[PgDn]</b> scroll</span>
+        <span><b>[C]</b>onnect</span>
+        <span><b>[D]</b>oors</span>
+        <span><b>[F]</b>aq</span>
+        <span><b>[G]</b>oodbye</span>
+      </div>
+      <div>ssh bbs.foglet.io</div>
+    </div>
+
+    <div class="screen-wrap flicker">
+      <section class="hero">
+        <div class="starfield" aria-hidden="true">
+          <pre>     .                 ·              ·     ·                          .
+
+   ·       .       *               .              *           .
+                ·         *
+       .             ·       *                ·     *     .      ·
+                                        .
+     ·           .             ·     .          ·            ·
+                       *                 .
+   *      .              ·                          *
+                   ·          .          *                .          ·
+       ·                                       .
+              .         ·                          ·    *
+                 *               .             ·
+   ·         .                          *                   .
+                        ·         .
+     .              *                          .            ·         *
+
+   ·              ·             *      .                      ·        </pre>
+        </div>
+
+        <div class="preheader">
+          <span>● ONLINE</span> · FOGLET BBS DOOR GAME · NEW FOR SEASON 1
+        </div>
+
+        <pre class="hero-title flicker"><span class="ddn">██████╗ ██████╗  ██████╗ ██████╗     ██████╗ ███████╗ █████╗ ██████╗ </span>
+<span class="ddn">██╔══██╗██╔══██╗██╔═══██╗██╔══██╗    ██╔══██╗██╔════╝██╔══██╗██╔══██╗</span>
+<span class="ddn">██║  ██║██████╔╝██║   ██║██████╔╝    ██║  ██║█████╗  ███████║██║  ██║</span>
+<span class="ddn">██║  ██║██╔══██╗██║   ██║██╔═══╝     ██║  ██║██╔══╝  ██╔══██║██║  ██║</span>
+<span class="ddn">██████╔╝██║  ██║╚██████╔╝██║         ██████╔╝███████╗██║  ██║██████╔╝</span>
+<span class="ddn">╚═════╝ ╚═╝  ╚═╝ ╚═════╝ ╚═╝         ╚═════╝ ╚══════╝╚═╝  ╚═╝╚═════╝ </span>
+
+<span class="neb">                ███╗   ██╗███████╗██████╗ ██╗   ██╗██╗      █████╗ </span>
+<span class="neb">                ████╗  ██║██╔════╝██╔══██╗██║   ██║██║     ██╔══██╗</span>
+<span class="neb">                ██╔██╗ ██║█████╗  ██████╔╝██║   ██║██║     ███████║</span>
+<span class="neb">                ██║╚██╗██║██╔══╝  ██╔══██╗██║   ██║██║     ██╔══██║</span>
+<span class="neb">                ██║ ╚████║███████╗██████╔╝╚██████╔╝███████╗██║  ██║</span>
+<span class="neb">                ╚═╝  ╚═══╝╚══════╝╚═════╝  ╚═════╝ ╚══════╝╚═╝  ╚═╝</span></pre>
+
+        <p class="hero-tagline">
+          a terminal-first space sim where each caller spends limited <span class="accent">daily turns</span>
+          as a salvage captain in a collapsing frontier nebula. trade volatile cargo. board derelicts.
+          <span class="accent">leave traps for rivals.</span>
+          log off with the galaxy slightly changed.
+        </p>
+
+        <div class="hero-meta">
+          <span class="pulse">● NEBULA ALIVE</span>·<span>72–120 places</span>·<span>30 turns/day</span>·<span>solo-first, async multi</span>
+        </div>
+
+        <div class="ssh-box">
+          <div class="ssh-row" id="ssh-cta" role="button" tabindex="0" aria-label="copy ssh command">
+            <span class="prompt">$</span>
+            <span class="cmd" id="ssh-cmd">ssh bbs.foglet.io</span><span class="cur" aria-hidden="true"></span>
+            <button class="copy-btn" id="copy-btn" type="button">[C]OPY</button>
+          </div>
+          <div class="ssh-sub">
+            <b>fresh callers welcome. apply for an account at the prompt.</b><br />
+            once in, pick <span class="amber">[D]oors</span>
+            · select <span class="amber">drop-dead-nebula</span>. existing handle? we remember you.
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 01 · WHAT THIS IS</h4>
+        <h2>══ the nebula doesn't wait for you ══</h2>
+
+        <p class="lede">
+          the old empire's relay network collapsed and left behind
+          <span class="amber">
+            wrecks, quarantined colonies, smugglers, corporate claim-jumpers, machine cults, and hungry stations
+          </span>. you are a captain of a half-legal salvage vessel. the cargo is volatile, the routes degrade, and the bounty board updates whether you logged in or not.
+        </p>
+
+        <p class="lede">
+          drop dead nebula runs as a <span class="cyan">bbs door game</span>:
+          a 5-to-15 minute session, every day, that nudges a shared galaxy forward one tick. npc captains trade. factions advance projects. markets drift. someone steps on the mine you left behind two days ago.
+        </p>
+
+        <div class="stat-row">
+          <div class="stat-cell"><div class="num">30</div>
+            <div class="lbl">daily turns</div></div>
+          <div class="stat-cell"><div class="num">9</div>
+            <div class="lbl">hull classes</div></div>
+          <div class="stat-cell"><div class="num">6</div>
+            <div class="lbl">major factions</div></div>
+          <div class="stat-cell"><div class="num">120</div>
+            <div class="lbl">places to find</div></div>
+        </div>
+
+        <div class="row">
+          <div class="box cyan-edge">
+            <div class="box-title">► async, not realtime <span class="num">/01</span></div>
+            <div class="body">
+              no live sockets. no waiting on humans. the world advances through daily turns, npc ticks, market drift, and persisted actions. you can finish a session in five minutes and still feel like something happened.
+            </div>
+          </div>
+          <div class="box green-edge">
+            <div class="box-title">► solo-first <span class="num">/02</span></div>
+            <div class="body">
+              named npcs — <em class="mag">Kara Vex, Moth-9, Marshal Senn, Brass Jory</em>
+              — remember you. they undercut your routes, ransom your cargo, and send mail. a one-player bbs still feels populated.
+            </div>
+          </div>
+          <div class="box red-edge">
+            <div class="box-title">► everything leaves a scar <span class="num">/03</span></div>
+            <div class="body">
+              trades move prices. failed expeditions leave wrecks. routes destabilize. mines and decoys wait for future callers.
+              <span class="dim">the galaxy remembers what you did and who did it to you.</span>
+            </div>
+          </div>
+          <div class="box mag-edge">
+            <div class="box-title">► information is a resource <span class="num">/04</span></div>
+            <div class="body">
+              your route recall goes stale. rumors can be planted. a market price you remember from yesterday might be a trap. scanning, gossip, and intel buys are sometimes worth more than fuel.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 02 · WHAT YOU DO</h4>
+        <h2>══ eleven ways to make rent ══</h2>
+        <p class="dim" style="max-width:64ch">
+          reputation is built by action, not class. most captains end up hybrid by week two: a smuggler who founded an outpost, a marshal with debts to a cartel, a salvager who never stopped collecting bounties.
+        </p>
+
+        <div class="career-grid">
+          <div class="career">
+            <div class="glyph">$</div>
+            <div class="name">trader</div>
+            <div class="desc">read the markets. run the lanes. bulk contracts and convoy discounts.</div>
+          </div>
+          <div class="career">
+            <div class="glyph green">§</div>
+            <div class="name">smuggler</div>
+            <div class="desc">false holds, bribe networks, heat decay. customs is a math problem.</div>
+          </div>
+          <div class="career">
+            <div class="glyph cyan">¶</div>
+            <div class="name">salvager</div>
+            <div class="desc">board derelicts. extract under hazard. rare parts, black boxes, ghosts.</div>
+          </div>
+          <div class="career">
+            <div class="glyph mag">►</div>
+            <div class="name">explorer</div>
+            <div class="desc">find hidden routes. handle anomalies. recall upgrades and gate access.</div>
+          </div>
+          <div class="career">
+            <div class="glyph red">†</div>
+            <div class="name">privateer</div>
+            <div class="desc">interdict cargo, board ships, collect lawful bounties. intimidate.</div>
+          </div>
+          <div class="career">
+            <div class="glyph red">‡</div>
+            <div class="name">pirate</div>
+            <div class="desc">ambush tools, fences, fear reputation. heat follows you everywhere.</div>
+          </div>
+          <div class="career">
+            <div class="glyph">♦</div>
+            <div class="name">marshal</div>
+            <div class="desc">hunt the wanted. inspection immunity windows. lawful faction trust.</div>
+          </div>
+          <div class="career">
+            <div class="glyph cyan">♣</div>
+            <div class="name">faction agent</div>
+            <div class="desc">privileged missions. restricted ports. political protection.</div>
+          </div>
+          <div class="career">
+            <div class="glyph">▓</div>
+            <div class="name">colonist</div>
+            <div class="desc">found an outpost. set production. survive raids and stockpile drift.</div>
+          </div>
+          <div class="career">
+            <div class="glyph green">≈</div>
+            <div class="name">manipulator</div>
+            <div class="desc">corner a commodity. plant rumors. let the market do the violence.</div>
+          </div>
+          <div class="career">
+            <div class="glyph mag">☼</div>
+            <div class="name">relic diver</div>
+            <div class="desc">precursor wrecks, anomaly pockets, modules that don't quite make sense.</div>
+          </div>
+          <div class="career">
+            <div class="glyph">☻</div>
+            <div class="name">whatever sticks</div>
+            <div class="desc">most careers hybridize. choices in week one become identity by week three.</div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 03 · A TYPICAL DAY</h4>
+        <h2>══ 30 turns, one log entry ══</h2>
+        <p class="dim" style="max-width:70ch">
+          logged session of captain <span class="mag">vanta</span>, last laugh, day 17. illustrative only — the galaxy reorganizes between callers.
+        </p>
+
+        <div class="narrative">
+          <div class="turn-row">
+            <div class="t-time">06:14 UTC</div>
+            <div class="t-event">
+              <b>arrive: ash coil.</b>
+              daily intel: <em>mercy relay paying +42% on med gel today, customs pinged a smuggler last tick.</em>
+              inbox has 3 unread.
+            </div>
+            <div class="t-turns"><b>30/30</b> turns</div>
+          </div>
+          <div class="turn-row">
+            <div class="t-time">06:15</div>
+            <div class="t-event">
+              buy 12 med gel at ash coil. install a <em>cheap false hold</em>. read the player challenge:
+              <span class="who">brass jory</span>
+              is undercutting the coolant run again.
+            </div>
+            <div class="t-turns"><b>28/30</b></div>
+          </div>
+          <div class="turn-row">
+            <div class="t-time">06:18</div>
+            <div class="t-event">
+              <b>route: ash coil → mercy relay.</b>
+              the dangerous one. <em>customs ping mid-transit.</em>
+              spoof transponder. succeed. <span class="red">heat +1</span>.
+            </div>
+            <div class="t-turns"><b>26/30</b></div>
+          </div>
+          <div class="turn-row">
+            <div class="t-time">06:21</div>
+            <div class="t-event">
+              dock at mercy relay. price still good but <em>npc convoy almost satisfied demand</em>. sell 6, hold 6 for a black-box bounty drop later.
+            </div>
+            <div class="t-turns"><b>25/30</b></div>
+          </div>
+          <div class="turn-row">
+            <div class="t-time">06:24</div>
+            <div class="t-event">
+              scan a wreck field nearby. board derelict <span class="cyan">DDN-44</span>. survivor pod ticking.
+              <b>cargo full.</b>
+              game blocks: jettison goods, or leave the data core.
+            </div>
+            <div class="t-turns"><b>20/30</b></div>
+          </div>
+          <div class="turn-row">
+            <div class="t-time">06:27</div>
+            <div class="t-event">
+              save the survivor. lose profit. <span class="cyan">mourning union</span>
+              rep +2. wreck logged. <span class="who">moth-9</span>
+              will scrape the data core later. it always does.
+            </div>
+            <div class="t-turns"><b>17/30</b></div>
+          </div>
+          <div class="turn-row">
+            <div class="t-time">06:30</div>
+            <div class="t-event">
+              deploy a sensor ghost on the mercy → red maw route. file a counter-rumor on the coolant lane. drop one mine at <em>blue blind verge</em>.
+            </div>
+            <div class="t-turns"><b>5/30</b></div>
+          </div>
+          <div class="turn-row">
+            <div class="t-time">06:31</div>
+            <div class="t-event">
+              <b>log off.</b>
+              three turns saved for tomorrow. <span class="red">hull 82%</span>.
+              <span class="cyan">+1 union contact</span>
+              . one grudge. the galaxy ticks. <span class="dim">no carrier.</span>
+            </div>
+            <div class="t-turns"><b>3/30</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 04 · THE DROP DEAD NEBULA</h4>
+        <h2>══ 6 regions, 120 places, one dead gate ══</h2>
+
+        <div class="regions-map">
+          <div class="region">
+            <div class="r-head">
+              <span class="r-bul amber">◆</span>
+              <span class="r-name amber">MOURNING SHELF</span>
+              <span class="r-loc">region · 01</span>
+            </div>
+            <div class="r-tag">industrial. stable lanes. union repair zone.</div>
+            <div class="r-places">
+              <div class="place">
+                <span class="p-mark amber">┣</span>
+                <span class="p-name amber">[ash coil]</span>
+                <span class="p-tag">hub · ore · beginner freight</span>
+              </div>
+              <div class="place">
+                <span class="p-mark amber">┣</span>
+                <span class="p-name amber">[mercy relay]</span>
+                <span class="p-tag">hub · med gel · faction repair goal</span>
+              </div>
+              <div class="place">
+                <span class="p-mark amber">┗</span>
+                <span class="p-name amber">[cinder pocket]</span>
+                <span class="p-tag">mining · invoices · pirate target</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="region">
+            <div class="r-head">
+              <span class="r-bul red">◆</span>
+              <span class="r-name red">THE BLEED</span>
+              <span class="r-loc">region · 02</span>
+            </div>
+            <div class="r-tag">watched corridor. customs heat. drift currents.</div>
+            <div class="r-places">
+              <div class="place">
+                <span class="p-mark red">┣</span>
+                <span class="p-name red">[red maw]</span>
+                <span class="p-tag">watched · customs · port authority</span>
+              </div>
+              <div class="place">
+                <span class="p-mark red">┣</span>
+                <span class="p-name">[ash drift]</span>
+                <span class="p-tag">▒ unstable ▒ one-way nebula current</span>
+              </div>
+              <div class="place">
+                <span class="p-mark red">┗</span>
+                <span class="p-name mag">[blue blind]</span>
+                <span class="p-tag">salvage · static · moth-9 territory</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="region">
+            <div class="r-head">
+              <span class="r-bul mag">◆</span>
+              <span class="r-name mag">SAINT'S REACH</span>
+              <span class="r-loc">region · 03</span>
+            </div>
+            <div class="r-tag">mystic. cult politics. hidden routes.</div>
+            <div class="r-places">
+              <div class="place">
+                <span class="p-mark mag">┣</span>
+                <span class="p-name mag">[shrine of vex]</span>
+                <span class="p-tag">cult · relic buyer · mother lumen</span>
+              </div>
+              <div class="place">
+                <span class="p-mark mag">┗</span>
+                <span class="p-name cyan">[blackglass cache]</span>
+                <span class="p-tag">· hidden · rumor or scan</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="region">
+            <div class="r-head">
+              <span class="r-bul">◆</span>
+              <span class="r-name">THE DEAD QUARTER</span>
+              <span class="r-loc">region · 04</span>
+            </div>
+            <div class="r-tag">unscanned. unstable. campaign endgame.</div>
+            <div class="r-places">
+              <div class="place">
+                <span class="p-mark dimmer">┣</span>
+                <span class="p-name dimmer">[ ? ]──[ ? ]──[ ? ]</span>
+                <span class="p-tag dim">unscanned · 5 hidden nodes</span>
+              </div>
+              <div class="place">
+                <span class="p-mark red">┗</span>
+                <span class="p-name red">[ DEAD GATE ]</span>
+                <span class="p-tag">locked · ▒ unstable ▒ · season finale</span>
+              </div>
+            </div>
+            <div class="r-foot dim">↑ unlocks at faction project completion</div>
+          </div>
+        </div>
+
+        <div class="map-legend">
+          <span><b class="amber">[ ]</b> known place</span>
+          <span><b class="cyan">·</b> hidden node</span>
+          <span><b class="amber">══</b> major lane</span>
+          <span><b class="red">▒</b> drift / anomaly</span>
+          <span><b class="red">customs</b> heat zone</span>
+          <span><b class="dimmer">[?]</b> unscanned</span>
+        </div>
+
+        <div class="row-3" style="margin-top: 14px;">
+          <div class="box">
+            <div class="box-title amber">ash coil <span class="num">hub</span></div>
+            <div class="body">
+              <span class="dim">industrial. tired. dockworker bluntness.</span>
+              beginner freight, no patience for ceremony. coolant prices steady. the pipes are not.
+            </div>
+          </div>
+          <div class="box">
+            <div class="box-title amber">mercy relay <span class="num">hub</span></div>
+            <div class="body">
+              <span class="dim">humanitarian urgency.</span>
+              the antennas are patched with wire, prayer, and coolant debt. med bay is always buying. shared faction repair goal.
+            </div>
+          </div>
+          <div class="box">
+            <div class="box-title mag">blue blind <span class="num">salvage</span></div>
+            <div class="body">
+              <span class="dim">derelict static.</span>
+              broadcasting again. nobody admits tuning in first. wreck field answers scans with old emergency codes.
+            </div>
+          </div>
+          <div class="box red-edge">
+            <div class="box-title">red maw <span class="num">danger</span></div>
+            <div class="body">
+              <span class="dim">watched routes.</span>
+              red maw is watched today. that does not mean safe. the route beacon is alive, which is not the same as friendly.
+            </div>
+          </div>
+          <div class="box mag-edge">
+            <div class="box-title">shrine of vex <span class="num">cult</span></div>
+            <div class="body">
+              <span class="dim">saints of vacuum.</span>
+              mother lumen pays irrational prices for relics. she also asks questions you didn't agree to answer.
+            </div>
+          </div>
+          <div class="box red-edge">
+            <div class="box-title">the dead gate <span class="num">endgame</span></div>
+            <div class="body">
+              <span class="dim">restrained mystery.</span>
+              the gate remains dark. the static around it does not. nobody opens a gate by accident twice. that is the official line.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 05 · WHAT THE WORLD IS DOING WHILE YOU SLEEP</h4>
+        <h2>══ today's intel packet ══</h2>
+        <p class="dim" style="max-width:64ch">
+          every login, the door prints a daily intel digest: market drift, npc traces, faction project ticks, and personal mail. samples below are from a recent season tick.
+        </p>
+
+        <div class="dispatch">
+          <div class="head">
+            <span>┌── while you were out ──┐</span>
+            <span>tick 184 · season 1 · day 17</span>
+          </div>
+
+          <div class="item good">
+            <div class="sym">$</div>
+            <div class="body">
+              <b class="green">mercy relay burned through most of its med gel.</b>
+              med bay is buying again. <span class="dim">your prior route is still profitable. for now.</span><span class="src">— market drift</span>
+            </div>
+          </div>
+          <div class="item">
+            <div class="sym">●</div>
+            <div class="body">
+              <b>independent haulers moved coolant out of ash coil.</b>
+              margins compressed. expect ore lane to be quieter for one tick.<span class="src">— route heat</span>
+            </div>
+          </div>
+          <div class="item npc">
+            <div class="sym">♦</div>
+            <div class="body">
+              <b class="mag">brass jory undercut the coolant run again.</b>
+              third time this week. <span class="dim">he is not subtle. he is just rich.</span><span class="src">— npc trace</span>
+            </div>
+          </div>
+          <div class="item npc">
+            <div class="sym">♦</div>
+            <div class="body">
+              <b class="mag">moth-9 marked a salvage lane near blue blind, then went quiet.</b>
+              the lane is unusually clean. that is also unusual.<span class="src">— npc trace</span>
+            </div>
+          </div>
+          <div class="item warn">
+            <div class="sym">!</div>
+            <div class="body">
+              <b class="yel">red maw is watched.</b>
+              port authority customs increased patrols after a flare. scan before spending a turn.<span class="src">— route warning</span>
+            </div>
+          </div>
+          <div class="item bad">
+            <div class="sym">‡</div>
+            <div class="body">
+              <b class="red">someone stepped on your mine at the mercy → red maw corridor.</b>
+              they were not a friend. event log has the details. <em>they may now be a problem.</em><span class="src">— trap triggered</span>
+            </div>
+          </div>
+          <div class="item">
+            <div class="sym">§</div>
+            <div class="body">
+              <b>mourning union shared goal "patch the relay" is 64% complete.</b>
+              three more catalyst shipments and mercy relay opens a permanent +1 supply slot.<span class="src">— faction project</span>
+            </div>
+          </div>
+          <div class="item">
+            <div class="sym">?</div>
+            <div class="body">
+              <span class="cyan">rumor</span>: <em>dead gate static climbed after the last tick. scan data is stale.</em>
+              <span class="dim">unverified. probably saints of vacuum talking.</span><span class="src">— rumor / unverified</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 06 · THE CAPTAIN'S BRIDGE</h4>
+        <h2>══ this is the screen you live on ══</h2>
+        <p class="dim" style="max-width:64ch">
+          one 80-column screen. every common action a single keystroke away. the bbs aesthetic is the point — fast in, fast out, no chrome between you and the decision.
+        </p>
+
+        <div class="dash">
+          <div class="dash-bar">
+            <span>DROP DEAD NEBULA</span>
+            <span>captain vanta · day 17 · season 1</span>
+          </div>
+          <div class="dash-body">
+            <pre class="ascii-title">  ░▒▓ DROP DEAD NEBULA ▓▒░          ── ash coil, mourning shelf
+</pre>
+
+            <div class="stats">
+              <div class="stat">
+                <div class="lbl">turns</div>
+                <div class="val amber">12 / 30</div>
+              </div>
+              <div class="stat">
+                <div class="lbl">credits</div>
+                <div class="val">14,220 cr</div>
+              </div>
+              <div class="stat">
+                <div class="lbl">hull</div>
+                <div class="val red">82%</div>
+              </div>
+              <div class="stat">
+                <div class="lbl">heat</div>
+                <div class="val red">WANTED·1</div>
+              </div>
+            </div>
+
+            <hr class="dashed" />
+
+            <div class="dim">
+              ship: <span class="amber">last laugh</span>
+              · ghost clipper, false hold (cheap), salvage claw mk-i
+            </div>
+            <div class="dim">
+              faction standing: <span class="cyan">helix +3</span>
+              · <span class="cyan">mourning union +1</span>
+              · <span class="red">port authority -2</span>
+            </div>
+
+            <div class="signals">
+              <h4 style="color:var(--fg-3); margin-top: 14px;">LOCAL SIGNALS</h4>
+              <div class="row">
+                <div class="sig-mark bang">!</div>
+                <div>union convoy delayed near mercy relay</div>
+              </div>
+              <div class="row">
+                <div class="sig-mark dolr">$</div>
+                <div>
+                  ash coil buying med gel at <b class="green">+42%</b> — drops at next tick
+                </div>
+              </div>
+              <div class="row">
+                <div class="sig-mark que">?</div>
+                <div>
+                  wreck ping: <b class="cyan">DDN-44</b>
+                  <span class="dim">/ stale 2 days / blue blind verge</span>
+                </div>
+              </div>
+              <div class="row">
+                <div class="sig-mark star">*</div>
+                <div>
+                  unread: <b class="amber">3 notices</b> · 1 challenge open · 1 bounty expires next tick
+                </div>
+              </div>
+            </div>
+
+            <hr class="dashed" />
+
+            <div class="hotkeys">
+              <b>(T)</b>ravel  <b>(M)</b>arket  <b>(J)</b>obs  <b>(S)</b>hip  <b>(I)</b>nbox  <b>(F)</b>action<br />
+              <b>(C)</b>argo   <b>(R)</b>ecall  <b>(L)</b>og   <b>(H)</b>elp  <b>(Q)</b>uit
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 07 · THE SIX FACTIONS</h4>
+        <h2>══ pick a side. or don't. ══</h2>
+        <p class="dim" style="max-width:64ch">
+          factions advance shared projects, post bounties, and remember who helped. standing hybridizes — be loved by one, hunted by another. neutrality is a strategy. so is treachery.
+        </p>
+
+        <div class="factions">
+          <div class="faction f-union">
+            <div class="sigil">§</div>
+            <div class="name">mourning union</div>
+            <div class="desc">labor, repair, refugees. wants mercy relay rebuilt before the next refugee push.</div>
+            <div class="bonus">
+              <span class="lbl">bonus:</span>
+              repair discounts · humanitarian contracts
+            </div>
+          </div>
+          <div class="faction f-helix">
+            <div class="sigil">¤</div>
+            <div class="name">helix cartel</div>
+            <div class="desc">trade monopolists, smugglers, market manipulators. wants the route open, profitable, and quiet.</div>
+            <div class="bonus">
+              <span class="lbl">bonus:</span>
+              black-market access · arbitrage intel
+            </div>
+          </div>
+          <div class="faction f-port">
+            <div class="sigil">♦</div>
+            <div class="name">port authority black office</div>
+            <div class="desc">lawful regulators with secret methods. legal bounties and inspection immunity, if you can stomach the paperwork.</div>
+            <div class="bonus">
+              <span class="lbl">bonus:</span>
+              patrol protection · legal bounties
+            </div>
+          </div>
+          <div class="faction f-saints">
+            <div class="sigil">☼</div>
+            <div class="name">saints of vacuum</div>
+            <div class="desc">mystic relic cult and anomaly divers. mother lumen pays irrationally well for things you should not have brought aboard.</div>
+            <div class="bonus">
+              <span class="lbl">bonus:</span>
+              anomaly access · weird modules
+            </div>
+          </div>
+          <div class="faction f-concord">
+            <div class="sigil">▓</div>
+            <div class="name">machine concord</div>
+            <div class="desc">post-human logistics intelligence. cold reputation, weird demands, exceptional drone supply chains.</div>
+            <div class="bonus">
+              <span class="lbl">bonus:</span>
+              drones · automation · efficiency
+            </div>
+          </div>
+          <div class="faction f-dust">
+            <div class="sigil">‡</div>
+            <div class="name">dust clans</div>
+            <div class="desc">pirates, free raiders, survivalist fleets. hunted by lawful factions. extremely good at being feared.</div>
+            <div class="bonus">
+              <span class="lbl">bonus:</span>
+              ambush tools · fences · fear rep
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h4>§ 08 · WHY IT WORKS ON A BBS</h4>
+        <h2>══ async by design ══</h2>
+
+        <div class="row">
+          <div class="box">
+            <div class="box-title">≈ daily turns, not grind</div>
+            <div class="body">
+              30 turns per day. reserve cap of 60 if you miss a day.
+              <span class="dim">"one turn left" is a feature, not a fail-state.</span>
+              a session is 5–15 minutes. you stop when the turns stop.
+            </div>
+          </div>
+          <div class="box">
+            <div class="box-title">≈ world ticks, not servers</div>
+            <div class="body">
+              no live game server. the world advances through lazy or cron-triggered ticks: markets restock, factions advance projects, npcs move cargo, your traps wait.
+              <span class="dim">comes back up the moment somebody dials in.</span>
+            </div>
+          </div>
+          <div class="box">
+            <div class="box-title">≈ low-pop guarantee</div>
+            <div class="body">
+              if nobody else is online, every session still offers: one low-risk profit, one dangerous temptation, one story hook, one consequence from last tick.
+              <span class="dim">an empty bbs is still a full game.</span>
+            </div>
+          </div>
+          <div class="box">
+            <div class="box-title">≈ high-pop, no slop</div>
+            <div class="body">
+              when the board is busy, anti-monopoly pressure rises, faction conflict zones open, and async pvp resolves through standing combat policies — no realtime ambushes required.
+            </div>
+          </div>
+          <div class="box">
+            <div class="box-title">≈ death is rarely deletion</div>
+            <div class="body">
+              crippled hulls. escape pods. insurance. wrecks left for future salvagers. ransom over erasure.
+              <span class="dim">true ship loss is rare and dramatic; reputation outlives the hull.</span>
+            </div>
+          </div>
+          <div class="box">
+            <div class="box-title">≈ player text is short and safe</div>
+            <div class="body">
+              mail, dead-drop labels, bounty blurbs, outpost mottos, ship epitaphs. bounded, terminal-sanitized, moderation-friendly.
+              <span class="dim">no rich formatting. it's a bbs.</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="final-cta">
+        <div class="pre">● connect now · 3 nodes available</div>
+        <h2 class="red flicker">drop in. drop dead. or don't.</h2>
+
+        <div class="ssh-box" style="display:inline-block">
+          <div class="ssh-row" id="ssh-cta-2" role="button" tabindex="0" aria-label="copy ssh command">
+            <span class="prompt">$</span>
+            <span class="cmd">ssh bbs.foglet.io</span><span class="cur" aria-hidden="true"></span>
+            <button class="copy-btn" id="copy-btn-2" type="button">[C]OPY</button>
+          </div>
+        </div>
+
+        <div class="footnote">
+          <em>apply for a handle at the login prompt.</em>
+          pick a hull, spend your first thirty turns. the door is at
+          <span class="amber">[D]oors → drop-dead-nebula</span>.<br /><br />
+          <span class="dim">a foglet bbs door game. season 1 runs ~30 days. the dead gate opens when it opens.</span>
+        </div>
+      </section>
+    </div>
+
+    <div class="foglet-strip">
+      <div class="l">
+        ▓▒░ a <span class="amber">foglet bbs</span> production ░▒▓ ── door games for people who remember when the network was smaller.
+      </div>
+      <div class="r"><span class="glyph">►</span>ssh bbs.foglet.io</div>
+    </div>
+
+    <div class="toast" id="toast">copied to clipboard</div>
+  </body>
+</html>

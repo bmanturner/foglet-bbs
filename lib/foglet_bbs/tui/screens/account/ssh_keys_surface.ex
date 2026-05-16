@@ -107,29 +107,10 @@ defmodule Foglet.TUI.Screens.Account.SSHKeysSurface do
 
   defp table_for_width(%ConsoleTable{} = table, available_width)
        when is_integer(available_width) and available_width > 0 do
-    rebuilt =
-      ConsoleTable.init(
-        columns: table.columns,
-        rows: table.rows,
-        selectable: table.selectable,
-        empty_state: table.empty_state,
-        width: available_width
-      )
-
-    put_selected_row(rebuilt, selected_row(table))
+    ConsoleTable.with_width(table, available_width)
   end
 
   defp table_for_width(%ConsoleTable{} = table, _available_width), do: table
-
-  defp selected_row(%ConsoleTable{table: %{raxol_state: raxol_state}}) do
-    Map.get(raxol_state, :selected_row)
-  end
-
-  defp put_selected_row(%ConsoleTable{} = table, selected_row) when is_integer(selected_row) do
-    put_in(table.table.raxol_state[:selected_row], selected_row)
-  end
-
-  defp put_selected_row(%ConsoleTable{} = table, _selected_row), do: table
 
   # Polish: keep a single pasted public key from blowing past the viewport.
   # Trim with an ellipsis once the value gets long; full validation still runs

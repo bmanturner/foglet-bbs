@@ -219,9 +219,21 @@ defmodule Foglet.Config do
   @spec email_verify_resend_cooldown_seconds() :: integer()
   def email_verify_resend_cooldown_seconds, do: get!("email_verify_resend_cooldown_seconds")
 
-  @doc "Per-user invite generation cap when invite_code_generators == \"any_user\" (INVT-07 D-04). 0 = unlimited."
-  @spec invite_generation_per_user_limit() :: non_neg_integer()
+  @doc "Per-user invite generation limit (0 means unlimited)."
+  @spec invite_generation_per_user_limit() :: integer()
   def invite_generation_per_user_limit, do: get!("invite_generation_per_user_limit")
+
+  @doc "Whether SSH allowlist mode is enabled."
+  @spec ssh_ip_allowlist_enabled?() :: boolean()
+  def ssh_ip_allowlist_enabled?, do: get("ssh_ip_allowlist_enabled", false)
+
+  @doc "Maximum SSH attempts per source IP during the configured window."
+  @spec ssh_rate_limit_max() :: integer()
+  def ssh_rate_limit_max, do: get("ssh_rate_limit_max", 10)
+
+  @doc "SSH per-IP rate limit window in milliseconds."
+  @spec ssh_rate_limit_window_ms() :: integer()
+  def ssh_rate_limit_window_ms, do: get("ssh_rate_limit_window_ms", 60_000)
 
   # ---------- Private ----------
 

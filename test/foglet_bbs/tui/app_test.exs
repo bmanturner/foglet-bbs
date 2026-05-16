@@ -342,6 +342,19 @@ defmodule Foglet.TUI.AppTest do
     end
   end
 
+  describe "effect interpretation" do
+    test "active-screen task effects route results to the current screen" do
+      {:ok, state} = App.init(%{})
+      state = %{state | current_screen: :thread_list}
+
+      {_state, [%Raxol.Core.Runtime.Command{type: :task, data: task}]} =
+        Effects.apply_effect(state, Effect.task(:load_threads, fn -> [%{id: "t1"}] end))
+
+      assert {:screen_task_result, :thread_list, :load_threads, {:ok, [%{id: "t1"}]}} =
+               task.()
+    end
+  end
+
   describe "update/2 (SSH-06, SSH-08)" do
     setup do
       {:ok, state} = App.init(%{})
@@ -2314,81 +2327,48 @@ defmodule Foglet.TUI.AppTest do
       assert cmds == []
     end
 
-    test "{:notifications, event, payload} on :main_menu triggers unread count and chrome refresh",
+    test "{:notifications, event, payload} on :main_menu applies live unread count and chrome refresh",
          %{
            state: state
          } do
-      Process.put(:fake_notifications_unread_count, 3)
       state = %{state | current_screen: :main_menu, unread_count: 2}
 
       {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
 
-      assert %MainMenuState{notifications_status: :loading} =
+      assert %MainMenuState{unread_notifications_count: 3, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
       assert new_state.unread_count == 3
-
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-
-      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 3}} =
-               task.()
-
-      {refreshed_state, []} =
-        App.update(
-          {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 3}},
-          new_state
-        )
-
-      assert %MainMenuState{unread_notifications_count: 3, notifications_status: :idle} =
-               App.screen_state_for(refreshed_state, :main_menu)
-
-      assert refreshed_state.unread_count == 3
-      assert "N 3" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(refreshed_state)
-      assert_received :unread_count
+      assert "N 3" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(new_state)
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+      refute_received :unread_count
     end
 
     test "{:notifications, event, payload} on non-main-menu screen refreshes cached badge and framed chrome",
          %{
            state: state
          } do
-      Process.put(:fake_notifications_unread_count, 2)
-
       state =
         %{state | current_screen: :board_list, unread_count: 0, terminal_size: {64, 22}}
         |> App.put_screen_state(:main_menu, %MainMenuState{unread_notifications_count: 0})
 
       {new_state, cmds} = App.update({:notifications, :created, %{user_id: "u1"}}, state)
 
-      assert %MainMenuState{notifications_status: :loading} =
+      assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
       assert new_state.current_screen == :board_list
       assert new_state.unread_count == 1
       assert "N 1" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(new_state)
       assert new_state |> App.view() |> AsciiRenderer.render({64, 22}) =~ "N 1"
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+      refute_received :unread_count
 
-      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 2}} =
-               task.()
-
-      {refreshed_state, []} =
-        App.update(
-          {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 2}},
-          new_state
-        )
-
-      assert refreshed_state.current_screen == :board_list
-      assert refreshed_state.unread_count == 2
-      assert "N 2" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(refreshed_state)
-
-      rendered = refreshed_state |> App.view() |> AsciiRenderer.render({64, 22})
-      assert rendered =~ "N 2"
-
-      eighty_col_state = %{refreshed_state | terminal_size: {80, 24}}
-      assert "N 2" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(eighty_col_state)
+      eighty_col_state = %{new_state | terminal_size: {80, 24}}
+      assert "N 1" in Foglet.TUI.Widgets.Chrome.StatusBar.status_atoms(eighty_col_state)
 
       rendered = eighty_col_state |> App.view() |> AsciiRenderer.render({80, 24})
-      assert rendered =~ "N 2"
+      assert rendered =~ "N 1"
     end
 
     test "mark-all-read task result clears chrome unread token while staying on framed screen", %{
@@ -2411,7 +2391,7 @@ defmodule Foglet.TUI.AppTest do
              )
     end
 
-    test "{:subscription, {:notifications, event, payload}} on :main_menu triggers unread count refresh",
+    test "{:subscription, {:notifications, event, payload}} on :main_menu applies live unread count",
          %{
            state: state
          } do
@@ -2420,15 +2400,11 @@ defmodule Foglet.TUI.AppTest do
       {new_state, cmds} =
         App.update({:subscription, {:notifications, :created, %{user_id: "u1"}}}, state)
 
-      assert %MainMenuState{notifications_status: :loading} =
+      assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
-      assert [%Raxol.Core.Runtime.Command{type: :task, data: task}] = cmds
-
-      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
-               task.()
-
-      assert_received :unread_count
+      assert [%Raxol.Core.Runtime.Command{type: :task}] = cmds
+      refute_received :unread_count
     end
 
     test "{:notifications, event, payload} on :notifications refreshes inbox and cached main menu",
@@ -2443,21 +2419,18 @@ defmodule Foglet.TUI.AppTest do
 
       assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
 
-      assert %MainMenuState{notifications_status: :loading} =
+      assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
       assert [
-               %Raxol.Core.Runtime.Command{type: :task, data: unread_task},
+               %Raxol.Core.Runtime.Command{type: :task},
                %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
              ] = cmds
-
-      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
-               unread_task.()
 
       assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
                inbox_task.()
 
-      assert_received :unread_count
+      refute_received :unread_count
       assert_received {:list_recent_notifications, 50}
     end
 
@@ -2474,21 +2447,18 @@ defmodule Foglet.TUI.AppTest do
 
       assert %{status: :loading} = App.screen_state_for(new_state, :notifications)
 
-      assert %MainMenuState{notifications_status: :loading} =
+      assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
       assert [
-               %Raxol.Core.Runtime.Command{type: :task, data: unread_task},
+               %Raxol.Core.Runtime.Command{type: :task},
                %Raxol.Core.Runtime.Command{type: :task, data: inbox_task}
              ] = cmds
-
-      assert {:screen_task_result, :main_menu, :load_unread_notifications_count, {:ok, 0}} =
-               unread_task.()
 
       assert {:screen_task_result, :notifications, :load_notifications, {:ok, [%{id: "n-1"}]}} =
                inbox_task.()
 
-      assert_received :unread_count
+      refute_received :unread_count
       assert_received {:list_recent_notifications, 50}
     end
 
@@ -2523,7 +2493,7 @@ defmodule Foglet.TUI.AppTest do
       assert %{rows: [%{id: "n-live"}], status: :loading} =
                App.screen_state_for(new_state, :notifications)
 
-      assert %MainMenuState{notifications_status: :loading} =
+      assert %MainMenuState{unread_notifications_count: 1, notifications_status: :idle} =
                App.screen_state_for(new_state, :main_menu)
 
       assert [
@@ -2570,7 +2540,9 @@ defmodule Foglet.TUI.AppTest do
     end
 
     test "{:notification, user_id, kind, payload} shows a modal", %{state: state} do
-      {new_state, []} = App.update({:notification, "u1", :dm, %{body: "hey!"}}, state)
+      {new_state, [%Effect{type: :terminal, payload: {:alert, :terminal_bell}}]} =
+        App.update({:notification, "u1", :dm, %{body: "hey!"}}, state)
+
       assert new_state.modal != nil
       assert new_state.modal.type == :info
       assert new_state.modal.message == "New message: hey!"
@@ -2705,7 +2677,9 @@ defmodule Foglet.TUI.AppTest do
   end
 
   describe "Phase 0 screen routing" do
-    setup do
+    setup tags do
+      FogletBbs.DataCase.setup_sandbox(tags)
+
       user = %Foglet.Accounts.User{id: "u1", handle: "alice", role: :user}
 
       {:ok, state} =
@@ -2895,7 +2869,9 @@ defmodule Foglet.TUI.AppTest do
       )
     end
 
-    setup do
+    setup tags do
+      FogletBbs.DataCase.setup_sandbox(tags)
+
       Process.put(:fake_oneliners_owner, self())
       Process.put(:fake_oneliners_entries, [])
       Process.put(:fake_accounts_owner, self())

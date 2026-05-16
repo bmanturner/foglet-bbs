@@ -49,6 +49,11 @@ swap_size_mb = 256
   min_machines_running = 1
 
   [[services.ports]]
+    # Do not add handlers = ["proxy_proto"] until Foglet has a reviewed
+    # PROXY-protocol-aware SSH shim. Erlang :ssh expects the SSH banner as the
+    # first socket bytes; raw PROXY headers would break the handshake. Without
+    # proxy_proto, app code sees Fly Proxy/private-network peer addresses rather
+    # than true public caller IPs.
     port = 22
 
 [mounts]

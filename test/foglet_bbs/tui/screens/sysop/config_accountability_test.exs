@@ -169,7 +169,16 @@ defmodule Foglet.TUI.Screens.Sysop.ConfigAccountabilityTest do
         "LIMITS control affects thread title validation through Foglet.Config.max_thread_title_length/0"}},
       {"email_verify_resend_cooldown_seconds",
        {:visible,
-        "LIMITS control affects Verify resend cooldown through Foglet.Config.email_verify_resend_cooldown_seconds/0"}}
+        "LIMITS control affects Verify resend cooldown through Foglet.Config.email_verify_resend_cooldown_seconds/0"}},
+      {"ssh_ip_allowlist_enabled",
+       {:visible,
+        "SITE control changes whether SSH sources must match an enabled allow rule through Foglet.Config.ssh_ip_allowlist_enabled?/0"}},
+      {"ssh_rate_limit_max",
+       {:visible,
+        "LIMITS control changes accepted SSH attempts per source IP through Foglet.Config.ssh_rate_limit_max/0"}},
+      {"ssh_rate_limit_window_ms",
+       {:visible,
+        "LIMITS control changes the SSH per-IP throttle window through Foglet.Config.ssh_rate_limit_window_ms/0"}}
     ]
   end
 

@@ -10,7 +10,7 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
   alias Foglet.TUI.Widgets.List.SelectableFieldList
   alias Foglet.TUI.Widgets.Modal.Form, as: ModalForm
 
-  @fields [:timezone, :time_format, :theme, :handle_color]
+  @fields [:timezone, :time_format, :notification_alert, :theme, :handle_color]
 
   @spec render(State.t(), Theme.t(), keyword()) :: any()
   def render(%State{} = state, %Theme{} = theme, opts \\ []) do
@@ -32,6 +32,27 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
   def handle_key(%{key: :enter}, %State{} = state, _current_user) do
     open_selected_field(state)
+  end
+
+  def handle_key(
+        %{key: :char, char: c},
+        %State{prefs_focus: :notification_alert} = state,
+        _current_user
+      )
+      when c in ["t", "T"] do
+    mode = Map.get(state.prefs_draft, :notification_alert, "terminal_bell")
+
+    case Foglet.TUI.TerminalAlert.normalize_mode(mode) do
+      :off ->
+        {:ok, %{state | status_message: "Alerts are off."}, []}
+
+      normalized ->
+        {:ok,
+         %{
+           state
+           | status_message: "Test alert sent. Some clients flash instead of playing sound."
+         }, [Foglet.TUI.Effect.terminal_alert(normalized)]}
+    end
   end
 
   def handle_key(%{key: key} = event, %State{} = state, _current_user)
@@ -59,7 +80,10 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
 
     attrs = %{
       timezone: Map.get(draft, :timezone, "Etc/UTC"),
-      preferences: %{"time_format" => Map.get(draft, :time_format, "12h")},
+      preferences: %{
+        "time_format" => Map.get(draft, :time_format, "12h"),
+        "notification_alert" => Map.get(draft, :notification_alert, "terminal_bell")
+      },
       theme: Map.get(draft, :theme, "gray"),
       handle_color: Map.get(draft, :handle_color)
     }
@@ -148,6 +172,17 @@ defmodule Foglet.TUI.Screens.Account.PrefsForm do
       swatch_color: value,
       description: "Use #RRGGBB, like #ff8800. Blank uses the BBS default."
     })
+  end
+
+  defp friendly_value(%{name: :notification_alert, value: value} = field) do
+    display =
+      case Foglet.TUI.TerminalAlert.normalize_mode(value) do
+        :off -> "Off"
+        :terminal_bell -> "Terminal bell"
+        :desktop_osc_best_effort -> "Desktop OSC (best effort)"
+      end
+
+    %{field | value: display}
   end
 
   defp friendly_value(field), do: field

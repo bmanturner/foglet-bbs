@@ -129,6 +129,70 @@ Two `ExUnit.CaseTemplate` modules cover most tests:
 Tests that do not touch the Repo (most TUI widget tests) use plain
 `use ExUnit.Case, async: true`.
 
+## TUI behavior, buffer, and inspection tests
+
+Use the narrowest TUI test that protects the behavior:
+
+- Reducer and context tests should call `init/1`, `update/3`, and focused state
+  helpers directly when the invariant is about behavior, effects, authorization
+  routing, validation, or state transitions.
+- Widget unit tests should call the widget `render/*` or
+  `init/1` + `handle_event/2` + `render/2` contract directly when the invariant
+  belongs to a reusable widget.
+- Buffer snapshot tests can import `Foglet.TUI.Test` and use
+  `render_screen/3`, `render_fixture/2`, `assert_screen/2`, and `~B` when the
+  invariant is the whole rendered buffer at a known terminal size. `~B` removes
+  heredoc indentation and one surrounding newline, but it does not trim trailing
+  row whitespace.
+- Layout smoke tests remain for broad cross-screen size contracts and layout
+  engine regressions that are easier to express structurally than as snapshots.
+- Manual inspection with `rtk mix foglet.tui.render <screen>` is the fastest way
+  to review layout while developing; it is evidence for humans, not a
+  regression assertion by itself.
+- SSH harness QA is for live terminal workflows, authentication/session
+  behavior, and permission gates that need a running Foglet instance.
+
+Avoid single-fragment text-presence tests for visual behavior. Prefer reducer
+assertions for behavior, widget assertions for reusable primitives, or
+whole-buffer snapshots when exact layout and chrome are the thing being pinned.
+
+### Buffer snapshot conventions
+
+Use buffer snapshots for stable, user-visible screen states, not for every render
+branch. Name snapshot tests after the state they freeze, for example
+`"renders empty catalog"` or `"renders launch confirmation modal"`, and keep them
+near the behavior tests for the same screen. New screen snapshots should import
+`Foglet.TUI.Test` and render either a focused screen state with `render_screen/3`
+or one of the synthetic manual-inspection fixtures with `render_fixture/2`.
+
+When a snapshot includes chrome, freeze every clock-sensitive input in the
+context. Set `session_context.clock_now` to a fixed `DateTime`, and set the
+user's time-format preference fields that the chrome or screen reads. This keeps
+snapshots from changing with wall-clock time or local preference defaults. Use
+the smallest terminal size that proves the layout, usually `80x24`, and add a
+second wider snapshot only when the responsive behavior is the invariant.
+
+Update snapshots intentionally. First run `rtk mix foglet.tui.render <screen>`
+for quick visual inspection when the fixture exists, then update the `~B`
+expected buffer only after confirming the visual change is intended. Prefer a
+new snapshot for a meaningfully different state over widening one expected
+buffer until it becomes hard to read.
+
+### Layout smoke coverage
+
+`test/foglet_bbs/tui/layout_smoke_test.exs` is broad integration coverage for
+the Raxol layout engine and the highest-risk screen shells. It is intentionally
+not the default pattern for new screen work. Add focused reducer, widget, or
+buffer snapshot tests first; extend the smoke test only when the change touches
+cross-screen layout contracts, chrome placement, or size behavior that is
+awkward to express as one exact buffer.
+
+When the smoke file grows, keep related helper code in
+`test/support/foglet/tui/layout_smoke/` and add comments to new sections that
+explain the layout invariant being protected. If a new screen needs several
+fixtures or tab states, prefer a per-screen support helper over another large
+inline setup block.
+
 ## Ecto sandbox
 
 `FogletBbs.DataCase.setup_sandbox/1` is the single sandbox entry point used by both
@@ -297,9 +361,6 @@ inspecting the returned tree.
 Screen tests live in `test/foglet_bbs/tui/screens/` and the App-level test in
 `test/foglet_bbs/tui/app_test.exs`. They typically:
 
-- Seed the `Foglet.Config` ETS cache up-front so render paths that call `Config.get/2`
-  do not require a DB checkout. `Foglet.TUI.AppTest` calls `Config.init_cache/0` and
-  inserts known keys via `:ets.insert/2` in `setup`.
 - Inject **fakes** for domain modules by passing a `domain:` map in context, e.g.
   `%{domain: %{oneliners: Foglet.TUI.FakeOneliners, moderation: Foglet.TUI.FakeModeration}}`.
   The fakes (`test/support/fake_oneliners.ex`, `test/support/fake_moderation.ex`) send
@@ -307,6 +368,11 @@ Screen tests live in `test/foglet_bbs/tui/screens/` and the App-level test in
   called.
 - Use `Foglet.TUI.RenderHelpers.collect_text_values/1` to assert both presence and
   ordering of labels in the DFS-walked render tree.
+- Keep render pure. `test/foglet_bbs/tui/render_purity_test.exs` scans render
+  entry points and render/surface modules for obvious side effects. Seed
+  `Foglet.Config` only for reducer/task tests that intentionally exercise
+  config-backed behavior; render paths should receive already-loaded config
+  decisions through screen state or `session_context`.
 
 ## Mix task tests
 

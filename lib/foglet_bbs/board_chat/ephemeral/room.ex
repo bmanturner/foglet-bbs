@@ -44,6 +44,8 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
           board_id: binary(),
           user_id: binary(),
           body: String.t(),
+          kind: :text | :action,
+          metadata: map(),
           inserted_at: integer()
         }
 
@@ -56,9 +58,9 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
   end
 
   @doc "Append a message and broadcast it. Returns the stored message map."
-  @spec post(binary(), binary(), String.t()) :: {:ok, message()} | {:error, term()}
+  @spec post(binary(), binary(), String.t() | map()) :: {:ok, message()} | {:error, term()}
   def post(board_id, user_id, body)
-      when is_binary(board_id) and is_binary(user_id) and is_binary(body) do
+      when is_binary(board_id) and is_binary(user_id) and (is_binary(body) or is_map(body)) do
     GenServer.call(via_tuple(board_id), {:post, user_id, body})
   end
 
@@ -127,8 +129,8 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
 
   @impl true
   def handle_call({:post, user_id, body}, _from, state) do
-    case Body.validate(body) do
-      {:ok, body} -> store_and_broadcast(user_id, body, state)
+    case normalize_payload(body) do
+      {:ok, payload} -> store_and_broadcast(user_id, payload, state)
       {:error, reason} -> {:reply, {:error, reason}, state}
     end
   end
@@ -165,12 +167,31 @@ defmodule Foglet.BoardChat.Ephemeral.Room do
 
   # ---------- Internals ----------
 
-  defp store_and_broadcast(user_id, body, state) do
+  defp normalize_payload(body) when is_binary(body) do
+    with {:ok, body} <- Body.validate(body) do
+      {:ok, %{kind: :text, body: body, metadata: %{}}}
+    end
+  end
+
+  defp normalize_payload(%{body: body} = payload) do
+    with {:ok, body} <- Body.validate(body) do
+      {:ok,
+       payload
+       |> Map.take([:kind, :body, :metadata])
+       |> Map.put(:body, body)
+       |> Map.put_new(:kind, :text)
+       |> Map.put_new(:metadata, %{})}
+    end
+  end
+
+  defp store_and_broadcast(user_id, payload, state) do
     msg = %{
       id: Ecto.UUID.generate(),
       board_id: state.board_id,
       user_id: user_id,
-      body: body,
+      body: payload.body,
+      kind: payload.kind,
+      metadata: payload.metadata,
       inserted_at: state.now_fn.()
     }
 

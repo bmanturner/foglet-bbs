@@ -7,7 +7,7 @@ defmodule Foglet.TUI.OnlinePresenceRefreshTest do
   alias Foglet.TUI.Screens.OnlineNow.State, as: OnlineNowState
 
   test "Main Menu subscribes to global online presence events" do
-    assert Foglet.PubSub.online_presence_topic() in MainMenu.subscriptions(nil, context())
+    assert Foglet.PubSub.online_presence_topic() in MainMenu.subscriptions(nil, context()).topics
   end
 
   test "Online Now subscribes to global online presence events" do
@@ -26,9 +26,11 @@ defmodule Foglet.TUI.OnlinePresenceRefreshTest do
     assert [
              %Foglet.TUI.Effect{
                type: :task,
-               payload: %{op: :load_online_now, screen_key: :online_now}
+               payload: %{op: :load_online_now, screen_key: :__current_screen__, fun: fun}
              }
            ] = effects
+
+    assert is_function(fun, 0)
   end
 
   test "Main Menu presence events bump screen state so focused Raxol model refreshes" do

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { keyBytes, createTerminalWriter } from './ssh-harness.mjs';
+import { keyBytes, createTerminalWriter, ensurePrivateKey } from './ssh-harness.mjs';
 
 assert.equal(keyBytes('shift-tab'), '\x1b[Z');
 assert.equal(keyBytes('Shift-Tab'), '\x1b[Z');
@@ -22,4 +22,11 @@ await writer.flush();
 await Promise.all([first, second]);
 assert.deepEqual(writes, ['start:first', 'finish:first', 'start:second', 'finish:second']);
 
-console.log('ssh harness key mapping and terminal flush tests passed');
+const withGeneratedKey = ensurePrivateKey({ username: 'qa' });
+assert.equal(withGeneratedKey.username, 'qa');
+assert.match(withGeneratedKey.privateKey, /BEGIN (RSA )?PRIVATE KEY/);
+
+const existingKey = '-----BEGIN PRIVATE KEY-----\nexisting\n-----END PRIVATE KEY-----';
+assert.equal(ensurePrivateKey({ privateKey: existingKey }).privateKey, existingKey);
+
+console.log('ssh harness key mapping, terminal flush, and generated auth key tests passed');

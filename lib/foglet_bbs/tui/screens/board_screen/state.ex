@@ -1,24 +1,21 @@
 defmodule Foglet.TUI.Screens.BoardScreen.State do
   @moduledoc """
-  Screen-local state for the board screen wrapper introduced in C5 of
-  FOG-242.
+  Screen-local state for the board screen wrapper.
 
-  When the active board has chat disabled the wrapper is a structural
-  pass-through to `Foglet.TUI.Screens.ThreadList` and the screen-local
-  state stored on the App is a `%Foglet.TUI.Screens.ThreadList.State{}`
-  directly. This struct is only used when the board has `chat_enabled`
-  set to `true`; in that case the wrapper owns tab focus and the live
-  presence count rendered as `2 CHAT (#)`.
+  The wrapper is used whenever a board has more than the base THREADS surface:
+  chat, cached news, or operator-only feed CONFIG.
   """
 
-  alias Foglet.TUI.Screens.ChatRoom
-  alias Foglet.TUI.Screens.ThreadList
+  alias Foglet.TUI.Screens.{BoardConfig, BoardNews, ChatRoom, ThreadList}
 
-  @type tab :: :threads | :chat
+  @type tab :: :threads | :chat | :news | :config
 
   @type t :: %__MODULE__{
           thread_list: ThreadList.State.t(),
           chat_room: ChatRoom.State.t() | nil,
+          news: BoardNews.State.t() | nil,
+          config: BoardConfig.State.t() | nil,
+          tabs: [tab()],
           current_tab: tab(),
           chat_alert?: boolean(),
           chat_flash_phase: :on | :off,
@@ -31,6 +28,9 @@ defmodule Foglet.TUI.Screens.BoardScreen.State do
 
   defstruct thread_list: %ThreadList.State{},
             chat_room: nil,
+            news: nil,
+            config: nil,
+            tabs: [:threads],
             current_tab: :threads,
             chat_alert?: false,
             chat_flash_phase: :off,

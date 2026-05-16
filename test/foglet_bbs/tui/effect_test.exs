@@ -30,6 +30,22 @@ defmodule Foglet.TUI.EffectTest do
       assert_received :task_ran
     end
 
+    test "task/2 marks the task for active-screen routing" do
+      effect = Effect.task(:load_posts, fn -> {:ok, [:post]} end)
+
+      assert %Effect{
+               type: :task,
+               payload: %{
+                 op: :load_posts,
+                 screen_key: screen_key,
+                 fun: fun
+               }
+             } = effect
+
+      assert screen_key == Effect.current_screen_key()
+      assert fun.() == {:ok, [:post]}
+    end
+
     test "task/3 requires an atom operation and zero-arity function" do
       assert_raise FunctionClauseError, fn ->
         Effect.task("load_posts", :post_reader, fn -> :ok end)

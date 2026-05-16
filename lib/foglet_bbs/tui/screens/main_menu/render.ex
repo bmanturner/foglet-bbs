@@ -31,7 +31,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
     actions = MainMenu.visible_actions(state)
 
     inner_width = MainMenu.__nav_panel_inner_width__(state)
-    menu_panel = nav_panel(destinations, theme, inner_width)
+    menu_panel = nav_panel(destinations, theme, inner_width, state.selected_destination_index)
     oneliners_panel_widget = oneliners_panel(state, theme)
 
     # `divider_char: " "` (space) — both panels render their own `│` borders, so
@@ -72,6 +72,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
       route_params: context.route_params || %{},
       screen_state: %{main_menu: local_state},
       recent_oneliners: local_state.recent_oneliners,
+      selected_destination_index: local_state.selected_destination_index,
       selected_oneliner_index: local_state.selected_oneliner_index,
       pending_hide_oneliner_id: local_state.pending_hide_oneliner_id
     }
@@ -84,7 +85,7 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   # truncated and the right border drawn at the children-measured edge instead
   # of the chrome-allocated edge. We pass sentinel large values; `apply_constraints/2`
   # clamps to `available_space.width`/`height`, so the panel fills the pane.
-  defp nav_panel(destinations, theme, inner_width) do
+  defp nav_panel(destinations, theme, inner_width, selected_index) do
     %{
       type: :panel,
       attrs: %{
@@ -97,7 +98,11 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
       },
       children: [
         column style: %{gap: 0} do
-          Enum.map(destinations, &nav_row(&1, theme, inner_width))
+          destinations
+          |> Enum.with_index()
+          |> Enum.map(fn {destination, index} ->
+            nav_row(destination, theme, inner_width, index == selected_index)
+          end)
         end
       ]
     }
@@ -115,11 +120,16 @@ defmodule Foglet.TUI.Screens.MainMenu.Render do
   # Width budget at 64x22 (inner_width = 20):
   #   indent(1) + glyph(1) + space(1) + "Moderation"(10) + "[M]"(3) = 16,
   #   leaving 4 cols of trailing padding.
-  defp nav_row(%{key: key, label: label, glyph: glyph} = destination, theme, inner_width) do
-    indent = " "
+  defp nav_row(
+         %{key: key, label: label, glyph: glyph} = destination,
+         theme,
+         inner_width,
+         selected?
+       ) do
+    marker = if selected?, do: ">", else: " "
     bracketed_key = "[" <> key <> "]"
 
-    prefix_text = indent <> glyph <> " " <> label
+    prefix_text = marker <> glyph <> " " <> label
     prefix_width = TextWidth.display_width(prefix_text)
     bracketed_key_width = TextWidth.display_width(bracketed_key)
 

@@ -25,7 +25,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Authorization
-  alias Foglet.TUI.{Context, Effect, ScrollKeys}
+  alias Foglet.TUI.{Context, Effect, KeyBinding}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Modal
   alias Foglet.TUI.Screens.MainMenu.Render
@@ -64,6 +64,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     %{key: "B", label: "Boards", glyph: "●", kind: :destination, visibility: :always},
     %{key: "C", label: "Compose", glyph: "✎", kind: :destination, visibility: :always},
     %{key: "I", label: "Inbox", glyph: "✉", kind: :destination, visibility: :authenticated},
+    %{key: "L", label: "BBS Mail", glyph: "✉", kind: :destination, visibility: :authenticated},
     %{key: "N", label: "Online Now", glyph: "◌", kind: :destination, visibility: :always},
     %{key: "D", label: "Door Games", glyph: "▸", kind: :destination, visibility: :doors},
     %{key: "A", label: "Account", glyph: "◇", kind: :destination, visibility: :account},
@@ -86,29 +87,24 @@ defmodule Foglet.TUI.Screens.MainMenu do
     do: Render.render(normalize_state(local_state, context), context)
 
   @impl true
-  @spec subscriptions(State.t() | nil, Context.t()) :: [String.t()]
+  @spec subscriptions(State.t() | nil, Context.t()) ::
+          [String.t()] | %{topics: [String.t()], intervals: [{pos_integer(), term()}]}
   def subscriptions(_local_state, %Context{current_user: %{id: user_id}}) do
-    [Foglet.PubSub.online_presence_topic(), Foglet.PubSub.notifications_topic(user_id)]
+    %{
+      topics: [Foglet.PubSub.online_presence_topic(), Foglet.PubSub.notifications_topic(user_id)],
+      intervals: [{2_000, :refresh_unread_notifications_count}]
+    }
   end
 
   def subscriptions(_local_state, %Context{}), do: [Foglet.PubSub.online_presence_topic()]
 
   @impl true
   @spec update(term(), State.t() | nil, Context.t()) :: {State.t(), [Effect.t()]}
-  def update({:key, %{key: key} = event}, local_state, %Context{} = context)
-      when key in [:up, :down] do
-    local_state = normalize_state(local_state, context)
-    {State.select_delta(local_state, ScrollKeys.vertical_delta(event)), []}
-  end
-
-  def update({:key, %{key: :char, char: c} = event}, local_state, %Context{} = context)
-      when c in ["j", "k"] do
-    local_state = normalize_state(local_state, context)
-    {State.select_delta(local_state, ScrollKeys.vertical_delta(event)), []}
-  end
-
-  def update({:key, %{key: :enter}}, local_state, %Context{} = context) do
-    {normalize_state(local_state, context), []}
+  def update({:key, key_event}, local_state, %Context{} = context) do
+    case KeyBinding.vertical_delta(key_event) do
+      nil -> handle_key_command(key_event, local_state, context)
+      delta -> select_destination(local_state, context, delta)
+    end
   end
 
   # Phase 39 D-01/D-03/D-14: screen owns its route-entry conditional load.
@@ -133,142 +129,20 @@ defmodule Foglet.TUI.Screens.MainMenu do
     end
   end
 
+  def update(:refresh_unread_notifications_count, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {%{local_state | notifications_status: :loading},
+       [load_unread_notifications_count_task_effect(context)]}
+    else
+      {local_state, []}
+    end
+  end
+
   def update(:load_oneliners, local_state, %Context{} = context) do
     local_state = normalize_state(local_state, context)
     {%{local_state | oneliner_status: :loading}, [load_oneliners_task_effect(context)]}
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["b", "B"] do
-    {normalize_state(local_state, context),
-     [Effect.navigate(:board_list), load_boards_effect(context)]}
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["c", "C"] do
-    local_state = normalize_state(local_state, context)
-
-    if Guest.guest?(context) do
-      {local_state, [Effect.open_modal(Guest.denial_modal(:compose))]}
-    else
-      {local_state, [Effect.navigate(:new_thread, %{origin: :main_menu})]}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["i", "I"] do
-    local_state = normalize_state(local_state, context)
-
-    if context.current_user do
-      {local_state, [Effect.navigate(:notifications)]}
-    else
-      {local_state, []}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["n", "N"] do
-    {normalize_state(local_state, context), [Effect.navigate(:online_now)]}
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["d", "D"] do
-    local_state = normalize_state(local_state, context)
-
-    if Foglet.Doors.list_browsable(context.current_user) == [] do
-      {local_state, []}
-    else
-      {local_state, [Effect.navigate(:door_list)]}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["o", "O"] do
-    local_state = normalize_state(local_state, context)
-
-    if context.current_user do
-      {State.clear_errors(local_state), [Effect.open_modal(oneliner_composer_modal())]}
-    else
-      {local_state, []}
-    end
-  end
-
-  def update({:key, %{key: :char, char: "!"}}, local_state, %Context{} = context) do
-    local_state = normalize_state(local_state, context)
-    app_state = app_state_from_local(local_state, context)
-
-    case selected_reportable_oneliner(app_state) do
-      %{id: id} = entry when is_binary(id) and id != "" ->
-        modal =
-          Reporting.report_modal(
-            :main_menu,
-            :submit_oneliner_report,
-            %{
-              target_kind: :oneliner,
-              target_id: id,
-              target_label: "oneliner by @#{oneliner_handle(entry)}"
-            },
-            title: "Report Oneliner"
-          )
-
-        {State.clear_errors(local_state), [Effect.open_modal(modal)]}
-
-      _other ->
-        {local_state, []}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["h", "H"] do
-    local_state = normalize_state(local_state, context)
-    app_state = app_state_from_local(local_state, context)
-
-    case selected_hideable_oneliner(app_state) do
-      %{id: id} when is_binary(id) and id != "" ->
-        local_state = local_state |> State.set_pending_hide(id) |> State.clear_errors()
-        {local_state, [Effect.open_modal(hide_oneliner_modal())]}
-
-      _other ->
-        {local_state, []}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["a", "A"] do
-    local_state = normalize_state(local_state, context)
-
-    if ShellVisibility.account_visible?(context.current_user) do
-      {local_state, [Effect.navigate(:account)]}
-    else
-      {local_state, []}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["m", "M"] do
-    local_state = normalize_state(local_state, context)
-
-    if ShellVisibility.moderation_visible?(context.current_user) do
-      {local_state, [Effect.navigate(:moderation)]}
-    else
-      {local_state, []}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["s", "S"] do
-    local_state = normalize_state(local_state, context)
-
-    if ShellVisibility.sysop_visible?(context.current_user) do
-      {local_state, [Effect.navigate(:sysop)]}
-    else
-      {local_state, []}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, local_state, %Context{} = context)
-      when c in ["q", "Q"] do
-    {normalize_state(local_state, context), [Effect.quit()]}
   end
 
   def update({:task_result, :load_oneliners, {:ok, entries}}, local_state, %Context{} = context)
@@ -317,7 +191,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
       {%{
          local_state
          | unread_notifications_count: context.unread_count,
-           notifications_status: :loading
+           notifications_status: :idle
        }, [load_unread_notifications_count_task_effect(context)]}
     else
       {local_state, []}
@@ -336,7 +210,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
       oneliners_mod = domain_module(context, :oneliners)
 
       effect =
-        Effect.task(:submit_oneliner, :main_menu, fn ->
+        Effect.task(:submit_oneliner, fn ->
           oneliners_mod.create_entry(user, %{body: body})
         end)
 
@@ -386,7 +260,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
         oneliners_mod = domain_module(context, :oneliners)
 
         effect =
-          Effect.task(:submit_hide_oneliner, :main_menu, fn ->
+          Effect.task(:submit_hide_oneliner, fn ->
             oneliners_mod.hide_entry(user, entry_id, reason)
           end)
 
@@ -410,7 +284,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     moderation_mod = domain_module(context, :moderation)
 
     effect =
-      Effect.task(:submit_oneliner_report, :main_menu, fn ->
+      Effect.task(:submit_oneliner_report, fn ->
         moderation_mod.create_report(context.current_user, %{
           target_kind: Map.get(payload, :target_kind),
           target_id: Map.get(payload, :target_id),
@@ -540,6 +414,184 @@ defmodule Foglet.TUI.Screens.MainMenu do
     {normalize_state(local_state, context), []}
   end
 
+  defp handle_key_command(key_event, local_state, %Context{} = context) do
+    if KeyBinding.submit?(key_event) do
+      activate_selected_destination(local_state, context)
+    else
+      handle_command_key(key_event, local_state, context)
+    end
+  end
+
+  defp select_destination(local_state, %Context{} = context, delta) do
+    local_state = normalize_state(local_state, context)
+    destination_count = visible_destination_entries(context.current_user) |> length()
+
+    {State.select_destination_delta(local_state, delta, destination_count), []}
+  end
+
+  defp activate_selected_destination(local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+
+    case Enum.at(
+           visible_destination_entries(context.current_user),
+           local_state.selected_destination_index
+         ) do
+      %{key: key} when is_binary(key) ->
+        handle_command_key(%{key: :char, char: key}, local_state, context)
+
+      _other ->
+        {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["b", "B"] do
+    {normalize_state(local_state, context),
+     [Effect.navigate(:board_list), load_boards_effect(context)]}
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["c", "C"] do
+    local_state = normalize_state(local_state, context)
+
+    if Guest.guest?(context) do
+      {local_state, [Effect.open_modal(Guest.denial_modal(:compose))]}
+    else
+      {local_state, [Effect.navigate(:new_thread, %{origin: :main_menu})]}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["i", "I"] do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {local_state, [Effect.navigate(:notifications)]}
+    else
+      {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["l", "L"] do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {local_state, [Effect.navigate(:bbs_mail)]}
+    else
+      {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["n", "N"] do
+    {normalize_state(local_state, context), [Effect.navigate(:online_now)]}
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["d", "D"] do
+    local_state = normalize_state(local_state, context)
+
+    if Foglet.Doors.list_browsable(context.current_user) == [] do
+      {local_state, []}
+    else
+      {local_state, [Effect.navigate(:door_list)]}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["o", "O"] do
+    local_state = normalize_state(local_state, context)
+
+    if context.current_user do
+      {State.clear_errors(local_state), [Effect.open_modal(oneliner_composer_modal())]}
+    else
+      {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: "!"}, local_state, %Context{} = context) do
+    local_state = normalize_state(local_state, context)
+    app_state = app_state_from_local(local_state, context)
+
+    case selected_reportable_oneliner(app_state) do
+      %{id: id} = entry when is_binary(id) and id != "" ->
+        modal =
+          Reporting.report_modal(
+            :main_menu,
+            :submit_oneliner_report,
+            %{
+              target_kind: :oneliner,
+              target_id: id,
+              target_label: "oneliner by @#{oneliner_handle(entry)}"
+            },
+            title: "Report Oneliner"
+          )
+
+        {State.clear_errors(local_state), [Effect.open_modal(modal)]}
+
+      _other ->
+        {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["h", "H"] do
+    local_state = normalize_state(local_state, context)
+    app_state = app_state_from_local(local_state, context)
+
+    case selected_hideable_oneliner(app_state) do
+      %{id: id} when is_binary(id) and id != "" ->
+        local_state = local_state |> State.set_pending_hide(id) |> State.clear_errors()
+        {local_state, [Effect.open_modal(hide_oneliner_modal())]}
+
+      _other ->
+        {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["a", "A"] do
+    local_state = normalize_state(local_state, context)
+
+    if ShellVisibility.account_visible?(context.current_user) do
+      {local_state, [Effect.navigate(:account)]}
+    else
+      {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["m", "M"] do
+    local_state = normalize_state(local_state, context)
+
+    if ShellVisibility.moderation_visible?(context.current_user) do
+      {local_state, [Effect.navigate(:moderation)]}
+    else
+      {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["s", "S"] do
+    local_state = normalize_state(local_state, context)
+
+    if ShellVisibility.sysop_visible?(context.current_user) do
+      {local_state, [Effect.navigate(:sysop)]}
+    else
+      {local_state, []}
+    end
+  end
+
+  defp handle_command_key(%{key: :char, char: c}, local_state, %Context{} = context)
+       when c in ["q", "Q"] do
+    {normalize_state(local_state, context), [Effect.quit()]}
+  end
+
+  defp handle_command_key(_key_event, local_state, %Context{} = context) do
+    {normalize_state(local_state, context), []}
+  end
+
   # --- public data layer (D-01 single-source-of-truth split) ---
 
   @doc """
@@ -611,6 +663,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
       route_params: context.route_params || %{},
       screen_state: %{main_menu: local_state},
       recent_oneliners: local_state.recent_oneliners,
+      selected_destination_index: local_state.selected_destination_index,
       selected_oneliner_index: local_state.selected_oneliner_index,
       pending_hide_oneliner_id: local_state.pending_hide_oneliner_id
     }
@@ -686,7 +739,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
   defp load_oneliners_task_effect(%Context{} = context) do
     oneliners_mod = domain_module(context, :oneliners)
 
-    Effect.task(:load_oneliners, :main_menu, fn ->
+    Effect.task(:load_oneliners, fn ->
       oneliners_mod.list_recent_visible(@oneliner_display_limit)
     end)
   end
@@ -695,7 +748,7 @@ defmodule Foglet.TUI.Screens.MainMenu do
     notifications_mod = domain_module(context, :notifications)
     current_user = context.current_user
 
-    Effect.task(:load_unread_notifications_count, :main_menu, fn ->
+    Effect.task(:load_unread_notifications_count, fn ->
       notifications_mod.unread_count(current_user)
     end)
   end

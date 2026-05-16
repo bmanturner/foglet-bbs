@@ -1,6 +1,8 @@
 defmodule Foglet.TUI.Screens.DoorListTest do
   use ExUnit.Case, async: false
 
+  import Foglet.TUI.Test
+
   alias Foglet.Accounts.User
   alias Foglet.Config
   alias Foglet.Doors.Manifest
@@ -16,6 +18,7 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
   @demo_doors_env "FOGLET_ENABLE_DEMO_DOORS"
   @manifest_dir_env "FOGLET_DOOR_MANIFEST_DIR"
+  @clock ~U[2026-01-01 17:43:00Z]
 
   defmodule EmptyDoors do
     @moduledoc false
@@ -52,12 +55,21 @@ defmodule Foglet.TUI.Screens.DoorListTest do
     :ok
   end
 
-  defp user(role \\ :user), do: %User{id: "u1", handle: "alice", role: role, status: :active}
+  defp user(role \\ :user) do
+    %User{
+      id: "u1",
+      handle: "alice",
+      role: role,
+      status: :active,
+      timezone: "America/Chicago",
+      preferences: %{"time_format" => "24h"}
+    }
+  end
 
   defp context(opts \\ []) do
     Context.new(
       current_user: Keyword.get(opts, :user, user()),
-      session_context: %{theme: Foglet.TUI.Theme.default()},
+      session_context: %{theme: Foglet.TUI.Theme.default(), clock_now: @clock},
       terminal_size: Keyword.get(opts, :terminal_size, {80, 24}),
       route: :door_list,
       domain: Keyword.get(opts, :domain, %{})
@@ -227,16 +239,30 @@ defmodule Foglet.TUI.Screens.DoorListTest do
 
     assert {^state, []} = DoorList.update({:key, %{key: :enter}}, state, ctx)
 
-    ascii =
-      state
-      |> DoorList.render(ctx)
-      |> AsciiRenderer.render({80, 24})
-
-    assert String.contains?(ascii, "No door games are available right now.")
-    assert String.contains?(ascii, "Check back later.")
-    refute String.contains?(ascii, "No visible door games are configured")
-    refute String.contains?(ascii, "Enter Launch")
-    assert String.contains?(ascii, "Q Back")
+    assert_screen(render_screen(DoorList, state, context: ctx, width: 64, height: 22), ~B"""
+    ┌ Foglet ▸ Door Games ───────────────────────── @alice | 11:43 ┐
+    │Choose a door game.                                           │
+    │Doors may take over the terminal, then return here.           │
+    │                                                              │
+    │┌────────────────────────────────────────────────────────────┐│
+    ││No door games are available right now.                      ││
+    ││Check back later.                                           ││
+    │└────────────────────────────────────────────────────────────┘│
+    │                                                              │
+    │Q Back                                                        │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    │                                                              │
+    └ Q Back ──────────────────────────────────────────────────────┘
+    """)
   end
 
   defp enable_demo_doors do

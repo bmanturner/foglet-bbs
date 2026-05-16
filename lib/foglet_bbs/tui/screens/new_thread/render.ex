@@ -9,8 +9,8 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
   """
 
   alias Foglet.TUI.Context
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.Screens.NewThread.State
-  alias Foglet.TUI.ScrollKeys
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Foglet.TUI.Widgets.Chrome.ScreenFrame
@@ -70,7 +70,7 @@ defmodule Foglet.TUI.Screens.NewThread.Render do
         commands: [
           %{key: "Type", label: "Filter", priority: 5},
           %{key: "Backspace", label: "Edit", priority: 8},
-          %{key: ScrollKeys.commandbar_key(), label: "Select", priority: 25},
+          %{key: KeyBinding.commandbar_key(), label: "Select", priority: 25},
           %{key: "PgUp/PgDn", label: "Page", priority: 30},
           %{key: "Enter", label: "Choose", priority: 5}
         ]

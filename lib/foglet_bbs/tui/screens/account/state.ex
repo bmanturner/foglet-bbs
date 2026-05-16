@@ -189,6 +189,9 @@ defmodule Foglet.TUI.Screens.Account.State do
       timezone: user_value(user, :timezone, "Etc/UTC") || "Etc/UTC",
       time_format:
         Map.get(preferences, "time_format") || Map.get(preferences, :time_format) || "12h",
+      notification_alert:
+        Map.get(preferences, "notification_alert") || Map.get(preferences, :notification_alert) ||
+          "terminal_bell",
       theme: user_value(user, :theme, "gray") || "gray",
       handle_color: user_value(user, :handle_color, "#FFFFFF")
     }
@@ -221,7 +224,6 @@ defmodule Foglet.TUI.Screens.Account.State do
   end
 
   @doc "Returns PREFS field specs in display order."
-  @spec prefs_fields(map()) :: [map()]
   def prefs_fields(draft) do
     theme_ids = theme_id_strings()
 
@@ -231,9 +233,9 @@ defmodule Foglet.TUI.Screens.Account.State do
         type: :select_list,
         label: "Timezone",
         required: true,
-        choices: Timezones.choices_for(draft.timezone),
+        choices: Timezones.choices_for(Map.get(draft, :timezone)),
         description: "Search by city or IANA name; save to keep it.",
-        value: draft.timezone || "Etc/UTC",
+        value: Map.get(draft, :timezone, "Etc/UTC") || "Etc/UTC",
         max_height: 4
       },
       %{
@@ -241,7 +243,16 @@ defmodule Foglet.TUI.Screens.Account.State do
         type: :enum,
         label: "Time format",
         choices: ["12h", "24h"],
-        value: draft.time_format || "12h"
+        value: Map.get(draft, :time_format, "12h") || "12h"
+      },
+      %{
+        name: :notification_alert,
+        type: :enum,
+        label: "Notification alert",
+        choices: ["off", "terminal_bell", "desktop_osc_best_effort"],
+        description:
+          "Terminal bell may sound, flash, or do nothing. Use Test alert to check this terminal.",
+        value: Map.get(draft, :notification_alert, "terminal_bell") || "terminal_bell"
       },
       %{
         name: :theme,
@@ -249,16 +260,16 @@ defmodule Foglet.TUI.Screens.Account.State do
         label: "Theme",
         choices: theme_ids,
         description: "Preview changes here; save to keep them.",
-        value: draft.theme || "gray"
+        value: Map.get(draft, :theme, "gray") || "gray"
       },
       %{
         name: :handle_color,
         type: :text,
         label: "Handle color",
         description: "Type a six-digit hex color. Examples: #ff8800, #66ccff.",
-        value: draft.handle_color || "",
+        value: Map.get(draft, :handle_color, "") || "",
         max_length: 7,
-        swatch_color: draft.handle_color,
+        swatch_color: Map.get(draft, :handle_color),
         preview: &handle_color_preview/2
       }
     ]

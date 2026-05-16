@@ -17,8 +17,10 @@ defmodule Foglet.TUI.App.RuntimeMessages do
   alias Foglet.TUI.App.ScreenStates
   alias Foglet.TUI.App.SessionAlias
   alias Foglet.TUI.App.Tasks, as: AppTasks
+  alias Foglet.TUI.CommandEntry
   alias Foglet.TUI.Guest
   alias Foglet.TUI.SizeGate
+  alias Foglet.TUI.TerminalAlert
   alias Raxol.Core.Runtime.Command
 
   require PubSubRouter
@@ -58,6 +60,8 @@ defmodule Foglet.TUI.App.RuntimeMessages do
   def concern(:heartbeat_tick), do: :session
   def concern({:tui_clock, :minute_tick, %DateTime{}}), do: :clock
   def concern(:main_menu_clock_tick), do: :clock
+  def concern(:refresh_unread_notifications_count), do: :routing
+  def concern(:refresh_mail), do: :routing
   def concern(:login_menu_scramble_tick), do: :routing
   def concern(:initial_route_enter), do: :routing
   def concern({:session_replaced, _payload}), do: :session
@@ -114,6 +118,22 @@ defmodule Foglet.TUI.App.RuntimeMessages do
       state,
       Routing.screen_key(Routing.current_route(state)),
       :on_route_enter
+    )
+  end
+
+  defp handle_routing(:refresh_unread_notifications_count, %App{} = state) do
+    Routing.route_screen_update(
+      state,
+      Routing.screen_key(Routing.current_route(state)),
+      :refresh_unread_notifications_count
+    )
+  end
+
+  defp handle_routing(:refresh_mail, %App{} = state) do
+    Routing.route_screen_update(
+      state,
+      Routing.screen_key(Routing.current_route(state)),
+      :refresh_mail
     )
   end
 
@@ -179,6 +199,16 @@ defmodule Foglet.TUI.App.RuntimeMessages do
       state.modal != nil ->
         AppModal.handle_key(key_event, state)
 
+      state.command_entry != nil ->
+        {entry, effects} = CommandEntry.handle_key(state.command_entry, key_event, state)
+
+        state
+        |> Map.put(:command_entry, entry)
+        |> Foglet.TUI.App.Effects.apply_effects(effects)
+
+      command_entry_open_key?(key_event, state) ->
+        {%{state | command_entry: CommandEntry.open()}, []}
+
       true ->
         Routing.route_screen_update(
           state,
@@ -188,13 +218,52 @@ defmodule Foglet.TUI.App.RuntimeMessages do
     end
   end
 
+  defp command_entry_open_key?(%{key: :char, char: "/"}, %App{
+         current_screen: :thread_list,
+         screen_state: %{thread_list: %Foglet.TUI.Screens.BoardScreen.State{current_tab: :chat}}
+       }) do
+    false
+  end
+
+  defp command_entry_open_key?(key_event, %App{} = state) do
+    CommandEntry.open_key?(key_event, state.current_screen)
+  end
+
   defp handle_presence({:online_presence, _event, _payload} = msg, %App{} = state) do
     Routing.route_screen_update(state, Routing.screen_key(Routing.current_route(state)), msg)
   end
 
-  defp handle_notification({:notification, _user_id, kind, payload}, %App{} = state) do
+  defp handle_notification({:notification, user_id, kind, payload}, %App{} = state) do
     modal = %Foglet.TUI.Modal{type: :info, message: format_notification(kind, payload)}
-    {%{state | modal: modal}, []}
+    state = %{state | modal: modal}
+
+    if recipient?(state, user_id) do
+      alert_for_notification(state, payload)
+    else
+      {state, []}
+    end
+  end
+
+  defp recipient?(%App{current_user: %{id: id}}, id), do: true
+  defp recipient?(_state, _user_id), do: false
+
+  defp alert_for_notification(%App{} = state, payload) do
+    mode = TerminalAlert.mode_from_user(state.current_user)
+    now_ms = System.monotonic_time(:millisecond)
+    alert_state = Map.get(state.session_context || %{}, :terminal_alert, %{})
+
+    case {TerminalAlert.sequence(mode, payload),
+          TerminalAlert.check_rate_limit(alert_state, now_ms)} do
+      {nil, _rate} ->
+        {state, []}
+
+      {_sequence, {:suppress, _alert_state}} ->
+        {state, []}
+
+      {_sequence, {:emit, next_alert_state}} ->
+        session_context = Map.put(state.session_context || %{}, :terminal_alert, next_alert_state)
+        {%{state | session_context: session_context}, [Foglet.TUI.Effect.terminal_alert(mode)]}
+    end
   end
 
   defp handle_clock({:tui_clock, :minute_tick, %DateTime{} = now}, %App{} = state) do

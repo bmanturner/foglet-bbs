@@ -40,7 +40,7 @@ defmodule Foglet.TUI.Widgets.Display.Table do
   """
 
   import Raxol.Core.Renderer.View
-  alias Foglet.TUI.ScrollKeys
+  alias Foglet.TUI.KeyBinding
   alias Foglet.TUI.TextWidth
   alias Foglet.TUI.Theme
   alias Raxol.UI.Components.Table, as: RaxolTable
@@ -171,9 +171,9 @@ defmodule Foglet.TUI.Widgets.Display.Table do
     do: translate_non_vertical_event(event)
 
   defp translate_event(event, %__MODULE__{}) do
-    case ScrollKeys.vertical_direction(event) do
-      :down -> {:key, {:arrow_down, nil}}
-      :up -> {:key, {:arrow_up, nil}}
+    case KeyBinding.vertical_delta(event) do
+      1 -> {:key, {:arrow_down, nil}}
+      -1 -> {:key, {:arrow_up, nil}}
       nil -> translate_non_vertical_event(event)
     end
   end

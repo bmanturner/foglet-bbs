@@ -68,6 +68,29 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
   defp maybe_add_content(%{content: content}, acc) when is_binary(content), do: [content | acc]
   defp maybe_add_content(_node, acc), do: acc
 
+  defp text_nodes(tree), do: tree |> collect_text_nodes([]) |> Enum.reverse()
+
+  defp collect_text_nodes(nil, acc), do: acc
+
+  defp collect_text_nodes(list, acc) when is_list(list),
+    do: Enum.reduce(list, acc, &collect_text_nodes/2)
+
+  defp collect_text_nodes(%{children: children} = node, acc) do
+    acc =
+      if Map.has_key?(node, :content) or Map.has_key?(node, :text), do: [node | acc], else: acc
+
+    collect_text_nodes(children, acc)
+  end
+
+  defp collect_text_nodes(%{content: content} = node, acc) when is_binary(content),
+    do: [node | acc]
+
+  defp collect_text_nodes(%{text: text} = node, acc) when is_binary(text), do: [node | acc]
+  defp collect_text_nodes(_other, acc), do: acc
+
+  defp node_text(%{content: content}) when is_binary(content), do: content
+  defp node_text(%{text: text}) when is_binary(text), do: text
+
   defp render_chat_text(state, ctx, size) do
     state
     |> ChatRoom.render(ctx)
@@ -90,6 +113,12 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       :nomatch ->
         nil
     end
+  end
+
+  defp first_nonblank_column(line) when is_binary(line) do
+    line
+    |> String.graphemes()
+    |> Enum.find_index(&(&1 != " "))
   end
 
   defp sidebar_columns_for_body(body, size) do
@@ -252,6 +281,78 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       assert text =~ "bob"
       assert text =~ "hi from bob"
       assert text =~ "hello bob"
+    end
+
+    test "renders action messages with author-led action styling and timestamp alignment" do
+      b = board()
+      size = {80, 24}
+      {state, ctx} = init_state(b, size: size)
+
+      msgs = [
+        %{
+          id: "m1",
+          board_id: b.id,
+          user_id: "u2",
+          kind: :action,
+          body: "waves from the doorway",
+          inserted_at: nil
+        },
+        %{
+          id: "m2",
+          board_id: b.id,
+          user_id: "u2",
+          kind: :text,
+          body: "plain text with /me later",
+          inserted_at: nil
+        }
+      ]
+
+      {state, []} = ChatRoom.update({:task_result, :load_chat_history, {:ok, msgs}}, state, ctx)
+
+      tree = ChatRoom.render(state, ctx)
+      rendered = AsciiRenderer.render(tree, size)
+      action_line = first_line_containing(rendered, "* @bob waves from the doorway")
+      plain_line = first_line_containing(rendered, "plain text with /me later")
+
+      assert action_line
+      assert plain_line
+      assert column_of(action_line, "?") == column_of(plain_line, "?")
+      refute plain_line =~ "* @bob plain text with /me later"
+
+      action_node =
+        tree
+        |> text_nodes()
+        |> Enum.find(fn node -> node_text(node) =~ "* @bob waves from the doorway" end)
+
+      assert action_node
+      assert :italic in List.wrap(Map.get(action_node, :style))
+    end
+
+    test "wraps action continuation rows under the action text, not as normal handle rows" do
+      b = board()
+      size = {52, 16}
+      {state, ctx} = init_state(b, size: size)
+      body = "moves through the very narrow doorway with a stack of old disks"
+
+      msg = %{
+        id: "m1",
+        board_id: b.id,
+        user_id: "u2",
+        kind: :action,
+        body: body,
+        inserted_at: nil
+      }
+
+      {state, []} = ChatRoom.update({:task_result, :load_chat_history, {:ok, [msg]}}, state, ctx)
+
+      rendered = render_chat_text(state, ctx, size)
+      first = first_line_containing(rendered, "* @bob")
+      continuation = first_line_containing(rendered, "stack of old disks")
+
+      assert first
+      assert continuation
+      refute continuation =~ "bob •"
+      assert first_nonblank_column(continuation) == column_of(first, "* @bob") + 2
     end
   end
 
@@ -507,11 +608,74 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       assert is_function(fun, 0)
     end
 
-    # FOG-277 regression — task results were dropped at routing because
-    # ChatRoom dispatched with screen_key `:chat_room`, which is not a
-    # known top-level screen. The task's screen_key must be the active
-    # route so BoardScreen forwards `{:task_result, ...}` to ChatRoom.
-    test "send_chat task uses the active route key, not :chat_room" do
+    test "successful /me submission uses the BoardChat send path and clears composer" do
+      b = board(chat_storage_mode: :ephemeral)
+      {state, ctx} = init_state(b)
+      state = %{state | composer: " /me waves from the doorway "}
+
+      {state, [%Effect{type: :task, payload: %{op: :send_chat, fun: fun}}]} =
+        ChatRoom.update({:key, %{key: :enter}}, state, ctx)
+
+      assert state.composer == ""
+      assert state.status == :sending
+      assert {:ok, %{kind: :action, body: "waves from the doorway"}} = fun.()
+    end
+
+    test "slash-command validation failure restores composer text and shows the clear error" do
+      b = board()
+      {state, ctx} = init_state(b)
+      original = "/me   "
+      state = %{state | composer: original}
+
+      {state, [%Effect{type: :task, payload: %{fun: fun}}]} =
+        ChatRoom.update({:key, %{key: :enter}}, state, ctx)
+
+      assert state.composer == ""
+      assert {:error, {:command_validation, message}} = fun.()
+
+      {state, []} =
+        ChatRoom.update(
+          {:task_result, :send_chat, {:error, {:command_validation, message}}},
+          state,
+          ctx
+        )
+
+      assert state.composer == original
+      assert state.status == :idle
+      assert state.last_error == {:command_validation, "Add an action after /me, e.g. /me waves."}
+
+      assert ChatRoom.render(state, ctx) |> flatten_text() =~
+               "Add an action after /me, e.g. /me waves."
+    end
+
+    test "unknown slash-command error restores composer text and displays supported command hint" do
+      b = board()
+      {state, ctx} = init_state(b)
+      original = "/shrug probably later"
+      state = %{state | composer: original}
+
+      {state, [%Effect{type: :task, payload: %{fun: fun}}]} =
+        ChatRoom.update({:key, %{key: :enter}}, state, ctx)
+
+      assert {:error, {:command_validation, message}} = fun.()
+
+      {state, []} =
+        ChatRoom.update(
+          {:task_result, :send_chat, {:error, {:command_validation, message}}},
+          state,
+          ctx
+        )
+
+      assert state.composer == original
+
+      assert ChatRoom.render(state, ctx) |> flatten_text() =~
+               "Unknown chat command: /shrug. Supported: /me."
+    end
+
+    # FOG-277 regression — task results were dropped at routing when ChatRoom
+    # dispatched to a non-mounted screen key. Embedded chat now uses the active
+    # screen sentinel so BoardScreen forwards `{:task_result, ...}` to ChatRoom.
+    test "send_chat task uses the active screen key, not :chat_room" do
       b = board()
       {state, ctx} = init_state(b)
       state = %{state | composer: "hello"}
@@ -519,7 +683,7 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
       {_state, [%Effect{type: :task, payload: %{op: :send_chat, screen_key: key}}]} =
         ChatRoom.update({:key, %{key: :enter}}, state, ctx)
 
-      assert key == :thread_list
+      assert key == Effect.current_screen_key()
     end
   end
 
@@ -619,14 +783,14 @@ defmodule Foglet.TUI.Screens.ChatRoomTest do
     end
 
     # FOG-277 regression — see send_chat task screen_key test above.
-    test "load_chat_history task uses the active route key, not :chat_room" do
+    test "load_chat_history task uses the active screen key, not :chat_room" do
       b = board()
       {state, ctx} = init_state(b)
 
       {_state, [%Effect{type: :task, payload: %{op: :load_chat_history, screen_key: key}}]} =
         ChatRoom.load_effects(state, ctx)
 
-      assert key == :thread_list
+      assert key == Effect.current_screen_key()
     end
 
     # FOG-277 regression — the route param is a plain map (BoardList

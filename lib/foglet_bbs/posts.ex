@@ -22,6 +22,9 @@ defmodule Foglet.Posts do
   alias Foglet.Threads.Thread
   alias FogletBbs.Repo
 
+  @search_default_limit 25
+  @search_max_limit 100
+
   # ---------- Authorization scope helper (D-08) ----------
 
   @doc """
@@ -190,6 +193,206 @@ defmodule Foglet.Posts do
       nil -> {:error, :not_found}
       error -> error
     end
+  end
+
+  @type search_result :: %{
+          board: Board.t(),
+          thread: Thread.t(),
+          post: Post.t(),
+          author: User.t() | nil,
+          around_message_number: pos_integer(),
+          snippet: String.t() | nil
+        }
+
+  @type direct_lookup_result :: %{
+          board: Board.t(),
+          thread: Thread.t(),
+          post: Post.t(),
+          around_message_number: pos_integer()
+        }
+
+  @doc """
+  Search readable, non-deleted posts for an actor using the generated body_tsv column.
+
+  The query is bounded at the SQL layer and joins boards/threads/users so result
+  rows contain enough payload for TUI result lists and direct navigation.
+  Unsupported or blank filters are ignored; soft-deleted posts are excluded so
+  search never exposes tombstoned body text.
+  """
+  @spec search_readable_posts(User.t() | nil, keyword() | map()) :: [search_result()]
+  def search_readable_posts(actor, opts \\ []) do
+    opts = normalize_search_opts(opts)
+    query_text = Map.get(opts, :query)
+    limit = Map.fetch!(opts, :limit)
+    offset = Map.fetch!(opts, :offset)
+
+    Post
+    |> join(:inner, [p], t in assoc(p, :thread), as: :thread)
+    |> join(:inner, [p], b in assoc(p, :board), as: :board)
+    |> join(:inner, [board: b], c in assoc(b, :category), as: :category)
+    |> join(:left, [p], u in assoc(p, :user), as: :user)
+    |> where([p], is_nil(p.deleted_at))
+    |> where([thread: t], is_nil(t.deleted_at))
+    |> where([board: b, category: c], b.archived == false and c.archived == false)
+    |> readable_posts_where(actor)
+    |> maybe_body_search(query_text)
+    |> maybe_board_slug(Map.get(opts, :board_slug))
+    |> maybe_author_handle(Map.get(opts, :author_handle))
+    |> maybe_thread_title(Map.get(opts, :thread_title))
+    |> maybe_inserted_after(Map.get(opts, :inserted_after))
+    |> maybe_inserted_before(Map.get(opts, :inserted_before))
+    |> order_by([p], desc: p.inserted_at, desc: p.message_number)
+    |> limit(^limit)
+    |> offset(^offset)
+    |> preload([p, thread: t, board: b, user: u], board: b, thread: t, user: u)
+    |> Repo.all()
+    |> Enum.map(&search_result/1)
+  end
+
+  @doc """
+  Fetch a readable post by `{board_slug}:{message_number}` for direct navigation.
+
+  All missing, malformed, unauthorized, archived, deleted-thread, and moved-post
+  mismatches collapse to `{:error, :not_found}` so callers do not leak private
+  existence. Soft-deleted posts are returned when their thread remains readable,
+  preserving tombstone navigation by stable per-board message number.
+  """
+  @spec fetch_readable_post_by_board_slug_and_message_number(
+          User.t() | nil,
+          String.t(),
+          pos_integer()
+        ) :: {:ok, direct_lookup_result()} | {:error, :not_found}
+  def fetch_readable_post_by_board_slug_and_message_number(actor, slug, message_number)
+      when is_binary(slug) and is_integer(message_number) and message_number > 0 do
+    with %Board{} = board <- Boards.get_board_by_slug(String.downcase(String.trim(slug))),
+         {:ok, %Board{} = readable_board} <- Boards.fetch_readable_board(actor, board.id),
+         %Post{} = post <- direct_post(readable_board.id, message_number),
+         %Thread{deleted_at: nil} = thread <- Repo.preload(post, [:thread]).thread do
+      {:ok,
+       %{
+         board: readable_board,
+         thread: Repo.preload(thread, [:board, :created_by, :first_post]),
+         post: Repo.preload(post, [:user, :reply_to]),
+         around_message_number: post.message_number
+       }}
+    else
+      _not_found_or_not_readable -> {:error, :not_found}
+    end
+  end
+
+  def fetch_readable_post_by_board_slug_and_message_number(_actor, _slug, _message_number),
+    do: {:error, :not_found}
+
+  defp normalize_search_opts(opts) do
+    opts = if is_map(opts), do: opts, else: Map.new(opts)
+
+    %{
+      query: normalize_blank(opt_get(opts, :query)),
+      board_slug: normalize_slug(opt_get(opts, :board_slug)),
+      author_handle: normalize_blank(opt_get(opts, :author_handle)),
+      thread_title: normalize_blank(opt_get(opts, :thread_title)),
+      inserted_after: opt_get(opts, :inserted_after),
+      inserted_before: opt_get(opts, :inserted_before),
+      limit: normalize_search_limit(opt_get(opts, :limit)),
+      offset: normalize_search_offset(opt_get(opts, :offset))
+    }
+  end
+
+  defp opt_get(opts, key) do
+    Map.get(opts, key) || Map.get(opts, Atom.to_string(key))
+  end
+
+  defp normalize_blank(value) when is_binary(value) do
+    value = String.trim(value)
+    if value == "", do: nil, else: value
+  end
+
+  defp normalize_blank(_value), do: nil
+
+  defp normalize_slug(value) when is_binary(value),
+    do: value |> normalize_blank() |> maybe_downcase()
+
+  defp normalize_slug(_value), do: nil
+
+  defp maybe_downcase(nil), do: nil
+  defp maybe_downcase(value), do: String.downcase(value)
+
+  defp normalize_search_limit(limit) when is_integer(limit) and limit > 0,
+    do: min(limit, @search_max_limit)
+
+  defp normalize_search_limit(_limit), do: @search_default_limit
+
+  defp normalize_search_offset(offset) when is_integer(offset) and offset >= 0, do: offset
+  defp normalize_search_offset(_offset), do: 0
+
+  defp readable_posts_where(query, nil) do
+    where(query, [board: b], b.readable_by == :public)
+  end
+
+  defp readable_posts_where(query, %User{status: :active, deleted_at: nil}), do: query
+  defp readable_posts_where(query, %{status: :active}), do: query
+
+  defp readable_posts_where(query, _actor) do
+    where(query, [board: b], b.readable_by == :public)
+  end
+
+  defp maybe_body_search(query, nil), do: query
+
+  defp maybe_body_search(query, text) do
+    where(query, [p], fragment("? @@ plainto_tsquery('english', ?)", fragment("body_tsv"), ^text))
+  end
+
+  defp maybe_board_slug(query, nil), do: query
+  defp maybe_board_slug(query, slug), do: where(query, [board: b], b.slug == ^slug)
+
+  defp maybe_author_handle(query, nil), do: query
+
+  defp maybe_author_handle(query, handle) do
+    where(query, [user: u], fragment("lower(?)", u.handle) == ^String.downcase(handle))
+  end
+
+  defp maybe_thread_title(query, nil), do: query
+
+  defp maybe_thread_title(query, title) do
+    where(query, [thread: t], ilike(t.title, ^"%#{title}%"))
+  end
+
+  defp maybe_inserted_after(query, %DateTime{} = datetime),
+    do: where(query, [p], p.inserted_at >= ^datetime)
+
+  defp maybe_inserted_after(query, _datetime), do: query
+
+  defp maybe_inserted_before(query, %DateTime{} = datetime),
+    do: where(query, [p], p.inserted_at <= ^datetime)
+
+  defp maybe_inserted_before(query, _datetime), do: query
+
+  defp search_result(%Post{} = post) do
+    %{
+      board: post.board,
+      thread: post.thread,
+      post: post,
+      author: post.user,
+      around_message_number: post.message_number,
+      snippet: search_snippet(post.body)
+    }
+  end
+
+  defp search_snippet(nil), do: nil
+
+  defp search_snippet(body) do
+    body
+    |> String.replace(~r/\s+/, " ")
+    |> String.trim()
+    |> String.slice(0, 160)
+  end
+
+  defp direct_post(board_id, message_number) do
+    Repo.one(
+      from p in Post,
+        where: p.board_id == ^board_id and p.message_number == ^message_number,
+        preload: [:user, :reply_to]
+    )
   end
 
   @doc """

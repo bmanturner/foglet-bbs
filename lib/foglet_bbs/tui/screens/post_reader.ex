@@ -53,7 +53,7 @@ defmodule Foglet.TUI.Screens.PostReader do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Accounts.PublicProfile
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, KeyBinding}
   alias Foglet.TUI.Guest
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostReader.Render
@@ -120,7 +120,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     new_state = %{state | status: :loading, last_op: :load_posts_window, last_error: nil}
 
     effect =
-      Effect.task(:load_posts_window, :post_reader, fn ->
+      Effect.task(:load_posts_window, fn ->
         load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
@@ -204,7 +204,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     opts = thread_activity_window_opts(state)
 
     effect =
-      Effect.task(:load_posts_window, :post_reader, fn ->
+      Effect.task(:load_posts_window, fn ->
         load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
@@ -298,7 +298,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       state = update_reply_context_scroll(state, scroll_top)
 
       effect =
-        Effect.task(:toggle_reply_context_upvote, :post_reader, fn ->
+        Effect.task(:toggle_reply_context_upvote, fn ->
           posts_mod.toggle_upvote(user_id, post_id)
         end)
 
@@ -306,108 +306,8 @@ defmodule Foglet.TUI.Screens.PostReader do
     end
   end
 
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["n", "N"] do
-    advance_local_post(state, 1, context)
-  end
-
-  def update({:key, %{key: :char, char: " "}}, %State{} = state, %Context{} = context) do
-    advance_local_post(state, 1, context)
-  end
-
-  def update({:key, %{key: :page_down}}, %State{} = state, %Context{} = context) do
-    advance_local_post(state, 1, context)
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["p", "P"] do
-    advance_local_post(state, -1, context)
-  end
-
-  def update({:key, %{key: :page_up}}, %State{} = state, %Context{} = context) do
-    advance_local_post(state, -1, context)
-  end
-
-  def update({:key, %{key: :down}}, %State{} = state, %Context{} = context) do
-    scroll_or_move_action_target(state, 1, context)
-  end
-
-  def update({:key, %{key: :tab}}, %State{} = state, %Context{} = context) do
-    move_action_target_for_visible_post(state, 1, context)
-  end
-
-  def update({:key, %{key: :up}}, %State{} = state, %Context{} = context) do
-    scroll_or_move_action_target(state, -1, context)
-  end
-
-  def update({:key, %{key: :backtab}}, %State{} = state, %Context{} = context) do
-    move_action_target_for_visible_post(state, -1, context)
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["j", "J"] do
-    {scroll_local_post(state, 1, context), []}
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["k", "K"] do
-    {scroll_local_post(state, -1, context), []}
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["u", "U"] do
-    toggle_selected_post_upvote(state, context)
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["v", "V"] do
-    open_selected_author_profile(state, context)
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["!"] do
-    open_selected_post_report(state, context)
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["c", "C"] do
-    open_selected_reply_context(state, context)
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["r", "R"] do
-    cond do
-      Guest.guest?(context) ->
-        {state, [Effect.open_modal(Guest.denial_modal(:post))]}
-
-      locked_thread?(state) or archived_board?(state) ->
-        {state, []}
-
-      true ->
-        params = %{
-          origin: :post_reader,
-          board: state.board,
-          board_id: state.board_id,
-          thread: state.thread,
-          thread_id: state.thread_id,
-          reply_to: selected_action_post(state)
-        }
-
-        {state, [Effect.navigate(:post_composer, params)]}
-    end
-  end
-
-  def update({:key, %{key: :char, char: c}}, %State{} = state, %Context{} = context)
-      when c in ["q", "Q"] do
-    effects = [Effect.navigate(:thread_list, %{board: state.board, board_id: state.board_id})]
-
-    effects =
-      case flush_effect(state, context) do
-        nil -> effects
-        effect -> effects ++ [effect]
-      end
-
-    {state, effects}
+  def update({:key, event}, %State{} = state, %Context{} = context) when is_map(event) do
+    handle_key(event, state, context)
   end
 
   def update(
@@ -439,7 +339,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     moderation_mod = resolve_domain_module(context, :moderation, Foglet.Moderation)
 
     effect =
-      Effect.task(:submit_user_report, :post_reader, fn ->
+      Effect.task(:submit_user_report, fn ->
         moderation_mod.create_report(context.current_user, %{
           target_kind: Map.get(payload, :target_kind),
           target_id: Map.get(payload, :target_id),
@@ -459,7 +359,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     moderation_mod = resolve_domain_module(context, :moderation, Foglet.Moderation)
 
     effect =
-      Effect.task(:submit_post_report, :post_reader, fn ->
+      Effect.task(:submit_post_report, fn ->
         moderation_mod.create_report(context.current_user, %{
           target_kind: Map.get(payload, :target_kind),
           target_id: Map.get(payload, :target_id),
@@ -477,6 +377,147 @@ defmodule Foglet.TUI.Screens.PostReader do
   end
 
   def update(_message, %State{} = state, %Context{}), do: {state, []}
+
+  defp handle_key(event, %State{} = state, %Context{} = context) do
+    case movement_key(event) do
+      {:advance, delta} ->
+        advance_local_post(state, delta, context)
+
+      {:arrow, delta} ->
+        scroll_or_move_action_target(state, delta, context)
+
+      {:tab, delta} ->
+        move_action_target_for_visible_post(state, delta, context)
+
+      {:scroll, delta} ->
+        {scroll_local_post(state, delta, context), []}
+
+      nil ->
+        handle_action_key(event, state, context)
+    end
+  end
+
+  defp movement_key(event) do
+    advance_key(event) || selection_key(event) || reader_scroll_key(event)
+  end
+
+  defp advance_key(event) do
+    cond do
+      next_post?(event) -> {:advance, 1}
+      previous_post?(event) -> {:advance, -1}
+      true -> nil
+    end
+  end
+
+  defp selection_key(event) do
+    cond do
+      arrow_down?(event) -> {:arrow, 1}
+      arrow_up?(event) -> {:arrow, -1}
+      tab_next?(event) -> {:tab, 1}
+      tab_previous?(event) -> {:tab, -1}
+      true -> nil
+    end
+  end
+
+  defp reader_scroll_key(event) do
+    cond do
+      reader_scroll_down?(event) -> {:scroll, 1}
+      reader_scroll_up?(event) -> {:scroll, -1}
+      true -> nil
+    end
+  end
+
+  defp handle_action_key(event, %State{} = state, %Context{} = context) do
+    cond do
+      plain_char?(event, ["u", "U"]) ->
+        toggle_selected_post_upvote(state, context)
+
+      plain_char?(event, ["v", "V"]) ->
+        open_selected_author_profile(state, context)
+
+      plain_char?(event, ["!"]) ->
+        open_selected_post_report(state, context)
+
+      plain_char?(event, ["c", "C"]) ->
+        open_selected_reply_context(state, context)
+
+      plain_char?(event, ["r", "R"]) ->
+        reply_to_selected_post(state, context)
+
+      cancel_reader?(event) ->
+        leave_reader(state, context)
+
+      true ->
+        {state, []}
+    end
+  end
+
+  defp next_post?(event), do: KeyBinding.page_down?(event) or plain_char?(event, ["n", "N", " "])
+
+  defp previous_post?(event), do: KeyBinding.page_up?(event) or plain_char?(event, ["p", "P"])
+
+  # Arrow movement has reader-specific behavior distinct from j/k: arrows move
+  # the selected action target in packed layouts, while j/k scroll body content.
+  defp arrow_down?(event), do: match?(%{key: :down}, event) and plain_event?(event)
+
+  defp arrow_up?(event), do: match?(%{key: :up}, event) and plain_event?(event)
+
+  defp tab_next?(event), do: match?(%{key: :tab}, event) and plain_event?(event)
+
+  defp tab_previous?(event), do: match?(%{key: :backtab}, event) and plain_event?(event)
+
+  defp reader_scroll_down?(event), do: plain_char?(event, ["j", "J"])
+
+  defp reader_scroll_up?(event), do: plain_char?(event, ["k", "K"])
+
+  defp cancel_reader?(event), do: KeyBinding.cancel?(event) or plain_char?(event, ["q", "Q"])
+
+  defp plain_char?(%{key: :char, char: char} = event, chars) when is_list(chars) do
+    char in chars and plain_event?(event)
+  end
+
+  defp plain_char?(_event, _chars), do: false
+
+  defp plain_event?(event) when is_map(event) do
+    Enum.all?(
+      [:ctrl, :control, :alt, :meta, :shift],
+      &(Map.get(event, &1, false) in [false, nil])
+    )
+  end
+
+  defp reply_to_selected_post(%State{} = state, %Context{} = context) do
+    cond do
+      Guest.guest?(context) ->
+        {state, [Effect.open_modal(Guest.denial_modal(:post))]}
+
+      locked_thread?(state) or archived_board?(state) ->
+        {state, []}
+
+      true ->
+        params = %{
+          origin: :post_reader,
+          board: state.board,
+          board_id: state.board_id,
+          thread: state.thread,
+          thread_id: state.thread_id,
+          reply_to: selected_action_post(state)
+        }
+
+        {state, [Effect.navigate(:post_composer, params)]}
+    end
+  end
+
+  defp leave_reader(%State{} = state, %Context{} = context) do
+    effects = [Effect.navigate(:thread_list, %{board: state.board, board_id: state.board_id})]
+
+    effects =
+      case flush_effect(state, context) do
+        nil -> effects
+        effect -> effects ++ [effect]
+      end
+
+    {state, effects}
+  end
 
   @doc """
   Returns true when the screen-local thread is locked.
@@ -708,7 +749,20 @@ defmodule Foglet.TUI.Screens.PostReader do
   # The read-pointer lookup stays where it already lives — the screen-owned
   # `pending_read_positions` map (D-03 forbids calling Threads here, and D-03
   # forbids adding a new :read_pointer direction — :around is the primitive).
+  defp load_window_opts(_msg_no, {:around, message_number}) when is_integer(message_number) do
+    [direction: :around, around_message_number: message_number]
+  end
+
+  defp load_window_opts(_msg_no, %{"around" => message_number}) when is_integer(message_number) do
+    [direction: :around, around_message_number: message_number]
+  end
+
   defp load_window_opts(message_number, _load_intent) when is_integer(message_number) do
+    [direction: :around, around_message_number: message_number]
+  end
+
+  defp load_window_opts(_msg_no, {:around_message_number, message_number})
+       when is_integer(message_number) and message_number > 0 do
     [direction: :around, around_message_number: message_number]
   end
 
@@ -1196,6 +1250,14 @@ defmodule Foglet.TUI.Screens.PostReader do
     max(length(posts) - 1, 0)
   end
 
+  defp selected_index_after_window_load(
+         %State{load_intent: {:around_message_number, message_number}},
+         _window,
+         posts
+       ) do
+    index_of_message_number(posts, message_number) || 0
+  end
+
   defp selected_index_after_window_load(%State{} = state, window, posts) do
     case window_direction(window) do
       :last ->
@@ -1288,7 +1350,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
 
       effect =
-        Effect.task(:toggle_upvote, :post_reader, fn ->
+        Effect.task(:toggle_upvote, fn ->
           posts_mod.toggle_upvote(user_id, post_id)
         end)
 
@@ -1345,7 +1407,7 @@ defmodule Foglet.TUI.Screens.PostReader do
       posts_mod = resolve_domain_module(context, :posts, Foglet.Posts)
 
       effect =
-        Effect.task(:load_reply_context, :post_reader, fn ->
+        Effect.task(:load_reply_context, fn ->
           posts_mod.fetch_readable_post(context.current_user, reply_to_id)
         end)
 
@@ -1521,7 +1583,7 @@ defmodule Foglet.TUI.Screens.PostReader do
     opts = adjacent_window_opts(state, direction)
 
     effect =
-      Effect.task(:load_posts_window, :post_reader, fn ->
+      Effect.task(:load_posts_window, fn ->
         load_reader_window(posts_mod, context.current_user, thread_id, opts)
       end)
 
@@ -1851,7 +1913,7 @@ defmodule Foglet.TUI.Screens.PostReader do
           last_read_message_number: pos.last_read_message_number
         }
 
-        Effect.task(:flush_read_pointers, :post_reader, fn ->
+        Effect.task(:flush_read_pointers, fn ->
           with :ok <- flush_local_board_pointer(boards_mod, flush_ctx),
                :ok <- flush_local_thread_pointer(threads_mod, flush_ctx) do
             {:read_pointers_flushed, thread_id}

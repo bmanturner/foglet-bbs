@@ -78,7 +78,29 @@ defmodule Foglet.TUI.Screens.ShellVisibility do
     InvitesSurface.visible?(user, policy, registration_mode)
   end
 
+  @doc """
+  Pure invite-tab visibility from already-loaded session context only.
+
+  Render paths use this variant so they can honor decisions already carried in
+  `session_context` without falling back to `Foglet.Config`.
+  """
+  @spec invites_visible_from_context?(map() | nil, map() | nil) :: boolean()
+  def invites_visible_from_context?(user, session_context) do
+    policy = loaded_string_config(session_context, :invite_code_generators)
+    registration_mode = loaded_string_config(session_context, :registration_mode)
+    InvitesSurface.visible?(user, policy, registration_mode)
+  end
+
   # --- private ---
+
+  defp loaded_string_config(session_context, key) when is_map(session_context) do
+    case Map.get(session_context, key) do
+      value when is_binary(value) -> value
+      _other -> nil
+    end
+  end
+
+  defp loaded_string_config(_session_context, _key), do: nil
 
   defp resolve_policy(nil), do: config_policy_or_nil()
 

@@ -247,6 +247,84 @@ defmodule Foglet.TUI.Widgets.Display.ConsoleTableTest do
     end
   end
 
+  describe "state ownership helpers" do
+    test "selected_index/2 and selected_row/1 hide nested table state" do
+      state =
+        ConsoleTable.init(
+          columns: columns([:handle, :status]),
+          rows: moderation_user_rows(),
+          selectable: true
+        )
+
+      assert ConsoleTable.selected_index(state, 0) == 0
+      assert ConsoleTable.selected_row(state).handle == "alice"
+
+      empty = ConsoleTable.init(columns: columns([:handle]), rows: [])
+
+      assert ConsoleTable.selected_index(empty, 0) == 0
+      assert ConsoleTable.selected_row(empty) == nil
+    end
+
+    test "put_selected_index/2 keeps cursor mutation inside widget API" do
+      rows = [
+        %{handle: "alice", status: "active"},
+        %{handle: "bob", status: "pending"}
+      ]
+
+      state =
+        ConsoleTable.init(
+          columns: columns([:handle, :status]),
+          rows: rows,
+          selectable: true
+        )
+        |> ConsoleTable.put_selected_index(1)
+
+      assert ConsoleTable.selected_index(state) == 1
+      assert ConsoleTable.selected_row(state).handle == "bob"
+    end
+
+    test "with_width/2 preserves selection and behavior options" do
+      rows = [
+        %{handle: "alice", status: "active"},
+        %{handle: "bob", status: "pending"}
+      ]
+
+      state =
+        ConsoleTable.init(
+          columns: columns([:handle, :status]),
+          rows: rows,
+          sortable: true,
+          filterable: true,
+          selectable: true,
+          page_size: 7,
+          width: 80
+        )
+        |> ConsoleTable.put_selected_index(1)
+
+      resized = ConsoleTable.with_width(state, 42)
+
+      assert resized.width == 42
+      assert resized.sortable == true
+      assert resized.filterable == true
+      assert resized.selectable == true
+      assert resized.page_size == 7
+      assert ConsoleTable.selected_index(resized) == 1
+      assert ConsoleTable.selected_row(resized).handle == "bob"
+    end
+
+    test "render/2 is idempotent for the same state and input", %{theme: theme} do
+      state =
+        ConsoleTable.init(
+          columns: columns([:handle, :status]),
+          rows: moderation_user_rows(),
+          selectable: true
+        )
+
+      assert ConsoleTable.render(state, theme: theme) ==
+               ConsoleTable.render(state, theme: theme)
+    end
+  end
+
   describe "theme hygiene" do
     test "does not leak hardcoded terminal color atoms", %{theme: theme} do
       tree =

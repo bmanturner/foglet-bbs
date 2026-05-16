@@ -15,6 +15,8 @@ defmodule Foglet.BoardChat.Message do
 
   schema "board_chat_messages" do
     field :body, :string
+    field :kind, Ecto.Enum, values: [:text, :action], default: :text
+    field :metadata, :map, default: %{}
 
     belongs_to :board, Foglet.Boards.Board
     belongs_to :user, Foglet.Accounts.User
@@ -31,9 +33,9 @@ defmodule Foglet.BoardChat.Message do
   """
   def insert_changeset(message, attrs) do
     message
-    |> cast(attrs, [:body])
+    |> cast(attrs, [:body, :kind, :metadata])
     |> update_change(:body, &Body.trim/1)
-    |> validate_required([:body])
+    |> validate_required([:body, :kind, :metadata])
     |> validate_length(:body, min: 1, max: Body.max_length())
     |> foreign_key_constraint(:board_id)
     |> foreign_key_constraint(:user_id)

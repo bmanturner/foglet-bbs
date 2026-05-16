@@ -93,6 +93,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   defp local_from_app(state) do
     %MainMenuState{
       recent_oneliners: Map.get(state, :recent_oneliners, []),
+      selected_destination_index: Map.get(state, :selected_destination_index, 0),
       selected_oneliner_index: Map.get(state, :selected_oneliner_index, 0),
       pending_hide_oneliner_id: Map.get(state, :pending_hide_oneliner_id)
     }
@@ -164,7 +165,10 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
   end
 
   defp only_task_fun(effects, op) do
-    assert [%Effect{type: :task, payload: %{op: ^op, screen_key: :main_menu, fun: fun}}] = effects
+    assert [%Effect{type: :task, payload: %{op: ^op, screen_key: screen_key, fun: fun}}] =
+             effects
+
+    assert screen_key == Effect.current_screen_key()
     fun
   end
 
@@ -270,45 +274,32 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       refute String.contains?(row, "body body body body body body body body body body")
     end
 
-    test "Up and Down change MainMenu.State selected_oneliner_index", %{
+    test "Up and Down change MainMenu.State selected_destination_index", %{
       state: state
     } do
-      state =
-        state
-        |> with_oneliners([
-          oneliner("alice", "first", %{id: "ol1"}),
-          oneliner("bob", "second", %{id: "ol2"})
-        ])
-        |> with_selected_oneliner(0)
-
       {down_state, []} = handle_special_key_result(state, :down)
-      assert down_state.selected_oneliner_index == 1
+      assert down_state.selected_destination_index == 1
       assert %MainMenuState{} = down_state
 
       {jk_up_state, []} =
         MainMenu.update({:key, %{key: :char, char: "k"}}, down_state, context_from_app(state))
 
-      assert jk_up_state.selected_oneliner_index == 0
+      assert jk_up_state.selected_destination_index == 0
 
       {jk_down_state, []} =
         MainMenu.update({:key, %{key: :char, char: "j"}}, jk_up_state, context_from_app(state))
 
-      assert jk_down_state.selected_oneliner_index == 1
-
-      {clamped_down_state, []} =
-        MainMenu.update({:key, %{key: :down}}, jk_down_state, context_from_app(state))
-
-      assert clamped_down_state.selected_oneliner_index == 1
+      assert jk_down_state.selected_destination_index == 1
 
       {up_state, []} =
-        MainMenu.update({:key, %{key: :up}}, clamped_down_state, context_from_app(state))
+        MainMenu.update({:key, %{key: :up}}, jk_down_state, context_from_app(state))
 
-      assert up_state.selected_oneliner_index == 0
+      assert up_state.selected_destination_index == 0
 
       {clamped_up_state, []} =
         MainMenu.update({:key, %{key: :up}}, up_state, context_from_app(state))
 
-      assert clamped_up_state.selected_oneliner_index == 0
+      assert clamped_up_state.selected_destination_index == 0
     end
 
     test "all authenticated roles render a visible marker on the selected oneliner" do
@@ -432,17 +423,13 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
       end
     end
 
-    test "Enter on a selected oneliner is reserved and performs no Profile navigation", %{
+    test "Enter activates the selected navigation destination", %{
       state: state
     } do
-      state =
-        state
-        |> with_oneliners([oneliner("alice", "profile later", %{id: "ol1"})])
-        |> with_selected_oneliner(0)
-
       {local_state, effects} = handle_special_key_result(state, :enter)
       assert local_state == local_from_app(state)
-      assert effects == []
+      assert_navigate_effect(effects, :board_list)
+      assert_board_list_load_task(effects)
     end
   end
 
@@ -603,8 +590,8 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
     # with one-column inner indent per MENU-04) and an accent-color
     # bracketed-key segment "[X]". collect_text_values flattens children, so
     # both halves appear as separate entries in `texts`.
-    assert Enum.any?(texts, &(&1 =~ ~r/^\s+●\s+Boards/)),
-           "expected ' ● Boards ...' leading segment; got: #{inspect(texts)}"
+    assert Enum.any?(texts, &(&1 =~ ~r/^[>\s]●\s+Boards/)),
+           "expected selected or unselected Boards leading segment; got: #{inspect(texts)}"
 
     assert "[B]" in texts,
            "expected '[B]' bracketed-key segment; got: #{inspect(texts)}"
@@ -937,6 +924,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                {"B", "Boards"},
                {"C", "Compose"},
                {"I", "Inbox"},
+               {"L", "BBS Mail"},
                {"N", "Online Now (0)"},
                {"A", "Account"},
                {"Q", "Logout"}
@@ -951,6 +939,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                  {"B", "Boards"},
                  {"C", "Compose"},
                  {"I", "Inbox"},
+                 {"L", "BBS Mail"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
@@ -966,6 +955,7 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
                  {"B", "Boards"},
                  {"C", "Compose"},
                  {"I", "Inbox"},
+                 {"L", "BBS Mail"},
                  {"N", "Online Now (0)"},
                  {"A", "Account"},
                  {"M", "Moderation"},
@@ -1148,10 +1138,16 @@ defmodule Foglet.TUI.Screens.MainMenuTest do
 
       assert Enum.any?(
                effects_via_load,
-               &match?(
-                 %Effect{type: :task, payload: %{op: :load_oneliners, screen_key: :main_menu}},
-                 &1
-               )
+               fn
+                 %Effect{
+                   type: :task,
+                   payload: %{op: :load_oneliners, screen_key: screen_key}
+                 } ->
+                   screen_key == Effect.current_screen_key()
+
+                 _effect ->
+                   false
+               end
              )
     end
 

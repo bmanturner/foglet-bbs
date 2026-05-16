@@ -7,10 +7,10 @@ defmodule Foglet.Config.SchemaTest do
   alias Foglet.Config.UnknownKeyError
 
   describe "entries/0" do
-    test "returns exactly 9 entries in the documented order" do
+    test "returns exactly 12 entries in the documented order" do
       entries = Schema.entries()
 
-      assert length(entries) == 9
+      assert length(entries) == 12
 
       assert Enum.map(entries, & &1.key) == [
                "registration_mode",
@@ -21,7 +21,10 @@ defmodule Foglet.Config.SchemaTest do
                "require_email_verification",
                "guest_mode_enabled",
                "email_verify_resend_cooldown_seconds",
-               "invite_generation_per_user_limit"
+               "invite_generation_per_user_limit",
+               "ssh_ip_allowlist_enabled",
+               "ssh_rate_limit_max",
+               "ssh_rate_limit_window_ms"
              ]
     end
 
@@ -166,6 +169,50 @@ defmodule Foglet.Config.SchemaTest do
                max: nil
              }
     end
+
+    test "ssh_ip_allowlist_enabled spec matches the access-policy default contract" do
+      {:ok, spec} = Schema.fetch_spec("ssh_ip_allowlist_enabled")
+
+      assert spec == %{
+               key: "ssh_ip_allowlist_enabled",
+               type: :boolean,
+               default: false,
+               description:
+                 "Require an explicit enabled SSH allow rule before a source IP may connect.",
+               enum: nil,
+               min: nil,
+               max: nil
+             }
+    end
+
+    test "ssh_rate_limit_max spec preserves the legacy per-IP throttle default" do
+      {:ok, spec} = Schema.fetch_spec("ssh_rate_limit_max")
+
+      assert spec == %{
+               key: "ssh_rate_limit_max",
+               type: :integer,
+               default: 10,
+               description:
+                 "Maximum SSH channel startups per source IP within the configured window.",
+               enum: nil,
+               min: 1,
+               max: nil
+             }
+    end
+
+    test "ssh_rate_limit_window_ms spec preserves the legacy throttle window default" do
+      {:ok, spec} = Schema.fetch_spec("ssh_rate_limit_window_ms")
+
+      assert spec == %{
+               key: "ssh_rate_limit_window_ms",
+               type: :integer,
+               default: 60_000,
+               description: "SSH per-IP rate limit window in milliseconds.",
+               enum: nil,
+               min: 1,
+               max: nil
+             }
+    end
   end
 
   describe "fetch_spec/1" do
@@ -180,7 +227,7 @@ defmodule Foglet.Config.SchemaTest do
   end
 
   describe "defaults/0" do
-    test "returns a map of key → default covering exactly the 9 schematized keys" do
+    test "returns a map of key → default covering exactly the 12 schematized keys" do
       defaults = Schema.defaults()
 
       assert defaults == %{
@@ -192,7 +239,10 @@ defmodule Foglet.Config.SchemaTest do
                "require_email_verification" => false,
                "guest_mode_enabled" => true,
                "email_verify_resend_cooldown_seconds" => 60,
-               "invite_generation_per_user_limit" => 0
+               "invite_generation_per_user_limit" => 0,
+               "ssh_ip_allowlist_enabled" => false,
+               "ssh_rate_limit_max" => 10,
+               "ssh_rate_limit_window_ms" => 60_000
              }
     end
 

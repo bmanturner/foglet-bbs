@@ -44,8 +44,11 @@ defmodule Foglet.Authorization do
     :create_category,
     :update_category,
     :archive_category,
+    :manage_board_feeds,
     :edit_config,
     :manage_user_status,
+    :manage_ssh_access_rules,
+    :manage_identity_rules,
     :generate_invite,
     :revoke_invite,
     :send_test_email
@@ -77,7 +80,8 @@ defmodule Foglet.Authorization do
     :delete_thread,
     :delete_post,
     :edit_post_as_mod,
-    :hide_oneliner
+    :hide_oneliner,
+    :manage_board_feeds
   ]
 
   @type actor :: User.t() | nil

@@ -183,6 +183,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert ss.prefs_draft == %{
                timezone: "America/Chicago",
                time_format: "24h",
+               notification_alert: "terminal_bell",
                theme: "amber",
                handle_color: "#FFFFFF"
              }
@@ -590,6 +591,7 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert Enum.map(ss.prefs_form.fields, & &1.label) == [
                "Timezone",
                "Time format",
+               "Notification alert",
                "Theme",
                "Handle color"
              ]
@@ -682,6 +684,9 @@ defmodule Foglet.TUI.Screens.AccountTest do
       {:update, state, []} = handle_account_key(%{key: :tab}, state)
       assert state.screen_state.account.active_tab == 1
       assert state.screen_state.account.prefs_focus == :time_format
+
+      {:update, state, []} = handle_account_key(%{key: :tab}, state)
+      assert state.screen_state.account.prefs_focus == :notification_alert
 
       {:update, state, []} = handle_account_key(%{key: :tab}, state)
       assert state.screen_state.account.prefs_focus == :theme
@@ -1921,6 +1926,33 @@ defmodule Foglet.TUI.Screens.AccountTest do
       refute Enum.any?(flat, &(&1 == "Change")),
              "↑/↓ Change must not advertise when a text field is focused"
     end
+
+    test "PREFS keybar advertises Test alert only on notification alert focus" do
+      focused =
+        AccountState.new()
+        |> Map.put(:active_tab, 1)
+        |> Map.put(:prefs_focus, :notification_alert)
+
+      other = %{focused | prefs_focus: :theme}
+
+      focused_text =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], focused)
+        |> render_account()
+        |> collect_text_values()
+
+      other_text =
+        build_state_for_role(:user)
+        |> put_in([:screen_state, :account], other)
+        |> render_account()
+        |> collect_text_values()
+
+      assert Enum.chunk_every(focused_text, 2, 1, :discard)
+             |> Enum.any?(fn pair -> pair == ["T", " Test alert"] end)
+
+      refute Enum.chunk_every(other_text, 2, 1, :discard)
+             |> Enum.any?(fn pair -> pair == ["T", " Test alert"] end)
+    end
   end
 
   # ---------------------------------------------------------------------------
@@ -1969,6 +2001,30 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert String.contains?(joined, "Select")
       refute String.contains?(joined, "Save")
       refute String.contains?(joined, "Cancel")
+    end
+
+    test "PREFS notification alert keybar keeps Test alert, Edit, and Back at 80x24" do
+      ss =
+        AccountState.new()
+        |> Map.put(:active_tab, 1)
+        |> Map.put(:prefs_focus, :notification_alert)
+
+      joined =
+        build_state_for_role(:user)
+        |> Map.put(:terminal_size, {80, 24})
+        |> put_in([:screen_state, :account], ss)
+        |> render_account()
+        |> collect_text_values()
+        |> Enum.join("|")
+
+      assert String.contains?(joined, "Test alert"),
+             "PREFS notification alert 80x24 keybar must retain Test alert. Got: #{joined}"
+
+      assert String.contains?(joined, "Edit"),
+             "PREFS notification alert 80x24 keybar must retain Edit. Got: #{joined}"
+
+      assert String.contains?(joined, "Back"),
+             "PREFS notification alert 80x24 keybar must retain Back. Got: #{joined}"
     end
   end
 
@@ -2151,7 +2207,12 @@ defmodule Foglet.TUI.Screens.AccountTest do
       assert after_submit.prefs_focus == :time_format
       assert [{:account_save_prefs, attrs}] = cmds
       assert attrs.timezone == user.timezone
-      assert attrs.preferences == %{"time_format" => "12h"}
+
+      assert attrs.preferences == %{
+               "time_format" => "12h",
+               "notification_alert" => "terminal_bell"
+             }
+
       assert attrs.theme == user.theme
     end
 

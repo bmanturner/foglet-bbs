@@ -191,7 +191,7 @@ defmodule Foglet.TUI.App.Routing do
   end
 
   defp route_owned_screen?(key)
-       when key in [:thread_list, :post_reader, :post_composer, :new_thread],
+       when key in [:thread_list, :post_reader, :post_composer, :new_thread, :bbs_mail],
        do: true
 
   defp route_owned_screen?(_key), do: false
@@ -248,6 +248,7 @@ defmodule Foglet.TUI.App.Routing do
       :verify,
       :main_menu,
       :notifications,
+      :bbs_mail,
       :online_now,
       :board_list,
       :thread_list,
@@ -266,6 +267,7 @@ defmodule Foglet.TUI.App.Routing do
   defp built_in_screen_module_for(:verify), do: Screens.Verify
   defp built_in_screen_module_for(:main_menu), do: Screens.MainMenu
   defp built_in_screen_module_for(:notifications), do: Screens.Notifications
+  defp built_in_screen_module_for(:bbs_mail), do: Screens.BBSMail
   defp built_in_screen_module_for(:online_now), do: Screens.OnlineNow
   defp built_in_screen_module_for(:board_list), do: Screens.BoardList
   defp built_in_screen_module_for(:thread_list), do: Screens.BoardScreen

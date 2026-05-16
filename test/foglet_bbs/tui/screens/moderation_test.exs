@@ -169,10 +169,12 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert [
                %Effect{
                  type: :task,
-                 payload: %{op: :load_moderation_workspace, screen_key: :moderation}
+                 payload: %{op: :load_moderation_workspace, screen_key: screen_key}
                }
              ] =
                effects
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     test "Moderation task result stores workspace rows locally" do
@@ -232,9 +234,11 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert [
                %Effect{
                  type: :task,
-                 payload: %{op: :load_moderation_workspace, screen_key: :moderation}
+                 payload: %{op: :load_moderation_workspace, screen_key: screen_key}
                }
              ] = effects
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     test "moderator INVITES tab requests task-backed generate" do
@@ -254,8 +258,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       assert state.active_tab == 5
 
-      assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: :moderation}}] =
+      assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: screen_key}}] =
                effects
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     # FOG-173: regression — pressing G after a prior tab-jump (e.g. "6")
@@ -288,8 +294,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
 
       assert state.active_tab == 5
 
-      assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: :moderation}}] =
+      assert [%Effect{payload: %{op: :moderation_generate_invite, screen_key: screen_key}}] =
                effects
+
+      assert screen_key == Effect.current_screen_key()
     end
 
     test "INVITES D arms confirm_revoke after a prior tab-jump keypress" do
@@ -947,8 +955,10 @@ defmodule Foglet.TUI.Screens.ModerationTest do
           context
         )
 
-      assert [%Effect{type: :task, payload: %{op: :resolve_report, screen_key: :moderation}}] =
+      assert [%Effect{type: :task, payload: %{op: :resolve_report, screen_key: screen_key}}] =
                effects
+
+      assert screen_key == Effect.current_screen_key()
     end
   end
 
@@ -1306,10 +1316,11 @@ defmodule Foglet.TUI.Screens.ModerationTest do
       assert [
                %Effect{
                  type: :task,
-                 payload: %{op: :load_moderation_workspace, screen_key: :moderation}
+                 payload: %{op: :load_moderation_workspace, screen_key: screen_key}
                }
              ] = effects_via_on_enter
 
+      assert screen_key == Effect.current_screen_key()
       assert effects_via_on_enter == effects_via_load
     end
 

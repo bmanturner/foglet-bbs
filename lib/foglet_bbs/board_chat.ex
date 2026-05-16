@@ -21,7 +21,7 @@ defmodule Foglet.BoardChat do
   """
 
   alias Foglet.Accounts.User
-  alias Foglet.BoardChat.{Ephemeral, Permanent}
+  alias Foglet.BoardChat.{Ephemeral, Permanent, SlashCommands}
   alias Foglet.Boards.Board
 
   @doc """
@@ -32,15 +32,20 @@ defmodule Foglet.BoardChat do
   and propagates backend-specific validation errors (e.g. body length) from
   the permanent path as `{:error, %Ecto.Changeset{}}`.
   """
-  @spec post(Board.t(), User.t() | nil, String.t()) :: {:ok, map()} | {:error, term()}
+  @spec post(Board.t(), User.t() | nil, String.t()) ::
+          {:ok, map()} | {:error, term()}
   def post(%Board{}, nil, _body), do: {:error, :guest_not_allowed}
 
   def post(%Board{chat_storage_mode: :ephemeral} = board, %User{id: user_id}, body) do
-    Ephemeral.post(board, user_id, body)
+    with {:ok, payload} <- SlashCommands.parse(body) do
+      Ephemeral.post(board, user_id, payload)
+    end
   end
 
   def post(%Board{chat_storage_mode: :permanent} = board, %User{} = user, body) do
-    Permanent.insert(board, user, body)
+    with {:ok, payload} <- SlashCommands.parse(body) do
+      Permanent.insert(board, user, payload)
+    end
   end
 
   @doc """

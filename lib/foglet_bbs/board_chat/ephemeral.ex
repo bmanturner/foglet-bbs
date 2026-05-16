@@ -17,15 +17,15 @@ defmodule Foglet.BoardChat.Ephemeral do
   alias Foglet.Boards.Board
 
   @doc "Append a chat message for `board` and broadcast it on the chat topic."
-  @spec post(Board.t(), binary(), String.t(), keyword()) ::
+  @spec post(Board.t(), binary(), String.t() | map(), keyword()) ::
           {:ok, Room.message()} | {:error, term()}
   def post(%Board{} = board, user_id, body, room_opts \\ [])
-      when is_binary(user_id) and is_binary(body) do
+      when is_binary(user_id) and (is_binary(body) or is_map(body)) do
     with :ok <- ensure_chat_enabled(board),
          :ok <- ensure_ephemeral(board),
-         {:ok, body} <- Body.validate(body),
+         {:ok, payload} <- normalize_payload(body),
          {:ok, _pid} <- ensure_room(board, room_opts) do
-      Room.post(board.id, user_id, body)
+      Room.post(board.id, user_id, payload)
     end
   end
 
@@ -48,6 +48,23 @@ defmodule Foglet.BoardChat.Ephemeral do
   defp ensure_room(%Board{id: board_id} = board, room_opts) do
     opts = Keyword.put_new(room_opts, :ttl_seconds, board.chat_message_ttl_seconds)
     Supervisor.ensure_room(board_id, opts)
+  end
+
+  defp normalize_payload(body) when is_binary(body) do
+    with {:ok, body} <- Body.validate(body) do
+      {:ok, %{kind: :text, body: body, metadata: %{}}}
+    end
+  end
+
+  defp normalize_payload(%{body: body} = payload) do
+    with {:ok, body} <- Body.validate(body) do
+      {:ok,
+       payload
+       |> Map.take([:kind, :body, :metadata])
+       |> Map.put(:body, body)
+       |> Map.put_new(:kind, :text)
+       |> Map.put_new(:metadata, %{})}
+    end
   end
 
   defp ensure_chat_enabled(%Board{chat_enabled: true}), do: :ok

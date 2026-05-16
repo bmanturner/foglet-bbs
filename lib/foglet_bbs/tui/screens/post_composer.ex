@@ -23,7 +23,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
   @behaviour Foglet.TUI.Screen
 
   alias Foglet.Config
-  alias Foglet.TUI.{Context, Effect}
+  alias Foglet.TUI.{Context, Effect, KeyBinding}
   alias Foglet.TUI.Screens.Domain
   alias Foglet.TUI.Screens.PostComposer.State
   alias Foglet.TUI.TextWidth
@@ -61,23 +61,16 @@ defmodule Foglet.TUI.Screens.PostComposer do
     submit_local(state, context)
   end
 
-  def update({:key, %{key: :char, char: "c", ctrl: true}}, %State{} = state, %Context{}) do
-    {state, [Effect.navigate(state.origin, cancel_params(state))]}
-  end
-
-  def update({:key, %{key: :escape}}, %State{} = state, %Context{}) do
-    {state, [Effect.navigate(state.origin, cancel_params(state))]}
-  end
-
-  def update({:key, key_event}, %State{} = state, %Context{} = context) do
-    case Compose.apply_key(state.input_state, key_event) do
-      {:ok, input_state} ->
-        {%{state | input_state: enforce_max_len(input_state, context)}, []}
-
-      :error ->
-        {state, []}
+  def update({:key, key_event}, %State{} = state, %Context{} = context)
+      when is_map(key_event) do
+    if KeyBinding.cancel?(key_event, composer?: true) do
+      cancel_local(state)
+    else
+      update_input_key(key_event, state, context)
     end
   end
+
+  def update({:key, _key_event}, %State{} = state, %Context{}), do: {state, []}
 
   def update({:task_result, :submit_reply, {:ok, {:error, reason}}}, %State{} = state, %Context{}) do
     {%{
@@ -111,6 +104,20 @@ defmodule Foglet.TUI.Screens.PostComposer do
 
   def update({:task_result, :submit_reply, result}, %State{} = state, %Context{}) do
     {%{state | submit_result: result}, []}
+  end
+
+  defp cancel_local(%State{} = state) do
+    {state, [Effect.navigate(state.origin, cancel_params(state))]}
+  end
+
+  defp update_input_key(key_event, %State{} = state, %Context{} = context) do
+    case Compose.apply_key(state.input_state, key_event) do
+      {:ok, input_state} ->
+        {%{state | input_state: enforce_max_len(input_state, context)}, []}
+
+      :error ->
+        {state, []}
+    end
   end
 
   @impl true
@@ -356,7 +363,7 @@ defmodule Foglet.TUI.Screens.PostComposer do
         attrs = build_reply_attrs(draft, state)
 
         effect =
-          Effect.task(:submit_reply, :post_composer, fn ->
+          Effect.task(:submit_reply, fn ->
             posts_mod.create_reply(thread_id, board_id, user_id, attrs)
           end)
 

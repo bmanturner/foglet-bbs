@@ -109,6 +109,54 @@ defmodule Foglet.Notifications do
     {:ok, count}
   end
 
+  @spec resolve_open_target(user_ref(), Notification.t() | map()) ::
+          {:ok,
+           %{
+             board_id: Ecto.UUID.t(),
+             thread_id: Ecto.UUID.t(),
+             post_id: Ecto.UUID.t(),
+             message_number: pos_integer()
+           }}
+          | {:error, :not_openable | :target_missing | :unauthorized | term()}
+  def resolve_open_target(user, notification) do
+    kind = Map.get(notification, :kind) || Map.get(notification, "kind")
+    payload = Map.get(notification, :payload) || Map.get(notification, "payload") || %{}
+
+    with true <- kind in [:dm, "dm"],
+         message_id when is_binary(message_id) <- payload["message_id"] || payload[:message_id],
+         {:ok, message} <- Foglet.DMs.get_visible_message(user, message_id) do
+      participant_id =
+        if message.sender_id == user_id!(user), do: message.recipient_id, else: message.sender_id
+
+      {:ok, %{kind: :dm, participant_id: participant_id, message_id: message.id}}
+    else
+      _ -> resolve_post_open_target(user, kind, payload)
+    end
+  end
+
+  defp resolve_post_open_target(user, kind, payload) do
+    with true <- kind in [:mention, :reply, "mention", "reply"],
+         post_id when is_binary(post_id) <- payload["post_id"] || payload[:post_id],
+         thread_id when is_binary(thread_id) <- payload["thread_id"] || payload[:thread_id],
+         board_id when is_binary(board_id) <- payload["board_id"] || payload[:board_id],
+         {:ok, post} <- Foglet.Posts.fetch_readable_post(user, post_id),
+         true <- post.thread_id == thread_id and post.board_id == board_id do
+      {:ok,
+       %{
+         board_id: post.board_id,
+         thread_id: post.thread_id,
+         post_id: post.id,
+         message_number: post.message_number
+       }}
+    else
+      false -> {:error, :not_openable}
+      nil -> {:error, :not_openable}
+      {:error, :not_found} -> {:error, :target_missing}
+      {:error, :board_archived} -> {:error, :unauthorized}
+      other -> other
+    end
+  end
+
   defp maybe_return_existing_notification(user_id, dedupe_key, changeset)
        when is_binary(user_id) and is_binary(dedupe_key) do
     case Repo.get_by(Notification, user_id: user_id, dedupe_key: String.trim(dedupe_key)) do

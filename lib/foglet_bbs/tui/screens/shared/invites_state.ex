@@ -6,9 +6,10 @@ defmodule Foglet.TUI.Screens.Shared.InvitesState do
   returned by `Foglet.Accounts.Invites.list_invites/1`; the TUI does not query or shape
   invite persistence directly.
 
-  Selection is owned by `%ConsoleTable{}` in the `:table` field (D-05, Phase 25
-  Plan 03). The bespoke index field has been replaced by the widget cursor inside
-  `table.table.raxol_state.selected_row` (D-05 — selection owned by widget).
+  Selection is mirrored into `%ConsoleTable{}` in the `:table` field (D-05,
+  Phase 25 Plan 03). Use `ConsoleTable.selected_index/2` and related widget
+  helpers when reading the table cursor instead of reaching into nested Raxol
+  state.
   """
 
   alias Foglet.TUI.Widgets.Display.ConsoleTable

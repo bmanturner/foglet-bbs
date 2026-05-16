@@ -1031,6 +1031,293 @@ defmodule Foglet.PostsTest do
     end
   end
 
+  describe "search_readable_posts/2" do
+    test "returns bounded readable post payloads for active actors" do
+      board = setup_board_with_server(%{slug: "search-public"})
+      author = active_user_fixture(%{handle: "search_author"})
+      {thread, root} = setup_thread(board, author)
+
+      {:ok, match} =
+        Foglet.Posts.create_reply(thread.id, board.id, author.id, %{
+          body: "needles are easier to find with full text search"
+        })
+
+      {:ok, other} =
+        Foglet.Posts.create_reply(thread.id, board.id, author.id, %{
+          body: "another needles row for pagination"
+        })
+
+      results = Foglet.Posts.search_readable_posts(author, query: "needles", limit: 1)
+
+      assert [
+               %{
+                 board: result_board,
+                 thread: result_thread,
+                 post: result_post,
+                 author: result_author
+               }
+             ] =
+               results
+
+      assert result_board.id == board.id
+      assert result_thread.id == thread.id
+      assert result_author.id == author.id
+      assert result_post.id in [match.id, other.id]
+      assert hd(results).around_message_number == result_post.message_number
+      assert hd(results).snippet =~ "needles"
+
+      all_results = Foglet.Posts.search_readable_posts(author, query: "needles", limit: 10)
+      assert Enum.map(all_results, & &1.post.id) |> Enum.sort() == Enum.sort([match.id, other.id])
+      refute Enum.any?(all_results, &(&1.post.id == root.id))
+    end
+
+    test "filters unreadable member boards from guests at query level" do
+      public_board = setup_board_with_server(%{slug: "public-search", readable_by: :public})
+      private_board = setup_board_with_server(%{slug: "private-search", readable_by: :members})
+      author = active_user_fixture()
+
+      {public_thread, _public_root} = setup_thread(public_board, author)
+      {private_thread, _private_root} = setup_thread(private_board, author)
+
+      {:ok, public_post} =
+        Foglet.Posts.create_reply(public_thread.id, public_board.id, author.id, %{
+          body: "shared lantern keyword"
+        })
+
+      {:ok, private_post} =
+        Foglet.Posts.create_reply(private_thread.id, private_board.id, author.id, %{
+          body: "private lantern keyword"
+        })
+
+      guest_results = Foglet.Posts.search_readable_posts(nil, query: "lantern", limit: 10)
+      assert Enum.map(guest_results, & &1.post.id) == [public_post.id]
+      refute Enum.any?(guest_results, &(&1.post.id == private_post.id))
+
+      member_results = Foglet.Posts.search_readable_posts(author, query: "lantern", limit: 10)
+
+      assert Enum.map(member_results, & &1.post.id) |> Enum.sort() ==
+               Enum.sort([public_post.id, private_post.id])
+    end
+
+    test "excludes archived boards, deleted threads, and deleted post bodies" do
+      active_board = setup_board_with_server(%{slug: "active-search"})
+      archived_board = setup_board_with_server(%{slug: "archived-search"})
+      author = active_user_fixture()
+      sysop = active_user_fixture(%{role: :sysop})
+
+      {active_thread, _root} = setup_thread(active_board, author)
+      {deleted_thread, _deleted_root} = setup_thread(active_board, author)
+      {archived_thread, _archived_root} = setup_thread(archived_board, author)
+
+      {:ok, visible} =
+        Foglet.Posts.create_reply(active_thread.id, active_board.id, author.id, %{
+          body: "visible cicada keyword"
+        })
+
+      {:ok, deleted_post} =
+        Foglet.Posts.create_reply(active_thread.id, active_board.id, author.id, %{
+          body: "deleted cicada secret"
+        })
+
+      {:ok, hidden_by_thread} =
+        Foglet.Posts.create_reply(deleted_thread.id, active_board.id, author.id, %{
+          body: "thread cicada hidden"
+        })
+
+      {:ok, hidden_by_archive} =
+        Foglet.Posts.create_reply(archived_thread.id, archived_board.id, author.id, %{
+          body: "archived cicada hidden"
+        })
+
+      {:ok, _deleted_post} = Foglet.Posts.delete_post(deleted_post)
+      {:ok, _deleted_thread} = Foglet.Threads.delete_thread(deleted_thread)
+      {:ok, _archived_board} = Foglet.Boards.archive_board(sysop, archived_board)
+
+      results = Foglet.Posts.search_readable_posts(sysop, query: "cicada", limit: 10)
+      assert Enum.map(results, & &1.post.id) == [visible.id]
+
+      refute Enum.any?(
+               results,
+               &(&1.post.id in [deleted_post.id, hidden_by_thread.id, hidden_by_archive.id])
+             )
+    end
+
+    test "supports board, author, title, date, and offset filters" do
+      board = setup_board_with_server(%{slug: "filter-search"})
+      other_board = setup_board_with_server(%{slug: "other-filter-search"})
+      author = active_user_fixture(%{handle: "filter_author"})
+      other_author = active_user_fixture(%{handle: "other_filter_author"})
+
+      {thread, _root} = setup_thread(board, author)
+
+      {:ok, updated_thread} =
+        thread
+        |> Ecto.Changeset.change(title: "Signal Thread")
+        |> Repo.update()
+
+      {other_thread, _other_root} = setup_thread(other_board, other_author)
+
+      {:ok, matching_post} =
+        Foglet.Posts.create_reply(updated_thread.id, board.id, author.id, %{
+          body: "signal filtertoken"
+        })
+
+      {:ok, _wrong_board} =
+        Foglet.Posts.create_reply(other_thread.id, other_board.id, author.id, %{
+          body: "signal filtertoken"
+        })
+
+      {:ok, _wrong_author} =
+        Foglet.Posts.create_reply(updated_thread.id, board.id, other_author.id, %{
+          body: "signal filtertoken"
+        })
+
+      after_time = DateTime.add(matching_post.inserted_at, -1, :second)
+      before_time = DateTime.add(matching_post.inserted_at, 1, :second)
+
+      assert [%{post: %{id: post_id}}] =
+               Foglet.Posts.search_readable_posts(author,
+                 query: "filtertoken",
+                 board_slug: "FILTER-SEARCH",
+                 author_handle: "FILTER_AUTHOR",
+                 thread_title: "signal",
+                 inserted_after: after_time,
+                 inserted_before: before_time,
+                 limit: 10
+               )
+
+      assert post_id == matching_post.id
+
+      assert [] =
+               Foglet.Posts.search_readable_posts(author,
+                 query: "filtertoken",
+                 board_slug: "filter-search",
+                 author_handle: "filter_author",
+                 thread_title: "signal",
+                 inserted_after: DateTime.add(matching_post.inserted_at, 1, :second)
+               )
+
+      assert [] =
+               Foglet.Posts.search_readable_posts(author,
+                 query: "filtertoken",
+                 board_slug: "filter-search",
+                 author_handle: "filter_author",
+                 thread_title: "signal",
+                 limit: 1,
+                 offset: 1
+               )
+    end
+  end
+
+  describe "fetch_readable_post_by_board_slug_and_message_number/3" do
+    test "returns route payload by board slug and stable message number" do
+      board = setup_board_with_server(%{slug: "direct-search"})
+      author = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+
+      {:ok, post} =
+        Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "jump target"})
+
+      assert {:ok, payload} =
+               Foglet.Posts.fetch_readable_post_by_board_slug_and_message_number(
+                 author,
+                 "DIRECT-SEARCH",
+                 post.message_number
+               )
+
+      assert payload.board.id == board.id
+      assert payload.thread.id == thread.id
+      assert payload.post.id == post.id
+      assert payload.around_message_number == post.message_number
+    end
+
+    test "does not leak private, missing, archived, malformed, or deleted-thread targets" do
+      private_board = setup_board_with_server(%{slug: "direct-private", readable_by: :members})
+      archived_board = setup_board_with_server(%{slug: "direct-archived"})
+      author = active_user_fixture()
+      sysop = active_user_fixture(%{role: :sysop})
+
+      {private_thread, _private_root} = setup_thread(private_board, author)
+      {archived_thread, _archived_root} = setup_thread(archived_board, author)
+      {deleted_thread, _deleted_root} = setup_thread(private_board, author)
+
+      {:ok, private_post} =
+        Foglet.Posts.create_reply(private_thread.id, private_board.id, author.id, %{
+          body: "private jump"
+        })
+
+      {:ok, archived_post} =
+        Foglet.Posts.create_reply(archived_thread.id, archived_board.id, author.id, %{
+          body: "archived jump"
+        })
+
+      {:ok, deleted_thread_post} =
+        Foglet.Posts.create_reply(deleted_thread.id, private_board.id, author.id, %{
+          body: "deleted thread jump"
+        })
+
+      {:ok, _deleted_thread} = Foglet.Threads.delete_thread(deleted_thread)
+      {:ok, _archived_board} = Foglet.Boards.archive_board(sysop, archived_board)
+
+      assert {:error, :not_found} =
+               Foglet.Posts.fetch_readable_post_by_board_slug_and_message_number(
+                 nil,
+                 "direct-private",
+                 private_post.message_number
+               )
+
+      assert {:error, :not_found} =
+               Foglet.Posts.fetch_readable_post_by_board_slug_and_message_number(
+                 author,
+                 "direct-archived",
+                 archived_post.message_number
+               )
+
+      assert {:error, :not_found} =
+               Foglet.Posts.fetch_readable_post_by_board_slug_and_message_number(
+                 author,
+                 "direct-private",
+                 deleted_thread_post.message_number
+               )
+
+      assert {:error, :not_found} =
+               Foglet.Posts.fetch_readable_post_by_board_slug_and_message_number(
+                 author,
+                 "direct-private",
+                 999_999
+               )
+
+      assert {:error, :not_found} =
+               Foglet.Posts.fetch_readable_post_by_board_slug_and_message_number(
+                 author,
+                 "direct-private",
+                 0
+               )
+    end
+
+    test "allows tombstone direct lookup without exposing deleted body through search" do
+      board = setup_board_with_server(%{slug: "direct-tombstone"})
+      author = active_user_fixture()
+      {thread, _root} = setup_thread(board, author)
+
+      {:ok, post} =
+        Foglet.Posts.create_reply(thread.id, board.id, author.id, %{body: "tombstone secretword"})
+
+      {:ok, _deleted_post} = Foglet.Posts.delete_post(post)
+
+      assert {:ok, payload} =
+               Foglet.Posts.fetch_readable_post_by_board_slug_and_message_number(
+                 nil,
+                 "direct-tombstone",
+                 post.message_number
+               )
+
+      assert payload.post.id == post.id
+      assert payload.post.deleted_at
+      assert [] = Foglet.Posts.search_readable_posts(nil, query: "secretword", limit: 10)
+    end
+  end
+
   describe "scope_for/1 (D-08)" do
     test "returns {:board, board_id} for a Post struct" do
       post = %Foglet.Posts.Post{

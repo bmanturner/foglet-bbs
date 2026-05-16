@@ -7,7 +7,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   flushing, and render-cache mutation.
   """
 
-  alias Foglet.TUI.{Context, Guest, ScrollKeys}
+  alias Foglet.TUI.{Context, Guest, KeyBinding}
   alias Foglet.TUI.Screens.PostReader
   alias Foglet.TUI.Screens.PostReader.State
   alias Foglet.TUI.TextWidth
@@ -66,18 +66,18 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
 
     case PostReader.visible_screenful(state, context) do
       %{mode: :packed_partial, indexes: indexes, partial: partial} = sf ->
-        cmds = [%{key: ScrollKeys.commandbar_key(), label: "Select", priority: 6} | base_commands]
+        cmds = [%{key: KeyBinding.commandbar_key(), label: "Select", priority: 6} | base_commands]
 
         # FOG-714: commandbar advertises arrows only. j/k still works as the
         # unadvertised long-post scroll fallback for users who expect it.
         if length(indexes) > 1 and action_index(state, sf) == partial.index do
-          cmds ++ [%{key: ScrollKeys.commandbar_key(), label: "Scroll", priority: 8}]
+          cmds ++ [%{key: KeyBinding.commandbar_key(), label: "Scroll", priority: 8}]
         else
           cmds
         end
 
       %{mode: :packed, indexes: indexes} when length(indexes) > 1 ->
-        [%{key: ScrollKeys.commandbar_key(), label: "Select", priority: 6} | base_commands]
+        [%{key: KeyBinding.commandbar_key(), label: "Select", priority: 6} | base_commands]
 
       %{mode: :packed} ->
         # FOG-694: at the cramped FOG-651 negative threshold the screenful
@@ -87,7 +87,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
         base_commands
 
       _long ->
-        base_commands ++ [%{key: ScrollKeys.commandbar_key(), label: "Scroll", priority: 10}]
+        base_commands ++ [%{key: KeyBinding.commandbar_key(), label: "Scroll", priority: 10}]
     end
   end
 
@@ -144,9 +144,9 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   defp thread_title_label(%State{thread: %{title: title}}) when is_binary(title), do: title
   defp thread_title_label(%State{}), do: "Thread"
 
-  defp render_post_content(%{posts: posts}, _ss, theme, _w, _h)
+  defp render_post_content(%{posts: posts} = frame_view, _ss, theme, _w, _h)
        when posts in [[], nil] do
-    render_loading(theme)
+    render_loading(theme, Map.get(frame_view, :frame, 0))
   end
 
   defp render_post_content(frame_view, ss, theme, w, h) do
@@ -270,7 +270,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   defp partial_progress_label(_index, _total, partial, true) do
     cond do
       partial.total_body_rows <= 0 ->
-        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll"
+        "▶ Selected — #{KeyBinding.commandbar_key()} scroll"
 
       PostReader.partial_at_bottom?(partial) ->
         "▶ Selected — end of post"
@@ -282,7 +282,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
           (partial.scroll_top + partial.body_visible_rows)
           |> min(partial.total_body_rows)
 
-        "▶ Selected — #{ScrollKeys.commandbar_key()} scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
+        "▶ Selected — #{KeyBinding.commandbar_key()} scroll • lines #{first}-#{last}/#{partial.total_body_rows}"
     end
   end
 
@@ -321,7 +321,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
          _h,
          _reply_state
        ),
-       do: render_loading(theme)
+       do: render_loading(theme, 0)
 
   defp render_local_post_content(%State{status: :empty}, _frame_state, theme, _w, _h, reply_state) do
     column style: %{gap: 0} do
@@ -399,9 +399,7 @@ defmodule Foglet.TUI.Screens.PostReader.Render do
   # (post_reader was opened but {:posts_loaded, posts} hasn't landed yet).
   # One-row composition: gap-1 row with spinner glyph + label text.
   # Row count is identical to the old plain-text path — no visible row growth (D-05, D-06).
-  defp render_loading(theme) do
-    frame = System.monotonic_time(:millisecond) |> abs() |> div(Spinner.frame_duration_ms())
-
+  defp render_loading(theme, frame) do
     column style: %{gap: 0} do
       [
         row style: %{gap: 1} do

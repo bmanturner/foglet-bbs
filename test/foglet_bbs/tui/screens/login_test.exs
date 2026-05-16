@@ -178,7 +178,7 @@ defmodule Foglet.TUI.Screens.LoginTest do
 
     assert get_in(submitting_state, [:screen_state, :login, :submitting?]) == true
     assert effect.payload.op == :login
-    assert effect.payload.screen_key == :login
+    assert effect.payload.screen_key == Effect.current_screen_key()
     result = effect.payload.fun.()
 
     {:update, final_state, final_effects} =
