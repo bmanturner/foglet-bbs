@@ -100,6 +100,35 @@ mix foglet.board_chat set-ttl --board BOARD_SLUG --seconds 60..86400 --actor SYS
 `show` is read-only. Mutations require an actor and route through board update
 authorization. Archived boards can be inspected but not changed by this task.
 
+## SSH IP access rules
+
+```sh
+mix foglet.ip_access.list
+mix foglet.ip_access.create --mode allow|deny --address IP_OR_CIDR --reason TEXT
+mix foglet.ip_access.disable ID
+mix foglet.ip_access.enable ID
+mix foglet.ip_access.remove ID
+```
+
+These tasks manage the SSH daemon's operator-defined IP allow/deny rules. Use
+CIDR notation when you mean a network, not a single host. A bad deny rule can
+lock callers out; keep a console or deploy shell open while changing access.
+
+## Identity policy rules
+
+```sh
+mix foglet.identity_policy.list
+mix foglet.identity_policy.create --kind reserved_handle|banned_handle|banned_email|banned_email_domain --value VALUE --reason TEXT
+mix foglet.identity_policy.disable ID
+mix foglet.identity_policy.enable ID
+mix foglet.identity_policy.remove ID
+```
+
+Identity policy rules reserve handles and block handles, email addresses, or
+email domains during registration/account checks. The create task reports
+conflicts when a new rule overlaps existing accounts; read that output before
+assuming the rule has solved an existing account problem.
+
 ## Contributor and QA-only tasks
 
 ```sh

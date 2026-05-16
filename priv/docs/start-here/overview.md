@@ -8,9 +8,9 @@ Foglet is an SSH-first bulletin board system. This page explains what it is,
 what it is not, and whether you are in the right place.
 
 Foglet's front door is SSH. Callers connect with a normal SSH client and use a
-terminal UI for registration, login, boards, threads, replies, account settings,
-SSH keys, oneliners, door games, and the sysop workflows that are implemented in
-the TUI.
+terminal UI for registration, login, boards, threads, replies, BBS Mail, account
+settings, SSH keys, oneliners, door games, and the sysop workflows that are
+implemented in the TUI.
 
 The Phoenix web endpoint is still important, but it is not the product surface.
 It serves the home page, these public docs, the `/up` health check, development
@@ -29,6 +29,8 @@ Foglet fits when you want:
 - operator-owned registration, invites, account status, roles, boards, runtime
   settings, and moderation flows where those features are implemented;
 - an in-TUI inbox for durable notifications such as replies and @mentions;
+- BBS Mail for direct user-to-user messages inside the terminal;
+- board news/feed pages where sysops attach RSS or Atom sources;
 - door games that hand off the caller's terminal session and return to the BBS
   when the door exits.
 
@@ -45,7 +47,6 @@ Do not run Foglet as though these exist today:
 - a hosted Foglet cloud service;
 - federation;
 - a mobile app;
-- direct messages or private mail;
 - email digests;
 - webhook notifications;
 - a full case-management moderation suite.
