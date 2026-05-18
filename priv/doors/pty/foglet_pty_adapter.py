@@ -164,7 +164,8 @@ def reap_child(child_pid: int):
 FINAL_DRAIN_MAX_BYTES = 64 * 1024
 FINAL_DRAIN_MAX_FRAMES = 16
 FINAL_DRAIN_MAX_SECONDS = 0.05
-DANGEROUS_DEC_PRIVATE_MODES = {47, 1047, 1048, 1049}
+DANGEROUS_DEC_PRIVATE_MODES = {1, 47, 1047, 1048, 1049}
+DANGEROUS_ESC_SINGLE_BYTE_MODES = {ord("="): "application_keypad", ord(">"): "numeric_keypad"}
 
 
 class TerminalOutputSanitizer:
@@ -233,6 +234,9 @@ class TerminalOutputSanitizer:
             return None
 
         if data[start + 1] == ord("c"):
+            return ("strip", start + 2)
+
+        if data[start + 1] in DANGEROUS_ESC_SINGLE_BYTE_MODES:
             return ("strip", start + 2)
 
         if data[start + 1] != ord("["):
